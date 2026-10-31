@@ -216,6 +216,11 @@ def fused_step(
 
     Notes
     -----
+    A tensor requiring grad that ``optimizer`` does not hold — a loss weight left
+    out of it — is not stepped, and gets no ``.grad``: the backward runs inside
+    the executable and the loss returned has no ``grad_fn``.  Put it in the
+    optimizer, or use :func:`make_step`.
+
     Parameters on the CPU leave nothing to compile (the executables run on
     Metal only): the call runs the eager step — ``zero_grad()``, forward,
     ``backward()``, ``optimizer.step()`` of the optimizer passed in, which keeps

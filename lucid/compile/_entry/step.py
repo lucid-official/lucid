@@ -32,7 +32,17 @@ import operator
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Literal, Protocol, SupportsIndex, cast, final, override
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    Literal,
+    NamedTuple,
+    Protocol,
+    SupportsIndex,
+    cast,
+    final,
+    override,
+)
 
 from lucid._C import engine as _C_engine
 from lucid.autograd.function import Function, FunctionCtx
@@ -98,6 +108,21 @@ class _StepEntry:
     input_grads: tuple[int | None, ...] = ()
     # Every tensor the trace was fed from outside, for ``ParamFingerprint.settle``.
     fed: tuple[_C_engine.TensorImpl, ...] = ()
+    # Tensors requiring grad that the trace read but neither the model owns nor
+    # the call passes — a parameter of the loss (a learned loss weight, a
+    # criterion's centres).  The executable differentiates them too, so the
+    # step hands each its gradient the way eager's ``backward`` does (LCD-721).
+    loose: tuple[_C_engine.TensorImpl, ...] = ()
+    # Per ``loose`` tensor: does the loss depend on it (a gradient comes back)?
+    loose_present: tuple[bool, ...] = ()
+    # ``(feed, requires_grad at trace time)`` for each feed that is no parameter
+    # of the model's: the executable differentiates exactly the ones that
+    # required grad then, so a flip afterwards retraces (:meth:`grad_flipped`).
+    watched: tuple[tuple[_C_engine.TensorImpl, bool], ...] = ()
+
+    def grad_flipped(self) -> bool:
+        """Has a watched feed gained or lost ``requires_grad`` since the trace?"""
+        return any(impl.requires_grad != flag for impl, flag in self.watched)
 
 
 def _match_param_ids(
@@ -147,20 +172,104 @@ def _input_grad_targets(
     return ids, positions
 
 
+def _loose_grad_targets(
+    tracer: Tracer, ext: dict[int, object], taken: list[int]
+) -> tuple[list[int], tuple[_C_engine.TensorImpl, ...]]:
+    """The feeds that require grad and belong to neither the model nor the call.
+
+    A trace reads such a tensor when ``loss_fn`` closes over it, or holds it as
+    an attribute of its own: a learned loss weight, a criterion's centres.
+    Eager's ``backward`` reaches every ``requires_grad`` leaf the loss reads, so
+    the executable differentiates these as well (LCD-721) — dropping them left
+    their ``.grad`` ``None`` and their optimizer step a no-op.  A tensor the
+    trace made itself was never in a slot anyone holds; one in ``taken`` already
+    has its gradient asked for.
+    """
+    seen = set(taken)
+    ids: list[int] = []
+    impls: list[_C_engine.TensorImpl] = []
+    for tid, impl in ext.items():
+        if (
+            tid in seen
+            or not isinstance(impl, _C_engine.TensorImpl)
+            or not impl.requires_grad
+            or tracer.made_here(impl)
+        ):
+            continue
+        seen.add(tid)
+        ids.append(tid)
+        impls.append(impl)
+    return ids, tuple(impls)
+
+
+class _GradTargets(NamedTuple):
+    """Everything a step's executable is asked for the gradient of."""
+
+    param_ids: list[int]
+    observed: list[bool]
+    input_positions: list[int]
+    loose: tuple[_C_engine.TensorImpl, ...]
+    ids: list[int]  # parameters', then the call's tensors', then the loss's own
+
+
+def _grad_targets(
+    tracer: Tracer, params: list[Parameter], x_args: tuple[Tensor, ...]
+) -> _GradTargets:
+    """The model's parameters, the call's tensors and the loss's own that need a gradient."""
+    ext = tracer.external_feeds
+    param_ids, observed = _match_param_ids(params, ext)
+    input_ids, input_positions = _input_grad_targets(x_args, ext, param_ids)
+    loose_ids, loose = _loose_grad_targets(tracer, ext, param_ids + input_ids)
+    return _GradTargets(
+        param_ids, observed, input_positions, loose, param_ids + input_ids + loose_ids
+    )
+
+
+def _watched_feeds(
+    tracer: Tracer, params: list[Parameter], x_args: tuple[Tensor, ...]
+) -> tuple[tuple[_C_engine.TensorImpl, bool], ...]:
+    """Each outside feed that is neither a model parameter nor a call tensor, with its grad need.
+
+    The parameters and the call's tensors are keyed on already
+    (:class:`ParamFingerprint`, the signature); the rest is what
+    :meth:`_StepEntry.grad_flipped` watches.
+    """
+    from lucid._dispatch import _unwrap
+    from lucid.compile._core.signature import leaf_tensors, outside_feeds
+
+    keyed = {id(_unwrap(p)) for p in params}
+    keyed.update(id(_unwrap(t)) for t in leaf_tensors(x_args, {}))
+    return tuple(
+        (impl, impl.requires_grad) for impl in outside_feeds(tracer) if id(impl) not in keyed
+    )
+
+
+class _GradSlots(NamedTuple):
+    """What an executable's gradient ids say about the gradients it returns."""
+
+    absent: tuple[bool, ...]
+    input_grads: tuple[int | None, ...]
+    loose_present: tuple[bool, ...]
+
+
 def _grad_slots(
-    exe: _ExecutableLike, n_params: int, input_positions: list[int]
-) -> tuple[tuple[bool, ...], tuple[int | None, ...]]:
-    """Read the gradients ``exe`` returns: ``_StepEntry.absent`` and ``.input_grads``.
+    exe: _ExecutableLike, n_params: int, input_positions: list[int], n_loose: int = 0
+) -> _GradSlots:
+    """Read the gradients ``exe`` returns, after the parameters', the inputs' and the loose ones'.
 
     A gradient the loss does not depend on comes back as zeros with grad id
-    -1: absent for a parameter, ``None`` in place of an input's position.
+    -1: absent for a parameter, ``None`` in place of an input's position,
+    ``False`` for a loose tensor.
     """
     grad_ids = [int(g) for g in exe.grad_output_ids]
     absent = tuple(g == -1 for g in grad_ids[:n_params])
-    inputs = grad_ids[n_params : n_params + len(input_positions)]
-    return (
+    n_in = len(input_positions)
+    inputs = grad_ids[n_params : n_params + n_in]
+    loose = grad_ids[n_params + n_in : n_params + n_in + n_loose]
+    return _GradSlots(
         absent if any(absent) else (),
         tuple(None if g == -1 else pos for pos, g in zip(input_positions, inputs, strict=True)),
+        tuple(g != -1 for g in loose),
     )
 
 
@@ -252,18 +361,12 @@ def _compile_step_entry(
 
     bn = BnWriteback.of(model, graph, ext)
 
-    param_ids, observed = _match_param_ids(params, ext)
-    if not param_ids:
+    targets = _grad_targets(tracer, params, x_args)
+    if not targets.param_ids:
         return None
-    input_ids, input_positions = _input_grad_targets(x_args, ext, param_ids)
 
     exe_like = _lower_step_executable(
-        tracer,
-        ext,
-        loss_id,
-        param_ids + input_ids,
-        [*bn.out_ids, *write_ids],
-        use_dynamic=use_dynamic,
+        tracer, ext, loss_id, targets.ids, [*bn.out_ids, *write_ids], use_dynamic=use_dynamic
     )
     if exe_like is None:
         return None
@@ -272,14 +375,19 @@ def _compile_step_entry(
     if input_source is None:
         return None
 
-    absent, input_grads = _grad_slots(exe_like, len(param_ids), input_positions)
+    slots = _grad_slots(
+        exe_like, len(targets.param_ids), targets.input_positions, len(targets.loose)
+    )
     return _StepEntry(
         exe=exe_like,
         external_feeds=dict(ext),
         input_source=input_source,
-        observed=() if all(observed) else tuple(observed),
-        absent=absent,
-        input_grads=input_grads,
+        observed=() if all(targets.observed) else tuple(targets.observed),
+        absent=slots.absent,
+        input_grads=slots.input_grads,
+        loose=targets.loose,
+        loose_present=slots.loose_present,
+        watched=_watched_feeds(tracer, params, x_args),
         graph_json=trace_to_json(graph),
         compile_ms=(time.perf_counter() - t0) * 1000.0,
         bn=bn,
@@ -291,56 +399,82 @@ def _compile_step_entry(
 _Grads = list[_C_engine.TensorImpl | None]
 
 
-def _run_step_entry(
-    entry: _StepEntry, params: list[Parameter], x_args: tuple[Tensor, ...]
-) -> tuple[_C_engine.TensorImpl, _Grads, _Grads]:
-    """Execute one cached step entry.
+class _StepResult(NamedTuple):
+    """One run of a step entry: the loss and every gradient it returned."""
 
-    Returns the loss, a gradient per parameter, and a gradient per tensor in
-    ``x_args`` (``None`` for those that need none).
-    """
+    loss: _C_engine.TensorImpl
+    params: _Grads
+    inputs: _Grads  # per tensor of the call (``None`` for those that need none)
+    loose: _Grads  # per ``_StepEntry.loose`` tensor
+
+
+def _execute_entry(entry: _StepEntry, x_args: tuple[Tensor, ...]) -> list[_C_engine.TensorImpl]:
+    """Feed ``entry``'s executable and run it: every output, in the executable's order."""
     from lucid._dispatch import _unwrap
-    from lucid.compile._core.buffer_writes import write_back
 
-    exe = entry.exe
     feed_impls: list[object] = [
         entry.external_feeds[tid] if src is None else _unwrap(x_args[src])
-        for tid, src in zip(exe.input_ids, entry.input_source, strict=True)
+        for tid, src in zip(entry.exe.input_ids, entry.input_source, strict=True)
     ]
     t0 = time.perf_counter()
     outs = _C_engine.compile.run_executable(entry.exe, feed_impls)
     entry.last_run_ms = (time.perf_counter() - t0) * 1000.0
     entry.n_hits += 1
+    return list(outs)
 
-    n_grads = sum(entry.observed) if entry.observed else len(params)
-    n_inputs = len(entry.input_grads)
-    n_loss_grad = 1 + n_grads + n_inputs
+
+def _take_side_outputs(
+    entry: _StepEntry, outs: list[_C_engine.TensorImpl], n_loss_grad: int
+) -> None:
+    """Copy the BatchNorm statistics and in-place writes trailing the gradients back out."""
+    from lucid.compile._core.buffer_writes import write_back
+
     n_writes = len(entry.written)
-    n_stats = len(entry.bn.out_ids)
-    if len(outs) != n_loss_grad + n_stats + n_writes:
-        raise RuntimeError(
-            f"make_step: run_executable returned {len(outs)} outputs, "
-            f"expected {n_loss_grad + n_stats + n_writes} "
-            f"(1 loss + {n_grads} grads + {n_inputs} input grads + "
-            f"{n_stats} BN stats + {n_writes} buffer writes)"
-        )
-    first = n_loss_grad + n_stats
+    first = n_loss_grad + len(entry.bn.out_ids)
     entry.bn.apply(outs[n_loss_grad:first])
     write_back(entry.written, list(outs[first : first + n_writes]))
 
-    grads: list[_C_engine.TensorImpl] = list(outs[1:n_loss_grad])
-    input_grads: _Grads = [None] * len(x_args)
-    for pos, g in zip(entry.input_grads, grads[n_grads:], strict=True):
+
+def _scatter_grads(
+    entry: _StepEntry, grads: list[_C_engine.TensorImpl], n_grads: int, n_call: int
+) -> tuple[_Grads, _Grads, _Grads]:
+    """Sort ``grads`` into the parameters', the call tensors' and the loss's own."""
+    n_inputs = len(entry.input_grads)
+    inputs: _Grads = [None] * n_call
+    for pos, g in zip(entry.input_grads, grads[n_grads : n_grads + n_inputs], strict=True):
         if pos is not None:
-            input_grads[pos] = g
+            inputs[pos] = g
+    loose: _Grads = [
+        g if present else None
+        for present, g in zip(entry.loose_present, grads[n_grads + n_inputs :], strict=True)
+    ]
     reached: _Grads = [
         None if entry.absent and entry.absent[i] else g for i, g in enumerate(grads[:n_grads])
     ]
-    loss_impl = cast(_C_engine.TensorImpl, outs[0])
     if not entry.observed:
-        return loss_impl, reached, input_grads
+        return reached, inputs, loose
     it = iter(reached)
-    return (loss_impl, [next(it) if seen else None for seen in entry.observed], input_grads)
+    return [next(it) if seen else None for seen in entry.observed], inputs, loose
+
+
+def _run_step_entry(
+    entry: _StepEntry, params: list[Parameter], x_args: tuple[Tensor, ...]
+) -> _StepResult:
+    """Execute one cached step entry."""
+    outs = _execute_entry(entry, x_args)
+    n_grads = sum(entry.observed) if entry.observed else len(params)
+    n_loss_grad = 1 + n_grads + len(entry.input_grads) + len(entry.loose)
+    n_side = len(entry.bn.out_ids) + len(entry.written)
+    if len(outs) != n_loss_grad + n_side:
+        raise RuntimeError(
+            f"make_step: run_executable returned {len(outs)} outputs, expected "
+            f"{n_loss_grad + n_side} (1 loss + {n_grads} grads + {len(entry.input_grads)} "
+            f"input grads + {len(entry.loose)} loss-owned grads + {len(entry.bn.out_ids)} "
+            f"BN stats + {len(entry.written)} buffer writes)"
+        )
+    _take_side_outputs(entry, outs, n_loss_grad)
+    grads, inputs, loose = _scatter_grads(entry, outs[1:n_loss_grad], n_grads, len(x_args))
+    return _StepResult(outs[0], grads, inputs, loose)
 
 
 @final
@@ -358,11 +492,11 @@ class _CompiledStepFunction(Function):
         from lucid._dispatch import _wrap
 
         entry, params = entry_holder
-        x_args = step_args[: len(step_args) - len(params)]
+        x_args = step_args[: len(step_args) - len(params) - len(entry.loose)]
 
-        loss_impl, grad_impls, input_grad_impls = _run_step_entry(entry, params, x_args)
-        ctx.saved_grad_impls = input_grad_impls + grad_impls
-        return _wrap(loss_impl)
+        result = _run_step_entry(entry, params, x_args)
+        ctx.saved_grad_impls = result.inputs + result.params + result.loose
+        return _wrap(result.loss)
 
     @override
     @staticmethod
@@ -374,8 +508,18 @@ class _CompiledStepFunction(Function):
         return tuple(None if g is None else grad_loss * _wrap(g) for g in saved_grad_impls)
 
 
+def _live_entry(cache: dict[object, _StepEntry], key: object) -> _StepEntry | None:
+    """``key``'s cached entry, dropped instead when a tensor of the loss flipped its grad need."""
+    entry = cache.get(key) if key is not None else None
+    if entry is not None and entry.grad_flipped():
+        del cache[key]
+        return None
+    return entry
+
+
 def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Callable[..., Tensor]:
     """Build the monolithic (single-segment) compiled step callable."""
+    from lucid._dispatch import _wrap
     from lucid._tensor.tensor import Tensor
     from lucid.compile._core.fallback import EagerFallbackSet
     from lucid.compile._core.signature import (
@@ -410,7 +554,7 @@ def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Call
         ):
             return loss_fn(model(*x_args[:1]), *x_args[1:])
 
-        entry = cache.get(key) if key is not None else None
+        entry = _live_entry(cache, key)
         if entry is None:
             from lucid.compile._core.trace_context import compile_attempt
 
@@ -427,7 +571,8 @@ def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Call
             if key is not None:
                 cache[key] = entry
 
-        return cast(Tensor, _CompiledStepFunction.apply((entry, params), *leaves, *params))
+        loose = [_wrap(impl) for impl in entry.loose]
+        return cast(Tensor, _CompiledStepFunction.apply((entry, params), *leaves, *params, *loose))
 
     def clear_cache() -> None:
         """Drop every cached executable + eager-fallback blacklist for this step callable."""
@@ -455,17 +600,17 @@ def make_step(
        :func:`_tracing` to capture the op DAG (forward + loss).
     2. Compiles a single MPSGraph executable that produces the loss
        and the gradient of the loss w.r.t. every model parameter and
-       every input that requires grad, via
-       :func:`compile_trace_with_backward`.
+       every input that requires grad, and every tensor the loss owns (a
+       learned weight it closes over), via :func:`compile_trace_with_backward`.
     3. Runs the executable, populates a Lucid :class:`autograd.Function`
        with the resulting (loss, grads) so the returned scalar loss has
        a working ``grad_fn`` and ``loss.backward()`` drives ``.grad`` on
-       every parameter — and on through an input computed by eager ops,
-       so a compiled head trains the eager trunk that feeds it.
+       every parameter and loss weight — and on through an input computed
+       by eager ops, so a compiled head trains the eager trunk that feeds it.
     4. Caches the executable so a second call with the same input /
        parameter signature is a pure run.  Which inputs require grad is
        part of the signature: a step whose inputs need no gradient
-       computes none.
+       computes none.  A loss weight changing ``requires_grad`` retraces.
 
     Parameters
     ----------

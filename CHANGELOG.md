@@ -161,6 +161,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - name_or_path only when it rebuilds the model
 
+- compiled steps train their loss's own parameters (LCD-721)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

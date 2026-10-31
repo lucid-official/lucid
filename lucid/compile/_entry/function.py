@@ -30,12 +30,7 @@ from typing import TYPE_CHECKING
 from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
 from lucid.compile._core.custom_backward import refuse_custom_backward
-from lucid.compile._entry.step import (
-    _ExecutableLike,
-    _grad_slots,
-    _input_grad_targets,
-    _match_param_ids,
-)
+from lucid.compile._entry.step import _ExecutableLike, _GradTargets, _grad_slots, _grad_targets
 
 if TYPE_CHECKING:
     from lucid.nn.module import Module
@@ -49,7 +44,7 @@ def _accumulate_grads(
     grads: list[_C_engine.TensorImpl],
     params: list[Parameter],
     leaves: list[Tensor],
-    input_positions: list[int],
+    targets: _GradTargets,
 ) -> None:
     """Add ``exe``'s gradients into ``.grad`` the way ``loss.backward()`` does.
 
@@ -59,21 +54,30 @@ def _accumulate_grads(
     that the loss does not depend on, gets none; and an input computed by
     eager ops passes its gradient on to the graph behind it.  Assigning
     ``p.grad`` instead dropped every earlier gradient and never reached
-    the input (LCD-617).
+    the input (LCD-617).  ``loose`` are the tensors the loss itself owns (a
+    learned loss weight): they get their gradients the same way (LCD-721).
     """
     from lucid._dispatch import _wrap
     from lucid.autograd import backward
 
-    absent, input_grads = _grad_slots(exe, len(params), input_positions)
+    loose = targets.loose
+    absent, input_grads, loose_present = _grad_slots(
+        exe, len(params), targets.input_positions, len(loose)
+    )
     roots: list[Tensor] = []
     seeds: list[Tensor] = []
     for i, (p, g) in enumerate(zip(params, grads[: len(params)], strict=True)):
         if p.requires_grad and not (absent and absent[i]):
             roots.append(p)
             seeds.append(_wrap(g))
-    for pos, g in zip(input_grads, grads[len(params) :], strict=True):
+    n_in = len(targets.input_positions)
+    for pos, g in zip(input_grads, grads[len(params) : len(params) + n_in], strict=True):
         if pos is not None:
             roots.append(leaves[pos])
+            seeds.append(_wrap(g))
+    for impl, present, g in zip(loose, loose_present, grads[len(params) + n_in :], strict=True):
+        if present:
+            roots.append(_wrap(impl))
             seeds.append(_wrap(g))
     if roots:
         backward(roots, seeds)
@@ -124,8 +128,9 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
     Tensor
         The loss (compiled result, with no graph: its backward has run).
         Its gradients are added into ``.grad`` as ``loss.backward()`` adds
-        them — of each parameter that requires grad, and of ``x`` and the
-        graph behind it when ``x`` requires grad.  Then run the optimizer.
+        them — of each parameter that requires grad, of a loss weight
+        ``loss_fn`` reads, and of ``x`` and the graph behind it when ``x``
+        requires grad.  Then run the optimizer.
 
     Raises
     ------
@@ -196,14 +201,13 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
             raise RuntimeError("compiled_step: loss_fn's result is not a traced tensor")
         loss_id = int(found)
 
-        param_ids, observed = _match_param_ids(params, ext)
-        if not all(observed):
+        targets = _grad_targets(tracer, params, (x,))
+        if not all(targets.observed):
             raise RuntimeError(
                 "compiled_step: a model parameter was not observed in the trace "
                 "(model.forward did not use it, or the parameter was wrapped/copied)"
             )
-        input_ids, input_positions = _input_grad_targets((x,), ext, param_ids)
-        grad_ids = param_ids + input_ids
+        grad_ids = targets.ids
         refuse_custom_backward(tracer, loss_id, grad_ids)
 
         # 3.5 BatchNorm running-stats. compiled_step has no eager fallback (it raises
@@ -244,5 +248,5 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
         )
     bn.apply(outs[n_loss_grad:])
 
-    _accumulate_grads(exe, list(outs[1:n_loss_grad]), params, [x], input_positions)
+    _accumulate_grads(exe, list(outs[1:n_loss_grad]), params, [x], targets)
     return _wrap(outs[0])
