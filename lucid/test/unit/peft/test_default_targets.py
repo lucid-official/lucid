@@ -1,7 +1,9 @@
 """A config that names no ``target_modules`` takes the default for the model's ``model_type``.
 
 The table is the reference's (restricted to the zoo's model types) plus the
-zoo's own spelling of the same projections.  That each row names modules the
+zoo's own spelling of the same projections, and a row for every model type
+the zoo registers (``neural_ode``, whose weights are raw parameters, has
+``DEFAULT_LORA_TARGET_PARAMETERS`` instead).  That each row names modules the
 zoo's classes really have is held per family in
 ``lucid/test/unit/models/test_peft_zoo.py``; here is the rule — where the
 default applies, what is stored, what a model with no row is told.
@@ -129,7 +131,7 @@ class TestTheDefaultApplies:
 
 
 class TestNoDefault:
-    @pytest.mark.parametrize("model_type", ["transformer", "resnet", "", None, 3])
+    @pytest.mark.parametrize("model_type", ["not_a_family", "", None, 3])
     def test_a_model_type_with_no_row_is_told_what_to_do(self, model_type: object) -> None:
         model = _Encoder(model_type)
         with pytest.raises(ValueError, match="Please specify `target_modules` in `peft_config`"):
@@ -138,8 +140,8 @@ class TestNoDefault:
         assert not any(hasattr(m, "lora_A") for m in model.modules())
 
     def test_the_message_names_the_type_and_the_types_with_a_default(self) -> None:
-        with pytest.raises(ValueError, match="model type 'transformer'") as caught:
-            get_peft_model(_Encoder("transformer"), LoraConfig(r=2))
+        with pytest.raises(ValueError, match="model type 'not_a_family'") as caught:
+            get_peft_model(_Encoder("not_a_family"), LoraConfig(r=2))
         for model_type in DEFAULT_LORA_TARGET_MODULES:
             assert model_type in str(caught.value)
 
@@ -149,3 +151,40 @@ class TestNoDefault:
     ) -> None:
         with pytest.raises(ValueError, match="model type 'custom'"):
             adapt(nn.Sequential(nn.Linear(4, 4)))
+
+
+class _Planar(nn.Module):
+    """A model whose weight is a raw parameter of a plain module, not a layer's."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.config = types.SimpleNamespace(model_type="planar")
+        self.field = nn.Module()
+        self.field.w = nn.Parameter(lucid.randn(6, 8))
+
+    def forward(self, x: lucid.Tensor) -> lucid.Tensor:
+        return x @ self.field.w.T
+
+
+class TestTheParameterDefault:
+    """A type whose default is raw parameters adapts those, and is not told to name modules."""
+
+    @pytest.fixture(autouse=True)
+    def _row(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(LoraModel, "_default_parameters", {"planar": frozenset({"field.w"})})
+
+    def test_the_parameters_are_adapted(self) -> None:
+        peft = get_peft_model(_Planar(), LoraConfig(r=2))
+        assert peft.base_model.targeted_parameter_names == ["field.w"]
+        assert peft.base_model.targeted_module_names == []
+        assert peft.peft_config["default"].target_parameters == ["field.w"]
+
+    def test_an_explicit_choice_is_never_replaced(self) -> None:
+        peft = get_peft_model(_Encoder("planar"), LoraConfig(r=2, target_modules=["key"]))
+        assert peft.base_model.targeted_parameter_names == []
+        assert sorted(peft.base_model.targeted_module_names) == ["layers.0.key", "layers.1.key"]
+
+    def test_a_type_with_a_module_row_only_is_unchanged(self) -> None:
+        peft = get_peft_model(_Encoder("bert"), LoraConfig(r=2))
+        assert peft.base_model.targeted_parameter_names == []
+        assert peft.peft_config["default"].target_modules == {"query", "value"}

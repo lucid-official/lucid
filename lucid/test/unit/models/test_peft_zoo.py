@@ -24,8 +24,15 @@ cpu and metal.  What is proved, per family:
   and ``AutoPeftModel*`` rebuilds base and adapter from the adapter's directory;
 * **defaults** — a config that names no ``target_modules`` takes the default
   for the family's ``model_type`` (``DEFAULT_LORA_TARGET_MODULES``), which is
-  exactly the modules the table above lists for the family, and every model
-  type with a default is a row here.
+  exactly the modules the table above lists for the family.
+
+Below the deep rows sits the coverage matrix (``_peft_rows.ROWS``): one tiny
+real factory for every ``model_type`` the zoo registers, each adapted with the
+type's default targets, trained one backward, saved and reloaded, and merged.
+A type LoRA cannot adapt yet is a strict ``xfail`` naming the missing piece,
+so the matrix is the progress meter for how much of the zoo ``lucid.peft``
+reaches; and the default of every type is checked against every factory of it,
+built without allocating.
 
 Two rows reach the layer types beyond ``nn.Linear``: vit's patch embedding is
 an ``nn.Conv2d`` (the convolution LoRA), and the transformer family's
@@ -62,9 +69,21 @@ from lucid.peft import (
     get_peft_model,
     get_peft_model_state_dict,
 )
-from lucid.peft._target_defaults import DEFAULT_LORA_TARGET_MODULES
+from lucid.models._registry import _REGISTRY
+from lucid.peft._target_defaults import (
+    DEFAULT_LORA_TARGET_MODULES,
+    DEFAULT_LORA_TARGET_PARAMETERS,
+)
 from lucid.peft.tuners import lora
 from lucid.serialization import load_safetensors, save_safetensors
+from lucid.test.unit.models._peft_matrix import (
+    Trial,
+    ZooRow,
+    default_problems,
+    owned_by_adapter as _owned_by_adapter,
+    zoo_model_types,
+)
+from lucid.test.unit.models._peft_rows import ROWS
 
 _DEPTH = 2
 _STEPS = 3
@@ -343,14 +362,15 @@ _FAMILIES = [
         kinds=(("patch_embed.proj", nn.Conv2d),),
     ),
     # The family that stands for the ones built on ``nn.MultiheadAttention``: its encoder's
-    # ``self_attn``, whose two projections are adapted together.
+    # ``self_attn``, whose two projections are adapted together.  The default also names the
+    # decoder's ``multihead_attn``, which this encoder-only model does not have.
     _Family(
         name="transformer",
         factory="transformer_base_cls",
         overrides=_TEXT,
         batch=_cls_batch,
         task_type="SEQ_CLS",
-        targets=["self_attn"],
+        targets=["self_attn", "multihead_attn"],
         saved=[],
         adapted=_names("transformer.transformer.encoder.layers.{i}.self_attn"),
         all_linear=frozenset(),
@@ -513,19 +533,6 @@ def _logits(model: nn.Module, batch: _Batch) -> lucid.Tensor:
 
 def _same(a: lucid.Tensor, b: lucid.Tensor) -> bool:
     return bool((a == b).all().item())
-
-
-def _owned_by_adapter(name: str) -> bool:
-    return any(
-        part in name
-        for part in (
-            ".lora_A.",
-            ".lora_B.",
-            ".out_proj_lora_",  # an attention's output projection
-            ".lora_embedding_",  # an embedding's factors are bare parameters
-            ".modules_to_save.",
-        )
-    )
 
 
 def _adapter_leaves(kind: type[nn.Module]) -> tuple[str, ...]:
@@ -953,8 +960,8 @@ def test_the_rebuilt_model_generates_what_the_trained_one_did(
 # ── defaults ─────────────────────────────────────────────────────────────────
 
 
-def test_every_model_type_with_a_default_is_a_row_and_each_row_is_the_tables() -> None:
-    assert {f.name for f in _DEFAULT_ROWS} == set(DEFAULT_LORA_TARGET_MODULES)
+def test_the_deep_rows_are_the_tables_and_every_default_is_a_matrix_row() -> None:
+    assert {f.name for f in _DEFAULT_ROWS} <= set(DEFAULT_LORA_TARGET_MODULES)
     for family in _DEFAULT_ROWS:
         assert DEFAULT_LORA_TARGET_MODULES[family.name] == set(family.targets), family.name
 
@@ -995,10 +1002,17 @@ def test_the_default_modules_are_the_ones_the_zoo_trains_on(family: _Family, dev
             assert _same(silenced, live) == (name in family.off_path), name
 
 
+class _Unregistered(nn.Module):
+    """A module with no ``config``: the reference's ``"custom"`` model type, which has no default."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.proj = nn.Linear(4, 4)
+
+
 def test_a_model_type_the_table_lacks_is_told_to_name_its_targets() -> None:
-    model = _transformer_classifier()
-    assert model.config.model_type == "transformer"
-    with pytest.raises(ValueError, match="no default for model type 'transformer'"):
+    model = _Unregistered()
+    with pytest.raises(ValueError, match="no default for model type 'custom'"):
         get_peft_model(model, LoraConfig(r=4))
     assert not any(".lora_" in n for n, _ in model.named_modules())
 
@@ -1104,3 +1118,49 @@ def test_merging_a_head_trained_apart_from_its_tie_is_refused(device: str) -> No
         with pytest.raises(RuntimeError, match="transformer.wte.weight"):
             peft.merge_and_unload()
         assert _same(_logits(peft, batch), before)
+
+
+# ── the coverage matrix: every model type the zoo registers ──────────────────
+
+_MATRIX_ROWS = [pytest.param(row, id=name, marks=row.marks()) for name, row in ROWS.items()]
+
+#: Factories that cannot be built under ``shadow_alloc``, and why.
+_UNSHADOWED = {
+    "ddpm_imagenet64_gen": (
+        "learn_sigma reads the beta schedule on the host at construction (tolist of a "
+        "phantom tensor)"
+    )
+}
+_FACTORIES = [
+    pytest.param(
+        name,
+        id=name,
+        marks=(
+            [pytest.mark.xfail(strict=True, reason=_UNSHADOWED[name])]
+            if name in _UNSHADOWED
+            else []
+        ),
+    )
+    for name in sorted(_REGISTRY)
+]
+
+
+def test_every_zoo_model_type_is_a_matrix_row() -> None:
+    assert set(ROWS) == zoo_model_types()
+    assert all(row.model_type == name for name, row in ROWS.items())
+
+
+def test_the_defaults_are_the_matrix_rows() -> None:
+    """A type the table lacks is a type ``LoraConfig()`` refuses; every type has one."""
+    defaults = set(DEFAULT_LORA_TARGET_MODULES) | set(DEFAULT_LORA_TARGET_PARAMETERS)
+    assert defaults == set(ROWS)
+
+
+@pytest.mark.parametrize("row", _MATRIX_ROWS)
+def test_a_zoo_model_type_adapts_trains_saves_and_merges(row: ZooRow) -> None:
+    Trial(row).run()
+
+
+@pytest.mark.parametrize("factory", _FACTORIES)
+def test_a_default_reaches_adaptable_layers_in_every_factory_of_its_type(factory: str) -> None:
+    assert default_problems(factory) == []

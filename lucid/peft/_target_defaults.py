@@ -4,14 +4,21 @@
 answers from a table keyed by the base model's ``config.model_type`` —
 attention's query and value projections, by the names that architecture
 gives them — and refuses a model type it has no row for.  This is that
-table for the model types Lucid's zoo has.  The three the reference lists
-(``t5``, ``gpt2``, ``bert``) keep its choice; the others take the same
-projections under the zoo's own names, each checked against the zoo class
-by ``lucid/test/unit/models/test_peft_zoo.py``.
+table for every model type Lucid's zoo registers.  The three the
+reference lists (``t5``, ``gpt2``, ``bert``) keep its choice; the others
+take the same projections under the zoo's own names, and the convolutional
+families — which the reference leaves to the user — the convolutions
+(or the fully connected layers) that carry the model.
 
-``nn.MultiheadAttention`` holds its projections as raw parameters, which
-LoRA on ``nn.Linear`` cannot reach, so the families built on it
-(``transformer``, ``clip``, ``dit``, ``detr``) have no row.
+A row is chosen to hold for **every factory of its type**, not only the
+one the tests build: a name that lands on a grouped convolution is left
+out (a grouped LoRA convolution cannot be merged), and so is a name that
+also lands on a wrapper module the adapter has no layer for.
+``lucid/test/unit/models/test_peft_zoo.py`` builds every registered
+factory without allocating and checks both, and runs one factory of each
+type end to end.  ```neural_ode`` has no module row: its vector
+field holds raw parameters, with no ``nn.Linear`` or convolution to adapt, so
+its default is ``DEFAULT_LORA_TARGET_PARAMETERS``.
 """
 
 from collections.abc import Mapping
@@ -20,18 +27,122 @@ from typing import Final
 
 import lucid.nn as nn
 
+
+def _names(*names: str) -> frozenset[str]:
+    return frozenset(names)
+
+
+_QKV: Final = _names("qkv")
+_ATTENTION: Final = _names("self_attn", "multihead_attn")
+_QV_PROJ: Final = _names("q_proj", "v_proj")
+_FC6_FC7: Final = _names("fc6", "fc7")
+_BOTTLENECK_CONVS: Final = _names("conv1", "conv2", "conv3")
+_UNET_ATTENTION: Final = _names("qkv", "proj")
+_DREAMER_HEADS: Final = _names("prior_head.0", "posterior_head.0")
+
 #: ``model_type`` → the module names a LoRA adapter takes by default.  Read-only.
 DEFAULT_LORA_TARGET_MODULES: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
     {
-        "gpt": frozenset({"c_attn"}),
-        "gpt2": frozenset({"c_attn"}),
-        "bert": frozenset({"query", "value"}),
-        "roformer": frozenset({"query", "value"}),
-        "t5": frozenset({"q", "v"}),
-        "vit": frozenset({"qkv"}),
-        "swin": frozenset({"qkv"}),
-        "pvt": frozenset({"q", "kv"}),
+        # text and multimodal
+        "gpt": _names("c_attn"),
+        "gpt2": _names("c_attn"),
+        "bert": _names("query", "value"),
+        "roformer": _names("query", "value"),
+        "t5": _names("q", "v"),
+        "transformer": _ATTENTION,
+        "clip": _names("attn"),
+        # vision transformers
+        "vit": _QKV,
+        "swin": _QKV,
+        "pvt": _names("q", "kv"),
+        "coatnet": _names("qkv", "proj"),
+        "crossvit": _names("qkv", "wq", "wv"),
+        "cvt": _names("proj_q.proj", "proj_v.proj"),
+        "efficientformer": _names("qkv", "proj"),
+        "maxvit": _names("qkv", "proj"),
+        "ijepa": _QKV,
+        "vjepa": _QKV,
+        "vjepa2": _QKV,
+        "vjepa2_ac": _QKV,
+        # convolutional classifiers
+        "alexnet": _names("features.0", "features.3", "features.6", "features.8", "features.10")
+        | _FC6_FC7,
+        "zfnet": _names("features.0", "features.4", "features.8", "features.10", "features.12")
+        | _FC6_FC7,
+        "lenet": _names("features.0", "features.3", "features.6", "f6"),
+        "vgg": _names("features.0", "fc6", "fc7"),
+        "densenet": _names("conv1", "conv2"),
+        "resnet": _BOTTLENECK_CONVS,
+        "resnext": _names("conv1", "conv3"),
+        "resnest": _names("conv3", "fc1", "fc2"),
+        "senet": _BOTTLENECK_CONVS,
+        "sknet": _names("fc_reduce", "fc_select"),
+        "convnext": _names("fc1", "fc2"),
+        "inception_next": _names("fc1", "fc2"),
+        "cspnet": _names("conv_exp.conv", "conv_transition.conv"),
+        "efficientnet": _names("project_conv"),
+        "mobilenet": frozenset(f"{i}.3" for i in range(3, 16)),
+        "mobilenet_v2": _names("conv.6"),
+        "mobilenet_v3": _names("fc1", "fc2"),
+        "mobilenet_v4": _names("pw_exp.conv", "pw_proj.conv", "conv_exp", "conv_pwl"),
+        "xception": _names("pointwise"),
+        "googlenet": _names(
+            "0.conv", "1.conv", "branch1.conv", "conv1.conv", "conv2.conv", "conv3.conv"
+        ),
+        "inception_v3": _names("conv"),
+        "inception_resnet": _names("conv"),
+        "inception_v4": _names(
+            *("0.conv", "1.conv", "2.conv", "4.conv", "conv.conv", "branch0.conv"),
+            *("branch1.3.conv", "branch1_0.conv", "branch1_1a.conv", "branch1_1b.conv"),
+            *("branch2.3.conv", "branch2_0.conv", "branch2_1.conv", "branch2_2.conv"),
+            *("branch2_3a.conv", "branch2_3b.conv"),
+        ),
+        # detection and segmentation
+        "detr": _ATTENTION,
+        "efficientdet": _names("pw"),
+        "rcnn": _FC6_FC7,
+        "fast_rcnn": _FC6_FC7,
+        "faster_rcnn": _FC6_FC7,
+        "mask_rcnn": _FC6_FC7,
+        "yolo": _names("fc1", "fc2"),
+        "yolo_v2": _names(
+            *("0.0", "1.0", "2.0", "3.0", "4.0", "det1.0", "det2.0", "det3.0", "route_reduce.0")
+        ),
+        "yolo_v3": _names("conv"),
+        "yolo_v3_tiny": _names("conv"),
+        "yolo_v4": _names("conv"),
+        "fcn": _BOTTLENECK_CONVS,
+        "unet": _names("body.0", "body.3"),
+        "attention_unet": _names("net.0", "net.3"),
+        "maskformer": _QV_PROJ,
+        "mask2former": _QV_PROJ,
+        # generative
+        "ddpm": _UNET_ATTENTION,
+        "ncsn": _UNET_ATTENTION,
+        "score_sde": _UNET_ATTENTION,
+        "flow_matching": _UNET_ATTENTION,
+        "rectified_flow": _names("query", "value"),
+        "dit": _names("attn"),
+        "mean_flow": _names("attn"),
+        "tvm": _QKV,
+        "stable_diffusion": _names("attn1"),
+        "diamond": _names("qkv_proj", "out_proj"),
+        "genie": _names("query", "value"),
+        "nice": _names("proj"),
+        "realnvp": _names("conv1", "conv2"),
+        "vqvae": _names("conv1", "conv2"),
+        "vae": _names("down_blocks.0", "down_blocks.1", "down_blocks.2"),
+        "dreamer": _DREAMER_HEADS,
+        "dreamer_v2": _DREAMER_HEADS,
+        "dreamer_v3": _DREAMER_HEADS,
+        "planet": _DREAMER_HEADS,
     }
+)
+
+#: ``model_type`` → the raw parameters (``target_parameters``) an adapter takes by default, for a
+#: model whose weights are parameters of a plain module and not the weight of a layer.  Read-only.
+DEFAULT_LORA_TARGET_PARAMETERS: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
+    {"neural_ode": _names("field.w", "field.u")}
 )
 
 #: The model type of a module that carries none, as the reference spells it.
@@ -44,12 +155,24 @@ def _model_type(model: nn.Module) -> str:
     return model_type if isinstance(model_type, str) else _UNKNOWN_MODEL_TYPE
 
 
-def _default_target_modules(
+def _default_target_parameters(
     model: nn.Module, table: Mapping[str, frozenset[str]]
 ) -> frozenset[str]:
-    """The names ``table`` gives ``model``'s type; ``ValueError`` if it has no row."""
+    """The parameter names ``table`` gives ``model``'s type; empty if it has no row."""
+    return table.get(_model_type(model), frozenset())
+
+
+def _default_target_modules(
+    model: nn.Module, table: Mapping[str, frozenset[str]], parameters: frozenset[str] = frozenset()
+) -> frozenset[str]:
+    """The names ``table`` gives ``model``'s type; ``ValueError`` if it has no row.
+
+    A type whose default is parameters alone has no module names, and is not an error.
+    """
     model_type = _model_type(model)
     names = table.get(model_type)
+    if names is None and parameters:
+        return frozenset()
     if names is None:
         raise ValueError(
             "Please specify `target_modules` in `peft_config`: a list of module names, a "

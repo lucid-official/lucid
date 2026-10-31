@@ -37,7 +37,7 @@ import functools
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
-from typing import ClassVar, NamedTuple, override
+from typing import ClassVar, NamedTuple, Protocol, override, runtime_checkable
 
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
@@ -46,7 +46,12 @@ from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft._slots import _adapter_slots, _as_names, _outermost_slots, _outside_slots
-from lucid.peft._target_defaults import DEFAULT_LORA_TARGET_MODULES, _default_target_modules
+from lucid.peft._target_defaults import (
+    DEFAULT_LORA_TARGET_MODULES,
+    DEFAULT_LORA_TARGET_PARAMETERS,
+    _default_target_modules,
+    _default_target_parameters,
+)
 from lucid.peft._targeting import (
     _module_names_matching,
     _parameter_paths,
@@ -54,6 +59,13 @@ from lucid.peft._targeting import (
     _selects,
     _shared_outside,
 )
+
+
+@runtime_checkable
+class _NamesParameters(Protocol):
+    """A config that can name raw parameters (``target_parameters``) beside modules."""
+
+    target_parameters: list[str] | None
 
 
 def _join(prefix: str, name: str) -> str:
@@ -399,6 +411,8 @@ class _BaseTuner(_ForwardsAttributes, ABC):
     _config_class: ClassVar[type[_TargetedConfig]]
     #: What a config that names no ``target_modules`` adapts, by the model's ``model_type``.
     _default_targets: ClassVar[Mapping[str, frozenset[str]]] = DEFAULT_LORA_TARGET_MODULES
+    #: The raw parameters it adapts instead, for a model type whose weights are not layers'.
+    _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = DEFAULT_LORA_TARGET_PARAMETERS
 
     @override
     def __init_subclass__(cls, *, peft_type: PeftType | None = None, **kwargs: object) -> None:
@@ -444,7 +458,12 @@ class _BaseTuner(_ForwardsAttributes, ABC):
         """The config to store: a copy, its default targets and ``"all-linear"`` spelled out."""
         stored = copy.deepcopy(config)
         if stored.target_modules is None and not cls._adapts_parameters(stored):
-            stored.target_modules = set(_default_target_modules(model, cls._default_targets))
+            parameters = _default_target_parameters(model, cls._default_parameters)
+            stored.target_modules = set(
+                _default_target_modules(model, cls._default_targets, parameters)
+            )
+            if parameters and isinstance(stored, _NamesParameters):
+                stored.target_parameters = sorted(parameters)
         resolved = _resolve_all_linear(stored, model, cls._adapted_linear)
         if resolved is not None:
             stored.target_modules = resolved

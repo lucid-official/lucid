@@ -129,6 +129,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AutoPeftModel*, auto_mapping and zoo task rows
 - LoRA for embeddings, convs, attention and raw parameters
 - DoRA, PiSSA/OLoRA init and lora_bias for LoRA layers
+- LoRA default targets for the whole zoo, with a matrix
 
 ---
 
