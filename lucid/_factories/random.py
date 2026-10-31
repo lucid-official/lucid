@@ -3,7 +3,6 @@ Random tensor creation: rand, randn, randint, bernoulli, normal, manual_seed,
 the ``*_like`` forms, and the draws behind ``Tensor.normal_`` / ``uniform_``.
 """
 
-import functools
 import math
 import operator
 import os
@@ -15,6 +14,17 @@ from lucid._ctx import check_random_allowed as _check_random
 from lucid._C import engine as _C_engine
 from lucid._dispatch import normalize_factory_kwargs, _wrap
 from lucid._factories._build import _leaf
+from lucid._factories._overloads import (
+    Overloads,
+    Slot,
+    SlotKind,
+    Spelling,
+    anything,
+    is_extent,
+    is_int,
+    is_number,
+    is_tensor,
+)
 from lucid._factories._generator import (
     Generator as Generator,
     _key,
@@ -118,7 +128,7 @@ def _require_permutable(n: int, dt: _C_engine.Dtype) -> None:
         )
 
 
-def manual_seed(seed: int) -> None:
+def manual_seed(seed: int) -> _C_engine.Generator:
     r"""Set the seed of the default Philox counter-based random number generator.
 
     The Lucid RNG uses a **Philox-4×32** counter-based PRNG (Salmon et al.,
@@ -142,6 +152,13 @@ def manual_seed(seed: int) -> None:
         through it first — ``True``, ``2.0`` — as the reference reads it;
         :meth:`Generator.manual_seed` is strict.  The same seed always
         produces the same sequence of random values on the same hardware.
+
+    Returns
+    -------
+    lucid._C.engine.Generator
+        The default generator, seeded — as the reference returns its own.
+        Bind it (``_ = lucid.manual_seed(0)``) in a doctest, which would
+        otherwise print it.
 
     Notes
     -----
@@ -168,9 +185,9 @@ def manual_seed(seed: int) -> None:
     Examples
     --------
     >>> import lucid
-    >>> lucid.manual_seed(42)
+    >>> _ = lucid.manual_seed(42)
     >>> a = lucid.rand(3)
-    >>> lucid.manual_seed(42)
+    >>> _ = lucid.manual_seed(42)
     >>> b = lucid.rand(3)
     >>> (a - b).abs().max().item()
     0.0
@@ -178,13 +195,15 @@ def manual_seed(seed: int) -> None:
     Every spelling draws from the one stream, so they do not repeat each
     other:
 
-    >>> lucid.manual_seed(42)
+    >>> _ = lucid.manual_seed(42)
     >>> x = lucid.randn(3)
     >>> y = lucid.randn_like(x)
     >>> bool((x == y).all())
     False
     """
-    _default_stream().set_seed(_seed_value(int(seed), "manual_seed"))
+    stream = _default_stream()
+    stream.set_seed(_seed_value(int(seed), "manual_seed"))
+    return stream
 
 
 def seed() -> int:
@@ -233,7 +252,7 @@ def seed() -> int:
     >>> print(f"Run seed: {s}")
     Run seed: ...
     >>> # Later, to reproduce:
-    >>> lucid.manual_seed(s)
+    >>> _ = lucid.manual_seed(s)
     """
     s: int = int.from_bytes(os.urandom(8), "little", signed=False)
     # Mask to the 63-bit non-negative range so the int round-trips through
@@ -274,7 +293,7 @@ def initial_seed() -> int:
     Examples
     --------
     >>> import lucid
-    >>> lucid.manual_seed(1337)
+    >>> _ = lucid.manual_seed(1337)
     >>> lucid.initial_seed()
     1337
     """
@@ -316,7 +335,7 @@ def get_rng_state() -> Tensor:
     Examples
     --------
     >>> import lucid
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> _ = lucid.rand(10)           # advance counter by drawing 10 values
     >>> state = lucid.get_rng_state()
     >>> a = lucid.rand(5)
@@ -379,7 +398,7 @@ def set_rng_state(new_state: Tensor) -> None:
     Examples
     --------
     >>> import lucid
-    >>> lucid.manual_seed(99)
+    >>> _ = lucid.manual_seed(99)
     >>> state = lucid.get_rng_state()
     >>> x = lucid.randn(4)
     >>> lucid.set_rng_state(state)
@@ -393,6 +412,15 @@ def set_rng_state(new_state: Tensor) -> None:
     _set_counter(g, s_counter)
 
 
+#: The two ways the reference writes a shape: ``rand(2, 3)`` / ``rand((2, 3))``
+#: and ``rand(size=(2, 3))``.  ``rand`` and ``randn`` take both.
+_SHAPE_SPELLINGS: tuple[Spelling[Tensor], ...] = (
+    Spelling((Slot("size", is_extent, "int", SlotKind.VARIADIC),)),
+    Spelling((Slot("size", is_extent, "tuple of ints", SlotKind.KEYWORD, splat=True),)),
+)
+
+
+@Overloads(*_SHAPE_SPELLINGS)
 def rand(
     *size: int | tuple[int, ...],
     dtype: DTypeLike = None,
@@ -416,8 +444,8 @@ def rand(
     Parameters
     ----------
     *size : int or tuple[int, ...]
-        Shape of the output tensor.  Accepts varargs ``rand(2, 3)`` or a
-        single tuple ``rand((2, 3))``.
+        Shape of the output tensor.  Accepts varargs ``rand(2, 3)``, a
+        single tuple ``rand((2, 3))`` or the keyword ``rand(size=(2, 3))``.
     dtype : lucid.dtype, optional
         Floating-point data type.  Defaults to the global default
         (``lucid.float32``).  Integer dtypes are not supported.
@@ -451,7 +479,7 @@ def rand(
     Examples
     --------
     >>> import lucid
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> x = lucid.rand(3, 4)
     >>> x.shape
     (3, 4)
@@ -460,7 +488,7 @@ def rand(
 
     Monte-Carlo estimate of $\pi$:
 
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> n = 1_000_000
     >>> pts = lucid.rand(n, 2)
     >>> inside = ((pts ** 2).sum(dim=-1) < 1.0).float().mean()
@@ -474,6 +502,7 @@ def rand(
     return _wrap(_leaf(impl, requires_grad))
 
 
+@Overloads(*_SHAPE_SPELLINGS)
 def randn(
     *size: int | tuple[int, ...],
     dtype: DTypeLike = None,
@@ -497,7 +526,8 @@ def randn(
     Parameters
     ----------
     *size : int or tuple[int, ...]
-        Shape of the output tensor.
+        Shape of the output tensor: varargs ``randn(2, 3)``, a single tuple
+        ``randn((2, 3))`` or the keyword ``randn(size=(2, 3))``.
     dtype : lucid.dtype, optional
         Floating-point data type.  Defaults to the global default.
     device : str or lucid.device, optional
@@ -541,7 +571,7 @@ def randn(
     Examples
     --------
     >>> import lucid
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> x = lucid.randn(1000)
     >>> abs(float(x.mean())) < 0.1       # ≈ 0
     True
@@ -560,6 +590,18 @@ def randn(
     return _wrap(_leaf(impl, requires_grad))
 
 
+_LOW = Slot("low", is_int, "int")
+_HIGH = Slot("high", is_int, "int")
+_SIZE = Slot("size", is_extent, "tuple of ints")
+
+
+_RANDINT_SPELLINGS: tuple[Spelling[Tensor], ...] = (
+    Spelling((_HIGH, _SIZE), fixed={"low": 0}),
+    Spelling((_LOW, _HIGH, _SIZE)),
+)
+
+
+@Overloads(*_RANDINT_SPELLINGS)
 def randint(
     low: int,
     high: int,
@@ -587,7 +629,9 @@ def randint(
     Parameters
     ----------
     low : int
-        Lower bound of the interval (inclusive).
+        Lower bound of the interval (inclusive).  Leave it out for the
+        reference's two-argument spelling ``randint(high, size)``, which
+        draws from ``[0, high)``.
     high : int
         Upper bound of the interval (exclusive).  Must satisfy
         ``high > low``.
@@ -627,18 +671,20 @@ def randint(
     Examples
     --------
     >>> import lucid
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> x = lucid.randint(0, 10, (5,))
     >>> x.shape, x.dtype
     ((5,), lucid.int64)
     >>> bool(((x >= 0) & (x < 10)).all())
     True
+    >>> lucid.randint(10, (5,)).shape  # high only: values in [0, 10)
+    (5,)
     >>> idx = lucid.randint(0, 1024, (64,))  # sample 64 indices
     >>> mask = lucid.randint(0, 2, (3, 4))  # values in {0, 1}
     """
     _check_random()
     _dt, _dev, _ = normalize_factory_kwargs(dtype if dtype is not None else int64, device)
-    _require_holds("randint", low, high, _dt)
+    _require_holds("randint", low, high, _dt, stacklevel=4)  # past the spelling reader
     draw_dt = (
         _C_engine.I64 if _dev == _C_engine.Device.CPU and not _promotion.is_integer(_dt) else _dt
     )
@@ -681,7 +727,7 @@ def bernoulli(
     Examples
     --------
     >>> import lucid
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> probs = lucid.full((10_000,), 0.3)
     >>> x = lucid.bernoulli(probs)
     >>> sorted(set(x.tolist()))                      # only zeros and ones
@@ -726,6 +772,71 @@ def bernoulli(
     return (u < input).to(dtype=input.dtype).detach()
 
 
+def _normal_of_tensors(
+    mean: Tensor | float, std: Tensor | float = 1.0, *, generator: _C_engine.Generator | None = None
+) -> Tensor:
+    r"""Samples of $\mathcal{N}(\text{mean}_i, \text{std}_i^2)$ for tensor ``mean`` / ``std``.
+
+    The tensor overloads of :func:`normal`.  The result takes the broadcast
+    shape of the tensors among ``mean`` and ``std`` and the dtype they
+    promote to; a floating tensor is required, as the reference's kernel
+    has none for integers.  Like the reference's, the draw is not
+    differentiable through ``mean`` or ``std``.
+    """
+    from lucid._tensor._indexing import broadcast_shapes
+
+    _check_random()
+    operands = (_promotion.as_number(mean), _promotion.as_number(std))
+    tensors = [x for x in operands if not isinstance(x, (int, float))]
+    for t in tensors:
+        if not t.is_floating_point():
+            raise _C_engine.NotImplementedError(f'"normal" not implemented for {t.dtype}')
+    dt = _promotion.result_type(*(x if isinstance(x, (int, float)) else x._impl for x in operands))
+    shape = broadcast_shapes(*(t.shape for t in tensors))
+    draw = _wrap(_C_engine.randn(list(shape), dt, tensors[0]._impl.device, generator))
+    loc, scale = (x if isinstance(x, (int, float)) else x.detach() for x in operands)
+    _require_non_negative_std(scale)
+    return (loc + scale * draw).detach()
+
+
+def _require_non_negative_std(std: Tensor | float) -> None:
+    """Refuse a negative standard deviation, a tensor's elements included."""
+    if isinstance(std, (int, float)):
+        negative = std < 0.0
+    elif hasattr(std._impl, "_in_dim"):  # symbolic under a trace: no value to read
+        return
+    else:
+        from lucid._engine_scope import untraced
+
+        with untraced():
+            negative = std.numel() > 0 and bool((std < 0.0).any().item())
+    if negative:
+        raise _C_engine.InvalidArgument("normal expects all elements of std >= 0.0")
+
+
+_MEAN = Slot("mean", is_tensor, "Tensor")
+_STD = Slot("std", is_tensor, "Tensor")
+_MEAN_VALUE = Slot("mean", is_number, "float")
+_STD_VALUE = Slot("std", is_number, "float")
+_EXTENT = Slot("size", is_extent, "tuple of ints")
+
+
+_NORMAL_SPELLINGS: tuple[Spelling[Tensor], ...] = (
+    Spelling((_MEAN, _STD), route=_normal_of_tensors),
+    Spelling((_MEAN, Slot("std", is_number, "float", optional=True)), route=_normal_of_tensors),
+    Spelling((_MEAN_VALUE, _STD), route=_normal_of_tensors),
+    Spelling((_MEAN_VALUE, _STD_VALUE, _EXTENT)),
+    Spelling(
+        (
+            Slot("mean", is_number, "float", optional=True),
+            Slot("std", is_number, "float", optional=True),
+            Slot("size", is_extent, "tuple of ints", SlotKind.KEYWORD),
+        )
+    ),
+)
+
+
+@Overloads(*_NORMAL_SPELLINGS)
 def normal(
     mean: float = 0.0,
     std: float = 1.0,
@@ -751,12 +862,14 @@ def normal(
 
     Parameters
     ----------
-    mean : float, optional
-        Mean $\mu$ of the distribution.  Default: ``0.0``.
-    std : float, optional
-        Standard deviation $\sigma > 0$.  Default: ``1.0``.
+    mean : float or Tensor, optional
+        Mean $\mu$ of the distribution.  Default: ``0.0``.  A tensor
+        selects the reference's tensor overloads (see Notes).
+    std : float or Tensor, optional
+        Standard deviation $\sigma \ge 0$.  Default: ``1.0``.
     size : list[int] or tuple[int, ...]
-        Shape of the output tensor.  Required (keyword-only).
+        Shape of the output tensor.  Required with a float ``mean`` and
+        ``std`` (keyword, or third positional); none with a tensor.
     dtype : lucid.dtype, optional
         Floating-point data type.  Defaults to the global default.
     device : str or lucid.device, optional
@@ -782,6 +895,10 @@ def normal(
     The output is therefore equivalent to
     ``mean + std * lucid.randn(*size, ...)``.
 
+    With a tensor ``mean`` or ``std`` it draws one sample per element of
+    their broadcast shape, in the dtype they promote to, with no gradient to
+    either; only ``generator=`` is taken besides.
+
     **Weight initialisation** recipes commonly parameterise the normal
     distribution directly:
 
@@ -795,12 +912,17 @@ def normal(
     Examples
     --------
     >>> import lucid
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> x = lucid.normal(mean=5.0, std=2.0, size=(1000,))
     >>> abs(float(x.mean()) - 5.0) < 0.2
     True
     >>> abs(float(x.std()) - 2.0) < 0.2
     True
+
+    >>> lucid.normal(lucid.zeros(2, 3), lucid.ones(3)).shape  # per-element
+    (2, 3)
+    >>> lucid.normal(0.0, 1.0, (4,)).shape  # shape by position
+    (4,)
 
     He-normal initialisation for a Conv2d kernel:
 
@@ -966,32 +1088,16 @@ def _int_bounds(op: str, low: object, high: object) -> tuple[int, int]:
     return lo, hi
 
 
-def _one_bound_is_high(fn: Callable[..., Tensor]) -> Callable[..., Tensor]:
-    """``fn(input, n)`` read as ``high=n``; ``low=`` without ``high`` refused.
-
-    The reference's overloads are ``(input, high)`` and ``(input, low,
-    high)``, which no one Python signature says: ``(input, low=0,
-    high=None)`` would bind ``randint_like(x, low=3)`` as if ``3`` were the
-    one bound, where the reference refuses it.  So the call is read before
-    it binds.
-    """
-
-    @functools.wraps(fn)
-    def call(*args: object, **kwargs: object) -> Tensor:
-        if "high" not in kwargs:
-            if "low" in kwargs and len(args) < 3:
-                raise TypeError(
-                    "randint_like(): low= was given without high= — pass "
-                    "high, or a single bound by position, which is high"
-                )
-            if len(args) == 2:
-                args = (args[0], 0, args[1])
-        return fn(*args, **kwargs)
-
-    return call
+_LIKE = Slot("input", anything, "Tensor")
 
 
-@_one_bound_is_high
+_RANDINT_LIKE_SPELLINGS: tuple[Spelling[Tensor], ...] = (
+    Spelling((_LIKE, _HIGH), fixed={"low": 0}),
+    Spelling((_LIKE, _LOW, _HIGH)),
+)
+
+
+@Overloads(*_RANDINT_LIKE_SPELLINGS)
 def randint_like(
     input: Tensor,
     low: int = 0,
@@ -1056,7 +1162,7 @@ def randint_like(
     Examples
     --------
     >>> import lucid
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> x = lucid.zeros(2, 3)
     >>> r = lucid.randint_like(x, 10)
     >>> r.shape, r.dtype
@@ -1067,13 +1173,11 @@ def randint_like(
     [[3, 3, 3], [3, 3, 3]]
     """
     _check_random()
-    if high is None:
-        raise TypeError("randint_like() missing 1 required argument: 'high'")
     lo, hi = _int_bounds("randint_like", low, high)
     _dt, _dev, _ = normalize_factory_kwargs(
         dtype if dtype is not None else input.dtype, device if device is not None else input.device
     )
-    _require_holds("randint_like", lo, hi, _dt, stacklevel=4)  # past the bound reader
+    _require_holds("randint_like", lo, hi, _dt, stacklevel=4)  # past the spelling reader
     shape = list(input.shape)
     impl = _C_engine.randint(shape, lo, hi, _C_engine.I64, _dev, generator)
     if _dt != _C_engine.I64:
@@ -1221,7 +1325,7 @@ def randperm(
     Examples
     --------
     >>> import lucid
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> sorted(lucid.randperm(5).tolist())   # every index exactly once
     [0, 1, 2, 3, 4]
 

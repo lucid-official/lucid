@@ -1560,11 +1560,12 @@ def logspace(
 ) -> Tensor: ...
 
 # ── Tensor factories — random (random.py) ───────────────────────────────
-def manual_seed(seed: _int) -> None: ...
+def manual_seed(seed: _int) -> _C_engine.Generator: ...
 def seed() -> _int: ...
 def initial_seed() -> _int: ...
 def get_rng_state() -> Tensor: ...
 def set_rng_state(new_state: Tensor) -> None: ...
+@overload
 def rand(
     *size: _int | tuple[_int, ...],
     dtype: DTypeLike = None,
@@ -1572,6 +1573,16 @@ def rand(
     requires_grad: _bool = False,
     generator: _C_engine.Generator | None = None,
 ) -> Tensor: ...
+@overload
+def rand(
+    *,
+    size: list[_int] | tuple[_int, ...],
+    dtype: DTypeLike = None,
+    device: DeviceLike = None,
+    requires_grad: _bool = False,
+    generator: _C_engine.Generator | None = None,
+) -> Tensor: ...
+@overload
 def randn(
     *size: _int | tuple[_int, ...],
     dtype: DTypeLike = None,
@@ -1579,8 +1590,28 @@ def randn(
     requires_grad: _bool = False,
     generator: _C_engine.Generator | None = None,
 ) -> Tensor: ...
+@overload
+def randn(
+    *,
+    size: list[_int] | tuple[_int, ...],
+    dtype: DTypeLike = None,
+    device: DeviceLike = None,
+    requires_grad: _bool = False,
+    generator: _C_engine.Generator | None = None,
+) -> Tensor: ...
+@overload
 def randint(
     low: _int,
+    high: _int,
+    size: list[_int] | tuple[_int, ...],
+    *,
+    dtype: DTypeLike = None,
+    device: DeviceLike = None,
+    requires_grad: _bool = False,
+    generator: _C_engine.Generator | None = None,
+) -> Tensor: ...
+@overload
+def randint(
     high: _int,
     size: list[_int] | tuple[_int, ...],
     *,
@@ -1595,6 +1626,7 @@ def bernoulli(
     *,
     generator: _C_engine.Generator | None = None,
 ) -> Tensor: ...
+@overload
 def normal(
     mean: _float = 0.0,
     std: _float = 1.0,
@@ -1605,6 +1637,23 @@ def normal(
     requires_grad: _bool = False,
     generator: _C_engine.Generator | None = None,
 ) -> Tensor: ...
+@overload
+def normal(
+    mean: _float,
+    std: _float,
+    size: list[_int] | tuple[_int, ...],
+    *,
+    dtype: DTypeLike = None,
+    device: DeviceLike = None,
+    requires_grad: _bool = False,
+    generator: _C_engine.Generator | None = None,
+) -> Tensor: ...
+@overload
+def normal(mean: Tensor, std: Tensor, *, generator: _C_engine.Generator | None = None) -> Tensor: ...
+@overload
+def normal(mean: Tensor, std: _float = 1.0, *, generator: _C_engine.Generator | None = None) -> Tensor: ...
+@overload
+def normal(mean: _float, std: Tensor, *, generator: _C_engine.Generator | None = None) -> Tensor: ...
 def rand_like(
     input: Tensor,
     *,

@@ -139,7 +139,7 @@ def random_unstructured(module: Module, name: str = "weight", amount: float = 0.
     >>> import lucid
     >>> import lucid.nn as nn
     >>> from lucid.nn.utils import prune
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> layer = nn.Linear(100, 100)
     >>> _ = prune.random_unstructured(layer, amount=0.3)
     >>> kept = float(layer.weight_mask.mean())

@@ -485,7 +485,7 @@ class Gamma(ExponentialFamily):
 
         Examples
         --------
-        >>> lucid.manual_seed(0)
+        >>> _ = lucid.manual_seed(0)
         >>> d = Gamma(concentration=2.0, rate=1.0)
         >>> x = d.sample((500,))
         >>> x.shape
@@ -955,7 +955,7 @@ class Beta(ExponentialFamily):
 
         Examples
         --------
-        >>> lucid.manual_seed(0)
+        >>> _ = lucid.manual_seed(0)
         >>> d = Beta(concentration1=2.0, concentration0=5.0)
         >>> x = d.sample((500,))
         >>> x.shape

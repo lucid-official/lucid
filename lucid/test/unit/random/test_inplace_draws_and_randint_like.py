@@ -125,7 +125,7 @@ def test_randint_like_refuses_bad_bounds() -> None:
         lucid.randint_like(lucid.zeros(3, dtype=lucid.int64), 4, requires_grad=True)
     # ``low=`` alone binds neither of the reference's overloads; one bound
     # by position, or ``high=`` alone, is the high bound.
-    with pytest.raises(TypeError, match="low= was given without high="):
+    with pytest.raises(TypeError, match="invalid combination of arguments"):
         lucid.randint_like(x, low=3)
     with pytest.raises(TypeError, match="high"):
         lucid.randint_like(x)

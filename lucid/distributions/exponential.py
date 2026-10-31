@@ -216,7 +216,7 @@ class Exponential(ExponentialFamily):
 
         Examples
         --------
-        >>> lucid.manual_seed(0)
+        >>> _ = lucid.manual_seed(0)
         >>> d = Exponential(rate=1.0)
         >>> x = d.rsample((500,))
         >>> x.shape

@@ -36,6 +36,7 @@ import pytest
 
 import lucid
 import lucid._ops as ops
+from lucid._factories._overloads import spellings_of
 from lucid._ops._registry import _REGISTRY
 from lucid._tensor.tensor import Tensor
 
@@ -124,9 +125,29 @@ def _stub_defs(path: Path, cls: str | None) -> dict[str, list[ast.FunctionDef]]:
     return defs
 
 
-def _drift(stub: list[list[_Param]], runtime: list[_Param]) -> list[str]:
+def _spelled(owner: str, name: str) -> list[_Param]:
+    """The parameters of every spelling a factory declared with ``Overloads``.
+
+    A factory whose spellings place a name differently (``rand``'s ``*size``
+    and ``size=``) keeps one canonical signature, so an overload of its stub
+    may use any placement one of its spellings does.
+    """
+    if owner != "lucid":
+        return []
+    obj = getattr(lucid, name)
+    out: list[_Param] = []
+    for spelling in spellings_of(obj):
+        target = spelling.route or obj.__wrapped__
+        out.extend(_signature_params(spelling.signature(target), method=False))
+    return out
+
+
+def _drift(
+    stub: list[list[_Param]], runtime: list[_Param], spelled: list[_Param] | None = None
+) -> list[str]:
     if len(stub) == 1:
         return [] if stub[0] == runtime else [f"stub {stub[0]}", f"runtime {runtime}"]
+    runtime = [*runtime, *(spelled or [])]
     known = {(p.name, p.kind) for p in runtime}
     names = {p.name for p in runtime}
     problems = []
@@ -207,4 +228,4 @@ def test_the_stub_binds_what_the_runtime_binds(
     if runtime is None or unchecked:
         return
     stub = [_stub_params(d, method) for d in defs]
-    assert _drift(stub, runtime) == []
+    assert _drift(stub, runtime, _spelled(owner, name)) == []

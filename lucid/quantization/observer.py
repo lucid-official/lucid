@@ -788,7 +788,7 @@ class HistogramObserver(ObserverBase):
     ``1e5`` values, keeping the outlier is the lower-error choice; at ``1e6`` it is not:
 
     >>> import lucid
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> x = lucid.randn(1, 1_000_000)
     >>> x[0, 0] = 50.0                           # a single far outlier
     >>> obs = Q.HistogramObserver(bins=2048)

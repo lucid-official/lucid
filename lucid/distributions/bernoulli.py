@@ -333,7 +333,7 @@ class Bernoulli(ExponentialFamily):
 
         Examples
         --------
-        >>> lucid.manual_seed(0)
+        >>> _ = lucid.manual_seed(0)
         >>> d = Bernoulli(probs=0.6)
         >>> x = d.sample((1000,))
         >>> x.shape
@@ -650,7 +650,7 @@ class Geometric(Distribution):
 
         Examples
         --------
-        >>> lucid.manual_seed(0)
+        >>> _ = lucid.manual_seed(0)
         >>> d = Geometric(probs=0.5)
         >>> x = d.sample((1000,))
         >>> x.shape

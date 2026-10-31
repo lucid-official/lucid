@@ -204,7 +204,7 @@ def normal_(
     >>> import lucid
     >>> from lucid.nn.init import normal_
     >>> w = lucid.empty(64, 32)
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> _ = normal_(w, mean=0.0, std=0.02)
     >>> abs(w.std().item() - 0.02) < 0.002       # sample std close to the target
     True
@@ -492,7 +492,7 @@ def xavier_normal_(
     >>> import lucid
     >>> from lucid.nn.init import xavier_normal_, calculate_gain
     >>> w = lucid.empty(64, 32)
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> _ = xavier_normal_(w, gain=calculate_gain('tanh'))
     >>> std = calculate_gain('tanh') * (2 / (32 + 64)) ** 0.5
     >>> abs(w.std().item() - std) < 0.1 * std
@@ -632,7 +632,7 @@ def kaiming_normal_(
     >>> import lucid
     >>> from lucid.nn.init import kaiming_normal_
     >>> w = lucid.empty(64, 32)
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> _ = kaiming_normal_(w, nonlinearity='relu')
     >>> std = 2.0**0.5 / 32**0.5                 # gain / sqrt(fan_in) = 0.25
     >>> abs(w.std().item() - std) < 0.1 * std

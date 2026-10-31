@@ -103,7 +103,7 @@ class RelaxedBernoulli(Distribution):
     --------
     >>> import lucid
     >>> from lucid.distributions import RelaxedBernoulli
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> dist = RelaxedBernoulli(temperature=0.5, probs=0.7)
     >>> samples = dist.rsample((100,))
     >>> # Samples are in (0, 1)
