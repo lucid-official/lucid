@@ -19,7 +19,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
-from lucid.utils.cache import Cache, StaticCache
+from lucid.utils.cache import Cache, DynamicCache, StaticCache
 
 __all__ = [
     "text_activation",
@@ -31,6 +31,8 @@ __all__ = [
     "update_causal_kv_and_bias",
     "resolve_causal_positions",
     "embed_tokens",
+    "kv_prefix",
+    "prepend_kv_prefix",
     "flatten_multiple_choice_inputs",
     "score_double_heads",
     "compute_qa_loss",
@@ -319,6 +321,73 @@ def embed_tokens(
     assert input_ids is not None  # the check above
     embedded: Tensor = table(input_ids)
     return embedded
+
+
+def kv_prefix(cache: Cache | None, layer: int) -> tuple[Tensor, Tensor] | None:
+    """The keys and values ``cache`` holds for ``layer``, read as a prefix and left as they are.
+
+    A bidirectional encoder has no history to extend: a cache handed to one is a
+    *prefix* every position attends to (a learned prefix, in prefix tuning).  It is
+    read, never written, so the same cache serves any number of calls.
+
+    Parameters
+    ----------
+    cache : Cache or None
+        ``None`` for no prefix.
+    layer : int
+        The encoder layer asking.
+
+    Returns
+    -------
+    tuple of (Tensor, Tensor) or None
+        ``(key, value)``, each ``(B, heads, prefix, head_dim)``; ``None`` for no cache
+        or an empty one.
+
+    Raises
+    ------
+    TypeError
+        ``cache`` is not a :class:`~lucid.utils.cache.DynamicCache`, the one cache
+        whose layers can be read back.
+    """
+    if cache is None or cache.get_seq_length() == 0:
+        return None
+    if not isinstance(cache, DynamicCache):
+        raise TypeError(
+            f"an encoder reads its key/value prefix from a DynamicCache, got {type(cache).__name__}"
+        )
+    return cache[layer]
+
+
+def prepend_kv_prefix(
+    key: Tensor, value: Tensor, prefix: tuple[Tensor, Tensor] | None
+) -> tuple[Tensor, Tensor]:
+    """``key`` and ``value`` with a prefix's keys and values in front of them.
+
+    The prefix is taken as it is — in particular, no position encoding is applied
+    to it — and cast to the dtype of ``key`` so a half-precision model takes a
+    full-precision prefix.
+
+    Parameters
+    ----------
+    key : Tensor
+        ``(B, H, T, D)`` keys of the input.
+    value : Tensor
+        ``(B, H, T, D)`` values of the input.
+    prefix : tuple of (Tensor, Tensor) or None
+        ``(key, value)``, each ``(B, H, P, D)``; ``None`` leaves both as they are.
+
+    Returns
+    -------
+    tuple of (Tensor, Tensor)
+        ``(B, H, P + T, D)`` keys and values.
+    """
+    if prefix is None:
+        return key, value
+    pre_key, pre_value = prefix
+    return (
+        lucid.cat([pre_key.to(key.dtype), key], dim=2),
+        lucid.cat([pre_value.to(value.dtype), value], dim=2),
+    )
 
 
 def resolve_causal_positions(

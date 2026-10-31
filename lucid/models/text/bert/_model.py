@@ -43,9 +43,12 @@ from lucid.models._utils._text import (
     compute_qa_loss,
     extended_attention_mask,
     init_text_weights as _init_weights,
+    kv_prefix,
+    prepend_kv_prefix,
     text_activation,
 )
 from lucid.models.text.bert._config import BERTConfig
+from lucid.utils.cache import Cache
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Embeddings
@@ -209,6 +212,7 @@ class _BERTSelfAttention(nn.Module):
         self,
         hidden: Tensor,
         attention_mask: Tensor | None = None,
+        prefix: tuple[Tensor, Tensor] | None = None,
         head_mask: Tensor | None = None,
         output_attentions: bool = False,
     ) -> tuple[Tensor, Tensor | None]:
@@ -216,6 +220,9 @@ class _BERTSelfAttention(nn.Module):
         q = self._shape(self.query(hidden), B, T)
         k = self._shape(self.key(hidden), B, T)
         v = self._shape(self.value(hidden), B, T)
+        # Prefix keys and values (prefix tuning) are attended to by every query; the
+        # ``attention_mask`` is as wide as prefix + input.
+        k, v = prepend_kv_prefix(k, v, prefix)
 
         weights: Tensor | None = None
         if output_attentions or head_mask is not None:
@@ -273,12 +280,14 @@ class _BERTAttention(nn.Module):
         attention_mask: Tensor | None = None,
         head_mask: Tensor | None = None,
         output_attentions: bool = False,
+        prefix: tuple[Tensor, Tensor] | None = None,
     ) -> tuple[Tensor, Tensor | None]:
         attn_out, weights = self.self(
             hidden,
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
+            prefix=prefix,
         )
         return self.output(attn_out, hidden), weights
 
@@ -334,12 +343,14 @@ class _BERTLayer(nn.Module):
         attention_mask: Tensor | None = None,
         head_mask: Tensor | None = None,
         output_attentions: bool = False,
+        prefix: tuple[Tensor, Tensor] | None = None,
     ) -> tuple[Tensor, Tensor | None]:
         attn_out, weights = self.attention(
             hidden,
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
+            prefix=prefix,
         )
         inter = self.intermediate(attn_out)
         return self.output(inter, attn_out), weights
@@ -359,6 +370,7 @@ class _BERTEncoder(nn.Module):
         output_hidden_states: bool = False,
         head_mask: Tensor | None = None,
         output_attentions: bool = False,
+        past_key_values: Cache | None = None,
     ) -> tuple[Tensor, tuple[Tensor, ...] | None, tuple[Tensor, ...] | None]:
         """Run the layer stack, optionally keeping every intermediate state.
 
@@ -368,6 +380,9 @@ class _BERTEncoder(nn.Module):
             output_hidden_states: Collect the input embedding plus each
                 layer's output.  Off by default so the common path holds
                 only one activation at a time.
+            past_key_values: Per-layer key/value prefix every position attends
+                to (read, never extended); ``attention_mask`` is then as wide
+                as prefix + input.
 
         Returns:
             ``(last_hidden_state, hidden_states)``.  The second is ``None``
@@ -387,6 +402,7 @@ class _BERTEncoder(nn.Module):
                 attention_mask=attention_mask,
                 head_mask=layer_head_mask,
                 output_attentions=output_attentions,
+                prefix=kv_prefix(past_key_values, i),
             )
             if output_hidden_states:
                 states.append(hidden)
@@ -497,6 +513,7 @@ class BERTModel(PretrainedModel):
 
     config_class: ClassVar[type[BERTConfig]] = BERTConfig
     base_model_prefix: ClassVar[str] = "bert"
+    kv_prefix_only: ClassVar[bool] = True
 
     def __init__(self, config: BERTConfig) -> None:
         super().__init__(config)
@@ -528,6 +545,7 @@ class BERTModel(PretrainedModel):
         output_hidden_states: bool = False,
         head_mask: Tensor | None = None,
         output_attentions: bool = False,
+        past_key_values: Cache | None = None,
     ) -> BaseModelOutputWithPooling:
         """Encode a batch and return the sequence output plus the pooled CLS.
 
@@ -541,6 +559,12 @@ class BERTModel(PretrainedModel):
         materialises the ``(B, H, T, T)`` matrix, which is exactly why it
         is fast.  Neither flag changes the result when off, and the fused
         path stays the default.
+
+        ``past_key_values`` is a :class:`~lucid.utils.cache.DynamicCache` holding
+        one ``(key, value)`` pair per layer, which every position attends to in
+        front of its own keys and values.  An encoder has no history to extend, so
+        the cache is only read, the prefix takes no position (the input's positions
+        start at 0), and ``attention_mask`` is as wide as prefix + input.
         """
         if inputs_embeds is not None:
             B, T = int(inputs_embeds.shape[0]), int(inputs_embeds.shape[1])
@@ -549,7 +573,8 @@ class BERTModel(PretrainedModel):
                 raise ValueError("pass either input_ids or inputs_embeds.")
             B, T = int(input_ids.shape[0]), int(input_ids.shape[1])
 
-        ext_mask = extended_attention_mask(attention_mask, (B, T))
+        prefix_len = 0 if past_key_values is None else past_key_values.get_seq_length()
+        ext_mask = extended_attention_mask(attention_mask, (B, T), key_length=prefix_len + T)
 
         hidden = self.embeddings(
             input_ids,
@@ -563,6 +588,7 @@ class BERTModel(PretrainedModel):
             output_hidden_states=output_hidden_states,
             head_mask=head_mask,
             output_attentions=output_attentions,
+            past_key_values=past_key_values,
         )
         pooled_output = self.pooler(sequence_output)
 

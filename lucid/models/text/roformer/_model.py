@@ -39,12 +39,15 @@ from lucid.models._utils._text import (
     extended_attention_mask,
     flatten_multiple_choice_inputs,
     init_text_module_weights,
+    kv_prefix,
     last_kept_token,
+    prepend_kv_prefix,
     text_activation,
 )
 from lucid.nn.functional import apply_rotary_emb
 from lucid.nn.module import Module
 from lucid.models.text.roformer._config import RoFormerConfig
+from lucid.utils.cache import Cache
 
 
 class _RoFormerInitMixin:
@@ -175,7 +178,12 @@ class _RoFormerSelfAttention(nn.Module):
 
     @override
     def forward(
-        self, hidden: Tensor, cos: Tensor, sin: Tensor, attention_mask: Tensor | None = None
+        self,
+        hidden: Tensor,
+        cos: Tensor,
+        sin: Tensor,
+        attention_mask: Tensor | None = None,
+        prefix: tuple[Tensor, Tensor] | None = None,
     ) -> Tensor:
         B, T, _ = hidden.shape
         q = self._shape(self.query(hidden), B, T)
@@ -190,6 +198,10 @@ class _RoFormerSelfAttention(nn.Module):
             # phase.  ``apply_rotary_emb`` rotates a pair, so V is passed
             # twice and only the first result is kept.
             v, _ = apply_rotary_emb(v, v, cos, sin, interleaved=True)
+
+        # A prefix (prefix tuning) is key/value states with no position: it goes in
+        # after the rotation, so it is never rotated, and the input's phases start at 0.
+        k, v = prepend_kv_prefix(k, v, prefix)
 
         # One masked-attention core for every path (RoPE is already applied,
         # so it sees rotated q/k).  A hand-written softmax took the dropout
@@ -229,9 +241,14 @@ class _RoFormerAttention(nn.Module):
 
     @override
     def forward(
-        self, hidden: Tensor, cos: Tensor, sin: Tensor, attention_mask: Tensor | None = None
+        self,
+        hidden: Tensor,
+        cos: Tensor,
+        sin: Tensor,
+        attention_mask: Tensor | None = None,
+        prefix: tuple[Tensor, Tensor] | None = None,
     ) -> Tensor:
-        attn_out = self.self(hidden, cos, sin, attention_mask=attention_mask)
+        attn_out = self.self(hidden, cos, sin, attention_mask=attention_mask, prefix=prefix)
         return self.output(attn_out, hidden)
 
 
@@ -271,9 +288,14 @@ class _RoFormerLayer(nn.Module):
 
     @override
     def forward(
-        self, hidden: Tensor, cos: Tensor, sin: Tensor, attention_mask: Tensor | None = None
+        self,
+        hidden: Tensor,
+        cos: Tensor,
+        sin: Tensor,
+        prefix: tuple[Tensor, Tensor] | None = None,
+        attention_mask: Tensor | None = None,
     ) -> Tensor:
-        attn_out = self.attention(hidden, cos, sin, attention_mask=attention_mask)
+        attn_out = self.attention(hidden, cos, sin, attention_mask=attention_mask, prefix=prefix)
         inter = self.intermediate(attn_out)
         return self.output(inter, attn_out)
 
@@ -288,10 +310,21 @@ class _RoFormerEncoder(nn.Module):
 
     @override
     def forward(
-        self, hidden: Tensor, cos: Tensor, sin: Tensor, attention_mask: Tensor | None = None
+        self,
+        hidden: Tensor,
+        cos: Tensor,
+        sin: Tensor,
+        attention_mask: Tensor | None = None,
+        past_key_values: Cache | None = None,
     ) -> Tensor:
-        for layer in self.layer:
-            hidden = layer(hidden, cos, sin, attention_mask=attention_mask)
+        for i, layer in enumerate(self.layer):
+            hidden = layer(
+                hidden,
+                cos,
+                sin,
+                attention_mask=attention_mask,
+                prefix=kv_prefix(past_key_values, i),
+            )
         return hidden
 
 
@@ -398,6 +431,7 @@ class _RoFormerTrunk(_RoFormerInitMixin, PretrainedModel):
 
     config_class: ClassVar[type[RoFormerConfig]] = RoFormerConfig
     base_model_prefix: ClassVar[str] = "roformer"
+    kv_prefix_only: ClassVar[bool] = True
 
     def __init__(self, config: RoFormerConfig) -> None:
         super().__init__(config)
@@ -435,6 +469,7 @@ class _RoFormerTrunk(_RoFormerInitMixin, PretrainedModel):
         attention_mask: Tensor | None,
         token_type_ids: Tensor | None,
         inputs_embeds: Tensor | None,
+        past_key_values: Cache | None = None,
     ) -> Tensor:
         hidden = self.embeddings(
             input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
@@ -453,8 +488,13 @@ class _RoFormerTrunk(_RoFormerInitMixin, PretrainedModel):
 
         if self.embeddings_project is not None:
             hidden = self.embeddings_project(hidden)
-        ext_mask = extended_attention_mask(attention_mask, (batch_size, seq_len))
-        return self.encoder(hidden, cos, sin, attention_mask=ext_mask)
+        prefix_len = 0 if past_key_values is None else past_key_values.get_seq_length()
+        ext_mask = extended_attention_mask(
+            attention_mask, (batch_size, seq_len), key_length=prefix_len + seq_len
+        )
+        return self.encoder(
+            hidden, cos, sin, attention_mask=ext_mask, past_key_values=past_key_values
+        )
 
 
 @final
@@ -473,10 +513,13 @@ class _RoFormerEncoderOnly(_RoFormerTrunk):
         attention_mask: Tensor | None = None,
         token_type_ids: Tensor | None = None,
         *,
+        past_key_values: Cache | None = None,
         inputs_embeds: Tensor | None = None,
     ) -> BaseModelOutput:
         return BaseModelOutput(
-            last_hidden_state=self._encode(input_ids, attention_mask, token_type_ids, inputs_embeds)
+            last_hidden_state=self._encode(
+                input_ids, attention_mask, token_type_ids, inputs_embeds, past_key_values
+            )
         )
 
 
@@ -572,8 +615,11 @@ class RoFormerModel(_RoFormerTrunk, PretrainedModel):
         token_type_ids: Tensor | None = None,
         *,
         inputs_embeds: Tensor | None = None,
+        past_key_values: Cache | None = None,
     ) -> BaseModelOutputWithPooling:
-        sequence_output = self._encode(input_ids, attention_mask, token_type_ids, inputs_embeds)
+        sequence_output = self._encode(
+            input_ids, attention_mask, token_type_ids, inputs_embeds, past_key_values
+        )
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output, pooler_output=self.pooler(sequence_output)
         )

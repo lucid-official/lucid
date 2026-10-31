@@ -92,7 +92,9 @@ class _SingleStackLayout(_Layout, task_types=(None, TaskType.SEQ_CLS, TaskType.F
                 f"{type(trunk).__name__} cannot take cached keys and values, which prefix "
                 "tuning puts its prefix in"
             )
-        return [(trunk, _PrefixSite(tuner))]
+        # An encoder's cache is a prefix to attend to, not positions to continue from.
+        shifts_positions = not getattr(trunk, "kv_prefix_only", False)
+        return [(trunk, _PrefixSite(tuner, shifts_positions))]
 
 
 class _CausalLayout(_SingleStackLayout, task_types=(TaskType.CAUSAL_LM,)):

@@ -426,13 +426,11 @@ class TestFile:
 
 
 class TestSequenceClassification:
-    @pytest.mark.parametrize("family", ["gpt2_small_cls", "gpt_cls", "bert_base_cls"])
+    @pytest.mark.parametrize(
+        "family", ["gpt2_small_cls", "gpt_cls", "bert_base_cls", "roformer_cls"]
+    )
     @pytest.mark.parametrize("method", ["prompt", "p-tuning-lstm", "prefix"])
     def test_the_head_trains_beside_the_prompt(self, family: str, method: str, device: str) -> None:
-        if method == "prefix" and family == "bert_base_cls":
-            with pytest.raises(NotImplementedError, match="cached keys and values"):
-                get_peft_model(_classifier(family, device), _METHODS[method]("SEQ_CLS"))
-            return
         ids = _ids(device, (2, 5))
         labels = lucid.tensor([0, 2], device=device).long()
         peft = get_peft_model(_classifier(family, device), _METHODS[method]("SEQ_CLS"))
@@ -640,3 +638,233 @@ class TestModelHooks:
         model = _t5(device)
         assert model.get_encoder() is model.t5.encoder is model.t5.get_encoder()
         assert model.get_decoder() is model.t5.decoder is model.t5.get_decoder()
+
+
+_ENCODERS = ["bert_base_cls", "roformer_cls"]
+
+
+def _trunk_of(peft: PeftModel) -> nn.Module:
+    model = peft.get_base_model()
+    return getattr(model, model.base_model_prefix)
+
+
+def _prefix_cache(peft: PeftModel, batch: int) -> DynamicCache:
+    tuner = peft.base_model
+    applied = tuner._applying()
+    assert isinstance(applied, _Applied)
+    cache = DynamicCache()
+    _put_prefix(cache, applied.key_values(batch, tuner._model_dtype()), _V)
+    return cache
+
+
+class TestEncoderPrefix:
+    """Prefix tuning on the bidirectional encoders: the prefix is read as keys and values in front."""
+
+    @pytest.mark.parametrize("family", _ENCODERS)
+    def test_the_heads_see_the_real_sequence_and_the_trunk_the_prefix(
+        self, family: str, device: str
+    ) -> None:
+        peft = get_peft_model(_classifier(family, device), _METHODS["prefix"]("SEQ_CLS"))
+        assert type(peft) is PeftModelForSequenceClassification
+        assert len(peft.base_model._handles) == 1  # on the trunk alone
+        ids = _ids(device, (2, 5))
+        assert peft(ids, attention_mask=lucid.ones(2, 5, device=device).long()).logits.shape == (
+            2,
+            3,
+        )
+        seen: dict[str, tuple[int, ...]] = {}
+
+        def spy(_module: nn.Module, _args: tuple[object, ...], kwargs: dict[str, object]) -> None:
+            cache = kwargs["past_key_values"]
+            assert isinstance(cache, DynamicCache)
+            seen["keys"] = tuple(cache[0][0].shape)
+            mask = kwargs["attention_mask"]
+            assert isinstance(mask, lucid.Tensor)
+            seen["mask"] = tuple(mask.shape)
+
+        handle = _trunk_of(peft).register_forward_pre_hook(spy, with_kwargs=True, prepend=False)
+        peft(ids, attention_mask=lucid.ones(2, 5, device=device).long())
+        handle.remove()
+        assert seen == {"keys": (2, 2, _V, 8), "mask": (2, _V + 5)}
+
+    @pytest.mark.parametrize("family", _ENCODERS)
+    def test_a_known_prefix_is_the_same_as_a_cache_that_holds_it(
+        self, family: str, device: str
+    ) -> None:
+        base = _classifier(family, device)
+        peft = get_peft_model(_classifier(family, device), _METHODS["prefix"]("SEQ_CLS"))
+        ids = _ids(device, (2, 5))
+        mask = lucid.ones(2, 5, device=device).long()
+        mask[1, 3:] = 0
+        wide = lucid.cat([lucid.ones(2, _V, device=device).long(), mask], dim=1)
+        cache = _prefix_cache(peft, 2)
+        by_hand = getattr(base, base.base_model_prefix)(
+            ids, attention_mask=wide, past_key_values=cache
+        ).last_hidden_state
+        plain = getattr(base, base.base_model_prefix)(ids, attention_mask=mask).last_hidden_state
+        by_hook = _trunk_of(peft)(ids, attention_mask=mask).last_hidden_state
+        assert bool(lucid.allclose(by_hook, by_hand, atol=1e-5))
+        assert not bool(lucid.allclose(by_hook, plain, atol=1e-5))
+
+    @pytest.mark.parametrize("family", _ENCODERS)
+    def test_only_the_prefix_and_the_head_train(self, family: str, device: str) -> None:
+        peft = get_peft_model(_classifier(family, device), _METHODS["prefix"]("SEQ_CLS"))
+        ids = _ids(device, (2, 5))
+        labels = lucid.tensor([0, 2], device=device).long()
+        before = {n: p.clone() for n, p in peft.named_parameters()}
+        named = _prompt_parameters(peft)
+        optimizer = optim.SGD([p for p in peft.parameters() if p.requires_grad], lr=0.5)
+        peft(ids, labels=labels).loss.backward()
+        assert {n for n, p in peft.named_parameters() if p.grad is not None} == set(named)
+        optimizer.step()
+        for n, p in peft.named_parameters():
+            assert (not bool(lucid.allclose(p, before[n]))) == (n in named), n
+
+    def test_the_prefix_takes_no_position(self, device: str) -> None:
+        # The input keeps positions 0..T-1 whatever sits in front; a decoder's would shift past it.
+        lucid.manual_seed(0)
+        model = create_model("bert_base", **_TEXT).eval().to(device)
+        peft = get_peft_model(model, _METHODS["prefix"]("FEATURE_EXTRACTION"))
+        ids = _ids(device, (2, 5))
+        positions = lucid.arange(5, device=device).long().reshape(1, 5).repeat(2, 1)
+        given = peft(ids, position_ids=positions).last_hidden_state
+        assert bool(lucid.allclose(given, peft(ids).last_hidden_state))
+
+    @pytest.mark.parametrize("family", _ENCODERS)
+    def test_a_padded_key_is_not_attended_to(self, family: str, device: str) -> None:
+        peft = get_peft_model(_classifier(family, device), _METHODS["prefix"]("SEQ_CLS"))
+        ids = _ids(device, (2, 5))
+        full = peft(ids, attention_mask=lucid.ones(2, 5, device=device).long()).logits
+        assert bool(lucid.allclose(full, peft(ids).logits, atol=1e-5))
+        padded = lucid.ones(2, 5, device=device).long()
+        padded[:, 3:] = 0
+        assert not bool(lucid.allclose(peft(ids, attention_mask=padded).logits, full, atol=1e-5))
+
+    @pytest.mark.parametrize("family", _ENCODERS)
+    def test_disabling_the_prefix_runs_the_base(self, family: str, device: str) -> None:
+        base = _classifier(family, device)
+        peft = get_peft_model(_classifier(family, device), _METHODS["prefix"]("SEQ_CLS"))
+        ids = _ids(device, (2, 5))
+        with peft.disable_adapter():
+            assert bool(lucid.equal(peft(ids).logits, base(ids).logits))
+
+    @pytest.mark.parametrize("family", _ENCODERS)
+    def test_a_saved_prefix_loads_to_the_same_model(
+        self, family: str, device: str, tmp_path: Path
+    ) -> None:
+        peft = get_peft_model(_classifier(family, device), _METHODS["prefix"]("SEQ_CLS"))
+        for p in peft.base_model.prompt_encoder.parameters():
+            _assign(p, p + 0.5)
+        peft.save_pretrained(tmp_path)
+        saved = load_safetensors(str(tmp_path / "adapter_model.safetensors"))
+        layers, planes, hidden = 2, 2, 16  # the keys and the values of each layer
+        assert saved["prompt_embeddings"].shape == (_V, layers * planes * hidden)
+        loaded = PeftModel.from_pretrained(_classifier(family, device), tmp_path)
+        ids = _ids(device, (2, 5))
+        assert bool(lucid.allclose(loaded(ids).logits, peft(ids).logits, atol=1e-5))
+
+    @pytest.mark.parametrize("family", ["bert_base", "roformer"])
+    def test_feature_extraction_returns_the_real_positions(self, family: str, device: str) -> None:
+        lucid.manual_seed(0)
+        model = create_model(family, **_TEXT).eval().to(device)
+        peft = get_peft_model(model, _METHODS["prefix"]("FEATURE_EXTRACTION"))
+        assert peft(_ids(device, (2, 5))).last_hidden_state.shape == (2, 5, 16)
+
+
+def _heads(x: lucid.Tensor, heads: int) -> lucid.Tensor:
+    batch, length, width = x.shape
+    return x.reshape(batch, length, heads, width // heads).permute(0, 2, 1, 3)
+
+
+def _attend(
+    q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor, prefix: tuple[lucid.Tensor, lucid.Tensor]
+) -> lucid.Tensor:
+    """softmax(q [prefix k; k]^T / sqrt(d)) [prefix v; v], head by head, by hand."""
+    keys, values = lucid.cat([prefix[0], k], dim=2), lucid.cat([prefix[1], v], dim=2)
+    scores = (q @ keys.permute(0, 1, 3, 2)) / (int(q.shape[-1]) ** 0.5)
+    out: lucid.Tensor = nn.functional.softmax(scores, dim=-1) @ values
+    return out.permute(0, 2, 1, 3).reshape(q.shape[0], q.shape[2], -1)
+
+
+class TestPrefixedAttention:
+    """The encoders' attention with a key/value prefix, against the softmax written out."""
+
+    def _prefix(self, device: str) -> tuple[lucid.Tensor, lucid.Tensor]:
+        lucid.manual_seed(3)
+        return lucid.randn(2, 2, _V, 8, device=device), lucid.randn(2, 2, _V, 8, device=device)
+
+    def test_bert_attends_over_the_prefix_then_the_input(self, device: str) -> None:
+        model = _classifier("bert_base_cls", device)
+        attention = model.bert.encoder.layer[0].attention.self
+        hidden = lucid.randn(2, 5, 16, device=device)
+        prefix = self._prefix(device)
+        q, k, v = (
+            _heads(proj(hidden), 2) for proj in (attention.query, attention.key, attention.value)
+        )
+        got, _ = attention(hidden, prefix=prefix)
+        assert bool(lucid.allclose(got, _attend(q, k, v, prefix), atol=1e-5))
+        plain, _ = attention(hidden)
+        assert not bool(lucid.allclose(got, plain, atol=1e-4))
+
+    def test_roformer_rotates_the_input_and_not_the_prefix(self, device: str) -> None:
+        from lucid.nn.functional import apply_rotary_emb
+
+        model = _classifier("roformer_cls", device)
+        trunk = model.roformer
+        attention = trunk.encoder.layer[0].attention.self
+        hidden = lucid.randn(2, 5, 16, device=device)
+        cos, sin = trunk.rotary()
+        cos, sin = cos[:5], sin[:5]
+        prefix = self._prefix(device)
+        q, k, v = (
+            _heads(proj(hidden), 2) for proj in (attention.query, attention.key, attention.value)
+        )
+        q, k = apply_rotary_emb(q, k, cos, sin, interleaved=True)
+        got = attention(hidden, cos, sin, prefix=prefix)
+        assert bool(lucid.allclose(got, _attend(q, k, v, prefix), atol=1e-5))
+        # A prefix rotated as well would be a different attention: the check can tell.
+        turned = apply_rotary_emb(prefix[0], prefix[0], cos[:_V], sin[:_V], interleaved=True)[0]
+        assert not bool(lucid.allclose(got, _attend(q, k, v, (turned, prefix[1])), atol=1e-4))
+
+    @pytest.mark.parametrize("family", _ENCODERS)
+    def test_an_empty_cache_is_no_prefix(self, family: str, device: str) -> None:
+        model = _classifier(family, device)
+        trunk = getattr(model, model.base_model_prefix)
+        ids = _ids(device, (2, 5))
+        plain = trunk(ids).last_hidden_state
+        empty = trunk(ids, past_key_values=DynamicCache()).last_hidden_state
+        assert bool(lucid.equal(plain, empty))
+
+    @pytest.mark.parametrize("family", _ENCODERS)
+    def test_the_prefix_is_read_and_left_as_it_was(self, family: str, device: str) -> None:
+        model = _classifier(family, device)
+        trunk = getattr(model, model.base_model_prefix)
+        peft = get_peft_model(_classifier(family, device), _METHODS["prefix"]("SEQ_CLS"))
+        cache = _prefix_cache(peft, 2)
+        ids = _ids(device, (2, 5))
+        wide = lucid.ones(2, _V + 5, device=device).long()
+        first = trunk(ids, attention_mask=wide, past_key_values=cache).last_hidden_state
+        assert cache.get_seq_length() == _V
+        again = trunk(ids, attention_mask=wide, past_key_values=cache).last_hidden_state
+        assert bool(lucid.equal(first, again))
+
+    def test_only_a_dynamic_cache_can_be_read_as_a_prefix(self, device: str) -> None:
+        from lucid.utils.cache import StaticCache
+
+        model = _classifier("bert_base_cls", device)
+        static = StaticCache(max_cache_len=8)
+        static.update(*self._prefix(device), 0)
+        with pytest.raises(TypeError, match="DynamicCache"):
+            model.bert(_ids(device, (2, 5)), past_key_values=static)
+
+    def test_a_mask_as_wide_as_the_input_alone_is_refused_beside_a_prefix(
+        self, device: str
+    ) -> None:
+        model = _classifier("bert_base_cls", device)
+        peft = get_peft_model(_classifier("bert_base_cls", device), _METHODS["prefix"]("SEQ_CLS"))
+        with pytest.raises(ValueError, match="attention_mask has width 5"):
+            model.bert(
+                _ids(device, (2, 5)),
+                attention_mask=lucid.ones(2, 5, device=device).long(),
+                past_key_values=_prefix_cache(peft, 2),
+            )
