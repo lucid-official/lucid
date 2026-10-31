@@ -466,10 +466,10 @@ class MultiheadAttention(Module):
             Parameter(empty(embed_dim, dtype=dtype, device=device)) if bias else None
         )
 
-        self._init_weights()
+        self.reset_parameters()
 
-    def _init_weights(self) -> None:
-        """Internal helper for the MultiheadAttention module."""
+    def reset_parameters(self) -> None:
+        """Xavier-uniform the projections, zero the biases, Xavier-normal ``bias_k`` / ``bias_v``."""
         if self.in_proj_weight is not None:
             init.xavier_uniform_(self.in_proj_weight)
         if self.q_proj_weight is not None:
@@ -487,6 +487,10 @@ class MultiheadAttention(Module):
             init.xavier_normal_(self.bias_k)
             assert self.bias_v is not None
             init.xavier_normal_(self.bias_v)
+
+    def _reset_parameters(self) -> None:
+        """:meth:`reset_parameters`, under the name the reference gives it."""
+        self.reset_parameters()
 
     # ── reference-checkpoint loading: accept ``out_proj.weight`` / ``out_proj.bias``
     @override

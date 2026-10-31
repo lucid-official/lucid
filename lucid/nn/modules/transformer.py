@@ -14,6 +14,7 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike
 
 from lucid.nn.module import Module
+import lucid.nn.init as init
 from lucid.nn.modules.attention import MultiheadAttention
 from lucid.nn.modules.normalization import LayerNorm
 
@@ -1363,6 +1364,17 @@ class Transformer(Module):
         self.d_model = d_model
         self.nhead = nhead
         self.batch_first = batch_first
+
+    def _reset_parameters(self) -> None:
+        """Xavier-uniform every parameter of two or more dimensions, as the reference does.
+
+        The constructor does not call it: it leaves each sub-layer on its own
+        default, and a caller who wants the reference's whole-model start
+        runs this after building.
+        """
+        for p in self.parameters():
+            if p.ndim > 1:
+                init.xavier_uniform_(p)
 
     @override
     def forward(

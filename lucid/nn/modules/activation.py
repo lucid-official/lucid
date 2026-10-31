@@ -15,8 +15,7 @@ from typing import override
 from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike, GeluApproximate
 from lucid.nn.module import Module
-from lucid.nn.parameter import Parameter
-from lucid._factories.creation import full
+from lucid.nn.modules._slope import _SlopeParameters
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid.nn.functional.activations import (
@@ -1214,7 +1213,7 @@ class ReLU6(_InplaceActivation):
         return relu6(input, self.inplace)
 
 
-class PReLU(Module):
+class PReLU(_SlopeParameters):
     r"""Parametric Rectified Linear Unit activation function.
 
     Applies element-wise:
@@ -1252,6 +1251,8 @@ class PReLU(Module):
     weight : Parameter of shape ``(num_parameters,)``
         Learnable negative slopes :math:`\alpha`.  Updated by the optimiser
         during training.
+    init : float
+        The initial slope; :meth:`reset_parameters` restores it.
 
     Shape
     -----
@@ -1290,8 +1291,7 @@ class PReLU(Module):
     ) -> None:
         """Initialise the PReLU module. See the class docstring for parameter semantics."""
         super().__init__()
-        self.num_parameters = num_parameters
-        self.weight = Parameter(full((num_parameters,), init, dtype=dtype, device=device))
+        self._make_slopes(num_parameters, init, device, dtype)
 
     @override
     def forward(self, input: Tensor) -> Tensor:

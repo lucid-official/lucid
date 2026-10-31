@@ -10,11 +10,10 @@ from typing import ClassVar, cast, override
 from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike, _Size2d, _Size3d, PaddingMode
 from lucid.nn.module import Module
-from lucid.nn.parameter import Parameter
 from lucid.nn.modules._conv_common import (
     _check_groups,
     _single,
-    _conv_parameters,
+    _ConvParameters,
     _LazyConvMixin,
     _pair,
     _triple,
@@ -54,7 +53,7 @@ def _string_padding(padding: object, stride: int | tuple[int, ...], label: str) 
     return padding
 
 
-class _ConvNd(Module):
+class _ConvNd(_ConvParameters):
     """What ``Conv{1,2,3}d`` share: the forward, ``extra_repr`` and weight init.
 
     Each subclass sets ``_rank`` and its attributes in ``__init__``.
@@ -70,8 +69,6 @@ class _ConvNd(Module):
     groups: int
     padding_mode: PaddingMode
     _padding_str: str | None
-    weight: Parameter
-    bias: Parameter | None
 
     @override
     def forward(self, input: Tensor) -> Tensor:
@@ -270,12 +267,8 @@ class Conv1d(_ConvNd):
         self.padding_mode = _validate_padding_mode(padding_mode)
         self._padding_str: str | None = _string_padding(padding, self.stride, type(self).__name__)
         self.padding: int = 0 if isinstance(padding, str) else _single(padding, "padding")
-        self.weight, self.bias = _conv_parameters(
-            (out_channels, in_channels // groups, self.kernel_size),
-            out_channels,
-            bias,
-            device,
-            dtype,
+        self._make_parameters(
+            (out_channels, in_channels // groups, self.kernel_size), bias, device, dtype
         )
 
 
@@ -461,9 +454,7 @@ class Conv2d(_ConvNd):
         self.padding: tuple[int, int] = (
             (0, 0) if isinstance(padding, str) else _pair(padding, "padding")
         )
-        self.weight, self.bias = _conv_parameters(
-            (out_channels, in_channels // groups, kh, kw), out_channels, bias, device, dtype
-        )
+        self._make_parameters((out_channels, in_channels // groups, kh, kw), bias, device, dtype)
 
 
 class Conv3d(_ConvNd):
@@ -613,8 +604,8 @@ class Conv3d(_ConvNd):
         self.padding: tuple[int, int, int] = (
             (0, 0, 0) if isinstance(padding, str) else _triple(padding, "padding")
         )
-        self.weight, self.bias = _conv_parameters(
-            (out_channels, in_channels // groups, kd, kh, kw), out_channels, bias, device, dtype
+        self._make_parameters(
+            (out_channels, in_channels // groups, kd, kh, kw), bias, device, dtype
         )
 
 

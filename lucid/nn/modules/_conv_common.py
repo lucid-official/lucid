@@ -1,6 +1,5 @@
 """Helpers the convolution and transposed-convolution modules share."""
 
-import math
 from collections.abc import Sequence
 from typing import ClassVar, override
 
@@ -87,26 +86,41 @@ def _in_channels(x: Tensor, n: int) -> int:
     return int(x.shape[0 if x.ndim == n + 1 else 1])
 
 
-def _init_conv_weights(weight: Parameter, bias: Parameter | None) -> None:
-    """Kaiming-uniform weight; a bias bounded by the weight's fan-in."""
-    init.kaiming_uniform_(weight, a=math.sqrt(5))
-    if bias is not None:
-        fan_in, _ = init._calculate_fan_in_and_fan_out(weight)
-        bound: float = 1.0 / math.sqrt(fan_in) if fan_in > 0 else 0.0
-        init.uniform_(bias, -bound, bound)
-
-
 def _conv_parameters(
     shape: tuple[int, ...], out_channels: int, bias: bool, device: DeviceLike, dtype: DTypeLike
 ) -> tuple[Parameter, Parameter | None]:
-    """A convolution's ``weight`` of ``shape`` and its bias, initialised."""
+    """A convolution's ``weight`` of ``shape`` and its bias, allocated and not yet drawn."""
     weight = Parameter(empty(*shape, dtype=dtype, device=device))
     b = Parameter(empty(out_channels, dtype=dtype, device=device)) if bias else None
-    _init_conv_weights(weight, b)
     return weight, b
 
 
-class _LazyConvMixin(_LazyModule):
+class _ConvParameters(Module):
+    """The ``weight`` / ``bias`` of a convolution, and how they are initialised.
+
+    The eager, transposed and lazy convolutions all own the pair, so the
+    rule for drawing it lives here once: :meth:`reset_parameters` is the
+    default weight-and-bias initialisation, and :meth:`_make_parameters`
+    allocates the pair and then calls it.
+    """
+
+    out_channels: int
+    weight: Parameter
+    bias: Parameter | None
+
+    def _make_parameters(
+        self, shape: tuple[int, ...], bias: bool, device: DeviceLike, dtype: DTypeLike
+    ) -> None:
+        """Allocate ``weight`` of ``shape`` and the bias, then draw their values."""
+        self.weight, self.bias = _conv_parameters(shape, self.out_channels, bias, device, dtype)
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        """Re-draw ``weight`` (Kaiming uniform) and ``bias`` (bounded by the weight's fan-in)."""
+        init._reset_weight_and_bias(self.weight, self.bias)
+
+
+class _LazyConvMixin(_LazyModule, _ConvParameters):
     """What the six lazy convolutions share: deferring the weight to the first input.
 
     Each lazy class puts this before its eager counterpart, sets
@@ -117,7 +131,6 @@ class _LazyConvMixin(_LazyModule):
 
     _lazy_rank: ClassVar[int]
     _lazy_transposed: ClassVar[bool] = False
-    out_channels: int
     groups: int
     _has_bias: bool
 
@@ -158,6 +171,13 @@ class _LazyConvMixin(_LazyModule):
             _fill(self, "bias", bias)
         else:
             Module.__setattr__(self, "bias", None)
+        self.reset_parameters()
+
+    @override
+    def reset_parameters(self) -> None:
+        """Re-draw the values; nothing to do until the layer has been sized."""
+        if self.in_channels is not None:
+            super().reset_parameters()
 
     def _materialize_from(self, x: Tensor) -> None:
         """Size ``in_channels`` from the first input ``x``."""

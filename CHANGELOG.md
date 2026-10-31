@@ -135,6 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - DoRA, PiSSA/OLoRA init and lora_bias for LoRA layers
 - LoRA default targets for the whole zoo, with a matrix
 - IA3, LoHa and LoKr tuners on the registry
+- reset_parameters() on every module that owns parameters
 
 ---
 

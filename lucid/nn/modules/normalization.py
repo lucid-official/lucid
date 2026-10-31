@@ -8,11 +8,11 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike
 from lucid.nn.module import Module
 from lucid.nn.parameter import Parameter
+from lucid.nn.modules._affine import _AffineParameters
 from lucid.nn.modules._lazy import _LazyModule, fill as _fill
 from lucid._factories.creation import ones, zeros
 import lucid as _lucid
 from lucid._C import engine as _C_engine
-import lucid.nn.init as init
 from lucid.nn.functional._spatial_args import _add_batch_axis, _drop_batch_axis
 from lucid.nn.functional.normalization import (
     layer_norm,
@@ -26,7 +26,7 @@ from lucid.nn.functional.normalization import (
 )
 
 
-class LayerNorm(Module):
+class LayerNorm(_AffineParameters):
     r"""Layer normalization over the trailing dimensions of the input.
 
     Normalises each sample independently by computing mean and variance
@@ -174,7 +174,7 @@ class LayerNorm(Module):
         )
 
 
-class RMSNorm(Module):
+class RMSNorm(_AffineParameters):
     r"""Root Mean Square Layer Normalization.
 
     Normalises the input by its root-mean-square value and applies a
@@ -298,7 +298,7 @@ class RMSNorm(Module):
         )
 
 
-class GroupNorm(Module):
+class GroupNorm(_AffineParameters):
     r"""Group normalization over the channel dimension.
 
     Divides the :math:`C` channels into ``num_groups`` contiguous groups
@@ -438,7 +438,7 @@ class GroupNorm(Module):
         return f"{self.num_groups}, {self.num_channels}, eps={self.eps}, affine={self.affine}"
 
 
-class _NormBase(Module):
+class _NormBase(_AffineParameters):
     """The state BatchNorm and InstanceNorm share, as the reference shares it.
 
     An optional affine pair and optional running statistics, ``num_features``
@@ -555,6 +555,7 @@ class _NormBase(Module):
             if buffer is not None:
                 buffer.fill_(value)
 
+    @override
     def reset_parameters(self) -> None:
         """Reset the running statistics, then ``weight`` to ones and ``bias`` to zeros.
 
@@ -569,11 +570,7 @@ class _NormBase(Module):
         ([0.0, 0.0], 0)
         """
         self.reset_running_stats()
-        if self.affine:
-            if self.weight is not None:
-                init.ones_(self.weight)
-            if self.bias is not None:
-                init.zeros_(self.bias)
+        super().reset_parameters()
 
     @override
     def _load_from_state_dict(

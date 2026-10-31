@@ -16,7 +16,43 @@ from lucid.nn.functional.activations import straight_through
 from lucid.nn.functional.sparse import embedding, nearest_codebook, one_hot
 
 
-class Embedding(Module):
+class _PaddedTable(Module):
+    """A ``(num_embeddings, embedding_dim)`` ``weight`` table with an optional padding row.
+
+    What :class:`Embedding` and :class:`EmbeddingBag` share: drawn from
+    ``N(0, 1)``, then the padding row, if any, put to zero so it feeds
+    nothing through.  :meth:`reset_parameters` is that rule, run by the
+    constructor and again by anyone who wants the initial state back.
+    """
+
+    weight: Parameter
+    padding_idx: int | None
+
+    def reset_parameters(self) -> None:
+        """Re-draw ``weight`` from ``N(0, 1)`` and zero the padding row."""
+        init.normal_(self.weight)
+        self._fill_padding_idx_with_zero()
+
+    def _fill_padding_idx_with_zero(self) -> None:
+        """Set ``weight[padding_idx]`` to zero, written through in place.
+
+        Through the weight's own storage, the way ``nn.init`` writes, so the
+        parameter stays a leaf that requires grad.  This used to compute the
+        zeroed table with gradient tracking on and swap it in as the
+        weight's impl: the weight became the output of an ``index_fill``
+        node rather than a leaf, and backward never accumulated into its
+        ``.grad``.  Every embedding built with a ``padding_idx`` — BERT's and
+        RoFormer's word tables among them — was untrainable, with no error.
+        """
+        if self.padding_idx is None:
+            return
+        pad = _lucid.tensor([self.padding_idx], dtype=_lucid.int64, device=self.weight.device)
+        with _lucid.no_grad():
+            zeroed: Tensor = _lucid.index_fill(self.weight, 0, pad, 0.0)
+        init._fill_from_impl(self.weight, zeroed._impl)
+
+
+class Embedding(_PaddedTable):
     r"""Learnable dense lookup table that maps integer token indices to vectors.
 
     An embedding table is a matrix :math:`W \in \mathbb{R}^{V \times D}`
@@ -157,29 +193,7 @@ class Embedding(Module):
         self.weight: Parameter = Parameter(
             empty(num_embeddings, embedding_dim, dtype=dtype, device=device)
         )
-        init.normal_(self.weight)
-        # Zero out the pad row on init — matches the reference framework
-        # so untouched models do not leak random values through the pad slot.
-        if self.padding_idx is not None:
-            self._zero_pad_row()
-
-    def _zero_pad_row(self) -> None:
-        """Set ``weight[padding_idx]`` to zero, written through in place.
-
-        Through the weight's own storage, the way ``nn.init`` writes, so the
-        parameter stays a leaf that requires grad.  This used to compute the
-        zeroed table with gradient tracking on and swap it in as the
-        weight's impl: the weight became the output of an ``index_fill``
-        node rather than a leaf, and backward never accumulated into its
-        ``.grad``.  Every embedding built with a ``padding_idx`` — BERT's and
-        RoFormer's word tables among them — was untrainable, with no error.
-        """
-        pad = _lucid.tensor(
-            [int(self.padding_idx)], dtype=_lucid.int64, device=self.weight.device  # type: ignore[arg-type]
-        )
-        with _lucid.no_grad():
-            zeroed: Tensor = _lucid.index_fill(self.weight, 0, pad, 0.0)
-        init._fill_from_impl(self.weight, zeroed._impl)
+        self.reset_parameters()
 
     @override
     def forward(self, input: Tensor) -> Tensor:
@@ -218,7 +232,7 @@ class Embedding(Module):
         return s
 
 
-class EmbeddingBag(Module):
+class EmbeddingBag(_PaddedTable):
     r"""Embedding lookup table with per-bag reduction.
 
     Computes a summary embedding for each *bag* (a variable-length set
@@ -364,7 +378,7 @@ class EmbeddingBag(Module):
             self.weight = Parameter(
                 empty(num_embeddings, embedding_dim, dtype=dtype, device=device)
             )
-            init.normal_(self.weight)
+            self.reset_parameters()
         else:
             self.weight = Parameter(_weight)
 
@@ -550,7 +564,11 @@ class VectorQuantizer(Module):
         self.weight: Parameter = Parameter(
             empty(num_embeddings, embedding_dim, dtype=dtype, device=device)
         )
-        bound = 1.0 / float(num_embeddings)
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        """Re-draw ``weight`` from ``U(-1/K, 1/K)`` with ``K`` the codebook size."""
+        bound = 1.0 / float(self.num_embeddings)
         init.uniform_(self.weight, -bound, bound)
 
     def assign(self, x: Tensor) -> Tensor:

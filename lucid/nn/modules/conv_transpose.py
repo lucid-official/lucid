@@ -6,11 +6,10 @@ from typing import ClassVar, override
 from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike, _Size2d, _Size3d
 from lucid.nn.module import Module
-from lucid.nn.parameter import Parameter
 from lucid.nn.modules._conv_common import (
     _check_groups,
     _single,
-    _conv_parameters,
+    _ConvParameters,
     _LazyConvMixin,
     _pair,
     _triple,
@@ -34,7 +33,7 @@ def _transpose_padding(module: Module, padding: object, mode: str) -> str:
     return mode
 
 
-class _ConvTransposeNd(Module):
+class _ConvTransposeNd(_ConvParameters):
     """What ``ConvTranspose{1,2,3}d`` share: initialisation and the forward.
 
     Each subclass sets ``_rank`` and builds its weight in ``__init__``.
@@ -50,8 +49,6 @@ class _ConvTransposeNd(Module):
     dilation: int | tuple[int, ...]
     groups: int
     padding_mode: str
-    weight: Parameter
-    bias: Parameter | None
 
     @override
     def extra_repr(self) -> str:
@@ -221,12 +218,8 @@ class ConvTranspose1d(_ConvTransposeNd):
         _check_groups(in_channels, out_channels, groups)
         self.groups = groups
         self.dilation: int = _single(dilation, "dilation")
-        self.weight, self.bias = _conv_parameters(
-            (in_channels, out_channels // groups, self.kernel_size),
-            out_channels,
-            bias,
-            device,
-            dtype,
+        self._make_parameters(
+            (in_channels, out_channels // groups, self.kernel_size), bias, device, dtype
         )
 
     @override
@@ -381,9 +374,7 @@ class ConvTranspose2d(_ConvTransposeNd):
         _check_groups(in_channels, out_channels, groups)
         self.groups = groups
         self.dilation = _pair(dilation, "dilation")
-        self.weight, self.bias = _conv_parameters(
-            (in_channels, out_channels // groups, kh, kw), out_channels, bias, device, dtype
-        )
+        self._make_parameters((in_channels, out_channels // groups, kh, kw), bias, device, dtype)
 
     @override
     def forward(self, input: Tensor, output_size: Sequence[int] | None = None) -> Tensor:
@@ -528,8 +519,8 @@ class ConvTranspose3d(_ConvTransposeNd):
         _check_groups(in_channels, out_channels, groups)
         self.groups = groups
         self.dilation = _triple(dilation, "dilation")
-        self.weight, self.bias = _conv_parameters(
-            (in_channels, out_channels // groups, kd, kh, kw), out_channels, bias, device, dtype
+        self._make_parameters(
+            (in_channels, out_channels // groups, kd, kh, kw), bias, device, dtype
         )
 
     @override

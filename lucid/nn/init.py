@@ -1105,6 +1105,20 @@ def _calculate_correct_fan(tensor: Tensor, mode: str) -> int:
     raise ValueError(f"Unknown mode: {mode!r}")
 
 
+def _reset_weight_and_bias(weight: Tensor, bias: Tensor | None) -> None:
+    """The default for a layer that multiplies by ``weight``: Linear, convolutions.
+
+    ``kaiming_uniform_(a=sqrt(5))`` on the weight, then a bias drawn from
+    ``U(-1/sqrt(fan_in), 1/sqrt(fan_in))`` with the *weight's* fan-in.  The
+    one place this rule lives, so a layer cannot drift from its siblings.
+    """
+    kaiming_uniform_(weight, a=math.sqrt(5))
+    if bias is not None:
+        fan_in, _ = _calculate_fan_in_and_fan_out(weight)
+        bound = 1.0 / math.sqrt(fan_in) if fan_in > 0 else 0.0
+        uniform_(bias, -bound, bound)
+
+
 # Non-inplace aliases (deprecated in the reference framework but still widely used).
 constant = constant_
 dirac = dirac_

@@ -139,7 +139,24 @@ def _read_cell_keys(
             state_dict.setdefault(f"{prefix}{name}", value)
 
 
-class _FlatRecurrent(Module):
+class _RecurrentParameters(Module):
+    """The initialisation every recurrent layer and cell shares.
+
+    Each parameter — input and hidden weights, biases, a projection — is
+    drawn from ``U(-1/sqrt(H), 1/sqrt(H))``, ``H`` the hidden size, in the
+    order ``parameters()`` yields them.
+    """
+
+    hidden_size: int
+
+    def reset_parameters(self) -> None:
+        """Re-draw every parameter from ``U(-1/sqrt(hidden_size), 1/sqrt(hidden_size))``."""
+        stdv = _init_bound(self.hidden_size)
+        for p in self.parameters():
+            init.uniform_(p, -stdv, stdv)
+
+
+class _FlatRecurrent(_RecurrentParameters):
     """GRU and RNN: flat per-layer parameters and the stacked recurrence.
 
     The parameters are ``weight_ih_l{k}``, ``weight_hh_l{k}``,
@@ -159,10 +176,9 @@ class _FlatRecurrent(Module):
 
     def _register_weights(self, device: DeviceLike, dtype: DTypeLike) -> None:
         """Allocate every layer's weights, in the reference's order, and
-        initialise them from ``U(-1/sqrt(H), 1/sqrt(H))``."""
+        initialise them."""
         dirs = 2 if self.bidirectional else 1
         rows = self._gates * self.hidden_size
-        stdv = _init_bound(self.hidden_size)
         for layer in range(self.num_layers):
             width = self.input_size if layer == 0 else self.hidden_size * dirs
             for suffix in ("", "_reverse")[:dirs]:
@@ -174,8 +190,8 @@ class _FlatRecurrent(Module):
                     shapes |= {"bias_ih": (rows,), "bias_hh": (rows,)}
                 for name, shape in shapes.items():
                     p = Parameter(empty(*shape, dtype=dtype, device=device))
-                    init.uniform_(p, -stdv, stdv)
                     self.register_parameter(f"{name}_l{layer}{suffix}", p)
+        self.reset_parameters()
         self.register_load_state_dict_pre_hook(_read_cell_keys)
 
     def _weights(self, layer: int, reverse: bool) -> _Weights:
@@ -261,7 +277,7 @@ class _FlatRecurrent(Module):
 # ── LSTM ──────────────────────────────────────────────────────────────────────
 
 
-class LSTM(Module):
+class LSTM(_RecurrentParameters):
     r"""Long Short-Term Memory (LSTM) recurrent layer.
 
     Applies a multi-layer LSTM over an input sequence.  At each time step
@@ -504,13 +520,7 @@ class LSTM(Module):
                         f"weight_hr_l{layer}{suffix}",
                         Parameter(empty(proj_size, hidden_size, dtype=dtype, device=device)),
                     )
-        self._init_weights()
-
-    def _init_weights(self) -> None:
-        """Internal helper for the LSTM module."""
-        stdv = _init_bound(self.hidden_size)
-        for p in self.parameters():
-            init.uniform_(p, -stdv, stdv)
+        self.reset_parameters()
 
     def flatten_parameters(self) -> None:
         """No-op for API compatibility with reference recurrent modules.
@@ -714,7 +724,7 @@ class LSTM(Module):
 # ── Pure-Python RNN cells ─────────────────────────────────────────────────────
 
 
-class RNNCell(Module):
+class RNNCell(_RecurrentParameters):
     r"""Single time-step Elman RNN cell.
 
     Computes one recurrent update for a single time step:
@@ -827,13 +837,7 @@ class RNNCell(Module):
         self.bias_hh: Parameter | None = (
             Parameter(empty(hidden_size, dtype=dtype, device=device)) if bias else None
         )
-        self._init_weights()
-
-    def _init_weights(self) -> None:
-        """Internal helper for the RNNCell module."""
-        stdv = _init_bound(self.hidden_size)
-        for p in self.parameters():
-            init.uniform_(p, -stdv, stdv)
+        self.reset_parameters()
 
     @override
     def forward(self, input: Tensor, hx: Tensor | None = None) -> Tensor:
@@ -861,7 +865,7 @@ class RNNCell(Module):
         return f"{self.input_size}, {self.hidden_size}, nonlinearity={self.nonlinearity!r}"
 
 
-class LSTMCell(Module):
+class LSTMCell(_RecurrentParameters):
     r"""Single time-step Long Short-Term Memory (LSTM) cell.
 
     Computes one recurrent update using the full LSTM gating equations:
@@ -980,13 +984,7 @@ class LSTMCell(Module):
         self.bias_hh: Parameter | None = (
             Parameter(empty(4 * hidden_size, dtype=dtype, device=device)) if bias else None
         )
-        self._init_weights()
-
-    def _init_weights(self) -> None:
-        """Internal helper for the LSTMCell module."""
-        stdv = _init_bound(self.hidden_size)
-        for p in self.parameters():
-            init.uniform_(p, -stdv, stdv)
+        self.reset_parameters()
 
     @override
     def forward(
@@ -1020,7 +1018,7 @@ class LSTMCell(Module):
         return f"{self.input_size}, {self.hidden_size}"
 
 
-class GRUCell(Module):
+class GRUCell(_RecurrentParameters):
     r"""Single time-step Gated Recurrent Unit (GRU) cell.
 
     Computes one recurrent update using the three-gate GRU equations:
@@ -1142,13 +1140,7 @@ class GRUCell(Module):
         self.bias_hh: Parameter | None = (
             Parameter(empty(3 * hidden_size, dtype=dtype, device=device)) if bias else None
         )
-        self._init_weights()
-
-    def _init_weights(self) -> None:
-        """Internal helper for the GRUCell module."""
-        stdv = _init_bound(self.hidden_size)
-        for p in self.parameters():
-            init.uniform_(p, -stdv, stdv)
+        self.reset_parameters()
 
     @override
     def forward(self, input: Tensor, hx: Tensor | None = None) -> Tensor:

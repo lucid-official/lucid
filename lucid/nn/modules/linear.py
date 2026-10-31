@@ -22,7 +22,31 @@ from lucid.nn.functional.linear import (
 from lucid._types import StateDict
 
 
-class Linear(Module):
+class _LinearParameters(Module):
+    """The ``weight`` / ``bias`` pair of an ``in -> out`` affine layer, and its default draw.
+
+    :class:`Linear`, :class:`FusedLinear` and :class:`LazyLinear` all hold
+    a ``(out_features, in_features)`` weight and an ``out_features`` bias
+    initialised the same way; the rule lives here once.
+    """
+
+    weight: Parameter
+    bias: Parameter | None
+
+    def _make_parameters(
+        self, in_features: int, out_features: int, bias: bool, device: DeviceLike, dtype: DTypeLike
+    ) -> None:
+        """Allocate ``weight`` and the optional bias, then draw their values."""
+        self.weight = Parameter(empty(out_features, in_features, dtype=dtype, device=device))
+        self.bias = Parameter(empty(out_features, dtype=dtype, device=device)) if bias else None
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        """Initialize weight with Kaiming uniform and bias with uniform fan_in bound."""
+        init._reset_weight_and_bias(self.weight, self.bias)
+
+
+class Linear(_LinearParameters):
     r"""Apply a learnable affine transformation to incoming data.
 
     Computes the linear map
@@ -130,20 +154,7 @@ class Linear(Module):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.weight = Parameter(empty(out_features, in_features, dtype=dtype, device=device))
-        if bias:
-            self.bias: Parameter | None = Parameter(empty(out_features, dtype=dtype, device=device))
-        else:
-            self.bias = None
-        self.reset_parameters()
-
-    def reset_parameters(self) -> None:
-        """Initialize weight with Kaiming uniform and bias with uniform fan_in bound."""
-        init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-        if self.bias is not None:
-            fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
-            bound = 1.0 / math.sqrt(fan_in) if fan_in > 0 else 0.0
-            init.uniform_(self.bias, -bound, bound)
+        self._make_parameters(in_features, out_features, bias, device, dtype)
 
     @override
     def forward(self, input: Tensor) -> Tensor:
@@ -248,7 +259,7 @@ class Identity(Module):
         return input
 
 
-class FusedLinear(Module):
+class FusedLinear(_LinearParameters):
     r"""Linear layer with a kernel-fused non-linear activation.
 
     Computes
@@ -367,20 +378,7 @@ class FusedLinear(Module):
         self.out_features = out_features
         self.activation = activation
 
-        import math as _math
-        import lucid.nn.init as _init
-
-        self.weight = Parameter(empty(out_features, in_features, dtype=dtype, device=device))
-        if bias:
-            self.bias: Parameter | None = Parameter(empty(out_features, dtype=dtype, device=device))
-        else:
-            self.bias = None
-
-        _init.kaiming_uniform_(self.weight, a=_math.sqrt(5))
-        if self.bias is not None:
-            fan_in, _ = _init._calculate_fan_in_and_fan_out(self.weight)
-            bound = 1.0 / _math.sqrt(fan_in) if fan_in > 0 else 0.0
-            _init.uniform_(self.bias, -bound, bound)
+        self._make_parameters(in_features, out_features, bias, device, dtype)
 
     @override
     def forward(self, x: Tensor) -> Tensor:
@@ -522,8 +520,6 @@ class Bilinear(Module):
 
     def reset_parameters(self) -> None:
         """Initialize with Kaiming uniform."""
-        import math
-
         bound = 1.0 / math.sqrt(self.weight.shape[1])
         init.uniform_(self.weight, -bound, bound)
         if self.bias is not None:
@@ -556,7 +552,7 @@ class Bilinear(Module):
         )
 
 
-class LazyLinear(_LazyModule):
+class LazyLinear(_LazyModule, _LinearParameters):
     r"""Linear layer whose input dimension is inferred on the first forward call.
 
     ``LazyLinear`` defers weight allocation until it receives its first input
@@ -658,9 +654,6 @@ class LazyLinear(_LazyModule):
     512
     """
 
-    weight: Parameter
-    bias: Parameter | None
-
     def __init__(
         self,
         out_features: int,
@@ -684,23 +677,37 @@ class LazyLinear(_LazyModule):
         self.register_parameter("bias", self._placeholder() if bias else None)
 
     def _initialize(self, in_features: int) -> None:
-        """Internal helper for the LazyLinear module."""
+        """Size the layer: allocate ``weight`` / ``bias`` and draw their initial values."""
         self.in_features = in_features
-        weight = Parameter(
-            empty(self.out_features, in_features, dtype=self._dtype, device=self._device)
-        )
-        init.kaiming_uniform_(weight, a=math.sqrt(5))
         # ``materialize`` and not assignment: the placeholder object is
         # what anything that read ``parameters()`` early is holding.
-        _fill(self, "weight", weight)
-
+        _fill(
+            self,
+            "weight",
+            Parameter(
+                empty(self.out_features, in_features, dtype=self._dtype, device=self._device)
+            ),
+        )
         if self._has_bias:
-            bound = 1.0 / math.sqrt(in_features)
-            bias = Parameter(empty(self.out_features, dtype=self._dtype, device=self._device))
-            init.uniform_(bias, -bound, bound)
-            _fill(self, "bias", bias)
+            _fill(
+                self,
+                "bias",
+                Parameter(empty(self.out_features, dtype=self._dtype, device=self._device)),
+            )
         else:
             self.bias = None
+        self.reset_parameters()
+
+    def initialize_parameters(self, input: Tensor) -> None:
+        """Size the layer from ``input``'s last axis, if it has not been sized yet."""
+        if self.in_features is None:
+            self._initialize(int(input.shape[-1]))
+
+    @override
+    def reset_parameters(self) -> None:
+        """Re-draw the initial values; nothing to do until the layer has been sized."""
+        if self.in_features is not None:
+            super().reset_parameters()
 
     @override
     def _load_from_state_dict(
@@ -764,8 +771,7 @@ class LazyLinear(_LazyModule):
         # ``in_features`` and not ``weight is None``: the weight is now a
         # placeholder object from construction, so its absence no longer
         # signals "not yet built".  The recorded input size does.
-        if self.in_features is None:
-            self._initialize(input.shape[-1])
+        self.initialize_parameters(input)
         return linear(input, self.weight, self.bias)
 
     @override
