@@ -67,11 +67,12 @@ class _Kind(ABC):
 
     @staticmethod
     def of(base_type: type[nn.Module]) -> _Kind:
-        """The kind registered for ``base_type``."""
-        try:
-            return _Kind._kinds[base_type]
-        except KeyError:
-            raise TypeError(f"no LyCORIS kind for {base_type.__name__}") from None
+        """The kind registered for ``base_type``, or for the nearest of its base classes."""
+        for klass in base_type.__mro__:
+            kind = _Kind._kinds.get(klass)
+            if kind is not None:
+                return kind
+        raise TypeError(f"no LyCORIS kind for {base_type.__name__}")
 
     @abstractmethod
     def geometry(self, base: nn.Module) -> _Geometry:

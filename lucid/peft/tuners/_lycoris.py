@@ -263,7 +263,7 @@ class _LycorisLayer(_BaseTunerLayer):
 
     @property
     def _geometry(self) -> _Geometry:
-        return _Kind.of(type(self)._base_type).geometry(self.base_layer)
+        return _Kind.of(type(self.base_layer)).geometry(self.base_layer)
 
     @override
     def __repr__(self) -> str:
@@ -386,7 +386,7 @@ class _LycorisLayer(_BaseTunerLayer):
         result: Tensor = self.base_layer(x)
         if self.disable_adapters or self.merged:
             return result
-        kind = _Kind.of(type(self)._base_type)
+        kind = _Kind.of(type(self.base_layer))
         out = result
         for adapter in self.active_adapters:
             if adapter not in self._specs or self._skips(adapter):
