@@ -11,6 +11,8 @@ Provides composable, higher-order transformations over Lucid functions:
 * :func:`jacfwd`         — forward-mode Jacobian via jvp
 * :func:`hessian`        — second-order derivative matrix
 * :func:`linearize`      — linearisation: (primals_out, tangent_fn)
+* :func:`functional_call` — run a module with other parameters and buffers
+* :func:`stack_module_state` — stack the state of several models for ``vmap``
 
 All transforms compose: ``vmap(grad(fn))``, ``grad(vmap(fn))``,
 ``grad(grad(fn))``, ``jacfwd(jacrev(fn))``, ``vmap(grad(grad(fn)))``.  A
@@ -50,8 +52,8 @@ Limitations
   one draw all of them share.
 """
 
-from collections.abc import Callable
-from typing import Literal, overload
+from collections.abc import Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Literal, overload
 
 from lucid._tensor.tensor import Tensor as _Tensor
 from lucid.func._batching import Vmap as _Vmap
@@ -63,7 +65,14 @@ from lucid.func._reverse import (
     Jacrev as _Jacrev,
     vjp_at as _vjp_at,
 )
+from lucid.func._module import (
+    functional_call_at as _functional_call_at,
+    stack_state as _stack_state,
+)
 from lucid.func._transform import Dims as _Dims, PyTree as _PyTree
+
+if TYPE_CHECKING:
+    from lucid.nn.module import Module
 
 __all__ = [
     "vmap",
@@ -75,6 +84,8 @@ __all__ = [
     "jacfwd",
     "hessian",
     "linearize",
+    "functional_call",
+    "stack_module_state",
 ]
 
 
@@ -218,7 +229,8 @@ def grad[**P](
     has_aux : bool, optional
         If ``True``, ``func`` must return ``(loss, aux)``; the wrapped
         callable then returns ``(grads, aux)`` with ``aux`` forwarded
-        through without differentiation. Default ``False``.
+        through without differentiation, and detached unless the gradients
+        keep their graph. Default ``False``.
 
     Returns
     -------
@@ -227,7 +239,12 @@ def grad[**P](
         gradient in the structure of the differentiated argument — a
         tensor for a tensor, a dict for a dict — or a tuple of them when
         ``argnums`` is a tuple. A tensor the loss does not depend on has
-        gradient ``None``.
+        a gradient of zeros.
+
+    Raises
+    ------
+    RuntimeError
+        ``func`` returns a tensor that is not 0-d.
 
     Notes
     -----
@@ -373,12 +390,14 @@ def vjp(
     -------
     tuple
         ``(outputs, vjp_fn)`` with ``outputs`` in ``func``'s output
-        structure. ``vjp_fn(cotangents)`` takes a cotangent for every
-        output tensor, in the structure of the output, and returns a
-        tuple with one entry per primal, each in that primal's structure
-        (``None`` for a tensor the outputs do not depend on). For
-        convenience the cotangents may also be given as separate positional
-        arguments, one per output tensor, and left out for a scalar output.
+        structure, attached to the graph only where the caller's is (a
+        primal requires grad, or this runs inside another transform).
+        ``vjp_fn(cotangents)`` takes a cotangent for every output tensor,
+        in the structure of the output, and returns a tuple with one entry
+        per primal, each in that primal's structure (zeros for a tensor the
+        outputs do not depend on). For convenience the cotangents may also
+        be given as separate positional arguments, one per output tensor,
+        and left out for a scalar output.
 
     Notes
     -----
@@ -408,12 +427,41 @@ def vjp(
 # ── jvp ──────────────────────────────────────────────────────────────────────
 
 
+@overload
 def jvp(
     func: Callable[..., _PyTree],
     primals: tuple[_PyTree, ...],
     tangents: tuple[_PyTree, ...],
     strict: bool = False,
-) -> tuple[_PyTree, _PyTree]:
+    *,
+    has_aux: Literal[False] = False,
+) -> tuple[_PyTree, _PyTree]: ...
+@overload
+def jvp(
+    func: Callable[..., _PyTree],
+    primals: tuple[_PyTree, ...],
+    tangents: tuple[_PyTree, ...],
+    strict: bool = False,
+    *,
+    has_aux: Literal[True],
+) -> tuple[_PyTree, _PyTree, object]: ...
+@overload
+def jvp(
+    func: Callable[..., _PyTree],
+    primals: tuple[_PyTree, ...],
+    tangents: tuple[_PyTree, ...],
+    strict: bool,
+    *,
+    has_aux: bool,
+) -> tuple[_PyTree, _PyTree] | tuple[_PyTree, _PyTree, object]: ...
+def jvp(
+    func: Callable[..., _PyTree],
+    primals: tuple[_PyTree, ...],
+    tangents: tuple[_PyTree, ...],
+    strict: bool = False,
+    *,
+    has_aux: bool = False,
+) -> tuple[_PyTree, _PyTree] | tuple[_PyTree, _PyTree, object]:
     r"""Compute the Jacobian-vector product of ``func`` at ``primals``.
 
     Returns both the primal output ``func(*primals)`` and the directional
@@ -437,12 +485,17 @@ def jvp(
         If ``True``, refuse what :func:`lucid.autograd.jvp` refuses under
         ``strict`` — an output independent of the inputs among them —
         instead of giving it a zero tangent. Default ``False``.
+    has_aux : bool, optional
+        If ``True``, ``func`` must return ``(output, aux)``; ``aux`` is
+        passed through without differentiation. Default ``False``.
 
     Returns
     -------
     tuple
         ``(primals_out, tangents_out)``, each with the same nested structure
-        as ``func(*primals)``.
+        as ``func(*primals)``; with ``has_aux=True``,
+        ``(primals_out, tangents_out, aux)``.  ``aux`` is detached unless
+        the results join the caller's graph.
 
     Raises
     ------
@@ -492,7 +545,7 @@ def jvp(
     >>> dy  # 2 * x
     tensor([2., 4., 6.])
     """
-    return _jvp_at(func, tuple(primals), tuple(tangents), strict)
+    return _jvp_at(func, tuple(primals), tuple(tangents), strict, has_aux)
 
 
 # ── linearize ────────────────────────────────────────────────────────────────
@@ -774,3 +827,123 @@ def hessian[**P](
     tensor([[6., 0., 0.], [0., 12., 0.], [0., 0., 18.]])
     """
     return _Hessian(func, argnums)
+
+
+# ── functional_call & stack_module_state ─────────────────────────────────────
+
+
+def functional_call(
+    module: Module,
+    parameter_and_buffer_dicts: Mapping[str, _Tensor] | Sequence[Mapping[str, _Tensor]],
+    args: object = None,
+    kwargs: Mapping[str, object] | None = None,
+    *,
+    tie_weights: bool = True,
+    strict: bool = False,
+) -> object:
+    r"""Call ``module`` with other parameters and buffers than its own.
+
+    Runs ``module(*args, **kwargs)`` with the tensors of
+    ``parameter_and_buffer_dicts`` standing in the module's parameter and
+    buffer slots by name, so the weights become an argument: a function of
+    them that :func:`grad`, :func:`vmap` or :func:`jacrev` can transform.
+    The module is exactly as before afterwards — the original ``Parameter``
+    objects are put back when the call returns, or raises.
+
+    Parameters
+    ----------
+    module : Module
+        The module to call.
+    parameter_and_buffer_dicts : dict or sequence of dict
+        Dotted parameter / buffer name (``"fc.weight"``) to the tensor to use.
+        A sequence of dicts is merged; a name in two of them is a
+        ``ValueError``.  A name the module has no parameter or buffer of is
+        ignored unless ``strict``.
+    args : object, optional
+        The positional arguments: a tuple is unpacked, any other value is
+        the one argument, ``None`` (default) is none.
+    kwargs : dict, optional
+        The keyword arguments.
+    tie_weights : bool, optional
+        If ``True`` (default), a tensor given for one name also replaces
+        every name that holds the same parameter (tied weights); different
+        tensors for tied names are a ``ValueError``.  If ``False`` only the
+        names given are replaced.
+    strict : bool, optional
+        If ``True``, ``parameter_and_buffer_dicts`` must name exactly the
+        module's parameters and buffers (tied names count as named when
+        ``tie_weights``), else ``RuntimeError``.  Default ``False``.
+
+    Returns
+    -------
+    object
+        What ``module`` returns.
+
+    Raises
+    ------
+    TypeError
+        A value of ``parameter_and_buffer_dicts`` is not a tensor.
+    ValueError
+        A name is in two dicts, or tied names were given different tensors.
+    RuntimeError
+        ``strict`` and the names do not match the module's.
+
+    Notes
+    -----
+    The tensors are used as they are, with their autograd history, so the
+    output is differentiable with respect to them.  A buffer a layer updates
+    in place (``BatchNorm`` running statistics) is updated in the tensor that
+    was given.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> import lucid.nn as nn
+    >>> from lucid.func import functional_call
+    >>> layer = nn.Linear(2, 1)
+    >>> w = lucid.ones(1, 2)
+    >>> b = lucid.zeros(1)
+    >>> functional_call(layer, {"weight": w, "bias": b}, (lucid.tensor([[1.0, 2.0]]),))
+    tensor([[3.]])
+    """
+    return _functional_call_at(
+        module, parameter_and_buffer_dicts, args, kwargs, tie_weights=tie_weights, strict=strict
+    )
+
+
+def stack_module_state(models: Sequence[Module]) -> tuple[dict[str, _Tensor], dict[str, _Tensor]]:
+    r"""Stack the parameters and buffers of several models of one class.
+
+    The state of ``N`` models becomes one state whose tensors have a new
+    first axis of length ``N`` — the argument ``vmap`` maps over to run an
+    ensemble with :func:`functional_call`.
+
+    Parameters
+    ----------
+    models : sequence of Module
+        At least one model; all of one class and in the same train / eval
+        mode, with the same parameters and buffers.
+
+    Returns
+    -------
+    tuple of dict
+        ``(params, buffers)``: each name to the tensors of every model
+        stacked along dimension 0.  A stacked parameter is a fresh leaf that
+        requires grad when the models' parameters do (they must all agree).
+
+    Raises
+    ------
+    RuntimeError
+        No models, models of different classes or modes, or models that
+        disagree on whether a tensor requires grad.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> import lucid.nn as nn
+    >>> from lucid.func import stack_module_state
+    >>> params, buffers = stack_module_state([nn.Linear(3, 2), nn.Linear(3, 2)])
+    >>> tuple(params["weight"].shape)
+    (2, 2, 3)
+    """
+    return _stack_state(models)

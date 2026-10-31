@@ -17,7 +17,7 @@ from lucid._ctx import _RandomnessGuard, check_randomness
 from lucid._factories.random import get_rng_state, set_rng_state
 from lucid._tensor.tensor import Tensor
 from lucid.autograd._functional import jvp as _jvp_by_double_backward
-from lucid.func._function import FlatFunction, Selection, pack_jacobian
+from lucid.func._function import FlatFunction, Selection, detach_aux, keeps_graph, pack_jacobian
 from lucid.func._transform import Isolated, PyTree, Transform
 
 __all__ = ["Jacfwd", "Linearization", "jvp_at", "linearize_at"]
@@ -150,8 +150,10 @@ def jvp_at(
     primals: tuple[object, ...],
     tangents: tuple[object, ...],
     strict: bool,
-) -> tuple[PyTree, PyTree]:
-    """``(func(*primals), J · tangents)``, both in ``func``'s output structure.
+    has_aux: bool,
+) -> tuple[PyTree, PyTree] | tuple[PyTree, PyTree, object]:
+    """``(func(*primals), J · tangents)``, both in ``func``'s output structure
+    — and, for a ``has_aux`` function, ``func``'s side output after them.
 
     Parameters
     ----------
@@ -164,11 +166,14 @@ def jvp_at(
         Pytrees of exactly the structure of ``primals``.
     strict : bool
         Refuse what :func:`lucid.autograd.jvp` refuses under ``strict``.
+    has_aux : bool
+        Whether ``func`` returns ``(output, aux)``.
 
     Returns
     -------
     tuple
-        ``(primals_out, tangents_out)``.
+        ``(primals_out, tangents_out)``, or ``(primals_out, tangents_out,
+        aux)`` with ``aux`` detached unless the results keep the graph.
     """
     if len(primals) != len(tangents):
         raise RuntimeError(
@@ -176,11 +181,14 @@ def jvp_at(
             f"and {len(tangents)} tangents"
         )
     selection = Selection(primals, tuple(range(len(primals))), "jvp", allow_fixed=True)
-    flat = FlatFunction(func, primals, {}, selection, has_aux=False, name="jvp")
+    flat = FlatFunction(func, primals, {}, selection, has_aux=has_aux, name="jvp")
     primals_out, tangents_out = _jvp_attached(
         flat, selection.leaves, selection.tangents(tangents), strict
     )
-    return flat.out_spec.unflatten(primals_out), flat.out_spec.unflatten(tangents_out)
+    pair = (flat.out_spec.unflatten(primals_out), flat.out_spec.unflatten(tangents_out))
+    if not has_aux:
+        return pair
+    return (*pair, detach_aux(flat.aux, keep=keeps_graph(selection.leaves)))
 
 
 class Linearization(Isolated):
@@ -333,4 +341,4 @@ class Jacfwd[**P](Transform[P, PyTree]):
             attach, required = attachment(primals, sample)
             blocks = _forward_blocks(flat, primals, sample, attach=attach, required=required)
         packed = pack_jacobian(flat.out_spec, selection.spec, blocks)
-        return (packed, flat.aux) if self.has_aux else packed
+        return (packed, detach_aux(flat.aux, keep=attach)) if self.has_aux else packed

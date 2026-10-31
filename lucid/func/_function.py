@@ -11,17 +11,21 @@ puts a flat answer back into the structure it belongs to.
 
 from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
+from typing import override
 
 import lucid
 from lucid._ctx import _TransformLevel, transform_depth
 from lucid._tensor.tensor import Tensor
-from lucid.func._pytree import TreeSpec, tree_flatten
+from lucid.func._pytree import TreeSpec, tree_flatten, tree_map
 
 __all__ = [
     "FlatFunction",
     "LossFunction",
+    "ScalarLoss",
+    "ScalarOutputError",
     "Selection",
     "as_tensors",
+    "detach_aux",
     "keeps_graph",
     "pack_jacobian",
 ]
@@ -257,6 +261,15 @@ class FlatFunction(_Traced):
         return tuple(outputs)
 
 
+class ScalarOutputError(RuntimeError, ValueError):
+    """``func`` returned a tensor that is not 0-d where the transform
+    differentiates a scalar.
+
+    A ``RuntimeError`` as the reference framework raises it, and a
+    ``ValueError`` because the output's shape is a value the caller chose.
+    """
+
+
 class LossFunction(_Traced):
     """``func`` as a function of the selected tensors returning the one tensor
     it must return — a loss, a scalar to take the gradient or Hessian of."""
@@ -270,7 +283,50 @@ class LossFunction(_Traced):
             raise TypeError(
                 f"lucid.func.{self._name}: func must return a single Tensor, got {kind}"
             )
+        self._check(value)
         return value
+
+    def _check(self, value: Tensor) -> None:
+        """Refuse a ``value`` this transform cannot differentiate."""
+
+
+class ScalarLoss(LossFunction):
+    """A :class:`LossFunction` whose tensor has to be 0-d — what ``grad``
+    takes: one number to differentiate, not one per output element."""
+
+    __slots__ = ()
+
+    @override
+    def _check(self, value: Tensor) -> None:
+        if value.ndim != 0:
+            raise ScalarOutputError(
+                f"{self._name}(f)(*args): Expected f(*args) to return a scalar Tensor, got "
+                f"tensor with {value.ndim} dims. Maybe you wanted to use the vjp or jacrev "
+                "APIs instead?"
+            )
+
+
+def detach_aux(aux: object, *, keep: bool) -> object:
+    """``aux`` — the side output of a ``has_aux`` function — as the caller
+    gets it: attached to the graph only where the transform's own results
+    are (``keep``), otherwise a plain value.
+
+    Parameters
+    ----------
+    aux : object
+        A tensor or a pytree of them, or anything else.
+    keep : bool
+        Whether the transform keeps the graph of its results.
+
+    Returns
+    -------
+    object
+        ``aux`` itself when ``keep``, else the same structure with each
+        tensor detached.
+    """
+    if keep:
+        return aux
+    return tree_map(lambda leaf: leaf.detach() if isinstance(leaf, Tensor) else leaf, aux)
 
 
 def pack_jacobian(

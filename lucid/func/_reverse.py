@@ -14,7 +14,15 @@ from lucid._tensor.tensor import Tensor
 from lucid.autograd._backward import grad as _autograd_grad
 from lucid.autograd._functional import hessian as _hessian, jacobian as _jacobian
 from lucid.autograd._grad_mode import enable_grad
-from lucid.func._function import FlatFunction, LossFunction, Selection, keeps_graph, pack_jacobian
+from lucid.func._function import (
+    FlatFunction,
+    LossFunction,
+    ScalarLoss,
+    Selection,
+    detach_aux,
+    keeps_graph,
+    pack_jacobian,
+)
 from lucid.func._pytree import StructureError, TreeSpec
 from lucid.func._transform import Isolated, PyTree, Transform
 
@@ -42,19 +50,28 @@ class _GradBase[**P, R](Transform[P, R]):
         selection = Selection(args, self.argnums, self.name)
         graph = keeps_graph(selection.leaves)
         tracked = selection.tracked()
-        loss_fn = LossFunction(
+        loss_fn = ScalarLoss(
             self.func, args, kwargs, selection, has_aux=self.has_aux, name=self.name
         )
         with enable_grad():
             loss = loss_fn(*tracked)
         grads = (
             _autograd_grad(
-                [loss], tracked, retain_graph=graph, create_graph=graph, allow_unused=True
+                [loss],
+                tracked,
+                retain_graph=graph,
+                create_graph=graph,
+                allow_unused=True,
+                materialize_grads=True,
             )
             if tracked
             else ()
         )
-        return selection.spec.unflatten(grads), (loss if graph else loss.detach()), loss_fn.aux
+        return (
+            selection.spec.unflatten(grads),
+            (loss if graph else loss.detach()),
+            detach_aux(loss_fn.aux, keep=graph),
+        )
 
 
 class Grad[**P](_GradBase[P, PyTree]):
@@ -142,6 +159,7 @@ class Pullback(Isolated):
             retain_graph=True,
             create_graph=self._graph,
             allow_unused=True,
+            materialize_grads=True,
         )
         return self._selection.spec.unflatten(grads)
 
@@ -158,8 +176,9 @@ def vjp_at(
     with enable_grad():
         outputs = flat(*tracked)
     pullback = Pullback(outputs, flat.out_spec, tracked, selection, graph)
-    result = flat.out_spec.unflatten(outputs)
-    return ((result, flat.aux) if has_aux else result), pullback
+    shown = outputs if graph else tuple(o.detach() for o in outputs)
+    result = flat.out_spec.unflatten(shown)
+    return ((result, detach_aux(flat.aux, keep=graph)) if has_aux else result), pullback
 
 
 def _rows(blocks: Tensor | tuple[Tensor | tuple[Tensor, ...], ...]) -> list[tuple[Tensor, ...]]:
@@ -196,9 +215,10 @@ class Jacrev[**P](Transform[P, PyTree]):
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> PyTree:
         selection = Selection(args, self.argnums, "jacrev")
         flat = FlatFunction(self.func, args, kwargs, selection, has_aux=self.has_aux, name="jacrev")
-        blocks = _jacobian(flat, selection.leaves, create_graph=keeps_graph(selection.leaves))
+        graph = keeps_graph(selection.leaves)
+        blocks = _jacobian(flat, selection.leaves, create_graph=graph)
         packed = pack_jacobian(flat.out_spec, selection.spec, _rows(blocks))
-        return (packed, flat.aux) if self.has_aux else packed
+        return (packed, detach_aux(flat.aux, keep=graph)) if self.has_aux else packed
 
 
 class Hessian[**P](Transform[P, PyTree]):
