@@ -17,6 +17,7 @@ All operations are stateless and side-effect free.
 """
 
 import math
+import struct
 from collections.abc import Callable, Sequence
 from typing import NamedTuple, Protocol, final, overload
 
@@ -32,6 +33,7 @@ from lucid.models._utils._common import host_floats
 
 __all__ = [
     "make_beta_schedule",
+    "beta_schedule_floats",
     "make_sigma_schedule",
     "extract_into_tensor",
     "normal_kl",
@@ -58,6 +60,38 @@ __all__ = [
 # ─────────────────────────────────────────────────────────────────────────────
 # Diffusion: β / α / cumulative-α schedule
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+def _beta_values(num_steps: int, schedule: str, beta_start: float, beta_end: float) -> list[float]:
+    """The schedule's ``β_t`` as Python doubles, before any tensor stores them."""
+    if schedule == "linear":
+        step = (beta_end - beta_start) / max(num_steps - 1, 1)
+        return [beta_start + i * step for i in range(num_steps)]
+
+    if schedule == "scaled_linear":
+        # Stable Diffusion's schedule: linear in sqrt(beta), then squared.
+        # Between the same endpoints this differs from "linear" only in
+        # the middle, which is why it needs its own name — a plot of the
+        # two is nearly indistinguishable and the samples are not.
+        root_start, root_end = beta_start**0.5, beta_end**0.5
+        step = (root_end - root_start) / max(num_steps - 1, 1)
+        return [(root_start + i * step) ** 2 for i in range(num_steps)]
+
+    if schedule == "cosine":
+        s = 0.008
+        # ᾱ schedule in [0, 1] then β_t = clip(1 - ᾱ_t / ᾱ_{t-1}, 0, 0.999)
+        f_values: list[float] = [
+            math.cos(((i / num_steps) + s) / (1.0 + s) * math.pi / 2.0) ** 2
+            for i in range(num_steps + 1)
+        ]
+        alpha_bar = [v / f_values[0] for v in f_values]
+        betas: list[float] = []
+        for i in range(1, num_steps + 1):
+            b = 1.0 - alpha_bar[i] / max(alpha_bar[i - 1], 1e-8)
+            betas.append(min(max(b, 0.0), 0.999))
+        return betas
+
+    raise ValueError(f"Unsupported beta schedule {schedule!r}")
 
 
 def make_beta_schedule(
@@ -92,36 +126,55 @@ def make_beta_schedule(
     at the start, where the signal is still intact and worth protecting,
     and most of it at the end.
     """
-    if schedule == "linear":
-        step = (beta_end - beta_start) / max(num_steps - 1, 1)
-        values = [beta_start + i * step for i in range(num_steps)]
-        return lucid.tensor(values, device=device)
+    return lucid.tensor(_beta_values(num_steps, schedule, beta_start, beta_end), device=device)
 
-    if schedule == "scaled_linear":
-        # Stable Diffusion's schedule: linear in sqrt(beta), then squared.
-        # Between the same endpoints this differs from "linear" only in
-        # the middle, which is why it needs its own name — a plot of the
-        # two is nearly indistinguishable and the samples are not.
-        root_start, root_end = beta_start**0.5, beta_end**0.5
-        step = (root_end - root_start) / max(num_steps - 1, 1)
-        values = [(root_start + i * step) ** 2 for i in range(num_steps)]
-        return lucid.tensor(values, device=device)
 
-    if schedule == "cosine":
-        s = 0.008
-        # ᾱ schedule in [0, 1] then β_t = clip(1 - ᾱ_t / ᾱ_{t-1}, 0, 0.999)
-        f_values: list[float] = [
-            math.cos(((i / num_steps) + s) / (1.0 + s) * math.pi / 2.0) ** 2
-            for i in range(num_steps + 1)
-        ]
-        alpha_bar = [v / f_values[0] for v in f_values]
-        betas: list[float] = []
-        for i in range(1, num_steps + 1):
-            b = 1.0 - alpha_bar[i] / max(alpha_bar[i - 1], 1e-8)
-            betas.append(min(max(b, 0.0), 0.999))
-        return lucid.tensor(betas, device=device)
+def _stored_precision(values: list[float]) -> list[float]:
+    """``values`` as a tensor of the default dtype holds them, widened back to doubles."""
+    if lucid.get_default_dtype() == lucid.float64:
+        return values
+    return [struct.unpack("f", struct.pack("f", v))[0] for v in values]
 
-    raise ValueError(f"Unsupported beta schedule {schedule!r}")
+
+def beta_schedule_floats(
+    num_steps: int,
+    schedule: str = "linear",
+    *,
+    beta_start: float = 1e-4,
+    beta_end: float = 0.02,
+) -> list[float]:
+    """The values :func:`make_beta_schedule` stores, as host Python floats.
+
+    A model that derives constants from the schedule at construction reads
+    them here rather than from the tensor: reading a tensor's elements on
+    the host is impossible while the model is being built without storage
+    (:func:`~lucid.nn._shadow.shadow_alloc`), and it is a device round trip
+    otherwise.  Each value is rounded the way the tensor rounds it, so
+    anything computed from the list matches what it would have been computed
+    from the tensor, bit for bit.
+
+    Args:
+        num_steps:  Number of diffusion timesteps ``T``.
+        schedule:   Schedule name, as for :func:`make_beta_schedule`.
+        beta_start: Start of the linear schedule (ignored for cosine).
+        beta_end:   End of the linear schedule (ignored for cosine).
+
+    Returns:
+        ``num_steps`` Python floats.
+
+    Examples
+    --------
+    >>> from lucid.models._utils._generative import (
+    ...     beta_schedule_floats,
+    ...     make_beta_schedule,
+    ... )
+    >>> beta_schedule_floats(5) == make_beta_schedule(5).tolist()
+    True
+
+    Equal to the tensor's own elements, which a double-precision list of
+    the same formula is not: ``0.0001`` is not a float32.
+    """
+    return _stored_precision(_beta_values(num_steps, schedule, beta_start, beta_end))
 
 
 def extract_into_tensor(
@@ -337,7 +390,9 @@ class DiffusionPosterior(NamedTuple):
     log_variance: Tensor
 
 
-def diffusion_posterior_constants(betas: Tensor, *, device: str = "cpu") -> DiffusionPosterior:
+def diffusion_posterior_constants(
+    betas: Tensor | Sequence[float], *, device: str = "cpu"
+) -> DiffusionPosterior:
     r"""Precompute the closed-form posterior constants (Ho 2020 Eq. 6–7):
 
     .. math::
@@ -357,7 +412,9 @@ def diffusion_posterior_constants(betas: Tensor, *, device: str = "cpu") -> Diff
     ``betas`` alone, and only the finished coefficients are cast down.
 
     Args:
-        betas:  ``(T,)`` forward-process variances.
+        betas:  ``(T,)`` forward-process variances, as a tensor or as host
+            floats (see :func:`beta_schedule_floats`, the form a model can
+            use while it is built without storage).
         device: Where to allocate the resulting ``(T,)`` buffers.
 
     Returns:
@@ -377,7 +434,7 @@ def diffusion_posterior_constants(betas: Tensor, *, device: str = "cpu") -> Diff
     function of the betas alone, and a sampler reads them thousands of
     times.
     """
-    beta_l = host_floats(betas)
+    beta_l = host_floats(betas) if isinstance(betas, Tensor) else [float(b) for b in betas]
     T = len(beta_l)
 
     ab_l: list[float] = []

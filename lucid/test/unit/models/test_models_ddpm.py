@@ -13,6 +13,7 @@ import pytest
 import lucid
 from lucid._tensor.tensor import Tensor
 from lucid.models._utils._generative import (
+    beta_schedule_floats,
     diffusion_posterior,
     diffusion_posterior_constants,
     diffusion_vlb_term,
@@ -28,6 +29,7 @@ from lucid.models import (
     is_model,
 )
 from lucid.models.generative import DDPMScheduler
+from lucid.nn._shadow import is_shadow, shadow_alloc
 from lucid.models.generative.ddpm._model import _DDPMUNet
 
 
@@ -340,6 +342,50 @@ class TestDDPMSampling:
         out = m.generate(sched, n_samples=1, num_inference_steps=3, return_intermediates=True)
         assert out.intermediates is not None
         assert len(out.intermediates) == 3
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Schedule constants are host floats (LCD-760)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestScheduleConstantsOnTheHost:
+    """The constants a learned-variance model derives at construction read no tensor.
+
+    The class of defect is "building a model reads a tensor's elements":
+    under ``shadow_alloc`` there are none to read.  The schedule is a function
+    of the config alone, so it is computed as host floats, and these tests hold
+    that the floats are exactly what the tensor path produced.
+    """
+
+    @pytest.mark.parametrize("schedule", ["linear", "scaled_linear", "cosine"])
+    @pytest.mark.parametrize("steps", [1, 2, 10, 1000])
+    def test_floats_are_the_tensors_elements(self, schedule: str, steps: int) -> None:
+        assert beta_schedule_floats(steps, schedule) == make_beta_schedule(steps, schedule).tolist()
+
+    @pytest.mark.parametrize("schedule", ["linear", "scaled_linear", "cosine"])
+    def test_posterior_is_bit_identical_from_floats_or_tensor(self, schedule: str) -> None:
+        from_tensor = diffusion_posterior_constants(make_beta_schedule(100, schedule))
+        from_floats = diffusion_posterior_constants(beta_schedule_floats(100, schedule))
+        for ours, theirs in zip(from_floats, from_tensor, strict=True):
+            assert ours.tolist() == theirs.tolist()
+
+    def test_a_built_model_holds_the_tensor_path_constants(self) -> None:
+        model = DDPMForImageGeneration(_tiny_cfg(learn_sigma=True, out_channels=6))
+        betas = make_beta_schedule(model.config.num_train_timesteps, model.config.beta_schedule)
+        legacy = diffusion_posterior_constants(betas)
+        assert model._posterior_mean_coef_start.tolist() == legacy.mean_coef_start.tolist()
+        assert model._posterior_mean_coef_t.tolist() == legacy.mean_coef_t.tolist()
+        assert model._posterior_log_variance.tolist() == legacy.log_variance.tolist()
+        assert model._log_betas.tolist() == lucid.log(betas).tolist()
+
+    @pytest.mark.parametrize("name", ["ddpm_cifar_gen", "ddpm_lsun_gen", "ddpm_imagenet64_gen"])
+    def test_every_generation_factory_builds_without_storage(self, name: str) -> None:
+        with shadow_alloc():
+            model = create_model(name)
+        assert all(is_shadow(p) for p in model.parameters())
+        if model.config.learn_sigma:
+            assert is_shadow(model._posterior_log_variance)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

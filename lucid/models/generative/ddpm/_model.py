@@ -27,6 +27,7 @@ ResBlock conditioning recipe (Ho 2020 §3.2 + Appendix B):
 """
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import ClassVar, final, override
 
@@ -40,16 +41,15 @@ from lucid.models._mixins import DiffusionMixin
 from lucid.models._output import DiffusionModelOutput
 from lucid.models._utils._generative import (
     DiffusionPosterior,
+    beta_schedule_floats,
     diffusion_posterior,
     diffusion_posterior_constants,
     diffusion_vlb_term,
     extract_into_tensor,
-    make_beta_schedule,
     resolve_generation_device,
 )
 from lucid.models.generative._common._schedulers import DDPMScheduler
 from lucid.models.generative.ddpm._config import DDPMConfig
-from lucid.models._utils._common import host_floats
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Building blocks
@@ -612,7 +612,7 @@ class DDPMOutput(DiffusionModelOutput):
     loss_vlb: Tensor | None = None
 
 
-def _x0_recovery_constants(betas: Tensor) -> tuple[Tensor, Tensor]:
+def _x0_recovery_constants(betas: Sequence[float]) -> tuple[Tensor, Tensor]:
     r"""Constants for inverting :math:`x_t = \sqrt{\bar\alpha_t}x_0 +
     \sqrt{1 - \bar\alpha_t}\varepsilon`.
 
@@ -621,17 +621,18 @@ def _x0_recovery_constants(betas: Tensor) -> tuple[Tensor, Tensor]:
     \sqrt{1/\bar\alpha_t - 1}\,\varepsilon`.  Accumulated in Python floats
     for the same reason as :func:`diffusion_posterior_constants` — ``ᾱ_t``
     reaches ~4e-5 at ``t = T``, and its reciprocal square root magnifies
-    whatever error it carries.
+    whatever error it carries.  ``betas`` are host floats
+    (:func:`beta_schedule_floats`), so building the model never reads a
+    tensor's elements.
     """
     recip: list[float] = []
     recipm1: list[float] = []
     acc = 1.0
-    for beta in host_floats(betas):
+    for beta in betas:
         acc *= 1.0 - beta
         recip.append(math.sqrt(1.0 / acc))
         recipm1.append(math.sqrt(1.0 / acc - 1.0))
-    dev = betas.device.type
-    return lucid.tensor(recip, device=dev), lucid.tensor(recipm1, device=dev)
+    return lucid.tensor(recip), lucid.tensor(recipm1)
 
 
 class DDPMForImageGeneration(ImageGenerationModel, DiffusionMixin):
@@ -738,16 +739,16 @@ class DDPMForImageGeneration(ImageGenerationModel, DiffusionMixin):
             # The bound needs the forward-process schedule, which the U-Net
             # itself never sees.  Build it once — the constants depend only
             # on ``betas``, not on any parameter.
-            betas = make_beta_schedule(
+            beta_values = beta_schedule_floats(
                 config.num_train_timesteps,
                 config.beta_schedule,
                 beta_start=config.beta_start,
                 beta_end=config.beta_end,
             )
-            posterior = diffusion_posterior_constants(betas)
-            sqrt_recip_ab, sqrt_recipm1_ab = _x0_recovery_constants(betas)
+            posterior = diffusion_posterior_constants(beta_values)
+            sqrt_recip_ab, sqrt_recipm1_ab = _x0_recovery_constants(beta_values)
             constants = {
-                "_log_betas": lucid.log(betas),
+                "_log_betas": lucid.log(lucid.tensor(beta_values)),
                 "_sqrt_recip_ab": sqrt_recip_ab,
                 "_sqrt_recipm1_ab": sqrt_recipm1_ab,
                 "_posterior_mean_coef_start": posterior.mean_coef_start,

@@ -1130,25 +1130,7 @@ def test_merging_a_head_trained_apart_from_its_tie_is_refused(device: str) -> No
 
 _MATRIX_ROWS = [pytest.param(row, id=name, marks=row.marks()) for name, row in ROWS.items()]
 
-#: Factories that cannot be built under ``shadow_alloc``, and why.
-_UNSHADOWED = {
-    "ddpm_imagenet64_gen": (
-        "learn_sigma reads the beta schedule on the host at construction (tolist of a "
-        "phantom tensor)"
-    )
-}
-_FACTORIES = [
-    pytest.param(
-        name,
-        id=name,
-        marks=(
-            [pytest.mark.xfail(strict=True, reason=_UNSHADOWED[name])]
-            if name in _UNSHADOWED
-            else []
-        ),
-    )
-    for name in sorted(_REGISTRY)
-]
+_FACTORIES = [pytest.param(name, id=name) for name in sorted(_REGISTRY)]
 
 
 def test_every_zoo_model_type_is_a_matrix_row() -> None:

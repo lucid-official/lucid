@@ -153,6 +153,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the prefix site leaves caller position ids alone
 
+- learn_sigma builds its schedule from host floats
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
