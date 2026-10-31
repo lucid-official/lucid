@@ -11,7 +11,9 @@ PiSSA and OLoRA are not "just a different random draw": they read the base
 weight, put its principal directions (an SVD) or an orthogonal basis (a QR)
 into the factors, and write the residual back into the base weight, so the
 adapted layer starts as the original.  They are the reason this runs after
-the factors exist and before anything else reads the base weight.
+the factors exist and before anything else reads the base weight — and the
+reason ``on_load`` exists: an adapter read from a file gets its factors from
+the file, so it is built with the strategy that leaves the base alone.
 """
 
 import dataclasses
@@ -102,6 +104,15 @@ class _Init(ABC):
     @abstractmethod
     def value(self) -> bool | str:
         """The spelling a config stores: ``True``, ``False`` or the lower-case name."""
+
+    def on_load(self) -> _Init:
+        """The strategy to build an adapter with when a file is about to overwrite its factors.
+
+        An initialisation that only fills the factors can run as it is; one
+        that rewrites the base weight (``factorises``) overrides this, for
+        loading must not change the base the adapter is put on.
+        """
+        return self
 
     def check(self, layer: LoraLayer, r: int) -> None:
         """Raise ``ValueError`` if ``layer`` cannot be initialised this way at rank ``r``."""
@@ -267,7 +278,19 @@ def _svd_lowrank(matrix: Tensor, rank: int, niter: int) -> tuple[Tensor, Tensor,
     return (v, s, u) if flipped else (u, s, v)
 
 
-class _Pissa(_Init, init="pissa"):
+class _Factorising(_Init):
+    """A strategy that factorises the base weight and writes the residual back into it."""
+
+    __slots__ = ()
+    factorises = True
+
+    @override
+    def on_load(self) -> _Init:
+        # The file holds the factors, and the base it is loaded onto already holds (or must keep) its weight.
+        return _Random()
+
+
+class _Pissa(_Factorising, init="pissa"):
     r"""``"pissa"`` / ``"pissa_niter_<k>"``: the principal singular components, residual in the base.
 
     With :math:`W = U\Sigma V^\top` and rank :math:`r`, scale :math:`s`:
@@ -280,7 +303,6 @@ class _Pissa(_Init, init="pissa"):
     """
 
     __slots__ = ("niter",)
-    factorises = True
 
     def __init__(self, niter: int | None = None) -> None:
         self.niter = niter
@@ -322,7 +344,7 @@ class _Pissa(_Init, init="pissa"):
             _install(layer, adapter, lora_a, lora_b, weight - spec.scaling * (lora_b @ lora_a))
 
 
-class _Olora(_Init, init="olora"):
+class _Olora(_Factorising, init="olora"):
     r"""``"olora"``: an orthonormal basis of the weight's column space (QR), residual in the base.
 
     With :math:`W = QR`: :math:`B = Q_{:,\,:r}`, :math:`A = R_{:r}` and the
@@ -332,7 +354,6 @@ class _Olora(_Init, init="olora"):
     """
 
     __slots__ = ()
-    factorises = True
 
     @property
     @override
@@ -441,4 +462,13 @@ def _check_init(name: str, value: object) -> bool | str:
 
 
 # The strategies are reached through ``_Init.of``, by the spelling each registers under.
-__all__ = ["_Default", "_Gaussian", "_Init", "_Olora", "_Pissa", "_Random", "_check_init"]
+__all__ = [
+    "_Default",
+    "_Factorising",
+    "_Gaussian",
+    "_Init",
+    "_Olora",
+    "_Pissa",
+    "_Random",
+    "_check_init",
+]

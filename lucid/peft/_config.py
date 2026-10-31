@@ -15,6 +15,7 @@ class (``_field_checks``), merged down the hierarchy when a subclass is
 defined.
 """
 
+import copy
 import dataclasses
 import enum
 import json
@@ -369,7 +370,6 @@ class PeftConfig:
         "inference_mode": _check_bool,
     }
     _all_checks: ClassVar[dict[str, _Check]] = dict(_field_checks)
-
     task_type: TaskType | str | None = None
     peft_type: PeftType | str | None = None
     auto_mapping: dict[str, str] | None = None
@@ -443,6 +443,28 @@ class PeftConfig:
         (['q', 'v'], 'CAUSAL_LM', 'LORA')
         """
         return {f.name: _json_value(getattr(self, f.name)) for f in dataclasses.fields(self)}
+
+    def _load_fields(self) -> dict[str, object]:
+        """The fields to build an adapter with while its tensors are being loaded, if they differ from the file's.
+
+        An initialisation that changes the base model (PiSSA) must not run
+        for tensors that are about to be overwritten; the config the model
+        keeps is still the file's (``_staged`` / ``_unstaged``).
+        """
+        return {}
+
+    def _staged(self) -> Self:
+        """A copy of this config to build a loaded adapter with."""
+        staged = copy.deepcopy(self)
+        for name, value in self._load_fields().items():
+            setattr(staged, name, value)
+        staged.__post_init__()
+        return staged
+
+    def _unstaged(self, stored: PeftConfig) -> None:
+        """Put this (the file's) config's values back into ``stored``, the config a staged copy left in the model."""
+        for name in self._load_fields():
+            setattr(stored, name, getattr(self, name))
 
     @classmethod
     def from_dict(cls, config_dict: Mapping[str, object]) -> Self:

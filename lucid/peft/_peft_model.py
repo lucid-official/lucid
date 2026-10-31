@@ -2,10 +2,10 @@
 
 import dataclasses
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from types import TracebackType
-from typing import ClassVar, Final, override
+from typing import ClassVar, Final, Self, override
 
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
@@ -611,6 +611,30 @@ class PeftModel(_ForwardsAttributes):
         return {name: _tuner_for(trained.config)._converted_to_plain(trained, initial)}
 
     @classmethod
+    def _filled(
+        cls,
+        model: nn.Module,
+        config: PeftConfig,
+        weights: Mapping[str, Tensor],
+        adapter_name: str,
+    ) -> Self:
+        """``model`` adapted with ``config`` and holding ``weights``; undone if they do not fit.
+
+        The file's tensors replace whatever the adapter is built with, so it
+        is built from ``config._staged()`` — which leaves the base weight
+        alone — and the model keeps the file's ``config``.
+        """
+        peft_model = cls(model, config._staged(), adapter_name)
+        try:
+            set_peft_model_state_dict(peft_model, weights, adapter_name=adapter_name)
+        except BaseException:
+            # Whatever stopped the load, ``model`` goes back to what it was.
+            peft_model.unload()
+            raise
+        config._unstaged(peft_model.peft_config[adapter_name])
+        return peft_model
+
+    @classmethod
     def from_pretrained(
         cls,
         model: nn.Module,
@@ -627,8 +651,12 @@ class PeftModel(_ForwardsAttributes):
         Reads ``adapter_config.json`` (unless ``config`` is given) and
         ``adapter_model.safetensors`` — written by ``save_pretrained``
         or by the reference library — injects the adapter into ``model`` in
-        place and loads its tensors.  If the tensors do not fit the model,
-        the injection is undone before the error is raised.  The class
+        place and loads its tensors.  The adapter is built without its
+        initialisation's effect on the base, so an adapter saved from a PiSSA
+        or OLoRA start loads onto the (rewritten) base it was trained beside
+        as it was trained, and a pristine base is left as it is.  If the
+        tensors do not fit the model, the injection is undone before the error
+        is raised.  The class
         returned follows the config's ``task_type`` as in
         :func:`~lucid.peft.get_peft_model`; only an adapter with no task
         is built as ``cls``.
@@ -701,13 +729,9 @@ class PeftModel(_ForwardsAttributes):
         _tuner_for(config)._check_loadable(config, is_trainable)
         converted = _converted(model, AdapterFile(config, _adapter_weights(directory)), convert)
         config, weights = converted.config, converted.tensors
-        peft_model = cls._model_class(config.task_type)(model, config, adapter_name)
-        try:
-            set_peft_model_state_dict(peft_model, weights, adapter_name=adapter_name)
-        except BaseException:
-            # Whatever stopped the load, ``model`` goes back to what it was.
-            peft_model.unload()
-            raise
+        peft_model = cls._model_class(config.task_type)._filled(
+            model, config, weights, adapter_name
+        )
         if not is_trainable:
             peft_model.eval()
         return peft_model
@@ -798,7 +822,7 @@ class PeftModel(_ForwardsAttributes):
             if config is not None:
                 config = dataclasses.replace(converted.config, inference_mode=not is_trainable)
         if config is not None:
-            self.add_adapter(adapter_name, config, low_cpu_mem_usage)
+            self.add_adapter(adapter_name, config._staged(), low_cpu_mem_usage)
             if is_trainable:
                 self.set_requires_grad(adapter_name)
         try:
@@ -807,6 +831,8 @@ class PeftModel(_ForwardsAttributes):
             if added:
                 self.delete_adapter(adapter_name)
             raise
+        if config is not None:
+            config._unstaged(self.peft_config[adapter_name])
         if not is_trainable:
             self.eval()
         return loaded

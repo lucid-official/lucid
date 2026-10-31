@@ -137,6 +137,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - boundary validation, weighted tail, split remainder
 
+- loading an adapter no longer re-runs a mutating init
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

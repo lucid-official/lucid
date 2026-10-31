@@ -18,7 +18,7 @@ from lucid.peft._config import (
     _pattern_key_regex,
     _TargetedConfig,
 )
-from lucid.peft.tuners.lora._inits import _check_init
+from lucid.peft.tuners.lora._inits import _check_init, _Init
 
 _BIASES: Final[tuple[Literal["none", "all", "lora_only"], ...]] = ("none", "all", "lora_only")
 
@@ -190,6 +190,10 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
     lora_bias: bool = False
 
     @override
+    def _load_fields(self) -> dict[str, object]:
+        return {"init_lora_weights": _Init.of(self.init_lora_weights).on_load().value}
+
+    @override
     def _check_fields(self) -> None:
         super()._check_fields()
         if self.lora_bias:
@@ -203,10 +207,11 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
                     "The argument lora_bias=True is not supported for DoRA, "
                     "please pass use_dora=False"
                 )
-        factorising = self.init_lora_weights == "olora" or str(self.init_lora_weights).startswith(
-            "pissa"
-        )
-        if self.use_rslora and (self.rank_pattern or self.alpha_pattern) and factorising:
+        if (
+            self.use_rslora
+            and (self.rank_pattern or self.alpha_pattern)
+            and _Init.of(self.init_lora_weights).factorises
+        ):
             warnings.warn(
                 "Using Rank-Stabilized LoRA with rank_pattern/alpha_pattern and an "
                 "initialisation that rewrites the base weights (PiSSA / OLoRA) means the "
