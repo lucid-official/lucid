@@ -656,7 +656,7 @@ def reparameterize(mu: Tensor, logvar: Tensor) -> Tensor:
     --------
     >>> import lucid
     >>> from lucid.models._utils._generative import reparameterize
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> mu, logvar = lucid.zeros(2, 3), lucid.zeros(2, 3)
     >>> reparameterize(mu, logvar).shape
     (2, 3)

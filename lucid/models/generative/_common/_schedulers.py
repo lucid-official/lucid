@@ -180,7 +180,7 @@ class DDPMScheduler(DiffusionScheduler):
     >>> scheduler.timesteps.shape
     (10,)
 
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> clean = lucid.zeros(1, 3, 8, 8)
     >>> noise = lucid.ones(1, 3, 8, 8)
     >>> scheduler.add_noise(clean, noise, lucid.tensor([500])).shape

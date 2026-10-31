@@ -446,9 +446,9 @@ class NICEForImageGeneration(ImageGenerationModel):
         (3, 64)
         >>> samples.reshape(3, 1, 8, 8).shape  # onto an 8x8 grid for display
         (3, 1, 8, 8)
-        >>> lucid.manual_seed(0)
+        >>> _ = lucid.manual_seed(0)
         >>> first = model.generate(n_samples=2).samples
-        >>> lucid.manual_seed(0)  # the prior draw is the only randomness
+        >>> _ = lucid.manual_seed(0)  # the prior draw is the only randomness
         >>> bool(lucid.allclose(first, model.generate(n_samples=2).samples))
         True
         """

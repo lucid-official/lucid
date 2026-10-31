@@ -312,7 +312,7 @@ class DDIMScheduler:
         >>> from lucid.models.generative.stable_diffusion import (
         ...     DDIMScheduler, StableDiffusionConfig)
         >>> scheduler = DDIMScheduler(StableDiffusionConfig())
-        >>> lucid.manual_seed(0)
+        >>> _ = lucid.manual_seed(0)
         >>> clean = lucid.randn((1, 4, 8, 8))
         >>> noise = lucid.randn((1, 4, 8, 8))
         >>> noised = scheduler.add_noise(clean, noise, 501)
@@ -528,7 +528,7 @@ class PNDMScheduler:
         ...     DDIMScheduler, PNDMScheduler, StableDiffusionConfig)
         >>> config = StableDiffusionConfig()
         >>> scheduler, ddim = PNDMScheduler(config), DDIMScheduler(config)
-        >>> lucid.manual_seed(0)
+        >>> _ = lucid.manual_seed(0)
         >>> clean = lucid.randn((1, 4, 8, 8))
         >>> noise = lucid.randn((1, 4, 8, 8))
 

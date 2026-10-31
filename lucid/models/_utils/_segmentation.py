@@ -167,7 +167,7 @@ def sample_point_coords(num_points: int, *, device: str = "cpu") -> Tensor:
     --------
     >>> import lucid
     >>> from lucid.models._utils._segmentation import sample_point_coords
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> sample_point_coords(5).shape
     (5, 2)
 
@@ -202,7 +202,7 @@ def point_sample(masks: Tensor, coords: Tensor) -> Tensor:
     ...     point_sample,
     ...     sample_point_coords,
     ... )
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> masks = lucid.zeros(1, 8, 8)
     >>> coords = sample_point_coords(5).reshape(1, 5, 2)
     >>> point_sample(masks, coords).shape

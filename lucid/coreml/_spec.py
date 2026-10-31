@@ -123,7 +123,7 @@ class Activations(enum.Enum):
     >>> import shutil, tempfile
     >>> import lucid, lucid.nn as nn, lucid.coreml as cml
     >>> import lucid.quantization as q
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> x = lucid.randn(1, 3, 16, 16)
     >>> float_model = nn.Sequential(
     ...     nn.Conv2d(3, 32, 3, padding=1), nn.ReLU(),

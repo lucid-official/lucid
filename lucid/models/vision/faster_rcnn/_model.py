@@ -632,7 +632,7 @@ class FasterRCNNForObjectDetection(ObjectDetectionModel):
         --------
         >>> import lucid
         >>> from lucid.models import create_model
-        >>> lucid.manual_seed(0)
+        >>> _ = lucid.manual_seed(0)
         >>> model = create_model(
         ...     "faster_rcnn_resnet50_fpn", num_classes=3,
         ...     backbone_layers=(1, 1, 1, 1), fpn_out_channels=32,

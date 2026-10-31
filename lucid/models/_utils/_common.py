@@ -532,9 +532,9 @@ def host_random() -> random.Random:
     --------
     >>> import lucid
     >>> from lucid.models._utils._common import host_random
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> first = host_random().random()
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> host_random().random() == first
     True
     """
@@ -750,7 +750,7 @@ def mine_hard_negatives(
     >>> from lucid.models._utils._common import mine_hard_negatives
     >>> pos = lucid.randn(8, 4) + 3.0
     >>> neg = lucid.randn(200, 4) - 3.0
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> w, b, history = mine_hard_negatives(pos, neg, rounds=2)
     >>> history                       # working-set size, one entry per round
     [200]

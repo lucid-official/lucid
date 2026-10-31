@@ -723,9 +723,9 @@ class NeuralODEForImageGeneration(ImageGenerationModel):
         >>> model = NeuralODEForImageGeneration(cfg).eval()
         >>> model.generate(n_samples=3).samples.shape
         (3, 1, 2, 2)
-        >>> lucid.manual_seed(0)
+        >>> _ = lucid.manual_seed(0)
         >>> cool = model.generate(n_samples=2, temperature=0.5).samples
-        >>> lucid.manual_seed(0)
+        >>> _ = lucid.manual_seed(0)
         >>> z = lucid.randn((2, 4))  # the same standard-normal prior draw
         >>> bool(lucid.allclose(cool, model.neural_ode.decode(z * 0.5)))
         True
