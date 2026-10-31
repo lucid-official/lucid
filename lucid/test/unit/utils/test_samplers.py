@@ -170,11 +170,11 @@ def test_weighted_refuses_a_non_positive_num_samples():
         WeightedRandomSampler([1.0, 1.0], 0)
 
 
-def test_a_draw_stops_when_every_remaining_weight_is_zero():
-    """Falling back to a uniform draw over the items the caller weighted
-    out would be worse than a short epoch."""
+def test_zero_weights_come_last_so_the_epoch_keeps_its_length():
+    """``len(sampler)`` is what a DataLoader sizes the epoch by, so a pool
+    short of positive weights is topped up with the zero-weight indices."""
     drawn = list(WeightedRandomSampler([1.0, 0.0, 0.0], 3, replacement=False))
-    assert drawn == [0]
+    assert drawn == [0, 1, 2]
 
 
 # ── batching ──────────────────────────────────────────────────────────────────

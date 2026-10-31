@@ -135,6 +135,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - base forward args reach adapters; short default exclusions
 
+- boundary validation, weighted tail, split remainder
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

@@ -2220,7 +2220,6 @@
     "lucid/nn/module.py": 1,
     "lucid/nn/modules/rnn.py": 1,
     "lucid/quantization/_quantize.py": 1,
-    "lucid/utils/data/dataset.py": 1,
     "lucid/utils/transforms/_datatypes.py": 1,
     "lucid/utils/transforms/functional.py": 1
    },

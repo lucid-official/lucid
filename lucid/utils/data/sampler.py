@@ -19,6 +19,7 @@ import lucid
 from lucid._factories.random import Generator
 from lucid._tensor.tensor import Tensor
 from lucid.utils.data.dataset import Dataset
+from lucid.utils.data._validate import _check_bool, _check_positive_int
 from lucid.utils.data._rng import (
     _as_generator,
     _draw_seed,
@@ -188,16 +189,19 @@ class RandomSampler(Sampler):
         Raises
         ------
         TypeError
-            If ``generator`` is neither a :class:`lucid.Generator`, a seed,
-            nor ``None``.
+            If ``replacement`` is not a ``bool``, or ``generator`` is
+            neither a :class:`lucid.Generator`, a seed, nor ``None``.
+        ValueError
+            If ``num_samples`` is not a positive integer.
         """
         self.data_source = data_source
+        _check_bool("replacement", replacement)
         self.replacement = replacement
-        if num_samples is not None and num_samples <= 0:
+        if num_samples is not None:
             # Caught here rather than at the first ``len()``, where it
             # surfaced as ``__len__() should return >= 0`` — an error about
             # the protocol rather than about the argument that caused it.
-            raise ValueError(f"num_samples must be a positive integer, got {num_samples}.")
+            _check_positive_int("num_samples", num_samples)
         self._num_samples = num_samples
         self.generator: Generator | None = _as_generator(generator, "RandomSampler")
 
@@ -349,8 +353,9 @@ class WeightedRandomSampler(Sampler):
     :math:`\log(u_i) / w_i` (Efraimidis & Spirakis, 2006) and the
     ``num_samples`` largest are kept, in the order one-at-a-time draws
     would pick them.  When fewer than ``num_samples`` weights are
-    positive, the draw stops after the last of them rather than handing
-    out an index the caller weighted out.
+    positive, the zero-weight indices follow the positive ones (lowest
+    index first), so an epoch always yields exactly ``num_samples``
+    indices and ``len(DataLoader)`` stays true.
 
     Examples
     --------
@@ -392,10 +397,12 @@ class WeightedRandomSampler(Sampler):
 
         Raises
         ------
+        TypeError
+            If ``replacement`` is not a ``bool``.
         ValueError
-            If ``num_samples`` is not positive, exceeds ``len(weights)``
-            without replacement, or a weight is negative or not finite,
-            or — with replacement — every weight is zero.
+            If ``num_samples`` is not a positive integer, exceeds
+            ``len(weights)`` without replacement, or a weight is negative
+            or not finite, or — with replacement — every weight is zero.
         """
         values = (
             cast(list[float], weights.reshape(-1).tolist())
@@ -403,8 +410,8 @@ class WeightedRandomSampler(Sampler):
             else weights
         )
         self.weights: list[float] = [float(w) for w in values]
-        if num_samples <= 0:
-            raise ValueError(f"num_samples must be a positive integer, got {num_samples}.")
+        _check_positive_int("num_samples", num_samples)
+        _check_bool("replacement", replacement)
         if not replacement and num_samples > len(self.weights):
             # There are not that many distinct indices to give.  Refused
             # here rather than silently repeating, which is what this did.
@@ -445,16 +452,22 @@ class WeightedRandomSampler(Sampler):
             return
         positive = sum(1 for w in weights if w > 0)
         take = min(self.num_samples, positive)
-        if take == 0:
-            return
-        # Efraimidis–Spirakis: the ``take`` largest keys log(u) / w are a
-        # weighted draw without replacement, already in draw order.  A zero
-        # weight's key is -inf, so it is never among them.
-        w = _host_float64(weights)
-        noise = _uniform_doubles(len(weights), self.generator)
-        keys = noise.clamp(min=2.0**-60).log() / w
-        _, order = lucid.topk(keys, take)
-        yield from cast(list[int], order.tolist())
+        if take:
+            # Efraimidis–Spirakis: the ``take`` largest keys log(u) / w are a
+            # weighted draw without replacement, already in draw order.  A
+            # zero weight's key is -inf, so it is never among them.
+            w = _host_float64(weights)
+            noise = _uniform_doubles(len(weights), self.generator)
+            keys = noise.clamp(min=2.0**-60).log() / w
+            _, order = lucid.topk(keys, take)
+            yield from cast(list[int], order.tolist())
+        # ``__len__`` promises ``num_samples`` items, and a DataLoader sizes
+        # its epoch by it, so a pool with fewer positive weights is topped up
+        # with zero-weight indices — last, in index order, as the weighted
+        # draw has nothing to rank them by.
+        if take < self.num_samples:
+            zero = (i for i, wi in enumerate(weights) if wi <= 0)
+            yield from itertools.islice(zero, self.num_samples - take)
 
     @override
     def __len__(self) -> int:
@@ -513,12 +526,20 @@ class BatchSampler(Sampler):
             Target batch size.
         drop_last : bool
             Whether to discard the final short batch.
+
+        Raises
+        ------
+        ValueError
+            If ``batch_size`` is not a positive integer (a ``bool`` is not).
+        TypeError
+            If ``drop_last`` is not a ``bool``.
         """
         self.sampler = sampler
-        if batch_size <= 0:
-            # Otherwise the first ``len()`` divides by it and the caller
-            # gets a ``ZeroDivisionError`` from inside the sampler.
-            raise ValueError(f"batch_size must be a positive integer, got {batch_size}.")
+        # Otherwise the first ``len()`` divides by it and the caller gets a
+        # ``ZeroDivisionError`` from inside the sampler — or ``True`` quietly
+        # becomes a batch size of 1.
+        _check_positive_int("batch_size", batch_size)
+        _check_bool("drop_last", drop_last)
         self.batch_size = batch_size
         self.drop_last = drop_last
 

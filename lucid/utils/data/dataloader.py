@@ -212,6 +212,12 @@ def default_collate(
         * ``dict`` / ``list`` / ``tuple`` / ``NamedTuple`` containers
           → walked recursively; original container type is preserved.
 
+    Raises
+    ------
+    TypeError
+        If a leaf is none of the above (``None``, a custom object, ...);
+        pass a ``collate_fn`` to batch those.
+
     Notes
     -----
     The recursion is structural: a batch of ``{"x": Tensor, "y": int}``
@@ -257,7 +263,11 @@ def default_collate(
         collated = [default_collate([d[i] for d in batch]) for i in range(len(elem))]
         return type(elem)(collated) if isinstance(elem, tuple) else collated  # type: ignore[return-value]
 
-    return batch
+    raise TypeError(
+        f"default_collate: cannot collate a batch of {type(elem).__name__}; "
+        "it handles Tensors, numbers, str/bytes and dict/list/tuple of those — "
+        "pass a collate_fn for anything else."
+    )
 
 
 # ── fetching ──────────────────────────────────────────────────────────────────

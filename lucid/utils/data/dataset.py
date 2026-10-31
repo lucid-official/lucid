@@ -2,6 +2,8 @@
 Dataset base classes and implementations.
 """
 
+import bisect
+import math
 from typing import Iterator, TYPE_CHECKING, override
 
 from lucid._factories.random import Generator
@@ -300,9 +302,17 @@ class ConcatDataset(Dataset):
     """
 
     def __init__(self, datasets: list[Dataset]) -> None:
-        """Initialise the instance.  See the class docstring for parameter semantics."""
+        """Initialise the instance.  See the class docstring for parameter semantics.
+
+        Raises
+        ------
+        ValueError
+            If ``datasets`` is empty — there would be nothing to index.
+        """
         self.datasets = list(datasets)
-        self.cumulative_sizes = self._cumsum([len(d) for d in datasets])
+        if not self.datasets:
+            raise ValueError("ConcatDataset needs at least one dataset, got an empty list.")
+        self.cumulative_sizes = self._cumsum([len(d) for d in self.datasets])
 
     @staticmethod
     def _cumsum(sizes: list[int]) -> list[int]:
@@ -316,7 +326,7 @@ class ConcatDataset(Dataset):
     @override
     def __len__(self) -> int:
         """Return the total length — sum of all child dataset lengths."""
-        return self.cumulative_sizes[-1] if self.cumulative_sizes else 0
+        return self.cumulative_sizes[-1]
 
     @override
     def __getitem__(self, idx: int) -> Tensor | tuple[Tensor, ...]:
@@ -332,18 +342,24 @@ class ConcatDataset(Dataset):
         -------
         Tensor or tuple of Tensor
             Sample fetched from the appropriate child dataset.
+
+        Raises
+        ------
+        ValueError
+            If a negative ``idx`` is below ``-len(self)``; wrapping it
+            into a child would silently return a sample from the wrong
+            place.
+        IndexError
+            If ``idx >= len(self)``.
         """
         if idx < 0:
+            if -idx > len(self):
+                raise ValueError("absolute value of index should not exceed dataset length")
             idx = len(self) + idx
-        dataset_idx = 0
-        while (
-            dataset_idx < len(self.cumulative_sizes) and idx >= self.cumulative_sizes[dataset_idx]
-        ):
-            dataset_idx += 1
-        if dataset_idx == 0:
-            sample_idx = idx
-        else:
-            sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
+        dataset_idx = bisect.bisect_right(self.cumulative_sizes, idx)
+        if dataset_idx == len(self.datasets):
+            raise IndexError(f"index {idx} is out of range for a dataset of length {len(self)}")
+        sample_idx = idx if dataset_idx == 0 else idx - self.cumulative_sizes[dataset_idx - 1]
         return self.datasets[dataset_idx][sample_idx]
 
 
@@ -425,8 +441,9 @@ def random_split(
     lengths : list of int or list of float
         Either absolute split sizes summing to ``len(dataset)``, or
         fractions in ``[0, 1]`` summing (approximately) to ``1.0``.  In
-        the fractional case, rounding error is absorbed by the final
-        split so the totals stay consistent.
+        the fractional case each split gets ``floor(fraction * n)`` and
+        the leftover samples go one each, round-robin from the first
+        split, so the totals stay consistent.
     generator : lucid.Generator or int, optional
         Stream the permutation is drawn from.  ``None`` (default) draws
         from the default generator, so :func:`lucid.manual_seed`
@@ -476,9 +493,11 @@ def random_split(
         total = sum(lengths)
         if abs(total - 1.0) > 1e-6:
             raise ValueError("Fraction lengths must sum to 1.0")
-        int_lengths = [round(x * n) for x in lengths]
-        # Fix rounding error on last element
-        int_lengths[-1] = n - sum(int_lengths[:-1])
+        int_lengths = [math.floor(x * n) for x in lengths]
+        # The floors leave fewer than ``len(lengths)`` samples over; hand
+        # them out one at a time from the first split.
+        for i in range(n - sum(int_lengths)):
+            int_lengths[i % len(int_lengths)] += 1
         lengths = int_lengths
 
     lengths_int: list[int] = [int(x) for x in lengths]

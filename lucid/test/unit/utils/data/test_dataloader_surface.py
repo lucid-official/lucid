@@ -116,9 +116,9 @@ def test_default_convert_makes_a_numpy_scalar_a_zero_d_tensor():
     assert default_convert(np.float32(1.5)).dtype == lucid.float32
 
 
-def test_a_numpy_string_array_is_left_as_it_is():
-    batch = [np.array(["a"]), np.array(["b"])]
-    assert default_collate(batch) is batch
+def test_a_numpy_string_array_is_refused():
+    with pytest.raises(TypeError, match="ndarray"):
+        default_collate([np.array(["a"]), np.array(["b"])])
 
 
 # ── batch_size=None ───────────────────────────────────────────────────────────
