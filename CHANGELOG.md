@@ -146,6 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - default targets leave EMA and auxiliary networks out
 - TIES/DARE merges, mixed batches, status, re-adaptation
 - AdaLoRA and VeRA tuners on the registry
+- export AdaLoRA and VeRA; PeftModel runs through the tuner
 
 ---
 

@@ -36,9 +36,11 @@ from lucid.peft import (
 )
 from lucid.peft.tuners import lora
 from lucid.peft.tuners._base import _BaseTunerLayer
+from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraLayer, AdaLoraModel
 from lucid.peft.tuners.ia3 import IA3Layer
 from lucid.peft.tuners.loha import LoHaLayer
 from lucid.peft.tuners.lokr import LoKrLayer
+from lucid.peft.tuners.vera import VeraConfig, VeraLayer, VeraModel
 
 
 def _base_model() -> nn.Module:
@@ -68,6 +70,8 @@ _LAYER_CONFIGS: dict[type[_BaseTunerLayer], Callable[[], PeftConfig]] = {
     IA3Layer: lambda: IA3Config(target_modules=["x"], feedforward_modules=[]),
     LoHaLayer: lambda: LoHaConfig(target_modules=["x"]),
     LoKrLayer: lambda: LoKrConfig(target_modules=["x"]),
+    AdaLoraLayer: lambda: AdaLoraConfig(total_step=10, target_modules=["x"]),
+    VeraLayer: lambda: VeraConfig(target_modules=["x"]),
 }
 
 
@@ -88,6 +92,9 @@ def _layer_builder(base: type[nn.Module], layer: type[_BaseTunerLayer]) -> Calla
     """Wrap a fresh ``base`` module in ``layer`` with a rank-2 adapter, giving it what it takes."""
     parameters = inspect.signature(layer).parameters
     keywords = {name: 2 for name in ("r", "alpha") if name in parameters}
+    # A layer taking ``**kwargs`` (lora.MultiheadAttention) forwards the rank to its base class.
+    if "r" not in keywords and any(p.kind is p.VAR_KEYWORD for p in parameters.values()):
+        keywords["r"] = 2
     make_config = next((m for root, m in _LAYER_CONFIGS.items() if issubclass(layer, root)), None)
     wants_config = "config" in parameters and make_config is not None
 
@@ -117,6 +124,10 @@ BUILDERS: dict[type, Callable[[], Any]] = {
     ),
     LoHaModel: lambda: LoHaModel(_base_model(), LoHaConfig(r=2, target_modules=["0", "2"])),
     LoKrModel: lambda: LoKrModel(_base_model(), LoKrConfig(r=2, target_modules=["0", "2"])),
+    AdaLoraModel: lambda: AdaLoraModel(
+        _base_model(), AdaLoraConfig(init_r=2, total_step=10, target_modules=["0", "2"])
+    ),
+    VeraModel: lambda: VeraModel(_base_model(), VeraConfig(r=2, target_modules=["0", "2"])),
     PeftModel: lambda: PeftModel(_base_model(), _config()),
     lora.ParamWrapper: lambda: lora.ParamWrapper(_Gate(), "default", "w", r=2),
 }

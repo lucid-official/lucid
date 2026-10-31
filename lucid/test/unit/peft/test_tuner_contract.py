@@ -267,14 +267,7 @@ class TestRegistration:
         with pytest.raises(TypeError, match="config must be a"):
             method.tuner(_mlp(), other.make())
 
-    def test_the_audit_builds_a_fresh_working_instance(
-        self, method: _Method, request: pytest.FixtureRequest
-    ) -> None:
-        if method.tuner not in BUILDERS:
-            # LCD-714b: the audit's builder rows for AdaLoRA / VeRA land with lucid/test/audit/_builders.py.
-            request.applymarker(
-                pytest.mark.xfail(strict=True, raises=KeyError, reason="no audit builder row yet")
-            )
+    def test_the_audit_builds_a_fresh_working_instance(self, method: _Method) -> None:
         first, second = BUILDERS[method.tuner](), BUILDERS[method.tuner]()
         assert type(first) is method.tuner
         assert {id(p) for p in first.parameters()}.isdisjoint(id(p) for p in second.parameters())
@@ -304,7 +297,10 @@ class TestForward:
         net = _mlp(device)
         peft = get_peft_model(net, method.make())
         trainable = {n for n, p in peft.named_parameters() if p.requires_grad}
-        assert trainable and all(any(t in n for t in ("ia3_", "hada_", "lokr_", "lora_", "vera_lambda")) for n in trainable)
+        assert trainable and all(
+            any(t in n for t in ("ia3_", "hada_", "lokr_", "lora_", "vera_lambda"))
+            for n in trainable
+        )
         peft(lucid.randn(5, 6, device=device)).sum().backward()
         for name, p in peft.named_parameters():
             if name in trainable:
@@ -718,7 +714,7 @@ def _reference_forward(
                 ],
                 dim=0,
             )
-        scale = 4 / 2 if method.name in ('loha', 'lokr') else 1.0  # alpha / r
+        scale = 4 / 2 if method.name in ("loha", "lokr") else 1.0  # alpha / r
         weights.append(net[index].weight + delta * scale)
     hidden = relu(x @ weights[0].mT + net[0].bias)
     return hidden @ weights[1].mT + net[2].bias

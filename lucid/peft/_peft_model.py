@@ -348,8 +348,10 @@ class PeftModel(_ForwardsAttributes):
         >>> bool(lucid.allclose(mixed[1], peft(x)[1], atol=1e-6))
         True
         """
+        # Through the tuner, whose forward is the model's own unless the method adds to it
+        # (AdaLoRA's orthogonality penalty on the loss).
         with self._routed(adapter_names):
-            return self.get_base_model()(*args, **kwargs)
+            return self.base_model(*args, **kwargs)
 
     def get_nb_trainable_parameters(self) -> tuple[int, int]:
         """Return ``(trainable, total)`` parameter counts, each shared parameter once.

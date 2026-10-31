@@ -653,12 +653,6 @@ class TestPenalty:
         out = tuner(x)
         assert _close(out.loss, net(x).loss + 0.5 * _penalty(tuner), atol=1e-4)
 
-    @pytest.mark.xfail(
-        strict=True,
-        raises=AssertionError,
-        reason="LCD-714b: PeftModel.forward still calls the inner model; the routing through the "
-        "tuner is in the patch held for LCD-755 (remove this marker when it lands)",
-    )
     def test_a_peft_model_applies_it_too(self) -> None:
         net = _Net()
         peft = get_peft_model(net, _config(target_modules=["a", "b"], init_lora_weights=False))
