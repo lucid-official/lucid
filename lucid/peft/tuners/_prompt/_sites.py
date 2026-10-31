@@ -20,7 +20,7 @@ import inspect
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Final, Protocol, override
+from typing import ClassVar, Final, Protocol, override
 
 import lucid
 import lucid.nn as nn
@@ -121,6 +121,10 @@ class _Hook(ABC):
     """A forward pre-hook that applies the active adapter's prompt to one module's call."""
 
     __slots__ = ("_tuner",)
+
+    #: Declares the site a pure tensor rewrite (it reads the tuner's switches, which
+    #: ``lucid.compile`` keys, and writes nothing), so a compiled call traces it.
+    _lucid_traceable_hook: ClassVar[bool] = True
 
     def __init__(self, tuner: _Prompting) -> None:
         self._tuner = tuner

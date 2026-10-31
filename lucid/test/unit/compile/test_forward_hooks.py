@@ -17,6 +17,7 @@ The CPU has no executables: there the same cases check the key and the eager res
 """
 
 from collections.abc import Callable
+from functools import partial
 
 import pytest
 
@@ -25,7 +26,7 @@ import lucid.nn as nn
 from lucid._C import engine as _C_engine
 from lucid.compile._core import fallback
 from lucid.compile._core.fallback import CompileFallbackWarning
-from lucid.compile._core.hook_contract import HookContract
+from lucid.compile._core.hook_contract import HookContract, traceable_hook
 from lucid.compile._core.signature import hook_block, model_has_active_hooks, signature_of
 from lucid.nn.hooks import RemovableHandle
 
@@ -51,20 +52,24 @@ def _entries(compiled: lucid.compile.CompiledModule[..., lucid.Tensor], device: 
     return int(compiled.cache_info()["entries"]) if device == "metal" else 0
 
 
+@traceable_hook
 def _forward(m: nn.Module, _: object, out: lucid.Tensor) -> lucid.Tensor:
     return out * 2.0
 
 
+@traceable_hook
 def _pre(m: nn.Module, args: tuple[lucid.Tensor, ...]) -> tuple[lucid.Tensor]:
     return (args[0] + 1.0,)
 
 
+@traceable_hook
 def _forward_kw(
     m: nn.Module, args: object, kwargs: dict[str, object], out: lucid.Tensor
 ) -> lucid.Tensor:
     return out - 3.0
 
 
+@traceable_hook
 def _pre_kw(
     m: nn.Module, args: tuple[lucid.Tensor, ...], kwargs: dict[str, object]
 ) -> tuple[tuple[lucid.Tensor], dict[str, object]]:
@@ -79,6 +84,7 @@ _KINDS: dict[str, Callable[[nn.Module], RemovableHandle]] = {
 }
 
 
+@traceable_hook
 class _Scale:
     """A callable-object hook whose factor is its attribute."""
 
@@ -89,6 +95,7 @@ class _Scale:
         return out * self.k
 
 
+@traceable_hook
 class _Bias:
     """A hook that adds a tensor it holds."""
 
@@ -154,10 +161,10 @@ class TestTraced:
         m = _linear(device)
         x = _x(device)
         compiled = lucid.compile(m)
-        first = m.register_forward_hook(lambda mod, args, out: out * 2.0)
+        first = m.register_forward_hook(traceable_hook(lambda mod, args, out: out * 2.0))
         a = compiled(x)
         first.remove()
-        second = m.register_forward_hook(lambda mod, args, out: out * 5.0)
+        second = m.register_forward_hook(traceable_hook(lambda mod, args, out: out * 5.0))
         b = compiled(x)
         assert _close(b, m(x))
         assert not _close(a, b)
@@ -167,11 +174,13 @@ class TestTraced:
         m = _linear(device)
         x = _x(device)
         compiled = lucid.compile(m)
-        m.register_forward_hook(lambda mod, args, out: out + 1.0)
-        m.register_forward_hook(lambda mod, args, out: out * 3.0)
+        m.register_forward_hook(traceable_hook(lambda mod, args, out: out + 1.0))
+        m.register_forward_hook(traceable_hook(lambda mod, args, out: out * 3.0))
         a = compiled(x)
         assert _close(a, m(x))
-        late = m.register_forward_hook(lambda mod, args, out: out - 7.0, prepend=True)
+        late = m.register_forward_hook(
+            traceable_hook(lambda mod, args, out: out - 7.0), prepend=True
+        )
         b = compiled(x)
         assert _close(b, m(x))
         assert not _close(a, b)
@@ -182,7 +191,7 @@ class TestTraced:
         m = _linear(device)
         x = _x(device)
         config = {"scale": 2.0}
-        m.register_forward_hook(lambda mod, args, out: out * config["scale"])
+        m.register_forward_hook(traceable_hook(lambda mod, args, out: out * config["scale"]))
         compiled = lucid.compile(m)
         a = compiled(x)
         config["scale"] = 4.0  # an in-place change moves no tree version
@@ -227,6 +236,7 @@ class TestTraced:
                 super().__init__()
                 self.on = True
 
+            @traceable_hook
             def rewrite(self, mod: nn.Module, args: object, out: lucid.Tensor) -> lucid.Tensor:
                 return out * 2.0 if self.on else out
 
@@ -322,16 +332,31 @@ _SIDE_EFFECTS: dict[str, Callable[[list[int]], Callable[..., object]]] = {
 }
 
 
+def _hidden_in_helper(calls: list[int]) -> Callable[..., lucid.Tensor]:
+    """A hook that reads as a pure rewrite; its side effect lives in a helper it calls."""
+
+    def record(out: lucid.Tensor) -> None:
+        calls.append(len(out))
+
+    def hook(m: nn.Module, args: object, out: lucid.Tensor) -> lucid.Tensor:
+        record(out)
+        return out * 2.0
+
+    return hook
+
+
 @pytest.mark.usefixtures("inference")
-class TestSideEffects:
+class TestOnlyDeclaredHooksAreTraced:
+    @pytest.mark.parametrize("marked", [False, True], ids=["unmarked", "marked-but-impure"])
     @pytest.mark.parametrize("name", list(_SIDE_EFFECTS))
-    def test_it_runs_eagerly_every_call_and_says_so(
-        self, name: str, device: str, capfd: pytest.CaptureFixture[str]
+    def test_a_side_effect_runs_eagerly_every_call_and_says_so(
+        self, name: str, marked: bool, device: str, capfd: pytest.CaptureFixture[str]
     ) -> None:
         m = _linear(device)
         x = _x(device)
         calls: list[int] = [0] if name == "item-store" else []
-        m.register_forward_hook(_SIDE_EFFECTS[name](calls))
+        hook = _SIDE_EFFECTS[name](calls)
+        m.register_forward_hook(traceable_hook(hook) if marked else hook)
         assert model_has_active_hooks(m)
         reason = hook_block(m)
         assert reason is not None and "hook" in reason
@@ -348,15 +373,42 @@ class TestSideEffects:
         assert compiled.cache_info()["entries"] == 0
         capfd.readouterr()
 
-    def test_a_hook_that_writes_outside_its_frame_is_found_by_its_code(self) -> None:
+    def test_a_pure_looking_user_hook_is_not_traced_without_a_declaration(
+        self, device: str
+    ) -> None:
+        m = _linear(device)
+        x = _x(device)
+        m.register_forward_hook(lambda mod, args, out: out * 2.0)
+        reason = hook_block(m)
+        assert reason is not None and "not declared" in reason
+        compiled = lucid.compile(m)
+        fallback._NOTICED.discard("hooks")
+        with pytest.warns(CompileFallbackWarning, match="not declared"):
+            assert _close(compiled(x), m(x))
+        assert compiled.cache_info()["entries"] == 0
+
+    def test_a_side_effect_hidden_in_a_helper_runs_on_every_call(self, device: str) -> None:
+        m = _linear(device)
+        x = _x(device)
+        calls: list[int] = []
+        m.register_forward_hook(_hidden_in_helper(calls))
+        compiled = lucid.compile(m)
+        for _ in range(3):
+            assert _close(compiled(x), m(x))
+        assert len(calls) == 6  # three compiled calls and three eager ones, none replayed
+        assert compiled.cache_info()["entries"] == 0
+
+    def test_the_marker_and_the_guard(self) -> None:
         def clean(m: nn.Module, args: object, out: lucid.Tensor) -> lucid.Tensor:
             return (lambda t: t * 2.0)(out) + 1.0
 
-        assert HookContract.blocker(clean) is None
-        assert HookContract.blocker(_Scale(2.0)) is None
-        assert HookContract.blocker(print) is not None  # not Python we can read
+        assert HookContract.blocker(clean) is not None  # unmarked
+        assert HookContract.blocker(traceable_hook(clean)) is None
+        assert HookContract.blocker(_Scale(2.0)) is None  # a marked class
+        assert HookContract.blocker(partial(traceable_hook(clean))) is None
+        assert HookContract.blocker(print) is not None  # a builtin: not Python we can read
 
-    def test_a_pure_hook_does_not_hide_an_impure_one_behind_a_wrapper(self) -> None:
+    def test_a_marked_hook_does_not_hide_an_impure_one_behind_a_wrapper(self) -> None:
         calls: list[int] = []
 
         def observe(m: nn.Module, args: object, out: lucid.Tensor) -> None:
@@ -369,7 +421,7 @@ class TestSideEffects:
         def forwarding(m: nn.Module, args: object, out: lucid.Tensor) -> None:
             return wrapper(m, args, out)
 
-        assert HookContract.blocker(forwarding) is not None
+        assert HookContract.blocker(traceable_hook(forwarding)) is not None
 
     def test_backward_and_global_hooks_still_run_eagerly(self, device: str) -> None:
         m = _linear(device)
@@ -387,8 +439,8 @@ class TestSideEffects:
 def _mlp(device: str) -> nn.Sequential:
     lucid.manual_seed(0)
     net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 4)).to(device)
-    net[0].register_forward_hook(lambda mod, args, out: out * 2.0)
-    net[2].register_forward_pre_hook(lambda mod, args: (args[0] + 1.0,))
+    net[0].register_forward_hook(traceable_hook(lambda mod, args, out: out * 2.0))
+    net[2].register_forward_pre_hook(traceable_hook(lambda mod, args: (args[0] + 1.0,)))
     return net
 
 

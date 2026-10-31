@@ -39,13 +39,13 @@ The MPSGraph builder + executable cache + per-op emitters live in
 notes: a call that needs gradients, or that the compiler cannot lower,
 runs eagerly.
 
-Forward hooks and pre-hooks are traced with the forward when they only rewrite
-tensors (a prompt, a scaling); the hook set and the state a hook reads are part
-of the cache key, so adding, removing or reordering one retraces.  A hook that
-acts by side effect - one that returns nothing, appends, counts, prints - would
-run only at trace time, so a call with one runs eagerly, with a one-time
-notice.  Backward hooks, global module hooks and tensor gradient hooks always
-run eagerly.
+Forward hooks and pre-hooks are traced with the forward only when lucid itself
+declares them pure tensor rewrites (the prompt-learning sites of ``lucid.peft``);
+the hook set and the state such a hook reads are part of the cache key, so
+adding, removing or reordering one retraces.  Any other forward hook or pre-hook
+may act by side effect - log, count, record - which a replay would silently
+skip, so a call with one runs eagerly, with a one-time notice.  Backward hooks,
+global module hooks and tensor gradient hooks always run eagerly.
 """
 
 import sys

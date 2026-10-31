@@ -9,15 +9,20 @@ that appends to a list, bumps a counter or prints would run once, at trace time,
 and never again.  :class:`HookContract` decides which of the two a hook is, and
 what makes a traced hook's graph stale:
 
-* **Traceable.**  A hook is traced when it is Python we can read and its own
-  code (and the code nested in it) writes nothing outside its frame — no
-  attribute, item, global or ``nonlocal`` store, and no call of a mutator or an
-  I/O function by name — and it has a path that *returns* a value.  A hook that
-  returns ``None`` on every path acts by side effect (an observer, a recorder),
-  whatever its body looks like, so it is not traced.  Backward hooks, global
-  hooks and parameter gradient hooks are never traced.  The helpers a hook calls
-  are not followed: a hook is judged by its own code, so a hook whose side
-  effect hides in a callee is the one case this cannot see.
+* **Declared.**  A hook is traced only if it is *declared* a pure tensor
+  rewrite: marked with :func:`traceable_hook`, or a callable whose class sets
+  ``TRACEABLE_MARKER``.  Nothing is inferred.  A scan of a hook's own code
+  cannot see a side effect that lives in a helper it calls (a logger, a stats
+  accumulator, a counter), and a replay would skip it silently; so every
+  unmarked forward hook and pre-hook runs eagerly, with a one-time notice.
+  lucid marks only its own hooks (the prompt-learning sites).  Backward hooks,
+  global hooks and parameter gradient hooks are never traced.
+* **Guarded.**  A marked hook is still scanned: its own code (and the code
+  nested in it) must write nothing outside its frame — no attribute, item,
+  global or ``nonlocal`` store, no call of a mutator or an I/O function by
+  name — and must have a path that *returns* a value.  A marked hook that fails
+  the scan is not traced (eager, with the notice naming why); the scan is a
+  check on the declaration, not a substitute for it.
 * **Keyed.**  The key (:attr:`CacheKey.module_state`) names each traced hook of
   each module — its registration id, its callable, whether it takes kwargs, and
   the order — so adding, removing, reordering or replacing a hook moves it.  It
@@ -31,17 +36,45 @@ what makes a traced hook's graph stale:
 
 import dis
 import weakref
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from functools import partial
 from types import CodeType, FunctionType, MethodType
-from typing import ClassVar, final
+from typing import ClassVar, Final, final
 
 from lucid.compile._core.callable_slots import callable_slots, cell_value
 from lucid.compile._core.module_state import StateContract
 from lucid.nn.module import Module
 
-__all__ = ["HookContract", "HookSite"]
+__all__ = ["HookContract", "HookSite", "TRACEABLE_MARKER", "traceable_hook"]
+
+#: The attribute that declares a hook a pure tensor rewrite.  A class sets it
+#: as a class attribute (lucid's peft sites do, without importing this module);
+#: a function gets it from :func:`traceable_hook`.
+TRACEABLE_MARKER: Final = "_lucid_traceable_hook"
+
+
+def traceable_hook[F: Callable[..., object]](hook: F) -> F:
+    """Declare ``hook`` a pure tensor rewrite, which a compiled call may trace.
+
+    Private to ``lucid.compile``: a hook that reads state, branches on a
+    switch or builds tensors is fine — the key names what it reads — but one
+    that acts by side effect (logging, counting, recording) is not, since a
+    replay never runs it.
+
+    Parameters
+    ----------
+    hook : callable
+        A function, or a class whose instances are hooks.
+
+    Returns
+    -------
+    callable
+        ``hook`` itself, marked.
+    """
+    setattr(hook, TRACEABLE_MARKER, True)
+    return hook
+
 
 # What walking a code object found, by the object's address: an entry leaves
 # with its code: (why it is not traceable or None, whether it returns a value).
@@ -264,8 +297,16 @@ class HookContract:
         return False
 
     @classmethod
+    def declared(cls, hook: object) -> bool:
+        """Whether ``hook`` carries ``TRACEABLE_MARKER`` (a ``partial`` by its function)."""
+        target = hook.func if isinstance(hook, partial) else hook
+        return getattr(target, TRACEABLE_MARKER, False) is True
+
+    @classmethod
     def blocker(cls, hook: object) -> str | None:
         """Why ``hook`` cannot be traced, or ``None`` if it can."""
+        if not cls.declared(hook):
+            return "is not declared a pure tensor rewrite, so it may act by side effect"
         parts = cls.parts(hook)
         if parts is None:
             return "is not a Python callable"

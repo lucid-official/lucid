@@ -1,8 +1,9 @@
 """A compiled prompt-tuned model follows every adapter switch (CPU and Metal).
 
 A prompt is applied by forward pre-hooks that read the tuner's ``disable_adapters`` and
-``active_adapter``.  ``lucid.compile`` traces such a hook (it only rewrites tensors, so its ops are
-recorded with the rest of the forward) and keys the executable on the hook set and on the public
+``active_adapter``.  The sites declare themselves pure tensor rewrites (``_lucid_traceable_hook``),
+so ``lucid.compile`` traces them (their ops are recorded with the rest of the forward; an
+undeclared hook runs eagerly) and keys the executable on the hook set and on the public
 scalar attributes of every module, the tuner included (LCD-703, LCD-776): a switch retraces, going
 back to an earlier state reuses its executable, and a compiled call equals the eager one after each.
 On the CPU, which has no executables, the same switches are checked against the key and the eager
@@ -17,6 +18,7 @@ import lucid
 import lucid.nn as nn
 from lucid._C import engine as _C_engine
 from lucid.compile._core import signature
+from lucid.compile._core.hook_contract import HookContract
 from lucid.models import create_model
 from lucid.peft import PeftModel, PromptTuningConfig, get_peft_model
 from lucid.test.unit.peft.test_prompt_learning import _METHODS, _TEXT, _ids
@@ -226,3 +228,28 @@ class TestThePromptIsTraced:
             _C_engine.compile.session_cache_clear()
             assert _close(base(ids).logits, model(ids).logits)
             assert _C_engine.compile.session_cache_size() > 0
+
+
+class TestTheSitesAreDeclaredTraceable:
+    @pytest.mark.parametrize("method", _PROMPTS)
+    def test_every_site_is_marked_and_passes_the_guard(self, method: str) -> None:
+        peft = _adapted(method, "cpu")
+        sites = [
+            (type(sub).__name__, hook)
+            for sub in peft.modules()
+            for _, _, hook in HookContract.hooks_of(sub, frozenset())
+        ]
+        assert sites
+        for owner, hook in sites:
+            assert HookContract.blocker(hook) is None, (owner, hook)
+        assert signature.hook_block(peft) is None
+
+    def test_an_unmarked_hook_beside_them_sends_the_call_to_eager(self) -> None:
+        peft = _adapted("prompt", "cpu")
+        handle = peft.model.register_forward_hook(lambda mod, args, out: out)
+        try:
+            reason = signature.hook_block(peft)
+            assert reason is not None and "not declared" in reason
+        finally:
+            handle.remove()
+        assert signature.hook_block(peft) is None
