@@ -84,14 +84,17 @@ class _BERTEmbeddings(nn.Module):
         token_type_ids: Tensor | None = None,
         position_ids: Tensor | None = None,
         inputs_embeds: Tensor | None = None,
+        past_key_values_length: int = 0,
     ) -> Tensor:
         """Sum the word, position and token-type embeddings.
 
         Exactly one of ``input_ids`` and ``inputs_embeds`` is required.
         ``inputs_embeds`` skips the word-embedding lookup, which is what a
         caller doing soft prompts or adapter tuning needs; ``position_ids``
-        overrides the default ``0..T-1``, which packed or shifted sequences
-        need.
+        overrides the default positions, which packed or shifted sequences
+        need.  The default positions are ``past_key_values_length ..
+        past_key_values_length + T - 1`` (``0..T-1`` with no cache), so keys and
+        values already in front of the input take the positions before it.
         """
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError(
@@ -110,7 +113,16 @@ class _BERTEmbeddings(nn.Module):
             dev = input_ids.device.type
             words = self.word_embeddings(input_ids)
 
-        pos_ids = self.position_ids[:, :T] if position_ids is None else position_ids
+        if position_ids is None:
+            end = past_key_values_length + T
+            if end > int(self.position_ids.shape[1]):
+                raise ValueError(
+                    f"{past_key_values_length} cached positions + {T} input positions exceed "
+                    f"max_position_embeddings ({int(self.position_ids.shape[1])})"
+                )
+            pos_ids = self.position_ids[:, past_key_values_length:end]
+        else:
+            pos_ids = position_ids
         positions = self.position_embeddings(pos_ids)
 
         if token_type_ids is None:
@@ -513,7 +525,7 @@ class BERTModel(PretrainedModel):
 
     config_class: ClassVar[type[BERTConfig]] = BERTConfig
     base_model_prefix: ClassVar[str] = "bert"
-    kv_prefix_only: ClassVar[bool] = True
+    prefix_shifts_positions: ClassVar[bool] = True
 
     def __init__(self, config: BERTConfig) -> None:
         super().__init__(config)
@@ -563,8 +575,11 @@ class BERTModel(PretrainedModel):
         ``past_key_values`` is a :class:`~lucid.utils.cache.DynamicCache` holding
         one ``(key, value)`` pair per layer, which every position attends to in
         front of its own keys and values.  An encoder has no history to extend, so
-        the cache is only read, the prefix takes no position (the input's positions
-        start at 0), and ``attention_mask`` is as wide as prefix + input.
+        the cache is only read, and ``attention_mask`` is as wide as prefix + input.
+        The prefix takes the positions in front of the input, as the reference
+        numbers them after the cache: with no ``position_ids`` the input's are
+        ``P .. P + T - 1`` for a prefix of length ``P``; ``position_ids`` given are
+        used as they are.
         """
         if inputs_embeds is not None:
             B, T = int(inputs_embeds.shape[0]), int(inputs_embeds.shape[1])
@@ -581,6 +596,7 @@ class BERTModel(PretrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            past_key_values_length=prefix_len,
         )
         sequence_output, all_hidden, all_attn = self.encoder(
             hidden,

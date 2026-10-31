@@ -92,8 +92,7 @@ class _SingleStackLayout(_Layout, task_types=(None, TaskType.SEQ_CLS, TaskType.F
                 f"{type(trunk).__name__} cannot take cached keys and values, which prefix "
                 "tuning puts its prefix in"
             )
-        # An encoder's cache is a prefix to attend to, not positions to continue from.
-        shifts_positions = not getattr(trunk, "kv_prefix_only", False)
+        shifts_positions = getattr(trunk, "prefix_shifts_positions", True)
         return [(trunk, _PrefixSite(tuner, shifts_positions))]
 
 

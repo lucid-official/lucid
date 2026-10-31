@@ -17,6 +17,7 @@ import lucid
 import lucid.nn as nn
 import lucid.optim as optim
 from lucid.models import create_model
+from lucid.models.text.bert import BERTModel
 from lucid.peft import (
     PeftConfig,
     PeftModel,
@@ -720,8 +721,9 @@ class TestEncoderPrefix:
         for n, p in peft.named_parameters():
             assert (not bool(lucid.allclose(p, before[n]))) == (n in named), n
 
-    def test_the_prefix_takes_no_position(self, device: str) -> None:
-        # The input keeps positions 0..T-1 whatever sits in front; a decoder's would shift past it.
+    def test_the_prefix_takes_the_positions_in_front_of_the_input(self, device: str) -> None:
+        # The reference numbers the input after the cache: positions the caller gave, input-relative,
+        # shift past the prefix as a decoder's do.
         lucid.manual_seed(0)
         model = create_model("bert_base", **_TEXT).eval().to(device)
         peft = get_peft_model(model, _METHODS["prefix"]("FEATURE_EXTRACTION"))
@@ -729,6 +731,17 @@ class TestEncoderPrefix:
         positions = lucid.arange(5, device=device).long().reshape(1, 5).repeat(2, 1)
         given = peft(ids, position_ids=positions).last_hidden_state
         assert bool(lucid.allclose(given, peft(ids).last_hidden_state))
+        seen: list[list[int]] = []
+
+        def spy(_m: nn.Module, args: tuple[lucid.Tensor, ...]) -> None:
+            seen.append([int(i) for i in args[0].reshape(-1).tolist()])
+
+        handle = model.embeddings.position_embeddings.register_forward_pre_hook(spy)
+        peft(ids)
+        peft(ids, position_ids=positions)
+        handle.remove()
+        assert seen[0] == list(range(_V, _V + 5))
+        assert seen[1] == list(range(_V, _V + 5)) * 2
 
     @pytest.mark.parametrize("family", _ENCODERS)
     def test_a_padded_key_is_not_attended_to(self, family: str, device: str) -> None:
@@ -921,3 +934,120 @@ class TestTextInitialisation:
     def test_an_unknown_name_lists_what_is_registered(self, device: str) -> None:
         with pytest.raises(ValueError, match="registered: .*roformer"):
             get_peft_model(_gpt2(device), self._config("no-such-tokenizer"))
+
+
+_POSITION_FAMILIES = {"bert_base": True, "gpt": True, "gpt2_small": True, "roformer": True}
+
+
+class TestPrefixPositions:
+    """Whether a prefix in the cache moves the input's positions is declared by the trunk's family."""
+
+    @pytest.mark.parametrize(("family", "shifts"), _POSITION_FAMILIES.items())
+    def test_the_family_declares_it(self, family: str, shifts: bool, device: str) -> None:
+        lucid.manual_seed(0)
+        trunk = create_model(family, **_TEXT).eval().to(device)
+        assert getattr(type(trunk), "prefix_shifts_positions", True) is shifts
+
+    @pytest.mark.parametrize("shifts", [True, False])
+    def test_the_site_reads_the_flag_of_the_trunk(
+        self, shifts: bool, device: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(BERTModel, "prefix_shifts_positions", shifts)
+        lucid.manual_seed(0)
+        trunk = create_model("bert_base", **_TEXT).eval().to(device)
+        peft = get_peft_model(trunk, _METHODS["prefix"]("FEATURE_EXTRACTION"))
+        seen: list[list[int]] = []
+
+        def spy(_m: nn.Module, _a: tuple[object, ...], kwargs: dict[str, object]) -> None:
+            given = kwargs["position_ids"]
+            assert isinstance(given, lucid.Tensor)
+            seen.append([int(i) for i in given.reshape(-1).tolist()])
+
+        handle = trunk.register_forward_pre_hook(spy, with_kwargs=True)
+        peft(_ids(device, (2, 5)), position_ids=lucid.arange(5, device=device).long().reshape(1, 5))
+        handle.remove()
+        # The spy runs after the site (a hook added later runs later).
+        assert seen == [list(range(_V, _V + 5)) if shifts else list(range(5))]
+
+    def test_roformer_phases_start_after_the_cache(self, device: str) -> None:
+        lucid.manual_seed(0)
+        trunk = create_model("roformer", **_TEXT).eval().to(device)
+        peft = get_peft_model(
+            create_model("roformer", **_TEXT).eval().to(device),
+            _METHODS["prefix"]("FEATURE_EXTRACTION"),
+        )
+        cache = _prefix_cache(peft, 2)
+        cos, _ = trunk.rotary()
+        seen: list[lucid.Tensor] = []
+        layer = trunk.encoder.layer[0].attention.self
+
+        def spy(_m: nn.Module, args: tuple[lucid.Tensor, ...], _kw: dict[str, object]) -> None:
+            seen.append(args[1])
+
+        handle = layer.register_forward_pre_hook(spy, with_kwargs=True)
+        trunk(
+            _ids(device, (2, 5)),
+            attention_mask=lucid.ones(2, _V + 5, device=device).long(),
+            past_key_values=cache,
+        )
+        handle.remove()
+        assert bool(lucid.equal(seen[0], cos[_V : _V + 5]))
+
+    def test_a_cache_past_the_rotary_table_is_refused(self, device: str) -> None:
+        trunk = create_model("roformer", **_TEXT).eval().to(device)
+        peft = get_peft_model(
+            create_model("roformer", **_TEXT).eval().to(device),
+            _METHODS["prefix"]("FEATURE_EXTRACTION"),
+        )
+        with pytest.raises(ValueError, match="max_position_embeddings"):
+            trunk(
+                _ids(device, (2, 62)),
+                attention_mask=lucid.ones(2, _V + 62, device=device).long(),
+                past_key_values=_prefix_cache(peft, 2),
+            )
+
+    def test_bert_numbers_the_input_after_the_cache(self, device: str) -> None:
+        lucid.manual_seed(0)
+        trunk = create_model("bert_base", **_TEXT).eval().to(device)
+        peft = get_peft_model(
+            create_model("bert_base", **_TEXT).eval().to(device),
+            _METHODS["prefix"]("FEATURE_EXTRACTION"),
+        )
+        cache = _prefix_cache(peft, 2)
+        ids = _ids(device, (2, 5))
+        wide = lucid.ones(2, _V + 5, device=device).long()
+        after = lucid.arange(_V, _V + 5, device=device).long().reshape(1, 5)
+        start = lucid.arange(5, device=device).long().reshape(1, 5)
+        derived = trunk(ids, attention_mask=wide, past_key_values=cache).last_hidden_state
+        given = trunk(
+            ids, attention_mask=wide, past_key_values=cache, position_ids=after
+        ).last_hidden_state
+        from_zero = trunk(
+            ids, attention_mask=wide, past_key_values=cache, position_ids=start
+        ).last_hidden_state
+        assert bool(lucid.equal(derived, given))
+        # The positions the caller gave win over the cache's length.
+        assert not bool(lucid.allclose(derived, from_zero, atol=1e-4))
+        # With no cache the positions are 0..T-1, as ever.
+        assert bool(
+            lucid.equal(
+                trunk(ids).last_hidden_state, trunk(ids, position_ids=start).last_hidden_state
+            )
+        )
+
+    def test_the_embeddings_start_at_the_cache_length(self, device: str) -> None:
+        lucid.manual_seed(0)
+        embeddings = create_model("bert_base", **_TEXT).eval().to(device).embeddings
+        ids = _ids(device, (2, 5))
+        run = lucid.arange(_V, _V + 5, device=device).long().reshape(1, 5)
+        assert bool(
+            lucid.equal(
+                embeddings(ids, past_key_values_length=_V), embeddings(ids, position_ids=run)
+            )
+        )
+
+    def test_a_cache_past_the_position_table_is_refused(self, device: str) -> None:
+        lucid.manual_seed(0)
+        embeddings = create_model("bert_base", **_TEXT).eval().to(device).embeddings
+        with pytest.raises(ValueError, match="max_position_embeddings"):
+            embeddings(_ids(device, (2, 5)), past_key_values_length=62)

@@ -210,11 +210,10 @@ class _PrefixSite(_Site):
     """On the trunk: a cache that already holds the prefix, when the call starts from none.
 
     The keys the trunk attends over are the prefix's as well as the input's, on
-    every step, so its attention mask gets the virtual positions.  A decoder
-    numbers its positions after the cache, so positions the caller gave shift
-    past the prefix; an encoder (``shifts_positions=False``) reads the prefix
-    as keys and values alone, and its positions are the input's.  The model's
-    heads see the real sequence.
+    every step, so its attention mask gets the virtual positions.  A trunk that
+    numbers its positions after the cache (``prefix_shifts_positions``) has the
+    positions the caller gave shifted past the prefix as well; one that does
+    not takes them as they are.  The model's heads see the real sequence.
     """
 
     __slots__ = ("_shifts_positions",)

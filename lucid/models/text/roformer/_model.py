@@ -199,8 +199,9 @@ class _RoFormerSelfAttention(nn.Module):
             # twice and only the first result is kept.
             v, _ = apply_rotary_emb(v, v, cos, sin, interleaved=True)
 
-        # A prefix (prefix tuning) is key/value states with no position: it goes in
-        # after the rotation, so it is never rotated, and the input's phases start at 0.
+        # A prefix (prefix tuning) is key/value states that already have their phases: it
+        # goes in after the rotation, so it is never rotated (the trunk gives the input
+        # ``cos`` / ``sin`` that start after it).
         k, v = prepend_kv_prefix(k, v, prefix)
 
         # One masked-attention core for every path (RoPE is already applied,
@@ -431,7 +432,7 @@ class _RoFormerTrunk(_RoFormerInitMixin, PretrainedModel):
 
     config_class: ClassVar[type[RoFormerConfig]] = RoFormerConfig
     base_model_prefix: ClassVar[str] = "roformer"
-    kv_prefix_only: ClassVar[bool] = True
+    prefix_shifts_positions: ClassVar[bool] = True
 
     def __init__(self, config: RoFormerConfig) -> None:
         super().__init__(config)
@@ -475,20 +476,22 @@ class _RoFormerTrunk(_RoFormerInitMixin, PretrainedModel):
             input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
         batch_size, seq_len = int(hidden.shape[0]), int(hidden.shape[1])
-        if seq_len > self._max_pos:
+        prefix_len = 0 if past_key_values is None else past_key_values.get_seq_length()
+        if prefix_len + seq_len > self._max_pos:
             raise ValueError(
-                f"Sequence length {seq_len} exceeds max_position_embeddings {self._max_pos}"
+                f"Sequence length {seq_len} (after {prefix_len} cached positions) exceeds "
+                f"max_position_embeddings {self._max_pos}"
             )
 
         cos, sin = self.rotary()
-        # Slice the precomputed tables to the current sequence length so we
-        # don't carry around (max_pos, head_dim) when the prompt is short.
-        cos = cos[:seq_len]
-        sin = sin[:seq_len]
+        # The input is rotated from the phase after the cache (the reference's
+        # ``past_key_values_length``); the cached keys keep the phases they were
+        # given.  Slicing also keeps us from carrying (max_pos, head_dim) around.
+        cos = cos[prefix_len : prefix_len + seq_len]
+        sin = sin[prefix_len : prefix_len + seq_len]
 
         if self.embeddings_project is not None:
             hidden = self.embeddings_project(hidden)
-        prefix_len = 0 if past_key_values is None else past_key_values.get_seq_length()
         ext_mask = extended_attention_mask(
             attention_mask, (batch_size, seq_len), key_length=prefix_len + seq_len
         )
