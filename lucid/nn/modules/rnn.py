@@ -197,10 +197,16 @@ class _FlatRecurrent(_RecurrentParameters):
     def _weights(self, layer: int, reverse: bool) -> _Weights:
         """One layer and direction's ``(weight_ih, weight_hh, bias_ih, bias_hh)``."""
         tag = f"_l{layer}{'_reverse' if reverse else ''}"
-        p = self._parameters
-        w_ih, w_hh = p[f"weight_ih{tag}"], p[f"weight_hh{tag}"]
-        assert w_ih is not None and w_hh is not None
-        return w_ih, w_hh, p.get(f"bias_ih{tag}"), p.get(f"bias_hh{tag}")
+        # Attribute reads, not ``_parameters``: a weight under weight norm, an
+        # orthogonal parametrization or a prune mask is no longer in that
+        # registry, and the attribute is what holds its current value.
+        w_ih, w_hh = getattr(self, f"weight_ih{tag}"), getattr(self, f"weight_hh{tag}")
+        return (
+            w_ih,
+            w_hh,
+            getattr(self, f"bias_ih{tag}", None),
+            getattr(self, f"bias_hh{tag}", None),
+        )
 
     def _step(self, x: Tensor, h: Tensor, w: _Weights) -> Tensor:
         """One timestep of this layer's cell."""
@@ -469,7 +475,7 @@ class LSTM(_RecurrentParameters):
             raise ValueError(f"proj_size must be >= 0, got {proj_size}")
         if proj_size >= hidden_size and proj_size > 0:
             raise ValueError(
-                f"proj_size ({proj_size}) must be smaller than hidden_size " f"({hidden_size})"
+                f"proj_size ({proj_size}) must be smaller than hidden_size ({hidden_size})"
             )
         # proj_size > 0 with multi-layer / bidirectional configurations is
         # composed in Python by looping single-layer engine calls — see
@@ -618,9 +624,8 @@ class LSTM(_RecurrentParameters):
         x_impl = _unwrap(layer_input)
 
         def param(name: str) -> _C_engine.TensorImpl:
-            p = self._parameters[f"{name}_l{layer}{suffix}"]
-            assert p is not None
-            return _unwrap(p)
+            # An attribute read: see ``_FlatRecurrent._weights``.
+            return _unwrap(getattr(self, f"{name}_l{layer}{suffix}"))
 
         if self.bias:
             biases = [param("bias_ih"), param("bias_hh")]
