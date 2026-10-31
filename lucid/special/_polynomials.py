@@ -22,25 +22,67 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import TensorOrScalar
 
 
+def _rescale_limit(dtype: lucid.dtype) -> float:
+    """A power of two near the square root of ``dtype``'s largest finite value.
+
+    A term past it is divided by it before the next step: the recurrence's
+    multiplier (``2x``, ``(2k + 1 - x) / (k + 1)``) is far below this, so a
+    step from a term at the limit still lands inside the dtype's range.
+    """
+    return 2.0 ** (math.frexp(lucid.finfo(dtype).max)[1] // 2)
+
+
 def _terms(
     x: Tensor,
     top: int,
     first: Callable[[Tensor], Tensor],
     advance: Callable[[Tensor, Tensor, Tensor, int], Tensor],
-) -> Iterator[Tensor]:
+) -> Iterator[tuple[Tensor, Tensor]]:
     """``P_0, P_1, ..., P_top`` at ``x``: ``P_0`` is 1, ``first(x)`` is ``P_1``,
-    and ``advance(x, P_k, P_{k-1}, k)`` is ``P_{k+1}``."""
+    and ``advance(x, P_k, P_{k-1}, k)`` is ``P_{k+1}``.
+
+    Each term comes as ``(scaled, exponent)`` with ``P_k = scaled * limit **
+    exponent`` (:func:`_rescale_limit`; :func:`_unscale` puts it back).  The
+    recurrence is linear, so ``P_k`` and ``P_{k-1}`` can be divided by the same
+    constant at any step.  Run bare, a term that overflows meets its
+    neighbour's overflow in the next ``a - b`` and answers NaN, and a term
+    just under the maximum overflows through ``2x * P`` before the
+    subtraction brings it back (``H_32(-9)`` is ``2.85e38``, float32's
+    ``inf``).
+    """
     if top < 0:
         return
+    exponent = lucid.zeros_like(x)
     p_prev = lucid.ones_like(x)
-    yield p_prev
+    yield p_prev, exponent
     if top < 1:
         return
     p_curr = first(x)
-    yield p_curr
+    yield p_curr, exponent
+    limit = _rescale_limit(x.dtype)
     for k in range(1, top):
         p_prev, p_curr = p_curr, advance(x, p_curr, p_prev, k)
-        yield p_curr
+        big = lucid.abs(p_curr) > limit
+        shrink = lucid.where(big, lucid.full_like(x, 1.0 / limit), lucid.ones_like(x))
+        p_prev, p_curr = p_prev * shrink, p_curr * shrink
+        exponent = exponent + lucid.where(big, lucid.ones_like(x), lucid.zeros_like(x))
+        yield p_curr, exponent
+
+
+def _unscale(scaled: Tensor, exponent: Tensor) -> Tensor:
+    """``scaled * limit ** exponent``: the term :func:`_terms` scaled down.
+
+    The last factor of ``limit`` is applied apart, after ``scaled`` has taken
+    ``limit ** (exponent - 1)``: ``limit ** exponent`` alone is already ``inf``
+    for a result a little under the maximum.  A zero is left a zero (its
+    ``0 * inf`` is no answer), and the exponent fed to ``pow`` is held to 0
+    wherever the factor is not used, so it holds no ``inf`` for the gradient.
+    """
+    limit = _rescale_limit(scaled.dtype)
+    grown = (exponent > 0.0) & (scaled != 0.0)
+    held = lucid.where(grown, exponent - 1.0, lucid.zeros_like(exponent))
+    factor = lucid.pow(lucid.full_like(scaled, limit), held)
+    return lucid.where(grown, scaled * factor * limit, scaled)
 
 
 def _top_degree(op: str, n: float) -> int:
@@ -92,13 +134,19 @@ def _ortho_poly(
         )
     if shift:
         x = 2 * x - 1
-    out = lucid.zeros_like(x)
+    out, out_exponent = lucid.zeros_like(x), lucid.zeros_like(x)
     if degree is not None:
         shape = lucid.broadcast_shapes(tuple(x.shape), tuple(degree.shape))
         out = lucid.zeros(shape, dtype=x.dtype, device=x.device)
-    for k, term in enumerate(_terms(x, top, first, advance)):
-        out = term if degree is None else lucid.where(degree == float(k), term, out)
-    return out
+        out_exponent = lucid.zeros_like(out)
+    for k, (term, exponent) in enumerate(_terms(x, top, first, advance)):
+        if degree is None:
+            out, out_exponent = term, exponent
+        else:
+            pick = degree == float(k)
+            out = lucid.where(pick, term, out)
+            out_exponent = lucid.where(pick, exponent, out_exponent)
+    return _unscale(out, out_exponent)
 
 
 def _chebyshev_step(v: Tensor, p: Tensor, q: Tensor, _k: int) -> Tensor:

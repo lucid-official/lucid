@@ -3,9 +3,10 @@ float64 refinement.  Kept out of ``lucid/special/__init__.py``, which is over
 its size cap."""
 
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 import lucid
+from lucid._ops.composite._opmath import _in_float32
 from lucid.special._erfcx import _erfcx_stable
 
 if TYPE_CHECKING:
@@ -141,3 +142,37 @@ def _ndtri_double(p: Tensor) -> Tensor:
     in_centre = (p_safe > _P_LOW) & (p_safe < 1.0 - _P_LOW)
     refined = lucid.where(in_centre, centre, lucid.where(low, lower, -lower))
     return lucid.where(in_open, refined, approx)
+
+
+def _ndtri_value(p: Tensor) -> Tensor:
+    """``ndtri`` of a real ``p`` by its dtype's path, as plain ops."""
+    if p.dtype == lucid.float64:
+        return _ndtri_double(p)
+    return _in_float32(_ndtri, p)
+
+
+@final
+class _Ndtri(lucid.autograd.Function):
+    """``ndtri`` with its exact derivative ``sqrt(2 pi) exp(x^2 / 2)`` (LCD-772).
+
+    ``x = ndtri(p)``, and ``1 / phi(x)`` is a function of the output alone:
+    ``+inf`` at both endpoints (``x = ±inf``) and NaN wherever the value is
+    NaN — outside ``[0, 1]`` and for a NaN input — which is the reference's.
+    The edges of ``_ndtri`` are constants under a ``where``, so differentiating
+    it gave 0 at all of them.
+    """
+
+    _trace_form = staticmethod(_ndtri_value)
+
+    @override
+    @staticmethod
+    def forward(ctx: lucid.autograd.FunctionCtx, p: Tensor) -> Tensor:
+        out = _ndtri_value(p.detach())
+        ctx.save_for_backward(out)
+        return out
+
+    @override
+    @staticmethod
+    def backward(ctx: lucid.autograd.FunctionCtx, grad: Tensor) -> Tensor:
+        (x,) = ctx.saved_tensors
+        return grad * (_SQRT_2PI * lucid.exp(0.5 * x * x))

@@ -75,12 +75,16 @@ def test_edges_match_the_reference(name: str, device: str, dtype: str, ref: Any)
 @pytest.mark.parametrize("name", _HALF_LINE)
 @pytest.mark.parametrize("device,dtype", _cases())
 def test_edge_gradients_follow_one_rule(name: str, device: str, dtype: str) -> None:
-    # The value at 0 and below is a constant of the domain rule, so it carries
-    # no gradient; NaN in, NaN out.  The same in either dtype.
+    # The gradient follows the value to the edge (LCD-772): at 0 the slope of
+    # the divergence (Y: +inf, K: -inf, the opposite sign of the pole), NaN
+    # below it and for a NaN.  It used to be 0 there, a finite slope at a
+    # point where the function is not finite.  The same in either dtype.
     _, grad = _edge_run(name, device, dtype)
     _, f64 = _edge_run(name, "cpu", "float64")
     np.testing.assert_array_equal(grad, f64)
-    assert np.all(grad[:6] == 0.0) and np.all(grad[7] == 0.0)
+    slope = math.inf if name[0] == "y" else -math.inf
+    assert np.all(grad[:2] == slope)
+    assert np.isnan(grad[2:6]).all() and np.isnan(grad[7:]).all()
 
 
 # Tiny arguments, both sides of every branch edge (float32: 2, 3, 3.75, 8;

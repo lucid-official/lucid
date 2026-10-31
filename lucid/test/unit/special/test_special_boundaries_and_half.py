@@ -144,14 +144,16 @@ def test_ndtri_gradients_clean_across_boundaries(device: str, dtype: str) -> Non
     y.sum().backward()
     assert x.grad is not None
     grads = x.grad.to("cpu").to(lucid.float64).tolist()
-    # Boundary and out-of-domain finite points do not leak NaN into interior grads.
-    assert grads[0] == 0.0
-    assert grads[1] == 0.0
+    # The slope follows the value (LCD-772): NaN outside [0, 1], +inf at the
+    # endpoints where ndtri is +-inf — and none of it leaks into an interior
+    # point's gradient.
+    assert math.isnan(grads[0])
+    assert grads[1] == math.inf
     assert math.isfinite(grads[2]) and grads[2] > 0.0
     assert math.isfinite(grads[3]) and grads[3] > 0.0
     assert math.isfinite(grads[4]) and grads[4] > 0.0
-    assert grads[5] == 0.0
-    assert grads[6] == 0.0
+    assert grads[5] == math.inf
+    assert math.isnan(grads[6])
     assert math.isnan(grads[7])
 
 

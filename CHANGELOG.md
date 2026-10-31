@@ -173,6 +173,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - _cast_scalar takes an int or float factor (LCD-728)
 
+- edge values of special and elementwise functions (LCD-772)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

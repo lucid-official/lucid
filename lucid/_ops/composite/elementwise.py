@@ -19,8 +19,9 @@ import lucid
 from lucid import _promotion
 from lucid._dispatch import _float_input
 from lucid._ops.composite import _bessel
-from lucid._ops.composite._gamma import _lgamma, _polygamma
-from lucid._ops.composite._opmath import _in_float32, _promote_pair, _real
+from lucid._ops.composite._expm1 import _expm1
+from lucid._ops.composite._gamma import _LogGamma, _polygamma
+from lucid._ops.composite._opmath import _promote_pair, _real
 from lucid._ops.composite._pow2 import _copysign, _frexp, _ldexp_dtype, _ldexp_to, _signbit
 from lucid._ops.composite._shared import _is_tensor
 from lucid._types import Scalar, TensorOrScalar
@@ -697,32 +698,14 @@ def expm1(input: Tensor) -> Tensor:
     >>> lucid.expm1(x)
     tensor([0., 1.718, 6.389])
     """
-    # Kahan's form: with u = exp(x), (u - 1) * x / log(u) cancels the rounding
-    # of u against the same rounding in log(u), so it keeps full relative
-    # precision near 0.  The guards take u == 1 (x underflowed), u == 0 and
-    # u == inf, where the ratio is 0/0 or inf/inf.
-    with lucid.no_grad():
-        u = lucid.exp(input)
-        accurate = lucid.where(u == 1.0, input, (u - 1.0) * input / lucid.log(u))
-        # Kahan's second guard: once u - 1 rounds to -1, -1 is the answer.  The
-        # ratio would take log(u) of a subnormal u, whose rounding is no longer
-        # relative — expm1(-100) in float32 came out -1.000169.
-        accurate = lucid.where(u - 1.0 == -1.0, u - 1.0, accurate)
-        accurate = lucid.where((u == 0.0) | ~lucid.isfinite(u), u - 1.0, accurate)
-    # The value is the accurate one; the gradient is exp(x)'s, carried by the
-    # naive form under it, so the guards' 0/0 branches never reach backward.
-    naive = lucid.exp(input) - 1.0
-    with lucid.no_grad():
-        correction = lucid.where(
-            lucid.isfinite(naive), accurate - naive, lucid.zeros_like(accurate)
-        )
-    # Where exp(x) rounds to 1, x + 0.5 * c * (c - c.detach()) with clamped c
-    # equals x bit-for-bit (preserving expm1(-0) = -0 and keeping ±inf finite
-    # in MulBackward) while carrying both the unit slope and unit curvature of
-    # exp(x) at the origin for higher-order autograd.
-    c = lucid.clamp(input, -1.0, 1.0)
-    small_branch = input + 0.5 * c * (c - c.detach())
-    return lucid.where(u == 1.0, small_branch, naive + correction)
+    return _expm1(input)
+
+
+# ``sin(u) / u = sum (-1)^k u^(2k) / (2k + 1)!``, highest power first.  Twelve
+# terms hold ``|u| < 1`` to float64's last digit (the next is 1e-28).
+_SINC_SERIES: tuple[float, ...] = tuple(
+    (-1.0) ** k / math.factorial(2 * k + 1) for k in range(12, -1, -1)
+)
 
 
 def sinc(input: Tensor) -> Tensor:
@@ -754,9 +737,12 @@ def sinc(input: Tensor) -> Tensor:
             1,                          & x = 0.
         \end{cases}
 
-    The composite uses :func:`lucid.where` to substitute the limit value
-    at ``x = 0`` so the gradient flows cleanly through the removable
-    singularity.
+    For :math:`|\pi x| < 1` the value is the Maclaurin series in
+    :math:`(\pi x)^2`: ``sin(u) / u`` and its derivative
+    ``cos(u) / u - sin(u) / u²`` cancel to nothing there (float32 at
+    ``x = 1e-30`` had a slope of ``-inf`` where the reference has ``0``;
+    float64 at ``1e-6`` was off in the fifth digit), and a polynomial has
+    neither the removable singularity at 0 nor the cancellation, to any order.
 
     Examples
     --------
@@ -766,12 +752,16 @@ def sinc(input: Tensor) -> Tensor:
     tensor([1., 0.6366, -0.2122])
     """
     px = input * math.pi
-    is_zero = input == 0.0
-    safe_px = lucid.where(is_zero, lucid.full_like(input, 1.0), px)
+    small = lucid.abs(px) < 1.0
+    # Each branch runs on its own interval: ``sin(u) / u`` at the u = 1 that
+    # stands in for the small arguments, the series on u clamped into [-1, 1].
+    safe_px = lucid.where(small, lucid.full_like(input, 1.0), px)
     val = lucid.sin(safe_px) / safe_px
-    # Use the 2nd-order Taylor expansion 1 - (pi * x)^2 / 6 at x = 0 so
-    # both the value (1), slope (0), and curvature (-pi^2 / 3) are exact.
-    return lucid.where(is_zero, 1.0 - (px * px) / 6.0, val)
+    u2 = lucid.clamp(px, -1.0, 1.0) ** 2
+    series = lucid.full_like(input, _SINC_SERIES[0])
+    for c in _SINC_SERIES[1:]:
+        series = series * u2 + c
+    return lucid.where(small, series, val)
 
 
 def heaviside(input: Tensor, values: Tensor | Scalar) -> Tensor:
@@ -970,7 +960,8 @@ def logit(input: Tensor, eps: float | None = None) -> Tensor:
     Inverse of the sigmoid:
     :math:`\operatorname{logit}(\sigma(z)) = z`. Without ``eps``, inputs
     of exactly ``0`` or ``1`` produce :math:`-\infty` and :math:`+\infty`
-    respectively.
+    respectively.  Outside :math:`[0, 1]` the value and the gradient are NaN;
+    the gradient :math:`1 / (x (1 - x))` is :math:`+\infty` at both ends.
 
     Examples
     --------
@@ -982,7 +973,15 @@ def logit(input: Tensor, eps: float | None = None) -> Tensor:
     input = _float_input(input)
     if eps is not None:
         input = lucid.clamp(input, eps, 1.0 - eps)
-    return lucid.log(input / (1.0 - input))
+    # ``log(x) - log1p(-x)``, not ``log(x / (1 - x))``: its slope is
+    # ``1/x + 1/(1-x)``, ``+inf`` at both ends as the reference has it, where
+    # the ratio's chain met ``0 * inf`` at 1; and 1 - x never rounds.  Off
+    # [0, 1] the value is NaN but each log's slope is a finite ``1/x``, so the
+    # NaN is multiplied in (``where`` would hand the branch a zero gradient):
+    # the reference's derivative is NaN there too.
+    outside = (input < 0.0) | (input > 1.0)
+    nan_outside = lucid.where(outside, lucid.full_like(input, math.nan), lucid.ones_like(input))
+    return (lucid.log(input) - lucid.log1p(-input)) * nan_outside
 
 
 def signbit(input: Tensor) -> Tensor:
@@ -1358,8 +1357,9 @@ def lgamma(input: Tensor) -> Tensor:
     Lanczos approximation (Numerical Recipes, :math:`g = 7`, 9 series
     coefficients).  Relative error stays below ``1.5e-15`` for real
     ``x > 0`` in float64; ``x < 1/2`` goes through Euler's reflection.
-    Autograd flows through automatically because every step is an engine
-    op.
+    The gradient is :func:`digamma`, including at the poles: ``-inf`` at
+    ``+0`` (``+inf`` at ``-0``) and NaN at the negative integers, as the
+    reference has it.
 
     Parameters
     ----------
@@ -1375,7 +1375,9 @@ def lgamma(input: Tensor) -> Tensor:
     --------
     digamma : derivative :math:`\psi(x) = \frac{d}{dx} \ln \Gamma(x)`.
     """
-    return _lgamma(input)
+    out = _LogGamma.apply(input)
+    assert isinstance(out, Tensor)
+    return out
 
 
 def digamma(input: Tensor) -> Tensor:
@@ -1435,10 +1437,9 @@ def i0(input: Tensor) -> Tensor:
     Tensor
         :math:`I_0(x)` element-wise; always positive.
     """
-    x = _real(input)
-    if x.dtype == lucid.float64:
-        return _bessel._i0(x)
-    return _in_float32(_bessel._i0_as_fit, x)
+    out = _bessel._I0.apply(_real(input))
+    assert isinstance(out, Tensor)
+    return out
 
 
 __all__ = [

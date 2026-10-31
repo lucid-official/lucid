@@ -37,13 +37,15 @@ from typing import TYPE_CHECKING, Callable
 import lucid
 from lucid._ops.composite import _bessel
 from lucid._ops.composite._bessel import _half_line_split
-from lucid._ops.composite._gamma import _polygamma, gammainc, gammaincc
+from lucid._ops.composite._gamma import _integer_order, _polygamma, gammainc, gammaincc
 from lucid._ops.composite._opmath import _in_float32, _real
 from lucid._ops.composite._zeta import zeta
 from lucid._ops.composite.elementwise import _x_times_log
 from lucid._types import TensorOrScalar
+from lucid.special._entr import _Entr
+from lucid.special._expit import _complex_expit
 from lucid.special._erfcx import _Erfcx, _erfcx_stable
-from lucid.special._ndtri import _ndtri, _ndtri_double
+from lucid.special._ndtri import _Ndtri
 from lucid.special._polynomials import (
     chebyshev_polynomial_t,
     chebyshev_polynomial_u,
@@ -470,7 +472,10 @@ def log_ndtr(input: Tensor) -> Tensor:
     direct = lucid.log(ndtr(lucid.clip(x, -1.0, _LOG_NDTR_UPPER)))
     t = -lucid.clamp(x, max=-1.0) * _INV_SQRT2
     tail = lucid.log(0.5 * _erfcx_stable(t)) - t * t
-    xu = lucid.clamp(x, min=_LOG_NDTR_UPPER)
+    # Capped as well: at +inf the exp(-x^2/2) factor meets its own slope as
+    # 0 * inf, a NaN gradient where the reference has 0; 1e4 is already 0 in
+    # either dtype and the clamp passes no gradient beyond it.
+    xu = lucid.clamp(x, min=_LOG_NDTR_UPPER, max=1e4)
     # exp(-x²/2) is as ill-conditioned as its argument is large: a rounded
     # u = x/√2 squared carries ~4 times the error of x*x, ~4e-13 at x = 37.
     upper = lucid.log1p(-0.5 * _erfcx_stable(xu * _INV_SQRT2) * lucid.exp(-0.5 * xu * xu))
@@ -533,10 +538,9 @@ def ndtri(input: Tensor) -> Tensor:
     >>> ndtri(lucid.tensor([0.025, 0.5, 0.975]))
     tensor([-1.96, 0., 1.96])
     """
-    x = _real(input)
-    if x.dtype == lucid.float64:
-        return _ndtri_double(x)
-    return _in_float32(_ndtri, x)
+    out = _Ndtri.apply(_real(input))
+    assert isinstance(out, lucid.Tensor)
+    return out
 
 
 # ── x-times-log-of-something helpers ───────────────────────────────────────
@@ -644,11 +648,10 @@ def entr(input: Tensor) -> Tensor:
     ``x = 1``.  Related quantities include `rel_entr` (point-wise
     relative entropy) and :func:`kl_div` (KL kernel).
 
-    It is :math:`-\operatorname{xlogy}(x, x)` and takes the ``0 \log 0``
-    convention from :func:`lucid.xlogy`, so the gradient at ``x = 0`` is
-    ``0`` rather than the one-sided :math:`+\infty` of
-    :math:`-(1 + \log x)` that the reference framework returns.  Below
-    zero the gradient is NaN, as in the reference.
+    The value is :math:`-\operatorname{xlogy}(x, x)` and takes the
+    ``0 \log 0`` convention from :func:`lucid.xlogy`.  The gradient is
+    :math:`-(1 + \log x)` as the reference framework has it: the one-sided
+    :math:`+\infty` at ``x = 0`` and NaN below zero.
 
     Examples
     --------
@@ -657,17 +660,9 @@ def entr(input: Tensor) -> Tensor:
     >>> entr(lucid.tensor([0.0, 0.5, 1.0, 2.0]))
     tensor([0., 0.3466, 0., -1.386])
     """
-    x = _real(input)
-    # ``0.0 - …`` rather than a unary minus: the convention's 0 at x == 0
-    # is +0, and negating it would print as -0.
-    val = 0.0 - lucid.xlogy(x, x)
-    # Negative x is -inf, not NaN.  The entropy kernel is defined as
-    # ``-x log x`` on the positive half, ``0`` at zero and ``-inf`` below
-    # — it is an extended-real-valued function, not an undefined one, and
-    # a NaN there loses the ordering that makes it usable as a penalty.
-    # A NaN input needs no branch of its own: ``xlogy(nan, nan)`` is NaN,
-    # and ``nan < 0`` is false, so it falls through unchanged.
-    return lucid.where(x < 0.0, float("-inf"), val)
+    out = _Entr.apply(input)
+    assert isinstance(out, lucid.Tensor)
+    return out
 
 
 # ── Gamma family ───────────────────────────────────────────────────────────
@@ -709,7 +704,8 @@ def multigammaln(input: Tensor, p: int) -> Tensor:
               \right).
 
     For ``p = 1`` this reduces to :math:`\log \Gamma(a)`.  Raises
-    ``ValueError`` if ``p < 1``.
+    ``ValueError`` if ``p < 1`` and ``TypeError`` if ``p`` is not an integer
+    (a float or a ``bool``), as the reference does.
 
     Examples
     --------
@@ -718,10 +714,11 @@ def multigammaln(input: Tensor, p: int) -> Tensor:
     >>> multigammaln(lucid.tensor([3.0, 5.0]), p=2)
     tensor([1.55, 6.204])
     """
-    if int(p) < 1:
+    p = _integer_order(p, "p")
+    if p < 1:
         raise ValueError(f"multigammaln requires p >= 1, got {p}")
     accum = lucid.zeros_like(input)
-    for i in range(1, int(p) + 1):
+    for i in range(1, p + 1):
         accum = accum + lucid.lgamma(input + (1.0 - float(i)) / 2.0)
     return float(p * (p - 1)) / 4.0 * math.log(math.pi) + accum
 
@@ -781,9 +778,11 @@ def polygamma(n: int, input: Tensor) -> Tensor:
     maps the argument onto the right half.  The non-positive integers
     (and ``-inf``) are poles: ``n = 0`` gives NaN there, except
     ``psi(+0) = -inf`` and ``psi(-0) = +inf``; ``n >= 1`` gives
-    :math:`(-1)^{n+1} \infty`.
+    :math:`(-1)^{n+1} \infty`.  The gradient is :math:`\psi^{(n+1)}`
+    everywhere, a pole's slope being the next order's pole value.
 
-    Raises ``ValueError`` for ``n < 0``.
+    Raises ``ValueError`` for ``n < 0`` and ``TypeError`` if ``n`` is not an
+    integer (a float or a ``bool``), as the reference does.
 
     Accuracy was checked against an independent direct summation
     :math:`\psi^{(n)}(x) = (-1)^{n+1} n! \sum_{k \ge 0} (x+k)^{-(n+1)}`
@@ -803,7 +802,7 @@ def polygamma(n: int, input: Tensor) -> Tensor:
     >>> polygamma(1, lucid.tensor([1.0, 2.0, 5.0]))
     tensor([1.645, 0.6449, 0.2213])
     """
-    n = int(n)
+    n = _integer_order(n, "n")
     if n < 0:
         raise ValueError(f"polygamma: n must be ≥ 0, got {n}")
     return _polygamma(n, input)
@@ -835,7 +834,7 @@ def spherical_bessel_j0(x: Tensor) -> Tensor:
 
     .. math::
 
-        j_0(x) = \frac{\sin x}{x}, \qquad j_0(0) = 1.
+        j_0(x) = \frac{\sin x}{x}, \qquad j_0(0) = 1, \qquad j_0(\pm\infty) = 0.
 
     The implementation guards the removable singularity at the origin
     by substituting ``x = 1`` into the division and patching the result
@@ -850,10 +849,7 @@ def spherical_bessel_j0(x: Tensor) -> Tensor:
     >>> spherical_bessel_j0(lucid.tensor([0.0, 1.0, 2.0]))
     tensor([1., 0.8415, 0.4546])
     """
-    is_zero = x == lucid.zeros_like(x)
-    safe_x = lucid.where(is_zero, lucid.full_like(x, 1.0), x)
-    val = lucid.sin(safe_x) / safe_x
-    return lucid.where(is_zero, lucid.full_like(x, 1.0), val)
+    return _bessel._spherical_j0(x)
 
 
 # ── Bessel functions ───────────────────────────────────────────────────────
@@ -1562,12 +1558,13 @@ def expit(input: Tensor) -> Tensor:
 
     Convenience alias for :func:`lucid.sigmoid`.  Maps the real line
     onto the open interval :math:`(0, 1)` and is the inverse of
-    :func:`lucid.logit`.
+    :func:`lucid.logit`.  Unlike :func:`lucid.sigmoid` it accepts a complex
+    input, evaluated as :math:`1 / (1 + e^{-z})` in real arithmetic.
 
     Parameters
     ----------
     input : Tensor
-        Input tensor; any floating-point dtype.
+        Input tensor; any floating-point or complex dtype.
 
     Returns
     -------
@@ -1595,6 +1592,8 @@ def expit(input: Tensor) -> Tensor:
     >>> expit(lucid.tensor([-2.0, 0.0, 2.0]))
     tensor([0.1192, 0.5, 0.8808])
     """
+    if input.is_complex():
+        return _complex_expit(input)
     return lucid.sigmoid(input)
 
 

@@ -238,7 +238,8 @@ def test_half_precision_keeps_its_dtype(name: str, device: str) -> None:
 @pytest.mark.parametrize(
     ("x", "value", "grad"),
     [
-        (0.0, 0.0, 0.0),  # the reference's d/dx is the one-sided +inf
+        # The value takes the 0 log 0 convention; d/dx is the one-sided +inf (LCD-772).
+        (0.0, 0.0, _INF),
         (0.5, -0.5 * math.log(0.5), -(1.0 + math.log(0.5))),
         (1.0, 0.0, -1.0),
         (-1.0, -_INF, _NAN),

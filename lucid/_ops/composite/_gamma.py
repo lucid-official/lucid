@@ -33,6 +33,7 @@ one owner the Gamma-family CDFs in ``lucid.distributions`` go through.
 
 import functools
 import math
+import operator
 from collections.abc import Callable
 from typing import final, override
 
@@ -114,6 +115,50 @@ def _lgamma_wide(x: Tensor) -> Tensor:
     # derivative there (x log x would form inf / inf in its backward).
     x_big = lucid.where(big, x, lucid.ones_like(x))
     return lucid.where(big, x_big * x_big, out)
+
+
+@final
+class _LogGamma(Function):
+    """``lgamma`` with its exact derivative, ``digamma`` (LCD-772).
+
+    The value is :func:`_lgamma`.  Differentiating that composite instead
+    meets ``log(sin(pi x)) = log 0`` at the non-positive integers: the pole
+    is named in the value but not in the gradient, which came out NaN at
+    ``0`` where the reference has ``digamma(0) = -inf`` (``+inf`` at ``-0``).
+    ``digamma`` also carries the other poles (NaN at the negative integers),
+    ``+inf`` at ``+inf``, and is itself differentiable, so higher orders
+    follow.
+    """
+
+    _trace_form = staticmethod(_lgamma)
+
+    @override
+    @staticmethod
+    def forward(ctx: FunctionCtx, x: Tensor) -> Tensor:
+        ctx.save_for_backward(x)
+        return _lgamma(x.detach())
+
+    @override
+    @staticmethod
+    def backward(ctx: FunctionCtx, grad: Tensor) -> Tensor:
+        (x,) = ctx.saved_tensors
+        return grad * _polygamma(0, x)
+
+
+def _integer_order(value: int, name: str) -> int:
+    """``value`` as an ``int`` order, or ``TypeError`` — as the reference.
+
+    ``polygamma`` and ``multigammaln`` take an integer order.  ``int(value)``
+    truncated ``1.5`` to ``1`` and answered the wrong function without a
+    word; an index-like value (a Python or 0-d integer, a NumPy integer)
+    passes, and a float, a ``bool`` or ``None`` is refused.
+    """
+    if isinstance(value, bool):
+        raise TypeError(f"`{name}` must be an integer, not bool")
+    try:
+        return operator.index(value)
+    except TypeError:
+        raise TypeError(f"`{name}` must be an integer, not {type(value).__name__}") from None
 
 
 def _lgamma_lanczos(x: Tensor) -> Tensor:
@@ -216,14 +261,48 @@ def _horner(coeffs: tuple[int, ...], c: Tensor) -> Tensor:
     return acc
 
 
-def _polygamma(n: int, x: Tensor) -> Tensor:
-    """:math:`\\psi^{(n)}(x)` on the whole real line, ``n >= 0``.
+def _polygamma_value(n: int, x: Tensor) -> Tensor:
+    """:math:`\\psi^{(n)}(x)` on the whole real line, ``n >= 0``, as plain ops.
 
     A 16-bit ``x`` is evaluated in float32: the recurrence's shift and the
     series cancel, and ``digamma(1.5)`` in float16 was 0.0391 for 0.0365.
     An integer ``x`` is the default float first (:func:`_real`).
     """
     return _in_float32(lambda v: _polygamma_wide(n, v), _real(x))
+
+
+@final
+class _Polygamma(Function):
+    """:math:`\\psi^{(n)}` with its exact derivative :math:`\\psi^{(n+1)}` (LCD-772).
+
+    The value is :func:`_polygamma_value`, whose poles are named constants and
+    so carry a gradient of 0 — ``digamma`` at ``-3`` had a slope of 0 next to
+    a trigamma of ``+inf``.  The derivative is the next order of the same
+    function, so a pole's slope is that order's pole value, and every order
+    above is differentiable in turn.
+    """
+
+    _trace_form = staticmethod(_polygamma_value)
+
+    @override
+    @staticmethod
+    def forward(ctx: FunctionCtx, n: int, x: Tensor) -> Tensor:
+        ctx.save_for_backward(x)
+        ctx.order = n
+        return _polygamma_value(n, x.detach())
+
+    @override
+    @staticmethod
+    def backward(ctx: FunctionCtx, grad: Tensor) -> tuple[None, Tensor]:
+        (x,) = ctx.saved_tensors
+        return None, grad * _polygamma(ctx.order + 1, x)
+
+
+def _polygamma(n: int, x: Tensor) -> Tensor:
+    """:math:`\\psi^{(n)}(x)` on the whole real line, ``n >= 0`` (:class:`_Polygamma`)."""
+    out = _Polygamma.apply(n, x)
+    assert isinstance(out, Tensor)
+    return out
 
 
 def _polygamma_wide(n: int, x: Tensor) -> Tensor:

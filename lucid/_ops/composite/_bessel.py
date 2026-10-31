@@ -23,7 +23,9 @@ Every function runs both of its branches on an argument clamped into that
 branch's interval and selects with ``where``, so neither branch sees an
 argument it would overflow or divide by zero on — in the forward value or in
 its gradient.  ``Y`` and ``K`` live on the positive half-line: ``-inf`` /
-``+inf`` at 0 and NaN below, as the reference framework has them.
+``+inf`` at 0 and NaN below, as the reference framework has them.  Their
+gradient follows the value to the edge (:class:`_HalfLineEdge`): ``±inf`` at 0,
+the slope of the divergence, and NaN below it.
 
 The Cephes coefficient tables are those of the Cephes Mathematical Library
 (Stephen L. Moshier, 3-clause BSD licence; see THIRD_PARTY_NOTICES.md at the
@@ -32,10 +34,11 @@ repository root).
 
 import math
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, final, override
 
 import lucid
 from lucid._ops.composite._opmath import _in_float32
+from lucid.autograd.function import Function, FunctionCtx
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -117,9 +120,55 @@ def _above(ax: Tensor, edge: float) -> Tensor:
     return lucid.clamp(ax, min=edge)
 
 
+def _edge_value(x: Tensor, at_zero: float) -> Tensor:
+    """``at_zero`` where ``x == 0`` and NaN elsewhere."""
+    return lucid.where(x == 0.0, lucid.full_like(x, at_zero), lucid.full_like(x, math.nan))
+
+
+@final
+class _HalfLineEdge(Function):
+    """The value of a ``Y`` / ``K`` function off the open half-line, with a slope.
+
+    ``at_zero`` at ``x == 0`` and NaN below it (and at a NaN).  These
+    functions diverge monotonically into their pole, so the derivative at 0
+    is the infinity of the *opposite* sign — ``Y0 -> -inf`` has slope
+    ``+inf`` (``Y0' = -Y1``), ``K0 -> +inf`` has ``-inf`` (``K0' = -K1``) —
+    and below 0 the slope is NaN like the value.  A constant under ``where``
+    gave a gradient of 0 at all of these, a finite slope at a point where
+    the function is not even finite (LCD-772).
+
+    The backward is masked, not just multiplied: this node sits under a
+    ``where`` that hands it a 0 on the open half-line, and ``0 * NaN`` there
+    would put a NaN into the gradient of every *valid* point.
+    """
+
+    _trace_form = staticmethod(_edge_value)
+
+    @override
+    @staticmethod
+    def forward(ctx: FunctionCtx, x: Tensor, at_zero: float) -> Tensor:
+        ctx.save_for_backward(x)
+        ctx.at_zero = at_zero
+        return _edge_value(x.detach(), at_zero)
+
+    @override
+    @staticmethod
+    def backward(ctx: FunctionCtx, grad: Tensor) -> tuple[Tensor, None]:
+        (x,) = ctx.saved_tensors
+        nan = lucid.full_like(grad, math.nan)
+        at_edge = lucid.where(x == 0.0, grad * -ctx.at_zero, nan)
+        return lucid.where(x > 0.0, lucid.zeros_like(grad), at_edge), None
+
+
 def _on_half_line(x: Tensor, value: Tensor, at_zero: float) -> Tensor:
-    """``value`` where ``x > 0``, ``at_zero`` at 0 and NaN below."""
-    edge = lucid.where(x == 0.0, lucid.full_like(x, at_zero), lucid.full_like(x, math.nan))
+    """``value`` where ``x > 0``, ``at_zero`` at 0 and NaN below.
+
+    The edge carries a gradient too: the slope into the pole at 0, NaN below
+    (:class:`_HalfLineEdge`); ``value`` is the only thing the open half-line
+    differentiates.
+    """
+    edge = _HalfLineEdge.apply(x, at_zero)
+    assert isinstance(edge, lucid.Tensor)
     return lucid.where(x > 0.0, value, edge)
 
 
@@ -151,6 +200,18 @@ def _half_line_split(
         return _on_half_line(v, value, at_zero)
 
     return _in_float32(split, x)
+
+
+def _spherical_j0(x: Tensor) -> Tensor:
+    """``sin(x) / x``, 1 at 0 and 0 at ``±inf``; a NaN stays NaN."""
+    is_zero = x == lucid.zeros_like(x)
+    # ``sin(inf) / inf`` is NaN, but the envelope ``1 / |x|`` carries the limit
+    # to 0, as the reference has it.
+    is_inf = lucid.isinf(x)
+    safe_x = lucid.where(is_zero | is_inf, lucid.full_like(x, 1.0), x)
+    val = lucid.sin(safe_x) / safe_x
+    val = lucid.where(is_inf, lucid.zeros_like(x), val)
+    return lucid.where(is_zero, lucid.full_like(x, 1.0), val)
 
 
 # ── I0 / I1 ──────────────────────────────────────────────────────────────────
@@ -235,6 +296,52 @@ def _i1e(x: Tensor) -> Tensor:
 def _i1(x: Tensor) -> Tensor:
     """``I1(x)``; odd in ``x``."""
     return lucid.exp(lucid.abs(x)) * _i1e(x)
+
+
+def _i0_value(x: Tensor) -> Tensor:
+    """``I0(x)`` for a real ``x``: Cephes in float64, the A&S fit in float32."""
+    if x.dtype == lucid.float64:
+        return _i0(x)
+    return _in_float32(_i0_as_fit, x)
+
+
+def _i1_slope(x: Tensor) -> Tensor:
+    """``I1(x)`` for the slope of ``I0``, signed ``inf`` at ``±inf``.
+
+    ``exp(|x|) * i1e(x)`` is ``inf * 0`` at an infinity, where ``i1e`` is 0.
+    """
+
+    def slope(v: Tensor) -> Tensor:
+        edge = lucid.isinf(v)
+        value = _i1(lucid.where(edge, lucid.zeros_like(v), v))
+        return lucid.where(edge, lucid.sign(v) * math.inf, value)
+
+    return _in_float32(slope, x)
+
+
+@final
+class _I0(Function):
+    """``I0`` with the slope ``I1`` taken whole (LCD-772).
+
+    ``I0`` is ``exp(|x|)`` times a bounded factor, and differentiating that
+    product gives two terms of opposite sign that are each ``inf`` once
+    ``exp(|x|)`` overflows (``x > 88.7`` in float32): their sum is NaN where
+    the slope is ``inf``, as the value is.  ``I1`` is the one term.
+    """
+
+    _trace_form = staticmethod(_i0_value)
+
+    @override
+    @staticmethod
+    def forward(ctx: FunctionCtx, x: Tensor) -> Tensor:
+        ctx.save_for_backward(x)
+        return _i0_value(x.detach())
+
+    @override
+    @staticmethod
+    def backward(ctx: FunctionCtx, grad: Tensor) -> Tensor:
+        (x,) = ctx.saved_tensors
+        return grad * _i1_slope(x)
 
 
 # ── J0 / J1 / Y0 / Y1 ────────────────────────────────────────────────────────
