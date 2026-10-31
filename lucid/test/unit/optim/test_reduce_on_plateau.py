@@ -84,7 +84,9 @@ def test_a_metric_with_more_than_one_element_is_refused_and_changes_nothing() ->
     ],
     ids=["default", "max", "abs", "cooldown", "min_lr", "min_lr-list", "min_lr-tuple"],
 )
-def test_the_rates_and_the_public_state_are_the_references(kwargs: dict[str, Any], ref: Any) -> None:
+def test_the_rates_and_the_public_state_are_the_references(
+    kwargs: dict[str, Any], ref: Any
+) -> None:
     _, got = _run(lucid, **kwargs)
     _, want = _run(ref, **kwargs)
     assert got.get_last_lr() == pytest.approx(want.get_last_lr())

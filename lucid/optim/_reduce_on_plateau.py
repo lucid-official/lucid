@@ -8,7 +8,11 @@ from typing import ClassVar, Literal, SupportsFloat, override
 import warnings
 
 from lucid._tensor.tensor import Tensor
-from lucid.optim._scheduler_base import EPOCH_DEPRECATION_WARNING, _CheckpointState
+from lucid.optim._scheduler_base import (
+    EPOCH_DEPRECATION_WARNING,
+    _CheckpointState,
+    _require_optimizer,
+)
 from lucid.optim.optimizer import Optimizer, _group_float
 
 #: Keys a checkpoint written before the attributes were public carries.
@@ -130,6 +134,10 @@ class ReduceLROnPlateau(_CheckpointState):
     [0.05]
     """
 
+    # Where the class is documented, pickled and audited: the module it is
+    # imported from, with every other scheduler.
+    __module__ = "lucid.optim.lr_scheduler"
+
     # so the composites, which step without one, refuse it
     _steps_on_a_metric: ClassVar[bool] = True
 
@@ -148,8 +156,7 @@ class ReduceLROnPlateau(_CheckpointState):
         """Initialise the ReduceLROnPlateau.  See the class docstring for parameter semantics."""
         if factor >= 1.0:
             raise ValueError("Factor should be < 1.0.")
-        if not isinstance(optimizer, Optimizer):
-            raise TypeError(f"{type(optimizer).__name__} is not an Optimizer")
+        _require_optimizer(optimizer)
         self.factor = factor
         self.optimizer = optimizer
         groups = len(optimizer.param_groups)

@@ -97,7 +97,7 @@ class TestLRScheduler:
     def test_lambda_lr_wants_one_lambda_per_group(self) -> None:
         a, b = lucid.zeros(1, requires_grad=True), lucid.zeros(1, requires_grad=True)
         opt = optim.SGD([{"params": [a]}, {"params": [b]}], lr=0.1)
-        with pytest.raises(ValueError, match="expected 2 lr_lambdas"):
+        with pytest.raises(ValueError, match="Expected 2 lr_lambdas, but got 1"):
             optim.lr_scheduler.LambdaLR(opt, [lambda epoch: 1.0])
 
 

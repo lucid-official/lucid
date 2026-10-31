@@ -2,7 +2,7 @@
 The learning-rate scheduler base classes and the rules the schedulers share.
 """
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from typing import ClassVar
 import warnings
@@ -46,6 +46,49 @@ def _check_step_order(optimizer: Optimizer) -> None:
         warnings.warn(_STEPPED_FIRST, UserWarning, stacklevel=3)
 
 
+def _require_optimizer(optimizer: object) -> None:
+    """Refuse what is not an optimizer, before it is read for param groups.
+
+    An optimizer is whatever holds ``param_groups``: a compiled optimizer
+    stands in for the :class:`Optimizer` it was built from and is scheduled
+    like it, without being an instance of it.
+    """
+    if not hasattr(optimizer, "param_groups"):
+        raise TypeError(f"{type(optimizer).__name__} is not an Optimizer")
+
+
+def _require_initial_lr(optimizer: Optimizer) -> None:
+    """Refuse to resume (``last_epoch >= 0``) over groups that never had a schedule."""
+    for i, group in enumerate(optimizer.param_groups):
+        if "initial_lr" not in group:
+            raise KeyError(
+                f"param 'initial_lr' is not specified in param_groups[{i}] when resuming "
+                "scheduler with last_epoch >= 0.\n"
+                "This typically happens when:\n"
+                "1. You're trying to resume training from a checkpoint but haven't properly "
+                "loaded the optimizer state\n"
+                "2. You're using last_epoch >= 0 for a fresh training run (not recommended)"
+            )
+
+
+def _per_group_lambdas(
+    optimizer: Optimizer, lr_lambda: Callable[[int], float] | list[Callable[[int], float]]
+) -> list[Callable[[int], float]]:
+    """One function per param group: a list or tuple as given, a single one repeated."""
+    _require_optimizer(optimizer)
+    groups = len(optimizer.param_groups)
+    if isinstance(lr_lambda, (list, tuple)):
+        if len(lr_lambda) != groups:
+            raise ValueError(f"Expected {groups} lr_lambdas, but got {len(lr_lambda)}")
+        fns = list(lr_lambda)
+    else:
+        fns = [lr_lambda] * groups
+    for fn in fns:
+        if not callable(fn):
+            raise TypeError(f"lr_lambda should be a function, but got {type(fn).__name__}")
+    return fns
+
+
 def _holds_a_callable(value: object) -> bool:
     """Whether ``value`` carries a Python function into a checkpoint.
 
@@ -79,7 +122,7 @@ class _CheckpointState:
         and silently pickling one would make a checkpoint that only reloads in
         the process that wrote it.  Reconstruct the scheduler with the same
         lambda, then :meth:`load_state_dict` the rest.  This holds whether the
-        callables are stored singly (``MultiplicativeLR.lr_lambda``) or in a
+        callables are stored singly (``CyclicLR.scale_fn``) or in a
         list (``LambdaLR.lr_lambdas``, one per param group).
 
         Returns
@@ -122,18 +165,7 @@ def _floored(rates: list[float]) -> list[float]:
     return [0.0 if lr <= 0.0 else lr for lr in rates]
 
 
-class _CallerRated:
-    """Marks a schedule whose rate is the result of the caller's own function.
-
-    ``LambdaLR`` and ``MultiplicativeLR`` write what the function returns: a
-    negative result is the caller's to see, from the optimizer, and not a
-    formula's artefact for the write path to hold at zero.
-    """
-
-    _floors_rates: ClassVar[bool] = False
-
-
-class _LRScheduler(_CheckpointState):
+class LRScheduler(_CheckpointState):
     """Base class for all learning rate schedulers.
 
     Subclasses must implement :meth:`get_lr`, which returns a list of new
@@ -162,9 +194,6 @@ class _LRScheduler(_CheckpointState):
         The index of the last epoch.  Pass ``-1`` (default) to start from
         epoch 0 on the first :meth:`step` call; pass ``N`` to resume from
         an existing checkpoint where ``N`` steps have already been taken.
-    verbose : bool, optional
-        If ``True``, prints the updated learning rate to stdout after every
-        :meth:`step` call (default: ``False``).
 
     Attributes
     ----------
@@ -175,8 +204,6 @@ class _LRScheduler(_CheckpointState):
         construction time.
     last_epoch : int
         Number of :meth:`step` calls completed so far.
-    verbose : bool
-        Whether to print learning-rate updates.
 
     Notes
     -----
@@ -217,16 +244,16 @@ class _LRScheduler(_CheckpointState):
     _checks_step_order: ClassVar[bool] = True
 
     #: Whether a negative rate is the schedule's own formula's artefact (held
-    #: at zero) rather than the caller's; see :class:`_CallerRated`.
+    #: at zero) rather than the caller's; see :class:`_PerGroupLambda`.
     _floors_rates: ClassVar[bool] = True
 
-    def __init__(self, optimizer: Optimizer, last_epoch: int = -1, verbose: bool = False) -> None:
+    def __init__(self, optimizer: Optimizer, last_epoch: int = -1) -> None:
+        _require_optimizer(optimizer)
         self.optimizer = optimizer
         _watch_steps(optimizer)
         # After N step() calls, last_epoch == N (the constructor's initial
         # step takes it from -1 to 0).
         self.last_epoch = last_epoch
-        self.verbose = verbose
         # The rate before any scheduler touched it, kept on the group: the
         # schedule below writes step 0's rate straight away, and a second
         # scheduler on the same optimizer — a SequentialLR's cosine after
@@ -234,10 +261,9 @@ class _LRScheduler(_CheckpointState):
         if last_epoch == -1:
             for group in optimizer.param_groups:
                 group.setdefault("initial_lr", group["lr"])
-        self.base_lrs: list[float] = [
-            _group_float(g, "initial_lr" if "initial_lr" in g else "lr")
-            for g in optimizer.param_groups
-        ]
+        else:
+            _require_initial_lr(optimizer)
+        self.base_lrs: list[float] = [_group_float(g, "initial_lr") for g in optimizer.param_groups]
         self._last_lr: list[float] = []
         # Step 0's rate takes effect now, before the first optimizer step.
         # Only step() used to write a rate, so the first update ran at the
@@ -316,7 +342,7 @@ class _LRScheduler(_CheckpointState):
         """Take back the step 0 the constructor took, as SequentialLR does."""
         self.last_epoch -= 1
 
-    def step(self) -> None:
+    def step(self, epoch: int | None = None) -> None:
         """Advance the scheduler by one epoch and update optimizer learning rates.
 
         Increments ``last_epoch`` by one, calls :meth:`get_lr` to obtain
@@ -326,12 +352,19 @@ class _LRScheduler(_CheckpointState):
 
         Should be called **once per epoch**, after ``optimizer.step()``.
 
+        Parameters
+        ----------
+        epoch : int, optional
+            Deprecated.  Sets ``last_epoch`` to ``epoch`` and computes the
+            rates from the schedule's closed form where it has one, instead
+            of stepping from the current rates.  Not every schedule has one.
+
         Warns
         -----
         UserWarning
             On the first call, when the optimizer has not stepped since the
             first scheduler on it was built, or when ``optimizer.step`` was
-            replaced after that.
+            replaced after that; and whenever ``epoch`` is given.
 
         Examples
         --------
@@ -350,10 +383,10 @@ class _LRScheduler(_CheckpointState):
         # taken: a refused step changes nothing.
         if self._step_count == 1 and self._checks_step_order:
             _check_step_order(self.optimizer)
-        self._update_lr()
+        if epoch is not None:
+            warnings.warn(EPOCH_DEPRECATION_WARNING, UserWarning, stacklevel=2)
+        self._update_lr(epoch)
         self._step_count += 1
-        if self.verbose:
-            self.print_lr(self.verbose, self.last_epoch, self._last_lr)
 
     def get_lr(self) -> list[float]:
         """Compute new learning rates for all param groups.
@@ -386,29 +419,35 @@ class _LRScheduler(_CheckpointState):
         """
         return [_group_float(g) for g in self.optimizer.param_groups]
 
-    def print_lr(self, is_verbose: bool, epoch: int, lrs: list[float]) -> None:
-        """Print the current learning rates to stdout when verbose mode is on.
 
-        Parameters
-        ----------
-        is_verbose : bool
-            When ``True``, the message is printed; when ``False``, this
-            method is a no-op.
-        epoch : int
-            The epoch index to include in the printed message.
-        lrs : list of float
-            The new learning rates for each param group.
-        """
-        if is_verbose:
-            for i, lr in enumerate(lrs):
-                print(f"Epoch {epoch}: adjusting learning rate of group {i} to {lr:.4e}.")
+_LRScheduler = LRScheduler  # the name the reference keeps for the same base
+
+
+class _PerGroupLambda(LRScheduler):
+    """The schedules whose rate comes from the caller's function, one per param group.
+
+    ``LambdaLR`` and ``MultiplicativeLR`` write what the function returns: a
+    negative result is the caller's to see, from the optimizer, and not a
+    formula's artefact for the write path to hold at zero.
+    """
+
+    _floors_rates: ClassVar[bool] = False
+
+    def __init__(
+        self,
+        optimizer: Optimizer,
+        lr_lambda: Callable[[int], float] | list[Callable[[int], float]],
+        last_epoch: int = -1,
+    ) -> None:
+        self.lr_lambdas = _per_group_lambdas(optimizer, lr_lambda)
+        super().__init__(optimizer, last_epoch)
 
 
 class _CompositeSchedulerMixin:
     """What the composite schedulers share: checkpoints and taking back step 0."""
 
     optimizer: Optimizer
-    schedulers: Sequence[_LRScheduler | _CompositeSchedulerMixin]
+    schedulers: Sequence[LRScheduler | _CompositeSchedulerMixin]
 
     def state_dict(self) -> dict[str, object]:
         """Serialisable state, including each wrapped scheduler's own state."""
@@ -445,7 +484,7 @@ class _CompositeSchedulerMixin:
 
 def _check_schedulers(
     owner: str,
-    schedulers: Sequence[_LRScheduler | _CompositeSchedulerMixin],
+    schedulers: Sequence[LRScheduler | _CompositeSchedulerMixin],
     optimizer: Optimizer | None,
     accepted: tuple[type, ...],
 ) -> Optimizer:
@@ -468,7 +507,7 @@ def _check_schedulers(
             )
         if not isinstance(sched, accepted):
             kinds = {
-                _LRScheduler: "an LR scheduler",
+                LRScheduler: "an LR scheduler",
                 _CompositeSchedulerMixin: "SequentialLR or ChainedScheduler",
             }
             names = " or ".join(kinds.get(t, t.__name__) for t in accepted)
@@ -507,8 +546,8 @@ def _reset_to_base(optimizer: Optimizer) -> None:
 
 
 def _scheduler_tree(
-    schedulers: Sequence[_LRScheduler | _CompositeSchedulerMixin],
-) -> Iterator[_LRScheduler | _CompositeSchedulerMixin]:
+    schedulers: Sequence[LRScheduler | _CompositeSchedulerMixin],
+) -> Iterator[LRScheduler | _CompositeSchedulerMixin]:
     """Every scheduler under ``schedulers``, composites and what they wrap."""
     for sched in schedulers:
         yield sched

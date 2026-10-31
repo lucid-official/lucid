@@ -1022,7 +1022,7 @@
     "lucid/nn/modules/loss.py": 990,
     "lucid/nn/modules/normalization.py": 532,
     "lucid/nn/modules/pooling.py": 737,
-    "lucid/optim/lr_scheduler.py": 117,
+    "lucid/optim/lr_scheduler.py": 85,
     "lucid/special/__init__.py": 225,
     "lucid/utils/transforms/_color.py": 231
    },
@@ -1522,7 +1522,7 @@
     "lucid/nn/utils/fusion.py": 1,
     "lucid/optim/adam.py": 12,
     "lucid/optim/lbfgs.py": 1,
-    "lucid/optim/lr_scheduler.py": 22,
+    "lucid/optim/lr_scheduler.py": 20,
     "lucid/optim/others.py": 14,
     "lucid/optim/sgd.py": 2,
     "lucid/quantization/_functional.py": 1,
