@@ -197,6 +197,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - has_spec sees qualified specs; specs for the new prune entry points
 
+- zeta evaluates its three Hurwitz terms in one stacked series (LCD-794)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

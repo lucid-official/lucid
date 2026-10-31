@@ -375,3 +375,31 @@ class TestZeta:
         z_at_1 = lucid.special.zeta(s, lucid.tensor([1.0])).item()
         z_at_2 = lucid.special.zeta(s, lucid.tensor([2.0])).item()
         assert abs((z_at_1 - 1.0) - z_at_2) < 1e-3
+
+    @pytest.mark.parametrize("x", [2.0, 3.0, 5.0, 8.0])
+    def test_negative_q_equals_the_three_positive_evaluations(self, x: float) -> None:
+        # zeta(x, q) = zeta(x, f) + (-1)^x [zeta(x, 1 - f) - zeta(x, 1 - q)] for a negative
+        # non-integer q = f - m.  The three terms share one stacked series evaluation (one
+        # graph to compile on Metal, not three); each must still equal its own call.
+        q_np = np.array([-0.3, -1.7, -2.5, -6.25, -9.9], dtype=np.float32)
+        f_np = q_np - np.floor(q_np)
+        z = lucid.special.zeta
+        xs = lucid.full((5,), x)
+        got = z(xs, lucid.tensor(q_np)).numpy()
+        direct = (
+            z(xs, lucid.tensor(f_np))
+            + (-1.0) ** x * (z(xs, lucid.tensor(1.0 - f_np)) - z(xs, lucid.tensor(1.0 - q_np)))
+        ).numpy()
+        np.testing.assert_array_equal(got, direct)
+
+    def test_values_are_pinned(self) -> None:
+        # The Euler-Maclaurin evaluation order is fixed: restructuring it for compile time
+        # (LCD-794) left every bit unchanged, and these are the values from before that change.
+        x = lucid.tensor([1.5, 2.0, 3.0, 10.0, 6.0])
+        q = lucid.tensor([0.25, 1.0, 7.5, 0.5, 20.0])
+        expected = np.array(
+            [10.213055610656738, 1.644934058189392, 0.010152626782655716, 1024.0174560546875]
+            + [7.070222096672296e-08],
+            dtype=np.float32,
+        )
+        np.testing.assert_array_equal(lucid.special.zeta(x, q).numpy(), expected)

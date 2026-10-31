@@ -95,7 +95,6 @@ def _zeta(x: Tensor, q: Tensor) -> Tensor:
     f = q - lucid.floor(q)
     # zeta(x, q) itself, or for a negative q the zeta(x, f) term below.
     q_safe = lucid.where(negative, f, lucid.where(pole, one, q))
-    out = _hurwitz_zeta_positive(x_safe, q_safe)
 
     # A negative non-integer q has terms (q + k)^-x of negative bases, real
     # only for an integer x.  Writing q = f - m with f in (0, 1), the m
@@ -107,8 +106,19 @@ def _zeta(x: Tensor, q: Tensor) -> Tensor:
     # The direct sum it replaces needed one term per unit of |q| before the
     # Euler-Maclaurin tail was valid; with a fixed prefix it was wrong for
     # q below about -3 and NaN once q + 12 went negative.
-    mirror = _hurwitz_zeta_positive(x_safe, lucid.where(negative, 1.0 - f, one))
-    far = _hurwitz_zeta_positive(x_safe, lucid.where(negative, 1.0 - q, one))
+    #
+    # The three evaluations go through one stacked series instead of three
+    # calls: on Metal the traced graph of three calls reconverging on
+    # ``x_safe`` compiled in 7.6 s, the stacked one in under a second, and
+    # the values are element-for-element the same.
+    out, mirror, far = lucid.unbind(
+        _hurwitz_zeta_positive(
+            lucid.stack([x_safe, x_safe, x_safe]),
+            lucid.stack(
+                [q_safe, lucid.where(negative, 1.0 - f, one), lucid.where(negative, 1.0 - q, one)]
+            ),
+        )
+    )
     xd = x_safe.detach()
     parity = 1.0 - 2.0 * (xd - 2.0 * lucid.floor(xd / 2.0))
     out = lucid.where(negative, out + parity * (mirror - far), out)

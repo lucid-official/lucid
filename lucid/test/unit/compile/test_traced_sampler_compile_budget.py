@@ -47,13 +47,7 @@ pytestmark = pytest.mark.deadline(900)
 _BUDGET_S = 10.0
 #: Targets that are slow to compile today.  Their own budget is a ceiling set about 4x above
 #: the measurement, so that getting worse still fails; lower it when the cause is fixed.
-_SLOW_TODAY: dict[str, float] = {
-    # 6.5 s on an M1 Pro (every other special function: <= 3.3 s).  ``_zeta.py`` threads
-    # ``rising`` / ``a_pow`` / ``tail`` through a 12+13-term unrolled loop, each read twice
-    # per term -- the shape that blew up the Gamma sampler, at a depth where it is still
-    # merely slow.
-    "special:zeta": 25.0,
-}
+_SLOW_TODAY: dict[str, float] = {}
 #: Silence from the child for this long means it is inside a compile that is not coming back.
 _STALL_S = 30.0
 #: Targets that run eagerly by design (a traced value is read on the host), so there is no
