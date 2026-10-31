@@ -196,7 +196,7 @@ class TestTaskIds:
         lora = get_peft_model(
             _classifier(device), LoraConfig(r=2, target_modules=["query"], task_type="SEQ_CLS")
         )
-        with pytest.raises(ValueError, match="task_ids choose a prompt per task"):
+        with pytest.raises(ValueError, match="task_ids given to an adapter whose prompt is not"):
             lora(ids, task_ids=tasks)
 
 

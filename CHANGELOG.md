@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - drop the unread kv_prefix_only ClassVar
 
+- one owner for heads and task scope; atomic construction
+
 ### Fixed
 
 - pin integer division by zero: CPU refuses, Metal returns the dividend remainder (LCD-654)

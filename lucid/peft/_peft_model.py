@@ -23,7 +23,6 @@ from lucid.peft._status import TunerLayerStatus, TunerModelStatus, _parameter_co
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
 from lucid.peft._targeting import _config_for_model, _with_heads
 from lucid.peft.tuners._base import _AdapterHost, _tuner_for
-from lucid.peft.tuners._prompt._tuner import _PromptLearningTuner
 from lucid.serialization import load_safetensors, save_safetensors
 
 _WEIGHTS_NAME: Final = "adapter_model.safetensors"
@@ -306,14 +305,7 @@ class PeftModel(_ForwardsAttributes):
 
     def _tasked(self, task_ids: Tensor | None) -> AbstractContextManager[None]:
         """The context a call runs in: each batch row with the prompt of its task, or no change."""
-        if task_ids is None:
-            return nullcontext()
-        host = self.base_model
-        if isinstance(host, _PromptLearningTuner):
-            return host._task_scope(task_ids)
-        raise ValueError(
-            f"task_ids choose a prompt per task, which {type(host).__name__} does not have"
-        )
+        return self.base_model._task_scope(task_ids)
 
     @override
     def forward(

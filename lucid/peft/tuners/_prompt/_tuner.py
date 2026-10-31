@@ -95,12 +95,18 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
             for name, param in model.named_parameters(remove_duplicate=False)
         }
         self._handles: list[RemovableHandle] = []
-        self._add(adapter_name, config)
-        layout = _Layout.for_task(config.task_type)
-        for module, site in layout.sites(self, model, type(self)._encoder_class.injection):
-            self._handles.append(module.register_forward_pre_hook(site, with_kwargs=True))
-        model.peft_config = self.peft_config
-        self._mark_only_adapters_as_trainable()
+        try:
+            self._add(adapter_name, config)
+            layout = _Layout.for_task(config.task_type)
+            for module, site in layout.sites(self, model, type(self)._encoder_class.injection):
+                self._handles.append(module.register_forward_pre_hook(site, with_kwargs=True))
+            model.peft_config = self.peft_config
+            self._mark_only_adapters_as_trainable()
+        except BaseException:
+            # A layout that refuses the model (no head to cut, no encoder to hook) comes after
+            # ``modules_to_save`` wrapped the heads: take it all out, so the model is as given.
+            self.unload()
+            raise
 
     # ── what the sites ask ────────────────────────────────────────────────
 
@@ -113,6 +119,7 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
         assert isinstance(config, PromptLearningConfig)  # add_adapter admits no other
         return _Applied(config, self.prompt_encoder[names[0]], self._task_ids)
 
+    @override
     @contextmanager
     def _task_scope(self, task_ids: Tensor | None) -> Iterator[None]:
         """Within the block, the prompt is the one of the task each batch row belongs to.

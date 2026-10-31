@@ -20,12 +20,10 @@ from lucid.peft._config import (
     _pattern_key_regex,
     _TargetedConfig,
 )
+from lucid.peft._heads import CLASSIFIER_HEADS
 from lucid.peft._slots import _outside_slots
 
 _ALL_LINEAR = "all-linear"
-
-#: Root attributes the reference treats as a sequence-classification head.
-_SEQ_CLS_HEADS = ("score", "classifier")
 
 
 def _suffix_match(key: str, names: Iterable[str]) -> bool:
@@ -129,7 +127,7 @@ def _output_head(model: nn.Module) -> nn.Module | None:
 def _head_names(model: nn.Module, task_type: TaskType | str | None) -> set[str]:
     head = _output_head(model)
     if head is None and task_type == TaskType.SEQ_CLS:
-        for name in _SEQ_CLS_HEADS:
+        for name in CLASSIFIER_HEADS:
             candidate = getattr(model, name, None)
             if isinstance(candidate, nn.Module):
                 head = candidate

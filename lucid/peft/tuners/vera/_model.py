@@ -16,6 +16,7 @@ from lucid.peft.tuners._base import (
     _NO_PARAMETERS,
     _BaseTuner,
     _BaseTunerLayer,
+    _Injected,
     _Placement,
     _Target,
 )
@@ -132,10 +133,10 @@ class VeraModel(_FileFormat, _BaseTuner, peft_type=PeftType.VERA):
     # ── the adapters ──────────────────────────────────────────────────────
 
     @override
-    def _inject(self, adapter_name: str, config: _TargetedConfig) -> None:
+    def _inject(self, adapter_name: str, config: _TargetedConfig) -> _Injected:
         if "_projections" not in self.__dict__:
             self._projections = _Shared(_as_vera(config).save_projection)
-        super()._inject(adapter_name, config)
+        return super()._inject(adapter_name, config)
 
     @override
     @classmethod

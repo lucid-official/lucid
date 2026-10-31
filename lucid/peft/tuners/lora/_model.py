@@ -238,6 +238,11 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
 
     @override
     @classmethod
+    def _rewrites_base(cls, config: _TargetedConfig) -> bool:
+        return _Init.of(_as_lora(config).init_lora_weights).factorises
+
+    @override
+    @classmethod
     def _adapts_parameters(cls, config: _TargetedConfig) -> bool:
         return bool(_as_lora(config).target_parameters)
 

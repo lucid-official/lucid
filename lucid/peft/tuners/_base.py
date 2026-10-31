@@ -36,8 +36,8 @@ import copy
 import functools
 import warnings
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import AbstractContextManager
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from types import MappingProxyType
 from typing import ClassVar, Final, NamedTuple, Protocol, override, runtime_checkable
 
@@ -485,6 +485,29 @@ class _Placement(NamedTuple):
     original: nn.Module
 
 
+class _Injected(NamedTuple):
+    """What one injection put in the tree, and what it overwrote, so it can be taken back."""
+
+    placements: list[_Placement]
+    #: The base parameters an initialisation rewrote in place, each with its value before.
+    overwritten: list[tuple[Parameter, Tensor]]
+
+
+def _values_of(modules: Iterable[nn.Module]) -> list[tuple[Parameter, Tensor]]:
+    """Each distinct parameter of ``modules`` with a copy of its value."""
+    held: dict[int, Parameter] = {}
+    for module in modules:
+        held.update((id(param), param) for param in module.parameters())
+    with lucid.no_grad():
+        return [(param, param.clone()) for param in held.values()]
+
+
+def _put_back(values: Iterable[tuple[Parameter, Tensor]]) -> None:
+    with lucid.no_grad():
+        for param, value in values:
+            param.copy_(value)
+
+
 #: ``PeftType`` → the tuner that applies it, filled as each is defined.
 _TUNERS: dict[PeftType, type[_AdapterHost]] = {}
 
@@ -535,6 +558,20 @@ class _AdapterHost(_ForwardsAttributes, ABC):
     def _wrapped(self) -> nn.Module | None:
         modules = self.__dict__.get("_modules")
         return _as_module(modules.get("model")) if modules else None
+
+    def _task_scope(self, task_ids: Tensor | None) -> AbstractContextManager[None]:
+        """The context a call runs in when it names a task per batch row.
+
+        An adapter whose prompt is not per task has nothing to pick, so it takes none.
+
+        Raises
+        ------
+        ValueError
+            ``task_ids`` is given.
+        """
+        if task_ids is not None:
+            raise ValueError("task_ids given to an adapter whose prompt is not per-task")
+        return nullcontext()
 
     def _admit(self, adapter_name: str, peft_config: PeftConfig) -> str:
         """``adapter_name`` once it and ``peft_config`` are fit to be added beside the adapters held.
@@ -681,12 +718,13 @@ class _BaseTuner(_AdapterHost, ABC):
         earlier = self._adopted_configs(model, adapter_name)
         # By name, which a deep copy or a pickle of the model keeps; a model
         # adapted before keeps what it had before the first adapter.
+        trainable_now = {
+            name: param.requires_grad
+            for name, param in model.named_parameters(remove_duplicate=False)
+        }
         flags = model.__dict__.get(_FLAGS_KEY) if earlier is not None else None
         if flags is None:
-            flags = {
-                name: param.requires_grad
-                for name, param in model.named_parameters(remove_duplicate=False)
-            }
+            flags = trainable_now
         super().__init__(model, config, adapter_name)
         self.model = model
         self.peft_config: dict[str, PeftConfig] = {} if earlier is None else earlier
@@ -694,15 +732,25 @@ class _BaseTuner(_AdapterHost, ABC):
         self.targeted_module_names: list[str] = []
         self.targeted_parameter_names: list[str] = []
         self._requires_grad_before = flags
-        self._inject(adapter_name, config)
-        if earlier is not None:
-            # The newest adapter is the one in use; a merged earlier one would hide it.
-            self.unmerge_adapter()
-        # Where ``get_peft_model_state_dict`` finds the config of a model
-        # adapted in place, as the reference's does.
-        model.peft_config = self.peft_config
-        model.__dict__[_FLAGS_KEY] = flags
-        self._mark_only_adapters_as_trainable()
+        injected = self._inject(adapter_name, config)
+        try:
+            if earlier is not None:
+                # The newest adapter is the one in use; a merged earlier one would hide it.
+                self.unmerge_adapter()
+            # Where ``get_peft_model_state_dict`` finds the config of a model
+            # adapted in place, as the reference's does.
+            model.peft_config = self.peft_config
+            model.__dict__[_FLAGS_KEY] = flags
+            self._mark_only_adapters_as_trainable()
+        except BaseException:
+            # A constructor that raises leaves the model it was given as it found it.
+            self._rollback(adapter_name, injected)
+            for name, param in model.named_parameters(remove_duplicate=False):
+                param.requires_grad_(trainable_now[name])
+            if earlier is None:
+                model.__dict__.pop("peft_config", None)
+                model.__dict__.pop(_FLAGS_KEY, None)
+            raise
 
     @property
     @override
@@ -834,20 +882,41 @@ class _BaseTuner(_AdapterHost, ABC):
 
     # ── injecting an adapter ──────────────────────────────────────────────
 
-    def _inject(self, adapter_name: str, config: _TargetedConfig) -> None:
+    @classmethod
+    def _rewrites_base(cls, config: _TargetedConfig) -> bool:
+        """Whether building an adapter from ``config`` writes into the base weights (LoRA's PiSSA, OLoRA).
+
+        Those writes happen as the layers are built, ahead of the tree being touched, so
+        an injection that fails afterwards has to put the values back (``_Injected``).
+        """
+        del config  # the default leaves the base as it is
+        return False
+
+    def _inject(self, adapter_name: str, config: _TargetedConfig) -> _Injected:
         """Plan, then apply, ``config`` as adapter ``adapter_name``; the model is as it was on failure."""
         model = self.model
         stored = self._prepare_config(config, model)
         self._check_new_adapter_config(stored)
         targets = self._plan_targets(model, stored)
         saved = _plan_modules_to_save(model, stored)
-        # Everything new to the tree is built before the first change.
-        placements = self._new_slots(stored, adapter_name, targets, saved)
+        # Everything new to the tree is built before the first change to it; an
+        # initialisation that rewrites the base weights is the one thing built
+        # in place, so its targets' values are kept.
+        kept = _values_of(t.module for t in targets) if self._rewrites_base(stored) else []
+        try:
+            placements = self._new_slots(stored, adapter_name, targets, saved)
+        except BaseException:
+            _put_back(kept)
+            raise
+        injected = _Injected(placements, kept)
         self.peft_config[adapter_name] = stored
         try:
             self._attach_adapter(stored, adapter_name, targets, saved, placements)
+            # A slot new to the tree began with its one adapter active.
+            for _, slot in _adapter_slots(model):
+                slot._activate(self.active_adapter)
         except BaseException:
-            self._withdraw(adapter_name, placements)
+            self._rollback(adapter_name, injected)
             raise
         for target in targets:
             names = (
@@ -857,9 +926,7 @@ class _BaseTuner(_AdapterHost, ABC):
             )
             if target.full_name not in names:
                 names.append(target.full_name)
-        # A slot new to the tree began with its one adapter active.
-        for _, slot in _adapter_slots(model):
-            slot._activate(self.active_adapter)
+        return injected
 
     def _new_slots(
         self, config: _TargetedConfig, adapter_name: str, targets: list[_Target], saved: list[str]
@@ -903,6 +970,11 @@ class _BaseTuner(_AdapterHost, ABC):
                 wrapper.update(adapter_name)
         for placement in placements:
             _set_submodule(self.model, placement.key, placement.slot)
+
+    def _rollback(self, adapter_name: str, injected: _Injected) -> None:
+        """Take ``injected`` back out: the adapter out of the tree, the base weights as they were."""
+        self._withdraw(adapter_name, injected.placements)
+        _put_back(injected.overwritten)
 
     def _withdraw(self, adapter_name: str, placements: list[_Placement]) -> None:
         """Undo a failed ``_inject``: the adapter out of every slot, the new slots out of the tree."""
