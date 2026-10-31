@@ -147,6 +147,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - device axis reads a self-moving container's dtype from its data
 
+- read every fft argument in one spec (LCD-767)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

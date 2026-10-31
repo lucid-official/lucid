@@ -27,29 +27,33 @@ taken through its ``Function``, so a gradient differentiates again under
 ``create_graph``.
 
 Input: an integer or boolean tensor is promoted to the default floating
-dtype, and with ``dim`` omitted an ``s`` shorter than the rank names the
+dtype, a ``float16`` or ``bfloat16`` one to ``float32`` (every entry point
+alike), and with ``dim`` omitted an ``s`` shorter than the rank names the
 last ``len(s)`` axes.
+
+Arguments: ``lucid.fft._spec`` reads and checks them once for all 22
+functions.  ``n`` / ``s`` / ``dim`` must be integers (a ``TypeError``
+otherwise, never a truncation); ``-1`` in ``s`` keeps the input's size
+along that axis (``irfftn`` / ``hfftn`` keep ``2 * (m - 1)`` on the last);
+an empty ``dim`` makes ``fftn`` / ``ifftn`` the identity (as a complex
+tensor — a 0-d input is that case) and is refused by the real-valued
+transforms.
 """
 
 from typing import Sequence, TYPE_CHECKING
 
 import lucid
 from lucid._types import DeviceLike, DTypeLike
-from lucid.fft._transforms import (
-    _FftnAutograd,
-    _IrfftnAutograd,
-    _RfftnAutograd,
-    _as_axis_list,
-    _check_norm,
-    _conj,
-    _dual_norm,
-    _input_sizes_along_axes,
-    _normalise_axes,
-    _prepare,
-    _promote,
-    _transform,
-    _transform_size,
+from lucid.fft._spec import (
+    _COMPLEX,
+    _REAL_IN,
+    _REAL_OUT,
+    _freq_args,
+    _shift_axes,
+    _spec_1d,
+    _spec_nd,
 )
+from lucid.fft._transforms import _conj, _run_complex, _run_irfftn, _run_rfftn
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -93,12 +97,16 @@ def fftn(
         Signal length(s) along each transformed axis.  When given, each
         axis is zero-padded (if ``s[i] > input.shape[dim[i]]``) or
         truncated (if smaller) before the transform.  ``len(s)`` must
-        equal ``len(dim)`` when both are sequences.  If ``None``, each
-        axis is transformed at its current size.
+        equal ``len(dim)`` when both are sequences.  An entry of ``-1``
+        keeps that axis's input size.  If ``None``, each axis is
+        transformed at its current size.  Entries must be integers
+        (``TypeError`` otherwise).
     dim : int or sequence of int, optional
         Axis or axes over which to compute the transform.  Negative
         indices are supported.  ``None`` (the default) means every axis,
-        or the last ``len(s)`` axes when ``s`` is given.
+        or the last ``len(s)`` axes when ``s`` is given.  An empty
+        sequence — or a 0-d ``input`` — transforms no axis: the input
+        comes back as a complex tensor.
     norm : str or None, optional
         Normalisation mode.  One of:
 
@@ -160,11 +168,7 @@ def fftn(
     >>> X = lucid.fft.fftn(x, norm="ortho")
     >>> # lucid.fft.ifftn(X, norm="ortho") recovers x exactly
     """
-    norm_v = _check_norm(norm)
-    input, axes, s_list = _prepare(input, s, dim, "fftn")
-    in_sizes = _input_sizes_along_axes(input.shape, axes)
-    N = _transform_size(s_list, in_sizes)
-    return _transform(_FftnAutograd, input, s_list, axes, norm_v, N, False)
+    return _run_complex(_spec_nd("fftn", _COMPLEX, input, s, dim, norm), False)
 
 
 def ifftn(
@@ -196,7 +200,8 @@ def ifftn(
         Output signal length(s) along each transformed axis.  The
         frequency-domain tensor is zero-padded or truncated to match
         before inverting.  ``len(s)`` must equal ``len(dim)`` when both
-        are sequences.  If ``None``, each axis keeps its current size.
+        are sequences.  An entry of ``-1`` keeps that axis's input size.
+        If ``None``, each axis keeps its current size.
     dim : int or sequence of int, optional
         Axis or axes over which to compute the inverse transform.
         Negative indices are supported.  ``None`` (the default) means
@@ -249,11 +254,7 @@ def ifftn(
     >>> x.shape
     (8, 8)
     """
-    norm_v = _check_norm(norm)
-    input, axes, s_list = _prepare(input, s, dim, "ifftn")
-    in_sizes = _input_sizes_along_axes(input.shape, axes)
-    N = _transform_size(s_list, in_sizes)
-    return _transform(_FftnAutograd, input, s_list, axes, norm_v, N, True)
+    return _run_complex(_spec_nd("ifftn", _COMPLEX, input, s, dim, norm), True)
 
 
 def fft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None) -> Tensor:
@@ -333,7 +334,7 @@ def fft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = N
     >>> X.shape
     (128,)
     """
-    return fftn(input, s=None if n is None else [int(n)], dim=[int(dim)], norm=norm)
+    return _run_complex(_spec_1d("fft", _COMPLEX, input, n, dim, norm), False)
 
 
 def ifft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None) -> Tensor:
@@ -406,7 +407,7 @@ def ifft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = 
     >>> Y = lucid.fft.fft(lucid.randn(32))   # observed output spectrum
     >>> x_est = lucid.fft.ifft(Y / H)        # estimated input
     """
-    return ifftn(input, s=None if n is None else [int(n)], dim=[int(dim)], norm=norm)
+    return _run_complex(_spec_1d("ifft", _COMPLEX, input, n, dim, norm), True)
 
 
 def fft2(
@@ -491,7 +492,7 @@ def fft2(
 
     >>> X_shifted = lucid.fft.fftshift(lucid.fft.fft2(x))
     """
-    return fftn(input, s=s, dim=dim, norm=norm)
+    return _run_complex(_spec_nd("fft2", _COMPLEX, input, s, dim, norm), False)
 
 
 def ifft2(
@@ -565,7 +566,7 @@ def ifft2(
     >>> # Zero out high frequencies, then invert
     >>> x_smooth = lucid.fft.ifft2(X)
     """
-    return ifftn(input, s=s, dim=dim, norm=norm)
+    return _run_complex(_spec_nd("ifft2", _COMPLEX, input, s, dim, norm), True)
 
 
 # ── Public API: real-input FFT (rfft / rfft2 / rfftn) ────────────────────────
@@ -667,12 +668,7 @@ def rfftn(
     >>> X.shape   # 64 // 2 + 1 = 33
     (33,)
     """
-    norm_v = _check_norm(norm)
-    input, axes, s_list = _prepare(input, s, dim, "rfftn")
-    in_sizes = _input_sizes_along_axes(input.shape, axes)
-    full_sizes: list[int] = list(s_list) if s_list else list(in_sizes)
-    N = _transform_size(s_list, in_sizes)
-    return _transform(_RfftnAutograd, input, s_list, axes, norm_v, N, full_sizes)
+    return _run_rfftn(_spec_nd("rfftn", _REAL_IN, input, s, dim, norm))
 
 
 def irfftn(
@@ -762,19 +758,7 @@ def irfftn(
     >>> x_rec.shape
     (16, 32, 64)
     """
-    norm_v = _check_norm(norm)
-    input, axes, s_list = _prepare(input, s, dim, "irfftn")
-    out_sizes: list[int]
-    if s_list:
-        out_sizes = list(s_list)
-    else:
-        # Default: last axis becomes 2*(in_last - 1); others keep size.
-        out_sizes = _input_sizes_along_axes(input.shape, axes)
-        out_sizes[-1] = (out_sizes[-1] - 1) * 2
-    N = 1
-    for v in out_sizes:
-        N *= int(v)
-    return _transform(_IrfftnAutograd, input, s_list, axes, norm_v, N, out_sizes)
+    return _run_irfftn(_spec_nd("irfftn", _REAL_OUT, input, s, dim, norm))
 
 
 def rfft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None) -> Tensor:
@@ -844,7 +828,7 @@ def rfft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = 
     >>> x_rec.shape
     (128,)
     """
-    return rfftn(input, s=None if n is None else [int(n)], dim=[int(dim)], norm=norm)
+    return _run_rfftn(_spec_1d("rfft", _REAL_IN, input, n, dim, norm))
 
 
 def irfft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None) -> Tensor:
@@ -911,7 +895,7 @@ def irfft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None =
     >>> lucid.fft.irfft(X).shape          # 2*(65-1) = 128
     (128,)
     """
-    return irfftn(input, s=None if n is None else [int(n)], dim=[int(dim)], norm=norm)
+    return _run_irfftn(_spec_1d("irfft", _REAL_OUT, input, n, dim, norm))
 
 
 def rfft2(
@@ -987,7 +971,7 @@ def rfft2(
     >>> x_rec.shape
     (64, 64)
     """
-    return rfftn(input, s=s, dim=dim, norm=norm)
+    return _run_rfftn(_spec_nd("rfft2", _REAL_IN, input, s, dim, norm))
 
 
 def irfft2(
@@ -1047,7 +1031,7 @@ def irfft2(
     >>> x_rec.shape
     (128, 256)
     """
-    return irfftn(input, s=s, dim=dim, norm=norm)
+    return _run_irfftn(_spec_nd("irfft2", _REAL_OUT, input, s, dim, norm))
 
 
 # ── Public API: Hermitian FFT (hfft / hfft2 / hfftn) ─────────────────────────
@@ -1150,8 +1134,7 @@ def hfftn(
     >>> y.shape
     (16, 64)
     """
-    norm_v = _check_norm(norm)
-    return irfftn(_conj(_promote(input)), s=s, dim=dim, norm=_dual_norm(norm_v))
+    return _run_irfftn(_spec_nd("hfftn", _REAL_OUT, input, s, dim, norm).hermitian())
 
 
 def ihfftn(
@@ -1230,8 +1213,7 @@ def ihfftn(
     >>> x_rec.shape
     (128,)
     """
-    norm_v = _check_norm(norm)
-    return _conj(rfftn(input, s=s, dim=dim, norm=_dual_norm(norm_v)))
+    return _conj(_run_rfftn(_spec_nd("ihfftn", _REAL_IN, input, s, dim, norm).with_dual_norm()))
 
 
 def hfft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None) -> Tensor:
@@ -1302,7 +1284,7 @@ def hfft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = 
     >>> x_rec.shape
     (64,)
     """
-    return hfftn(input, s=None if n is None else [int(n)], dim=[int(dim)], norm=norm)
+    return _run_irfftn(_spec_1d("hfft", _REAL_OUT, input, n, dim, norm).hermitian())
 
 
 def ihfft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None = None) -> Tensor:
@@ -1372,7 +1354,7 @@ def ihfft(input: Tensor, n: int | None = None, dim: int = -1, norm: str | None =
     >>> x_rec.shape
     (64,)
     """
-    return ihfftn(input, s=None if n is None else [int(n)], dim=[int(dim)], norm=norm)
+    return _conj(_run_rfftn(_spec_1d("ihfft", _REAL_IN, input, n, dim, norm).with_dual_norm()))
 
 
 def hfft2(
@@ -1426,7 +1408,7 @@ def hfft2(
     >>> y.shape
     (64, 64)
     """
-    return hfftn(input, s=s, dim=dim, norm=norm)
+    return _run_irfftn(_spec_nd("hfft2", _REAL_OUT, input, s, dim, norm).hermitian())
 
 
 def ihfft2(
@@ -1490,7 +1472,7 @@ def ihfft2(
     >>> x_rec.shape
     (64, 64)
     """
-    return ihfftn(input, s=s, dim=dim, norm=norm)
+    return _conj(_run_rfftn(_spec_nd("ihfft2", _REAL_IN, input, s, dim, norm).with_dual_norm()))
 
 
 # ── Public API: utility functions ────────────────────────────────────────────
@@ -1585,14 +1567,12 @@ def fftfreq(
     >>> freqs_centred = lucid.fft.fftshift(lucid.fft.fftfreq(256, d=1.0/1000.0))
     >>> # Now ranges from -500 Hz to ~496 Hz, centred at 0
     """
-    n = int(n)
-    if n < 0:
-        raise ValueError(f"fftfreq requires n >= 0, got {n}")
-    half = (n - 1) // 2 + 1  # number of non-negative frequency bins
+    n_v, d_v = _freq_args("fftfreq", n, d, dtype)
+    half = (n_v - 1) // 2 + 1  # number of non-negative frequency bins
     pos = lucid.arange(0.0, float(half), 1.0, dtype=dtype, device=device)
-    neg = lucid.arange(float(-(n // 2)), 0.0, 1.0, dtype=dtype, device=device)
+    neg = lucid.arange(float(-(n_v // 2)), 0.0, 1.0, dtype=dtype, device=device)
     full = lucid.cat([pos, neg], 0)
-    return (full / (float(d) * n)).requires_grad_(requires_grad)
+    return (full / (d_v * n_v)).requires_grad_(requires_grad)
 
 
 def rfftfreq(
@@ -1676,11 +1656,9 @@ def rfftfreq(
     >>> freqs = lucid.fft.rfftfreq(1024)
     >>> # len(freqs) == X.shape[-1] == 513
     """
-    n = int(n)
-    if n < 0:
-        raise ValueError(f"rfftfreq requires n >= 0, got {n}")
-    bins = lucid.arange(0.0, float(n // 2 + 1), 1.0, dtype=dtype, device=device)
-    return (bins / (float(d) * n)).requires_grad_(requires_grad)
+    n_v, d_v = _freq_args("rfftfreq", n, d, dtype)
+    bins = lucid.arange(0.0, float(n_v // 2 + 1), 1.0, dtype=dtype, device=device)
+    return (bins / (d_v * n_v)).requires_grad_(requires_grad)
 
 
 def fftshift(input: Tensor, dim: int | Sequence[int] | None = None) -> Tensor:
@@ -1754,10 +1732,8 @@ def fftshift(input: Tensor, dim: int | Sequence[int] | None = None) -> Tensor:
     >>> X_c = lucid.fft.fftshift(X)           # centred spectrum
     >>> freqs = lucid.fft.fftshift(lucid.fft.fftfreq(64))  # centred frequency axis
     """
-    rank = input.ndim
-    dims = _normalise_axes(_as_axis_list(dim, rank, default_all=True), rank)
-    shifts = [int(input.shape[a]) // 2 for a in dims]
-    return lucid.roll(input, shifts=shifts, dims=dims)
+    x, dims = _shift_axes("fftshift", input, dim)
+    return lucid.roll(x, shifts=[int(x.shape[a]) // 2 for a in dims], dims=dims)
 
 
 def ifftshift(input: Tensor, dim: int | Sequence[int] | None = None) -> Tensor:
@@ -1833,10 +1809,8 @@ def ifftshift(input: Tensor, dim: int | Sequence[int] | None = None) -> Tensor:
     >>> # Then convert back to FFT ordering before inverting:
     >>> # x_filtered = lucid.fft.ifft(lucid.fft.ifftshift(H))
     """
-    rank = input.ndim
-    dims = _normalise_axes(_as_axis_list(dim, rank, default_all=True), rank)
-    shifts = [-(int(input.shape[a]) // 2) for a in dims]
-    return lucid.roll(input, shifts=shifts, dims=dims)
+    x, dims = _shift_axes("ifftshift", input, dim)
+    return lucid.roll(x, shifts=[-(int(x.shape[a]) // 2) for a in dims], dims=dims)
 
 
 __all__ = [

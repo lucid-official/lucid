@@ -1,14 +1,15 @@
 """The four base transforms behind :mod:`lucid.fft` and their autograd.
 
-Everything the public transforms share: ``norm`` / ``dim`` / ``s``
-canonicalisation, the raw engine entry points, and the
+Everything the public transforms share once their arguments are checked
+(``lucid.fft._spec`` does that): the raw engine entry points, the
+``_run_*`` entry points over a checked spec, and the
 ``lucid.autograd.Function`` classes for the base transforms — one for the
 complex pair ``fftn`` / ``ifftn``, one each for ``rfftn`` and ``irfftn`` —
 whose backward is the dual transform.
 """
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import final, override
 
@@ -16,30 +17,14 @@ import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry
-from lucid._ops._dims import _wrap_dim
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function as _AutogradFunction
 from lucid.autograd.function import FunctionCtx
+from lucid.fft._spec import _dual_norm, _Spec
 
 _fft = _C_engine.fft
 
 # ── Normalisation ────────────────────────────────────────────────────────────
-
-_VALID_NORMS = ("backward", "forward", "ortho")
-
-
-def _check_norm(norm: str | None) -> str:
-    if norm is None:
-        return "backward"
-    if norm not in _VALID_NORMS:
-        raise ValueError(f"norm must be one of {_VALID_NORMS} or None, got {norm!r}")
-    return norm
-
-
-def _dual_norm(norm: str) -> str:
-    if norm == "ortho":
-        return "ortho"
-    return "forward" if norm == "backward" else "backward"
 
 
 def _scale_after_fft(N: int, norm: str) -> float:
@@ -60,69 +45,7 @@ def _scale_after_ifft(N: int, norm: str) -> float:
     return math.sqrt(float(N))  # ortho: turn 1/N into 1/sqrt(N)
 
 
-# ── Axis / shape canonicalisation ────────────────────────────────────────────
-
-
-def _as_axis_list(dim: int | Sequence[int] | None, rank: int, default_all: bool) -> list[int]:
-    if dim is None:
-        if default_all:
-            return list(range(rank))
-        return [-1]
-    if isinstance(dim, int):
-        return [dim]
-    return [int(d) for d in dim]
-
-
-def _as_size_list(s: int | Sequence[int] | None) -> list[int]:
-    if s is None:
-        return []
-    if isinstance(s, int):
-        return [int(s)]
-    return [int(v) for v in s]
-
-
-def _normalise_axes(axes: list[int], rank: int) -> list[int]:
-    if rank == 0 and axes:
-        raise IndexError(f"FFT axis {axes[0]} out of range for rank-0 tensor")
-    return [_wrap_dim(ax, rank, "fft") for ax in axes]
-
-
-def _validate_axes_and_s(axes: list[int], s: list[int], op: str) -> None:
-    if s and len(s) != len(axes):
-        raise ValueError(f"{op}: len(s)={len(s)} must match len(dim)={len(axes)}")
-
-
-def _promote(x: Tensor) -> Tensor:
-    """An integer or boolean input in the default floating dtype.
-
-    The engine transforms take only floating and complex input; the
-    reference reads an integer signal as the real signal it denotes, so
-    ``fft(arange(4))`` is a ``complex64`` spectrum rather than an error.
-    """
-    if x.is_floating_point() or x.is_complex():
-        return x
-    return x.to(lucid.get_default_dtype())
-
-
-def _prepare(
-    input: Tensor, s: int | Sequence[int] | None, dim: int | Sequence[int] | None, op: str
-) -> tuple[Tensor, list[int], list[int]]:
-    """The promoted input, its normalised transform axes, and ``s`` as a list.
-
-    With ``dim`` omitted the transform covers every axis — or, when ``s``
-    is given, the last ``len(s)`` axes, which is what ``s`` then names.
-    """
-    input = _promote(input)
-    rank = input.ndim
-    s_list = _as_size_list(s)
-    if dim is None and s_list:
-        if len(s_list) > rank:
-            raise ValueError(f"{op}: len(s)={len(s_list)} exceeds the input's {rank} dimensions")
-        axes = list(range(rank - len(s_list), rank))
-    else:
-        axes = _normalise_axes(_as_axis_list(dim, rank, default_all=True), rank)
-    _validate_axes_and_s(axes, s_list, op)
-    return input, axes, s_list
+# ── Sizes ─────────────────────────────────────────────────────────────────────
 
 
 def _input_sizes_along_axes(x_shape: tuple[int, ...], axes: list[int]) -> list[int]:
@@ -510,3 +433,44 @@ class _IrfftnAutograd(_AutogradFunction):
         # Lane-wise, because a broadcast multiply has no complex branch.
         g = lucid.complex(lucid.real(g) * weights, lucid.imag(g) * weights)
         return _input_grad(g, p, _scale_after_fft(p.N, _dual_norm(p.norm)))
+
+
+# ── Entry points over a checked spec ─────────────────────────────────────────
+#
+# The public functions build a ``_Spec`` (``lucid.fft._spec``) and hand it to
+# one of these; none of them re-reads an argument.
+
+
+def _as_complex(x: Tensor) -> Tensor:
+    """``x`` as a complex tensor with its values — the transform over no axis."""
+    if x.is_complex():
+        return x.clone()
+    return lucid.complex(x, lucid.zeros_like(x))
+
+
+def _run_complex(spec: _Spec, inverse: bool) -> Tensor:
+    """``fftn`` / ``ifftn`` of a checked spec."""
+    if spec.is_identity:
+        return _as_complex(spec.input)
+    N = _transform_size(spec.s, _input_sizes_along_axes(spec.input.shape, spec.axes))
+    return _transform(_FftnAutograd, spec.input, spec.s, spec.axes, spec.norm, N, inverse)
+
+
+def _run_rfftn(spec: _Spec) -> Tensor:
+    """``rfftn`` of a checked spec."""
+    in_sizes = _input_sizes_along_axes(spec.input.shape, spec.axes)
+    full_sizes = list(spec.s) if spec.s else list(in_sizes)
+    N = _transform_size(spec.s, in_sizes)
+    return _transform(_RfftnAutograd, spec.input, spec.s, spec.axes, spec.norm, N, full_sizes)
+
+
+def _run_irfftn(spec: _Spec) -> Tensor:
+    """``irfftn`` of a checked spec."""
+    if spec.s:
+        out_sizes = list(spec.s)
+    else:
+        # Default: last axis becomes 2*(in_last - 1); others keep size.
+        out_sizes = _input_sizes_along_axes(spec.input.shape, spec.axes)
+        out_sizes[-1] = (out_sizes[-1] - 1) * 2
+    N = math.prod(out_sizes)
+    return _transform(_IrfftnAutograd, spec.input, spec.s, spec.axes, spec.norm, N, out_sizes)
