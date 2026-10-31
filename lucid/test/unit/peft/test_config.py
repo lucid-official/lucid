@@ -266,7 +266,9 @@ class TestFile:
 
     def test_a_subfolder_holds_the_file(self, tmp_path: Path) -> None:
         LoraConfig(r=3, target_modules=["q"]).save_pretrained(tmp_path / "style")
-        assert isinstance(loaded := PeftConfig.from_pretrained(tmp_path, subfolder="style"), LoraConfig)
+        assert isinstance(
+            loaded := PeftConfig.from_pretrained(tmp_path, subfolder="style"), LoraConfig
+        )
         assert loaded.r == 3
         with pytest.raises(FileNotFoundError, match="adapter_config.json"):
             PeftConfig.from_pretrained(tmp_path)
