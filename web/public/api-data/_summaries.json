@@ -313146,13 +313146,13 @@
   "roformer_cls": {
     "name": "RoFormerForSequenceClassification",
     "type": "RoFormerForSequenceClassification",
-    "params": 124640258,
+    "params": 124049666,
     "own_params": 0,
     "children": [
       {
         "name": "roformer",
-        "type": "RoFormerModel",
-        "params": 124048128,
+        "type": "_RoFormerEncoderOnly",
+        "params": 123457536,
         "own_params": 0,
         "children": [
           {
@@ -313326,44 +313326,37 @@
                 ]
               }
             ]
-          },
-          {
-            "name": "pooler",
-            "type": "_RoFormerPooler",
-            "params": 590592,
-            "own_params": 0,
-            "children": [
-              {
-                "name": "dense",
-                "type": "Linear",
-                "params": 590592,
-                "own_params": 590592,
-                "children": []
-              }
-            ]
           }
         ]
       },
       {
-        "name": "dropout",
-        "type": "Dropout",
-        "params": 0,
-        "own_params": 0,
-        "children": []
-      },
-      {
-        "name": "dense",
-        "type": "Linear",
-        "params": 590592,
-        "own_params": 590592,
-        "children": []
-      },
-      {
         "name": "classifier",
-        "type": "Linear",
-        "params": 1538,
-        "own_params": 1538,
-        "children": []
+        "type": "_RoFormerClassificationHead",
+        "params": 592130,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "dropout",
+            "type": "Dropout",
+            "params": 0,
+            "own_params": 0,
+            "children": []
+          },
+          {
+            "name": "dense",
+            "type": "Linear",
+            "params": 590592,
+            "own_params": 590592,
+            "children": []
+          },
+          {
+            "name": "out_proj",
+            "type": "Linear",
+            "params": 1538,
+            "own_params": 1538,
+            "children": []
+          }
+        ]
       }
     ]
   },
@@ -313618,13 +313611,13 @@
   "roformer_multiple_choice": {
     "name": "RoFormerForMultipleChoice",
     "type": "RoFormerForMultipleChoice",
-    "params": 124048897,
+    "params": 123458305,
     "own_params": 0,
     "children": [
       {
         "name": "roformer",
-        "type": "RoFormerModel",
-        "params": 124048128,
+        "type": "_RoFormerEncoderOnly",
+        "params": 123457536,
         "own_params": 0,
         "children": [
           {
@@ -313796,21 +313789,6 @@
                     "repeat": 12
                   }
                 ]
-              }
-            ]
-          },
-          {
-            "name": "pooler",
-            "type": "_RoFormerPooler",
-            "params": 590592,
-            "own_params": 0,
-            "children": [
-              {
-                "name": "dense",
-                "type": "Linear",
-                "params": 590592,
-                "own_params": 590592,
-                "children": []
               }
             ]
           }
@@ -313835,13 +313813,13 @@
   "roformer_qa": {
     "name": "RoFormerForQuestionAnswering",
     "type": "RoFormerForQuestionAnswering",
-    "params": 124049666,
+    "params": 123459074,
     "own_params": 0,
     "children": [
       {
         "name": "roformer",
-        "type": "RoFormerModel",
-        "params": 124048128,
+        "type": "_RoFormerEncoderOnly",
+        "params": 123457536,
         "own_params": 0,
         "children": [
           {
@@ -314013,21 +313991,6 @@
                     "repeat": 12
                   }
                 ]
-              }
-            ]
-          },
-          {
-            "name": "pooler",
-            "type": "_RoFormerPooler",
-            "params": 590592,
-            "own_params": 0,
-            "children": [
-              {
-                "name": "dense",
-                "type": "Linear",
-                "params": 590592,
-                "own_params": 590592,
-                "children": []
               }
             ]
           }
@@ -314045,13 +314008,13 @@
   "roformer_token_cls": {
     "name": "RoFormerForTokenClassification",
     "type": "RoFormerForTokenClassification",
-    "params": 124049666,
+    "params": 123459074,
     "own_params": 0,
     "children": [
       {
         "name": "roformer",
-        "type": "RoFormerModel",
-        "params": 124048128,
+        "type": "_RoFormerEncoderOnly",
+        "params": 123457536,
         "own_params": 0,
         "children": [
           {
@@ -314223,21 +314186,6 @@
                     "repeat": 12
                   }
                 ]
-              }
-            ]
-          },
-          {
-            "name": "pooler",
-            "type": "_RoFormerPooler",
-            "params": 590592,
-            "own_params": 0,
-            "children": [
-              {
-                "name": "dense",
-                "type": "Linear",
-                "params": 590592,
-                "own_params": 590592,
-                "children": []
               }
             ]
           }
