@@ -43,8 +43,15 @@ def _reference_model(family: str, ref: Any) -> Any:
 
 @pytest.mark.parity
 class TestEncoderPrefixParity:
-    @pytest.mark.parametrize("family", ["bert_base", "roformer"])
-    def test_a_prefix_matches_the_reference(self, family: str, ref: Any) -> None:
+    @pytest.mark.parametrize(
+        ("family", "given_positions"),
+        [("bert_base", False), ("bert_base", True), ("roformer", False)],
+        ids=["bert", "bert-positions-given", "roformer"],
+    )
+    def test_a_prefix_matches_the_reference(
+        self, family: str, given_positions: bool, ref: Any
+    ) -> None:
+        # ``given_positions``: the caller numbers the input (from 0, beside the cache) itself.
         transformers = pytest.importorskip("transformers")
         reference = _reference_model(family, ref)
         model = create_model(family, hidden_dropout=0.0, attention_dropout=0.0, **_SIZES).eval()
@@ -68,16 +75,23 @@ class TestEncoderPrefixParity:
             ours.update(lucid.tensor(k), lucid.tensor(v), layer)
             theirs.update(ref.tensor(k), ref.tensor(v), layer)
 
+        extra_ref: dict[str, Any] = {}
+        extra: dict[str, Any] = {}
+        if given_positions:
+            extra_ref["position_ids"] = ref.arange(_LENGTH).reshape(1, _LENGTH)
+            extra["position_ids"] = lucid.arange(_LENGTH).long().reshape(1, _LENGTH)
         with ref.no_grad():
             want = reference(
                 ref.tensor(ids),
                 attention_mask=ref.ones(_BATCH, _PREFIX + _LENGTH, dtype=ref.long),
                 past_key_values=theirs,
                 use_cache=False,
+                **extra_ref,
             ).last_hidden_state
         got = model(
             lucid.tensor(ids).long(),
             attention_mask=lucid.ones(_BATCH, _PREFIX + _LENGTH).long(),
             past_key_values=ours,
+            **extra,
         ).last_hidden_state
         assert_close(got, want, atol=1e-5)

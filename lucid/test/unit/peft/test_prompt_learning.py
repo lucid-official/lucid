@@ -17,7 +17,6 @@ import lucid
 import lucid.nn as nn
 import lucid.optim as optim
 from lucid.models import create_model
-from lucid.models.text.bert import BERTModel
 from lucid.peft import (
     PeftConfig,
     PeftModel,
@@ -722,26 +721,24 @@ class TestEncoderPrefix:
             assert (not bool(lucid.allclose(p, before[n]))) == (n in named), n
 
     def test_the_prefix_takes_the_positions_in_front_of_the_input(self, device: str) -> None:
-        # The reference numbers the input after the cache: positions the caller gave, input-relative,
-        # shift past the prefix as a decoder's do.
+        # The reference numbers the input after the cache; positions the caller gave are its own.
         lucid.manual_seed(0)
         model = create_model("bert_base", **_TEXT).eval().to(device)
         peft = get_peft_model(model, _METHODS["prefix"]("FEATURE_EXTRACTION"))
         ids = _ids(device, (2, 5))
         positions = lucid.arange(5, device=device).long().reshape(1, 5).repeat(2, 1)
-        given = peft(ids, position_ids=positions).last_hidden_state
-        assert bool(lucid.allclose(given, peft(ids).last_hidden_state))
         seen: list[list[int]] = []
 
         def spy(_m: nn.Module, args: tuple[lucid.Tensor, ...]) -> None:
             seen.append([int(i) for i in args[0].reshape(-1).tolist()])
 
         handle = model.embeddings.position_embeddings.register_forward_pre_hook(spy)
-        peft(ids)
-        peft(ids, position_ids=positions)
+        derived = peft(ids).last_hidden_state
+        given = peft(ids, position_ids=positions).last_hidden_state
         handle.remove()
         assert seen[0] == list(range(_V, _V + 5))
-        assert seen[1] == list(range(_V, _V + 5)) * 2
+        assert seen[1] == list(range(5)) * 2
+        assert not bool(lucid.allclose(derived, given, atol=1e-4))
 
     @pytest.mark.parametrize("family", _ENCODERS)
     def test_a_padded_key_is_not_attended_to(self, family: str, device: str) -> None:
@@ -936,23 +933,10 @@ class TestTextInitialisation:
             get_peft_model(_gpt2(device), self._config("no-such-tokenizer"))
 
 
-_POSITION_FAMILIES = {"bert_base": True, "gpt": True, "gpt2_small": True, "roformer": True}
-
-
 class TestPrefixPositions:
-    """Whether a prefix in the cache moves the input's positions is declared by the trunk's family."""
+    """The trunk numbers the input after the prefix; the prefix site never rewrites the caller's ids."""
 
-    @pytest.mark.parametrize(("family", "shifts"), _POSITION_FAMILIES.items())
-    def test_the_family_declares_it(self, family: str, shifts: bool, device: str) -> None:
-        lucid.manual_seed(0)
-        trunk = create_model(family, **_TEXT).eval().to(device)
-        assert getattr(type(trunk), "prefix_shifts_positions", True) is shifts
-
-    @pytest.mark.parametrize("shifts", [True, False])
-    def test_the_site_reads_the_flag_of_the_trunk(
-        self, shifts: bool, device: str, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(BERTModel, "prefix_shifts_positions", shifts)
+    def test_the_site_leaves_the_positions_the_caller_gave(self, device: str) -> None:
         lucid.manual_seed(0)
         trunk = create_model("bert_base", **_TEXT).eval().to(device)
         peft = get_peft_model(trunk, _METHODS["prefix"]("FEATURE_EXTRACTION"))
@@ -967,7 +951,7 @@ class TestPrefixPositions:
         peft(_ids(device, (2, 5)), position_ids=lucid.arange(5, device=device).long().reshape(1, 5))
         handle.remove()
         # The spy runs after the site (a hook added later runs later).
-        assert seen == [list(range(_V, _V + 5)) if shifts else list(range(5))]
+        assert seen == [list(range(5))]
 
     def test_roformer_phases_start_after_the_cache(self, device: str) -> None:
         lucid.manual_seed(0)

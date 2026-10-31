@@ -210,25 +210,16 @@ class _PrefixSite(_Site):
     """On the trunk: a cache that already holds the prefix, when the call starts from none.
 
     The keys the trunk attends over are the prefix's as well as the input's, on
-    every step, so its attention mask gets the virtual positions.  A trunk that
-    numbers its positions after the cache (``prefix_shifts_positions``) has the
-    positions the caller gave shifted past the prefix as well; one that does
-    not takes them as they are.  The model's heads see the real sequence.
+    every step, so its attention mask gets the virtual positions.  Positions are
+    the trunk's to number (after the cache's length, as the reference does); the
+    ones the caller gave are used as they are.  The model's heads see the real
+    sequence.
     """
-
-    __slots__ = ("_shifts_positions",)
-
-    def __init__(self, tuner: _Prompting, shifts_positions: bool) -> None:
-        super().__init__(tuner)
-        self._shifts_positions = shifts_positions
 
     @override
     def rewrite(self, applied: _Applied, call: _Call) -> None:
         if "attention_mask" in call:
             call["attention_mask"] = _widen(call["attention_mask"], applied.virtual)
-        positions = call.get("position_ids")
-        if self._shifts_positions and isinstance(positions, Tensor):
-            call["position_ids"] = positions + applied.virtual
         cache = call.get("past_key_values")
         if _holds_prompt(cache):
             return

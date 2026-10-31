@@ -432,7 +432,6 @@ class _RoFormerTrunk(_RoFormerInitMixin, PretrainedModel):
 
     config_class: ClassVar[type[RoFormerConfig]] = RoFormerConfig
     base_model_prefix: ClassVar[str] = "roformer"
-    prefix_shifts_positions: ClassVar[bool] = True
 
     def __init__(self, config: RoFormerConfig) -> None:
         super().__init__(config)

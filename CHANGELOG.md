@@ -151,6 +151,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - bert and roformer number input after a kv prefix
 
+- the prefix site leaves caller position ids alone
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

@@ -525,7 +525,6 @@ class BERTModel(PretrainedModel):
 
     config_class: ClassVar[type[BERTConfig]] = BERTConfig
     base_model_prefix: ClassVar[str] = "bert"
-    prefix_shifts_positions: ClassVar[bool] = True
 
     def __init__(self, config: BERTConfig) -> None:
         super().__init__(config)
