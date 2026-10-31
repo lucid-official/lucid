@@ -3,7 +3,7 @@
   "name": "inception",
   "path": "lucid.models.vision.inception",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/__init__.py#L1",
   "members": [
     {
       "name": "InceptionConfig",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "InceptionConfig(num_classes: int = 1000, in_channels: int = 3, version: str = 'v3', aux_logits: bool = False, dropout: float = 0.5, transform_input: bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/_config.py#L10",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/_config.py#L10",
       "subcategory": "config",
       "methods": [
         {
@@ -24,7 +24,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(num_classes: int = 1000, in_channels: int = 3, version: str = 'v3', aux_logits: bool = False, dropout: float = 0.5, transform_input: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -65,7 +65,7 @@
       ],
       "labels": [],
       "signature": "InceptionV3(config: InceptionConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/_model.py#L407",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/_model.py#L407",
       "subcategory": "model",
       "methods": [
         {
@@ -74,7 +74,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: InceptionConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/_model.py#L484",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/_model.py#L484",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -96,7 +96,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward_features(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/_model.py#L529",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/_model.py#L529",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -118,7 +118,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/_model.py#L539",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/_model.py#L539",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -214,7 +214,7 @@
       ],
       "labels": [],
       "signature": "InceptionV3ForImageClassification(config: InceptionConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/_model.py#L549",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/_model.py#L549",
       "subcategory": "model",
       "methods": [
         {
@@ -223,7 +223,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: InceptionConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/_model.py#L619",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/_model.py#L619",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -245,7 +245,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor, labels: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/_model.py#L670",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/_model.py#L670",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -325,7 +325,7 @@
       ],
       "labels": [],
       "signature": "InceptionV3Output(logits: Tensor, loss: Tensor | None = None, hidden_states: tuple[Tensor, ...] | None = None, attentions: tuple[Tensor, ...] | None = None, aux_logits: Tensor | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/_model.py#L288",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/_model.py#L288",
       "subcategory": "model",
       "methods": [
         {
@@ -334,7 +334,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(logits: Tensor, loss: Tensor | None = None, hidden_states: tuple[Tensor, ...] | None = None, attentions: tuple[Tensor, ...] | None = None, aux_logits: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/_model.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/_model.py#L1",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -391,7 +391,7 @@
       "kind": "function",
       "labels": [],
       "signature": "inception_v3(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/_pretrained.py#L16",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/_pretrained.py#L16",
       "subcategory": "pretrained",
       "summary": "Inception v3 feature-extracting backbone.",
       "extended": "Builds an `InceptionV3` with the paper-cited Szegedy 2016\ntopology: deep stem → 3× Inception-A → Reduction-A → 4× Inception-C\n→ Reduction-B → 2× Inception-E → $1\\times1$ global pool.\nDesigned for $299\\times299$ RGB inputs.  Approximately\n21.8 M parameters in the backbone alone.",
@@ -437,7 +437,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 928,
                 "own_params": 0,
                 "children": [
@@ -459,7 +459,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 9280,
                 "own_params": 0,
                 "children": [
@@ -481,7 +481,7 @@
               },
               {
                 "name": "2",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 18560,
                 "own_params": 0,
                 "children": [
@@ -510,7 +510,7 @@
               },
               {
                 "name": "4",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 5280,
                 "own_params": 0,
                 "children": [
@@ -532,7 +532,7 @@
               },
               {
                 "name": "5",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 138624,
                 "own_params": 0,
                 "children": [
@@ -569,7 +569,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 12416,
                 "own_params": 0,
                 "children": [
@@ -591,7 +591,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 9312,
                 "own_params": 0,
                 "children": [
@@ -613,7 +613,7 @@
               },
               {
                 "name": "branch2_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 76928,
                 "own_params": 0,
                 "children": [
@@ -635,7 +635,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 12416,
                 "own_params": 0,
                 "children": [
@@ -657,7 +657,7 @@
               },
               {
                 "name": "branch3_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 55488,
                 "own_params": 0,
                 "children": [
@@ -679,7 +679,7 @@
               },
               {
                 "name": "branch3_c",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 83136,
                 "own_params": 0,
                 "children": [
@@ -708,7 +708,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 6208,
                 "own_params": 0,
                 "children": [
@@ -738,7 +738,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 16512,
                 "own_params": 0,
                 "children": [
@@ -760,7 +760,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 12384,
                 "own_params": 0,
                 "children": [
@@ -782,7 +782,7 @@
               },
               {
                 "name": "branch2_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 76928,
                 "own_params": 0,
                 "children": [
@@ -804,7 +804,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 16512,
                 "own_params": 0,
                 "children": [
@@ -826,7 +826,7 @@
               },
               {
                 "name": "branch3_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 55488,
                 "own_params": 0,
                 "children": [
@@ -848,7 +848,7 @@
               },
               {
                 "name": "branch3_c",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 83136,
                 "own_params": 0,
                 "children": [
@@ -877,7 +877,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 16512,
                 "own_params": 0,
                 "children": [
@@ -907,7 +907,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 18560,
                 "own_params": 0,
                 "children": [
@@ -929,7 +929,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 13920,
                 "own_params": 0,
                 "children": [
@@ -951,7 +951,7 @@
               },
               {
                 "name": "branch2_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 76928,
                 "own_params": 0,
                 "children": [
@@ -973,7 +973,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 18560,
                 "own_params": 0,
                 "children": [
@@ -995,7 +995,7 @@
               },
               {
                 "name": "branch3_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 55488,
                 "own_params": 0,
                 "children": [
@@ -1017,7 +1017,7 @@
               },
               {
                 "name": "branch3_c",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 83136,
                 "own_params": 0,
                 "children": [
@@ -1046,7 +1046,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 18560,
                 "own_params": 0,
                 "children": [
@@ -1076,7 +1076,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 996096,
                 "own_params": 0,
                 "children": [
@@ -1098,7 +1098,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 18560,
                 "own_params": 0,
                 "children": [
@@ -1120,7 +1120,7 @@
               },
               {
                 "name": "branch2_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 55488,
                 "own_params": 0,
                 "children": [
@@ -1142,7 +1142,7 @@
               },
               {
                 "name": "branch2_c",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 83136,
                 "own_params": 0,
                 "children": [
@@ -1179,7 +1179,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -1201,7 +1201,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 98560,
                 "own_params": 0,
                 "children": [
@@ -1251,7 +1251,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 98560,
                 "own_params": 0,
                 "children": [
@@ -1336,7 +1336,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -1366,7 +1366,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -1388,7 +1388,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 123200,
                 "own_params": 0,
                 "children": [
@@ -1438,7 +1438,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 123200,
                 "own_params": 0,
                 "children": [
@@ -1523,7 +1523,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -1554,7 +1554,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -1605,7 +1605,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -1690,7 +1690,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -1720,7 +1720,7 @@
             "children": [
               {
                 "name": "branch1_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -1742,7 +1742,7 @@
               },
               {
                 "name": "branch1_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 553600,
                 "own_params": 0,
                 "children": [
@@ -1764,7 +1764,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -1814,7 +1814,7 @@
               },
               {
                 "name": "branch2_d",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 332160,
                 "own_params": 0,
                 "children": [
@@ -1851,7 +1851,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 410240,
                 "own_params": 0,
                 "children": [
@@ -1873,7 +1873,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 492288,
                 "own_params": 0,
                 "children": [
@@ -1923,7 +1923,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 574336,
                 "own_params": 0,
                 "children": [
@@ -1945,7 +1945,7 @@
               },
               {
                 "name": "branch3_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 1549056,
                 "own_params": 0,
                 "children": [
@@ -2002,7 +2002,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 246144,
                 "own_params": 0,
                 "children": [
@@ -2032,7 +2032,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 656000,
                 "own_params": 0,
                 "children": [
@@ -2054,7 +2054,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 787200,
                 "own_params": 0,
                 "children": [
@@ -2104,7 +2104,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 918400,
                 "own_params": 0,
                 "children": [
@@ -2126,7 +2126,7 @@
               },
               {
                 "name": "branch3_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 1549056,
                 "own_params": 0,
                 "children": [
@@ -2183,7 +2183,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 393600,
                 "own_params": 0,
                 "children": [
@@ -2221,7 +2221,7 @@
       "kind": "function",
       "labels": [],
       "signature": "inception_v3_cls(pretrained: bool | str = False, weights: InceptionV3Weights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/_pretrained.py#L71",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/_pretrained.py#L71",
       "subcategory": "pretrained",
       "summary": "Inception v3 image classifier (no auxiliary head by default).",
       "extended": "Builds an `InceptionV3ForImageClassification` with the\npaper-cited Szegedy 2016 topology.  Default configuration matches\nthe standard reference-framework setting of `aux_logits=False` —\napproximately 23.8 M parameters; enable the auxiliary classifier\nby passing `aux_logits=True` (adds ≈4 M parameters used only\nduring training).  Designed for $299\\times299$ RGB inputs;\nachieves a top-5 ImageNet validation error of 3.5%.",
@@ -2273,7 +2273,7 @@
             "children": [
               {
                 "name": "0",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 928,
                 "own_params": 0,
                 "children": [
@@ -2295,7 +2295,7 @@
               },
               {
                 "name": "1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 9280,
                 "own_params": 0,
                 "children": [
@@ -2317,7 +2317,7 @@
               },
               {
                 "name": "2",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 18560,
                 "own_params": 0,
                 "children": [
@@ -2346,7 +2346,7 @@
               },
               {
                 "name": "4",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 5280,
                 "own_params": 0,
                 "children": [
@@ -2368,7 +2368,7 @@
               },
               {
                 "name": "5",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 138624,
                 "own_params": 0,
                 "children": [
@@ -2405,7 +2405,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 12416,
                 "own_params": 0,
                 "children": [
@@ -2427,7 +2427,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 9312,
                 "own_params": 0,
                 "children": [
@@ -2449,7 +2449,7 @@
               },
               {
                 "name": "branch2_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 76928,
                 "own_params": 0,
                 "children": [
@@ -2471,7 +2471,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 12416,
                 "own_params": 0,
                 "children": [
@@ -2493,7 +2493,7 @@
               },
               {
                 "name": "branch3_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 55488,
                 "own_params": 0,
                 "children": [
@@ -2515,7 +2515,7 @@
               },
               {
                 "name": "branch3_c",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 83136,
                 "own_params": 0,
                 "children": [
@@ -2544,7 +2544,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 6208,
                 "own_params": 0,
                 "children": [
@@ -2574,7 +2574,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 16512,
                 "own_params": 0,
                 "children": [
@@ -2596,7 +2596,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 12384,
                 "own_params": 0,
                 "children": [
@@ -2618,7 +2618,7 @@
               },
               {
                 "name": "branch2_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 76928,
                 "own_params": 0,
                 "children": [
@@ -2640,7 +2640,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 16512,
                 "own_params": 0,
                 "children": [
@@ -2662,7 +2662,7 @@
               },
               {
                 "name": "branch3_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 55488,
                 "own_params": 0,
                 "children": [
@@ -2684,7 +2684,7 @@
               },
               {
                 "name": "branch3_c",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 83136,
                 "own_params": 0,
                 "children": [
@@ -2713,7 +2713,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 16512,
                 "own_params": 0,
                 "children": [
@@ -2743,7 +2743,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 18560,
                 "own_params": 0,
                 "children": [
@@ -2765,7 +2765,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 13920,
                 "own_params": 0,
                 "children": [
@@ -2787,7 +2787,7 @@
               },
               {
                 "name": "branch2_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 76928,
                 "own_params": 0,
                 "children": [
@@ -2809,7 +2809,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 18560,
                 "own_params": 0,
                 "children": [
@@ -2831,7 +2831,7 @@
               },
               {
                 "name": "branch3_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 55488,
                 "own_params": 0,
                 "children": [
@@ -2853,7 +2853,7 @@
               },
               {
                 "name": "branch3_c",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 83136,
                 "own_params": 0,
                 "children": [
@@ -2882,7 +2882,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 18560,
                 "own_params": 0,
                 "children": [
@@ -2912,7 +2912,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 996096,
                 "own_params": 0,
                 "children": [
@@ -2934,7 +2934,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 18560,
                 "own_params": 0,
                 "children": [
@@ -2956,7 +2956,7 @@
               },
               {
                 "name": "branch2_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 55488,
                 "own_params": 0,
                 "children": [
@@ -2978,7 +2978,7 @@
               },
               {
                 "name": "branch2_c",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 83136,
                 "own_params": 0,
                 "children": [
@@ -3015,7 +3015,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -3037,7 +3037,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 98560,
                 "own_params": 0,
                 "children": [
@@ -3087,7 +3087,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 98560,
                 "own_params": 0,
                 "children": [
@@ -3172,7 +3172,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -3202,7 +3202,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -3224,7 +3224,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 123200,
                 "own_params": 0,
                 "children": [
@@ -3274,7 +3274,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 123200,
                 "own_params": 0,
                 "children": [
@@ -3359,7 +3359,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -3390,7 +3390,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -3441,7 +3441,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -3526,7 +3526,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -3556,7 +3556,7 @@
             "children": [
               {
                 "name": "branch1_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -3578,7 +3578,7 @@
               },
               {
                 "name": "branch1_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 553600,
                 "own_params": 0,
                 "children": [
@@ -3600,7 +3600,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 147840,
                 "own_params": 0,
                 "children": [
@@ -3650,7 +3650,7 @@
               },
               {
                 "name": "branch2_d",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 332160,
                 "own_params": 0,
                 "children": [
@@ -3687,7 +3687,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 410240,
                 "own_params": 0,
                 "children": [
@@ -3709,7 +3709,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 492288,
                 "own_params": 0,
                 "children": [
@@ -3759,7 +3759,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 574336,
                 "own_params": 0,
                 "children": [
@@ -3781,7 +3781,7 @@
               },
               {
                 "name": "branch3_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 1549056,
                 "own_params": 0,
                 "children": [
@@ -3838,7 +3838,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 246144,
                 "own_params": 0,
                 "children": [
@@ -3868,7 +3868,7 @@
             "children": [
               {
                 "name": "branch1",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 656000,
                 "own_params": 0,
                 "children": [
@@ -3890,7 +3890,7 @@
               },
               {
                 "name": "branch2_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 787200,
                 "own_params": 0,
                 "children": [
@@ -3940,7 +3940,7 @@
               },
               {
                 "name": "branch3_a",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 918400,
                 "own_params": 0,
                 "children": [
@@ -3962,7 +3962,7 @@
               },
               {
                 "name": "branch3_b",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 1549056,
                 "own_params": 0,
                 "children": [
@@ -4019,7 +4019,7 @@
               },
               {
                 "name": "branch4_conv",
-                "type": "_ConvBnReLU",
+                "type": "BasicConvBnReLU2d",
                 "params": 393600,
                 "own_params": 0,
                 "children": [
@@ -4082,7 +4082,7 @@
       ],
       "labels": [],
       "signature": "InceptionV3Weights()",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/models/vision/inception/_weights.py#L24",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/models/vision/inception/_weights.py#L24",
       "subcategory": "weights",
       "methods": [],
       "summary": "Pretrained weights for `lucid.models.inception_v3_cls`.",

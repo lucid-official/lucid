@@ -24,7 +24,7 @@
       ],
       "labels": [],
       "signature": "Generator(seed: int | DeviceLike = 0, device: DeviceLike = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/_factories/_generator.py#L82",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/_factories/_generator.py#L82",
       "subcategory": null,
       "methods": [
         {
@@ -33,7 +33,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(seed: int | DeviceLike = 0, device: DeviceLike = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/_factories/_generator.py#L131",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/_factories/_generator.py#L131",
           "subcategory": "generator",
           "summary": "Initialise the instance.  See the class docstring for parameter semantics.",
           "extended": null,
@@ -57,7 +57,7 @@
             "property"
           ],
           "signature": "device: _device_cls",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/_factories/_generator.py#L141",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/_factories/_generator.py#L141",
           "summary": "The device recorded when this generator was constructed.",
           "extended": null,
           "parameters": [],
@@ -78,7 +78,7 @@
           "kind": "function",
           "labels": [],
           "signature": "manual_seed(seed: int)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/_factories/_generator.py#L145",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/_factories/_generator.py#L145",
           "subcategory": "generator",
           "summary": "Set the key to `seed` and rewind the stream to its start.",
           "extended": null,
@@ -107,7 +107,7 @@
           "kind": "function",
           "labels": [],
           "signature": "initial_seed()",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/_factories/_generator.py#L161",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/_factories/_generator.py#L161",
           "subcategory": "generator",
           "summary": "The key this stream was last seeded with.",
           "extended": null,
@@ -129,7 +129,7 @@
           "kind": "function",
           "labels": [],
           "signature": "get_state()",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/_factories/_generator.py#L171",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/_factories/_generator.py#L171",
           "subcategory": "generator",
           "summary": "The stream's position, `[key, counter]`, as an `int64` tensor.",
           "extended": null,
@@ -151,7 +151,7 @@
           "kind": "function",
           "labels": [],
           "signature": "set_state(new_state: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/_factories/_generator.py#L181",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/_factories/_generator.py#L181",
           "subcategory": "generator",
           "summary": "Return the stream to a position `get_state` captured.",
           "extended": null,
@@ -185,7 +185,7 @@
           "kind": "function",
           "labels": [],
           "signature": "seed()",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/_factories/_generator.py#L204",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/_factories/_generator.py#L204",
           "subcategory": "generator",
           "summary": "Reseed the stream from the OS entropy source and return the new key.",
           "extended": null,
@@ -245,7 +245,7 @@
       "kind": "function",
       "labels": [],
       "signature": "tensor(data: object, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L208",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L208",
       "subcategory": null,
       "summary": "Construct a new `Tensor` from Python data, a NumPy array, or another Tensor.",
       "extended": "Always allocates a fresh storage and **copies** the source bytes into\nLucid-owned memory.  This is the canonical entry point for creating\ntensors from heterogeneous Python inputs: scalars (`int` / `float` /\n`bool`), nested lists, NumPy `ndarray`\\s, and existing Lucid\n`Tensor`\\s.  Dtype is inferred from the source unless `dtype` is\ngiven; device defaults to the global default (typically `\"cpu\"`) unless\noverridden.",
@@ -296,7 +296,7 @@
       "kind": "function",
       "labels": [],
       "signature": "as_tensor(data: object, dtype: DTypeLike = None, device: DeviceLike = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L215",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L215",
       "subcategory": null,
       "summary": "Convert data to a tensor, avoiding a copy when the source already matches.",
       "extended": "Unlike `tensor`, `as_tensor` is \"best-effort no-copy\":\n\n* If `data` is already a `Tensor` with the requested `dtype`\n  and `device`, it is returned unchanged.\n* If `data` is a `Tensor` whose dtype or device differs, it is\n  converted as `Tensor.to` converts it, and the result stays\n  connected to `data`'s autograd graph — unlike `tensor`, which\n  copies into a detached leaf.\n* Anything else — Python data, NumPy arrays — goes through\n  `tensor`, which copies.",
@@ -341,7 +341,7 @@
       "kind": "function",
       "labels": [],
       "signature": "from_numpy(ndarray: np.ndarray)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L221",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L221",
       "subcategory": null,
       "summary": "Copy a NumPy `ndarray` into an owned Lucid tensor.",
       "extended": "The returned tensor owns a copy and inherits the array's dtype according\nto the canonical\nNumPy → Lucid mapping (`np.float32` → `lucid.float32`,\n`np.int64` → `lucid.int64`, etc.). Mutations do not propagate between\nthe source array and the result. Like `tensor`, this bridge uses\nthe active default device; use `tensor(arr, device=\"cpu\")` to pin it.",
@@ -383,7 +383,7 @@
       "kind": "function",
       "labels": [],
       "signature": "from_dlpack(ext_tensor: object, device: DeviceLike = None, copy: _bool | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L222",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L222",
       "subcategory": null,
       "summary": "Construct a Lucid tensor from any object exposing the DLPack\nprotocol (`__dlpack__`) or from a raw PyCapsule.",
       "extended": "Two dialects, picked by what the producer says it is:\n\n* **Metal** (`__dlpack_device__() == (8, 0)`) — adopted natively.\n  The producer's `MTLBuffer` becomes this tensor's storage with no\n  copy at all, which is what makes an `mlx.core.array` and a Lucid\n  Metal tensor two views of one allocation. NumPy cannot read a\n  capsule of this device type, so this path bypasses it entirely.\n* **Everything else** — through NumPy, which shares host memory\n  where it can. The result lives on the CPU by default unless\n  `device` is explicitly specified.\n\nRequires numpy for the host dialect — install via\n`pip install lucid[numpy]` if missing. The Metal dialect needs\nnothing.",
@@ -424,7 +424,7 @@
       "kind": "function",
       "labels": [],
       "signature": "to_dlpack(tensor: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L228",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L228",
       "subcategory": null,
       "summary": "Export `tensor` as a DLPack PyCapsule.",
       "extended": "A Metal tensor exports natively — the capsule carries its\n`MTLBuffer`, so an MLX consumer reads the same pages rather than a\ndownloaded copy. A CPU tensor materialises through NumPy. Either\ncapsule can be consumed exactly once.\n\nRequires numpy for the host dialect — install via\n`pip install lucid[numpy]` if missing.",
@@ -446,7 +446,7 @@
       "kind": "function",
       "labels": [],
       "signature": "zeros(size: _int | tuple[_int, ...] = (), dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L231",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L231",
       "subcategory": null,
       "summary": "Return a tensor filled with the additive identity element, zero.",
       "extended": "Allocates a new tensor of the requested shape and fills every element\nwith the scalar value $0$.  The result is the unique tensor satisfying\n\n$$\nZ_{i_1, i_2, \\ldots, i_n} = 0\n\\quad \\forall\\; (i_1, \\ldots, i_n) \\in \\prod_k [0, s_k)\n$$\n\nwhere $(s_1, \\ldots, s_n)$ is the requested shape.\n\nZero-initialisation is the standard starting point for accumulation\nbuffers (gradient accumulators, running statistics in batch norm,\nconfusion matrices) and for masking computations where a neutral\nadditive element is required.",
@@ -497,7 +497,7 @@
       "kind": "function",
       "labels": [],
       "signature": "ones(size: _int | tuple[_int, ...] = (), dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L237",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L237",
       "subcategory": null,
       "summary": "Return a tensor filled with the multiplicative identity element, one.",
       "extended": "Allocates a new tensor of the requested shape and fills every element\nwith the scalar value $1$.  Every entry satisfies\n\n$$\nO_{i_1, \\ldots, i_n} = 1\n\\quad \\forall\\; (i_1, \\ldots, i_n) \\in \\prod_k [0, s_k)\n$$\n\nOne-initialisation is the canonical starting point for multiplicative\naccumulators, scale parameters in normalisation layers (before any\ntraining), and homogeneous coordinate vectors in projective geometry.",
@@ -548,7 +548,7 @@
       "kind": "function",
       "labels": [],
       "signature": "empty(size: _int | tuple[_int, ...] = (), dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L243",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L243",
       "subcategory": null,
       "summary": "Return a tensor whose elements are uninitialised (undefined memory).",
       "extended": "Allocates the backing memory for the requested shape but performs **no\ninitialisation write**.  Reading any element before overwriting it is\nundefined behaviour — values may be zero, garbage, or a previous\ntensor's data depending on the allocator's state.\n\nThe key advantage over `zeros` or `ones` is that the initialisation\nkernel is skipped entirely, which is measurable when allocating large\ntemporary buffers inside hot loops.  The typical pattern is:\n\n$$\n\\text{allocate} \\to \\text{fill via in-place op} \\to \\text{read}\n$$",
@@ -599,7 +599,7 @@
       "kind": "function",
       "labels": [],
       "signature": "empty_strided(size: Sequence[_int], stride: Sequence[_int], dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L249",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L249",
       "subcategory": null,
       "summary": "Create an uninitialised tensor with the specified `size` and `stride`.",
       "extended": null,
@@ -654,7 +654,7 @@
       "kind": "function",
       "labels": [],
       "signature": "full(size: _int | list[_int] | tuple[_int, ...], fill_value: _complex, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L257",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L257",
       "subcategory": null,
       "summary": "Return a tensor filled with a constant scalar value.",
       "extended": "Every element of the output equals `fill_value`:\n\n$$\nF_{i_1, \\ldots, i_n} = c\n\\quad \\forall\\; (i_1, \\ldots, i_n) \\in \\prod_k [0, s_k)\n$$\n\nwhere $c$ is `fill_value`.  This is a generalisation of `zeros`\n($c = 0$) and `ones` ($c = 1$) to an arbitrary constant.",
@@ -711,7 +711,7 @@
       "kind": "function",
       "labels": [],
       "signature": "eye(n: _int, m: _int | None = None, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L265",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L265",
       "subcategory": null,
       "summary": "Return a 2-D matrix with ones on the main diagonal and zeros elsewhere.",
       "extended": "The returned matrix $E \\in \\mathbb{R}^{n \\times m}$ is defined by the\nKronecker delta:\n\n$$\nE_{ij} = \\delta_{ij} =\n\\begin{cases}\n    1 & \\text{if } i = j \\\\\n    0 & \\text{if } i \\neq j\n\\end{cases}\n$$\n\nWhen $n = m$ this is the identity matrix $I_n$, which satisfies\n$I_n A = A I_n = A$ for any $n \\times n$ matrix $A$.  Rectangular\nvariants ($n \\neq m$) arise naturally as the pseudo-identity in\nleast-squares problems and in constructing projection matrices.",
@@ -768,7 +768,7 @@
       "kind": "function",
       "labels": [],
       "signature": "arange(start: _float, end: _float | None = None, step: _float = 1, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L273",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L273",
       "subcategory": null,
       "summary": "Return a 1-D tensor of evenly spaced values over a half-open interval.",
       "extended": "Generates the arithmetic sequence\n\n$$\nx_k = \\texttt{start} + k \\cdot \\texttt{step},\n\\quad k = 0, 1, \\ldots, N-1\n$$\n\nwhere $N = \\left\\lceil \\dfrac{\\texttt{end} - \\texttt{start}}{\\texttt{step}} \\right\\rceil$\nis the number of elements.  The interval is **half-open**: `start`\nis included, `end` is excluded, mirroring Python's built-in\n`range`.\n\nWhen called with a single positional argument `arange(n)`, the call\nis reinterpreted as `arange(0, n, 1)`, yielding\n$[0, 1, \\ldots, n-1]$.",
@@ -831,7 +831,7 @@
       "kind": "function",
       "labels": [],
       "signature": "linspace(start: _float, end: _float, steps: _int, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L282",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L282",
       "subcategory": null,
       "summary": "Return a 1-D tensor of `steps` equally spaced values over a closed interval.",
       "extended": "Generates the arithmetic sequence\n\n$$\nx_k = \\texttt{start} + k \\cdot \\frac{\\texttt{end} - \\texttt{start}}{\\texttt{steps} - 1},\n\\quad k = 0, 1, \\ldots, \\texttt{steps} - 1\n$$\n\nUnlike `arange`, the interval is **closed** on both ends: `start`\nand `end` are both included in the output, and the number of\nelements is always exactly `steps`.",
@@ -894,7 +894,7 @@
       "kind": "function",
       "labels": [],
       "signature": "zeros_like(input: Tensor, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L291",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L291",
       "subcategory": null,
       "summary": "Return a zero-filled tensor with the same shape, dtype, and device as `input`.",
       "extended": "Equivalent to `lucid.zeros(t.shape, dtype=t.dtype, device=t.device)`,\nbut infers the metadata from an existing tensor so the caller need not\nrepeat it.  Every element satisfies\n\n$$\nZ_{i_1, \\ldots, i_n} = 0\n\\quad \\forall\\; (i_1, \\ldots, i_n) \\in \\prod_k [0, s_k)\n$$\n\nwhere $(s_1, \\ldots, s_n) = \\texttt{t.shape}$.",
@@ -945,7 +945,7 @@
       "kind": "function",
       "labels": [],
       "signature": "ones_like(input: Tensor, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L298",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L298",
       "subcategory": null,
       "summary": "Return an all-ones tensor with the same shape, dtype, and device as `input`.",
       "extended": "Equivalent to `lucid.ones(t.shape, dtype=t.dtype, device=t.device)`,\nbut infers metadata from an existing tensor.  Every element satisfies\n\n$$\nO_{i_1, \\ldots, i_n} = 1\n\\quad \\forall\\; (i_1, \\ldots, i_n) \\in \\prod_k [0, s_k)\n$$",
@@ -996,7 +996,7 @@
       "kind": "function",
       "labels": [],
       "signature": "empty_like(input: Tensor, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L305",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L305",
       "subcategory": null,
       "summary": "Return an uninitialised tensor with the same shape, dtype, and device as `input`.",
       "extended": "Allocates backing memory matching `input`'s metadata but performs no\ninitialisation write.  Reading elements before overwriting them is\nundefined behaviour.  The typical use is to pre-allocate an output\nbuffer for an in-place kernel call:\n\n$$\n\\text{allocate}(|\\texttt{t}|) \\;\\to\\; \\text{kernel\\_write}(\\text{buf})\n\\;\\to\\; \\text{read}(\\text{buf})\n$$",
@@ -1047,7 +1047,7 @@
       "kind": "function",
       "labels": [],
       "signature": "full_like(input: Tensor, fill_value: _complex, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L312",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L312",
       "subcategory": null,
       "summary": "Return a constant-filled tensor with the same shape, dtype, and device as `input`.",
       "extended": "Every element of the output equals `fill_value`:\n\n$$\nF_{i_1, \\ldots, i_n} = c\n\\quad \\forall\\; (i_1, \\ldots, i_n) \\in \\prod_k [0, s_k)\n$$\n\nwhere $c = \\texttt{fill\\_value}$ and $(s_1, \\ldots, s_n) = \\texttt{t.shape}$.\nThis is the shape-aware generalisation of `full`.",
@@ -1104,7 +1104,7 @@
       "kind": "function",
       "labels": [],
       "signature": "logspace(start: _float, end: _float, steps: _int, base: _float = 10.0, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L320",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L320",
       "subcategory": null,
       "summary": "Return a 1-D tensor of `steps` values evenly spaced on a logarithmic scale.",
       "extended": "Generates the geometric sequence\n\n$$\nx_k = \\texttt{base}^{y_k},\n\\quad y_k = \\texttt{start} + k \\cdot \\frac{\\texttt{end} - \\texttt{start}}{\\texttt{steps} - 1},\n\\quad k = 0, 1, \\ldots, \\texttt{steps} - 1\n$$\n\nEquivalently, the exponents $y_k$ are linearly spaced (as in\n`linspace`) and then the base is raised to those exponents.  The\nresult spans the range $[\\texttt{base}^\\texttt{start},\\,\n\\texttt{base}^\\texttt{end}]$ multiplicatively: consecutive elements\nsatisfy $x_{k+1} / x_k = \\text{const}$.",
@@ -1173,7 +1173,7 @@
       "kind": "function",
       "labels": [],
       "signature": "manual_seed(seed: _int)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L332",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L332",
       "subcategory": null,
       "summary": "Set the key to `seed` and rewind the stream to its start.",
       "extended": null,
@@ -1202,7 +1202,7 @@
       "kind": "function",
       "labels": [],
       "signature": "seed()",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L333",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L333",
       "subcategory": null,
       "summary": "Reseed the stream from the OS entropy source and return the new key.",
       "extended": null,
@@ -1224,7 +1224,7 @@
       "kind": "function",
       "labels": [],
       "signature": "initial_seed()",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L334",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L334",
       "subcategory": null,
       "summary": "The key this stream was last seeded with.",
       "extended": null,
@@ -1246,7 +1246,7 @@
       "kind": "function",
       "labels": [],
       "signature": "get_rng_state()",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L335",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L335",
       "subcategory": null,
       "summary": "Snapshot the full state of the default random generator.",
       "extended": "Returns an `int64` tensor of length 2, `[seed, counter]`,\nthat completely characterises the default Philox generator.\n\nThe Philox-4×32 PRNG is a **stateless counter-based** design: the\nentire infinite sample stream is determined by the two-tuple\n\n$$\n\\text{state} = (k,\\; c)\n\\quad k \\in [0,\\, 2^{63}),\\; c \\in [0,\\, 2^{64})\n$$\n\nwhere $k$ is the seed key and $c$ is the call counter.  After each\ndraw of a 128-bit output block, $c$ is incremented by 1.  The next\nsample is always $\\text{Philox}(k, c)$, so saving $(k, c)$ is a\nlossless checkpoint of the generator.",
@@ -1257,7 +1257,7 @@
       },
       "raises": [],
       "examples": [
-        ">>> import lucid\n>>> lucid.manual_seed(0)\n>>> _ = lucid.rand(10)           # advance counter by drawing 10 values\n>>> state = lucid.get_rng_state()\n>>> a = lucid.rand(5)\n>>> lucid.set_rng_state(state)   # rewind\n>>> b = lucid.rand(5)\n>>> (a - b).abs().max().item()\n0.0"
+        ">>> import lucid\n>>> _ = lucid.manual_seed(0)\n>>> _ = lucid.rand(10)           # advance counter by drawing 10 values\n>>> state = lucid.get_rng_state()\n>>> a = lucid.rand(5)\n>>> lucid.set_rng_state(state)   # rewind\n>>> b = lucid.rand(5)\n>>> (a - b).abs().max().item()\n0.0"
       ],
       "notes": [
         "Unlike Mersenne Twister (which requires 624 × 32-bit words of state),\nPhilox's full state is just 128 bits.  This makes checkpointing\nessentially free and enables **exact reproducibility** of training\nruns when saved alongside model weights."
@@ -1272,7 +1272,7 @@
       "kind": "function",
       "labels": [],
       "signature": "set_rng_state(new_state: Tensor)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L336",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L336",
       "subcategory": null,
       "summary": "Restore the default random generator to a previously captured state.",
       "extended": "Rewinds (or fast-forwards) the Philox generator to the exact\n`(seed, counter)` pair encoded in `new_state`, so that the next\nsample call produces exactly the same value as it did immediately\nafter the `get_rng_state` call that created `new_state`.\n\nFormally, after `set_rng_state(state)` the generator satisfies:\n\n$$\nk \\leftarrow \\texttt{state}[0], \\quad\nc \\leftarrow \\texttt{state}[1]\n$$\n\nand the next draw returns $\\text{Philox}(k, c)$.",
@@ -1295,198 +1295,10 @@
         }
       ],
       "examples": [
-        ">>> import lucid\n>>> lucid.manual_seed(99)\n>>> state = lucid.get_rng_state()\n>>> x = lucid.randn(4)\n>>> lucid.set_rng_state(state)\n>>> y = lucid.randn(4)\n>>> (x - y).abs().max().item()\n0.0"
+        ">>> import lucid\n>>> _ = lucid.manual_seed(99)\n>>> state = lucid.get_rng_state()\n>>> x = lucid.randn(4)\n>>> lucid.set_rng_state(state)\n>>> y = lucid.randn(4)\n>>> (x - y).abs().max().item()\n0.0"
       ],
       "notes": [
         "`set_rng_state` + `get_rng_state` together provide a lightweight\n**fork–join** pattern for reproducible stochastic computation:\n\n\n\n$$\ns^* = \\text{get\\_rng\\_state}()\n\\;\\to\\;\n\\text{sample branch A}\n\\;\\to\\;\n\\text{set\\_rng\\_state}(s^*)\n\\;\\to\\;\n\\text{sample branch B}\n$$\n\nBoth branches then draw from the same sub-stream, enabling\ncontrolled ablations where only the model changes, not the data\naugmentation noise."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "rand",
-      "path": "lucid.rand",
-      "kind": "function",
-      "labels": [],
-      "signature": "rand(size: _int | tuple[_int, ...] = (), dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False, generator: _C_engine.Generator | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L337",
-      "subcategory": null,
-      "summary": "Return a tensor of samples drawn from the continuous uniform distribution.",
-      "extended": "Each element is drawn independently from $U[0, 1)$, the uniform\ndistribution on the half-open unit interval:\n\n$$\nX_i \\sim U[0, 1), \\quad\nf_X(x) = \\begin{cases} 1 & 0 \\le x < 1 \\\\ 0 & \\text{otherwise} \\end{cases}\n$$\n\nThe distribution has mean $\\mathbb{E}[X] = \\tfrac{1}{2}$ and variance\n$\\operatorname{Var}[X] = \\tfrac{1}{12}$.",
-      "parameters": [
-        {
-          "name": "*size",
-          "annotation": "int or tuple[int, ...]",
-          "description": "Shape of the output tensor.  Accepts varargs `rand(2, 3)` or a\nsingle tuple `rand((2, 3))`.",
-          "default": null
-        },
-        {
-          "name": "dtype",
-          "annotation": "lucid.dtype",
-          "description": "Floating-point data type.  Defaults to the global default\n(`lucid.float32`).  Integer dtypes are not supported.",
-          "default": null
-        },
-        {
-          "name": "device",
-          "annotation": "str or lucid.device",
-          "description": "Target device — `\"cpu\"` or `\"metal\"`.",
-          "default": null
-        },
-        {
-          "name": "requires_grad",
-          "annotation": "bool",
-          "description": "If `True`, downstream operations are tracked by autograd.\nDefault: `False`.",
-          "default": null
-        },
-        {
-          "name": "generator",
-          "annotation": "lucid._C.engine.Generator",
-          "description": "Explicit generator to use.  When `None` (default), the global\ndefault generator is used.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "Tensor of shape `size` with values in $[0, 1)$."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> lucid.manual_seed(0)\n>>> x = lucid.rand(3, 4)\n>>> x.shape\n(3, 4)\n>>> float(x.min()) >= 0.0 and float(x.max()) < 1.0\nTrue\nMonte-Carlo estimate of $\\pi$:\n>>> lucid.manual_seed(0)\n>>> n = 1_000_000\n>>> pts = lucid.rand(n, 2)\n>>> inside = ((pts ** 2).sum(dim=-1) < 1.0).float().mean()\n>>> abs(float(inside) * 4 - 3.1416) < 0.01\nTrue"
-      ],
-      "notes": [
-        "Internally the engine applies the Philox bijection and converts the\nraw 32-bit output to a float via the standard IEEE 754 mantissa trick:\n\n\n\n$$\n\\begin{aligned}\nx = (u \\;\\&\\; \\texttt{0x007FFFFF}) \\;\\big|\\; \\texttt{0x3F800000}\n\\;\\text{(reinterpreted as float32)} \\;-\\; 1.0\n\\end{aligned}\n$$\n\nyielding $2^{23}$ equally spaced values in $[0, 1)$ with spacing\n$2^{-23} \\approx 1.19 \\times 10^{-7}$."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "randn",
-      "path": "lucid.randn",
-      "kind": "function",
-      "labels": [],
-      "signature": "randn(size: _int | tuple[_int, ...] = (), dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False, generator: _C_engine.Generator | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L344",
-      "subcategory": null,
-      "summary": "Return a tensor of samples drawn from the standard normal distribution.",
-      "extended": "Each element is drawn independently from $\\mathcal{N}(0, 1)$, the\nstandard Gaussian with zero mean and unit variance:\n\n$$\nX_i \\sim \\mathcal{N}(0, 1), \\quad\nf_X(x) = \\frac{1}{\\sqrt{2\\pi}}\\, e^{-x^2 / 2}\n$$\n\nThe distribution has mean $\\mathbb{E}[X] = 0$, variance\n$\\operatorname{Var}[X] = 1$, and all odd central moments zero.",
-      "parameters": [
-        {
-          "name": "*size",
-          "annotation": "int or tuple[int, ...]",
-          "description": "Shape of the output tensor.",
-          "default": null
-        },
-        {
-          "name": "dtype",
-          "annotation": "lucid.dtype",
-          "description": "Floating-point data type.  Defaults to the global default.",
-          "default": null
-        },
-        {
-          "name": "device",
-          "annotation": "str or lucid.device",
-          "description": "Target device — `\"cpu\"` or `\"metal\"`.",
-          "default": null
-        },
-        {
-          "name": "requires_grad",
-          "annotation": "bool",
-          "description": "Enable autograd tracking.  Default: `False`.",
-          "default": null
-        },
-        {
-          "name": "generator",
-          "annotation": "lucid._C.engine.Generator",
-          "description": "Explicit generator.  Defaults to the global default generator.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "Tensor of shape `size` with $\\mathcal{N}(0, 1)$ samples."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> lucid.manual_seed(0)\n>>> x = lucid.randn(1000)\n>>> abs(float(x.mean())) < 0.1       # ≈ 0\nTrue\n>>> abs(float(x.std()) - 1.0) < 0.1  # ≈ 1\nTrue\nKaiming initialisation for a linear layer:\n>>> fan_in = 256\n>>> w = lucid.randn(fan_in, 512) * (2.0 / fan_in) ** 0.5"
-      ],
-      "notes": [
-        "The engine uses the **Box–Muller transform** to convert pairs of\nuniform samples $(u_1, u_2) \\sim U(0,1)^2$ into standard normals:\n\n\n\n$$\nz_1 = \\sqrt{-2\\ln u_1}\\,\\cos(2\\pi u_2), \\quad\nz_2 = \\sqrt{-2\\ln u_1}\\,\\sin(2\\pi u_2)\n$$\n\nThis is exact (not approximate) and is highly efficient on SIMD\nhardware because the two outputs $z_1, z_2$ can be produced\nsimultaneously from one pair of uniform draws.\n\n**Xavier / Glorot initialisation** (Glorot & Bengio, 2010) uses\n$\\mathcal{N}(0, \\sigma^2)$ with\n\n\n\n$$\n\\sigma = \\sqrt{\\frac{2}{n_\\text{in} + n_\\text{out}}}\n$$\n\nwhich can be obtained as `randn(fan_in, fan_out) * sigma`.\n\n**[He / Kaiming initialisation** (He et al., 2015)](https://arxiv.org/abs/1502.01852) for ReLU networks\nuses $\\sigma = \\sqrt{2 / n_\\text{in}}$."
-      ],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "randint",
-      "path": "lucid.randint",
-      "kind": "function",
-      "labels": [],
-      "signature": "randint(low: _int, high: _int, size: list[_int] | tuple[_int, ...], dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False, generator: _C_engine.Generator | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L351",
-      "subcategory": null,
-      "summary": "Return a tensor of samples drawn from the discrete uniform distribution.",
-      "extended": "Each element is drawn independently and uniformly from the integer set\n$\\{l, l+1, \\ldots, h-1\\}$, i.e. the discrete uniform distribution:\n\n$$\nX_i \\sim \\mathcal{U}\\{l,\\, h-1\\}, \\quad\nP(X_i = k) = \\frac{1}{h - l}\n\\quad \\forall\\; k \\in \\{l, \\ldots, h-1\\}\n$$\n\nThe distribution has mean $\\mathbb{E}[X] = \\tfrac{l + h - 1}{2}$ and\nvariance $\\operatorname{Var}[X] = \\tfrac{(h-l)^2 - 1}{12}$.",
-      "parameters": [
-        {
-          "name": "low",
-          "annotation": "int",
-          "description": "Lower bound of the interval (inclusive).",
-          "default": null
-        },
-        {
-          "name": "high",
-          "annotation": "int",
-          "description": "Upper bound of the interval (exclusive).  Must satisfy\n`high > low`.",
-          "default": null
-        },
-        {
-          "name": "size",
-          "annotation": "list[int] or tuple[int, ...]",
-          "description": "Shape of the output tensor.  Unlike `rand` / `randn`, `size`\nis a single required keyword-positional argument, not varargs.",
-          "default": null
-        },
-        {
-          "name": "dtype",
-          "annotation": "lucid.dtype",
-          "description": "Integer data type.  Defaults to `lucid.int64`.",
-          "default": null
-        },
-        {
-          "name": "device",
-          "annotation": "str or lucid.device",
-          "description": "Target device — `\"cpu\"` or `\"metal\"`.",
-          "default": null
-        },
-        {
-          "name": "requires_grad",
-          "annotation": "bool",
-          "description": "Enable autograd tracking.  Default: `False`.  Gradients through\ninteger tensors are always zero; this flag is accepted for\ncompatibility with downstream wrappers.",
-          "default": null
-        },
-        {
-          "name": "generator",
-          "annotation": "lucid._C.engine.Generator",
-          "description": "Explicit generator.  Defaults to the global default generator.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "Integer tensor of shape `size` with values in $[l, h)$."
-      },
-      "raises": [
-        {
-          "annotation": "lucid._C.engine.InvalidArgument",
-          "description": "`high <= low`, or `dtype` cannot hold `low` or `high - 1`\n(`int8` past 127): such a draw used to wrap round."
-        }
-      ],
-      "examples": [
-        ">>> import lucid\n>>> lucid.manual_seed(0)\n>>> x = lucid.randint(0, 10, (5,))\n>>> x.shape, x.dtype\n((5,), lucid.int64)\n>>> bool(((x >= 0) & (x < 10)).all())\nTrue\n>>> idx = lucid.randint(0, 1024, (64,))  # sample 64 indices\n>>> mask = lucid.randint(0, 2, (3, 4))  # values in {0, 1}"
-      ],
-      "notes": [
-        "The engine generates the integers via\n$X_i = l + \\lfloor U_i \\cdot (h - l) \\rfloor$ for $U_i \\sim U[0, 1)$,\ngiving an exact discrete uniform distribution with no\nacceptance–rejection overhead.  Common uses include sampling mini-batch\nindices, generating random class labels, and stochastic depth masks."
       ],
       "attributes": [],
       "warns": [],
@@ -1498,7 +1310,7 @@
       "kind": "function",
       "labels": [],
       "signature": "bernoulli(input: Tensor, p: _float | None = None, generator: _C_engine.Generator | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L361",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L392",
       "subcategory": null,
       "summary": "Draw binary random numbers (`0` or `1`) from a Bernoulli distribution.",
       "extended": "The `input` tensor holds probabilities in $[0, 1]$ to be used for\ndrawing the binary random number, unless scalar `p` is supplied, in which\ncase `input` provides only the output shape, dtype, and device while each\nelement is drawn from $\\text{Bernoulli}(p)$.\n\n$$\n\\text{out}_i \\sim \\text{Bernoulli}(p_i), \\quad\nP(\\text{out}_i = 1) = p_i, \\quad P(\\text{out}_i = 0) = 1 - p_i\n$$",
@@ -1528,78 +1340,9 @@
       },
       "raises": [],
       "examples": [
-        ">>> import lucid\n>>> lucid.manual_seed(0)\n>>> probs = lucid.full((10_000,), 0.3)\n>>> x = lucid.bernoulli(probs)\n>>> sorted(set(x.tolist()))                      # only zeros and ones\n[0.0, 1.0]\n>>> abs(float(x.mean()) - 0.3) < 0.02            # ≈ 30 % ones\nTrue"
+        ">>> import lucid\n>>> _ = lucid.manual_seed(0)\n>>> probs = lucid.full((10_000,), 0.3)\n>>> x = lucid.bernoulli(probs)\n>>> sorted(set(x.tolist()))                      # only zeros and ones\n[0.0, 1.0]\n>>> abs(float(x.mean()) - 0.3) < 0.02            # ≈ 30 % ones\nTrue"
       ],
       "notes": [],
-      "attributes": [],
-      "warns": [],
-      "see_also": []
-    },
-    {
-      "name": "normal",
-      "path": "lucid.normal",
-      "kind": "function",
-      "labels": [],
-      "signature": "normal(mean: _float = 0.0, std: _float = 1.0, size: list[_int] | tuple[_int, ...], dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False, generator: _C_engine.Generator | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L367",
-      "subcategory": null,
-      "summary": "Return a tensor of samples drawn from a parametric normal distribution.",
-      "extended": "Each element is drawn independently from $\\mathcal{N}(\\mu, \\sigma^2)$:\n\n$$\nX_i \\sim \\mathcal{N}(\\mu,\\, \\sigma^2), \\quad\nf_X(x) = \\frac{1}{\\sigma\\sqrt{2\\pi}}\\,\n         \\exp\\!\\left(-\\frac{(x-\\mu)^2}{2\\sigma^2}\\right)\n$$\n\nwith mean $\\mathbb{E}[X_i] = \\mu$ and standard deviation\n$\\sqrt{\\operatorname{Var}[X_i]} = \\sigma$.",
-      "parameters": [
-        {
-          "name": "mean",
-          "annotation": "float",
-          "description": "Mean $\\mu$ of the distribution.  Default: `0.0`.",
-          "default": null
-        },
-        {
-          "name": "std",
-          "annotation": "float",
-          "description": "Standard deviation $\\sigma > 0$.  Default: `1.0`.",
-          "default": null
-        },
-        {
-          "name": "size",
-          "annotation": "list[int] or tuple[int, ...]",
-          "description": "Shape of the output tensor.  Required (keyword-only).",
-          "default": null
-        },
-        {
-          "name": "dtype",
-          "annotation": "lucid.dtype",
-          "description": "Floating-point data type.  Defaults to the global default.",
-          "default": null
-        },
-        {
-          "name": "device",
-          "annotation": "str or lucid.device",
-          "description": "Target device — `\"cpu\"` or `\"metal\"`.",
-          "default": null
-        },
-        {
-          "name": "requires_grad",
-          "annotation": "bool",
-          "description": "Enable autograd tracking.  Default: `False`.",
-          "default": null
-        },
-        {
-          "name": "generator",
-          "annotation": "lucid._C.engine.Generator",
-          "description": "Explicit generator.  Defaults to the global default.",
-          "default": null
-        }
-      ],
-      "returns": {
-        "annotation": "Tensor",
-        "description": "Tensor of shape `size` with $\\mathcal{N}(\\mu, \\sigma^2)$ samples."
-      },
-      "raises": [],
-      "examples": [
-        ">>> import lucid\n>>> lucid.manual_seed(0)\n>>> x = lucid.normal(mean=5.0, std=2.0, size=(1000,))\n>>> abs(float(x.mean()) - 5.0) < 0.2\nTrue\n>>> abs(float(x.std()) - 2.0) < 0.2\nTrue\nHe-normal initialisation for a Conv2d kernel:\n>>> fan_in = 3 * 3 * 64          # kernel_h × kernel_w × C_in\n>>> w = lucid.normal(0.0, (2.0 / fan_in) ** 0.5, size=(128, 64, 3, 3))"
-      ],
-      "notes": [
-        "This is a convenience wrapper around `randn` with an affine shift:\n\n\n\n$$\nX = \\mu + \\sigma \\cdot Z, \\quad Z \\sim \\mathcal{N}(0, 1)\n$$\n\nThe output is therefore equivalent to\n`mean + std * lucid.randn(*size, ...)`.\n\n**Weight initialisation** recipes commonly parameterise the normal\ndistribution directly:\n\n* **LeCun normal** (LeCun et al., 1998):\n  $\\sigma = \\sqrt{1 / n_\\text{in}}$\n* **Glorot normal** (Glorot & Bengio, 2010):\n  $\\sigma = \\sqrt{2 / (n_\\text{in} + n_\\text{out})}$\n* **[He normal** (He et al., 2015)](https://arxiv.org/abs/1502.01852):\n  $\\sigma = \\sqrt{2 / n_\\text{in}}$"
-      ],
       "attributes": [],
       "warns": [],
       "see_also": []
@@ -1610,7 +1353,7 @@
       "kind": "function",
       "labels": [],
       "signature": "rand_like(input: Tensor, generator: _C_engine.Generator | None = None, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L377",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L426",
       "subcategory": null,
       "summary": "Return a $U[0,1)$ random tensor with the same shape, dtype, and device as `input`.",
       "extended": "Equivalent to `lucid.rand(t.shape, dtype=t.dtype, device=t.device)`,\nbut infers metadata from an existing tensor so the caller need not\nrepeat shape and type information.\n\nEach element is drawn independently from\n\n$$\nX_i \\sim U[0, 1)\n$$",
@@ -1667,7 +1410,7 @@
       "kind": "function",
       "labels": [],
       "signature": "randn_like(input: Tensor, generator: _C_engine.Generator | None = None, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L385",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L434",
       "subcategory": null,
       "summary": "Return a $\\mathcal{N}(0,1)$ random tensor with the same shape, dtype, and device as `input`.",
       "extended": "Equivalent to `lucid.randn(t.shape, dtype=t.dtype, device=t.device)`,\ninferring all metadata from an existing tensor.\n\nEach element is drawn independently from the standard normal:\n\n$$\nX_i \\sim \\mathcal{N}(0, 1), \\quad\nf_X(x) = \\frac{1}{\\sqrt{2\\pi}}\\,e^{-x^2/2}\n$$",
@@ -1724,7 +1467,7 @@
       "kind": "function",
       "labels": [],
       "signature": "randint_like(input: Tensor, low: _int = 0, high: _int | None = None, generator: _C_engine.Generator | None = None, dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L393",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L442",
       "subcategory": null,
       "summary": "Return random integers in $[\\text{low}, \\text{high})$ shaped like `input`.",
       "extended": "Each element is drawn independently and uniformly from\n$\\{l, l+1, \\ldots, h-1\\}$, as `randint` draws them, in `input`'s\nshape, dtype and device unless overridden.  Called with one bound by\nposition, `randint_like(x, 10)`, the bound is `high` and `low` is\n`0`; `low=` alone is refused, as by the reference.",
@@ -1791,7 +1534,7 @@
         }
       ],
       "examples": [
-        ">>> import lucid\n>>> lucid.manual_seed(0)\n>>> x = lucid.zeros(2, 3)\n>>> r = lucid.randint_like(x, 10)\n>>> r.shape, r.dtype\n((2, 3), lucid.float32)\n>>> bool(((r >= 0) & (r < 10)).all())\nTrue\n>>> lucid.randint_like(x, 3, 4, dtype=lucid.int64).tolist()\n[[3, 3, 3], [3, 3, 3]]"
+        ">>> import lucid\n>>> _ = lucid.manual_seed(0)\n>>> x = lucid.zeros(2, 3)\n>>> r = lucid.randint_like(x, 10)\n>>> r.shape, r.dtype\n((2, 3), lucid.float32)\n>>> bool(((r >= 0) & (r < 10)).all())\nTrue\n>>> lucid.randint_like(x, 3, 4, dtype=lucid.int64).tolist()\n[[3, 3, 3], [3, 3, 3]]"
       ],
       "notes": [
         "The integers are drawn as `int64` and cast to the result's dtype, so\nthe draw is the same on either device whatever that dtype is."
@@ -1806,7 +1549,7 @@
       "kind": "function",
       "labels": [],
       "signature": "randperm(n: _int, generator: _C_engine.Generator | None = None, dtype: DTypeLike = ..., device: DeviceLike = None, requires_grad: _bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/__init__.py#L403",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/__init__.py#L452",
       "subcategory": null,
       "summary": "Return a uniformly random permutation of the integers $0, 1, \\ldots, n-1$.",
       "extended": "Produces a rank-1 tensor containing a uniformly random element of\n$S_n$, the symmetric group of permutations on $n$ symbols.  Every\none of the $n!$ orderings is equally likely:\n\n$$\nP(\\sigma) = \\frac{1}{n!}\n\\quad \\forall\\; \\sigma \\in S_n\n$$",
@@ -1857,10 +1600,267 @@
         }
       ],
       "examples": [
-        ">>> import lucid\n>>> lucid.manual_seed(0)\n>>> sorted(lucid.randperm(5).tolist())   # every index exactly once\n[0, 1, 2, 3, 4]\nShuffle a dataset of 1024 examples in one line:\n>>> data = lucid.randn(1024, 16)\n>>> idx = lucid.randperm(1024)\n>>> shuffled = data[idx]\n>>> shuffled.shape\n(1024, 16)\nEdge cases:\n>>> lucid.randperm(0).shape\n(0,)\n>>> lucid.randperm(1).tolist()\n[0]"
+        ">>> import lucid\n>>> _ = lucid.manual_seed(0)\n>>> sorted(lucid.randperm(5).tolist())   # every index exactly once\n[0, 1, 2, 3, 4]\nShuffle a dataset of 1024 examples in one line:\n>>> data = lucid.randn(1024, 16)\n>>> idx = lucid.randperm(1024)\n>>> shuffled = data[idx]\n>>> shuffled.shape\n(1024, 16)\nEdge cases:\n>>> lucid.randperm(0).shape\n(0,)\n>>> lucid.randperm(1).tolist()\n[0]"
       ],
       "notes": [
         "The implementation uses the **lottery-ticket argsort trick**: assign\neach integer $k$ a uniform random key $u_k \\sim U[0,1)$ and return\nthe argsort of those keys:\n\n\n\n$$\n\\pi = \\operatorname{argsort}(u), \\quad u_k \\sim U[0,1)^n\n$$\n\nThis is equivalent to the Fisher–Yates shuffle in expectation and\nis more cache-friendly on SIMD hardware because the sort can be\nvectorised without branch-dependent swaps."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "normal",
+      "path": "lucid.normal",
+      "kind": "function",
+      "labels": [],
+      "signature": "normal(mean: float = 0.0, std: float = 1.0, size: list[int] | tuple[int, ...], dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: bool = False, generator: _C_engine.Generator | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/_factories/random.py#L839",
+      "subcategory": null,
+      "summary": "Return a tensor of samples drawn from a parametric normal distribution.",
+      "extended": "Each element is drawn independently from $\\mathcal{N}(\\mu, \\sigma^2)$:\n\n$$\nX_i \\sim \\mathcal{N}(\\mu,\\, \\sigma^2), \\quad\nf_X(x) = \\frac{1}{\\sigma\\sqrt{2\\pi}}\\,\n         \\exp\\!\\left(-\\frac{(x-\\mu)^2}{2\\sigma^2}\\right)\n$$\n\nwith mean $\\mathbb{E}[X_i] = \\mu$ and standard deviation\n$\\sqrt{\\operatorname{Var}[X_i]} = \\sigma$.",
+      "parameters": [
+        {
+          "name": "mean",
+          "annotation": "float or Tensor",
+          "description": "Mean $\\mu$ of the distribution.  Default: `0.0`.  A tensor\nselects the reference's tensor overloads (see Notes).",
+          "default": "0.0"
+        },
+        {
+          "name": "std",
+          "annotation": "float or Tensor",
+          "description": "Standard deviation $\\sigma \\ge 0$.  Default: `1.0`.",
+          "default": "1.0"
+        },
+        {
+          "name": "size",
+          "annotation": "list[int] or tuple[int, ...]",
+          "description": "Shape of the output tensor.  Required with a float `mean` and\n`std` (keyword, or third positional); none with a tensor.",
+          "default": null
+        },
+        {
+          "name": "dtype",
+          "annotation": "lucid.dtype",
+          "description": "Floating-point data type.  Defaults to the global default.",
+          "default": "None"
+        },
+        {
+          "name": "device",
+          "annotation": "str or lucid.device",
+          "description": "Target device — `\"cpu\"` or `\"metal\"`.",
+          "default": "None"
+        },
+        {
+          "name": "requires_grad",
+          "annotation": "bool",
+          "description": "Enable autograd tracking.  Default: `False`.",
+          "default": "False"
+        },
+        {
+          "name": "generator",
+          "annotation": "lucid._C.engine.Generator",
+          "description": "Explicit generator.  Defaults to the global default.",
+          "default": "None"
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "Tensor of shape `size` with $\\mathcal{N}(\\mu, \\sigma^2)$ samples."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> _ = lucid.manual_seed(0)\n>>> x = lucid.normal(mean=5.0, std=2.0, size=(1000,))\n>>> abs(float(x.mean()) - 5.0) < 0.2\nTrue\n>>> abs(float(x.std()) - 2.0) < 0.2\nTrue\n>>> lucid.normal(lucid.zeros(2, 3), lucid.ones(3)).shape  # per-element\n(2, 3)\n>>> lucid.normal(0.0, 1.0, (4,)).shape  # shape by position\n(4,)\nHe-normal initialisation for a Conv2d kernel:\n>>> fan_in = 3 * 3 * 64          # kernel_h × kernel_w × C_in\n>>> w = lucid.normal(0.0, (2.0 / fan_in) ** 0.5, size=(128, 64, 3, 3))"
+      ],
+      "notes": [
+        "This is a convenience wrapper around `randn` with an affine shift:\n\n\n\n$$\nX = \\mu + \\sigma \\cdot Z, \\quad Z \\sim \\mathcal{N}(0, 1)\n$$\n\nThe output is therefore equivalent to\n`mean + std * lucid.randn(*size, ...)`.\n\nWith a tensor `mean` or `std` it draws one sample per element of\ntheir broadcast shape, in the dtype they promote to, with no gradient to\neither; only `generator=` is taken besides.\n\n**Weight initialisation** recipes commonly parameterise the normal\ndistribution directly:\n\n* **LeCun normal** (LeCun et al., 1998):\n  $\\sigma = \\sqrt{1 / n_\\text{in}}$\n* **Glorot normal** (Glorot & Bengio, 2010):\n  $\\sigma = \\sqrt{2 / (n_\\text{in} + n_\\text{out})}$\n* **[He normal** (He et al., 2015)](https://arxiv.org/abs/1502.01852):\n  $\\sigma = \\sqrt{2 / n_\\text{in}}$"
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "rand",
+      "path": "lucid.rand",
+      "kind": "function",
+      "labels": [],
+      "signature": "rand(size: int | tuple[int, ...] = (), dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: bool = False, generator: _C_engine.Generator | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/_factories/random.py#L423",
+      "subcategory": null,
+      "summary": "Return a tensor of samples drawn from the continuous uniform distribution.",
+      "extended": "Each element is drawn independently from $U[0, 1)$, the uniform\ndistribution on the half-open unit interval:\n\n$$\nX_i \\sim U[0, 1), \\quad\nf_X(x) = \\begin{cases} 1 & 0 \\le x < 1 \\\\ 0 & \\text{otherwise} \\end{cases}\n$$\n\nThe distribution has mean $\\mathbb{E}[X] = \\tfrac{1}{2}$ and variance\n$\\operatorname{Var}[X] = \\tfrac{1}{12}$.",
+      "parameters": [
+        {
+          "name": "*size",
+          "annotation": "int or tuple[int, ...]",
+          "description": "Shape of the output tensor.  Accepts varargs `rand(2, 3)`, a\nsingle tuple `rand((2, 3))` or the keyword `rand(size=(2, 3))`.",
+          "default": "()"
+        },
+        {
+          "name": "dtype",
+          "annotation": "lucid.dtype",
+          "description": "Floating-point data type.  Defaults to the global default\n(`lucid.float32`).  Integer dtypes are not supported.",
+          "default": "None"
+        },
+        {
+          "name": "device",
+          "annotation": "str or lucid.device",
+          "description": "Target device — `\"cpu\"` or `\"metal\"`.",
+          "default": "None"
+        },
+        {
+          "name": "requires_grad",
+          "annotation": "bool",
+          "description": "If `True`, downstream operations are tracked by autograd.\nDefault: `False`.",
+          "default": "False"
+        },
+        {
+          "name": "generator",
+          "annotation": "lucid._C.engine.Generator",
+          "description": "Explicit generator to use.  When `None` (default), the global\ndefault generator is used.",
+          "default": "None"
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "Tensor of shape `size` with values in $[0, 1)$."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> _ = lucid.manual_seed(0)\n>>> x = lucid.rand(3, 4)\n>>> x.shape\n(3, 4)\n>>> float(x.min()) >= 0.0 and float(x.max()) < 1.0\nTrue\nMonte-Carlo estimate of $\\pi$:\n>>> _ = lucid.manual_seed(0)\n>>> n = 1_000_000\n>>> pts = lucid.rand(n, 2)\n>>> inside = ((pts ** 2).sum(dim=-1) < 1.0).float().mean()\n>>> abs(float(inside) * 4 - 3.1416) < 0.01\nTrue"
+      ],
+      "notes": [
+        "Internally the engine applies the Philox bijection and converts the\nraw 32-bit output to a float via the standard IEEE 754 mantissa trick:\n\n\n\n$$\n\\begin{aligned}\nx = (u \\;\\&\\; \\texttt{0x007FFFFF}) \\;\\big|\\; \\texttt{0x3F800000}\n\\;\\text{(reinterpreted as float32)} \\;-\\; 1.0\n\\end{aligned}\n$$\n\nyielding $2^{23}$ equally spaced values in $[0, 1)$ with spacing\n$2^{-23} \\approx 1.19 \\times 10^{-7}$."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "randint",
+      "path": "lucid.randint",
+      "kind": "function",
+      "labels": [],
+      "signature": "randint(low: int, high: int, size: list[int] | tuple[int, ...], dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: bool = False, generator: _C_engine.Generator | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/_factories/random.py#L604",
+      "subcategory": null,
+      "summary": "Return a tensor of samples drawn from the discrete uniform distribution.",
+      "extended": "Each element is drawn independently and uniformly from the integer set\n$\\{l, l+1, \\ldots, h-1\\}$, i.e. the discrete uniform distribution:\n\n$$\nX_i \\sim \\mathcal{U}\\{l,\\, h-1\\}, \\quad\nP(X_i = k) = \\frac{1}{h - l}\n\\quad \\forall\\; k \\in \\{l, \\ldots, h-1\\}\n$$\n\nThe distribution has mean $\\mathbb{E}[X] = \\tfrac{l + h - 1}{2}$ and\nvariance $\\operatorname{Var}[X] = \\tfrac{(h-l)^2 - 1}{12}$.",
+      "parameters": [
+        {
+          "name": "low",
+          "annotation": "int",
+          "description": "Lower bound of the interval (inclusive).  Leave it out for the\nreference's two-argument spelling `randint(high, size)`, which\ndraws from `[0, high)`.",
+          "default": null
+        },
+        {
+          "name": "high",
+          "annotation": "int",
+          "description": "Upper bound of the interval (exclusive).  Must satisfy\n`high > low`.",
+          "default": null
+        },
+        {
+          "name": "size",
+          "annotation": "list[int] or tuple[int, ...]",
+          "description": "Shape of the output tensor.  Unlike `rand` / `randn`, `size`\nis a single required keyword-positional argument, not varargs.",
+          "default": null
+        },
+        {
+          "name": "dtype",
+          "annotation": "lucid.dtype",
+          "description": "Integer data type.  Defaults to `lucid.int64`.",
+          "default": "None"
+        },
+        {
+          "name": "device",
+          "annotation": "str or lucid.device",
+          "description": "Target device — `\"cpu\"` or `\"metal\"`.",
+          "default": "None"
+        },
+        {
+          "name": "requires_grad",
+          "annotation": "bool",
+          "description": "Enable autograd tracking.  Default: `False`.  Gradients through\ninteger tensors are always zero; this flag is accepted for\ncompatibility with downstream wrappers.",
+          "default": "False"
+        },
+        {
+          "name": "generator",
+          "annotation": "lucid._C.engine.Generator",
+          "description": "Explicit generator.  Defaults to the global default generator.",
+          "default": "None"
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "Integer tensor of shape `size` with values in $[l, h)$."
+      },
+      "raises": [
+        {
+          "annotation": "lucid._C.engine.InvalidArgument",
+          "description": "`high <= low`, or `dtype` cannot hold `low` or `high - 1`\n(`int8` past 127): such a draw used to wrap round."
+        }
+      ],
+      "examples": [
+        ">>> import lucid\n>>> _ = lucid.manual_seed(0)\n>>> x = lucid.randint(0, 10, (5,))\n>>> x.shape, x.dtype\n((5,), lucid.int64)\n>>> bool(((x >= 0) & (x < 10)).all())\nTrue\n>>> lucid.randint(10, (5,)).shape  # high only: values in [0, 10)\n(5,)\n>>> idx = lucid.randint(0, 1024, (64,))  # sample 64 indices\n>>> mask = lucid.randint(0, 2, (3, 4))  # values in {0, 1}"
+      ],
+      "notes": [
+        "The engine generates the integers via\n$X_i = l + \\lfloor U_i \\cdot (h - l) \\rfloor$ for $U_i \\sim U[0, 1)$,\ngiving an exact discrete uniform distribution with no\nacceptance–rejection overhead.  Common uses include sampling mini-batch\nindices, generating random class labels, and stochastic depth masks."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "randn",
+      "path": "lucid.randn",
+      "kind": "function",
+      "labels": [],
+      "signature": "randn(size: int | tuple[int, ...] = (), dtype: DTypeLike = None, device: DeviceLike = None, requires_grad: bool = False, generator: _C_engine.Generator | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/_factories/random.py#L505",
+      "subcategory": null,
+      "summary": "Return a tensor of samples drawn from the standard normal distribution.",
+      "extended": "Each element is drawn independently from $\\mathcal{N}(0, 1)$, the\nstandard Gaussian with zero mean and unit variance:\n\n$$\nX_i \\sim \\mathcal{N}(0, 1), \\quad\nf_X(x) = \\frac{1}{\\sqrt{2\\pi}}\\, e^{-x^2 / 2}\n$$\n\nThe distribution has mean $\\mathbb{E}[X] = 0$, variance\n$\\operatorname{Var}[X] = 1$, and all odd central moments zero.",
+      "parameters": [
+        {
+          "name": "*size",
+          "annotation": "int or tuple[int, ...]",
+          "description": "Shape of the output tensor: varargs `randn(2, 3)`, a single tuple\n`randn((2, 3))` or the keyword `randn(size=(2, 3))`.",
+          "default": "()"
+        },
+        {
+          "name": "dtype",
+          "annotation": "lucid.dtype",
+          "description": "Floating-point data type.  Defaults to the global default.",
+          "default": "None"
+        },
+        {
+          "name": "device",
+          "annotation": "str or lucid.device",
+          "description": "Target device — `\"cpu\"` or `\"metal\"`.",
+          "default": "None"
+        },
+        {
+          "name": "requires_grad",
+          "annotation": "bool",
+          "description": "Enable autograd tracking.  Default: `False`.",
+          "default": "False"
+        },
+        {
+          "name": "generator",
+          "annotation": "lucid._C.engine.Generator",
+          "description": "Explicit generator.  Defaults to the global default generator.",
+          "default": "None"
+        }
+      ],
+      "returns": {
+        "annotation": "Tensor",
+        "description": "Tensor of shape `size` with $\\mathcal{N}(0, 1)$ samples."
+      },
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> _ = lucid.manual_seed(0)\n>>> x = lucid.randn(1000)\n>>> abs(float(x.mean())) < 0.1       # ≈ 0\nTrue\n>>> abs(float(x.std()) - 1.0) < 0.1  # ≈ 1\nTrue\nKaiming initialisation for a linear layer:\n>>> fan_in = 256\n>>> w = lucid.randn(fan_in, 512) * (2.0 / fan_in) ** 0.5"
+      ],
+      "notes": [
+        "The engine uses the **Box–Muller transform** to convert pairs of\nuniform samples $(u_1, u_2) \\sim U(0,1)^2$ into standard normals:\n\n\n\n$$\nz_1 = \\sqrt{-2\\ln u_1}\\,\\cos(2\\pi u_2), \\quad\nz_2 = \\sqrt{-2\\ln u_1}\\,\\sin(2\\pi u_2)\n$$\n\nThis is exact (not approximate) and is highly efficient on SIMD\nhardware because the two outputs $z_1, z_2$ can be produced\nsimultaneously from one pair of uniform draws.\n\n**Xavier / Glorot initialisation** (Glorot & Bengio, 2010) uses\n$\\mathcal{N}(0, \\sigma^2)$ with\n\n\n\n$$\n\\sigma = \\sqrt{\\frac{2}{n_\\text{in} + n_\\text{out}}}\n$$\n\nwhich can be obtained as `randn(fan_in, fan_out) * sigma`.\n\n**[He / Kaiming initialisation** (He et al., 2015)](https://arxiv.org/abs/1502.01852) for ReLU networks\nuses $\\sigma = \\sqrt{2 / n_\\text{in}}$."
       ],
       "attributes": [],
       "warns": [],

@@ -3,7 +3,7 @@
   "name": "peft",
   "path": "lucid.peft",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/__init__.py#L1",
   "members": [
     {
       "name": "PeftConfig",
@@ -13,7 +13,7 @@
       "bases": [],
       "labels": [],
       "signature": "PeftConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_config.py#L316",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_config.py#L327",
       "subcategory": "config",
       "methods": [
         {
@@ -22,10 +22,10 @@
           "kind": "function",
           "labels": [],
           "signature": "to_dict()",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_config.py#L426",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_config.py#L440",
           "subcategory": "config",
           "summary": "Return the config as the JSON-ready dict `adapter_config.json` holds.",
-          "extended": "Enums become their strings and sets of module names sorted lists,\nso the result goes straight to `json.dumps` and back through\n`from_dict`.",
+          "extended": "Enums become their strings and sets of module names sorted lists,\nso the result goes straight to `json.dumps` and back through\n`from_dict`.  A field the reference's config of this method lacks\n(`IA3Config.layers_to_transform`) is written only when it is set,\nso a file that does not use it is one the reference reads too.",
           "parameters": [],
           "returns": {
             "annotation": "dict of str to object",
@@ -48,7 +48,7 @@
             "classmethod"
           ],
           "signature": "from_dict(config_dict: Mapping[str, object])",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_config.py#L447",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_config.py#L489",
           "subcategory": "config",
           "summary": "Build a config from a dict such as a parsed `adapter_config.json`.",
           "extended": "The constructor cannot do this: a file from the reference carries\nkeys v1 has no field for.  Such a key is accepted only at a value\nthat turns its feature off — null, false or empty\n(`\"loftq_config\": {}`, `\"megatron_config\": null`) — and dropped (with\na warning if v1 does not know the key); at any other value it\nraises, as it would change what the adapter computes.  The\n`peft_version` provenance key is dropped.  Called on\n`PeftConfig`, the dict's `peft_type` picks the class.",
@@ -84,7 +84,7 @@
           "kind": "function",
           "labels": [],
           "signature": "save_pretrained(save_directory: str | os.PathLike[str])",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_config.py#L513",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_config.py#L555",
           "subcategory": "config",
           "summary": "Write `adapter_config.json` into `save_directory`.",
           "extended": "The file is the reference's: `to_dict` with its keys sorted,\nindented by two spaces.  The directory is created if missing.",
@@ -122,7 +122,7 @@
             "staticmethod"
           ],
           "signature": "from_json_file(path_json_file: str | os.PathLike[str])",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_config.py#L544",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_config.py#L586",
           "subcategory": "config",
           "summary": "Read a config file into the dict it holds, unchanged but for `runtime_config`.",
           "extended": "What `from_pretrained` reads before it chooses a config class: the\nfile's content as a dict, as the reference's `from_json_file` returns\nit.  `from_dict` turns it into a config.",
@@ -164,7 +164,7 @@
             "classmethod"
           ],
           "signature": "from_pretrained(pretrained_model_name_or_path: str | os.PathLike[str], subfolder: str | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_config.py#L591",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_config.py#L633",
           "subcategory": "config",
           "summary": "Read `adapter_config.json` from a local adapter directory.",
           "extended": "The file's `peft_type` picks the config class: called on\n`PeftConfig` this returns a `LoraConfig` for a LoRA adapter,\nand called on a method's own class it refuses the file of another\nmethod.",
@@ -210,7 +210,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_config.py#L1",
           "subcategory": "config",
           "summary": "Make the host; a method's host builds its adapter from `model` and `config` after this.",
           "extended": null,
@@ -292,11 +292,11 @@
       ],
       "labels": [],
       "signature": "PeftType()",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_config.py#L59",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_config.py#L60",
       "subcategory": "config",
       "methods": [],
       "summary": "The parameter-efficient method an adapter file holds.",
-      "extended": "The members are the reference library's `peft_type` strings, so a\nconfig file names its method the same way on both sides.\n`lucid.peft` implements `LORA`, `ADALORA`, `IA3`, `LOHA`, `LOKR`, `VERA` and\nthe prompt-learning methods `PROMPT_TUNING`, `PREFIX_TUNING` and `P_TUNING`;\nreading a file of any other type raises `NotImplementedError`.",
+      "extended": "The members are the reference library's `peft_type` strings, so a\nconfig file names its method the same way on both sides.\n`lucid.peft` implements `LORA`, `ADALORA`, `IA3`, `LOHA`, `LOKR`, `VERA`,\n`OFT`, `BOFT`, `HRA`, `FOURIERFT`, `LN_TUNING` and\nthe prompt-learning methods `PROMPT_TUNING`, `PREFIX_TUNING` and `P_TUNING`;\nreading a file of any other type raises `NotImplementedError`.",
       "parameters": [],
       "returns": null,
       "raises": [],
@@ -316,7 +316,7 @@
       ],
       "labels": [],
       "signature": "PromptLearningConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, num_virtual_tokens: int | None = None, token_dim: int | None = None, num_transformer_submodules: int | None = None, num_attention_heads: int | None = None, num_layers: int | None = None, modules_to_save: list[str] | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_config.py#L708",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_config.py#L750",
       "subcategory": "config",
       "methods": [
         {
@@ -325,7 +325,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, num_virtual_tokens: int | None = None, token_dim: int | None = None, num_transformer_submodules: int | None = None, num_attention_heads: int | None = None, num_layers: int | None = None, modules_to_save: list[str] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_config.py#L1",
           "subcategory": "config",
           "summary": "Make the host; a method's host builds its adapter from `model` and `config` after this.",
           "extended": null,
@@ -442,7 +442,7 @@
       ],
       "labels": [],
       "signature": "TaskType()",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_config.py#L96",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_config.py#L98",
       "subcategory": "config",
       "methods": [],
       "summary": "The task an adapter was trained for, as `adapter_config.json` records it.",
@@ -462,7 +462,7 @@
       "kind": "function",
       "labels": [],
       "signature": "get_peft_model(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_mapping.py#L10",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_mapping.py#L10",
       "subcategory": "mapping",
       "summary": "Adapt `model` with the method `peft_config` names and return it wrapped as a `lucid.peft.PeftModel`.",
       "extended": "The model is changed in place: each module `peft_config` selects\nbecomes an adapter layer of that method (LoRA, (IA)^3, LoHa, LoKr) around the\noriginal, and every parameter but the adapter's is frozen.  `peft_config`\nis not changed — the wrapper keeps a copy — with two additions the reference makes too: a\n`base_model_name_or_path` read from the model's `name_or_path`,\nwhen it has one, and, for a classification or question-answering\n`task_type`, the model's `classifier` / `score` / `qa_outputs`\nhead added to `modules_to_save` so that it trains.\n\nThe class returned follows `peft_config.task_type`:\n`PeftModelForCausalLM` for `\"CAUSAL_LM\"`, `PeftModelForSeq2SeqLM`,\n`PeftModelForSequenceClassification`, `PeftModelForTokenClassification`,\n`PeftModelForQuestionAnswering` and `PeftModelForFeatureExtraction`\nfor theirs (`MODEL_TYPE_TO_PEFT_MODEL_MAPPING` is the table), and a\nplain `PeftModel` when the config has no task.",
@@ -514,7 +514,7 @@
       "kind": "function",
       "labels": [],
       "signature": "inject_adapter_in_model(peft_config: PeftConfig, model: nn.Module, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_mapping.py#L71",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_mapping.py#L71",
       "subcategory": "mapping",
       "summary": "Put adapter layers into `model` in place and return it, without a wrapper.",
       "extended": "For code that manages the model itself: the model is adapted and\nfrozen exactly as by `lucid.peft.get_peft_model`, but returned\nbare, so its state dict keeps its own key names (plus `base_layer` /\n`lora_A` / `lora_B` under each adapted layer).\n`lucid.peft.get_peft_model_state_dict` reads the adapter out\nof it.  Note the argument order, the reference's: config first.",
@@ -561,7 +561,7 @@
       ],
       "labels": [],
       "signature": "PeftModel(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L83",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L83",
       "subcategory": "peft_model",
       "methods": [
         {
@@ -570,7 +570,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L163",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L163",
           "subcategory": "peft_model",
           "summary": "Make the host; a method's host builds its adapter from `model` and `config` after this.",
           "extended": null,
@@ -594,7 +594,7 @@
             "property"
           ],
           "signature": "peft_config: dict[str, PeftConfig]",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L177",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L177",
           "summary": "Each adapter's config by adapter name (`\"all-linear\"` spelled out).",
           "extended": null,
           "parameters": [],
@@ -617,7 +617,7 @@
             "property"
           ],
           "signature": "active_adapter: str | list[str]",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L182",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L182",
           "summary": "Name of the adapter in use (a list once `delete_adapter` leaves several or none).",
           "extended": null,
           "parameters": [],
@@ -640,7 +640,7 @@
             "property"
           ],
           "signature": "active_adapters: list[str]",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L187",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L187",
           "summary": "The adapters in use, as a list.",
           "extended": null,
           "parameters": [],
@@ -661,9 +661,9 @@
           "kind": "function",
           "labels": [],
           "signature": "get_base_model()",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L191",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L191",
           "subcategory": "peft_model",
-          "summary": "Return the adapted model itself — the one passed in, now holding LoRA layers.",
+          "summary": "Return the adapted model itself — the one passed in, now holding adapter layers.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -683,7 +683,7 @@
           "kind": "function",
           "labels": [],
           "signature": "add_adapter(adapter_name: str, peft_config: PeftConfig, low_cpu_mem_usage: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L195",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L195",
           "subcategory": "peft_model",
           "summary": "Add an adapter beside the ones the model holds.",
           "extended": "The new adapter is initialised, not trained, and starts frozen and\ninactive: the model computes what it computed, and every parameter\nkeeps its `requires_grad`.  Switch to it with `set_adapter`.\nModules an earlier adapter wraps take the new one beside it; a\nclassification or question-answering `task_type` adds the model's\nhead to `modules_to_save` as `get_peft_model` does.",
@@ -731,7 +731,7 @@
           "kind": "function",
           "labels": [],
           "signature": "set_adapter(adapter_name: str, inference_mode: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L244",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L244",
           "subcategory": "peft_model",
           "summary": "Make `adapter_name` the adapter in use.",
           "extended": "Only the one adapter applies.  It trains, and every other adapter is\nfrozen, unless `inference_mode`.  A merged model is unmerged\nfirst; layers that hold nothing of the adapter run their base alone.",
@@ -771,7 +771,7 @@
           "kind": "function",
           "labels": [],
           "signature": "delete_adapter(adapter_name: str)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L265",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L265",
           "subcategory": "peft_model",
           "summary": "Remove an adapter, its config and its `modules_to_save` copies from the model.",
           "extended": "If it was the one in use, the first of the others (by name) takes\nover, with a warning.  Deleting the last adapter leaves a model\nthat applies nothing; `unload()` takes the layers out.",
@@ -798,7 +798,7 @@
           "kind": "function",
           "labels": [],
           "signature": "set_requires_grad(adapter_names: str | Sequence[str], requires_grad: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L279",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L279",
           "subcategory": "peft_model",
           "summary": "Enable or disable gradients on the named adapter(s), leaving the rest as they are.",
           "extended": null,
@@ -838,7 +838,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(args: object = (), adapter_names: Sequence[str] | None = None, kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L306",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L306",
           "subcategory": "peft_model",
           "summary": "Run the adapted model; every other argument goes to it as given.",
           "extended": null,
@@ -890,7 +890,7 @@
           "kind": "function",
           "labels": [],
           "signature": "get_nb_trainable_parameters()",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L363",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L363",
           "subcategory": "peft_model",
           "summary": "Return `(trainable, total)` parameter counts, each shared parameter once.",
           "extended": null,
@@ -912,7 +912,7 @@
           "kind": "function",
           "labels": [],
           "signature": "get_layer_status()",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L373",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L373",
           "subcategory": "peft_model",
           "summary": "The state of each adapter layer: see `lucid.peft.get_layer_status`.",
           "extended": null,
@@ -934,7 +934,7 @@
           "kind": "function",
           "labels": [],
           "signature": "get_model_status()",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L377",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L377",
           "subcategory": "peft_model",
           "summary": "The state of the model's adapters as a whole: see `lucid.peft.get_model_status`.",
           "extended": null,
@@ -956,7 +956,7 @@
           "kind": "function",
           "labels": [],
           "signature": "print_trainable_parameters()",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L381",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L381",
           "subcategory": "peft_model",
           "summary": "Print the trainable / total parameter counts and their ratio.",
           "extended": null,
@@ -980,7 +980,7 @@
           "kind": "function",
           "labels": [],
           "signature": "disable_adapter()",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L399",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L399",
           "subcategory": "peft_model",
           "summary": "Run the base model alone inside the `with` block.",
           "extended": "LoRA updates are skipped (a merged layer is unmerged on entry, and\nstays unmerged after) and every `modules_to_save` module runs as\nthe original; the adapter comes back when the block exits, even on\nan exception.  Blocks nest: the adapter stays off until the\noutermost one exits.  Merging inside the block is refused.  A\ncompiled model follows the switch: the state it branches on is\npart of its cache key.",
@@ -1004,7 +1004,7 @@
           "kind": "function",
           "labels": [],
           "signature": "merge_and_unload(progressbar: bool = False, safe_merge: bool = False, adapter_names: list[str] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L426",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L426",
           "subcategory": "peft_model",
           "summary": "Fold the adapter(s) into the base model and hand the base model back.",
           "extended": "For deployment: the result runs at the base model's cost and saves,\nexports and compiles as an ordinary model.  This wrapper is spent\nafterwards, and adapters that were not folded in are gone with it.",
@@ -1052,14 +1052,14 @@
           "kind": "function",
           "labels": [],
           "signature": "unload()",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L474",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L474",
           "subcategory": "peft_model",
           "summary": "Remove the adapter without merging and return the original model.",
           "extended": null,
           "parameters": [],
           "returns": {
             "annotation": "nn.Module",
-            "description": "The model, each LoRA layer replaced by the `nn.Linear` it wrapped."
+            "description": "The model, each adapter layer replaced by the module it wrapped."
           },
           "raises": [],
           "examples": [],
@@ -1074,7 +1074,7 @@
           "kind": "function",
           "labels": [],
           "signature": "save_pretrained(save_directory: str | os.PathLike[str], safe_serialization: bool = True, selected_adapters: list[str] | None = None, path_initial_model_for_weight_conversion: str | os.PathLike[str] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L499",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L499",
           "subcategory": "peft_model",
           "summary": "Write the adapters — not the base model — under `save_directory`.",
           "extended": "Per adapter, the reference library's two files:\n`adapter_config.json` (with `inference_mode` set, as the\nreference stores it, and the base model's class as `auto_mapping`)\nand `adapter_model.safetensors`, keyed by\n`lucid.peft.get_peft_model_state_dict`.  The adapter named\n`\"default\"` goes into `save_directory` itself, every other into\na sub-directory of its own name, as the reference lays it out; an\nadapter is read back from the directory that holds its two files\n(`PeftModel.from_pretrained` / `load_adapter`).",
@@ -1146,10 +1146,10 @@
             "classmethod"
           ],
           "signature": "from_pretrained(model: nn.Module, model_id: str | os.PathLike[str], adapter_name: str = 'default', is_trainable: bool = False, config: PeftConfig | None = None, subfolder: str | None = None, convert: ConvertMode = 'auto')",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L613",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L637",
           "subcategory": "peft_model",
           "summary": "Adapt `model` with the adapter saved in `model_id`.",
-          "extended": "Reads `adapter_config.json` (unless `config` is given) and\n`adapter_model.safetensors` — written by `save_pretrained`\nor by the reference library — injects the adapter into `model` in\nplace and loads its tensors.  If the tensors do not fit the model,\nthe injection is undone before the error is raised.  The class\nreturned follows the config's `task_type` as in\n`lucid.peft.get_peft_model`; only an adapter with no task\nis built as `cls`.",
+          "extended": "Reads `adapter_config.json` (unless `config` is given) and\n`adapter_model.safetensors` — written by `save_pretrained`\nor by the reference library — injects the adapter into `model` in\nplace and loads its tensors.  The adapter is built without its\ninitialisation's effect on the base, so an adapter saved from a PiSSA\nor OLoRA start loads onto the (rewritten) base it was trained beside\nas it was trained, and a pristine base is left as it is.  If the\ntensors do not fit the model, the injection is undone before the error\nis raised.  The class\nreturned follows the config's `task_type` as in\n`lucid.peft.get_peft_model`; only an adapter with no task\nis built as `cls`.",
           "parameters": [
             {
               "name": "model",
@@ -1226,7 +1226,7 @@
           "kind": "function",
           "labels": [],
           "signature": "load_adapter(model_id: str | os.PathLike[str], adapter_name: str, is_trainable: bool = False, low_cpu_mem_usage: bool = False, subfolder: str | None = None, convert: ConvertMode = 'auto')",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L715",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L739",
           "subcategory": "peft_model",
           "summary": "Load a saved adapter into the model, beside the ones it holds.",
           "extended": "An adapter the model does not hold is added from the directory's\nconfig and filled from its weights; the weights of one the model\nalready holds replace the values it has.  The loaded adapter is not\nmade the one in use — `set_adapter` does that.  Nothing changes\nif the files are missing or their tensors do not fit.",
@@ -1338,7 +1338,7 @@
       "kind": "function",
       "labels": [],
       "signature": "get_layer_status(model: nn.Module)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L815",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L841",
       "subcategory": "peft_model",
       "summary": "The state of each adapter layer of `model`: enabled, active, merged, trainable, and where.",
       "extended": "One `lucid.peft.TunerLayerStatus` per adapter layer and per\n`modules_to_save` module, in module order, named relative to the\nadapting tuner (`\"model.0\"` for a `PeftModel` around `net[0]`).",
@@ -1374,7 +1374,7 @@
       "kind": "function",
       "labels": [],
       "signature": "get_model_status(model: nn.Module)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_peft_model.py#L853",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_peft_model.py#L879",
       "subcategory": "peft_model",
       "summary": "The state of `model`'s adapters as a whole, folded from its layers.",
       "extended": "A field the layers disagree on reads `\"irregular\"` (see\n`lucid.peft.TunerModelStatus`): one layer enabled and another\nnot, an adapter merged on one layer and not on another that holds it,\nan adapter that trains in some layers and is frozen in others.",
@@ -1410,7 +1410,7 @@
       "kind": "function",
       "labels": [],
       "signature": "get_peft_model_state_dict(model: nn.Module, state_dict: Mapping[str, Tensor] | None = None, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_state_dict.py#L69",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_state_dict.py#L72",
       "subcategory": "state_dict",
       "summary": "Return the adapter's tensors under the keys an adapter file uses.",
       "extended": "That is `lora_A` / `lora_B` of every adapted layer, the trained\ncopy of every `modules_to_save` module and the biases `bias`\ntrains — keyed as the reference writes them, the adapter name taken\nout.  Called on a `PeftModel` the keys start `base_model.model.`,\nwhich is the reference's file layout.",
@@ -1445,7 +1445,7 @@
         },
         {
           "annotation": "RuntimeError",
-          "description": "The adapter was merged or unloaded, so no LoRA layer is left."
+          "description": "The adapter was merged or unloaded, so no adapter layer is left."
         },
         {
           "annotation": "KeyError",
@@ -1466,7 +1466,7 @@
       "kind": "function",
       "labels": [],
       "signature": "set_peft_model_state_dict(model: nn.Module, peft_model_state_dict: Mapping[str, Tensor], adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_state_dict.py#L124",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_state_dict.py#L127",
       "subcategory": "state_dict",
       "summary": "Load an adapter's tensors, keyed as an adapter file keys them, into `model`.",
       "extended": "Each key is mapped back to where the tensor lives in memory (the\nadapter name put back in) and copied into the existing parameter,\nwhich keeps its dtype, device and identity.  Every key is checked\nbefore anything is copied: one that lands nowhere, or a shape that\ndiffers, raises with the model untouched — an adapter loaded into the\nwrong model must not pass for a fresh one.  An adapter tensor the dict\ndoes not supply is reported in a warning and keeps its value.",
@@ -1520,7 +1520,7 @@
       "bases": [],
       "labels": [],
       "signature": "TunerLayerStatus(name: str, module_type: str, enabled: bool, active_adapters: list[str], merged_adapters: list[str], requires_grad: dict[str, GradState], available_adapters: list[str], devices: dict[str, list[str]])",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_status.py#L54",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_status.py#L54",
       "subcategory": "status",
       "methods": [
         {
@@ -1531,7 +1531,7 @@
             "classmethod"
           ],
           "signature": "of(name: str, slot: _AdapterSlot)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_status.py#L88",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_status.py#L88",
           "subcategory": "status",
           "summary": "The status of `slot`, found at `name`.",
           "extended": null,
@@ -1555,7 +1555,7 @@
             "classmethod"
           ],
           "signature": "all_of(root: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_status.py#L108",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_status.py#L108",
           "subcategory": "status",
           "summary": "The status of every adapter slot under `root`, in module order.",
           "extended": null,
@@ -1582,7 +1582,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(name: str, module_type: str, enabled: bool, active_adapters: list[str], merged_adapters: list[str], requires_grad: dict[str, GradState], available_adapters: list[str], devices: dict[str, list[str]])",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_status.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_status.py#L1",
           "subcategory": "status",
           "summary": null,
           "extended": null,
@@ -1659,7 +1659,7 @@
       "bases": [],
       "labels": [],
       "signature": "TunerModelStatus(base_model_type: str, adapter_model_type: str, peft_types: dict[str, str], trainable_params: int, total_params: int, num_adapter_layers: int, enabled: bool | Irregular, active_adapters: list[str] | Irregular, merged_adapters: list[str] | Irregular, requires_grad: dict[str, GradState], available_adapters: list[str], devices: dict[str, list[str]])",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_status.py#L136",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_status.py#L136",
       "subcategory": "status",
       "methods": [
         {
@@ -1670,7 +1670,7 @@
             "classmethod"
           ],
           "signature": "of(layers: Sequence[TunerLayerStatus], base_model_type: str, adapter_model_type: str, peft_types: dict[str, str], parameter_counts: tuple[int, int])",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_status.py#L182",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_status.py#L182",
           "subcategory": "status",
           "summary": "The model's status from its `layers` (at least one) and what the wrapper knows.",
           "extended": null,
@@ -1692,7 +1692,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(base_model_type: str, adapter_model_type: str, peft_types: dict[str, str], trainable_params: int, total_params: int, num_adapter_layers: int, enabled: bool | Irregular, active_adapters: list[str] | Irregular, merged_adapters: list[str] | Irregular, requires_grad: dict[str, GradState], available_adapters: list[str], devices: dict[str, list[str]])",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_status.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_status.py#L1",
           "subcategory": "status",
           "summary": null,
           "extended": null,
@@ -1786,7 +1786,7 @@
       ],
       "labels": [],
       "signature": "PeftModelForCausalLM(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_task_models.py#L80",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_task_models.py#L80",
       "subcategory": "task_models",
       "methods": [],
       "summary": "An adapted causal language model: the `PeftModel` for `task_type=\"CAUSAL_LM\"`.",
@@ -1834,7 +1834,7 @@
       ],
       "labels": [],
       "signature": "PeftModelForFeatureExtraction(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_task_models.py#L190",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_task_models.py#L190",
       "subcategory": "task_models",
       "methods": [],
       "summary": "An adapted feature encoder: the `PeftModel` for `task_type=\"FEATURE_EXTRACTION\"`.",
@@ -1882,7 +1882,7 @@
       ],
       "labels": [],
       "signature": "PeftModelForQuestionAnswering(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_task_models.py#L169",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_task_models.py#L169",
       "subcategory": "task_models",
       "methods": [],
       "summary": "An adapted question-answering model: the `PeftModel` for `task_type=\"QUESTION_ANS\"`.",
@@ -1930,7 +1930,7 @@
       ],
       "labels": [],
       "signature": "PeftModelForSeq2SeqLM(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_task_models.py#L107",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_task_models.py#L107",
       "subcategory": "task_models",
       "methods": [],
       "summary": "An adapted encoder-decoder model: the `PeftModel` for `task_type=\"SEQ_2_SEQ_LM\"`.",
@@ -1978,7 +1978,7 @@
       ],
       "labels": [],
       "signature": "PeftModelForSequenceClassification(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_task_models.py#L124",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_task_models.py#L124",
       "subcategory": "task_models",
       "methods": [],
       "summary": "An adapted sequence classifier: the `PeftModel` for `task_type=\"SEQ_CLS\"`.",
@@ -2026,7 +2026,7 @@
       ],
       "labels": [],
       "signature": "PeftModelForTokenClassification(model: nn.Module, peft_config: PeftConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/_task_models.py#L148",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/_task_models.py#L148",
       "subcategory": "task_models",
       "methods": [],
       "summary": "An adapted token classifier: the `PeftModel` for `task_type=\"TOKEN_CLS\"`.",
@@ -2074,7 +2074,7 @@
       ],
       "labels": [],
       "signature": "AutoPeftModel(args: object = (), kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/auto.py#L222",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/auto.py#L222",
       "subcategory": "auto",
       "methods": [],
       "summary": "Load an adapter that has no task, with its base model.",
@@ -2100,7 +2100,7 @@
       ],
       "labels": [],
       "signature": "AutoPeftModelForCausalLM(args: object = (), kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/auto.py#L272",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/auto.py#L272",
       "subcategory": "auto",
       "methods": [],
       "summary": "Load a causal language model's adapter with its base model.",
@@ -2126,7 +2126,7 @@
       ],
       "labels": [],
       "signature": "AutoPeftModelForFeatureExtraction(args: object = (), kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/auto.py#L361",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/auto.py#L361",
       "subcategory": "auto",
       "methods": [],
       "summary": "Load a feature encoder's adapter with its base model.",
@@ -2152,7 +2152,7 @@
       ],
       "labels": [],
       "signature": "AutoPeftModelForQuestionAnswering(args: object = (), kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/auto.py#L342",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/auto.py#L342",
       "subcategory": "auto",
       "methods": [],
       "summary": "Load a question-answering model's adapter with its base model.",
@@ -2178,7 +2178,7 @@
       ],
       "labels": [],
       "signature": "AutoPeftModelForSeq2SeqLM(args: object = (), kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/auto.py#L290",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/auto.py#L290",
       "subcategory": "auto",
       "methods": [],
       "summary": "Load an encoder-decoder model's adapter with its base model.",
@@ -2204,7 +2204,7 @@
       ],
       "labels": [],
       "signature": "AutoPeftModelForSequenceClassification(args: object = (), kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/auto.py#L308",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/auto.py#L308",
       "subcategory": "auto",
       "methods": [],
       "summary": "Load a sequence classifier's adapter with its base model.",
@@ -2230,7 +2230,7 @@
       ],
       "labels": [],
       "signature": "AutoPeftModelForTokenClassification(args: object = (), kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/auto.py#L325",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/auto.py#L325",
       "subcategory": "auto",
       "methods": [],
       "summary": "Load a token classifier's adapter with its base model.",
@@ -2256,7 +2256,7 @@
       ],
       "labels": [],
       "signature": "AdaLoraConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, target_r: int = 8, init_r: int = 12, tinit: int = 0, tfinal: int = 0, deltaT: int = 1, beta1: float = 0.85, beta2: float = 0.85, orth_reg_weight: float = 0.5, total_step: int | None = None, rank_pattern: dict[str, list[bool]] | None = None, r: int = 8, lora_alpha: float = 8, lora_dropout: float = 0.0, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'lora_only'] = 'none', init_lora_weights: bool = True)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/adalora/_config.py#L26",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/adalora/_config.py#L26",
       "subcategory": "tuners/adalora/config",
       "methods": [
         {
@@ -2265,7 +2265,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, target_r: int = 8, init_r: int = 12, tinit: int = 0, tfinal: int = 0, deltaT: int = 1, beta1: float = 0.85, beta2: float = 0.85, orth_reg_weight: float = 0.5, total_step: int | None = None, rank_pattern: dict[str, list[bool]] | None = None, r: int = 8, lora_alpha: float = 8, lora_dropout: float = 0.0, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'lora_only'] = 'none', init_lora_weights: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/adalora/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/adalora/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -2488,7 +2488,7 @@
       ],
       "labels": [],
       "signature": "AdaLoraModel(model: nn.Module, config: AdaLoraConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/adalora/_model.py#L49",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/adalora/_model.py#L49",
       "subcategory": "tuners/adalora/model",
       "methods": [
         {
@@ -2497,7 +2497,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(model: nn.Module, config: AdaLoraConfig, adapter_name: str = 'default')",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/adalora/_model.py#L112",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/adalora/_model.py#L112",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -2521,7 +2521,7 @@
             "property"
           ],
           "signature": "trainable_adapter_name: str | None",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/adalora/_model.py#L133",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/adalora/_model.py#L133",
           "summary": "The one adapter whose config is not `inference_mode`, or `None` if every adapter is for inference.",
           "extended": null,
           "parameters": [],
@@ -2544,7 +2544,7 @@
             "property"
           ],
           "signature": "rankallocator: RankAllocator",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/adalora/_model.py#L139",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/adalora/_model.py#L139",
           "summary": "The `RankAllocator` of the trainable adapter (built on first use, rebuilt if that adapter changes).",
           "extended": null,
           "parameters": [],
@@ -2570,7 +2570,7 @@
           "kind": "function",
           "labels": [],
           "signature": "add_weighted_adapter(args: object = (), kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/adalora/_model.py#L188",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/adalora/_model.py#L188",
           "subcategory": "model",
           "summary": "Not supported for AdaLoRA: its pruned, masked triplets have no weighted sum.",
           "extended": null,
@@ -2597,7 +2597,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(args: object = (), kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/adalora/_model.py#L216",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/adalora/_model.py#L216",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -2619,7 +2619,7 @@
           "kind": "function",
           "labels": [],
           "signature": "update_and_allocate(global_step: int)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/adalora/_model.py#L227",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/adalora/_model.py#L227",
           "subcategory": "model",
           "summary": "Record the importance of every triplet and, on schedule, mask the least important ones.",
           "extended": "Call it every training step, after `loss.backward()` and before the\ngradients are cleared.  `tinit`, `tfinal` and `deltaT` are\nhandled here: until `total_step - tfinal` the allocator masks down to\nthe falling budget; at that step it masks to `target_r` per layer,\nstores the rank pattern in the config and forgets the importances;\nafterwards it keeps the dropped triplets at zero.",
@@ -2653,7 +2653,7 @@
           "kind": "function",
           "labels": [],
           "signature": "resize_modules_by_rank_pattern(rank_pattern: Mapping[str, list[bool]], adapter_name: str)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/adalora/_model.py#L264",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/adalora/_model.py#L264",
           "subcategory": "model",
           "summary": "Drop the triplets a rank pattern marks as pruned from the layers, for good.",
           "extended": "The scale of what is kept does not change.  A layer already as small as\nits pattern asks is left alone.",
@@ -2730,6 +2730,750 @@
       "see_also": []
     },
     {
+      "name": "BOFTConfig",
+      "path": "lucid.peft.tuners.boft._config.BOFTConfig",
+      "kind": "class",
+      "class_kind": "dataclass",
+      "bases": [
+        "_TargetedConfig"
+      ],
+      "labels": [],
+      "signature": "BOFTConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, boft_block_size: int = 4, boft_block_num: int = 0, boft_n_butterfly_factor: int = 1, boft_dropout: float = 0.0, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'boft_only'] = 'none', init_weights: bool = True)",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/boft/_config.py#L20",
+      "subcategory": "tuners/boft/config",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.boft._config.BOFTConfig.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, boft_block_size: int = 4, boft_block_num: int = 0, boft_n_butterfly_factor: int = 1, boft_dropout: float = 0.0, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'boft_only'] = 'none', init_weights: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/boft/_config.py#L1",
+          "subcategory": "config",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "How `lucid.peft.get_peft_model` adapts a model with BOFT.",
+      "extended": "BOFT (Liu et al., 2023, [arXiv:2311.06243](https://arxiv.org/abs/2311.06243) — Butterfly Orthogonal Finetuning)\nfactors the orthogonal matrix OFT builds block-diagonally into a product of\n$m$ sparse orthogonal factors in butterfly order, so a small number of\nparameters spans a dense rotation of the input space:\n\n$$\n\\qquad M = M_{m-1}\\cdots M_1 M_0,\\quad M_i = P_i\\,B_i\\,P_i^\\top,\n$$\n\neach $B_i$ block-diagonal with Cayley-orthogonal blocks and\n$P_i$ a fixed butterfly permutation, $s$ a learned scale of the\noutput rows.  The blocks start at the identity and $s$ at one, so the adapted\nmodel starts as the base; the transform folds into the weight.  With\n`boft_n_butterfly_factor=1` the method is OFT.\n\nField names, defaults and `adapter_config.json` are the reference\nadapter library's.  Every field is keyword-only.",
+      "parameters": [
+        {
+          "name": "task_type",
+          "annotation": "TaskType or str",
+          "description": "The task the adapter is for (metadata; see `TaskType`).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "peft_type",
+          "annotation": "PeftType or str",
+          "description": "The method; filled in by the subclass when omitted, refused when\nit names another.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "auto_mapping",
+          "annotation": "dict of str to str",
+          "description": "The class of the base model, `{\"base_model_class\": name,\n\"parent_library\": module}` — what `AutoPeftModel*` rebuilds the\nbase with.  `PeftModel.save_pretrained` writes it.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "base_model_name_or_path",
+          "annotation": "str",
+          "description": "Name of the model the adapter was trained on (metadata).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "revision",
+          "annotation": "str",
+          "description": "Revision of that model (metadata).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "inference_mode",
+          "annotation": "bool",
+          "description": "Freeze the adapter too, for inference.",
+          "default": "False",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "target_modules",
+          "annotation": "str or list of str",
+          "description": "The `nn.Linear` / `nn.Conv2d` modules to adapt, matched as\n`LoraConfig.target_modules` is.  `None` takes the default for the base\nmodel's `model_type` (the LoRA table, as the reference does).",
+          "default": "None"
+        },
+        {
+          "name": "exclude_modules",
+          "annotation": "str or list of str",
+          "description": "Modules never adapted, matched like `target_modules`.",
+          "default": "None"
+        },
+        {
+          "name": "modules_to_save",
+          "annotation": "list of str",
+          "description": "Modules trained in full beside the adapter (a classifier head).",
+          "default": "None"
+        },
+        {
+          "name": "layers_to_transform",
+          "annotation": "int | list[int] | None",
+          "description": "As in `LoraConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "layers_pattern",
+          "annotation": "int | list[int] | None",
+          "description": "As in `LoraConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "boft_block_size",
+          "annotation": "int",
+          "description": "Size of each block.  Give exactly one of this and `boft_block_num`\n(their product is the layer's input size); set this to `0` when you give the number.",
+          "default": "4"
+        },
+        {
+          "name": "boft_block_num",
+          "annotation": "int",
+          "description": "Number of blocks per factor.",
+          "default": "0"
+        },
+        {
+          "name": "boft_n_butterfly_factor",
+          "annotation": "int",
+          "description": "Number of butterfly factors $m$.  Each extra factor doubles the\neffective block size of the rotation (and needs a block count divisible by two).",
+          "default": "1"
+        },
+        {
+          "name": "boft_dropout",
+          "annotation": "float",
+          "description": "During training, the probability of replacing a block of one randomly chosen factor by the identity.",
+          "default": "0.0"
+        },
+        {
+          "name": "fan_in_fan_out",
+          "annotation": "bool",
+          "description": "For bases that store their weight `(in, out)`.  `nn.Linear` does not,\nso `True` warns and is reset to `False`.",
+          "default": "False"
+        },
+        {
+          "name": "bias",
+          "annotation": "none",
+          "description": "The reference also offers `\"all\"` and `\"boft_only\"`; here the adapter\ntrains its own tensors only, and those raise `NotImplementedError`.",
+          "default": "\"none\""
+        },
+        {
+          "name": "init_weights",
+          "annotation": "bool",
+          "description": "`True`: the blocks start at zero (the identity rotation) and $s$ at one.\n`False`: both random (for tests).",
+          "default": "True"
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "TypeError",
+          "description": "A field holds a value of the wrong type."
+        },
+        {
+          "annotation": "ValueError",
+          "description": "A field is out of range, or the block size and the block count are both set or both zero."
+        },
+        {
+          "annotation": "NotImplementedError",
+          "description": "`bias` is not `\"none\"`."
+        }
+      ],
+      "examples": [
+        ">>> from lucid.peft import BOFTConfig\n>>> config = BOFTConfig(boft_block_size=4, boft_n_butterfly_factor=2, target_modules=[\"q\"])\n>>> config.boft_n_butterfly_factor, config.peft_type\n(2, <PeftType.BOFT: 'BOFT'>)\n>>> BOFTConfig.from_dict(config.to_dict()) == config\nTrue"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "BOFTModel",
+      "path": "lucid.peft.tuners.boft._model.BOFTModel",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_ConfigTuner"
+      ],
+      "labels": [],
+      "signature": "BOFTModel(model: nn.Module, config: BOFTConfig, adapter_name: str = 'default')",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/boft/_model.py#L12",
+      "subcategory": "tuners/boft/model",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.boft._model.BOFTModel.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(model: nn.Module, config: BOFTConfig, adapter_name: str = 'default')",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/boft/_model.py#L57",
+          "subcategory": "model",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "A model with BOFT layers in it, and the tools to take them out again.",
+      "extended": "A module that `config` selects is replaced by a\n`lucid.peft.tuners.boft.Linear` or `Conv2d` (chosen by its type) that\nholds the butterfly rotation and the row scale; all other parameters are\nfrozen.  The change is made in place, `model` keeps the wrapped model\nand answers for its public names, and `peft_config` holds `config` with the\ndefault targets resolved.  Add further adapters with `add_adapter` and\nchoose among them with `set_adapter`.",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The model to adapt.",
+          "default": null
+        },
+        {
+          "name": "config",
+          "annotation": "BOFTConfig",
+          "description": "What to adapt and how.",
+          "default": null
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the adapter, the key in `boft_R` and `boft_s`.",
+          "default": "\"default\""
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "ValueError",
+          "description": "Nothing matches `target_modules`, a match has no BOFT layer type, the\nblock sizes do not fit a match, or `modules_to_save` matches nothing."
+        },
+        {
+          "annotation": "NotImplementedError",
+          "description": "The model already holds adapter layers of another method, or a match is a grouped convolution."
+        }
+      ],
+      "examples": [
+        ">>> import lucid.nn as nn\n>>> from lucid.peft import BOFTConfig, BOFTModel\n>>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))\n>>> boft = BOFTModel(net, BOFTConfig(boft_block_size=4, target_modules=[\"0\"]))\n>>> boft.targeted_module_names\n['0']\n>>> net[0].base_layer.weight.requires_grad, net[0].boft_R[\"default\"].requires_grad\n(False, True)\n>>> boft.unload() is net, type(net[0]) is nn.Linear\n(True, True)"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "FourierFTConfig",
+      "path": "lucid.peft.tuners.fourierft._config.FourierFTConfig",
+      "kind": "class",
+      "class_kind": "dataclass",
+      "bases": [
+        "_TargetedConfig"
+      ],
+      "labels": [],
+      "signature": "FourierFTConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, n_frequency: int = 1000, scaling: float = 150.0, random_loc_seed: int = 777, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'fourier_only'] = 'none', n_frequency_pattern: dict[str, int] = dict(), init_weights: bool = False)",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/fourierft/_config.py#L31",
+      "subcategory": "tuners/fourierft/config",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.fourierft._config.FourierFTConfig.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, n_frequency: int = 1000, scaling: float = 150.0, random_loc_seed: int = 777, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'fourier_only'] = 'none', n_frequency_pattern: dict[str, int] = dict(), init_weights: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/fourierft/_config.py#L1",
+          "subcategory": "config",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "How `lucid.peft.get_peft_model` adapts a model with FourierFT.",
+      "extended": "FourierFT (Gao et al., 2024, [arXiv:2405.03003](https://arxiv.org/abs/2405.03003)) learns the weight update in\nthe frequency domain: a handful of coefficients $c_1 \\dots c_n$ of a\n$d_{out} \\times d_{in}$ spectrum, at fixed pseudo-random locations,\nand the inverse 2-D Fourier transform of that sparse spectrum is the update,\n\n$$\nS_{\\ell_j} = c_j,\n$$\n\nwith $\\alpha$ the `scaling`.  The locations come from\n`random_loc_seed` alone, so an adapter file holds only the $c_j$\n(`n_frequency` numbers per layer) and any copy of the model rebuilds the\nsame $\\Delta W$.  A targeted `nn.Linear` computes\n$f(x) + \\Delta W\\,x$; the update folds into the weight.\n\nField names, defaults and `adapter_config.json` are the reference\nadapter library's.  Every field is keyword-only.",
+      "parameters": [
+        {
+          "name": "task_type",
+          "annotation": "TaskType or str",
+          "description": "The task the adapter is for (metadata; see `TaskType`).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "peft_type",
+          "annotation": "PeftType or str",
+          "description": "The method; filled in by the subclass when omitted, refused when\nit names another.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "auto_mapping",
+          "annotation": "dict of str to str",
+          "description": "The class of the base model, `{\"base_model_class\": name,\n\"parent_library\": module}` — what `AutoPeftModel*` rebuilds the\nbase with.  `PeftModel.save_pretrained` writes it.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "base_model_name_or_path",
+          "annotation": "str",
+          "description": "Name of the model the adapter was trained on (metadata).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "revision",
+          "annotation": "str",
+          "description": "Revision of that model (metadata).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "inference_mode",
+          "annotation": "bool",
+          "description": "Freeze the adapter too, for inference.",
+          "default": "False",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "target_modules",
+          "annotation": "str or list of str",
+          "description": "The `nn.Linear` modules to adapt, matched as `LoraConfig.target_modules`\nis.  `None` takes the default for the base model's `model_type` (the\nLoRA table with `gpt2` narrowed to `mlp.c_proj`, as the reference does).",
+          "default": "None"
+        },
+        {
+          "name": "exclude_modules",
+          "annotation": "str or list of str",
+          "description": "Modules never adapted, matched like `target_modules`.",
+          "default": "None"
+        },
+        {
+          "name": "modules_to_save",
+          "annotation": "list of str",
+          "description": "Modules trained in full beside the adapter (a classifier head).",
+          "default": "None"
+        },
+        {
+          "name": "layers_to_transform",
+          "annotation": "int | list[int] | None",
+          "description": "As in `LoraConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "layers_pattern",
+          "annotation": "int | list[int] | None",
+          "description": "As in `LoraConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "n_frequency",
+          "annotation": "int",
+          "description": "Number of learned coefficients per layer; at most `d_out * d_in`.",
+          "default": "1000"
+        },
+        {
+          "name": "scaling",
+          "annotation": "float",
+          "description": "The scale $\\alpha$ of the update.",
+          "default": "150.0"
+        },
+        {
+          "name": "random_loc_seed",
+          "annotation": "int",
+          "description": "Seed of the generator that picks the locations.  The locations are\nthose the reference framework's CPU generator picks for the same seed.",
+          "default": "777"
+        },
+        {
+          "name": "fan_in_fan_out",
+          "annotation": "bool",
+          "description": "For bases that store their weight `(in, out)`.  `nn.Linear` does not,\nso `True` warns and is reset to `False`.",
+          "default": "False"
+        },
+        {
+          "name": "bias",
+          "annotation": "none",
+          "description": "The reference also offers `\"all\"` and `\"fourier_only\"`; here the adapter\ntrains its own coefficients only, and those raise `NotImplementedError`.",
+          "default": "\"none\""
+        },
+        {
+          "name": "n_frequency_pattern",
+          "annotation": "dict of str to int",
+          "description": "Per-module `n_frequency` overrides, keyed by name or regex suffix.",
+          "default": "dict()"
+        },
+        {
+          "name": "init_weights",
+          "annotation": "bool",
+          "description": "`False`: the coefficients start as a standard normal sample (the update is\nnon-zero from the start, as in the paper).  `True`: zeros.",
+          "default": "False"
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "TypeError",
+          "description": "A field holds a value of the wrong type."
+        },
+        {
+          "annotation": "ValueError",
+          "description": "A field is out of range."
+        },
+        {
+          "annotation": "NotImplementedError",
+          "description": "`bias` is not `\"none\"`."
+        }
+      ],
+      "examples": [
+        ">>> from lucid.peft import FourierFTConfig\n>>> config = FourierFTConfig(n_frequency=200, scaling=300.0, target_modules=[\"q\", \"v\"])\n>>> config.n_frequency, config.peft_type\n(200, <PeftType.FOURIERFT: 'FOURIERFT'>)\n>>> FourierFTConfig.from_dict(config.to_dict()) == config\nTrue"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "FourierFTModel",
+      "path": "lucid.peft.tuners.fourierft._model.FourierFTModel",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_ConfigTuner"
+      ],
+      "labels": [],
+      "signature": "FourierFTModel(model: nn.Module, config: FourierFTConfig, adapter_name: str = 'default')",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/fourierft/_model.py#L17",
+      "subcategory": "tuners/fourierft/model",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.fourierft._model.FourierFTModel.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(model: nn.Module, config: FourierFTConfig, adapter_name: str = 'default')",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/fourierft/_model.py#L63",
+          "subcategory": "model",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "A model with FourierFT layers in it, and the tools to take them out again.",
+      "extended": "Modules named by `config` are wrapped in a\n`lucid.peft.tuners.fourierft.Linear` that adds the spectral update to\ntheir output while every other parameter stays frozen.  The model is edited\nin place and remains available as `model`; `peft_config` stores `config`\nwith the model type's default targets resolved.  Adapters coexist under their own\nnames (`add_adapter`, `set_adapter`, `delete_adapter`).",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The model to adapt.",
+          "default": null
+        },
+        {
+          "name": "config",
+          "annotation": "FourierFTConfig",
+          "description": "What to adapt and how.",
+          "default": null
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the adapter, the key in every `fourierft_spectrum`.",
+          "default": "\"default\""
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "ValueError",
+          "description": "Nothing matches `target_modules`, a match is not an `nn.Linear`,\n`n_frequency` is larger than a match's weight, or `modules_to_save`\nmatches nothing."
+        },
+        {
+          "annotation": "NotImplementedError",
+          "description": "The model already holds adapter layers of another method."
+        }
+      ],
+      "examples": [
+        ">>> import lucid.nn as nn\n>>> from lucid.peft import FourierFTConfig, FourierFTModel\n>>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))\n>>> fourier = FourierFTModel(net, FourierFTConfig(n_frequency=10, target_modules=[\"0\"]))\n>>> fourier.targeted_module_names\n['0']\n>>> net[0].base_layer.weight.requires_grad, net[0].fourierft_spectrum[\"default\"].requires_grad\n(False, True)\n>>> fourier.unload() is net, type(net[0]) is nn.Linear\n(True, True)"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "HRAConfig",
+      "path": "lucid.peft.tuners.hra._config.HRAConfig",
+      "kind": "class",
+      "class_kind": "dataclass",
+      "bases": [
+        "_TargetedConfig"
+      ],
+      "labels": [],
+      "signature": "HRAConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 8, apply_GS: bool = False, init_weights: bool = True, bias: Literal['none', 'all', 'hra_only'] = 'none')",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/hra/_config.py#L11",
+      "subcategory": "tuners/hra/config",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.hra._config.HRAConfig.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 8, apply_GS: bool = False, init_weights: bool = True, bias: Literal['none', 'all', 'hra_only'] = 'none')",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/hra/_config.py#L1",
+          "subcategory": "config",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "How `lucid.peft.get_peft_model` adapts a model with HRA.",
+      "extended": "HRA (Yuan et al., 2024, [arXiv:2405.17484](https://arxiv.org/abs/2405.17484) — Householder Reflection Adaptation)\nmultiplies each targeted weight from the right by a chain of $r$\nHouseholder reflections,\n\n$$\n\\qquad \\hat u_i = u_i / \\lVert u_i \\rVert,\n$$\n\nan orthogonal transform of the input space whose $r$ learned vectors\n$u_i$ are its only parameters ($r\\,d_{in}$ per layer).  With an even\n`r` the vectors start in equal pairs, so the chain is the identity and the\nadapted model starts as the base; the transform folds into the weight.\n\nField names, defaults and `adapter_config.json` are the reference\nadapter library's.  Every field is keyword-only.",
+      "parameters": [
+        {
+          "name": "task_type",
+          "annotation": "TaskType or str",
+          "description": "The task the adapter is for (metadata; see `TaskType`).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "peft_type",
+          "annotation": "PeftType or str",
+          "description": "The method; filled in by the subclass when omitted, refused when\nit names another.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "auto_mapping",
+          "annotation": "dict of str to str",
+          "description": "The class of the base model, `{\"base_model_class\": name,\n\"parent_library\": module}` — what `AutoPeftModel*` rebuilds the\nbase with.  `PeftModel.save_pretrained` writes it.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "base_model_name_or_path",
+          "annotation": "str",
+          "description": "Name of the model the adapter was trained on (metadata).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "revision",
+          "annotation": "str",
+          "description": "Revision of that model (metadata).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "inference_mode",
+          "annotation": "bool",
+          "description": "Freeze the adapter too, for inference.",
+          "default": "False",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "target_modules",
+          "annotation": "str or list of str",
+          "description": "The `nn.Linear` / `nn.Conv2d` modules to adapt, matched as\n`LoraConfig.target_modules` is.  `None` takes the default for the base\nmodel's `model_type` (the LoRA table, as the reference does).",
+          "default": "None"
+        },
+        {
+          "name": "exclude_modules",
+          "annotation": "str or list of str",
+          "description": "Modules never adapted, matched like `target_modules`.",
+          "default": "None"
+        },
+        {
+          "name": "modules_to_save",
+          "annotation": "int | list[int] | None",
+          "description": "As in `LoraConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "layers_to_transform",
+          "annotation": "int | list[int] | None",
+          "description": "As in `LoraConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "layers_pattern",
+          "annotation": "int | list[int] | None",
+          "description": "As in `LoraConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "r",
+          "annotation": "int",
+          "description": "Number of reflections.  Best even: an odd `r` cannot start at the identity.",
+          "default": "8"
+        },
+        {
+          "name": "apply_GS",
+          "annotation": "bool",
+          "description": "Orthonormalise the vectors with Gram-Schmidt before reflecting, so the\nchain is one $I - 2UU^\\top$.",
+          "default": "False"
+        },
+        {
+          "name": "init_weights",
+          "annotation": "bool",
+          "description": "`True`: the vectors start in equal pairs (the identity).  `False`: every\nvector Kaiming-uniform (for tests).",
+          "default": "True"
+        },
+        {
+          "name": "bias",
+          "annotation": "none",
+          "description": "The reference also offers `\"all\"` and `\"hra_only\"`; here the adapter\ntrains its own vectors only, and those raise `NotImplementedError`.",
+          "default": "\"none\""
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "TypeError",
+          "description": "A field is not of its type."
+        },
+        {
+          "annotation": "ValueError",
+          "description": "`r` is not positive."
+        },
+        {
+          "annotation": "NotImplementedError",
+          "description": "`bias` asks for trained biases."
+        }
+      ],
+      "examples": [
+        ">>> from lucid.peft import HRAConfig\n>>> config = HRAConfig(r=4, apply_GS=True, target_modules=[\"q_proj\", \"v_proj\"])\n>>> sorted(config.target_modules), config.peft_type\n(['q_proj', 'v_proj'], <PeftType.HRA: 'HRA'>)\n>>> HRAConfig.from_dict(config.to_dict()) == config\nTrue"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "HRAModel",
+      "path": "lucid.peft.tuners.hra._model.HRAModel",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_ConfigTuner"
+      ],
+      "labels": [],
+      "signature": "HRAModel(model: nn.Module, config: HRAConfig, adapter_name: str = 'default')",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/hra/_model.py#L12",
+      "subcategory": "tuners/hra/model",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.hra._model.HRAModel.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(model: nn.Module, config: HRAConfig, adapter_name: str = 'default')",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/hra/_model.py#L57",
+          "subcategory": "model",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "A model with HRA layers in it, and the tools to take them out again.",
+      "extended": "Every module `config` selects is wrapped in an\n`lucid.peft.tuners.hra.Linear` or `Conv2d` (by its type) whose\nweight a chain of reflections multiplies, and the rest of the model is frozen.\nThe model is changed in place and stays reachable as `model`, with unknown\npublic names read from it.  `peft_config` stores `config` with its default\ntargets filled in.  Several adapters can coexist (`add_adapter`,\n`set_adapter`, `delete_adapter`).",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The model to adapt.",
+          "default": null
+        },
+        {
+          "name": "config",
+          "annotation": "HRAConfig",
+          "description": "What to adapt and how.",
+          "default": null
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the adapter, the key in every `hra_u`.",
+          "default": "\"default\""
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "ValueError",
+          "description": "`target_modules` matches no module, or a match is neither linear nor\nconvolutional, or `modules_to_save` names nothing."
+        },
+        {
+          "annotation": "NotImplementedError",
+          "description": "Another method's layers are already in the model, or a match is a grouped convolution."
+        }
+      ],
+      "examples": [
+        ">>> import lucid.nn as nn\n>>> from lucid.peft import HRAConfig, HRAModel\n>>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))\n>>> hra = HRAModel(net, HRAConfig(r=4, target_modules=[\"0\"]))\n>>> hra.targeted_module_names\n['0']\n>>> net[0].base_layer.weight.requires_grad, net[0].hra_u[\"default\"].requires_grad\n(False, True)\n>>> hra.unload() is net, type(net[0]) is nn.Linear\n(True, True)"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
       "name": "IA3Config",
       "path": "lucid.peft.tuners.ia3._config.IA3Config",
       "kind": "class",
@@ -2739,7 +3483,7 @@
       ],
       "labels": [],
       "signature": "IA3Config(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, feedforward_modules: str | list[str] | set[str] | None = None, fan_in_fan_out: bool = False, init_ia3_weights: bool = True)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/ia3/_config.py#L16",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/ia3/_config.py#L16",
       "subcategory": "tuners/ia3/config",
       "methods": [
         {
@@ -2748,7 +3492,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, feedforward_modules: str | list[str] | set[str] | None = None, fan_in_fan_out: bool = False, init_ia3_weights: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/ia3/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/ia3/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -2766,7 +3510,7 @@
         }
       ],
       "summary": "How `lucid.peft.get_peft_model` adapts a model with (IA)^3.",
-      "extended": "(IA)^3 (Liu et al., 2022, [arXiv:2205.05638](https://arxiv.org/abs/2205.05638) — \"Infused Adapter by\nInhibiting and Amplifying Inner Activations\") freezes the model and learns\none vector $\\ell$ per targeted layer that rescales its **output**\nchannels, $y = \\ell \\odot (W x + b)$; for the feed-forward layers of\na block it rescales the **input** instead, $y = W (\\ell \\odot x) + b$.\nThe vector starts at ones, so the adapted model starts as the base, and it\nfolds into the weight (and bias), so a merged model costs what the base does.\n\nField names, defaults and `adapter_config.json` are the reference\nadapter library's.  Every field is keyword-only.  Unlike the reference's,\nthis config also takes `layers_to_transform` / `layers_pattern`, which\nselect layers the way `LoraConfig`'s do.",
+      "extended": "(IA)^3 (Liu et al., 2022, [arXiv:2205.05638](https://arxiv.org/abs/2205.05638) — \"Infused Adapter by\nInhibiting and Amplifying Inner Activations\") freezes the model and learns\none vector $\\ell$ per targeted layer that rescales its **output**\nchannels, $y = \\ell \\odot (W x + b)$; for the feed-forward layers of\na block it rescales the **input** instead, $y = W (\\ell \\odot x) + b$.\nThe vector starts at ones, so the adapted model starts as the base, and it\nfolds into the weight (and bias), so a merged model costs what the base does.\n\nField names, defaults and `adapter_config.json` are the reference\nadapter library's.  Every field is keyword-only.  Unlike the reference's,\nthis config also takes `layers_to_transform` / `layers_pattern`, which\nselect layers the way `LoraConfig`'s do; `adapter_config.json` holds\nthem only when they are set, and `from_pretrained` reads files with or\nwithout them.",
       "parameters": [
         {
           "name": "task_type",
@@ -2876,7 +3620,7 @@
       ],
       "labels": [],
       "signature": "IA3Model(model: nn.Module, config: IA3Config, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/ia3/_model.py#L37",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/ia3/_model.py#L37",
       "subcategory": "tuners/ia3/model",
       "methods": [
         {
@@ -2885,7 +3629,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(model: nn.Module, config: IA3Config, adapter_name: str = 'default')",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/ia3/_model.py#L93",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/ia3/_model.py#L93",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -2907,7 +3651,7 @@
           "kind": "function",
           "labels": [],
           "signature": "add_weighted_adapter(adapters: list[str], weights: list[float], adapter_name: str)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/ia3/_model.py#L140",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/ia3/_model.py#L140",
           "subcategory": "model",
           "summary": "Add an adapter whose vectors are the weighted sum of other adapters' vectors.",
           "extended": "The new adapter is frozen and inactive, like any added adapter.  It\ntargets the union of the sources' modules (and feed-forward modules);\na layer one source does not reach sums the sources it has.",
@@ -2992,6 +3736,202 @@
       "see_also": []
     },
     {
+      "name": "LNTuningConfig",
+      "path": "lucid.peft.tuners.ln_tuning._config.LNTuningConfig",
+      "kind": "class",
+      "class_kind": "dataclass",
+      "bases": [
+        "_TargetedConfig"
+      ],
+      "labels": [],
+      "signature": "LNTuningConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/ln_tuning/_config.py#L9",
+      "subcategory": "tuners/ln_tuning/config",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.ln_tuning._config.LNTuningConfig.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/ln_tuning/_config.py#L1",
+          "subcategory": "config",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "How `lucid.peft.get_peft_model` adapts a model with LN tuning.",
+      "extended": "LN tuning (Zhao et al., 2023, [arXiv:2312.11420](https://arxiv.org/abs/2312.11420) — \"Tuning LayerNorm in\nAttention\") trains the normalisation layers of a model and nothing else:\neach targeted layer gets a copy of itself that trains while the original\nstays frozen.  The method adds no tensor of its own, so it is a few\n$d$ parameters per layer; \"merging\" makes the trained copy the layer.\n\nField names, defaults and `adapter_config.json` are the reference\nadapter library's.  Every field is keyword-only.  Unlike the reference's, this\nconfig also takes `layers_to_transform` / `layers_pattern`, which select layers\nthe way `LoraConfig`'s do; `adapter_config.json` holds them only when they are\nset, and `from_pretrained` reads files with or without them.",
+      "parameters": [
+        {
+          "name": "task_type",
+          "annotation": "TaskType or str",
+          "description": "The task the adapter is for (metadata; see `TaskType`).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "peft_type",
+          "annotation": "PeftType or str",
+          "description": "The method; filled in by the subclass when omitted, refused when\nit names another.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "auto_mapping",
+          "annotation": "dict of str to str",
+          "description": "The class of the base model, `{\"base_model_class\": name,\n\"parent_library\": module}` — what `AutoPeftModel*` rebuilds the\nbase with.  `PeftModel.save_pretrained` writes it.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "base_model_name_or_path",
+          "annotation": "str",
+          "description": "Name of the model the adapter was trained on (metadata).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "revision",
+          "annotation": "str",
+          "description": "Revision of that model (metadata).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "inference_mode",
+          "annotation": "bool",
+          "description": "Freeze the adapter too, for inference.",
+          "default": "False",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "target_modules",
+          "annotation": "str or list of str",
+          "description": "The modules to tune (any module, typically `LayerNorm` / `RMSNorm`),\nmatched as `LoraConfig.target_modules` is.  `None` takes the default\nfor the base model's `model_type` (`gpt2` and `t5`;\n`LN_TUNING_DEFAULT_TARGET_MODULES` in `lucid.peft.tuners.ln_tuning._defaults`);\nanother model type raises `ValueError`.",
+          "default": "None"
+        },
+        {
+          "name": "exclude_modules",
+          "annotation": "str or list of str",
+          "description": "Modules never adapted, matched like `target_modules`.",
+          "default": "None"
+        },
+        {
+          "name": "modules_to_save",
+          "annotation": "list of str",
+          "description": "Modules trained in full beside the tuned layers (a classifier head).",
+          "default": "None"
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "TypeError",
+          "description": "A field holds a value of the wrong type."
+        },
+        {
+          "annotation": "ValueError",
+          "description": "A field is out of range or two fields conflict."
+        }
+      ],
+      "examples": [
+        ">>> from lucid.peft import LNTuningConfig\n>>> config = LNTuningConfig(target_modules=[\"ln_1\", \"ln_2\"])\n>>> sorted(config.target_modules), config.peft_type\n(['ln_1', 'ln_2'], <PeftType.LN_TUNING: 'LN_TUNING'>)\n>>> LNTuningConfig.from_dict(config.to_dict()) == config\nTrue"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "LNTuningModel",
+      "path": "lucid.peft.tuners.ln_tuning._model.LNTuningModel",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_ConfigTuner"
+      ],
+      "labels": [],
+      "signature": "LNTuningModel(model: nn.Module, config: LNTuningConfig, adapter_name: str = 'default')",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/ln_tuning/_model.py#L14",
+      "subcategory": "tuners/ln_tuning/model",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.ln_tuning._model.LNTuningModel.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(model: nn.Module, config: LNTuningConfig, adapter_name: str = 'default')",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/ln_tuning/_model.py#L63",
+          "subcategory": "model",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "A model whose chosen normalisation layers train as copies, and the tools to take them out again.",
+      "extended": "Each module `config` selects is replaced by an\n`lucid.peft.tuners.ln_tuning.LNTuningLayer` around it — the module\nand a trainable copy of it — and every other parameter is frozen.  The model\nis changed in place and kept as `model`; a public name this wrapper lacks is\nread from it.  `peft_config` holds a copy of `config` with the default\n`target_modules` spelled out; `config` is untouched.\n\nAny number of adapters live side by side, each under its own name, but only\none applies (and only one can be merged) at a time: see `add_adapter`,\n`set_adapter` and `delete_adapter`.",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The model to adapt.",
+          "default": null
+        },
+        {
+          "name": "config",
+          "annotation": "LNTuningConfig",
+          "description": "What to adapt.",
+          "default": null
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the adapter, the key in every `ln_tuning_layers`.",
+          "default": "\"default\""
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "ValueError",
+          "description": "Nothing matches `target_modules`, the model type has no default\n`target_modules` and the config names none, or `modules_to_save` matches nothing."
+        },
+        {
+          "annotation": "NotImplementedError",
+          "description": "The model already holds adapter layers of another method."
+        }
+      ],
+      "examples": [
+        ">>> import lucid.nn as nn\n>>> from lucid.peft import LNTuningConfig, LNTuningModel\n>>> net = nn.Sequential(nn.Linear(8, 8), nn.LayerNorm(8), nn.Linear(8, 2))\n>>> tuned = LNTuningModel(net, LNTuningConfig(target_modules=[\"1\"]))\n>>> tuned.targeted_module_names\n['1']\n>>> net[1].base_layer.weight.requires_grad, net[1].ln_tuning_layers[\"default\"].weight.requires_grad\n(False, True)\n>>> tuned.unload() is net, type(net[1]) is nn.LayerNorm\n(True, True)"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
       "name": "LoHaConfig",
       "path": "lucid.peft.tuners.loha._config.LoHaConfig",
       "kind": "class",
@@ -3001,7 +3941,7 @@
       ],
       "labels": [],
       "signature": "LoHaConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 8, alpha: float = 8, rank_dropout: float = 0.0, module_dropout: float = 0.0, use_effective_conv2d: bool = False, rank_pattern: dict[str, int] = dict(), alpha_pattern: dict[str, float] = dict(), init_weights: bool = True)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/loha/_config.py#L10",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/loha/_config.py#L10",
       "subcategory": "tuners/loha/config",
       "methods": [
         {
@@ -3010,7 +3950,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 8, alpha: float = 8, rank_dropout: float = 0.0, module_dropout: float = 0.0, use_effective_conv2d: bool = False, rank_pattern: dict[str, int] = dict(), alpha_pattern: dict[str, float] = dict(), init_weights: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/loha/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/loha/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -3180,7 +4120,7 @@
       ],
       "labels": [],
       "signature": "LoHaModel(model: nn.Module, config: LoHaConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/loha/_model.py#L12",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/loha/_model.py#L12",
       "subcategory": "tuners/loha/model",
       "methods": [
         {
@@ -3189,7 +4129,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(model: nn.Module, config: LoHaConfig, adapter_name: str = 'default')",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/loha/_model.py#L59",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/loha/_model.py#L59",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -3257,7 +4197,7 @@
       ],
       "labels": [],
       "signature": "LoKrConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 8, alpha: float = 8, rank_dropout: float = 0.0, module_dropout: float = 0.0, use_effective_conv2d: bool = False, rank_pattern: dict[str, int] = dict(), alpha_pattern: dict[str, float] = dict(), decompose_both: bool = False, decompose_factor: int = -1, rank_dropout_scale: bool = False, init_weights: bool | Literal['lycoris'] = True)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/lokr/_config.py#L30",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/lokr/_config.py#L30",
       "subcategory": "tuners/lokr/config",
       "methods": [
         {
@@ -3266,7 +4206,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 8, alpha: float = 8, rank_dropout: float = 0.0, module_dropout: float = 0.0, use_effective_conv2d: bool = False, rank_pattern: dict[str, int] = dict(), alpha_pattern: dict[str, float] = dict(), decompose_both: bool = False, decompose_factor: int = -1, rank_dropout_scale: bool = False, init_weights: bool | Literal['lycoris'] = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/lokr/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/lokr/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -3454,7 +4394,7 @@
       ],
       "labels": [],
       "signature": "LoKrModel(model: nn.Module, config: LoKrConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/lokr/_model.py#L12",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/lokr/_model.py#L12",
       "subcategory": "tuners/lokr/model",
       "methods": [
         {
@@ -3463,7 +4403,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(model: nn.Module, config: LoKrConfig, adapter_name: str = 'default')",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/lokr/_model.py#L60",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/lokr/_model.py#L60",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -3531,7 +4471,7 @@
       ],
       "labels": [],
       "signature": "LoraConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 8, lora_alpha: float = 8, lora_dropout: float = 0.0, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'lora_only'] = 'none', use_rslora: bool = False, init_lora_weights: bool | str = True, rank_pattern: dict[str, int] = dict(), alpha_pattern: dict[str, float] = dict(), use_dora: bool = False, target_parameters: list[str] | None = None, lora_bias: bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/lora/_config.py#L26",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/lora/_config.py#L26",
       "subcategory": "tuners/lora/config",
       "methods": [
         {
@@ -3540,7 +4480,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 8, lora_alpha: float = 8, lora_dropout: float = 0.0, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'lora_only'] = 'none', use_rslora: bool = False, init_lora_weights: bool | str = True, rank_pattern: dict[str, int] = dict(), alpha_pattern: dict[str, float] = dict(), use_dora: bool = False, target_parameters: list[str] | None = None, lora_bias: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/lora/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/lora/_config.py#L1",
           "subcategory": "config",
           "summary": "Make the host; a method's host builds its adapter from `model` and `config` after this.",
           "extended": null,
@@ -3733,7 +4673,7 @@
       ],
       "labels": [],
       "signature": "LoraModel(model: nn.Module, config: LoraConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/lora/_model.py#L123",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/lora/_model.py#L123",
       "subcategory": "tuners/lora/model",
       "methods": [
         {
@@ -3742,7 +4682,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(model: nn.Module, config: LoraConfig, adapter_name: str = 'default')",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/lora/_model.py#L192",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/lora/_model.py#L192",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -3764,7 +4704,7 @@
           "kind": "function",
           "labels": [],
           "signature": "disable_adapter_layers()",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/lora/_model.py#L307",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/lora/_model.py#L307",
           "subcategory": "model",
           "summary": "Run the base model alone: LoRA updates off, original `modules_to_save`.",
           "extended": "With `bias` other than `\"none\"` the trained biases are base\nparameters and stay as trained, so the output is not the base\nmodel's; a warning says so.",
@@ -3786,7 +4726,7 @@
           "kind": "function",
           "labels": [],
           "signature": "add_weighted_adapter(adapters: list[str], weights: list[float], adapter_name: str, combination_type: _CombinationType = 'svd', svd_rank: int | None = None, svd_clamp: float | None = None, svd_full_matrices: bool = True, svd_driver: str | None = None, density: float | None = None, majority_sign_method: Literal['total', 'frequency'] = 'total')",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/lora/_model.py#L400",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/lora/_model.py#L400",
           "subcategory": "model",
           "summary": "Add an adapter that is a weighted combination of existing ones.",
           "extended": "The new adapter is frozen and inactive, like any added adapter, and\nhas $\\alpha = r$, so its scale is 1 and the weights live in\nits matrices.  It targets the union of the sources' modules; a\nlayer one source does not reach combines the sources it has.",
@@ -3918,6 +4858,284 @@
       "see_also": []
     },
     {
+      "name": "OFTConfig",
+      "path": "lucid.peft.tuners.oft._config.OFTConfig",
+      "kind": "class",
+      "class_kind": "dataclass",
+      "bases": [
+        "_TargetedConfig"
+      ],
+      "labels": [],
+      "signature": "OFTConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 0, oft_block_size: int = 32, module_dropout: float = 0.0, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'oft_only'] = 'none', init_weights: bool = True, coft: bool = False, eps: float = 6e-05, block_share: bool = False, use_cayley_neumann: bool = True, num_cayley_neumann_terms: int = 5)",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/oft/_config.py#L21",
+      "subcategory": "tuners/oft/config",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.oft._config.OFTConfig.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 0, oft_block_size: int = 32, module_dropout: float = 0.0, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'oft_only'] = 'none', init_weights: bool = True, coft: bool = False, eps: float = 6e-05, block_share: bool = False, use_cayley_neumann: bool = True, num_cayley_neumann_terms: int = 5)",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/oft/_config.py#L1",
+          "subcategory": "config",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "How `lucid.peft.get_peft_model` adapts a model with OFT.",
+      "extended": "OFT (Qiu et al., 2023, [arXiv:2306.07280](https://arxiv.org/abs/2306.07280) — Orthogonal Finetuning) rotates the\ninput space of each targeted layer instead of adding to its weight:\n$y = (W R^\\top) x + b$ with $R$ block-diagonal, each block an\northogonal matrix $(I - Q)(I + Q)^{-1}$ of a learned skew-symmetric\n$Q$.  A rotation keeps the pairwise angles between the weight's\nneurons, which is what OFT tunes while the weight's spectrum stays.  The\n$Q$\\ s start at zero, so the adapted model starts as the base; the\nrotation folds into the weight, so a merged model costs what the base does.\n\nField names, defaults and `adapter_config.json` are the reference\nadapter library's.  Every field is keyword-only.",
+      "parameters": [
+        {
+          "name": "task_type",
+          "annotation": "TaskType or str",
+          "description": "The task the adapter is for (metadata; see `TaskType`).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "peft_type",
+          "annotation": "PeftType or str",
+          "description": "The method; filled in by the subclass when omitted, refused when\nit names another.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "auto_mapping",
+          "annotation": "dict of str to str",
+          "description": "The class of the base model, `{\"base_model_class\": name,\n\"parent_library\": module}` — what `AutoPeftModel*` rebuilds the\nbase with.  `PeftModel.save_pretrained` writes it.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "base_model_name_or_path",
+          "annotation": "str",
+          "description": "Name of the model the adapter was trained on (metadata).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "revision",
+          "annotation": "str",
+          "description": "Revision of that model (metadata).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "inference_mode",
+          "annotation": "bool",
+          "description": "Freeze the adapter too, for inference.",
+          "default": "False",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "target_modules",
+          "annotation": "str or list of str",
+          "description": "The `nn.Linear` / `nn.Conv2d` modules to adapt, matched as\n`LoraConfig.target_modules` is.  `None` takes the default for the base\nmodel's `model_type` (the LoRA table, as the reference does).",
+          "default": "None"
+        },
+        {
+          "name": "exclude_modules",
+          "annotation": "str or list of str",
+          "description": "Modules never adapted, matched like `target_modules`.",
+          "default": "None"
+        },
+        {
+          "name": "modules_to_save",
+          "annotation": "int | list[int] | None",
+          "description": "As in `LoraConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "layers_to_transform",
+          "annotation": "int | list[int] | None",
+          "description": "As in `LoraConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "layers_pattern",
+          "annotation": "int | list[int] | None",
+          "description": "As in `LoraConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "r",
+          "annotation": "int",
+          "description": "Number of blocks per layer.  Give exactly one of `r` and\n`oft_block_size` (their product is the layer's input size): the default\n`r=0` leaves the choice to `oft_block_size`.",
+          "default": "0"
+        },
+        {
+          "name": "oft_block_size",
+          "annotation": "int",
+          "description": "Size of each block.  Pass `oft_block_size=0` when you set `r`.  A size\nthat does not divide a layer's input size is moved to the nearest one that\ndoes, with a warning.",
+          "default": "32"
+        },
+        {
+          "name": "module_dropout",
+          "annotation": "float",
+          "description": "During training, the probability of replacing a block by the identity.",
+          "default": "0.0"
+        },
+        {
+          "name": "fan_in_fan_out",
+          "annotation": "bool",
+          "description": "For bases that store their weight `(in, out)`.  `nn.Linear` does not,\nso `True` warns and is reset to `False`.",
+          "default": "False"
+        },
+        {
+          "name": "bias",
+          "annotation": "none",
+          "description": "The reference also offers `\"all\"` and `\"oft_only\"`; here the adapter\ntrains its own tensors only, and those raise `NotImplementedError`.",
+          "default": "\"none\""
+        },
+        {
+          "name": "init_weights",
+          "annotation": "bool",
+          "description": "`True`: every $Q$ starts at zero (the update is the identity).\n`False`: $Q \\sim \\mathcal N(0, 0.1^2)$ (for tests).",
+          "default": "True"
+        },
+        {
+          "name": "coft",
+          "annotation": "bool",
+          "description": "The constrained variant: each block's $Q$ is projected into a ball\nof radius `eps` around zero every time the rotation is computed.",
+          "default": "False"
+        },
+        {
+          "name": "eps",
+          "annotation": "float",
+          "description": "The radius of that ball (scaled by one over the square root of the block\ncount).  Only read when `coft` is set.",
+          "default": "6e-5"
+        },
+        {
+          "name": "block_share",
+          "annotation": "bool",
+          "description": "Share one block among all positions: fewer parameters, one rotation.",
+          "default": "False"
+        },
+        {
+          "name": "use_cayley_neumann",
+          "annotation": "bool",
+          "description": "Approximate the Cayley transform by a truncated Neumann series\n(matrix products only, orthogonal up to the truncation) instead of an exact solve.",
+          "default": "True"
+        },
+        {
+          "name": "num_cayley_neumann_terms",
+          "annotation": "int",
+          "description": "Terms of that series.",
+          "default": "5"
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "TypeError",
+          "description": "A field holds a value of the wrong type."
+        },
+        {
+          "annotation": "ValueError",
+          "description": "A field is out of range, or `r` and `oft_block_size` are both set or both zero."
+        },
+        {
+          "annotation": "NotImplementedError",
+          "description": "`bias` is not `\"none\"`."
+        }
+      ],
+      "examples": [
+        ">>> from lucid.peft import OFTConfig\n>>> config = OFTConfig(oft_block_size=16, target_modules=[\"q_proj\", \"v_proj\"])\n>>> sorted(config.target_modules), config.peft_type\n(['q_proj', 'v_proj'], <PeftType.OFT: 'OFT'>)\n>>> OFTConfig.from_dict(config.to_dict()) == config\nTrue\n>>> OFTConfig(r=4, oft_block_size=0, target_modules=[\"x\"]).r\n4"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "OFTModel",
+      "path": "lucid.peft.tuners.oft._model.OFTModel",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_ConfigTuner"
+      ],
+      "labels": [],
+      "signature": "OFTModel(model: nn.Module, config: OFTConfig, adapter_name: str = 'default')",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/oft/_model.py#L12",
+      "subcategory": "tuners/oft/model",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.oft._model.OFTModel.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(model: nn.Module, config: OFTConfig, adapter_name: str = 'default')",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/oft/_model.py#L57",
+          "subcategory": "model",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "A model with OFT layers in it, and the tools to take them out again.",
+      "extended": "The modules `config` selects each become an\n`lucid.peft.tuners.oft.Linear` or `Conv2d` (by their type) that\nrotates its input; everything else is frozen.  `model` is changed in place\nand kept; a public name this wrapper lacks is read from it.  The stored\n`peft_config` has the default targets spelled out, `config` itself is left alone.\nAdapters are added, switched and removed with `add_adapter`, `set_adapter`\nand `delete_adapter`.",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The model to adapt.",
+          "default": null
+        },
+        {
+          "name": "config",
+          "annotation": "OFTConfig",
+          "description": "What to adapt and how.",
+          "default": null
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the adapter, the key in every `oft_R`.",
+          "default": "\"default\""
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "ValueError",
+          "description": "Nothing matches `target_modules`, a match has no OFT layer type, or\n`modules_to_save` matches nothing."
+        },
+        {
+          "annotation": "NotImplementedError",
+          "description": "The model already holds adapter layers of another method, or a match is a grouped convolution."
+        }
+      ],
+      "examples": [
+        ">>> import lucid.nn as nn\n>>> from lucid.peft import OFTConfig, OFTModel\n>>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))\n>>> oft = OFTModel(net, OFTConfig(oft_block_size=4, target_modules=[\"0\"]))\n>>> oft.targeted_module_names\n['0']\n>>> net[0].base_layer.weight.requires_grad, net[0].oft_R[\"default\"].requires_grad\n(False, True)\n>>> oft.unload() is net, type(net[0]) is nn.Linear\n(True, True)"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
       "name": "PromptEncoder",
       "path": "lucid.peft.tuners.p_tuning._model.PromptEncoder",
       "kind": "class",
@@ -3927,7 +5145,7 @@
       ],
       "labels": [],
       "signature": "PromptEncoder(config: PromptEncoderConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/p_tuning/_model.py#L19",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/p_tuning/_model.py#L19",
       "subcategory": "tuners/p_tuning/model",
       "methods": [
         {
@@ -3936,7 +5154,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: PromptEncoderConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/p_tuning/_model.py#L54",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/p_tuning/_model.py#L54",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -3960,7 +5178,7 @@
             "classmethod"
           ],
           "signature": "from_config(config: PromptLearningConfig, word_embeddings: nn.Module | None)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/p_tuning/_model.py#L93",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/p_tuning/_model.py#L93",
           "subcategory": "model",
           "summary": "The encoder for `config`; `word_embeddings` is the model's token table, when the method reads it.",
           "extended": null,
@@ -3984,7 +5202,7 @@
             "property"
           ],
           "signature": "stores_prompt: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/p_tuning/_model.py#L102",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/p_tuning/_model.py#L102",
           "summary": "Whether `embedding.weight` is the prompt itself (nothing maps it).",
           "extended": null,
           "parameters": [],
@@ -4005,7 +5223,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(indices: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/p_tuning/_model.py#L105",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/p_tuning/_model.py#L105",
           "subcategory": "model",
           "summary": "Prompt rows of the virtual-token ids: `(B, total)` ids to `(B, total, token_dim)`.",
           "extended": null,
@@ -4068,7 +5286,7 @@
       ],
       "labels": [],
       "signature": "PromptEncoderConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, num_virtual_tokens: int | None = None, token_dim: int | None = None, num_transformer_submodules: int | None = None, num_attention_heads: int | None = None, num_layers: int | None = None, modules_to_save: list[str] | None = None, encoder_reparameterization_type: PromptEncoderReparameterizationType | str = PromptEncoderReparameterizationType.MLP, encoder_hidden_size: int | None = None, encoder_num_layers: int = 2, encoder_dropout: float = 0.0)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/p_tuning/_config.py#L25",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/p_tuning/_config.py#L25",
       "subcategory": "tuners/p_tuning/config",
       "methods": [
         {
@@ -4077,7 +5295,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, num_virtual_tokens: int | None = None, token_dim: int | None = None, num_transformer_submodules: int | None = None, num_attention_heads: int | None = None, num_layers: int | None = None, modules_to_save: list[str] | None = None, encoder_reparameterization_type: PromptEncoderReparameterizationType | str = PromptEncoderReparameterizationType.MLP, encoder_hidden_size: int | None = None, encoder_num_layers: int = 2, encoder_dropout: float = 0.0)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/p_tuning/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/p_tuning/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -4230,7 +5448,7 @@
       ],
       "labels": [],
       "signature": "PromptEncoderReparameterizationType()",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/p_tuning/_config.py#L18",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/p_tuning/_config.py#L18",
       "subcategory": "tuners/p_tuning/config",
       "methods": [],
       "summary": "What turns the virtual tokens' embeddings into the prompt: an `MLP` or an `LSTM`.",
@@ -4254,7 +5472,7 @@
       ],
       "labels": [],
       "signature": "PrefixEncoder(config: PrefixTuningConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prefix_tuning/_model.py#L13",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prefix_tuning/_model.py#L13",
       "subcategory": "tuners/prefix_tuning/model",
       "methods": [
         {
@@ -4263,7 +5481,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: PrefixTuningConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prefix_tuning/_model.py#L47",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prefix_tuning/_model.py#L47",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -4287,7 +5505,7 @@
             "classmethod"
           ],
           "signature": "from_config(config: PromptLearningConfig, word_embeddings: nn.Module | None)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prefix_tuning/_model.py#L69",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prefix_tuning/_model.py#L69",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -4311,7 +5529,7 @@
             "property"
           ],
           "signature": "stores_prompt: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prefix_tuning/_model.py#L78",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prefix_tuning/_model.py#L78",
           "summary": null,
           "extended": null,
           "parameters": [],
@@ -4332,7 +5550,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(prefix: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prefix_tuning/_model.py#L81",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prefix_tuning/_model.py#L81",
           "subcategory": "model",
           "summary": "Key/value rows of the virtual-token ids: `(B, V)` ids to `(B, V, 2 * num_layers * token_dim)`.",
           "extended": null,
@@ -4390,7 +5608,7 @@
       ],
       "labels": [],
       "signature": "PrefixTuningConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, num_virtual_tokens: int | None = None, token_dim: int | None = None, num_transformer_submodules: int | None = None, num_attention_heads: int | None = None, num_layers: int | None = None, modules_to_save: list[str] | None = None, encoder_hidden_size: int | None = None, prefix_projection: bool = False, init_weights: str | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prefix_tuning/_config.py#L15",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prefix_tuning/_config.py#L15",
       "subcategory": "tuners/prefix_tuning/config",
       "methods": [
         {
@@ -4399,7 +5617,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, num_virtual_tokens: int | None = None, token_dim: int | None = None, num_transformer_submodules: int | None = None, num_attention_heads: int | None = None, num_layers: int | None = None, modules_to_save: list[str] | None = None, encoder_hidden_size: int | None = None, prefix_projection: bool = False, init_weights: str | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prefix_tuning/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prefix_tuning/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -4546,7 +5764,7 @@
       ],
       "labels": [],
       "signature": "PromptEmbedding(config: PromptTuningConfig, word_embeddings: nn.Module | None, tokenizer: _TextEncoder | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prompt_tuning/_model.py#L22",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prompt_tuning/_model.py#L23",
       "subcategory": "tuners/prompt_tuning/model",
       "methods": [
         {
@@ -4555,7 +5773,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: PromptTuningConfig, word_embeddings: nn.Module | None, tokenizer: _TextEncoder | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prompt_tuning/_model.py#L59",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prompt_tuning/_model.py#L63",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -4579,7 +5797,7 @@
             "classmethod"
           ],
           "signature": "from_config(config: PromptLearningConfig, word_embeddings: nn.Module | None)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prompt_tuning/_model.py#L98",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prompt_tuning/_model.py#L101",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -4603,7 +5821,7 @@
             "property"
           ],
           "signature": "stores_prompt: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prompt_tuning/_model.py#L106",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prompt_tuning/_model.py#L109",
           "summary": null,
           "extended": null,
           "parameters": [],
@@ -4624,7 +5842,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(indices: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prompt_tuning/_model.py#L109",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prompt_tuning/_model.py#L112",
           "subcategory": "model",
           "summary": "Embeddings of the virtual-token ids: `(*, ...)` ids to `(*, ..., token_dim)`.",
           "extended": null,
@@ -4659,7 +5877,7 @@
         {
           "name": "tokenizer",
           "annotation": "object with encode(text) -> list[int]",
-          "description": "Turns `prompt_tuning_init_text` into ids for `\"TEXT\"`.",
+          "description": "Turns `prompt_tuning_init_text` into ids for `\"TEXT\"`.  Left out, the\ntokenizer `config.tokenizer_name_or_path` names is resolved (a registered\nname, built from `config.tokenizer_kwargs`, or a directory).",
           "default": "None"
         }
       ],
@@ -4667,7 +5885,7 @@
       "raises": [
         {
           "annotation": "ValueError",
-          "description": "`\"TEXT\"` initialisation without a tokenizer."
+          "description": "`\"TEXT\"` initialisation whose tokenizer cannot be resolved or tokenizes the text\nto nothing."
         }
       ],
       "examples": [
@@ -4694,7 +5912,7 @@
       ],
       "labels": [],
       "signature": "PromptTuningConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, num_virtual_tokens: int | None = None, token_dim: int | None = None, num_transformer_submodules: int | None = None, num_attention_heads: int | None = None, num_layers: int | None = None, modules_to_save: list[str] | None = None, prompt_tuning_init: PromptTuningInit | str = PromptTuningInit.RANDOM, prompt_tuning_init_text: str | None = None, tokenizer_name_or_path: str | None = None, tokenizer_kwargs: dict[str, object] | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prompt_tuning/_config.py#L29",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prompt_tuning/_config.py#L29",
       "subcategory": "tuners/prompt_tuning/config",
       "methods": [
         {
@@ -4703,7 +5921,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, num_virtual_tokens: int | None = None, token_dim: int | None = None, num_transformer_submodules: int | None = None, num_attention_heads: int | None = None, num_layers: int | None = None, modules_to_save: list[str] | None = None, prompt_tuning_init: PromptTuningInit | str = PromptTuningInit.RANDOM, prompt_tuning_init_text: str | None = None, tokenizer_name_or_path: str | None = None, tokenizer_kwargs: dict[str, object] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prompt_tuning/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prompt_tuning/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -4860,7 +6078,7 @@
       ],
       "labels": [],
       "signature": "PromptTuningInit()",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/prompt_tuning/_config.py#L10",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/prompt_tuning/_config.py#L10",
       "subcategory": "tuners/prompt_tuning/config",
       "methods": [],
       "summary": "How the prompt's rows start: from `TEXT`, `SAMPLE_VOCAB` tokens, or `RANDOM`.",
@@ -4884,7 +6102,7 @@
       ],
       "labels": [],
       "signature": "VeraConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 256, projection_prng_key: int = 0, save_projection: bool = True, vera_dropout: float = 0.0, d_initial: float = 0.1, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'vera_only'] = 'none', init_weights: bool = True)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/vera/_config.py#L28",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/vera/_config.py#L28",
       "subcategory": "tuners/vera/config",
       "methods": [
         {
@@ -4893,7 +6111,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, r: int = 256, projection_prng_key: int = 0, save_projection: bool = True, vera_dropout: float = 0.0, d_initial: float = 0.1, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'vera_only'] = 'none', init_weights: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/vera/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/vera/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -4964,7 +6182,7 @@
         {
           "name": "exclude_modules",
           "annotation": "str | list[str] | set[str] | None",
-          "description": "As in `LoraConfig`.",
+          "description": "As in `LoraConfig`.  The reference's config has no `exclude_modules`,\nso `adapter_config.json` holds it only when it is set.",
           "default": "None"
         },
         {
@@ -4976,13 +6194,13 @@
         {
           "name": "layers_to_transform",
           "annotation": "str | list[str] | set[str] | None",
-          "description": "As in `LoraConfig`.",
+          "description": "As in `LoraConfig`.  The reference's config has no `exclude_modules`,\nso `adapter_config.json` holds it only when it is set.",
           "default": "None"
         },
         {
           "name": "layers_pattern",
           "annotation": "str | list[str] | set[str] | None",
-          "description": "As in `LoraConfig`.",
+          "description": "As in `LoraConfig`.  The reference's config has no `exclude_modules`,\nso `adapter_config.json` holds it only when it is set.",
           "default": "None"
         },
         {
@@ -5068,7 +6286,7 @@
       ],
       "labels": [],
       "signature": "VeraModel(model: nn.Module, config: VeraConfig, adapter_name: str = 'default')",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/vera/_model.py#L63",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/vera/_model.py#L63",
       "subcategory": "tuners/vera/model",
       "methods": [
         {
@@ -5077,7 +6295,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(model: nn.Module, config: VeraConfig, adapter_name: str = 'default')",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/vera/_model.py#L119",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/vera/_model.py#L119",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -5101,7 +6319,7 @@
             "property"
           ],
           "signature": "vera_A: _BufferDict",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/vera/_model.py#L123",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/vera/_model.py#L123",
           "summary": "The shared `A` projections, one entry per adapter (the reference's attribute).",
           "extended": null,
           "parameters": [],
@@ -5124,7 +6342,7 @@
             "property"
           ],
           "signature": "vera_B: _BufferDict",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/vera/_model.py#L128",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/vera/_model.py#L128",
           "summary": "The shared `B` projections, one entry per adapter (the reference's attribute).",
           "extended": null,
           "parameters": [],
@@ -5145,7 +6363,7 @@
           "kind": "function",
           "labels": [],
           "signature": "delete_adapter(adapter_name: str)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/peft/tuners/vera/_model.py#L255",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/peft/tuners/vera/_model.py#L255",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -5204,8 +6422,8 @@
       "see_also": []
     }
   ],
-  "summary": "`lucid.peft` — parameter-efficient fine-tuning: LoRA, AdaLoRA, (IA)^3, LoHa, LoKr and VeRA.",
-  "extended": "Fine-tuning a pretrained model end to end updates, stores and ships every\nweight.  LoRA (Hu et al., 2021) freezes them and learns, beside each\nchosen `nn.Linear`, a rank-$r$ update $s\\,BA$ — on GPT-2\nsmall's `c_attn` at $r = 8$, 294,912 parameters, 0.24 % of the\nmodel — so a fine-tune is trained, saved and swapped as a few megabytes.\n\nThe API and the adapter file format are the reference adapter library's,\nnames and defaults included, so a script written for it reads the same\nand an adapter directory moves between the two:\n\nfrom lucid.peft import LoraConfig, PeftConfig, PeftModel, get_peft_model\n\nconfig = LoraConfig(r=8, lora_alpha=16, target_modules=[\"c_attn\"],\n                        task_type=\"CAUSAL_LM\")\n    model = get_peft_model(base_model, config)    # base_model changed in place\n    model.print_trainable_parameters()\n    ...                                            # train: only the adapter learns\n    model.save_pretrained(\"my-adapter\")            # adapter_config.json + adapter_model.safetensors\n\nPeftConfig.from_pretrained(\"my-adapter\").base_model_name_or_path  # which base it needs\n    model = PeftModel.from_pretrained(fresh_base_model, \"my-adapter\")\n    merged = model.merge_and_unload()              # a plain model again, adapter folded in\n\nEach method is a config class, a tuner and its layer classes, registered\nby `PeftType` as they are defined (`lucid.peft.tuners._base`); the\nentry points above dispatch on the method a config or a file names.  The\nmethods are LoRA (`LoraConfig` / `LoraModel`), AdaLoRA — LoRA as a\ntruncated SVD whose rank per layer is allocated during training\n(`AdaLoraConfig` / `AdaLoraModel`), (IA)^3 — a learned rescaling vector per\nlayer (`IA3Config` / `IA3Model`), the LyCORIS pair LoHa (a Hadamard product\nof low-rank products, `LoHaConfig` / `LoHaModel`) and LoKr (a Kronecker\nproduct, `LoKrConfig` / `LoKrModel`), and VeRA — two learned vectors per\nlayer over one pair of frozen random projections (`VeraConfig` /\n`VeraModel`); the layer classes of each are in `lucid.peft.tuners.<method>`.\nEverything below about adapters, switching, merging and files holds for all six.\n\nThree more methods learn an input rather than a weight and add no layer to the model:\nprompt tuning (`PromptTuningConfig`: virtual-token embeddings in front of the input),\nprefix tuning (`PrefixTuningConfig`: virtual keys and values in front of every attention\nlayer) and p-tuning (`PromptEncoderConfig`: the virtual tokens produced by an MLP or LSTM).\nThe prompt is applied by hooks on the model's own call, so `model(...)` and the model's\n`generate` both carry it; the adapter file holds the finished prompt as\n`prompt_embeddings`.  They train one prompt at a time, have nothing to merge, and\nsupport the causal-LM, sequence-to-sequence and sequence-classification tasks:\n\nconfig = PromptTuningConfig(num_virtual_tokens=20, task_type=\"CAUSAL_LM\")\n    model = get_peft_model(base_model, config)\n\nWhat a LoRA layer guarantees:\n\n* **The base is untouched until merged.**  The wrapped `nn.Linear` is\n  kept as `base_layer` with its own `Parameter` objects — not\n  copies — so an optimizer built earlier, a tied embedding and Core ML's\n  identity-keyed weight sharing all still see them, and with the\n  default initialisation ($B = 0$) the adapted model's output is\n  the base model's, bit for bit.\n* **Only the adapter trains.**  Every other parameter is frozen; the\n  `bias` option and `modules_to_save` add biases and whole modules.\n* **A half-precision base gets a float32 adapter**, computed in float32\n  and cast back to the base's output dtype.\n* **Merging refuses a shared weight.**  Folding the update into a weight\n  another module also uses (a tied LM head) would change that module;\n  `merge_and_unload` raises instead.\n\nA model holds any number of adapters, each under its own name:\n\nmodel.add_adapter(\"style\", LoraConfig(r=4, target_modules=[\"c_attn\"]))\n    model.set_adapter(\"style\")                     # compute with — and train — this one\n    model.add_weighted_adapter([\"default\", \"style\"], [0.7, 0.3], \"mix\")\n    model.save_pretrained(\"adapters\")              # \"default\" in adapters/, \"style\" in adapters/style/\n    model.load_adapter(\"adapters/style\", \"style-again\")\n\nThe model class follows the task: `get_peft_model` returns a\n`PeftModelForCausalLM` for `task_type=\"CAUSAL_LM\"` (and the matching\n`PeftModelFor...` class for the other tasks, which also train a\nclassification or question-answering head), and a config with no\n`target_modules` takes the default for the base model's `model_type`.\nAn adapter directory that names its base model reopens in one call:\n\nmodel = AutoPeftModelForCausalLM.from_pretrained(\"my-adapter\")\n\nLoRA layers exist for `nn.Linear`, `nn.Embedding`, `nn.Conv1d` /\n`Conv2d` / `Conv3d`, their `nn.ConvTranspose` counterparts and\n`nn.MultiheadAttention` (found by the module's\ntype in `target_modules`), and `target_parameters` adapts a raw\n`nn.Parameter` of a module (`lucid.peft.tuners.lora`).  Asking for\nmore — `add_weighted_adapter` over anything but `nn.Linear` layers, an\nadapter file of a method this package lacks — raises `NotImplementedError`\nrather than doing less than asked.  Adapters are read from a local directory;\nhub ids are not resolved.\n\nA model can hold several adapters, switch between them, combine them\n(`add_weighted_adapter`: `svd`, `cat`, `linear` and the TIES / DARE /\nmagnitude-prune types), and compute a batch whose rows each use a different\nadapter (`model(x, adapter_names=[...])`).  `get_layer_status` and\n`get_model_status` report what each adapter layer, and the model, is doing.\nAdapting a model a second time adds the new adapter beside the first, with a\nwarning.",
+  "summary": "`lucid.peft` — parameter-efficient fine-tuning: LoRA, AdaLoRA, (IA)^3, LoHa, LoKr, VeRA, OFT, BOFT, HRA, FourierFT and LN tuning.",
+  "extended": "Fine-tuning a pretrained model end to end updates, stores and ships every\nweight.  LoRA (Hu et al., 2021) freezes them and learns, beside each\nchosen `nn.Linear`, a rank-$r$ update $s\\,BA$ — on GPT-2\nsmall's `c_attn` at $r = 8$, 294,912 parameters, 0.24 % of the\nmodel — so a fine-tune is trained, saved and swapped as a few megabytes.\n\nThe API and the adapter file format are the reference adapter library's,\nnames and defaults included, so a script written for it reads the same\nand an adapter directory moves between the two:\n\nfrom lucid.peft import LoraConfig, PeftConfig, PeftModel, get_peft_model\n\nconfig = LoraConfig(r=8, lora_alpha=16, target_modules=[\"c_attn\"],\n                        task_type=\"CAUSAL_LM\")\n    model = get_peft_model(base_model, config)    # base_model changed in place\n    model.print_trainable_parameters()\n    ...                                            # train: only the adapter learns\n    model.save_pretrained(\"my-adapter\")            # adapter_config.json + adapter_model.safetensors\n\nPeftConfig.from_pretrained(\"my-adapter\").base_model_name_or_path  # which base it needs\n    model = PeftModel.from_pretrained(fresh_base_model, \"my-adapter\")\n    merged = model.merge_and_unload()              # a plain model again, adapter folded in\n\nEach method is a config class, a tuner and its layer classes, registered\nby `PeftType` as they are defined (`lucid.peft.tuners._base`); the\nentry points above dispatch on the method a config or a file names.  The\nmethods are LoRA (`LoraConfig` / `LoraModel`), AdaLoRA — LoRA as a\ntruncated SVD whose rank per layer is allocated during training\n(`AdaLoraConfig` / `AdaLoraModel`), (IA)^3 — a learned rescaling vector per\nlayer (`IA3Config` / `IA3Model`), the LyCORIS pair LoHa (a Hadamard product\nof low-rank products, `LoHaConfig` / `LoHaModel`) and LoKr (a Kronecker\nproduct, `LoKrConfig` / `LoKrModel`), and VeRA — two learned vectors per\nlayer over one pair of frozen random projections (`VeraConfig` /\n`VeraModel`); the orthogonal family, which turns the input space of a layer instead of adding to its\nweight — OFT (block-diagonal Cayley rotations, `OFTConfig` / `OFTModel`), BOFT (their butterfly\nfactorisation plus a row scale, `BOFTConfig` / `BOFTModel`) and HRA (a chain of Householder\nreflections, `HRAConfig` / `HRAModel`); FourierFT, a handful of coefficients of the weight\nupdate in the frequency domain (`FourierFTConfig` / `FourierFTModel`); and LN tuning, a\ntrainable copy of each chosen normalisation layer (`LNTuningConfig` / `LNTuningModel`).  The\nlayer classes of each are in `lucid.peft.tuners.<method>`.\nEverything below about adapters, switching, merging and files holds for all of them (LN tuning applies, and merges, one adapter at a time).\n\nThree more methods learn an input rather than a weight and add no layer to the model:\nprompt tuning (`PromptTuningConfig`: virtual-token embeddings in front of the input),\nprefix tuning (`PrefixTuningConfig`: virtual keys and values in front of every attention\nlayer) and p-tuning (`PromptEncoderConfig`: the virtual tokens produced by an MLP or LSTM).\nThe prompt is applied by hooks on the model's own call, so `model(...)` and the model's\n`generate` both carry it; the adapter file holds the finished prompt as\n`prompt_embeddings`.  They train one prompt at a time, have nothing to merge, and\nsupport the causal-LM, sequence-to-sequence and sequence-classification tasks:\n\nconfig = PromptTuningConfig(num_virtual_tokens=20, task_type=\"CAUSAL_LM\")\n    model = get_peft_model(base_model, config)\n\nWhat a LoRA layer guarantees:\n\n* **The base is untouched until merged.**  The wrapped `nn.Linear` is\n  kept as `base_layer` with its own `Parameter` objects — not\n  copies — so an optimizer built earlier, a tied embedding and Core ML's\n  identity-keyed weight sharing all still see them, and with the\n  default initialisation ($B = 0$) the adapted model's output is\n  the base model's, bit for bit.\n* **Only the adapter trains.**  Every other parameter is frozen; the\n  `bias` option and `modules_to_save` add biases and whole modules.\n* **A half-precision base gets a float32 adapter**, computed in float32\n  and cast back to the base's output dtype.\n* **Merging refuses a shared weight.**  Folding the update into a weight\n  another module also uses (a tied LM head) would change that module;\n  `merge_and_unload` raises instead.\n\nA model holds any number of adapters, each under its own name:\n\nmodel.add_adapter(\"style\", LoraConfig(r=4, target_modules=[\"c_attn\"]))\n    model.set_adapter(\"style\")                     # compute with — and train — this one\n    model.add_weighted_adapter([\"default\", \"style\"], [0.7, 0.3], \"mix\")\n    model.save_pretrained(\"adapters\")              # \"default\" in adapters/, \"style\" in adapters/style/\n    model.load_adapter(\"adapters/style\", \"style-again\")\n\nThe model class follows the task: `get_peft_model` returns a\n`PeftModelForCausalLM` for `task_type=\"CAUSAL_LM\"` (and the matching\n`PeftModelFor...` class for the other tasks, which also train a\nclassification or question-answering head), and a config with no\n`target_modules` takes the default for the base model's `model_type`.\nAn adapter directory that names its base model reopens in one call:\n\nmodel = AutoPeftModelForCausalLM.from_pretrained(\"my-adapter\")\n\nLoRA layers exist for `nn.Linear`, `nn.Embedding`, `nn.Conv1d` /\n`Conv2d` / `Conv3d`, their `nn.ConvTranspose` counterparts and\n`nn.MultiheadAttention` (found by the module's\ntype in `target_modules`), and `target_parameters` adapts a raw\n`nn.Parameter` of a module (`lucid.peft.tuners.lora`).  Asking for\nmore — `add_weighted_adapter` over anything but `nn.Linear` layers, an\nadapter file of a method this package lacks — raises `NotImplementedError`\nrather than doing less than asked.  Adapters are read from a local directory;\nhub ids are not resolved.\n\nA model can hold several adapters, switch between them, combine them\n(`add_weighted_adapter`: `svd`, `cat`, `linear` and the TIES / DARE /\nmagnitude-prune types), and compute a batch whose rows each use a different\nadapter (`model(x, adapter_names=[...])`).  `get_layer_status` and\n`get_model_status` report what each adapter layer, and the model, is doing.\nAdapting a model a second time adds the new adapter beside the first, with a\nwarning.",
   "parameters": [],
   "returns": null,
   "raises": [],

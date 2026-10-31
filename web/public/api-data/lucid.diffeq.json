@@ -3,7 +3,7 @@
   "name": "diffeq",
   "path": "lucid.diffeq",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/diffeq/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/diffeq/__init__.py#L1",
   "members": [
     {
       "name": "odeint_adjoint",
@@ -11,7 +11,7 @@
       "kind": "function",
       "labels": [],
       "signature": "odeint_adjoint(func: Callable[..., object], y0: State, t: Tensor | Sequence[float], rtol: float = 1e-07, atol: float = 1e-09, method: str | ButcherTableau | None = None, options: dict[str, object] | None = None, event_fn: Callable[..., Tensor] | None = None, adjoint_rtol: float | None = None, adjoint_atol: float | None = None, adjoint_method: str | ButcherTableau | None = None, adjoint_options: dict[str, object] | None = None, adjoint_params: Sequence[Tensor] | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/diffeq/_adjoint.py#L285",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/diffeq/_adjoint.py#L333",
       "subcategory": "adjoint",
       "summary": "Integrate `dy/dt = f(t, y)` and differentiate it at constant memory.",
       "extended": "Same result as `odeint`, different gradient strategy.  `odeint`\ndifferentiates the discretisation — exact for what it computed, but every\nstage of every step stays alive until backward.  This instead discards the\nforward graph and reconstructs the gradient by integrating the adjoint\nsystem backwards, so memory no longer grows with the number of steps.\n\nUse it when the solve is long or the tolerance tight enough that the\nretained stages dominate memory.  For a short solve, `odeint` is\nboth faster and more accurate.",
@@ -117,7 +117,7 @@
         ">>> import lucid, lucid.diffeq as diffeq\n>>> k = lucid.tensor([0.5], dtype=lucid.float64, requires_grad=True)\n>>> y0 = lucid.tensor([1.0], dtype=lucid.float64)\n>>> ys = diffeq.odeint_adjoint(\n...     lambda t, y: -k * y, y0, [0.0, 1.0], adjoint_params=[k]\n... )\n>>> ys[-1].sum().backward()\n>>> bool(abs(float(k.grad.item()) + 0.60653066) < 1e-5)\nTrue"
       ],
       "notes": [
-        "The gradient is an approximation.  It solves the continuous adjoint\nequation numerically, so it converges to the true derivative as the\ntolerances tighten rather than matching `odeint`'s gradient\nexactly — tightening `adjoint_rtol` / `adjoint_atol` is what closes\nthe gap.\n\nCost is a second integration whose right-hand side performs one\nvector-Jacobian product through `func`, so expect roughly a doubling\nof solve time on top of the backward passes.\n\nGradients with respect to `t` are not produced.  `t` is read to the\nhost once as an integration grid throughout `lucid.diffeq`, so it is\nnot differentiable in `odeint` either."
+        "The gradient is an approximation.  It solves the continuous adjoint\nequation numerically, so it converges to the true derivative as the\ntolerances tighten rather than matching `odeint`'s gradient\nexactly — tightening `adjoint_rtol` / `adjoint_atol` is what closes\nthe gap.\n\nCost is a second integration whose right-hand side performs one\nvector-Jacobian product through `func`, so expect roughly a doubling\nof solve time on top of the backward passes.\n\nA `t` that requires gradient receives one: `dL/dt_i = <dL/dy_i,\nf(t_i, y_i)>` at an output time and `-<a(t_0), f(t_0, y_0)>` at the\nstart, with `a` the adjoint -- the exact solution's sensitivity, at one\nextra `func` call per output time."
       ],
       "attributes": [],
       "warns": [],
@@ -134,7 +134,7 @@
       "kind": "function",
       "labels": [],
       "signature": "odeint(func: Callable[..., object], y0: State, t: Tensor | Sequence[float], rtol: float = 1e-07, atol: float = 1e-09, method: str | ButcherTableau | None = None, options: dict[str, object] | None = None, event_fn: Callable[..., Tensor] | None = None, return_trajectory: bool = True)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/diffeq/_solvers.py#L351",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/diffeq/_solvers.py#L481",
       "subcategory": "solvers",
       "summary": "Integrate `dy/dt = f(t, y)`.",
       "extended": "Four families are reachable through the same call, and which one runs\nfollows from `method`:\n\n**Adaptive** (the default, and anything carrying an embedded error\nestimate) treats `t` as *output* times.  The solver picks its own step\nsizes to hold the local error inside `rtol` / `atol` and interpolates\nto each requested time, so a coarse `t` costs nothing in accuracy.\n\n**Fixed step** (`euler` / `midpoint` / `heun2` / `heun3` / `rk4`\n/ `rk4_classic`)\ntreats `t` as the integration grid itself by default: consecutive\nentries are one step each, with no sub-stepping and no interpolation.\n`rtol` / `atol` are unused there, and accuracy is controlled by\nchoosing a finer grid — or by handing `options[\"step_size\"]`, which\ndecouples the two the same way an adaptive method does.\n\n**Adams multistep** (`explicit_adams` / `implicit_adams` /\n`fixed_adams`) is fixed-step too, but reaches high order by reusing the\nderivatives from previous steps instead of taking more of them inside one\nstep — one new evaluation per step regardless of order.  That pays off\nwhen `func` is expensive.  See `options[\"max_order\"]` for the caveat\nthat comes with it.\n\nGradient mode is left entirely to the caller.  Under grad the whole solve\nis differentiable end-to-end (discretise-then-optimise) and every stage is\nretained for backward; wrap the call in `lucid.no_grad` for sampling,\nwhere the stage graph is pure overhead.",
@@ -216,7 +216,7 @@
         "Exponential decay against its closed form:\n>>> import lucid, lucid.diffeq as diffeq\n>>> y0 = lucid.tensor([1.0], dtype=lucid.float64)\n>>> y = diffeq.odeint(lambda s, y: -y, y0, [0.0, 1.0], return_trajectory=False)\n>>> abs(float(y.item()) - 0.36787944117) < 1e-8\nTrue"
       ],
       "notes": [
-        "A fixed-step solve costs exactly `(len(t) - 1) * method.stages` calls to\n`func`.  An adaptive solve costs as many as the tolerances demand, and\nreads one scalar back to the host per step to decide whether to accept it\n— that host synchronisation is intrinsic to adaptivity, which is why the\ntwo families have different performance characters.\n\nHigher-order differentiation works: the fused step opts into\ngraph-recording backward, so `create_graph=True` through a solve behaves\nexactly as it would for the unfused arithmetic."
+        "A fixed-step solve costs exactly `(len(t) - 1) * method.stages` calls to\n`func`.  An adaptive solve costs as many as the tolerances demand, and\nreads one scalar back to the host per step to decide whether to accept it\n— that host synchronisation is intrinsic to adaptivity, which is why the\ntwo families have different performance characters.\n\n`t` is differentiable when it requires gradient.  A fixed-step solve on\nits default grid (`t` *is* the step boundaries) returns the derivative\nof its own arithmetic, step sizes included, with `func` seeing time\ntensors that carry the graph.  Every other route -- adaptive, implicit and\nAdams methods, or a grid decoupled from `t` by `step_size` -- returns\nthe exact solution's sensitivity: `dL/dt_i = <dL/dy_i, f(t_i, y_i)>` for\nan output time, and `-<dL/dy_0 through the solve, f(t_0, y_0)>` for the\nstart.  The two agree as a fixed grid refines.  Each costs one extra\nevaluation of `func` per output time, and only when `t` asks for it.\nWith `event_fn` only `t[0]` is read, so only `t[0]` is differentiated.\n\nHigher-order differentiation works: the fused step opts into\ngraph-recording backward, so `create_graph=True` through a solve behaves\nexactly as it would for the unfused arithmetic."
       ],
       "attributes": [],
       "warns": [],
@@ -233,7 +233,7 @@
       "kind": "function",
       "labels": [],
       "signature": "odeint_dense(func: Callable[..., object], y0: State, t0: float, t1: float, rtol: float = 1e-07, atol: float = 1e-09, method: str | ButcherTableau | None = None, options: dict[str, object] | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/diffeq/_solvers.py#L603",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/diffeq/_solvers.py#L690",
       "subcategory": "solvers",
       "summary": "Solve once across an interval and return a continuous solution.",
       "extended": "Where `odeint` wants the output times up front, this integrates\n`[t0, t1]` a single time and hands back a function of `t`.  Every\nstep's interpolating polynomial is kept, so any later query costs a\nbinary search and one polynomial evaluation — no re-integration, and no\ncommitment to a grid before you know which times you need.",
@@ -309,7 +309,7 @@
         ">>> import lucid, lucid.diffeq as diffeq\n>>> y0 = lucid.tensor([1.0], dtype=lucid.float64)\n>>> dense = diffeq.odeint_dense(lambda t, y: -y, y0, 0.0, 1.0)\n>>> abs(float(dense(0.5).item()) - 0.6065306597) < 1e-7\nTrue"
       ],
       "notes": [
-        "Memory grows with the number of accepted steps: each keeps a handful of\ntensors the size of the state.  A long solve over a large state is\ntherefore much heavier than `odeint` with `return_trajectory=False`.\n\nA fixed-step method interpolates with whatever `options[\"interp\"]`\nsays, and without `step_size` its grid is the single interval\n`[t0, t1]` — usually far too coarse, so pass one."
+        "Memory grows with the number of accepted steps: each keeps a handful of\ntensors the size of the state.  A long solve over a large state is\ntherefore much heavier than `odeint` with `return_trajectory=False`.\n\nThe returned function accepts a query-time tensor that requires gradient,\nand `d state / d t` is then `f(t, state)`.\n\nA fixed-step method interpolates with whatever `options[\"interp\"]`\nsays, and without `step_size` its grid is the single interval\n`[t0, t1]` — usually far too coarse, so pass one."
       ],
       "attributes": [],
       "warns": [],
@@ -326,7 +326,7 @@
       "kind": "function",
       "labels": [],
       "signature": "odeint_event(func: Callable[..., object], y0: State, t0: float | Tensor, event_fn: Callable[..., Tensor], reverse_time: bool = False, odeint_interface: Callable[..., object] = odeint, kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/diffeq/_solvers.py#L732",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/diffeq/_solvers.py#L826",
       "subcategory": "solvers",
       "summary": "Integrate from `t0` until an event fires.",
       "extended": "The convenience form of `odeint(..., event_fn=...)` for the common case\nwhere there is no output grid at all — you have a starting time and a\ncondition, and want to know when the condition is met.",
@@ -392,7 +392,7 @@
         "A body falling from rest hits the ground at \\sqrt{2h/g}:\n>>> import lucid, lucid.diffeq as diffeq\n>>> y0 = lucid.tensor([10.0, 0.0], dtype=lucid.float64)  # height, velocity\n>>> def fall(t, y):\n...     return lucid.stack([y[1], lucid.tensor(-9.8, dtype=y.dtype)], dim=0)\n>>> event_t, sol = diffeq.odeint_event(\n...     fall, y0, 0.0, event_fn=lambda t, y: y[0]\n... )\n>>> abs(float(event_t.item()) - (2 * 10.0 / 9.8) ** 0.5) < 1e-6\nTrue"
       ],
       "notes": [
-        "The event time itself is located by bisecting the interpolant of the\nstep that brackets it, so it costs event-function calls but no extra\nright-hand-side evaluations.\n\n`event_t` is differentiable, though bisection itself is not: the event\ntime is pinned by `g(t*, y(t*)) = 0`, and differentiating that identity\nroutes its gradient onto the state at the event, which does carry a graph.\nExpect total derivatives -- the state at the event moves with the event\ntime, so differentiating `solution[-1]` accounts for that too."
+        "The event time itself is located by bisecting the interpolant of the\nstep that brackets it, so it costs event-function calls but no extra\nright-hand-side evaluations.\n\n`t0` may be a tensor that requires gradient; the event time and the\nstate at it then move with the start time (`d event_t / d t0 = 1` for an\nautonomous system).\n\n`event_t` is differentiable, though bisection itself is not: the event\ntime is pinned by `g(t*, y(t*)) = 0`, and differentiating that identity\nroutes its gradient onto the state at the event, which does carry a graph.\nExpect total derivatives -- the state at the event moves with the event\ntime, so differentiating `solution[-1]` accounts for that too."
       ],
       "attributes": [],
       "warns": [],
@@ -411,7 +411,7 @@
       "bases": [],
       "labels": [],
       "signature": "ButcherTableau(a: tuple[tuple[float, ...], ...], b: tuple[float, ...], c: tuple[float, ...], order: int, name: str, b_error: tuple[float, ...] | None = None, mid: tuple[float, ...] | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/diffeq/_tableau.py#L62",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/diffeq/_tableau.py#L62",
       "subcategory": "tableau",
       "methods": [
         {
@@ -422,7 +422,7 @@
             "property"
           ],
           "signature": "is_adaptive: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/diffeq/_tableau.py#L231",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/diffeq/_tableau.py#L231",
           "summary": "bool: Whether the tableau carries an embedded error estimate.",
           "extended": "Adaptive methods pair two solutions of different order; their weight\ndifference (`b_error`) estimates the local error, which is what a\nstep-size controller needs.  A tableau without it can only be stepped\non a fixed grid.",
           "parameters": [],
@@ -445,7 +445,7 @@
             "property"
           ],
           "signature": "is_implicit: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/diffeq/_tableau.py#L242",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/diffeq/_tableau.py#L242",
           "summary": "bool: Whether any stage depends on itself or on a later stage.",
           "extended": "An explicit method computes its stages in order, each from the ones\nbefore it.  An implicit one does not: the stage equations are coupled,\nso a step has to solve a nonlinear system instead of evaluating a\nrecipe.  That is a different solver, not a different coefficient set,\nwhich is what this flag selects.",
           "parameters": [],
@@ -468,7 +468,7 @@
             "property"
           ],
           "signature": "is_dirk: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/diffeq/_tableau.py#L259",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/diffeq/_tableau.py#L259",
           "summary": "bool: Whether the stage matrix is lower triangular, diagonal included.",
           "extended": "Diagonally implicit methods still couple each stage to itself, but not\nto any stage after it, so the stages can be solved one at a time.  For\na state of `n` elements that means `s` solves of size `n` rather\nthan one of size `s*n` — the difference between a dense Jacobian of\n`n**2` entries and one of `(s*n)**2`.",
           "parameters": [],
@@ -491,7 +491,7 @@
             "property"
           ],
           "signature": "is_fsal: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/diffeq/_tableau.py#L278",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/diffeq/_tableau.py#L278",
           "summary": "bool: Whether the last stage derivative equals `f(t + dt, y_next)`.",
           "extended": "True when the final stage row reproduces the solution weights, so the\nstage already evaluated the right-hand side at the new state.  That\nderivative can then be reused as the next step's first stage, saving\none call per accepted step — a real saving when the right-hand side is\na neural network.",
           "parameters": [],
@@ -514,7 +514,7 @@
             "property"
           ],
           "signature": "mid_order: int",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/diffeq/_tableau.py#L290",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/diffeq/_tableau.py#L290",
           "summary": "int: Order to which `mid` reproduces the state at the midpoint.",
           "extended": "Zero when the tableau carries no `mid` at all.\n\nThe dense output is a quartic anchored on the midpoint estimate, so\nthis bounds how accurate any interpolated value can be — and it is not\nimplied by `order`.  Several tableaux pair a genuinely derived\ninterpolant with their steps (`dopri5` and `tsit5` reach 4 here,\n`dopri8` reaches 5) while others carry only a first-order\nplaceholder: a half-step of Euler, which is what `mid` reduces to\nwhen its weights put `1/2` in a single slot.  `bosh3` takes third\norder steps and interpolates to first, and nothing about the method's\nname says so.\n\nComputed from the quadrature conditions the midpoint weights would\nhave to satisfy, the same way the collocation tableaux verify their\nown order at import:\n\n$$\n\\sum_i \\text{mid}_i\\, c_i^{\\,k-1} = \\frac{(1/2)^k}{k}\n$$",
           "parameters": [],
@@ -537,7 +537,7 @@
             "property"
           ],
           "signature": "stages: int",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/diffeq/_tableau.py#L325",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/diffeq/_tableau.py#L325",
           "summary": "int: Number of stage derivatives evaluated per step.",
           "extended": "Equals the number of right-hand-side calls the method makes for each\nstep, which is the dominant cost when the right-hand side is a neural\nnetwork.",
           "parameters": [],
@@ -558,7 +558,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(a: tuple[tuple[float, ...], ...], b: tuple[float, ...], c: tuple[float, ...], order: int, name: str, b_error: tuple[float, ...] | None = None, mid: tuple[float, ...] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/diffeq/_tableau.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/diffeq/_tableau.py#L1",
           "subcategory": "tableau",
           "summary": null,
           "extended": null,

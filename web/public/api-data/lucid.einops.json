@@ -3,23 +3,125 @@
   "name": "einops",
   "path": "lucid.einops",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/einops/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/einops/__init__.py#L1",
   "members": [
+    {
+      "name": "pack",
+      "path": "lucid.einops._packing.pack",
+      "kind": "function",
+      "labels": [],
+      "signature": "pack(tensors: Sequence[Tensor], pattern: str)",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/einops/_packing.py#L60",
+      "subcategory": "packing",
+      "summary": "Join tensors of different rank into one along the axis a `*` marks.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "tensors",
+          "annotation": "sequence of Tensor",
+          "description": "The tensors to pack.  They agree on every axis the pattern names\nbesides `*` and may differ in what `*` covers.",
+          "default": null
+        },
+        {
+          "name": "pattern",
+          "annotation": "str",
+          "description": "Space-separated axis names with one `*`, for example\n`\"b seq * c\"`.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "tuple of (Tensor, list of tuple of int)",
+        "description": "The packed tensor and, for each input, the shape of the axes the\nstar covered there (empty if it covered none)."
+      },
+      "raises": [
+        {
+          "annotation": "lucid._C.engine.InvalidArgument",
+          "description": "The pattern is malformed or no tensor is given."
+        },
+        {
+          "annotation": "lucid._C.engine.ShapeMismatch",
+          "description": "A tensor has fewer axes than the pattern names, or the axes around\nthe star differ between tensors."
+        },
+        {
+          "annotation": "TypeError",
+          "description": "An element of `tensors` is not a tensor."
+        }
+      ],
+      "examples": [
+        ">>> import lucid\n>>> parts = [lucid.zeros(2, 5), lucid.zeros(2, 3, 5), lucid.zeros(2, 3, 4, 5)]\n>>> packed, shapes = lucid.einops.pack(parts, \"n * c\")\n>>> packed.shape\n(2, 16, 5)\n>>> shapes\n[(), (3,), (3, 4)]"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "unpack",
+      "path": "lucid.einops._packing.unpack",
+      "kind": "function",
+      "labels": [],
+      "signature": "unpack(tensor: Tensor, packed_shapes: Sequence[Sequence[int]], pattern: str)",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/einops/_packing.py#L164",
+      "subcategory": "packing",
+      "summary": "Split a tensor `pack` made back into the tensors it joined.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "tensor",
+          "annotation": "Tensor",
+          "description": "The packed tensor.",
+          "default": null
+        },
+        {
+          "name": "packed_shapes",
+          "annotation": "sequence of sequence of int",
+          "description": "What the star covered in each output, as `pack` returned it.  One\nshape may hold a single `-1`, which is inferred.",
+          "default": null
+        },
+        {
+          "name": "pattern",
+          "annotation": "str",
+          "description": "The pattern `pack` was called with.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "list of Tensor",
+        "description": "One tensor per entry of `packed_shapes`."
+      },
+      "raises": [
+        {
+          "annotation": "lucid._C.engine.InvalidArgument",
+          "description": "The pattern is malformed or `packed_shapes` is not a list of shapes\nwith at most one `-1` among them."
+        },
+        {
+          "annotation": "lucid._C.engine.ShapeMismatch",
+          "description": "`tensor` does not have the rank the pattern names, or the parts do\nnot add up to its packed axis."
+        }
+      ],
+      "examples": [
+        ">>> import lucid\n>>> packed = lucid.zeros(2, 16, 5)\n>>> [t.shape for t in lucid.einops.unpack(packed, [(), (3,), (3, -1)], \"n * c\")]\n[(2, 5), (2, 3, 5), (2, 3, 4, 5)]"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
     {
       "name": "rearrange",
       "path": "lucid.einops.rearrange",
       "kind": "function",
       "labels": [],
-      "signature": "rearrange(tensor: Tensor, pattern: str, axes_lengths: int = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/einops/__init__.py#L100",
+      "signature": "rearrange(tensor: Tensor | list[Tensor], pattern: str, axes_lengths: int = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/einops/__init__.py#L140",
       "subcategory": null,
       "summary": "Rearrange axes of `tensor` according to an einops pattern.",
       "extended": "Performs arbitrary axis manipulation — transpose, reshape,\ncomposition, and decomposition — expressed in a single readable\npattern string. The notation makes the intent explicit and removes\nthe chain of `transpose`/`view` calls that obscure dimensionality\ntransforms in raw tensor code.",
       "parameters": [
         {
           "name": "tensor",
-          "annotation": "Tensor",
-          "description": "Input tensor to rearrange.",
+          "annotation": "Tensor or list of Tensor",
+          "description": "Input tensor to rearrange.  A list of equally shaped tensors is\nstacked along a new leading axis first, so the pattern names it.",
           "default": null
         },
         {
@@ -64,16 +166,16 @@
       "path": "lucid.einops.reduce",
       "kind": "function",
       "labels": [],
-      "signature": "reduce(tensor: Tensor, pattern: str, reduction: str, axes_lengths: int = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/einops/__init__.py#L157",
+      "signature": "reduce(tensor: Tensor | list[Tensor], pattern: str, reduction: str | Callable[[Tensor, tuple[int, ...]], Tensor], axes_lengths: int = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/einops/__init__.py#L198",
       "subcategory": null,
       "summary": "Reduce `tensor` along axes implied by an einops pattern.",
       "extended": "Generalises standard `sum` / `mean` / `max` / `min` /\n`prod` reductions to arbitrary axes selected by symbolic pattern.\nAny axis present on the left-hand side of `->` but absent on the\nright-hand side is collapsed by the chosen reduction.",
       "parameters": [
         {
           "name": "tensor",
-          "annotation": "Tensor",
-          "description": "Input tensor to reduce.",
+          "annotation": "Tensor or list of Tensor",
+          "description": "Input tensor to reduce.  A list of equally shaped tensors is\nstacked along a new leading axis first, so the pattern names it.",
           "default": null
         },
         {
@@ -84,8 +186,8 @@
         },
         {
           "name": "reduction",
-          "annotation": "str",
-          "description": "Reduction operation; one of `\"sum\"`, `\"mean\"`, `\"max\"`,\n`\"min\"`, `\"prod\"`, `\"any\"`, `\"all\"`.",
+          "annotation": "str or callable",
+          "description": "Reduction operation; one of `\"sum\"`, `\"mean\"`, `\"max\"`,\n`\"min\"`, `\"prod\"`, `\"any\"`, `\"all\"`.  A callable\n`f(tensor, axes)` is also accepted: it is given the tensor with\nthe axes to reduce moved last, and the positions `axes` they\nthen occupy, and returns the reduced tensor.",
           "default": null
         },
         {
@@ -114,7 +216,7 @@
         }
       ],
       "examples": [
-        ">>> import lucid\n>>> x = lucid.randn(2, 3, 4)\n>>> lucid.einops.reduce(x, \"b h w -> b w\", \"mean\").shape\n(2, 4)\n>>> lucid.einops.reduce(lucid.randn(2, 4, 6), \"b (h 2) (w 3) -> b h w\", \"max\").shape\n(2, 2, 2)"
+        ">>> import lucid\n>>> x = lucid.randn(2, 3, 4)\n>>> lucid.einops.reduce(x, \"b h w -> b w\", \"mean\").shape\n(2, 4)\n>>> lucid.einops.reduce(lucid.randn(2, 4, 6), \"b (h 2) (w 3) -> b h w\", \"max\").shape\n(2, 2, 2)\n>>> total = lambda t, axes: lucid.sum(t, dim=list(axes))\n>>> lucid.einops.reduce(lucid.ones(2, 3), \"b w -> b\", total)\ntensor([3., 3.])"
       ],
       "notes": [
         "Conceptually equivalent to a permutation followed by a reduction\nalong contiguous trailing axes. For `reduction=\"mean\"` the result\nis\n\n\n\n$$\ny_{b w} = \\frac{1}{H} \\sum_{h=1}^{H} x_{b h w}.\n$$"
@@ -128,16 +230,16 @@
       "path": "lucid.einops.repeat",
       "kind": "function",
       "labels": [],
-      "signature": "repeat(tensor: Tensor, pattern: str, axes_lengths: int = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/einops/__init__.py#L217",
+      "signature": "repeat(tensor: Tensor | list[Tensor], pattern: str, axes_lengths: int = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/einops/__init__.py#L270",
       "subcategory": null,
       "summary": "Repeat `tensor` along new or existing axes via an einops pattern.",
       "extended": "Provides a single notation for both tiling along existing axes and\nbroadcasting into entirely new axes. The pattern's right-hand side\nenumerates the desired output axes; any axis appearing on the right\nbut not on the left is introduced and must be given an explicit\nlength through `**axes_lengths`, or written as a number.",
       "parameters": [
         {
           "name": "tensor",
-          "annotation": "Tensor",
-          "description": "Input tensor to repeat.",
+          "annotation": "Tensor or list of Tensor",
+          "description": "Input tensor to repeat.  A list of equally shaped tensors is\nstacked along a new leading axis first, so the pattern names it.",
           "default": null
         },
         {
@@ -182,8 +284,8 @@
       "path": "lucid.einops.einsum",
       "kind": "function",
       "labels": [],
-      "signature": "einsum(equation: str, operands: Tensor = ())",
-      "source": "https://github.com/lucid-official/lucid/blob/bfa4169/lucid/einops/__init__.py#L273",
+      "signature": "einsum(equation: str, operands: Tensor | Sequence[Tensor] = ())",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/einops/__init__.py#L340",
       "subcategory": null,
       "summary": "Evaluate an Einstein-summation expression over the given tensors.",
       "extended": "Implements the general tensor contraction operator: each input is\nindexed by labels declared in `equation` and the output retains\nonly the labels appearing on the right-hand side. Repeated labels\nare summed; matching labels broadcast.",
@@ -196,8 +298,8 @@
         },
         {
           "name": "*operands",
-          "annotation": "Tensor",
-          "description": "Tensors corresponding to the comma-separated factors on the\nleft-hand side.",
+          "annotation": "Tensor or sequence of Tensor",
+          "description": "Tensors corresponding to the comma-separated factors on the\nleft-hand side, given one by one or as a single list or tuple.",
           "default": "()"
         }
       ],
@@ -213,21 +315,71 @@
         {
           "annotation": "lucid._C.engine.ShapeMismatch",
           "description": "An operand's rank does not match its subscripts, or a subscript's\nsizes disagree (within one operand, or across operands without a\nsize of 1 to broadcast)."
+        },
+        {
+          "annotation": "lucid._C.engine.NotImplementedError",
+          "description": "Bool operands share a subscript that the output drops."
         }
       ],
       "examples": [
         ">>> import lucid\n>>> a = lucid.randn(2, 3)\n>>> b = lucid.randn(3, 4)\n>>> lucid.einops.einsum(\"ij,jk->ik\", a, b).shape\n(2, 4)\n>>> m = lucid.tensor([[1.0, 2.0], [3.0, 4.0]])\n>>> lucid.einops.einsum(\"ii->i\", m)\ntensor([1., 4.])\n>>> lucid.einops.einsum(\"ii->\", m)\ntensor(5.)"
       ],
       "notes": [
-        "Matrix multiplication is the canonical example: `\"ij,jk->ik\"`\nrealises\n\n\n\n$$\nC_{ik} = \\sum_{j} A_{ij} \\, B_{jk}.\n$$\n\nMore generally, einsum expresses traces (`\"ii->\"`), batched\ncontractions (`\"bij,bjk->bik\"`), and outer products\n(`\"i,j->ij\"`) within one consistent notation.\n\nA subscript repeated within one operand selects that operand's\ndiagonal over those axes (`\"ii->i\"`, `\"bii->bi\"`), and must name\naxes of equal size.  `...` stands for the remaining leading axes;\nthey broadcast across operands, right-aligned.  A subscript's size\nmay be 1 in one operand and longer in another, which broadcasts.\nWithout `->` the output is `...` followed by the subscripts that\noccur exactly once, in sorted order."
+        "Matrix multiplication is the canonical example: `\"ij,jk->ik\"`\nrealises\n\n\n\n$$\nC_{ik} = \\sum_{j} A_{ij} \\, B_{jk}.\n$$\n\nMore generally, einsum expresses traces (`\"ii->\"`), batched\ncontractions (`\"bij,bjk->bik\"`), and outer products\n(`\"i,j->ij\"`) within one consistent notation.\n\nA subscript repeated within one operand selects that operand's\ndiagonal over those axes (`\"ii->i\"`, `\"bii->bi\"`), and must name\naxes of equal size.  `...` stands for the remaining leading axes;\nthey broadcast across operands, right-aligned.  A subscript's size\nmay be 1 in one operand and longer in another, which broadcasts.\nWithout `->` the output is `...` followed by the subscripts that\noccur exactly once, in sorted order.\n\nAn integer contraction keeps its operands' dtype, as `matmul` does:\n`\"ij,jk->ik\"` over `int32` is `int32`.  A subscript summed away\ninside one operand (`\"ij->j\"`, a trace) is a `sum` and widens an\ninteger or bool operand to `int64`.  Contracting bool operands is\nrefused."
       ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "parse_shape",
+      "path": "lucid.einops.parse_shape",
+      "kind": "function",
+      "labels": [],
+      "signature": "parse_shape(tensor: Tensor, pattern: str)",
+      "source": "https://github.com/lucid-official/lucid/blob/cf87cbb/lucid/einops/__init__.py#L429",
+      "subcategory": null,
+      "summary": "Read named axis lengths off the shape of `tensor`.",
+      "extended": "The result can be passed as the keyword lengths of the other entry\npoints, so a length is written once.",
+      "parameters": [
+        {
+          "name": "tensor",
+          "annotation": "Tensor",
+          "description": "The tensor whose shape is read.",
+          "default": null
+        },
+        {
+          "name": "pattern",
+          "annotation": "str",
+          "description": "One name per dimension, `_` for a dimension to skip, `...` for\nany run of dimensions, `1` or `()` for a unit axis and a number\nfor an axis of that length.  Parenthesised groups of several axes\nare refused: a length cannot be read through a composition.",
+          "default": null
+        }
+      ],
+      "returns": {
+        "annotation": "dict of str to int",
+        "description": "Each named axis and its length."
+      },
+      "raises": [
+        {
+          "annotation": "lucid._C.engine.InvalidArgument",
+          "description": "The pattern is malformed or composes axes."
+        },
+        {
+          "annotation": "lucid._C.engine.ShapeMismatch",
+          "description": "The rank of `tensor` does not fit the pattern, or a unit or\nnumbered axis is not the length the pattern writes."
+        }
+      ],
+      "examples": [
+        ">>> import lucid\n>>> x = lucid.zeros(2, 3, 5, 7)\n>>> lucid.einops.parse_shape(x, \"batch _ h w\")\n{'batch': 2, 'h': 5, 'w': 7}\n>>> y = lucid.zeros(70)\n>>> lucid.einops.rearrange(y, \"(c h w) -> c h w\", **lucid.einops.parse_shape(x, \"_ _ h w\")).shape\n(2, 5, 7)"
+      ],
+      "notes": [],
       "attributes": [],
       "warns": [],
       "see_also": []
     }
   ],
   "summary": "lucid.einops — shape manipulation written in named axes.",
-  "extended": "Four entry points: `rearrange` (permute, reshape, split or merge axes),\n`reduce` (the same, carrying a reduction), `repeat` (the same, carrying a\nbroadcast expansion) and `einsum`.\n\nPatterns are strings of axis names, so the intent is stated in the call\nrather than reconstructed from a run of anonymous `transpose` / `reshape`\nsteps:\n\nlucid.einops.rearrange(x, \"b c h w -> b (h w) c\")   # (2,3,4,5) → (2,20,3)\n\nThe grammar is the reference einops grammar: names, parenthesised groups\none level deep, `...` for the axes the pattern does not name, `1` or\n`()` for a unit axis and, in `reduce` and `repeat`, a number for an\nunnamed axis of that length.  A keyword length is also a check: an axis\nthe input already fixes must have the length given for it, and a keyword\nnaming no axis of the pattern is refused.  A mismatch fails with a message\nnaming the axis that did not fit, instead of producing a silently wrong\nshape that only surfaces layers later.\n\nReachable only as `lucid.einops.*`: there is no top-level `lucid.einsum`\nand no `Tensor.rearrange` method, so each op has exactly one path.",
+  "extended": "Entry points: `rearrange` (permute, reshape, split or merge axes),\n`reduce` (the same, carrying a reduction), `repeat` (the same, carrying a\nbroadcast expansion), `einsum`, `pack` / `unpack` (join tensors of\ndifferent rank along one axis and split them again) and `parse_shape`\n(read named lengths off a shape).\n\nPatterns are strings of axis names, so the intent is stated in the call\nrather than reconstructed from a run of anonymous `transpose` / `reshape`\nsteps:\n\nlucid.einops.rearrange(x, \"b c h w -> b (h w) c\")   # (2,3,4,5) → (2,20,3)\n\nThe grammar is the reference einops grammar: names, parenthesised groups\none level deep, `...` for the axes the pattern does not name, `1` or\n`()` for a unit axis and, in `reduce` and `repeat`, a number for an\nunnamed axis of that length.  A keyword length is also a check: an axis\nthe input already fixes must have the length given for it, and a keyword\nnaming no axis of the pattern is refused.  A mismatch fails with a message\nnaming the axis that did not fit, instead of producing a silently wrong\nshape that only surfaces layers later.\n\nReachable only as `lucid.einops.*`: there is no top-level `lucid.einsum`\nand no `Tensor.rearrange` method, so each op has exactly one path.",
   "parameters": [],
   "returns": null,
   "raises": [],
