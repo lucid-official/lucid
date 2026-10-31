@@ -39,6 +39,7 @@ _FC6_FC7: Final = _names("fc6", "fc7")
 _BOTTLENECK_CONVS: Final = _names("conv1", "conv2", "conv3")
 _UNET_ATTENTION: Final = _names("qkv", "proj")
 _DREAMER_HEADS: Final = _names("prior_head.0", "posterior_head.0")
+_DREAMER_DECODER: Final = frozenset(f"deconvs.{i}" for i in range(4))
 
 #: ``model_type`` → the module names a LoRA adapter takes by default.  Read-only.
 DEFAULT_LORA_TARGET_MODULES: Final[Mapping[str, frozenset[str]]] = MappingProxyType(
@@ -112,8 +113,8 @@ DEFAULT_LORA_TARGET_MODULES: Final[Mapping[str, frozenset[str]]] = MappingProxyT
         "yolo_v3_tiny": _names("conv"),
         "yolo_v4": _names("conv"),
         "fcn": _BOTTLENECK_CONVS,
-        "unet": _names("body.0", "body.3"),
-        "attention_unet": _names("net.0", "net.3"),
+        "unet": _names("body.0", "body.3", "up"),
+        "attention_unet": _names("net.0", "net.3", "up"),
         "maskformer": _QV_PROJ,
         "mask2former": _QV_PROJ,
         # generative
@@ -130,12 +131,12 @@ DEFAULT_LORA_TARGET_MODULES: Final[Mapping[str, frozenset[str]]] = MappingProxyT
         "genie": _names("query", "value"),
         "nice": _names("proj"),
         "realnvp": _names("conv1", "conv2"),
-        "vqvae": _names("conv1", "conv2"),
-        "vae": _names("down_blocks.0", "down_blocks.1", "down_blocks.2"),
-        "dreamer": _DREAMER_HEADS,
-        "dreamer_v2": _DREAMER_HEADS,
-        "dreamer_v3": _DREAMER_HEADS,
-        "planet": _DREAMER_HEADS,
+        "vqvae": _names("conv1", "conv2", "up_blocks.0", "up_blocks.1"),
+        "vae": _names(*(f"{side}_blocks.{i}" for side in ("down", "up") for i in range(3))),
+        "dreamer": _DREAMER_HEADS | _DREAMER_DECODER,
+        "dreamer_v2": _DREAMER_HEADS | _DREAMER_DECODER,
+        "dreamer_v3": _DREAMER_HEADS | _DREAMER_DECODER,
+        "planet": _DREAMER_HEADS | _DREAMER_DECODER,
     }
 )
 

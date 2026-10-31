@@ -56,6 +56,9 @@ _BASES: dict[type[nn.Module], Callable[[], nn.Module]] = {
     nn.Conv1d: lambda: nn.Conv1d(2, 3, 3),
     nn.Conv2d: lambda: nn.Conv2d(2, 3, 3),
     nn.Conv3d: lambda: nn.Conv3d(2, 3, 3),
+    nn.ConvTranspose1d: lambda: nn.ConvTranspose1d(2, 3, 3),
+    nn.ConvTranspose2d: lambda: nn.ConvTranspose2d(2, 3, 3),
+    nn.ConvTranspose3d: lambda: nn.ConvTranspose3d(2, 3, 3),
     nn.Embedding: lambda: nn.Embedding(5, 4),
     nn.MultiheadAttention: lambda: nn.MultiheadAttention(4, 2),
 }

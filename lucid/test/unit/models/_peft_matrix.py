@@ -276,6 +276,9 @@ _ADAPTABLE: Final = (
     nn.Conv1d,
     nn.Conv2d,
     nn.Conv3d,
+    nn.ConvTranspose1d,
+    nn.ConvTranspose2d,
+    nn.ConvTranspose3d,
     nn.Embedding,
     nn.MultiheadAttention,
 )

@@ -67,7 +67,8 @@ An adapter directory that names its base model reopens in one call::
     model = AutoPeftModelForCausalLM.from_pretrained("my-adapter")
 
 LoRA layers exist for ``nn.Linear``, ``nn.Embedding``, ``nn.Conv1d`` /
-``Conv2d`` / ``Conv3d`` and ``nn.MultiheadAttention`` (found by the module's
+``Conv2d`` / ``Conv3d``, their ``nn.ConvTranspose`` counterparts and
+``nn.MultiheadAttention`` (found by the module's
 type in ``target_modules``), and ``target_parameters`` adapts a raw
 ``nn.Parameter`` of a module (``lucid.peft.tuners.lora``).  Asking for
 more — a TIES / DARE weighted adapter, ``add_weighted_adapter`` over

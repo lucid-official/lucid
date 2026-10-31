@@ -140,6 +140,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - reset_parameters() on every module that owns parameters
 - merge LoRA into weight-normalised layers via a weight site
 - LoRA on attention with separate q/k/v projections
+- LoRA on transposed convolutions, decoders in the defaults
 
 ---
 

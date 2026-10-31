@@ -44,6 +44,9 @@ class TestRegistries:
             nn.Conv1d: lora.Conv1d,
             nn.Conv2d: lora.Conv2d,
             nn.Conv3d: lora.Conv3d,
+            nn.ConvTranspose1d: lora.ConvTranspose1d,
+            nn.ConvTranspose2d: lora.ConvTranspose2d,
+            nn.ConvTranspose3d: lora.ConvTranspose3d,
             nn.MultiheadAttention: lora.MultiheadAttention,
         }
         assert LoraModel._layer_types is LoraLayer._layer_types
