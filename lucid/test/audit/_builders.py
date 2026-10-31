@@ -19,6 +19,7 @@ from collections.abc import Callable
 from typing import Any
 
 import lucid.nn as nn
+import lucid.peft as peft
 from lucid.peft import LoraConfig, LoraModel, PeftModel
 from lucid.peft.tuners import lora
 
@@ -38,3 +39,16 @@ BUILDERS: dict[type, Callable[[], Any]] = {
     LoraModel: lambda: LoraModel(_base_model(), _config()),
     PeftModel: lambda: PeftModel(_base_model(), _config()),
 }
+
+# Every task wrapper ``get_peft_model`` can return takes the same
+# ``(model, config)`` pair as ``PeftModel``, so each public subclass is
+# registered from the package rather than by hand (LCD-716).
+BUILDERS.update(
+    {
+        cls: (lambda cls=cls: cls(_base_model(), _config()))
+        for name in peft.__all__
+        if isinstance(cls := getattr(peft, name), type)
+        and issubclass(cls, PeftModel)
+        and cls is not PeftModel
+    }
+)
