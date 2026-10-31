@@ -141,6 +141,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - method-named messages; IA3/VeRA files keep reference keys
 
+- Transformer.__init__ ends with xavier _reset_parameters
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

@@ -1364,13 +1364,14 @@ class Transformer(Module):
         self.d_model = d_model
         self.nhead = nhead
         self.batch_first = batch_first
+        self._reset_parameters()
 
     def _reset_parameters(self) -> None:
         """Xavier-uniform every parameter of two or more dimensions, as the reference does.
 
-        The constructor does not call it: it leaves each sub-layer on its own
-        default, and a caller who wants the reference's whole-model start
-        runs this after building.
+        The constructor ends with it, so a freshly built model starts from the
+        reference's whole-model initialisation instead of each sub-layer's own
+        default; custom encoders and decoders are included.
         """
         for p in self.parameters():
             if p.ndim > 1:
