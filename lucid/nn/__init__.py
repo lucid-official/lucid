@@ -21,7 +21,7 @@ design, so there is exactly one path to each name.
 """
 
 from lucid.nn.module import Module, UninitializedParameterWarning
-from lucid.nn.parameter import Parameter, UninitializedParameter
+from lucid.nn.parameter import Buffer, Parameter, UninitializedParameter
 from lucid.nn.hooks import (
     RemovableHandle,
     register_module_full_backward_hook,
@@ -142,6 +142,10 @@ from lucid.nn.modules import (
     LSTMCell,
     GRUCell,
     RNNCell,
+    RNNBase,
+    RNNCellBase,
+    AdaptiveLogSoftmaxWithLoss,
+    CrossMapLRN2d,
     MSELoss,
     L1Loss,
     CrossEntropyLoss,
@@ -204,6 +208,7 @@ from lucid.nn.modules import (
 __all__ = [
     "Module",
     "UninitializedParameterWarning",
+    "Buffer",
     "Parameter",
     "UninitializedParameter",
     "RemovableHandle",
@@ -323,6 +328,10 @@ __all__ = [
     "LSTMCell",
     "GRUCell",
     "RNNCell",
+    "RNNBase",
+    "RNNCellBase",
+    "AdaptiveLogSoftmaxWithLoss",
+    "CrossMapLRN2d",
     "MSELoss",
     "L1Loss",
     "CrossEntropyLoss",

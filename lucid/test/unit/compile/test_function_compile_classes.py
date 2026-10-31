@@ -67,6 +67,8 @@ CUSTOM: frozenset[str] = frozenset(
         "_Eig",
         "_LUFactorGrad",
         "_LDLFactorGrad",
+        # nn: the reference's hand-written backward, not its forward's derivative
+        "_CrossMapLRN2d",
         # Special (host loop in forward)
         "_RegularizedGamma",
         # Host / nested-autograd ODE backward

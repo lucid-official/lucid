@@ -438,6 +438,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     ),
     "lucid.nn.functional._interpolate": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.functional._loss_checks": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
+    "lucid.nn.functional._with_indices": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.functional.activations": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.functional.attention": (
         ("DTypeLike", "lucid._types", "DTypeLike"),
@@ -454,6 +455,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid.nn.functional.positional": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.functional.sampling": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.functional.sparse": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
+    "lucid.nn.functional.upsampling": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.init": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.intrinsic.qat.modules": (
         ("FakeQuantize", "lucid.quantization._fake_quantize", "FakeQuantize"),
@@ -499,7 +501,6 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
     ),
     "lucid.nn.quantized.sparse": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
-    "lucid.nn.utils.clip_grad": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.utils.fusion": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.utils.skip_init": (("Module", "lucid.nn.module", "Module"),),
     "lucid.optim._step_counter": (("Optimizer", "lucid.optim.optimizer", "Optimizer"),),

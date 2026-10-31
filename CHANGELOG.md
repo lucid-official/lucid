@@ -228,6 +228,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - token-level tasks and multitask prompt tuning
 - trace forward hooks that only rewrite tensors (LCD-776)
 - mark_dirty, setup_context, once_differentiable, hooks
+- nn namespace parity with the reference (LCD-751)
 
 ---
 

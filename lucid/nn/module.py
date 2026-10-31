@@ -25,7 +25,7 @@ from lucid._tensor.tensor import Tensor
 from lucid._tensor._to import _to_engine_target, _type_target
 from lucid._dispatch import _unwrap, _wrap
 from lucid.autograd._grad_inplace import zero_grads_
-from lucid.nn.parameter import Parameter, UninitializedParameter
+from lucid.nn.parameter import Buffer, Parameter, UninitializedParameter
 from lucid.nn.hooks import (
     _GLOBAL_BACKWARD_HOOKS,
     _GLOBAL_BACKWARD_PRE_HOOKS,
@@ -160,6 +160,8 @@ def _before_init_kind(value: object) -> str | None:
     """Which registry ``value`` would need, or ``None`` for a plain value."""
     if isinstance(value, Parameter):
         return "parameters"
+    if isinstance(value, Buffer):
+        return "buffer"
     if isinstance(value, (Module, _ModuleWrapper)):
         return "module"
     return None
@@ -180,7 +182,9 @@ class Module:
        which empties the slot; anything else is a ``TypeError``.
     3. If the value is a :class:`Module` → stored in ``_modules``.
     4. If the name is a registered submodule → the value must be ``None``.
-    5. If the name is a registered buffer → the value must be a
+    5. If the value is a :class:`~lucid.nn.Buffer` → registered as a buffer,
+       persistent or not as the ``Buffer`` says.
+       If the name is a registered buffer → the value must be a
        :class:`~lucid.Tensor` or ``None``, and the buffer keeps its
        persistence.
     6. Otherwise → plain Python attribute.
@@ -508,22 +512,32 @@ class Module:
             _refuse_unless_none(value, name, "child module", "Module")
             self.__dict__.pop(name, None)  # a compiled wrapper's
             self._modules[name] = None
-        elif name in self._buffers:
-            # A buffer stays a buffer, with its persistence, until it is
-            # deleted: spectral_norm's power iteration and every running
-            # statistic are kept by assignment, and a buffer demoted to a
-            # plain attribute drops out of ``state_dict`` and ``.to()``.
-            # ``None`` empties the slot, the way optional statistics are
-            # spelled.
-            if value is not None and not isinstance(value, Tensor):
-                raise TypeError(
-                    f"cannot assign '{type(value).__name__}' as buffer "
-                    f"'{name}' (Tensor or None expected)"
-                )
-            self._buffers[name] = value
+        elif isinstance(value, Buffer) or name in self._buffers:
+            self._assign_buffer(name, value)
         else:
             object.__setattr__(self, name, value)
         _tree_changed()
+
+    def _assign_buffer(self, name: str, value: object) -> None:
+        """Assign to buffer ``name``, or register ``value`` as one if it is a :class:`Buffer`.
+
+        A ``Buffer`` says how it is kept, as ``register_buffer`` would be told.
+        Any other value goes to a registered buffer's slot: the buffer stays
+        a buffer, with its persistence, until it is deleted — spectral_norm's
+        power iteration and every running statistic are kept by assignment,
+        and a buffer demoted to a plain attribute drops out of ``state_dict``
+        and ``.to()``.  ``None`` empties the slot, the way optional
+        statistics are spelled.
+        """
+        if isinstance(value, Buffer):
+            self.register_buffer(name, value, value.persistent)
+            return
+        if value is not None and not isinstance(value, Tensor):
+            raise TypeError(
+                f"cannot assign '{type(value).__name__}' as buffer "
+                f"'{name}' (Tensor or None expected)"
+            )
+        self._buffers[name] = value
 
     def _setattr_before_init(self, name: str, value: object) -> bool:
         """True, and already written, if ``Module.__init__`` hasn't run yet.

@@ -2,7 +2,7 @@
 Sparse / embedding modules.
 """
 
-from typing import NamedTuple, override
+from typing import NamedTuple, Self, override
 
 from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike
@@ -16,6 +16,16 @@ from lucid.nn.functional.activations import straight_through
 from lucid.nn.functional.sparse import embedding, nearest_codebook, one_hot
 
 
+def _pretrained_shape(embeddings: Tensor) -> tuple[int, int]:
+    """``(rows, cols)`` of a table passed to ``from_pretrained``, or ``ValueError``."""
+    if embeddings.ndim != 2:
+        raise ValueError(
+            f"Embeddings parameter is expected to be 2-dimensional, got {embeddings.ndim}D"
+        )
+    rows, cols = embeddings.shape
+    return int(rows), int(cols)
+
+
 class _PaddedTable(Module):
     """A ``(num_embeddings, embedding_dim)`` ``weight`` table with an optional padding row.
 
@@ -27,6 +37,34 @@ class _PaddedTable(Module):
 
     weight: Parameter
     padding_idx: int | None
+
+    def _init_weight(
+        self,
+        num_embeddings: int,
+        embedding_dim: int,
+        weight: Tensor | None,
+        freeze: bool,
+        device: DeviceLike,
+        dtype: DTypeLike,
+    ) -> None:
+        """Allocate ``weight``, or adopt a ready-made table.
+
+        A table passed in is bound as the parameter without a copy and is
+        *not* zeroed at ``padding_idx``: the caller supplied the rows they
+        want, as in the reference.  ``freeze`` turns its gradient off.
+        """
+        if weight is None:
+            self.weight = Parameter(
+                empty(num_embeddings, embedding_dim, dtype=dtype, device=device)
+            )
+            self.reset_parameters()
+            return
+        if tuple(weight.shape) != (num_embeddings, embedding_dim):
+            raise ValueError(
+                f"Shape of weight {tuple(weight.shape)} does not match "
+                f"num_embeddings={num_embeddings} and embedding_dim={embedding_dim}"
+            )
+        self.weight = Parameter(weight, requires_grad=not freeze)
 
     def reset_parameters(self) -> None:
         """Re-draw ``weight`` from ``N(0, 1)`` and zero the padding row."""
@@ -177,6 +215,8 @@ class Embedding(_PaddedTable):
         norm_type: float = 2.0,
         scale_grad_by_freq: bool = False,
         sparse: bool = False,
+        _weight: Tensor | None = None,
+        _freeze: bool = False,
         device: DeviceLike = None,
         dtype: DTypeLike = None,
     ) -> None:
@@ -190,10 +230,74 @@ class Embedding(_PaddedTable):
         self.norm_type: float = norm_type
         self.scale_grad_by_freq: bool = scale_grad_by_freq
         self.sparse: bool = sparse
-        self.weight: Parameter = Parameter(
-            empty(num_embeddings, embedding_dim, dtype=dtype, device=device)
+        self._init_weight(num_embeddings, embedding_dim, _weight, _freeze, device, dtype)
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        embeddings: Tensor,
+        freeze: bool = True,
+        padding_idx: int | None = None,
+        max_norm: float | None = None,
+        norm_type: float = 2.0,
+        scale_grad_by_freq: bool = False,
+        sparse: bool = False,
+    ) -> Self:
+        """Build an :class:`Embedding` whose table is ``embeddings``.
+
+        Parameters
+        ----------
+        embeddings : Tensor
+            A 2-D floating-point tensor; its shape is
+            ``(num_embeddings, embedding_dim)``.  The table is bound without
+            a copy, so an in-place write through either is seen by both.
+        freeze : bool, optional
+            ``True`` keeps the table out of training
+            (``weight.requires_grad = False``).  Default: ``True``.
+        padding_idx : int or None, optional
+            As the constructor.  It is *not* used to zero a row of
+            ``embeddings``; it only stops gradient reaching that row.
+        max_norm : float or None, optional
+            As the constructor.  Default: ``None``.
+        norm_type : float, optional
+            As the constructor.  Default: ``2.0``.
+        scale_grad_by_freq : bool, optional
+            As the constructor.  Default: ``False``.
+        sparse : bool, optional
+            As the constructor.  Default: ``False``.
+
+        Returns
+        -------
+        Embedding
+            The module.
+
+        Raises
+        ------
+        ValueError
+            If ``embeddings`` is not 2-D.
+
+        Examples
+        --------
+        >>> import lucid, lucid.nn as nn
+        >>> weight = lucid.tensor([[1.0, 2.3, 3.0], [4.0, 5.1, 6.3]])
+        >>> emb = nn.Embedding.from_pretrained(weight)
+        >>> emb(lucid.tensor([1], dtype=lucid.int64))
+        tensor([[4., 5.1, 6.3]])
+        >>> emb.weight.requires_grad
+        False
+        """
+        rows, cols = _pretrained_shape(embeddings)
+        return cls(
+            num_embeddings=rows,
+            embedding_dim=cols,
+            padding_idx=padding_idx,
+            max_norm=max_norm,
+            norm_type=norm_type,
+            scale_grad_by_freq=scale_grad_by_freq,
+            sparse=sparse,
+            _weight=embeddings,
+            _freeze=freeze,
         )
-        self.reset_parameters()
 
     @override
     def forward(self, input: Tensor) -> Tensor:
@@ -374,13 +478,78 @@ class EmbeddingBag(_PaddedTable):
         self.sparse = sparse
         self.include_last_offset = include_last_offset
         self.padding_idx = _padding_row(padding_idx, num_embeddings, "EmbeddingBag")
-        if _weight is None:
-            self.weight = Parameter(
-                empty(num_embeddings, embedding_dim, dtype=dtype, device=device)
-            )
-            self.reset_parameters()
-        else:
-            self.weight = Parameter(_weight)
+        self._init_weight(num_embeddings, embedding_dim, _weight, False, device, dtype)
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        embeddings: Tensor,
+        freeze: bool = True,
+        max_norm: float | None = None,
+        norm_type: float = 2.0,
+        scale_grad_by_freq: bool = False,
+        mode: str = "mean",
+        sparse: bool = False,
+        include_last_offset: bool = False,
+        padding_idx: int | None = None,
+    ) -> Self:
+        """Build an :class:`EmbeddingBag` whose table is ``embeddings``.
+
+        Parameters
+        ----------
+        embeddings : Tensor
+            A 2-D floating-point tensor; its shape is
+            ``(num_embeddings, embedding_dim)``.  Bound without a copy.
+        freeze : bool, optional
+            ``True`` keeps the table out of training.  Default: ``True``.
+        max_norm : float or None, optional
+            Rows longer than this are rescaled before the lookup.  Default: ``None``.
+        norm_type : float, optional
+            The ``p`` of the norm ``max_norm`` bounds.  Default: ``2.0``.
+        scale_grad_by_freq : bool, optional
+            Scale gradients by inverse index frequency.  Default: ``False``.
+        mode : {'sum', 'mean', 'max'}, optional
+            The reduction over each bag.  Default: ``'mean'``.
+        sparse : bool, optional
+            Sparse gradients, which are unsupported.  Default: ``False``.
+        include_last_offset : bool, optional
+            Whether ``offsets`` carries a final end position.  Default: ``False``.
+        padding_idx : int or None, optional
+            An index that contributes nothing.  Default: ``None``.
+
+        Returns
+        -------
+        EmbeddingBag
+            A bag over the given table.
+
+        Raises
+        ------
+        ValueError
+            If ``embeddings`` has any rank other than two.
+
+        Examples
+        --------
+        >>> import lucid, lucid.nn as nn
+        >>> table = lucid.tensor([[1.0, 2.3, 3.0], [4.0, 5.1, 6.3]])
+        >>> bag = nn.EmbeddingBag.from_pretrained(table)
+        >>> bag(lucid.tensor([[1, 0]], dtype=lucid.int64))
+        tensor([[2.5, 3.7, 4.65]])
+        """
+        rows, cols = _pretrained_shape(embeddings)
+        bag = cls(
+            num_embeddings=rows,
+            embedding_dim=cols,
+            max_norm=max_norm,
+            norm_type=norm_type,
+            scale_grad_by_freq=scale_grad_by_freq,
+            mode=mode,
+            sparse=sparse,
+            _weight=embeddings,
+            include_last_offset=include_last_offset,
+            padding_idx=padding_idx,
+        )
+        bag.weight.requires_grad = not freeze
+        return bag
 
     @override
     def forward(

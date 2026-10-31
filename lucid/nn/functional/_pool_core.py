@@ -108,6 +108,10 @@ def _pool_windows(x: Tensor, g: _PoolGeometry, out_spatial: tuple[int, ...]) -> 
     """
     kernel, stride, padding, dilation = g
     n = len(kernel)
+    if x.dtype in (_lucid.int8, _lucid.int16):
+        # The CPU ``pad`` has no kernel for the narrow integers.  A window is only
+        # compared, so it is read in ``int32``; the caller casts any value back.
+        x = x.to(_lucid.int32)
     lead = x.ndim - n
     spatial = tuple(int(s) for s in x.shape[lead:])
     span = tuple(dl * (k - 1) + 1 for k, dl in zip(kernel, dilation, strict=True))
@@ -257,7 +261,7 @@ def _max_pool(
                 f"kernel_size={g.kernel} with dilation={g.dilation}"
             )
         windows = _pool_windows(xb, g, out_spatial)
-        out = windows.max(dim=-1).values
+        out = windows.max(dim=-1).values.to(x.dtype)
     else:
         out = _wrap(_MAX_POOL[n](_unwrap(xb), *g.kernel, *g.stride, *g.padding, ceil_mode))
         if not return_indices:

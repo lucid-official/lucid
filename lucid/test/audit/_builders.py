@@ -199,6 +199,8 @@ class _Gate(nn.Module):
 
 #: Class -> a zero-argument builder of one instance.
 BUILDERS: dict[type, Callable[[], Any]] = {
+    nn.AdaptiveLogSoftmaxWithLoss: lambda: nn.AdaptiveLogSoftmaxWithLoss(4, 10, [3, 6]),
+    nn.RNNBase: lambda: nn.RNNBase("LSTM", 4, 4),
     LoraModel: lambda: LoraModel(_base_model(), _config()),
     IA3Model: lambda: IA3Model(
         _base_model(), IA3Config(target_modules=["0", "2"], feedforward_modules=["2"])

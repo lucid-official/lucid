@@ -4264,7 +4264,7 @@
   "nn.ELU": {"params": ["a:alpha=", "a:inplace="]},
   "nn.ELU.extra_repr": {"params": ["a:self"]},
   "nn.ELU.forward": {"params": ["a:self", "a:input"]},
-  "nn.Embedding": {"params": ["a:num_embeddings", "a:embedding_dim", "a:padding_idx=", "a:max_norm=", "a:norm_type=", "a:scale_grad_by_freq=", "a:sparse=", "a:device=", "a:dtype="]},
+  "nn.Embedding": {"params": ["a:num_embeddings", "a:embedding_dim", "a:padding_idx=", "a:max_norm=", "a:norm_type=", "a:scale_grad_by_freq=", "a:sparse=", "a:_weight=", "a:_freeze=", "a:device=", "a:dtype="]},
   "nn.Embedding.extra_repr": {"params": ["a:self"]},
   "nn.Embedding.forward": {"params": ["a:self", "a:input"]},
   "nn.EmbeddingBag": {"params": ["a:num_embeddings", "a:embedding_dim", "a:max_norm=", "a:norm_type=", "a:scale_grad_by_freq=", "a:mode=", "a:sparse=", "a:_weight=", "a:include_last_offset=", "a:padding_idx=", "a:device=", "a:dtype="]},

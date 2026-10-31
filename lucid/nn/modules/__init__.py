@@ -106,6 +106,9 @@ from lucid.nn.modules.attention import (
     MultiQueryAttention,
 )
 from lucid.nn.modules.rnn import LSTM, GRU, RNN, LSTMCell, GRUCell, RNNCell
+from lucid.nn.modules.recurrent_base import RNNBase, RNNCellBase
+from lucid.nn.modules.adaptive import AdaptiveLogSoftmaxWithLoss
+from lucid.nn.modules.cross_map_lrn import CrossMapLRN2d
 from lucid.nn.modules.loss import (
     MSELoss,
     L1Loss,
@@ -279,6 +282,10 @@ __all__ = [
     "LSTMCell",
     "GRUCell",
     "RNNCell",
+    "RNNBase",
+    "RNNCellBase",
+    "AdaptiveLogSoftmaxWithLoss",
+    "CrossMapLRN2d",
     "MSELoss",
     "L1Loss",
     "CrossEntropyLoss",

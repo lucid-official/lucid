@@ -2,23 +2,18 @@
 Recurrent modules: LSTM, GRU, RNN.
 """
 
-from typing import ClassVar, override
+from typing import override
 
 from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike
-from lucid.nn.module import Module
-from lucid.nn.parameter import Parameter
-from lucid._factories.creation import empty, zeros
+from lucid._factories.creation import zeros
 import lucid as _lucid
-import lucid.nn.init as init
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid.nn.functional.linear import linear
 from lucid.nn.utils.rnn import PackedSequence
+from lucid.nn.modules.recurrent_base import RNNBase, RNNCellBase
 from lucid.nn.modules._recurrent_layout import (
-    _check_dropout,
-    _check_sizes,
-    _init_bound,
     _inter_layer_dropout,
     _cell_batch,
     _cell_unbatch,
@@ -120,79 +115,12 @@ def _check_nonlinearity(nonlinearity: str) -> str:
     return nonlinearity
 
 
-def _read_cell_keys(
-    module: Module, state_dict: dict[str, Tensor], prefix: str, *_rest: object
-) -> None:
-    """Load a GRU / RNN checkpoint saved before the parameters were flat.
+class _FlatRecurrent(RNNBase):
+    """GRU and RNN: the stacked recurrence over the flat per-layer parameters.
 
-    The layers used to hold one cell sub-module per layer and direction, so
-    an old checkpoint names ``weight_ih_l0`` as ``cell_l0.weight_ih``.  Each
-    such key is read as the flat one it stands for; a checkpoint holding
-    both keeps the flat one.  A pre-hook rather than a loader override, so
-    ``load_state_dict(assign=True)`` reads the old keys too.
+    The parameters are those :class:`RNNBase` registers.  Each subclass
+    sets ``_step``.
     """
-    for name in list(module._parameters):
-        param, _, tag = name.partition("_l")
-        legacy = f"{prefix}cell_l{tag}.{param}"
-        if legacy in state_dict:
-            value = state_dict.pop(legacy)
-            state_dict.setdefault(f"{prefix}{name}", value)
-
-
-class _RecurrentParameters(Module):
-    """The initialisation every recurrent layer and cell shares.
-
-    Each parameter — input and hidden weights, biases, a projection — is
-    drawn from ``U(-1/sqrt(H), 1/sqrt(H))``, ``H`` the hidden size, in the
-    order ``parameters()`` yields them.
-    """
-
-    hidden_size: int
-
-    def reset_parameters(self) -> None:
-        """Re-draw every parameter from ``U(-1/sqrt(hidden_size), 1/sqrt(hidden_size))``."""
-        stdv = _init_bound(self.hidden_size)
-        for p in self.parameters():
-            init.uniform_(p, -stdv, stdv)
-
-
-class _FlatRecurrent(_RecurrentParameters):
-    """GRU and RNN: flat per-layer parameters and the stacked recurrence.
-
-    The parameters are ``weight_ih_l{k}``, ``weight_hh_l{k}``,
-    ``bias_ih_l{k}`` and ``bias_hh_l{k}`` (``_reverse`` for the backward
-    direction) — the names LSTM and the reference use, and so the
-    ``state_dict`` keys.  Each subclass sets ``_gates`` and ``_step``.
-    """
-
-    _gates: ClassVar[int]
-    input_size: int
-    hidden_size: int
-    num_layers: int
-    bias: bool
-    batch_first: bool
-    dropout_val: float
-    bidirectional: bool
-
-    def _register_weights(self, device: DeviceLike, dtype: DTypeLike) -> None:
-        """Allocate every layer's weights, in the reference's order, and
-        initialise them."""
-        dirs = 2 if self.bidirectional else 1
-        rows = self._gates * self.hidden_size
-        for layer in range(self.num_layers):
-            width = self.input_size if layer == 0 else self.hidden_size * dirs
-            for suffix in ("", "_reverse")[:dirs]:
-                shapes: dict[str, tuple[int, ...]] = {
-                    "weight_ih": (rows, width),
-                    "weight_hh": (rows, self.hidden_size),
-                }
-                if self.bias:
-                    shapes |= {"bias_ih": (rows,), "bias_hh": (rows,)}
-                for name, shape in shapes.items():
-                    p = Parameter(empty(*shape, dtype=dtype, device=device))
-                    self.register_parameter(f"{name}_l{layer}{suffix}", p)
-        self.reset_parameters()
-        self.register_load_state_dict_pre_hook(_read_cell_keys)
 
     def _weights(self, layer: int, reverse: bool) -> _Weights:
         """One layer and direction's ``(weight_ih, weight_hh, bias_ih, bias_hh)``."""
@@ -255,10 +183,6 @@ class _FlatRecurrent(_RecurrentParameters):
         out, (h_n_tensor,) = _restore_layout(layout, inp, [stack(h_n, 0)])
         return out, h_n_tensor
 
-    def flatten_parameters(self) -> None:
-        """No-op for API compatibility (see :meth:`LSTM.flatten_parameters`)."""
-        return None
-
     @override
     def forward(
         self, input: Tensor | PackedSequence, hx: Tensor | None = None
@@ -283,7 +207,7 @@ class _FlatRecurrent(_RecurrentParameters):
 # ── LSTM ──────────────────────────────────────────────────────────────────────
 
 
-class LSTM(_RecurrentParameters):
+class LSTM(RNNBase):
     r"""Long Short-Term Memory (LSTM) recurrent layer.
 
     Applies a multi-layer LSTM over an input sequence.  At each time step
@@ -469,73 +393,24 @@ class LSTM(_RecurrentParameters):
         dtype: DTypeLike = None,
     ) -> None:
         """Initialise the LSTM module. See the class docstring for parameter semantics."""
-        super().__init__()
-        _check_sizes(input_size, hidden_size, num_layers)
-        if proj_size < 0:
-            raise ValueError(f"proj_size must be >= 0, got {proj_size}")
-        if proj_size >= hidden_size and proj_size > 0:
-            raise ValueError(
-                f"proj_size ({proj_size}) must be smaller than hidden_size ({hidden_size})"
-            )
         # proj_size > 0 with multi-layer / bidirectional configurations is
         # composed in Python by looping single-layer engine calls — see
         # ``forward``.  The C++ engine itself still handles only the
         # single-layer single-direction case; the Python wrapper bridges
         # the gap.
-        self.input_size: int = input_size
-        self.hidden_size: int = hidden_size
-        self.num_layers: int = num_layers
-        self.bias: bool = bias
-        self.batch_first: bool = batch_first
-        self.dropout_val: float = _check_dropout(dropout, num_layers)
-        self.bidirectional: bool = bidirectional
-        self.proj_size: int = proj_size
-
-        num_directions: int = 2 if bidirectional else 1
-        gate_size: int = 4 * hidden_size
-        # Recurrent dim feeding the next time step.  When proj_size > 0 the
-        # projected output of each step is what re-enters the recurrence,
-        # so W_hh's input axis and the per-layer hidden carry shrink to
-        # proj_size.
-        rec_size: int = proj_size if proj_size > 0 else hidden_size
-
-        for layer in range(num_layers):
-            for direction in range(num_directions):
-                suffix: str = "_reverse" if direction == 1 else ""
-                layer_input: int = input_size if layer == 0 else rec_size * num_directions
-                self.register_parameter(
-                    f"weight_ih_l{layer}{suffix}",
-                    Parameter(empty(gate_size, layer_input, dtype=dtype, device=device)),
-                )
-                self.register_parameter(
-                    f"weight_hh_l{layer}{suffix}",
-                    Parameter(empty(gate_size, rec_size, dtype=dtype, device=device)),
-                )
-                if bias:
-                    self.register_parameter(
-                        f"bias_ih_l{layer}{suffix}",
-                        Parameter(empty(gate_size, dtype=dtype, device=device)),
-                    )
-                    self.register_parameter(
-                        f"bias_hh_l{layer}{suffix}",
-                        Parameter(empty(gate_size, dtype=dtype, device=device)),
-                    )
-                if proj_size > 0:
-                    # Projection W_hr: (proj_size × hidden_size).
-                    self.register_parameter(
-                        f"weight_hr_l{layer}{suffix}",
-                        Parameter(empty(proj_size, hidden_size, dtype=dtype, device=device)),
-                    )
-        self.reset_parameters()
-
-    def flatten_parameters(self) -> None:
-        """No-op for API compatibility with reference recurrent modules.
-
-        Some external codepaths call ``flatten_parameters()`` to coalesce
-        weights for cuDNN; Lucid's BLAS / MLX path has no such concern,
-        so this is a placeholder that lets such code run unchanged.
-        """
-        return None
+        super().__init__(
+            "LSTM",
+            input_size,
+            hidden_size,
+            num_layers,
+            bias,
+            batch_first,
+            dropout,
+            bidirectional,
+            proj_size,
+            device,
+            dtype,
+        )
 
     def _reverse_along_time(self, x: Tensor) -> Tensor:
         """Flip a sequence-major tensor along the time (axis-0) dimension.
@@ -729,7 +604,7 @@ class LSTM(_RecurrentParameters):
 # ── Pure-Python RNN cells ─────────────────────────────────────────────────────
 
 
-class RNNCell(_RecurrentParameters):
+class RNNCell(RNNCellBase):
     r"""Single time-step Elman RNN cell.
 
     Computes one recurrent update for a single time step:
@@ -829,20 +704,9 @@ class RNNCell(_RecurrentParameters):
         dtype: DTypeLike = None,
     ) -> None:
         """Initialise the RNNCell module. See the class docstring for parameter semantics."""
-        super().__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.bias = bias
-        self.nonlinearity = _check_nonlinearity(nonlinearity)
-        self.weight_ih = Parameter(empty(hidden_size, input_size, dtype=dtype, device=device))
-        self.weight_hh = Parameter(empty(hidden_size, hidden_size, dtype=dtype, device=device))
-        self.bias_ih: Parameter | None = (
-            Parameter(empty(hidden_size, dtype=dtype, device=device)) if bias else None
-        )
-        self.bias_hh: Parameter | None = (
-            Parameter(empty(hidden_size, dtype=dtype, device=device)) if bias else None
-        )
-        self.reset_parameters()
+        _check_nonlinearity(nonlinearity)
+        super().__init__(input_size, hidden_size, bias, 1, device, dtype)
+        self.nonlinearity = nonlinearity
 
     @override
     def forward(self, input: Tensor, hx: Tensor | None = None) -> Tensor:
@@ -870,7 +734,7 @@ class RNNCell(_RecurrentParameters):
         return f"{self.input_size}, {self.hidden_size}, nonlinearity={self.nonlinearity!r}"
 
 
-class LSTMCell(_RecurrentParameters):
+class LSTMCell(RNNCellBase):
     r"""Single time-step Long Short-Term Memory (LSTM) cell.
 
     Computes one recurrent update using the full LSTM gating equations:
@@ -977,19 +841,7 @@ class LSTMCell(_RecurrentParameters):
         dtype: DTypeLike = None,
     ) -> None:
         """Initialise the LSTMCell module. See the class docstring for parameter semantics."""
-        super().__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.bias = bias
-        self.weight_ih = Parameter(empty(4 * hidden_size, input_size, dtype=dtype, device=device))
-        self.weight_hh = Parameter(empty(4 * hidden_size, hidden_size, dtype=dtype, device=device))
-        self.bias_ih: Parameter | None = (
-            Parameter(empty(4 * hidden_size, dtype=dtype, device=device)) if bias else None
-        )
-        self.bias_hh: Parameter | None = (
-            Parameter(empty(4 * hidden_size, dtype=dtype, device=device)) if bias else None
-        )
-        self.reset_parameters()
+        super().__init__(input_size, hidden_size, bias, 4, device, dtype)
 
     @override
     def forward(
@@ -1023,7 +875,7 @@ class LSTMCell(_RecurrentParameters):
         return f"{self.input_size}, {self.hidden_size}"
 
 
-class GRUCell(_RecurrentParameters):
+class GRUCell(RNNCellBase):
     r"""Single time-step Gated Recurrent Unit (GRU) cell.
 
     Computes one recurrent update using the three-gate GRU equations:
@@ -1133,19 +985,7 @@ class GRUCell(_RecurrentParameters):
         dtype: DTypeLike = None,
     ) -> None:
         """Initialise the GRUCell module. See the class docstring for parameter semantics."""
-        super().__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.bias = bias
-        self.weight_ih = Parameter(empty(3 * hidden_size, input_size, dtype=dtype, device=device))
-        self.weight_hh = Parameter(empty(3 * hidden_size, hidden_size, dtype=dtype, device=device))
-        self.bias_ih: Parameter | None = (
-            Parameter(empty(3 * hidden_size, dtype=dtype, device=device)) if bias else None
-        )
-        self.bias_hh: Parameter | None = (
-            Parameter(empty(3 * hidden_size, dtype=dtype, device=device)) if bias else None
-        )
-        self.reset_parameters()
+        super().__init__(input_size, hidden_size, bias, 3, device, dtype)
 
     @override
     def forward(self, input: Tensor, hx: Tensor | None = None) -> Tensor:
@@ -1284,8 +1124,6 @@ class GRU(_FlatRecurrent):
     RNN : Vanilla Elman RNN (no gating).
     """
 
-    _gates = 3
-
     def __init__(
         self,
         input_size: int,
@@ -1299,16 +1137,18 @@ class GRU(_FlatRecurrent):
         dtype: DTypeLike = None,
     ) -> None:
         """Initialise the GRU module. See the class docstring for parameter semantics."""
-        super().__init__()
-        _check_sizes(input_size, hidden_size, num_layers)
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.bias = bias
-        self.batch_first = batch_first
-        self.dropout_val = _check_dropout(dropout, num_layers)
-        self.bidirectional = bidirectional
-        self._register_weights(device, dtype)
+        super().__init__(
+            "GRU",
+            input_size,
+            hidden_size,
+            num_layers,
+            bias,
+            batch_first,
+            dropout,
+            bidirectional,
+            device=device,
+            dtype=dtype,
+        )
 
     @override
     def _step(self, x: Tensor, h: Tensor, w: _Weights) -> Tensor:
@@ -1445,8 +1285,6 @@ class RNN(_FlatRecurrent):
     GRU : Gated RNN without a separate cell state.
     """
 
-    _gates = 1
-
     def __init__(
         self,
         input_size: int,
@@ -1461,17 +1299,20 @@ class RNN(_FlatRecurrent):
         dtype: DTypeLike = None,
     ) -> None:
         """Initialise the RNN module. See the class docstring for parameter semantics."""
-        super().__init__()
-        _check_sizes(input_size, hidden_size, num_layers)
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-        self.nonlinearity = _check_nonlinearity(nonlinearity)
-        self.bias = bias
-        self.batch_first = batch_first
-        self.dropout_val = _check_dropout(dropout, num_layers)
-        self.bidirectional = bidirectional
-        self._register_weights(device, dtype)
+        mode = "RNN_RELU" if _check_nonlinearity(nonlinearity) == "relu" else "RNN_TANH"
+        super().__init__(
+            mode,
+            input_size,
+            hidden_size,
+            num_layers,
+            bias,
+            batch_first,
+            dropout,
+            bidirectional,
+            device=device,
+            dtype=dtype,
+        )
+        self.nonlinearity = nonlinearity
 
     @override
     def _step(self, x: Tensor, h: Tensor, w: _Weights) -> Tensor:

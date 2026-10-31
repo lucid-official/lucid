@@ -4,18 +4,15 @@ All computation goes through the C++ engine — no numpy.
 """
 
 from abc import ABC, abstractmethod
-from typing import Iterable, TYPE_CHECKING, override
+from typing import Iterable, override
 import math
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._factories.creation import zeros
 from lucid.autograd._grad_inplace import write_grad_
+from lucid._tensor.tensor import Tensor
 from lucid.nn.utils._checks import _as_tensor_list
-
-if TYPE_CHECKING:
-    from lucid._tensor.tensor import Tensor
-
 
 _D = _C_engine.Dtype
 _NORMABLE = frozenset({_D.F16, _D.BF16, _D.F32, _D.F64, _D.C64})
@@ -237,6 +234,22 @@ def _scale_clipped_grads(params_with_grad: list[Tensor], grads: _Group, clip_coe
         write_grad_(p, scaled, "clip_grad_norm_")
 
 
+def _clip_to(
+    params_with_grad: list[Tensor], grads: _Group, max_norm: float, total_norm: float
+) -> None:
+    """Scale the gradients so their norm ``total_norm`` falls to ``max_norm``, if it is above.
+
+    The one place the clip coefficient is formed, for :func:`clip_grad_norm_`
+    (which measures the norm) and :func:`clip_grads_with_norm_` (which is told
+    it).
+    """
+    clip_coef = float(max_norm) / (total_norm + 1e-6)
+    # ``not >=`` rather than ``<``: a NaN coefficient scales too, as the
+    # reference's clamp-then-multiply does.
+    if not clip_coef >= 1.0:
+        _scale_clipped_grads(params_with_grad, grads, clip_coef)
+
+
 def clip_grad_norm_(
     parameters: Tensor | Iterable[Tensor],
     max_norm: float,
@@ -328,14 +341,71 @@ def clip_grad_norm_(
 
     norm_type = float(norm_type)
     total_norm = _total_norm(grads, norm_type, error_if_nonfinite)
-
-    clip_coef = float(max_norm) / (total_norm + 1e-6)
-    # ``not >=`` rather than ``<``: a NaN coefficient scales too, as the
-    # reference's clamp-then-multiply does.
-    if not clip_coef >= 1.0:
-        _scale_clipped_grads(params_with_grad, grads, clip_coef)
-
+    _clip_to(params_with_grad, grads, max_norm, total_norm)
     return _norm_tensor(grads, total_norm)
+
+
+def clip_grads_with_norm_(
+    parameters: Tensor | Iterable[Tensor],
+    max_norm: float,
+    total_norm: Tensor,
+    foreach: bool | None = None,
+) -> None:
+    r"""Clip the gradients of ``parameters`` in place, given their total norm.
+
+    The scaling step of :func:`clip_grad_norm_` on its own, for when the norm
+    was measured elsewhere — by :func:`get_total_norm` over gradients that
+    live in several places, say, or reduced across processes.  Every
+    gradient is multiplied by :math:`\min(1, \text{max\_norm} /
+    (\text{total\_norm} + 10^{-6}))`, so a norm already within ``max_norm``
+    leaves them untouched.
+
+    Parameters
+    ----------
+    parameters : Tensor or iterable of Tensor
+        Parameters whose ``.grad`` is scaled; one ``Tensor`` counts as a
+        one-element list.  Entries with ``grad is None`` are skipped.
+    max_norm : float
+        The norm the gradients are clipped to.
+    total_norm : Tensor
+        The gradients' total norm, a one-element tensor.
+    foreach : bool, optional
+        Accepted for API compatibility; ignored.
+
+    Raises
+    ------
+    TypeError
+        If ``total_norm`` is not a ``Tensor``.
+    ValueError
+        If ``total_norm`` does not hold exactly one element.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> import lucid.nn as nn
+    >>> from lucid.nn.utils import clip_grads_with_norm_, get_total_norm
+    >>> model = nn.Linear(4, 2)
+    >>> (model(lucid.randn(8, 4)) * 100.0).sum().backward()
+    >>> params = list(model.parameters())
+    >>> norm = get_total_norm([p.grad for p in params])
+    >>> clip_grads_with_norm_(params, max_norm=1.0, total_norm=norm)
+    >>> after = get_total_norm([p.grad for p in params])
+    >>> abs(float(after) - 1.0) < 1e-3
+    True
+    """
+    del foreach  # reference-signature parity
+    if not isinstance(total_norm, Tensor):
+        raise TypeError(
+            f"clip_grads_with_norm_: total_norm must be a Tensor, got {type(total_norm).__name__}"
+        )
+    if total_norm.numel() != 1:
+        raise ValueError(
+            f"clip_grads_with_norm_: total_norm must hold one element, got shape "
+            f"{tuple(total_norm.shape)}"
+        )
+    params_with_grad, grads = _gather_grads(_as_tensor_list(parameters, "clip_grads_with_norm_"))
+    if params_with_grad:
+        _clip_to(params_with_grad, grads, max_norm, _item(_unwrap(total_norm)))
 
 
 def clip_grad_value_(

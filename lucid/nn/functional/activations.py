@@ -1180,6 +1180,24 @@ def elu_(input: Tensor, alpha: float = 1.0, scale: float = 1.0, input_scale: flo
     )
 
 
+def celu_(input: Tensor, alpha: float = 1.0) -> Tensor:
+    r"""In-place CELU — overwrites ``input`` with :math:`\text{CELU}(\text{input}, \alpha)`.
+
+    Parameters
+    ----------
+    input : Tensor
+        Input; modified in place.
+    alpha : float, optional
+        Saturation value :math:`\alpha > 0` for negative inputs.  Default ``1.0``.
+
+    Returns
+    -------
+    Tensor
+        The same ``input`` tensor, now holding ``celu(input, alpha)``.
+    """
+    return celu(input, alpha, True)
+
+
 def selu_(input: Tensor, inplace: bool = True) -> Tensor:
     """In-place SELU — overwrites ``input`` with ``selu(input)``.
 

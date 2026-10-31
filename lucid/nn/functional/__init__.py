@@ -52,6 +52,7 @@ from lucid.nn.functional.activations import (
     symlog,
     relu_,
     elu_,
+    celu_,
     selu_,
     leaky_relu_,
     hardtanh_,
@@ -105,6 +106,16 @@ from lucid.nn.functional.pooling import (
     fractional_max_pool2d,
     fractional_max_pool3d,
 )
+from lucid.nn.functional._with_indices import (
+    max_pool1d_with_indices,
+    max_pool2d_with_indices,
+    max_pool3d_with_indices,
+    adaptive_max_pool1d_with_indices,
+    adaptive_max_pool2d_with_indices,
+    adaptive_max_pool3d_with_indices,
+    fractional_max_pool2d_with_indices,
+    fractional_max_pool3d_with_indices,
+)
 from lucid.nn.functional.dropout import (
     dropout,
     dropout1d,
@@ -149,6 +160,7 @@ from lucid.nn.functional.positional import (
     sinusoidal_embedding,
     sinusoidal_embedding_2d,
 )
+from lucid.nn.functional.upsampling import upsample, upsample_nearest, upsample_bilinear
 from lucid.nn.functional.sampling import (
     interpolate,
     grid_sample,
@@ -208,6 +220,7 @@ __all__ = [
     # AST walk → docs site missed the public surface).
     "relu_",
     "elu_",
+    "celu_",
     "selu_",
     "leaky_relu_",
     "hardtanh_",
@@ -253,6 +266,14 @@ __all__ = [
     "max_unpool3d",
     "fractional_max_pool2d",
     "fractional_max_pool3d",
+    "max_pool1d_with_indices",
+    "max_pool2d_with_indices",
+    "max_pool3d_with_indices",
+    "adaptive_max_pool1d_with_indices",
+    "adaptive_max_pool2d_with_indices",
+    "adaptive_max_pool3d_with_indices",
+    "fractional_max_pool2d_with_indices",
+    "fractional_max_pool3d_with_indices",
     # dropout
     "dropout",
     "dropout1d",
@@ -297,6 +318,9 @@ __all__ = [
     "sinusoidal_embedding_2d",
     # sampling
     "interpolate",
+    "upsample",
+    "upsample_nearest",
+    "upsample_bilinear",
     "grid_sample",
     "affine_grid",
     "pad",

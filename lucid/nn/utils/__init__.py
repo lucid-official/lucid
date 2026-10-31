@@ -6,6 +6,7 @@ from lucid.nn.utils.clip_grad import (
     clip_grad_norm_,
     clip_grad_norm,
     clip_grad_value_,
+    clip_grads_with_norm_,
     get_total_norm,
 )
 from lucid.nn.utils.convert_parameters import parameters_to_vector, vector_to_parameters
@@ -37,6 +38,7 @@ __all__ = [
     "clip_grad_norm_",
     "clip_grad_norm",
     "clip_grad_value_",
+    "clip_grads_with_norm_",
     "get_total_norm",
     "parameters_to_vector",
     "vector_to_parameters",

@@ -150,6 +150,75 @@ class Parameter(Tensor):
         return f"Parameter containing:\n{super().__repr__()}"
 
 
+class Buffer(Tensor):
+    r"""A :class:`Tensor` that a :class:`Module` keeps as a buffer, not a parameter.
+
+    Module state that is not trained — BatchNorm's ``running_mean``, a
+    positional table, a mask — is a *buffer*: it follows ``.to()`` and
+    ``.half()``, appears in :meth:`Module.buffers` and, if persistent, in
+    ``state_dict``.  Assigning a bare ``Tensor`` as a module attribute does
+    none of that; assigning a ``Buffer`` does, as if
+    :meth:`Module.register_buffer` had been called with its ``persistent``
+    flag.
+
+    Parameters
+    ----------
+    data : Tensor, optional
+        The buffer's value.  Aliased, not copied: the buffer shares the
+        tensor's storage, detached from its graph and keeping its
+        ``requires_grad``.  ``None`` (default) is an empty float tensor.
+    persistent : bool, optional
+        Whether the buffer is part of the module's ``state_dict``.
+        Default: ``True``.
+
+    Attributes
+    ----------
+    persistent : bool
+        The flag given at construction.
+
+    Notes
+    -----
+    The module stores this object itself, so ``module.name is buffer``.
+    Operations on it return plain tensors, as for :class:`Parameter`.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> from lucid.nn import Buffer, Module
+    >>> class Counter(Module):
+    ...     def __init__(self):
+    ...         super().__init__()
+    ...         self.steps = Buffer(lucid.zeros(1))
+    ...         self.scratch = Buffer(lucid.zeros(1), persistent=False)
+    >>> m = Counter()
+    >>> [name for name, _ in m.named_buffers()]
+    ['steps', 'scratch']
+    >>> list(m.state_dict())
+    ['steps']
+    """
+
+    persistent: bool
+
+    def __new__(cls, data: Tensor | None = None, *, persistent: bool = True) -> Buffer:
+        """Allocate a new :class:`Buffer` aliasing ``data``'s storage."""
+        if data is None:
+            impl = _C_engine.zeros([0], _C_engine.F32, _C_engine.CPU)
+        else:
+            impl = _impl_with_grad(data._impl, data.requires_grad)
+        obj = object.__new__(cls)
+        obj._impl = impl
+        obj.persistent = persistent
+        return obj
+
+    def __init__(self, data: Tensor | None = None, *, persistent: bool = True) -> None:
+        """Initialise the instance.  See the class docstring for parameter semantics."""
+
+    @override
+    def __repr__(self) -> str:
+        """Return a developer-facing string representation of the instance."""
+        return f"Buffer containing:\n{super().__repr__()}"
+
+
 class UninitializedParameter(Parameter):
     """A parameter that exists before its shape does.
 
@@ -200,4 +269,4 @@ class UninitializedParameter(Parameter):
         self.__class__ = Parameter  # type: ignore[assignment]
 
 
-__all__ = ["Parameter", "UninitializedParameter"]
+__all__ = ["Buffer", "Parameter", "UninitializedParameter"]

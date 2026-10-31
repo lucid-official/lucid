@@ -88,6 +88,8 @@ _CASES: dict[str, _Case] = {
     "LSTM_proj": _c("LSTM", 3, 4, proj_size=2),
     "RNNCell": _c("RNNCell", 3, 4),
     "LSTMCell": _c("LSTMCell", 3, 4),
+    "RNNBase": _c("RNNBase", "GRU", 3, 4, num_layers=2),
+    "RNNCellBase": _c("RNNCellBase", 3, 4, True, 3),
     "GRUCell": _c("GRUCell", 3, 4),
     "LayerNorm": _c("LayerNorm", 4),
     "GroupNorm": _c("GroupNorm", 2, 4),
