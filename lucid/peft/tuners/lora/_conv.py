@@ -288,6 +288,15 @@ class Conv2d(_ConvNd, base_type=nn.Conv2d):
         ``init_lora_weights`` of ``"pissa"`` or ``"olora"`` is refused (the
         kernel is not a dense matrix).
 
+    Notes
+    -----
+    A grouped or depthwise base (``groups > 1``) adapts in the forward pass
+    (with a warning), but its adapter cannot be merged: a rank-:math:`r` update
+    mixes channels across groups, which one grouped kernel cannot hold, so
+    ``merge``, ``get_delta_weight`` and DoRA raise ``NotImplementedError``.  The
+    reference's convolution LoRA has the same restriction, and the default
+    targets of the model zoo leave such layers out.  The same holds for
+    :class:`Conv1d`, :class:`Conv3d` and the transposed layers.
 
     Examples
     --------
