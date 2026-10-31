@@ -904,11 +904,11 @@ class NnUtilsAxis(Axis):
         return self._finding(symbol, Status.PASS, "forward keeps its shape and stays trainable")
 
     def _unparametrise(self, symbol: Symbol, fn: Any, name: str, probe: Any) -> Finding:
-        if name == "remove_spectral_norm":
-            return self._unparametrise_spectral(symbol, fn, probe)
-
         module = self._linear()
-        apply = {"remove_weight_norm": lucid.nn.utils.weight_norm}.get(name)
+        apply = {
+            "remove_weight_norm": lucid.nn.utils.weight_norm,
+            "remove_spectral_norm": lucid.nn.utils.spectral_norm,
+        }.get(name)
         if apply is not None:
             apply(module)
         else:
@@ -929,59 +929,6 @@ class NnUtilsAxis(Axis):
                 f"removing it changed the output by " f"{np.abs(parametrised - plain).max():.3e}",
             )
         return self._finding(symbol, Status.PASS, "removed without changing the output")
-
-    def _unparametrise_spectral(self, symbol: Symbol, fn: Any, probe: Any) -> Finding:
-        """Check ``remove_spectral_norm`` against what it actually promises.
-
-        The sibling removals put the *effective* weight back, so the
-        module computes the same thing afterwards and "output unchanged"
-        is the right question to ask them.  This one documents the
-        opposite: it restores ``weight_orig``, the unnormalised matrix
-        that was being trained behind the parametrisation, and warns the
-        caller to copy the rescaled one out first if they wanted it.  So
-        a changed output is the contract being kept, not broken, and the
-        shared check called it a defect on every run.
-
-        What is verifiable is that the restored weight *is* the original
-        and that the machinery is gone.
-        """
-        module = self._linear()
-        lucid.nn.utils.spectral_norm(module, "weight")
-        module.eval()
-
-        orig = _probe.to_numpy(getattr(module, "weight_orig", None))
-        if orig is None:
-            return self._finding(symbol, Status.SKIP, "no weight_orig to compare")
-        normed = _probe.to_numpy(module(probe))
-
-        fn(module)
-
-        restored = _probe.to_numpy(getattr(module, "weight", None))
-        if restored is None or normed is None:
-            return self._finding(symbol, Status.SKIP, "no weight to inspect")
-        if not np.allclose(orig, restored, rtol=1e-5, atol=1e-6):
-            return self._finding(
-                symbol,
-                Status.FAIL,
-                f"restored weight is not weight_orig — differs by "
-                f"{np.abs(orig - restored).max():.3e}",
-            )
-
-        left = [attr for attr in ("weight_orig", "weight_u", "weight_v") if hasattr(module, attr)]
-        if left:
-            return self._finding(symbol, Status.FAIL, f"the machinery survived removal: {left}")
-
-        # The normalisation divided by sigma > 1 here, so the two must
-        # differ; if they do not, spectral_norm never applied and the
-        # check above compared a weight with itself.
-        plain = _probe.to_numpy(module(probe))
-        if plain is not None and np.allclose(normed, plain, rtol=1e-5, atol=1e-6):
-            return self._finding(
-                symbol,
-                Status.VACUOUS,
-                "normed and unnormed outputs agree — nothing was being normalised",
-            )
-        return self._finding(symbol, Status.PASS, "weight_orig restored and the buffers are gone")
 
     def _prune(self, symbol: Symbol, fn: Any, name: str, probe: Any) -> Finding:
         module = self._linear()

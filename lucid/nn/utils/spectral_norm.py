@@ -116,6 +116,18 @@ class SpectralNorm(_NamedHook):
         sigma: Tensor = (u * _mv(w_mat, v)).sum()
         return w_orig / sigma
 
+    def _solve_v_and_rescale(self, weight_mat: Tensor, u: Tensor, target_sigma: Tensor) -> Tensor:
+        r"""A ``v`` with :math:`u = \text{normalize}(Wv)` and :math:`u^\top W v = \sigma`.
+
+        Recovers the right vector a pre-v1 checkpoint did not store: solve
+        :math:`W v = u` in the least-squares sense through the pseudo-inverse
+        of :math:`W^\top W`, then rescale so the Rayleigh quotient equals the
+        sigma the checkpoint's weight implies.
+        """
+        gram_pinv: Tensor = lucid.linalg.pinv(lucid.matmul(weight_mat.mT, weight_mat))
+        v: Tensor = _mv(gram_pinv, _mv(weight_mat.mT, u))
+        return v * (target_sigma / (u * _mv(weight_mat, v)).sum())
+
     @classmethod
     def apply(
         cls, module: Module, name: str, n_power_iterations: int, dim: int, eps: float
@@ -170,6 +182,8 @@ class SpectralNorm(_NamedHook):
         # the first forward is the first power iteration.
         fn._publish(module, fn.compute_weight(module, do_power_iteration=False))
         cls._register(module, fn)
+        module._register_state_dict_hook(SpectralNormStateDictHook(fn))
+        module._register_load_state_dict_pre_hook(SpectralNormLoadStateDictPreHook(fn))
         return fn
 
     @override
@@ -179,13 +193,114 @@ class SpectralNorm(_NamedHook):
 
     @override
     def remove(self, module: Module) -> None:
-        """Hand the unnormalised ``W_orig`` back as ``<name>`` and drop ``_u`` / ``_v``."""
-        orig: Parameter = _require_parameter(module, self.name + "_orig", "remove spectral_norm")
+        """Bake ``W_orig / sigma`` into a fresh ``<name>`` Parameter and drop the helpers.
+
+        As the reference does, the weight handed back is the *normalised* one
+        the module was using (from the current ``u`` / ``v``, no power
+        iteration), as a new leaf Parameter; ``<name>_orig``, ``<name>_u`` /
+        ``<name>_v`` and this hook's state-dict hooks are removed.
+        """
+        _require_parameter(module, self.name + "_orig", "remove spectral_norm")
+        with lucid.no_grad():
+            weight: Tensor = self.compute_weight(module, do_power_iteration=False)
         self._vacate(module)
         del module._parameters[self.name + "_orig"]
         del module._buffers[self.name + "_u"]
         del module._buffers[self.name + "_v"]
-        module.register_parameter(self.name, orig)
+        self._drop_state_dict_hooks(module)
+        module.register_parameter(self.name, Parameter(weight.detach()))
+
+    def _drop_state_dict_hooks(self, module: Module) -> None:
+        """Deregister the version-recording and pre-v1 loading hooks :meth:`apply` installed."""
+        for key, hook in list(module._state_dict_hooks.items()):
+            if isinstance(hook, SpectralNormStateDictHook) and hook.fn is self:
+                del module._state_dict_hooks[key]
+        for key, wrapped in list(module._load_state_dict_pre_hooks.items()):
+            inner = getattr(wrapped, "hook", None)
+            if isinstance(inner, SpectralNormLoadStateDictPreHook) and inner.fn is self:
+                del module._load_state_dict_pre_hooks[key]
+
+
+class _SpectralNormHook:
+    """What the two state-dict hooks of one :class:`SpectralNorm` share: the instance they serve."""
+
+    def __init__(self, fn: SpectralNorm) -> None:
+        self.fn: SpectralNorm = fn
+
+
+class SpectralNormLoadStateDictPreHook(_SpectralNormHook):
+    r"""Rebuilds ``<name>_v`` when a checkpoint predates ``spectral_norm`` version 1.
+
+    Version 0 checkpoints stored the normalised ``<name>`` and ``<name>_orig``
+    and ``<name>_u`` but no ``<name>_v``; this pre-hook, registered by
+    :meth:`SpectralNorm.apply`, drops ``<name>`` from the state dict and
+    solves for ``v`` (see :meth:`SpectralNorm._solve_v_and_rescale`).  A state
+    dict without the metadata that already carries ``_orig`` / ``_u`` / ``_v``
+    and no ``<name>`` is taken to be current.
+    """
+
+    def __call__(
+        self,
+        state_dict: dict[str, Tensor],
+        prefix: str,
+        local_metadata: dict[str, object],
+        strict: bool,
+        missing_keys: list[str],
+        *_unused: object,  # unexpected_keys, error_msgs: this hook reads neither
+    ) -> None:
+        fn = self.fn
+        recorded = local_metadata.get("spectral_norm", {})
+        version = recorded.get(fn.name + ".version") if isinstance(recorded, dict) else None
+        if version is not None and version >= 1:
+            return
+        weight_key = prefix + fn.name
+        if (
+            version is None
+            and all(weight_key + s in state_dict for s in ("_orig", "_u", "_v"))
+            and weight_key not in state_dict
+        ):
+            return
+        has_missing_keys = False
+        for suffix in ("_orig", "", "_u"):
+            key = weight_key + suffix
+            if key not in state_dict:
+                has_missing_keys = True
+                if strict:
+                    missing_keys.append(key)
+        if has_missing_keys:
+            return
+        with lucid.no_grad():
+            weight_orig = state_dict[weight_key + "_orig"]
+            weight = state_dict.pop(weight_key)
+            sigma = (weight_orig / weight).mean()
+            weight_mat = fn.reshape_weight_to_matrix(weight_orig)
+            u = state_dict[weight_key + "_u"]
+            state_dict[weight_key + "_v"] = fn._solve_v_and_rescale(weight_mat, u, sigma)
+
+
+class SpectralNormStateDictHook(_SpectralNormHook):
+    """Records :attr:`SpectralNorm._version` in the module's ``state_dict`` metadata.
+
+    Registered by :meth:`SpectralNorm.apply` as a state-dict post-hook; the
+    version lands in ``local_metadata["spectral_norm"]["<name>.version"]``,
+    where :class:`SpectralNormLoadStateDictPreHook` reads it back.
+    """
+
+    def __call__(
+        self,
+        module: Module,
+        state_dict: dict[str, Tensor],
+        prefix: str,
+        local_metadata: dict[str, object],
+    ) -> None:
+        del module, state_dict, prefix  # state-dict post-hook signature parity
+        recorded = local_metadata.setdefault("spectral_norm", {})
+        key = self.fn.name + ".version"
+        if not isinstance(recorded, dict):
+            raise TypeError("Unexpected value in metadata['spectral_norm']")
+        if key in recorded:
+            raise RuntimeError(f"Unexpected key in metadata['spectral_norm']: {key}")
+        recorded[key] = self.fn._version
 
 
 def spectral_norm(
@@ -279,11 +394,13 @@ def spectral_norm(
 def remove_spectral_norm(module: Module, name: str = "weight") -> Module:
     r"""Reverse :func:`spectral_norm` and restore a plain leaf parameter.
 
-    Copies ``module.<name>_orig`` back into a fresh leaf parameter
-    ``module.<name>``, removes the ``<name>_u`` / ``<name>_v`` power-
-    iteration buffers, and detaches the forward pre-hook.  Used before
-    exporting for inference when the normalisation overhead is no
-    longer wanted, or before fine-tuning without the spectral cap.
+    Bakes the weight the module was using, :math:`\mathbf{W}_{\text{orig}} /
+    \sigma` from the current ``u`` / ``v`` (no further power iteration), into
+    a fresh leaf parameter ``module.<name>``, removes ``<name>_orig``, the
+    ``<name>_u`` / ``<name>_v`` buffers, the forward pre-hook and its
+    state-dict hooks.  Used before exporting for inference when the
+    normalisation overhead is no longer wanted, or before fine-tuning without
+    the spectral cap.
 
     Parameters
     ----------
@@ -295,9 +412,9 @@ def remove_spectral_norm(module: Module, name: str = "weight") -> Module:
     Returns
     -------
     Module
-        The same module, with ``<name>`` as a plain
-        :class:`~lucid.nn.parameter.Parameter` carrying the *unnormalised*
-        weight that was being trained behind the parametrisation.
+        The same module, with ``<name>`` as a new plain
+        :class:`~lucid.nn.parameter.Parameter` holding the *normalised*
+        weight, the one the layer computed with.
 
     Raises
     ------
@@ -306,10 +423,10 @@ def remove_spectral_norm(module: Module, name: str = "weight") -> Module:
 
     Notes
     -----
-    The restored parameter is :math:`\mathbf{W}_{\text{orig}}` — *not*
-    the rescaled :math:`\mathbf{W}_{\text{orig}} / \sigma` that was
-    visible during training.  If you want the normalised matrix in the
-    final checkpoint, copy it out *before* calling this function.
+    The restored parameter is :math:`\mathbf{W}_{\text{orig}} / \sigma`, as in
+    the reference, so the module's outputs are unchanged by the removal.  It
+    is a *new* Parameter: ``<name>_orig`` is gone, and an optimizer that held
+    it must be rebuilt.
 
     Examples
     --------

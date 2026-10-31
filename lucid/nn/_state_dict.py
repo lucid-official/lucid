@@ -9,9 +9,10 @@ The protocol mirrors the reference framework:
   ``error_msgs`` in place.  The top-level ``load_state_dict()`` driver
   recurses, runs pre/post hooks, and raises a single ``RuntimeError`` at
   the end when ``strict=True``.
-* ``state_dict()`` attaches an ``_metadata`` attribute to the returned
-  OrderedDict mapping ``module_path → {"version": <int>}`` for every module
-  that defines a ``_version`` class attribute.  This metadata is forwarded
+* ``state_dict()`` (``Module.state_dict``, which also runs the state-dict
+  hooks) attaches an ``_metadata`` attribute to the returned OrderedDict
+  mapping ``module_path → {"version": <int>}`` for every module.  This
+  metadata is forwarded
   to each child's ``_load_from_state_dict`` via the ``local_metadata`` arg
   for migration hooks to inspect.
 """
@@ -48,41 +49,6 @@ class _IncompatibleKeys(namedtuple("_IncompatibleKeys", ["missing_keys", "unexpe
     """
 
     __slots__ = ()
-
-
-# ── state_dict (save side) ────────────────────────────────────────────────────
-
-
-def _build_metadata(module: Module, prefix: str = "") -> dict[str, dict[str, object]]:
-    """Walk the module tree and collect per-module ``_version`` tags.
-
-    Every module now carries at least ``{"version": 1}`` (base class default),
-    matching the reference framework.  Subclasses may set ``_version = N``
-    (N ≥ 2) to signal that their ``_load_from_state_dict`` performs key
-    migration for older checkpoints.
-    """
-    metadata: dict[str, dict[str, object]] = {}
-    version: int | None = getattr(type(module), "_version", None)
-    key: str = prefix.rstrip(".") if prefix else ""
-    # Always record when version is a non-None int (includes the base default 1).
-    if isinstance(version, int):
-        metadata[key] = {"version": version}
-    for name, child in module._modules.items():
-        if child is None:
-            continue
-        metadata.update(_build_metadata(child, f"{prefix}{name}."))
-    return metadata
-
-
-def _save_to_state_dict(
-    module: Module, destination: dict[str, Tensor], prefix: str = "", keep_vars: bool = False
-) -> None:
-    """Recursive walker — let each module write its own state, then recurse."""
-    module._save_to_state_dict(destination, prefix, keep_vars)
-    for mname, child in module._modules.items():
-        if child is None:
-            continue
-        _save_to_state_dict(child, destination, f"{prefix}{mname}.", keep_vars)
 
 
 # ── state_dict (load side) ────────────────────────────────────────────────────
@@ -247,9 +213,9 @@ def _walk_load(
             unexpected_keys,
             error_msgs,
         )
+    # Wrapped hooks: each one decides whether it is handed the module.
     for hook in module._load_state_dict_pre_hooks.values():
         hook(
-            module,
             state_dict,
             prefix,
             local_meta,

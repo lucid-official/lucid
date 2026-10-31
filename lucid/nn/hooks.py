@@ -1,7 +1,12 @@
 """Hook registration helpers for Module."""
 
+import functools
+import weakref
 from collections import OrderedDict
-from typing import Callable
+from typing import TYPE_CHECKING, Callable, Protocol, TypedDict, override
+
+if TYPE_CHECKING:
+    from lucid.nn._state_dict_hooks import _StateDictHookMixin
 
 _GLOBAL_FORWARD_PRE_HOOKS: OrderedDict[int, tuple[Callable[..., object], bool]] = OrderedDict()
 _GLOBAL_FORWARD_HOOKS: OrderedDict[int, tuple[Callable[..., object], bool, bool]] = OrderedDict()
@@ -22,6 +27,18 @@ def _next_hook_id() -> int:
     global _HOOK_ID
     _HOOK_ID += 1
     return _HOOK_ID
+
+
+class _HookRegistry(Protocol):
+    """What a handle needs of the registry it removes from: test and delete a key.
+
+    A protocol rather than ``dict[int, object]``: a registry's value type is
+    invariant, so no ``OrderedDict[int, Callable]`` would be accepted as one.
+    """
+
+    def __contains__(self, key: object, /) -> bool: ...
+
+    def __delitem__(self, key: int, /) -> None: ...
 
 
 class RemovableHandle:
@@ -73,12 +90,10 @@ class RemovableHandle:
     """
 
     def __init__(
-        self, hooks: dict[int, object], key: int, extra_sets: tuple[set[int], ...] = ()
+        self, hooks: _HookRegistry, key: int, extra_sets: tuple[set[int], ...] = ()
     ) -> None:
         """Initialise the handle.  See the class docstring for parameter semantics."""
-        self._hooks: dict[int, object] = (
-            hooks  # covariant dict usage: we only pop/read, never write incompatible types
-        )
+        self._hooks: _HookRegistry = hooks
         self._key = key
         self._extra_sets = extra_sets
 
@@ -87,9 +102,10 @@ class RemovableHandle:
 
         Pops the hook entry from the owning registry dict and discards the
         key from any auxiliary sets.  Idempotent — calling ``remove`` a
-        second time is a no-op (``pop(..., None)``).
+        second time is a no-op.
         """
-        self._hooks.pop(self._key, None)
+        if self._key in self._hooks:
+            del self._hooks[self._key]
         for extra_set in self._extra_sets:
             extra_set.discard(self._key)
 
@@ -100,6 +116,56 @@ class RemovableHandle:
     def __exit__(self, *args: object) -> None:
         """Exit the ``with`` block, auto-removing the hook registration."""
         self.remove()
+
+
+class _WrappedHookState(TypedDict):
+    hook: Callable[..., object]
+    with_module: bool
+    module: _StateDictHookMixin | None
+
+
+class _WrappedHook:
+    """A load-state-dict pre-hook that is handed its module on call, or not.
+
+    ``Module._register_load_state_dict_pre_hook(hook, with_module=...)`` stores
+    one of these.  The module is held weakly so a hook registered on a module
+    does not keep it alive; pickling and ``deepcopy`` carry the module itself,
+    and the copy's hook points at the copy.
+    """
+
+    def __init__(
+        self, hook: Callable[..., object], module: _StateDictHookMixin | None = None
+    ) -> None:
+        self.hook: Callable[..., object] = hook
+        functools.update_wrapper(self, hook)
+        self.with_module: bool = module is not None
+        self.module: weakref.ReferenceType[_StateDictHookMixin] | None = (
+            None if module is None else weakref.ref(module)
+        )
+
+    def __call__(self, *args: object, **kwargs: object) -> object:
+        if self.module is None:
+            return self.hook(*args, **kwargs)
+        module = self.module()
+        if module is None:
+            raise RuntimeError("You are trying to call the hook of a dead Module!")
+        return self.hook(module, *args, **kwargs)
+
+    @override
+    def __getstate__(self) -> _WrappedHookState:
+        return {
+            "hook": self.hook,
+            "with_module": self.with_module,
+            "module": None if self.module is None else self.module(),
+        }
+
+    def __setstate__(self, state: _WrappedHookState) -> None:
+        module = state["module"]
+        self.hook = state["hook"]
+        self.with_module = state["with_module"]
+        if self.with_module and module is None:
+            raise RuntimeError("You are trying to revive the hook of a dead Module!")
+        self.module = None if module is None else weakref.ref(module)
 
 
 def register_module_forward_pre_hook(
@@ -150,7 +216,7 @@ def register_module_forward_pre_hook(
     """
     key = _next_hook_id()
     _GLOBAL_FORWARD_PRE_HOOKS[key] = (hook, with_kwargs)
-    return RemovableHandle(_GLOBAL_FORWARD_PRE_HOOKS, key)  # type: ignore[arg-type]
+    return RemovableHandle(_GLOBAL_FORWARD_PRE_HOOKS, key)
 
 
 def register_module_forward_hook(
@@ -208,7 +274,7 @@ def register_module_forward_hook(
     """
     key = _next_hook_id()
     _GLOBAL_FORWARD_HOOKS[key] = (hook, with_kwargs, always_call)
-    return RemovableHandle(_GLOBAL_FORWARD_HOOKS, key)  # type: ignore[arg-type]
+    return RemovableHandle(_GLOBAL_FORWARD_HOOKS, key)
 
 
 def register_module_full_backward_pre_hook(hook: Callable[..., object]) -> RemovableHandle:
@@ -249,7 +315,7 @@ def register_module_full_backward_pre_hook(hook: Callable[..., object]) -> Remov
     """
     key = _next_hook_id()
     _GLOBAL_BACKWARD_PRE_HOOKS[key] = hook
-    return RemovableHandle(_GLOBAL_BACKWARD_PRE_HOOKS, key)  # type: ignore[arg-type]
+    return RemovableHandle(_GLOBAL_BACKWARD_PRE_HOOKS, key)
 
 
 def register_module_full_backward_hook(hook: Callable[..., object]) -> RemovableHandle:
@@ -291,7 +357,7 @@ def register_module_full_backward_hook(hook: Callable[..., object]) -> Removable
     """
     key = _next_hook_id()
     _GLOBAL_BACKWARD_HOOKS[key] = hook
-    return RemovableHandle(_GLOBAL_BACKWARD_HOOKS, key)  # type: ignore[arg-type]
+    return RemovableHandle(_GLOBAL_BACKWARD_HOOKS, key)
 
 
 def register_module_load_state_dict_pre_hook(hook: Callable[..., object]) -> RemovableHandle:
@@ -340,7 +406,7 @@ def register_module_load_state_dict_pre_hook(hook: Callable[..., object]) -> Rem
     """
     key = _next_hook_id()
     _GLOBAL_LOAD_STATE_DICT_PRE_HOOKS[key] = hook
-    return RemovableHandle(_GLOBAL_LOAD_STATE_DICT_PRE_HOOKS, key)  # type: ignore[arg-type]
+    return RemovableHandle(_GLOBAL_LOAD_STATE_DICT_PRE_HOOKS, key)
 
 
 def register_module_load_state_dict_post_hook(hook: Callable[..., object]) -> RemovableHandle:
@@ -385,4 +451,4 @@ def register_module_load_state_dict_post_hook(hook: Callable[..., object]) -> Re
     """
     key = _next_hook_id()
     _GLOBAL_LOAD_STATE_DICT_POST_HOOKS[key] = hook
-    return RemovableHandle(_GLOBAL_LOAD_STATE_DICT_POST_HOOKS, key)  # type: ignore[arg-type]
+    return RemovableHandle(_GLOBAL_LOAD_STATE_DICT_POST_HOOKS, key)

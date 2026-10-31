@@ -242,7 +242,7 @@ def test_spectral_norm_buffers_stay_the_same_tensors_in_every_mode() -> None:
         assert layer.weight_u is u and layer.weight_v is v
 
 
-def test_spectral_norm_keeps_the_parameter_object() -> None:
+def test_spectral_norm_keeps_the_parameter_object_until_it_is_removed() -> None:
     layer = nn.Linear(4, 3)
     weight = layer.weight
     U.spectral_norm(layer)
@@ -250,7 +250,8 @@ def test_spectral_norm_keeps_the_parameter_object() -> None:
     assert list(layer._parameters) == ["bias", "weight_orig"]
     assert list(layer._buffers) == ["weight_u", "weight_v"]
     U.remove_spectral_norm(layer)
-    assert layer.weight is weight
+    # The reference bakes W_orig / sigma into a new leaf Parameter (LCD-792).
+    assert layer.weight is not weight and isinstance(layer.weight, nn.Parameter)
 
 
 def test_a_frozen_weight_stays_frozen_under_spectral_norm() -> None:

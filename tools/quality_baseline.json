@@ -1008,7 +1008,7 @@
    },
    "file-loc-over-cap": {
     "lucid/_tensor/_dunders.py": 226,
-    "lucid/_tensor/tensor.py": 2410,
+    "lucid/_tensor/tensor.py": 2402,
     "lucid/compile/_optim/compiler.py": 323,
     "lucid/coreml/_build.py": 1588,
     "lucid/coreml/_emit.py": 1024,
@@ -1045,9 +1045,7 @@
     "lucid/metal/__init__.py": 4,
     "lucid/models/_output.py": 3,
     "lucid/models/vision/sknet/_model.py": 3,
-    "lucid/nn/hooks.py": 6,
     "lucid/nn/intrinsic/qat/modules.py": 1,
-    "lucid/nn/module.py": 6,
     "lucid/nn/modules/padding.py": 1,
     "lucid/nn/qat/conv.py": 3,
     "lucid/quantization/_fake_quantize.py": 2,

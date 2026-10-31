@@ -33,6 +33,7 @@ from lucid.nn.hooks import (
     _GLOBAL_FORWARD_PRE_HOOKS,
     RemovableHandle,
 )
+from lucid.nn._state_dict_hooks import _StateDictHookMixin
 from lucid.nn._module_backward_state import _ModuleBackwardState
 from lucid._tree_version import _TrackedDict, _tree_changed
 from lucid._types import (
@@ -62,6 +63,15 @@ class UninitializedParameterWarning(UserWarning):
 
 
 _HOOK_ID: int = 0
+
+# The state_dict / load_state_dict hook registries.  Plain ordered dicts: the
+# compiled cache does not read them, so a write need not move the tree version.
+_STATE_DICT_HOOK_REGISTRIES = (
+    "_state_dict_hooks",
+    "_state_dict_pre_hooks",
+    "_load_state_dict_pre_hooks",
+    "_load_state_dict_post_hooks",
+)
 
 # The registries ``lucid.compile`` keys an executable on, held as
 # ``_TrackedDict``s so every write to one moves the tree version
@@ -167,7 +177,7 @@ def _before_init_kind(value: object) -> str | None:
     return None
 
 
-class Module:
+class Module(_StateDictHookMixin):
     """Base class for all neural network modules.
 
     Every custom model should subclass this and implement :meth:`forward`.
@@ -228,8 +238,6 @@ class Module:
     _forward_hooks_always_called: set[int]
     _backward_pre_hooks: OrderedDict[int, Callable[..., object]]
     _backward_hooks: OrderedDict[int, Callable[..., object]]
-    _load_state_dict_pre_hooks: OrderedDict[int, Callable[..., object]]
-    _load_state_dict_post_hooks: OrderedDict[int, Callable[..., object]]
 
     def __init__(self) -> None:
         """Initialise the instance.  See the class docstring for parameter semantics."""
@@ -239,8 +247,8 @@ class Module:
         object.__setattr__(self, "_forward_hooks_always_called", set())
         for name in _TRACKED_REGISTRIES:
             object.__setattr__(self, name, _TrackedDict())
-        object.__setattr__(self, "_load_state_dict_pre_hooks", OrderedDict())
-        object.__setattr__(self, "_load_state_dict_post_hooks", OrderedDict())
+        for name in _STATE_DICT_HOOK_REGISTRIES:
+            object.__setattr__(self, name, OrderedDict())
         object.__setattr__(self, "training", True)
 
     # ``(*Any, **Any) -> Any`` is the one signature every narrower override is
@@ -616,6 +624,9 @@ class Module:
             registry = self.__dict__.get(name)
             if isinstance(registry, dict) and not isinstance(registry, _TrackedDict):
                 self.__dict__[name] = _TrackedDict(registry)
+        # A module pickled before a hook registry existed comes back without it.
+        for name in _STATE_DICT_HOOK_REGISTRIES:
+            self.__dict__.setdefault(name, OrderedDict())
         _tree_changed()
 
     def __getattr__(self, name: str) -> Tensor | Parameter | Module:
@@ -1215,12 +1226,27 @@ class Module:
             OrderedDict mapping qualified parameter / buffer paths to
             their tensor values.
         """
-        from lucid.nn._state_dict import _save_to_state_dict, _build_metadata
-
         if destination is None:
             destination = OrderedDict()
-            destination._metadata = _build_metadata(self, prefix)  # type: ignore[attr-defined]
-        _save_to_state_dict(self, destination, prefix=prefix, keep_vars=keep_vars)
+            destination._metadata = OrderedDict()  # type: ignore[attr-defined]
+        local_metadata: dict[str, object] = {"version": self._version}
+        if hasattr(destination, "_metadata"):
+            destination._metadata[prefix[:-1]] = local_metadata
+        for pre_hook in list(self._state_dict_pre_hooks.values()):
+            pre_hook(self, prefix, keep_vars)
+        self._save_to_state_dict(destination, prefix, keep_vars)
+        for name, child in self._modules.items():
+            if child is not None:
+                child.state_dict(
+                    destination=destination, prefix=f"{prefix}{name}.", keep_vars=keep_vars
+                )
+        for hook in list(self._state_dict_hooks.values()):
+            result = hook(self, destination, prefix, local_metadata)
+            if getattr(hook, "_from_public_api", False):
+                if result is not None:
+                    raise RuntimeError("state_dict post-hook must return None")
+            elif isinstance(result, dict):
+                destination = result
         return destination
 
     def _save_to_state_dict(
@@ -1307,28 +1333,6 @@ class Module:
 
         return _driver(self, state_dict, strict=strict, assign=assign)
 
-    def register_load_state_dict_pre_hook(self, hook: Callable[..., object]) -> RemovableHandle:
-        """Register a pre-hook called when this module loads state_dict.
-
-        Hook signature:
-            hook(module, state_dict, prefix, local_metadata, strict,
-                 missing_keys, unexpected_keys, error_msgs) -> None
-
-        The hook may mutate state_dict/missing/unexpected/error_msgs.
-        """
-        key = _next_hook_id()
-        self._load_state_dict_pre_hooks[key] = hook
-        return RemovableHandle(self._load_state_dict_pre_hooks, key)  # type: ignore[arg-type]
-
-    def register_load_state_dict_post_hook(self, hook: Callable[..., object]) -> RemovableHandle:
-        """Register a post-hook called after this module loads state_dict.
-
-        Hook signature: ``hook(module, incompatible_keys) -> None``.
-        """
-        key = _next_hook_id()
-        self._load_state_dict_post_hooks[key] = hook
-        return RemovableHandle(self._load_state_dict_post_hooks, key)  # type: ignore[arg-type]
-
     # ── hooks ─────────────────────────────────────────────────────────────
 
     @overload
@@ -1373,7 +1377,7 @@ class Module:
         if prepend:
             self._forward_pre_hooks.move_to_end(key, last=False)
         return RemovableHandle(
-            self._forward_pre_hooks,  # type: ignore[arg-type]
+            self._forward_pre_hooks,
             key,
             (self._forward_pre_hooks_with_kwargs,),
         )
@@ -1396,7 +1400,7 @@ class Module:
         if prepend:
             self._forward_hooks.move_to_end(key, last=False)
         return RemovableHandle(
-            self._forward_hooks,  # type: ignore[arg-type]  # safe: RemovableHandle only pops by key
+            self._forward_hooks,
             key,
             (self._forward_hooks_with_kwargs, self._forward_hooks_always_called),
         )
@@ -1409,7 +1413,7 @@ class Module:
         self._backward_pre_hooks[key] = hook
         if prepend:
             self._backward_pre_hooks.move_to_end(key, last=False)
-        return RemovableHandle(self._backward_pre_hooks, key)  # type: ignore[arg-type]
+        return RemovableHandle(self._backward_pre_hooks, key)
 
     def register_full_backward_hook(
         self, hook: _BackwardHook, *, prepend: bool = False
@@ -1419,7 +1423,7 @@ class Module:
         self._backward_hooks[key] = hook
         if prepend:
             self._backward_hooks.move_to_end(key, last=False)
-        return RemovableHandle(self._backward_hooks, key)  # type: ignore[arg-type]
+        return RemovableHandle(self._backward_hooks, key)
 
     def register_backward_hook(self, hook: _BackwardHook) -> RemovableHandle:
         """Deprecated alias for register_full_backward_hook."""

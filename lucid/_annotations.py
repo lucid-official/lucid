@@ -252,6 +252,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
         ("TensorOrScalar", "lucid._types", "TensorOrScalar"),
     ),
+    "lucid._tensor._pickle": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid._tensor._repr": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid._tensor._to": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid._tensor.tensor": (
@@ -456,6 +457,9 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid.nn.functional.sampling": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.functional.sparse": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.functional.upsampling": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
+    "lucid.nn.hooks": (
+        ("_StateDictHookMixin", "lucid.nn._state_dict_hooks", "_StateDictHookMixin"),
+    ),
     "lucid.nn.init": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.intrinsic.qat.modules": (
         ("FakeQuantize", "lucid.quantization._fake_quantize", "FakeQuantize"),
