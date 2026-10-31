@@ -97,6 +97,32 @@ class _CheckpointState:
         self.__dict__.update(state_dict)
 
 
+def _floored(rates: list[float]) -> list[float]:
+    """Each rate, or ``0.0`` where a schedule's formula took it below zero.
+
+    The optimizer refuses a negative rate, and a schedule's own formula can
+    leave ``[0, inf)`` without anyone having asked for it: a linear
+    ``OneCycleLR`` extrapolates past ``total_steps - 1`` on its last step, and
+    a cosine from a base below ``eta_min`` lands a few ulps under zero at the
+    bottom of a cycle.  The reference writes those and lets the optimizer take
+    them; here the write would raise out of a step that only ran the schedule
+    to its end, so the schedule's value is held at the nearest one the
+    optimizer takes.  ``nan`` stays ``nan``.
+    """
+    return [0.0 if lr <= 0.0 else lr for lr in rates]
+
+
+class _CallerRated:
+    """Marks a schedule whose rate is the result of the caller's own function.
+
+    ``LambdaLR`` and ``MultiplicativeLR`` write what the function returns: a
+    negative result is the caller's to see, from the optimizer, and not a
+    formula's artefact for the write path to hold at zero.
+    """
+
+    _floors_rates: ClassVar[bool] = False
+
+
 class _LRScheduler(_CheckpointState):
     """Base class for all learning rate schedulers.
 
@@ -180,6 +206,10 @@ class _LRScheduler(_CheckpointState):
     #: because the reference's does not.
     _checks_step_order: ClassVar[bool] = True
 
+    #: Whether a negative rate is the schedule's own formula's artefact (held
+    #: at zero) rather than the caller's; see :class:`_CallerRated`.
+    _floors_rates: ClassVar[bool] = True
+
     def __init__(self, optimizer: Optimizer, last_epoch: int = -1, verbose: bool = False) -> None:
         self.optimizer = optimizer
         _watch_steps(optimizer)
@@ -250,6 +280,8 @@ class _LRScheduler(_CheckpointState):
             values = self.get_lr() if epoch is None else self._get_closed_form_lr()
             if len(values) < len(self.optimizer.param_groups):
                 raise self._unrated_group(len(values))
+            if self._floors_rates:
+                values = _floored(values)
         except ValueError:
             self.last_epoch = previous
             raise

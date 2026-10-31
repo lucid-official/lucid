@@ -342,9 +342,10 @@ class TestOneCycleLRParity:
             anneal_strategy="linear",
         )
 
-        _assert_lr_sequence(
-            _collect_lrs(lucid_sched, total_steps), _collect_lrs(ref_sched, total_steps), atol=1e-6
-        )
+        # The step after the last extrapolates below zero in the reference, which
+        # writes it; Lucid's optimizer refuses a negative rate, so it is held at 0.
+        ref_lrs = [max(lr, 0.0) for lr in _collect_lrs(ref_sched, total_steps)]
+        _assert_lr_sequence(_collect_lrs(lucid_sched, total_steps), ref_lrs, atol=1e-6)
 
 
 # ── ReduceLROnPlateau ─────────────────────────────────────────────────────────

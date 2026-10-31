@@ -199,6 +199,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - zeta evaluates its three Hurwitz terms in one stacked series (LCD-794)
 
+- hold a schedule's rate at zero instead of raising (LCD-787)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

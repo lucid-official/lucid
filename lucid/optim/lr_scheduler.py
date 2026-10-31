@@ -7,6 +7,7 @@ from collections.abc import Callable, Sequence
 import math
 from typing import override
 from lucid.optim._scheduler_base import (
+    _CallerRated,
     _CheckpointState,
     _CompositeSchedulerMixin,
     _LRScheduler,
@@ -386,7 +387,7 @@ class CosineAnnealingLR(_LRScheduler):
         ]
 
 
-class LambdaLR(_LRScheduler):
+class LambdaLR(_CallerRated, _LRScheduler):
     r"""Set the learning rate using a user-supplied multiplicative factor function.
 
     At each epoch :math:`t`, the learning rate for param group :math:`i` is:
@@ -816,7 +817,7 @@ class NoamScheduler(_LRScheduler):
         return [scale] * len(self.optimizer.param_groups)
 
 
-class MultiplicativeLR(_LRScheduler):
+class MultiplicativeLR(_CallerRated, _LRScheduler):
     r"""Multiply the learning rate by a factor returned by a function each epoch.
 
     Unlike :class:`LambdaLR`, which computes the learning rate as
@@ -889,9 +890,8 @@ class MultiplicativeLR(_LRScheduler):
         if self._is_initial:
             return self._group_lrs()
         factor = self.lr_lambda(self.last_epoch)
-        # The factor is per group the scheduler was built over, as the
-        # reference keeps one lambda per group: a group added later has
-        # none, and the step is refused.
+        # One factor per group built over, as in the reference: a group added
+        # later has none and the step is refused.
         return [lr * factor for lr in self._group_lrs()[: len(self.base_lrs)]]
 
 
