@@ -24,7 +24,7 @@ from lucid.peft.tuners._support import _adapter_dtype, _reset_fan_in_fan_out
 from lucid.peft.tuners.vera._config import VeraConfig
 from lucid.peft.tuners.vera._defaults import VERA_DEFAULT_TARGET_MODULES
 from lucid.peft.tuners.vera._layer import VeraLayer
-from lucid.peft.tuners.vera._projection import _BufferDict, _Projection
+from lucid.peft.tuners.vera._projection import _BufferDict, _Projection, _Shared
 
 #: Where the reference's adapter file keeps the shared projections: one tensor each, for the whole model.
 _FILE_A: Final = "base_model.vera_A"
@@ -72,10 +72,11 @@ class VeraModel(_FileFormat, _BaseTuner, peft_type=PeftType.VERA):
     The two random projections :math:`A` and :math:`B` are drawn once, sized for
     the largest targeted layer, and held here as ``vera_A`` / ``vera_B``
     (containers of one tensor per adapter, aliased when adapters share them) —
-    the reference's attributes and ``base_model.vera_A.<adapter>`` state-dict
-    keys.  Every layer reads them from there.  Adapters added later must fit
-    them (the same ``projection_prng_key`` and ``save_projection``, a rank and
-    layer sizes no larger).
+    the reference's attributes.  Every layer reads them from there; the first
+    layer holds them in its module tree, so a state dict lists each once
+    (``<layer>.vera_A.<adapter>``) and the adapter file holds one pair.
+    Adapters added later must fit them (the same ``projection_prng_key`` and
+    ``save_projection``, a rank and layer sizes no larger).
 
     Parameters
     ----------
@@ -115,19 +116,25 @@ class VeraModel(_FileFormat, _BaseTuner, peft_type=PeftType.VERA):
     _default_targets: ClassVar[Mapping[str, frozenset[str]]] = VERA_DEFAULT_TARGET_MODULES
     _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = _NO_PARAMETERS
 
-    vera_A: _BufferDict
-    vera_B: _BufferDict
-
     def __init__(self, model: nn.Module, config: VeraConfig, adapter_name: str = "default") -> None:
         super().__init__(model, config, adapter_name)
+
+    @property
+    def vera_A(self) -> _BufferDict:
+        """The shared ``A`` projections, one entry per adapter (the reference's attribute)."""
+        return self._projections.vera_a
+
+    @property
+    def vera_B(self) -> _BufferDict:
+        """The shared ``B`` projections, one entry per adapter (the reference's attribute)."""
+        return self._projections.vera_b
 
     # ── the adapters ──────────────────────────────────────────────────────
 
     @override
     def _inject(self, adapter_name: str, config: _TargetedConfig) -> None:
-        if "vera_A" not in self._modules:
-            persistent = _as_vera(config).save_projection
-            self.vera_A, self.vera_B = _BufferDict(persistent), _BufferDict(persistent)
+        if "_projections" not in self.__dict__:
+            self._projections = _Shared(_as_vera(config).save_projection)
         super()._inject(adapter_name, config)
 
     @override
@@ -237,7 +244,7 @@ class VeraModel(_FileFormat, _BaseTuner, peft_type=PeftType.VERA):
             raise
         for placement in placements:
             if isinstance(placement.slot, VeraLayer):
-                placement.slot.bind(self.vera_A, self.vera_B)
+                placement.slot.bind(self._projections)
         return placements
 
     @override
@@ -260,9 +267,9 @@ class VeraModel(_FileFormat, _BaseTuner, peft_type=PeftType.VERA):
         if not config.save_projection:
             return {}
         for path, layer in context.layers:
-            if isinstance(layer, VeraLayer) and context.adapter in layer._specs:
-                held = layer.vera_A
-                if held is None or not held.persistent:
+            if isinstance(layer, VeraLayer) and context.adapter in layer.vera_A:
+                # The layer holding the containers in its tree: the others only read them.
+                if not layer.vera_A.persistent:
                     raise ValueError(
                         "Model was initialised to not save vera_A and vera_B but config now "
                         "specifies to save projection! Set `config.save_projection` to `False`."
@@ -288,12 +295,13 @@ class VeraModel(_FileFormat, _BaseTuner, peft_type=PeftType.VERA):
             for _, layer in context.layers
             if isinstance(layer, VeraLayer) and context.adapter in layer._specs
         ]
-        held = layers[0].vera_A, layers[0].vera_B
+        held = layers[0]._containers
         loaded = state[_FILE_A], state[_FILE_B]
-        if None in held or not _covers(loaded, _as_vera(context.config).r, layers):
+        if context.adapter not in held[0] or not _covers(
+            loaded, _as_vera(context.config).r, layers
+        ):
             return
         for container, tensor in zip(held, loaded, strict=True):
-            assert container is not None
             current = container[context.adapter]
             if tuple(current.shape) != tuple(tensor.shape):
                 container[context.adapter] = lucid.zeros(

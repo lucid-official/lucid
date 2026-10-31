@@ -20,6 +20,22 @@ from lucid._types import DeviceLike, DTypeLike
 _GAIN: Final = math.sqrt(2.0)
 
 
+def _take_entries(
+    container: _BufferDict, state_dict: dict[str, Tensor], prefix: str, *rest: object
+) -> None:
+    """Load pre-hook: a container holds whatever entries it is given, so a fresh one makes a buffer per name in a checkpoint.
+
+    As ``ModuleDict`` takes the keys of its children's: without this a layer's own checkpoint
+    (which lists the projections it holds) would not load into a fresh instance of the layer.
+    """
+    del rest  # missing / unexpected keys and the rest of the hook's arguments: the default loader's
+    if container.persistent:
+        for key, value in state_dict.items():
+            name = key[len(prefix) :]
+            if key.startswith(prefix) and "." not in name and name not in container:
+                container[name] = lucid.zeros_like(value)
+
+
 class _BufferDict(nn.Module):
     """Buffers by adapter name: tensors a layer reads and does not train, as ``ParameterDict`` holds parameters.
 
@@ -31,6 +47,7 @@ class _BufferDict(nn.Module):
     def __init__(self, persistent: bool) -> None:
         super().__init__()
         self._persistent = persistent
+        self.register_load_state_dict_pre_hook(_take_entries)
 
     @property
     def persistent(self) -> bool:
@@ -60,6 +77,22 @@ class _BufferDict(nn.Module):
 
     def __len__(self) -> int:
         return len(self._buffers)
+
+
+class _Shared:
+    """The two containers a tuner shares between its layers, and whether a layer holds them in its tree.
+
+    Exactly one layer *owns* them — registers them as its submodules, so they are in the
+    module tree once (``.to()``, ``state_dict``, ``named_buffers`` see each tensor once) —
+    and the other layers read them through a plain reference.
+    """
+
+    __slots__ = ("owned", "vera_a", "vera_b")
+
+    def __init__(self, persistent: bool) -> None:
+        self.vera_a = _BufferDict(persistent)
+        self.vera_b = _BufferDict(persistent)
+        self.owned = False
 
 
 class _Projection(NamedTuple):

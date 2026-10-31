@@ -21,7 +21,7 @@ from lucid.nn.parameter import Parameter
 from lucid.peft.tuners._base import _check_adapter_name, _parameter_at
 from lucid.peft.tuners._support import _adapter_dtype, _ResidualUpdate, _SpecField
 from lucid.peft.tuners.vera._config import VeraConfig
-from lucid.peft.tuners.vera._projection import _BufferDict, _Projection
+from lucid.peft.tuners.vera._projection import _BufferDict, _Projection, _Shared
 
 
 class _VeraSpec(NamedTuple):
@@ -82,9 +82,13 @@ class VeraLayer(_ResidualUpdate, family=True):
         self.vera_lambda_b: nn.ParameterDict = nn.ParameterDict()
         self.vera_lambda_d: nn.ParameterDict = nn.ParameterDict()
         self.vera_dropout: nn.ModuleDict[nn.Module] = nn.ModuleDict()
-        # The shared projections: empty until the tuner (or the first forward pass) binds them.
-        self.vera_A: _BufferDict | None = None
-        self.vera_B: _BufferDict | None = None
+        # The layer's own projection containers: empty unless it owns the tuner's (``bind``) or a
+        # checkpoint fills them.  A layer used alone draws its own on demand into ``_unbound`` —
+        # plain Python state, not part of ``state_dict``.
+        self.vera_A = _BufferDict(config.save_projection)
+        self.vera_B = _BufferDict(config.save_projection)
+        self._shared: _Shared | None = None
+        self._unbound: dict[str, _Projection] = {}
         self.update_layer(adapter_name, r, config)
 
     # ── the layer ─────────────────────────────────────────────────────────
@@ -160,24 +164,39 @@ class VeraLayer(_ResidualUpdate, family=True):
         if not self.active_adapters:
             self.active_adapter = adapter_name
 
-    def bind(self, vera_a: _BufferDict, vera_b: _BufferDict) -> None:
-        """Read the projections from these containers — the ones the tuner shares between its layers."""
-        self.vera_A = vera_a
-        self.vera_B = vera_b
+    def bind(self, shared: _Shared) -> None:
+        """Read the projections from the containers the tuner shares between its layers.
+
+        The first layer bound holds them in its module tree; the others keep a plain reference.
+        """
+        if not shared.owned:
+            self.vera_A, self.vera_B = shared.vera_a, shared.vera_b
+            shared.owned = True
+        self._shared = shared
+        self._unbound.clear()
+
+    @property
+    def _containers(self) -> tuple[_BufferDict, _BufferDict]:
+        """The ``(A, B)`` containers this layer reads: the tuner's if bound, else its own."""
+        if self._shared is not None:
+            return self._shared.vera_a, self._shared.vera_b
+        return self.vera_A, self.vera_B
 
     def _projection(self, adapter: str) -> _Projection:
-        """The ``(A, B)`` ``adapter`` reads; one drawn for this layer's size if nothing holds it yet.
+        """The ``(A, B)`` ``adapter`` reads: the bound containers', or one drawn for this layer's size.
 
-        A tuner fills the containers it binds before any layer reads them, so
-        this only draws for a layer used without one.
+        A tuner fills the containers it binds before any layer reads them.  A
+        layer used without one draws from its key and keeps the pair out of
+        its state: a forward pass must not change what ``state_dict`` holds,
+        or the layer's own checkpoint would not load into a fresh instance.
         """
-        spec = self._specs[adapter]
-        if self.vera_A is None or self.vera_B is None:
-            self.bind(_BufferDict(spec.save_projection), _BufferDict(spec.save_projection))
-        assert self.vera_A is not None and self.vera_B is not None
-        if adapter not in self.vera_A:
-            anchor = self.weight
-            self.vera_A[adapter], self.vera_B[adapter] = _Projection.draw(
+        held_a, held_b = self._containers
+        if adapter in held_a and adapter in held_b:
+            return _Projection(held_a[adapter], held_b[adapter])
+        drawn = self._unbound.get(adapter)
+        if drawn is None:
+            spec, anchor = self._specs[adapter], self.weight
+            drawn = _Projection.draw(
                 spec.projection_prng_key,
                 spec.r,
                 self.out_features,
@@ -185,7 +204,8 @@ class VeraLayer(_ResidualUpdate, family=True):
                 anchor.device,
                 _adapter_dtype(anchor),
             )
-        return _Projection(self.vera_A[adapter], self.vera_B[adapter])
+            self._unbound[adapter] = drawn
+        return drawn
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
@@ -193,6 +213,7 @@ class VeraLayer(_ResidualUpdate, family=True):
         if adapter_name in self.vera_dropout:
             del self.vera_dropout[adapter_name]
         self._specs.pop(adapter_name, None)
+        self._unbound.pop(adapter_name, None)
 
     # ── the update ────────────────────────────────────────────────────────
 

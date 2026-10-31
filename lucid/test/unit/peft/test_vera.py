@@ -188,20 +188,63 @@ class TestProjection:
         trained = {n for n, p in peft.named_parameters() if p.grad is not None}
         assert trained and all("vera_lambda" in n for n in trained)
 
-    def test_every_layer_reads_the_one_pair_the_tuner_holds(self) -> None:
+    def test_every_layer_reads_the_one_pair_the_tuner_holds_and_one_layer_holds_it(self) -> None:
         tuner = _tuner()
-        for _, layer in _tuner_layers(tuner.model):
+        layers = [layer for _, layer in _tuner_layers(tuner.model)]
+        assert all(isinstance(layer, VeraLayer) for layer in layers)
+        for layer in layers:
             assert isinstance(layer, VeraLayer)
-            assert layer.vera_A is tuner.vera_A and layer.vera_B is tuner.vera_B
+            assert layer._containers == (tuner.vera_A, tuner.vera_B)
+        # In the module tree once: the first layer registers the containers, the rest read them.
+        holders = [
+            layer
+            for layer in layers
+            if isinstance(layer, VeraLayer) and layer.vera_A is tuner.vera_A
+        ]
+        assert len(holders) == 1 and holders[0] is layers[0]
+
+    @pytest.mark.parametrize("wrapped", [False, True])
+    def test_a_state_dict_lists_each_tensor_once(self, wrapped: bool) -> None:
+        # The audit's rule: entries == parameters + buffers, so no shared module is registered twice.
+        model = get_peft_model(_mlp(), _config(init_weights=False)) if wrapped else _tuner()
+        buffers = [n for n, _ in model.named_buffers()]
+        assert len(model.state_dict()) == len(list(model.named_parameters())) + len(buffers)
+        assert sum("vera_A" in key for key in model.state_dict()) == 1
 
     def test_a_layer_alone_draws_a_projection_of_its_own_size_from_its_key(self) -> None:
         base = nn.Linear(6, 4)
         layer = Linear(base, "a", _config(projection_prng_key=2), r=3)
-        assert layer.vera_A is None
+        assert len(layer.vera_A) == 0  # nothing bound: it draws its own on demand
         x = lucid.randn(3, 6)
         layer(x)
         drawn = _Projection.draw(2, 3, 4, 6, "cpu", lucid.float32)
-        assert _same(layer.vera_A["a"], drawn.vera_a) and _same(layer.vera_B["a"], drawn.vera_b)  # type: ignore[index]
+        got = layer._projection("a")
+        assert _same(got.vera_a, drawn.vera_a) and _same(got.vera_b, drawn.vera_b)
+        assert layer._projection("a") is got  # drawn once
+
+    def test_using_a_layer_alone_does_not_change_its_state_dict(self) -> None:
+        # A layer's own state must load into a fresh instance of the same layer, before and
+        # after it ran: the projection it draws for itself is not state.
+        layer = Linear(nn.Linear(6, 4), "a", _config(init_weights=False), r=3)
+        before = sorted(layer.state_dict())
+        out = layer(lucid.randn(3, 6))
+        assert sorted(layer.state_dict()) == before and not any("vera_A" in k for k in before)
+        fresh = Linear(nn.Linear(6, 4), "a", _config(init_weights=False), r=3)
+        fresh.load_state_dict(layer.state_dict())
+        assert out.shape == (3, 4)
+
+    def test_a_layer_bound_to_a_tuner_s_projections_loads_into_a_fresh_layer(self) -> None:
+        tuner = _tuner(init_weights=False)
+        bound = _vera(tuner.model, "0")
+        state = bound.state_dict()
+        assert {"vera_A.default", "vera_B.default"} <= set(state)
+        fresh = Linear(nn.Linear(6, 8), "default", _config(init_weights=False), r=3)
+        fresh.load_state_dict(state)
+        assert _same(fresh.vera_A["default"], tuner.vera_A["default"])  # type: ignore[index]
+        # Once loaded the fresh layer reads the projection it was given.
+        x = lucid.randn(2, 6)
+        assert _same(fresh.vera_lambda_d["default"], bound.vera_lambda_d["default"])
+        assert _close(fresh(x), bound(x))
 
 
 class TestBufferDict:
@@ -216,6 +259,20 @@ class TestBufferDict:
             held["a"]
         with pytest.raises(KeyError):
             del held["a"]
+
+    def test_a_fresh_container_takes_the_entries_of_a_checkpoint(self) -> None:
+        source = _BufferDict(persistent=True)
+        source["a"], source["b"] = lucid.ones(2), lucid.zeros(3)
+        fresh = _BufferDict(persistent=True)
+        fresh.load_state_dict(source.state_dict())
+        assert sorted(fresh) == ["a", "b"] and _same(fresh["b"], lucid.zeros(3))
+
+    def test_a_non_persistent_container_takes_nothing_from_a_checkpoint(self) -> None:
+        source = _BufferDict(persistent=True)
+        source["a"] = lucid.ones(2)
+        fresh = _BufferDict(persistent=False)
+        with pytest.raises(RuntimeError, match="Unexpected key"):
+            fresh.load_state_dict(source.state_dict())
 
     def test_a_non_persistent_one_is_not_in_the_state_dict(self) -> None:
         held = _BufferDict(persistent=False)
@@ -568,11 +625,10 @@ class TestTuner:
     def test_the_attributes_are_the_reference_s(self) -> None:
         tuner = _tuner()
         assert isinstance(tuner.vera_A, _BufferDict) and isinstance(tuner.vera_B, _BufferDict)
-        assert sorted(k for k in tuner.state_dict() if "vera_" in k and "lambda" not in k)[:2] == [
+        assert sorted(k for k in tuner.state_dict() if "vera_" in k and "lambda" not in k) == [
             "model.0.vera_A.default",
             "model.0.vera_B.default",
         ]
-        assert "vera_A.default" in tuner.state_dict()
 
     def test_unload_gives_the_base_back_and_merge_and_unload_matches(self, device: str) -> None:
         net = _mlp(device)
