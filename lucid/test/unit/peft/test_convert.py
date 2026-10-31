@@ -592,11 +592,15 @@ def test_roformer_encoder_adapter_is_read_as_it_is(tmp_path: Path) -> None:
         assert _same(loaded(ids).logits, expected(ids).logits)
 
 
-def test_roformer_output_projection_is_the_zoo_classifier(tmp_path: Path) -> None:
-    tensors, factors = _roformer_encoder(120)
-    out_w, out_b = _randn(121, 2, _DIM), _randn(122, 2)
-    tensors[f"{_PREFIX}classifier.out_proj.weight"] = out_w
-    tensors[f"{_PREFIX}classifier.out_proj.bias"] = out_b
+def test_roformer_head_names_are_the_reference_s_own() -> None:
+    tensors, _ = _roformer_encoder(120)
+    for name, shape in (
+        ("classifier.dense.weight", (_DIM, _DIM)),
+        ("classifier.dense.bias", (_DIM,)),
+        ("classifier.out_proj.weight", (2, _DIM)),
+        ("classifier.out_proj.bias", (2,)),
+    ):
+        tensors[f"{_PREFIX}{name}"] = _randn(121, *shape)
     converted = convert_adapter(
         AdapterFile(
             LoraConfig.from_dict(_roformer_config(modules_to_save=["classifier"])), tensors
@@ -604,57 +608,37 @@ def test_roformer_output_projection_is_the_zoo_classifier(tmp_path: Path) -> Non
         ConversionContext(model_type="roformer"),
         True,
     )
-    assert _same(converted.tensors[f"{_PREFIX}classifier.weight"], out_w)
-    assert f"{_PREFIX}classifier.out_proj.weight" not in converted.tensors
+    assert set(converted.tensors) == set(tensors)
 
 
-def test_roformer_trained_dense_head_is_refused_until_the_head_is_nested(tmp_path: Path) -> None:
-    tensors, _ = _roformer_encoder(130)
-    tensors[f"{_PREFIX}classifier.dense.weight"] = _randn(131, _DIM, _DIM)
-    tensors[f"{_PREFIX}classifier.dense.bias"] = _randn(132, _DIM)
-    tensors[f"{_PREFIX}classifier.out_proj.weight"] = _randn(133, 2, _DIM)
+def test_roformer_sequence_classification_adapter_with_its_head_loads(tmp_path: Path) -> None:
+    tensors, factors = _roformer_encoder(140)
+    head = {
+        "classifier.dense.weight": _randn(141, _DIM, _DIM),
+        "classifier.dense.bias": _randn(142, _DIM),
+        "classifier.out_proj.weight": _randn(143, 2, _DIM),
+        "classifier.out_proj.bias": _randn(144, 2),
+    }
+    tensors.update({f"{_PREFIX}{name}": value for name, value in head.items()})
     _write(tmp_path, _roformer_config(modules_to_save=["classifier"]), tensors)
     base = _base("roformer_cls", _TEXT)
-    before = {k: v.clone() for k, v in base.state_dict().items()}
-    with pytest.raises(NotImplementedError, match="LCD-709"):
-        PeftModel.from_pretrained(base, tmp_path)
-    assert set(base.state_dict()) == set(before)  # nothing was injected
-
-
-@pytest.mark.xfail(
-    strict=True, reason="LCD-709: roformer_cls keeps its head's dense outside `classifier`"
-)
-def test_roformer_sequence_classification_adapter_with_its_head_loads(tmp_path: Path) -> None:
-    tensors, _ = _roformer_encoder(140)
-    tensors[f"{_PREFIX}classifier.dense.weight"] = _randn(141, _DIM, _DIM)
-    tensors[f"{_PREFIX}classifier.dense.bias"] = _randn(142, _DIM)
-    tensors[f"{_PREFIX}classifier.out_proj.weight"] = _randn(143, 2, _DIM)
-    tensors[f"{_PREFIX}classifier.out_proj.bias"] = _randn(144, 2)
-    _write(tmp_path, _roformer_config(modules_to_save=["classifier"]), tensors)
-    PeftModel.from_pretrained(_base("roformer_cls", _TEXT), tmp_path)
-
-
-def test_roformer_nested_head_converts_by_identity() -> None:
-    class Head(nn.Module):
-        def __init__(self) -> None:
-            super().__init__()
-            self.dense = nn.Linear(_DIM, _DIM)
-            self.out_proj = nn.Linear(_DIM, 2)
-
-    class Nested(nn.Module):
-        def __init__(self) -> None:
-            super().__init__()
-            self.classifier = Head()
-
-    tensors, _ = _roformer_encoder(150)
-    tensors[f"{_PREFIX}classifier.dense.weight"] = _randn(151, _DIM, _DIM)
-    tensors[f"{_PREFIX}classifier.out_proj.weight"] = _randn(152, 2, _DIM)
-    adapter = AdapterFile(
-        LoraConfig.from_dict(_roformer_config(modules_to_save=["classifier"])), tensors
+    state = base.state_dict()
+    # Folded by hand: the encoder's low-rank update added into the weights, and
+    # the trained head standing where the base's was.
+    expected = _with_weights(
+        _base("roformer_cls", _TEXT),
+        {
+            **{
+                f"{module}.weight": state[f"{module}.weight"] + 2.0 * (b @ a)
+                for module, (a, b) in factors.items()
+            },
+            **head,
+        },
     )
-    context = ConversionContext(model_type="roformer", model=Nested())
-    assert convert_adapter(adapter, context, "auto") is adapter
-    assert set(convert_adapter(adapter, context, True).tensors) == set(tensors)
+    loaded = PeftModel.from_pretrained(base, tmp_path)
+    ids = _roformer_batch()
+    with lucid.no_grad():
+        assert _same(loaded(ids).logits, expected(ids).logits)
 
 
 # ── GPT-2: score becomes classifier ──────────────────────────────────────────

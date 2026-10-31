@@ -129,6 +129,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - nest roformer_cls head as classifier.dense/out_proj
 
+- roformer adapters load by identity, head is nested
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
