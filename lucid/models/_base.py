@@ -316,9 +316,6 @@ class PretrainedModel(nn.Module):
     # None signals "not set"; __init__ will raise if a concrete subclass forgets.
     config_class: ClassVar[type[ModelConfig] | None] = None
     base_model_prefix: ClassVar[str] = ""
-    #: Whether ``past_key_values`` is a read-only prefix every position attends to (a bidirectional
-    #: encoder's) rather than the history a decoder extends and numbers its next positions after.
-    kv_prefix_only: ClassVar[bool] = False
 
     #: Where this model came from, as the reference's ``name_or_path``: the registered factory
     #: name the factory built it under, or the directory ``from_pretrained`` read it from.  The

@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - one public initialize_parameters on the lazy base
 
+- drop the unread kv_prefix_only ClassVar
+
 ### Fixed
 
 - pin integer division by zero: CPU refuses, Metal returns the dividend remainder (LCD-654)
