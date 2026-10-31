@@ -219,6 +219,7 @@ markers = [
     "f64_only:  float64-only path; skipped when only f32 is available",
     "audit:     the exhaustive (symbol x axis) sweep — ~9k cases, minutes; opt in with -m audit",
     "control:   world-model control benchmark — thousands of gradient steps, tens of minutes; opt in with -m control",
+    "deadline:  deadline(seconds) -- wall-clock limit before the watchdog dumps stacks and exits (lucid/test/_fixtures/deadline.py)",
     "property:  Hypothesis boundary property tests driven by the op registry (LCD-268)",
 ]
 addopts = "-v --tb=short -m 'not heavy and not audit and not control'"

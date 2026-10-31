@@ -19,6 +19,8 @@ What you get for free in any test:
 * ``bench`` — ``pytest-benchmark``-compatible benchmark callable
   (degrades gracefully when the dep is missing).
 * Autouse ``manual_seed(0)`` per test.
+* Autouse wall-clock deadline for tests that reach a native graph compile
+  (``_fixtures/deadline.py``); ``@pytest.mark.deadline(seconds)`` overrides.
 """
 
 import pytest
@@ -36,6 +38,10 @@ from lucid.test._fixtures.devices import (  # noqa: F401
     device_gpu_only,
     cross_device_pair,
     pytest_generate_tests,
+)
+from lucid.test._fixtures.deadline import (  # noqa: F401
+    _deadline_stderr_fd,
+    _native_compile_deadline,
 )
 from lucid.test._fixtures.dtypes import float_dtype, float_dtype_extended, int_dtype  # noqa: F401
 from lucid.test._fixtures.ref_framework import ref  # noqa: F401
