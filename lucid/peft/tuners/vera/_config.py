@@ -97,7 +97,7 @@ class VeraConfig(_TargetedConfig, peft_type=PeftType.VERA):
 
     Examples
     --------
-    >>> from lucid.peft import VeraConfig
+    >>> from lucid.peft.tuners.vera import VeraConfig
     >>> config = VeraConfig(r=128, target_modules=["q_proj", "v_proj"], projection_prng_key=7)
     >>> sorted(config.target_modules), config.peft_type
     (['q_proj', 'v_proj'], <PeftType.VERA: 'VERA'>)

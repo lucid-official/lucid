@@ -99,7 +99,7 @@ class VeraModel(_FileFormat, _BaseTuner, peft_type=PeftType.VERA):
     Examples
     --------
     >>> import lucid.nn as nn
-    >>> from lucid.peft import VeraConfig, VeraModel
+    >>> from lucid.peft.tuners.vera import VeraConfig, VeraModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
     >>> vera = VeraModel(net, VeraConfig(r=4, target_modules=["0", "2"]))
     >>> tuple(vera.vera_A["default"].shape), tuple(vera.vera_B["default"].shape)

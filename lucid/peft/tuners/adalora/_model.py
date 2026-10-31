@@ -92,7 +92,7 @@ class AdaLoraModel(_FileFormat, _BaseTuner, peft_type=PeftType.ADALORA):
     --------
     >>> import lucid
     >>> import lucid.nn as nn
-    >>> from lucid.peft import AdaLoraConfig, AdaLoraModel
+    >>> from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
     >>> config = AdaLoraConfig(init_r=4, target_r=2, total_step=10, target_modules=["0"])
     >>> ada = AdaLoraModel(net, config)

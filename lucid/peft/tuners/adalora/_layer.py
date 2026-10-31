@@ -373,7 +373,7 @@ class SVDLinear(AdaLoraLayer, base_type=nn.Linear):
     --------
     >>> import lucid
     >>> import lucid.nn as nn
-    >>> from lucid.peft import AdaLoraConfig
+    >>> from lucid.peft.tuners.adalora import AdaLoraConfig
     >>> from lucid.peft.tuners.adalora import SVDLinear
     >>> base = nn.Linear(8, 4)
     >>> layer = SVDLinear(base, "default", AdaLoraConfig(total_step=10), r=3, lora_alpha=6)

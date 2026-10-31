@@ -100,11 +100,11 @@ class RankAllocator:
     Examples
     --------
     >>> import lucid.nn as nn
-    >>> from lucid.peft import AdaLoraConfig, AdaLoraModel
+    >>> from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraModel
     >>> net = nn.Sequential(nn.Linear(6, 6), nn.Linear(6, 2))
     >>> config = AdaLoraConfig(init_r=4, target_r=2, total_step=20, tfinal=5, target_modules=["0", "1"])
     >>> allocator = AdaLoraModel(net, config).rankallocator
-    >>> allocator.budget_schedule(0), allocator.budget_schedule(19)
+    >>> tuple(allocator.budget_schedule(0)), tuple(allocator.budget_schedule(19))
     ((8, False), (4, True))
     """
 

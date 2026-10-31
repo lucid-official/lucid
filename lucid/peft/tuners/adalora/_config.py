@@ -121,7 +121,7 @@ class AdaLoraConfig(_TargetedConfig, peft_type=PeftType.ADALORA):
 
     Examples
     --------
-    >>> from lucid.peft import AdaLoraConfig
+    >>> from lucid.peft.tuners.adalora import AdaLoraConfig
     >>> config = AdaLoraConfig(init_r=12, target_r=4, total_step=100, target_modules=["q", "v"])
     >>> sorted(config.target_modules), config.peft_type
     (['q', 'v'], <PeftType.ADALORA: 'ADALORA'>)

@@ -225,15 +225,6 @@ class VeraLayer(_ResidualUpdate, family=True):
         lambda_b = _parameter_at(self.vera_lambda_b, adapter)
         return (lambda_b.unsqueeze(-1) * vera_b) @ (lambda_d.unsqueeze(-1) * vera_a)
 
-    @override
-    def _contribution(self, adapter: str, x: Tensor) -> Tensor:
-        vera_a, vera_b = self._sliced(adapter)
-        lambda_d = _parameter_at(self.vera_lambda_d, adapter)
-        lambda_b = _parameter_at(self.vera_lambda_b, adapter)
-        dropped: Tensor = self.vera_dropout[adapter](x)
-        dropped = dropped if dropped.dtype == lambda_d.dtype else dropped.to(lambda_d.dtype)
-        return lambda_b * ((lambda_d * (dropped @ vera_a.mT)) @ vera_b.mT)
-
 
 class Linear(VeraLayer, base_type=nn.Linear):
     r"""An ``nn.Linear`` with a VeRA update: :math:`y = W x + b + \lambda_b \odot B(\lambda_d \odot A\,\mathrm{drop}(x))`.
@@ -253,7 +244,7 @@ class Linear(VeraLayer, base_type=nn.Linear):
     --------
     >>> import lucid
     >>> import lucid.nn as nn
-    >>> from lucid.peft import VeraConfig
+    >>> from lucid.peft.tuners.vera import VeraConfig
     >>> from lucid.peft.tuners.vera import Linear
     >>> base = nn.Linear(8, 4)
     >>> layer = Linear(base, "default", VeraConfig(target_modules=["x"]), r=16)
@@ -265,3 +256,12 @@ class Linear(VeraLayer, base_type=nn.Linear):
     """
 
     base_layer: nn.Linear
+
+    @override
+    def _contribution(self, adapter: str, x: Tensor) -> Tensor:
+        vera_a, vera_b = self._sliced(adapter)
+        lambda_d = _parameter_at(self.vera_lambda_d, adapter)
+        lambda_b = _parameter_at(self.vera_lambda_b, adapter)
+        dropped: Tensor = self.vera_dropout[adapter](x)
+        dropped = dropped if dropped.dtype == lambda_d.dtype else dropped.to(lambda_d.dtype)
+        return lambda_b * ((lambda_d * (dropped @ vera_a.mT)) @ vera_b.mT)
