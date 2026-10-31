@@ -287,7 +287,7 @@ def test_the_refusal_names_the_spellings_it_expected() -> None:
 #: Files whose example still has a bare ``manual_seed`` line, held by another
 #: workspace when LCD-773 was written; the guard fails the day one is fixed,
 #: so the list cannot go stale.
-_PENDING = frozenset({"lucid/utils/data/dataset.py", "lucid/_tensor/_methods.py"})
+_PENDING = frozenset({"lucid/_tensor/_methods.py"})
 
 
 def test_no_docstring_example_leaves_manual_seed_unbound() -> None:

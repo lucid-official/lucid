@@ -480,9 +480,9 @@ def random_split(
     ``generator``; the same generator state always yields the same
     partition.
 
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> first = random_split(full, [50, 50])[0].indices
-    >>> lucid.manual_seed(0)
+    >>> _ = lucid.manual_seed(0)
     >>> first == random_split(full, [50, 50])[0].indices
     True
     """
