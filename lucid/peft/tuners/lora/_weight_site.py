@@ -19,7 +19,7 @@ import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
-from lucid.nn.utils.weight_norm import _compute_weight, _norm_along_dim, _WN_HOOK_ATTR
+from lucid.nn.utils.weight_norm import WeightNorm, _compute_weight, _norm_along_dim
 
 _WEIGHT: Final = "weight"
 _MAGNITUDE: Final = "weight_g"
@@ -112,7 +112,7 @@ class _Normalised(_WeightSite, site=True):
     @classmethod
     @override
     def holds(cls, module: nn.Module) -> bool:
-        return _WEIGHT in getattr(module, _WN_HOOK_ATTR, {}) and isinstance(
+        return WeightNorm.find(module, _WEIGHT) is not None and isinstance(
             getattr(module, _MAGNITUDE, None), Parameter
         )
 
@@ -122,9 +122,9 @@ class _Normalised(_WeightSite, site=True):
         return magnitude, direction
 
     def _dim(self) -> int:
-        _handle, dim = getattr(self.module, _WN_HOOK_ATTR)[_WEIGHT]
-        assert isinstance(dim, int)
-        return dim
+        hook = WeightNorm.find(self.module, _WEIGHT)
+        assert hook is not None
+        return hook.dim
 
     @override
     def parameters(self) -> dict[str, Parameter]:

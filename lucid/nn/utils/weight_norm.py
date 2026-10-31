@@ -11,37 +11,124 @@ reparametrised weight is recomputed before each forward call via a pre-hook.
 Mirrors ``reference framework.nn.utils.weight_norm`` (the legacy non-parametrize variant).
 """
 
-from typing import Any
+__all__ = ["WeightNorm", "weight_norm", "remove_weight_norm"]
+
+from typing import override
 
 import lucid
 from lucid._tensor.tensor import Tensor
 from lucid.nn.module import Module
 from lucid.nn.parameter import Parameter
 from lucid.nn.utils._checks import _require_module, _require_parameter
-
-# Sentinel attribute on a Module to record which parameter name carries an
-# active weight-norm registration; used by ``remove_weight_norm`` to undo it.
-_WN_HOOK_ATTR: str = "_weight_norm_hooks"
+from lucid.nn.utils._reparam import _NamedHook
 
 
 def _norm_along_dim(v: Tensor, dim: int) -> Tensor:
-    """Compute ||v|| reduced over every axis except ``dim``."""
+    """L2 norm of ``v`` over every axis except ``dim``, kept broadcastable.
+
+    ``dim == -1`` is the reference's "no axis": the norm of the whole tensor, a
+    0-d scalar (so ``weight_norm(m, dim=-1)`` and ``dim=None`` share one scalar
+    magnitude).  Any other negative ``dim`` counts from the end.
+    """
     ndim: int = len(v.shape)
-    if dim < 0:
-        dim += ndim
+    if dim == -1:
+        return lucid.sqrt((v * v).sum())
+    if not -ndim <= dim < ndim:
+        raise IndexError(f"dim {dim} is out of range for a weight of shape {tuple(v.shape)}")
+    dim %= ndim
     keep_axes: list[int] = [i for i in range(ndim) if i != dim]
     if not keep_axes:
-        # 1-D weight — the norm is the full L2 norm scalar.
-        return lucid.sqrt((v * v).sum())
+        # A 1-D weight normalised along its only axis: every slice is one element.
+        return lucid.abs(v)
     return lucid.sqrt((v * v).sum(dim=keep_axes, keepdim=True))
 
 
 def _compute_weight(g: Tensor, v: Tensor, dim: int) -> Tensor:
-    norm: Tensor = _norm_along_dim(v, dim)
-    return g * (v / norm)
+    return v * (g / _norm_along_dim(v, dim))
 
 
-def weight_norm(module: Module, name: str = "weight", dim: int = 0) -> Module:
+class WeightNorm(_NamedHook):
+    r"""The forward pre-hook behind :func:`weight_norm`.
+
+    Holds which parameter is reparametrised and along which axis; before every
+    forward it recomputes :math:`\mathbf{W} = g\,\mathbf{v}/\lVert\mathbf{v}\rVert`
+    from the module's ``<name>_g`` and ``<name>_v``.  A plain instance, so a
+    module carrying one pickles and deep-copies.
+
+    Parameters
+    ----------
+    name : str
+        Name of the reparametrised parameter.
+    dim : int or None
+        Axis keeping its own magnitude; ``None`` or ``-1`` normalises the whole
+        tensor to one scalar magnitude.
+    """
+
+    _LABEL = "weight_norm"
+
+    def __init__(self, name: str, dim: int | None) -> None:
+        super().__init__(name)
+        self.dim: int = -1 if dim is None else dim
+
+    def compute_weight(self, module: Module) -> Tensor:
+        """The weight ``g * v / ||v||`` from the module's current ``g`` and ``v``."""
+        g: Tensor = getattr(module, self.name + "_g")
+        v: Tensor = getattr(module, self.name + "_v")
+        return _compute_weight(g, v, self.dim)
+
+    @classmethod
+    def apply(cls, module: Module, name: str, dim: int | None) -> WeightNorm:
+        """Reparametrise ``module.<name>`` and install the hook; the constructor of record.
+
+        Parameters
+        ----------
+        module : Module
+            Host of the parameter.
+        name : str
+            Name of the parameter to normalise.
+        dim : int or None
+            Axis keeping its own magnitude; ``None`` / ``-1`` for one scalar.
+
+        Returns
+        -------
+        WeightNorm
+            The hook now installed on ``module``.
+
+        Raises
+        ------
+        RuntimeError
+            If ``name`` is already weight-normalised.
+        """
+        cls._require_free(module, name)
+        weight: Parameter = _require_parameter(module, name, "apply weight_norm")
+        fn = cls(name, dim)
+        # The magnitude is the first thing computed, so a ``dim`` out of range is
+        # refused before the module is touched.
+        g: Parameter = Parameter(_norm_along_dim(weight.detach(), fn.dim))
+        v: Parameter = Parameter(weight.detach())
+        del module._parameters[name]
+        module.register_parameter(name + "_g", g)
+        module.register_parameter(name + "_v", v)
+        fn._publish(module, fn.compute_weight(module))
+        cls._register(module, fn)
+        return fn
+
+    @override
+    def refresh(self, module: Module) -> None:
+        """Recompute ``module.<name>`` from the current ``g`` and ``v``."""
+        self._publish(module, self.compute_weight(module))
+
+    @override
+    def remove(self, module: Module) -> None:
+        """Materialise the weight one last time as a plain leaf Parameter."""
+        weight: Tensor = self.compute_weight(module).detach()
+        self._vacate(module)
+        del module._parameters[self.name + "_g"]
+        del module._parameters[self.name + "_v"]
+        module.register_parameter(self.name, Parameter(weight))
+
+
+def weight_norm(module: Module, name: str = "weight", dim: int | None = 0) -> Module:
     r"""Reparametrise a weight as direction times magnitude (Salimans & Kingma 2016).
 
     Replaces ``module.<name>`` with the derived tensor
@@ -64,11 +151,13 @@ def weight_norm(module: Module, name: str = "weight", dim: int = 0) -> Module:
         a derived tensor recomputed before every forward call.
     name : str, optional
         Attribute name of the parameter to normalise.  Default ``"weight"``.
-    dim : int, optional
+    dim : int or None, optional
         Axis along which the scale ``g`` has its own entry; norms are
         reduced over every other axis.  ``0`` (the default) is correct
         for ``Linear`` and ``Conv*`` (one scale per output channel).
-        Use ``-1`` for output-row Linear layouts.
+        ``None`` or ``-1`` normalises the whole tensor against one scalar
+        ``g`` (the reference's convention); any other negative ``dim``
+        counts from the end.
 
     Returns
     -------
@@ -81,7 +170,8 @@ def weight_norm(module: Module, name: str = "weight", dim: int = 0) -> Module:
     Two new parameters are registered:
 
     * ``<name>_g`` — broadcast-shaped tensor (``1`` along every axis
-      except ``dim``) holding the per-slice magnitudes.
+      except ``dim``; a 0-d scalar for ``dim=None`` / ``-1``) holding the
+      per-slice magnitudes.
     * ``<name>_v`` — same shape as the original weight, holding the
       unnormalised direction.
 
@@ -98,42 +188,7 @@ def weight_norm(module: Module, name: str = "weight", dim: int = 0) -> Module:
     ((64, 1), (64, 128))
     """
     _require_module(module, "weight_norm")
-    weight: Parameter = _require_parameter(module, name, "apply weight_norm")
-
-    ndim: int = len(weight.shape)
-    if dim < 0:
-        dim += ndim
-
-    # g shape: same as weight, but every axis except ``dim`` is 1 (so it
-    # broadcasts correctly during the multiply).
-    g_shape: list[int] = [1] * ndim
-    if ndim > 0:
-        g_shape[dim] = int(weight.shape[dim])
-    initial_norm: Tensor = _norm_along_dim(weight.detach(), dim)
-    g_param: Parameter = Parameter(initial_norm.reshape(g_shape))
-    v_param: Parameter = Parameter(weight.detach())
-
-    # Drop the old leaf parameter and install ``g`` / ``v`` next to it.
-    del module._parameters[name]
-    module.register_parameter(name + "_g", g_param)
-    module.register_parameter(name + "_v", v_param)
-
-    def _pre_hook(mod: Module, _inputs: Any) -> None:
-        # Recompute weight from the current g/v before every forward.
-        g: Parameter = getattr(mod, name + "_g")
-        v: Parameter = getattr(mod, name + "_v")
-        object.__setattr__(mod, name, _compute_weight(g, v, dim))
-
-    handle = module.register_forward_pre_hook(_pre_hook)  # type: ignore[arg-type]
-
-    # Track the registration so remove_weight_norm can find it.
-    hooks: dict[str, Any] = getattr(module, _WN_HOOK_ATTR, {})
-    hooks[name] = (handle, dim)
-    object.__setattr__(module, _WN_HOOK_ATTR, hooks)
-
-    # Trigger the hook once so the attribute exists immediately (without
-    # waiting for a forward call).
-    object.__setattr__(module, name, _compute_weight(g_param, v_param, dim))
+    WeightNorm.apply(module, name, dim)
     return module
 
 
@@ -182,20 +237,4 @@ def remove_weight_norm(module: Module, name: str = "weight") -> Module:
     >>> "weight_g" in dict(layer.named_parameters())
     False
     """
-    hooks: dict[str, Any] = getattr(module, _WN_HOOK_ATTR, {})
-    if name not in hooks:
-        raise ValueError(f"weight_norm not registered on '{name}'")
-    handle, dim = hooks.pop(name)
-    handle.remove()
-    g: Parameter = getattr(module, name + "_g")
-    v: Parameter = getattr(module, name + "_v")
-    materialised: Tensor = _compute_weight(g, v, dim).detach()
-    del module._parameters[name + "_g"]
-    del module._parameters[name + "_v"]
-    # Drop the cached non-leaf attribute and re-install as a fresh Parameter.
-    if name in module.__dict__:
-        del module.__dict__[name]
-    module.register_parameter(name, Parameter(materialised))
-    if not hooks:
-        object.__delattr__(module, _WN_HOOK_ATTR)
-    return module
+    return WeightNorm.uninstall(module, name)

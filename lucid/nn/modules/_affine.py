@@ -13,9 +13,11 @@ class _AffineParameters(Module):
 
     def reset_parameters(self) -> None:
         """Put ``weight`` to ones and ``bias`` to zeros, where the layer has them."""
-        weight = self._parameters.get("weight")
+        # By attribute, not from ``_parameters``: a parametrised ``weight`` is not
+        # in the registry -- the property of the generated subclass answers for it.
+        weight = getattr(self, "weight", None)
         if weight is not None:
             init.ones_(weight)
-        bias = self._parameters.get("bias")
+        bias = getattr(self, "bias", None)
         if bias is not None:
             init.zeros_(bias)

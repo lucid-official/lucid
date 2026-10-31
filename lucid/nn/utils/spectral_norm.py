@@ -24,15 +24,16 @@ The buffers ``u`` / ``v`` are recomputed in training mode and held fixed
 in eval mode — bit-identical to the reference framework's behaviour.
 """
 
+from typing import Self, override
+
 import lucid
 from lucid._tensor.tensor import Tensor
 from lucid.nn.module import Module
 from lucid.nn.parameter import Parameter
 from lucid.nn.utils._checks import _require_module, _require_parameter
+from lucid.nn.utils._reparam import _NamedHook
 
-# Sentinel attribute used by ``remove_spectral_norm`` to find an active
-# registration on a module.
-_SN_HOOK_ATTR: str = "_spectral_norm_hooks"
+__all__ = ["SpectralNorm", "spectral_norm", "remove_spectral_norm"]
 
 
 def _l2_normalize(v: Tensor, eps: float = 1e-12) -> Tensor:
@@ -41,19 +42,150 @@ def _l2_normalize(v: Tensor, eps: float = 1e-12) -> Tensor:
     return v / norm
 
 
-def _flatten_weight(w: Tensor, dim: int) -> Tensor:
-    """Reshape ``w`` to 2-D with the chosen ``dim`` as rows.
+def _mv(mat: Tensor, vec: Tensor) -> Tensor:
+    """Matrix-vector product; ``matmul`` wants ≥ 2-D, so the vector rides as a column."""
+    col: Tensor = vec.reshape([int(vec.shape[0]), 1])
+    return lucid.matmul(mat, col).reshape([-1])
 
-    Spectral norm is defined for matrices, so we collapse all the other
-    axes into a single column dimension.  The default ``dim=0`` is correct
-    for ``Linear`` / ``Conv*``: rows = output channels, columns = fan-in.
+
+class SpectralNorm(_NamedHook):
+    r"""The forward pre-hook behind :func:`spectral_norm`.
+
+    Holds the parameter name, the row axis of the flattened matrix and the
+    power-iteration settings; before every forward it refreshes the ``u`` /
+    ``v`` buffers (training mode) and sets ``module.<name>`` to
+    :math:`\mathbf{W}_{\text{orig}} / \sigma`.  A plain instance, so a module
+    carrying one pickles and deep-copies.
+
+    Parameters
+    ----------
+    name : str, optional
+        Name of the reparametrised parameter.  Default ``"weight"``.
+    n_power_iterations : int, optional
+        Power-iteration steps per training-mode forward; positive.  Default ``1``.
+    dim : int, optional
+        Axis that becomes the rows of the flattened matrix.  Default ``0``.
+    eps : float, optional
+        Floor inside the :math:`\ell_2` normalisation.  Default ``1e-12``.
     """
-    if dim != 0:
-        ndim: int = len(w.shape)
-        perm: list[int] = [dim] + [i for i in range(ndim) if i != dim]
-        w = w.permute(perm)
-    rows: int = int(w.shape[0])
-    return w.reshape([rows, -1])
+
+    _LABEL = "spectral_norm"
+    _version: int = 1
+
+    def __init__(
+        self, name: str = "weight", n_power_iterations: int = 1, dim: int = 0, eps: float = 1e-12
+    ) -> None:
+        if n_power_iterations <= 0:
+            raise ValueError(
+                f"Expected n_power_iterations to be positive, but got n_power_iterations="
+                f"{n_power_iterations}"
+            )
+        super().__init__(name)
+        self.dim: int = dim
+        self.n_power_iterations: int = n_power_iterations
+        self.eps: float = eps
+
+    def reshape_weight_to_matrix(self, weight: Tensor) -> Tensor:
+        """``weight`` as a 2-D matrix with axis :attr:`dim` as its rows.
+
+        Spectral norm is defined for matrices, so every other axis collapses
+        into one column axis.  ``dim=0`` is right for ``Linear`` / ``Conv*``
+        (rows = output channels, columns = fan-in).
+        """
+        if self.dim != 0:
+            perm: list[int] = [self.dim] + [i for i in range(len(weight.shape)) if i != self.dim]
+            weight = weight.permute(perm)
+        return weight.reshape([int(weight.shape[0]), -1])
+
+    def compute_weight(self, module: Module, do_power_iteration: bool) -> Tensor:
+        """``W_orig / sigma``, refreshing ``u`` / ``v`` first when asked to."""
+        w_orig: Tensor = getattr(module, self.name + "_orig")
+        u: Tensor = getattr(module, self.name + "_u")
+        v: Tensor = getattr(module, self.name + "_v")
+        w_mat: Tensor = self.reshape_weight_to_matrix(w_orig)
+        if do_power_iteration:
+            # No-grad, and into the buffers in place as the reference writes them (LCD-497).
+            with lucid.no_grad():
+                for _ in range(self.n_power_iterations):
+                    v.copy_(_l2_normalize(_mv(w_mat.mT, u), eps=self.eps))
+                    u.copy_(_l2_normalize(_mv(w_mat, v), eps=self.eps))
+        # ``sigma`` reads copies in every mode: the graph saves its operands, and a
+        # later iteration writing the live buffers in place would reach into it
+        # (eval then train used to raise on the write).
+        u, v = u.clone(), v.clone()
+        sigma: Tensor = (u * _mv(w_mat, v)).sum()
+        return w_orig / sigma
+
+    @classmethod
+    def apply(
+        cls, module: Module, name: str, n_power_iterations: int, dim: int, eps: float
+    ) -> Self:
+        r"""Reparametrise ``module.<name>`` and install the hook; the constructor of record.
+
+        The original Parameter stays, as the same object, under ``<name>_orig``
+        — an optimizer built before this call keeps updating it.
+
+        Parameters
+        ----------
+        module : Module
+            Host of the parameter.
+        name : str
+            Name of the parameter to normalise.
+        n_power_iterations : int
+            Power-iteration steps per training-mode forward.
+        dim : int
+            Axis that becomes the rows of the flattened matrix.
+        eps : float
+            Floor inside the :math:`\ell_2` normalisation of ``u`` and ``v``.
+
+        Returns
+        -------
+        SpectralNorm
+            The hook now installed on ``module``.
+
+        Raises
+        ------
+        RuntimeError
+            If ``name`` is already spectral-normalised.
+        """
+        cls._require_free(module, name)
+        fn = cls(name, n_power_iterations, dim, eps)
+        weight: Parameter = _require_parameter(module, name, "apply spectral_norm")
+        if not 0 <= dim < len(weight.shape):
+            raise ValueError(f"dim {dim} out of range for weight of shape {tuple(weight.shape)}")
+        with lucid.no_grad():
+            rows, cols = (int(n) for n in fn.reshape_weight_to_matrix(weight).shape)
+            # Both iterates are contracted with the weight every forward: same device and dtype.
+            u: Tensor = _l2_normalize(
+                lucid.randn(rows, dtype=weight.dtype, device=weight.device), eps=eps
+            )
+            v: Tensor = _l2_normalize(
+                lucid.randn(cols, dtype=weight.dtype, device=weight.device), eps=eps
+            )
+        del module._parameters[name]
+        module.register_parameter(name + "_orig", weight)
+        module.register_buffer(name + "_u", u)
+        module.register_buffer(name + "_v", v)
+        # Readable before the first forward, normalised by the seeded vectors;
+        # the first forward is the first power iteration.
+        fn._publish(module, fn.compute_weight(module, do_power_iteration=False))
+        cls._register(module, fn)
+        return fn
+
+    @override
+    def refresh(self, module: Module) -> None:
+        """Recompute ``module.<name>``; the power iteration runs only in training mode."""
+        self._publish(module, self.compute_weight(module, do_power_iteration=module.training))
+
+    @override
+    def remove(self, module: Module) -> None:
+        """Hand the unnormalised ``W_orig`` back as ``<name>`` and drop ``_u`` / ``_v``."""
+        orig: Parameter = _require_parameter(module, self.name + "_orig", "remove spectral_norm")
+        self._vacate(module)
+        del module._parameters[self.name + "_orig"]
+        del module._buffers[self.name + "_u"]
+        del module._buffers[self.name + "_v"]
+        module.register_parameter(self.name, orig)
 
 
 def spectral_norm(
@@ -103,7 +235,16 @@ def spectral_norm(
     Module
         The same module, with ``<name>_orig`` (the trainable underlying
         matrix), ``<name>_u`` / ``<name>_v`` (buffers), and a forward
-        pre-hook performing the normalisation.
+        pre-hook performing the normalisation.  ``<name>_orig`` is the
+        original :class:`~lucid.nn.parameter.Parameter` object itself, so an
+        optimizer built before this call keeps updating it.
+
+    Raises
+    ------
+    RuntimeError
+        If ``<name>`` is already spectral-normalised.
+    ValueError
+        If ``n_power_iterations`` is not positive or ``dim`` is out of range.
 
     Notes
     -----
@@ -127,71 +268,11 @@ def spectral_norm(
     >>> disc = spectral_norm(nn.Conv2d(3, 64, 3, padding=1))
     """
     _require_module(module, "spectral_norm")
-    weight: Parameter = _require_parameter(module, name, "apply spectral_norm")
-
-    # ConvTranspose* stores weights as (in_channels, out_channels, ...) — the
-    # spectral norm should be taken with the output-channel axis (1) on top.
     if dim is None:
-        cls_name: str = type(module).__name__
-        dim = 1 if cls_name.startswith("ConvTranspose") else 0
-    if dim < 0 or dim >= len(weight.shape):
-        raise ValueError(f"dim {dim} out of range for weight of shape {tuple(weight.shape)}")
-
-    # Move the original weight to ``{name}_orig`` and seed the iteration
-    # vectors.  ``u`` is the row-side iterate (size = rows of the flattened
-    # weight); ``v`` is the column-side iterate.
-    weight_mat: Tensor = _flatten_weight(weight.detach(), dim)
-    rows: int = int(weight_mat.shape[0])
-    cols: int = int(weight_mat.shape[1])
-    # Power-iteration vectors are contracted with the weight every forward,
-    # so they must start on the weight's device.
-    dev = weight.device
-    u_init: Tensor = _l2_normalize(lucid.randn(rows, device=dev), eps=eps)
-    v_init: Tensor = _l2_normalize(lucid.randn(cols, device=dev), eps=eps)
-
-    del module._parameters[name]
-    module.register_parameter(name + "_orig", Parameter(weight.detach()))
-    module.register_buffer(name + "_u", u_init)
-    module.register_buffer(name + "_v", v_init)
-
-    def _pre_hook(mod: Module, _inputs: object) -> None:
-        w_orig: Parameter = getattr(mod, name + "_orig")
-        u: Tensor = getattr(mod, name + "_u")
-        v: Tensor = getattr(mod, name + "_v")
-        w_mat: Tensor = _flatten_weight(w_orig, dim)
-
-        # ``matmul`` only handles ≥ 2-D inputs; treat each iterate as a
-        # column vector ``(N, 1)`` and squeeze the trailing axis after.
-        def _mv(mat: Tensor, vec: Tensor) -> Tensor:
-            col: Tensor = vec.reshape([int(vec.shape[0]), 1])
-            return lucid.matmul(mat, col).reshape([-1])
-
-        # Power iteration runs in no-grad, into the buffers in place as the
-        # reference writes them (LCD-497).  ``sigma`` reads copies, so the
-        # next forward's writes cannot reach what this graph saved.
-        with lucid.no_grad():
-            iters: int = n_power_iterations if mod.training else 0
-            for _ in range(iters):
-                v.copy_(_l2_normalize(_mv(w_mat.mT, u), eps=eps))
-                u.copy_(_l2_normalize(_mv(w_mat, v), eps=eps))
-            if iters > 0:
-                u, v = u.clone(), v.clone()
-
-        # ``sigma = u^T (W v)`` — keep the autograd graph here so the
-        # gradient w.r.t. ``weight_orig`` flows through the normalisation.
-        sigma: Tensor = (u * _mv(w_mat, v)).sum()
-        normalised: Tensor = w_orig / sigma
-        object.__setattr__(mod, name, normalised)
-
-    handle = module.register_forward_pre_hook(_pre_hook)  # type: ignore[arg-type]
-
-    hooks: dict[str, object] = getattr(module, _SN_HOOK_ATTR, {})
-    hooks[name] = (handle, dim)
-    object.__setattr__(module, _SN_HOOK_ATTR, hooks)
-
-    # Run the hook once so ``module.{name}`` has a sensible initial value
-    # without waiting for the first forward call.
-    _pre_hook(module, ())
+        # ConvTranspose* stores weights as (in_channels, out_channels, ...): its
+        # output-channel axis, the matrix rows, is 1.
+        dim = 1 if type(module).__name__.startswith("ConvTranspose") else 0
+    SpectralNorm.apply(module, name, n_power_iterations, dim, eps)
     return module
 
 
@@ -239,27 +320,4 @@ def remove_spectral_norm(module: Module, name: str = "weight") -> Module:
     >>> sorted(name for name, _ in disc.named_parameters())
     ['bias', 'weight']
     """
-    hooks: dict[str, object] = getattr(module, _SN_HOOK_ATTR, {})
-    if name not in hooks:
-        raise ValueError(f"spectral_norm not registered on '{name}'")
-    handle, _dim = hooks.pop(name)  # type: ignore[misc]
-    handle.remove()  # type: ignore[has-type]
-
-    w_orig: Parameter = getattr(module, name + "_orig")
-    materialised: Tensor = w_orig.detach()
-    del module._parameters[name + "_orig"]
-
-    # Drop the cached non-leaf attribute so ``register_parameter`` succeeds.
-    if name in module.__dict__:
-        del module.__dict__[name]
-    module.register_parameter(name, Parameter(materialised))
-
-    # Buffers are stored on the module's ``_buffers`` dict — clear them.
-    for buf_suffix in ("_u", "_v"):
-        full_name: str = name + buf_suffix
-        if hasattr(module, "_buffers") and full_name in module._buffers:
-            del module._buffers[full_name]
-
-    if not hooks:
-        object.__delattr__(module, _SN_HOOK_ATTR)
-    return module
+    return SpectralNorm.uninstall(module, name)
