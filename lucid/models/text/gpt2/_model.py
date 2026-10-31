@@ -45,6 +45,7 @@ from lucid.models._utils._text import (
     extended_attention_mask,
     init_text_weights as _init_weights,
     last_kept_token,
+    embed_tokens,
     resolve_causal_positions,
     score_double_heads,
     text_activation,
@@ -314,23 +315,24 @@ class GPT2Model(PretrainedModel):
     @override
     def forward(
         self,
-        input_ids: Tensor,
+        input_ids: Tensor | None = None,
         attention_mask: Tensor | None = None,
         *,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         cache_position: Tensor | None = None,
+        inputs_embeds: Tensor | None = None,
     ) -> BaseModelOutput:
         # ``None`` means "whatever the config says" — hard-coding False here
         # made ``config.use_cache`` dead, so a model configured for cached
         # decoding still ran the quadratic path unless every call site
         # remembered to pass the flag.
         use_cache = self._use_cache if use_cache is None else use_cache
-        B, T = int(input_ids.shape[0]), int(input_ids.shape[1])
+        tok_emb = embed_tokens(self.wte, input_ids, inputs_embeds)
+        B, T = int(tok_emb.shape[0]), int(tok_emb.shape[1])
         past_len, cache_position, pos_ids = resolve_causal_positions(
-            input_ids, self.position_ids, self._max_pos, past_key_values, cache_position
+            tok_emb, self.position_ids, self._max_pos, past_key_values, cache_position
         )
-        tok_emb = self.wte(input_ids)
         pos_emb = self.wpe(pos_ids)
         hidden = self.drop(tok_emb + pos_emb)
 

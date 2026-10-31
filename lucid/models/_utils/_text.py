@@ -30,6 +30,7 @@ __all__ = [
     "init_text_weights",
     "update_causal_kv_and_bias",
     "resolve_causal_positions",
+    "embed_tokens",
     "flatten_multiple_choice_inputs",
     "score_double_heads",
     "compute_qa_loss",
@@ -283,6 +284,43 @@ def update_causal_kv_and_bias(
     return k, v, bias
 
 
+def embed_tokens(
+    table: nn.Module, input_ids: Tensor | None, inputs_embeds: Tensor | None
+) -> Tensor:
+    """The token embeddings of a call: ``inputs_embeds`` as given, or ``table`` applied to ``input_ids``.
+
+    A model takes its input as ids or as embeddings already looked up (a
+    caller that edits them — a learned prompt put in front, say); exactly
+    one of the two is given.
+
+    Parameters
+    ----------
+    table : nn.Module
+        The token embedding table.
+    input_ids : Tensor or None
+        ``(B, T)`` token ids.
+    inputs_embeds : Tensor or None
+        ``(B, T, H)`` embeddings to use as they are.
+
+    Returns
+    -------
+    Tensor
+        ``(B, T, H)`` token embeddings.
+
+    Raises
+    ------
+    ValueError
+        Both or neither of ``input_ids`` and ``inputs_embeds`` is given.
+    """
+    if (input_ids is None) == (inputs_embeds is None):
+        raise ValueError("specify exactly one of input_ids and inputs_embeds")
+    if inputs_embeds is not None:
+        return inputs_embeds
+    assert input_ids is not None  # the check above
+    embedded: Tensor = table(input_ids)
+    return embedded
+
+
 def resolve_causal_positions(
     input_ids: Tensor,
     position_ids: Tensor,
@@ -290,7 +328,28 @@ def resolve_causal_positions(
     past_key_values: Cache | None,
     cache_position: Tensor | None,
 ) -> tuple[int, Tensor, Tensor]:
-    """Validate total sequence length and return ``(past_len, cache_position, pos_ids)`` for decoding."""
+    """Validate total sequence length and return ``(past_len, cache_position, pos_ids)`` for decoding.
+
+    ``input_ids`` only lends its length and device, so the call's embeddings serve as well.
+
+    Parameters
+    ----------
+    input_ids : Tensor
+        ``(B, T)`` ids (or ``(B, T, H)`` embeddings) of the new tokens.
+    position_ids : Tensor
+        ``(1, max_pos)`` table of positions to slice.
+    max_pos : int
+        Longest total sequence the model has positions for.
+    past_key_values : Cache or None
+        The cache holding earlier tokens.
+    cache_position : Tensor or None
+        Absolute positions of the new tokens, if the caller knows them.
+
+    Returns
+    -------
+    tuple of (int, Tensor, Tensor)
+        Cached length, the new tokens' cache positions, and their position ids.
+    """
     T = int(input_ids.shape[1])
     past_len = past_key_values.get_seq_length() if past_key_values is not None else 0
     if past_len + T > max_pos:

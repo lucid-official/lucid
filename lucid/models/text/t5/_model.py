@@ -511,6 +511,14 @@ class T5Model(PretrainedModel):
             )
         self.shared = value
 
+    def get_encoder(self) -> nn.Module:
+        """The encoder stack: ``forward(embeddings, attention_mask)`` to the encoder output."""
+        return self.encoder
+
+    def get_decoder(self) -> nn.Module:
+        """The decoder stack, which reads the encoder output as ``memory`` and an optional ``cache``."""
+        return self.decoder
+
     def encode(self, src_ids: Tensor, src_attention_mask: Tensor | None = None) -> Tensor:
         """Run the encoder alone.
 
@@ -690,6 +698,14 @@ class T5ForSeq2SeqLM(LanguageModelingModel):
         weight = self.t5.shared.weight
         self.lm_head.weight = weight
         self.lm_head.out_features = int(weight.shape[0])
+
+    def get_encoder(self) -> nn.Module:
+        """The trunk's encoder stack."""
+        return self.t5.get_encoder()
+
+    def get_decoder(self) -> nn.Module:
+        """The trunk's decoder stack."""
+        return self.t5.get_decoder()
 
     def _logits(self, hidden: Tensor) -> Tensor:
         """Vocabulary logits, rescaled first when the head is the token table."""

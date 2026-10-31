@@ -39,6 +39,7 @@ from lucid.models._utils._text import (
     extended_attention_mask,
     init_text_weights as _init_weights,
     last_kept_token,
+    embed_tokens,
     resolve_causal_positions,
     score_double_heads,
     text_activation,
@@ -279,18 +280,19 @@ class GPTModel(PretrainedModel):
     @override
     def forward(
         self,
-        input_ids: Tensor,
+        input_ids: Tensor | None = None,
         attention_mask: Tensor | None = None,
         *,
         past_key_values: Cache | None = None,
         use_cache: bool = False,
         cache_position: Tensor | None = None,
+        inputs_embeds: Tensor | None = None,
     ) -> BaseModelOutput:
-        B, T = int(input_ids.shape[0]), int(input_ids.shape[1])
+        tok_emb = embed_tokens(self.tokens_embed, input_ids, inputs_embeds)
+        B, T = int(tok_emb.shape[0]), int(tok_emb.shape[1])
         past_len, cache_position, pos_ids = resolve_causal_positions(
-            input_ids, self.position_ids, self._max_pos, past_key_values, cache_position
+            tok_emb, self.position_ids, self._max_pos, past_key_values, cache_position
         )
-        tok_emb = self.tokens_embed(input_ids)
         pos_emb = self.positions_embed(pos_ids)
         hidden = self.drop(tok_emb + pos_emb)
 

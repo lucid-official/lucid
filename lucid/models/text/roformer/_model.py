@@ -34,6 +34,7 @@ from lucid.models._output import (
 )
 from lucid.models._utils._text import (
     compute_qa_loss,
+    embed_tokens,
     extended_attention_mask,
     flatten_multiple_choice_inputs,
     init_text_module_weights,
@@ -130,11 +131,15 @@ class _RoFormerEmbeddings(nn.Module):
         self.dropout = nn.Dropout(p=config.hidden_dropout)
 
     @override
-    def forward(self, input_ids: Tensor, token_type_ids: Tensor | None = None) -> Tensor:
-        B, T = int(input_ids.shape[0]), int(input_ids.shape[1])
-        dev = input_ids.device.type
-
-        words = self.word_embeddings(input_ids)
+    def forward(
+        self,
+        input_ids: Tensor | None = None,
+        token_type_ids: Tensor | None = None,
+        inputs_embeds: Tensor | None = None,
+    ) -> Tensor:
+        words = embed_tokens(self.word_embeddings, input_ids, inputs_embeds)
+        B, T = int(words.shape[0]), int(words.shape[1])
+        dev = words.device.type
         if token_type_ids is None:
             token_type_ids = lucid.zeros((B, T), device=dev).long()
         types = self.token_type_embeddings(token_type_ids)
@@ -416,11 +421,16 @@ class RoFormerModel(_RoFormerInitMixin, PretrainedModel):
     @override
     def forward(
         self,
-        input_ids: Tensor,
+        input_ids: Tensor | None = None,
         attention_mask: Tensor | None = None,
         token_type_ids: Tensor | None = None,
+        *,
+        inputs_embeds: Tensor | None = None,
     ) -> BaseModelOutputWithPooling:
-        batch_size, seq_len = int(input_ids.shape[0]), int(input_ids.shape[1])
+        hidden = self.embeddings(
+            input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+        )
+        batch_size, seq_len = int(hidden.shape[0]), int(hidden.shape[1])
         if seq_len > self._max_pos:
             raise ValueError(
                 f"Sequence length {seq_len} exceeds max_position_embeddings {self._max_pos}"
@@ -432,7 +442,6 @@ class RoFormerModel(_RoFormerInitMixin, PretrainedModel):
         cos = cos[:seq_len]
         sin = sin[:seq_len]
 
-        hidden = self.embeddings(input_ids, token_type_ids=token_type_ids)
         if self.embeddings_project is not None:
             hidden = self.embeddings_project(hidden)
         ext_mask = extended_attention_mask(attention_mask, (batch_size, seq_len))

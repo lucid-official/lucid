@@ -6,7 +6,17 @@ import warnings
 import weakref
 from collections import OrderedDict
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Iterator, Self, override
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    ClassVar,
+    Iterator,
+    Literal,
+    Self,
+    overload,
+    override,
+)
 
 from lucid._C import engine as _C_engine
 from lucid import _promotion
@@ -25,7 +35,13 @@ from lucid.nn.hooks import (
 )
 from lucid.nn._module_backward_state import _ModuleBackwardState
 from lucid._tree_version import _TrackedDict, _tree_changed
-from lucid._types import _ModuleOutput, _ForwardPreHook, _ForwardHook, _BackwardHook
+from lucid._types import (
+    _ModuleOutput,
+    _ForwardPreHook,
+    _ForwardPreHookWithKwargs,
+    _ForwardHook,
+    _BackwardHook,
+)
 
 if TYPE_CHECKING:
     from lucid._types import _HasForward
@@ -1300,10 +1316,41 @@ class Module:
 
     # ── hooks ─────────────────────────────────────────────────────────────
 
+    @overload
     def register_forward_pre_hook(
-        self, hook: _ForwardPreHook, *, prepend: bool = False, with_kwargs: bool = False
+        self, hook: _ForwardPreHook, *, prepend: bool = False, with_kwargs: Literal[False] = False
+    ) -> RemovableHandle: ...
+
+    @overload
+    def register_forward_pre_hook(
+        self, hook: _ForwardPreHookWithKwargs, *, prepend: bool = False, with_kwargs: Literal[True]
+    ) -> RemovableHandle: ...
+
+    def register_forward_pre_hook(
+        self,
+        hook: _ForwardPreHook | _ForwardPreHookWithKwargs,
+        *,
+        prepend: bool = False,
+        with_kwargs: bool = False,
     ) -> RemovableHandle:
-        """Register a hook called before forward()."""
+        """Register a hook called before forward().
+
+        Parameters
+        ----------
+        hook : callable
+            ``hook(module, args)`` returning ``None`` or the new ``args``; with
+            ``with_kwargs``, ``hook(module, args, kwargs)`` returning ``None`` or the
+            new ``(args, kwargs)``.
+        prepend : bool, default=False
+            Run before the hooks already registered.
+        with_kwargs : bool, default=False
+            Pass the keyword arguments to the hook too.
+
+        Returns
+        -------
+        RemovableHandle
+            ``handle.remove()`` unregisters the hook.
+        """
         key = _next_hook_id()
         self._forward_pre_hooks[key] = hook
         if with_kwargs:
