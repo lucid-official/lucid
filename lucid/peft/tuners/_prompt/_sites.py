@@ -41,6 +41,8 @@ class _Applied:
 
     config: PromptLearningConfig
     encoder: _PromptEncoder
+    #: The task of each batch row, for a prompt that is made per task.
+    tasks: Tensor | None = None
 
     @property
     def virtual(self) -> int:
@@ -50,11 +52,7 @@ class _Applied:
 
     def embeddings(self, batch: int, dtype: lucid.dtype) -> Tensor:
         """The prompt as ``(batch, rows, token_dim)`` rows to put before input embeddings."""
-        rows = self.encoder.num_embeddings
-        device = self.encoder.embedding.weight.device.type
-        ids = lucid.arange(rows, device=device).long().reshape(1, rows)
-        prompt: Tensor = self.encoder(ids).repeat(batch, 1, 1)
-        return prompt.to(dtype)
+        return self.encoder.prompts(batch, self.tasks).to(dtype)
 
     def key_values(self, batch: int, dtype: lucid.dtype) -> list[tuple[Tensor, Tensor]]:
         """The prefix as one ``(key, value)`` pair per layer, each ``(batch, heads, virtual, head_dim)``."""
@@ -62,8 +60,7 @@ class _Applied:
         assert config.num_attention_heads is not None and config.token_dim is not None
         assert config.num_layers is not None
         heads, virtual = config.num_attention_heads, self.virtual
-        ids = lucid.arange(virtual, device=self.encoder.embedding.weight.device.type).long()
-        rows: Tensor = self.encoder(ids.reshape(1, virtual)).repeat(batch, 1, 1)
+        rows = self.encoder.prompts(batch, self.tasks)
         rows = rows.reshape(batch, virtual, config.num_layers * 2, heads, config.token_dim // heads)
         planes = rows.permute(2, 0, 3, 1, 4).to(dtype).unbind(0)
         return [(planes[i], planes[i + 1]) for i in range(0, len(planes), 2)]
@@ -120,7 +117,7 @@ def _put_prefix(cache: Cache, pairs: list[tuple[Tensor, Tensor]], virtual: int) 
         cache.update(key, value, layer, cache_kwargs={"cache_position": positions})
 
 
-class _Site(ABC):
+class _Hook(ABC):
     """A forward pre-hook that applies the active adapter's prompt to one module's call."""
 
     __slots__ = ("_tuner",)
@@ -135,6 +132,24 @@ class _Site(ABC):
         if applied is None:
             return None
         assert isinstance(module, nn.Module)  # a hook is called by its module
+        return self.apply(applied, module, args, kwargs)
+
+    @abstractmethod
+    def apply(
+        self, applied: _Applied, module: nn.Module, args: tuple[object, ...], kwargs: _Call
+    ) -> tuple[tuple[object, ...], _Call]:
+        """The arguments ``module`` is called with instead, the prompt in them."""
+
+
+class _Site(_Hook):
+    """A hook that rewrites the module's arguments by their names (positional or keyword alike)."""
+
+    __slots__ = ()
+
+    @override
+    def apply(
+        self, applied: _Applied, module: nn.Module, args: tuple[object, ...], kwargs: _Call
+    ) -> tuple[tuple[object, ...], _Call]:
         call = _named_arguments(module, args, kwargs)
         self.rewrite(applied, call)
         return (), call
@@ -275,3 +290,35 @@ class _DecoderPrefixSite(_Site):
             cache = EncoderDecoderCache(DynamicCache(), DynamicCache())
         _put_prefix(cache, pairs, virtual)
         call["cache"] = cache
+
+
+class _HeadSite(_Hook):
+    """On a token-level head: its input without the rows the prompt added, so the output is the input's length.
+
+    A classifier or span head maps every position of the trunk's output to a
+    row of logits.  With the prompt in front of the input the trunk's output
+    has ``virtual`` more positions than the input did; cutting them off at the
+    head's input — rather than from its logits — leaves the model's own loss
+    (its labels, its start and end positions) working on the sequence the
+    caller gave.
+    """
+
+    __slots__ = ()
+
+    @override
+    def apply(
+        self, applied: _Applied, module: nn.Module, args: tuple[object, ...], kwargs: _Call
+    ) -> tuple[tuple[object, ...], _Call]:
+        features = args[0] if len(args) == 1 and not kwargs else None
+        if not isinstance(features, Tensor) or features.ndim < 3:
+            raise TypeError(
+                f"{type(module).__name__} is called with something other than one "
+                "(batch, positions, features) tensor, which is what a token-level head reads"
+            )
+        virtual = applied.virtual
+        if int(features.shape[1]) <= virtual:
+            raise ValueError(
+                f"the head reads {int(features.shape[1])} positions, "
+                f"no more than the {virtual} virtual tokens in front"
+            )
+        return (features[:, virtual:],), {}

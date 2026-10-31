@@ -24,7 +24,9 @@ from collections.abc import Mapping, Sequence
 from types import MappingProxyType
 from typing import ClassVar, Final
 
+from lucid._tensor.tensor import Tensor
 from lucid.peft._config import TaskType
+from lucid.peft._heads import CLASSIFIER_HEADS, SPAN_HEADS
 from lucid.peft._peft_model import PeftModel
 
 #: Wrapper class by the task it serves, as the reference's table of the same name.  Read-only.
@@ -37,7 +39,11 @@ class _GeneratingPeftModel(PeftModel):
     """A wrapper for a task that decodes: ``generate`` runs the model's own."""
 
     def generate(
-        self, *args: object, adapter_names: Sequence[str] | None = None, **kwargs: object
+        self,
+        *args: object,
+        adapter_names: Sequence[str] | None = None,
+        task_ids: Tensor | None = None,
+        **kwargs: object,
     ) -> object:
         r"""Generate with the adapted model: its own ``generate``, called as given.
 
@@ -55,6 +61,9 @@ class _GeneratingPeftModel(PeftModel):
             (``"__base__"``: the base model).  With beam search
             (``num_beams`` in ``kwargs``) each name covers that prompt's
             beams; an encoder, if the model has one, sees the prompts once.
+        task_ids : Tensor, optional
+            For multitask prompt tuning: the task of each prompt of the batch,
+            as for :meth:`~lucid.peft.PeftModel.forward`.
         **kwargs : object
             Keyword arguments of the model's ``generate``.
 
@@ -73,7 +82,8 @@ class _GeneratingPeftModel(PeftModel):
         if generate is None:
             raise AttributeError(f"{type(model).__name__} has no generate() to call")
         beams = kwargs.get("num_beams")
-        with self._routed(adapter_names, beams if isinstance(beams, int) and beams > 1 else 1):
+        routed = self._routed(adapter_names, beams if isinstance(beams, int) and beams > 1 else 1)
+        with routed, self._tasked(task_ids):
             return generate(*args, **kwargs)
 
 
@@ -142,7 +152,7 @@ class PeftModelForSequenceClassification(PeftModel, task_type=TaskType.SEQ_CLS):
     ['classifier']
     """
 
-    _head_names: ClassVar[tuple[str, ...]] = ("classifier", "score")
+    _head_names: ClassVar[tuple[str, ...]] = CLASSIFIER_HEADS
 
 
 class PeftModelForTokenClassification(PeftModel, task_type=TaskType.TOKEN_CLS):
@@ -150,7 +160,9 @@ class PeftModelForTokenClassification(PeftModel, task_type=TaskType.TOKEN_CLS):
 
     As for :class:`~lucid.peft.PeftModelForSequenceClassification`, the
     model's ``classifier`` / ``score`` head is trained in full beside the
-    adapter.
+    adapter.  With a prompt (prompt tuning, p-tuning) in front of the input, the
+    head reads the input's positions alone, so the logits and the labels are as
+    long as the input the caller gave.
 
     Examples
     --------
@@ -163,7 +175,7 @@ class PeftModelForTokenClassification(PeftModel, task_type=TaskType.TOKEN_CLS):
     ['score']
     """
 
-    _head_names: ClassVar[tuple[str, ...]] = ("classifier", "score")
+    _head_names: ClassVar[tuple[str, ...]] = CLASSIFIER_HEADS
 
 
 class PeftModelForQuestionAnswering(PeftModel, task_type=TaskType.QUESTION_ANS):
@@ -171,7 +183,9 @@ class PeftModelForQuestionAnswering(PeftModel, task_type=TaskType.QUESTION_ANS):
 
     The span head — the model's ``qa_outputs`` module — is trained in full
     beside the adapter, so the start and end positions are learned
-    whatever the base model's head was.
+    whatever the base model's head was.  With a prompt in front of the input,
+    the head reads the input's positions alone, so the start and end logits
+    and the answer positions are in the caller's coordinates.
 
     Examples
     --------
@@ -184,7 +198,7 @@ class PeftModelForQuestionAnswering(PeftModel, task_type=TaskType.QUESTION_ANS):
     ['qa_outputs']
     """
 
-    _head_names: ClassVar[tuple[str, ...]] = ("qa_outputs",)
+    _head_names: ClassVar[tuple[str, ...]] = SPAN_HEADS
 
 
 class PeftModelForFeatureExtraction(PeftModel, task_type=TaskType.FEATURE_EXTRACTION):

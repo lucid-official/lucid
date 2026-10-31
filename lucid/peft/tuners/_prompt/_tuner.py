@@ -15,8 +15,8 @@ prompt enters — is two class attributes of a subclass:
 
 import copy
 import warnings
-from collections.abc import Mapping, Sequence
-from contextlib import AbstractContextManager
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager
 from typing import ClassVar, Final, override
 
 import lucid
@@ -86,7 +86,10 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
         self.peft_config: dict[str, PeftConfig] = {}
         self.active_adapter = adapter_name
         self.prompt_encoder: nn.ModuleDict[_PromptEncoder] = nn.ModuleDict()
-        self._enabled = True
+        # Public scalars, as the LoRA layer keeps its own (LCD-703): the sites branch on them, and
+        # ``lucid.compile`` keys an executable on a module's public scalar attributes.
+        self.disable_adapters = False
+        self._task_ids: Tensor | None = None
         self._requires_grad_before = {
             name: param.requires_grad
             for name, param in model.named_parameters(remove_duplicate=False)
@@ -104,11 +107,34 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
     def _applying(self) -> _Applied | None:
         """The active adapter, unless adapters are off or none is left."""
         names = self.active_adapters
-        if not self._enabled or not names:
+        if self.disable_adapters or not names:
             return None
         config = self.peft_config[names[0]]
         assert isinstance(config, PromptLearningConfig)  # add_adapter admits no other
-        return _Applied(config, self.prompt_encoder[names[0]])
+        return _Applied(config, self.prompt_encoder[names[0]], self._task_ids)
+
+    @contextmanager
+    def _task_scope(self, task_ids: Tensor | None) -> Iterator[None]:
+        """Within the block, the prompt is the one of the task each batch row belongs to.
+
+        Raises
+        ------
+        ValueError
+            ``task_ids`` is given and the active adapter's prompt is not made per task.
+        """
+        if task_ids is None:
+            yield
+            return
+        names = self.active_adapters
+        if not names or not self.prompt_encoder[names[0]].per_task:
+            raise ValueError(
+                f"task_ids choose a prompt per task, which {type(self).__name__} does not have"
+            )
+        self._task_ids = task_ids
+        try:
+            yield
+        finally:
+            self._task_ids = None
 
     def _model_dtype(self) -> lucid.dtype:
         return next(iter(self.model.parameters())).dtype
@@ -270,13 +296,13 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
 
     @override
     def enable_adapter_layers(self) -> None:
-        self._enabled = True
+        self.disable_adapters = False
         for _, slot in _adapter_slots(self.model):
             slot.enable_adapters(True)
 
     @override
     def disable_adapter_layers(self) -> None:
-        self._enabled = False
+        self.disable_adapters = True
         for _, slot in _adapter_slots(self.model):
             slot.enable_adapters(False)
 
@@ -327,17 +353,21 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
     @classmethod
     @override
     def _shared_keys(cls, context: _FileContext) -> dict[str, str]:
-        return {f"{context.host}prompt_encoder.{context.adapter}.embedding.weight": _PROMPT_KEY}
+        held = f"{context.host}prompt_encoder.{context.adapter}."
+        return {held + own: disk for own, disk in cls._encoder_class.stored.items()}
 
     @classmethod
     @override
     def _to_file(cls, context: _FileContext, state: dict[str, Tensor]) -> dict[str, Tensor]:
         """The prompt as the encoder makes it, and the model's own keys without the tuner's ``model.`` level."""
         encoder = cls._holder(context).prompt_encoder[context.adapter]
+        own = set(cls._encoder_class.stored.values())
         out: dict[str, Tensor] = {}
         for key, value in state.items():
             if key == _PROMPT_KEY:
                 out[key] = value if encoder.stores_prompt else encoder.prompt_embeddings()
+            elif key in own:
+                out[key] = value
             else:
                 out[context.host + key.removeprefix(context.prefix)] = value
         return out
@@ -351,7 +381,8 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
                 "this adapter is built to train, so its embedding is not the prompt a file holds; "
                 "load the file as an inference adapter (PeftModel.from_pretrained)"
             )
+        own = set(cls._encoder_class.stored.values())
         return {
-            (key if key == _PROMPT_KEY else context.prefix + key.removeprefix(context.host)): value
+            (key if key in own else context.prefix + key.removeprefix(context.host)): value
             for key, value in state.items()
         }

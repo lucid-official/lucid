@@ -71,7 +71,11 @@ class PromptEmbedding(_PromptEncoder):
         total = config.num_virtual_tokens * (config.num_transformer_submodules or 1)
         self.embedding = nn.Embedding(total, config.token_dim)
         init = config.prompt_tuning_init
-        if config.inference_mode or init == PromptTuningInit.RANDOM:
+        # Any other value (``RANDOM``, a source-task start of a subclass) keeps the table's own rows.
+        if config.inference_mode or init not in (
+            PromptTuningInit.TEXT,
+            PromptTuningInit.SAMPLE_VOCAB,
+        ):
             return
         if not isinstance(word_embeddings, nn.Embedding):
             raise TypeError(f"{init} initialisation reads the model's nn.Embedding token table")

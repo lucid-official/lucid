@@ -211,6 +211,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - resolve tokenizers by name for TEXT prompt init
 - OFT, BOFT, HRA, FourierFT and LN tuning (LCD-770)
 - lists, callable reductions, pack, unpack, parse_shape
+- token-level tasks and multitask prompt tuning
 
 ---
 

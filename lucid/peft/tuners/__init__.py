@@ -1,8 +1,8 @@
 """``lucid.peft.tuners`` — one sub-package per parameter-efficient method.
 
 ``lora``, ``adalora``, ``ia3``, ``loha``, ``lokr`` and ``vera`` hold the method's layer
-classes; ``prompt_tuning``, ``prefix_tuning`` and ``p_tuning`` hold the learned prompt (they adapt
-no layer).  The config and model-level classes are exported from ``lucid.peft``.
+classes; ``prompt_tuning``, ``multitask_prompt_tuning``, ``prefix_tuning`` and ``p_tuning`` hold the learned
+prompt (they adapt no layer).  The config and model-level classes are exported from ``lucid.peft``.
 """
 
 from lucid.peft.tuners import (
@@ -15,6 +15,7 @@ from lucid.peft.tuners import (
     loha,
     lokr,
     lora,
+    multitask_prompt_tuning,
     oft,
     p_tuning,
     prefix_tuning,
@@ -32,6 +33,7 @@ __all__ = [
     "loha",
     "lokr",
     "lora",
+    "multitask_prompt_tuning",
     "oft",
     "p_tuning",
     "prefix_tuning",

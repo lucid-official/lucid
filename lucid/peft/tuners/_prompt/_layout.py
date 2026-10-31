@@ -2,7 +2,8 @@
 
 A layout is the knowledge of one kind of model: a language model's loss
 needs its labels widened, a classifier's does not; an encoder-decoder takes
-the prompt on its encoder and the prefix on its decoder.  Each layout names
+the prompt on its encoder and the prefix on its decoder, a tagger's head loses
+the rows the prompt added.  Each layout names
 itself for the tasks it serves in its class statement
 (``class _CausalLayout(..., task_types=(TaskType.CAUSAL_LM,))``) and is
 found by ``_Layout.for_task``; the tuner never branches on the task.
@@ -14,23 +15,33 @@ from typing import ClassVar, override
 
 import lucid.nn as nn
 from lucid.peft._config import TaskType
+from lucid.peft._heads import CLASSIFIER_HEADS, SPAN_HEADS
 from lucid.peft.tuners._prompt._encoder import _Injection
 from lucid.peft.tuners._prompt._sites import (
     _DecoderPrefixSite,
     _EmbeddingsSite,
     _EncoderSite,
+    _HeadSite,
+    _Hook,
     _MemoryMaskSite,
     _PrefixSite,
     _Prompting,
     _RequestSite,
-    _Site,
 )
 
-type _Placement = list[tuple[nn.Module, _Site]]
+type _Placement = list[tuple[nn.Module, _Hook]]
 
 # The layouts register themselves as they are defined; naming them here is what keeps
 # a reader (and dead-code detection) from taking an unreferenced class for unused.
-__all__ = ["_CausalLayout", "_Layout", "_Seq2SeqLayout", "_SingleStackLayout", "_UnsupportedLayout"]
+__all__ = [
+    "_CausalLayout",
+    "_Layout",
+    "_Seq2SeqLayout",
+    "_SingleStackLayout",
+    "_SpanLayout",
+    "_TokenClassLayout",
+    "_TokenLevelLayout",
+]
 
 
 def _takes(module: nn.Module, name: str) -> bool:
@@ -126,13 +137,42 @@ class _Seq2SeqLayout(_Layout, task_types=(TaskType.SEQ_2_SEQ_LM,)):
         return [(decoder, _DecoderPrefixSite(tuner))]
 
 
-class _UnsupportedLayout(_Layout, task_types=(TaskType.TOKEN_CLS, TaskType.QUESTION_ANS)):
-    """A task whose output has one row per input position: the prompt's rows would have to be cut off again."""
+class _TokenLevelLayout(_SingleStackLayout):
+    """A model whose output has a row per input position (token tags, answer spans).
+
+    With the prompt in front of the input embeddings the trunk's output is
+    ``virtual`` positions longer than the input.  The head's input is cut back
+    to the input's length (``_HeadSite``), so the logits, the labels and the
+    start and end positions are all in the coordinates of the sequence the
+    caller gave.  A prefix leaves the sequence as long as it was and needs no cut.
+    """
+
+    #: The names the head can have; the task's subclass says them.
+    heads: ClassVar[tuple[str, ...]]
 
     @classmethod
     @override
     def sites(cls, tuner: _Prompting, model: nn.Module, injection: _Injection) -> _Placement:
+        placement = super().sites(tuner, model, injection)
+        if injection != _Injection.EMBEDDINGS:
+            return placement
+        for name in cls.heads:
+            head = getattr(model, name, None)
+            if isinstance(head, nn.Module):
+                return [*placement, (head, _HeadSite(tuner))]
         raise NotImplementedError(
-            "prompt learning for token classification and question answering is not supported: "
-            "the model's output has a row per virtual token to cut off again"
+            f"{type(model).__name__} has no {' / '.join(cls.heads)} module, the head whose "
+            "input the prompt's rows are cut off"
         )
+
+
+class _TokenClassLayout(_TokenLevelLayout, task_types=(TaskType.TOKEN_CLS,)):
+    """Token classification: a ``classifier`` / ``score`` head over every position."""
+
+    heads = CLASSIFIER_HEADS
+
+
+class _SpanLayout(_TokenLevelLayout, task_types=(TaskType.QUESTION_ANS,)):
+    """Extractive question answering: a ``qa_outputs`` head giving a start and an end logit per position."""
+
+    heads = SPAN_HEADS

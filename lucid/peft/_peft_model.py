@@ -23,6 +23,7 @@ from lucid.peft._status import TunerLayerStatus, TunerModelStatus, _parameter_co
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
 from lucid.peft._targeting import _config_for_model, _with_heads
 from lucid.peft.tuners._base import _AdapterHost, _tuner_for
+from lucid.peft.tuners._prompt._tuner import _PromptLearningTuner
 from lucid.serialization import load_safetensors, save_safetensors
 
 _WEIGHTS_NAME: Final = "adapter_model.safetensors"
@@ -303,9 +304,24 @@ class PeftModel(_ForwardsAttributes):
             return nullcontext()
         return self.base_model._mixed_batch(adapter_names, num_beams)
 
+    def _tasked(self, task_ids: Tensor | None) -> AbstractContextManager[None]:
+        """The context a call runs in: each batch row with the prompt of its task, or no change."""
+        if task_ids is None:
+            return nullcontext()
+        host = self.base_model
+        if isinstance(host, _PromptLearningTuner):
+            return host._task_scope(task_ids)
+        raise ValueError(
+            f"task_ids choose a prompt per task, which {type(host).__name__} does not have"
+        )
+
     @override
     def forward(
-        self, *args: object, adapter_names: Sequence[str] | None = None, **kwargs: object
+        self,
+        *args: object,
+        adapter_names: Sequence[str] | None = None,
+        task_ids: Tensor | None = None,
+        **kwargs: object,
     ) -> object:
         r"""Run the adapted model; every other argument goes to it as given.
 
@@ -321,6 +337,9 @@ class PeftModel(_ForwardsAttributes):
             are ignored.  Inference only, for LoRA on ``nn.Linear``,
             ``nn.Embedding`` and convolution layers (and ``modules_to_save``
             modules).
+        task_ids : Tensor, optional
+            For multitask prompt tuning: the task of each row of the batch, ``(batch,)``
+            integers in ``[0, num_tasks)``, whose prompt is put in front of that row.
         **kwargs : object
             Keyword arguments of the model's ``forward``.
 
@@ -334,7 +353,8 @@ class PeftModel(_ForwardsAttributes):
         ValueError
             ``adapter_names`` is given in training mode, names an adapter
             the model lacks, a row count other than the batch's, or the
-            model holds merged adapters or a DoRA adapter among those named.
+            model holds merged adapters or a DoRA adapter among those named;
+            ``task_ids`` is given to an adapter whose prompt is not made per task.
         NotImplementedError
             The method is not LoRA, or the model has an adapted layer a
             mixed batch cannot route (attention, a raw parameter).
@@ -357,7 +377,7 @@ class PeftModel(_ForwardsAttributes):
         """
         # Through the tuner, whose forward is the model's own unless the method adds to it
         # (AdaLoRA's orthogonality penalty on the loss).
-        with self._routed(adapter_names):
+        with self._routed(adapter_names), self._tasked(task_ids):
             return self.base_model(*args, **kwargs)
 
     def get_nb_trainable_parameters(self) -> tuple[int, int]:
@@ -612,11 +632,7 @@ class PeftModel(_ForwardsAttributes):
 
     @classmethod
     def _filled(
-        cls,
-        model: nn.Module,
-        config: PeftConfig,
-        weights: Mapping[str, Tensor],
-        adapter_name: str,
+        cls, model: nn.Module, config: PeftConfig, weights: Mapping[str, Tensor], adapter_name: str
     ) -> Self:
         """``model`` adapted with ``config`` and holding ``weights``; undone if they do not fit.
 

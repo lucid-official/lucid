@@ -2,6 +2,8 @@
 
 import enum
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import ClassVar, Self
 
 import lucid
@@ -33,6 +35,13 @@ class _PromptEncoder(nn.Module, ABC):
 
     #: Where this method's prompt enters the model.
     injection: ClassVar[_Injection]
+    #: Whether the prompt depends on the task each batch row belongs to (``task_ids``).
+    per_task: ClassVar[bool] = False
+    #: The tensors an adapter file holds, by the encoder's own key and the file's: the prompt
+    #: always, and whatever else the method keeps beside it.
+    stored: ClassVar[Mapping[str, str]] = MappingProxyType(
+        {"embedding.weight": "prompt_embeddings"}
+    )
 
     embedding: nn.Embedding
 
@@ -51,8 +60,22 @@ class _PromptEncoder(nn.Module, ABC):
         """How many virtual tokens the encoder produces."""
         return int(self.embedding.num_embeddings)
 
+    def indices(self) -> Tensor:
+        """The virtual-token ids ``(1, num_embeddings)`` the encoder is called with."""
+        ids = lucid.arange(self.num_embeddings, device=self.embedding.weight.device.type)
+        return ids.long().reshape(1, self.num_embeddings)
+
+    def prompts(self, batch: int, tasks: Tensor | None) -> Tensor:
+        """The prompt of each of ``batch`` rows: ``(batch, num_embeddings, width)``.
+
+        ``tasks`` is the task of each row, which a ``per_task`` encoder needs and the others
+        do not read.
+        """
+        del tasks  # one prompt for every row
+        prompt: Tensor = self(self.indices()).repeat(batch, 1, 1)
+        return prompt
+
     def prompt_embeddings(self) -> Tensor:
         """The prompt as an adapter file stores it: ``(rows, width)``, one row per virtual token."""
-        ids = lucid.arange(self.num_embeddings, device=self.embedding.weight.device.type).long()
-        prompt: Tensor = self(ids.reshape(1, self.num_embeddings))[0]
+        prompt: Tensor = self(self.indices())[0]
         return prompt.detach()

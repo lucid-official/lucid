@@ -533,9 +533,13 @@ class TestRefusals:
         with pytest.raises(ValueError, match="already holds adapters"):
             get_peft_model(model, _METHODS["prefix"]("CAUSAL_LM"))
 
-    @pytest.mark.parametrize("task", ["TOKEN_CLS", "QUESTION_ANS"])
-    def test_tasks_with_a_row_per_position_are_refused(self, task: str, device: str) -> None:
-        with pytest.raises(NotImplementedError, match="token classification"):
+    @pytest.mark.parametrize(
+        ("task", "head"), [("TOKEN_CLS", "classifier / score"), ("QUESTION_ANS", "qa_outputs")]
+    )
+    def test_a_token_level_task_needs_its_head_to_cut_the_prompt_off(
+        self, task: str, head: str, device: str
+    ) -> None:
+        with pytest.raises(NotImplementedError, match=head):
             get_peft_model(_gpt2(device), _METHODS["prompt"](task))
 
     def test_the_length_of_the_prompt_must_be_given(self, device: str) -> None:

@@ -49,7 +49,10 @@ layer) and p-tuning (``PromptEncoderConfig``: the virtual tokens produced by an 
 The prompt is applied by hooks on the model's own call, so ``model(...)`` and the model's
 ``generate`` both carry it; the adapter file holds the finished prompt as
 ``prompt_embeddings``.  They train one prompt at a time, have nothing to merge, and
-support the causal-LM, sequence-to-sequence and sequence-classification tasks::
+support the causal-LM, sequence-to-sequence, sequence-classification, token-classification
+and question-answering tasks (the last two get logits as long as the input, the prompt's rows
+cut off at the head).  Multitask prompt tuning (``MultitaskPromptTuningConfig``) learns a shared
+prompt and a low-rank factor pair per task, chosen per batch row by ``task_ids``::
 
     config = PromptTuningConfig(num_virtual_tokens=20, task_type="CAUSAL_LM")
     model = get_peft_model(base_model, config)
@@ -144,6 +147,11 @@ from lucid.peft.tuners.lokr._config import LoKrConfig
 from lucid.peft.tuners.lokr._model import LoKrModel
 from lucid.peft.tuners.lora._config import LoraConfig
 from lucid.peft.tuners.lora._model import LoraModel
+from lucid.peft.tuners.multitask_prompt_tuning import (
+    MultitaskPromptEmbedding,
+    MultitaskPromptTuningConfig,
+    MultitaskPromptTuningInit,
+)
 from lucid.peft.tuners.oft import OFTConfig, OFTModel
 from lucid.peft.tuners.p_tuning import (
     PromptEncoder,
@@ -163,6 +171,9 @@ __all__ = [
     "AutoPeftModelForSequenceClassification",
     "AutoPeftModelForTokenClassification",
     "MODEL_TYPE_TO_PEFT_MODEL_MAPPING",
+    "MultitaskPromptEmbedding",
+    "MultitaskPromptTuningConfig",
+    "MultitaskPromptTuningInit",
     "PeftConfig",
     "PrefixEncoder",
     "PrefixTuningConfig",
