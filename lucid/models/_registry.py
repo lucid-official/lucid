@@ -160,6 +160,11 @@ def _normalize(name: str) -> str:
 def _naming(fn: ModelFactory, name: str) -> ModelFactory:
     r"""``fn`` wrapped so the model it builds carries ``name`` as its ``name_or_path``.
 
+    The name is set only when it rebuilds the model: a call with any keyword
+    override builds something else, and a source that rebuilds the registered
+    default would hand ``lucid.peft`` (``AutoPeftModel``) the wrong base.  Such
+    a model has none, as one built straight from a config has none.
+
     The wrapper keeps ``fn``'s name, module, docstring and signature
     (``functools.wraps``), so tools that read the factory by those see the
     function it wraps.
@@ -168,7 +173,8 @@ def _naming(fn: ModelFactory, name: str) -> ModelFactory:
     @functools.wraps(fn)
     def named(pretrained: bool = False, **overrides: object) -> PretrainedModel:
         model = fn(pretrained=pretrained, **overrides)
-        model.name_or_path = name
+        if not overrides:
+            model.name_or_path = name
         return model
 
     return named

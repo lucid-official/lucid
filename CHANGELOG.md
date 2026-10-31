@@ -157,6 +157,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - saved zoo directories load as their own class; name_or_path
 
+- name_or_path only when it rebuilds the model
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

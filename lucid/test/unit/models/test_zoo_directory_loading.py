@@ -174,11 +174,28 @@ def test_every_factory_names_its_model() -> None:
 
 
 def test_the_factory_function_names_its_model_as_create_model_does() -> None:
-    from lucid.models import bert_base_cls
+    from lucid.models import lenet_5
 
-    model = bert_base_cls(**_TINY["bert"])
-    assert model.name_or_path == "bert_base_cls"
-    assert model.__dict__["name_or_path"] == "bert_base_cls"
+    model = lenet_5()
+    assert model.name_or_path == "lenet_5" == create_model("lenet_5").name_or_path
+    assert model.__dict__["name_or_path"] == "lenet_5"
+
+
+def test_a_factory_called_with_overrides_has_no_source() -> None:
+    """A name that rebuilds a different model is no source: ``AutoPeftModel`` would fetch the wrong base."""
+    model = create_model("bert_base_cls", **_TINY["bert"])
+    assert model.name_or_path == ""
+    assert "name_or_path" not in model.__dict__
+    peft = get_peft_model(model, LoraConfig(r=2))
+    assert peft.peft_config["default"].base_model_name_or_path is None
+
+
+def test_a_factory_called_without_overrides_names_its_model_pretrained_or_not() -> None:
+    from lucid.models import lenet_5
+
+    with shadow_alloc():
+        assert lenet_5().name_or_path == "lenet_5"
+        assert lenet_5(pretrained=False).name_or_path == "lenet_5"
 
 
 def test_from_pretrained_by_name_keeps_the_name() -> None:
@@ -206,9 +223,9 @@ def test_the_name_is_not_state(tmp_path: Path) -> None:
 
 
 def test_peft_takes_its_base_model_from_the_factory_name() -> None:
-    model = create_model("bert_base_cls", **_TINY["bert"])
-    peft = get_peft_model(model, LoraConfig(r=2))
-    assert peft.peft_config["default"].base_model_name_or_path == "bert_base_cls"
+    model = create_model("lenet_5")
+    peft = get_peft_model(model, LoraConfig(r=2, target_modules=["features.0"]))
+    assert peft.peft_config["default"].base_model_name_or_path == "lenet_5"
 
 
 def test_peft_takes_its_base_model_from_the_directory(tmp_path: Path) -> None:
