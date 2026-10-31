@@ -139,6 +139,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - loading an adapter no longer re-runs a mutating init
 
+- method-named messages; IA3/VeRA files keep reference keys
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

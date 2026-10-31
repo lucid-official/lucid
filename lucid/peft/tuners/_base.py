@@ -806,7 +806,7 @@ class _BaseTuner(_AdapterHost, ABC):
         if not _tuner_layers(model):
             raise RuntimeError(
                 f"adapter {adapter_name!r} has been merged or unloaded: the model holds no "
-                "LoRA layer left to save or load"
+                f"{cls._config_class._peft_type} layer left to save or load"
             )
 
     @classmethod

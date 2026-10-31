@@ -153,9 +153,9 @@ class TestStateDict:
             get_peft_model_state_dict(peft, state_dict=partial)
 
     def test_a_model_without_an_adapter_is_refused(self) -> None:
-        with pytest.raises(ValueError, match="no LoRA adapter named 'default'"):
+        with pytest.raises(ValueError, match="no adapter named 'default'"):
             get_peft_model_state_dict(_model())
-        with pytest.raises(ValueError, match="no LoRA adapter named 'other'"):
+        with pytest.raises(ValueError, match="no adapter named 'other'"):
             get_peft_model_state_dict(get_peft_model(_model(), _config()), adapter_name="other")
 
     def test_set_round_trips(self, device: str) -> None:

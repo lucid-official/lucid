@@ -84,7 +84,8 @@ class VeraConfig(_TargetedConfig, peft_type=PeftType.VERA):
         ``False``: :math:`\lambda_d \sim \mathcal N(0, 1)` and :math:`\lambda_b = 1`
         (the update is non-zero from the start — for tests).
     exclude_modules, layers_to_transform, layers_pattern
-        As in ``LoraConfig``.
+        As in ``LoraConfig``.  The reference's config has no ``exclude_modules``,
+        so ``adapter_config.json`` holds it only when it is set.
 
     Raises
     ------
@@ -105,6 +106,7 @@ class VeraConfig(_TargetedConfig, peft_type=PeftType.VERA):
     True
     """
 
+    _extension_fields: ClassVar[frozenset[str]] = frozenset({"exclude_modules"})
     _field_checks: ClassVar[dict[str, _Check]] = {
         "r": _check_rank,
         "projection_prng_key": _check_key,

@@ -189,7 +189,7 @@ class PeftModel(_ForwardsAttributes):
         return self.base_model.active_adapters
 
     def get_base_model(self) -> nn.Module:
-        """Return the adapted model itself — the one passed in, now holding LoRA layers."""
+        """Return the adapted model itself — the one passed in, now holding adapter layers."""
         return self.base_model.model
 
     def add_adapter(
@@ -477,7 +477,7 @@ class PeftModel(_ForwardsAttributes):
         Returns
         -------
         nn.Module
-            The model, each LoRA layer replaced by the ``nn.Linear`` it wrapped.
+            The model, each adapter layer replaced by the module it wrapped.
         """
         return self.base_model.unload()
 

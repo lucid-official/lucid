@@ -28,7 +28,9 @@ class IA3Config(_TargetedConfig, peft_type=PeftType.IA3):
     Field names, defaults and ``adapter_config.json`` are the reference
     adapter library's.  Every field is keyword-only.  Unlike the reference's,
     this config also takes ``layers_to_transform`` / ``layers_pattern``, which
-    select layers the way ``LoraConfig``'s do.
+    select layers the way ``LoraConfig``'s do; ``adapter_config.json`` holds
+    them only when they are set, and ``from_pretrained`` reads files with or
+    without them.
 
     Parameters
     ----------
@@ -71,6 +73,9 @@ class IA3Config(_TargetedConfig, peft_type=PeftType.IA3):
     True
     """
 
+    _extension_fields: ClassVar[frozenset[str]] = frozenset(
+        {"layers_to_transform", "layers_pattern"}
+    )
     _field_checks: ClassVar[dict[str, _Check]] = {
         "feedforward_modules": _name_set,
         "fan_in_fan_out": _check_bool,

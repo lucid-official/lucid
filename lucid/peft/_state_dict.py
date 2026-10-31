@@ -21,12 +21,15 @@ from lucid.peft.tuners._files import _FileContext, _FileFormat
 
 def _peft_config_of(model: nn.Module, adapter_name: str) -> PeftConfig:
     configs = getattr(model, "peft_config", None)
-    config = configs.get(adapter_name) if isinstance(configs, dict) else None
+    held = configs if isinstance(configs, dict) else {}
+    config = held.get(adapter_name)
     if isinstance(config, PeftConfig):
         return config
+    names = ", ".join(f"{name!r} ({c.peft_type})" for name, c in held.items())
+    detail = f" (it holds {names})" if names else ""
     raise ValueError(
-        f"the model holds no LoRA adapter named {adapter_name!r} "
-        "(add one with get_peft_model or inject_adapter_in_model)"
+        f"the model holds no adapter named {adapter_name!r}{detail}; "
+        "add one with get_peft_model or inject_adapter_in_model"
     )
 
 
@@ -97,7 +100,7 @@ def get_peft_model_state_dict(
     ValueError
         ``model`` holds no adapter named ``adapter_name``.
     RuntimeError
-        The adapter was merged or unloaded, so no LoRA layer is left.
+        The adapter was merged or unloaded, so no adapter layer is left.
     KeyError
         ``state_dict`` lacks one of the adapter's tensors.
 

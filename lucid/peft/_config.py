@@ -370,6 +370,10 @@ class PeftConfig:
         "inference_mode": _check_bool,
     }
     _all_checks: ClassVar[dict[str, _Check]] = dict(_field_checks)
+    #: Fields this class has that the reference's config of the same method lacks.  ``to_dict`` writes
+    #: one only when it holds a value, so an ordinary adapter's file stays one the reference reads.
+    _extension_fields: ClassVar[frozenset[str]] = frozenset()
+
     task_type: TaskType | str | None = None
     peft_type: PeftType | str | None = None
     auto_mapping: dict[str, str] | None = None
@@ -428,7 +432,9 @@ class PeftConfig:
 
         Enums become their strings and sets of module names sorted lists,
         so the result goes straight to :func:`json.dumps` and back through
-        ``from_dict``.
+        ``from_dict``.  A field the reference's config of this method lacks
+        (``IA3Config.layers_to_transform``) is written only when it is set,
+        so a file that does not use it is one the reference reads too.
 
         Returns
         -------
@@ -442,7 +448,11 @@ class PeftConfig:
         >>> d["target_modules"], d["task_type"], d["peft_type"]
         (['q', 'v'], 'CAUSAL_LM', 'LORA')
         """
-        return {f.name: _json_value(getattr(self, f.name)) for f in dataclasses.fields(self)}
+        return {
+            f.name: _json_value(getattr(self, f.name))
+            for f in dataclasses.fields(self)
+            if f.name not in self._extension_fields or getattr(self, f.name) != f.default
+        }
 
     def _load_fields(self) -> dict[str, object]:
         """The fields to build an adapter with while its tensors are being loaded, if they differ from the file's.
