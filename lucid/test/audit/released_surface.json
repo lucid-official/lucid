@@ -3327,7 +3327,7 @@
   "lucid.optim.RAdam.step": {"params": ["a:self", "a:closure="]},
   "lucid.optim.RMSprop": {"params": ["a:params", "a:lr=", "a:alpha=", "a:eps=", "a:weight_decay=", "a:momentum=", "a:centered=", "a:capturable=", "a:foreach=", "a:maximize=", "a:differentiable="]},
   "lucid.optim.RMSprop.step": {"params": ["a:self", "a:closure="]},
-  "lucid.optim.ReduceLROnPlateau": {"params": ["a:optimizer", "a:mode=", "a:factor=", "a:patience=", "a:threshold=", "a:threshold_mode=", "a:cooldown=", "a:min_lr=", "a:eps=", "a:verbose="]},
+  "lucid.optim.ReduceLROnPlateau": {"params": ["a:optimizer", "a:mode=", "a:factor=", "a:patience=", "a:threshold=", "a:threshold_mode=", "a:cooldown=", "a:min_lr=", "a:eps="]},
   "lucid.optim.ReduceLROnPlateau.load_state_dict": {"params": ["a:self", "a:state_dict"]},
   "lucid.optim.ReduceLROnPlateau.state_dict": {"params": ["a:self"]},
   "lucid.optim.ReduceLROnPlateau.step": {"params": ["a:self", "a:metrics"]},

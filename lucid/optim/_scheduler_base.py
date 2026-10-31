@@ -24,6 +24,16 @@ _STEP_REPLACED = (
 )
 
 
+EPOCH_DEPRECATION_WARNING = (
+    "The epoch parameter in `scheduler.step()` was not necessary and is being "
+    "deprecated where possible. Please use `scheduler.step()` to step the "
+    "scheduler. During the deprecation, if epoch is different from None, the "
+    "closed form is used instead of the new chainable form, where available. "
+    "Please open an issue if you are unable to replicate your use case: "
+    "https://github.com/lucid-official/lucid/issues/new/choose."
+)
+
+
 def _check_step_order(optimizer: Optimizer) -> None:
     """Warn when a scheduler's first step comes before an optimizer step.
 

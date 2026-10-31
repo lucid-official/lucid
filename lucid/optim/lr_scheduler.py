@@ -6,9 +6,9 @@ from bisect import bisect_right
 from collections.abc import Callable, Sequence
 import math
 from typing import override
+from lucid.optim._reduce_on_plateau import ReduceLROnPlateau as ReduceLROnPlateau
 from lucid.optim._scheduler_base import (
     _CallerRated,
-    _CheckpointState,
     _CompositeSchedulerMixin,
     _LRScheduler,
     _all_or_nothing,
@@ -597,142 +597,6 @@ class CyclicLR(_LRScheduler, _CyclicLike):
         if len(self.optimizer.param_groups) > len(self.base_lrs):
             raise self._unrated_group(len(self.base_lrs))
         return _cyclic_get_lr(self, math.floor(1 + self.last_epoch / self.total_size))
-
-
-class ReduceLROnPlateau(_CheckpointState):
-    r"""Reduce the learning rate when a monitored metric stops improving.
-
-    Once the metric fails to improve by more than ``threshold`` for
-    ``patience`` consecutive epochs, the learning rate is multiplied by
-    ``factor``.  This is useful when progress stalls and a smaller step
-    size may help escape a plateau:
-
-    .. math::
-
-        \eta \leftarrow \max(\eta \cdot \text{factor},\; \eta_{\min})
-
-    Parameters
-    ----------
-    optimizer : Optimizer
-        Wrapped optimizer.
-    mode : str, optional
-        One of ``"min"`` or ``"max"``.  In ``"min"`` mode the LR is
-        reduced when the metric has stopped decreasing; in ``"max"`` mode
-        it is reduced when the metric has stopped increasing
-        (default: ``"min"``).
-    factor : float, optional
-        Multiplicative factor by which the learning rate is reduced
-        (default: ``0.1``).  Must be less than 1.
-    patience : int, optional
-        Number of epochs with no improvement after which the LR is
-        reduced (default: ``10``).
-    verbose : bool, optional
-        Print a message when the LR is reduced (default: ``False``).
-    threshold : float, optional
-        Minimum change to qualify as an improvement (default: ``1e-4``).
-    min_lr : float, optional
-        A lower bound on the learning rate (default: ``0``).
-
-    Attributes
-    ----------
-    optimizer : Optimizer
-        The optimizer being scheduled.
-    mode : str
-        ``"min"`` or ``"max"``.
-    factor : float
-        LR reduction factor.
-    patience : int
-        Epochs to wait before reducing.
-    threshold : float
-        Minimum improvement threshold.
-    min_lr : float
-        Floor on the learning rate.
-
-    Notes
-    -----
-    Unlike the epoch-based schedulers that inherit from :class:`_LRScheduler`,
-    ``ReduceLROnPlateau`` does **not** inherit from :class:`_LRScheduler`
-    because it requires a metric value at each :meth:`step` call rather
-    than advancing by a fixed epoch count.
-
-    A typical use-case is to monitor validation loss:
-
-    .. code-block:: python
-
-        scheduler = optim.ReduceLROnPlateau(optimizer, mode="min", patience=5)
-        for epoch in range(epochs):
-            train(...)
-            val_loss = validate(...)
-            scheduler.step(val_loss)
-
-    Examples
-    --------
-    >>> import lucid.nn as nn
-    >>> model = nn.Linear(4, 2)
-    >>> import lucid.optim as optim
-    >>> optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    >>> scheduler = optim.ReduceLROnPlateau(
-    ...     optimizer, mode="min", factor=0.5, patience=5
-    ... )
-    """
-
-    _steps_on_a_metric = True  # so the composites, which step without one, refuse it
-
-    def __init__(
-        self,
-        optimizer: Optimizer,
-        mode: str = "min",
-        factor: float = 0.1,
-        patience: int = 10,
-        threshold: float = 1e-4,
-        threshold_mode: str = "rel",
-        cooldown: int = 0,
-        min_lr: float = 0,
-        eps: float = 1e-8,
-        verbose: bool = False,
-    ) -> None:
-        """Initialise the ReduceLROnPlateau.  See the class docstring for parameter semantics."""
-        self.optimizer = optimizer
-        self.mode = mode
-        self.factor = factor
-        self.patience = patience
-        self.threshold = threshold
-        self.threshold_mode = threshold_mode
-        self.cooldown = cooldown
-        self.min_lr = min_lr
-        self.eps = eps
-        self.verbose = verbose
-        self._best: float = float("inf") if mode == "min" else float("-inf")
-        self._num_bad_epochs = 0
-        self._cooldown_counter = 0
-
-    def step(self, metrics: float) -> None:
-        """Update the scheduler with the latest monitored metric value."""
-        rel = self.threshold_mode == "rel"
-        if self.mode == "min":
-            bound = self._best * (1.0 - self.threshold) if rel else self._best - self.threshold
-            improved = metrics < bound
-        else:
-            bound = self._best * (1.0 + self.threshold) if rel else self._best + self.threshold
-            improved = metrics > bound
-
-        if improved:
-            self._best = metrics
-            self._num_bad_epochs = 0
-        else:
-            self._num_bad_epochs += 1
-        if self._cooldown_counter > 0:
-            self._cooldown_counter -= 1
-            self._num_bad_epochs = 0
-        if self._num_bad_epochs > self.patience:
-            for group in self.optimizer.param_groups:
-                old_lr = _group_float(group)
-                new_lr = max(old_lr * self.factor, self.min_lr)
-                if old_lr - new_lr > self.eps:
-                    group["lr"] = new_lr
-            self.optimizer._sync_hyperparams()
-            self._cooldown_counter = self.cooldown
-            self._num_bad_epochs = 0
 
 
 class NoamScheduler(_LRScheduler):
