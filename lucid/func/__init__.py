@@ -2,7 +2,7 @@
 
 Provides composable, higher-order transformations over Lucid functions:
 
-* :func:`vmap`           — vectorise over a batch dimension (C++ vmapped dispatch)
+* :func:`vmap`           — map a function of one example over a batch dimension
 * :func:`grad`           — gradient transform (returns a function)
 * :func:`grad_and_value` — gradient + primal output
 * :func:`vjp`            — vector-Jacobian product (functional style)
@@ -27,26 +27,27 @@ tensor leaf and returns its result in the structure of what it came from:
 ``vmap``'s ``in_dims`` / ``out_dims`` may be a pytree matching (a prefix
 of) the arguments / results.
 
-C++ vmapped dispatch
---------------------
-``vmap`` does **not** loop over batch elements in Python.  It moves the batch
-dimension to the front and calls the function **once** with the full batched
-tensor.  The underlying C++ engine ops then run on the complete batch:
-
-* **GPU (Metal/MLX)**: a single Metal dispatch handles all batch elements in
-  parallel via MLX's native batched kernels.
-* **CPU (Accelerate)**: BLAS calls (``SGEMM``, ``cblas_sgemm_batch``, etc.)
-  operate on the full batched tensor with SIMD parallelism.
-
-This gives real vectorisation — not a sequential Python loop.
+How vmap runs the function
+--------------------------
+By default (``strategy="auto"``) ``vmap`` calls the function once per batch
+element, on that element's logical shapes, and stacks the results.  A
+reduction without a ``dim``, a loss, a shape query or a transform inside the
+function therefore sees one example, as written.  ``strategy="vectorized"``
+instead moves the batch axis to the front and calls the function **once** on
+the whole batch, so the C++ engine ops run on the complete batch: one Metal
+dispatch on the GPU, batched BLAS calls on the CPU.  A function that is
+itself a derivative transform, or that draws independent random numbers
+(``randomness="different"``), is still run element by element.
 
 Limitations
 -----------
-* Reduction ops inside the vmapped function must use an explicit ``dim``
-  argument.  An unqualified ``.sum()`` / ``.mean()`` reduces over the batch
-  dimension as well, which is almost never desired.
+* With ``strategy="vectorized"`` a reduction inside the function must use an
+  explicit ``dim``: an unqualified ``.sum()`` / ``.mean()`` reduces over the
+  batch dimension as well.
 * In-place ops inside a vmapped function are not supported.
-* ``randomness='error'`` (default) raises if the function calls any random op.
+* ``randomness='error'`` (default) raises if the function calls any random op;
+  ``'different'`` gives every batch element its own draws and ``'same'`` the
+  one draw all of them share.
 """
 
 from collections.abc import Callable
@@ -91,14 +92,12 @@ def vmap(
 ) -> Callable[..., _PyTree]:
     r"""Vectorise ``func`` over a batch axis to produce a batched function.
 
-    Lifts a function operating on a single example into one operating on a
-    whole batch in a single dispatch, without writing an explicit Python
-    loop. Mathematically, if :math:`f : \mathbb{R}^d \to \mathbb{R}^e`, then
-    ``vmap(f)`` realises :math:`F : \mathbb{R}^{B \times d} \to
-    \mathbb{R}^{B \times e}` such that ``F(x)[b] = f(x[b])`` for every
-    batch index :math:`b`. The transform composes with :func:`grad`,
-    :func:`jacrev`, :func:`jvp`, and :func:`vjp` to yield per-sample
-    gradients, batched Jacobians, and higher-order constructs.
+    Lifts a function of a single example into one of a whole batch.  If
+    :math:`f : \mathbb{R}^d \to \mathbb{R}^e`, ``vmap(f)`` realises
+    :math:`F : \mathbb{R}^{B \times d} \to \mathbb{R}^{B \times e}` with
+    ``F(x)[b] = f(x[b])``.  It composes with :func:`grad`, :func:`jacrev`,
+    :func:`jvp` and :func:`vjp` to yield per-sample gradients, batched
+    Jacobians and higher-order constructs.
 
     Parameters
     ----------
@@ -111,42 +110,57 @@ def vmap(
         inside an argument a dict or list may give per-leaf control — any
         pytree that is a prefix of the arguments, whose leaf stands for the
         whole subtree under it. Use ``None`` to hand an argument to
-        ``func`` unchanged. A leaf of a batched argument that is not a
-        tensor is refused with ``TypeError``. Default ``0``.
-    out_dims : int or pytree of int, optional
+        ``func`` unchanged. A tuple has one entry per positional argument.
+        Default ``0``.
+    out_dims : int, None or pytree of (int or None), optional
         Where the batch axis appears in the output(s): an ``int`` for every
-        tensor, or a pytree that is a prefix of ``func``'s output. Default
-        ``0``.
-    randomness : str, optional
+        tensor, or a pytree that is a prefix of ``func``'s output.  ``None``
+        marks an output that does not depend on the batch: it comes back
+        as ``func`` returned it, and a tensor that differs between batch
+        elements is an error.  Default ``0``.
+    randomness : {"error", "different", "same"}, optional
         ``"error"`` (default) forbids random ops inside ``func``;
-        ``"different"`` and ``"same"`` allow them with shared RNG state.
+        ``"different"`` gives every batch element its own draws; ``"same"``
+        gives every element the draw the first one gets, and leaves the
+        generator where a single call would.
     chunk_size : int, optional
         If set, process the batch in chunks of this size to cap peak
-        memory. Applies in both vectorised and isolated strategies.
+        memory. Applies in both vectorised and isolated strategies; it
+        must be positive.
     strategy : str, optional
         ``"auto"`` (default) and ``"isolated"`` evaluate ``func`` per
         batch element so ``func`` always observes logical per-sample
         shapes, reductions, and differentiation transforms.
         ``"vectorized"`` moves the batch axis to the front and calls
         ``func`` once on the physical batched tensor when ``func`` is
-        not marked for isolation.
+        not marked for isolation and ``randomness`` is not
+        ``"different"`` (one call would share a single draw).
 
     Returns
     -------
     Callable
-        A new function with the batched semantics described above. It
-        returns ``func``'s output structure with every tensor batched.
+        ``func``'s output structure with every tensor batched; for a batch
+        of no elements, the shapes ``func`` makes for one example with an
+        axis of length 0 where the batch goes.
+
+    Raises
+    ------
+    ValueError
+        ``in_dims`` / ``out_dims`` do not fit the arguments / results; a
+        batched argument is not a tensor; the batch sizes disagree; a
+        result with an ``out_dims`` axis is not a tensor; ``chunk_size``
+        is not positive; ``strategy`` is unknown.
+    RuntimeError
+        ``randomness`` is none of the three modes.
 
     Notes
     -----
-    In ``"auto"`` (default) and ``"isolated"`` modes, each batch element
-    is sliced along its ``in_dims`` axis before calling ``func``, so
-    unqualified reductions (``.sum()``, ``.mean()``), loss functions,
-    shape queries, and nested transforms (:func:`grad`, :func:`jacrev`,
-    :func:`vjp`, :func:`jvp`) operate on the logical per-sample tensor.
-    In ``"vectorized"`` mode, the batch axis is moved to the front for a
-    single engine dispatch across the full batch. In-place ops inside the
-    vectorised function are unsupported.
+    In ``"auto"`` and ``"isolated"`` modes each batch element is sliced
+    along its ``in_dims`` axis before ``func`` is called, so unqualified
+    reductions, losses, shape queries and nested transforms
+    (:func:`grad`, :func:`jacrev`, :func:`vjp`, :func:`jvp`) see the
+    logical per-sample tensor.  In-place ops in ``"vectorized"`` mode are
+    unsupported.
 
     Examples
     --------

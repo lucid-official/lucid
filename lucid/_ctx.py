@@ -11,9 +11,37 @@ circular-import risk.
 
 import threading
 from types import TracebackType
-from typing import final
+from typing import Final, final
 
 _local: threading.local = threading.local()
+
+#: The values ``vmap(randomness=)`` and ``jacfwd(randomness=)`` accept.
+RANDOMNESS_MODES: Final = ("error", "different", "same")
+
+
+def check_randomness(mode: str) -> str:
+    """``mode`` itself, if it is one of ``RANDOMNESS_MODES``.
+
+    Parameters
+    ----------
+    mode : str
+        The ``randomness`` argument of a transform.
+
+    Returns
+    -------
+    str
+        ``mode``, unchanged.
+
+    Raises
+    ------
+    RuntimeError
+        ``mode`` is none of ``"error"``, ``"different"`` and ``"same"``.
+    """
+    if mode not in RANDOMNESS_MODES:
+        raise RuntimeError(
+            f"Only allowed values for randomness are 'error', 'different', or 'same'. Got {mode}"
+        )
+    return mode
 
 
 def get_randomness() -> str:
@@ -60,7 +88,7 @@ class _RandomnessGuard:
     """
 
     def __init__(self, mode: str) -> None:
-        self._mode = mode
+        self._mode = check_randomness(mode)
         self._prev: str = "different"
 
     def __enter__(self) -> None:

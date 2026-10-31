@@ -13,7 +13,7 @@ from typing import override
 
 import lucid
 from lucid._C import engine as _C_engine
-from lucid._ctx import _RandomnessGuard
+from lucid._ctx import _RandomnessGuard, check_randomness
 from lucid._factories.random import get_rng_state, set_rng_state
 from lucid._tensor.tensor import Tensor
 from lucid.autograd._functional import jvp as _jvp_by_double_backward
@@ -319,7 +319,7 @@ class Jacfwd[**P](Transform[P, PyTree]):
         super().__init__(func)
         self.argnums = argnums
         self.has_aux = has_aux
-        self.randomness = randomness
+        self.randomness = check_randomness(randomness)
 
     @override
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> PyTree:

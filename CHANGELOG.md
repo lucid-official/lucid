@@ -123,6 +123,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - build the EMA copies from the live module tree
 
+- vmap validates its arguments and honours randomness='same'
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

@@ -501,7 +501,7 @@ def test_vmap_over_a_tree_of_one_batch_size_checks_all_leaves(device: str) -> No
 def test_vmap_refuses_a_non_tensor_it_was_asked_to_batch(device: str) -> None:
     """Passing it through unbatched is the silent wrong answer."""
     x = lucid.zeros(3, 2, device=device)
-    with pytest.raises(TypeError, match="only Tensors can be batched"):
+    with pytest.raises(ValueError, match="cannot vmap over non-Tensor arguments"):
         func.vmap(lambda d: d["x"].sum())({"x": x, "tag": "t"})
     assert (
         float(
@@ -519,7 +519,7 @@ def test_vmap_refuses_in_dims_that_do_not_fit_the_arguments(device: str) -> None
     x = lucid.zeros(3, 2, device=device)
     with pytest.raises(ValueError, match="cannot be given a prefix"):
         func.vmap(lambda d: d["x"].sum(), in_dims=({"y": 0},))({"x": x})
-    with pytest.raises(TypeError, match="ints or None"):
+    with pytest.raises(ValueError, match="in_dims"):
         func.vmap(lambda d: d["x"].sum(), in_dims=({"x": "0"},))({"x": x})
 
 
@@ -535,13 +535,13 @@ def test_vmap_refuses_results_whose_structure_differs_between_examples(device: s
 
 def test_vmap_refuses_a_result_that_is_not_made_of_tensors(device: str) -> None:
     x = lucid.arange(4.0, device=device).reshape(2, 2)
-    with pytest.raises(TypeError, match="func must return Tensors"):
+    with pytest.raises(ValueError, match="func must only return Tensors"):
         func.vmap(lambda a: {"k": 3.0})(x)
 
 
-def test_vmap_out_dims_without_a_batched_output_axis_is_refused(device: str) -> None:
+def test_vmap_out_dims_none_is_refused_for_an_output_that_is_batched(device: str) -> None:
     x = lucid.arange(4.0, device=device).reshape(2, 2)
-    with pytest.raises(TypeError, match="out_dims must hold ints"):
+    with pytest.raises(ValueError, match="depends on the batch where out_dims is None"):
         func.vmap(lambda a: a, out_dims=None)(x)
 
 
