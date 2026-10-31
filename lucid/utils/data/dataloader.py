@@ -23,6 +23,7 @@ from lucid._tensor.tensor import Tensor
 from lucid._factories.converters import tensor as _tensor_fn
 from lucid._factories.random import Generator, manual_seed as _manual_seed
 from lucid import stack
+from lucid.utils.data._batched import collated_fetcher, fetch_samples
 from lucid.utils.data.dataset import Dataset, IterableDataset
 from lucid.utils.data._rng import _as_generator, _draw_seed
 from lucid.utils.data._worker import WorkerInfo, _set_worker_info, get_worker_info
@@ -298,7 +299,7 @@ class _FetchSpec:
     collate_fn: Callable[..., object]
     batch_size: int
     drop_last: bool
-    use_getitems: bool
+    use_collated_fetch: bool
 
     def make(self, dataset: object) -> _MapFetcher | _IterableFetcher:
         if self.iterable:
@@ -314,13 +315,13 @@ class _MapFetcher:
         self._dataset = cast(Dataset, dataset)
         self._auto = spec.auto_collation
         self._collate_fn = spec.collate_fn
-        # 3.2.0: the optional vectorised batch-fetch protocol.  A dataset
-        # that implements ``__getitems__(indices) -> already-batched`` owns
-        # its own collation — but only when the caller did not ask for a
-        # different one.  The fast path *is* a collation, so taking it with
-        # a user-supplied ``collate_fn`` in hand would silently discard it.
-        self._getitems: Callable[[list[int]], object] | None = (
-            getattr(dataset, "__getitems__", None) if spec.use_getitems else None
+        # Lucid's own vectorised path: a dataset that can build the
+        # already-default-collated batch.  It *is* a collation, so it is
+        # taken only when the default one was asked for, and only while the
+        # dataset's ``__getitem__`` is the one the shortcut mirrors
+        # (``collated_fetcher`` owns that rule).
+        self._collated: Callable[[list[int]], object] | None = (
+            collated_fetcher(dataset) if spec.use_collated_fetch else None
         )
 
     def fetch(self, index: object) -> object:
@@ -330,9 +331,11 @@ class _MapFetcher:
                 # ``collate_fn`` (``default_convert`` unless overridden).
                 return self._collate_fn(self._dataset[cast(int, index)])
             indices = cast(list[int], index)
-            if self._getitems is not None:
-                return self._getitems(indices)
-            return self._collate_fn([self._dataset[i] for i in indices])
+            if self._collated is not None:
+                return self._collated(indices)
+            # ``__getitems__`` (when present) returns samples, not a batch:
+            # they go through ``collate_fn`` like any other.
+            return self._collate_fn(fetch_samples(self._dataset, indices))
         except StopIteration as exc:
             raise _escaped_stop("the dataset or collate_fn") from exc
 
@@ -1153,7 +1156,9 @@ class DataLoader:
             collate_fn=self.collate_fn,
             batch_size=self.batch_size or 1,
             drop_last=self.drop_last,
-            use_getitems=(not self._iterable_style and auto and self.collate_fn is default_collate),
+            use_collated_fetch=(
+                not self._iterable_style and auto and self.collate_fn is default_collate
+            ),
         )
 
     def __iter__(self) -> Iterator[Tensor | tuple[Tensor, ...]]:

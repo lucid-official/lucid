@@ -4,9 +4,10 @@ Dataset base classes and implementations.
 
 import bisect
 import math
-from typing import Iterator, TYPE_CHECKING, override
+from typing import Callable, Iterator, TYPE_CHECKING, override
 
 from lucid._factories.random import Generator
+from lucid.utils.data._batched import collated_fetcher, fetch_samples
 from lucid.utils.data._rng import _as_generator, _permutation
 
 if TYPE_CHECKING:
@@ -203,35 +204,25 @@ class TensorDataset(Dataset):
         """
         return tuple(t[index] for t in self.tensors)
 
-    def __getitems__(self, indices: list[int]) -> tuple[Tensor, ...]:
-        """Batched fetch — return one fancy-indexed tensor per wrapped tensor.
+    def _collated_fetcher(self) -> Callable[[list[int]], tuple[Tensor, ...]]:
+        """Lucid's vectorised batch path, consumed by :class:`~lucid.utils.data.DataLoader`.
 
-        This is the 3.2.0 vectorised fast path consumed by
-        :class:`~lucid.utils.data.DataLoader`.  Unlike :meth:`__getitem__`,
-        which returns a *single* sample tuple and forces the data loader
-        to call this method ``batch_size`` times then run ``collate_fn``
-        to stack them, ``__getitems__`` returns the **already-batched**
-        tensors in one call — one ``t[indices]`` fancy-index per wrapped
-        tensor.  The data loader treats the result as already-collated
-        and bypasses ``collate_fn`` entirely (a documented short-circuit
-        that's safe because the tensors share the same leading-dim
-        contract as the per-sample path's stacked output).
+        Returns a callable that turns a list of indices into the
+        **already-collated** batch — one fancy-index per wrapped tensor,
+        the same tensors ``__getitem__`` per sample followed by
+        ``default_collate`` would give.  The loader takes it only for the
+        default collate and only while ``__getitem__`` is the one defined
+        here, so a subclass that overrides ``__getitem__`` is read
+        through its own override (see :func:`~lucid.utils.data._batched.collated_fetcher`).
 
         On LeNet-5/MNIST the per-sample path costs ~30 ms / batch in
         Python overhead (60 k calls + 1 stack); the batched path is
         ~1 ms / batch (1 fancy-index + 0 stack).
-
-        Parameters
-        ----------
-        indices : list of int
-            Sample indices to fetch.  Order is preserved.
-
-        Returns
-        -------
-        tuple of Tensor
-            One batched tensor per wrapped tensor, in registration order.
-            Each output has shape ``(len(indices), *t.shape[1:])``.
         """
+        return self._gather
+
+    def _gather(self, indices: list[int]) -> tuple[Tensor, ...]:
+        """One batched tensor per wrapped tensor, shape ``(len(indices), *t.shape[1:])``."""
         # Convert the Python list of indices to a Lucid index tensor once,
         # then reuse it across every wrapped tensor.  Fancy indexing copies
         # into a fresh contiguous buffer — that's the batched output the
@@ -422,6 +413,25 @@ class Subset(Dataset):
             Sample from the parent dataset at the remapped index.
         """
         return self.dataset[self.indices[idx]]
+
+    def __getitems__(self, indices: list[int]) -> list[object]:
+        """Return the samples at ``indices`` — one list, for ``collate_fn`` to batch.
+
+        Delegates to the parent's ``__getitems__`` with the remapped
+        indices when it has one.  A subclass that overrides
+        :meth:`__getitem__` is read through that override instead.
+        """
+        if type(self).__getitem__ is not Subset.__getitem__:
+            return [self[i] for i in indices]
+        return fetch_samples(self.dataset, [self.indices[i] for i in indices])
+
+    def _collated_fetcher(self) -> Callable[[list[int]], object] | None:
+        """The parent's batch path, reading through this subset's index map."""
+        inner = collated_fetcher(self.dataset)
+        if inner is None:
+            return None
+        remap = self.indices
+        return lambda indices: inner([remap[i] for i in indices])
 
 
 def random_split(
@@ -689,3 +699,44 @@ class StackDataset(Dataset):
         if self._keys is not None:
             return dict(zip(self._keys, items, strict=True))
         return items
+
+    def __getitems__(self, indices: list[int]) -> list[object]:
+        """Return the samples at ``indices``, each child read in one batched call.
+
+        Every child contributes through its own ``__getitems__`` when it
+        has one.  A subclass that overrides :meth:`__getitem__` is read
+        through that override instead.
+
+        Raises
+        ------
+        ValueError
+            If a child's ``__getitems__`` returns the wrong number of samples.
+        """
+        if type(self).__getitem__ is not StackDataset.__getitem__:
+            return [self[i] for i in indices]
+        columns: list[list[object]] = []
+        for child in self.datasets:
+            column = fetch_samples(child, indices)
+            if len(column) != len(indices):
+                raise ValueError(
+                    f"A child's __getitems__ returned {len(column)} samples "
+                    f"for {len(indices)} indices"
+                )
+            columns.append(column)
+        rows = list(zip(*columns, strict=True))
+        if self._keys is not None:
+            return [dict(zip(self._keys, row, strict=True)) for row in rows]
+        return [row for row in rows]
+
+    def _collated_fetcher(self) -> Callable[[list[int]], object] | None:
+        """Every child's batch path, bundled — only when each child has one."""
+        fetchers = [collated_fetcher(child) for child in self.datasets]
+        if any(f is None for f in fetchers):
+            return None
+        keys = self._keys
+
+        def fetch(indices: list[int]) -> object:
+            batches = tuple(f(indices) for f in fetchers if f is not None)
+            return batches if keys is None else dict(zip(keys, batches, strict=True))
+
+        return fetch
