@@ -33,6 +33,7 @@ from typing import ClassVar, NoReturn, Protocol, override, runtime_checkable
 
 import lucid.nn as nn
 from lucid.peft._config import PeftConfig, TaskType, _adapter_directory
+from lucid.peft._convert import ConvertMode
 from lucid.peft._peft_model import PeftModel
 from lucid.peft._task_models import (
     MODEL_TYPE_TO_PEFT_MODEL_MAPPING,
@@ -104,6 +105,7 @@ class _BaseAutoPeftModel:
         *,
         subfolder: str | None = None,
         import_allowlist: list[str] | None = None,
+        convert: ConvertMode = "auto",
     ) -> PeftModel:
         r"""Build the base model the adapter names and load the adapter onto it.
 
@@ -133,6 +135,9 @@ class _BaseAutoPeftModel:
             adapter's ``auto_mapping`` may name; ``["lucid.models"]`` by
             default.  The mapping is data from a file, and importing what it
             names would run that package's code.
+        convert : bool or "auto", default="auto"
+            Read an adapter written for the reference library's model in the
+            zoo's layout; see :meth:`PeftModel.from_pretrained`.
 
         Returns
         -------
@@ -185,6 +190,7 @@ class _BaseAutoPeftModel:
             is_trainable=is_trainable,
             config=config,
             subfolder=subfolder,
+            convert=convert,
         )
 
     @classmethod

@@ -16,6 +16,7 @@ from lucid.peft._config import (
     _output_directory,
     _require_config,
 )
+from lucid.peft._convert import AdapterFile, ConversionContext, ConvertMode, convert_adapter
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
 from lucid.peft._status import TunerLayerStatus, TunerModelStatus, _parameter_counts
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
@@ -71,6 +72,11 @@ def _adapter_weights(directory: str) -> dict[str, Tensor]:
         raise FileNotFoundError(f"no {_WEIGHTS_NAME} in {directory!r}")
     loaded = load_safetensors(path)
     return {key: value for key, value in loaded.items() if isinstance(value, Tensor)}
+
+
+def _converted(model: nn.Module, adapter: AdapterFile, convert: ConvertMode) -> AdapterFile:
+    """``adapter`` in the layout of ``model``'s zoo family, if ``convert`` asks for it."""
+    return convert_adapter(adapter, ConversionContext.of(model, adapter.config), convert)
 
 
 class PeftModel(_ForwardsAttributes):
@@ -572,6 +578,7 @@ class PeftModel(_ForwardsAttributes):
         config: PeftConfig | None = None,
         *,
         subfolder: str | None = None,
+        convert: ConvertMode = "auto",
     ) -> PeftModel:
         r"""Adapt ``model`` with the adapter saved in ``model_id``.
 
@@ -599,6 +606,14 @@ class PeftModel(_ForwardsAttributes):
             Use this config instead of the directory's.
         subfolder : str, optional
             The directory under ``model_id`` that holds the adapter.
+        convert : bool or "auto", default="auto"
+            Read an adapter written for the reference library's model in the
+            zoo's layout: renamed modules (T5), fused projections (ViT's
+            ``query`` / ``key`` / ``value`` into ``qkv``), a renamed head
+            (GPT-2's ``score``).  ``"auto"`` converts when the model's type has
+            a converter and the file is in the layout it changes; ``True``
+            converts and refuses a type with none; ``False`` reads the file as
+            it is.
 
         Returns
         -------
@@ -642,7 +657,8 @@ class PeftModel(_ForwardsAttributes):
             _require_config("config", given), inference_mode=not is_trainable
         )
         _tuner_for(config)._check_loadable(config, is_trainable)
-        weights = _adapter_weights(directory)
+        converted = _converted(model, AdapterFile(config, _adapter_weights(directory)), convert)
+        config, weights = converted.config, converted.tensors
         peft_model = cls._model_class(config.task_type)(model, config, adapter_name)
         try:
             set_peft_model_state_dict(peft_model, weights, adapter_name=adapter_name)
@@ -662,6 +678,7 @@ class PeftModel(_ForwardsAttributes):
         low_cpu_mem_usage: bool = False,
         *,
         subfolder: str | None = None,
+        convert: ConvertMode = "auto",
     ) -> object:
         r"""Load a saved adapter into the model, beside the ones it holds.
 
@@ -687,6 +704,9 @@ class PeftModel(_ForwardsAttributes):
             ``add_adapter``.
         subfolder : str, optional
             The directory under ``model_id`` that holds the adapter.
+        convert : bool or "auto", default="auto"
+            As for :meth:`from_pretrained`: read an adapter written for the
+            reference library's model in the zoo's layout.
 
         Returns
         -------
@@ -729,6 +749,12 @@ class PeftModel(_ForwardsAttributes):
             _tuner_for(config)._check_loadable(config, is_trainable)
         # Read before anything is changed, so a missing file leaves the model alone.
         weights = _adapter_weights(directory)
+        if convert is not False:
+            source = config if config is not None else PeftConfig.from_pretrained(directory)
+            converted = _converted(self.get_base_model(), AdapterFile(source, weights), convert)
+            weights = dict(converted.tensors)
+            if config is not None:
+                config = dataclasses.replace(converted.config, inference_mode=not is_trainable)
         if config is not None:
             self.add_adapter(adapter_name, config, low_cpu_mem_usage)
             if is_trainable:
