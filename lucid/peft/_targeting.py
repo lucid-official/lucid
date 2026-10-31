@@ -33,6 +33,22 @@ def _suffix_match(key: str, names: Iterable[str]) -> bool:
     return any(key == name or key.endswith(f".{name}") for name in names)
 
 
+def _with_subtrees_excluded(excluded: str | Iterable[str] | None, subtrees: Iterable[str]) -> str:
+    """``excluded`` (as ``exclude_modules`` holds it) widened to every module under the ``subtrees``.
+
+    One regex, which the reference's ``exclude_modules`` reads too: a name list matches by dotted
+    suffix, so it cannot say "everything under", and the pattern keeps what was already excluded.
+    """
+    roots = "|".join(re.escape(name) for name in sorted(subtrees))
+    patterns = [rf"(?:.*\.)?(?:{roots})\..*"]
+    if isinstance(excluded, str):
+        patterns.append(excluded)
+    elif excluded:
+        names = "|".join(re.escape(name) for name in sorted(excluded))
+        patterns.append(rf"(?:.*\.)?(?:{names})")
+    return "|".join(f"(?:{pattern})" for pattern in patterns)
+
+
 def _excluded(config: _TargetedConfig, key: str) -> bool:
     excluded = config.exclude_modules
     if isinstance(excluded, str):

@@ -23,7 +23,7 @@ silently ignoring its rows' names.
 
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
 from types import TracebackType
 from typing import ClassVar, Final, override
@@ -100,8 +100,17 @@ class _Route(ABC):
         """Raise if this slot cannot answer a mixed batch that names the adapters ``named``."""
 
     @abstractmethod
-    def apply(self, x: Tensor, output: Tensor, rows: dict[str, list[int]]) -> Tensor:
-        """``output``, the base module's, with each adapter's ``rows`` of ``x`` routed through it."""
+    def apply(
+        self,
+        args: tuple[Tensor, ...],
+        kwargs: Mapping[str, object],
+        output: Tensor,
+        rows: dict[str, list[int]],
+    ) -> Tensor:
+        """``output``, the base module's, with each adapter's rows of the call's input routed through it.
+
+        ``args`` and ``kwargs`` are the call the slot answered; its first argument is the batch.
+        """
 
 
 def _index(rows: list[int], like: Tensor) -> Tensor:
@@ -124,14 +133,24 @@ class _ResidualRoute(_Route, slot_type=_Residual):
             raise ValueError("Cannot pass `adapter_names` when DoRA is enabled.")
 
     @override
-    def apply(self, x: Tensor, output: Tensor, rows: dict[str, list[int]]) -> Tensor:
+    def apply(
+        self,
+        args: tuple[Tensor, ...],
+        kwargs: Mapping[str, object],
+        output: Tensor,
+        rows: dict[str, list[int]],
+    ) -> Tensor:
         layer = self.slot
+        x = args[0]
+        extras = layer._extras_of(args, kwargs)
         held = layer._adapter_names()
         for adapter, indices in rows.items():
             if adapter == BASE_ADAPTER or adapter not in held:
                 continue
             index = _index(indices, x)
-            update = layer._lowrank(adapter, layer._dropped(adapter, x.index_select(0, index)))
+            update = layer._lowrank(
+                adapter, layer._dropped(adapter, x.index_select(0, index)), extras
+            )
             output = output.index_add(0, index, update.to(output.dtype))
         return output
 
@@ -147,7 +166,15 @@ class _CopyRoute(_Route, slot_type=ModulesToSaveWrapper):
         del named
 
     @override
-    def apply(self, x: Tensor, output: Tensor, rows: dict[str, list[int]]) -> Tensor:
+    def apply(
+        self,
+        args: tuple[Tensor, ...],
+        kwargs: Mapping[str, object],
+        output: Tensor,
+        rows: dict[str, list[int]],
+    ) -> Tensor:
+        del kwargs  # the copy is run on the batch alone
+        x = args[0]
         copies = self.slot.modules_to_save
         for adapter, indices in rows.items():
             if adapter == BASE_ADAPTER or adapter not in copies:
@@ -175,7 +202,13 @@ class _UnroutableRoute(_Route, slot_type=_BaseTunerLayer):
         )
 
     @override
-    def apply(self, x: Tensor, output: Tensor, rows: dict[str, list[int]]) -> Tensor:
+    def apply(
+        self,
+        args: tuple[Tensor, ...],
+        kwargs: Mapping[str, object],
+        output: Tensor,
+        rows: dict[str, list[int]],
+    ) -> Tensor:
         raise NotImplementedError("unreachable: check() refuses this slot first")
 
 
@@ -239,7 +272,10 @@ class _MixedBatch(AbstractContextManager[None]):
         slot = route.slot
 
         def routed(
-            module: object, args: tuple[Tensor, ...], output: _ModuleOutput
+            module: object,
+            args: tuple[Tensor, ...],
+            kwargs: Mapping[str, object],
+            output: _ModuleOutput,
         ) -> _ModuleOutput:
             del module  # the slot this hook was made for
             if was_off or not isinstance(output, Tensor):
@@ -251,9 +287,9 @@ class _MixedBatch(AbstractContextManager[None]):
                     "Length of `adapter_names` should be the same as the number of inputs, but "
                     f"got {len(names)} and {len(x)} respectively."
                 )
-            return route.apply(x, output, rows)
+            return route.apply(args, kwargs, output, rows)
 
-        self._handles.append(slot.register_forward_hook(routed))
+        self._handles.append(slot.register_forward_hook(routed, with_kwargs=True))
 
     @override
     def __enter__(self) -> None:

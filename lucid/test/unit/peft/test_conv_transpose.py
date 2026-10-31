@@ -154,11 +154,6 @@ class TestConvTranspose:
         x = lucid.randn(1, 3, 4, 4, device=device).bfloat16()
         assert layer(x).dtype == lucid.bfloat16
 
-    def test_an_output_size_is_refused_rather_than_ignored(self, device: str) -> None:
-        _, layer, x = _transposed(2, device)
-        with pytest.raises(NotImplementedError, match="output_size"):
-            layer(x, output_size=[12, 14])
-
     def test_the_tuner_wraps_each_transposed_convolution_by_its_type(self, device: str) -> None:
         lucid.manual_seed(0)
         model = nn.Sequential(
@@ -187,6 +182,117 @@ class TestConvTranspose:
             merged = peft.merge_and_unload()
             assert isinstance(merged[2], nn.ConvTranspose2d)
             assert _close(merged(x), adapted)
+
+
+def _asked_size(x: lucid.Tensor, base: nn.Module) -> list[int]:
+    """The size one past the default on every spatial axis: the base's ``output_padding`` raised by one."""
+    default = base(x).shape[2:]
+    return [n + 1 for n in default]
+
+
+class TestOutputSize:
+    """An adapted transposed convolution takes the base's ``output_size``, and the update follows it."""
+
+    @pytest.mark.parametrize("dims", [1, 2, 3])
+    def test_the_output_is_the_size_asked_for_and_the_update_is_at_that_size(
+        self, dims: int, device: str
+    ) -> None:
+        base, layer, x = _transposed(dims, device)
+        size = _asked_size(x, base)
+        out = layer(x, output_size=size)
+        assert list(out.shape[2:]) == size
+        branch = layer.lora_B["default"](layer.lora_A["default"](x, output_size=size))
+        assert _close(out, base(x, output_size=size) + branch * layer.scaling["default"])
+        assert not _same(out, base(x, output_size=size))  # a non-zero update
+
+    def test_it_may_be_given_positionally(self, device: str) -> None:
+        base, layer, x = _transposed(2, device)
+        size = _asked_size(x, base)
+        assert _same(layer(x, size), layer(x, output_size=size))
+
+    def test_without_it_the_output_is_the_default_size(self, device: str) -> None:
+        base, layer, x = _transposed(2, device)
+        assert _same(layer(x), layer(x, output_size=None))
+        assert layer(x).shape == base(x).shape
+
+    def test_a_size_the_stride_cannot_give_is_the_base_layers_error(self, device: str) -> None:
+        _, layer, x = _transposed(2, device)
+        with pytest.raises(ValueError, match="requested an output size"):
+            layer(x, output_size=[40, 40])
+
+    def test_a_merged_layer_gives_the_unmerged_output_at_that_size(self, device: str) -> None:
+        base, layer, x = _transposed(2, device)
+        size = _asked_size(x, base)
+        before = layer(x, output_size=size)
+        layer.merge()
+        assert _close(layer(x, output_size=size), before)
+
+    def test_dora_follows_it_with_and_without_dropout(self, device: str) -> None:
+        base, layer, x = _transposed(2, device, use_dora=True, lora_dropout=0.5)
+        size = _asked_size(x, base)
+        layer.eval()
+        eval_out = layer(x, output_size=size)
+        layer.train()
+        assert list(eval_out.shape[2:]) == size
+        assert list(layer(x, output_size=size).shape[2:]) == size
+
+    def test_every_adapted_layer_takes_what_its_base_forward_takes(self) -> None:
+        """The class-wide guard: a layer type registered for a base type keeps that type's forward parameters."""
+        from lucid.peft.tuners.lora._layer import _Residual, _extra_parameters
+
+        layers = {
+            base: layer
+            for base, layer in lora.LoraLayer._layer_types.items()
+            if issubclass(layer, _Residual)
+        }
+        assert nn.ConvTranspose2d in layers
+        for base, layer in layers.items():
+            assert set(_extra_parameters(base.forward)) <= set(_extra_parameters(layer.forward))
+
+    def test_a_layer_that_drops_a_base_parameter_fails_at_its_class(self) -> None:
+        from lucid.peft.tuners.lora._conv import _ConvLayer
+
+        with pytest.raises(TypeError, match="output_size"):
+
+            class _Lossy(_ConvLayer, base_type=nn.ConvTranspose2d):  # type: ignore[type-var,misc]
+                pass
+
+        assert lora.LoraLayer._layer_types[nn.ConvTranspose2d] is lora.ConvTranspose2d
+
+    @pytest.mark.parametrize("positional", [False, True])
+    def test_a_mixed_batch_routes_rows_at_that_size(self, positional: bool, device: str) -> None:
+        class _Up(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.up = nn.ConvTranspose2d(3, 4, 3, stride=2, padding=1)
+
+            def forward(
+                self, x: lucid.Tensor, output_size: list[int] | None = None
+            ) -> lucid.Tensor:
+                if positional:
+                    return self.up(x, output_size)
+                return self.up(x, output_size=output_size)
+
+        lucid.manual_seed(0)
+        config = LoraConfig(r=2, lora_alpha=4, target_modules=["up"], init_lora_weights=False)
+        peft = get_peft_model(_Up().to(device), config, adapter_name="a")
+        peft.add_adapter("b", config)
+        peft.eval()
+        x = lucid.randn(3, 3, 5, 6, device=device)
+        names = ["a", "b", "__base__"]
+        size = [10, 12]
+        with lucid.no_grad():
+            mixed = peft(x, adapter_names=names, output_size=size)
+            rows = []
+            for i, name in enumerate(names):
+                if name == "__base__":
+                    with peft.disable_adapter():
+                        rows.append(peft(x[i : i + 1], output_size=size))
+                else:
+                    peft.set_adapter(name)
+                    rows.append(peft(x[i : i + 1], output_size=size))
+        assert list(mixed.shape[2:]) == size
+        assert _close(mixed, lucid.cat(rows))
 
 
 class TestGroupedConvTranspose:

@@ -59,6 +59,7 @@ from lucid.peft._slots import (
 from lucid.peft._target_defaults import (
     DEFAULT_LORA_TARGET_MODULES,
     DEFAULT_LORA_TARGET_PARAMETERS,
+    _default_skipped_subtrees,
     _default_target_modules,
     _default_target_parameters,
 )
@@ -68,6 +69,7 @@ from lucid.peft._targeting import (
     _resolve_all_linear,
     _selects,
     _shared_outside,
+    _with_subtrees_excluded,
 )
 
 #: Where a model adapted in place keeps the ``requires_grad`` it had before its first adapter.
@@ -759,6 +761,9 @@ class _BaseTuner(_AdapterHost, ABC):
             stored.target_modules = set(
                 _default_target_modules(model, cls._default_targets, parameters)
             )
+            skipped = _default_skipped_subtrees(model)
+            if skipped:
+                stored.exclude_modules = _with_subtrees_excluded(stored.exclude_modules, skipped)
             if parameters and isinstance(stored, _NamesParameters):
                 stored.target_parameters = sorted(parameters)
         resolved = _resolve_all_linear(stored, model, cls._adapted_linear)

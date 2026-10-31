@@ -30,7 +30,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
 
 if TYPE_CHECKING:
-    from lucid.peft.tuners.lora._layer import LoraLayer, _Residual
+    from lucid.peft.tuners.lora._layer import LoraLayer, _Extras, _Residual
 
 #: The per-adapter table DoRA keeps its magnitude vectors in (the reference's name).
 MAGNITUDE_TABLE: Final = "lora_magnitude_vector"
@@ -91,8 +91,13 @@ class _Variant(ABC):
         del layer, adapter  # plain LoRA keeps nothing
 
     @abstractmethod
-    def contribution(self, layer: _Residual, adapter: str, x: Tensor, result: Tensor) -> Tensor:
-        """What ``adapter`` adds to the base output ``result`` for the input ``x``."""
+    def contribution(
+        self, layer: _Residual, adapter: str, x: Tensor, result: Tensor, extras: _Extras
+    ) -> Tensor:
+        """What ``adapter`` adds to the base output ``result`` for the input ``x``.
+
+        ``extras`` are the base layer's other forward arguments, which the update follows.
+        """
 
     @abstractmethod
     def shift(
@@ -122,8 +127,10 @@ class _Lora(_Variant, variant="lora"):
     label = "plain LoRA"
 
     @override
-    def contribution(self, layer: _Residual, adapter: str, x: Tensor, result: Tensor) -> Tensor:
-        return layer._lowrank(adapter, layer._dropped(adapter, x))
+    def contribution(
+        self, layer: _Residual, adapter: str, x: Tensor, result: Tensor, extras: _Extras
+    ) -> Tensor:
+        return layer._lowrank(adapter, layer._dropped(adapter, x), extras)
 
     @override
     def shift(
@@ -181,14 +188,18 @@ class _Dora(_Variant, variant="dora"):
         return table[adapter]
 
     @override
-    def contribution(self, layer: _Residual, adapter: str, x: Tensor, result: Tensor) -> Tensor:
+    def contribution(
+        self, layer: _Residual, adapter: str, x: Tensor, result: Tensor, extras: _Extras
+    ) -> Tensor:
         dropped = layer._dropped(adapter, x)
         # Dropout on the update's input also reaches the base term, as in the reference.
-        seen = layer.base_layer(dropped) if layer._applies_dropout(adapter) else result
+        seen = layer.base_layer(dropped, **extras) if layer._applies_dropout(adapter) else result
         gain = layer._output_vector(
             self._magnitude(layer, adapter).weight / self.weight_norm(layer, adapter)
         )
-        return (gain - 1) * layer._without_bias(seen) + gain * layer._lowrank(adapter, dropped)
+        return (gain - 1) * layer._without_bias(seen) + gain * layer._lowrank(
+            adapter, dropped, extras
+        )
 
     @override
     def shift(

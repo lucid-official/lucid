@@ -14,10 +14,11 @@ plain LoRA or DoRA); the ones that instead shift the base weights for the
 duration of its forward are in ``_weight_space``.
 """
 
+import inspect
 import math
 import warnings
 from abc import abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from types import MappingProxyType
 from typing import ClassVar, Final, NamedTuple, override
 
@@ -51,6 +52,16 @@ class _AdapterSpec(NamedTuple):
 
 
 type _Factors = tuple[nn.Module | Parameter, ...]
+
+#: What a base layer's ``forward`` takes beside its input (a transposed convolution's ``output_size``),
+#: by parameter name: handed to the base layer and to the low-rank branch alike.
+type _Extras = Mapping[str, object]
+_NO_EXTRAS: Final[_Extras] = MappingProxyType({})
+
+
+def _extra_parameters(forward: Callable[..., object]) -> tuple[str, ...]:
+    """The names a ``forward`` takes beside ``self`` and its input, in order."""
+    return tuple(inspect.signature(forward).parameters)[2:]
 
 
 class _Place(NamedTuple):
@@ -461,9 +472,35 @@ class _Residual(LoraLayer):
     _variant_tables = (MAGNITUDE_TABLE,)
     lora_magnitude_vector: nn.ModuleDict[_Magnitude]
 
+    @override
+    def __init_subclass__(
+        cls, *, base_type: type[nn.Module] | None = None, family: bool = False, **kwargs: object
+    ) -> None:
+        if base_type is not None:
+            # An adapted layer takes whatever its base's forward takes: a base that gains a
+            # parameter fails here, at the class (before it registers), not at a user's call.
+            missing = set(_extra_parameters(base_type.forward)) - set(
+                _extra_parameters(cls.forward)
+            )
+            if missing:
+                raise TypeError(
+                    f"{cls.__name__}.forward must take {sorted(missing)}, as "
+                    f"{base_type.__name__}.forward does"
+                )
+        super().__init_subclass__(base_type=base_type, family=family, **kwargs)
+
     @abstractmethod
-    def _lowrank(self, adapter: str, dropped: Tensor) -> Tensor:
-        """The scaled low-rank update ``adapter`` makes from the (dropped-out) input."""
+    def _lowrank(self, adapter: str, dropped: Tensor, extras: _Extras) -> Tensor:
+        """The scaled low-rank update ``adapter`` makes from the (dropped-out) input.
+
+        ``extras`` are the base layer's other forward arguments, which the update must follow.
+        """
+
+    def _extras_of(self, args: tuple[object, ...], kwargs: Mapping[str, object]) -> _Extras:
+        """The extras of a call ``self(*args, **kwargs)``, by name (defaults filled in)."""
+        bound = inspect.signature(self.forward).bind(*args, **kwargs)
+        bound.apply_defaults()
+        return {name: bound.arguments[name] for name in _extra_parameters(type(self).forward)}
 
     def _dropped(self, adapter: str, x: Tensor) -> Tensor:
         """``x`` as the update sees it: through the adapter's dropout."""
@@ -590,14 +627,18 @@ class _Residual(LoraLayer):
 
     @override
     def forward(self, x: Tensor) -> Tensor:
-        result: Tensor = self.base_layer(x)
+        return self._forward(x, _NO_EXTRAS)
+
+    def _forward(self, x: Tensor, extras: _Extras) -> Tensor:
+        """The forward pass: the base layer on ``x`` and ``extras``, plus each active adapter's update."""
+        result: Tensor = self.base_layer(x, **extras)
         if self.disable_adapters or self.merged:
             return result
         out = result
         for adapter in self.active_adapters:
             if adapter not in self._specs:
                 continue  # an adapter aimed at other layers: this one runs its base for it
-            out = out + self._variant(adapter).contribution(self, adapter, x, result)
+            out = out + self._variant(adapter).contribution(self, adapter, x, result, extras)
         return out if out.dtype == result.dtype else out.to(result.dtype)
 
 
@@ -617,11 +658,11 @@ class _Factored[Factor: nn.Module](_Residual):
     lora_B: nn.ModuleDict[Factor]
 
     @override
-    def _lowrank(self, adapter: str, dropped: Tensor) -> Tensor:
+    def _lowrank(self, adapter: str, dropped: Tensor, extras: _Extras) -> Tensor:
         lora_a = self.lora_A[adapter]
         dtype = _entry_parameters(lora_a)[0].dtype
         update: Tensor = self.lora_B[adapter](
-            lora_a(dropped if dropped.dtype == dtype else dropped.to(dtype))
+            lora_a(dropped if dropped.dtype == dtype else dropped.to(dtype), **extras)
         )
         return update * self._specs[adapter].scaling
 

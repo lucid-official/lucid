@@ -133,6 +133,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - prompt tuners forward missing names; audit builds them
 
+- base forward args reach adapters; short default exclusions
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

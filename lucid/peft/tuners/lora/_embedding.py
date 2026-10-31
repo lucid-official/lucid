@@ -9,7 +9,7 @@ import lucid.nn.init as init
 from lucid._tensor.tensor import Tensor
 from lucid.nn.functional import embedding
 from lucid.nn.parameter import Parameter
-from lucid.peft.tuners.lora._layer import _Factors, _Place, _Residual
+from lucid.peft.tuners.lora._layer import _Extras, _Factors, _Place, _Residual
 from lucid.peft.tuners.lora._variants import MAGNITUDE_TABLE
 
 
@@ -140,7 +140,8 @@ class Embedding(_Residual, base_type=nn.Embedding):
         return weight.mT
 
     @override
-    def _lowrank(self, adapter: str, dropped: Tensor) -> Tensor:
+    def _lowrank(self, adapter: str, dropped: Tensor, extras: _Extras) -> Tensor:
+        del extras  # a lookup takes no arguments beside its indices
         lora_a, lora_b = self._pair(adapter)
         base = self.base_layer
         after_a = embedding(

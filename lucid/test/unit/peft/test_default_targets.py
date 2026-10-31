@@ -9,19 +9,23 @@ zoo's classes really have is held per family in
 default applies, what is stored, what a model with no row is told.
 """
 
+import json
+import re
 import types
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
 import lucid
 import lucid.nn as nn
-from lucid.peft import LoraConfig, LoraModel, get_peft_model, inject_adapter_in_model
+from lucid.peft import LoraConfig, LoraModel, PeftModel, get_peft_model, inject_adapter_in_model
 from lucid.peft._target_defaults import (
     DEFAULT_LORA_EXCLUDE_MODULES,
     DEFAULT_LORA_TARGET_MODULES,
     _default_target_modules,
 )
+from lucid.peft._targeting import _with_subtrees_excluded
 
 
 class _Attention(nn.Module):
@@ -218,10 +222,12 @@ class TestTheExcludeTable:
         for model_type in ("ijepa", "vjepa", "vjepa2"):
             assert DEFAULT_LORA_EXCLUDE_MODULES[model_type] == {"target_encoder"}
 
-    def test_the_default_is_spelled_out_in_full_names_outside_the_subtree(self) -> None:
+    def test_the_rows_names_stay_short_and_the_subtree_is_left_out_by_exclude_modules(self) -> None:
         model = _WithTarget("ijepa")
-        names = _default_target_modules(model, DEFAULT_LORA_TARGET_MODULES)
-        assert names == {"encoder.0.qkv", "encoder.1.qkv"}
+        assert _default_target_modules(model, DEFAULT_LORA_TARGET_MODULES) == {"qkv"}
+        stored = get_peft_model(model, LoraConfig(r=2)).peft_config["default"]
+        assert stored.target_modules == {"qkv"}
+        assert isinstance(stored.exclude_modules, str)
 
     def test_a_type_with_nothing_to_skip_keeps_its_names_as_they_are(self) -> None:
         assert _default_target_modules(_Encoder("bert"), DEFAULT_LORA_TARGET_MODULES) == {
@@ -232,6 +238,61 @@ class TestTheExcludeTable:
     def test_the_adapter_goes_into_the_live_network_only(self) -> None:
         peft = get_peft_model(_WithTarget("ijepa"), LoraConfig(r=2))
         assert sorted(peft.base_model.targeted_module_names) == ["encoder.0.qkv", "encoder.1.qkv"]
+
+    def test_the_adapter_file_stores_the_short_names_and_the_reference_s_exclude_field(
+        self, tmp_path: Path
+    ) -> None:
+        peft = get_peft_model(_WithTarget("ijepa"), LoraConfig(r=2))
+        peft.save_pretrained(tmp_path)
+        stored = json.loads((tmp_path / "adapter_config.json").read_text())
+        assert stored["target_modules"] == ["qkv"]
+        pattern = stored["exclude_modules"]
+        assert re.fullmatch(pattern, "target_encoder.0.qkv")
+        assert re.fullmatch(pattern, "wrapper.target_encoder.1.qkv")
+        assert not re.fullmatch(pattern, "encoder.0.qkv")
+        assert not re.fullmatch(pattern, "ema_target_encoder.0.qkv")
+
+    def test_a_saved_adapter_follows_a_change_of_the_model_s_structure(
+        self, tmp_path: Path
+    ) -> None:
+        get_peft_model(_WithTarget("ijepa"), LoraConfig(r=2)).save_pretrained(tmp_path)
+        grown = _WithTarget("ijepa")
+        grown.encoder.append(_Block())
+        grown.target_encoder.append(_Block())
+        with pytest.warns(UserWarning, match="missing adapter keys"):  # the new block is untrained
+            loaded = PeftModel.from_pretrained(grown, tmp_path)
+        assert sorted(loaded.base_model.targeted_module_names) == [
+            "encoder.0.qkv",
+            "encoder.1.qkv",
+            "encoder.2.qkv",
+        ]
+
+    def test_a_file_saved_with_full_module_names_still_loads(self, tmp_path: Path) -> None:
+        get_peft_model(_WithTarget("ijepa"), LoraConfig(r=2)).save_pretrained(tmp_path)
+        path = tmp_path / "adapter_config.json"
+        stored = json.loads(path.read_text())
+        stored["target_modules"] = ["encoder.0.qkv", "encoder.1.qkv"]
+        stored["exclude_modules"] = None
+        path.write_text(json.dumps(stored))
+        loaded = PeftModel.from_pretrained(_WithTarget("ijepa"), tmp_path)
+        assert sorted(loaded.base_model.targeted_module_names) == ["encoder.0.qkv", "encoder.1.qkv"]
+
+    def test_an_exclusion_the_user_gave_is_kept_beside_the_subtree(self) -> None:
+        listed = get_peft_model(
+            _WithTarget("ijepa"), LoraConfig(r=2, exclude_modules=["encoder.1.qkv"])
+        )
+        assert sorted(listed.base_model.targeted_module_names) == ["encoder.0.qkv"]
+        regexed = get_peft_model(
+            _WithTarget("ijepa"), LoraConfig(r=2, exclude_modules=r"encoder\.0\..*")
+        )
+        assert sorted(regexed.base_model.targeted_module_names) == ["encoder.1.qkv"]
+
+    def test_the_pattern_reads_a_list_of_names_as_the_reference_does(self) -> None:
+        pattern = _with_subtrees_excluded({"a.b", "c"}, {"root"})
+        for key in ("a.b", "x.a.b", "c", "x.c", "root.0.q", "x.root.q"):
+            assert re.fullmatch(pattern, key), key
+        for key in ("a.bb", "xc", "roots.0.q", "x.a", "root"):
+            assert not re.fullmatch(pattern, key), key
 
     def test_a_name_the_user_gives_is_not_filtered(self) -> None:
         peft = get_peft_model(_WithTarget("ijepa"), LoraConfig(r=2, target_modules=["qkv"]))

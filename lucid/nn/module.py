@@ -40,6 +40,7 @@ from lucid._types import (
     _ForwardPreHook,
     _ForwardPreHookWithKwargs,
     _ForwardHook,
+    _ForwardHookWithKwargs,
     _BackwardHook,
 )
 
@@ -1365,7 +1366,7 @@ class Module:
 
     def register_forward_hook(
         self,
-        hook: _ForwardHook,
+        hook: _ForwardHook | _ForwardHookWithKwargs,
         *,
         prepend: bool = False,
         with_kwargs: bool = False,

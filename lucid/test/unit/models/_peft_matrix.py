@@ -39,13 +39,13 @@ import lucid.models as models
 import lucid.nn as nn
 from lucid.models._registry import _REGISTRY
 from lucid.nn._shadow import shadow_alloc
-from lucid.peft import LoraConfig, PeftModel, get_peft_model
+from lucid.peft import LoraConfig, LoraModel, PeftModel, get_peft_model
 from lucid.peft._target_defaults import (
+    DEFAULT_LORA_EXCLUDE_MODULES,
     DEFAULT_LORA_TARGET_MODULES,
     DEFAULT_LORA_TARGET_PARAMETERS,
-    _default_target_modules,
 )
-from lucid.peft._targeting import _suffix_match
+from lucid.peft._targeting import _selects
 
 type Call = tuple[tuple[Any, ...], dict[str, Any]]
 
@@ -299,10 +299,21 @@ def default_problems(factory: str) -> list[str]:
     entry = _REGISTRY[factory]
     with shadow_alloc():
         model = entry.factory()
-    parameters = DEFAULT_LORA_TARGET_PARAMETERS.get(entry.model_type, frozenset())
-    names = _default_target_modules(model, DEFAULT_LORA_TARGET_MODULES, parameters)
-    reached = [(n, m) for n, m in model.named_modules() if n and _suffix_match(n, names)]
+    # The config as a default adapter stores it: the type's names and what it leaves out.
+    stored = LoraModel._prepare_config(LoraConfig(), model)
+    reached = [(n, m) for n, m in model.named_modules() if n and _selects(stored, n)]
     problems = [f"{n}: {why}" for n, m in reached if (why := _refusal(m)) is not None]
+    skipped = DEFAULT_LORA_EXCLUDE_MODULES.get(entry.model_type, frozenset())
+    problems += [
+        f"{n}: inside {sorted(skipped)}, which the default leaves out"
+        for n, _ in reached
+        if not skipped.isdisjoint(n.split("."))
+    ]
+    row = DEFAULT_LORA_TARGET_MODULES.get(entry.model_type, frozenset())
+    if stored.target_modules != row:  # the row's own names, so a saved adapter follows the model
+        problems.append(
+            f"the stored default is {sorted(stored.target_modules or [])}, not {sorted(row)}"
+        )
     if not reached and entry.model_type not in DEFAULT_LORA_TARGET_PARAMETERS:
-        problems.append(f"the default {sorted(names)} reaches no module")
+        problems.append(f"the default {sorted(stored.target_modules or [])} reaches no module")
     return problems

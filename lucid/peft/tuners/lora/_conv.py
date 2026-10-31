@@ -190,8 +190,9 @@ class _ConvTransposeNd(_ConvLayer):
     ``lora_B`` is the 1x1 (regular) convolution :math:`r \to C_o`.  A pointwise
     map after a transposed convolution is the transposed convolution of the
     composed kernel, :math:`\Delta W_{i,o,k} = s \sum_{r} A_{i,r,k}\,B_{o,r}`, so
-    ``groups == 1`` merges exactly, as for the forward convolutions.  An output
-    size given to the forward (``output_size``) is not accepted by the adapter.
+    ``groups == 1`` merges exactly, as for the forward convolutions.  An
+    ``output_size`` given to the forward reaches the base layer and ``lora_A``
+    alike, so the update has the output the base resolves.
     """
 
     base_layer: _ConvTranspose
@@ -214,20 +215,12 @@ class _ConvTransposeNd(_ConvLayer):
 
     @override
     def forward(self, x: Tensor, output_size: Sequence[int] | None = None) -> Tensor:
-        """Run the base layer and add the adapters' update.
+        """Run the base layer and add the adapters' update, both at the output size asked for.
 
-        Raises
-        ------
-        NotImplementedError
-            ``output_size`` is given: the update's transposed convolution would need the same
-            ``output_padding`` the base resolves it to.
+        ``output_size`` picks one of the sizes the stride allows, as for ``nn.ConvTranspose*d``.
+        The update's first factor has the base's geometry, so it resolves the same size.
         """
-        if output_size is not None:
-            raise NotImplementedError(
-                f"{type(self).__name__} does not accept output_size; set output_padding on the "
-                "base layer instead"
-            )
-        return super().forward(x)
+        return self._forward(x, {"output_size": output_size})
 
     @override
     def get_delta_weight(self, adapter: str) -> Tensor:

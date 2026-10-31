@@ -512,6 +512,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     ),
     "lucid.peft.tuners.lora._variants": (
         ("LoraLayer", "lucid.peft.tuners.lora._layer", "LoraLayer"),
+        ("_Extras", "lucid.peft.tuners.lora._layer", "_Extras"),
         ("_Residual", "lucid.peft.tuners.lora._layer", "_Residual"),
     ),
     "lucid.quantization._fake_quantize": (("Tensor", "lucid._tensor.tensor", "Tensor"),),

@@ -236,6 +236,9 @@ type _ForwardPreHookWithKwargs = Callable[
     tuple[tuple[object, ...], dict[str, object]] | None,
 ]
 type _ForwardHook = Callable[[object, tuple[Tensor, ...], _ModuleOutput], _ModuleOutput | None]
+type _ForwardHookWithKwargs = Callable[
+    [object, tuple[Tensor, ...], dict[str, object], _ModuleOutput], _ModuleOutput | None
+]
 type _BackwardHook = Callable[..., None]
 
 

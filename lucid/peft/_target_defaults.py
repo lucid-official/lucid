@@ -18,8 +18,9 @@ also lands on a wrapper module the adapter has no layer for.
 factory without allocating and checks both, and runs one factory of each
 type end to end.  A model with an exponential-moving-average target network
 (the JEPAs) or an auxiliary one (diamond's reward and actor) lists it in
-``DEFAULT_LORA_EXCLUDE_MODULES``, and the default is spelled out in full names
-outside it.  ``neural_ode`` has no module row: its vector field holds raw
+``DEFAULT_LORA_EXCLUDE_MODULES``; the config stores the row's own short names
+and the reference's ``exclude_modules`` (a pattern over those subtrees), so the
+saved adapter follows later changes to the model's structure.  ``neural_ode`` has no module row: its vector field holds raw
 parameters, with no ``nn.Linear`` or convolution to adapt, so its default is
 ``DEFAULT_LORA_TARGET_PARAMETERS``.
 
@@ -35,7 +36,6 @@ from types import MappingProxyType
 from typing import Final
 
 import lucid.nn as nn
-from lucid.peft._targeting import _suffix_match
 
 
 def _names(*names: str) -> frozenset[str]:
@@ -205,19 +205,9 @@ def _default_target_modules(
             f"regex, or 'all-linear'.  There is no default for model type {model_type!r} "
             f"(the defaults cover {', '.join(sorted(table))})."
         )
-    return _outside(model, names, DEFAULT_LORA_EXCLUDE_MODULES.get(model_type, frozenset()))
+    return names
 
 
-def _outside(model: nn.Module, names: frozenset[str], skipped: frozenset[str]) -> frozenset[str]:
-    """The modules of ``model`` that ``names`` reach outside the ``skipped`` subtrees, by full name.
-
-    Spelled out in full, as ``"all-linear"`` is, because a suffix cannot say "except under".
-    With nothing to skip, ``names`` are returned as they are.
-    """
-    if not skipped:
-        return names
-    return frozenset(
-        key
-        for key, _ in model.named_modules()
-        if key and _suffix_match(key, names) and skipped.isdisjoint(key.split("."))
-    )
+def _default_skipped_subtrees(model: nn.Module) -> frozenset[str]:
+    """The sub-networks a default adapter never goes into for ``model``'s type (none for most)."""
+    return DEFAULT_LORA_EXCLUDE_MODULES.get(_model_type(model), frozenset())
