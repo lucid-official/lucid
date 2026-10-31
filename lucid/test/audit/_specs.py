@@ -27,6 +27,7 @@ import numpy as np
 import lucid
 import lucid.fft
 import lucid.linalg
+import lucid.nn.utils.prune
 import lucid.nn.utils.rnn
 from lucid.peft import PeftModel, get_peft_model_state_dict
 from lucid.test.audit import _probe, _surface
@@ -1294,6 +1295,24 @@ _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
     # size=)`` is refused as the reference refuses it, and the float form has nothing to vary.
     # A flat vector and the parameters it fills; since LCD-778 a bare tensor is one parameter,
     # so the blind ladder's ``(x, x)`` no longer splits into rows and nothing it tries fits.
+    # The LCD-779 pruning entry points take a module and required method arguments
+    # (`n`, `dim`, a pruning method class), which no signature-derived call can supply.
+    "lucid.nn.utils.prune.ln_structured": lambda d: iter(
+        [Call([lucid.nn.Linear(4, 4), "weight", 0.5, 2, 0], {}, -1, "ln_structured(linear)")]
+    ),
+    "lucid.nn.utils.prune.random_structured": lambda d: iter(
+        [Call([lucid.nn.Linear(4, 4), "weight", 0.5, 0], {}, -1, "random_structured(linear)")]
+    ),
+    "lucid.nn.utils.prune.global_unstructured": lambda d: iter(
+        [
+            Call(
+                [[(lucid.nn.Linear(4, 4), "weight"), (lucid.nn.Linear(4, 2), "weight")]],
+                {"pruning_method": lucid.nn.utils.prune.L1Unstructured, "amount": 0.25},
+                -1,
+                "global_unstructured(two linears, L1)",
+            )
+        ]
+    ),
     "lucid.nn.utils.vector_to_parameters": lambda d: iter(
         [
             Call(
@@ -1603,12 +1622,16 @@ def _candidates(name: str, domain: str, qualname: str | None, fn: Any) -> Iterat
     yield Call([[x, x]], {}, 0, "op([x, x])")
 
 
-def has_spec(name: str, fn: Any = None) -> bool:
+def has_spec(name: str, fn: Any = None, qualname: str | None = None) -> bool:
     """Whether ``name`` gets a real invocation rather than the ladder.
 
     ``fn`` opts in the signature tier: a symbol nobody wrote a spec for is
-    still specified if its own signature says enough.
+    still specified if its own signature says enough.  ``qualname`` opts in
+    the ``_QUALIFIED`` table, which ``invocations`` reads first — without it
+    a qualified spec was invisible here though it is the one that runs.
     """
+    if qualname is not None and qualname in _QUALIFIED:
+        return True
     if name in _EXACT:
         return True
     if any(re.search(p, name) for p, _ in _FAMILIES):

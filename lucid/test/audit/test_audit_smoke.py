@@ -91,7 +91,7 @@ def test_every_callable_symbol_gets_a_concrete_invocation() -> None:
     without = []
     for symbol in ops:
         fn = _surface.resolve(symbol)
-        if fn is None or _specs.has_spec(symbol.short):
+        if fn is None or _specs.has_spec(symbol.short, qualname=symbol.qualname):
             continue
         if next(_autospec.invocations(fn, symbol.short, "moderate"), None) is None:
             without.append(symbol.qualname)

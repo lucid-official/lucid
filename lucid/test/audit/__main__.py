@@ -821,7 +821,9 @@ def report_uncovered(console: Console, args: argparse.Namespace) -> int:
 
     symbols = _selected_symbols(args)
     ops = [s for s in symbols if s.kind in ("op", "method") and s.inert]
-    without = [s for s in ops if not _specs.has_spec(s.short, _surface.resolve(s))]
+    without = [
+        s for s in ops if not _specs.has_spec(s.short, _surface.resolve(s), qualname=s.qualname)
+    ]
 
     console.banner(
         "Symbols with no invocation, hand-written or derived",
