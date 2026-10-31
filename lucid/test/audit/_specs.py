@@ -1292,6 +1292,18 @@ _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
     ),
     # The tensor form first, so an axis varies a tensor: since LCD-773 ``normal(tensor, float,
     # size=)`` is refused as the reference refuses it, and the float form has nothing to vary.
+    # A flat vector and the parameters it fills; since LCD-778 a bare tensor is one parameter,
+    # so the blind ladder's ``(x, x)`` no longer splits into rows and nothing it tries fits.
+    "lucid.nn.utils.vector_to_parameters": lambda d: iter(
+        [
+            Call(
+                [_f((6,), d), [_f((2,), d), _f((4,), d)]],
+                {},
+                0,
+                "vector_to_parameters(vec, [p, q])",
+            )
+        ]
+    ),
     "lucid.normal": lambda d: iter(
         [
             Call([_f(_probe.SHAPE, d), _f(_probe.SHAPE, "positive")], {}, 0, "normal(mu, sigma)"),
