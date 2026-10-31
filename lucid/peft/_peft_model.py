@@ -9,6 +9,7 @@ from typing import ClassVar, Final, override
 
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
+from lucid.peft._adapter_file import _AdapterFile
 from lucid.peft._config import (
     PeftConfig,
     TaskType,
@@ -500,6 +501,7 @@ class PeftModel(_ForwardsAttributes):
         save_directory: str | os.PathLike[str],
         safe_serialization: bool = True,
         selected_adapters: list[str] | None = None,
+        path_initial_model_for_weight_conversion: str | os.PathLike[str] | None = None,
     ) -> None:
         r"""Write the adapters — not the base model — under ``save_directory``.
 
@@ -522,13 +524,30 @@ class PeftModel(_ForwardsAttributes):
             ``False`` is not one Lucid can produce.
         selected_adapters : list of str, optional
             The adapters to write; every adapter of the model by default.
+        path_initial_model_for_weight_conversion : str or os.PathLike, optional
+            For an adapter initialised with ``"pissa"``, ``"pissa_niter_<k>"``
+            or ``"olora"``, which rewrote the base weight: the directory
+            where ``save_pretrained`` wrote that adapter right after
+            initialisation, before any training.  The adapter is written
+            converted to a plain LoRA of twice the rank
+            (:math:`\Delta W = s(BA - B_0A_0)`, ``init_lora_weights=True``),
+            which loads onto the original, unmodified base model and sits
+            beside other adapters.  It converts one adapter, so pass
+            ``selected_adapters`` if the model holds several; the directory
+            is only read.
 
         Raises
         ------
         NotImplementedError
             ``safe_serialization=False``.
         ValueError
-            ``selected_adapters`` names an adapter the model lacks.
+            ``selected_adapters`` names an adapter the model lacks, or
+            ``path_initial_model_for_weight_conversion`` is given with
+            several adapters to write, for a method other than LoRA, for a
+            DoRA adapter, for ``use_rslora`` with a rank or alpha pattern,
+            or the directory's adapter does not match the trained one.
+        FileNotFoundError
+            ``path_initial_model_for_weight_conversion`` holds no adapter.
         RuntimeError
             The adapters were merged or unloaded already — there is nothing
             left to save; nothing is written.
@@ -559,14 +578,37 @@ class PeftModel(_ForwardsAttributes):
                 f"You passed an invalid `selected_adapters` arguments, current supported adapter "
                 f"names are {list(self.peft_config)} - got {names}."
             )
-        # Every adapter is read before the first byte is written.
-        states = {name: get_peft_model_state_dict(self, adapter_name=name) for name in names}
+        # Every adapter is read, and converted, before the first byte is written.
+        files = {
+            name: _AdapterFile(
+                self._config_to_save(name), get_peft_model_state_dict(self, adapter_name=name)
+            )
+            for name in names
+        }
+        if path_initial_model_for_weight_conversion is not None:
+            files = self._converted_to_plain(files, path_initial_model_for_weight_conversion)
         root = _output_directory(save_directory)
-        for name, state in states.items():
+        for name, file in files.items():
             path = root if name == "default" else _output_directory(os.path.join(root, name))
             # The reference's writer tags its files with this format string.
-            save_safetensors(state, os.path.join(path, _WEIGHTS_NAME), metadata={"format": "pt"})
-            self._config_to_save(name).save_pretrained(path)
+            save_safetensors(
+                file.state, os.path.join(path, _WEIGHTS_NAME), metadata={"format": "pt"}
+            )
+            file.config.save_pretrained(path)
+
+    def _converted_to_plain(
+        self, files: dict[str, _AdapterFile[PeftConfig]], initial_directory: str | os.PathLike[str]
+    ) -> dict[str, _AdapterFile[PeftConfig]]:
+        """``files`` (one adapter) as its tuner converts it, given the adapter saved at initialisation."""
+        if len(files) != 1:
+            raise ValueError(
+                "path_initial_model_for_weight_conversion converts one adapter; pass "
+                f"selected_adapters to choose one of {list(files)}"
+            )
+        ((name, trained),) = files.items()
+        directory = _adapter_directory(initial_directory)
+        initial = _AdapterFile(PeftConfig.from_pretrained(directory), _adapter_weights(directory))
+        return {name: _tuner_for(trained.config)._converted_to_plain(trained, initial)}
 
     @classmethod
     def from_pretrained(
