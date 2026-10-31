@@ -38,9 +38,10 @@ class ParamWrapper(_WeightSpace[object]):
         Name of the adapter, the key in ``lora_A`` / ``lora_B``.
     parameter_name : str
         Attribute name of the parameter on the module.
-    r, lora_alpha, init_lora_weights, use_rslora, use_dora
+    r, lora_alpha, init_lora_weights, use_rslora, use_dora, lora_bias
         The adapter's hyper-parameters, as ``LoraLayer.update_layer`` takes
-        them; ``r`` must be positive.
+        them; ``r`` must be positive.  ``use_dora`` and ``lora_bias`` are
+        refused, as the reference does.
     lora_dropout : float, default=0.0
         Must be 0: the update is folded into the weight, so there is no
         input to drop.
@@ -81,19 +82,22 @@ class ParamWrapper(_WeightSpace[object]):
         lora_dropout: float = 0.0,
         init_lora_weights: bool | str = True,
         use_rslora: bool = False,
+        *,
         use_dora: bool = False,
+        lora_bias: bool = False,
     ) -> None:
         # Plain attributes may be set before ``Module.__init__``; ``_setup`` reads this one.
         self.parameter_name = parameter_name
         super().__init__(
             base_layer,
             adapter_name,
-            r,
-            lora_alpha,
-            lora_dropout,
-            init_lora_weights,
-            use_rslora,
-            use_dora,
+            r=r,
+            lora_alpha=lora_alpha,
+            lora_dropout=lora_dropout,
+            init_lora_weights=init_lora_weights,
+            use_rslora=use_rslora,
+            use_dora=use_dora,
+            lora_bias=lora_bias,
         )
 
     @override

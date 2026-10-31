@@ -500,6 +500,11 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid.nn.utils.fusion": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.nn.utils.skip_init": (("Module", "lucid.nn.module", "Module"),),
     "lucid.optim._step_counter": (("Optimizer", "lucid.optim.optimizer", "Optimizer"),),
+    "lucid.peft.tuners.lora._inits": (("LoraLayer", "lucid.peft.tuners.lora._layer", "LoraLayer"),),
+    "lucid.peft.tuners.lora._variants": (
+        ("LoraLayer", "lucid.peft.tuners.lora._layer", "LoraLayer"),
+        ("_Residual", "lucid.peft.tuners.lora._layer", "_Residual"),
+    ),
     "lucid.quantization._fake_quantize": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.quantization._functional": (("QDtype", "lucid.quantization._qscheme", "QDtype"),),
     "lucid.quantization._qgemm": (("Tensor", "lucid._tensor.tensor", "Tensor"),),

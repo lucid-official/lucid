@@ -28,17 +28,11 @@ from typing import ClassVar, Final, Self, override
 
 _CONFIG_NAME: Final = "adapter_config.json"
 
-#: Initialisations the reference offers that need machinery v1 lacks
-#: (an SVD, a calibration pass, a quantized base).  Matched by prefix:
-#: ``pissa_niter_16`` is PiSSA too.
-_UNSUPPORTED_INITS: Final = ("pissa", "olora", "eva", "corda", "loftq", "orthogonal")
-
 #: Keys the reference writes, at their "off" value, for features v1 does
 #: not have.  Read off, they are dropped without a word; any other key that
 #: is off is dropped with a warning; a key that is on is refused.
 _INERT_KEYS: Final = frozenset(
     {
-        "lora_bias",
         "megatron_config",
         "loftq_config",
         "eva_config",
@@ -178,21 +172,6 @@ def _check_dropout(name: str, value: object) -> float:
     if not 0.0 <= p < 1.0:
         raise ValueError(f"`{name}` must lie in [0, 1), got {p}")
     return p
-
-
-def _check_init(name: str, value: object) -> bool | str:
-    """``True`` (Kaiming-uniform A), ``False`` (no special init) or ``"gaussian"``."""
-    if isinstance(value, bool):
-        return value
-    if not isinstance(value, str):
-        raise TypeError(f"`{name}` must be a bool or a str, got {value!r}")
-    if value.lower() == "gaussian":
-        return "gaussian"
-    if value.lower().startswith(_UNSUPPORTED_INITS):
-        raise NotImplementedError(
-            f"{name}={value!r} is not supported by lucid.peft v1 (True, False and 'gaussian' are)"
-        )
-    raise ValueError(f"Unknown initialization {name}={value!r}")
 
 
 def _check_auto_mapping(name: str, value: object) -> dict[str, str] | None:
@@ -460,7 +439,7 @@ class PeftConfig:
         The constructor cannot do this: a file from the reference carries
         keys v1 has no field for.  Such a key is accepted only at a value
         that turns its feature off — null, false or empty
-        (``"lora_bias": false``, ``"loftq_config": {}``) — and dropped (with
+        (``"loftq_config": {}``, ``"megatron_config": null``) — and dropped (with
         a warning if v1 does not know the key); at any other value it
         raises, as it would change what the adapter computes.  The
         ``peft_version`` provenance key is dropped.  Called on

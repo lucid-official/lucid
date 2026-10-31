@@ -23,7 +23,9 @@ class _ConvNd(_Factored[_Conv]):
     one convolution with the kernel :math:`B \circ A`, so with
     ``groups == 1`` the update merges into :math:`W` exactly; a grouped
     base works in the forward pass but cannot be merged (a rank-:math:`r`
-    update mixes channels across groups).
+    update mixes channels across groups, nor can DoRA, which needs that
+    kernel).  ``lora_bias`` gives ``lora_B`` a bias, merged into the
+    base bias.
     """
 
     #: The convolution class the factors are made of: the one this layer wraps.
@@ -80,11 +82,24 @@ class _ConvNd(_Factored[_Conv]):
                 self.out_features,
                 kernel_size=1,
                 groups=base.groups,
-                bias=False,
+                bias=place.bias,
                 device=place.device,
                 dtype=place.dtype,
             ),
         )
+
+    @override
+    def _output_vector(self, vector: Tensor) -> Tensor:
+        # Channels are axis 1 of a convolution's output.
+        return vector.reshape(1, -1, *([1] * (self.base_layer.weight.ndim - 2)))
+
+    @override
+    def _check_weight_norm(self) -> None:
+        if self.base_layer.groups > 1:
+            raise NotImplementedError(
+                "DoRA is not supported for a LoRA convolution with groups > 1: the update "
+                "mixes channels across groups, which one grouped kernel cannot hold"
+            )
 
     def _refuse_grouped_merge(self) -> None:
         if self.base_layer.groups > 1:
@@ -150,9 +165,11 @@ class Conv2d(_ConvNd, base_type=nn.Conv2d):
         The layer to adapt; kept as ``base_layer``, its parameters shared.
     adapter_name : str
         Name of the adapter, the key in ``lora_A`` / ``lora_B``.
-    r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora
+    r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora, lora_bias
         The adapter's hyper-parameters, as ``LoraLayer.update_layer`` takes
         them; ``r`` must be positive and divisible by the base's ``groups``.
+        ``init_lora_weights`` of ``"pissa"`` or ``"olora"`` is refused (the
+        kernel is not a dense matrix).
 
 
     Examples

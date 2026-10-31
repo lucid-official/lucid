@@ -109,6 +109,8 @@ class _LayerArguments(TypedDict):
     lora_dropout: float
     init_lora_weights: bool | str
     use_rslora: bool
+    use_dora: bool
+    lora_bias: bool
 
 
 def _layer_arguments(config: LoraConfig, key: str) -> _LayerArguments:
@@ -118,6 +120,8 @@ def _layer_arguments(config: LoraConfig, key: str) -> _LayerArguments:
         lora_dropout=config.lora_dropout,
         init_lora_weights=config.init_lora_weights,
         use_rslora=config.use_rslora,
+        use_dora=config.use_dora,
+        lora_bias=config.lora_bias,
     )
 
 
@@ -325,6 +329,16 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
             return functools.reduce(operator.or_, (t for t in targets if isinstance(t, set)))
         raise TypeError(f"Invalid type {type(targets[0])} found in target_modules")
 
+    def _refuse_variants(self, adapters: list[str]) -> None:
+        """Raise ``NotImplementedError`` if a source adapter is DoRA or has ``lora_bias``: their extra state has no weighted sum."""
+        for name in adapters:
+            config = self._lora_config(name)
+            if config.use_dora or config.lora_bias:
+                raise NotImplementedError(
+                    f"add_weighted_adapter does not combine DoRA or lora_bias adapters: "
+                    f"{name!r} has use_dora={config.use_dora}, lora_bias={config.lora_bias}"
+                )
+
     def _check_weighted_adapters(
         self, adapters: list[str], weights: list[float], majority_sign_method: str
     ) -> None:
@@ -342,6 +356,7 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
             raise ValueError(
                 f"majority_sign_method must be 'total' or 'frequency', got {majority_sign_method!r}"
             )
+        self._refuse_variants(adapters)
         for key, layer in _tuner_layers(self.model):
             held = [name for name in adapters if name in layer._adapter_names()]
             if held and not isinstance(layer, Linear):
@@ -366,6 +381,8 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
             lora_alpha=rank,
             # alpha = r only makes the scale 1 without rank stabilisation.
             use_rslora=False,
+            # Filled from the sources right after: nothing may touch the base weights first.
+            init_lora_weights=True,
             target_modules=self._weighted_target_modules(adapters),
             alpha_pattern={},
             rank_pattern={},
@@ -442,7 +459,8 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
             needs one rank; two train one ``modules_to_save`` module), or
             ``combination_type`` is unknown.
         NotImplementedError
-            ``combination_type`` is in the TIES / DARE family.
+            ``combination_type`` is in the TIES / DARE family, or a source is
+            a DoRA or ``lora_bias`` adapter.
 
         Examples
         --------

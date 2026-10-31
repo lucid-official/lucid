@@ -81,9 +81,39 @@ class _WeightSpace[Out](LoraLayer, _ForwardsAttributes):
     def _merge_targets(self) -> dict[str, Parameter]:
         return {self._path(name): param for name, param in self._weights().items()}
 
-    @override
     def _deltas(self, adapter: str) -> dict[str, Tensor]:
+        """The update to each merge target ``adapter`` makes, keyed as ``_merge_targets``."""
         return {self._path(name): self._delta_for(name, adapter) for name in self._weights()}
+
+    def _shifted(self, adapter: str, sign: float) -> dict[str, Tensor]:
+        """Each merge target plus ``sign`` times ``adapter``'s update, in the target's dtype.
+
+        Summed in the wider dtype, so a bfloat16 weight is rounded once.
+        """
+        deltas = self._deltas(adapter)
+        shifted: dict[str, Tensor] = {}
+        for key, param in self._merge_targets().items():
+            value = param + deltas[key] * sign
+            shifted[key] = value if value.dtype == param.dtype else value.to(param.dtype)
+        return shifted
+
+    @override
+    def _merged_values(self, adapter: str) -> dict[str, Tensor]:
+        return self._shifted(adapter, 1.0)
+
+    @override
+    def _fold(self, adapter: str) -> None:
+        targets = self._merge_targets()
+        for key, value in self._shifted(adapter, 1.0).items():
+            targets[key].copy_(value)
+
+    @override
+    def _unfold(self) -> None:
+        targets = self._merge_targets()
+        while self.merged_adapters:
+            adapter = self.merged_adapters.pop()
+            for key, value in self._shifted(adapter, -1.0).items():
+                targets[key].copy_(value)
 
     @override
     def forward(self, *args: object, **kwargs: object) -> Out:

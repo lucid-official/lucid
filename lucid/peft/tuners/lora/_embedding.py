@@ -9,8 +9,8 @@ import lucid.nn.init as init
 from lucid._tensor.tensor import Tensor
 from lucid.nn.functional import embedding
 from lucid.nn.parameter import Parameter
-from lucid.peft._config import _check_init
 from lucid.peft.tuners.lora._layer import _Factors, _Place, _Residual
+from lucid.peft.tuners.lora._variants import MAGNITUDE_TABLE
 
 
 class Embedding(_Residual, base_type=nn.Embedding):
@@ -23,7 +23,10 @@ class Embedding(_Residual, base_type=nn.Embedding):
     in a state dict, as in the reference).  The update looks the token up in
     :math:`A^\top` — with the base layer's ``padding_idx``, ``max_norm``,
     ``norm_type`` and ``scale_grad_by_freq`` — and projects it with
-    :math:`B^\top`.  Merging adds :math:`s\,(BA)^\top` to the table.
+    :math:`B^\top`.  Merging adds :math:`s\,(BA)^\top` to the table.  With
+    ``use_dora`` each embedding dimension carries a magnitude (a vector of
+    ``embedding_dim``, normed over the vocabulary); ``lora_bias`` is not
+    available on a lookup.
 
     The default initialisation is the reference's: :math:`A = 0` and
     :math:`B \sim \mathcal N(0, 1)`, so the update starts at zero;
@@ -36,15 +39,18 @@ class Embedding(_Residual, base_type=nn.Embedding):
         The layer to adapt; kept as ``base_layer``, its table shared.
     adapter_name : str
         Name of the adapter, the key in ``lora_embedding_A`` / ``lora_embedding_B``.
-    r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora
+    r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora, lora_bias
         The adapter's hyper-parameters, as ``LoraLayer.update_layer`` takes
         them; ``r`` must be positive.  ``lora_dropout`` has no activations to
-        act on in a lookup and is not applied (a nonzero value warns).
+        act on in a lookup and is not applied (a nonzero value warns).  Only
+        ``init_lora_weights`` of ``True``, ``False`` and ``"gaussian"`` apply
+        (the last has no meaning other than the first here).
 
     Raises
     ------
     ValueError
-        ``r`` is not positive.
+        ``r`` is not positive, ``lora_bias`` is set, or ``init_lora_weights``
+        factorises the weight (PiSSA, OLoRA).
 
     Examples
     --------
@@ -60,7 +66,7 @@ class Embedding(_Residual, base_type=nn.Embedding):
     True
     """
 
-    adapter_layer_names = ("lora_embedding_A", "lora_embedding_B")
+    adapter_layer_names = ("lora_embedding_A", "lora_embedding_B", MAGNITUDE_TABLE)
     base_layer: nn.Embedding
 
     @override
@@ -96,24 +102,10 @@ class Embedding(_Residual, base_type=nn.Embedding):
         return lora_a, lora_b
 
     @override
-    def reset_lora_parameters(self, adapter_name: str, init_lora_weights: bool | str) -> None:
-        r"""Initialise adapter ``adapter_name`` the way ``init_lora_weights`` asks.
-
-        ``True`` (and ``"gaussian"``, which has no other meaning here):
-        :math:`A = 0` and :math:`B \sim \mathcal N(0, 1)` — the way
-        ``nn.Embedding`` initialises its table — so the update starts at
-        zero.  ``False``: leave both normal.
-
-        Parameters
-        ----------
-        adapter_name : str
-            The adapter to initialise.
-        init_lora_weights : bool or str
-            ``True``, ``False`` or ``"gaussian"``.
-        """
-        if _check_init("init_lora_weights", init_lora_weights) is False:
-            return
-        lora_a, lora_b = self._pair(adapter_name)
+    def _reset_factors(self, adapter: str, gaussian: bool) -> None:
+        # ``True`` and ``"gaussian"`` alike: A = 0 and B ~ N(0, 1), the way ``nn.Embedding`` initialises.
+        del gaussian
+        lora_a, lora_b = self._pair(adapter)
         init.zeros_(lora_a)
         init.normal_(lora_b)
 
@@ -135,11 +127,24 @@ class Embedding(_Residual, base_type=nn.Embedding):
         return (lora_b @ lora_a).mT * self._specs[adapter].scaling
 
     @override
-    def _update(self, adapter: str, x: Tensor) -> Tensor:
+    def _dropped(self, adapter: str, x: Tensor) -> Tensor:
+        return x  # a lookup has no activations to drop
+
+    @override
+    def _applies_dropout(self, adapter: str) -> bool:
+        return False
+
+    @override
+    def _rows(self, weight: Tensor) -> Tensor:
+        # The table is (vocabulary, features); a feature is an output unit, so it is a row of the transpose.
+        return weight.mT
+
+    @override
+    def _lowrank(self, adapter: str, dropped: Tensor) -> Tensor:
         lora_a, lora_b = self._pair(adapter)
         base = self.base_layer
         after_a = embedding(
-            x,
+            dropped,
             lora_a.mT,
             padding_idx=base.padding_idx,
             max_norm=base.max_norm,

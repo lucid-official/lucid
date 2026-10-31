@@ -29,6 +29,7 @@ GOLDEN_CONFIG = {
     "layers_pattern": None,
     "layers_to_transform": None,
     "lora_alpha": 16,
+    "lora_bias": False,
     "lora_dropout": 0.05,
     "modules_to_save": None,
     "peft_type": "LORA",
@@ -53,7 +54,6 @@ REFERENCE_WRITTEN = {
     "fan_in_fan_out": True,
     "layer_replication": None,
     "loftq_config": {},
-    "lora_bias": False,
     "megatron_config": None,
     "megatron_core": "megatron.core",
     "peft_version": "0.17.1",
@@ -156,13 +156,10 @@ def test_a_bad_field_is_refused_with_its_class(
         LoraConfig(**fields)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize(
-    "fields",
-    [{"use_dora": True}, {"init_lora_weights": "pissa"}, {"init_lora_weights": "pissa_niter_4"}],
-)
-def test_what_v1_lacks_raises_not_implemented(fields: dict[str, object]) -> None:
-    with pytest.raises(NotImplementedError):
-        LoraConfig(**fields)  # type: ignore[arg-type]
+@pytest.mark.parametrize("init", ["eva", "corda", "loftq", "lora_ga", "orthogonal", "mica", "EVA"])
+def test_an_initialisation_the_library_lacks_raises_not_implemented(init: str) -> None:
+    with pytest.raises(NotImplementedError, match=init):
+        LoraConfig(init_lora_weights=init)
 
 
 class TestDict:
@@ -213,8 +210,7 @@ class TestDict:
         assert c.r == 8
 
     @pytest.mark.parametrize(
-        ("key", "value"),
-        [("lora_bias", True), ("loftq_config", {"loftq_bits": 4}), ("layer_replication", [[0, 4]])],
+        ("key", "value"), [("loftq_config", {"loftq_bits": 4}), ("layer_replication", [[0, 4]])]
     )
     def test_a_feature_v1_lacks_turned_on_is_refused(self, key: str, value: object) -> None:
         with pytest.raises(NotImplementedError, match=key):
@@ -225,9 +221,11 @@ class TestDict:
         with pytest.raises(NotImplementedError, match=peft_type):
             LoraConfig.from_dict({"peft_type": peft_type, "target_modules": ["k"]})
 
-    def test_use_dora_true_in_a_file_is_refused(self) -> None:
-        with pytest.raises(NotImplementedError, match="DoRA"):
-            LoraConfig.from_dict({**GOLDEN_CONFIG, "use_dora": True})
+    def test_dora_and_lora_bias_in_a_file_are_read(self) -> None:
+        dora = LoraConfig.from_dict({**GOLDEN_CONFIG, "use_dora": True})
+        assert dora.use_dora is True and dora.lora_bias is False
+        biased = LoraConfig.from_dict({**GOLDEN_CONFIG, "lora_bias": True})
+        assert biased.lora_bias is True and biased.use_dora is False
 
 
 class TestFile:

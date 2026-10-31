@@ -203,8 +203,8 @@ BAD_LAYERS = [
     ({"r": 2, "lora_dropout": 1.5}, ValueError, "lora_dropout"),
     ({"r": 2, "fan_in_fan_out": True}, ValueError, "fan_in_fan_out"),
     ({"r": 2, "is_target_conv_1d_layer": True}, ValueError, "Conv1D"),
-    ({"r": 2, "init_lora_weights": "olora"}, NotImplementedError, "olora"),
-    ({"r": 2, "use_dora": True}, NotImplementedError, "DoRA"),
+    ({"r": 2, "init_lora_weights": "eva"}, NotImplementedError, "eva"),
+    ({"r": 7, "init_lora_weights": "olora"}, ValueError, "min"),
     ({"r": 2, "lora_alpha": "x"}, TypeError, "lora_alpha"),
 ]
 

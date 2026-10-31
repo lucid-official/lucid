@@ -48,11 +48,13 @@ class MultiheadAttention(
         The attention to adapt; kept as ``base_layer``, its parameters shared.
     adapter_name : str
         Name of the adapter, the key in every factor table.
-    r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora
+    r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora, lora_bias
         The adapter's hyper-parameters, as ``LoraLayer.update_layer`` takes
         them; ``r`` must be positive.  ``lora_dropout`` is accepted but the
         update is folded into the weights, so there is nothing to drop
-        (a nonzero value warns).
+        (a nonzero value warns).  ``use_dora`` and ``lora_bias`` are refused
+        (the reference does not support DoRA here either), as are the
+        initialisations that factorise a weight.
 
     Raises
     ------

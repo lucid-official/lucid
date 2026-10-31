@@ -2,14 +2,16 @@
 
 ``LoraLayer`` is the family root.  It keeps what every LoRA layer keeps per
 adapter (rank, alpha, scale, dropout, the factor tables), creates and
-initialises adapters (``update_layer``), and merges them into the base
-weights.  What differs between layer types is a handful of hooks: the
-shape of the factors (``_build_factors``), the update an adapter makes
-(``get_delta_weight`` and, for the layers that add it to the output,
-``_update``) and which base tensors a merge writes (``_merge_targets``).
-``_Residual`` is the layers that add the update to the base output
-(``Linear``, the convolutions, ``Embedding``); the ones that instead shift
-the base weights for the duration of its forward are in ``_weight_space``.
+initialises adapters (``update_layer``, with an ``_Init`` strategy for the
+initialisation), and merges them into the base weights.  What differs
+between layer types is a handful of hooks: the shape of the factors
+(``_build_factors``), the update an adapter makes (``get_delta_weight``
+and, for the layers that add it to the output, ``_lowrank``) and which base
+tensors a merge writes (``_merge_targets``).  ``_Residual`` is the layers
+that add the update to the base output (``Linear``, the convolutions,
+``Embedding``) and so can host a variant of the update (``_Variant``:
+plain LoRA or DoRA); the ones that instead shift the base weights for the
+duration of its forward are in ``_weight_space``.
 """
 
 import math
@@ -25,36 +27,44 @@ import lucid.nn.init as init
 from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike
 from lucid.nn.parameter import Parameter
-from lucid.peft._config import _check_dropout, _check_init, _check_number, _check_rank
+from lucid.peft._config import _check_dropout, _check_number, _check_rank
 from lucid.peft.tuners._base import _BaseTunerLayer, _check_adapter_name, _entry_parameters
+from lucid.peft.tuners.lora._inits import _check_init, _Init
+from lucid.peft.tuners.lora._variants import MAGNITUDE_TABLE, _Magnitude, _rows_view, _Variant
 
 _HALF: Final = (lucid.float16, lucid.bfloat16)
 
 
 class _AdapterSpec(NamedTuple):
-    """What a layer remembers of one adapter besides its modules: rank, alpha and scale.
+    """What a layer remembers of one adapter besides its modules: rank, alpha, scale, bias and variant.
 
     A tuple, so the scalar state ``lucid.compile`` keys a trace on includes
-    it: the scale is baked into the graph.
+    it: the scale, and which variant computes the update, are baked into the graph.
     """
 
     r: int
     lora_alpha: float
     scaling: float
+    lora_bias: bool = False
+    variant: str = "lora"
 
 
 type _Factors = tuple[nn.Module | Parameter, ...]
 
 
 class _Place(NamedTuple):
-    """Where and in what dtype an adapter's factors are allocated: the base tensor's, widened if half."""
+    """Where and in what dtype an adapter's factors are allocated: the base tensor's, widened if half.
+
+    ``bias`` is whether the adapter's second factor carries a bias (``lora_bias``).
+    """
 
     device: DeviceLike
     dtype: DTypeLike
+    bias: bool = False
 
-    def linear(self, n_in: int, n_out: int) -> nn.Linear:
-        """A bias-free ``nn.Linear`` here."""
-        return nn.Linear(n_in, n_out, bias=False, device=self.device, dtype=self.dtype)
+    def linear(self, n_in: int, n_out: int, *, bias: bool = False) -> nn.Linear:
+        """An ``nn.Linear`` here, bias-free unless ``bias``."""
+        return nn.Linear(n_in, n_out, bias=bias, device=self.device, dtype=self.dtype)
 
 
 def _enter(
@@ -73,6 +83,16 @@ def _enter(
         raise TypeError(f"{type(factor).__name__} is not an adapter factor")
 
 
+def _weight_of(factor: nn.Module | Parameter | None) -> Parameter:
+    """The weight of a table entry: a module's ``weight`` (its bias, if any, is not a factor), or the bare parameter."""
+    if isinstance(factor, Parameter):
+        return factor
+    weight = getattr(factor, "weight", None)
+    if isinstance(weight, Parameter):
+        return weight
+    raise TypeError(f"{type(factor).__name__} holds no weight to use as an adapter factor")
+
+
 class LoraLayer(_BaseTunerLayer):
     r"""Adapter bookkeeping shared by the LoRA layers.
 
@@ -80,16 +100,17 @@ class LoraLayer(_BaseTunerLayer):
     parameters stay the same ``Parameter`` objects (an optimizer, a tied
     head and Core ML's identity-keyed weight sharing all keep seeing
     them) — and, per adapter name, the rank ``r``, ``lora_alpha``,
-    ``scaling`` and the factor tables (``lora_A`` / ``lora_B`` and the
-    ``lora_dropout`` modules in ``ModuleDict``\ s; ``lora_embedding_A`` /
-    ``lora_embedding_B`` in ``ParameterDict``\ s for an embedding), so a
-    state dict reads ``....lora_A.default.weight`` as the reference's
+    ``scaling``, ``lora_bias`` and ``use_dora`` and the factor tables
+    (``lora_A`` / ``lora_B`` and the ``lora_dropout`` modules in
+    ``ModuleDict``\ s; ``lora_embedding_A`` / ``lora_embedding_B`` in
+    ``ParameterDict``\ s for an embedding; DoRA's ``lora_magnitude_vector``),
+    so a state dict reads ``....lora_A.default.weight`` as the reference's
     does.  A layer holds any number of adapters, one entry per name in
-    those tables and in ``_specs`` (rank, alpha and scale, read as the
-    ``r``, ``lora_alpha`` and ``scaling`` mappings), and the forward pass
-    applies the ones named in ``active_adapter`` that it holds.  Merging
-    folds an update into the base weights in place; each LoRA layer type
-    supplies the update (``get_delta_weight``) and the forward pass.
+    those tables and in ``_specs`` (read as the ``r``, ``lora_alpha``,
+    ``scaling``, ``lora_bias`` and ``use_dora`` mappings), and the forward
+    pass applies the ones named in ``active_adapter`` that it holds.
+    Merging folds an update into the base weights in place; each LoRA layer
+    type supplies the update (``get_delta_weight``) and the forward pass.
 
     What the forward pass branches on — ``active_adapter``,
     ``disable_adapters``, ``merged`` — are plain public attributes, not
@@ -106,7 +127,7 @@ class LoraLayer(_BaseTunerLayer):
         The layer to adapt.
     adapter_name : str
         Name of the adapter created at once (``update_layer``).
-    r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora
+    r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora, lora_bias
         The adapter's hyper-parameters, as ``update_layer`` takes them.
 
     Raises
@@ -118,6 +139,14 @@ class LoraLayer(_BaseTunerLayer):
     """
 
     adapter_layer_names: ClassVar[tuple[str, ...]] = ("lora_A", "lora_B")
+    #: The variants of the update (``_Variant`` names) this layer type can host.
+    _variant_names: ClassVar[frozenset[str]] = frozenset({"lora"})
+    #: Tables a variant keeps state in (a subset of ``adapter_layer_names``, not factor tables).
+    _variant_tables: ClassVar[tuple[str, ...]] = ()
+    #: Whether the base weight is a dense ``(out, in)`` matrix an initialisation may factorise.
+    _dense_weight: ClassVar[bool] = False
+    #: Whether the second factor may carry a bias (``lora_bias``).
+    _lora_bias_ok: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -129,13 +158,24 @@ class LoraLayer(_BaseTunerLayer):
         init_lora_weights: bool | str = True,
         use_rslora: bool = False,
         use_dora: bool = False,
+        *,
+        lora_bias: bool = False,
     ) -> None:
         super().__init__(base_layer)
         self._specs: dict[str, _AdapterSpec] = {}
         self.lora_dropout: nn.ModuleDict[nn.Dropout | nn.Identity] = nn.ModuleDict()
         self._setup()
+        for table in self._variant_tables:
+            setattr(self, table, nn.ModuleDict())
         self.update_layer(
-            adapter_name, r, lora_alpha, lora_dropout, init_lora_weights, use_rslora, use_dora
+            adapter_name,
+            r,
+            lora_alpha,
+            lora_dropout,
+            init_lora_weights,
+            use_rslora,
+            use_dora,
+            lora_bias=lora_bias,
         )
 
     # ── what a layer type supplies ────────────────────────────────────────
@@ -156,24 +196,42 @@ class LoraLayer(_BaseTunerLayer):
 
     @abstractmethod
     def _build_factors(self, r: int, place: _Place) -> _Factors:
-        """One adapter's new factors, one per table of ``adapter_layer_names``, in that order."""
+        """One adapter's new factors, one per factor table (``adapter_layer_names`` less the variant tables), in order."""
+
+    def _adapter_built(self, adapter: str) -> None:
+        """Called once ``adapter``'s factors are initialised; a layer that keeps variant state creates it here."""
 
     @abstractmethod
-    def _deltas(self, adapter: str) -> dict[str, Tensor]:
-        """The update to each base tensor a merge writes, keyed as ``_merge_targets``."""
+    def _merged_values(self, adapter: str) -> dict[str, Tensor]:
+        """Each merge target as it would read with ``adapter`` folded in now, in the target's dtype."""
+
+    @abstractmethod
+    def _fold(self, adapter: str) -> None:
+        """Write ``adapter`` into the merge targets, in place."""
+
+    @abstractmethod
+    def _unfold(self) -> None:
+        """Take every merged adapter back out of the merge targets, in place."""
+
+    def _factor_tables(self) -> list[nn.ModuleDict[nn.Module] | nn.ParameterDict]:
+        """The factor tables (``adapter_layer_names`` less the variant tables), in order."""
+        return [
+            table
+            for name in self.adapter_layer_names
+            if name not in self._variant_tables
+            and isinstance(table := getattr(self, name), (nn.ModuleDict, nn.ParameterDict))
+        ]
 
     def _factor_pairs(self, adapter: str) -> list[tuple[Parameter, Parameter]]:
         r"""``(A, B)`` of each low-rank pair ``adapter`` holds: the update is :math:`s\,BA`.
 
-        The tables come in ``(A, B)`` pairs, each entry one weight.
+        The factor tables come in ``(A, B)`` pairs, each entry one weight.
         """
-        tables = self._tables()
-        pairs = []
-        for lora_a, lora_b in zip(tables[0::2], tables[1::2], strict=True):
-            (a,) = _entry_parameters(lora_a[adapter])
-            (b,) = _entry_parameters(lora_b[adapter])
-            pairs.append((a, b))
-        return pairs
+        tables = self._factor_tables()
+        return [
+            (_weight_of(lora_a[adapter]), _weight_of(lora_b[adapter]))
+            for lora_a, lora_b in zip(tables[0::2], tables[1::2], strict=True)
+        ]
 
     # ── per-adapter state ─────────────────────────────────────────────────
 
@@ -191,6 +249,18 @@ class LoraLayer(_BaseTunerLayer):
     def scaling(self) -> Mapping[str, float]:
         """The scale :math:`s` each adapter's update is multiplied by, by name (read-only)."""
         return MappingProxyType({name: spec.scaling for name, spec in self._specs.items()})
+
+    @property
+    def lora_bias(self) -> Mapping[str, bool]:
+        """Whether each adapter's second factor carries a bias, by name (read-only)."""
+        return MappingProxyType({name: spec.lora_bias for name, spec in self._specs.items()})
+
+    @property
+    def use_dora(self) -> Mapping[str, bool]:
+        """Whether each adapter is a DoRA adapter, by name (read-only)."""
+        return MappingProxyType(
+            {name: spec.variant == "dora" for name, spec in self._specs.items()}
+        )
 
     @property
     def weight(self) -> Parameter:
@@ -242,6 +312,8 @@ class LoraLayer(_BaseTunerLayer):
         init_lora_weights: bool | str,
         use_rslora: bool,
         use_dora: bool = False,
+        *,
+        lora_bias: bool = False,
     ) -> None:
         r"""Create adapter ``adapter_name``: its factors, dropout and scale.
 
@@ -251,6 +323,9 @@ class LoraLayer(_BaseTunerLayer):
         from underflowing in training.  A layer that holds an adapter already
         keeps applying the adapters it applied: the new one is inactive until
         ``set_adapter`` names it.  A layer with none starts applying this one.
+
+        Everything the layer cannot do is refused before anything is
+        allocated or any base weight is touched.
 
         Parameters
         ----------
@@ -263,44 +338,80 @@ class LoraLayer(_BaseTunerLayer):
         lora_dropout : float
             Dropout on the update's input, in ``[0, 1)``.
         init_lora_weights : bool or str
-            ``True``, ``False`` or ``"gaussian"`` (see ``LoraConfig``).
+            ``True``, ``False``, ``"gaussian"``, ``"pissa"``,
+            ``"pissa_niter_<k>"`` or ``"olora"`` (see ``LoraConfig``).
+            PiSSA and OLoRA rewrite the base weight (the residual), in place.
         use_rslora : bool
             Scale by :math:`\alpha/\sqrt r` instead of :math:`\alpha/r`.
         use_dora : bool, default=False
-            DoRA; ``True`` raises ``NotImplementedError``.
+            Weight-decomposed update (DoRA): a magnitude vector per output
+            unit beside the factors.
+        lora_bias : bool, default=False
+            Give the second factor a bias.
 
         Raises
         ------
         NotImplementedError
-            ``use_dora=True``.
+            An initialisation lucid.peft does not have.
         ValueError
-            The layer already holds an adapter of this name, or the rank
-            does not fit the base layer.
+            The layer already holds an adapter of this name, the rank does
+            not fit the base layer, or the layer type cannot host the
+            variant, the bias or the initialisation asked for.
         """
         adapter_name = _check_adapter_name(adapter_name)
         r = _check_rank("r", r)
         lora_alpha = _check_number("lora_alpha", lora_alpha)
-        init_lora_weights = _check_init("init_lora_weights", init_lora_weights)
+        init_strategy = _Init.of(_check_init("init_lora_weights", init_lora_weights))
         p = _check_dropout("lora_dropout", lora_dropout)
-        if use_dora:
-            raise NotImplementedError("use_dora=True: DoRA is not implemented in lucid.peft v1")
+        variant = _Variant.requested(use_dora=use_dora)
         if adapter_name in self._specs:
             raise ValueError(f"Adapter with name '{adapter_name}' already exists.")
+        variant.check(self)
+        self._check_lora_bias(lora_bias)
+        init_strategy.check(self, r)
         self._check_rank_fits(r)
         self._check_dropout(p)
         anchor = self._anchor()
         dtype = lucid.float32 if anchor.dtype in _HALF else anchor.dtype
         # Built first, entered together: an allocation that fails leaves no half adapter.
-        factors = self._build_factors(r, _Place(anchor.device, dtype))
+        factors = self._build_factors(r, _Place(anchor.device, dtype, lora_bias))
         self._specs[adapter_name] = _AdapterSpec(
-            r, lora_alpha, lora_alpha / (math.sqrt(r) if use_rslora else r)
+            r, lora_alpha, lora_alpha / (math.sqrt(r) if use_rslora else r), lora_bias, variant.name
         )
         self.lora_dropout[adapter_name] = nn.Dropout(p=p) if p > 0 else nn.Identity()
-        for table, factor in zip(self._tables(), factors, strict=True):
+        for table, factor in zip(self._factor_tables(), factors, strict=True):
             _enter(table, adapter_name, factor)
-        self.reset_lora_parameters(adapter_name, init_lora_weights)
+        init_strategy.apply(self, adapter_name)
+        self._adapter_built(adapter_name)
         if not self.active_adapters:
             self.active_adapter = adapter_name
+
+    def _check_lora_bias(self, lora_bias: bool) -> None:
+        """Refuse ``lora_bias`` on a layer type that cannot carry it; warn if a merge could not hold it."""
+        if not lora_bias:
+            return
+        if not self._lora_bias_ok:
+            raise ValueError(f"lora_bias=True is not supported for {type(self).__name__}.")
+        if self.bias is None:
+            warnings.warn(
+                f"`lora_bias=True` was passed but the targeted layer of type "
+                f"{type(self.get_base_layer()).__name__} has no bias. This means that merging "
+                "LoRA weights won't be possible.",
+                stacklevel=3,
+            )
+
+    def _reset_factors(self, adapter: str, gaussian: bool) -> None:
+        r"""The default initialisation of every factor pair of ``adapter``: :math:`B = 0`, :math:`A` random.
+
+        :math:`A` is Kaiming-uniform with ``a = sqrt(5)`` (what ``nn.Linear``
+        uses), or :math:`\mathcal N(0, 1/r^2)` when ``gaussian``.
+        """
+        for lora_a, lora_b in self._factor_pairs(adapter):
+            if gaussian:
+                init.normal_(lora_a, std=1 / self._specs[adapter].r)
+            else:
+                init.kaiming_uniform_(lora_a, a=math.sqrt(5))
+            init.zeros_(lora_b)
 
     def reset_lora_parameters(self, adapter_name: str, init_lora_weights: bool | str) -> None:
         r"""Initialise adapter ``adapter_name`` the way ``init_lora_weights`` asks.
@@ -309,23 +420,17 @@ class LoraLayer(_BaseTunerLayer):
         ``nn.Linear`` uses) and every :math:`B = 0`, so the update starts at
         zero.  ``"gaussian"``: :math:`A \sim \mathcal N(0, 1/r^2)`,
         :math:`B = 0`.  ``False``: leave both as the layers made them.
+        ``"pissa"``, ``"pissa_niter_<k>"`` and ``"olora"`` factorise the
+        base weight and write the residual back into it, in place.
 
         Parameters
         ----------
         adapter_name : str
             The adapter to initialise.
         init_lora_weights : bool or str
-            ``True``, ``False`` or ``"gaussian"``.
+            The initialisation, as ``update_layer`` takes it.
         """
-        init_lora_weights = _check_init("init_lora_weights", init_lora_weights)
-        if init_lora_weights is False:
-            return
-        for lora_a, lora_b in self._factor_pairs(adapter_name):
-            if init_lora_weights == "gaussian":
-                init.normal_(lora_a, std=1 / self._specs[adapter_name].r)
-            else:
-                init.kaiming_uniform_(lora_a, a=math.sqrt(5))
-            init.zeros_(lora_b)
+        _Init.of(_check_init("init_lora_weights", init_lora_weights)).apply(self, adapter_name)
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
@@ -337,24 +442,21 @@ class LoraLayer(_BaseTunerLayer):
 
     # ── merging ───────────────────────────────────────────────────────────
 
-    def _shifted(self, adapter: str, sign: float) -> dict[str, Tensor]:
-        """Each merge target plus ``sign`` times ``adapter``'s update, in the target's dtype.
-
-        Summed in the wider dtype, so a bfloat16 weight is rounded once.
-        """
-        deltas = self._deltas(adapter)
-        shifted: dict[str, Tensor] = {}
-        for key, param in self._merge_targets().items():
-            value = param + deltas[key] * sign
-            shifted[key] = value if value.dtype == param.dtype else value.to(param.dtype)
-        return shifted
+    @override
+    def _pending_merges(self, adapter_names: list[str] | None) -> list[str]:
+        pending = super()._pending_merges(adapter_names)
+        if self.bias is None and any(self._specs[name].lora_bias for name in pending):
+            raise RuntimeError(
+                "Impossible to merge LoRA with `lora_bias=True` because the base layer has no bias."
+            )
+        return pending
 
     @override
     def _check_finite_merge(self, adapter: str) -> None:
         with lucid.no_grad():
             finite = all(
                 bool(lucid.isfinite(value).all().item())
-                for value in self._shifted(adapter, 1.0).values()
+                for value in self._merged_values(adapter).values()
             )
         if not finite:
             raise ValueError(
@@ -370,7 +472,9 @@ class LoraLayer(_BaseTunerLayer):
         merged values.  That is also why a weight shared with another
         module must not be merged into; ``LoraModel.merge_adapter`` and
         ``merge_and_unload`` refuse it, as this layer alone cannot see the
-        rest of the model.
+        rest of the model.  A DoRA adapter folds in as the row-rescaled
+        weight :math:`m\,(W + sBA)/\lVert W + sBA\rVert`; an adapter with
+        ``lora_bias`` also adds its scaled bias to the base bias.
 
         Parameters
         ----------
@@ -386,7 +490,8 @@ class LoraLayer(_BaseTunerLayer):
             An adapter name this layer does not hold, or ``safe_merge``
             found a non-finite merged weight.
         RuntimeError
-            The adapter is disabled.
+            The adapter is disabled, or it has ``lora_bias`` and the base
+            layer no bias.
         NotImplementedError
             This layer's update cannot be written into its base weights.
         """
@@ -397,10 +502,8 @@ class LoraLayer(_BaseTunerLayer):
             for adapter in pending:
                 self._check_finite_merge(adapter)
         with lucid.no_grad():
-            targets = self._merge_targets()
             for adapter in pending:
-                for key, value in self._shifted(adapter, 1.0).items():
-                    targets[key].copy_(value)
+                self._fold(adapter)
                 self.merged_adapters.append(adapter)
                 self.merged = True
 
@@ -415,33 +518,152 @@ class LoraLayer(_BaseTunerLayer):
             warnings.warn("Already unmerged. Nothing to do.", stacklevel=2)
             return
         with lucid.no_grad():
-            targets = self._merge_targets()
-            while self.merged_adapters:
-                adapter = self.merged_adapters.pop()
-                for key, value in self._shifted(adapter, -1.0).items():
-                    targets[key].copy_(value)
-            self.merged = False
+            self._unfold()
+        self.merged_adapters.clear()
+        self.merged = False
+
+
+class _Plan(NamedTuple):
+    """What folding one adapter into the base does: the change of each merge target, and the DoRA row gain."""
+
+    shifts: dict[str, Tensor]
+    gain: Tensor | None
+
+
+_WEIGHT: Final = "base_layer.weight"
+_BIAS: Final = "base_layer.bias"
+
+
+def _added(param: Parameter, shift: Tensor) -> Tensor:
+    """``param + shift`` summed in the wider dtype and rounded once, in ``param``'s dtype."""
+    value = param + shift
+    return value if value.dtype == param.dtype else value.to(param.dtype)
 
 
 class _Residual(LoraLayer):
     r"""A LoRA layer whose update is added to the base layer's output: :math:`y = f(x) + \sum_a u_a(x)`.
 
-    A subclass supplies the update an adapter makes from the layer's input
-    (``_update``) and the same update as a change of the base weight
-    (``get_delta_weight``), which is what merging writes.
+    A subclass supplies the low-rank update from the layer's input
+    (``_lowrank``) and the same update as a change of the base weight
+    (``get_delta_weight``), which is what merging writes.  What an adapter
+    makes of that update — plain, or DoRA's magnitude-rescaled one — is its
+    variant's (``_Variant``): the forward pass and the merge delegate to it.
+
+    The hooks below are how a variant reads a layer without knowing its type:
+    the weight as one row per output unit (``_rows``), a per-unit vector
+    shaped to broadcast against the output (``_output_vector``) and the
+    output without its bias (``_without_bias``).
     """
 
+    _variant_names = frozenset({"lora", "dora"})
+    _variant_tables = (MAGNITUDE_TABLE,)
+    lora_magnitude_vector: nn.ModuleDict[_Magnitude]
+
     @abstractmethod
-    def _update(self, adapter: str, x: Tensor) -> Tensor:
-        """What ``adapter`` adds to the base output for the input ``x``."""
+    def _lowrank(self, adapter: str, dropped: Tensor) -> Tensor:
+        """The scaled low-rank update ``adapter`` makes from the (dropped-out) input."""
+
+    def _dropped(self, adapter: str, x: Tensor) -> Tensor:
+        """``x`` as the update sees it: through the adapter's dropout."""
+        dropped: Tensor = self.lora_dropout[adapter](x)
+        return dropped
+
+    def _applies_dropout(self, adapter: str) -> bool:
+        """Whether ``_dropped`` changes its input now (a dropout module, in training)."""
+        return self.training and not isinstance(self.lora_dropout[adapter], nn.Identity)
+
+    def _rows(self, weight: Tensor) -> Tensor:
+        """``weight`` (or an update shaped like it) with one row per output unit; its own inverse."""
+        return weight
+
+    def _output_vector(self, vector: Tensor) -> Tensor:
+        """A per-output-unit ``vector`` shaped to broadcast against this layer's output."""
+        return vector
+
+    def _without_bias(self, result: Tensor) -> Tensor:
+        """The base output ``result`` less its bias."""
+        bias = self.bias
+        return result if bias is None else result - self._output_vector(bias)
+
+    def _check_weight_norm(self) -> None:
+        """Raise if the per-unit weight norm DoRA needs cannot be formed for this base layer."""
+
+    def _bias_delta(self, adapter: str) -> Tensor | None:
+        """What merging ``adapter`` adds to the base bias, or ``None``."""
+        del adapter
+        return None
+
+    def _variant(self, adapter: str) -> _Variant:
+        return _Variant.named(self._specs[adapter].variant)
+
+    @override
+    def _adapter_built(self, adapter: str) -> None:
+        self._variant(adapter).attach(self, adapter)
+
+    def _original_rows(self, rows: Tensor) -> Tensor:
+        r"""``rows``, the weight now, with every merged adapter taken back out: the weight before any merge.
+
+        A merged weight is :math:`c\,W + \sum_a g_a\,\Delta_a` with
+        :math:`c = 1 + \sum_a (g_a - 1)` (:math:`g_a = 1` for a plain
+        adapter), so :math:`W` follows from the gains the merges
+        remembered.
+        """
+        original = rows
+        spread: Tensor | None = None
+        for adapter in reversed(self.merged_adapters):
+            delta = self._rows(self.get_delta_weight(adapter))
+            gain = self._variant(adapter).recall(self, adapter)
+            if gain is None:
+                original = original - delta
+                continue
+            original = original - _rows_view(gain, original) * delta
+            spread = gain - 1 if spread is None else spread + (gain - 1)
+        return original if spread is None else original / _rows_view(1 + spread, original)
+
+    def _plan(self, adapter: str) -> _Plan:
+        change, gain = self._variant(adapter).shift(
+            self, adapter, self._rows(self.weight), self._rows(self.get_delta_weight(adapter))
+        )
+        shifts = {_WEIGHT: self._rows(change)}
+        bias = self._bias_delta(adapter)
+        if bias is not None:
+            shifts[_BIAS] = bias
+        return _Plan(shifts, gain)
 
     @override
     def _merge_targets(self) -> dict[str, Parameter]:
-        return {"base_layer.weight": self.weight}
+        targets = {_WEIGHT: self.weight}
+        bias = self.bias
+        if bias is not None and any(spec.lora_bias for spec in self._specs.values()):
+            targets[_BIAS] = bias
+        return targets
 
     @override
-    def _deltas(self, adapter: str) -> dict[str, Tensor]:
-        return {"base_layer.weight": self.get_delta_weight(adapter)}
+    def _merged_values(self, adapter: str) -> dict[str, Tensor]:
+        targets = self._merge_targets()
+        return {
+            key: _added(targets[key], shift) for key, shift in self._plan(adapter).shifts.items()
+        }
+
+    @override
+    def _fold(self, adapter: str) -> None:
+        plan = self._plan(adapter)
+        targets = self._merge_targets()
+        for key, shift in plan.shifts.items():
+            targets[key].copy_(_added(targets[key], shift))
+        self._variant(adapter).remember(self, adapter, plan.gain)
+
+    @override
+    def _unfold(self) -> None:
+        targets = self._merge_targets()
+        weight = targets[_WEIGHT]
+        original = self._rows(self._original_rows(self._rows(weight)))
+        for adapter in self.merged_adapters:
+            bias = self._bias_delta(adapter)
+            if bias is not None:
+                targets[_BIAS].copy_(_added(targets[_BIAS], -bias))
+            self._variant(adapter).remember(self, adapter, None)
+        weight.copy_(original if original.dtype == weight.dtype else original.to(weight.dtype))
 
     @override
     def forward(self, x: Tensor) -> Tensor:
@@ -452,7 +674,7 @@ class _Residual(LoraLayer):
         for adapter in self.active_adapters:
             if adapter not in self._specs:
                 continue  # an adapter aimed at other layers: this one runs its base for it
-            out = out + self._update(adapter, x)
+            out = out + self._variant(adapter).contribution(self, adapter, x, result)
         return out if out.dtype == result.dtype else out.to(result.dtype)
 
 
@@ -460,19 +682,42 @@ class _Factored[Factor: nn.Module](_Residual):
     r"""A residual layer whose factors are two modules in a row: :math:`u(x) = s\,B(A(\mathrm{drop}(x)))`.
 
     ``lora_A`` and ``lora_B`` hold one ``Factor`` per adapter (an ``nn.Linear``,
-    a convolution); a subclass builds them and says how they merge.
+    a convolution); a subclass builds them and says how they merge.  The
+    second factor carries a bias when the adapter has ``lora_bias`` — scaled
+    with the rest of the update in the forward pass, and merged, scaled, into
+    the base bias.
     """
 
+    adapter_layer_names = ("lora_A", "lora_B", MAGNITUDE_TABLE)
+    _lora_bias_ok = True
     lora_A: nn.ModuleDict[Factor]
     lora_B: nn.ModuleDict[Factor]
 
     @override
-    def _update(self, adapter: str, x: Tensor) -> Tensor:
+    def _lowrank(self, adapter: str, dropped: Tensor) -> Tensor:
         lora_a = self.lora_A[adapter]
         dtype = _entry_parameters(lora_a)[0].dtype
-        dropped = self.lora_dropout[adapter](x if x.dtype == dtype else x.to(dtype))
-        update: Tensor = self.lora_B[adapter](lora_a(dropped))
+        update: Tensor = self.lora_B[adapter](
+            lora_a(dropped if dropped.dtype == dtype else dropped.to(dtype))
+        )
         return update * self._specs[adapter].scaling
+
+    def _second_bias(self, adapter: str) -> Parameter | None:
+        """The bias of ``adapter``'s second factor (``lora_bias``), or ``None``."""
+        bias = getattr(self.lora_B[adapter], "bias", None)
+        return bias if isinstance(bias, Parameter) else None
+
+    @override
+    def _reset_factors(self, adapter: str, gaussian: bool) -> None:
+        super()._reset_factors(adapter, gaussian)
+        bias = self._second_bias(adapter)
+        if bias is not None:
+            init.zeros_(bias)
+
+    @override
+    def _bias_delta(self, adapter: str) -> Tensor | None:
+        bias = self._second_bias(adapter)
+        return None if bias is None else bias * self._specs[adapter].scaling
 
 
 class Linear(_Factored[nn.Linear], base_type=nn.Linear):
@@ -503,17 +748,24 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
         Must be ``False``; kept so positional calls line up with the
         reference, whose fused-QKV ``Conv1D`` base v1 does not have.
     init_lora_weights : bool or str, default=True
-        See ``LoraConfig``.
+        See ``LoraConfig``; ``"pissa"`` and ``"olora"`` also rewrite the
+        base weight (the residual).
     use_rslora : bool, default=False
         Scale by :math:`\alpha/\sqrt r`.
     use_dora : bool, default=False
-        DoRA; ``True`` raises.
+        Weight-decomposed update (DoRA): a magnitude vector
+        (``lora_magnitude_vector``) beside the factors, so the layer computes
+        :math:`m\,(W + s\,BA)/\lVert W + s\,BA\rVert` row by row.
+    lora_bias : bool, default=False
+        Give ``lora_B`` a bias (``lora_B.<adapter>.bias``); merging folds it,
+        scaled, into the base bias.
 
     Raises
     ------
     ValueError
-        ``r`` is not positive, or ``fan_in_fan_out`` or
-        ``is_target_conv_1d_layer`` is ``True``.
+        ``r`` is not positive, ``fan_in_fan_out`` or
+        ``is_target_conv_1d_layer`` is ``True``, or ``init_lora_weights``
+        asks for more rank than the weight has.
 
     Examples
     --------
@@ -529,6 +781,7 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
     True
     """
 
+    _dense_weight = True
     base_layer: nn.Linear
 
     def __init__(
@@ -543,6 +796,8 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
         init_lora_weights: bool | str = True,
         use_rslora: bool = False,
         use_dora: bool = False,
+        *,
+        lora_bias: bool = False,
     ) -> None:
         if fan_in_fan_out:
             raise ValueError(
@@ -561,6 +816,7 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
             init_lora_weights,
             use_rslora,
             use_dora,
+            lora_bias=lora_bias,
         )
 
     @override
@@ -576,7 +832,10 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
 
     @override
     def _build_factors(self, r: int, place: _Place) -> _Factors:
-        return (place.linear(self.in_features, r), place.linear(r, self.out_features))
+        return (
+            place.linear(self.in_features, r),
+            place.linear(r, self.out_features, bias=place.bias),
+        )
 
     @override
     def get_delta_weight(self, adapter: str) -> Tensor:

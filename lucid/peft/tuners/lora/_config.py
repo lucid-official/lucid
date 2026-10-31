@@ -1,5 +1,6 @@
 """``LoraConfig``: the LoRA hyper-parameters on top of the shared targeting fields."""
 
+import warnings
 from dataclasses import dataclass, field
 from typing import ClassVar, Final, Literal, override
 
@@ -8,7 +9,6 @@ from lucid.peft._config import (
     _Check,
     _check_bool,
     _check_dropout,
-    _check_init,
     _check_number,
     _check_rank,
     _check_regex,
@@ -18,6 +18,7 @@ from lucid.peft._config import (
     _pattern_key_regex,
     _TargetedConfig,
 )
+from lucid.peft.tuners.lora._inits import _check_init
 
 _BIASES: Final[tuple[Literal["none", "all", "lora_only"], ...]] = ("none", "all", "lora_only")
 
@@ -93,18 +94,39 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
         only the biases of the adapted layers.
     use_rslora : bool, default=False
         Scale by :math:`\alpha / \sqrt{r}` (Kalajdzievski, 2023).
-    init_lora_weights : bool or "gaussian", default=True
+    init_lora_weights : bool or str, default=True
         ``True``: Kaiming-uniform :math:`A` (``a = \sqrt 5``) and zero
         :math:`B`, so the adapted model starts as the base.
         ``"gaussian"``: :math:`A \sim \mathcal N(0, 1/r^2)`, zero
         :math:`B`.  ``False``: both keep ``nn.Linear``'s initialisation
         (the update is non-zero from the start — for tests).
+        ``"pissa"`` (Meng et al., 2024) puts the weight's top-:math:`r`
+        singular components into :math:`BA` and the residual into the base
+        weight; ``"pissa_niter_<k>"`` does it with a randomised SVD of ``k``
+        power iterations.  ``"olora"`` (Büyükakyüz, 2024) puts the first
+        :math:`r` columns of a QR decomposition's :math:`Q` and rows of
+        :math:`R` there instead.  Both **rewrite the base weight in place**
+        (the adapted layer still starts as the original), so an adapter
+        trained from them is relative to that rewritten base; they apply to
+        ``nn.Linear`` targets only.  ``"eva"``, ``"corda"``, ``"loftq"`` and
+        the reference's other initialisations raise ``NotImplementedError``.
     rank_pattern : dict of str to int, optional
         Per-module rank overrides, keyed by name or regex suffix.
     alpha_pattern : dict of str to float, optional
         Per-module :math:`\alpha` overrides, keyed the same way.
     use_dora : bool, default=False
-        DoRA; not implemented in v1, ``True`` raises.
+        Weight-decomposed low-rank adaptation (Liu et al., 2024): a trainable
+        magnitude per output unit beside :math:`BA`, so the adapted weight
+        is :math:`m\,(W + sBA)/\lVert W + sBA\rVert` row by row.  Supported
+        on ``nn.Linear``, ``nn.Embedding`` and the convolutions (not grouped
+        ones); ``nn.MultiheadAttention`` and ``target_parameters`` refuse it,
+        as the reference does.  Costs a norm of the full weight per forward
+        pass; merge before inference.
+    lora_bias : bool, default=False
+        Give :math:`B` a bias, folded into the base bias on merge.  For
+        adapters extracted from a fully fine-tuned layer; needs
+        ``init_lora_weights`` of ``True`` or ``False`` and not ``use_dora``.
+        ``nn.Linear`` and convolutions only.
     target_parameters : list of str, optional
         Raw ``nn.Parameter``\ s to adapt, for a parameter that no layer
         reads through a module of its own (an attention's fused
@@ -122,7 +144,7 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
     ValueError
         A field is out of range or two fields conflict.
     NotImplementedError
-        ``use_dora=True`` or an initialisation v1 lacks.
+        An ``init_lora_weights`` the library lacks (``"eva"``, ``"loftq"`` …).
 
     Examples
     --------
@@ -132,6 +154,9 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
     (['q_proj', 'v_proj'], <PeftType.LORA: 'LORA'>)
     >>> LoraConfig.from_dict(config.to_dict()) == config
     True
+    >>> dora = LoraConfig(use_dora=True, init_lora_weights="PiSSA_niter_4")
+    >>> dora.use_dora, dora.init_lora_weights
+    (True, 'pissa_niter_4')
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {
@@ -146,6 +171,7 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
         "alpha_pattern": _keyed(_check_number),
         "use_dora": _check_bool,
         "target_parameters": _optional_strings,
+        "lora_bias": _check_bool,
     }
 
     r: int = 8
@@ -159,12 +185,33 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
     alpha_pattern: dict[str, float] = field(default_factory=dict)
     use_dora: bool = False
     target_parameters: list[str] | None = None
+    lora_bias: bool = False
 
     @override
     def _check_fields(self) -> None:
         super()._check_fields()
-        if self.use_dora:
-            raise NotImplementedError("use_dora=True: DoRA is not implemented in lucid.peft v1")
+        if self.lora_bias:
+            if self.init_lora_weights not in (True, False):
+                raise ValueError(
+                    "The argument lora_bias=True is only supported with init_lora_weights=True "
+                    f"or False, got init_lora_weights={self.init_lora_weights} instead."
+                )
+            if self.use_dora:
+                raise ValueError(
+                    "The argument lora_bias=True is not supported for DoRA, "
+                    "please pass use_dora=False"
+                )
+        factorising = self.init_lora_weights == "olora" or str(self.init_lora_weights).startswith(
+            "pissa"
+        )
+        if self.use_rslora and (self.rank_pattern or self.alpha_pattern) and factorising:
+            warnings.warn(
+                "Using Rank-Stabilized LoRA with rank_pattern/alpha_pattern and an "
+                "initialisation that rewrites the base weights (PiSSA / OLoRA) means the "
+                "initial base weights cannot be restored exactly afterwards; if you intend "
+                "to do that, do not use rslora with rank_pattern/alpha_pattern.",
+                stacklevel=2,
+            )
         for name, keys in (
             ("rank_pattern", self.rank_pattern),
             ("alpha_pattern", self.alpha_pattern),
