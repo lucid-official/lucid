@@ -103,16 +103,20 @@ _ADD_SUB_SIGNATURE = _BINARY_SIGNATURE.replace(
 )
 
 
-def _scale_by_alpha(a: _Impl, b: _Impl, alpha: Scalar) -> _Impl:
-    """Scale ``b`` by ``alpha`` for ``add`` / ``sub``, matching the reference's dtype rules."""
+def _scale_by_alpha(a: _Impl, b: _Impl, alpha: Scalar, name: str = "alpha") -> _Impl:
+    """Scale ``b`` by ``alpha`` for ``add`` / ``sub``, matching the reference's dtype rules.
+
+    ``a`` is the operand whose dtype decides what a scale may be; ``name`` is
+    how a refusal spells the scalar, since ``addmm`` has a ``beta`` too.
+    """
     alpha = _promotion.as_number(alpha)
     if isinstance(alpha, bool):
         if a.dtype != _C_engine.Bool:
-            raise RuntimeError("Boolean alpha only supported for Boolean results.")
+            raise RuntimeError(f"Boolean {name} only supported for Boolean results.")
         return b if alpha else _C_engine.zeros_like(b)
     if isinstance(alpha, float) and _promotion.is_integral(a.dtype):
         raise RuntimeError(
-            "For integral input tensors, argument alpha must not be a floating point number."
+            f"For integral input tensors, argument {name} must not be a floating point number."
         )
     if alpha == 1 or (a.dtype == _C_engine.Bool and alpha != 0):
         return b

@@ -3738,7 +3738,7 @@ class Tensor:
 
         return _diff(self, n=n, dim=dim, prepend=prepend, append=append)
 
-    def addmm(self, mat1: Tensor, mat2: Tensor, *, beta: float = 1.0, alpha: float = 1.0) -> Tensor:
+    def addmm(self, mat1: Tensor, mat2: Tensor, *, beta: float = 1, alpha: float = 1) -> Tensor:
         r"""Fused matrix multiply-add.
 
         Computes

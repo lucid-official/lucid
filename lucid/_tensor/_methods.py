@@ -845,7 +845,7 @@ def _make_bmm_inplace(name: str) -> Callable[..., Tensor]:
     op_name = name[:-1]
 
     def method(
-        self: Tensor, batch1: Tensor, batch2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
+        self: Tensor, batch1: Tensor, batch2: Tensor, *, beta: float = 1, alpha: float = 1
     ) -> Tensor:
         """Write the batched matrix-multiply accumulate into ``self`` in place."""
         import lucid
@@ -940,7 +940,7 @@ def _renorm_(self: Tensor, p: float, dim: int, maxnorm: float) -> Tensor:
 
 
 def _addmm_(
-    self: Tensor, mat1: Tensor, mat2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
+    self: Tensor, mat1: Tensor, mat2: Tensor, *, beta: float = 1, alpha: float = 1
 ) -> Tensor:
     """Write ``lucid.addmm(self, mat1, mat2, beta=beta, alpha=alpha)`` in place."""
     import lucid
@@ -954,9 +954,7 @@ def _addmm_(
     )
 
 
-def _addmv_(
-    self: Tensor, mat: Tensor, vec: Tensor, *, beta: float = 1.0, alpha: float = 1.0
-) -> Tensor:
+def _addmv_(self: Tensor, mat: Tensor, vec: Tensor, *, beta: float = 1, alpha: float = 1) -> Tensor:
     """Write ``lucid.addmv(self, mat, vec, beta=beta, alpha=alpha)`` in place."""
     import lucid
 
@@ -966,7 +964,7 @@ def _addmv_(
 
 
 def _addr_(
-    self: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
+    self: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1, alpha: float = 1
 ) -> Tensor:
     """Write ``lucid.addr(self, vec1, vec2, beta=beta, alpha=alpha)`` in place."""
     import lucid

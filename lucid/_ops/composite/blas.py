@@ -3,8 +3,10 @@
 from typing import TYPE_CHECKING
 
 import lucid
+from lucid import _contraction, _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
+from lucid._ops._adapters import _scale_by_alpha
 from lucid._ops._autocast import _amp_op, _autocast_entry, _autocast_suspended
 import lucid.linalg as _la
 
@@ -12,27 +14,66 @@ if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
 
 
+def _scaled(tensor: Tensor, factor: float, name: str) -> Tensor:
+    """``tensor * factor`` under the reference's rule for ``tensor``'s dtype.
+
+    An integral tensor takes an integral factor and keeps its dtype, so the
+    default ``beta=1`` / ``alpha=1`` of an integer ``addmm`` is the identity
+    instead of promoting the result to float.
+    """
+    impl = _unwrap(tensor)
+    return _wrap(_scale_by_alpha(impl, impl, factor, name))
+
+
+def _cast_scalar(dtype: _C_engine.Dtype, factor: float) -> float:
+    """``factor`` as the reference's GEMM-backed ops read it for an integer ``dtype``.
+
+    ``addmm``, ``addmv``, ``baddbmm``, ``addbmm`` and ``addcmul`` cast their
+    scalars to the tensor dtype (``beta=0.5`` on ``int32`` is ``0``), where
+    ``addr``, ``add`` and ``sub`` refuse a float for an integer tensor.
+    """
+    if isinstance(factor, float) and _promotion.is_integer(dtype):
+        return int(factor)
+    return factor
+
+
 def _scaled_add(
-    input: Tensor, beta: float, prod: Tensor, alpha: float, *, op: str | None = None
+    input: Tensor,
+    beta: float,
+    prod: Tensor,
+    alpha: float,
+    *,
+    op: str | None = None,
+    cast_scalars: bool = True,
 ) -> Tensor:
     """``beta * input + alpha * prod``, skipping ``input``'s values when ``beta == 0``."""
     if op is not None and input.dtype != prod.dtype:
         raise _C_engine.DtypeMismatch(
             f"DtypeMismatch ({op}): expected {input.dtype._name}, got {prod.dtype._name}"
         )
+    if cast_scalars:
+        beta = _cast_scalar(_unwrap(input).dtype, beta)
+        alpha = _cast_scalar(_unwrap(prod).dtype, alpha)
+    scaled_input = _scaled(input, beta, "beta")
+    scaled_prod = _scaled(prod, alpha, "alpha")
     if beta == 0:
         acc = (
             lucid.where(lucid.zeros_like(input, dtype=lucid.bool_), input, 0)
             if input.requires_grad
             else lucid.zeros_like(input)
         )
-        return acc + prod * alpha
-    return input * beta + prod * alpha
+        return acc + scaled_prod
+    return scaled_input + scaled_prod
+
+
+def _contract(op: str, operand: Tensor) -> None:
+    """Refuse an operand a contraction cannot take (bool)."""
+    _contraction.require_summable(_unwrap(operand).dtype, op)
 
 
 @_amp_op("addmm")
 def addmm(
-    input: Tensor, mat1: Tensor, mat2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
+    input: Tensor, mat1: Tensor, mat2: Tensor, *, beta: float = 1, alpha: float = 1
 ) -> Tensor:
     r"""General matrix multiply with a scaled accumulator (GEMM).
 
@@ -48,10 +89,10 @@ def addmm(
         Left matrix of shape ``(M, K)``.
     mat2 : Tensor
         Right matrix of shape ``(K, N)``.
-    beta : float, optional
-        Scalar multiplier on ``input``. Defaults to ``1.0``.
-    alpha : float, optional
-        Scalar multiplier on ``mat1 @ mat2``. Defaults to ``1.0``.
+    beta : int or float, optional
+        Scalar multiplier on ``input``. Defaults to ``1``.
+    alpha : int or float, optional
+        Scalar multiplier on ``mat1 @ mat2``. Defaults to ``1``.
 
     Returns
     -------
@@ -69,7 +110,10 @@ def addmm(
 
     The inner dimension ``K`` must match between ``mat1`` and ``mat2``.
     Standard dtype promotion applies; the matmul itself uses Accelerate
-    (CPU stream) or MLX (GPU stream).
+    (CPU stream) or MLX (GPU stream).  An integer ``input`` keeps its dtype,
+    ``beta`` and ``alpha`` being cast to it; bool operands are refused, as
+    for every product summed over an axis (``addmv``, ``baddbmm``,
+    ``addbmm``, ``mv``, ``vdot``).
 
     Examples
     --------
@@ -80,12 +124,13 @@ def addmm(
     >>> lucid.addmm(M, a, b, beta=0.0, alpha=1.0)
     tensor([[19., 22.], [43., 50.]])
     """
+    _contract("addmm", mat1)
     return _scaled_add(input, beta, lucid.matmul(mat1, mat2), alpha, op="addmm")
 
 
 @_amp_op("addbmm")
 def addbmm(
-    input: Tensor, batch1: Tensor, batch2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
+    input: Tensor, batch1: Tensor, batch2: Tensor, *, beta: float = 1, alpha: float = 1
 ) -> Tensor:
     r"""Batched matmul with reduction over the batch axis.
 
@@ -102,10 +147,10 @@ def addbmm(
         Batched left matrices of shape ``(B, M, K)``.
     batch2 : Tensor
         Batched right matrices of shape ``(B, K, N)``.
-    beta : float, optional
-        Scalar multiplier on ``input``. Defaults to ``1.0``.
-    alpha : float, optional
-        Scalar multiplier on the batched matmul sum. Defaults to ``1.0``.
+    beta : int or float, optional
+        Scalar multiplier on ``input``. Defaults to ``1``.
+    alpha : int or float, optional
+        Scalar multiplier on the batched matmul sum. Defaults to ``1``.
 
     Returns
     -------
@@ -134,12 +179,15 @@ def addbmm(
     >>> lucid.addbmm(M, b1, b2)
     tensor([[12., 12.], [12., 12.]])
     """
-    return _scaled_add(input, beta, lucid.sum(lucid.bmm(batch1, batch2), 0), alpha, op="addbmm")
+    _contract("addbmm", batch1)
+    product = lucid.bmm(batch1, batch2)
+    summed = _wrap(_contraction.settle(_unwrap(lucid.sum(product, 0)), _unwrap(product).dtype))
+    return _scaled_add(input, beta, summed, alpha, op="addbmm")
 
 
 @_amp_op("baddbmm")
 def baddbmm(
-    input: Tensor, batch1: Tensor, batch2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
+    input: Tensor, batch1: Tensor, batch2: Tensor, *, beta: float = 1, alpha: float = 1
 ) -> Tensor:
     r"""Batched GEMM with a batched accumulator.
 
@@ -156,10 +204,10 @@ def baddbmm(
         Batched left matrices of shape ``(B, M, K)``.
     batch2 : Tensor
         Batched right matrices of shape ``(B, K, N)``.
-    beta : float, optional
-        Scalar multiplier on ``input``. Defaults to ``1.0``.
-    alpha : float, optional
-        Scalar multiplier on ``bmm(batch1, batch2)``. Defaults to ``1.0``.
+    beta : int or float, optional
+        Scalar multiplier on ``input``. Defaults to ``1``.
+    alpha : int or float, optional
+        Scalar multiplier on ``bmm(batch1, batch2)``. Defaults to ``1``.
 
     Returns
     -------
@@ -187,13 +235,12 @@ def baddbmm(
     >>> lucid.baddbmm(M, b1, b2).shape
     (3, 2, 2)
     """
+    _contract("baddbmm", batch1)
     return _scaled_add(input, beta, lucid.bmm(batch1, batch2), alpha, op="baddbmm")
 
 
 @_amp_op("addmv")
-def addmv(
-    input: Tensor, mat: Tensor, vec: Tensor, *, beta: float = 1.0, alpha: float = 1.0
-) -> Tensor:
+def addmv(input: Tensor, mat: Tensor, vec: Tensor, *, beta: float = 1, alpha: float = 1) -> Tensor:
     r"""Matrix-vector multiply with a scaled accumulator (BLAS-2 gemv).
 
     Computes
@@ -208,10 +255,10 @@ def addmv(
         Matrix of shape ``(M, N)``.
     vec : Tensor
         Vector of shape ``(N,)``.
-    beta : float, optional
-        Scalar multiplier on ``input``. Defaults to ``1.0``.
-    alpha : float, optional
-        Scalar multiplier on ``mat @ vec``. Defaults to ``1.0``.
+    beta : int or float, optional
+        Scalar multiplier on ``input``. Defaults to ``1``.
+    alpha : int or float, optional
+        Scalar multiplier on ``mat @ vec``. Defaults to ``1``.
 
     Returns
     -------
@@ -239,14 +286,13 @@ def addmv(
     >>> lucid.addmv(M, A, v)
     tensor([17., 39.])
     """
+    _contract("addmv", mat)
     mv_out = lucid.matmul(mat, vec.unsqueeze(-1)).squeeze(-1)
     return _scaled_add(input, beta, mv_out, alpha, op="addmv")
 
 
 @_amp_op("addr")
-def addr(
-    input: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1.0, alpha: float = 1.0
-) -> Tensor:
+def addr(input: Tensor, vec1: Tensor, vec2: Tensor, *, beta: float = 1, alpha: float = 1) -> Tensor:
     r"""Rank-1 update of a matrix by an outer product (BLAS-2 ger).
 
     Computes
@@ -262,10 +308,10 @@ def addr(
         First vector of length ``M``.
     vec2 : Tensor
         Second vector of length ``N``.
-    beta : float, optional
-        Scalar multiplier on ``input``. Defaults to ``1.0``.
-    alpha : float, optional
-        Scalar multiplier on the outer product. Defaults to ``1.0``.
+    beta : int or float, optional
+        Scalar multiplier on ``input``. Defaults to ``1``.
+    alpha : int or float, optional
+        Scalar multiplier on the outer product. Defaults to ``1``.
 
     Returns
     -------
@@ -283,6 +329,8 @@ def addr(
 
     The outer product is a rank-1 matrix, so this update can be used to
     build rank-1 corrections in optimisation algorithms (Broyden / BFGS).
+    An integer or bool ``input`` keeps its dtype; unlike ``addmm``, a float
+    ``beta`` or ``alpha`` for it is refused rather than cast.
 
     Examples
     --------
@@ -293,7 +341,7 @@ def addr(
     >>> lucid.addr(M, u, v)
     tensor([[3., 4., 5.], [6., 8., 10.]])
     """
-    return _scaled_add(input, beta, lucid.linalg.outer(vec1, vec2), alpha)
+    return _scaled_add(input, beta, lucid.linalg.outer(vec1, vec2), alpha, cast_scalars=False)
 
 
 def _can_mix_devices(a: Tensor, b: Tensor) -> bool:
@@ -404,13 +452,18 @@ def addcmul(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
     tensor([5., 7., 9.])
     """
     _check_ternary_devices("addcmul", input, tensor1, tensor2)
+    common = _promotion.result_type(*(_unwrap(t) for t in (input, tensor1, tensor2)))
+    if common == _C_engine.Bool:
+        raise _C_engine.NotImplementedError(
+            'addcmul: "addcmul" is not implemented for the Bool dtype'
+        )
     with _autocast_entry("addcmul", _unwrap(input), _unwrap(tensor1), _unwrap(tensor2)) as (
         inp,
         t1,
         t2,
     ):
         input, tensor1, tensor2 = _wrap(inp), _wrap(t1), _wrap(t2)
-        return input + (tensor1 * tensor2) * value
+        return input + (tensor1 * tensor2) * _cast_scalar(common, value)
 
 
 def addcdiv(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1) -> Tensor:
@@ -457,8 +510,6 @@ def addcdiv(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
     >>> lucid.addcdiv(a, t1, t2, value=0.5)
     tensor([2., 3.5])
     """
-    from lucid import _promotion
-
     _check_ternary_devices("addcdiv", input, tensor1, tensor2)
     if _promotion.is_integral(_unwrap(tensor1).dtype) and _promotion.is_integral(
         _unwrap(tensor2).dtype
@@ -515,6 +566,7 @@ def mv(input: Tensor, vec: Tensor) -> Tensor:
     >>> lucid.mv(M, v)
     tensor([17., 39.])
     """
+    _contract("mv", input)
     return lucid.matmul(input, vec.unsqueeze(-1)).squeeze(-1)
 
 
@@ -598,6 +650,7 @@ def vdot(input: Tensor, other: Tensor) -> Tensor:
     """
     # ``vdot`` has no row, so under autocast a mixed pair is refused as it is
     # outside, rather than taking ``dot``'s WIDEST Metal row inside.
+    _contract("vdot", input)
     with _autocast_suspended(_unwrap(input).device):
         if (
             input.is_complex()
