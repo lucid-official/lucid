@@ -1,4 +1,4 @@
-"""What every tuner built on the registry promises, held for (IA)^3, LoHa and LoKr alike.
+"""What every tuner built on the registry promises, held for every method built on it: (IA)^3, LoHa, LoKr, AdaLoRA, VeRA, OFT, BOFT, HRA, FourierFT and LN tuning alike.
 
 A method is a config, a tuner and layer classes registered by ``PeftType``;
 nothing above the registry names LoRA.  So the entry points, the multi-adapter
@@ -20,12 +20,22 @@ import pytest
 import lucid
 import lucid.nn as nn
 from lucid.peft import (
+    BOFTConfig,
+    BOFTModel,
+    FourierFTConfig,
+    FourierFTModel,
+    HRAConfig,
+    HRAModel,
     IA3Config,
     IA3Model,
+    LNTuningConfig,
+    LNTuningModel,
     LoHaConfig,
     LoHaModel,
     LoKrConfig,
     LoKrModel,
+    OFTConfig,
+    OFTModel,
     PeftConfig,
     PeftModel,
     PeftModelForCausalLM,
@@ -38,12 +48,18 @@ from lucid.peft import (
 from lucid.peft._config import _CONFIG_CLASSES
 from lucid.peft.tuners._base import _TUNERS, _BaseTunerLayer, _tuner_for
 from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraLayer, AdaLoraModel
+from lucid.peft.tuners.boft import BOFTLayer
+from lucid.peft.tuners.fourierft import FourierFTLayer
+from lucid.peft.tuners.hra import HRALayer
 from lucid.peft.tuners.ia3 import IA3Layer
+from lucid.peft.tuners.ln_tuning import LNTuningLayer
 from lucid.peft.tuners.loha import LoHaLayer
 from lucid.peft.tuners.lokr import LoKrLayer
+from lucid.peft.tuners.oft import OFTLayer
 from lucid.peft.tuners.vera import VeraConfig, VeraLayer, VeraModel
 from lucid.serialization import save_safetensors
 from lucid.test.audit._builders import BUILDERS
+from lucid.test.unit.peft._closed_forms import CLOSED_FORMS
 from lucid.test._fixtures.devices import metal_available
 
 
@@ -53,6 +69,12 @@ def _same(a: lucid.Tensor, b: lucid.Tensor) -> bool:
 
 def _close(a: lucid.Tensor, b: lucid.Tensor, atol: float = 1e-5) -> bool:
     return bool(lucid.allclose(a, b, atol=atol))
+
+
+def _layer_for_linear(method: _Method) -> type[_BaseTunerLayer]:
+    """The layer class that wraps an ``nn.Linear``: its own entry, or the wrap-any-module one (LN tuning)."""
+    table = method.layer_root._layer_types
+    return table[nn.Linear] if nn.Linear in table else table[nn.Module]
 
 
 def _mlp(device: str = "cpu") -> nn.Sequential:
@@ -71,6 +93,11 @@ class _Method:
     files: dict[str, tuple[int, ...]]
     #: Config fields of an adapter added beside the first (AdaLoRA: only one may train).
     added: dict[str, object] = field(default_factory=dict)
+    #: Whether the config can start the update away from the base (LN tuning starts as a copy).
+    random_start: bool = True
+    #: Whether the default start reproduces the base bit for bit (a product of reflections or of
+    #: butterfly factors is the identity up to rounding only).
+    exact_start: bool = True
 
     def make(
         self, targets: tuple[str, ...] = ("0", "2"), random: bool = True, **kw: object
@@ -131,6 +158,49 @@ def _vera(targets: tuple[str, ...], random: bool, **kw: object) -> VeraConfig:
         init_weights=not random,
         **kw,  # type: ignore[arg-type]
     )
+
+
+def _oft(targets: tuple[str, ...], random: bool, **kw: object) -> OFTConfig:
+    return OFTConfig(
+        oft_block_size=2,
+        use_cayley_neumann=False,
+        target_modules=list(targets),
+        init_weights=not random,
+        **kw,  # type: ignore[arg-type]
+    )
+
+
+def _boft(targets: tuple[str, ...], random: bool, **kw: object) -> BOFTConfig:
+    return BOFTConfig(
+        boft_block_size=2,
+        target_modules=list(targets),
+        init_weights=not random,
+        **kw,  # type: ignore[arg-type]
+    )
+
+
+def _hra(targets: tuple[str, ...], random: bool, **kw: object) -> HRAConfig:
+    return HRAConfig(
+        r=2,
+        target_modules=list(targets),
+        init_weights=not random,
+        **kw,  # type: ignore[arg-type]
+    )
+
+
+def _fourierft(targets: tuple[str, ...], random: bool, **kw: object) -> FourierFTConfig:
+    return FourierFTConfig(
+        n_frequency=5,
+        scaling=2.0,
+        target_modules=list(targets),
+        init_weights=not random,
+        **kw,  # type: ignore[arg-type]
+    )
+
+
+def _ln_tuning(targets: tuple[str, ...], random: bool, **kw: object) -> LNTuningConfig:
+    del random  # a copy of the base is where the method starts
+    return LNTuningConfig(target_modules=list(targets), **kw)  # type: ignore[arg-type]
 
 
 _PREFIX = "base_model.model."
@@ -204,6 +274,62 @@ _METHODS = [
             "base_model.vera_B": (8, 3),
         },
     ),
+    _Method(
+        "oft",
+        PeftType.OFT,
+        _oft,
+        OFTModel,
+        OFTLayer,
+        {f"{_PREFIX}0.oft_R.weight": (3, 1), f"{_PREFIX}2.oft_R.weight": (4, 1)},
+    ),
+    _Method(
+        "boft",
+        PeftType.BOFT,
+        _boft,
+        BOFTModel,
+        BOFTLayer,
+        {
+            f"{_PREFIX}0.boft_R": (1, 3, 2, 2),
+            f"{_PREFIX}0.boft_s": (8, 1),
+            f"{_PREFIX}2.boft_R": (1, 4, 2, 2),
+            f"{_PREFIX}2.boft_s": (4, 1),
+        },
+        exact_start=False,
+    ),
+    _Method(
+        "hra",
+        PeftType.HRA,
+        _hra,
+        HRAModel,
+        HRALayer,
+        {f"{_PREFIX}0.hra_u": (6, 2), f"{_PREFIX}2.hra_u": (8, 2)},
+        exact_start=False,
+    ),
+    _Method(
+        "fourierft",
+        PeftType.FOURIERFT,
+        _fourierft,
+        FourierFTModel,
+        FourierFTLayer,
+        {
+            f"{_PREFIX}0.fourierft_spectrum": (5,),
+            f"{_PREFIX}2.fourierft_spectrum": (5,),
+        },
+    ),
+    _Method(
+        "ln_tuning",
+        PeftType.LN_TUNING,
+        _ln_tuning,
+        LNTuningModel,
+        LNTuningLayer,
+        {
+            f"{_PREFIX}0.ln_tuning_layers.weight": (8, 6),
+            f"{_PREFIX}0.ln_tuning_layers.bias": (8,),
+            f"{_PREFIX}2.ln_tuning_layers.weight": (4, 8),
+            f"{_PREFIX}2.ln_tuning_layers.bias": (4,),
+        },
+        random_start=False,
+    ),
 ]
 
 
@@ -228,12 +354,12 @@ class TestRegistration:
         assert _CONFIG_CLASSES[method.peft_type] is type(method.make())
         assert method.tuner._layer_types is method.layer_root._layer_types
         assert method.layer_root._layer_types  # at least the linear layer
-        assert method.layer_root._layer_types[nn.Linear].__mro__[1] is method.layer_root
+        assert _layer_for_linear(method) is method.layer_root or _layer_for_linear(method).__mro__[1] is method.layer_root
 
     def test_each_method_has_a_table_of_its_own(self) -> None:
         tables = [m.layer_root._layer_types for m in _METHODS]
         assert len({id(t) for t in tables}) == len(tables)
-        assert all(nn.Linear in t for t in tables)
+        assert all(nn.Linear in t or nn.Module in t for t in tables)
 
     def test_the_entry_points_dispatch_on_the_config(self, method: _Method) -> None:
         config = method.make()
@@ -280,13 +406,15 @@ class TestForward:
         x = lucid.randn(5, 6, device=device)
         base = net(x)
         peft = get_peft_model(net, method.make(random=False))
-        assert _same(peft(x), base)
+        assert _same(peft(x), base) if method.exact_start else _close(peft(x), base, atol=1e-6)
 
     def test_a_random_start_changes_the_output(self, method: _Method, device: str) -> None:
         net = _mlp(device)
         x = lucid.randn(5, 6, device=device)
         base = net(x)
         peft = get_peft_model(net, method.make())
+        if not method.random_start:
+            _perturb(peft)
         assert not _close(peft(x), base, atol=1e-3)
         with peft.disable_adapter():
             assert _same(peft(x), base)
@@ -298,7 +426,13 @@ class TestForward:
         peft = get_peft_model(net, method.make())
         trainable = {n for n, p in peft.named_parameters() if p.requires_grad}
         assert trainable and all(
-            any(t in n for t in ("ia3_", "hada_", "lokr_", "lora_", "vera_lambda"))
+            any(
+                t in n
+                for t in (
+                    *("ia3_", "hada_", "lokr_", "lora_", "vera_lambda"),
+                    *("oft_", "boft_", "hra_", "fourierft_", "ln_tuning_"),
+                )
+            )
             for n in trainable
         )
         peft(lucid.randn(5, 6, device=device)).sum().backward()
@@ -642,6 +776,103 @@ _REFERENCE_CONFIGS: dict[str, dict[str, object]] = {
         "task_type": None,
         "use_effective_conv2d": False,
     },
+    "oft": {
+        "auto_mapping": None,
+        "base_model_name_or_path": "tiny",
+        "bias": "none",
+        "block_share": False,
+        "coft": False,
+        "eps": 6e-05,
+        "exclude_modules": None,
+        "fan_in_fan_out": False,
+        "inference_mode": True,
+        "init_weights": True,
+        "layers_pattern": None,
+        "layers_to_transform": None,
+        "module_dropout": 0.0,
+        "modules_to_save": None,
+        "num_cayley_neumann_terms": 5,
+        "oft_block_size": 2,
+        "peft_type": "OFT",
+        "peft_version": "0.21.2",
+        "r": 0,
+        "revision": None,
+        "target_modules": ["0", "2"],
+        "task_type": None,
+        "use_cayley_neumann": False,
+    },
+    "boft": {
+        "auto_mapping": None,
+        "base_model_name_or_path": "tiny",
+        "bias": "none",
+        "boft_block_num": 0,
+        "boft_block_size": 2,
+        "boft_dropout": 0.0,
+        "boft_n_butterfly_factor": 1,
+        "exclude_modules": None,
+        "fan_in_fan_out": False,
+        "inference_mode": True,
+        "init_weights": True,
+        "layers_pattern": None,
+        "layers_to_transform": None,
+        "modules_to_save": None,
+        "peft_type": "BOFT",
+        "peft_version": "0.21.2",
+        "revision": None,
+        "target_modules": ["0", "2"],
+        "task_type": None,
+    },
+    "hra": {
+        "apply_GS": False,
+        "auto_mapping": None,
+        "base_model_name_or_path": "tiny",
+        "bias": "none",
+        "exclude_modules": None,
+        "inference_mode": True,
+        "init_weights": True,
+        "layers_pattern": None,
+        "layers_to_transform": None,
+        "modules_to_save": None,
+        "peft_type": "HRA",
+        "peft_version": "0.21.2",
+        "r": 2,
+        "revision": None,
+        "target_modules": ["0", "2"],
+        "task_type": None,
+    },
+    "fourierft": {
+        "auto_mapping": None,
+        "base_model_name_or_path": "tiny",
+        "bias": "none",
+        "exclude_modules": None,
+        "fan_in_fan_out": False,
+        "inference_mode": True,
+        "init_weights": False,
+        "layers_pattern": None,
+        "layers_to_transform": None,
+        "modules_to_save": None,
+        "n_frequency": 5,
+        "n_frequency_pattern": {},
+        "peft_type": "FOURIERFT",
+        "peft_version": "0.21.2",
+        "random_loc_seed": 777,
+        "revision": None,
+        "scaling": 2.0,
+        "target_modules": ["0", "2"],
+        "task_type": None,
+    },
+    "ln_tuning": {
+        "auto_mapping": None,
+        "base_model_name_or_path": "tiny",
+        "exclude_modules": None,
+        "inference_mode": True,
+        "modules_to_save": None,
+        "peft_type": "LN_TUNING",
+        "peft_version": "0.21.2",
+        "revision": None,
+        "target_modules": ["0", "2"],
+        "task_type": None,
+    },
     "lokr": {
         "alpha": 4,
         "alpha_pattern": {},
@@ -683,6 +914,8 @@ def _reference_forward(
     method: _Method, t: dict[str, lucid.Tensor], x: lucid.Tensor
 ) -> lucid.Tensor:
     """``_mlp(x)`` with the adapter of tensors ``t`` applied the way the reference's formulas say."""
+    if method.name in CLOSED_FORMS:
+        return CLOSED_FORMS[method.name](t, x)
     net = _mlp()
     relu = nn.functional.relu
     if method.name == "ia3":

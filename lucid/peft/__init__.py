@@ -126,14 +126,19 @@ from lucid.peft.auto import (
     AutoPeftModelForTokenClassification,
 )
 from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraModel
+from lucid.peft.tuners.boft import BOFTConfig, BOFTModel
+from lucid.peft.tuners.fourierft import FourierFTConfig, FourierFTModel
+from lucid.peft.tuners.hra import HRAConfig, HRAModel
 from lucid.peft.tuners.ia3._config import IA3Config
 from lucid.peft.tuners.ia3._model import IA3Model
+from lucid.peft.tuners.ln_tuning import LNTuningConfig, LNTuningModel
 from lucid.peft.tuners.loha._config import LoHaConfig
 from lucid.peft.tuners.loha._model import LoHaModel
 from lucid.peft.tuners.lokr._config import LoKrConfig
 from lucid.peft.tuners.lokr._model import LoKrModel
 from lucid.peft.tuners.lora._config import LoraConfig
 from lucid.peft.tuners.lora._model import LoraModel
+from lucid.peft.tuners.oft import OFTConfig, OFTModel
 from lucid.peft.tuners.p_tuning import (
     PromptEncoder,
     PromptEncoderConfig,
@@ -163,20 +168,30 @@ __all__ = [
     "PromptTuningConfig",
     "PromptTuningInit",
     "AdaLoraConfig",
+    "BOFTConfig",
+    "FourierFTConfig",
+    "HRAConfig",
     "IA3Config",
+    "LNTuningConfig",
     "LoHaConfig",
     "LoKrConfig",
     "LoraConfig",
+    "OFTConfig",
     "VeraConfig",
     "PeftType",
     "TaskType",
     "AdaLoraModel",
     "TunerLayerStatus",
     "TunerModelStatus",
+    "BOFTModel",
+    "FourierFTModel",
+    "HRAModel",
     "IA3Model",
+    "LNTuningModel",
     "LoHaModel",
     "LoKrModel",
     "LoraModel",
+    "OFTModel",
     "VeraModel",
     "PeftModel",
     "PeftModelForCausalLM",

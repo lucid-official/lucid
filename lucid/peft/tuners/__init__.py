@@ -7,10 +7,15 @@ no layer).  The config and model-level classes are exported from ``lucid.peft``.
 
 from lucid.peft.tuners import (
     adalora,
+    boft,
+    fourierft,
+    hra,
     ia3,
+    ln_tuning,
     loha,
     lokr,
     lora,
+    oft,
     p_tuning,
     prefix_tuning,
     prompt_tuning,
@@ -19,10 +24,15 @@ from lucid.peft.tuners import (
 
 __all__ = [
     "adalora",
+    "boft",
+    "fourierft",
+    "hra",
     "ia3",
+    "ln_tuning",
     "loha",
     "lokr",
     "lora",
+    "oft",
     "p_tuning",
     "prefix_tuning",
     "prompt_tuning",

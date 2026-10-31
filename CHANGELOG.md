@@ -203,6 +203,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PackedSequence defaults, conversions, unpad/unpack
 - prefix tuning on bert and roformer via a K/V prefix
 - resolve tokenizers by name for TEXT prompt init
+- OFT, BOFT, HRA, FourierFT and LN tuning (LCD-770)
 
 ---
 

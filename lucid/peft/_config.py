@@ -167,6 +167,15 @@ def _check_rank(name: str, value: object) -> int:
     return value
 
 
+def _check_count(name: str, value: object) -> int:
+    """A count that may be zero (one of two alternatives is "unset"): a non-negative ``int`` (``bool`` excluded)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"`{name}` must be an int, got {value!r}")
+    if value < 0:
+        raise ValueError(f"`{name}` must be a non-negative integer, got {value}")
+    return value
+
+
 def _check_number(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"`{name}` must be a real number, got {value!r}")

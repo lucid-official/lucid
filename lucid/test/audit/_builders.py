@@ -24,22 +24,28 @@ import lucid.nn as nn
 import lucid.peft as peft
 from lucid.models import create_model
 from lucid.peft import (
+    BOFTConfig,
+    FourierFTConfig,
+    HRAConfig,
     IA3Config,
     IA3Model,
+    LNTuningConfig,
     LoHaConfig,
     LoHaModel,
     LoKrConfig,
     LoKrModel,
     LoraConfig,
     LoraModel,
+    OFTConfig,
     PeftConfig,
     PeftModel,
+    PeftType,
     PrefixEncoder,
     PromptEmbedding,
     PromptEncoder,
 )
 from lucid.peft.tuners import lora
-from lucid.peft.tuners._base import _BaseTunerLayer
+from lucid.peft.tuners._base import _TUNERS, _BaseTuner, _BaseTunerLayer
 from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraLayer, AdaLoraModel
 from lucid.peft.tuners.ia3 import IA3Layer
 from lucid.peft.tuners.loha import LoHaLayer
@@ -97,7 +103,29 @@ _BASES: dict[type[nn.Module], Callable[[], nn.Module]] = {
     nn.ConvTranspose3d: lambda: nn.ConvTranspose3d(2, 3, 3),
     nn.Embedding: lambda: nn.Embedding(5, 4),
     nn.MultiheadAttention: lambda: nn.MultiheadAttention(4, 2),
+    # A layer that wraps any module (LN tuning) is built on a normalisation layer.
+    nn.Module: lambda: nn.LayerNorm(4),
 }
+
+#: A small config of each method that is built from ``(module, adapter, config)`` alone, by its
+#: ``PeftType``: it adapts the audit's two-linear model at ``0`` and ``2``, and fits any base ``_BASES`` holds.
+#: A new method of that shape adds its row here and nowhere else: its tuner's and its layers'
+#: builders follow from the registry below.
+_EXAMPLE_CONFIGS: dict[PeftType, Callable[[], PeftConfig]] = {
+    PeftType.OFT: lambda: OFTConfig(oft_block_size=2, target_modules=["0", "2"]),
+    PeftType.BOFT: lambda: BOFTConfig(boft_block_size=2, target_modules=["0", "2"]),
+    PeftType.HRA: lambda: HRAConfig(r=2, target_modules=["0", "2"]),
+    PeftType.FOURIERFT: lambda: FourierFTConfig(n_frequency=4, target_modules=["0", "2"]),
+    PeftType.LN_TUNING: lambda: LNTuningConfig(target_modules=["0", "2"]),
+}
+
+
+def _example_config(layer: type[_BaseTunerLayer]) -> Callable[[], PeftConfig] | None:
+    """The example config of the method whose layer family ``layer`` belongs to, if the table has one."""
+    for peft_type, tuner in _TUNERS.items():
+        if issubclass(tuner, _BaseTuner) and tuner._layer_types is layer._layer_types:
+            return _EXAMPLE_CONFIGS.get(peft_type)
+    return None
 
 #: The config a layer family takes as its third argument, where its constructor wants one.
 _LAYER_CONFIGS: dict[type[_BaseTunerLayer], Callable[[], PeftConfig]] = {
@@ -129,7 +157,9 @@ def _layer_builder(base: type[nn.Module], layer: type[_BaseTunerLayer]) -> Calla
     # A layer taking ``**kwargs`` (lora.MultiheadAttention) forwards the rank to its base class.
     if "r" not in keywords and any(p.kind is p.VAR_KEYWORD for p in parameters.values()):
         keywords["r"] = 2
-    make_config = next((m for root, m in _LAYER_CONFIGS.items() if issubclass(layer, root)), None)
+    make_config = next(
+        (m for root, m in _LAYER_CONFIGS.items() if issubclass(layer, root)), _example_config(layer)
+    )
     wants_config = "config" in parameters and make_config is not None
 
     def build() -> Any:
@@ -189,6 +219,15 @@ BUILDERS: dict[type, Callable[[], Any]] = {
 BUILDERS.update({layer: _layer_builder(base, layer) for base, layer in _layer_types()})
 # The LyCORIS family roots are concrete (a kind is found from the module they wrap).
 BUILDERS.update({root: _layer_builder(nn.Linear, root) for root in (LoHaLayer, LoKrLayer)})
+
+# Every tuner whose method has an example config is built on the audit's model with it.
+BUILDERS.update(
+    {
+        tuner: (lambda tuner=tuner, make=_EXAMPLE_CONFIGS[peft_type]: tuner(_base_model(), make()))
+        for peft_type, tuner in _TUNERS.items()
+        if issubclass(tuner, _BaseTuner) and peft_type in _EXAMPLE_CONFIGS
+    }
+)
 
 # Every task wrapper ``get_peft_model`` can return takes the same
 # ``(model, config)`` pair as ``PeftModel``, so each public subclass is
