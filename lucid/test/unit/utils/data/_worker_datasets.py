@@ -174,3 +174,19 @@ class Stream(IterableDataset):
             yield from range(self.n)
         else:
             yield from range(info.id, self.n, info.num_workers)
+
+
+class FirstSlow(Dataset):
+    """``dataset[i] == i``, except that sample 0 takes ``delay`` seconds."""
+
+    def __init__(self, n: int, delay: float) -> None:
+        self.n = n
+        self.delay = delay
+
+    def __len__(self) -> int:
+        return self.n
+
+    def __getitem__(self, index: int) -> int:
+        if index == 0:
+            time.sleep(self.delay)
+        return index

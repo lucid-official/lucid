@@ -326,6 +326,26 @@ class SubsetRandomSampler(Sampler):
         return len(self.indices)
 
 
+def _weight_values(weights: Sequence[float] | Tensor) -> list[float]:
+    """``weights`` as a flat list of floats — refusing anything but a 1-D sequence.
+
+    A 2-d tensor read as its flattening would sample indices into a dataset
+    that has ``rows`` samples, not ``rows * cols``; the shape is the caller's
+    to fix.
+    """
+    if isinstance(weights, Tensor):
+        if weights.ndim != 1:
+            raise ValueError(
+                "weights should be a 1d sequence but given weights have shape "
+                f"{tuple(weights.shape)}"
+            )
+        return [float(w) for w in cast(list[float], weights.tolist())]
+    values = list(weights)
+    if any(isinstance(w, (list, tuple, Tensor)) for w in values):
+        raise ValueError("weights should be a 1d sequence but given weights are nested")
+    return [float(w) for w in values]
+
+
 class WeightedRandomSampler(Sampler):
     r"""Yield indices drawn proportionally to user-supplied weights.
 
@@ -421,16 +441,12 @@ class WeightedRandomSampler(Sampler):
         TypeError
             If ``replacement`` is not a ``bool``.
         ValueError
-            If ``num_samples`` is not a positive integer, exceeds
-            ``len(weights)`` without replacement, or a weight is negative
+            If ``weights`` is not one-dimensional (a 2-D tensor, a list of
+            lists, a 0-d tensor), ``num_samples`` is not a positive integer,
+            exceeds ``len(weights)`` without replacement, or a weight is negative
             or not finite, or — with replacement — every weight is zero.
         """
-        values = (
-            cast(list[float], weights.reshape(-1).tolist())
-            if isinstance(weights, Tensor)
-            else weights
-        )
-        self.weights: list[float] = [float(w) for w in values]
+        self.weights: list[float] = _weight_values(weights)
         _check_positive_int("num_samples", num_samples)
         _check_bool("replacement", replacement)
         if not replacement and num_samples > len(self.weights):

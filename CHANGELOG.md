@@ -223,6 +223,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - stamp resolved qconfig on every module in prepare
 
+- close the utils.data parity leftovers (LCD-803)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

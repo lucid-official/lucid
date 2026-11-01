@@ -6,6 +6,8 @@ boundaries (external data ingest), so an ``np.ndarray`` input is
 expected, but ``import lucid.utils.data`` itself stays numpy-free.
 """
 
+import collections.abc
+import copy
 import itertools
 import multiprocessing as _mp
 import multiprocessing.queues as _mpq
@@ -17,7 +19,7 @@ import random
 import time
 import traceback
 from dataclasses import dataclass
-from typing import Callable, Iterator, Protocol, cast, final, override
+from typing import Callable, ClassVar, Iterator, Protocol, cast, final, override
 
 from lucid._tensor.tensor import Tensor
 from lucid._factories.converters import tensor as _tensor_fn
@@ -27,6 +29,7 @@ from lucid.utils.data._batched import collated_fetcher as _collated_fetcher
 from lucid.utils.data._batched import fetch_samples as _fetch_samples
 from lucid.utils.data.dataset import Dataset, IterableDataset
 from lucid.utils.data._rng import _as_generator, _draw_seed
+from lucid.utils.data._validate import _check_bool
 from lucid.utils.data._worker import WorkerInfo, _set_worker_info, get_worker_info
 from lucid.utils.data.sampler import Sampler, SequentialSampler, RandomSampler, BatchSampler
 
@@ -63,6 +66,18 @@ def _is_numpy_numeric(obj: object) -> bool:
         return False
     kind = getattr(getattr(obj, "dtype", None), "kind", None)
     return isinstance(kind, str) and kind in _NUMERIC_KINDS
+
+
+def _like[D: dict[object, object]](template: D, items: dict[object, object]) -> D:
+    """``items`` in the dict type of ``template`` — the one place that rule lives.
+
+    The template is cloned and updated rather than rebuilt, which keeps what
+    a subclass carries beyond its items (a ``defaultdict``'s factory) and
+    its key order.
+    """
+    clone = copy.copy(template)
+    clone.update(items)
+    return clone
 
 
 def default_convert(data: object) -> object:
@@ -115,7 +130,7 @@ def default_convert(data: object) -> object:
     if isinstance(data, (str, bytes)):
         return data
     if isinstance(data, dict):
-        return {k: default_convert(v) for k, v in data.items()}
+        return _like(data, {k: default_convert(v) for k, v in data.items()})
     if isinstance(data, tuple) and hasattr(data, "_fields"):
         return type(data)(*(default_convert(v) for v in data))  # type: ignore[arg-type]
     if isinstance(data, (list, tuple)):
@@ -212,13 +227,16 @@ def default_collate(
         * ``int`` / ``float`` leaves → 1-D :class:`Tensor`.
         * ``str`` / ``bytes`` leaves → kept as a Python list.
         * ``dict`` / ``list`` / ``tuple`` / ``NamedTuple`` containers
-          → walked recursively; original container type is preserved.
+          → walked recursively; original container type is preserved (a
+          ``dict`` subclass such as ``OrderedDict`` comes back as itself).
 
     Raises
     ------
     TypeError
         If a leaf is none of the above (``None``, a custom object, ...);
         pass a ``collate_fn`` to batch those.
+    RuntimeError
+        If the ``list`` / ``tuple`` samples in ``batch`` differ in length.
 
     Notes
     -----
@@ -256,14 +274,16 @@ def default_collate(
         return batch
 
     if isinstance(elem, dict):
-        return {key: default_collate([d[key] for d in batch]) for key in elem}
-
-    if isinstance(elem, tuple) and hasattr(elem, "_fields"):
-        return type(elem)(*(default_collate([d[i] for d in batch]) for i in range(len(elem))))
+        # A dict subclass (``OrderedDict``, ``defaultdict``) comes back as itself.
+        return _like(elem, {key: default_collate([d[key] for d in batch]) for key in elem})
 
     if isinstance(elem, (list, tuple)):
-        collated = [default_collate([d[i] for d in batch]) for i in range(len(elem))]
-        return type(elem)(collated) if isinstance(elem, tuple) else collated  # type: ignore[return-value]
+        if any(not isinstance(d, collections.abc.Sized) or len(d) != len(elem) for d in batch):
+            raise RuntimeError("each element in list of batch should be of equal size")
+        columns = [default_collate([d[i] for d in batch]) for i in range(len(elem))]
+        if isinstance(elem, tuple) and hasattr(elem, "_fields"):
+            return type(elem)(*columns)
+        return type(elem)(columns) if isinstance(elem, tuple) else columns  # type: ignore[return-value]
 
     raise TypeError(
         f"default_collate: cannot collate a batch of {type(elem).__name__}; "
@@ -624,7 +644,8 @@ class _MultiProcessDataLoaderIter:
       workers that still have data (an iterable dataset's copy may run
       out on one worker before another).
     - Workers push ``(epoch, seq, result)`` onto one shared result queue;
-      the main process reorders by ``seq`` and yields in sampler order.
+      the main process reorders by ``seq`` and yields in sampler order (or,
+      with ``in_order=False``, in arrival order).
     - At most ``num_workers * prefetch_factor`` tasks are in flight.
     - Every task and result carries the epoch it belongs to.  A
       persistent pool reused after a ``break`` skips, and the main process
@@ -645,6 +666,7 @@ class _MultiProcessDataLoaderIter:
         self._persistent: bool = loader.persistent_workers
         self._timeout: float = loader.timeout
         self._iterable: bool = loader._iterable_style
+        self._in_order: bool = loader.in_order
 
         ctx = _mp_context(loader.multiprocessing_context)
         self._epoch = 0
@@ -694,7 +716,7 @@ class _MultiProcessDataLoaderIter:
         )
         self._index_exhausted = False
         self._send_idx = 0  # next task to dispatch
-        self._rcvd_idx = 0  # next task to yield
+        self._yielded = 0  # tasks taken off the buffer; in order, also the next seq
         self._task_worker: dict[int, int] = {}  # dispatched, not yet received
         self._reorder: dict[int, object] = {}  # received, not yet yielded
         self._active = [True] * self._num_workers
@@ -709,14 +731,28 @@ class _MultiProcessDataLoaderIter:
         self._current_epoch.value = self._epoch
         self._begin_epoch(loader)
 
+    def _pick_worker(self) -> int | None:
+        """The worker the next task goes to, or ``None`` once every stream is spent.
+
+        In order: round-robin, so a given worker's share of the sampler is
+        fixed.  Out of order: the live worker with the fewest tasks in
+        flight, so a slow worker is not handed more work than it can start.
+        """
+        if self._in_order:
+            for _ in range(self._num_workers):
+                worker_id = next(self._worker_cycle)
+                if self._active[worker_id]:
+                    return worker_id
+            return None
+        load = collections.Counter(self._task_worker.values())
+        live = [w for w in range(self._num_workers) if self._active[w]]
+        return min(live, key=lambda w: load[w], default=None)
+
     def _dispatch(self) -> bool:
         if self._index_exhausted:
             return False
-        for _ in range(self._num_workers):
-            worker_id = next(self._worker_cycle)
-            if self._active[worker_id]:
-                break
-        else:
+        worker_id = self._pick_worker()
+        if worker_id is None:
             return False  # every worker's stream is spent
         try:
             index = next(self._index_iter)
@@ -729,7 +765,7 @@ class _MultiProcessDataLoaderIter:
         return True
 
     def _fill(self) -> None:
-        while self._send_idx - self._rcvd_idx < self._window and self._dispatch():
+        while self._send_idx - self._yielded < self._window and self._dispatch():
             pass
 
     # ── receiving ─────────────────────────────────────────────────────────────
@@ -824,16 +860,19 @@ class _MultiProcessDataLoaderIter:
             raise StopIteration
         while True:
             self._fill()
-            if self._rcvd_idx == self._send_idx:
+            if self._yielded == self._send_idx:
                 # Nothing in flight and nothing left to send.
                 if not self._persistent:
                     self._shutdown_workers()
                 raise StopIteration
-            if self._rcvd_idx not in self._reorder:
+            # In order the next batch is the next task's; out of order it is
+            # whichever arrived first (a dict keeps arrival order).
+            ready = self._yielded if self._in_order else next(iter(self._reorder), None)
+            if ready is None or ready not in self._reorder:
                 self._receive()
                 continue
-            data = self._reorder.pop(self._rcvd_idx)
-            self._rcvd_idx += 1
+            data = self._reorder.pop(ready)
+            self._yielded += 1
             if isinstance(data, _IterableEnd):
                 continue
             if isinstance(data, _WorkerError):
@@ -853,6 +892,37 @@ class _MultiProcessDataLoaderIter:
 
 
 # ── argument checks ───────────────────────────────────────────────────────────
+
+
+def _check_worker_options(
+    num_workers: int,
+    prefetch_factor: int | None,
+    multiprocessing_context: object,
+    persistent_workers: bool,
+) -> None:
+    """The options that configure a worker pool, refused by name — and refused
+    outright when there is no pool to configure."""
+    _require_count("num_workers", num_workers, minimum=0)
+    _require_count("prefetch_factor", prefetch_factor, minimum=1, optional=True)
+    if num_workers == 0:
+        for name, given in (
+            ("prefetch_factor", prefetch_factor is not None),
+            ("multiprocessing_context", multiprocessing_context is not None),
+            ("persistent_workers", bool(persistent_workers)),
+        ):
+            if given:
+                raise ValueError(
+                    f"{name} only applies to worker processes; it needs num_workers > 0."
+                )
+    _mp_context(multiprocessing_context)  # unknown or wrong type: refused now
+
+
+def _check_timeout(timeout: object) -> None:
+    """``timeout`` is a number of seconds ``>= 0`` (NaN refused)."""
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+        raise TypeError(f"timeout must be a number of seconds, got {type(timeout).__name__}")
+    if not timeout >= 0:
+        raise ValueError(f"timeout must be >= 0, got {timeout}")
 
 
 def _require_count(name: str, value: object, *, minimum: int, optional: bool = False) -> None:
@@ -953,6 +1023,15 @@ class DataLoader:
         Accepted for compatibility with code written for discrete-memory
         accelerators; a no-op here, since Apple Silicon's CPU and GPU
         share one unified memory.
+    pin_memory_device : str, default=""
+        Accepted for the same compatibility and ignored for the same reason.
+    in_order : bool, default=True
+        With ``num_workers > 0``, ``True`` yields batches in the order the
+        sampler produced them.  ``False`` yields each batch as soon as a
+        worker delivers it, and hands new work to the worker with the fewest
+        batches in flight, so one slow batch holds nothing else back.  The
+        set of batches is unchanged; their order, and so a run's
+        reproducibility, is not.  Ignored with ``num_workers=0``.
 
     Notes
     -----
@@ -970,6 +1049,18 @@ class DataLoader:
     between workers and between epochs, and the whole run reproduces
     under :func:`lucid.manual_seed`.  A persistent pool is seeded once
     and its streams carry on from epoch to epoch.
+
+    **Fixed after construction.**  ``dataset``, ``batch_size``,
+    ``batch_sampler``, ``sampler``, ``drop_last`` and ``persistent_workers``
+    are what the loader's iterator, sampler stack and collation were built
+    from; assigning one afterwards raises ``ValueError``.  Build a new loader
+    instead.
+
+    **Length.**  ``len(loader)`` is the sampler's length for a map-style
+    dataset.  For an iterable-style dataset it comes from the dataset's own
+    ``__len__`` (``TypeError`` if it has none): the sample count with
+    ``batch_size=None``, else ``ceil(n / batch_size)``, or ``n // batch_size``
+    with ``drop_last``.
 
     An exception raised in a worker is re-raised in the main process, as
     the same exception type where possible, with the worker's traceback
@@ -1011,6 +1102,8 @@ class DataLoader:
         persistent_workers: bool = False,
         *,
         pin_memory: bool = False,
+        pin_memory_device: str = "",
+        in_order: bool = True,
     ) -> None:
         """Configure a ``DataLoader``; see the class docstring for parameter
         semantics.
@@ -1037,33 +1130,26 @@ class DataLoader:
         TypeError
             If ``timeout`` is not a number, ``collate_fn`` or
             ``worker_init_fn`` is not callable, ``multiprocessing_context``
-            is neither a name nor a context, or ``generator`` is neither a
+            is neither a name nor a context, ``generator`` is neither a
             :class:`lucid.Generator`, a seed, nor ``None`` (a ``bool`` is
-            not a seed).
+            not a seed), ``pin_memory_device`` is not a ``str`` or
+            ``in_order`` is not a ``bool``.
         """
         # The boundary: every argument is checked here, with an error naming
         # it, before anything is stored or a worker exists.
         _require_count("batch_size", batch_size, minimum=1, optional=True)
-        _require_count("num_workers", num_workers, minimum=0)
-        _require_count("prefetch_factor", prefetch_factor, minimum=1, optional=True)
-        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
-            raise TypeError(f"timeout must be a number of seconds, got {type(timeout).__name__}")
-        if not timeout >= 0:  # NaN included
-            raise ValueError(f"timeout must be >= 0, got {timeout}")
+        _check_worker_options(
+            num_workers, prefetch_factor, multiprocessing_context, persistent_workers
+        )
+        _check_timeout(timeout)
+        _check_bool("in_order", in_order)
+        if not isinstance(pin_memory_device, str):
+            raise TypeError(
+                f"pin_memory_device must be a str, got {type(pin_memory_device).__name__}"
+            )
         for name, fn in (("collate_fn", collate_fn), ("worker_init_fn", worker_init_fn)):
             if fn is not None and not callable(fn):
                 raise TypeError(f"{name} must be callable, got {type(fn).__name__}")
-        if num_workers == 0:
-            for name, given in (
-                ("prefetch_factor", prefetch_factor is not None),
-                ("multiprocessing_context", multiprocessing_context is not None),
-                ("persistent_workers", bool(persistent_workers)),
-            ):
-                if given:
-                    raise ValueError(
-                        f"{name} only applies to worker processes; it needs " "num_workers > 0."
-                    )
-        _mp_context(multiprocessing_context)  # unknown or wrong type: refused now
         if batch_size is None and drop_last:
             raise ValueError(
                 "batch_size=None turns automatic batching off, so there is no "
@@ -1089,6 +1175,8 @@ class DataLoader:
         self.persistent_workers = persistent_workers
         # Unified memory: there is no pageable/pinned distinction to act on.
         self.pin_memory = pin_memory
+        self.pin_memory_device = pin_memory_device
+        self.in_order = in_order
 
         # An iterable-style dataset has no length and no indices, so there
         # is nothing for a sampler to sample.
@@ -1136,6 +1224,31 @@ class DataLoader:
         if collate_fn is None:
             collate_fn = default_collate if self._auto_collation else default_convert
         self.collate_fn: Callable[..., object] = collate_fn
+        self._initialized = True
+
+    # Fixed once the loader exists: the iterator, the sampler stack and the
+    # collation rules were all built from them, so assigning one later would
+    # leave the loader answering from a configuration it no longer has.
+    _FROZEN_AFTER_INIT: ClassVar[frozenset[str]] = frozenset(
+        {"batch_size", "batch_sampler", "sampler", "drop_last", "dataset", "persistent_workers"}
+    )
+    _initialized: bool = False
+
+    @override
+    def __setattr__(self, name: str, value: object) -> None:
+        """Refuse to reassign an attribute the loader was built from.
+
+        Raises
+        ------
+        ValueError
+            For ``batch_size``, ``batch_sampler``, ``sampler``, ``drop_last``,
+            ``dataset`` and ``persistent_workers`` once ``__init__`` returned.
+        """
+        if self._initialized and name in self._FROZEN_AFTER_INIT:
+            raise ValueError(
+                f"{name} attribute should not be set after {type(self).__name__} is initialized"
+            )
+        super().__setattr__(name, value)
 
     @property
     def _auto_collation(self) -> bool:
@@ -1199,17 +1312,35 @@ class DataLoader:
         return it
 
     def __len__(self) -> int:
-        """Return the number of steps per epoch (``len`` of the index sampler).
+        """Return the number of steps per epoch.
 
-        An iterable-style dataset has no length to divide, so neither has
-        the loader over it.  ``TypeError`` rather than a guess: a wrong
-        ``len`` silently truncates a progress bar, a learning-rate
-        schedule, or an epoch.
+        A map-style loader answers with ``len`` of its index sampler.  An
+        iterable-style loader answers from its dataset's ``__len__``: the
+        sample count itself with ``batch_size=None``, otherwise the batches
+        it makes — ``ceil(n / batch_size)``, or ``n // batch_size`` with
+        ``drop_last``.  That count is the dataset's to get right; a stream
+        sharded over workers yields more samples than it reports.
+
+        Raises
+        ------
+        TypeError
+            If the loader wraps an iterable-style dataset with no
+            ``__len__``.  ``TypeError`` rather than a guess: a wrong ``len``
+            silently truncates a progress bar, a learning-rate schedule, or
+            an epoch.
         """
         index_sampler = self._index_sampler
-        if self._iterable_style or index_sampler is None:
+        if index_sampler is not None:
+            return len(index_sampler)
+        dataset = self.dataset
+        if not isinstance(dataset, collections.abc.Sized):
             raise TypeError(
-                "this DataLoader wraps an IterableDataset, which has no "
-                "length — iterate it instead of asking how long it is."
+                f"this DataLoader wraps an IterableDataset ({type(dataset).__name__}) "
+                "that defines no length — iterate it instead of asking how long it is."
             )
-        return len(index_sampler)
+        samples = len(dataset)
+        if self.batch_size is None:
+            return samples
+        if self.drop_last:
+            return samples // self.batch_size
+        return -(-samples // self.batch_size)

@@ -4,6 +4,7 @@ Dataset base classes and implementations.
 
 import bisect
 import math
+from collections.abc import Sized
 from typing import Callable, Iterator, TYPE_CHECKING, override
 
 from lucid._factories.random import Generator
@@ -57,8 +58,13 @@ class Dataset:
         Tensor or tuple of Tensor
             The sample at the given index. Multi-output datasets typically
             return a tuple such as ``(input, target)``.
+
+        Raises
+        ------
+        NotImplementedError
+            Always; a subclass supplies the sample.
         """
-        raise NotImplementedError
+        raise NotImplementedError("Subclasses of Dataset should implement __getitem__.")
 
     def __len__(self) -> int:
         """Return the number of samples in the dataset.
@@ -67,8 +73,13 @@ class Dataset:
         -------
         int
             Total number of samples available via :meth:`__getitem__`.
+
+        Raises
+        ------
+        NotImplementedError
+            Always; a subclass supplies the count.
         """
-        raise NotImplementedError
+        raise NotImplementedError("Subclasses of Dataset should implement __len__.")
 
     def __add__(self, other: Dataset) -> ConcatDataset:
         """Concatenate this dataset with another via the ``+`` operator.
@@ -124,20 +135,43 @@ class IterableDataset:
             terminate (raise ``StopIteration``) when the stream is
             exhausted; infinite streams are permitted but require the
             consumer to externally bound iteration.
-        """
-        raise NotImplementedError
-
-    def __add__(self, other: IterableDataset) -> IterableDataset:
-        """Concatenation via ``+`` — not supported for iterable datasets.
-
-        Use :class:`ChainDataset` to chain iterable datasets end-to-end.
 
         Raises
         ------
         NotImplementedError
-            Always; iterable datasets cannot be concatenated through ``+``.
+            Always; a subclass supplies the stream.
         """
-        raise NotImplementedError("Concatenation of IterableDatasets is not supported.")
+        raise NotImplementedError("Subclasses of IterableDataset should implement __iter__.")
+
+    def __add__(self, other: IterableDataset) -> ChainDataset:
+        """Chain this dataset with another via the ``+`` operator.
+
+        Parameters
+        ----------
+        other : IterableDataset
+            Dataset whose stream should follow that of ``self``.
+
+        Returns
+        -------
+        ChainDataset
+            A :class:`ChainDataset` wrapping ``[self, other]``.
+
+        Raises
+        ------
+        TypeError
+            If ``other`` is not an :class:`IterableDataset`.
+        """
+        return ChainDataset([self, other])
+
+
+def _sample_count(position: int, tensor: Tensor) -> int:
+    """The size of ``tensor`` along its sample axis — the one rule for "has samples"."""
+    if tensor.ndim == 0:
+        raise IndexError(
+            f"TensorDataset tensor {position} is 0-d; it has no first "
+            "dimension to index samples along."
+        )
+    return int(tensor.shape[0])
 
 
 class TensorDataset(Dataset):
@@ -157,6 +191,8 @@ class TensorDataset(Dataset):
     ------
     ValueError
         If no tensors are provided or the leading dimensions disagree.
+    IndexError
+        If a tensor is 0-d, so it has no sample axis to index along.
 
     Examples
     --------
@@ -179,12 +215,12 @@ class TensorDataset(Dataset):
         """Initialise the instance.  See the class docstring for parameter semantics."""
         if not tensors:
             raise ValueError("TensorDataset requires at least one tensor")
-        n = tensors[0].shape[0]
-        for t in tensors[1:]:
-            if t.shape[0] != n:
+        sizes = [_sample_count(i, t) for i, t in enumerate(tensors)]
+        for size in sizes[1:]:
+            if size != sizes[0]:
                 raise ValueError(
                     f"All tensors must have the same size in the first dimension: "
-                    f"expected {n}, got {t.shape[0]}"
+                    f"expected {sizes[0]}, got {size}"
                 )
         self.tensors = tensors
 
@@ -434,6 +470,19 @@ class Subset(Dataset):
         return lambda indices: inner([remap[i] for i in indices])
 
 
+def _fractions_to_sizes(fractions: list[int] | list[float], n: int) -> list[int]:
+    """``floor(fraction * n)`` per split, the remainder handed out round-robin."""
+    sizes: list[int] = []
+    for i, fraction in enumerate(fractions):
+        if fraction < 0 or fraction > 1:
+            raise ValueError(f"Fraction at index {i} is not between 0 and 1")
+        sizes.append(math.floor(n * fraction))
+    # The floors leave fewer than ``len(fractions)`` samples over.
+    for i in range(n - sum(sizes)):
+        sizes[i % len(sizes)] += 1
+    return sizes
+
+
 def random_split(
     dataset: Dataset, lengths: list[int] | list[float], generator: Generator | int | None = None
 ) -> list[Subset]:
@@ -450,10 +499,11 @@ def random_split(
         Source dataset to split.
     lengths : list of int or list of float
         Either absolute split sizes summing to ``len(dataset)``, or
-        fractions in ``[0, 1]`` summing (approximately) to ``1.0``.  In
-        the fractional case each split gets ``floor(fraction * n)`` and
-        the leftover samples go one each, round-robin from the first
-        split, so the totals stay consistent.
+        fractions in ``[0, 1]`` summing (approximately) to ``1.0``.  A list
+        that sums to ``1.0`` is read as fractions.  In the fractional case
+        each split gets ``floor(fraction * n)`` and the leftover samples go
+        one each, round-robin from the first split, so the totals stay
+        consistent.
     generator : lucid.Generator or int, optional
         Stream the permutation is drawn from.  ``None`` (default) draws
         from the default generator, so :func:`lucid.manual_seed`
@@ -468,8 +518,8 @@ def random_split(
     Raises
     ------
     ValueError
-        If fractional ``lengths`` do not sum to ``1.0`` (within ``1e-6``)
-        or integer ``lengths`` do not sum to ``len(dataset)``.
+        If a fraction is outside ``[0, 1]``, or the ``lengths`` (fractions
+        that miss ``1.0`` included) do not sum to ``len(dataset)``.
 
     Examples
     --------
@@ -499,22 +549,14 @@ def random_split(
     rng = _as_generator(generator, "random_split")
     n = len(dataset)
 
-    if all(isinstance(x, float) for x in lengths):
-        total = sum(lengths)
-        if abs(total - 1.0) > 1e-6:
-            raise ValueError("Fraction lengths must sum to 1.0")
-        int_lengths = [math.floor(x * n) for x in lengths]
-        # The floors leave fewer than ``len(lengths)`` samples over; hand
-        # them out one at a time from the first split.
-        for i in range(n - sum(int_lengths)):
-            int_lengths[i % len(int_lengths)] += 1
-        lengths = int_lengths
-
-    lengths_int: list[int] = [int(x) for x in lengths]
+    # The reference's rule for "these are fractions": they add up to one.
+    # Anything else is a list of sizes, and the sum check below is its judge.
+    if math.isclose(sum(lengths), 1) and sum(lengths) <= 1:
+        lengths_int = _fractions_to_sizes(lengths, n)
+    else:
+        lengths_int = [int(x) for x in lengths]
     if sum(lengths_int) != n:
-        raise ValueError(
-            f"Sum of split lengths ({sum(lengths_int)}) must equal dataset length ({n})"
-        )
+        raise ValueError("Sum of input lengths does not equal the length of the input dataset!")
 
     indices = _permutation(n, rng)
 
@@ -585,6 +627,21 @@ class ChainDataset(IterableDataset):
         if bad:
             raise TypeError(f"ChainDataset requires IterableDataset children, got {bad}")
         self.datasets: list[IterableDataset] = list(datasets)
+
+    def __len__(self) -> int:
+        """Return the summed length of the children.
+
+        Raises
+        ------
+        TypeError
+            If a child has no ``__len__``.
+        """
+        total = 0
+        for d in self.datasets:
+            if not isinstance(d, Sized):
+                raise TypeError(f"ChainDataset child {type(d).__name__} has no length")
+            total += len(d)
+        return total
 
     @override
     def __iter__(self) -> Iterator[Tensor | tuple[Tensor, ...]]:
