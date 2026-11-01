@@ -15,10 +15,10 @@ _EPS = 1e-12
 _NOISE_EPS = 1.1920929e-07
 
 
-class Router(nn.Module, ABC):
+class _Router(nn.Module, ABC):
     """Maps the task of each batch row to ``(batch, n_splits, n_skills)`` skill weights; one per ``poly_type``."""
 
-    _routers: ClassVar[dict[str, type[Router]]] = {}
+    _routers: ClassVar[dict[str, type[_Router]]] = {}
 
     def __init__(self, config: PolyConfig) -> None:
         """Make a router for ``config``'s tasks and skills."""
@@ -29,16 +29,16 @@ class Router(nn.Module, ABC):
     def __init_subclass__(cls, *, poly_type: str | None = None, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
         if poly_type is not None:
-            Router._routers[poly_type] = cls
+            _Router._routers[poly_type] = cls
 
     @staticmethod
-    def of(config: PolyConfig) -> Router:
+    def of(config: PolyConfig) -> _Router:
         """The router ``config.poly_type`` names, built for ``config``."""
-        router = Router._routers.get(config.poly_type)
+        router = _Router._routers.get(config.poly_type)
         if router is None:
             raise ValueError(
                 f"Unsupported poly_type: {config.poly_type}. "
-                f"Currently, only the following types are supported: {', '.join(Router._routers)}."
+                f"Currently, only the following types are supported: {', '.join(_Router._routers)}."
             )
         return router(config)
 
@@ -52,7 +52,7 @@ class Router(nn.Module, ABC):
         """The skill weights of each row, given the task of each row."""
 
 
-class PolyRouter(Router, poly_type="poly"):
+class _PolyRouter(_Router, poly_type="poly"):
     r"""One learned logit vector per task; a row's skill weights are its task's, squashed and normalised.
 
     The weights are :math:`\sigma(z)` normalised over the skills of each split — in training a
@@ -73,8 +73,8 @@ class PolyRouter(Router, poly_type="poly"):
     --------
     >>> import lucid
     >>> from lucid.peft import PolyConfig
-    >>> from lucid.peft.tuners.poly._router import PolyRouter
-    >>> router = PolyRouter(PolyConfig(n_tasks=3, n_skills=2, n_splits=2, target_modules=["x"])).eval()
+    >>> from lucid.peft.tuners.poly._router import _PolyRouter
+    >>> router = _PolyRouter(PolyConfig(n_tasks=3, n_skills=2, n_splits=2, target_modules=["x"])).eval()
     >>> router(lucid.tensor([0, 2])).shape
     (2, 2, 2)
     """

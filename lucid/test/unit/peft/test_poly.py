@@ -24,7 +24,7 @@ from lucid.peft import (
     get_peft_model_state_dict,
 )
 from lucid.peft.tuners.poly import Linear, PolyLayer
-from lucid.peft.tuners.poly._router import PolyRouter, Router
+from lucid.peft.tuners.poly._router import _PolyRouter, _Router
 
 _LM: dict[str, object] = {
     "vocab_size": 32,
@@ -109,9 +109,9 @@ class TestConfig:
 
 
 class TestRouter:
-    def _router(self, **fields: int) -> PolyRouter:
-        router = Router.of(_config(**fields))
-        assert isinstance(router, PolyRouter)
+    def _router(self, **fields: int) -> _PolyRouter:
+        router = _Router.of(_config(**fields))
+        assert isinstance(router, _PolyRouter)
         router.reset()
         return router
 

@@ -41,7 +41,7 @@ def _non_negative(name: str, value: object) -> float:
 class CPTConfig(PromptLearningConfig, peft_type=PeftType.CPT):
     r"""How :func:`lucid.peft.get_peft_model` adapts a causal language model with context-aware prompt tuning.
 
-    CPT (Liu et al., 2024, arXiv:2410.17222) tunes a prompt made of in-context examples: the
+    CPT (Blau et al., 2024, arXiv:2410.17222) tunes a prompt made of in-context examples: the
     prompt's tokens start as the embeddings of ``cpt_token_ids`` and a trainable *delta* is
     added to each.  Each token has a type (``cpt_tokens_type_mask``, read modulo 4: ``1`` an input
     template, ``2`` an input, ``3`` an output template, ``0`` or ``4`` an output or padding) that

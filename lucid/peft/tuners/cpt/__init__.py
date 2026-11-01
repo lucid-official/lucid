@@ -1,6 +1,6 @@
 r"""``lucid.peft.tuners.cpt`` — context-aware prompt tuning: a prompt of in-context examples with a bounded learned offset.
 
-CPT (Liu et al., 2024, arXiv:2410.17222) tunes a prompt that is itself a few in-context examples.
+CPT (Blau et al., 2024, arXiv:2410.17222) tunes a prompt that is itself a few in-context examples.
 Its tokens start as the embeddings of ``cpt_token_ids`` and each gets a trainable delta, held near
 zero by a projection after every step (templates and inputs may move, outputs may not), so the
 examples keep their meaning while the prompt adapts.  The loss counts the output tokens of the

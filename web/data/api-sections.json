@@ -75,7 +75,7 @@
       {
         "id": "prompt-learning",
         "title": "Prompt learning",
-        "summary": "An input learned instead of a weight, with no layer added to the model: virtual tokens in front of the embeddings, virtual keys and values in every attention layer, tokens an encoder produces, or one prompt shared across tasks.",
+        "summary": "An input learned instead of a weight, with no layer added to the model: virtual tokens in front of the embeddings, virtual keys and values in every attention layer, tokens an encoder produces, or one prompt shared across tasks, or a prompt of in-context examples with a bounded learned offset (CPT).",
         "packages": [
           {
             "slug": "lucid.peft.tuners.prompt_tuning",
@@ -96,6 +96,11 @@
             "slug": "lucid.peft.tuners.multitask_prompt_tuning",
             "label": "Multitask Prompt Tuning",
             "citation": "Wang, Zhen, et al. \"Multitask Prompt Tuning Enables Parameter-Efficient Transfer Learning.\" arXiv:2303.02861, 2023."
+          },
+          {
+            "slug": "lucid.peft.tuners.cpt",
+            "label": "CPT",
+            "citation": "Blau, Tsachi, et al. \"Context-Aware Prompt Tuning: Advancing In-Context Learning with Adversarial Methods.\" arXiv:2410.17222, 2024."
           }
         ]
       },
@@ -150,6 +155,35 @@
             "slug": "lucid.peft.tuners.shira",
             "label": "SHiRA",
             "citation": "Bhardwaj, Kartikeya, et al. \"Sparse High Rank Adapters.\" arXiv:2406.13175, 2024."
+          }
+        ]
+      },
+      {
+        "id": "routing-mixing",
+        "title": "Routing and mixing",
+        "summary": "Several low-rank adapters combined per task or per token: skills mixed by a learned per-task router (Poly, Multi-Head Routing), or trained LoRA experts weighed per token by a classifier on the hidden states (X-LoRA).",
+        "packages": [
+          {
+            "slug": "lucid.peft.tuners.poly",
+            "label": "Poly",
+            "citation": "Ponti, Edoardo M., et al. \"Combining Modular Skills in Multitask Learning.\" arXiv:2202.13914, 2022."
+          },
+          {
+            "slug": "lucid.peft.tuners.xlora",
+            "label": "X-LoRA",
+            "citation": "Buehler, Eric L., and Markus J. Buehler. \"X-LoRA: Mixture of Low-Rank Adapter Experts, a Flexible Framework for Large Language Models with Applications in Protein Mechanics and Molecular Design.\" arXiv:2402.07148, 2024."
+          }
+        ]
+      },
+      {
+        "id": "adaption-prompts",
+        "title": "Adaption prompts",
+        "summary": "Learned prompts inside the model: the top attention layers of a decoder attend to them through a gate that starts at zero (LLaMA-Adapter).",
+        "packages": [
+          {
+            "slug": "lucid.peft.tuners.adaption_prompt",
+            "label": "Adaption Prompt",
+            "citation": "Zhang, Renrui, et al. \"LLaMA-Adapter: Efficient Fine-tuning of Language Models with Zero-init Attention.\" arXiv:2303.16199, 2023."
           }
         ]
       },

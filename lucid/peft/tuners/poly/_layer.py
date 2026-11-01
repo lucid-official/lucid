@@ -28,7 +28,7 @@ from lucid.peft.tuners._support import (
     _Unmergeable,
 )
 from lucid.peft.tuners.poly._config import PolyConfig
-from lucid.peft.tuners.poly._router import Router
+from lucid.peft.tuners.poly._router import _Router
 
 
 class _PolySpec(NamedTuple):
@@ -83,7 +83,7 @@ class PolyLayer(_LinearSized, _ConfigLayer, _Unmergeable, family=True):
     _unmergeable_because = "a Poly layer, which mixes its skills per task"
     poly_lora_A: nn.ParameterDict
     poly_lora_B: nn.ParameterDict
-    poly_router: nn.ModuleDict[Router]
+    poly_router: nn.ModuleDict[_Router]
 
     #: Read-only ``{adapter: value}`` views of the spec fields, by the reference's spelling.
     r = _SpecField[int]("Rank of each adapter's skills, by name (read-only).")
@@ -112,7 +112,7 @@ class PolyLayer(_LinearSized, _ConfigLayer, _Unmergeable, family=True):
         shape_b = (cfg.n_splits, cfg.n_skills, cfg.r, self.out_features // cfg.n_splits)
         a = Parameter(lucid.empty(*shape_a, device=anchor.device, dtype=dtype))
         b = Parameter(lucid.empty(*shape_b, device=anchor.device, dtype=dtype))
-        router = Router.of(cfg).to(anchor.device)
+        router = _Router.of(cfg).to(anchor.device)
         self._reset(a, b, router, cfg)
         self._specs[adapter_name] = _PolySpec(
             cfg.r, cfg.n_tasks, cfg.n_skills, cfg.n_splits, cfg.poly_type
@@ -122,7 +122,7 @@ class PolyLayer(_LinearSized, _ConfigLayer, _Unmergeable, family=True):
         self.poly_router[adapter_name] = router
 
     @staticmethod
-    def _reset(a: Parameter, b: Parameter, router: Router, config: PolyConfig) -> None:
+    def _reset(a: Parameter, b: Parameter, router: _Router, config: PolyConfig) -> None:
         """Start ``A`` like a linear layer's weight, ``B`` at zero (or alike), the router near-uniform."""
         skills = config.n_splits * config.n_skills
         with lucid.no_grad():
