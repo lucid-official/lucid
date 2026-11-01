@@ -51,6 +51,7 @@ from lucid.peft import (
     TrainableTokensConfig,
     VBLoRAConfig,
 )
+from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft.tuners import lora
 from lucid.peft.tuners._base import _TUNERS, _BaseTuner, _BaseTunerLayer
 from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraLayer, AdaLoraModel
@@ -257,6 +258,7 @@ BUILDERS: dict[type, Callable[[], Any]] = {
         PromptEncoderConfig(num_virtual_tokens=2, encoder_hidden_size=4, **_PROMPT_SIZES)
     ),
     lora.ParamWrapper: lambda: lora.ParamWrapper(_Gate(), "default", "w", r=2),
+    ModulesToSaveWrapper: lambda: ModulesToSaveWrapper(nn.Linear(4, 4), "default"),
 }
 
 # Every tuner layer registered by ``base_type=`` is built on a small module of
