@@ -1,4 +1,5 @@
 import type * as React from "react";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/Card";
 import { SectionHeading } from "@/components/ui/SectionHeading";
@@ -8,10 +9,17 @@ import { AttributeTable } from "./ParameterTable";
 import { MathText } from "./MathText";
 import { AnchorLink } from "./AnchorLink";
 import { ViewModeToggle } from "./ViewModeToggle";
-import type { ApiModule, ApiClassModule, ApiClass, FamilyGroup } from "@/lib/types";
+import type { ApiModule, ApiClassModule, ApiClass, ApiMember, FamilyGroup } from "@/lib/types";
 import { isApiClass, isApiFunction, isApiModule } from "@/lib/types";
 import { loadApiData, getAllModuleSlugs } from "@/lib/api-loader";
 import { packageLabel } from "@/lib/labels";
+import {
+  API_SECTIONS,
+  guidesFor,
+  sectionsForOverview,
+  splitMembers,
+  type ApiSection,
+} from "@/lib/api-sections";
 import { cn } from "@/lib/utils";
 
 interface ModuleOverviewProps {
@@ -117,6 +125,16 @@ export async function ModuleOverview({ data }: ModuleOverviewProps) {
     directSubpackages(data.slug),
   );
 
+  // A package that groups its content in ``api-sections.json`` (``lucid.peft``)
+  // renders those sections in order instead; its overview page
+  // (``lucid.peft.tuners``) renders the sub-package sections alone.
+  const ownSections = API_SECTIONS[data.slug]?.sections;
+  const overviewSections = sectionsForOverview(data.slug);
+  const groupedSections = ownSections ?? overviewSections;
+  const memberSlices = ownSections ? splitMembers(data.members, ownSections) : null;
+  const documentedSlugs = new Set(getAllModuleSlugs());
+  const guides = guidesFor(data.slug);
+
   // Family-leaf pages (e.g. lucid.models.vision.resnet) carry the full
   // ``citation`` + ``theory`` extracted from ``@model_family_meta``.
   // Render that above the member sections so the leaf page reads like
@@ -171,34 +189,67 @@ export async function ModuleOverview({ data }: ModuleOverviewProps) {
           )}
         </section>
       )}
-      {subpackageSections.map((sec) => (
+      {!groupedSections && subpackageSections.map((sec) => (
         <SubpackageGrid key={sec.title} groups={sec.groups} title={sec.title} />
       ))}
+      {guides.length > 0 && (
+        <MemberSection title="Guides" slug={data.slug} accent="blue">
+          {guides.map((g) => (
+            <Link
+              key={g.href}
+              href={g.href}
+              className={cn(
+                "flex flex-col gap-0.5 rounded-xl border border-lucid-border bg-lucid-surface px-4 py-3.5",
+                "transition-colors hover:bg-lucid-elevated hover:border-lucid-primary/40",
+              )}
+            >
+              <span className="text-sm font-medium text-lucid-primary">{g.title}</span>
+              {g.summary && (
+                <span className="text-xs text-lucid-text-low leading-relaxed">{g.summary}</span>
+              )}
+            </Link>
+          ))}
+        </MemberSection>
+      )}
       {/* Module-level constants documented in the module docstring's
           ``Attributes`` section.  Griffe surfaces these as attributes, not
           members, so without this they parse into the JSON and then render
           nowhere — the class path already funnels them through the same
           table via ClassDoc. */}
-      {data.attributes.length > 0 && (
+      {!groupedSections && data.attributes.length > 0 && (
         <MemberSection title="Attributes" slug={data.slug} accent="blue">
           <AttributeTable attributes={data.attributes} />
         </MemberSection>
       )}
-      {classes.length > 0 && (
+      {groupedSections && groupedSections.map((sec) => (
+        <GroupedSection
+          key={sec.id}
+          section={sec}
+          slug={data.slug}
+          members={memberSlices?.get(sec.id) ?? []}
+          documentedSlugs={documentedSlugs}
+        />
+      ))}
+      {groupedSections && data.attributes.length > 0 && (
+        <MemberSection title="Attributes" slug={data.slug} accent="blue">
+          <AttributeTable attributes={data.attributes} />
+        </MemberSection>
+      )}
+      {!groupedSections && classes.length > 0 && (
         <MemberSection title="Classes" slug={data.slug} accent="primary">
           {classes.map((cls) => (
             <ClassCard key={cls.name} cls={cls} moduleSlug={data.slug} />
           ))}
         </MemberSection>
       )}
-      {functions.length > 0 && (
+      {!groupedSections && functions.length > 0 && (
         <MemberSection title="Functions" slug={data.slug} accent="blue">
           {functions.map((fn) => (
             <FunctionCard key={fn.name} fn={fn} moduleSlug={data.slug} />
           ))}
         </MemberSection>
       )}
-      {weightClasses.length > 0 && (
+      {!groupedSections && weightClasses.length > 0 && (
         <MemberSection title="Weights" slug={data.slug} accent="primary">
           {weightClasses.map((cls) => (
             <ClassCard key={cls.name} cls={cls} moduleSlug={data.slug} />
@@ -216,6 +267,8 @@ export async function ModuleOverview({ data }: ModuleOverviewProps) {
 interface SubpackageGridProps {
   groups: FamilyGroup[];
   title: string;
+  /** Sentence(s) under the heading (inline markdown), for a titled section. */
+  blurb?: string;
 }
 
 interface FamilyCardData extends FamilyGroup {
@@ -228,7 +281,7 @@ interface FamilyCardData extends FamilyGroup {
   unit: "members" | "families";
 }
 
-function SubpackageGrid({ groups, title }: SubpackageGridProps) {
+function SubpackageGrid({ groups, title, blurb }: SubpackageGridProps) {
   const cards: FamilyCardData[] = groups.map((g) => {
     let canonicalName = g.label;
     let citation: string | null = null;
@@ -266,15 +319,62 @@ function SubpackageGrid({ groups, title }: SubpackageGridProps) {
     return { ...g, canonicalName, citation, theory, fallbackSummary, tasks, count, unit };
   });
 
+  const id = blurb ? _sectionId(title) : undefined;
   return (
-    <section className="mb-10">
-      <SectionHeading>{title}</SectionHeading>
+    <section id={id} className="mb-10 scroll-mt-24">
+      <SectionHeading id={id} className={blurb ? "flex items-center gap-2" : undefined}>
+        {title}
+        {id && <AnchorLink id={id} />}
+      </SectionHeading>
+      {blurb && (
+        <MathText
+          text={blurb}
+          block
+          className="mb-4 max-w-3xl text-sm text-lucid-text-mid leading-relaxed"
+        />
+      )}
       <div className="space-y-4">
         {cards.map((c) => (
           <FamilyCard key={c.slug} card={c} />
         ))}
       </div>
     </section>
+  );
+}
+
+/** One section of a package grouped in ``api-sections.json``: a run of
+ *  sub-package cards, or a slice of the package's own classes and functions
+ *  (classes first — the ``ui.classes-before-functions`` rule). */
+function GroupedSection({
+  section,
+  slug,
+  members,
+  documentedSlugs,
+}: {
+  section: ApiSection;
+  slug: string;
+  members: ApiMember[];
+  documentedSlugs: Set<string>;
+}) {
+  if (section.packages) {
+    const groups: FamilyGroup[] = section.packages
+      .filter((p) => documentedSlugs.has(p.slug))
+      .map((p) => ({ slug: p.slug, label: p.label }));
+    if (groups.length === 0) return null;
+    return <SubpackageGrid groups={groups} title={section.title} blurb={section.summary} />;
+  }
+  const classes = members.filter(isApiClass);
+  const functions = members.filter(isApiFunction);
+  if (classes.length + functions.length === 0) return null;
+  return (
+    <MemberSection title={section.title} slug={slug} accent="primary" blurb={section.summary}>
+      {classes.map((cls) => (
+        <ClassCard key={cls.name} cls={cls} moduleSlug={slug} />
+      ))}
+      {functions.map((fn) => (
+        <FunctionCard key={fn.name} fn={fn} moduleSlug={slug} />
+      ))}
+    </MemberSection>
   );
 }
 
@@ -406,7 +506,7 @@ function FamilyCard({ card }: { card: FamilyCardData }) {
         )}
         {hasFallback && (
           <p className="text-sm text-lucid-text-mid leading-relaxed">
-            {card.fallbackSummary}
+            <MathText text={card.fallbackSummary ?? ""} />
           </p>
         )}
       </div>
@@ -466,7 +566,7 @@ function ModuleHeader({
       <code className="text-sm text-lucid-text-low font-mono">{path}</code>
       {summary && (
         <p className="mt-3 text-base text-lucid-text-mid leading-relaxed max-w-3xl">
-          {summary}
+          <MathText text={summary} />
         </p>
       )}
       {extended && (
@@ -504,6 +604,8 @@ interface MemberSectionProps {
   slug: string;
   children: React.ReactNode;
   accent?: "primary" | "blue";
+  /** Sentence(s) under the heading (inline markdown). */
+  blurb?: string;
 }
 
 /** Convert a section title to a URL-safe ToC anchor id. */
@@ -517,7 +619,7 @@ function _sectionId(title: string): string {
   );
 }
 
-function MemberSection({ title, children }: MemberSectionProps) {
+function MemberSection({ title, children, blurb }: MemberSectionProps) {
   const id = _sectionId(title);
   return (
     <section id={id} className="group mb-10 scroll-mt-24">
@@ -525,6 +627,13 @@ function MemberSection({ title, children }: MemberSectionProps) {
         {title}
         <AnchorLink id={id} />
       </SectionHeading>
+      {blurb && (
+        <MathText
+          text={blurb}
+          block
+          className="mb-3 max-w-3xl text-sm text-lucid-text-mid leading-relaxed"
+        />
+      )}
       <div className="space-y-2">{children}</div>
     </section>
   );

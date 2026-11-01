@@ -54,6 +54,7 @@ function groupPython(methods: ApiMethod[]): MethodGroup[] {
   const buckets: Record<string, ApiMethod[]> = {
     "Constructors":     [],
     "Properties":       [],
+    "Attributes":       [],
     "Class methods":    [],
     "Static methods":   [],
     "Instance methods": [],
@@ -67,6 +68,8 @@ function groupPython(methods: ApiMethod[]): MethodGroup[] {
       buckets["Constructors"].push(m);
     } else if (labels.includes("property")) {
       buckets["Properties"].push(m);
+    } else if (labels.includes("attribute")) {
+      buckets["Attributes"].push(m);
     } else if (labels.includes("classmethod")) {
       buckets["Class methods"].push(m);
     } else if (labels.includes("staticmethod")) {
@@ -98,13 +101,14 @@ function groupPython(methods: ApiMethod[]): MethodGroup[] {
     }
     return a.name.localeCompare(b.name);
   });
-  for (const k of ["Properties", "Class methods", "Static methods", "Instance methods", "In-place ops", "Dunder methods"]) {
+  for (const k of ["Properties", "Attributes", "Class methods", "Static methods", "Instance methods", "In-place ops", "Dunder methods"]) {
     buckets[k] = sortByName(buckets[k]);
   }
 
   const order = [
     "Constructors",
     "Properties",
+    "Attributes",
     "Class methods",
     "Static methods",
     "Instance methods",

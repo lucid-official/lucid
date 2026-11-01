@@ -1,0 +1,200 @@
+{
+  "lucid.peft": {
+    "overview": "lucid.peft.tuners",
+    "sections": [
+      {
+        "id": "core",
+        "title": "Core",
+        "summary": "The adapter configs, `PeftModel` and its task classes, and the `AutoPeftModel` loaders that reopen a saved adapter with its base model.",
+        "members": {
+          "subcategories": [
+            "config",
+            "peft_model",
+            "task_models",
+            "auto"
+          ],
+          "kind": "class"
+        }
+      },
+      {
+        "id": "lora-family",
+        "title": "LoRA family",
+        "summary": "A low-rank update learned beside each frozen weight, and the variant that moves rank between layers while it trains.",
+        "packages": [
+          {
+            "slug": "lucid.peft.tuners.lora",
+            "label": "LoRA",
+            "citation": "Hu, Edward J., et al. \"LoRA: Low-Rank Adaptation of Large Language Models.\" arXiv:2106.09685, 2021."
+          },
+          {
+            "slug": "lucid.peft.tuners.adalora",
+            "label": "AdaLoRA",
+            "citation": "Zhang, Qingru, et al. \"Adaptive Budget Allocation for Parameter-Efficient Fine-Tuning.\" arXiv:2303.10512, 2023."
+          }
+        ]
+      },
+      {
+        "id": "orthogonal-family",
+        "title": "Orthogonal family",
+        "summary": "A rotation of each layer's input space instead of an addition to its weight: block-diagonal Cayley rotations (OFT), their butterfly factorisation (BOFT) and a chain of Householder reflections (HRA).",
+        "packages": [
+          {
+            "slug": "lucid.peft.tuners.oft",
+            "label": "OFT",
+            "citation": "Qiu, Zeju, et al. \"Controlling Text-to-Image Diffusion by Orthogonal Finetuning.\" arXiv:2306.07280, 2023."
+          },
+          {
+            "slug": "lucid.peft.tuners.boft",
+            "label": "BOFT",
+            "citation": "Liu, Weiyang, et al. \"Parameter-Efficient Orthogonal Finetuning via Butterfly Factorization.\" arXiv:2311.06243, 2023."
+          },
+          {
+            "slug": "lucid.peft.tuners.hra",
+            "label": "HRA",
+            "citation": "Yuan, Shen, et al. \"Bridging the Gap between Low-rank and Orthogonal Adaptation via Householder Reflection Adaptation.\" arXiv:2405.17484, 2024."
+          }
+        ]
+      },
+      {
+        "id": "lycoris-family",
+        "title": "LyCORIS family",
+        "summary": "A weight-shaped update built from a structured factorisation: a Hadamard product of low-rank products (LoHa) or a Kronecker product (LoKr).",
+        "packages": [
+          {
+            "slug": "lucid.peft.tuners.loha",
+            "label": "LoHa",
+            "citation": "Hyeon-Woo, Nam, et al. \"FedPara: Low-Rank Hadamard Product for Communication-Efficient Federated Learning.\" arXiv:2108.06098, 2021."
+          },
+          {
+            "slug": "lucid.peft.tuners.lokr",
+            "label": "LoKr",
+            "citation": "Yeh, Shih-Ying, et al. \"Navigating Text-To-Image Customization: From LyCORIS Fine-Tuning to Model Evaluation.\" arXiv:2309.14859, 2023."
+          }
+        ]
+      },
+      {
+        "id": "prompt-learning",
+        "title": "Prompt learning",
+        "summary": "An input learned instead of a weight, with no layer added to the model: virtual tokens in front of the embeddings, virtual keys and values in every attention layer, tokens an encoder produces, or one prompt shared across tasks.",
+        "packages": [
+          {
+            "slug": "lucid.peft.tuners.prompt_tuning",
+            "label": "Prompt Tuning",
+            "citation": "Lester, Brian, et al. \"The Power of Scale for Parameter-Efficient Prompt Tuning.\" arXiv:2104.08691, 2021."
+          },
+          {
+            "slug": "lucid.peft.tuners.prefix_tuning",
+            "label": "Prefix Tuning",
+            "citation": "Li, Xiang Lisa, and Percy Liang. \"Prefix-Tuning: Optimizing Continuous Prompts for Generation.\" arXiv:2101.00190, 2021."
+          },
+          {
+            "slug": "lucid.peft.tuners.p_tuning",
+            "label": "P-Tuning",
+            "citation": "Liu, Xiao, et al. \"GPT Understands, Too.\" arXiv:2103.10385, 2021."
+          },
+          {
+            "slug": "lucid.peft.tuners.multitask_prompt_tuning",
+            "label": "Multitask Prompt Tuning",
+            "citation": "Wang, Zhen, et al. \"Multitask Prompt Tuning Enables Parameter-Efficient Transfer Learning.\" arXiv:2303.02861, 2023."
+          }
+        ]
+      },
+      {
+        "id": "shared-table-tuners",
+        "title": "Shared-table tuners",
+        "summary": "One set of tensors for the whole model, such as random projections or a vector bank, held once by the tuner; each layer adds only a few parameters of its own.",
+        "packages": [
+          {
+            "slug": "lucid.peft.tuners.vera",
+            "label": "VeRA",
+            "citation": "Kopiczko, Dawid J., et al. \"VeRA: Vector-based Random Matrix Adaptation.\" arXiv:2310.11454, 2023."
+          },
+          {
+            "slug": "lucid.peft.tuners.randlora",
+            "label": "RandLoRA",
+            "citation": "Albert, Paul, et al. \"RandLoRA: Full-rank Parameter-Efficient Fine-Tuning of Large Models.\" arXiv:2502.00987, 2025."
+          },
+          {
+            "slug": "lucid.peft.tuners.vblora",
+            "label": "VB-LoRA",
+            "citation": "Li, Yang, et al. \"VB-LoRA: Extreme Parameter Efficient Fine-Tuning with Vector Banks.\" arXiv:2405.15179, 2024."
+          }
+        ]
+      },
+      {
+        "id": "structured-updates",
+        "title": "Structured and sparse updates",
+        "summary": "A weight update with a fixed structure other than low rank: a few frequency-domain coefficients (FourierFT), block-circulant blocks (C3A), shared shards (MiSS, and Bone, the method it replaced) or a sparse subset of the weight itself (SHiRA).",
+        "packages": [
+          {
+            "slug": "lucid.peft.tuners.fourierft",
+            "label": "FourierFT",
+            "citation": "Gao, Ziqi, et al. \"Parameter-Efficient Fine-Tuning with Discrete Fourier Transform.\" arXiv:2405.03003, 2024."
+          },
+          {
+            "slug": "lucid.peft.tuners.c3a",
+            "label": "C3A",
+            "citation": "Chen, Aochuan, et al. \"Parameter-Efficient Fine-Tuning via Circular Convolution.\" arXiv:2407.19342, 2024."
+          },
+          {
+            "slug": "lucid.peft.tuners.miss",
+            "label": "MiSS",
+            "citation": "Kang, Jiale, et al. arXiv:2409.15371, 2024 (the paper that introduced Bone, revised as MiSS)."
+          },
+          {
+            "slug": "lucid.peft.tuners.bone",
+            "label": "Bone",
+            "citation": "Kang, Jiale. arXiv:2409.15371, 2024 (the paper that introduced Bone; MiSS is its successor)."
+          },
+          {
+            "slug": "lucid.peft.tuners.shira",
+            "label": "SHiRA",
+            "citation": "Bhardwaj, Kartikeya, et al. \"Sparse High Rank Adapters.\" arXiv:2406.13175, 2024."
+          }
+        ]
+      },
+      {
+        "id": "selective-tuning",
+        "title": "Scaling and selective tuning",
+        "summary": "Methods that train a small part of the model itself: a learned rescaling vector per layer (IA3), a trainable copy of each chosen normalisation layer (LN tuning), or a few rows of an embedding table (trainable tokens).",
+        "packages": [
+          {
+            "slug": "lucid.peft.tuners.ia3",
+            "label": "IA3",
+            "citation": "Liu, Haokun, et al. \"Few-Shot Parameter-Efficient Fine-Tuning is Better and Cheaper than In-Context Learning.\" arXiv:2205.05638, 2022."
+          },
+          {
+            "slug": "lucid.peft.tuners.ln_tuning",
+            "label": "LN Tuning",
+            "citation": "Zhao, Bingchen, et al. \"Tuning LayerNorm in Attention: Towards Efficient Multi-Modal LLM Finetuning.\" arXiv:2312.11420, 2023."
+          },
+          {
+            "slug": "lucid.peft.tuners.trainable_tokens",
+            "label": "Trainable Tokens"
+          }
+        ]
+      },
+      {
+        "id": "utilities",
+        "title": "Utilities",
+        "summary": "Entry points that adapt a model without wrapping it, the adapter state-dict helpers, and the status reports of a model's adapter layers.",
+        "members": {
+          "rest": true,
+          "flat": true
+        }
+      }
+    ],
+    "guides": [
+      {
+        "title": "Fine-Tune with LoRA",
+        "href": "/docs/tutorials/lora-fine-tuning",
+        "summary": "A runnable tutorial: adapt a zoo model, train only the adapter, save and reload it, switch it off, merge it, hold several adapters, export to Core ML — and a map of the other methods."
+      },
+      {
+        "title": "Coming from the reference adapter library",
+        "href": "/docs/migration/from-reference-framework",
+        "summary": "What carries over unchanged — names, config fields, the adapter file — and the few places a port needs a second look."
+      }
+    ]
+  }
+}

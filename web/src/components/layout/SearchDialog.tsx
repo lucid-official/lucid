@@ -84,7 +84,8 @@ function SearchResultItem({ entry, active, onSelect }: SearchResultItemProps) {
         </div>
         {entry.summary && (
           <p className="mt-0.5 text-xs text-lucid-text-low line-clamp-1">
-            {entry.summary}
+            {/* A summary is markdown (`code` spans); one line of plain text here. */}
+            {entry.summary.replace(/`/g, "")}
           </p>
         )}
       </div>

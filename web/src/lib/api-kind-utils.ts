@@ -14,6 +14,7 @@ import type { ApiLabel, ApiClassKind } from "@/lib/types";
 export function getMemberNameColor(name: string, labels: ApiLabel[]): string {
   // Python kinds first — they take precedence on Python-side members.
   if (labels.includes("property"))       return "text-api-prop";
+  if (labels.includes("attribute"))      return "text-api-prop";
   if (labels.includes("classmethod"))    return "text-api-cls";
   if (labels.includes("staticmethod"))   return "text-api-static";
   if (labels.includes("abstractmethod")) return "text-api-abstract";

@@ -100,6 +100,12 @@ export async function FunctionSignature({
             {"param_count" in fn && fn.param_count !== undefined && (
               <ParamCountPill count={fn.param_count} />
             )}
+            {"inherited_from" in fn && fn.inherited_from && (
+              <span className="text-[11px] text-lucid-text-disabled">
+                from{" "}
+                <code className="font-mono text-lucid-text-low">{fn.inherited_from}</code>
+              </span>
+            )}
           </div>
 
           {/* Signature */}

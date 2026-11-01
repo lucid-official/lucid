@@ -5,6 +5,7 @@ import { MobileSidebarProvider } from "@/components/layout/MobileSidebarContext"
 import { loadApiData, getAllModuleSlugs } from "@/lib/api-loader";
 import { isApiModule, isApiClassModule, isApiClass } from "@/lib/types";
 import { packageLabel, segmentLabel, titleize } from "@/lib/labels";
+import { API_SECTIONS, splitMembers, type PackageSections } from "@/lib/api-sections";
 import type { ApiMember, ApiModule } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -387,6 +388,41 @@ function buildFamilyLeafItem(slug: string, data: ApiModule): SidebarItem {
   };
 }
 
+/** A tuner package (``lucid.peft.tuners.lora``) as a sidebar entry.
+ *
+ *  Same idea as the model-family leaf: the config and the model first, where
+ *  a reader starts, then whatever else the method defines — its layer
+ *  classes, the encoder of a prompt method, an init enum — under one
+ *  "Components" group.  The default bucketing by source file would put a
+ *  one-class "Configuration" group beside a one-class "Tuner Model" group. */
+function buildTunerItem(slug: string, data: ApiModule): SidebarItem {
+  const members = data.members.filter((m) => isApiClass(m) || m.kind === "function");
+  const configs = members.filter((m) => isApiClass(m) && m.name.endsWith("Config"));
+  const models = members.filter((m) => isApiClass(m) && m.name.endsWith("Model"));
+  const taken = new Set<ApiMember>([...configs, ...models]);
+  const components = members.filter((m) => !taken.has(m));
+
+  const items: SidebarItem[] = [
+    ...configs.map((m) => memberLeaf(slug, m)),
+    ...models.map((m) => memberLeaf(slug, m)),
+  ];
+  if (components.length > 0) {
+    items.push({
+      title: "Components",
+      badge: `${components.length}`,
+      items: components.map((m) => memberLeaf(slug, m)),
+    });
+  }
+  return {
+    title: data.canonical_name && data.canonical_name.length > 0
+      ? data.canonical_name
+      : packageLabel(slug),
+    href: `/api/${slug}`,
+    badge: `${members.length}`,
+    items,
+  };
+}
+
 function buildModuleItem(slug: string): SidebarItem {
   let memberItems: SidebarItem[] | undefined;
   let badge: string | undefined;
@@ -535,9 +571,88 @@ function buildApiSidebar(): SidebarItem[] {
   // the slug's own bucketed members instead of being buried at the bottom.
   const SUBPKGS_FIRST = new Set<string>(["lucid.models"]);
 
+  /** A package that groups its sub-packages in ``api-sections.json``
+   *  (``lucid.peft``): its children are the sections, not the alphabetical
+   *  run of sub-packages.
+   *
+   *  A sub-package section holds the tuner pages; a member section holds a
+   *  slice of the package's own classes and functions (``splitMembers`` — the
+   *  ``rest`` section takes whatever no other claimed).  The overview page
+   *  (``lucid.peft.tuners``) is one link at the top.  A documented
+   *  sub-package no section lists still gets an entry, under "More", so a
+   *  tuner added without touching the file shows up (the completeness test is
+   *  what insists it be listed). */
+  function buildSectionedItem(slug: string, plan: PackageSections): SidebarItem {
+    const base = buildModuleItem(slug);
+    const data = (() => {
+      try { return loadApiData(slug); } catch { return null; }
+    })();
+    const members = data && isApiModule(data)
+      ? data.members.filter((m) => isApiClass(m) || m.kind === "function")
+      : [];
+    const picked = splitMembers(members, plan.sections);
+
+    const children: SidebarItem[] = [];
+    const listed = new Set<string>();
+    if (plan.overview && docSlugs.has(plan.overview)) {
+      listed.add(plan.overview);
+      children.push({
+        title: `All ${packageLabel(plan.overview)}`,
+        href: `/api/${plan.overview}`,
+      });
+    }
+
+    for (const section of plan.sections) {
+      if (section.packages) {
+        const entries: SidebarItem[] = [];
+        for (const pkg of section.packages) {
+          if (!docSlugs.has(pkg.slug)) continue;
+          listed.add(pkg.slug);
+          let entry: SidebarItem;
+          try {
+            const pkgData = loadApiData(pkg.slug);
+            entry = isApiModule(pkgData)
+              ? buildTunerItem(pkg.slug, pkgData)
+              : buildModuleItem(pkg.slug);
+          } catch {
+            entry = { title: pkg.label, href: `/api/${pkg.slug}` };
+          }
+          entries.push(entry);
+        }
+        if (entries.length > 0) {
+          children.push({ title: section.title, badge: `${entries.length}`, items: entries });
+        }
+      }
+      const own = picked.get(section.id) ?? [];
+      if (section.members && own.length > 0) {
+        children.push({
+          title: section.title,
+          badge: `${own.length}`,
+          items: section.members.flat
+            ? own.map((m) => memberLeaf(slug, m))
+            : groupMembers(slug, own),
+        });
+      }
+    }
+
+    const unlisted = [...docSlugs]
+      .filter((s) => s.startsWith(`${slug}.`) && !listed.has(s))
+      .sort((a, b) => packageLabel(a).localeCompare(packageLabel(b)));
+    if (unlisted.length > 0) {
+      children.push({
+        title: "More",
+        badge: `${unlisted.length}`,
+        items: unlisted.map((s) => buildModuleItem(s)),
+      });
+    }
+    return { ...base, items: children };
+  }
+
   /** Build a SidebarItem for a slug, recursively attaching any documented
    *  sub-packages as nested children. */
   function buildItem(slug: string, parent: string | null): SidebarItem {
+    const plan = API_SECTIONS[slug];
+    if (plan) return buildSectionedItem(slug, plan);
     const isSynthetic = synthetic.has(slug);
     const base: SidebarItem = isSynthetic
       ? { title: packageLabel(slug), tag: packageTag(slug, true) }

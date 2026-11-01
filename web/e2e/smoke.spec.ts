@@ -33,6 +33,10 @@ const PAGES = [
   { path: "/api", name: "api landing" },
   { path: "/api/lucid.nn", name: "module overview" },
   { path: "/api/lucid.models.vision.resnet/resnet_50", name: "model member" },
+  { path: "/api/lucid.peft", name: "peft package" },
+  { path: "/api/lucid.peft.tuners", name: "peft tuners overview" },
+  { path: "/api/lucid.peft.tuners.lora", name: "peft tuner" },
+  { path: "/api/lucid.peft.tuners.lora/LoraConfig", name: "peft tuner member" },
   { path: "/architecture", name: "architecture landing" },
   { path: "/architecture/layer-map", name: "architecture diagram" },
 ];
@@ -51,6 +55,69 @@ test("model member page renders the Model Size card", async ({ page }) => {
     waitUntil: "networkidle",
   });
   await expect(page.getByText("Model Size", { exact: false })).toBeVisible();
+});
+
+// lucid.peft is documented as a package section (web/data/api-sections.json):
+// the sidebar groups the 22 tuners by family, each tuner page holds its config,
+// model and layers, and the generator fixes of LCD-725 show on the real pages.
+test.describe("lucid.peft reference", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
+  test("the sidebar groups the tuners by family, with one Tuners entry", async ({ page }) => {
+    await page.goto("/api/lucid.peft.tuners.lora/LoraConfig", { waitUntil: "networkidle" });
+    const sidebar = page.locator('aside[aria-label="Documentation navigation"]');
+    for (const group of [
+      "Core",
+      "LoRA family",
+      "Orthogonal family",
+      "LyCORIS family",
+      "Prompt learning",
+      "Shared-table tuners",
+      "Structured and sparse updates",
+      "Scaling and selective tuning",
+      "Utilities",
+    ]) {
+      await expect(sidebar.getByText(group, { exact: true }), group).toBeVisible();
+    }
+    // The overview is one link; a "Tuners" source-folder group beside it was
+    // the duplicate entry of the unfixed sidebar.
+    await expect(sidebar.getByText("All Tuners", { exact: true })).toBeVisible();
+    await expect(sidebar.getByText("Tuners", { exact: true })).toHaveCount(0);
+    // The active path is open down to the page: PEFT > LoRA family > LoRA > LoraConfig.
+    await expect(sidebar.locator('a[aria-current="page"][href$="/LoraConfig"]')).toBeVisible();
+  });
+
+  test("a tuner page lists its config, model and layer classes", async ({ page }) => {
+    await page.goto("/api/lucid.peft.tuners.lora", { waitUntil: "networkidle" });
+    const main = page.locator("#main-content");
+    for (const name of ["LoraConfig", "LoraModel", "LoraLayer", "MultiheadAttention"]) {
+      await expect(main.getByText(name, { exact: true }).first(), name).toBeVisible();
+    }
+  });
+
+  test("members inherited from private bases and documented attributes are listed", async ({
+    page,
+  }) => {
+    await page.goto("/api/lucid.peft.tuners.lora/LoraConfig", { waitUntil: "networkidle" });
+    const main = page.locator("#main-content");
+    for (const name of ["to_dict", "from_dict", "save_pretrained"]) {
+      await expect(main.locator(`h3#${name}`), name).toHaveCount(1);
+    }
+    await page.goto("/api/lucid.peft.tuners.lora/LoraLayer", { waitUntil: "networkidle" });
+    for (const name of ["merged", "disable_adapters", "active_adapter"]) {
+      await expect(page.locator(`#main-content h3#${name}`), name).toHaveCount(1);
+    }
+  });
+
+  test("a reST literal block renders as code, not as a paragraph", async ({ page }) => {
+    await page.goto("/api/lucid.peft", { waitUntil: "networkidle" });
+    const code = page.locator("#main-content pre", { hasText: "get_peft_model(base_model, config)" });
+    await expect(code.first()).toBeVisible();
+    // Line breaks survive: the example is several lines, not one run-on.
+    expect((await code.first().innerText()).split("\n").length).toBeGreaterThan(4);
+  });
 });
 
 test("ToC entry click scrolls + updates the hash", async ({ page }) => {

@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { loadApiData } from "@/lib/api-loader";
 import { isApiModule, isApiClassModule } from "@/lib/types";
 import { canonical } from "@/lib/site";
+import { API_SECTIONS, sectionedSlugs } from "@/lib/api-sections";
 
 export const metadata: Metadata = {
   title: "API Reference",
@@ -116,6 +117,18 @@ function _optimCounts(): { optimizers: number; lrSchedulers: number } {
   return { optimizers, lrSchedulers };
 }
 
+// ``lucid.peft`` documents its tuner configs, models and layers on one page per
+// method (``lucid.peft.tuners.<method>``), so its public names are spread over
+// the package page and those pages — count them all, or the card undersells it.
+function _peftCounts(): { methods: number; names: number } {
+  const tuners = (API_SECTIONS["lucid.peft"]?.sections ?? []).flatMap(
+    (s) => s.packages ?? [],
+  );
+  const methods = tuners.filter((p) => _memberCount(p.slug) > 0).length;
+  const names = sectionedSlugs().reduce((n, slug) => n + _memberCount(slug), 0);
+  return { methods, names: names + _memberCount("lucid.peft") };
+}
+
 function buildModuleGroups(): ModuleGroup[] {
   const tensorMethods = _memberCount("lucid.tensor");
   const nnClasses     = _memberCount("lucid.nn");
@@ -130,7 +143,7 @@ function buildModuleGroups(): ModuleGroup[] {
   const distributions = _memberCount("lucid.distributions");
   const diffeq        = _memberCount("lucid.diffeq");
   const coreml        = _memberCount("lucid.coreml");
-  const peft          = _memberCount("lucid.peft");
+  const peft          = _peftCounts();
   const engineMembers = _memberCount("lucid._C.engine");
 
   return [
@@ -164,7 +177,8 @@ function buildModuleGroups(): ModuleGroup[] {
     {
       category: "Fine-Tuning",
       modules: [
-        { name: "lucid.peft", slug: "lucid.peft", description: `LoRA fine-tuning in the reference adapter library's API and file format — ${peft} names: LoraConfig, get_peft_model, PeftModel, merge and save.`, icon: Puzzle, badge: `${peft} names` },
+        { name: "lucid.peft", slug: "lucid.peft", description: `Parameter-efficient fine-tuning in the reference adapter library's API and file format — ${peft.methods} methods behind one entry point: get_peft_model, PeftModel, the AutoPeftModel loaders, multiple adapters, merge and save.`, icon: Puzzle, badge: `${peft.names} names` },
+        { name: "lucid.peft.tuners", slug: "lucid.peft.tuners", description: `The ${peft.methods} methods by family — LoRA, orthogonal, LyCORIS, prompt learning, shared-table and more — each with its config, model and layers.`, icon: Layers, badge: `${peft.methods} methods` },
       ],
     },
     {

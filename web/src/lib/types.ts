@@ -59,6 +59,9 @@ export type ApiLabel =
   | "classmethod"
   | "abstractmethod"
   | "writable"
+  // A documented plain attribute (``self.merged = False`` with a ``#:``
+  // comment, a class-level constant) listed beside the properties.
+  | "attribute"
   // C++-specific method kinds (build-cpp-data.py::_cpp_labels).  These
   // co-exist with the Python kinds because the same ``labels: ApiLabel[]``
   // field is shared across both pipelines; downstream renderers pick the
@@ -118,6 +121,10 @@ export interface ApiMethod extends DocstringParsed {
   labels: ApiLabel[];
   signature: string | null;
   source: string | null;
+  /** Name of the private base class that defines this member, when the class
+   *  inherits it from one (``_BaseTuner``): that base has no page, so the
+   *  members it contributes are listed on the public class and say so. */
+  inherited_from?: string;
 }
 
 export type ApiClassKind = "regular" | "abstract" | "dataclass" | "protocol";

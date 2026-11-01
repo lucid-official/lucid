@@ -25,6 +25,7 @@ const ROOT = process.cwd();                       // run from web/
 const OUT = join(ROOT, "out");
 const API_DATA = join(ROOT, "public", "api-data");
 const LABELS_TS = join(ROOT, "src", "lib", "labels.ts");
+const API_SECTIONS_JSON = join(ROOT, "data", "api-sections.json");
 const BASE = "/lucid";
 
 // ── reST / markdown leak patterns (unambiguous — used by prose contracts) ────
@@ -117,6 +118,12 @@ if (existsSync(LABELS_TS)) {
   const blk = src.slice(src.indexOf("const PACKAGE_LABELS"));
   for (const m of blk.matchAll(/"(lucid[\w.]*)":/g)) labelKeys.add(m[1]);
 }
+// Packages grouped in data/api-sections.json are labelled there (labels.ts
+// spreads them into PACKAGE_LABELS), so their slugs count as covered.
+const sectionsJson = loadJson(API_SECTIONS_JSON);
+for (const parent of Object.values(sectionsJson ?? {}))
+  for (const section of parent.sections ?? [])
+    for (const pkg of section.packages ?? []) labelKeys.add(pkg.slug);
 
 const isFamilyLeaf = (slug) => {
   const p = slug.split(".");

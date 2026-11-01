@@ -130,6 +130,19 @@ export function PropBadge({
   );
 }
 
+/** A documented plain attribute (not a property) */
+export function AttrBadge({ className }: { className?: string }) {
+  return (
+    <Pill
+      label="attr"
+      className={cn(
+        "bg-api-prop/10 border-api-prop/30 text-api-prop",
+        className,
+      )}
+    />
+  );
+}
+
 /** @classmethod */
 export function ClsMethodBadge({ className }: { className?: string }) {
   return (
@@ -307,6 +320,7 @@ export function AutoKindBadge({
   // Python kinds (these are mutually exclusive with C++ kinds in practice
   // because the build pipelines emit one or the other, never both).
   if (labels.includes("property"))       return <PropBadge writable={isWritable} className={className} />;
+  if (labels.includes("attribute"))      return <AttrBadge className={className} />;
   if (labels.includes("classmethod"))    return <ClsMethodBadge className={className} />;
   if (labels.includes("staticmethod"))   return <StaticBadge className={className} />;
   if (labels.includes("abstractmethod")) return <AbstractBadge className={className} />;
