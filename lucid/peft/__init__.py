@@ -182,6 +182,7 @@ from lucid.peft.auto import (
     AutoPeftModelForTokenClassification,
 )
 from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraModel
+from lucid.peft.tuners.adaption_prompt import AdaptionPromptConfig, AdaptionPromptModel
 from lucid.peft.tuners.boft import BOFTConfig, BOFTModel
 from lucid.peft.tuners.bone import BoneConfig, BoneModel
 from lucid.peft.tuners.c3a import C3AConfig, C3AModel
@@ -240,6 +241,7 @@ __all__ = [
     "PromptTuningConfig",
     "PromptTuningInit",
     "AdaLoraConfig",
+    "AdaptionPromptConfig",
     "BOFTConfig",
     "BoneConfig",
     "C3AConfig",
@@ -260,6 +262,7 @@ __all__ = [
     "PeftType",
     "TaskType",
     "AdaLoraModel",
+    "AdaptionPromptModel",
     "TunerLayerStatus",
     "TunerModelStatus",
     "BOFTModel",

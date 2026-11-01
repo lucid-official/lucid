@@ -144,6 +144,54 @@ class _ResidualUpdate(_AdditiveWeight):
         return out if out.dtype == result.dtype else out.to(result.dtype)
 
 
+class _Unmergeable(_BaseTunerLayer):
+    """A layer whose adapter computes something no change of the base weights can hold.
+
+    An adaption prompt attends to learned keys, a skill router mixes factors per input: folding
+    either into the weight would be a different function.  The layer owns no merge target and
+    ``merge`` says why it cannot.
+    """
+
+    #: What the adapter is, for the refusal's message ("an adaption prompt").
+    _unmergeable_because: ClassVar[str] = "this adapter"
+
+    def _refusal(self) -> NotImplementedError:
+        return NotImplementedError(
+            f"{self._unmergeable_because} cannot be folded into the base weights; "
+            "keep the adapter, or unload() it"
+        )
+
+    @override
+    def get_delta_weight(self, adapter: str) -> Tensor:
+        """Refused: there is no weight-shaped change to report."""
+        del adapter
+        raise self._refusal()
+
+    @override
+    def _merge_targets(self) -> dict[str, Parameter]:
+        return {}
+
+    @override
+    def _merged_values(self, adapter: str) -> dict[str, Tensor]:
+        del adapter
+        raise self._refusal()
+
+    @override
+    def _fold(self, adapter: str) -> None:
+        del adapter
+        raise self._refusal()
+
+    @override
+    def _unfold(self) -> None:
+        raise self._refusal()
+
+    @override
+    def merge(self, safe_merge: bool = False, adapter_names: list[str] | None = None) -> None:
+        """Refused with ``NotImplementedError``: the adapter has no weight form."""
+        del safe_merge, adapter_names
+        raise self._refusal()
+
+
 class _LinearSized(_BaseTunerLayer):
     """A layer around an ``nn.Linear``-shaped weight, which reads the base's sizes off it."""
 

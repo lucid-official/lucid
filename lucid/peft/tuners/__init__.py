@@ -35,6 +35,7 @@ The modules whose names begin with an underscore here (``_base``, ``_lycoris``, 
 
 from lucid.peft.tuners import (
     adalora,
+    adaption_prompt,
     boft,
     bone,
     c3a,
@@ -60,6 +61,7 @@ from lucid.peft.tuners import (
 
 __all__ = [
     "adalora",
+    "adaption_prompt",
     "boft",
     "bone",
     "c3a",

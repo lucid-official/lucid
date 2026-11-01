@@ -265,6 +265,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PEFT package section in the api sidebar and index
 - export ModulesToSaveWrapper
 - docstring check follows exported classes through bases
+- adaption prompt (LLaMA-Adapter) tuner
 
 ---
 

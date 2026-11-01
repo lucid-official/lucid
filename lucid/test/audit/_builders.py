@@ -55,6 +55,11 @@ from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft.tuners import lora
 from lucid.peft.tuners._base import _TUNERS, _BaseTuner, _BaseTunerLayer
 from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraLayer, AdaLoraModel
+from lucid.peft.tuners.adaption_prompt import (
+    AdaptedAttention,
+    AdaptionPromptConfig,
+    AdaptionPromptModel,
+)
 from lucid.peft.tuners.ia3 import IA3Layer
 from lucid.peft.tuners.loha import LoHaLayer
 from lucid.peft.tuners.lokr import LoKrLayer
@@ -267,6 +272,21 @@ BUILDERS.update({layer: _layer_builder(base, layer) for base, layer in _layer_ty
 # A family root registers its own kinds and finds one from the module it wraps (LyCORIS, OFT,
 # BOFT, HRA, FourierFT), so it is concrete: build every one that takes a Linear on a Linear.
 BUILDERS.update({root: _layer_builder(nn.Linear, root) for root in _family_roots()})
+
+# A tuner that wraps an attention module, not one of the audit's linears, is built on a decoder.
+BUILDERS.update(
+    {
+        AdaptionPromptModel: lambda: AdaptionPromptModel(
+            _text_model(),
+            AdaptionPromptConfig(adapter_len=2, adapter_layers=1, task_type="CAUSAL_LM"),
+        ),
+        AdaptedAttention: lambda: AdaptedAttention(
+            _text_model().transformer.h[0].attn,
+            "default",
+            AdaptionPromptConfig(adapter_len=2, adapter_layers=1),
+        ),
+    }
+)
 
 # Every tuner whose method has an example config is built on the audit's model with it.
 BUILDERS.update(

@@ -40,7 +40,7 @@ from lucid.serialization import load_safetensors
 from lucid.test.unit.peft._parity import adapter_library, gap
 
 # Members a later card (LCD-798: the prompt and mixture methods) still owes a config and a tuner.
-_LATER = {PeftType.ADAPTION_PROMPT, PeftType.CPT, PeftType.POLY, PeftType.XLORA}
+_LATER = {PeftType.CPT, PeftType.POLY, PeftType.XLORA}
 
 
 def _mlp(inn: int = 8, hidden: int = 8, out: int = 4) -> nn.Sequential:
