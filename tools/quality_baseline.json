@@ -1964,7 +1964,7 @@
     "lucid/models/vision/yolo/_v2.py": 13,
     "lucid/models/vision/yolo/_v3.py": 95,
     "lucid/models/vision/yolo/_v4.py": 39,
-    "lucid/nn/functional/attention.py": 102,
+    "lucid/nn/functional/attention.py": 101,
     "lucid/nn/functional/dropout.py": 7,
     "lucid/nn/functional/linear.py": 5,
     "lucid/nn/functional/loss.py": 86,

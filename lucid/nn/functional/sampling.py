@@ -870,6 +870,14 @@ def pad(
     return _wrap(_C_engine.pad(_unwrap(x), widths, fill))
 
 
+def _require_pixel_rank(name: str, input: Tensor) -> None:
+    """Shared rank check: ``(*, C, H, W)`` — at least 3-D, any leading dims."""
+    if len(input.shape) < 3:
+        raise _C_engine.InvalidArgument(
+            f"{name}: expected at least 3-D input (*, C, H, W), " f"got shape {tuple(input.shape)}"
+        )
+
+
 def pixel_shuffle(input: Tensor, upscale_factor: int) -> Tensor:
     r"""Sub-pixel upsampling: rearrange channels into spatial resolution.
 
@@ -892,15 +900,16 @@ def pixel_shuffle(input: Tensor, upscale_factor: int) -> Tensor:
     Parameters
     ----------
     input : Tensor
-        4-D input of shape ``(N, C·r², H, W)``.  The channel dimension
-        must be divisible by ``upscale_factor²``.
+        Input of shape ``(*, C·r², H, W)`` — at least 3-D, any leading
+        dims.  The channel dimension must be divisible by
+        ``upscale_factor²``.
     upscale_factor : int
         Spatial upscaling factor :math:`r`.
 
     Returns
     -------
     Tensor
-        Upsampled tensor of shape ``(N, C, H·r, W·r)``.
+        Upsampled tensor of shape ``(*, C, H·r, W·r)``.
 
     Notes
     -----
@@ -924,20 +933,18 @@ def pixel_shuffle(input: Tensor, upscale_factor: int) -> Tensor:
         raise _C_engine.InvalidArgument(
             f"pixel_shuffle: upscale_factor must be a positive integer, got {r}"
         )
-    if len(input.shape) != 4:
-        raise _C_engine.InvalidArgument(
-            f"pixel_shuffle: expected 4-D input, got shape {tuple(input.shape)}"
-        )
-    n, c_r2, h, w = input.shape
+    _require_pixel_rank("pixel_shuffle", input)
+    *lead, c_r2, h, w = input.shape
     if c_r2 % (r * r) != 0:
         raise _C_engine.InvalidArgument(
             f"pixel_shuffle: channels {c_r2} not divisible by upscale_factor² ({r * r})"
         )
     c: int = c_r2 // (r * r)
+    k: int = len(lead)
     impl = _unwrap(input)
-    t = _C_engine.reshape(impl, [n, c, r, r, h, w])
-    t = _C_engine.permute(t, [0, 1, 4, 2, 5, 3])
-    return _wrap(_C_engine.reshape(t, [n, c, h * r, w * r]))
+    t = _C_engine.reshape(impl, [*lead, c, r, r, h, w])
+    t = _C_engine.permute(t, [*range(k), k, k + 3, k + 1, k + 4, k + 2])
+    return _wrap(_C_engine.reshape(t, [*lead, c, h * r, w * r]))
 
 
 def pixel_unshuffle(input: Tensor, downscale_factor: int) -> Tensor:
@@ -957,15 +964,16 @@ def pixel_unshuffle(input: Tensor, downscale_factor: int) -> Tensor:
     Parameters
     ----------
     input : Tensor
-        4-D input of shape ``(N, C, H·r, W·r)``.  Both spatial dims
-        must be divisible by ``downscale_factor``.
+        Input of shape ``(*, C, H·r, W·r)`` — at least 3-D, any leading
+        dims.  Both spatial dims must be divisible by
+        ``downscale_factor``.
     downscale_factor : int
         Spatial downscaling factor :math:`r`.
 
     Returns
     -------
     Tensor
-        Downsampled tensor of shape ``(N, C·r², H, W)``.
+        Downsampled tensor of shape ``(*, C·r², H, W)``.
 
     Notes
     -----
@@ -986,20 +994,18 @@ def pixel_unshuffle(input: Tensor, downscale_factor: int) -> Tensor:
         raise _C_engine.InvalidArgument(
             f"pixel_unshuffle: downscale_factor must be a positive integer, got {r}"
         )
-    if len(input.shape) != 4:
-        raise _C_engine.InvalidArgument(
-            f"pixel_unshuffle: expected 4-D input, got shape {tuple(input.shape)}"
-        )
-    n, c, h_r, w_r = input.shape
+    _require_pixel_rank("pixel_unshuffle", input)
+    *lead, c, h_r, w_r = input.shape
     if h_r % r != 0 or w_r % r != 0:
         raise _C_engine.InvalidArgument(
             f"pixel_unshuffle: spatial dims ({h_r}, {w_r}) not divisible by {r}"
         )
     h, w = h_r // r, w_r // r
+    k: int = len(lead)
     impl = _unwrap(input)
-    t = _C_engine.reshape(impl, [n, c, h, r, w, r])
-    t = _C_engine.permute(t, [0, 1, 3, 5, 2, 4])
-    return _wrap(_C_engine.reshape(t, [n, c * r * r, h, w]))
+    t = _C_engine.reshape(impl, [*lead, c, h, r, w, r])
+    t = _C_engine.permute(t, [*range(k), k, k + 2, k + 4, k + 1, k + 3])
+    return _wrap(_C_engine.reshape(t, [*lead, c * r * r, h, w]))
 
 
 def multi_head_attention_forward(

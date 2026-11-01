@@ -1755,9 +1755,9 @@ def ctc_loss(
         not read and may hold anything.
     input_lengths : Tensor
         Effective input lengths :math:`(N,)`, ``int32``.  Enables
-        padding-aware batching.  Each must lie in :math:`[1, T]`, else
-        ``IndexError``.  A length of 0 raises ``NotImplementedError`` for
-        now.
+        padding-aware batching.  Each must lie in :math:`[0, T]`, else
+        ``IndexError``.  A length of 0 is allowed: the loss is ``inf`` for
+        a non-empty target (see ``zero_infinity``), ``0`` for an empty one.
     target_lengths : Tensor
         Effective target lengths :math:`(N,)`, ``int32``.  Each must lie in
         :math:`[0, S]` for padded targets, and they must add up to the

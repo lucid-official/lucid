@@ -363,8 +363,8 @@ class PixelShuffle(Module):
 
     Shape
     -----
-    - **Input:** :math:`(N, C \cdot r^2, H, W)`.
-    - **Output:** :math:`(N, C, H \cdot r, W \cdot r)`.
+    - **Input:** :math:`(*, C \cdot r^2, H, W)`, at least 3-D.
+    - **Output:** :math:`(*, C, H \cdot r, W \cdot r)`.
 
     Notes
     -----
@@ -457,8 +457,8 @@ class PixelUnshuffle(Module):
 
     Shape
     -----
-    - **Input:** :math:`(N, C, H \cdot r, W \cdot r)`.
-    - **Output:** :math:`(N, C \cdot r^2, H, W)`.
+    - **Input:** :math:`(*, C, H \cdot r, W \cdot r)`, at least 3-D.
+    - **Output:** :math:`(*, C \cdot r^2, H, W)`.
 
     Notes
     -----

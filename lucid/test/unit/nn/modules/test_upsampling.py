@@ -4,8 +4,14 @@ Forward shape + a deterministic value/round-trip check + backward — these
 families had no dedicated test file before.
 """
 
+from typing import Any
+
+import numpy as np
+import pytest
+
 import lucid
 import lucid.nn as nn
+import lucid.nn.functional as F
 
 
 class TestUpsample:
@@ -81,3 +87,37 @@ class TestPixelShuffleUnshuffle:
         nn.PixelShuffle(2)(x).sum().backward()
         assert x.grad is not None
         assert x.grad.shape == (1, 8, 4, 4)
+
+
+#: Leading dims in front of ``(C, H, W)`` — none, one, several.
+_LEADING = [(), (8,), (2, 3), (2, 2, 2)]
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("lead", _LEADING, ids=str)
+@pytest.mark.parametrize("op", ["pixel_shuffle", "pixel_unshuffle"])
+def test_pixel_shuffle_any_leading_dims_match_the_reference(
+    ref: Any, device: str, lead: tuple[int, ...], op: str
+) -> None:
+    """``(*, C, H, W)`` — the reference takes any rank of at least 3."""
+    shape = (*lead, 8, 3, 4) if op == "pixel_shuffle" else (*lead, 3, 6, 8)
+    x = np.random.default_rng(0).standard_normal(shape).astype(np.float32)
+    mine = lucid.tensor(x, device=device, requires_grad=True)
+    out = getattr(F, op)(mine, 2)
+    theirs = ref.from_numpy(x).requires_grad_()
+    want = getattr(ref.nn.functional, op)(theirs, 2)
+
+    assert out.shape == tuple(want.shape)
+    np.testing.assert_array_equal(out.cpu().numpy(), want.detach().numpy())
+    weights = np.random.default_rng(1).standard_normal(out.shape).astype(np.float32)
+    (out * lucid.tensor(weights, device=device)).sum().backward()
+    (want * ref.from_numpy(weights)).sum().backward()
+    assert mine.grad is not None
+    np.testing.assert_array_equal(mine.grad.cpu().numpy(), theirs.grad.numpy())
+
+
+def test_pixel_shuffle_modules_take_any_leading_dims(device: str) -> None:
+    x = lucid.randn(8, 3, 4, device=device)
+    assert nn.PixelShuffle(2)(x).shape == (2, 6, 8)
+    assert nn.PixelUnshuffle(2)(lucid.randn(3, 6, 8, device=device)).shape == (12, 3, 4)
+    assert nn.PixelShuffle(2)(lucid.randn(2, 3, 8, 3, 4, device=device)).shape == (2, 3, 2, 6, 8)

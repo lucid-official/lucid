@@ -68,6 +68,18 @@ def _fused_attention(
     )
 
 
+def _default_scale(head_dim: int) -> float:
+    """The ``1/sqrt(head_dim)`` default scale.
+
+    A zero head dimension makes every score an empty dot product, ``0``,
+    whatever the scale — the reference softmaxes those to a uniform row —
+    so any finite scale does and ``1/sqrt(0)`` need not be formed.
+    """
+    import math
+
+    return 1.0 / math.sqrt(head_dim) if head_dim > 0 else 1.0
+
+
 def _masked_attention(
     query: Tensor,
     key: Tensor,
@@ -99,6 +111,13 @@ def _masked_attention(
     refuse a mismatched mask rather than read it in the wrong dtype.
     """
     import lucid as _lucid
+
+    if attn_mask is not None and attn_mask.shape[-1] == 0:
+        # No key to score, so the mask has no entry to say anything about —
+        # and the all-``-inf`` test below reduces over that empty axis,
+        # which the engine refuses.  Every row attends to nothing: the same
+        # zeros the unmasked call returns.
+        attn_mask = None
 
     dead: Tensor | None = None
     if attn_mask is not None:
@@ -286,7 +305,6 @@ def scaled_dot_product_attention(
     >>> out.shape
     (2, 8, 16, 64)
     """
-    import math
     import lucid as _lucid
 
     query, key, value = _attention_operands(query, key, value, enable_gqa, dropout_p)
@@ -390,7 +408,7 @@ def scaled_dot_product_attention(
                 attn_mask = attn_mask.expand(*full).contiguous()
 
     head_dim = query.shape[-1]
-    scale_val = scale if scale is not None else 1.0 / math.sqrt(head_dim)
+    scale_val = scale if scale is not None else _default_scale(int(head_dim))
     if is_causal:
         # Square, unmasked and without dropout: every row keeps key 0, so
         # there is no empty row to guard and the kernel's own triangle runs.

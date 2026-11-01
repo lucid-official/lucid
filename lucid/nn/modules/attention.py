@@ -2,7 +2,6 @@ r"""
 Multi-head attention module.
 """
 
-import math
 from typing import final, override
 
 from lucid._tensor.tensor import Tensor
@@ -18,6 +17,7 @@ from lucid.nn.functional.linear import linear
 from lucid.nn.functional.attention import (
     _causal_additive_mask,
     _keep_mask_to_additive,
+    _default_scale,
     _masked_attention,
     repeat_kv,
     scaled_dot_product_attention,
@@ -818,7 +818,7 @@ class MultiheadAttention(Module):
                 kh,
                 vh,
                 merged_mask,
-                1.0 / math.sqrt(qh.shape[-1]),
+                _default_scale(int(qh.shape[-1])),
                 dropout_p=dropout_p,
                 need_weights=need_weights,
             )
