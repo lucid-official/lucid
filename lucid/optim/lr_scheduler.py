@@ -18,6 +18,11 @@ from lucid.optim._scheduler_base import (
     _require_group_keys,
     _reset_to_base,
 )
+from lucid.optim._warm_restarts import (
+    _check_cycle_lengths,
+    _current_cycle_keys,
+    _WarmRestartCycle,
+)
 from lucid.optim.optimizer import (
     Optimizer,
     _CyclicLike,
@@ -1003,21 +1008,7 @@ class PolynomialLR(LRScheduler):
         return [base_lr * (1 - t / self.total_iters) ** self.power for base_lr in self.base_lrs]
 
 
-def _check_cycle_lengths(T_0: object, T_mult: object, eta_min: object) -> None:
-    """Refuse a cycle length the schedule cannot be placed in, before any state is set.
-
-    Checked on what was passed, not on the annotation: a ``T_0`` of ``0`` or
-    ``3.5`` made every step a division by zero or a cycle that never ends.
-    """
-    if not (isinstance(T_0, int) and T_0 > 0):
-        raise ValueError(f"Expected positive integer T_0, but got {T_0}")
-    if not (isinstance(T_mult, int) and T_mult >= 1):
-        raise ValueError(f"Expected integer T_mult >= 1, but got {T_mult}")
-    if not isinstance(eta_min, float | int):
-        raise TypeError(f"Expected float or int eta_min, but got {eta_min} of type {type(eta_min)}")
-
-
-class CosineAnnealingWarmRestarts(LRScheduler):
+class CosineAnnealingWarmRestarts(LRScheduler, _WarmRestartCycle):
     r"""Cosine annealing with periodic warm restarts (SGDR).
 
     Implements the Stochastic Gradient Descent with Warm Restarts (SGDR)
@@ -1063,6 +1054,10 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         Cycle-length multiplier applied after each restart.
     eta_min : float
         Lower bound on the learning rate.
+    T_cur : float
+        Epochs since the last restart.
+    T_i : int
+        Length of the current cycle.
 
     Notes
     -----
@@ -1101,36 +1096,23 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         self.T_0 = T_0
         self.T_mult = T_mult
         self.eta_min = eta_min
-        self._T_cur: float = last_epoch  # a resumed one is that far in, not at the start
-        self._T_i = T_0
+        self.T_cur: float = last_epoch  # a resumed one is that far in, not at the start
+        self.T_i = T_0
         super().__init__(optimizer, last_epoch)
 
-    def _advance_cycle(self) -> None:
-        """Move a step through the cycle — to its start, before step 0 — as the reference."""
-        if self.last_epoch < 0:
-            self._T_cur, self._T_i = 0, self.T_0
-            return
-        self._T_cur += 1
-        if self._T_cur >= self._T_i:
-            self._T_cur %= self._T_i
-            self._T_i *= self.T_mult
+    @override
+    def load_state_dict(self, state_dict: dict[str, object]) -> None:
+        """Restore state produced by :meth:`state_dict`, from this or an older Lucid.
+
+        An older Lucid kept the cycle under ``_T_cur`` and ``_T_i``.
+        """
+        super().load_state_dict(_current_cycle_keys(state_dict))
 
     @override
     def _initial_step(self) -> None:
         """Write step 0's rates, at the cycle position ``last_epoch`` puts it."""
         self._advance_cycle()
         super()._initial_step()
-
-    def _place_in_cycle(self, epoch: float) -> None:
-        """Put the cycle at ``epoch``, which may be fractional, from the start."""
-        if epoch < self.T_0:
-            self._T_i, self._T_cur = self.T_0, epoch
-        elif self.T_mult == 1:
-            self._T_cur = epoch % self.T_0
-        else:
-            n = int(math.log(epoch / self.T_0 * (self.T_mult - 1) + 1, self.T_mult))
-            self._T_cur = epoch - self.T_0 * (self.T_mult**n - 1) / (self.T_mult - 1)
-            self._T_i = self.T_0 * self.T_mult**n
 
     @override
     def step(self, epoch: float | None = None) -> None:
@@ -1167,7 +1149,7 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         """
         if epoch is not None and epoch < 0:
             raise ValueError(f"Expected non-negative epoch, but got {epoch}")
-        cycle = (self._T_cur, self._T_i)
+        cycle = (self.T_cur, self.T_i)
         if epoch is None:
             self._advance_cycle()
         else:
@@ -1176,7 +1158,7 @@ class CosineAnnealingWarmRestarts(LRScheduler):
             self._update_lr(None if epoch is None else math.floor(epoch))
         except ValueError:
             # A refused step leaves the cycle where it was, too.
-            self._T_cur, self._T_i = cycle
+            self.T_cur, self.T_i = cycle
             raise
         self._step_count += 1
 
@@ -1192,7 +1174,7 @@ class CosineAnnealingWarmRestarts(LRScheduler):
         """
         return [
             self.eta_min
-            + (base_lr - self.eta_min) * (1 + math.cos(math.pi * self._T_cur / self._T_i)) / 2
+            + (base_lr - self.eta_min) * (1 + math.cos(math.pi * self.T_cur / self.T_i)) / 2
             for base_lr in self.base_lrs
         ]
 
@@ -1332,14 +1314,15 @@ class SequentialLR(_CompositeSchedulerMixin):
     milestone a scheduler starts over at epoch 0, from the base rates.  An
     LR scheduler does so by its closed form, which has no rate for a param
     group added before then: the switch raises ``ValueError``.  A
-    ``ChainedScheduler`` starts its chain over as one that runs first does
-    (a Lucid extension: the reference cannot restart a chain).
+    ``ChainedScheduler`` starts its chain over as one that runs first does,
+    and so does a ``SequentialLR`` (a Lucid extension: the reference cannot
+    restart either).
 
     Parameters
     ----------
     optimizer : Optimizer
         The optimizer shared by all schedulers.
-    schedulers : list of LRScheduler or ChainedScheduler
+    schedulers : list of LRScheduler, SequentialLR or ChainedScheduler
         Schedulers to activate in sequence, on ``optimizer``.  Must have
         ``len(schedulers) == len(milestones) + 1``.
     milestones : list of int
@@ -1352,7 +1335,7 @@ class SequentialLR(_CompositeSchedulerMixin):
     ----------
     optimizer : Optimizer
         The shared optimizer.
-    schedulers : list of LRScheduler or ChainedScheduler
+    schedulers : list of LRScheduler, SequentialLR or ChainedScheduler
         All schedulers in activation order.
     milestones : list of int
         Epoch indices marking scheduler transitions.
@@ -1387,17 +1370,17 @@ class SequentialLR(_CompositeSchedulerMixin):
     ...     scheduler.step()
     """
 
-    schedulers: list[LRScheduler | ChainedScheduler]
+    schedulers: list[LRScheduler | SequentialLR | ChainedScheduler]
 
     def __init__(
         self,
         optimizer: Optimizer,
-        schedulers: Sequence[LRScheduler | ChainedScheduler],
+        schedulers: Sequence[LRScheduler | SequentialLR | ChainedScheduler],
         milestones: list[int],
         last_epoch: int = -1,
     ) -> None:
         """Initialise the SequentialLR.  See the class docstring for parameter semantics."""
-        _check_schedulers("SequentialLR", schedulers, optimizer, (LRScheduler, ChainedScheduler))
+        _check_schedulers("SequentialLR", schedulers, optimizer)
         if len(milestones) != len(schedulers) - 1:
             raise ValueError(
                 f"SequentialLR expects one milestone fewer than schedulers, got "
@@ -1411,8 +1394,28 @@ class SequentialLR(_CompositeSchedulerMixin):
         # other.  Start from the base again, take those steps back, and give
         # step 0 to the child that runs first only.
         _reset_to_base(optimizer)
-        self._undo_initial_step()
+        self._undo_children_initial_steps()
         schedulers[bisect_right(milestones, 0)]._initial_step()
+
+    def _active(self) -> LRScheduler | SequentialLR | ChainedScheduler:
+        """The child the current epoch belongs to."""
+        return self.schedulers[bisect_right(self.milestones, self.last_epoch)]
+
+    @override
+    def _initial_step(self) -> None:
+        """Step 0 of a SequentialLR that runs first in another: its first child's."""
+        self.last_epoch = 0
+        self._active()._initial_step()
+
+    @override
+    def _undo_initial_step(self) -> None:
+        """Take back step 0 of a SequentialLR wrapped by another.
+
+        Only the child that holds step 0 has one to take back; the rest were
+        undone when this one was built.
+        """
+        self._active()._undo_initial_step()
+        self.last_epoch -= 1
 
     @override
     def load_state_dict(self, state_dict: dict[str, object]) -> None:
@@ -1473,8 +1476,7 @@ class SequentialLR(_CompositeSchedulerMixin):
             Current learning rate of each optimizer param group, as
             reported by the active scheduler.
         """
-        active = self.schedulers[bisect_right(self.milestones, self.last_epoch)]
-        return active.get_last_lr()
+        return self._active().get_last_lr()
 
 
 class ChainedScheduler(_CompositeSchedulerMixin):
@@ -1545,21 +1547,14 @@ class ChainedScheduler(_CompositeSchedulerMixin):
     ) -> None:
         """Initialise the ChainedScheduler.  See the class docstring for parameter semantics."""
         # Nothing to write: each child took its step 0 on the last one's rate.
-        self.optimizer = _check_schedulers(
-            "ChainedScheduler", schedulers, optimizer, (LRScheduler, _CompositeSchedulerMixin)
-        )
+        self.optimizer = _check_schedulers("ChainedScheduler", schedulers, optimizer)
         self.schedulers = list(schedulers)
 
+    @override
     def _initial_step(self) -> None:
         """Step 0 of a chain that runs first in a SequentialLR: each child steps once."""
         for sched in self.schedulers:
             sched.step()
-
-    def _restart(self) -> None:
-        """Start over at a SequentialLR milestone, as a chain that runs first does."""
-        with _all_or_nothing(self):
-            _reset_to_base(self.optimizer)
-            self._initial_step()
 
     def step(self) -> None:
         """Step all chained schedulers simultaneously.

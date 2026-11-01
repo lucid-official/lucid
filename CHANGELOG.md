@@ -233,6 +233,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - no anchor nested in a clickable card (peft e2e)
 
+- nest SequentialLR; publish warm-restart T_cur and T_i
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

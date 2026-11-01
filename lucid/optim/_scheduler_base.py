@@ -476,17 +476,30 @@ class _CompositeSchedulerMixin:
             for sch, child in zip(self.schedulers, child_states, strict=True):
                 sch.load_state_dict(child)
 
-    def _undo_initial_step(self) -> None:
-        """Take back each wrapped scheduler's step 0, as the reference recurses."""
+    def _initial_step(self) -> None:
+        """Step 0 of this composite, when it runs first in a SequentialLR."""
+        raise NotImplementedError
+
+    def _restart(self) -> None:
+        """Start over at an outer SequentialLR's milestone, as one that runs first does."""
+        with _all_or_nothing(self):
+            _reset_to_base(self.optimizer)
+            self._initial_step()
+
+    def _undo_children_initial_steps(self) -> None:
+        """Take back step 0 of every wrapped scheduler, leaving this composite's own."""
         for sched in self.schedulers:
             sched._undo_initial_step()
+
+    def _undo_initial_step(self) -> None:
+        """Take back step 0 of what this composite wraps, as the reference recurses."""
+        self._undo_children_initial_steps()
 
 
 def _check_schedulers(
     owner: str,
     schedulers: Sequence[LRScheduler | _CompositeSchedulerMixin],
     optimizer: Optimizer | None,
-    accepted: tuple[type, ...],
 ) -> Optimizer:
     """The optimizer a composite's children share, or why it cannot wrap them.
 
@@ -505,13 +518,11 @@ def _check_schedulers(
                 f"{owner} at index {i}: {type(sched).__name__} steps on a metric, "
                 f"which {owner}.step() does not take"
             )
-        if not isinstance(sched, accepted):
-            kinds = {
-                LRScheduler: "an LR scheduler",
-                _CompositeSchedulerMixin: "SequentialLR or ChainedScheduler",
-            }
-            names = " or ".join(kinds.get(t, t.__name__) for t in accepted)
-            raise TypeError(f"{owner} at index {i}: expected {names}, got {type(sched).__name__}")
+        if not isinstance(sched, (LRScheduler, _CompositeSchedulerMixin)):
+            raise TypeError(
+                f"{owner} at index {i}: expected an LR scheduler, SequentialLR or "
+                f"ChainedScheduler, got {type(sched).__name__}"
+            )
     shared = optimizer or schedulers[0].optimizer
     for i, sched in enumerate(schedulers):
         if sched.optimizer is not shared:
