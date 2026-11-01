@@ -213,6 +213,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - DistributedSampler pads by cycling, not by prefix (LCD-802)
 
+- api generator depth, literal blocks, private-base members
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

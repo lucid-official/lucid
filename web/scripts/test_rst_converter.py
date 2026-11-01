@@ -49,6 +49,65 @@ def test_literal_block_double_colon_collapses() -> None:
     assert "Example:" in out and "x = add(a, b)" in out, out
 
 
+def test_literal_block_becomes_fenced_code() -> None:
+    """LCD-725: a ``::`` paragraph followed by an indented block is a reST
+    literal block.  It used to survive as indented lines that markdown joins
+    into ONE flowing paragraph; it must come out as a fenced code block with
+    its common indent removed and every line on its own line."""
+    out = rst(
+        "Usage looks like::\n\n"
+        "    from lucid.peft import LoraConfig\n\n"
+        "    config = LoraConfig(r=8)\n"
+        "    print(config)\n\n"
+        "Then prose."
+    )
+    assert "Usage looks like:" in out and "Usage looks like::" not in out, out
+    assert "```python\nfrom lucid.peft import LoraConfig\n\nconfig = LoraConfig(r=8)\nprint(config)\n```" in out, out
+    assert out.rstrip().endswith("Then prose."), out
+
+
+def test_literal_block_that_is_not_python_gets_a_text_fence() -> None:
+    out = rst("Keys::\n\n    base_model.model.x.lora_A.weight -> (r, in)\n")
+    assert "```text\nbase_model.model.x.lora_A.weight -> (r, in)\n```" in out, out
+
+
+def test_literal_block_marker_alone_on_a_line_is_dropped() -> None:
+    out = rst("Sentence.\n\n::\n\n    x = 1\n")
+    assert "::" not in out, out
+    assert "```python\nx = 1\n```" in out, out
+
+
+def test_literal_block_inside_a_list_item_ends_with_the_item_text() -> None:
+    """The indent a literal block has to exceed is the item TEXT's column, not
+    the marker's: the item's own continuation line is prose, not code."""
+    out = rst("* item::\n\n      x = 1\n\n  continues here.\n")
+    assert "```python\nx = 1\n```" in out, out
+    assert "continues here." in out and "continues" not in out.split("```")[1], out
+
+
+def test_double_colon_without_a_block_is_left_alone() -> None:
+    """``::`` that opens no indented block is not literal: ``std::vector``
+    mid-line is untouched, a trailing marker degrades to ``:`` as before."""
+    assert "std::vector" in rst("Use std::vector here.")
+    out = rst("Not literal::\nmore text directly.")
+    assert "```" not in out and "Not literal:" in out, out
+
+
+def test_escaped_space_after_inline_markup_is_dropped() -> None:
+    """``\\`\\`Parameter\\`\\`\\ s`` is reST's way to attach a plural ``s`` to a
+    literal; the backslash-space must not reach the page.  A TeX ``\\ `` inside
+    math is not reST and stays."""
+    out = rst(r"Raw ``nn.Parameter``\ s to adapt, and $a\ b$.")
+    assert "`nn.Parameter`s to adapt" in out, out
+    assert r"$a\ b$" in out, out
+
+
+def test_doctest_inside_a_literal_block_is_not_fenced_twice() -> None:
+    out = rst("Run it::\n\n    >>> import lucid\n    >>> lucid.add(1, 2)\n")
+    assert out.count("```") == 2, out
+    assert ">>> import lucid" in out, out
+
+
 def test_doctest_blocks_are_fenced() -> None:
     """``>>>`` doctest lines get wrapped in a ```python fence (never left as a
     reST blockquote / bare prose)."""

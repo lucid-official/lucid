@@ -5,13 +5,16 @@ Reads lucid/ Python source statically (NumPy docstring parser),
 outputs one JSON file per module to web/public/api-data/.
 
 Usage:
-    python scripts/build-api-data.py [--module MODULE] [--verbose]
+    python scripts/build-api-data.py [--module MODULE | --package PACKAGE] [--verbose]
 
     # Build all (default)
     python scripts/build-api-data.py
 
     # Single module PoC
     python scripts/build-api-data.py --module lucid.fft
+
+    # One package and everything under it
+    python scripts/build-api-data.py --package lucid.peft
 """
 
 # fmt: off
@@ -88,12 +91,12 @@ GITHUB_BASE = "https://github.com/lucid-official/lucid/blob"
 # Module manifest — auto-discovered from lucid/ directory structure
 # ---------------------------------------------------------------------------
 #
-# The discovery walk recurses two levels under ``lucid/``, looking for
+# The discovery walk recurses to any depth under ``lucid/``, looking for
 # directories that contain an ``__init__.py``.  Anything matching is exposed
-# as ``lucid.<dir>`` (or ``lucid.<dir>.<subdir>`` at the second level).
+# as ``lucid.<dir>[.<subdir>…]``.
 #
 # - Private packages (leading ``_``) are skipped automatically.
-# - Internal-only packages are listed in ``_EXCLUDED_SUBPKGS`` below.
+# - Internal-only packages are listed in ``_EXCLUDED_SUBTREE`` below.
 # - Special cases (class-modules, slug-path remappings, .py-file modules)
 #   live in ``_MANIFEST_OVERRIDES`` — applied AFTER discovery.
 #
@@ -229,11 +232,16 @@ _SYNTH_SUMMARIES: dict[str, tuple[str, str]] = {
 def _discover_manifest() -> dict[str, str]:
     """Walk lucid/ to auto-discover all documentable subpackages.
 
-    Returns a manifest dict ``{slug → griffe_path}``.  Walks two levels of
-    public directories under lucid/, then layers the explicit overrides
-    above.  The bare ``lucid`` top-level is intentionally NOT included —
-    its content is fully re-exported from the private subpackages that
-    ``_MANIFEST_OVERRIDES`` already surfaces under friendly aliases
+    Returns a manifest dict ``{slug → griffe_path}``.  Every public package
+    (no leading ``_``, has an ``__init__.py``) is picked up **at any depth** —
+    the walk used to stop after two levels, so ``lucid.peft.tuners`` built with
+    no members and the subpackages under it (``lucid.peft.tuners.lora`` …)
+    were never built at all.  Pruning is by exclusion only: a slug in
+    ``_EXCLUDED_SUBTREE`` ends its branch, one in ``_EXCLUDED_SELF`` is
+    skipped but its children are still walked.  The explicit overrides are
+    layered on afterwards.  The bare ``lucid`` top-level is intentionally NOT
+    included — its content is fully re-exported from the private subpackages
+    that ``_MANIFEST_OVERRIDES`` already surfaces under friendly aliases
     (``lucid.creation``, ``lucid.ops``, ``lucid.ops.composite``).
     """
     manifest: dict[str, str] = {}
@@ -248,39 +256,137 @@ def _discover_manifest() -> dict[str, str]:
             and (p / "__init__.py").exists()
         )
 
-    for first in sorted(lucid_dir.iterdir()):
-        if not _is_public_pkg(first):
-            continue
-        slug = f"lucid.{first.name}"
-        if slug in _EXCLUDED_SUBTREE:
-            continue
-        if slug not in _EXCLUDED_SELF:
-            manifest[slug] = slug
-        for second in sorted(first.iterdir()):
-            if not _is_public_pkg(second):
+    def _walk(parent: Path, parent_slug: str) -> None:
+        for child in sorted(parent.iterdir()):
+            if not _is_public_pkg(child):
                 continue
-            sub_slug = f"{slug}.{second.name}"
-            if sub_slug in _EXCLUDED_SUBTREE or sub_slug in _EXCLUDED_SELF:
+            slug = f"{parent_slug}.{child.name}"
+            if slug in _EXCLUDED_SUBTREE:
                 continue
-            manifest[sub_slug] = sub_slug
-            # Family-root walk: lucid.models has a 4-level structure
-            # (lucid/models/{vision,text,generative}/{family}/) — every
-            # leaf family directory becomes its own page so the family
-            # cards on the family-root index are clickable.
-            if sub_slug in _FAMILY_ROOTS:
-                for third in sorted(second.iterdir()):
-                    if not _is_public_pkg(third):
-                        continue
-                    leaf_slug = f"{sub_slug}.{third.name}"
-                    if leaf_slug in _EXCLUDED_SUBTREE or leaf_slug in _EXCLUDED_SELF:
-                        continue
-                    manifest[leaf_slug] = leaf_slug
+            if slug not in _EXCLUDED_SELF:
+                manifest[slug] = slug
+            _walk(child, slug)
+
+    _walk(lucid_dir, "lucid")
 
     manifest.update(_MANIFEST_OVERRIDES)
     return manifest
 
 
 MODULE_MANIFEST: dict[str, str] = _discover_manifest()
+
+# ---------------------------------------------------------------------------
+# Canonical page of a re-export
+# ---------------------------------------------------------------------------
+#
+# ``lucid.peft`` re-exports every tuner's config and model
+# (``from lucid.peft import LoraConfig``) from the sub-package that defines it
+# (``lucid.peft.tuners.lora``).  Listing them in both places would document
+# the same symbol twice (arch-docs-site-rules §1) and double the sidebar, and
+# listing them only on the parent would leave a tuner's own page without its
+# config — so a symbol a parent in this set re-exports is documented on the
+# deepest *documented* sub-package that defines it, and the parent's page
+# keeps what is its own (the model wrapper, the task classes, the entry points).
+_EXPORT_OWNER_PARENTS: set[str] = {"lucid.peft"}
+
+
+def _export_owner(path: str, parent_slug: str) -> str | None:
+    """The documented sub-package of ``parent_slug`` that defines the symbol at dotted ``path``.
+
+    ``lucid.peft.tuners.lora._config.LoraConfig`` → ``lucid.peft.tuners.lora``;
+    ``None`` when the symbol is defined in the parent itself (or in a package
+    with no page of its own).
+    """
+    parts = path.split(".")
+    for i in range(len(parts) - 1, len(parent_slug.split(".")), -1):
+        candidate = ".".join(parts[:i])
+        if candidate in MODULE_MANIFEST:
+            return candidate
+    return None
+
+
+def _owned_parent_exports(mod: Any, slug: str) -> list[tuple[str, Any]]:
+    """``(name, member)`` the parent re-exports that ``slug`` is the canonical page of."""
+    for parent_slug in _EXPORT_OWNER_PARENTS:
+        if not slug.startswith(parent_slug + "."):
+            continue
+        parent = mod
+        while parent is not None and getattr(parent, "path", None) != parent_slug:
+            parent = getattr(parent, "parent", None)
+        if parent is None:
+            return []
+        exported = _parse_dunder_all(parent) or set()
+        owned: list[tuple[str, Any]] = []
+        for name, raw in parent.members.items():
+            if name not in exported:
+                continue
+            target = _resolve_member(raw)
+            if target is not None and _export_owner(target.path, parent_slug) == slug:
+                owned.append((name, target))
+        return owned
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Package sections (web/data/api-sections.json)
+# ---------------------------------------------------------------------------
+#
+# A package whose sub-packages are better read in groups than as one
+# alphabetical run (``lucid.peft``: LoRA family, orthogonal family, prompt
+# learning, …) lists them in ``web/data/api-sections.json``.  That file is the
+# single source of the grouping for the sidebar and the overview cards (read
+# by the Next.js app) and of the per-package display metadata the build
+# stamps onto each page (label, paper); the completeness test reads it too.
+API_SECTIONS_FILE = WEB_ROOT / "data" / "api-sections.json"
+
+
+def _load_api_sections() -> dict[str, Any]:
+    try:
+        return json.loads(API_SECTIONS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _section_package(slug: str) -> dict[str, Any] | None:
+    """The ``packages`` entry for ``slug`` in any package's sections, if listed."""
+    for parent in _load_api_sections().values():
+        for section in parent.get("sections", []):
+            for package in section.get("packages", []):
+                if package.get("slug") == slug:
+                    return package
+    return None
+
+
+def _leading_paragraphs(text: str) -> str:
+    """The first paragraph of ``text`` and the display-math block under it, if any."""
+    paragraphs = [p for p in text.split("\n\n") if p.strip()]
+    if not paragraphs:
+        return ""
+    lead = [paragraphs[0]]
+    if len(paragraphs) > 1 and paragraphs[1].lstrip().startswith("$$"):
+        lead.append(paragraphs[1])
+    return "\n\n".join(lead)
+
+
+def _inject_package_meta(slug: str, data: dict[str, Any]) -> None:
+    """Stamp a sectioned package's display metadata onto its page data.
+
+    Reuses the model-family fields (``canonical_name`` / ``citation`` /
+    ``theory``) so the overview renders the same Paper / Overview block and
+    card a model family gets: the label and paper come from the sections file,
+    the overview is the lead of the package's config class — the method is
+    described once, where it is configured, and not retyped here.
+    """
+    package = _section_package(slug)
+    if package is None:
+        return
+    data["canonical_name"] = package["label"]
+    if package.get("citation"):
+        data["citation"] = _rst_inline_markup(package["citation"])
+    for member in data.get("members", []):
+        if member.get("kind") == "class" and member["name"].endswith("Config") and member.get("extended"):
+            data["theory"] = _leading_paragraphs(member["extended"])
+            break
 
 # ---------------------------------------------------------------------------
 # Griffe helpers
@@ -619,12 +725,15 @@ def _rst_inline_markup(text: str) -> str:
         r"`\1`",
         text,
     )
-    # reST literal-block marker ``::`` at end of a line → ``:`` (the indented
-    # block that follows is already a 4-space code block markdown renders
-    # verbatim); a lone ``::`` line is dropped.  Only matches line-end so an
-    # inline ``std::vector`` mid-sentence is left intact.
+    # reST literal-block marker ``::`` at end of a line → ``:`` (a block that
+    # followed it was already fenced by ``_convert_literal_blocks``); a lone
+    # ``::`` line is dropped.  Only matches line-end so an inline
+    # ``std::vector`` mid-sentence is left intact.
     text = re.sub(r"(\S)[ \t]*::([ \t]*(?:\n|$))", r"\1:\2", text)
     text = re.sub(r"(?m)^[ \t]*::[ \t]*$", "", text)
+    # reST's escaped space (``\ ``) glues markup to a following letter —
+    # ``Parameter``\ s — and renders as nothing; markdown would show it.
+    text = re.sub(r"(?<!\\)\\ ", "", text)
     return text
 
 
@@ -739,17 +848,115 @@ def _convert_directive_blocks(text: str) -> str:
     return "".join(out)
 
 
+# A list-item marker (``*``, ``-``, ``+``, ``1.``, ``1)``) opening a line: the
+# text of the item starts after it, and that column — not the marker's — is
+# the indentation a literal block under the item has to exceed.
+_LIST_MARKER = re.compile(r"^([ \t]*(?:[*+-]|\d+[.)])[ \t]+)")
+
+
+def _indent_of(line: str) -> int:
+    lead = line[: len(line) - len(line.lstrip(" \t"))]
+    return len(lead.expandtabs(4))
+
+
+def _code_fence_for(code: str) -> str:
+    """Opening fence for a literal block: ``python`` when the block parses as
+    Python (the common case — usage snippets), a ``text`` fence otherwise (shell
+    output, ascii tables, key listings)."""
+    import ast as _ast
+    try:
+        _ast.parse(code)
+    except (SyntaxError, ValueError):
+        return "```text"
+    return "```python"
+
+
+def _convert_literal_blocks(text: str) -> str:
+    """reST literal blocks → fenced code blocks.
+
+    A paragraph ending in ``::`` followed by a blank line and a block indented
+    deeper than the paragraph is *literal*: its content is code, to be shown
+    verbatim.  Until now the marker was merely shortened to ``:`` and the block
+    left as an indented run of lines, which markdown joins into one flowing
+    paragraph (the ``lucid.peft`` module overview rendered its whole usage
+    example as a sentence).  The marker is shortened to ``:`` (a lone ``::``
+    line is dropped) and the block is emitted as a fenced code block with its
+    common indentation removed.
+
+    A ``::`` that opens no indented block — ``std::vector`` mid-line, a marker
+    at the end of a paragraph with nothing under it — is left for the inline
+    pass.  Lines already inside a fence are skipped.
+    """
+    lines = text.split("\n")
+    out: list[str] = []
+    i = 0
+    n = len(lines)
+    in_fence = False
+    while i < n:
+        line = lines[i]
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            out.append(line)
+            i += 1
+            continue
+        stripped = line.rstrip()
+        if in_fence or not stripped.endswith("::") or stripped.lstrip().startswith(".."):
+            out.append(line)
+            i += 1
+            continue
+
+        item = _LIST_MARKER.match(line)
+        base = len(item.group(1).expandtabs(4)) if item else _indent_of(line)
+        j = i + 1
+        while j < n and not lines[j].strip():
+            j += 1
+        if j == i + 1 or j >= n or _indent_of(lines[j]) <= base:
+            out.append(line)           # no blank line + deeper block: not literal
+            i += 1
+            continue
+
+        k = j
+        block: list[str] = []
+        while k < n and (not lines[k].strip() or _indent_of(lines[k]) > base):
+            block.append(lines[k])
+            k += 1
+        while block and not block[-1].strip():
+            block.pop()
+            k -= 1
+
+        head = stripped[:-2].rstrip()
+        if head.strip():
+            out.append(f"{head}:")
+            out.append("")
+        code = textwrap.dedent("\n".join(block)).strip("\n")
+        out.append(_code_fence_for(code))
+        out.extend(code.split("\n"))
+        out.append("```")
+        out.append("")
+        i = k
+    return "\n".join(out)
+
+
 def _fence_doctests(text: str) -> str:
     """Wrap doctest blocks (consecutive ``>>>`` / ``...`` lines) in a fenced
     ```` ```python ```` code block.  Without this, a doctest authored in prose
     (not under an ``Examples`` header) renders as a markdown blockquote — the
     ``>>>`` triggers ``>`` blockquote nesting — and the code collapses into a
-    run-on line (the transforms module overview)."""
+    run-on line (the transforms module overview).
+
+    Lines already inside a fenced block (a ``code-block`` directive, a reST
+    literal block) are left alone: fencing them again would nest a fence in a
+    fence and close the outer one early."""
     lines = text.split("\n")
     out: list[str] = []
     i = 0
+    in_fence = False
     while i < len(lines):
-        if lines[i].lstrip().startswith(">>>"):
+        if lines[i].lstrip().startswith("```"):
+            in_fence = not in_fence
+            out.append(lines[i])
+            i += 1
+        elif not in_fence and lines[i].lstrip().startswith(">>>"):
             block: list[str] = []
             while i < len(lines) and lines[i].lstrip().startswith((">>>", "...")):
                 block.append(lines[i])
@@ -788,6 +995,7 @@ def _rst_to_text(text: str) -> str:
 
     Converts:
       - ``.. math::`` / ``.. code-block::`` / ``.. note::`` …  block directives
+      - ``Paragraph::`` + indented block → ``Paragraph:`` + a fenced code block
       - ``>>>`` doctest blocks         → fenced ```` ```python ``` ````
       - ``:math:`expr```               → $expr$   (inline math)
       - ````code````                   → `code`   (inline code)
@@ -797,6 +1005,7 @@ def _rst_to_text(text: str) -> str:
       - ANY other role ``:role:`Foo``` → `Foo`    (generic cross-reference pass)
     """
     text = _convert_directive_blocks(text)   # .. math:: / code-block:: / note::
+    text = _convert_literal_blocks(text)     # paragraph:: + indented block → fence
     text = _fence_doctests(text)             # >>> blocks → ```python fences
     # Inline passes (math + roles/code/cite/::) run only OUTSIDE fenced code so
     # they never mangle the ``` fences produced above.
@@ -923,6 +1132,15 @@ def _parse_docstring(obj: Any, parser: Any) -> dict[str, Any]:
     # Prefer the Griffe docstring object; fall back to the AST-extracted __doc__
     # when the stub (.pyi) has no docstring but the .py implementation does.
     if not obj.docstring:
+        # The fallback exists for a ``.pyi`` stub whose ``...`` body carries no
+        # docstring while the ``.py`` implementation does.  An object read from
+        # a ``.py`` file has nothing to fall back to: it IS the implementation,
+        # and a lookup by name alone would hand it the docstring of the first
+        # unrelated function of the same name — every ``__init__`` without one
+        # (``LoraConfig.__init__``) was documented with another class's text.
+        source_file = getattr(obj, "filepath", None)
+        if source_file is not None and not str(source_file).endswith(".pyi"):
+            return result
         fn_name = getattr(obj, "name", None) or obj.path.split(".")[-1]
         # When this method belongs to a class, pass the class name so the
         # AST fallback doesn't pick up a same-named method on a different
@@ -1322,6 +1540,184 @@ def _serialise_property(attr: Any, sha: str) -> dict[str, Any]:
     }
 
 
+# ``#:`` is the Sphinx convention for documenting an attribute with a comment —
+# the line(s) directly above an assignment, or trailing on its line.  Griffe
+# reads attribute docstrings (a string literal under the assignment) but not
+# this form, and lucid's classes use it for the state they expose as plain
+# instance attributes (``merged``, ``disable_adapters``, ``active_adapter``).
+_SOURCE_LINES_CACHE: dict[str, list[str]] = {}
+
+
+def _source_lines(filepath: Any) -> list[str]:
+    key = str(filepath)
+    lines = _SOURCE_LINES_CACHE.get(key)
+    if lines is None:
+        try:
+            lines = Path(key).read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            lines = []
+        _SOURCE_LINES_CACHE[key] = lines
+    return lines
+
+
+def _doc_comment_text(lines: list[str], lineno: int) -> str | None:
+    """The ``#:`` comment documenting the assignment on 1-based ``lineno``.
+
+    Consecutive ``#:`` lines directly above it are joined; failing that, a
+    trailing ``#:`` on the assignment's own line.  ``None`` when there is none.
+    """
+    if not 1 <= lineno <= len(lines):
+        return None
+    above: list[str] = []
+    k = lineno - 2
+    while k >= 0 and lines[k].lstrip().startswith("#:"):
+        above.append(lines[k].lstrip()[2:].strip())
+        k -= 1
+    if above:
+        return " ".join(reversed(above)).strip() or None
+    own = lines[lineno - 1]
+    if "#:" in own:
+        return own.split("#:", 1)[1].strip() or None
+    return None
+
+
+def _attribute_doc_text(attr: Any) -> str | None:
+    """Documentation of a Griffe ``Attribute`` — its docstring, else its ``#:`` comment."""
+    docstring = getattr(attr, "docstring", None)
+    if docstring is not None and docstring.value.strip():
+        return docstring.value.strip()
+    filepath = getattr(attr, "filepath", None)
+    lineno = getattr(attr, "lineno", None)
+    if filepath is None or lineno is None:
+        return None
+    return _doc_comment_text(_source_lines(filepath), lineno)
+
+
+def _serialise_documented_attribute(attr: Any, sha: str, text: str) -> dict[str, Any]:
+    """A documented public attribute as a pseudo-method (``labels: ["attribute"]``)."""
+    ann = _annotation_str(attr.annotation)
+    prose = _rst_to_text(text)
+    paragraphs = [p for p in prose.split("\n\n") if p.strip()]
+    return {
+        "name":      attr.name,
+        "path":      attr.path,
+        "kind":      "function",
+        "labels":    ["attribute"],
+        "signature": f"{attr.name}: {ann}" if ann else attr.name,
+        "source":    _source_link(attr, sha),
+        "summary":   paragraphs[0] if paragraphs else None,
+        "extended":  "\n\n".join(paragraphs[1:]) or None,
+        "parameters": [], "returns": None, "raises": [], "examples": [],
+        "notes": [], "attributes": [], "warns": [], "see_also": [],
+    }
+
+
+# Packages whose private bases are the spine of their public classes: for
+# these, what sits *above* a private base is listed on the public class too,
+# public or not.  ``lucid.peft``'s ``LoraConfig`` is a ``_TargetedConfig`` is a
+# ``PeftConfig``; the config contract (``to_dict``, ``save_pretrained``) is
+# ``PeftConfig``'s, and the ``extends`` row shows only the private hop.  Anywhere
+# else the public ancestor keeps its own page and only the private base's own
+# members are added — ``nn.Module``'s hundred methods do not belong on every
+# fused-module page just because ``_FusedModule`` sits between.
+_PUBLIC_ANCESTORS_ACROSS_PRIVATE: set[str] = {"lucid.peft"}
+
+
+def _ancestors_through_private_bases(cls: Any) -> list[Any]:
+    """The base classes whose members a class page has to list itself.
+
+    A class's page lists what it defines.  What it inherits from a *public*
+    base is that base's to document — its page is one click away through the
+    ``extends`` row.  But a base whose name starts with ``_`` has no page and
+    is not navigable, so everything such a base defines was invisible:
+    ``LoraModel`` listed none of ``merge_and_unload`` / ``unload`` /
+    ``merge_adapter`` (``_BaseTuner``), ``Binomial`` neither ``probs`` nor
+    ``logits`` (``_CountTrialDistribution``).
+
+    Rule: walk the bases depth-first in declaration order; every private base
+    is taken, and — in a package of ``_PUBLIC_ANCESTORS_ACROSS_PRIVATE`` —
+    every ancestor above one that lives in that package too.  A public base
+    reached directly is a barrier, and so is anything outside the package
+    (``nn.Module``).
+    """
+    package = ".".join(cls.path.split(".")[:2])
+    through_public = package in _PUBLIC_ANCESTORS_ACROSS_PRIVATE
+    seen: set[str] = set()
+    found: list[Any] = []
+
+    def _bases(obj: Any) -> list[Any]:
+        try:
+            return list(getattr(obj, "resolved_bases", []) or [])
+        except Exception:                                 # noqa: BLE001 — unresolvable ancestry: take nothing
+            return []
+
+    def _visit(base: Any, crossed: bool) -> None:
+        path = getattr(base, "path", None)
+        if not path or path in seen or not path.startswith(package + "."):
+            return
+        seen.add(path)
+        private = base.name.startswith("_")
+        if not (private or (crossed and through_public)):
+            return                                        # public: its own page documents it
+        found.append(base)
+        for above in _bases(base):
+            _visit(above, True)
+
+    for direct in _bases(cls):
+        _visit(direct, False)
+    return found
+
+
+def _members_inherited_through_private_bases(cls: Any) -> list[tuple[Any, str, Any]]:
+    """``(base, name, member)`` for the public names a class gets from those
+    ancestors; a name the class — or an earlier ancestor — defines wins."""
+    taken: set[str] = set(cls.members)
+    found: list[tuple[Any, str, Any]] = []
+    for base in _ancestors_through_private_bases(cls):
+        for name, member in base.members.items():
+            if name.startswith("_") or name in taken:
+                continue
+            taken.add(name)
+            found.append((base, name, member))
+    return found
+
+
+def _inherited_method_docs(cls: Any, name: str, parser: Any) -> dict[str, Any] | None:
+    """The docstring an undocumented override inherits, as ``inspect.getdoc`` gives it.
+
+    A method redefined in a subclass without a docstring (``delete_adapter`` on
+    every tuner layer, ``extra_repr`` on a layer) is documented by the method it
+    overrides — the first ancestor, in declaration order, that documents one of
+    that name.  Constructors and other dunders never borrow: each describes its
+    own class.
+    """
+    if name.startswith("__"):
+        return None
+    seen: set[str] = set()
+
+    def _bases(obj: Any) -> list[Any]:
+        try:
+            return list(getattr(obj, "resolved_bases", []) or [])
+        except Exception:                                 # noqa: BLE001 — unresolvable ancestry: nothing to inherit
+            return []
+
+    def _search(obj: Any) -> dict[str, Any] | None:
+        for base in _bases(obj):
+            path = getattr(base, "path", None)
+            if not path or path in seen:
+                continue
+            seen.add(path)
+            member = base.members.get(name)
+            if member is not None and getattr(member, "docstring", None):
+                return _parse_docstring(member, parser)
+            found = _search(base)
+            if found is not None:
+                return found
+        return None
+
+    return _search(cls)
+
+
 def _merge_inherited_parameters(cls: Any, doc: dict[str, Any], parser: Any) -> None:
     """Fill in parameters the class accepts but does not itself describe.
 
@@ -1406,22 +1802,49 @@ def _serialise_class(
                     "__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__",
                     "__enter__", "__exit__"}
 
+    from griffe import Function as GriffeFunction, Attribute as GriffeAttr
+
+    # Names the class docstring already documents (its ``Parameters`` and
+    # ``Attributes`` tables) — an attribute with a ``#:`` comment is not listed
+    # a second time beside them.
+    described = {p["name"] for p in doc["parameters"]} | {a["name"] for a in doc["attributes"]}
+
+    def _member_entry(name: str, member: Any) -> dict[str, Any] | None:
+        if isinstance(member, GriffeFunction):
+            entry = _serialise_function(member, parser, sha)
+            owner = member.parent
+            if owner is not None and not entry.get("summary"):
+                inherited = _inherited_method_docs(owner, name, parser)
+                if inherited is not None:
+                    entry = {**entry, **{k: v for k, v in inherited.items() if v}}
+            return entry
+        if isinstance(member, GriffeAttr):
+            attr_labels = set(getattr(member, "labels", set()))
+            # Include Attribute members that are @property (have 'property' label)
+            if "property" in attr_labels:
+                return _serialise_property(member, sha)
+            # A plain class / instance attribute is listed when it is
+            # documented — by a docstring or a ``#:`` comment — and only then:
+            # an undocumented ``self.in_features = ...`` is not an API entry.
+            if name not in described and attr_labels & {"instance-attribute", "class-attribute"}:
+                text = _attribute_doc_text(member)
+                if text:
+                    return _serialise_documented_attribute(member, sha, text)
+        return None
+
     methods: list[dict[str, Any]] = []
     for name, member in cls.members.items():
-        from griffe import Function as GriffeFunction, Attribute as GriffeAttr
-
         # Skip private names (but keep selected dunders)
         if name.startswith("_") and name not in KEEP_DUNDERS:
             continue
+        entry = _member_entry(name, member)
+        if entry is not None:
+            methods.append(entry)
 
-        if isinstance(member, GriffeFunction):
-            methods.append(_serialise_function(member, parser, sha))
-        elif isinstance(member, GriffeAttr):
-            # Include Attribute members that are @property (have 'property' label)
-            attr_labels = set(getattr(member, "labels", set()))
-            if "property" in attr_labels:
-                methods.append(_serialise_property(member, sha))
-            # Skip plain class/instance attributes (not properties)
+    for base, name, member in _members_inherited_through_private_bases(cls):
+        entry = _member_entry(name, member)
+        if entry is not None:
+            methods.append({**entry, "inherited_from": base.name})
 
     return {
         "name":        cls.name,
@@ -1820,15 +2243,25 @@ def _serialise_module(mod: Any, parser: Any, sha: str, *, slug: str) -> dict[str
     # lucid.nn.init for type-annotation use) and leaks cross-package symbols.
     allowed_names = _parse_dunder_all(mod)
 
-    for name, raw_member in mod.members.items():
+    # Canonical page of a re-export (see ``_EXPORT_OWNER_PARENTS``): the parent
+    # drops what a documented sub-package defines, and the sub-package takes it
+    # in even when its own ``__all__`` does not list it.
+    owned_here = _owned_parent_exports(mod, slug)
+    extra_names = {name for name, _ in owned_here}
+    relocated_names: set[str] = set()
+
+    for name, raw_member in [*mod.members.items(), *owned_here]:
         if name.startswith("_"):
             continue
         # __all__ filter: skip names not explicitly exported
-        if allowed_names is not None and name not in allowed_names:
+        if allowed_names is not None and name not in allowed_names and name not in extra_names:
             continue
 
         member = _resolve_member(raw_member)
         if member is None:
+            continue
+        if slug in _EXPORT_OWNER_PARENTS and _export_owner(member.path, slug) is not None:
+            relocated_names.add(name)
             continue
         # Deduplicate — same class re-exported from multiple aliases
         if member.path in seen_paths:
@@ -1921,18 +2354,32 @@ def _serialise_module(mod: Any, parser: Any, sha: str, *, slug: str) -> dict[str
         documented_attrs = {a.get("name") for a in doc.get("attributes", [])}
         missing = []
         for n in allowed_names:
-            if n in emitted or n in documented_attrs:
+            if n in emitted or n in documented_attrs or n in relocated_names:
                 continue
             sub = mod.members.get(n)
             sub = _resolve_member(sub) if sub is not None else None
             if sub is None:
                 continue
-            from griffe import Module as _GModuleCheck
+            from griffe import Module as _GModuleCheck, Attribute as _GAttrCheck
             if isinstance(sub, _GModuleCheck):
                 # A bare submodule re-export (e.g. ``data`` in
                 # ``lucid.utils.__all__``) is fine — that submodule gets
                 # its own page.
                 continue
+            if isinstance(sub, _GAttrCheck):
+                # An exported constant that documents itself — an attribute
+                # docstring or a ``#:`` comment above it — joins the module's
+                # ``Attributes`` table, as if the module docstring listed it
+                # (``lucid.peft.MODEL_TYPE_TO_PEFT_MODEL_MAPPING``).
+                text = _attribute_doc_text(sub)
+                if text:
+                    doc["attributes"].append({
+                        "name":        n,
+                        "annotation":  _annotation_str(sub.annotation),
+                        "description": _rst_to_text(text),
+                    })
+                    documented_attrs.add(n)
+                    continue
             missing.append(n)
         if missing:
             print(f"  [warn] {slug}: __all__ exposes {missing} but they are missing "
@@ -2177,6 +2624,8 @@ def build_one(slug: str, griffe_path: str, loader: Any, parser: Any, sha: str) -
                     tasks = _extract_family_tasks(slug)
                     if tasks:
                         data["tasks"] = tasks
+                else:
+                    _inject_package_meta(slug, data)
             elif isinstance(obj, GriffeClass):
                 serialised = _serialise_class(obj, parser, sha)
                 data = {"slug": slug, **serialised}
@@ -2316,6 +2765,11 @@ def main() -> None:
         nargs="+",
         help="Build only these slugs (used by the incremental cache wrapper)",
     )
+    parser_args.add_argument(
+        "--package",
+        help="Build this package and every sub-package of it "
+             "(e.g. lucid.peft builds lucid.peft and lucid.peft.tuners.*)",
+    )
     parser_args.add_argument("--verbose", action="store_true")
     args = parser_args.parse_args()
     VERBOSE = args.verbose
@@ -2366,6 +2820,14 @@ def main() -> None:
         selected_slugs = {args.module}
     elif args.slugs:
         selected_slugs = set(args.slugs)
+    elif args.package:
+        selected_slugs = {
+            slug for slug in [*manifest, *_SYNTH_SLUGS]
+            if slug == args.package or slug.startswith(args.package + ".")
+        }
+        if not selected_slugs:
+            print(f"ERROR: no documented slug is or lives under '{args.package}'.")
+            sys.exit(1)
 
     synth_slugs = _SYNTH_SLUGS
     if selected_slugs is not None:

@@ -48,6 +48,9 @@ MODULE_CACHE = CACHE_DIR / "modules.json"
 # git, so that cache only works within one machine's build.  This one hashes
 # file bytes, so it's identical on macOS dev and the Linux CI runner.
 DRIFT_CACHE = CACHE_DIR / "drift-hashes.json"
+# Grouping + display metadata of sectioned packages (``lucid.peft``): inputs of
+# those pages that live outside the slug's own source directory.
+SECTIONS_FILE = WEB_ROOT / "data" / "api-sections.json"
 
 
 def _compute_key() -> str:
@@ -67,6 +70,7 @@ def _compute_key() -> str:
     # the cache key, only the set of mtimes.
     for script_name in sorted(HERE.glob("*.py")):
         sources.append(script_name)
+    sources.append(SECTIONS_FILE)
     for p in sources:
         try:
             st = p.stat()
@@ -109,6 +113,33 @@ def _slug_to_source_dir(slug: str) -> Path | None:
     if py.is_file():
         return py
     return None
+
+
+def _sectioned_inputs(slug: str) -> list[Path]:
+    """Files other than the slug's source directory that its page is built from.
+
+    A page of a sectioned package takes its label and paper from
+    ``api-sections.json``, and ``lucid.peft``'s page (and each tuner's) depends
+    on which names ``lucid/peft/__init__.py`` exports — a re-export is
+    documented on the sub-package that defines it.  Neither is under the
+    tuner's own directory, so a fingerprint over that directory alone would
+    call the page fresh after either changed.
+    """
+    try:
+        plan = json.loads(SECTIONS_FILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        return []
+    for parent, entry in plan.items():
+        listed = {
+            pkg["slug"]
+            for section in entry.get("sections", [])
+            for pkg in section.get("packages", [])
+        }
+        if slug == parent or slug == entry.get("overview") or slug in listed:
+            parent_dir = _slug_to_source_dir(parent)
+            inits = [parent_dir / "__init__.py"] if parent_dir is not None and parent_dir.is_dir() else []
+            return [SECTIONS_FILE, *inits]
+    return []
 
 
 def _model_factory_names_in_dir(d: Path) -> set[str]:
@@ -249,7 +280,7 @@ def _per_module_fingerprints() -> dict[str, str]:
         d = _slug_to_source_dir(slug)
         if d is None:
             continue
-        files = list(d.rglob("*.py")) if d.is_dir() else [d]
+        files = (list(d.rglob("*.py")) if d.is_dir() else [d]) + _sectioned_inputs(slug)
         result[slug] = _hash_paths(files, _model_summary_fingerprint(slug, d))
     return result
 
@@ -289,7 +320,7 @@ def _content_fingerprints() -> dict[str, str]:
         d = _slug_to_source_dir(slug)
         if d is None:
             continue
-        files = list(d.rglob("*.py")) if d.is_dir() else [d]
+        files = (list(d.rglob("*.py")) if d.is_dir() else [d]) + _sectioned_inputs(slug)
 
         def _rel(p: Path) -> str:
             return (
@@ -433,6 +464,7 @@ def main() -> int:
                 continue
             if not files:
                 continue
+            files += _sectioned_inputs(slug)
             current_per_module[slug] = _hash_paths(files, _model_summary_fingerprint(slug, d))
 
     # ── Orphan cleanup — slugs that used to be in the cache but no
