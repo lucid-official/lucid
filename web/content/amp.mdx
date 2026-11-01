@@ -12,6 +12,8 @@ The subsystem is two cooperating tools:
 - **`autocast`** — a context manager that casts eligible ops to `float16` (or `bfloat16`) at op boundaries.
 - **`GradScaler`** — a dynamic loss-scaling helper that stops small `float16` gradients from underflowing to zero.
 
+Two smaller pieces sit beside them: [`custom_fwd` / `custom_bwd`](/api/lucid.amp/custom_fwd) make a hand-written `autograd.Function` follow the autocast state it ran in, and [`is_autocast_available`](/api/lucid.amp/is_autocast_available) asks whether a device type can autocast at all.
+
 ```python
 import lucid
 from lucid.amp import autocast, GradScaler
@@ -44,10 +46,10 @@ The standard recipe sidesteps both: keep the *bulk* of compute in `float16` for 
 
 ## autocast
 
-`autocast(device_type='metal', dtype=float16, enabled=True)` opens a scope in which AMP-aware ops cast their inputs to the target dtype. Cast points are inserted **only** at op boundaries — activations are stored in the lower-precision dtype, while reduction and accumulator state stays in `float32`. That is the "mixed" in mixed precision: matmul *inputs* are `float16`, but the inner accumulation runs in `float32`, so a long dot product does not lose precision.
+`autocast(device_type='metal', dtype=None, enabled=True)` opens a scope in which AMP-aware ops cast their inputs to the target dtype. Cast points are inserted **only** at op boundaries — activations are stored in the lower-precision dtype, while reduction and accumulator state stays in `float32`. That is the "mixed" in mixed precision: matmul *inputs* are `float16`, but the inner accumulation runs in `float32`, so a long dot product does not lose precision.
 
 ```python
-with lucid.amp.autocast():            # device_type="metal", dtype=float16
+with lucid.amp.autocast():            # device_type="metal", dtype=float16 (bfloat16 on "cpu")
     out = model(x)                    # conv / matmul / attention run in fp16
     loss = loss_fn(out, y)            # loss lands back in fp32
 ```
@@ -80,6 +82,34 @@ Pass `enabled=False` to turn the scope into a no-op without touching any call si
 Run `.backward()` **outside** the `autocast` scope. `autocast` governs the forward pass; the backward pass derives its dtypes from the recorded graph. Calling `backward()` while the scope is still open casts gradient computation too, which is not what you want.
 </Callout>
 
+### Which dtypes each device can autocast to
+
+`dtype` must be one the device can actually lower to. The table is the whole support matrix:
+
+| `device_type` | Supported `dtype` | Default | What runs |
+|---|---|---|---|
+| `"metal"` | `float16`, `bfloat16` | `float16` | Both lower the matmul / conv / attention inputs to that dtype |
+| `"cpu"` | `bfloat16`, `float16` | `bfloat16` | `bfloat16` lowers for real; a `float16` scope is accepted but computes in `float32` (Accelerate has no half-precision BLAS), so nothing is lowered |
+
+Anything else — `float32`, `float64`, an integer or `bool` — is not a mixed-precision dtype. Asking for one emits a `UserWarning` when the scope is created and turns it into an `enabled=False` scope, so the ops inside run in the dtype of their inputs instead of silently in the unsupported one. The decorator form and nested scopes behave the same, because they go through the same constructor; a scope that was already `enabled=False` does not warn. An unknown `device_type` is a `ValueError`.
+
+```python
+import warnings
+
+import lucid
+from lucid.amp import autocast, is_autocast_available
+
+print(is_autocast_available("metal"), is_autocast_available("cpu"), is_autocast_available("tpu"))
+
+with warnings.catch_warnings(record=True) as caught:
+    warnings.simplefilter("always")
+    with autocast("metal", dtype=lucid.float64):
+        print("enabled:", autocast.is_autocast_enabled("metal"))   # False: the scope disabled itself
+print(caught[0].category.__name__, "-", caught[0].message)
+```
+
+`is_autocast_available(device_type)` is a query, so an unknown name answers `False` rather than raising.
+
 ## GradScaler and dynamic loss scaling
 
 Even with `autocast`, the gradients themselves can underflow in `float16`. `GradScaler` fixes this by multiplying the loss by a large constant $S$ before backpropagation. Because differentiation is linear, every gradient is scaled by the same factor:
@@ -100,12 +130,40 @@ This produces a sawtooth schedule that hovers just below the largest scale the c
 
 ```python
 scaler = GradScaler(
+    device="metal",              # first parameter; "metal" or "cpu"
     init_scale=2.0 ** 16,
     growth_factor=2.0,
     backoff_factor=0.5,
     growth_interval=2000,
+    enabled=True,
 )
 ```
+
+`device` comes first, as in the reference framework, and is checked at construction only: each gradient is unscaled on whatever device it lives on. An unknown name is a `ValueError`. Because `device` is the first positional parameter, **pass `init_scale` and the rest by keyword** — `GradScaler(2.0 ** 16)` reads `65536.0` as a device name and raises.
+
+The three schedule knobs can be read and changed while training runs, which is how you retune a scaler that is skipping too often or growing too slowly:
+
+| Accessor | Reads / sets |
+|---|---|
+| `get_growth_factor()` / `set_growth_factor(f)` | the multiplier applied after `growth_interval` clean steps (`> 1.0`) |
+| `get_backoff_factor()` / `set_backoff_factor(f)` | the multiplier applied on overflow (`< 1.0`) |
+| `get_growth_interval()` / `set_growth_interval(n)` | how many overflow-free updates it takes the scale to grow |
+| `is_enabled()` | whether the scaler scales, unscales and updates at all (`enabled`) |
+
+```python
+from lucid.amp import GradScaler
+
+scaler = GradScaler("metal", init_scale=2.0 ** 10, growth_interval=500)
+print(scaler.get_scale(), scaler.get_growth_factor(), scaler.get_backoff_factor(),
+      scaler.get_growth_interval(), scaler.is_enabled())
+
+scaler.set_growth_factor(1.5)
+scaler.set_backoff_factor(0.25)
+scaler.set_growth_interval(100)
+print(scaler.state_dict())    # carries the updated factors and interval
+```
+
+A scaler built with `enabled=False` is a transparent pass-through: `scale` returns its input, `step` calls the optimizer directly, `get_scale()` is `1.0` and `state_dict()` is empty.
 
 The three steps form the canonical pattern — **scale the loss, then step, then update**:
 
@@ -150,6 +208,121 @@ With gradient clipping, unscale explicitly before you clip:
     scaler.update()
 ```
 
+## Custom autograd Functions under AMP
+
+A hand-written [`autograd.Function`](/docs/autograd) trips over autocast in a way a built-in layer never does. Its `forward` runs inside the `autocast` scope, so `a @ b` returns a half-precision result; its `backward` runs later, **outside** the scope, and multiplies the half-precision incoming gradient by the `float32` tensors that `forward` saved. The mixed-dtype matmul is refused:
+
+```python
+import lucid
+from lucid.amp import autocast
+from lucid.autograd import Function
+
+device = "metal" if lucid.metal.is_available() else "cpu"
+dtype = lucid.float16 if device == "metal" else lucid.bfloat16
+
+
+class Plain(Function):
+    @staticmethod
+    def forward(ctx, a, b):
+        ctx.save_for_backward(a, b)
+        return a @ b
+
+    @staticmethod
+    def backward(ctx, grad):
+        a, b = ctx.saved_tensors
+        return grad @ b.mT, a.mT @ grad
+
+
+a = lucid.randn(3, 4, device=device, requires_grad=True)
+b = lucid.randn(4, 2, device=device, requires_grad=True)
+with autocast(device, dtype=dtype):
+    y = Plain.apply(a, b)
+
+try:
+    y.float().sum().backward()
+except Exception as err:
+    print(type(err).__name__, "-", err)    # DtypeMismatch (matmul): expected float16, got float32
+```
+
+[`custom_fwd`](/api/lucid.amp/custom_fwd) and [`custom_bwd`](/api/lucid.amp/custom_bwd) close the gap. `custom_fwd` records the autocast state of its device on the `ctx`; `custom_bwd` runs `backward` inside a scope that restores it — on at the same dtype, or off — whatever scope `.backward()` was called from. Both take a keyword-only, required `device_type` (`"metal"` or `"cpu"`, the same on both) and sit **under** `@staticmethod`:
+
+```python
+from lucid.amp import custom_bwd, custom_fwd
+
+
+class MatMul(Function):
+    @staticmethod
+    @custom_fwd(device_type=device)
+    def forward(ctx, a, b):
+        ctx.save_for_backward(a, b)
+        return a @ b
+
+    @staticmethod
+    @custom_bwd(device_type=device)
+    def backward(ctx, grad):
+        a, b = ctx.saved_tensors
+        return grad @ b.mT, a.mT @ grad
+
+
+with autocast(device, dtype=dtype):
+    y = MatMul.apply(a, b)
+print("forward:", y.dtype)                       # half precision, as autocast intended
+y.float().sum().backward()
+print("grads:", a.grad.dtype, b.grad.dtype)      # float32, matching the parameters
+```
+
+### Forcing full precision with `cast_inputs`
+
+Some `forward` bodies should not run in half precision at all — an `exp`, a `log`, a reduction that overflows `float16`. Pass `cast_inputs=` and `custom_fwd` does two things when autocast is on: it casts every floating-point tensor argument on that device to the given dtype (nested lists, tuples and dicts included; `float64` is left alone), and it runs `forward` with autocast **off**. `custom_bwd` then runs `backward` with it off as well, so the saved tensors and the gradient agree. Outside an autocast scope `cast_inputs` does nothing.
+
+```python
+class Stable(Function):
+    @staticmethod
+    @custom_fwd(device_type=device, cast_inputs=lucid.float32)
+    def forward(ctx, x):
+        ctx.save_for_backward(x)
+        print("inside forward:", x.dtype, "- autocast on:", autocast.is_autocast_enabled(device))
+        return x.exp()
+
+    @staticmethod
+    @custom_bwd(device_type=device)
+    def backward(ctx, grad):
+        (x,) = ctx.saved_tensors
+        return grad * x.exp()
+
+
+x = lucid.randn(4, device=device).to(dtype).requires_grad_()
+with autocast(device, dtype=dtype):
+    z = Stable.apply(x)                          # forward ran in float32 ...
+print("output:", z.dtype)                        # ... so the output is float32
+z.float().sum().backward()
+print("grad:", x.grad.dtype)                     # the gradient follows the input: half precision
+```
+
+Use bare `custom_fwd` / `custom_bwd` when the `Function` is a thin wrapper over matmul-like ops that should keep the half-precision speed, and add `cast_inputs=lucid.float32` when the body is numerically sensitive. Decorating only one side is an error: `custom_bwd` raises `RuntimeError` when `forward` was not decorated with `custom_fwd`, or was decorated with a different `device_type`.
+
+## Checkpointed segments replay autocast
+
+[`lucid.autograd.checkpoint`](/api/lucid.autograd/checkpoint) runs a segment twice: once in the forward pass and again during backward to rebuild the activations it did not store. The recompute runs under the autocast state of **every** device that the forward saw — on or off, and at the same dtype — in the same way it replays the random stream. A matmul in the segment therefore computes in `float16` both times, and you can keep `.backward()` outside the `autocast` block as usual. Both the reentrant and the non-reentrant form do this.
+
+```python
+from lucid.autograd import checkpoint
+
+lin = lucid.nn.Linear(8, 8).to(device)
+x = lucid.randn(4, 8, device=device, requires_grad=True)
+
+
+def segment(t):
+    return lin(t).relu()
+
+
+with autocast(device, dtype=dtype):
+    out = checkpoint(segment, x, use_reentrant=False)
+print("segment out:", out.dtype)                 # half precision, as without checkpointing
+out.float().sum().backward()                     # the recompute replays autocast by itself
+print("grads:", x.grad.dtype, lin.weight.grad.dtype)
+```
+
 ## Common pitfalls
 
 <Callout variant="danger">
@@ -164,5 +337,5 @@ The first few hundred steps may skip while the scaler finds a stable scale — t
 </Callout>
 
 <Callout variant="note">
-For runnable examples of skipping on overflow, `unscale_` with clipping and checkpointing the scaler, see the [Mixed Precision Training](/docs/tutorials/mixed-precision) tutorial. See the [API reference](/api/lucid.amp) for the full surface, [Training Loop](/docs/training-loop) for where AMP slots into a real loop, and [Optimizers](/docs/optimizers) for the optimizers `GradScaler` drives.
+For runnable examples of skipping on overflow, `unscale_` with clipping and checkpointing the scaler, see the [Mixed Precision Training](/docs/tutorials/mixed-precision) tutorial. See the [API reference](/api/lucid.amp) for the full surface — [`autocast`](/api/lucid.amp/autocast), [`GradScaler`](/api/lucid.amp/GradScaler), [`custom_fwd`](/api/lucid.amp/custom_fwd), [`custom_bwd`](/api/lucid.amp/custom_bwd) and [`is_autocast_available`](/api/lucid.amp/is_autocast_available) — [Training Loop](/docs/training-loop) for where AMP slots into a real loop, and [Optimizers](/docs/optimizers) for the optimizers `GradScaler` drives.
 </Callout>

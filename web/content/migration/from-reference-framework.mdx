@@ -94,7 +94,11 @@ Apple Silicon has one pool of memory, so there is no separate device memory to s
 
 ### AMP and compile
 
-`GradScaler` takes no device argument, and `autocast` takes `device_type` (`"metal"` or `"cpu"`) and a `dtype`. The defaults are `float16` on `metal` and `bfloat16` on `cpu`. On the CPU a `float16` autocast scope computes in `float32` (nothing is lowered), so use `bfloat16` there. `lucid.compile` only compiles on Metal; on the CPU it runs the module eagerly. Both are covered in [Mixed Precision Training](/docs/tutorials/mixed-precision).
+`GradScaler(device="metal", init_scale=2.0**16, …)` has the reference signature, with `device` (`"metal"` or `"cpu"`) first, and `autocast` takes `device_type` and a `dtype`. `custom_fwd` / `custom_bwd` (with `cast_inputs`) and `is_autocast_available` are there too. The defaults are `float16` on `metal` and `bfloat16` on `cpu`. On the CPU a `float16` autocast scope computes in `float32` (nothing is lowered), so use `bfloat16` there; a dtype a device cannot autocast to (anything but `float16` / `bfloat16`) warns and disables the scope. `lucid.compile` only compiles on Metal; on the CPU it runs the module eagerly. All of it is covered in [Mixed Precision (AMP)](/docs/amp) and [Mixed Precision Training](/docs/tutorials/mixed-precision).
+
+<Callout variant="warning">
+**Breaking change:** `GradScaler` now takes `device` first, so a call that passed `init_scale` positionally — `GradScaler(2.0**16)` — raises `ValueError: unknown device`. Pass it by keyword: `GradScaler(init_scale=2.0**16)`. Calls that use keywords, or none, are unaffected.
+</Callout>
 
 ## dtypes and promotion
 
