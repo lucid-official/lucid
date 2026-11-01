@@ -104,17 +104,18 @@ class TestConfig:
 
     @pytest.mark.parametrize(
         "unused",
-        [
-            {"exclude_modules": ["x"]},
-            {"modules_to_save": ["x"]},
-            {"layers_to_transform": [0]},
-            {"layers_pattern": "h"},
-        ],
+        [{"exclude_modules": ["x"]}, {"layers_to_transform": [0]}, {"layers_pattern": "h"}],
         ids=lambda unused: next(iter(unused)),
     )
     def test_targeting_fields_the_method_lacks_are_refused(self, unused: dict[str, object]) -> None:
         with pytest.raises(ValueError, match="not a field of an adaption prompt"):
             AdaptionPromptConfig.from_dict({"adapter_len": 4, "adapter_layers": 2, **unused})
+
+    def test_modules_to_save_is_an_extension_written_only_when_used(self) -> None:
+        assert "modules_to_save" not in _config().to_dict()
+        chosen = _config(modules_to_save=["lm_head"])
+        assert chosen.to_dict()["modules_to_save"] == ["lm_head"]
+        assert AdaptionPromptConfig.from_dict(chosen.to_dict()) == chosen
 
     def test_a_size_left_unset_is_refused_when_the_adapter_is_built(self) -> None:
         with pytest.raises(ValueError, match="`adapter_len` must be set"):

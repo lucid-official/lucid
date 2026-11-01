@@ -210,6 +210,7 @@ from lucid.peft.tuners.p_tuning import (
     PromptEncoderConfig,
     PromptEncoderReparameterizationType,
 )
+from lucid.peft.tuners.poly import PolyConfig, PolyModel
 from lucid.peft.tuners.prefix_tuning import PrefixEncoder, PrefixTuningConfig
 from lucid.peft.tuners.prompt_tuning import PromptEmbedding, PromptTuningConfig, PromptTuningInit
 from lucid.peft.tuners.randlora import RandLoraConfig, RandLoraModel
@@ -256,6 +257,7 @@ __all__ = [
     "LoraConfig",
     "MissConfig",
     "OFTConfig",
+    "PolyConfig",
     "RandLoraConfig",
     "ShiraConfig",
     "TrainableTokensConfig",
@@ -281,6 +283,7 @@ __all__ = [
     "LoraModel",
     "MissModel",
     "OFTModel",
+    "PolyModel",
     "RandLoraModel",
     "ShiraModel",
     "TrainableTokensModel",

@@ -46,6 +46,7 @@ from lucid.peft import (
     PeftConfig,
     PeftModel,
     PeftType,
+    PolyConfig,
     PrefixEncoder,
     PromptEmbedding,
     PromptEncoder,
@@ -146,6 +147,7 @@ _EXAMPLE_CONFIGS: dict[PeftType, Callable[[], PeftConfig]] = {
     ),
     PeftType.SHIRA: lambda: ShiraConfig(r=1, random_seed=0, target_modules=["0", "2"]),
     PeftType.C3A: lambda: C3AConfig(block_size=1, target_modules=["0", "2"]),
+    PeftType.POLY: lambda: PolyConfig(r=2, n_tasks=2, n_skills=2, target_modules=["0", "2"]),
     PeftType.TRAINABLE_TOKENS: lambda: TrainableTokensConfig(
         token_indices=[1], target_modules=["0", "2"]
     ),

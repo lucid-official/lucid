@@ -5,9 +5,10 @@ from typing import ClassVar, override
 
 from lucid.peft._config import PeftType, _Check, _optional_count, _optional_str, _TargetedConfig
 
-#: Fields the targeting base has that the reference's config of this method lacks: the layers
-#: are chosen by ``adapter_layers`` alone, so these are refused rather than silently unused.
-_UNUSED_FIELDS = ("exclude_modules", "modules_to_save", "layers_to_transform", "layers_pattern")
+#: Fields the targeting base has that the reference's config of this method lacks, and that mean
+#: nothing here (the layers are chosen by ``adapter_layers`` alone): refused rather than silently unused.
+#: ``modules_to_save`` is the one extension that does something, and is written only when set.
+_UNUSED_FIELDS = ("exclude_modules", "layers_to_transform", "layers_pattern")
 
 
 @dataclass(kw_only=True)
@@ -21,7 +22,9 @@ class AdaptionPromptConfig(_TargetedConfig, peft_type=PeftType.ADAPTION_PROMPT):
     the base.
 
     Field names, defaults and ``adapter_config.json`` are the reference adapter library's.  Every
-    field is keyword-only.
+    field is keyword-only.  Unlike the reference's, this config also takes ``modules_to_save``
+    (modules trained in full beside the prompts, a classification head); ``adapter_config.json``
+    holds it only when it is set.
 
     Parameters
     ----------
@@ -32,13 +35,15 @@ class AdaptionPromptConfig(_TargetedConfig, peft_type=PeftType.ADAPTION_PROMPT):
         How many prompt vectors each adapted layer learns; required by the time the adapter is built.
     adapter_layers : int
         How many attention layers, counted from the top of the stack, are adapted; required then.
+    modules_to_save : list of str, optional
+        Modules trained in full beside the adapter.
 
     Raises
     ------
     TypeError
         A field holds a value of the wrong type.
     ValueError
-        A field is not positive, or a targeting field the method has no use for is set.
+        A field is not positive, or a layer-selection field the method has no use for is set.
 
     Examples
     --------
@@ -50,7 +55,7 @@ class AdaptionPromptConfig(_TargetedConfig, peft_type=PeftType.ADAPTION_PROMPT):
     True
     """
 
-    _extension_fields: ClassVar[frozenset[str]] = frozenset(_UNUSED_FIELDS)
+    _extension_fields: ClassVar[frozenset[str]] = frozenset((*_UNUSED_FIELDS, "modules_to_save"))
     _field_checks: ClassVar[dict[str, _Check]] = {
         "target_modules": _optional_str,
         "adapter_len": _optional_count,

@@ -43,6 +43,32 @@ def _fresh(host: type[_AdapterHost]) -> tuple[nn.Module, PeftConfig]:
     return built.unload(), config
 
 
+def _serving(hosts: list[type[_AdapterHost]], task: TaskType) -> list[type[_AdapterHost]]:
+    """The ``hosts`` whose config takes ``task`` (a method for one task, CPT's, never meets another)."""
+    serving = []
+    for host in hosts:
+        _, config = _fresh(host)
+        try:
+            dataclasses.replace(config, task_type=task)
+        except ValueError:
+            continue
+        serving.append(host)
+    return serving
+
+
+def _serving(hosts: list[type[_AdapterHost]], task: TaskType) -> list[type[_AdapterHost]]:
+    """The ``hosts`` whose config takes ``task`` (a method for one task, CPT's, never meets another)."""
+    serving = []
+    for host in hosts:
+        _, config = _fresh(host)
+        try:
+            dataclasses.replace(config, task_type=task)
+        except ValueError:
+            continue
+        serving.append(host)
+    return serving
+
+
 def _state(model: nn.Module) -> dict[str, object]:
     """Everything a refused construction must not change: a comparable snapshot of ``model``."""
     return {
@@ -100,7 +126,8 @@ def test_a_failure_in_the_last_step_leaves_the_model_as_it_was(
     host: type[_AdapterHost], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     model, config = _fresh(host)
-    module_to_save = "lm_head" if host in _PROMPTS else "2"
+    # A language model's head, or the audit's second linear layer.
+    module_to_save = "lm_head" if "lm_head" in dict(model.named_modules()) else "2"
     config = _with_a_module_trained_in_full(config, module_to_save)
     before = _state(model)
     monkeypatch.setattr(host, "_mark_only_adapters_as_trainable", _refuse)
@@ -111,7 +138,9 @@ def test_a_failure_in_the_last_step_leaves_the_model_as_it_was(
     assert isinstance(host(model, config), host), "the model is fit to be adapted again"
 
 
-@pytest.mark.parametrize("host", _PROMPTS, ids=lambda host: host.__name__)
+@pytest.mark.parametrize(
+    "host", _serving(_PROMPTS, TaskType.SEQ_2_SEQ_LM), ids=lambda host: host.__name__
+)
 def test_a_prompt_on_a_model_without_an_encoder_and_decoder_is_refused_whole(
     host: type[_AdapterHost],
 ) -> None:
@@ -126,7 +155,9 @@ def test_a_prompt_on_a_model_without_an_encoder_and_decoder_is_refused_whole(
     _assert_unchanged(before, _state(model))
 
 
-@pytest.mark.parametrize("host", _IN_FRONT, ids=lambda host: host.__name__)
+@pytest.mark.parametrize(
+    "host", _serving(_IN_FRONT, TaskType.TOKEN_CLS), ids=lambda host: host.__name__
+)
 def test_a_token_level_prompt_without_a_head_to_cut_is_refused_whole(
     host: type[_AdapterHost],
 ) -> None:

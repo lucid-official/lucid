@@ -267,6 +267,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - docstring check follows exported classes through bases
 - adaption prompt (LLaMA-Adapter) tuner
 - context-aware prompt tuning (CPT)
+- Poly / MHR tuner, task-routed low-rank skills
 
 ---
 
