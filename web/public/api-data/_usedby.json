@@ -831,6 +831,16 @@
       "module": "lucid.autograd"
     }
   ],
+  "lucid.autograd._grad_mode.is_inference_mode_enabled": [
+    {
+      "kind": "module",
+      "module": "lucid"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.autograd"
+    }
+  ],
   "lucid.autograd._grad_mode.no_grad": [
     {
       "kind": "module",
