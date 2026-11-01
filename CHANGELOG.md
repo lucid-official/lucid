@@ -227,6 +227,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - convert and quantize_dynamic strip .qconfig
 
+- a landed branch no longer holds claims on its files
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

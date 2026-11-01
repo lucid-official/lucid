@@ -288,14 +288,130 @@ def diff_names(root: Path, a: str, b: str) -> set[str]:
     return {line for line in out.splitlines() if line}
 
 
+def _patch_id(root: Path, commit: str) -> str | None:
+    """Patch-id of ``commit`` over every path except the generated files.
+
+    ``land`` folds a CHANGELOG entry into each user-facing commit, so the commit
+    that reaches main differs from the one the worker made by that file alone;
+    leaving the generated files out of both sides makes the two compare equal.
+    """
+    excludes = [f":(exclude){g}" for g in GENERATED]
+    diff = subprocess.run(
+        ["git", "diff-tree", "-p", "--no-renames", "--no-commit-id", commit, "--", ".", *excludes],
+        cwd=root,
+        env=repo_env(),
+        capture_output=True,
+        check=False,
+    )
+    if diff.returncode != 0 or not diff.stdout:
+        return None
+    ident = subprocess.run(
+        ["git", "patch-id", "--stable"],
+        cwd=root,
+        env=repo_env(),
+        input=diff.stdout,
+        capture_output=True,
+        check=False,
+    )
+    fields = ident.stdout.split()
+    return fields[0].decode() if fields else None
+
+
+def _commit_files(root: Path, commit: str) -> set[str]:
+    out = git("diff-tree", "-r", "--name-only", "--no-renames", "--no-commit-id", commit, cwd=root)
+    return {line for line in out.splitlines() if line}
+
+
+def unlanded_commits(root: Path, head: str) -> list[str] | None:
+    """Commits on ``head`` that main does not already carry, oldest first.
+
+    ``land`` rebases a branch, and a branch can also reach main by cherry-pick,
+    so the original commits stay on the branch with new ids on main: a plain
+    ``main..head`` still lists work that landed long ago (LCD-783).  A commit is
+    landed when main holds one with the same patch-id — ``git cherry``, then the
+    same comparison with the generated files left out, which is what ``land``'s
+    CHANGELOG fold changes.  ``None`` when the history has a merge commit, whose
+    own changes patch-ids cannot account for: the caller then keeps the whole range.
+    """
+    own = git("rev-list", "--parents", f"{MAIN_BRANCH}..{head}", cwd=root, check=False).splitlines()
+    if not own:  # also keeps a worktree far behind main off `git cherry`'s walk of main
+        return []
+    if any(len(line.split()) > 2 for line in own):
+        return None
+    pending = [
+        line[2:]
+        for line in git("cherry", MAIN_BRANCH, head, cwd=root, check=False).splitlines()
+        if line.startswith("+ ")
+    ]
+    fork = merge_base(root, head)
+    keep: list[str] = []
+    for commit in pending:
+        paths = sorted(f for f in _commit_files(root, commit) if f not in GENERATED)
+        ours = _patch_id(root, commit) if paths else None
+        if ours is None:  # generated files only: it claims nothing that counts
+            keep.append(commit)
+            continue
+        on_main = git(
+            "--literal-pathspecs",
+            "log",
+            "--no-merges",
+            "--format=%H",
+            f"{fork}..{MAIN_BRANCH}",
+            "--",
+            *paths,
+            cwd=root,
+        ).split()
+        if not any(_patch_id(root, other) == ours for other in on_main):
+            keep.append(commit)
+    return keep
+
+
+def _differing_from_main(root: Path, head: str, files: set[str]) -> set[str]:
+    """The ``files`` whose content on ``head`` is not already what main holds."""
+    differing: set[str] = set()
+    ordered = sorted(files)
+    for i in range(0, len(ordered), 400):
+        out = git(
+            "--literal-pathspecs",
+            "diff",
+            "--name-only",
+            "--no-renames",
+            head,
+            MAIN_BRANCH,
+            "--",
+            *ordered[i : i + 400],
+            cwd=root,
+        )
+        differing.update(line for line in out.splitlines() if line)
+    return differing
+
+
+def committed_claims(root: Path, head: str) -> set[str]:
+    """Files a branch still has to land: those of its commits main does not carry.
+
+    A file whose content on the branch already equals main's drops out too — a
+    squash or hand-applied landing leaves no patch-id to match, and merging such
+    a file changes nothing, so it cannot conflict with anyone.
+    """
+    base = merge_base(root, head)
+    if not base:
+        return set()
+    commits = unlanded_commits(root, head)
+    if commits is None:
+        return diff_names(root, base, head)
+    files: set[str] = set()
+    for commit in commits:
+        files |= _commit_files(root, commit)
+    return _differing_from_main(root, head, files) if files else files
+
+
 def changed_files(wt: Worktree) -> set[str]:
-    """Everything this worktree has changed relative to where it left main."""
+    """Everything this worktree still has to land: its uncommitted edits plus the
+    committed work main does not carry yet — a landed branch claims nothing."""
     if wt._changed is None:
         files = dirty_files(wt.path)
         if not wt.is_main and wt.head:
-            base = merge_base(wt.path, wt.head)
-            if base:
-                files |= diff_names(wt.path, base, wt.head)
+            files |= committed_claims(wt.path, wt.head)
         wt._changed = files
     return wt._changed
 

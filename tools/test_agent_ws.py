@@ -650,3 +650,131 @@ def test_land_measures_lucid_models_and_enforces_diff_cover_at_land(scratch: Scr
     ok = land(scratch, "--skip-stub-check")
     assert ok.returncode == 0, ok.stdout + ok.stderr
     assert main_tip(scratch) != before
+
+
+# ── claims: a landed branch claims nothing (LCD-783) ──────────────────────────
+
+
+def claims_of(scratch: Scratch, tree: Path) -> set[str]:
+    """What the board says ``tree`` claims, read the way an orchestrator reads it."""
+    proc = subprocess.run(
+        [sys.executable, str(AGENT_WS), "status", "--json"],
+        cwd=scratch.main,
+        env=scratch.env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    rows = {row["name"]: row for row in json.loads(proc.stdout)["worktrees"]}
+    return set(rows[tree.name]["claims"])
+
+
+def commit_file(scratch: Scratch, tree: Path, name: str) -> str:
+    """Append to ``name`` in ``tree``, commit it through the hook, return the commit."""
+    path = tree / name
+    path.write_text(path.read_text() + f"{name} in {tree.name}\n")
+    assert scratch.git(tree, "add", name).returncode == 0
+    made = scratch.git(tree, "commit", "-q", "-m", f"change {name}")
+    assert made.returncode == 0, made.stderr
+    return scratch.git(tree, "rev-parse", "HEAD").stdout.strip()
+
+
+def cherry_pick_onto_main(scratch: Scratch, *commits: str) -> None:
+    """Land ``commits`` so main holds new ids for them and the branch is untouched."""
+    # Main first moves on, or a cherry-pick of a commit onto its own parent
+    # rebuilds the very same commit id.
+    (scratch.main / "elsewhere.txt").write_text("main moved\n")
+    assert scratch.git(scratch.main, "add", "elsewhere.txt").returncode == 0
+    assert scratch.git(scratch.main, "commit", "-q", "-m", "main moves on").returncode == 0
+    picked = scratch.git(scratch.main, "cherry-pick", *commits)
+    assert picked.returncode == 0, picked.stderr
+
+
+def test_unlanded_branch_claims_its_files(scratch: Scratch) -> None:
+    commit_file(scratch, scratch.a, "a.txt")
+    commit_file(scratch, scratch.a, "b.txt")
+    assert claims_of(scratch, scratch.a) == {"a.txt", "b.txt"}
+
+
+def test_a_landed_branch_claims_nothing_though_its_old_commits_remain(scratch: Scratch) -> None:
+    first = commit_file(scratch, scratch.a, "a.txt")
+    second = commit_file(scratch, scratch.a, "b.txt")
+    cherry_pick_onto_main(scratch, first, second)
+    ahead = scratch.git(scratch.a, "rev-list", "--count", "main..task-a").stdout.strip()
+    assert ahead == "2"  # the branch still lists the pre-landing commits
+    assert claims_of(scratch, scratch.a) == set()
+    # Main moving on afterwards, even over the same file, changes nothing.
+    commit_file(scratch, scratch.main, "a.txt")
+    assert claims_of(scratch, scratch.a) == set()
+
+
+def test_a_file_a_landed_branch_held_is_free_for_the_next_worker(scratch: Scratch) -> None:
+    sha = commit_file(scratch, scratch.a, "a.txt")
+    assert claims_of(scratch, scratch.a) == {"a.txt"}  # in flight: B would be refused
+    cherry_pick_onto_main(scratch, sha)
+    assert scratch.git(scratch.b, "rebase", "main").returncode == 0
+    result = scratch.commit(scratch.b, "a.txt", "staged")
+    assert result.returncode == 0, result.stderr
+
+
+def test_a_partly_landed_branch_claims_only_what_has_not_landed(scratch: Scratch) -> None:
+    first = commit_file(scratch, scratch.a, "a.txt")
+    commit_file(scratch, scratch.a, "b.txt")
+    cherry_pick_onto_main(scratch, first)
+    assert claims_of(scratch, scratch.a) == {"b.txt"}
+
+
+def test_a_later_commit_on_a_landed_file_is_still_claimed(scratch: Scratch) -> None:
+    first = commit_file(scratch, scratch.a, "a.txt")
+    commit_file(scratch, scratch.a, "a.txt")  # a second change to the same file
+    cherry_pick_onto_main(scratch, first)
+    assert claims_of(scratch, scratch.a) == {"a.txt"}
+
+
+def test_a_dirty_landed_worktree_still_claims_its_dirty_files(scratch: Scratch) -> None:
+    sha = commit_file(scratch, scratch.a, "a.txt")
+    cherry_pick_onto_main(scratch, sha)
+    assert claims_of(scratch, scratch.a) == set()
+    scratch.edit(scratch.a, "c.txt")  # uncommitted
+    (scratch.a / "new.txt").write_text("untracked\n")
+    assert claims_of(scratch, scratch.a) == {"c.txt", "new.txt"}
+    scratch.edit(scratch.a, "a.txt")  # a landed file edited again, uncommitted
+    assert claims_of(scratch, scratch.a) == {"a.txt", "c.txt", "new.txt"}
+
+
+def test_a_commit_whose_changelog_fold_changed_it_on_main_counts_as_landed(
+    scratch: Scratch,
+) -> None:
+    # `land` folds a CHANGELOG entry into the commit it puts on main, so that
+    # commit's diff is the worker's plus CHANGELOG.md.
+    sha = commit_file(scratch, scratch.a, "a.txt")
+    cherry_pick_onto_main(scratch, sha)
+    (scratch.main / "CHANGELOG.md").write_text("## Unreleased\n- change a.txt\n")
+    assert scratch.git(scratch.main, "add", "CHANGELOG.md").returncode == 0
+    amended = scratch.git(scratch.main, "commit", "-q", "--amend", "--no-edit")
+    assert amended.returncode == 0, amended.stderr
+    # A plain patch-id comparison no longer sees the two as the same change ...
+    assert scratch.git(scratch.a, "cherry", "main", "task-a").stdout.startswith("+ ")
+    # ... the claim computation does.
+    assert claims_of(scratch, scratch.a) == set()
+
+
+def test_a_squash_landing_leaves_no_claim_either(scratch: Scratch) -> None:
+    commit_file(scratch, scratch.a, "a.txt")
+    commit_file(scratch, scratch.a, "b.txt")
+    # Two commits applied to main as one: no patch-id on main matches either of them.
+    squash = scratch.git(scratch.main, "commit-tree", "task-a^{tree}", "-p", "main", "-m", "squash")
+    assert squash.returncode == 0, squash.stderr
+    tip = squash.stdout.strip()
+    assert scratch.git(scratch.main, "merge", "-q", "--ff-only", tip).returncode == 0
+    assert claims_of(scratch, scratch.a) == set()
+
+
+def test_land_leaves_the_landed_worktree_with_no_claims(scratch: Scratch) -> None:
+    commit_file(scratch, scratch.a, "a.txt")
+    assert claims_of(scratch, scratch.a) == {"a.txt"}
+    result = land(scratch)
+    assert result.returncode == 0, result.stdout + result.stderr
+    commit_file(scratch, scratch.main, "c.txt")
+    assert claims_of(scratch, scratch.a) == set()
