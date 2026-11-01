@@ -141,6 +141,7 @@ warning.
 from lucid.peft import tuners
 from lucid.peft._config import PeftConfig, PeftType, PromptLearningConfig, TaskType
 from lucid.peft._mapping import get_peft_model, inject_adapter_in_model
+from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft._peft_model import PeftModel, get_layer_status, get_model_status
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
 from lucid.peft._status import TunerLayerStatus, TunerModelStatus
@@ -206,6 +207,7 @@ __all__ = [
     "AutoPeftModelForSequenceClassification",
     "AutoPeftModelForTokenClassification",
     "MODEL_TYPE_TO_PEFT_MODEL_MAPPING",
+    "ModulesToSaveWrapper",
     "MultitaskPromptEmbedding",
     "MultitaskPromptTuningConfig",
     "MultitaskPromptTuningInit",

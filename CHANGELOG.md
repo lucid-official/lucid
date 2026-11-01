@@ -259,6 +259,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - state-dict hook API; remove_spectral_norm parity (LCD-792)
 - seven more LoRA-family tuners, PeftType guard (LCD-797)
 - PEFT package section in the api sidebar and index
+- export ModulesToSaveWrapper
 
 ---
 
