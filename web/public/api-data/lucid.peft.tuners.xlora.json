@@ -1,0 +1,898 @@
+{
+  "slug": "lucid.peft.tuners.xlora",
+  "name": "xlora",
+  "path": "lucid.peft.tuners.xlora",
+  "kind": "module",
+  "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/__init__.py#L1",
+  "members": [
+    {
+      "name": "XLoraClassifier",
+      "path": "lucid.peft.tuners.xlora._classifier.XLoraClassifier",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "Module"
+      ],
+      "labels": [],
+      "signature": "XLoraClassifier(config: XLoraConfig, n_classes: int, n_layers: int, dtype: lucid.dtype, device: str)",
+      "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_classifier.py#L12",
+      "subcategory": "classifier",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.xlora._classifier.XLoraClassifier.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(config: XLoraConfig, n_classes: int, n_layers: int, dtype: lucid.dtype, device: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_classifier.py#L54",
+          "subcategory": "classifier",
+          "summary": "Build the layers for `config` and move them to `device` as `dtype`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "dummy_scalings",
+          "path": "lucid.peft.tuners.xlora._classifier.XLoraClassifier.dummy_scalings",
+          "kind": "function",
+          "labels": [],
+          "signature": "dummy_scalings(batch: int, tokens: int, device: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_classifier.py#L79",
+          "subcategory": "classifier",
+          "summary": "The scalings of the scalings pass: `scaling_pass_value` for every token, layer and expert.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "forward",
+          "path": "lucid.peft.tuners.xlora._classifier.XLoraClassifier.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(hidden: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_classifier.py#L84",
+          "subcategory": "classifier",
+          "summary": "The `(batch, tokens, n_layers, n_classes)` weights of the experts for `hidden`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "Predicts, for each token, how much each LoRA expert should weigh.",
+      "extended": "A stack of `xlora_depth` linear layers (ReLU and dropout between them) over the hidden\nstates, `(batch, tokens, hidden_size)` to `(batch, tokens, n_classes)` — or\n`n_classes * n_layers` outputs with `layerwise_scalings`, spread over the adapted layers.\nThe result is `(batch, tokens, n_layers, n_classes)`, softmax-normalised over the experts\n(at `softmax_temperature`) unless `enable_softmax` is off.  It reads its settings from\nthe config it is given, so changing the config's `softmax_temperature` or\n`scaling_pass_value` takes effect at the next call.",
+      "parameters": [
+        {
+          "name": "config",
+          "annotation": "XLoraConfig",
+          "description": "The classifier's shape (`hidden_size` set) and behaviour.",
+          "default": null
+        },
+        {
+          "name": "n_classes",
+          "annotation": "int",
+          "description": "How many experts it weighs.",
+          "default": null
+        },
+        {
+          "name": "n_layers",
+          "annotation": "int",
+          "description": "How many adapted layers the weights are for.",
+          "default": null
+        },
+        {
+          "name": "dtype",
+          "annotation": "lucid.dtype",
+          "description": "The dtype of its parameters (the base model's).",
+          "default": null
+        },
+        {
+          "name": "device",
+          "annotation": "str",
+          "description": "The device it lives on (the base model's).",
+          "default": null
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.peft import XLoraConfig\n>>> from lucid.peft.tuners.xlora._classifier import XLoraClassifier\n>>> config = XLoraConfig(hidden_size=8, adapters={\"a\": \"x\", \"b\": \"y\"})\n>>> classifier = XLoraClassifier(config, n_classes=2, n_layers=3, dtype=lucid.float32, device=\"cpu\")\n>>> classifier(lucid.randn(1, 5, 8)).shape\n(1, 5, 3, 2)"
+      ],
+      "notes": [],
+      "attributes": [
+        {
+          "name": "layers",
+          "annotation": "nn.Sequential",
+          "description": "The linear layers; their keys (`layers.0.weight` ...) are the adapter file's."
+        },
+        {
+          "name": "log_scalings",
+          "annotation": "list of Tensor",
+          "description": "The scalings of each call, while `scalings_logging` is on."
+        }
+      ],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "XLoraConfig",
+      "path": "lucid.peft.tuners.xlora._config.XLoraConfig",
+      "kind": "class",
+      "class_kind": "dataclass",
+      "bases": [
+        "PeftConfig"
+      ],
+      "labels": [],
+      "signature": "XLoraConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, hidden_size: int | None = None, adapters: dict[str, str] | None = None, enable_softmax: bool = True, enable_softmax_topk: bool = False, layerwise_scalings: bool = False, xlora_depth: int = 1, xlora_size: int = 2048, xlora_dropout_p: float = 0.2, use_trainable_adapters: bool = False, softmax_temperature: float = 1.0, top_k_lora: int | None = None, scaling_pass_value: float = 0.0, global_scaling_weight: float = 1.0)",
+      "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_config.py#L44",
+      "subcategory": "config",
+      "methods": [],
+      "summary": "How `lucid.peft.get_peft_model` mixes LoRA adapters with X-LoRA.",
+      "extended": "X-LoRA (Buehler & Buehler, 2024, [arXiv:2402.07148](https://arxiv.org/abs/2402.07148)) keeps several trained LoRA adapters (the\nexperts) and a small classifier on the base model's final hidden states that scales each\nexpert per token: a scalings pass computes the hidden states with the experts held at a\nfixed value, the classifier turns them into one weight per expert (per adapted layer if\n`layerwise_scalings`), and the real pass adds each expert's update with its weight.  Only the\nclassifier trains unless `use_trainable_adapters`.\n\nField names, defaults and `adapter_config.json` are the reference adapter library's.  Every\nfield is keyword-only.  Unlike the reference's, `hidden_size` left unset is read off the model\nrather than guessed, and an empty `adapters` is refused when the model is built.",
+      "parameters": [
+        {
+          "name": "task_type",
+          "annotation": "TaskType or str",
+          "description": "The task the adapter is for (metadata; see `TaskType`).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "peft_type",
+          "annotation": "PeftType or str",
+          "description": "The method; filled in by the subclass when omitted, refused when\nit names another.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "auto_mapping",
+          "annotation": "dict of str to str",
+          "description": "The class of the base model, `{\"base_model_class\": name,\n\"parent_library\": module}` — what `AutoPeftModel*` rebuilds the\nbase with.  `PeftModel.save_pretrained` writes it.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "base_model_name_or_path",
+          "annotation": "str",
+          "description": "Name of the model the adapter was trained on (metadata).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "revision",
+          "annotation": "str",
+          "description": "Revision of that model (metadata).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "inference_mode",
+          "annotation": "bool",
+          "description": "Freeze the adapter too, for inference.",
+          "default": "False",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "hidden_size",
+          "annotation": "int",
+          "description": "Hidden size of the base model, the classifier's input width; the model's when `None`.",
+          "default": "None"
+        },
+        {
+          "name": "adapters",
+          "annotation": "dict of str to str",
+          "description": "The experts: each name maps to the directory of a saved LoRA adapter.  They are loaded\nunder the names `\"0\"`, `\"1\"`, ... in this order, which is also the order of the\nclassifier's outputs.  Needed when the model is built.",
+          "default": "None"
+        },
+        {
+          "name": "enable_softmax",
+          "annotation": "bool",
+          "description": "Normalise each token's expert weights with a softmax.",
+          "default": "True"
+        },
+        {
+          "name": "enable_softmax_topk",
+          "annotation": "bool",
+          "description": "Softmax over the `top_k_lora` kept experts instead; set `enable_softmax` off with it.",
+          "default": "False"
+        },
+        {
+          "name": "layerwise_scalings",
+          "annotation": "bool",
+          "description": "One set of weights per adapted layer (the classifier outputs `n_experts * n_layers`)\ninstead of one set shared by every layer.",
+          "default": "False"
+        },
+        {
+          "name": "xlora_depth",
+          "annotation": "int",
+          "description": "Linear layers of the classifier.",
+          "default": "1"
+        },
+        {
+          "name": "xlora_size",
+          "annotation": "int",
+          "description": "Width of its hidden layers; unused at depth one.",
+          "default": "2048"
+        },
+        {
+          "name": "xlora_dropout_p",
+          "annotation": "float",
+          "description": "Dropout between its hidden layers; unused at depth one.",
+          "default": "0.2"
+        },
+        {
+          "name": "use_trainable_adapters",
+          "annotation": "bool",
+          "description": "Train the experts too.",
+          "default": "False"
+        },
+        {
+          "name": "softmax_temperature",
+          "annotation": "float",
+          "description": "Divides the logits before the softmax; lower is sharper.",
+          "default": "1.0"
+        },
+        {
+          "name": "top_k_lora",
+          "annotation": "int",
+          "description": "Keep only this many experts per token (the rest weigh zero).",
+          "default": "None"
+        },
+        {
+          "name": "scaling_pass_value",
+          "annotation": "float",
+          "description": "The weight every expert has in the scalings pass; `0` makes that pass the base model.",
+          "default": "0.0"
+        },
+        {
+          "name": "global_scaling_weight",
+          "annotation": "float",
+          "description": "A factor on every expert's update.",
+          "default": "1.0"
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "TypeError",
+          "description": "A field holds a value of the wrong type."
+        },
+        {
+          "annotation": "ValueError",
+          "description": "A count is not positive, or `top_k_lora` is below one."
+        }
+      ],
+      "examples": [
+        ">>> from lucid.peft import XLoraConfig\n>>> config = XLoraConfig(hidden_size=64, adapters={\"a\": \"/tmp/a\", \"b\": \"/tmp/b\"}, xlora_depth=2)\n>>> config.peft_type, sorted(config.adapters)\n(<PeftType.XLORA: 'XLORA'>, ['a', 'b'])\n>>> XLoraConfig.from_dict(config.to_dict()) == config\nTrue"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "XLoraModel",
+      "path": "lucid.peft.tuners.xlora._model.XLoraModel",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_FileFormat",
+        "_AdapterHost"
+      ],
+      "labels": [],
+      "signature": "XLoraModel(model: nn.Module, config: PeftConfig, adapter_name: str = 'default')",
+      "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L39",
+      "subcategory": "model",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(model: nn.Module, config: PeftConfig, adapter_name: str = 'default')",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L94",
+          "subcategory": "model",
+          "summary": "Load the experts into `model`, build the classifier and hook the model; `model` is as given if that fails.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "scalings",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.scalings",
+          "kind": "function",
+          "labels": [
+            "attribute"
+          ],
+          "signature": "scalings: Tensor | None",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L113",
+          "summary": "The scalings the call in progress mixes with, and the last ones the classifier made.",
+          "extended": null,
+          "parameters": [],
+          "returns": null,
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "xlora_config",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.xlora_config",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "xlora_config: XLoraConfig",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L132",
+          "summary": "The stored config of the X-LoRA adapter, which the settings below change.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "XLoraConfig",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "lora_model",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.lora_model",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "lora_model: PeftModel",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L139",
+          "summary": "The LoRA experts' holder (a `PeftModel` over the same model): the multi-adapter API they were loaded by.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "PeftModel",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "set_topk_lora",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.set_topk_lora",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_topk_lora(value: int | None)",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L301",
+          "subcategory": "model",
+          "summary": "Keep only the `value` heaviest experts per token (`None`: all of them).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "set_global_scaling_weight",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.set_global_scaling_weight",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_global_scaling_weight(weight: float)",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L305",
+          "subcategory": "model",
+          "summary": "Multiply every expert's update by `weight`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "get_global_scaling_weight",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.get_global_scaling_weight",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_global_scaling_weight()",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L309",
+          "subcategory": "model",
+          "summary": "The factor on every expert's update.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "float",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "set_scaling_pass_value",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.set_scaling_pass_value",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_scaling_pass_value(value: float | None)",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L313",
+          "subcategory": "model",
+          "summary": "Hold every expert at `value` in the scalings pass (`None`: one over the number of experts).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "get_latest_scalings",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.get_latest_scalings",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_latest_scalings()",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L317",
+          "subcategory": "model",
+          "summary": "The last scalings the classifier made, `(batch, tokens, layers, experts)`; `None` before the first call.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "get_scalings_log",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.get_scalings_log",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_scalings_log()",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L321",
+          "subcategory": "model",
+          "summary": "A copy of the list of logged scalings (the tensors are not copied).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "list[Tensor]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "enable_scalings_logging",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.enable_scalings_logging",
+          "kind": "function",
+          "labels": [],
+          "signature": "enable_scalings_logging()",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L325",
+          "subcategory": "model",
+          "summary": "Record the scalings of every call from now on.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "disable_scalings_logging",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.disable_scalings_logging",
+          "kind": "function",
+          "labels": [],
+          "signature": "disable_scalings_logging()",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L329",
+          "subcategory": "model",
+          "summary": "Stop recording; the log is kept.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "clear_scalings_log",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.clear_scalings_log",
+          "kind": "function",
+          "labels": [],
+          "signature": "clear_scalings_log()",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L333",
+          "subcategory": "model",
+          "summary": "Forget the logged scalings.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "get_bucketed_scalings_log",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.get_bucketed_scalings_log",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_bucketed_scalings_log()",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L337",
+          "subcategory": "model",
+          "summary": "The log grouped by sequence length: `{tokens: (positions in the log, scalings)}`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[int, tuple[list[int], list[Tensor]]]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "active_adapters",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.active_adapters",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "active_adapters: list[str]",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L350",
+          "summary": "The X-LoRA adapter, as a list.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "list[str]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "add_adapter",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.add_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "add_adapter(adapter_name: str, peft_config: PeftConfig, low_cpu_mem_usage: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L354",
+          "subcategory": "model",
+          "summary": "Refused: an X-LoRA model holds one classifier; build another model to mix other experts.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "set_adapter",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.set_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_adapter(adapter_name: str | list[str], inference_mode: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L365",
+          "subcategory": "model",
+          "summary": "Select the X-LoRA adapter — the only one — and train its classifier unless `inference_mode`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "set_requires_grad",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.set_requires_grad",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_requires_grad(adapter_names: str | Sequence[str], requires_grad: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L373",
+          "subcategory": "model",
+          "summary": "Enable or disable gradients on the classifier.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "delete_adapter",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.delete_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "delete_adapter(adapter_name: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L382",
+          "subcategory": "model",
+          "summary": "Refused: the classifier is the model's only adapter; `unload()` removes it.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "merge_and_unload",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.merge_and_unload",
+          "kind": "function",
+          "labels": [],
+          "signature": "merge_and_unload(progressbar: bool = False, safe_merge: bool = False, adapter_names: list[str] | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L388",
+          "subcategory": "model",
+          "summary": "Refused: the experts' weights change with every token, so there is nothing to merge.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "nn.Module",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "unload",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.unload",
+          "kind": "function",
+          "labels": [],
+          "signature": "unload()",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L402",
+          "subcategory": "model",
+          "summary": "Take the hooks and the experts out and give every parameter its old `requires_grad`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "nn.Module",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "enable_adapter_layers",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.enable_adapter_layers",
+          "kind": "function",
+          "labels": [],
+          "signature": "enable_adapter_layers()",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L414",
+          "subcategory": "model",
+          "summary": "Weigh the experts again after `disable_adapter_layers`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "disable_adapter_layers",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.disable_adapter_layers",
+          "kind": "function",
+          "labels": [],
+          "signature": "disable_adapter_layers()",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L419",
+          "subcategory": "model",
+          "summary": "Run the base model alone.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "forward",
+          "path": "lucid.peft.tuners.xlora._model.XLoraModel.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(args: object = (), kwargs: object = {})",
+          "source": "https://github.com/lucid-official/lucid/blob/8aa926f/lucid/peft/tuners/xlora/_model.py#L446",
+          "subcategory": "model",
+          "summary": "Call the model; the hooks weigh and mix the experts.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "object",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "A model whose LoRA experts are weighed per token by a classifier on its hidden states.",
+      "extended": "Construction loads the LoRA adapters `config.adapters` names (as `\"0\"`, `\"1\"`, ... through\nthe multi-adapter API, all active together), switches their layers to the base module and\nhooks each to add the experts' updates, scaled.  A call then runs twice: a *scalings pass*,\nwithout gradients, on the model with every expert held at `scaling_pass_value`, whose final\nhidden states the classifier (`internal_xlora_classifier`) turns into one weight per expert\nand token; and the real pass, in which each adapted layer adds\n$g\\sum_k u_k(s_k\\odot x)$.  The classifier is the only thing that trains (the experts as\nwell with `use_trainable_adapters`), and the only thing the adapter file holds.\n\nThe scalings need the whole sequence at every step: generate with `use_cache=False`.  Layers\nof the experts must be `nn.Linear` LoRA layers, without DoRA.  Nothing merges.  The model\nkeeps one X-LoRA adapter.",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The base model; its trunk (`base_model_prefix`) should return `last_hidden_state`.",
+          "default": null
+        },
+        {
+          "name": "config",
+          "annotation": "XLoraConfig",
+          "description": "The experts and the classifier.",
+          "default": null
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the X-LoRA adapter (the experts keep their own names).",
+          "default": "\"default\""
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "ValueError",
+          "description": "The model already holds adapters, `config.adapters` is empty or names a directory\nthat holds no LoRA adapter, an expert uses DoRA, or the model gives no hidden size."
+        },
+        {
+          "annotation": "NotImplementedError",
+          "description": "An expert adapts a layer that is not an `nn.Linear`."
+        }
+      ],
+      "examples": [
+        ">>> import lucid\n>>> import lucid.nn as nn\n>>> import tempfile\n>>> from lucid.models import create_model\n>>> from lucid.peft import LoraConfig, XLoraConfig, XLoraModel, get_peft_model\n>>> arch = dict(vocab_size=32, hidden_size=16, num_hidden_layers=2, num_attention_heads=2,\n...             intermediate_size=32, max_position_embeddings=16)\n>>> with tempfile.TemporaryDirectory() as d:\n...     for name in (\"a\", \"b\"):\n...         get_peft_model(create_model(\"gpt2_small_lm\", **arch),\n...                        LoraConfig(r=2, target_modules=[\"c_attn\"])).save_pretrained(f\"{d}/{name}\")\n...     lm = create_model(\"gpt2_small_lm\", **arch)\n...     xlora = XLoraModel(lm, XLoraConfig(adapters={\"a\": f\"{d}/a\", \"b\": f\"{d}/b\"}))\n...     out = xlora(lucid.randint(0, 32, (1, 5)))\n>>> out.logits.shape, xlora.get_latest_scalings().shape   # (batch, tokens, layers, experts)\n((1, 5, 32), (1, 5, 2, 2))"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    }
+  ],
+  "summary": "`lucid.peft.tuners.xlora` — X-LoRA: a mixture of LoRA experts weighed per token by a learned classifier.",
+  "extended": "X-LoRA (Buehler & Buehler, 2024, [arXiv:2402.07148](https://arxiv.org/abs/2402.07148)) starts from several LoRA adapters trained on\ndifferent tasks and learns only how to combine them.  A scalings pass runs the model with the\nexperts held at a fixed weight; a small classifier on its final hidden states then predicts, for\nevery token (and, if asked, every adapted layer), one weight per expert; the real pass adds each\nexpert's low-rank update on the input scaled by its weight, optionally keeping only the top-k.\nPick it to specialise a model on a mix of skills without choosing one expert up front, and to\ntrain a few thousand classifier parameters rather than the experts.\n\nThe experts are loaded by name through the multi-adapter API (`XLoraModel.lora_model`), the\nmodel is called as usual, and the adapter file holds the classifier alone\n(`internal_xlora_classifier.*`) — the experts stay where they were saved, named by\n`XLoraConfig.adapters`.  The weights come from the whole sequence, so generate with\n`use_cache=False`; nothing merges.  `XLoraConfig` and `XLoraModel` are here and exported from\n`lucid.peft`; `XLoraClassifier` is the classifier.  Importing the package registers the method\nunder `PeftType.XLORA`.",
+  "parameters": [],
+  "returns": null,
+  "raises": [],
+  "examples": [],
+  "notes": [],
+  "attributes": [],
+  "warns": [],
+  "see_also": [],
+  "canonical_name": "X-LoRA",
+  "citation": "Buehler, Eric L., and Markus J. Buehler. \"X-LoRA: Mixture of Low-Rank Adapter Experts, a Flexible Framework for Large Language Models with Applications in Protein Mechanics and Molecular Design.\" [arXiv:2402.07148](https://arxiv.org/abs/2402.07148), 2024.",
+  "theory": "X-LoRA (Buehler & Buehler, 2024, [arXiv:2402.07148](https://arxiv.org/abs/2402.07148)) keeps several trained LoRA adapters (the\nexperts) and a small classifier on the base model's final hidden states that scales each\nexpert per token: a scalings pass computes the hidden states with the experts held at a\nfixed value, the classifier turns them into one weight per expert (per adapted layer if\n`layerwise_scalings`), and the real pass adds each expert's update with its weight.  Only the\nclassifier trains unless `use_trainable_adapters`."
+}

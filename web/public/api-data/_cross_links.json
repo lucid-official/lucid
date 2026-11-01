@@ -874,6 +874,12 @@
         "kind": "backward_node"
       }
     ],
+    "lucid.peft.tuners.poly.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
     "lucid.peft.tuners.randlora.Linear": [
       {
         "name": "LinearBackward",
@@ -3096,6 +3102,11 @@
       {
         "path": "lucid.peft.tuners.oft.Linear",
         "module": "lucid.peft.tuners.oft",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.poly.Linear",
+        "module": "lucid.peft.tuners.poly",
         "kind": "class"
       },
       {
