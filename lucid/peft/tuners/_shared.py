@@ -235,6 +235,7 @@ class _SharingLayer(_BaseTunerLayer):
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
+        """Remove ``adapter_name``, and its entries in the shared tables if the layer owns them."""
         super().delete_adapter(adapter_name)
         if self._bound is None:  # a bound layer's tables are the tuner's to trim
             for name in self._shared_names:
@@ -322,6 +323,7 @@ class _SharedTablesTuner(_FileFormat, _BaseTuner):
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
+        """Remove ``adapter_name`` from the model, and its entries in the tuner's shared tables."""
         super().delete_adapter(adapter_name)
         self._drop(adapter_name)
 

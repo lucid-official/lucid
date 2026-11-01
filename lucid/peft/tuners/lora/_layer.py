@@ -176,6 +176,12 @@ class LoraLayer(_BaseTunerLayer):
         *,
         lora_bias: bool = False,
     ) -> None:
+        """Wrap ``base_layer`` and build the adapter ``adapter_name`` on it.
+
+        The update has rank ``r`` and scale ``lora_alpha / r`` (``lora_alpha / sqrt(r)`` with
+        ``use_rslora``); ``use_dora`` adds a magnitude vector and ``lora_bias`` a bias on the
+        ``B`` side.  ``init_lora_weights`` picks how the factors start.
+        """
         super().__init__(base_layer)
         self._specs: dict[str, _AdapterSpec] = {}
         self.lora_dropout: nn.ModuleDict[nn.Dropout | nn.Identity] = nn.ModuleDict()
@@ -271,10 +277,12 @@ class LoraLayer(_BaseTunerLayer):
 
     @override
     def __repr__(self) -> str:
+        """The module's repr, led by ``lora.`` so a printed model names the method."""
         return "lora." + super().__repr__()
 
     @override
     def extra_repr(self) -> str:
+        """The active adapter, its rank and ``lora_alpha``, and whether it is merged or disabled."""
         held = [name for name in self.active_adapters if name in self._specs]
         shown = {name: self._specs[name] for name in held}
         if isinstance(self.active_adapter, str) and held:
@@ -418,6 +426,7 @@ class LoraLayer(_BaseTunerLayer):
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
+        """Remove ``adapter_name``: its factors, its dropout and its recorded settings."""
         super().delete_adapter(adapter_name)
         self._specs.pop(adapter_name, None)
         # Not in ``adapter_layer_names`` — it holds no parameters to train or save.
@@ -627,6 +636,10 @@ class _Residual(LoraLayer):
 
     @override
     def forward(self, x: Tensor) -> Tensor:
+        """The base output plus each active adapter's low-rank update.
+
+        The base output alone when adapters are disabled or merged.
+        """
         return self._forward(x, _NO_EXTRAS)
 
     def _forward(self, x: Tensor, extras: _Extras) -> Tensor:
@@ -763,6 +776,11 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
         *,
         lora_bias: bool = False,
     ) -> None:
+        """Wrap an ``nn.Linear`` as :class:`LoraLayer` does.
+
+        ``fan_in_fan_out`` and ``is_target_conv_1d_layer`` are accepted for the reference
+        library's signature and must stay ``False``: ``nn.Linear`` stores ``(out, in)``.
+        """
         if fan_in_fan_out:
             raise ValueError(
                 "fan_in_fan_out=True is for a weight stored (in, out); nn.Linear stores (out, in)"

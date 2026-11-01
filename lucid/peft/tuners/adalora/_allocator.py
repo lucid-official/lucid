@@ -109,6 +109,10 @@ class RankAllocator:
     """
 
     def __init__(self, model: nn.Module, peft_config: AdaLoraConfig, adapter_name: str) -> None:
+        """Measure the adapted layers of ``model``.
+
+        ``peft_config`` sets the budget schedule and ``adapter_name`` is the adapter whose triplets are ranked.
+        """
         self.peft_config = peft_config
         self.adapter_name = adapter_name
         self.beta1 = peft_config.beta1

@@ -61,6 +61,7 @@ class C3AModel(_ConfigTuner, peft_type=PeftType.C3A):
     _default_targets: ClassVar[Mapping[str, frozenset[str]]] = C3A_DEFAULT_TARGET_MODULES
 
     def __init__(self, model: nn.Module, config: C3AConfig, adapter_name: str = "default") -> None:
+        """Adapt ``model`` in place, building C3A's circulant kernels as ``adapter_name``."""
         super().__init__(model, config, adapter_name)
 
     @staticmethod

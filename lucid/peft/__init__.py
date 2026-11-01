@@ -1,4 +1,4 @@
-r"""``lucid.peft`` — parameter-efficient fine-tuning: LoRA, AdaLoRA, (IA)^3, LoHa, LoKr, VeRA, OFT, BOFT, HRA, FourierFT and LN tuning.
+r"""``lucid.peft`` — parameter-efficient fine-tuning: LoRA and 21 other adapter methods, with one API.
 
 Fine-tuning a pretrained model end to end updates, stores and ships every
 weight.  LoRA (Hu et al., 2021) freezes them and learns, beside each
@@ -26,27 +26,49 @@ and an adapter directory moves between the two::
 Each method is a config class, a tuner and its layer classes, registered
 by ``PeftType`` as they are defined (``lucid.peft.tuners._base``); the
 entry points above dispatch on the method a config or a file names.  The
-methods are LoRA (``LoraConfig`` / ``LoraModel``), AdaLoRA — LoRA as a
-truncated SVD whose rank per layer is allocated during training
-(``AdaLoraConfig`` / ``AdaLoraModel``), (IA)^3 — a learned rescaling vector per
-layer (``IA3Config`` / ``IA3Model``), the LyCORIS pair LoHa (a Hadamard product
-of low-rank products, ``LoHaConfig`` / ``LoHaModel``) and LoKr (a Kronecker
-product, ``LoKrConfig`` / ``LoKrModel``), and VeRA — two learned vectors per
-layer over one pair of frozen random projections (``VeraConfig`` /
-``VeraModel``); the orthogonal family, which turns the input space of a layer instead of adding to its
-weight — OFT (block-diagonal Cayley rotations, ``OFTConfig`` / ``OFTModel``), BOFT (their butterfly
-factorisation plus a row scale, ``BOFTConfig`` / ``BOFTModel``) and HRA (a chain of Householder
-reflections, ``HRAConfig`` / ``HRAModel``); FourierFT, a handful of coefficients of the weight
-update in the frequency domain (``FourierFTConfig`` / ``FourierFTModel``); and LN tuning, a
-trainable copy of each chosen normalisation layer (``LNTuningConfig`` / ``LNTuningModel``).  The
-layer classes of each are in ``lucid.peft.tuners.<method>``.
-Everything below about adapters, switching, merging and files holds for all of them (LN tuning applies, and merges, one adapter at a time).
+layer classes of each are in ``lucid.peft.tuners.<method>``.  The methods,
+by family:
 
-Three more methods learn an input rather than a weight and add no layer to the model:
-prompt tuning (``PromptTuningConfig``: virtual-token embeddings in front of the input),
-prefix tuning (``PrefixTuningConfig``: virtual keys and values in front of every attention
-layer) and p-tuning (``PromptEncoderConfig``: the virtual tokens produced by an MLP or LSTM).
-The prompt is applied by hooks on the model's own call, so ``model(...)`` and the model's
+* **LoRA family** — a low-rank update beside each frozen weight.  LoRA
+  (``LoraConfig`` / ``LoraModel``) and AdaLoRA, which allocates the rank per
+  layer during training (``AdaLoraConfig`` / ``AdaLoraModel``).
+* **Orthogonal family** — a rotation of each layer's input space instead of
+  an addition to its weight.  OFT (block-diagonal Cayley rotations,
+  ``OFTConfig`` / ``OFTModel``), BOFT (their butterfly factorisation plus a
+  row scale, ``BOFTConfig`` / ``BOFTModel``) and HRA (a chain of Householder
+  reflections, ``HRAConfig`` / ``HRAModel``).
+* **LyCORIS family** — a weight-shaped update from a structured
+  factorisation.  LoHa (a Hadamard product of low-rank products,
+  ``LoHaConfig`` / ``LoHaModel``) and LoKr (a Kronecker product,
+  ``LoKrConfig`` / ``LoKrModel``).
+* **Shared-table tuners** — one set of tensors for the whole model, held once
+  by the tuner, and a few parameters per layer.  VeRA (two vectors per layer
+  over frozen random projections, ``VeraConfig`` / ``VeraModel``), RandLoRA (a
+  full-rank update from frozen random bases and learned scales,
+  ``RandLoraConfig`` / ``RandLoraModel``) and VB-LoRA (every low-rank factor
+  mixed from one vector bank, ``VBLoRAConfig`` / ``VBLoRAModel``).
+* **Structured and sparse updates** — a weight update with a fixed structure
+  other than low rank.  FourierFT (a few frequency-domain coefficients,
+  ``FourierFTConfig`` / ``FourierFTModel``), C3A (block-circulant blocks,
+  ``C3AConfig`` / ``C3AModel``), MiSS (one matrix shared across the shards of
+  a weight, ``MissConfig`` / ``MissModel``), Bone (the method MiSS replaced,
+  kept to read old adapter files, ``BoneConfig`` / ``BoneModel``) and SHiRA (a
+  sparse subset of the weight itself, ``ShiraConfig`` / ``ShiraModel``).
+* **Scaling and selective tuning** — a small part of the model itself.
+  (IA)^3 (a learned rescaling vector per layer, ``IA3Config`` /
+  ``IA3Model``), LN tuning (a trainable copy of each chosen normalisation
+  layer, ``LNTuningConfig`` / ``LNTuningModel``) and trainable tokens (a few
+  rows of an embedding table, ``TrainableTokensConfig`` /
+  ``TrainableTokensModel``).
+
+Everything below about adapters, switching, merging and files holds for all
+of them (LN tuning applies, and merges, one adapter at a time).
+
+**Prompt learning** is the last family.  It learns an input rather than a weight and adds no
+layer to the model: prompt tuning (``PromptTuningConfig``: virtual-token embeddings in front of
+the input), prefix tuning (``PrefixTuningConfig``: virtual keys and values in front of every
+attention layer) and p-tuning (``PromptEncoderConfig``: the virtual tokens produced by an MLP or
+LSTM).  The prompt is applied by hooks on the model's own call, so ``model(...)`` and the model's
 ``generate`` both carry it; the adapter file holds the finished prompt as
 ``prompt_embeddings``.  They train one prompt at a time, have nothing to merge, and
 support the causal-LM, sequence-to-sequence, sequence-classification, token-classification
@@ -100,6 +122,12 @@ more — ``add_weighted_adapter`` over anything but ``nn.Linear`` layers, an
 adapter file of a method this package lacks — raises ``NotImplementedError``
 rather than doing less than asked.  Adapters are read from a local directory;
 hub ids are not resolved.
+
+``modules_to_save`` trains whole modules (a classification head) beside the adapter; each
+becomes a ``ModulesToSaveWrapper`` that keeps the original and a trained copy per adapter.  An
+adapter written by the reference library for a model of the zoo (``gpt2``, ``roformer``,
+``t5``, ``vit``) is converted to the zoo's module layout as it is loaded
+(``PeftModel.from_pretrained(..., convert=)``).
 
 A model can hold several adapters, switch between them, combine them
 (``add_weighted_adapter``: ``svd``, ``cat``, ``linear`` and the TIES / DARE /

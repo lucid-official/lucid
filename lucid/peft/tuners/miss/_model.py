@@ -53,4 +53,5 @@ class MissModel(_ConfigTuner, peft_type=PeftType.MISS):
     _config_class: ClassVar[type[_TargetedConfig]] = MissConfig
 
     def __init__(self, model: nn.Module, config: MissConfig, adapter_name: str = "default") -> None:
+        """Adapt ``model`` in place, building MiSS's shard matrices as ``adapter_name``."""
         super().__init__(model, config, adapter_name)

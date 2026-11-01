@@ -89,6 +89,7 @@ class _BaseAutoPeftModel:
     _target_peft_class: ClassVar[type[PeftModel]] = PeftModel
 
     def __init__(self, *args: object, **kwargs: object) -> NoReturn:
+        """Always raises ``OSError``: the model is built by ``from_pretrained``."""
         del args, kwargs  # accepted so the error below is the one raised, not a TypeError
         raise OSError(
             f"{type(self).__name__} is designed to be instantiated using the "

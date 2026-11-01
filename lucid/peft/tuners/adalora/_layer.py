@@ -99,6 +99,11 @@ class AdaLoraLayer(_ResidualUpdate, family=True):
         r: int = 0,
         lora_alpha: float = 1,
     ) -> None:
+        """Wrap ``base_layer`` and build the adapter ``adapter_name`` on it.
+
+        The adapter starts at rank ``r`` and scale ``lora_alpha / ranknum``; ``config`` supplies
+        the dropout and the initialisation.
+        """
         super().__init__(base_layer)
         self._specs: dict[str, _AdaSpec] = {}
         self.lora_A: nn.ParameterDict = nn.ParameterDict()
@@ -127,10 +132,12 @@ class AdaLoraLayer(_ResidualUpdate, family=True):
 
     @override
     def __repr__(self) -> str:
+        """The module's repr, led by ``adalora.`` so a printed model names the method."""
         return "adalora." + super().__repr__()
 
     @override
     def extra_repr(self) -> str:
+        """The active adapter, its rank, whether it is merged and whether adapters are disabled."""
         return (
             f"adapter={self.active_adapter!r}, r={dict(self.r)}, "
             f"merged={self.merged}, disabled={self.disable_adapters}"
@@ -289,6 +296,7 @@ class AdaLoraLayer(_ResidualUpdate, family=True):
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
+        """Remove ``adapter_name``: its triplets, its rank count, its dropout and its settings."""
         super().delete_adapter(adapter_name)
         for table in (self.ranknum, self.lora_dropout):
             if adapter_name in table:

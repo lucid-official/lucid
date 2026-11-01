@@ -57,6 +57,7 @@ class ShiraModel(_FileFormat, _ConfigTuner, peft_type=PeftType.SHIRA):
     def __init__(
         self, model: nn.Module, config: ShiraConfig, adapter_name: str = "default"
     ) -> None:
+        """Adapt ``model`` in place, building SHiRA's sparse values as ``adapter_name``."""
         super().__init__(model, config, adapter_name)
 
     @override

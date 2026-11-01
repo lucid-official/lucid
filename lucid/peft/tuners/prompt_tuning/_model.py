@@ -66,6 +66,12 @@ class PromptEmbedding(_PromptEncoder):
         word_embeddings: nn.Module | None,
         tokenizer: _TextEncoder | None = None,
     ) -> None:
+        """Build the virtual-token embedding.
+
+        Its rows start from text, from sampled vocabulary rows or at random, as
+        ``config.prompt_tuning_init`` says; ``word_embeddings`` is the model's token table and
+        ``tokenizer`` turns ``prompt_tuning_init_text`` into ids.
+        """
         super().__init__()
         assert config.num_virtual_tokens is not None and config.token_dim is not None
         total = config.num_virtual_tokens * (config.num_transformer_submodules or 1)
@@ -105,12 +111,14 @@ class PromptEmbedding(_PromptEncoder):
     @classmethod
     @override
     def from_config(cls, config: PromptLearningConfig, word_embeddings: nn.Module | None) -> Self:
+        """The embedding for ``config``, started from ``word_embeddings``."""
         assert isinstance(config, PromptTuningConfig)
         return cls(config, word_embeddings)
 
     @property
     @override
     def stores_prompt(self) -> bool:
+        """Always ``True``: the embedding's rows are the prompt."""
         return True
 
     @override

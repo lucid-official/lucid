@@ -128,6 +128,12 @@ class MultitaskPromptEmbedding(PromptEmbedding):
         word_embeddings: nn.Module | None,
         tokenizer: _TextEncoder | None = None,
     ) -> None:
+        """Build the shared prompt and each task's low-rank pair.
+
+        The pair is :math:`u_k` and :math:`v_k` for each of ``config.num_tasks`` tasks; the
+        shared prompt starts as :class:`PromptEmbedding`'s does, or from a source-task prompt
+        when ``config.prompt_tuning_init`` asks.
+        """
         super().__init__(config, word_embeddings, tokenizer)
         assert config.token_dim is not None  # the tuner resolved it
         self.num_tasks = config.num_tasks
@@ -172,11 +178,26 @@ class MultitaskPromptEmbedding(PromptEmbedding):
     @classmethod
     @override
     def from_config(cls, config: PromptLearningConfig, word_embeddings: nn.Module | None) -> Self:
+        """The embedding for ``config``, started from ``word_embeddings``."""
         assert isinstance(config, MultitaskPromptTuningConfig)
         return cls(config, word_embeddings)
 
     @override
     def prompts(self, batch: int, tasks: Tensor | None) -> Tensor:
+        """The prompt of each of ``batch`` rows: the shared prompt scaled by that row's task.
+
+        Parameters
+        ----------
+        batch : int
+            Number of rows.
+        tasks : Tensor or None
+            The task id of each row, ``(batch,)``.
+
+        Returns
+        -------
+        Tensor
+            ``(batch, num_virtual_tokens, token_dim)``.
+        """
         return self(self.indices().repeat(batch, 1), tasks)
 
     @override

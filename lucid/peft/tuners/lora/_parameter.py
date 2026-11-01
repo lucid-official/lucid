@@ -86,6 +86,10 @@ class ParamWrapper(_WeightSpace[object]):
         use_dora: bool = False,
         lora_bias: bool = False,
     ) -> None:
+        """Wrap the module that holds ``parameter_name`` and adapt that parameter alone.
+
+        The other arguments are :class:`LoraLayer`'s.
+        """
         # Plain attributes may be set before ``Module.__init__``; ``_setup`` reads this one.
         self.parameter_name = parameter_name
         super().__init__(
@@ -123,6 +127,7 @@ class ParamWrapper(_WeightSpace[object]):
 
     @override
     def extra_repr(self) -> str:
+        """The parameter adapted, then what :class:`LoraLayer` shows."""
         return f"parameter_name={self.parameter_name!r}, " + super().extra_repr()
 
     def _parameter(self) -> Parameter:

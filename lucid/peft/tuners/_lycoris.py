@@ -170,6 +170,10 @@ class _LycorisLayer(_AdditiveWeight):
         r: int = 0,
         alpha: float = 0.0,
     ) -> None:
+        """Wrap ``base_layer`` and build the adapter ``adapter_name`` of rank ``r`` and scale ``alpha / r`` on it.
+
+        ``config`` supplies the rest.
+        """
         super().__init__(base_layer)
         self._specs: dict[str, _LycorisSpec] = {}
         for table in self.adapter_layer_names:
@@ -240,10 +244,12 @@ class _LycorisLayer(_AdditiveWeight):
 
     @override
     def __repr__(self) -> str:
+        """The module's repr led by the LyCORIS method's prefix, so a printed model names it."""
         return type(self)._repr_prefix + super().__repr__()
 
     @override
     def extra_repr(self) -> str:
+        """The active adapter, its rank, and whether the layer is merged or its adapters disabled."""
         held = [name for name in self.active_adapters if name in self._specs]
         ranks = {name: self._specs[name].r for name in held}
         detail = (
@@ -315,6 +321,7 @@ class _LycorisLayer(_AdditiveWeight):
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
+        """Remove ``adapter_name``: its factor tables, through the base, and its recorded settings."""
         super().delete_adapter(adapter_name)
         self._specs.pop(adapter_name, None)
 
@@ -356,6 +363,11 @@ class _LycorisLayer(_AdditiveWeight):
 
     @override
     def forward(self, x: Tensor) -> Tensor:
+        """The base output plus each active adapter's weight update, applied like the base weight.
+
+        The update is ``get_delta_weight`` (with rank dropout while training) run as a linear map
+        or a convolution of ``x``; the base output alone when adapters are disabled or merged.
+        """
         result: Tensor = self.base_layer(x)
         if self.disable_adapters or self.merged:
             return result

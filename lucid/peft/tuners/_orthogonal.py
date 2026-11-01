@@ -121,6 +121,12 @@ class _OrthogonalLayer(_ConfigLayer, _WeightRewrite):
 
     @override
     def forward(self, x: Tensor) -> Tensor:
+        """Run the layer on the weight the active adapters turn.
+
+        The base weight is rotated by each active adapter in turn (and row-scaled, for BOFT)
+        and the layer is computed from that; the base layer alone when adapters are disabled,
+        merged or none applies.
+        """
         adapters = [name for name in self.active_adapters if name in self._specs]
         if self.disable_adapters or self.merged or not adapters:
             result: Tensor = self.base_layer(x)

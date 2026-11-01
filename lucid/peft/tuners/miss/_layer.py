@@ -119,6 +119,7 @@ class MissLayer(_ConfigLayer, _LinearSized, _WeightRewrite, family=True):
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
+        """Remove ``adapter_name``: its shard matrix and its dropout."""
         super().delete_adapter(adapter_name)
         if adapter_name in self.miss_dropout:
             del self.miss_dropout[adapter_name]
@@ -156,6 +157,12 @@ class MissLayer(_ConfigLayer, _LinearSized, _WeightRewrite, family=True):
 
     @override
     def forward(self, x: Tensor) -> Tensor:
+        """Run the layer with the active adapters' shards applied.
+
+        The default and ``mini`` variants add their contribution to the base output; ``bat``
+        rewrites the weight and the layer is computed from that.  The base layer alone
+        when adapters are disabled, merged or none applies.
+        """
         adapters = [name for name in self.active_adapters if name in self._specs]
         base = self.base_layer
         if self.disable_adapters or self.merged or not adapters:

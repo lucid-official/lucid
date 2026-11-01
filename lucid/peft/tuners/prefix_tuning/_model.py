@@ -45,6 +45,11 @@ class PrefixEncoder(_PromptEncoder):
     injection: ClassVar[_Injection] = _Injection.KEY_VALUES
 
     def __init__(self, config: PrefixTuningConfig) -> None:
+        """Build the prefix: one row per virtual token holding its keys and values.
+
+        With ``config.prefix_projection`` the rows come from a smaller embedding through a
+        two-layer MLP while training.
+        """
         super().__init__()
         assert config.num_virtual_tokens is not None and config.num_layers is not None
         assert config.token_dim is not None  # the tuner resolves the sizes
@@ -69,6 +74,7 @@ class PrefixEncoder(_PromptEncoder):
     @classmethod
     @override
     def from_config(cls, config: PromptLearningConfig, word_embeddings: nn.Module | None) -> Self:
+        """The encoder for ``config``; ``word_embeddings`` is not read."""
         del word_embeddings  # the prefix is not made of token embeddings
         assert isinstance(config, PrefixTuningConfig)
         return cls(config)
@@ -76,6 +82,10 @@ class PrefixEncoder(_PromptEncoder):
     @property
     @override
     def stores_prompt(self) -> bool:
+        """``True`` without the projection MLP (no ``prefix_projection``, or ``inference_mode``).
+
+        The embedding then holds the keys and values themselves.
+        """
         return isinstance(self.transform, nn.Identity)
 
     @override

@@ -97,6 +97,7 @@ class VBLoRAModel(_SharedTablesTuner, _ConfigTuner, peft_type=PeftType.VBLORA):
     def __init__(
         self, model: nn.Module, config: VBLoRAConfig, adapter_name: str = "default"
     ) -> None:
+        """Adapt ``model`` in place, building VB-LoRA's logits and bank as ``adapter_name``."""
         super().__init__(model, config, adapter_name)
 
     @property

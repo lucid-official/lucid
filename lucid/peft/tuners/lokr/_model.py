@@ -58,4 +58,5 @@ class LoKrModel(_LycorisTuner, peft_type=PeftType.LOKR):
     _config_class: ClassVar[type[_TargetedConfig]] = LoKrConfig
 
     def __init__(self, model: nn.Module, config: LoKrConfig, adapter_name: str = "default") -> None:
+        """Adapt ``model`` in place, building LoKr's Kronecker factors as ``adapter_name``."""
         super().__init__(model, config, adapter_name)

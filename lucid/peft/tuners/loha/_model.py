@@ -57,4 +57,5 @@ class LoHaModel(_LycorisTuner, peft_type=PeftType.LOHA):
     _config_class: ClassVar[type[_TargetedConfig]] = LoHaConfig
 
     def __init__(self, model: nn.Module, config: LoHaConfig, adapter_name: str = "default") -> None:
+        """Adapt ``model`` in place, building LoHa's Hadamard factors as ``adapter_name``."""
         super().__init__(model, config, adapter_name)

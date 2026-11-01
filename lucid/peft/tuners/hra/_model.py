@@ -55,4 +55,5 @@ class HRAModel(_ConfigTuner, peft_type=PeftType.HRA):
     _config_class: ClassVar[type[_TargetedConfig]] = HRAConfig
 
     def __init__(self, model: nn.Module, config: HRAConfig, adapter_name: str = "default") -> None:
+        """Adapt ``model`` in place, building HRA's reflections as ``adapter_name``."""
         super().__init__(model, config, adapter_name)

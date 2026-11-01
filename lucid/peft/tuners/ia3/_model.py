@@ -91,6 +91,7 @@ class IA3Model(_BaseTuner, peft_type=PeftType.IA3):
     _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = _NO_PARAMETERS
 
     def __init__(self, model: nn.Module, config: IA3Config, adapter_name: str = "default") -> None:
+        """Adapt ``model`` in place, building (IA)^3's scaling vectors as ``adapter_name``."""
         super().__init__(model, config, adapter_name)
 
     @override

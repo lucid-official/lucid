@@ -117,6 +117,11 @@ class _WeightSpace[Out](LoraLayer, _ForwardsAttributes):
 
     @override
     def forward(self, *args: object, **kwargs: object) -> Out:
+        """Run the module with each adapted weight shifted by the active adapters' update.
+
+        The base module alone when adapters are disabled, merged or none applies; the shifted
+        weights are in force for the one call only.
+        """
         result: Out
         applied = [name for name in self.active_adapters if name in self._specs]
         if self.disable_adapters or self.merged or not applied:

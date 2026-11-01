@@ -144,6 +144,7 @@ class RandLoraLayer(_SharingLayer, _ConfigLayer, _LinearSized, _ResidualUpdate, 
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
+        """Remove ``adapter_name``: its scale vectors, its dropout and any projections it drew."""
         super().delete_adapter(adapter_name)
         if adapter_name in self.randlora_dropout:
             del self.randlora_dropout[adapter_name]

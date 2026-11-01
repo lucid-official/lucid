@@ -114,6 +114,7 @@ class ShiraLayer(_ConfigLayer, _LinearSized, _ResidualUpdate, family=True):
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
+        """Remove ``adapter_name``: its values and its mask indices."""
         super().delete_adapter(adapter_name)
         if adapter_name in self.shira_indices:
             del self.shira_indices[adapter_name]

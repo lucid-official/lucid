@@ -55,6 +55,7 @@ class BOFTModel(_ConfigTuner, peft_type=PeftType.BOFT):
     _config_class: ClassVar[type[_TargetedConfig]] = BOFTConfig
 
     def __init__(self, model: nn.Module, config: BOFTConfig, adapter_name: str = "default") -> None:
+        """Adapt ``model`` in place, building BOFT's butterfly rotations as ``adapter_name``."""
         super().__init__(model, config, adapter_name)
 
     @override

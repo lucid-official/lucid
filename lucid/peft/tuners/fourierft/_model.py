@@ -63,6 +63,7 @@ class FourierFTModel(_ConfigTuner, peft_type=PeftType.FOURIERFT):
     def __init__(
         self, model: nn.Module, config: FourierFTConfig, adapter_name: str = "default"
     ) -> None:
+        """Adapt ``model`` in place, building FourierFT's coefficients as ``adapter_name``."""
         super().__init__(model, config, adapter_name)
 
     @override

@@ -52,6 +52,12 @@ class PromptEncoder(_PromptEncoder):
     injection: ClassVar[_Injection] = _Injection.EMBEDDINGS
 
     def __init__(self, config: PromptEncoderConfig) -> None:
+        """Build the virtual-token embedding and the head that maps it to the prompt.
+
+        The head is the MLP, or the bidirectional LSTM and an MLP, that
+        ``config.encoder_reparameterization_type`` names; an ``inference_mode`` encoder has no
+        head.
+        """
         super().__init__()
         assert config.num_virtual_tokens is not None and config.token_dim is not None
         dim = config.token_dim
@@ -93,6 +99,10 @@ class PromptEncoder(_PromptEncoder):
     @classmethod
     @override
     def from_config(cls, config: PromptLearningConfig, word_embeddings: nn.Module | None) -> Self:
+        """The encoder for ``config``.
+
+        ``word_embeddings`` is not read, the encoder makes its own.
+        """
         del word_embeddings  # the encoder makes its own embeddings
         assert isinstance(config, PromptEncoderConfig)
         return cls(config)
@@ -100,6 +110,10 @@ class PromptEncoder(_PromptEncoder):
     @property
     @override
     def stores_prompt(self) -> bool:
+        """``True`` when no head maps the embedding (an ``inference_mode`` encoder).
+
+        Its rows are then the finished prompt.
+        """
         return isinstance(self.mlp_head, nn.Identity)
 
     @override

@@ -128,6 +128,11 @@ class _ResidualUpdate(_AdditiveWeight):
 
     @override
     def forward(self, x: Tensor) -> Tensor:
+        """The base layer's output plus every active adapter's contribution to it.
+
+        The base output alone when adapters are disabled or merged; the sum is cast back to the
+        base output's dtype.
+        """
         result: Tensor = self.base_layer(x)
         if self.disable_adapters or self.merged:
             return result
@@ -206,6 +211,7 @@ class _ConfigLayer(_BaseTunerLayer):
     _repr_prefix: ClassVar[str] = ""
 
     def __init__(self, base_layer: nn.Module, adapter_name: str, config: _TargetedConfig) -> None:
+        """Wrap ``base_layer`` and build the adapter ``adapter_name`` on it as ``config`` says."""
         super().__init__(base_layer)
         self._specs = {}
         for table in self.adapter_layer_names:
@@ -258,10 +264,12 @@ class _ConfigLayer(_BaseTunerLayer):
 
     @override
     def __repr__(self) -> str:
+        """The module's repr, led by the method's prefix so a printed model names it."""
         return type(self)._repr_prefix + super().__repr__()
 
     @override
     def extra_repr(self) -> str:
+        """The active adapter, whether it is merged and whether adapters are disabled."""
         return (
             f"adapter={self.active_adapter!r}, merged={self.merged}, "
             f"disabled={self.disable_adapters}"
@@ -269,6 +277,7 @@ class _ConfigLayer(_BaseTunerLayer):
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
+        """Remove ``adapter_name``: its tables, through the base, and its recorded settings."""
         super().delete_adapter(adapter_name)
         self._specs.pop(adapter_name, None)
 

@@ -161,6 +161,11 @@ class LNTuningLayer(_ConfigLayer, base_type=nn.Module):
 
     @override
     def forward(self, x: Tensor) -> Tensor:
+        """Run the active adapter's trained copy of the layer.
+
+        The original layer when adapters are disabled, merged or none applies; more than one
+        active adapter raises ``ValueError``, since LN tuning applies one copy at a time.
+        """
         held = [name for name in self.active_adapters if name in self.ln_tuning_layers]
         if self.disable_adapters or self.merged or not held:
             result: Tensor = self.base_layer(x)

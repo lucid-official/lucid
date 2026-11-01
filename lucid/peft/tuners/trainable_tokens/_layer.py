@@ -94,6 +94,7 @@ class TrainableTokensLayer(_ConfigLayer, _WeightRewrite, family=True):
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
+        """Remove ``adapter_name``: its trained rows and the originals it kept."""
         super().delete_adapter(adapter_name)
         if adapter_name in self.trainable_tokens_original:
             del self.trainable_tokens_original[adapter_name]
@@ -140,6 +141,22 @@ class TrainableTokensLayer(_ConfigLayer, _WeightRewrite, family=True):
 
     @override
     def merge(self, safe_merge: bool = False, adapter_names: list[str] | None = None) -> None:
+        """Write the active adapters' rows into the table.
+
+        Parameters
+        ----------
+        safe_merge : bool, default=False
+            Check the merged table for NaN / inf first and leave the base
+            untouched if there are any.
+        adapter_names : list of str, optional
+            Adapters to merge; the active ones this layer holds by default.
+
+        Raises
+        ------
+        ValueError
+            Two of the adapters (or one already merged) train the same token,
+            or as for the base layer's ``merge``.
+        """
         self._check_overlap(self._pending_merges(adapter_names))
         super().merge(safe_merge, adapter_names)
 
@@ -173,6 +190,11 @@ class TrainableTokensLayer(_ConfigLayer, _WeightRewrite, family=True):
 
     @override
     def forward(self, x: Tensor) -> Tensor:
+        """Run the layer on the table with the active adapters' rows in place.
+
+        The original table when adapters are disabled, merged or none applies; two adapters
+        that train the same token raise ``ValueError``.
+        """
         adapters = [name for name in self.active_adapters if name in self._specs]
         if self.disable_adapters or self.merged or not adapters:
             result: Tensor = self.base_layer(x)

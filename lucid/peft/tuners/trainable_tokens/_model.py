@@ -72,6 +72,7 @@ class TrainableTokensModel(_ConfigTuner, peft_type=PeftType.TRAINABLE_TOKENS):
     def __init__(
         self, model: nn.Module, config: TrainableTokensConfig, adapter_name: str = "default"
     ) -> None:
+        """Adapt ``model`` in place, building the trained token rows as ``adapter_name``."""
         super().__init__(model, config, adapter_name)
 
     @override

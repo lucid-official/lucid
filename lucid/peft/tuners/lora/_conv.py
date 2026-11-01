@@ -335,15 +335,16 @@ class ConvTranspose1d(_ConvTransposeNd, base_type=nn.ConvTranspose1d):
 class ConvTranspose2d(_ConvTransposeNd, base_type=nn.ConvTranspose2d):
     r"""An ``nn.ConvTranspose2d`` with a LoRA update: ``lora_A`` (a transposed convolution to :math:`r` channels), then ``lora_B`` (1x1).
 
+    The initialisations ``"pissa"`` and ``"olora"`` are refused (the kernel is not a dense
+    matrix).
+
     Parameters
     ----------
     base_layer : nn.ConvTranspose2d
-        The layer to adapt; kept as ``base_layer``, its parameters shared.
+        The layer to adapt; kept as ``base_layer``, its parameters shared; the other
+        parameters are those of :class:`Conv2d`.
     adapter_name : str
         Name of the adapter, the key in ``lora_A`` / ``lora_B``.
-
-    The remaining parameters are those of :class:`Conv2d`.  The initialisations
-    ``"pissa"`` and ``"olora"`` are refused (the kernel is not a dense matrix).
 
     Examples
     --------

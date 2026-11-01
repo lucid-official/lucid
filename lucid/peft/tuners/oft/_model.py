@@ -55,6 +55,7 @@ class OFTModel(_ConfigTuner, peft_type=PeftType.OFT):
     _config_class: ClassVar[type[_TargetedConfig]] = OFTConfig
 
     def __init__(self, model: nn.Module, config: OFTConfig, adapter_name: str = "default") -> None:
+        """Adapt ``model`` in place, building OFT's block rotations as ``adapter_name``."""
         super().__init__(model, config, adapter_name)
 
     @override

@@ -51,7 +51,11 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
     inference_mode : bool, default=False
         Freeze the adapter too, for inference.
     target_modules : str or list of str, optional
-        The ``nn.Linear`` modules to adapt.  A list matches a module whose
+        The modules to adapt: ``nn.Linear``, ``nn.Embedding``,
+        ``nn.Conv1d`` / ``nn.Conv2d`` / ``nn.Conv3d``, their
+        ``nn.ConvTranspose`` counterparts and ``nn.MultiheadAttention``;
+        the module's type picks the LoRA layer that wraps it
+        (``lucid.peft.tuners.lora``).  A list matches a module whose
         dotted name equals an entry or ends with ``"." + entry``; a string
         is a regular expression the whole name must match; ``"all-linear"``
         selects every ``nn.Linear`` except the output head and any layer

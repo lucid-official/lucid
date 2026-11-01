@@ -31,15 +31,34 @@ class ModulesToSaveWrapper(_ForwardsAttributes):
     the active adapter that has a copy, or ``""`` when none does, in which
     case the original runs.
 
+    ``get_peft_model(..., modules_to_save=[...])`` puts one of these where each
+    named module was, so ``isinstance(m, ModulesToSaveWrapper)`` finds them in an
+    adapted model.  The module as the base model had it is ``original_module``,
+    and the trained copies are in the ``modules_to_save`` dict, keyed by adapter.
+
     Parameters
     ----------
     module_to_save : nn.Module
         The module trained in full (a classification head, an embedding).
     adapter_name : str
         Key of the first copy in ``modules_to_save``.
+
+    Examples
+    --------
+    >>> import lucid.nn as nn
+    >>> from lucid.peft import LoraConfig, ModulesToSaveWrapper, get_peft_model
+    >>> net = nn.Sequential(nn.Linear(4, 4), nn.Linear(4, 2))
+    >>> config = LoraConfig(r=2, target_modules=["0"], modules_to_save=["1"])
+    >>> _ = get_peft_model(net, config)
+    >>> head = net[1]
+    >>> isinstance(head, ModulesToSaveWrapper), head.active_adapter
+    (True, 'default')
+    >>> head.get_base_layer() is head.original_module, list(head.modules_to_save)
+    (True, ['default'])
     """
 
     def __init__(self, module_to_save: nn.Module, adapter_name: str) -> None:
+        """Hold ``module_to_save`` and a trainable copy of it for ``adapter_name``."""
         super().__init__()
         self.original_module = module_to_save
         self.modules_to_save: nn.ModuleDict[nn.Module] = nn.ModuleDict()
@@ -64,6 +83,7 @@ class ModulesToSaveWrapper(_ForwardsAttributes):
 
     @override
     def extra_repr(self) -> str:
+        """The active adapter and whether adapters are disabled."""
         return f"active_adapter={self.active_adapter!r}, disabled={self.disable_adapters}"
 
     # ── the tuner's ``_AdapterSlot`` protocol ──────────────────────────────
@@ -159,4 +179,8 @@ class ModulesToSaveWrapper(_ForwardsAttributes):
 
     @override
     def forward(self, *args: object, **kwargs: object) -> object:
+        """Run the active adapter's copy of the module.
+
+        The original runs when no adapter is active or adapters are disabled.
+        """
         return self._active_module()(*args, **kwargs)

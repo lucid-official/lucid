@@ -148,6 +148,7 @@ class VBLoRALayer(_SharingLayer, _ConfigLayer, _LinearSized, _ResidualUpdate, fa
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
+        """Remove ``adapter_name``: its logits and its dropout."""
         super().delete_adapter(adapter_name)
         if adapter_name in self.vblora_dropout:
             del self.vblora_dropout[adapter_name]
@@ -168,6 +169,7 @@ class VBLoRALayer(_SharingLayer, _ConfigLayer, _LinearSized, _ResidualUpdate, fa
     def set_requires_grad(
         self, adapter_names: str | Sequence[str], requires_grad: bool = True
     ) -> None:
+        """Set ``requires_grad`` on the named adapters' logits and on the vector bank they share."""
         super().set_requires_grad(adapter_names, requires_grad)
         for name in [adapter_names] if isinstance(adapter_names, str) else adapter_names:
             for bank in self._bank_parameters(name):

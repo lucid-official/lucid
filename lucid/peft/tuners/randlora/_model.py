@@ -82,6 +82,7 @@ class RandLoraModel(_ProjectionTuner, _ConfigTuner, peft_type=PeftType.RANDLORA)
     def __init__(
         self, model: nn.Module, config: RandLoraConfig, adapter_name: str = "default"
     ) -> None:
+        """Adapt ``model`` in place, building RandLoRA's scale vectors as ``adapter_name``."""
         super().__init__(model, config, adapter_name)
 
     @property

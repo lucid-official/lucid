@@ -48,4 +48,5 @@ class BoneModel(_ConfigTuner, peft_type=PeftType.BONE):
     _config_class: ClassVar[type[_TargetedConfig]] = BoneConfig
 
     def __init__(self, model: nn.Module, config: BoneConfig, adapter_name: str = "default") -> None:
+        """Adapt ``model`` in place, building Bone's blocks as ``adapter_name``."""
         super().__init__(model, config, adapter_name)

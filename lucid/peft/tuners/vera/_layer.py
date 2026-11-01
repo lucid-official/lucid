@@ -72,6 +72,7 @@ class VeraLayer(_LinearSized, _ResidualUpdate, family=True):
     def __init__(
         self, base_layer: nn.Module, adapter_name: str, config: VeraConfig, r: int = 0
     ) -> None:
+        """Build the adapter ``adapter_name``, two vectors over the frozen projections, on ``base_layer``."""
         if config.fan_in_fan_out:
             raise ValueError(
                 "fan_in_fan_out=True is for a weight stored (in, out); this layer's weight is "
@@ -95,10 +96,12 @@ class VeraLayer(_LinearSized, _ResidualUpdate, family=True):
 
     @override
     def __repr__(self) -> str:
+        """The module's repr, led by ``vera.`` so a printed model names the method."""
         return "vera." + super().__repr__()
 
     @override
     def extra_repr(self) -> str:
+        """The active adapter, its rank, and whether the layer is merged or its adapters are off."""
         return (
             f"adapter={self.active_adapter!r}, r={dict(self.r)}, "
             f"merged={self.merged}, disabled={self.disable_adapters}"
@@ -199,6 +202,7 @@ class VeraLayer(_LinearSized, _ResidualUpdate, family=True):
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
+        """Remove ``adapter_name``: its vectors, its dropout and any projections it drew."""
         super().delete_adapter(adapter_name)
         if adapter_name in self.vera_dropout:
             del self.vera_dropout[adapter_name]

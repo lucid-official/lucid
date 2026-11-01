@@ -112,6 +112,7 @@ class AdaLoraModel(_FileFormat, _BaseTuner, peft_type=PeftType.ADALORA):
     def __init__(
         self, model: nn.Module, config: AdaLoraConfig, adapter_name: str = "default"
     ) -> None:
+        """Adapt ``model`` in place, building AdaLoRA's triplets as ``adapter_name``."""
         super().__init__(model, config, adapter_name)
         self._allocator: RankAllocator | None = None
 
@@ -215,6 +216,12 @@ class AdaLoraModel(_FileFormat, _BaseTuner, peft_type=PeftType.ADALORA):
 
     @override
     def forward(self, *args: object, **kwargs: object) -> object:
+        """Call the model, adding the orthogonality penalty to its loss.
+
+        When the output carries a ``loss`` and an adapter trains, ``orth_reg_weight`` times the
+        penalty that keeps :math:`P` and :math:`Q` near-orthogonal is added to it; otherwise the
+        output is returned as it is.
+        """
         outputs = self.model(*args, **kwargs)
         adapter = self.trainable_adapter_name
         loss = getattr(outputs, _LOSS, None)

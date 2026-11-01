@@ -70,6 +70,7 @@ class IA3Layer(_BaseTunerLayer):
         config: IA3Config,
         is_feedforward: bool = False,
     ) -> None:
+        """Build the scaling vector of ``adapter_name`` on ``base_layer`` (its input if feed-forward)."""
         if config.fan_in_fan_out:
             raise ValueError(
                 "fan_in_fan_out=True is for a weight stored (in, out); this layer's weight is "
@@ -115,10 +116,12 @@ class IA3Layer(_BaseTunerLayer):
 
     @override
     def __repr__(self) -> str:
+        """The module's repr, led by ``ia3.`` so a printed model names the method."""
         return "ia3." + super().__repr__()
 
     @override
     def extra_repr(self) -> str:
+        """The active adapter, whether the layer is feed-forward, merged or disabled."""
         return (
             f"adapter={self.active_adapter!r}, is_feedforward={self.is_feedforward}, "
             f"merged={self.merged}, disabled={self.disable_adapters}"
@@ -159,6 +162,11 @@ class IA3Layer(_BaseTunerLayer):
 
     @override
     def forward(self, x: Tensor) -> Tensor:
+        """Scale the layer by the active adapters' vectors.
+
+        The output is scaled — the input, for a feed-forward layer; the base layer alone when
+        adapters are disabled or merged.
+        """
         if self.disable_adapters or self.merged:
             result: Tensor = self.base_layer(x)
             return result
