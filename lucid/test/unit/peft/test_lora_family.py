@@ -39,10 +39,6 @@ from lucid.peft.tuners.miss._modes import _Mode
 from lucid.serialization import load_safetensors
 from lucid.test.unit.peft._parity import adapter_library, gap
 
-# Members a later card (LCD-798: the prompt and mixture methods) still owes a config and a tuner.
-_LATER = {PeftType.XLORA}
-
-
 def _mlp(inn: int = 8, hidden: int = 8, out: int = 4) -> nn.Sequential:
     lucid.manual_seed(0)
     return nn.Sequential(nn.Linear(inn, hidden), nn.ReLU(), nn.Linear(hidden, out))
@@ -55,21 +51,7 @@ def _close(a: lucid.Tensor, b: lucid.Tensor, atol: float = 1e-5) -> bool:
 # ── every method of the enum is backed ───────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    "member",
-    [
-        pytest.param(
-            m,
-            marks=(
-                pytest.mark.xfail(strict=True, reason="LCD-798: no config and tuner yet")
-                if m in _LATER
-                else ()
-            ),
-        )
-        for m in PeftType
-    ],
-    ids=lambda m: m.value,
-)
+@pytest.mark.parametrize("member", list(PeftType), ids=lambda m: m.value)
 def test_every_peft_type_has_a_config_and_a_tuner(member: PeftType) -> None:
     assert member in _CONFIG_CLASSES, f"{member} has no registered config"
     assert member in _TUNERS, f"{member} has no registered tuner"

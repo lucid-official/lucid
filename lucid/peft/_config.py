@@ -62,11 +62,14 @@ class PeftType(enum.StrEnum):
 
     The members are the reference library's ``peft_type`` strings, so a
     config file names its method the same way on both sides.
-    ``lucid.peft`` implements ``LORA``, ``ADALORA``, ``IA3``, ``LOHA``, ``LOKR``, ``VERA``,
-    ``VBLORA``, ``RANDLORA``, ``MISS`` (and its predecessor ``BONE``), ``SHIRA``, ``C3A``,
-    ``OFT``, ``BOFT``, ``HRA``, ``FOURIERFT``, ``LN_TUNING``, ``TRAINABLE_TOKENS`` and
-    the prompt-learning methods ``PROMPT_TUNING``, ``PREFIX_TUNING`` and ``P_TUNING``;
-    reading a file of any other type raises ``NotImplementedError``.
+    ``lucid.peft`` implements every member: the LoRA family (``LORA``, ``ADALORA``), the
+    orthogonal and LyCORIS families (``OFT``, ``BOFT``, ``HRA``, ``LOHA``, ``LOKR``), the shared-table
+    tuners (``VERA``, ``VBLORA``, ``RANDLORA``), the structured and sparse updates (``MISS``, its
+    predecessor ``BONE``, ``SHIRA``, ``C3A``, ``FOURIERFT``), ``IA3``, ``LN_TUNING``,
+    ``TRAINABLE_TOKENS``, the prompt-learning methods (``PROMPT_TUNING``,
+    ``MULTITASK_PROMPT_TUNING``, ``PREFIX_TUNING``, ``P_TUNING``, ``CPT``), the adaption prompt
+    (``ADAPTION_PROMPT``) and the routing and mixing methods (``POLY``, ``XLORA``).  A file that names
+    any other type raises ``NotImplementedError``.
     """
 
     PROMPT_TUNING = "PROMPT_TUNING"

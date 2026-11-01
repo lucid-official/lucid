@@ -1,4 +1,4 @@
-r"""``lucid.peft`` — parameter-efficient fine-tuning: LoRA and 21 other adapter methods, with one API.
+r"""``lucid.peft`` — parameter-efficient fine-tuning: LoRA and 25 other adapter methods, with one API.
 
 Fine-tuning a pretrained model end to end updates, stores and ships every
 weight.  LoRA (Hu et al., 2021) freezes them and learns, beside each
@@ -61,8 +61,19 @@ by family:
   rows of an embedding table, ``TrainableTokensConfig`` /
   ``TrainableTokensModel``).
 
+* **Routing and mixing** — several low-rank adapters combined per task or per token.
+  Poly and Multi-Head Routing (every layer holds ``n_skills`` low-rank skills and a router
+  with a logit vector per task, ``PolyConfig`` / ``PolyModel``; the call names its tasks with
+  ``task_ids``) and X-LoRA (trained LoRA adapters loaded by name and weighed per token by a
+  classifier on the final hidden states, ``XLoraConfig`` / ``XLoraModel``; only the classifier
+  is saved).
+* **Adaption prompts** — LLaMA-Adapter: the top attention layers of a ``gpt`` / ``gpt2`` decoder
+  attend to learned prompts through a gate that starts at zero (``AdaptionPromptConfig`` /
+  ``AdaptionPromptModel``).
+
 Everything below about adapters, switching, merging and files holds for all
-of them (LN tuning applies, and merges, one adapter at a time).
+of them (LN tuning applies, and merges, one adapter at a time; adaption prompts apply one at a
+time; adaption prompts, Poly and X-LoRA cannot be merged into the weights).
 
 **Prompt learning** is the last family.  It learns an input rather than a weight and adds no
 layer to the model: prompt tuning (``PromptTuningConfig``: virtual-token embeddings in front of
@@ -74,7 +85,9 @@ LSTM).  The prompt is applied by hooks on the model's own call, so ``model(...)`
 support the causal-LM, sequence-to-sequence, sequence-classification, token-classification
 and question-answering tasks (the last two get logits as long as the input, the prompt's rows
 cut off at the head).  Multitask prompt tuning (``MultitaskPromptTuningConfig``) learns a shared
-prompt and a low-rank factor pair per task, chosen per batch row by ``task_ids``::
+prompt and a low-rank factor pair per task, chosen per batch row by ``task_ids``; context-aware
+prompt tuning (``CPTConfig``) tunes a prompt of in-context examples with a bounded offset and
+a loss over the examples' outputs::
 
     config = PromptTuningConfig(num_virtual_tokens=20, task_type="CAUSAL_LM")
     model = get_peft_model(base_model, config)
@@ -218,6 +231,7 @@ from lucid.peft.tuners.shira import ShiraConfig, ShiraModel
 from lucid.peft.tuners.trainable_tokens import TrainableTokensConfig, TrainableTokensModel
 from lucid.peft.tuners.vblora import VBLoRAConfig, VBLoRAModel
 from lucid.peft.tuners.vera import VeraConfig, VeraModel
+from lucid.peft.tuners.xlora import XLoraClassifier, XLoraConfig, XLoraModel
 
 __all__ = [
     "AutoPeftModel",
@@ -263,6 +277,7 @@ __all__ = [
     "TrainableTokensConfig",
     "VBLoRAConfig",
     "VeraConfig",
+    "XLoraConfig",
     "PeftType",
     "TaskType",
     "AdaLoraModel",
@@ -289,6 +304,8 @@ __all__ = [
     "TrainableTokensModel",
     "VBLoRAModel",
     "VeraModel",
+    "XLoraClassifier",
+    "XLoraModel",
     "PeftModel",
     "PeftModelForCausalLM",
     "PeftModelForFeatureExtraction",

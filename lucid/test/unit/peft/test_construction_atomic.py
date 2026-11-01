@@ -98,7 +98,9 @@ def _assert_unchanged(before: dict[str, object], after: dict[str, object]) -> No
 
 
 def _with_a_module_trained_in_full(config: PeftConfig, name: str) -> PeftConfig:
-    """``config`` that also trains the module ``name`` in full, which every host plans before it mutates."""
+    """``config`` that also trains the module ``name`` in full, which every host that can plans before it mutates."""
+    if not any(field.name == "modules_to_save" for field in dataclasses.fields(config)):
+        return config  # X-LoRA trains its classifier alone
     return dataclasses.replace(config, modules_to_save=[name])
 
 

@@ -1,4 +1,4 @@
-"""``lucid.peft.tuners`` — one sub-package per parameter-efficient method, 22 in all.
+"""``lucid.peft.tuners`` — one sub-package per parameter-efficient method, 26 in all.
 
 A method is a config class, a tuner (the model-level host that injects, switches, merges and
 saves its adapters) and, for the methods that adapt weights, the layer types that wrap the
@@ -16,8 +16,9 @@ The methods, by family:
   product of low-rank products) and ``lokr`` (a Kronecker product).
 * **Prompt learning** — an input learned instead of a weight, with no layer added to the model:
   ``prompt_tuning`` (virtual tokens in front of the embeddings), ``prefix_tuning`` (virtual keys and
-  values in every attention layer), ``p_tuning`` (tokens an MLP or LSTM produces) and
-  ``multitask_prompt_tuning`` (one prompt shared across tasks, scaled per task).
+  values in every attention layer), ``p_tuning`` (tokens an MLP or LSTM produces),
+  ``multitask_prompt_tuning`` (one prompt shared across tasks, scaled per task) and ``cpt`` (a
+  prompt of in-context examples with a bounded learned offset and its own loss).
 * **Shared-table tuners** — one set of tensors for the whole model, held once by the tuner, with a
   few parameters per layer: ``vera`` (shared random projections, two vectors per layer),
   ``randlora`` (shared random bases, a full-rank update) and ``vblora`` (a shared vector bank).
@@ -25,6 +26,11 @@ The methods, by family:
   ``fourierft`` (a few frequency coefficients), ``c3a`` (block-circulant blocks), ``miss`` (shared
   matrix shards), ``bone`` (the method MiSS replaced, kept to read old adapter files) and ``shira``
   (a sparse subset of the weight itself).
+* **Routing and mixing** — several low-rank adapters combined per task or per token: ``poly``
+  (low-rank skills mixed by a per-task router) and ``xlora`` (LoRA experts weighed per token by a
+  classifier on the hidden states).
+* **Adaption prompts** — ``adaption_prompt`` (LLaMA-Adapter): learned prompts the top attention
+  layers attend to through a zero-initialised gate.
 * **Scaling and selective tuning** — a small part of the model itself: ``ia3`` (a rescaling vector
   per layer), ``ln_tuning`` (a trainable copy of each chosen normalisation layer) and
   ``trainable_tokens`` (a few rows of an embedding table).
@@ -59,6 +65,7 @@ from lucid.peft.tuners import (
     trainable_tokens,
     vblora,
     vera,
+    xlora,
 )
 
 __all__ = [
@@ -87,4 +94,5 @@ __all__ = [
     "trainable_tokens",
     "vblora",
     "vera",
+    "xlora",
 ]

@@ -54,6 +54,13 @@ def _same(a: lucid.Tensor, b: lucid.Tensor) -> bool:
     return bool((a == b).all().item())
 
 
+def _delta(prompt: CPTEmbedding) -> lucid.Tensor:
+    """The weight of a trainable prompt's delta."""
+    delta = prompt.delta_embedding
+    assert delta is not None
+    return delta.weight
+
+
 def _row_norms(weight: lucid.Tensor) -> list[float]:
     return [float(x) for x in (weight * weight).sum(dim=1).sqrt().tolist()]
 
@@ -116,7 +123,7 @@ class TestEmbedding:
         prompt, table = self._embedding()
         rows = prompt(lucid.arange(4).long())
         assert _same(rows, table(lucid.tensor(_IDS)))
-        assert float(prompt.delta_embedding.weight.abs().max().item()) == 0.0  # type: ignore[union-attr]
+        assert float(_delta(prompt).abs().max().item()) == 0.0
 
     def test_only_the_delta_trains(self) -> None:
         prompt, _ = self._embedding()
@@ -129,7 +136,7 @@ class TestEmbedding:
     def test_only_template_and_input_deltas_get_a_gradient(self) -> None:
         prompt, _ = self._embedding()
         prompt(lucid.arange(4).long()).sum().backward()
-        grad = prompt.delta_embedding.weight.grad  # type: ignore[union-attr]
+        grad = _delta(prompt).grad
         assert grad is not None
         live = [float(x) for x in grad.abs().sum(dim=1).tolist()]
         assert live[0] > 0 and live[1] > 0 and live[2] > 0 and live[3] == 0  # types 1, 2, 3 | 4
@@ -140,25 +147,25 @@ class TestEmbedding:
         )
         scale = math.sqrt(16 / 2048)
         with lucid.no_grad():
-            prompt.delta_embedding.weight.copy_(lucid.full((4, 16), 1.0))  # type: ignore[union-attr]
+            _delta(prompt).copy_(lucid.full((4, 16), 1.0))
         rows = prompt(lucid.arange(4).long())
-        norms = _row_norms(prompt.delta_embedding.weight)  # type: ignore[union-attr]
+        norms = _row_norms(_delta(prompt))
         # type 1 and 3 (templates) 0.2, type 2 (input) 0.4, scaled; type 4 is projected to ~0.
         assert norms[0] == pytest.approx(0.2 * scale, rel=1e-4)
         assert norms[1] == pytest.approx(0.4 * scale, rel=1e-4)
         assert norms[2] == pytest.approx(0.2 * scale, rel=1e-4)
         assert norms[3] < 1e-8
         # The prompt is the embedding plus the (masked) projected delta.
-        expected = table(lucid.tensor(_IDS)) + prompt.delta_embedding.weight * prompt.update_mask  # type: ignore[union-attr]
+        expected = table(lucid.tensor(_IDS)) + _delta(prompt) * prompt.update_mask
         assert bool(lucid.allclose(rows, expected, atol=1e-6))
 
     def test_a_row_inside_its_ball_is_left_alone(self) -> None:
         prompt, _ = self._embedding()
         small = lucid.full((4, 16), 1e-4)
         with lucid.no_grad():
-            prompt.delta_embedding.weight.copy_(small)  # type: ignore[union-attr]
+            _delta(prompt).copy_(small)
         prompt.project()
-        kept = prompt.delta_embedding.weight  # type: ignore[union-attr]
+        kept = _delta(prompt)
         assert bool(lucid.allclose(kept[:3], small[:3]))
 
     def test_an_inference_adapter_holds_the_prompt_alone(self) -> None:

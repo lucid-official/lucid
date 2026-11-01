@@ -15,7 +15,11 @@ are keyed by identity because ``Linear`` is also ``nn.Linear`` and four
 quantised layers.
 """
 
+import atexit
+import functools
 import inspect
+import shutil
+import tempfile
 from collections.abc import Callable, Iterator
 from typing import Any
 
@@ -54,6 +58,8 @@ from lucid.peft import (
     ShiraConfig,
     TrainableTokensConfig,
     VBLoRAConfig,
+    XLoraConfig,
+    XLoraModel,
 )
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft.tuners import lora
@@ -76,6 +82,7 @@ from lucid.peft.tuners.p_tuning import PromptEncoderConfig, PromptEncoderModel
 from lucid.peft.tuners.prefix_tuning import PrefixTuningConfig, PrefixTuningModel
 from lucid.peft.tuners.prompt_tuning import PromptTuningConfig, PromptTuningModel
 from lucid.peft.tuners.vera import VeraConfig, VeraLayer, VeraModel
+from lucid.peft.tuners.xlora import XLoraClassifier
 
 
 def _base_model() -> nn.Module:
@@ -99,6 +106,17 @@ def _text_model() -> nn.Module:
         max_position_embeddings=8,
         tie_word_embeddings=False,
     )
+
+
+@functools.cache
+def _expert_directory() -> str:
+    """A saved LoRA adapter for ``_text_model``, which X-LoRA loads as its one expert (removed at exit)."""
+    directory = tempfile.mkdtemp(prefix="lucid-audit-xlora-")
+    atexit.register(shutil.rmtree, directory, ignore_errors=True)
+    peft.get_peft_model(_text_model(), LoraConfig(r=2, target_modules=["c_attn"])).save_pretrained(
+        directory
+    )
+    return directory
 
 
 #: The sizes a prompt encoder reads off the model, spelled out for a table of width 4.
@@ -269,6 +287,12 @@ BUILDERS: dict[type, Callable[[], Any]] = {
             cpt_token_ids=[1, 2], cpt_tokens_type_mask=[1, 4], token_dim=4, task_type="CAUSAL_LM"
         ),
         nn.Embedding(5, 4),
+    ),
+    XLoraModel: lambda: XLoraModel(
+        _text_model(), XLoraConfig(adapters={"a": _expert_directory()}, task_type="CAUSAL_LM")
+    ),
+    XLoraClassifier: lambda: XLoraClassifier(
+        XLoraConfig(hidden_size=4, adapters={"a": "unused"}), 1, 1, lucid.float32, "cpu"
     ),
     MultitaskPromptEmbedding: lambda: MultitaskPromptEmbedding(
         MultitaskPromptTuningConfig(num_virtual_tokens=2, num_tasks=2, **_PROMPT_SIZES),
