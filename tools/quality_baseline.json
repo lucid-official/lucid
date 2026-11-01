@@ -1855,7 +1855,6 @@
     "lucid/models/vision/yolo/_v2.py": 1,
     "lucid/models/vision/yolo/_v3.py": 1,
     "lucid/models/vision/yolo/_v4.py": 1,
-    "lucid/nn/_state_dict.py": 1,
     "lucid/nn/functional/attention.py": 1,
     "lucid/nn/functional/dropout.py": 1,
     "lucid/nn/functional/linear.py": 1,
@@ -1965,7 +1964,6 @@
     "lucid/models/vision/yolo/_v2.py": 13,
     "lucid/models/vision/yolo/_v3.py": 95,
     "lucid/models/vision/yolo/_v4.py": 39,
-    "lucid/nn/_state_dict.py": 5,
     "lucid/nn/functional/attention.py": 102,
     "lucid/nn/functional/dropout.py": 7,
     "lucid/nn/functional/linear.py": 5,
@@ -2083,7 +2081,6 @@
     "lucid/models/vision/mask_rcnn/_model.py": 1,
     "lucid/models/vision/vjepa/_config.py": 1,
     "lucid/models/vision/vjepa2/_config.py": 1,
-    "lucid/nn/_state_dict.py": 1,
     "lucid/nn/functional/attention.py": 1,
     "lucid/nn/functional/sampling.py": 1,
     "lucid/nn/module.py": 3,
@@ -2217,9 +2214,6 @@
    },
    "SIM117": {
     "lucid/compile/_optim/compiler.py": 1
-   },
-   "SIM118": {
-    "lucid/nn/_state_dict.py": 1
    },
    "SIM300": {
     "lucid/models/multimodal/clip/_config.py": 1,

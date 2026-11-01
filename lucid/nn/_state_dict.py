@@ -174,6 +174,25 @@ def _enumerate_local_keys(module: Module, prefix: str) -> list[str]:
     return keys
 
 
+def _unexpected_here(module: Module, state_dict: StateDict, prefix: str) -> list[str]:
+    """Checkpoint keys under ``prefix`` that neither this module nor a child claims.
+
+    Run right after the module's own ``_load_from_state_dict`` (so after its
+    pre-hooks have renamed what they rename), as the reference does; a key
+    under a child is the child's to judge.
+    """
+    own = set(_enumerate_local_keys(module, prefix))
+    children = {name for name, child in module._modules.items() if child is not None}
+    unexpected: list[str] = []
+    for key in state_dict:
+        if not key.startswith(prefix) or key in own:
+            continue
+        head, dot, _ = key[len(prefix) :].partition(".")
+        if not (dot and head in children):
+            unexpected.append(key)
+    return unexpected
+
+
 def _walk_load(
     module: Module,
     state_dict: StateDict,
@@ -183,15 +202,15 @@ def _walk_load(
     missing_keys: list[str],
     unexpected_keys: list[str],
     error_msgs: list[str],
-    post_hook_modules: list[Module],
     assign: bool = False,
 ) -> None:
-    """Pre-order walk: handle this module, then recurse into children.
+    """Handle this module, recurse into its children, then run its post-hooks.
 
-    Post-hooks are deferred — modules with registered post-hooks are
-    appended to `post_hook_modules` and fired by the top-level driver
-    after the full walk completes, so each hook sees the final
-    _IncompatibleKeys rather than a per-module snapshot.
+    As in the reference, a module's post-hooks run right after its own
+    subtree has loaded and see ``missing_keys`` / ``unexpected_keys`` as they
+    stand then — the lists are shared across the walk, and a hook may edit
+    them in place; ``strict`` is judged on what is left once every hook has
+    run.
     """
     local_meta: dict[str, object] = metadata.get(prefix.rstrip("."), {}) if metadata else {}
     if assign:
@@ -225,8 +244,7 @@ def _walk_load(
         # into the old ones, which every holder sees.
         _tensors_replaced(module)
 
-    if module._load_state_dict_post_hooks:
-        post_hook_modules.append(module)
+    unexpected_keys.extend(_unexpected_here(module, state_dict, prefix))
 
     for name, child in module._modules.items():
         if child is None:
@@ -240,9 +258,14 @@ def _walk_load(
             missing_keys,
             unexpected_keys,
             error_msgs,
-            post_hook_modules,
             assign,
         )
+
+    incompatible: _IncompatibleKeys = _IncompatibleKeys(missing_keys, unexpected_keys)
+    for hook in module._load_state_dict_post_hooks.values():
+        hook(module, incompatible)
+    for hook in _GLOBAL_LOAD_STATE_DICT_POST_HOOKS.values():
+        hook(module, incompatible)
 
 
 def _load_state_dict(
@@ -251,8 +274,9 @@ def _load_state_dict(
     """Driver for ``Module.load_state_dict``.
 
     Pre-order recursion: at each module, run pre-hooks, then
-    ``_load_from_state_dict``, then post-hooks, then recurse into
-    children.  ``state_dict`` may carry an ``_metadata`` attribute (set
+    ``_load_from_state_dict``, then recurse into children, then run the
+    module's post-hooks (each right after its own subtree, as in the
+    reference).  ``state_dict`` may carry an ``_metadata`` attribute (set
     by ``Module.state_dict()``) mapping module paths to per-module
     metadata such as ``{"version": N}``; each module's hook receives
     the relevant slice as ``local_metadata``.
@@ -291,7 +315,6 @@ def _load_state_dict(
     missing_keys: list[str] = []
     unexpected_keys: list[str] = []
     error_msgs: list[str] = []
-    post_hook_modules: list[Module] = []
 
     _walk_load(
         module,
@@ -302,35 +325,10 @@ def _load_state_dict(
         missing_keys,
         unexpected_keys,
         error_msgs,
-        post_hook_modules,
         assign,
     )
 
-    # Compute final unexpected_keys based on the post-hook state_dict
-    # (pre-hooks may have renamed/added/removed keys).  Anything still
-    # present that no module claimed is "unexpected".
-    expected_keys: set[str] = set()
-    _collect_expected(module, "", expected_keys)
-    unexpected_keys = [k for k in state_dict.keys() if k not in expected_keys]
-
-    incompatible: _IncompatibleKeys = _IncompatibleKeys(missing_keys, unexpected_keys)
-
-    # Fire post-hooks (instance + global) with the final _IncompatibleKeys.
-    for m in post_hook_modules:
-        for hook in m._load_state_dict_post_hooks.values():
-            hook(m, incompatible)
-    if _GLOBAL_LOAD_STATE_DICT_POST_HOOKS:
-
-        def _walk_post(mod: Module) -> None:
-            for hook in _GLOBAL_LOAD_STATE_DICT_POST_HOOKS.values():
-                hook(mod, incompatible)
-            for child in mod._modules.values():
-                if child is not None:
-                    _walk_post(child)
-
-        _walk_post(module)
-
-    # Strict mode: turn missing/unexpected into errors.
+    # Strict mode: turn what the hooks left of missing/unexpected into errors.
     if strict:
         if missing_keys:
             error_msgs.insert(
@@ -349,12 +347,4 @@ def _load_state_dict(
             )
         )
 
-    return incompatible
-
-
-def _collect_expected(module: Module, prefix: str, out: set[str]) -> None:
-    out.update(_enumerate_local_keys(module, prefix))
-    for name, child in module._modules.items():
-        if child is None:
-            continue
-        _collect_expected(child, f"{prefix}{name}.", out)
+    return _IncompatibleKeys(missing_keys, unexpected_keys)

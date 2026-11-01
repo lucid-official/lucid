@@ -183,14 +183,77 @@ def test_every_load_post_hook_fires_once(ref) -> None:
 
 
 @pytest.mark.parity
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-805: load post-hooks run after the whole walk; the reference runs "
-    "each right after its own subtree",
-)
 def test_load_post_hooks_interleave_with_the_walk_as_in_the_reference(ref) -> None:
     ours, theirs = _load_logs(ref, False)
     assert [e[:3] for e in ours] == [e[:3] for e in theirs]
+
+
+def _observed_by_post_hooks(lib):
+    """(module path, missing, unexpected) as each post-hook sees the shared lists."""
+    net = _tree(lib)
+    sd = _tree(lib).state_dict()
+    for key in ("0.bias", "1.0.weight"):
+        del sd[key]
+    sd["1.0.stray"] = sd["0.weight"]
+    sd["1.nested.stray"] = sd["0.weight"]
+    sd["stray"] = sd["0.weight"]
+    seen: list = []
+    for path, sub in net.named_modules():
+        sub.register_load_state_dict_post_hook(
+            lambda m, inc, path=path: seen.append(
+                (path, list(inc.missing_keys), list(inc.unexpected_keys))
+            )
+        )
+    result = net.load_state_dict(sd, strict=False)
+    return seen, (result.missing_keys, result.unexpected_keys)
+
+
+@pytest.mark.parity
+def test_load_post_hooks_see_the_key_lists_as_they_stand_in_the_walk(ref) -> None:
+    ours, theirs = _observed_by_post_hooks(lucid), _observed_by_post_hooks(ref)
+    assert ours == theirs
+    seen = ours[0]
+    assert [entry[0] for entry in seen] == ["0", "1.0", "1", ""]
+    # A module judges its own stray keys before its children load, so the
+    # lists a hook sees grow as the walk goes on.
+    everything = ["stray", "1.nested.stray", "1.0.stray"]
+    assert seen[0][1:] == (["0.bias"], ["stray"])
+    assert seen[1][1:] == (["0.bias", "1.0.weight"], everything)
+    assert seen[-1][1:] == (["0.bias", "1.0.weight"], everything)
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("which", ["missing_keys", "unexpected_keys"])
+def test_a_post_hook_that_empties_a_key_list_makes_a_strict_load_pass(ref, which) -> None:
+    def forgive(module, incompatible):
+        getattr(incompatible, which).clear()
+
+    outcomes = []
+    for lib in (lucid, ref):
+        net = _tree(lib)
+        sd = _tree(lib).state_dict()
+        if which == "missing_keys":
+            del sd["1.0.bias"]
+        else:
+            sd["1.0.stray"] = sd["0.weight"]
+        with pytest.raises(RuntimeError, match="Error\\(s\\) in loading state_dict"):
+            net.load_state_dict(sd)
+        net[1].register_load_state_dict_post_hook(forgive)
+        result = net.load_state_dict(sd)
+        outcomes.append((list(result.missing_keys), list(result.unexpected_keys)))
+    assert outcomes[0] == outcomes[1] == ([], [])
+
+
+@pytest.mark.parity
+def test_a_post_hook_that_adds_a_key_makes_a_strict_load_fail(ref) -> None:
+    def add(module, incompatible):
+        incompatible.missing_keys.append("made.up")
+
+    for lib in (lucid, ref):
+        net = _tree(lib)
+        net[0].register_load_state_dict_post_hook(add)
+        with pytest.raises(RuntimeError, match="made.up"):
+            net.load_state_dict(_tree(lib).state_dict())
 
 
 @pytest.mark.parity
