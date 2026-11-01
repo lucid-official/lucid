@@ -35,8 +35,19 @@ class _FakeMember:
     to exercise its module-root-relative-path branch.
     """
 
-    def __init__(self, filepath: Path) -> None:
+    def __init__(self, filepath: Path, lineno: int | None = 1) -> None:
         self.filepath = filepath
+        self.lineno = lineno
+
+
+def test_synthesised_dataclass_init_is_not_a_member() -> None:
+    """LCD-808: ``@dataclass`` synthesises ``__init__``; Griffe mirrors it at
+    line 0, with no source and so no docstring.  It must not become a
+    summary-less member row -- the class header already carries the signature.
+    A hand-written ``__init__`` (a real line number) is unaffected."""
+    assert _M._is_synthesised(_FakeMember(Path("/repo/x.py"), lineno=0))
+    assert _M._is_synthesised(_FakeMember(Path("/repo/x.py"), lineno=None))
+    assert not _M._is_synthesised(_FakeMember(Path("/repo/x.py"), lineno=42))
 
 
 def test_softmax_distance_shrinkage_group_under_activations() -> None:

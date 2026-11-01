@@ -255,6 +255,20 @@ def test_module_overview_code_is_fenced_not_flowed() -> None:
     assert "::" not in text.replace("```", "").replace("std::", ""), "a literal-block marker leaked"
 
 
+def test_no_member_on_any_peft_page_has_an_empty_summary() -> None:
+    """LCD-808: a dataclass's synthesised ``__init__`` has no source def, so no
+    docstring could ever fill its row.  Every class, function and method on a
+    ``lucid.peft*`` page must read as something."""
+    empty = []
+    for slug, member in ((s, m) for _p, (s, m) in _members_by_path().items()):
+        if not member.get("summary"):
+            empty.append(f"{slug}: {member['name']}")
+        for method in member.get("methods") or []:
+            if not method.get("summary"):
+                empty.append(f"{slug}: {member['name']}.{method['name']}")
+    assert not empty, f"{len(empty)} member(s) with an empty summary: {empty[:8]}"
+
+
 def test_exported_constant_is_in_the_attributes_table() -> None:
     names = {a["name"] for a in _page("lucid.peft")["attributes"]}
     assert "MODEL_TYPE_TO_PEFT_MODEL_MAPPING" in names, sorted(names)

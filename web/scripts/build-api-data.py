@@ -1783,6 +1783,17 @@ def _merge_inherited_parameters(cls: Any, doc: dict[str, Any], parser: Any) -> N
     doc["parameters"].sort(key=lambda p: order.get(p["name"], len(order)))
 
 
+def _is_synthesised(member: Any) -> bool:
+    """True for a member Griffe invented — one with no ``def`` in any source.
+
+    ``@dataclass`` gives a class an ``__init__`` that exists only at run time;
+    Griffe's dataclass extension mirrors it as a ``Function`` at line 0.  No
+    docstring can attach to it, so listing it would put a summary-less row on
+    every config page — and the class header already shows the same signature.
+    """
+    return not getattr(member, "lineno", None)
+
+
 def _serialise_class(
     cls: Any, parser: Any, sha: str, *,
     module_root: Path | None = None,
@@ -1811,6 +1822,8 @@ def _serialise_class(
 
     def _member_entry(name: str, member: Any) -> dict[str, Any] | None:
         if isinstance(member, GriffeFunction):
+            if _is_synthesised(member):
+                return None
             entry = _serialise_function(member, parser, sha)
             owner = member.parent
             if owner is not None and not entry.get("summary"):
