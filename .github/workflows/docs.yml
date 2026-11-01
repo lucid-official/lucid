@@ -61,6 +61,10 @@ jobs:
         working-directory: web
         run: python3 scripts/test_rst_converter.py
 
+      - name: Test lucid.peft reference completeness
+        working-directory: web
+        run: python3 scripts/test_peft_docs.py
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
