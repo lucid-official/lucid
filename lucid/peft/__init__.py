@@ -186,6 +186,7 @@ from lucid.peft.tuners.adaption_prompt import AdaptionPromptConfig, AdaptionProm
 from lucid.peft.tuners.boft import BOFTConfig, BOFTModel
 from lucid.peft.tuners.bone import BoneConfig, BoneModel
 from lucid.peft.tuners.c3a import C3AConfig, C3AModel
+from lucid.peft.tuners.cpt import CPTConfig, CPTEmbedding, CPTModel
 from lucid.peft.tuners.fourierft import FourierFTConfig, FourierFTModel
 from lucid.peft.tuners.hra import HRAConfig, HRAModel
 from lucid.peft.tuners.ia3._config import IA3Config
@@ -245,6 +246,7 @@ __all__ = [
     "BOFTConfig",
     "BoneConfig",
     "C3AConfig",
+    "CPTConfig",
     "FourierFTConfig",
     "HRAConfig",
     "IA3Config",
@@ -268,6 +270,8 @@ __all__ = [
     "BOFTModel",
     "BoneModel",
     "C3AModel",
+    "CPTEmbedding",
+    "CPTModel",
     "FourierFTModel",
     "HRAModel",
     "IA3Model",

@@ -266,6 +266,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - export ModulesToSaveWrapper
 - docstring check follows exported classes through bases
 - adaption prompt (LLaMA-Adapter) tuner
+- context-aware prompt tuning (CPT)
 
 ---
 

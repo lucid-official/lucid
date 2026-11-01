@@ -27,6 +27,9 @@ from lucid.peft import (
     BOFTConfig,
     BoneConfig,
     C3AConfig,
+    CPTConfig,
+    CPTEmbedding,
+    CPTModel,
     FourierFTConfig,
     HRAConfig,
     IA3Config,
@@ -254,6 +257,16 @@ BUILDERS: dict[type, Callable[[], Any]] = {
     MultitaskPromptTuningModel: lambda: MultitaskPromptTuningModel(
         _text_model(),
         MultitaskPromptTuningConfig(num_virtual_tokens=2, num_tasks=2, task_type="CAUSAL_LM"),
+    ),
+    CPTModel: lambda: CPTModel(
+        _text_model(),
+        CPTConfig(cpt_token_ids=[1, 2], cpt_tokens_type_mask=[1, 4], task_type="CAUSAL_LM"),
+    ),
+    CPTEmbedding: lambda: CPTEmbedding(
+        CPTConfig(
+            cpt_token_ids=[1, 2], cpt_tokens_type_mask=[1, 4], token_dim=4, task_type="CAUSAL_LM"
+        ),
+        nn.Embedding(5, 4),
     ),
     MultitaskPromptEmbedding: lambda: MultitaskPromptEmbedding(
         MultitaskPromptTuningConfig(num_virtual_tokens=2, num_tasks=2, **_PROMPT_SIZES),
