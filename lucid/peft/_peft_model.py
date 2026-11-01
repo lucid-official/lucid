@@ -163,6 +163,10 @@ class PeftModel(_ForwardsAttributes):
     def __init__(
         self, model: nn.Module, peft_config: PeftConfig, adapter_name: str = "default"
     ) -> None:
+        """Adapt ``model`` in place with ``peft_config`` and wrap it.
+
+        ``adapter_name`` names the first adapter.
+        """
         config = self._prepared(model, _require_config("peft_config", peft_config))
         super().__init__()
         self.base_model: _AdapterHost = _tuner_for(config)(model, config, adapter_name)
@@ -685,13 +689,13 @@ class PeftModel(_ForwardsAttributes):
         subfolder : str, optional
             The directory under ``model_id`` that holds the adapter.
         convert : bool or "auto", default="auto"
-            Read an adapter written for the reference library's model in the
-            zoo's layout: renamed modules (T5), fused projections (ViT's
-            ``query`` / ``key`` / ``value`` into ``qkv``), a renamed head
-            (GPT-2's ``score``).  ``"auto"`` converts when the model's type has
-            a converter and the file is in the layout it changes; ``True``
-            converts and refuses a type with none; ``False`` reads the file as
-            it is.
+            Convert an adapter written for the reference library's model to the
+            zoo model's layout (``lucid.peft`` lists what each converter does):
+            ``gpt2`` (the ``score`` head), ``roformer``, ``t5`` (renamed
+            modules) and ``vit`` (``query`` / ``key`` / ``value`` fused into
+            ``qkv``, LoRA only).  ``"auto"`` converts when the model's type has
+            a converter and the file is in a layout it changes; ``True`` always
+            converts and refuses a type with none; ``False`` reads it as it is.
 
         Returns
         -------
@@ -704,10 +708,10 @@ class PeftModel(_ForwardsAttributes):
         FileNotFoundError
             The directory lacks ``adapter_config.json`` or the weights.
         NotImplementedError
-            The weights are a pickle (``adapter_model.bin``), or the config
+            The weights are a pickle (``adapter_model.bin``), the config
             describes something lucid.peft does not implement.
         ValueError
-            The adapter's tensors do not fit ``model``.
+            The adapter's tensors do not fit ``model``, or ``convert`` cannot apply.
 
         Examples
         --------
@@ -779,8 +783,8 @@ class PeftModel(_ForwardsAttributes):
         subfolder : str, optional
             The directory under ``model_id`` that holds the adapter.
         convert : bool or "auto", default="auto"
-            As for :meth:`from_pretrained`: read an adapter written for the
-            reference library's model in the zoo's layout.
+            As for :meth:`from_pretrained`: convert an adapter written for the
+            reference library's model to the zoo model's layout.
 
         Returns
         -------

@@ -81,9 +81,7 @@ PARAM_BLOCK_METHOD_EXEMPT = {
 # the member rule: every public method / property, however it is reached,
 # carries a docstring of its own, and the packages' own ``__init__.py`` says
 # more than a line.  Add a package here when it passes.
-# LCD-807: lucid/peft joins once LCD-777 lands (it holds the claims on the files whose
-# members still lack docstrings); then this becomes ("lucid/peft",).
-MEMBER_DOC_PACKAGES: tuple[str, ...] = ()
+MEMBER_DOC_PACKAGES: tuple[str, ...] = ("lucid/peft",)
 
 # Minimum docstring length on a public member of an exported class.
 MIN_MEMBER_DOC = 20

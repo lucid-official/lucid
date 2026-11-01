@@ -70,6 +70,11 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
     _encoder_class: ClassVar[type[_PromptEncoder]]
 
     def __init__(self, model: nn.Module, config: PeftConfig, adapter_name: str = "default") -> None:
+        """Prompt ``model`` with ``config`` under the name ``adapter_name``.
+
+        The prompt encoder trains and the model is frozen.  ``ValueError`` if the model already
+        holds adapters: ``unload()`` them first, or add the prompt to the ``PeftModel`` that holds them.
+        """
         if not isinstance(model, nn.Module):
             raise TypeError(f"model must be an nn.Module, got {type(model).__name__}")
         kind = type(self)._config_class
@@ -149,6 +154,10 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
     @property
     @override
     def active_adapters(self) -> list[str]:
+        """The adapter the model is prompted with, as a list.
+
+        Prompt learning applies one at a time.
+        """
         return _as_names(self.active_adapter)
 
     # ── building an adapter ───────────────────────────────────────────────
@@ -242,6 +251,7 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
     def set_requires_grad(
         self, adapter_names: str | Sequence[str], requires_grad: bool = True
     ) -> None:
+        """Set ``requires_grad`` on the named adapters' encoders and ``modules_to_save`` copies."""
         names = _as_names(adapter_names)
         self._require_known(names)
         for name in names:
@@ -303,12 +313,17 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
 
     @override
     def enable_adapter_layers(self) -> None:
+        """Prompt the model again, and run the trained ``modules_to_save`` copies."""
         self.disable_adapters = False
         for _, slot in _adapter_slots(self.model):
             slot.enable_adapters(True)
 
     @override
     def disable_adapter_layers(self) -> None:
+        """Stop prompting.
+
+        The model runs as the base does, and its ``modules_to_save`` modules run their originals.
+        """
         self.disable_adapters = True
         for _, slot in _adapter_slots(self.model):
             slot.enable_adapters(False)
@@ -324,6 +339,10 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
 
     @override
     def forward(self, *args: object, **kwargs: object) -> object:
+        """Call the model.
+
+        The prompt is put in by hooks on the model's own call, so nothing is applied here.
+        """
         return self.model(*args, **kwargs)
 
     @classmethod

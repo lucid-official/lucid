@@ -118,6 +118,7 @@ class VeraModel(_FileFormat, _BaseTuner, peft_type=PeftType.VERA):
     _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = _NO_PARAMETERS
 
     def __init__(self, model: nn.Module, config: VeraConfig, adapter_name: str = "default") -> None:
+        """Adapt ``model`` in place, building VeRA's scaling vectors as ``adapter_name``."""
         super().__init__(model, config, adapter_name)
 
     @property
@@ -255,6 +256,7 @@ class VeraModel(_FileFormat, _BaseTuner, peft_type=PeftType.VERA):
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:
+        """Remove ``adapter_name`` from the model, and its entries in the shared projections."""
         super().delete_adapter(adapter_name)
         self._drop_projection(adapter_name)
 

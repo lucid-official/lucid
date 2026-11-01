@@ -190,6 +190,7 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
     _config_class: ClassVar[type[_TargetedConfig]] = LoraConfig
 
     def __init__(self, model: nn.Module, config: LoraConfig, adapter_name: str = "default") -> None:
+        """Adapt ``model`` in place, building LoRA's low-rank factors as ``adapter_name``."""
         super().__init__(model, config, adapter_name)
 
     @override

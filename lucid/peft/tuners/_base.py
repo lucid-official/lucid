@@ -1231,6 +1231,7 @@ class _BaseTuner(_AdapterHost, ABC):
 
     @override
     def forward(self, *args: object, **kwargs: object) -> object:
+        """Call the adapted model; its adapter layers do their work inside the call."""
         return self.model(*args, **kwargs)
 
     # ── merging and unloading ─────────────────────────────────────────────

@@ -195,13 +195,8 @@ class Public(_Base):
             assert "prose inside its Parameters block" in err
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-807: 11 members in files LCD-777 holds still lack docstrings; apply the "
-    "patch, then make lucid/peft the MEMBER_DOC_PACKAGES default",
-)
 def test_the_peft_package_passes_its_own_rule() -> None:
-    """``lucid.peft`` is to be in ``MEMBER_DOC_PACKAGES``; a member added without a docstring fails here."""
+    """``lucid.peft`` is in ``MEMBER_DOC_PACKAGES``; a member added without a docstring fails here."""
     done = subprocess.run(
         [sys.executable, str(_TOOL), "--list", "--member-packages", "lucid/peft"],
         capture_output=True,

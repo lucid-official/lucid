@@ -125,9 +125,27 @@ hub ids are not resolved.
 
 ``modules_to_save`` trains whole modules (a classification head) beside the adapter; each
 becomes a ``ModulesToSaveWrapper`` that keeps the original and a trained copy per adapter.  An
-adapter written by the reference library for a model of the zoo (``gpt2``, ``roformer``,
-``t5``, ``vit``) is converted to the zoo's module layout as it is loaded
-(``PeftModel.from_pretrained(..., convert=)``).
+adapter written by the reference library for a model of the zoo is converted to the zoo's
+module layout as it is loaded (``PeftModel.from_pretrained(..., convert=)``).  The reference
+library and the zoo name some modules differently and lay a few out differently, so a
+converter exists for each of these zoo model types (``model.config.model_type``):
+
+* ``"gpt2"`` — the sequence-classification head ``score`` becomes ``classifier``; no other
+  name or tensor changes.
+* ``"roformer"`` — the layouts agree, so a file converts by identity.
+* ``"t5"`` — the reference's ``block.N.layer.M.<Module>`` nesting becomes the zoo's roles
+  (``blocks.N.self_attention``, ``cross_attention``, ``feed_forward``, ``<sub-layer>_norm``),
+  and the text-to-text model's modules gain the ``t5.`` trunk prefix.
+* ``"vit"`` — the separate ``query`` / ``key`` / ``value`` adapters are fused into the zoo's
+  one ``qkv`` (exactly for LoRA; another method on those projections raises
+  ``NotImplementedError``), and the remaining modules are renamed.
+
+``convert="auto"`` (the default) converts when the model's type has a converter and the file is
+in a layout it changes, and reads any other file as it is, such as one saved by
+``save_pretrained``.  ``True`` always converts and raises ``ValueError`` for a model type with
+no converter, or for a tensor the converter has no rule for.  ``False`` reads the file as it
+is.  A model without a ``config.model_type`` is matched by the reference class that the
+adapter's ``auto_mapping`` records.
 
 A model can hold several adapters, switch between them, combine them
 (``add_weighted_adapter``: ``svd``, ``cat``, ``linear`` and the TIES / DARE /
