@@ -23,7 +23,8 @@ from lucid._tensor.tensor import Tensor
 from lucid._factories.converters import tensor as _tensor_fn
 from lucid._factories.random import Generator, manual_seed as _manual_seed
 from lucid import stack
-from lucid.utils.data._batched import collated_fetcher, fetch_samples
+from lucid.utils.data._batched import collated_fetcher as _collated_fetcher
+from lucid.utils.data._batched import fetch_samples as _fetch_samples
 from lucid.utils.data.dataset import Dataset, IterableDataset
 from lucid.utils.data._rng import _as_generator, _draw_seed
 from lucid.utils.data._worker import WorkerInfo, _set_worker_info, get_worker_info
@@ -321,7 +322,7 @@ class _MapFetcher:
         # dataset's ``__getitem__`` is the one the shortcut mirrors
         # (``collated_fetcher`` owns that rule).
         self._collated: Callable[[list[int]], object] | None = (
-            collated_fetcher(dataset) if spec.use_collated_fetch else None
+            _collated_fetcher(dataset) if spec.use_collated_fetch else None
         )
 
     def fetch(self, index: object) -> object:
@@ -335,7 +336,7 @@ class _MapFetcher:
                 return self._collated(indices)
             # ``__getitems__`` (when present) returns samples, not a batch:
             # they go through ``collate_fn`` like any other.
-            return self._collate_fn(fetch_samples(self._dataset, indices))
+            return self._collate_fn(_fetch_samples(self._dataset, indices))
         except StopIteration as exc:
             raise _escaped_stop("the dataset or collate_fn") from exc
 

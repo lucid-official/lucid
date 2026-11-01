@@ -7,7 +7,7 @@ import math
 from typing import Callable, Iterator, TYPE_CHECKING, override
 
 from lucid._factories.random import Generator
-from lucid.utils.data._batched import collated_fetcher, fetch_samples
+from lucid.utils.data import _batched
 from lucid.utils.data._rng import _as_generator, _permutation
 
 if TYPE_CHECKING:
@@ -423,11 +423,11 @@ class Subset(Dataset):
         """
         if type(self).__getitem__ is not Subset.__getitem__:
             return [self[i] for i in indices]
-        return fetch_samples(self.dataset, [self.indices[i] for i in indices])
+        return _batched.fetch_samples(self.dataset, [self.indices[i] for i in indices])
 
     def _collated_fetcher(self) -> Callable[[list[int]], object] | None:
         """The parent's batch path, reading through this subset's index map."""
-        inner = collated_fetcher(self.dataset)
+        inner = _batched.collated_fetcher(self.dataset)
         if inner is None:
             return None
         remap = self.indices
@@ -716,7 +716,7 @@ class StackDataset(Dataset):
             return [self[i] for i in indices]
         columns: list[list[object]] = []
         for child in self.datasets:
-            column = fetch_samples(child, indices)
+            column = _batched.fetch_samples(child, indices)
             if len(column) != len(indices):
                 raise ValueError(
                     f"A child's __getitems__ returned {len(column)} samples "
@@ -730,7 +730,7 @@ class StackDataset(Dataset):
 
     def _collated_fetcher(self) -> Callable[[list[int]], object] | None:
         """Every child's batch path, bundled — only when each child has one."""
-        fetchers = [collated_fetcher(child) for child in self.datasets]
+        fetchers = [_batched.collated_fetcher(child) for child in self.datasets]
         if any(f is None for f in fetchers):
             return None
         keys = self._keys
