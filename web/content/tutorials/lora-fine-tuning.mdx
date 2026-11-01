@@ -1,6 +1,6 @@
 ---
 title: Fine-Tune with LoRA
-description: A runnable tutorial for lucid.peft — adapt a zoo model with LoRA, train only the adapter, generate, save and reload the adapter alone, switch it off, merge it for deployment, pick the target modules for each model family, export to Core ML, and load adapters written by the reference adapter library.
+description: A runnable tutorial for lucid.peft — adapt a zoo model with LoRA, train only the adapter, generate, save and reload the adapter alone, switch it off, merge it for deployment, pick the target modules for each model family, hold several adapters in one model, export to Core ML, load adapters written by the reference adapter library, and find the other twenty-one methods of the package.
 category: Tutorials
 order: 5
 ---
@@ -13,7 +13,7 @@ $$
 
 where $W$ is the frozen weight and the rank $r$ is small. $B$ starts at zero, so the adapted model begins exactly as the base model. Only $A$ and $B$ train, and only they are saved: a fine-tune becomes a few megabytes you can train, store and swap.
 
-[`lucid.peft`](/api/lucid.peft) implements this with the reference adapter library's API and adapter file format — the same names, the same defaults, the same two files on disk — so a script written for that library reads the same here, and an adapter directory moves between the two. This tutorial adapts a small GPT-2 from the zoo end to end, then covers the target modules for each model family, shipping to Core ML, and what v1 does not do.
+[`lucid.peft`](/api/lucid.peft) implements this with the reference adapter library's API and adapter file format — the same names, the same defaults, the same two files on disk — so a script written for that library reads the same here, and an adapter directory moves between the two. LoRA is one of [twenty-two methods](/api/lucid.peft.tuners) behind that one entry point; the last section is a map of the rest. This tutorial adapts a small GPT-2 from the zoo end to end, then covers the target modules for each model family, several adapters in one model, shipping to Core ML, and the other methods.
 
 Run the blocks in order as one script; it takes a few seconds on the CPU or on Metal.
 
@@ -76,7 +76,7 @@ def load_base() -> GPT2LMHeadModel:
 
 ## Adapt the model
 
-A `LoraConfig` says which modules get an adapter and how big it is. `target_modules` is required — there is no per-architecture default — and it names modules by the zoo's own module names, which *Choose the target modules* below lists per family. `get_peft_model` injects the adapter **in place** and returns a `PeftModel` that wraps the model.
+A `LoraConfig` says which modules get an adapter and how big it is. `target_modules` names the modules, by the zoo's own module names, which *Choose the target modules* below lists per family; leave it out and the config takes the default for the base model's `model_type`. `get_peft_model` injects the adapter **in place** and returns a `PeftModel` that wraps the model.
 
 Before adapting, the block records the base model's output on a probe batch, to compare against afterwards.
 
@@ -194,7 +194,7 @@ Merging refuses to fold an update into a weight that another module also uses, s
 
 ## Choose the target modules
 
-`target_modules` is the one decision a `LoraConfig` forces on you. The zoo's modules carry their own names, so first read them off the model:
+`target_modules` is the one decision worth making yourself. Left out, it takes a default for the model's type — the attention's query and value projections for the language and vision families, the convolutions (or the fully connected layers) that carry the model for the convolutional ones — and a model type with no default is a `ValueError`. The zoo's modules carry their own names, so to choose, read them off the model:
 
 ```python
 print([name for name, m in load_base().named_modules() if isinstance(m, nn.Linear)])
@@ -220,22 +220,42 @@ Which names to use depends on the family. The common recipe adapts the attention
 
 A classification or question-answering head is trained in full beside the adapter. With a `task_type` of `"SEQ_CLS"` or `"TOKEN_CLS"`, `get_peft_model` makes a head named `classifier` or `score` trainable for you, and with `"QUESTION_ANS"` one named `qa_outputs`; for any other head, such as a ViT's `head`, name it in `modules_to_save`.
 
-### What v1 cannot reach
+### Attention that is not made of `nn.Linear`
 
-Some zoo families build attention on `nn.MultiheadAttention`: `transformer`, `detr`, `clip`, `dit`, `stable_diffusion`, and the decoder cross-attention of `mask2former`. That module keeps its projections as raw parameters rather than `nn.Linear` modules, and v1 adapts `nn.Linear` only. Naming the attention module is refused, and the model is left untouched. `"all-linear"` on these models quietly gives a feed-forward-only LoRA, which is a different thing from adapting attention.
+Some zoo families build attention on `nn.MultiheadAttention`: `transformer`, `detr`, `clip`, `dit`, `stable_diffusion`, and the decoder cross-attention of `mask2former`. That module keeps its projections as raw parameters rather than `nn.Linear` modules, so there is no `q_proj` to name. Name the attention module itself and LoRA adapts it through a layer of its own (`lucid.peft.tuners.lora.MultiheadAttention`), found by the module's type. `"all-linear"` is a different thing on these models: it selects `nn.Linear` modules, so it quietly gives a feed-forward-only LoRA and leaves attention alone.
 
 ```python
 layer = nn.TransformerEncoderLayer(16, 2, 32)
-try:
-    get_peft_model(layer, LoraConfig(r=4, target_modules=["self_attn"]))
-except NotImplementedError as err:
-    print("refused:", err)
+attention = get_peft_model(layer, LoraConfig(r=4, target_modules=["self_attn"]))
+print("named by type:", sorted(attention.base_model.targeted_module_names))
 
-feed_forward = get_peft_model(layer, LoraConfig(r=4, target_modules="all-linear"))
+feed_forward = get_peft_model(nn.TransformerEncoderLayer(16, 2, 32), LoraConfig(r=4, target_modules="all-linear"))
 print("all-linear reaches only:", sorted(feed_forward.base_model.targeted_module_names))
 ```
 
-A name that matches no module is a `ValueError` listing what you asked for; so is leaving `target_modules` unset.
+The same goes for the other module types: LoRA layers exist for `nn.Embedding`, `nn.Conv1d` / `Conv2d` / `Conv3d`, their `ConvTranspose` counterparts and `nn.MultiheadAttention`, and `target_parameters` adapts one raw `nn.Parameter` of a module. A name that matches no module is a `ValueError` listing what you asked for.
+
+## Hold several adapters
+
+One model can hold any number of adapters, each under its own name. `get_peft_model` names the first one `"default"`; `add_adapter` adds another beside it, `set_adapter` picks the one the model computes with (and trains), and `add_weighted_adapter` builds a new adapter out of existing ones. `combination_type` chooses how the updates are combined: `svd`, `cat`, `linear`, or the TIES / DARE / magnitude-prune types.
+
+```python
+styled = get_peft_model(load_base().to(device), config)         # the adapter named "default"
+styled.add_adapter("style", LoraConfig(r=4, target_modules=["c_attn"]))
+styled.set_adapter("style")                                      # compute with, and train, this one
+styled.add_weighted_adapter(["default", "style"], [0.7, 0.3], "mix", combination_type="cat")
+print(styled.active_adapter, sorted(styled.peft_config))
+```
+
+`save_pretrained` writes the adapter named `"default"` at the top of the directory and every other adapter in a folder named after it, and `load_adapter` reads one back under a name of your choice. A batch can also use a different adapter in each row: call the model with `adapter_names=[...]`, one name per row. `get_layer_status` and `get_model_status` report what each adapter layer, and the model, is doing.
+
+```python
+styled.save_pretrained(str(room / "adapters"))
+styled.load_adapter(str(room / "adapters" / "style"), "style-again")
+print(sorted(styled.peft_config))
+```
+
+Adapting a model a second time with `get_peft_model` adds the new adapter beside the first, with a warning, rather than replacing it.
 
 ## Ship it with Core ML
 
@@ -357,19 +377,46 @@ with lucid.no_grad():
 
 The adapter file format is the reference library's, so an adapter directory it wrote loads here with `PeftModel.from_pretrained`, by key name and shape. A GPT-2 or BERT LoRA adapter loads one to one onto the zoo's `gpt2` and `bert` models. A GPT-2 adapter's config carries `fan_in_fan_out: true`, because that library's GPT-2 stores its projections transposed; Lucid's `nn.Linear` does not, so the flag is reset to `False` with a warning, and the tensors are unaffected.
 
-T5 and ViT adapters written by that library need their keys converted first, because the zoo's module names differ from theirs (`qkv` for ViT, as above); a converter is not provided yet. Adapters are read from a local directory, so download one first; a `.bin` pickle adapter is refused with a message to re-save it as SafeTensors. See [the migration guide](/docs/migration/from-reference-framework) for the API mapping.
+Where the zoo's layout differs from that library's, `from_pretrained` converts as it loads: T5's module names, ViT's separate `query` / `key` / `value` factors fused into the zoo's `qkv` (as above), and GPT-2's sequence-classification head, which the reference calls `score` and the zoo `classifier`. `convert="auto"`, the default, does it when the model's type has a converter and the file is in the layout the converter changes; `convert=True` insists, and refuses a type with none; `convert=False` reads the file as it is. To convert a directory once, without a model, run `python -m tools.convert_adapters SRC DST`. Adapters are read from a local directory, so download one first; a `.bin` pickle adapter is refused with a message to re-save it as SafeTensors. See [the migration guide](/docs/migration/from-reference-framework) for the API mapping.
 
-## What v1 does not do
+## The other methods
 
-`lucid.peft` is deliberately narrow, and refuses with `NotImplementedError` rather than doing less than you asked.
+LoRA is one of twenty-two methods in `lucid.peft`, and the rest are used the same way: a config for the method, `get_peft_model`, then train, save, load, merge. What changes is what the adapter learns, and so how many parameters it has and whether it can be merged.
 
-- **One adapter per model.** A second `get_peft_model` on an adapted model, or a second adapter name, is refused. To switch adapters, `unload()` the first and load the next onto the same model, or keep a copy of the base per adapter, as in the Core ML section.
-- **LoRA only.** No DoRA, QLoRA or IA3, and an adapter file of another method is refused.
-- **`nn.Linear` targets only.** No `nn.Embedding`, convolution or `nn.MultiheadAttention` target.
+```python
+from lucid.peft import IA3Config, PromptTuningConfig, VeraConfig
+
+rescaled = get_peft_model(load_base().to(device), IA3Config(target_modules=["c_attn", "c_fc"], feedforward_modules=["c_fc"]))
+shared = get_peft_model(load_base().to(device), VeraConfig(r=16, target_modules=["c_attn"]))
+prompted = get_peft_model(load_base().to(device), PromptTuningConfig(num_virtual_tokens=8, task_type="CAUSAL_LM"))
+for adapted in (rescaled, shared, prompted):
+    adapted.print_trainable_parameters()
+```
+
+The methods are grouped on [the tuners page](/api/lucid.peft.tuners); each has its own page with its config, its tuner and its layer classes.
+
+| Family | Methods | What the adapter learns |
+|---|---|---|
+| [LoRA family](/api/lucid.peft.tuners#section-lora-family) | [LoRA](/api/lucid.peft.tuners.lora), [AdaLoRA](/api/lucid.peft.tuners.adalora) | A low-rank update beside each frozen weight; AdaLoRA moves rank between layers while it trains. LoRA's `use_dora` option adds a trainable magnitude (DoRA). |
+| [Orthogonal family](/api/lucid.peft.tuners#section-orthogonal-family) | [OFT](/api/lucid.peft.tuners.oft), [BOFT](/api/lucid.peft.tuners.boft), [HRA](/api/lucid.peft.tuners.hra) | A rotation of each layer's input space instead of an addition to its weight. |
+| [LyCORIS family](/api/lucid.peft.tuners#section-lycoris-family) | [LoHa](/api/lucid.peft.tuners.loha), [LoKr](/api/lucid.peft.tuners.lokr) | A weight-shaped update built as a Hadamard or Kronecker product. |
+| [Prompt learning](/api/lucid.peft.tuners#section-prompt-learning) | [Prompt tuning](/api/lucid.peft.tuners.prompt_tuning), [prefix tuning](/api/lucid.peft.tuners.prefix_tuning), [P-tuning](/api/lucid.peft.tuners.p_tuning), [multitask prompt tuning](/api/lucid.peft.tuners.multitask_prompt_tuning) | An input, not a weight: virtual tokens that no layer of the model changes. Nothing to merge. |
+| [Shared-table tuners](/api/lucid.peft.tuners#section-shared-table-tuners) | [VeRA](/api/lucid.peft.tuners.vera), [RandLoRA](/api/lucid.peft.tuners.randlora), [VB-LoRA](/api/lucid.peft.tuners.vblora) | A few parameters per layer over tensors the whole model shares. |
+| [Structured and sparse updates](/api/lucid.peft.tuners#section-structured-and-sparse-updates) | [FourierFT](/api/lucid.peft.tuners.fourierft), [C3A](/api/lucid.peft.tuners.c3a), [MiSS](/api/lucid.peft.tuners.miss), [Bone](/api/lucid.peft.tuners.bone), [SHiRA](/api/lucid.peft.tuners.shira) | An update with a fixed structure other than low rank. |
+| [Scaling and selective tuning](/api/lucid.peft.tuners#section-scaling-and-selective-tuning) | [IA3](/api/lucid.peft.tuners.ia3), [LN tuning](/api/lucid.peft.tuners.ln_tuning), [trainable tokens](/api/lucid.peft.tuners.trainable_tokens) | A rescaling vector per layer, a copy of each chosen normalisation layer, or a few rows of an embedding table. |
+
+Everything above about switching, merging and files holds for all of them, with two exceptions that follow from what they learn: LN tuning applies, and merges, one adapter at a time, and the prompt methods train one prompt at a time and have nothing to merge. The prompt methods work on the causal-LM, sequence-to-sequence, sequence-classification, token-classification and question-answering tasks, and apply the prompt by hooks on the model's own call, so `model(...)` and `generate` both carry it.
+
+## What `lucid.peft` still refuses
+
+`lucid.peft` refuses with `NotImplementedError` rather than doing less than you asked.
+
 - **Local directories only.** Hub ids are not resolved, and `safe_serialization=False` is refused: adapters are SafeTensors.
+- **Methods the package lacks.** An adapter file of a method that is not one of the twenty-two is refused.
+- **`add_weighted_adapter` over anything but `nn.Linear` layers.**
 
 ## Where to go next
 
-- The [`lucid.peft` reference](/api/lucid.peft) has every field of `LoraConfig` — `lora_dropout`, `bias`, `rank_pattern`, `alpha_pattern`, `use_rslora` — and the lower-level `inject_adapter_in_model`, `get_peft_model_state_dict` and `set_peft_model_state_dict`.
+- The [`lucid.peft` reference](/api/lucid.peft) has the entry points, `PeftModel` and the `AutoPeftModel` loaders, and [the tuners](/api/lucid.peft.tuners) have every field of every config — for LoRA, [`LoraConfig`](/api/lucid.peft.tuners.lora/LoraConfig): `lora_dropout`, `bias`, `rank_pattern`, `alpha_pattern`, `use_rslora`, `use_dora` — beside the lower-level `inject_adapter_in_model`, `get_peft_model_state_dict` and `set_peft_model_state_dict`.
 - Combine with [Mixed Precision Training](/docs/tutorials/mixed-precision): a half-precision base gets a float32 adapter, computed in float32 and cast back to the base's output dtype.
 - Coming from the reference adapter library: [the migration guide](/docs/migration/from-reference-framework).
