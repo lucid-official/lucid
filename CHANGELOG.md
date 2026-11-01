@@ -217,6 +217,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - drop synthesised dataclass __init__ from API members
 
+- resolve qconfig per module for prepare and dynamic
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

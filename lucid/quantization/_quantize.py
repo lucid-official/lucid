@@ -16,9 +16,17 @@ imports the quantization primitives back).
 
 import copy
 import warnings
+from collections.abc import Collection, Mapping
 from typing import TYPE_CHECKING, Callable, cast
 
 import lucid.nn as nn
+from lucid.quantization._propagate import (
+    DynamicSpec,
+    QConfigResolver,
+    Resolved,
+    normalize_dynamic_spec,
+    weight_dtype,
+)
 from lucid.quantization._qscheme import QDtype, qint8
 from lucid.quantization.qconfig import (
     QConfig,
@@ -188,15 +196,6 @@ def _make_observer_hook(obs: nn.Module) -> _Hook:
     return hook
 
 
-def _as_mapping(qconfig: QConfig | QConfigMapping | None) -> QConfigMapping:
-    """Coerce a bare QConfig (or ``None``) to a global :class:`QConfigMapping`."""
-    if qconfig is None:
-        return get_default_qconfig_mapping()
-    if isinstance(qconfig, QConfig):
-        return QConfigMapping().set_global(qconfig)
-    return qconfig
-
-
 def prepare(
     model: nn.Module, qconfig: QConfig | QConfigMapping | None = None, inplace: bool = False
 ) -> nn.Module:
@@ -230,9 +229,10 @@ def prepare(
         them by hand, use :func:`prepare_fx`, which wraps them for you.
     qconfig : QConfig or QConfigMapping, optional
         The quantization recipe — a single :class:`QConfig` is promoted to a
-        global mapping, and ``None`` (default) falls back to
-        :func:`get_default_qconfig_mapping` (per-channel int8 weights,
-        per-tensor affine activations).
+        global mapping, ``None`` (default) falls back to the default mapping
+        (per-channel int8 weights, per-tensor affine activations). A module's
+        own ``.qconfig`` attribute takes precedence (``None`` keeps it and its
+        subtree float); see :class:`QConfigMapping`.
     inplace : bool, default False
         If ``True`` mutate and return ``model`` itself; if ``False`` (default)
         observe a :func:`copy.deepcopy` and leave the original untouched.
@@ -282,13 +282,12 @@ def prepare(
     lucid.quantization.prepare_qat : Insert fake-quant for quantization-aware training.
     lucid.quantization.fuse_modules : Fuse Conv/BN/ReLU runs before ``prepare``.
     """
-    mapping = _as_mapping(qconfig)
+    resolver = QConfigResolver.from_argument(qconfig, get_default_qconfig_mapping)
     model = model if inplace else copy.deepcopy(model)
     model.eval()
     observed = _observed_types()
     n_matched = 0
-    for name, mod in model.named_modules():
-        qcfg = mapping.get_qconfig(type(mod), name)
+    for _name, mod, _path, qcfg in resolver.walk(model):
         if qcfg is None or not isinstance(mod, observed):
             continue
         mod.qconfig = qcfg
@@ -429,7 +428,9 @@ def _dynamic_mapping() -> dict[type, _DynFromFloat]:
 
 def quantize_dynamic(
     model: nn.Module,
-    qconfig_spec: set[type] | None = None,
+    qconfig_spec: (
+        Collection[type | str] | Mapping[type | str, QConfig | QDtype | None] | None
+    ) = None,
     dtype: QDtype = qint8,
     inplace: bool = False,
 ) -> nn.Module:
@@ -465,14 +466,17 @@ def quantize_dynamic(
         The float model to quantize. A bare top-level target (e.g. calling this
         directly on an ``nn.Linear``) is handled too — it has no parent to swap
         it into, so the quantized module is returned directly.
-    qconfig_spec : set of module types, optional
-        Which module types to quantize; ``None`` (default) uses the mapping's
-        keys — ``{nn.Linear, nn.LSTM, nn.GRU, nn.LSTMCell, nn.GRUCell,
-        nn.RNNCell}``, the reference framework's dynamic set.  ``nn.RNN`` and
-        the convolutions have no dynamic form.
+    qconfig_spec : set or dict of module types and / or names, optional
+        What to quantize; ``None`` (default) uses the mapping's keys —
+        ``{nn.Linear, nn.LSTM, nn.GRU, nn.LSTMCell, nn.GRUCell, nn.RNNCell}``,
+        the reference framework's dynamic set.  ``nn.RNN`` and the convolutions
+        have no dynamic form. A set may mix types and dotted names (a container
+        name covers everything under it); a dict pairs each type or name with a
+        :class:`QConfig`, a :class:`QDtype` or ``None`` (skip). A module's own
+        ``.qconfig`` attribute is honoured as in :func:`prepare`.
     dtype : QDtype, default ``qint8``
-        The quantized dtype for the weights (its ``bits`` also selects the MLX
-        fast-path bit width when that backend is active).
+        The weight dtype of entries that name none (its ``bits`` also selects
+        the MLX fast-path bit width when that backend is active).
     inplace : bool, default False
         If ``True`` mutate and return ``model`` itself; if ``False`` (default)
         quantize a :func:`copy.deepcopy` and leave the original untouched.
@@ -509,6 +513,8 @@ def quantize_dynamic(
     True
     >>> qmlp(lucid.randn(1, 512)).shape
     (1, 10)
+    >>> type(Q.quantize_dynamic(mlp, {nn.Linear: Q.qint8, "2": None})[2]) is nn.Linear
+    True
 
     A model with no targeted layers warns and comes back unchanged — e.g. a
     conv-only stack, since ``Conv2d`` is not a dynamic-quant target:
@@ -525,62 +531,84 @@ def quantize_dynamic(
     lucid.nn.quantized.dynamic.Linear : The dynamic quantized Linear installed here.
     lucid.nn.quantized.dynamic.GRU : The dynamic quantized GRU installed here.
     """
-    import lucid
-
     model = model if inplace else copy.deepcopy(model)
     model.eval()
-    mapping = _dynamic_mapping()
+    builders = _dynamic_builders()
+    spec = normalize_dynamic_spec(qconfig_spec, dtype, tuple(builders))
+    return _DynamicSwapper(spec, builders, dtype).apply(model)
+
+
+def _dynamic_builders() -> dict[type, _DynFromFloat]:
+    """The dynamic ``from_float`` builders, with Linear routed to MLX when active."""
+    import lucid
+
+    builders = _dynamic_mapping()
     if lucid.backends.quantized.use_mlx():
-        mapping = dict(mapping)
-        mapping[nn.Linear] = _mlx_dynamic_builder()
-    types = qconfig_spec if qconfig_spec is not None else set(mapping)
-    _warn_left_float(model, types, set(mapping))
-    # Handle a bare top-level target (no parent to swap it in).
-    build = mapping.get(type(model))
-    if build is not None and type(model) in types:
-        return build(model, dtype)
-    _swap_dynamic(model, mapping, types, dtype)
-    return model
+        builders[nn.Linear] = _mlx_dynamic_builder()
+    return builders
 
 
-def _warn_left_float(model: nn.Module, types: set[type], mapped: set[type]) -> None:
-    """Warn when ``quantize_dynamic`` would leave every targeted module float.
+class _DynamicSwapper:
+    """Depth-first swap of each module the resolver targets for its dynamic form."""
 
-    Either no module of a targeted type is in ``model``, or a targeted type
-    present in it has no dynamically quantized form.  Both name the types.
-    """
-    present = {type(m) for m in model.modules()} & types
-    if not present:
-        warnings.warn(
-            "quantize_dynamic(): no module of a targeted type "
-            f"({', '.join(sorted(t.__name__ for t in types))}) found — "
-            "the model is returned unchanged.",
-            # warn ← _warn_left_float ← quantize_dynamic ← caller
-            stacklevel=3,
-        )
-    unmapped = present - mapped
-    if unmapped:
-        warnings.warn(
-            f"quantize_dynamic(): {', '.join(sorted(t.__name__ for t in unmapped))} "
-            "has no dynamically quantized form and stays float; dynamic "
-            f"quantization covers {', '.join(sorted(t.__name__ for t in mapped))}.",
-            stacklevel=3,
-        )
+    def __init__(
+        self, spec: DynamicSpec, mapping: dict[type, _DynFromFloat], dtype: QDtype
+    ) -> None:
+        self.resolver = QConfigResolver(spec.mapping)
+        self._targets = spec.targets
+        self._mapping = mapping
+        self._dtype = dtype
+        self._swapped = 0
+        self._unmapped: set[type] = set()
 
+    def apply(self, model: nn.Module) -> nn.Module:
+        """Swap every targeted module of ``model``; a targeted root is returned swapped."""
+        root = self.resolver.root(model)
+        # A bare top-level target has no parent to swap it into.
+        if root.qconfig is not None and type(model) in self._mapping:
+            return self.build(model, root.qconfig)
+        self.swap_children(root)
+        self._warn_if_left_float()
+        return model
 
-def _swap_dynamic(
-    module: nn.Module, mapping: dict[type, _DynFromFloat], types: set[type], dtype: QDtype
-) -> None:
-    """Depth-first swap of each targeted module for its dynamic-quant form."""
-    for name, child in list(module.named_children()):
-        build = mapping.get(type(child))
-        if build is not None and type(child) in types:
-            # ``setattr`` keeps the child's slot in place (LCD-551), so a
-            # ``Sequential`` still runs it in the same turn; no direct
-            # ``_modules`` write needed (LCD-556).
-            setattr(module, name, build(child, dtype))
-        else:
-            _swap_dynamic(child, mapping, types, dtype)
+    def build(self, module: nn.Module, qconfig: QConfig) -> nn.Module:
+        """Quantize one module with the weight dtype its recipe asks for."""
+        self._swapped += 1
+        return self._mapping[type(module)](module, weight_dtype(qconfig, self._dtype))
+
+    def swap_children(self, parent: Resolved) -> None:
+        for entry in self.resolver.children(parent.module, parent.path, parent.qconfig):
+            if entry.qconfig is not None and type(entry.module) in self._mapping:
+                # ``setattr`` keeps the child's slot in place (LCD-551), so a
+                # ``Sequential`` still runs it in the same turn; no direct
+                # ``_modules`` write needed (LCD-556).
+                setattr(parent.module, entry.name, self.build(entry.module, entry.qconfig))
+                continue
+            if (
+                entry.qconfig is not None
+                and self.resolver.is_targeted(entry.module, entry.path)
+                and next(entry.module.children(), None) is None
+            ):
+                self._unmapped.add(type(entry.module))
+            self.swap_children(entry)
+
+    def _warn_if_left_float(self) -> None:
+        """Warn when the call left a targeted module float, or swapped nothing."""
+        if self._unmapped:
+            mapped = sorted(t.__name__ for t in self._mapping)
+            warnings.warn(
+                f"quantize_dynamic(): {', '.join(sorted(t.__name__ for t in self._unmapped))} "
+                "has no dynamically quantized form and stays float; dynamic "
+                f"quantization covers {', '.join(mapped)}.",
+                # warn <- _warn_if_left_float <- apply <- quantize_dynamic
+                stacklevel=4,
+            )
+        elif self._swapped == 0:
+            warnings.warn(
+                "quantize_dynamic(): no module of a targeted type "
+                f"({', '.join(self._targets) or 'none'}) found — the model is returned unchanged.",
+                stacklevel=4,
+            )
 
 
 def _qat_mapping() -> dict[type, _FromFloat]:
@@ -655,6 +683,8 @@ def prepare_qat(
     - Fuse with :func:`fuse_modules_qat` (not :func:`fuse_modules`) beforehand:
       the eval-time BN fold would freeze BN, which QAT needs to keep learning.
     - Non-destructive by default (deep-copy).
+    - A module's own ``.qconfig`` attribute picks its recipe (``None`` keeps it
+      and its subtree float) exactly as in :func:`prepare`.
 
     Examples
     --------
@@ -675,36 +705,35 @@ def prepare_qat(
     lucid.quantization.fuse_modules_qat : Trainable Conv/BN fusion for QAT.
     lucid.quantization.fake_quantize : The STE primitive QAT trains through.
     """
-    if qconfig is None:
-        mapping = get_default_qat_qconfig_mapping()
-    else:
-        mapping = _as_mapping(qconfig)
+    resolver = QConfigResolver.from_argument(qconfig, get_default_qat_qconfig_mapping)
     model = model if inplace else copy.deepcopy(model)
     model.train()
-    _prepare_qat_recursive(model, mapping, _qat_mapping(), "")
+    _prepare_qat_recursive(resolver, model, resolver.root(model), _qat_mapping())
     return model
 
 
 def _prepare_qat_recursive(
-    module: nn.Module, qconfig_mapping: QConfigMapping, qat_map: dict[type, _FromFloat], prefix: str
+    resolver: QConfigResolver,
+    parent: nn.Module,
+    parent_entry: Resolved,
+    qat_map: dict[type, _FromFloat],
 ) -> None:
     """Depth-first swap of weighted layers to QAT + fake-quant on ``QuantStub``."""
     import lucid.nn.quantized as nnq
 
-    for name, child in list(module.named_children()):
-        full = f"{prefix}.{name}" if prefix else name
-        qcfg = qconfig_mapping.get_qconfig(type(child), full)
+    for entry in resolver.children(parent, parent_entry.path, parent_entry.qconfig):
+        child, qcfg = entry.module, entry.qconfig
         build = qat_map.get(type(child))
         if qcfg is not None and build is not None:
             child.qconfig = qcfg
             # ``setattr`` keeps the child's slot in place (LCD-551); no
             # direct ``_modules`` write needed (LCD-556).
-            setattr(module, name, build(child))
+            setattr(parent, entry.name, build(child))
         elif qcfg is not None and isinstance(child, nnq.QuantStub):
             child.qconfig = qcfg
             child.activation_post_process = qcfg.activation()
         else:
-            _prepare_qat_recursive(child, qconfig_mapping, qat_map, full)
+            _prepare_qat_recursive(resolver, child, entry, qat_map)
 
 
 def _convert_recursive(

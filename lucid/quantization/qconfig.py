@@ -274,6 +274,13 @@ class QConfigMapping:
     it — e.g. keep a numerically sensitive final classifier in float while quantizing
     everything else.
 
+    **Module attributes come first.** ``prepare`` / ``prepare_qat`` /
+    ``quantize_dynamic`` resolve a module's recipe in this order: its own ``.qconfig``
+    attribute (``None`` excludes the module *and its whole subtree* until a descendant
+    sets its own ``.qconfig``), then the three tiers above, then whatever the parent
+    resolved to. The root inherits the global tier, so ``model.qconfig = cfg`` alone
+    configures a model, and ``model.head.qconfig = None`` keeps one layer in float.
+
     **Fluent construction.** Every setter returns ``self``, so a mapping is typically
     built in a single chained expression.
 
@@ -411,6 +418,14 @@ class QConfigMapping:
             return self._module_name[module_name]
         if module_type in self._object_type:
             return self._object_type[module_type]
+        return self._global
+
+    def _has_rule(self, module_type: type, module_name: str) -> bool:
+        """Whether a per-name or per-type entry (``None`` included) covers the module."""
+        return module_name in self._module_name or module_type in self._object_type
+
+    def _fallback(self) -> QConfig | None:
+        """The global tier — what a module with no rule and no ``.qconfig`` inherits."""
         return self._global
 
 
