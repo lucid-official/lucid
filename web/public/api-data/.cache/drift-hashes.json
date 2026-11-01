@@ -2,7 +2,7 @@
   "lucid.amp": "efe91834b6e74648e551a767f686c7fcb200026b59babc90b8d31c37e6bdb3d9",
   "lucid.autograd": "cb86c41b85debbe54d36c9a93a3939d1dee86432d81859f1f39f24b5dc76e45e",
   "lucid.compile": "ef4cc76457f0c2e13c7fead864853c00b6aaf36eedbad02f67f176451be8e6d6",
-  "lucid.coreml": "6bb93fc12461d20271788b771bd132c4959939e2dd2fb7c492333bd650053e07",
+  "lucid.coreml": "145bc90b45fe8d6212baf6e76e2f3a5ca506207490d4e5f8e860185dbd04e14e",
   "lucid.diffeq": "edcffa20a5499e5f8e23bd68edc096286ce06e423ffa55bc4a83a87180a0b4a7",
   "lucid.distributions": "27fea39b143f5a7e503f8b13b50a36537517474b86002d58391cd65ba4f1f950",
   "lucid.einops": "b950f7802dd1136c1b7fda061a0d58807ddc045ec6927cc0547917aaf3dbfc6e",

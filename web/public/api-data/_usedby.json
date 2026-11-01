@@ -288,7 +288,15 @@
     },
     {
       "kind": "module",
+      "module": "lucid.coreml._shared"
+    },
+    {
+      "kind": "module",
       "module": "lucid.coreml._spec"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.coreml._weights"
     },
     {
       "kind": "module",
@@ -1183,6 +1191,10 @@
     {
       "kind": "module",
       "module": "lucid.coreml._sized"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.coreml._weights"
     }
   ],
   "lucid.coreml._build.StatefulModel": [
@@ -1369,6 +1381,10 @@
     {
       "kind": "module",
       "module": "lucid.coreml._optimize"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.coreml._weights"
     }
   ],
   "lucid.coreml.export": [
@@ -19625,6 +19641,10 @@
     {
       "kind": "module",
       "module": "lucid.coreml._optimize"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.coreml._weights"
     }
   ],
   "lucid.quantization._fake_quantize.FakeQuantize": [
