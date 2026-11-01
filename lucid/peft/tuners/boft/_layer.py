@@ -101,7 +101,9 @@ class BOFTLayer(_OrthogonalLayer, family=True):
             size = dim // num
         else:
             if dim % size != 0:
-                raise ValueError(f"input size ({dim}) must be divisible by boft_block_size ({size})!")
+                raise ValueError(
+                    f"input size ({dim}) must be divisible by boft_block_size ({size})!"
+                )
             if depth != 0 and (dim < size * 2**depth or dim % (size * 2**depth) != 0):
                 raise ValueError(
                     f"Invalid combination of input size ({dim}), boft_n_butterfly_factor "
@@ -129,7 +131,9 @@ class BOFTLayer(_OrthogonalLayer, family=True):
                 rotations.copy_(_RANDOM_STD * lucid.randn(*shape, device=device, dtype=dtype))
                 noise = lucid.randn(*scale.shape, device=device, dtype=dtype)
                 scale.copy_(1.0 + _RANDOM_STD * noise)
-        self._specs[adapter_name] = _BoftSpec(size, num, cfg.boft_n_butterfly_factor, cfg.boft_dropout)
+        self._specs[adapter_name] = _BoftSpec(
+            size, num, cfg.boft_n_butterfly_factor, cfg.boft_dropout
+        )
         self.boft_R[adapter_name] = rotations
         self.boft_s[adapter_name] = scale
 

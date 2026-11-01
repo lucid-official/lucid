@@ -488,8 +488,7 @@ class Vmap(Transform[..., PyTree]):
     def _each(self, batch: _Batch, span: range, kwargs: dict[str, object], draws: Draws) -> PyTree:
         """The elements of ``span``, each through ``func`` on its own, stacked."""
         return self._outputs.combine(
-            [draws.element(partial(self.func, *batch.element(b), **kwargs)) for b in span],
-            _STACK,
+            [draws.element(partial(self.func, *batch.element(b), **kwargs)) for b in span], _STACK
         )
 
     def _isolated(

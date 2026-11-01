@@ -11,7 +11,6 @@ from typing import ClassVar, Final, Self, override
 import lucid as _lucid
 import lucid.nn as nn
 
-
 #: Keys ``config.json`` holds beside the config's own fields: ``model_type`` names the family,
 #: ``architectures`` (as in the reference's ``config.json``) names the model class the weights
 #: beside it belong to.  Neither is a constructor argument.

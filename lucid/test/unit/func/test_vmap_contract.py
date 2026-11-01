@@ -240,10 +240,7 @@ def test_an_output_with_out_dim_none_is_not_batched(
     x = _grid(device)
     w = lucid.full((2,), 7.0, device=device)
     got = func.vmap(
-        lambda a: (a * 2.0, w * 3.0),
-        out_dims=(0, None),
-        strategy=strategy,
-        chunk_size=chunk_size,
+        lambda a: (a * 2.0, w * 3.0), out_dims=(0, None), strategy=strategy, chunk_size=chunk_size
     )(x)
     assert isinstance(got, tuple)
     _close(got[0], x * 2.0)

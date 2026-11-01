@@ -38,7 +38,7 @@ Draw = Callable[[Tensor], Tensor]  # a plain function, or a Module whose forward
 _DIST_OVERRIDES: dict[str, Callable[[], D.Distribution]] = {
     "LowRankMultivariateNormal": lambda: D.LowRankMultivariateNormal(
         lucid.zeros(3), lucid.ones(3, 2) * 0.3, lucid.ones(3)
-    ),
+    )
 }
 
 #: ``Function`` -> the public call that reaches it.  A ``TRACED_BACKWARD``

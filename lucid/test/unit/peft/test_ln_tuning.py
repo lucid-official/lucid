@@ -28,9 +28,10 @@ from lucid.test.unit.peft._parity import adapter_library, gap
 def _layer(base: nn.Module | None = None) -> tuple[ln_tuning.LNTuningLayer, nn.Module]:
     lucid.manual_seed(1)
     wrapped = nn.LayerNorm(4) if base is None else base
-    return ln_tuning.LNTuningLayer(
-        wrapped, "default", LNTuningConfig(target_modules=["x"])
-    ), wrapped
+    return (
+        ln_tuning.LNTuningLayer(wrapped, "default", LNTuningConfig(target_modules=["x"])),
+        wrapped,
+    )
 
 
 def _tune(layer: ln_tuning.LNTuningLayer, adapter: str = "default") -> None:

@@ -109,8 +109,7 @@ class MultiheadAttention(
 
     #: The weights adapted, by attribute name on the attention, each with its ``(A, B)`` tables.
     _SLOTS: ClassVar[_Slots] = _slots(
-        in_proj_weight=("lora_A", "lora_B"),
-        out_proj_weight=("out_proj_lora_A", "out_proj_lora_B"),
+        in_proj_weight=("lora_A", "lora_B"), out_proj_weight=("out_proj_lora_A", "out_proj_lora_B")
     )
     adapter_layer_names = _table_names(_SLOTS)
     _DISK: ClassVar[Mapping[str, str]] = _disk_tables(_SLOTS)

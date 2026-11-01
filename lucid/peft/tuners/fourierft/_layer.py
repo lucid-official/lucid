@@ -104,9 +104,7 @@ class FourierFTLayer(_ConfigLayer, _ResidualUpdate, family=True):
         )
         if cfg.init_weights:
             init.zeros_(spectrum)
-        self._specs[adapter_name] = _FourierSpec(
-            cfg.n_frequency, cfg.scaling, cfg.random_loc_seed
-        )
+        self._specs[adapter_name] = _FourierSpec(cfg.n_frequency, cfg.scaling, cfg.random_loc_seed)
         self.fourierft_spectrum[adapter_name] = spectrum
 
     @override

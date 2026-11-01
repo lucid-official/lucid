@@ -78,14 +78,20 @@ class FourierFTModel(_ConfigTuner, peft_type=PeftType.FOURIERFT):
         """``config`` with the ``n_frequency`` the module named ``key`` is given (``n_frequency_pattern``, else the default)."""
         assert isinstance(config, FourierFTConfig)
         count = _pattern_value(config.n_frequency_pattern, key, config.n_frequency)
-        return config if count == config.n_frequency else dataclasses.replace(config, n_frequency=count)
+        return (
+            config
+            if count == config.n_frequency
+            else dataclasses.replace(config, n_frequency=count)
+        )
 
     @override
     @classmethod
     def _create_new_module(
         cls, config: _TargetedConfig, adapter_name: str, target: _Target
     ) -> nn.Module:
-        return super()._create_new_module(cls._config_for(config, target.full_name), adapter_name, target)
+        return super()._create_new_module(
+            cls._config_for(config, target.full_name), adapter_name, target
+        )
 
     @override
     @classmethod

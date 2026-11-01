@@ -40,7 +40,9 @@ def test_scale_zero_switches_it_off(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(deadline.SCALE_ENV, "0")
     assert deadline.deadline_seconds(_UNIT / "compile" / "x.py", explicit=5.0) is None
     monkeypatch.setenv(deadline.SCALE_ENV, "2")
-    assert deadline.deadline_seconds(_UNIT / "compile" / "x.py") == 2 * deadline.COMPILE_DIR_DEADLINE_S
+    assert (
+        deadline.deadline_seconds(_UNIT / "compile" / "x.py") == 2 * deadline.COMPILE_DIR_DEADLINE_S
+    )
 
 
 def test_overrunning_test_ends_the_run_with_a_stack(tmp_path: Path) -> None:
@@ -50,9 +52,7 @@ def test_overrunning_test_ends_the_run_with_a_stack(tmp_path: Path) -> None:
         "    _deadline_stderr_fd, _native_compile_deadline,\n"
         ")  # noqa: F401\n"
     )
-    (tmp_path / "test_stuck.py").write_text(
-        textwrap.dedent(
-            """
+    (tmp_path / "test_stuck.py").write_text(textwrap.dedent("""
             import time
 
             import pytest
@@ -61,9 +61,7 @@ def test_overrunning_test_ends_the_run_with_a_stack(tmp_path: Path) -> None:
             @pytest.mark.deadline(1)
             def test_stuck_in_native_code():
                 time.sleep(60)
-            """
-        )
-    )
+            """))
     root = str(Path(deadline.__file__).resolve().parents[3])
     start = time.perf_counter()
     done = subprocess.run(

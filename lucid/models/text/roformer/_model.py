@@ -372,10 +372,7 @@ class _RoFormerClassificationHead(nn.Module):
 
 
 def _migrate_flat_classification_head(
-    module: nn.Module,
-    state_dict: dict[str, Tensor],
-    prefix: str,
-    *_hook_args: object,
+    module: nn.Module, state_dict: dict[str, Tensor], prefix: str, *_hook_args: object
 ) -> None:
     """Load-time key migration for checkpoints saved before the head was nested.
 
@@ -399,10 +396,7 @@ def _migrate_flat_classification_head(
 
 
 def _drop_absent_pooler(
-    module: nn.Module,
-    state_dict: dict[str, Tensor],
-    prefix: str,
-    *_hook_args: object,
+    module: nn.Module, state_dict: dict[str, Tensor], prefix: str, *_hook_args: object
 ) -> None:
     """Let a pooler-less trunk load a checkpoint that carries a pooler.
 

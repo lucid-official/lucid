@@ -70,10 +70,7 @@ from lucid.peft import (
     get_peft_model_state_dict,
 )
 from lucid.models._registry import _REGISTRY
-from lucid.peft._target_defaults import (
-    DEFAULT_LORA_TARGET_MODULES,
-    DEFAULT_LORA_TARGET_PARAMETERS,
-)
+from lucid.peft._target_defaults import DEFAULT_LORA_TARGET_MODULES, DEFAULT_LORA_TARGET_PARAMETERS
 from lucid.peft.tuners import lora
 from lucid.serialization import load_safetensors, save_safetensors
 from lucid.test.unit.models._peft_matrix import (

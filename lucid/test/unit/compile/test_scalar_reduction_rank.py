@@ -72,13 +72,7 @@ def _inputs() -> tuple[lucid.Tensor, lucid.Tensor]:
 
 
 def _reduction_cases() -> list[object]:
-    return [
-        pytest.param(
-            name,
-            marks=[] if name in _HEALTHY else [_XFAIL],
-        )
-        for name in _REDUCTIONS
-    ]
+    return [pytest.param(name, marks=[] if name in _HEALTHY else [_XFAIL]) for name in _REDUCTIONS]
 
 
 @pytest.mark.parametrize("consumer", sorted(_CONSUMERS))
@@ -94,9 +88,9 @@ def test_compiled_matches_eager_after_a_full_reduction(reduction: str, consumer:
     compiled(x, a)  # the first call traces; the second runs the executable
     got, want = compiled(x, a), fn(x, a)
     assert got.shape == want.shape
-    assert lucid.allclose(got, want, rtol=1e-4, atol=1e-4), (
-        f"{reduction} then {consumer}: compiled {got.tolist()} != eager {want.tolist()}"
-    )
+    assert lucid.allclose(
+        got, want, rtol=1e-4, atol=1e-4
+    ), f"{reduction} then {consumer}: compiled {got.tolist()} != eager {want.tolist()}"
 
 
 _CHILD = """

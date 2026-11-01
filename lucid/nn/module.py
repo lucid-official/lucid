@@ -1376,11 +1376,7 @@ class Module(_StateDictHookMixin):
             self._forward_pre_hooks_with_kwargs.add(key)
         if prepend:
             self._forward_pre_hooks.move_to_end(key, last=False)
-        return RemovableHandle(
-            self._forward_pre_hooks,
-            key,
-            (self._forward_pre_hooks_with_kwargs,),
-        )
+        return RemovableHandle(self._forward_pre_hooks, key, (self._forward_pre_hooks_with_kwargs,))
 
     def register_forward_hook(
         self,

@@ -121,6 +121,11 @@
    "date": "2026-10-25",
    "reason": "LCD-556: pure move of _ModuleBackwardState/_wrap_grads from nn/module.py (at its 1500-line cap) to nn/_module_backward_state.py; its 2 casts move with it (module.py 5->3, new file 0->2, net 0)",
    "by": "chanlee"
+  },
+  {
+   "date": "2026-11-01",
+   "reason": "user editor reformat (black, 88 columns) on main 2026-11-01: format-only, AST-identical in 38 files; re-wrapping lengthens functions in lucid/nn/utils/rnn.py (memory user-reformats-main)",
+   "by": "chanlee"
   }
  ],
  "counts": {
@@ -1973,7 +1978,7 @@
     "lucid/nn/modules/transformer.py": 17,
     "lucid/nn/utils/fusion.py": 7,
     "lucid/nn/utils/parametrize.py": 7,
-    "lucid/nn/utils/rnn.py": 3,
+    "lucid/nn/utils/rnn.py": 5,
     "lucid/quantization/_functional.py": 41,
     "lucid/quantization/_qparams.py": 13,
     "lucid/quantization/_quantize.py": 26,

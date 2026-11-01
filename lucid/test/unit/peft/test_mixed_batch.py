@@ -11,13 +11,7 @@ import pytest
 
 import lucid
 import lucid.nn as nn
-from lucid.peft import (
-    IA3Config,
-    LoraConfig,
-    PeftModel,
-    PeftModelForCausalLM,
-    get_peft_model,
-)
+from lucid.peft import IA3Config, LoraConfig, PeftModel, PeftModelForCausalLM, get_peft_model
 from lucid.peft.tuners.lora import Linear
 
 
@@ -198,8 +192,7 @@ class TestRefusals:
             peft(x, adapter_names=["dora", "plain"])
         with lucid.no_grad():
             assert _close(
-                peft(x, adapter_names=["plain", "__base__"]),
-                _alone(peft, x, ["plain", "__base__"]),
+                peft(x, adapter_names=["plain", "__base__"]), _alone(peft, x, ["plain", "__base__"])
             )
 
     def test_attention_layers_cannot_be_routed(self, device: str) -> None:

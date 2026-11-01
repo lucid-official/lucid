@@ -355,9 +355,7 @@ class AveragedModel(Module):
 
 
 def update_bn(
-    loader: Iterable[Tensor | Sequence[Tensor]],
-    model: Module,
-    device: DeviceLike = None,
+    loader: Iterable[Tensor | Sequence[Tensor]], model: Module, device: DeviceLike = None
 ) -> None:
     """Re-estimate the BatchNorm running statistics of ``model`` from one pass over data.
 

@@ -186,9 +186,7 @@ class saved_tensors_hooks:
     """
 
     def __init__(
-        self,
-        pack_hook: Callable[[Tensor], object],
-        unpack_hook: Callable[[object], Tensor],
+        self, pack_hook: Callable[[Tensor], object], unpack_hook: Callable[[object], Tensor]
     ) -> None:
         """Remember the hooks; nothing is routed until the block is entered."""
         self.pack_hook = pack_hook

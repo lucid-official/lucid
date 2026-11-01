@@ -468,7 +468,7 @@ def test_stack_module_state_stacks_the_buffers_too(device: str) -> None:
 
 
 def test_stack_module_state_of_one_model(device: str) -> None:
-    (params, _) = func.stack_module_state([nn.Linear(2, 3).to(device)])
+    params, _ = func.stack_module_state([nn.Linear(2, 3).to(device)])
     assert tuple(params["weight"].shape) == (1, 3, 2)
 
 

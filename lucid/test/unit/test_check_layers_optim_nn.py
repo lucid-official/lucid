@@ -24,10 +24,7 @@ def _tree(root: Path, module: str, source: str) -> Path:
     return root / "lucid"
 
 
-@pytest.mark.parametrize(
-    "imported",
-    ["lucid.nn.module", "lucid.nn.modules.normalization"],
-)
+@pytest.mark.parametrize("imported", ["lucid.nn.module", "lucid.nn.modules.normalization"])
 def test_swa_utils_may_import_the_two_named_nn_modules(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, imported: str
 ) -> None:

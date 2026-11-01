@@ -98,7 +98,9 @@ class OFTLayer(_OrthogonalLayer, family=True):
 
     @override
     def _disk_table(self, table_name: str) -> str:
-        return f"{table_name}.weight"  # the reference keeps the parameter in a module named ``weight``
+        return (
+            f"{table_name}.weight"  # the reference keeps the parameter in a module named ``weight``
+        )
 
     def _resolve_blocks(self, config: OFTConfig) -> tuple[int, int]:
         """``(r, block size)`` for this layer's input size: the one given, moved to a divisor if it does not fit."""

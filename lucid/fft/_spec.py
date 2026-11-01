@@ -195,12 +195,7 @@ def _spec(
 
 
 def _spec_nd(
-    op: str,
-    family: _Family,
-    input: object,
-    s: object,
-    dim: object,
-    norm: str | None,
+    op: str, family: _Family, input: object, s: object, dim: object, norm: str | None
 ) -> _Spec:
     """The spec of an n-D or 2-D call (``dim=None`` names every axis)."""
     axes = None if dim is None else _to_axes(dim, op)
@@ -208,12 +203,7 @@ def _spec_nd(
 
 
 def _spec_1d(
-    op: str,
-    family: _Family,
-    input: object,
-    n: object,
-    dim: object,
-    norm: str | None,
+    op: str, family: _Family, input: object, n: object, dim: object, norm: str | None
 ) -> _Spec:
     """The spec of a 1-D call: ``n`` and ``dim`` are single ints."""
     sizes = [] if n is None else [_index(n, op, "n")]

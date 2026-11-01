@@ -61,7 +61,10 @@ class _Cayley:
     def skew(vector: Tensor, block_size: int) -> Tensor:
         """The ``(b, n, n)`` skew-symmetric matrices whose strict upper triangles are the rows of ``vector`` (``(b, n(n-1)/2)``)."""
         maps = _skew_map(block_size, vector.device)
-        padded = lucid.cat([vector, lucid.zeros(vector.shape[0], 1, dtype=vector.dtype, device=vector.device)], dim=1)
+        padded = lucid.cat(
+            [vector, lucid.zeros(vector.shape[0], 1, dtype=vector.dtype, device=vector.device)],
+            dim=1,
+        )
         entries = padded[:, maps.source] * maps.sign.to(vector.dtype)
         return entries.reshape(vector.shape[0], block_size, block_size)
 

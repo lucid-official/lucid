@@ -172,4 +172,3 @@ class LNTuningLayer(_ConfigLayer, base_type=nn.Module):
             )
         tuned: Tensor = self.ln_tuning_layers[held[0]](x)
         return tuned
-

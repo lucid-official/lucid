@@ -26,7 +26,6 @@ from lucid.peft.tuners._kinds import _Geometry, _Kind
 from lucid.peft.tuners._support import _ConfigLayer, _WeightRewrite
 
 
-
 class _OrthogonalLayer(_ConfigLayer, _WeightRewrite):
     r"""A frozen base module whose weight an orthogonal matrix of its input space multiplies from the right.
 

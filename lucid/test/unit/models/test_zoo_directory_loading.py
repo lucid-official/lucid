@@ -42,10 +42,7 @@ _TEXT = {
     "intermediate_size": 32,
     "max_position_embeddings": 32,
 }
-_TINY: dict[str, dict[str, object]] = {
-    "bert": _TEXT,
-    "roformer": {**_TEXT, "embedding_size": 16},
-}
+_TINY: dict[str, dict[str, object]] = {"bert": _TEXT, "roformer": {**_TEXT, "embedding_size": 16}}
 
 
 def _ambiguous_pairs() -> dict[tuple[str, str], dict[str, str]]:

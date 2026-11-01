@@ -268,8 +268,7 @@ def test_unpad_sequence(
 
 
 @pytest.mark.parametrize(
-    "lens, match",
-    [([4, 2], "len\\(lengths\\)"), ([4, 5, 3], "must lie"), ([4, -1, 3], "must lie")],
+    "lens, match", [([4, 2], "len\\(lengths\\)"), ([4, 5, 3], "must lie"), ([4, -1, 3], "must lie")]
 )
 def test_unpad_sequence_validates_lengths(lens: list[int], match: str) -> None:
     padded = pad_sequence([lucid.ones(n, 2) for n in (4, 2, 3)], batch_first=True)

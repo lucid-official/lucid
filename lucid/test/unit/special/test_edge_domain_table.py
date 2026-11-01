@@ -255,9 +255,9 @@ def test_values_match_the_reference(name: str, dtype: str, dev: str, ref: Module
         elif row.recurrence:
             # A float32 recurrence accumulates ~n^2 eps against the reference's
             # trigonometric form for |x| < 1.
-            assert math.isclose(g, w, rel_tol=1e-3, abs_tol=1e-4), (
-                f"{name}({x}) {dtype}: {g} != {w}"
-            )
+            assert math.isclose(
+                g, w, rel_tol=1e-3, abs_tol=1e-4
+            ), f"{name}({x}) {dtype}: {g} != {w}"
         else:
             loose = _VALUE_LOOSE.get((name, dtype, x))
             assert _same(g, w, dtype, rtol=loose), f"{name}({x}) {dtype} {dev}: {g} != {w}"

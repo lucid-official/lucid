@@ -17,12 +17,7 @@ LN_TUNING_DEFAULT_TARGET_MODULES: Final[Mapping[str, frozenset[str]]] = MappingP
     {
         "gpt2": frozenset({"ln_1", "ln_2", "ln_f"}),
         "t5": frozenset(
-            {
-                "self_attention_norm",
-                "cross_attention_norm",
-                "feed_forward_norm",
-                "final_layer_norm",
-            }
+            {"self_attention_norm", "cross_attention_norm", "feed_forward_norm", "final_layer_norm"}
         ),
     }
 )

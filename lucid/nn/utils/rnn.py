@@ -314,9 +314,7 @@ class PackedSequence(_PackedSequenceFields):
         # ``dtype=None`` is left out: after a dtype / tensor ``device`` it
         # would name an argument already given.
         named = {} if dtype is None else {"dtype": dtype}
-        return self._with_data(
-            self.data.to(device, non_blocking=non_blocking, copy=copy, **named)
-        )
+        return self._with_data(self.data.to(device, non_blocking=non_blocking, copy=copy, **named))
 
     def _with_data(self, data: Tensor) -> Self:
         """``self`` carrying converted ``data``; the index tensors follow it to its device."""
@@ -577,7 +575,9 @@ def pad_packed_sequence(
     lengths_list = [sum(1 for bs in batch_sizes_list if bs > k) for k in range(B)]
 
     if sequence.unsorted_indices is not None:
-        order = _permutation_list(sequence.unsorted_indices, "pad_packed_sequence: unsorted_indices")
+        order = _permutation_list(
+            sequence.unsorted_indices, "pad_packed_sequence: unsorted_indices"
+        )
         if len(order) != B:
             raise ValueError(
                 f"pad_packed_sequence: unsorted_indices must be a permutation "

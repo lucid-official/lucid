@@ -70,8 +70,7 @@ def test_a_dataloader_over_a_zero_weight_pool_yields_len_batches():
 
 
 @pytest.mark.parametrize(
-    "index, expected",
-    [(0, 1), (2, 3), (3, 4), (4, 5), (-1, 5), (-2, 4), (-5, 1)],
+    "index, expected", [(0, 1), (2, 3), (3, 4), (4, 5), (-1, 5), (-2, 4), (-5, 1)]
 )
 def test_concat_resolves_indices_across_children(index, expected):
     data = ConcatDataset([_Range(3, 1), _Range(2, 4)])

@@ -120,10 +120,7 @@ class ZooRow:
         _family, factory, overrides, make_inputs = getattr(case, "values", case)
         heavy = any(mark.name == "heavy" for mark in getattr(case, "marks", ()))
         return cls(
-            factory=factory,
-            overrides=MappingProxyType(overrides),
-            inputs=make_inputs,
-            heavy=heavy,
+            factory=factory, overrides=MappingProxyType(overrides), inputs=make_inputs, heavy=heavy
         )
 
 

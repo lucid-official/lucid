@@ -137,11 +137,7 @@ def _stored_precision(values: list[float]) -> list[float]:
 
 
 def beta_schedule_floats(
-    num_steps: int,
-    schedule: str = "linear",
-    *,
-    beta_start: float = 1e-4,
-    beta_end: float = 0.02,
+    num_steps: int, schedule: str = "linear", *, beta_start: float = 1e-4, beta_end: float = 0.02
 ) -> list[float]:
     """The values :func:`make_beta_schedule` stores, as host Python floats.
 

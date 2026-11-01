@@ -220,9 +220,9 @@ def test_three_adam_steps_follow_eager(owner: str, entry: str, device: str) -> N
     # The loss's parameters must have moved: a dropped gradient leaves them put.
     start = _OWNERS[owner](device).params
     for p, s in zip(run.loss.params, start, strict=True):
-        assert float((p.detach() - s.detach()).abs().max().item()) > 1e-3, (
-            "the loss weight is stuck"
-        )
+        assert (
+            float((p.detach() - s.detach()).abs().max().item()) > 1e-3
+        ), "the loss weight is stuck"
     for g, w in zip(got, want, strict=True):
         assert abs(g - w) <= _TOL * max(1.0, abs(w))
 

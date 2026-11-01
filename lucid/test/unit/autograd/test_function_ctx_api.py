@@ -400,7 +400,7 @@ def _once_with_two_inputs(lib: ModuleType, device: str) -> object:
 
     a, b = _vec(lib, device, 1.0, 2.0), _vec(lib, device, 3.0, 4.0)
     w = _vec(lib, device, 1.0, 1.0)
-    (ga, gb) = lib.autograd.grad((Mul.apply(a, b) * w).sum(), (a, b), create_graph=True)
+    ga, gb = lib.autograd.grad((Mul.apply(a, b) * w).sum(), (a, b), create_graph=True)
     return _kind(ga), _kind(gb), _raises(lambda: (ga + gb).sum().backward())
 
 

@@ -215,15 +215,7 @@ def _walk_load(
         )
     # Wrapped hooks: each one decides whether it is handed the module.
     for hook in module._load_state_dict_pre_hooks.values():
-        hook(
-            state_dict,
-            prefix,
-            local_meta,
-            strict,
-            missing_keys,
-            unexpected_keys,
-            error_msgs,
-        )
+        hook(state_dict, prefix, local_meta, strict, missing_keys, unexpected_keys, error_msgs)
 
     module._load_from_state_dict(
         state_dict, prefix, local_meta, strict, missing_keys, unexpected_keys, error_msgs

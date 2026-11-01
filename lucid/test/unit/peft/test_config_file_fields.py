@@ -130,7 +130,9 @@ class TestSavedFile:
 class TestMethodNamedMessages:
     def test_a_model_without_the_adapter_names_what_it_holds(self) -> None:
         peft = get_peft_model(_ia3_net(), IA3Config(target_modules=["0"], feedforward_modules=[]))
-        with pytest.raises(ValueError, match=r"no adapter named 'other' \(it holds 'default' \(IA3\)\)"):
+        with pytest.raises(
+            ValueError, match=r"no adapter named 'other' \(it holds 'default' \(IA3\)\)"
+        ):
             get_peft_model_state_dict(peft, adapter_name="other")
         with pytest.raises(ValueError, match="no adapter named 'default'"):
             get_peft_model_state_dict(_ia3_net())
