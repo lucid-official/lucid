@@ -53,6 +53,9 @@ def _children_of_every_kind(S: Any, o: Any) -> dict[str, Any]:
     }
 
 
+# A chain run first steps its children at construction, and warns of the order
+# as the reference does (test_scheduler_step_order pins it).
+@pytest.mark.filterwarnings("ignore:Detected call of:UserWarning")
 @pytest.mark.parametrize("kind", ["lr", "sequential", "chained"])
 @pytest.mark.parametrize("composite", ["sequential", "chained"])
 def test_a_composite_admits_every_kind_of_composable_child(composite: str, kind: str) -> None:
@@ -169,3 +172,67 @@ def test_an_older_lucids_cycle_checkpoint_resumes_on_schedule() -> None:
         resumed_opt.step()
         resumed.step()
         assert resumed.get_last_lr() == pytest.approx(sched.get_last_lr())
+
+
+@pytest.mark.parametrize(
+    ("T_mult", "epoch", "want"),
+    [(1, 1.5, (1.5, 3)), (1, 7, (1, 3)), (2, 1.5, (1.5, 3)), (2, 10, (1, 12)), (2, 3, (0, 6))],
+)
+def test_stepping_to_an_epoch_places_the_cycle(
+    T_mult: int, epoch: float, want: tuple[float, int]
+) -> None:
+    opt = optim.SGD([lucid.nn.Parameter(lucid.zeros(1))], lr=0.1)
+    sched = optim.lr_scheduler.CosineAnnealingWarmRestarts(opt, T_0=3, T_mult=T_mult)
+    sched.step(epoch)
+    assert (sched.T_cur, sched.T_i) == pytest.approx(want)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error"),
+    [
+        ({"T_0": 0}, ValueError),
+        ({"T_0": 3.5}, ValueError),
+        ({"T_0": 3, "T_mult": 0}, ValueError),
+        ({"T_0": 3, "eta_min": "low"}, TypeError),
+    ],
+)
+def test_a_cycle_length_the_schedule_cannot_use_is_refused(
+    kwargs: dict[str, Any], error: type[Exception]
+) -> None:
+    opt = optim.SGD([lucid.nn.Parameter(lucid.zeros(1))], lr=0.1)
+    with pytest.raises(error):
+        optim.lr_scheduler.CosineAnnealingWarmRestarts(opt, **kwargs)
+
+
+def test_a_refused_step_leaves_the_cycle_where_it_was() -> None:
+    opt, sched = _warm_restarts(lucid)
+    for _ in range(4):
+        opt.step()
+        sched.step()
+    cycle = (sched.T_cur, sched.T_i)
+    opt.add_param_group({"params": [lucid.nn.Parameter(lucid.zeros(1))]})
+    with pytest.raises(ValueError, match="added after the scheduler was built"):
+        sched.step()
+    assert (sched.T_cur, sched.T_i) == cycle
+
+
+def test_the_public_cycle_names_win_over_the_private_ones_in_a_checkpoint() -> None:
+    opt, sched = _warm_restarts(lucid)
+    opt.step()
+    sched.step()
+    both = {**sched.state_dict(), "T_cur": 1, "T_i": 6, "_T_cur": 99, "_T_i": 99}
+    sched.load_state_dict(both)
+    assert (sched.T_cur, sched.T_i) == (1, 6)
+    assert "_T_cur" not in vars(sched)
+
+
+@pytest.mark.parametrize("composite", ["sequential", "chained"])
+def test_a_composite_names_the_kinds_it_takes_when_given_another(composite: str) -> None:
+    S = optim.lr_scheduler
+    opt = optim.SGD([lucid.nn.Parameter(lucid.zeros(1))], lr=LR)
+    kids: list[Any] = [S.StepLR(opt, 2), object()]
+    with pytest.raises(TypeError, match="at index 1: expected an LR scheduler, SequentialLR or"):
+        if composite == "sequential":
+            S.SequentialLR(opt, kids, [3])
+        else:
+            S.ChainedScheduler(kids)
