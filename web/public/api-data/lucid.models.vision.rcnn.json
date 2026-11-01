@@ -3,7 +3,7 @@
   "name": "rcnn",
   "path": "lucid.models.vision.rcnn",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/rcnn/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/4036e3d/lucid/models/vision/rcnn/__init__.py#L1",
   "members": [
     {
       "name": "RCNNConfig",
@@ -15,32 +15,9 @@
       ],
       "labels": [],
       "signature": "RCNNConfig(num_classes: int = 80, in_channels: int = 3, roi_size: int = 227, context_pad: int = 16, dropout: float = 0.5, score_thresh: float = 0.05, nms_thresh: float = 0.3, max_detections: int = 300, fg_iou_thresh: float = 0.5, bbox_reg_iou_thresh: float = 0.6)",
-      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/rcnn/_config.py#L10",
+      "source": "https://github.com/lucid-official/lucid/blob/4036e3d/lucid/models/vision/rcnn/_config.py#L10",
       "subcategory": "config",
-      "methods": [
-        {
-          "name": "__init__",
-          "path": "lucid.models.vision.rcnn._config.RCNNConfig.__init__",
-          "kind": "function",
-          "labels": [],
-          "signature": "__init__(num_classes: int = 80, in_channels: int = 3, roi_size: int = 227, context_pad: int = 16, dropout: float = 0.5, score_thresh: float = 0.05, nms_thresh: float = 0.3, max_detections: int = 300, fg_iou_thresh: float = 0.5, bbox_reg_iou_thresh: float = 0.6)",
-          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/rcnn/_config.py#L1",
-          "subcategory": "config",
-          "summary": null,
-          "extended": null,
-          "parameters": [],
-          "returns": {
-            "annotation": "None",
-            "description": ""
-          },
-          "raises": [],
-          "examples": [],
-          "notes": [],
-          "attributes": [],
-          "warns": [],
-          "see_also": []
-        }
-      ],
+      "methods": [],
       "summary": "Configuration for R-CNN.",
       "extended": "R-CNN (Girshick et al., CVPR 2014) applies a CNN independently to each\nregion proposal (warped to a fixed `roi_size × roi_size` crop), then\nfeeds the flattened pool5 features through two FC layers before the\nclassification and bounding-box regression heads.\n\nOriginal paper uses AlexNet (5 conv + 3 FC) as the backbone.  The\neffective output of pool5 for a 227 × 227 input is 6 × 6 × 256 = 9 216.\n\nArgs:\n    num_classes:     Number of foreground object classes.\n                     Background is automatically added as class 0,\n                     giving (num_classes + 1) output logits.\n    in_channels:     Number of input image channels (3 for RGB).\n    context_pad:     Pixels of image context kept around each proposal\n                     in the *warped* frame (Appendix A's $p$).\n                     `0` warps the tight box.\n    roi_size:        Each region proposal is warped to this square size\n                     before being forwarded through the backbone.\n                     Original paper: 227.\n    dropout:         Dropout probability applied after fc6 and fc7.\n    score_thresh:    Minimum class-score threshold applied during\n                     post-processing (after softmax).  Boxes whose\n                     max class score is below this value are discarded.\n    nms_thresh:      IoU threshold for per-class NMS at inference time.\n    max_detections:  Maximum number of detections returned per image\n                     after NMS.\n\n> **Note:**\n>\n> **Training — two of the paper's three stages.**  Passing\n> `targets` to `forward` trains stage 1 (CNN fine-tuning,\n> softmax cross-entropy over proposals at IoU >= `fg_iou_thresh`)\n> and stage 3 (the class-specific bounding-box regressors on pool5\n> features, restricted to proposals at IoU > `bbox_reg_iou_thresh`\n> per Appendix C).\n>\n> Stage 2 — the per-class linear SVMs that *replace* the softmax at\n> test time — is **not** part of the model.  It is an offline pass\n> over features cached from a frozen network, with positives drawn\n> only from ground-truth boxes, negatives at IoU < 0.3, and hard\n> negative mining across the whole dataset; the mining is what makes\n> it work, and it is a pipeline rather than a layer.\n> `lucid.models._utils._common.mine_hard_negatives` implements\n> that loop over cached features — score the pool, keep the\n> highest-scoring mistakes, refit, repeat — on top of\n> `lucid.models._utils._common.fit_linear_svm`.  Extracting the\n> features from a frozen network over a whole dataset, and scoring\n> with the resulting weights instead of the softmax, remain the\n> caller's pipeline.",
       "parameters": [],
@@ -64,7 +41,7 @@
       ],
       "labels": [],
       "signature": "RCNNForObjectDetection(config: RCNNConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/rcnn/_model.py#L176",
+      "source": "https://github.com/lucid-official/lucid/blob/4036e3d/lucid/models/vision/rcnn/_model.py#L176",
       "subcategory": "model",
       "methods": [
         {
@@ -73,7 +50,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: RCNNConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/rcnn/_model.py#L260",
+          "source": "https://github.com/lucid-official/lucid/blob/4036e3d/lucid/models/vision/rcnn/_model.py#L260",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -95,7 +72,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor, proposals: list[Tensor] | None = None, targets: list[dict[str, Tensor]] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/rcnn/_model.py#L434",
+          "source": "https://github.com/lucid-official/lucid/blob/4036e3d/lucid/models/vision/rcnn/_model.py#L434",
           "subcategory": "model",
           "summary": "Run R-CNN on a batch of images.",
           "extended": null,
@@ -141,7 +118,7 @@
           "kind": "function",
           "labels": [],
           "signature": "postprocess(output: ObjectDetectionOutput, proposals: list[Tensor] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/rcnn/_model.py#L541",
+          "source": "https://github.com/lucid-official/lucid/blob/4036e3d/lucid/models/vision/rcnn/_model.py#L541",
           "subcategory": "model",
           "summary": "Apply score threshold + per-class NMS to raw R-CNN output.",
           "extended": null,
@@ -215,7 +192,7 @@
       "kind": "function",
       "labels": [],
       "signature": "rcnn(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/rcnn/_pretrained.py#L34",
+      "source": "https://github.com/lucid-official/lucid/blob/4036e3d/lucid/models/vision/rcnn/_pretrained.py#L34",
       "subcategory": "pretrained",
       "summary": "R-CNN with AlexNet backbone (Girshick et al., CVPR 2014).",
       "extended": "Builds a `RCNNForObjectDetection` with the paper-cited AlexNet\ntopology: five-conv trunk applied to each region proposal warped to\n$227 \\times 227$, followed by two FC layers and sibling\nclassification (`num_classes + 1`) and class-specific bounding-box\nregression (`4 \\cdot num_classes`) heads.  Original PASCAL VOC 2010\ntest mAP of 53.3% (paper Table 9) — a ~20-point jump over the prior\nDPM state of the art.",

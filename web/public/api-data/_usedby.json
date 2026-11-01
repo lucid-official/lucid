@@ -18003,6 +18003,28 @@
       "module": "lucid.peft"
     }
   ],
+  "lucid.peft._modules_to_save.ModulesToSaveWrapper": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners._base"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners._prompt._tuner"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._mixed"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._model"
+    }
+  ],
   "lucid.peft._peft_model.PeftModel": [
     {
       "kind": "module",
