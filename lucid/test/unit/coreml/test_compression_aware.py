@@ -45,7 +45,7 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 import lucid.optim as optim
 from lucid._C import engine as _C_engine
-from lucid.coreml import _build
+from lucid.coreml import _weights
 
 pytestmark = pytest.mark.skipif(
     not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
@@ -199,7 +199,7 @@ class TestTheExportWritesWhatWasTrained:
         keys = (lucid.arange(4 * 64) % count).reshape(4, 64).to(lucid.int64)
         rows = lucid.gather(table, 1, keys)
 
-        fitted = _build._palettes_for(rows, count)
+        fitted = _weights._palettes_for(rows, count)
         assert float((fitted - table).abs().max().item()) < 1e-6
 
     def test_an_ordinary_weight_still_goes_through_the_iteration(self) -> None:
@@ -211,7 +211,7 @@ class TestTheExportWritesWhatWasTrained:
         """
         lucid.manual_seed(0)
         rows = lucid.randn(4, 4096)
-        fitted = _build._palettes_for(rows, 16)
+        fitted = _weights._palettes_for(rows, 16)
         assert tuple(fitted.shape) == (4, 16)
         assert float(fitted.min().item()) >= float(rows.min().item())
         assert float(fitted.max().item()) <= float(rows.max().item())

@@ -85,7 +85,6 @@ from lucid.coreml._build import (
     commit_staging,
     discard_staging,
     staging_path,
-    _Shared,
     StatefulModel,
     UnsupportedOp,
     UnsupportedRank,
@@ -94,6 +93,7 @@ from lucid.coreml._build import (
 from lucid.coreml._flex import ShapeNotFlexible
 from lucid.coreml._model import CoreMLModel, Latency, PlacementSummary
 from lucid.coreml._optimize import CompressionAware
+from lucid.coreml._shared import Shared
 from lucid.coreml._spec import (
     Activations,
     DeploymentTarget,
@@ -663,7 +663,7 @@ def export_functions(
     staging = staging_path(path)
     try:
         paths = cm.prepare_package(staging)
-        shared = _Shared(paths=paths, blob=cm.BlobWriter(paths.weight_bin))
+        shared = Shared(paths=paths, blob=cm.BlobWriter(paths.weight_bin))
 
         built: dict[str, dict[str, object]] = {}
         programs: list[tuple[str, object]] = []

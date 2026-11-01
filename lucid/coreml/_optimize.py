@@ -34,14 +34,14 @@ from typing import override
 
 from lucid.nn import Module, Parameter
 
-from lucid.coreml._build import (
+from lucid.coreml._spec import Palettize, Sparsify, WeightPrecision
+from lucid.coreml._weights import (
     _QUANTIZE_MIN_ELEMENTS,
     _assign,
     _edge_table,
     _palette_groups,
     _palettes_for,
 )
-from lucid.coreml._spec import Palettize, Sparsify, WeightPrecision
 
 __all__ = ["CompressionAware"]
 

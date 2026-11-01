@@ -14,22 +14,19 @@ Three claims, each against a real package:
   read entry by entry (its layout is in ``BlobWriter.h``), so the
   assertions are exact rather than "about".
 * **What breaks it.**  Sharing is by identity: a deep copy of the base
-  ships its weights again, and a compressed weight is not shared at all
-  (LCD-688, a strict xfail below).
+  ships its weights again.
 
 Measured on the 64-64-32 net used here (float32 weights):
 
     base alone                                  25,280 B  (weights file)
-    + one rank-4 adapter, unmerged              30,144 B   (+4,864)
+    + one rank-4 adapter, unmerged              29,376 B   (+4,096)
     merged (``merge_and_unload``)               25,280 B   (the base again)
-    base + adapted, one package                 30,144 B   (== adapted alone)
-    base + adapter A (r=4) + adapter B (r=8)    38,592 B   (A + B - base)
-    the same three as separate packages         89,152 B
+    base + adapted, one package                 29,376 B   (== adapted alone)
+    base + adapter A (r=4) + adapter B (r=8)    37,056 B   (A + B - base)
+    the same three as separate packages         87,616 B
 
-An adapter costs its parameters plus a zero bias per bias-free linear and
-a four-byte scale each; at rank 4 that is about 12 % over the parameter
-count (the zero bias of ``B`` is one row in ``r``), and falls as the rank
-grows.
+An adapter costs its parameters plus a four-byte scale per linear: LoRA's
+projections have no bias, and a bias-free linear writes no bias constant.
 """
 
 import copy
@@ -285,11 +282,13 @@ class TestOneCopyOfTheBase:
         base_entries, unmerged_entries = _entries(base_package), _entries(unmerged_package)
         adapter_bytes = 4 * _floats(peft, lambda name: "lora_" in name)
         # Every base entry is there once; what is added is the adapter and
-        # its small constants — nowhere near a second copy of the base.
+        # its scaling scalars.  LoRA's projections have no bias, and a
+        # bias-free linear writes no bias constant (it used to write a
+        # zero one each, 12% over the adapter), so the slack is a few scalars.
         for size in base_entries:
             unmerged_entries.remove(size)
         extra = sum(unmerged_entries)
-        assert adapter_bytes <= extra <= 1.5 * adapter_bytes, (adapter_bytes, extra)
+        assert adapter_bytes <= extra <= adapter_bytes + 64, (adapter_bytes, extra)
         assert extra < 0.5 * sum(base_entries)
 
     def test_the_base_function_adds_nothing_to_the_adapted_one(self, tmp_path: object) -> None:
@@ -381,11 +380,6 @@ class TestOneCopyOfTheBase:
         finally:
             _close(*handles.values())
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="LCD-688: a compressed (int8) weight is written per function; only float "
-        "weights are shared by identity",
-    )
     def test_an_int8_base_is_shared_between_functions(self, tmp_path: object) -> None:
         peft = _peft()
         x = _example()

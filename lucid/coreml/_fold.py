@@ -4,10 +4,10 @@ Split from :mod:`lucid.coreml._build`, the driver, which asks once per
 export (:func:`foldable`) and writes the answer down as constants.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Protocol
 
-__all__ = ["TRUE_FACTORIES", "f32_opmath_scalars", "foldable"]
+__all__ = ["BIASED_OPS", "TRUE_FACTORIES", "f32_opmath_scalars", "foldable", "zero_biases"]
 
 
 class _Value(Protocol):
@@ -174,3 +174,68 @@ def f32_opmath_scalars(graph: _Graph, feeds: Mapping[int, _Feed]) -> set[int]:
         if sid is not None:
             scalars.add(sid)
     return scalars
+
+
+#: Operations that add their third operand, a bias, after the matrix product.
+BIASED_OPS = frozenset({"linear", "_fused_linear_relu", "_fused_linear_gelu"})
+
+
+def _has_bias_slot(op: _Op) -> bool:
+    return op.name in BIASED_OPS and len(op.inputs) == 3
+
+
+def zero_biases(
+    graph: _Graph,
+    feeds: Mapping[int, object],
+    input_ids: set[int],
+    output_ids: set[int],
+    is_zero: Callable[[int], bool],
+) -> set[int]:
+    """Bias operands that add nothing, and so need no constant in the package.
+
+    ``F.linear`` without a bias hands the kernel a ``zeros(out_features)``
+    of its own, because the kernel takes one. Written out, that is a
+    constant the model does not have: a bias-free (LLaMA-style) network
+    carries one per projection, and a LoRA adapter's two bias-free
+    projections per target are 12% of its package.
+
+    Only a value nothing else reads qualifies: as a bias operand it is
+    dropped, as anything else the program needs it. A weight that happens
+    to be all zeros goes the same way, since ``x @ W.T + 0`` is
+    ``x @ W.T`` exactly.
+
+    Parameters
+    ----------
+    graph : TraceGraph
+        The traced graph.
+    feeds : mapping of int to TensorImpl
+        Its external feeds.
+    input_ids : set of int
+        The feeds that are inputs, whose value is not the example's.
+    output_ids : set of int
+        The model's outputs, which the caller reads.
+    is_zero : callable
+        Whether a feed holds nothing but zeros.
+
+    Returns
+    -------
+    set of int
+        The value ids to leave out of the package.
+    """
+    made_zeros = {
+        int(op.outputs[0].id)
+        for op in graph.ops
+        if op.name == "zeros" and not op.inputs and len(op.outputs) == 1
+    }
+    dropped: set[int] = set()
+    for op in graph.ops:
+        if not _has_bias_slot(op):
+            continue
+        bias = int(op.inputs[2])
+        if bias in made_zeros or (bias in feeds and bias not in input_ids and is_zero(bias)):
+            dropped.add(bias)
+    dropped -= output_ids
+    for op in graph.ops:
+        slot = 2 if _has_bias_slot(op) else -1
+        dropped.difference_update(int(v) for i, v in enumerate(op.inputs) if i != slot)
+    return dropped

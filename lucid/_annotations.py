@@ -398,11 +398,20 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
         ("TensorImpl", "lucid._C.engine", "TensorImpl"),
     ),
+    "lucid.coreml._shared": (
+        ("BlobWriter", "lucid._C.engine", "BlobWriter"),
+        ("PackagePaths", "lucid._C.engine", "PackagePaths"),
+        ("TensorImpl", "lucid._C.engine", "TensorImpl"),
+    ),
     "lucid.coreml._sized": (
         ("Bindings", "lucid.coreml._emit", "Bindings"),
         ("Builder", "lucid.coreml._build", "Builder"),
         ("EmitResult", "lucid.coreml._emit", "EmitResult"),
         ("TracedOp", "lucid.coreml._emit", "TracedOp"),
+    ),
+    "lucid.coreml._weights": (
+        ("Tensor", "lucid._tensor.tensor", "Tensor"),
+        ("_BuildCtx", "lucid.coreml._build", "_BuildCtx"),
     ),
     "lucid.fft": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.func": (("Module", "lucid.nn.module", "Module"),),

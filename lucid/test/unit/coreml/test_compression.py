@@ -32,7 +32,7 @@ import lucid.nn.functional as F
 import lucid.coreml as cml
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap
-from lucid.coreml import _build
+from lucid.coreml import _weights
 
 pytestmark = pytest.mark.skipif(
     not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
@@ -79,10 +79,10 @@ def _reconstruct(weight: lucid.Tensor, bits: int) -> lucid.Tensor:
     clustering is any good.
     """
     count = 1 << bits
-    groups = _build._palette_groups(int(weight.shape[0]), count, int(weight.numel()))
+    groups = _weights._palette_groups(int(weight.shape[0]), count, int(weight.numel()))
     rows = weight.reshape(groups, -1)
-    palettes = _build._palettes_for(rows, count)
-    keys = _build._assign(rows, _build._edge_table(palettes), count)
+    palettes = _weights._palettes_for(rows, count)
+    keys = _weights._assign(rows, _weights._edge_table(palettes), count)
     return lucid.gather(palettes, 1, keys).reshape(*weight.shape)
 
 
@@ -132,7 +132,7 @@ class TestTheKeysSurviveTheTrip:
         groups, width = 5, 200
         palettes = lucid.sort(lucid.randn(groups, count), dim=-1).values
         values = lucid.randn(groups, width) * 2
-        got = _build._assign(values, _build._edge_table(palettes), count).tolist()
+        got = _weights._assign(values, _weights._edge_table(palettes), count).tolist()
 
         table, sample = palettes.tolist(), values.tolist()
         for row in range(groups):
@@ -209,9 +209,9 @@ class TestWhatIsLeftAlone:
         lucid.manual_seed(0)
         vector = lucid.randn(4096)
         if isinstance(weights, cml.Palettize):
-            assert _build._palettize_weight(vector, weights.bits) is None
+            assert _weights._palettize_weight(vector, weights.bits) is None
         else:
-            assert _build._sparsify_weight(vector, weights.ratio) is None
+            assert _weights._sparsify_weight(vector, weights.ratio) is None
 
     def test_a_constant_with_nothing_above_its_median_stays_dense(self) -> None:
         """A uniform tensor has no element above its own median.
@@ -221,8 +221,8 @@ class TestWhatIsLeftAlone:
         constant with an empty payload, which is not a thing to write —
         it goes out dense instead of failing.
         """
-        assert _build._sparsify_weight(lucid.zeros(64, 64), 0.5) is None
-        assert _build._sparsify_weight(lucid.ones(64, 64) * 3.0, 0.5) is None
+        assert _weights._sparsify_weight(lucid.zeros(64, 64), 0.5) is None
+        assert _weights._sparsify_weight(lucid.ones(64, 64) * 3.0, 0.5) is None
 
     @pytest.mark.parametrize("bits", [0, 5, 7, 9, 16])
     def test_a_width_the_operation_cannot_carry_is_refused(self, bits: int) -> None:
