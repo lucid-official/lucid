@@ -37,6 +37,24 @@ from lucid.compile import fused_step
 from tools._bench_timing import cold_ms, warm_ms
 
 COMPILE_DEVICE = "metal"
+AUTOCAST_DTYPE = lucid.float16
+
+# Parity budget between the fused step and the eager step at the same precision.
+# Eager autocast rounds the weights to the low dtype *before* the matmul while
+# the fused kernel accumulates first and rounds the output, so the two differ by
+# a rounding step or two of that dtype.  The loss squares the prediction, which
+# doubles the relative error of one rounding step.
+_ROUNDING_STEPS = 2
+_FP32_RTOL = 1e-3
+_FP32_ATOL = 1e-5
+
+
+def parity_tolerance(autocast: bool, scale: float) -> float:
+    """Largest ``|fused - eager|`` accepted for a value of magnitude ``scale``."""
+    rtol = _FP32_RTOL
+    if autocast:
+        rtol = max(rtol, _ROUNDING_STEPS * float(lucid.finfo(AUTOCAST_DTYPE).eps))
+    return _FP32_ATOL + rtol * scale
 
 
 # ── Workloads that work with fused_step + autocast ──────────────────
@@ -139,7 +157,7 @@ def _bench_fused_step(
     def call() -> object:
         nonlocal first_loss
         if autocast:
-            with amp.autocast(dtype=lucid.float16):
+            with amp.autocast(dtype=AUTOCAST_DTYPE):
                 loss = step(*inputs, target)
         else:
             loss = step(*inputs, target)
@@ -148,7 +166,7 @@ def _bench_fused_step(
         return loss
 
     cold = cold_ms(call)
-    with amp.autocast(dtype=lucid.float16) if autocast else nullcontext():
+    with amp.autocast(dtype=AUTOCAST_DTYPE) if autocast else nullcontext():
         expected_loss = _loss_fn(eager(*inputs), target)
     expected_loss.backward()
     eager_opt.step()
@@ -160,7 +178,11 @@ def _bench_fused_step(
         for name, actual, expected in pairs:
             delta = float((actual - expected).abs().max().item())
             scale = float(expected.abs().max().item())
-            if not math.isfinite(delta) or not math.isfinite(scale) or delta > 1e-5 + 1e-3 * scale:
+            if (
+                not math.isfinite(delta)
+                or not math.isfinite(scale)
+                or delta > parity_tolerance(autocast, scale)
+            ):
                 raise RuntimeError(
                     f"training parity diverged at {name}: delta={delta:g}, scale={scale:g}"
                 )

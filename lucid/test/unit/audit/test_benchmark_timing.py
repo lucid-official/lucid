@@ -88,12 +88,13 @@ inputs = lambda n: lucid.ones(n, 4)
 targets = lambda n: lucid.zeros(n, 2)
 bench._bench_fused_step(factory, inputs, targets, 2, autocast=True, n_iter=1)
 bench.fused_step = lambda model, loss_fn, opt: lambda x, y: loss_fn(model(x), y)
-try:
-    bench._bench_fused_step(factory, inputs, targets, 2, autocast=False, n_iter=1)
-except RuntimeError as exc:
-    assert 'training parity diverged' in str(exc)
-else:
-    raise AssertionError('an unchanged model earned a training timing')
+for autocast in (False, True):
+    try:
+        bench._bench_fused_step(factory, inputs, targets, 2, autocast=autocast, n_iter=1)
+    except RuntimeError as exc:
+        assert 'training parity diverged' in str(exc)
+    else:
+        raise AssertionError('an unchanged model earned a training timing')
 bench.WORKLOADS = [('broken', factory, inputs, targets)]
 sys.argv = ['bench', '--batch', '2', '--iter', '1', '--csv', sys.argv[1]]
 assert bench.main() == 1
@@ -105,3 +106,14 @@ assert bench.main() == 1
         timeout=60,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_autocast_parity_tolerance_follows_the_autocast_dtype() -> None:
+    from tools import bench_autocast as bench
+
+    eps = float(lucid.finfo(bench.AUTOCAST_DTYPE).eps)
+    # One fp16 rounding step in the prediction moves a squared loss by 2 * eps.
+    assert bench.parity_tolerance(True, 1.0) >= 2 * eps
+    assert bench.parity_tolerance(True, 1.0) > bench.parity_tolerance(False, 1.0)
+    # Without autocast the update must still match to the float32 budget.
+    assert bench.parity_tolerance(False, 1.0) == pytest.approx(1e-5 + 1e-3)
