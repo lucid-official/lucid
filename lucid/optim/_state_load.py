@@ -8,9 +8,12 @@ for its parameter — is decided here, so a malformed checkpoint is refused
 before anything is staged, let alone installed.
 """
 
-from collections.abc import Sequence
+import copy
+import numbers
+import operator
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Protocol, Self
+from typing import Protocol, Self, SupportsFloat, SupportsIndex, TypeGuard
 
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
@@ -50,6 +53,33 @@ def _follow(src: _C_engine.TensorImpl, like: _C_engine.TensorImpl) -> _C_engine.
     return out
 
 
+def _is_plain_number(value: object) -> TypeGuard[int | float]:
+    """Whether ``value`` is exactly a Python ``int`` or ``float``, not a numpy scalar."""
+    return type(value) in (int, float)
+
+
+def _as_number(value: object) -> int | float | None:
+    """``value`` as a Python number when it is a scalar, ``None`` when it is not.
+
+    A checkpoint's scalar can be a Python number or a numpy scalar (what 0-d
+    numpy arithmetic produces — ``np.float32``, ``np.int64``).  numpy registers
+    its scalars with :mod:`numbers`, so none of this needs numpy itself.  An
+    array is not a scalar, 0-d ones included: it keeps the dtype it was saved
+    with.
+    """
+    if isinstance(value, numbers.Integral):
+        return int(value)
+    if isinstance(value, numbers.Real):
+        return float(value)
+    if hasattr(value, "shape"):
+        return None
+    if isinstance(value, SupportsIndex):
+        return operator.index(value)
+    if isinstance(value, SupportsFloat):
+        return float(value)
+    return None
+
+
 def _loaded_state_like(
     name: str, value: object, like: _C_engine.TensorImpl
 ) -> _C_engine.TensorImpl:
@@ -60,13 +90,50 @@ def _loaded_state_like(
     written in float32 into a half-precision run.  A host array is built on
     the host and converted there, because a float64 array cannot be built on
     the GPU.  A scalar (``step``, ``eta``, ``mu``, ``mu_product``) stays as it
-    was saved.
+    was saved; it may come as a 0-d array, a Python number or a numpy scalar,
+    and the last two are made into 0-d host tensors here, because the engine
+    builds tensors from arrays only.
     """
     if isinstance(value, Tensor):
         src = value._impl
+    elif (number := _as_number(value)) is not None:
+        dtype = _C_engine.Dtype.I64 if isinstance(number, int) else _C_engine.Dtype.F64
+        src = _C_engine.full([], number, dtype, _C_engine.Device.CPU)
     else:
         src = _C_engine.TensorImpl(value, _C_engine.Device.CPU, False)
     return src if name in _SCALAR_STATE else _follow(src, like)
+
+
+def _host_filled(shape: Sequence[int], value: float, dtype: _C_engine.Dtype) -> object:
+    """A host array of ``shape`` and ``dtype`` filled with ``value``, owned by the caller."""
+    return copy.deepcopy(_C_engine.full(shape, value, dtype, _C_engine.Device.CPU).data_as_python())
+
+
+def initial_state(
+    groups: Sequence[tuple[Sequence[Parameter], Mapping[str, float]]],
+) -> dict[int, dict[str, object]]:
+    """The state an optimizer that builds it in its constructor gives its parameters.
+
+    The reference framework makes this for Adagrad when it is built, so
+    ``state_dict()`` has an entry before the first update.  ``groups`` holds
+    each group's parameters with the buffers to make for them — name → fill
+    value.  Every parameter gets ``step`` 0 and those buffers, shaped and typed
+    like the parameter.  The entries are host arrays like every checkpointed
+    one, so they follow the parameter's device when the engine is built, and
+    are keyed by flat parameter index.  A group added after construction is
+    not covered: its state starts at its first update, as in the reference.
+    """
+    out: dict[int, dict[str, object]] = {}
+    for params, fills in groups:
+        for p in params:
+            out[len(out)] = {
+                "step": _host_filled([], 0, _C_engine.Dtype.I64),
+                **{
+                    name: _host_filled(p._impl.shape, fill, p._impl.dtype)
+                    for name, fill in fills.items()
+                },
+            }
+    return out
 
 
 def _load_group_state(
@@ -84,7 +151,7 @@ def _load_group_state(
     step_count: int = 0
     for slot, p in enumerate(params):
         for name, value in state.get(first + slot, {}).items():
-            if name == "step" and isinstance(value, (int, float)):
+            if name == "step" and _is_plain_number(value):
                 # Folding per-parameter arrays to their maximum here gave
                 # every parameter the furthest one's count.
                 step_count = max(step_count, int(value))

@@ -13,8 +13,8 @@ from lucid._types import _OptimizerClosure
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid.nn.parameter import Parameter
-from lucid.optim._state_load import _follow
-from lucid.optim.optimizer import Optimizer, _from_host, _group_params, _host_copy
+from lucid.optim._state_load import _follow, initial_state
+from lucid.optim.optimizer import Optimizer, _from_host, _group_float, _group_params, _host_copy
 
 
 class RMSprop(Optimizer):
@@ -192,6 +192,12 @@ class Adagrad(Optimizer):
     runs.  ``initial_accumulator_value`` precedes ``eps`` in the constructor
     signature, matching the reference framework.
 
+    Like the reference framework, Adagrad builds its state when it is
+    constructed: ``state_dict()["state"]`` has ``step`` 0 and a ``sum`` filled
+    with ``initial_accumulator_value`` for every parameter given to the
+    constructor.  A group added later with :meth:`add_param_group` gets its
+    state at its first update.
+
     Examples
     --------
     The sparse-feature case it suits — an embedding whose rows are hit
@@ -237,6 +243,12 @@ class Adagrad(Optimizer):
             fused=fused,
         )
         super().__init__(params, defaults)
+        self.state = initial_state(
+            [
+                (_group_params(g), {"sum": _group_float(g, "initial_accumulator_value")})
+                for g in self.param_groups
+            ]
+        )
 
     @override
     def _append_engine_optim(self, group: dict[str, object]) -> None:

@@ -205,11 +205,13 @@ def test_a_parameter_the_checkpoint_has_no_entry_for_starts_afresh(
     for k in range(3):
         pair.step(k, only=(0,))
     partial = pair.save()
-    assert set(partial[0]["state"]) <= {0}
+    # What a parameter that never stepped holds is the reference's to say:
+    # nothing for most optimizers, a fresh entry for Adagrad.
+    assert set(partial[0]["state"]) == set(partial[1]["state"])
     for k in range(3, 5):
         pair.step(k)
     pair.load(partial)
-    assert set(pair.opt.state_dict()["state"]) <= {0}, "the second parameter kept its state"
+    pair.assert_state_agrees("the second parameter kept the state of the run loaded over")
     pair.rewind(pair.init)
     for k in range(5, 7):
         pair.step(k)
@@ -422,6 +424,16 @@ def _state_arrays(opt: Any) -> dict[int, dict[str, np.ndarray]]:
     }
 
 
+def _assert_state_is(opt: Any, state: dict[int, dict[str, np.ndarray]]) -> None:
+    """The optimizer's state is ``state``, entry for entry and value for value."""
+    after = _state_arrays(opt)
+    assert after.keys() == state.keys()
+    for idx, entry in state.items():
+        assert after[idx].keys() == entry.keys()
+        for key, want in entry.items():
+            np.testing.assert_array_equal(after[idx][key], want, err_msg=f"{idx}/{key}")
+
+
 def _break_hyperparam(sd: dict[str, Any]) -> type[Exception]:
     sd["param_groups"][1]["lr"] = -1.0
     return ValueError
@@ -481,11 +493,7 @@ def test_a_refused_checkpoint_leaves_the_optimizer_as_it_was(
         opt.load_state_dict(bad)
 
     assert _hyperparams(opt) == hyper
-    after = _state_arrays(opt)
-    assert after.keys() == state.keys()
-    for idx, entry in state.items():
-        for key, want in entry.items():
-            np.testing.assert_array_equal(after[idx][key], want, err_msg=f"{idx}/{key}")
+    _assert_state_is(opt, state)
     _feed(params, _arrays(300), device)
     opt.step()
     _feed(twin_params, _arrays(300), device)
@@ -507,11 +515,11 @@ def test_a_refused_checkpoint_leaves_an_optimizer_that_never_stepped_untouched(
     bad["param_groups"][0]["lr"] = 0.5
     error = break_it(bad)
     opt, _ = _stepped(case, "cpu", compiled, steps=0)
-    hyper = _hyperparams(opt)
+    hyper, state = _hyperparams(opt), _state_arrays(opt)
     with pytest.raises(error):
         opt.load_state_dict(bad)
     assert _hyperparams(opt) == hyper
-    assert opt.state_dict()["state"] == {}
+    _assert_state_is(opt, state)
 
 
 @pytest.mark.parametrize(
@@ -530,11 +538,11 @@ def test_a_number_that_is_not_one_is_refused_and_changes_nothing(
     bad["param_groups"][0]["lr"] = 0.5
     bad["state"][1][key] = object()
     opt, _ = _stepped(case, "cpu", compiled, steps=0)
-    hyper = _hyperparams(opt)
+    hyper, state = _hyperparams(opt), _state_arrays(opt)
     with pytest.raises(TypeError):
         opt.load_state_dict(bad)
     assert _hyperparams(opt) == hyper
-    assert opt.state_dict()["state"] == {}
+    _assert_state_is(opt, state)
 
 
 @pytest.mark.parametrize("device, compiled", _COMPILED_STEPPING)

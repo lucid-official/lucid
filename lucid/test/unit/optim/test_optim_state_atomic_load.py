@@ -229,12 +229,12 @@ class TestOptimizerDeclarativeAtomicState:
 
         fresh_params = _make_params()
         fresh_opt = factory(fresh_params)
-        assert fresh_opt.state_dict()["state"] == {}
+        before = copy.deepcopy(fresh_opt.state_dict())
 
         with pytest.raises(_C_engine.ShapeMismatch):
             fresh_opt.load_state_dict(bad_sd)
 
-        assert fresh_opt.state_dict()["state"] == {}
+        _assert_state_dict_equal(fresh_opt.state_dict(), before)
 
 
 @pytest.mark.parametrize(
