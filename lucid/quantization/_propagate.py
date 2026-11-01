@@ -23,6 +23,8 @@ module they walk (:meth:`QConfigResolver.stamp`), ``None`` included.  A
 weight-only ``from_float`` (``Embedding``, ``EmbeddingBag``) is never observed,
 so the attribute is the only channel through which it learns the recipe — and
 the only way ``convert`` can tell "excluded" from "never configured".
+``convert`` removes the attribute again once it has swapped
+(:meth:`QConfigResolver.strip`).
 """
 
 from collections.abc import Callable, Collection, Iterator, Mapping
@@ -122,6 +124,21 @@ class QConfigResolver:
         """Write the resolved recipe onto its module (``None`` marks it excluded); return it."""
         entry.module.qconfig = entry.qconfig
         return entry
+
+    @staticmethod
+    def strip(model: nn.Module) -> None:
+        """Remove ``.qconfig`` from every module of ``model`` — the counterpart of :meth:`stamp`.
+
+        ``convert`` calls this once swapping is done: the attribute is a
+        ``prepare``-time channel (``from_float`` and the excluded-vs-unconfigured
+        test read it) and means nothing on a converted model.  Without the strip a
+        converted model would keep ``None`` / stale recipes on every leftover
+        container and activation, and a later ``prepare`` would read them as the
+        user's own per-module choice.
+        """
+        for module in model.modules():
+            if hasattr(module, "qconfig"):
+                del module.qconfig
 
     def root(self, model: nn.Module) -> Resolved:
         """Resolve the root module, which inherits the mapping's global tier."""

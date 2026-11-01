@@ -349,7 +349,7 @@ def convert(model: nn.Module, inplace: bool = False) -> nn.Module:
     -------
     nn.Module
         The converted, ``eval``-mode model with int8 weights baked in and its
-        float submodules replaced by their quantized counterparts.
+        float submodules replaced by quantized ones and every ``.qconfig`` removed.
 
     Notes
     -----
@@ -407,7 +407,7 @@ def convert(model: nn.Module, inplace: bool = False) -> nn.Module:
         mapping[nni.LinearReLU] = _mlx_linear_builder(relu=True)
         mapping[nnqat.Linear] = _mlx_linear_builder(relu=False)
     # DeQuantStub + Embedding(Bag) convert without calibration, unless prepare set qconfig None.
-    _convert_recursive(model, mapping, always=(nnq.DeQuantStub, nn.Embedding, nn.EmbeddingBag))
+    _convert_and_strip(model, mapping, always=(nnq.DeQuantStub, nn.Embedding, nn.EmbeddingBag))
     model.eval()
     return model
 
@@ -562,7 +562,16 @@ class _DynamicSwapper:
         self._unmapped: set[type] = set()
 
     def apply(self, model: nn.Module) -> nn.Module:
-        """Swap every targeted module of ``model``; a targeted root is returned swapped."""
+        """Swap every targeted module of ``model`` and drop its ``.qconfig`` markers.
+
+        A targeted root is returned swapped.  The reference converts internally, which
+        removes the attribute too.
+        """
+        swapped = self._swap(model)
+        QConfigResolver.strip(swapped)
+        return swapped
+
+    def _swap(self, model: nn.Module) -> nn.Module:
         root = self.resolver.root(model)
         # A bare top-level target has no parent to swap it into.
         if root.qconfig is not None and type(model) in self._mapping:
@@ -600,14 +609,14 @@ class _DynamicSwapper:
                 f"quantize_dynamic(): {', '.join(sorted(t.__name__ for t in self._unmapped))} "
                 "has no dynamically quantized form and stays float; dynamic "
                 f"quantization covers {', '.join(mapped)}.",
-                # warn <- _warn_if_left_float <- apply <- quantize_dynamic
-                stacklevel=4,
+                # warn <- _warn_if_left_float <- _swap <- apply <- quantize_dynamic
+                stacklevel=5,
             )
         elif self._swapped == 0:
             warnings.warn(
                 "quantize_dynamic(): no module of a targeted type "
                 f"({', '.join(self._targets) or 'none'}) found — the model is returned unchanged.",
-                stacklevel=4,
+                stacklevel=5,
             )
 
 
@@ -734,6 +743,17 @@ def _prepare_qat_recursive(
             child.activation_post_process = qcfg.activation()
         else:
             _prepare_qat_recursive(resolver, child, entry, qat_map)
+
+
+def _convert_and_strip(
+    model: nn.Module, mapping: dict[type, _FromFloat], always: tuple[type, ...]
+) -> None:
+    """Swap every convertible child, then drop the ``prepare``-time ``.qconfig`` markers.
+
+    The strip must follow the swap: ``from_float`` and the excluded-Embedding test read them.
+    """
+    _convert_recursive(model, mapping, always)
+    QConfigResolver.strip(model)
 
 
 def _convert_recursive(
