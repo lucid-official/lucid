@@ -880,10 +880,8 @@ class UnigramTokenizerFast(_UnigramCommonMixin, Tokenizer):
     algorithm with custom Python-only normalizers without touching
     C++.
 
-    Parameters
-    ----------
-    Same as :class:`UnigramTokenizer`.  The C++ backend is
-    constructed transparently in ``__init__`` and held as `_cpp`.
+    It takes the parameters of :class:`UnigramTokenizer`.  The C++ backend is constructed
+    transparently in ``__init__`` and held as ``_cpp``.
 
     See Also
     --------

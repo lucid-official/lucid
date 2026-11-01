@@ -441,10 +441,8 @@ class WordPieceTokenizerFast(_WordPieceCommonMixin, Tokenizer):
     (so user-defined Python normalizers compose with the C++
     backend) and the BERT-style decode join.
 
-    Parameters
-    ----------
-    Same as :class:`WordPieceTokenizer`.  The C++ backend is
-    constructed transparently in ``__init__`` and held as `_cpp`.
+    It takes the parameters of :class:`WordPieceTokenizer`.  The C++ backend is constructed
+    transparently in ``__init__`` and held as ``_cpp``.
 
     See Also
     --------

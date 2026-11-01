@@ -267,9 +267,7 @@ class ByteLevelBPETokenizerFast(_ByteLevelDecodeMixin, BPETokenizerFast):
     Encode outputs are bit-identical to the pure-Python flavour for
     the same vocab + same merges.
 
-    Parameters
-    ----------
-    Same as :class:`ByteLevelBPETokenizer`.
+    It takes the parameters of :class:`ByteLevelBPETokenizer`.
 
     See Also
     --------

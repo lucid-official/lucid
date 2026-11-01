@@ -618,10 +618,8 @@ class BPETokenizerFast(_BPECommonMixin, Tokenizer):
     :class:`BPETokenizer` for debugging / extending the algorithm
     with custom Python-only normalizers without touching C++.
 
-    Parameters
-    ----------
-    Same as :class:`BPETokenizer`.  The C++ backend is constructed
-    transparently in ``__init__`` and held as `_cpp`.
+    It takes the parameters of :class:`BPETokenizer`.  The C++ backend is constructed
+    transparently in ``__init__`` and held as ``_cpp``.
 
     Examples
     --------
