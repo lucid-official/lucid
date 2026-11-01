@@ -17,6 +17,12 @@ semantics:
 
 A child that sets its own ``.qconfig`` therefore re-enters quantization
 underneath an excluded parent.
+
+``prepare`` and ``prepare_qat`` also *write* the resolved answer back onto every
+module they walk (:meth:`QConfigResolver.stamp`), ``None`` included.  A
+weight-only ``from_float`` (``Embedding``, ``EmbeddingBag``) is never observed,
+so the attribute is the only channel through which it learns the recipe — and
+the only way ``convert`` can tell "excluded" from "never configured".
 """
 
 from collections.abc import Callable, Collection, Iterator, Mapping
@@ -110,6 +116,12 @@ class QConfigResolver:
         if self._mapping._has_rule(type(module), path):
             return self._mapping.get_qconfig(type(module), path)
         return inherited
+
+    @staticmethod
+    def stamp(entry: Resolved) -> Resolved:
+        """Write the resolved recipe onto its module (``None`` marks it excluded); return it."""
+        entry.module.qconfig = entry.qconfig
+        return entry
 
     def root(self, model: nn.Module) -> Resolved:
         """Resolve the root module, which inherits the mapping's global tier."""

@@ -221,6 +221,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - share weights by identity in every format, drop zero bias
 
+- stamp resolved qconfig on every module in prepare
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

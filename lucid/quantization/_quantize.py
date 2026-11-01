@@ -231,8 +231,9 @@ def prepare(
         The quantization recipe — a single :class:`QConfig` is promoted to a
         global mapping, ``None`` (default) falls back to the default mapping
         (per-channel int8 weights, per-tensor affine activations). A module's
-        own ``.qconfig`` attribute takes precedence (``None`` keeps it and its
-        subtree float); see :class:`QConfigMapping`.
+        own ``.qconfig`` takes precedence (``None`` keeps its subtree float);
+        the resolved recipe is written back onto every module as ``.qconfig``
+        (weight-only ``Embedding`` reads it at :func:`convert`).
     inplace : bool, default False
         If ``True`` mutate and return ``model`` itself; if ``False`` (default)
         observe a :func:`copy.deepcopy` and leave the original untouched.
@@ -287,10 +288,9 @@ def prepare(
     model.eval()
     observed = _observed_types()
     n_matched = 0
-    for _name, mod, _path, qcfg in resolver.walk(model):
+    for _name, mod, _path, qcfg in map(resolver.stamp, resolver.walk(model)):
         if qcfg is None or not isinstance(mod, observed):
             continue
-        mod.qconfig = qcfg
         obs = qcfg.activation()
         mod.activation_post_process = obs
         mod.register_forward_hook(_make_observer_hook(obs))
@@ -406,7 +406,7 @@ def convert(model: nn.Module, inplace: bool = False) -> nn.Module:
         mapping[nn.Linear] = _mlx_linear_builder(relu=False)
         mapping[nni.LinearReLU] = _mlx_linear_builder(relu=True)
         mapping[nnqat.Linear] = _mlx_linear_builder(relu=False)
-    # DeQuantStub + Embedding(Bag) convert without calibration (no activation obs).
+    # DeQuantStub + Embedding(Bag) convert without calibration, unless prepare set qconfig None.
     _convert_recursive(model, mapping, always=(nnq.DeQuantStub, nn.Embedding, nn.EmbeddingBag))
     model.eval()
     return model
@@ -708,7 +708,8 @@ def prepare_qat(
     resolver = QConfigResolver.from_argument(qconfig, get_default_qat_qconfig_mapping)
     model = model if inplace else copy.deepcopy(model)
     model.train()
-    _prepare_qat_recursive(resolver, model, resolver.root(model), _qat_mapping())
+    root = resolver.stamp(resolver.root(model))
+    _prepare_qat_recursive(resolver, model, root, _qat_mapping())
     return model
 
 
@@ -723,14 +724,13 @@ def _prepare_qat_recursive(
 
     for entry in resolver.children(parent, parent_entry.path, parent_entry.qconfig):
         child, qcfg = entry.module, entry.qconfig
+        resolver.stamp(entry)
         build = qat_map.get(type(child))
         if qcfg is not None and build is not None:
-            child.qconfig = qcfg
             # ``setattr`` keeps the child's slot in place (LCD-551); no
             # direct ``_modules`` write needed (LCD-556).
             setattr(parent, entry.name, build(child))
         elif qcfg is not None and isinstance(child, nnq.QuantStub):
-            child.qconfig = qcfg
             child.activation_post_process = qcfg.activation()
         else:
             _prepare_qat_recursive(resolver, child, entry, qat_map)
@@ -742,8 +742,12 @@ def _convert_recursive(
     """Depth-first swap of every convertible child in place."""
     for name, child in list(module.named_children()):
         build = mapping.get(type(child))
+        # ``prepare`` stamps ``qconfig = None`` on a module it excluded; a module
+        # that never went through ``prepare`` has no attribute at all.
+        excluded = hasattr(child, "qconfig") and child.qconfig is None
         convertible = build is not None and (
-            isinstance(child, always) or hasattr(child, "activation_post_process")
+            (isinstance(child, always) and not excluded)
+            or hasattr(child, "activation_post_process")
         )
         if convertible and build is not None:
             # ``setattr`` keeps the child's slot in place (LCD-551), so a
