@@ -231,6 +231,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - load post-hooks run right after their own subtree
 
+- no anchor nested in a clickable card (peft e2e)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

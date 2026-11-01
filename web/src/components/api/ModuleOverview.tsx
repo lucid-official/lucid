@@ -501,12 +501,12 @@ function FamilyCard({ card }: { card: FamilyCardData }) {
         )}
         {theoryIntro && (
           <div className="text-sm text-lucid-text-mid">
-            <MathText text={theoryIntro} block />
+            <MathText text={theoryIntro} block inLink />
           </div>
         )}
         {hasFallback && (
           <p className="text-sm text-lucid-text-mid leading-relaxed">
-            <MathText text={card.fallbackSummary ?? ""} />
+            <MathText text={card.fallbackSummary ?? ""} inLink />
           </p>
         )}
       </div>

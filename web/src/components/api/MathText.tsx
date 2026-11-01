@@ -86,14 +86,34 @@ const PLUGINS = {
   rehype: [rehypeKatex] as Parameters<typeof Markdown>[0]["rehypePlugins"],
 };
 
+/** Same renderers, but a markdown link degrades to a link-styled ``<span>``.
+ *  For text that sits inside a card which is itself a ``<Link>`` — an anchor
+ *  may not contain another anchor (HTML forbids it; React reports a hydration
+ *  error), and the whole card already navigates. */
+const linklessComponents: Components = {
+  ...components,
+  a: ({ children }) => (
+    <span className="text-lucid-primary-light">{children}</span>
+  ),
+};
+
 interface MathTextProps {
   text: string;
   className?: string;
   block?: boolean;
+  /** Set when rendered inside an ``<a>`` / ``<Link>``: markdown links in
+   *  ``text`` render as plain spans instead of nested anchors. */
+  inLink?: boolean;
 }
 
-export function MathText({ text, className, block = false }: MathTextProps) {
+export function MathText({
+  text,
+  className,
+  block = false,
+  inLink = false,
+}: MathTextProps) {
   if (!text) return null;
+  const renderers = inLink ? linklessComponents : components;
 
   if (!block) {
     return (
@@ -102,7 +122,7 @@ export function MathText({ text, className, block = false }: MathTextProps) {
           remarkPlugins={PLUGINS.remark}
           rehypePlugins={PLUGINS.rehype}
           components={{
-            ...components,
+            ...renderers,
             p: ({ children }) => <span>{children}</span>,
           }}
         >
@@ -123,7 +143,7 @@ export function MathText({ text, className, block = false }: MathTextProps) {
       <Markdown
         remarkPlugins={PLUGINS.remark}
         rehypePlugins={PLUGINS.rehype}
-        components={components}
+        components={renderers}
       >
         {text}
       </Markdown>

@@ -219,6 +219,18 @@ const PAGE_CONTRACTS = [
       return bad;
     },
   },
+  {
+    // HTML forbids <a> inside <a>; React reports it as a hydration error.  The
+    // usual cause is a clickable card (<Link>) whose prose carries a markdown
+    // link — render that prose with ``<MathText inLink>``.
+    id: "link.no-nested-anchor", component: "InternalLink", kind: "page",
+    check(ctx) {
+      return ctx.dom.querySelectorAll("a a").map((a) => ({
+        scope: ctx.scope,
+        detail: `<a href="${a.getAttribute("href")}"> nested inside another <a>`,
+      }));
+    },
+  },
   // ── Prose / rendering (every page) ─────────────────────────────────────────
   {
     id: "prose.no-visible-rest", component: "ProseField", kind: "page",

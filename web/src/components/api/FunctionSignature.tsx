@@ -260,7 +260,7 @@ export function FunctionCard({ fn, moduleSlug }: FunctionCardProps) {
         </div>
         {fn.summary && (
           <p className="compact-card-summary text-xs text-lucid-text-low leading-relaxed line-clamp-2">
-            <MathText text={fn.summary} className="text-xs" />
+            <MathText text={fn.summary} className="text-xs" inLink />
           </p>
         )}
       </div>
