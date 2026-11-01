@@ -8,6 +8,7 @@ from types import TracebackType
 from typing import ClassVar, Final, Self, override
 
 import lucid.nn as nn
+from lucid.nn._incompatible_keys import _IncompatibleKeys
 from lucid._tensor.tensor import Tensor
 from lucid.peft._adapter_file import _AdapterFile
 from lucid.peft._config import (
@@ -757,7 +758,7 @@ class PeftModel(_ForwardsAttributes):
         *,
         subfolder: str | None = None,
         convert: ConvertMode = "auto",
-    ) -> object:
+    ) -> _IncompatibleKeys:
         r"""Load a saved adapter into the model, beside the ones it holds.
 
         An adapter the model does not hold is added from the directory's
@@ -788,7 +789,7 @@ class PeftModel(_ForwardsAttributes):
 
         Returns
         -------
-        object
+        _IncompatibleKeys
             What ``model.load_state_dict(..., strict=False)`` returned, as
             ``set_peft_model_state_dict`` hands it back.
 

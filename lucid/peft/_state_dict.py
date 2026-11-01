@@ -12,6 +12,7 @@ import warnings
 from collections.abc import Mapping
 
 import lucid.nn as nn
+from lucid.nn._incompatible_keys import _IncompatibleKeys
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig
 from lucid.peft._slots import _adapter_slots
@@ -126,7 +127,7 @@ def get_peft_model_state_dict(
 
 def set_peft_model_state_dict(
     model: nn.Module, peft_model_state_dict: Mapping[str, Tensor], adapter_name: str = "default"
-) -> object:
+) -> _IncompatibleKeys:
     r"""Load an adapter's tensors, keyed as an adapter file keys them, into ``model``.
 
     Each key is mapped back to where the tensor lives in memory (the
@@ -148,11 +149,11 @@ def set_peft_model_state_dict(
 
     Returns
     -------
-    object
-        What ``model.load_state_dict(..., strict=False)`` returns, typed as
-        that method declares it: the ``(missing_keys, unexpected_keys)``
-        named tuple, whose ``missing_keys`` lists the base parameters (no
-        adapter file holds them) and whose ``unexpected_keys`` is empty.
+    _IncompatibleKeys
+        What ``model.load_state_dict(..., strict=False)`` returns: the
+        ``(missing_keys, unexpected_keys)`` named tuple, whose
+        ``missing_keys`` lists the base parameters (no adapter file holds
+        them) and whose ``unexpected_keys`` is empty.
 
     Raises
     ------

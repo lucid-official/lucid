@@ -17,38 +17,15 @@ The protocol mirrors the reference framework:
   for migration hooks to inspect.
 """
 
-from collections import OrderedDict, namedtuple
-from typing import final
+from collections import OrderedDict
 
 from lucid._tensor.tensor import Tensor
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _impl_with_grad, _wrap
 from lucid.nn.hooks import _GLOBAL_LOAD_STATE_DICT_POST_HOOKS, _GLOBAL_LOAD_STATE_DICT_PRE_HOOKS
+from lucid.nn._incompatible_keys import _IncompatibleKeys
 from lucid.nn.module import Module, _tensors_replaced
 from lucid._types import StateDict
-
-
-@final
-class _IncompatibleKeys(namedtuple("_IncompatibleKeys", ["missing_keys", "unexpected_keys"])):
-    """Result tuple returned by ``Module.load_state_dict``.
-
-    Lightweight named tuple summarising the diff between the
-    checkpoint's ``state_dict`` keys and the module's actual parameter
-    / buffer names.  Each field is a list of strings; the loader is
-    advisory — keys reported here are merely *not loaded*, not raised.
-
-    Attributes
-    ----------
-    missing_keys : list[str]
-        Module parameter / buffer names not present in the checkpoint.
-        These end up using the module's existing (init-time) values.
-    unexpected_keys : list[str]
-        Checkpoint entries with no corresponding parameter / buffer in
-        the module — typically a sign of a stale checkpoint or a
-        rename.
-    """
-
-    __slots__ = ()
 
 
 # ── state_dict (load side) ────────────────────────────────────────────────────

@@ -33,6 +33,7 @@ from lucid.nn.hooks import (
     _GLOBAL_FORWARD_PRE_HOOKS,
     RemovableHandle,
 )
+from lucid.nn._incompatible_keys import _IncompatibleKeys
 from lucid.nn._state_dict_hooks import _StateDictHookMixin
 from lucid.nn._module_backward_state import _ModuleBackwardState
 from lucid._tree_version import _TrackedDict, _tree_changed
@@ -1305,7 +1306,7 @@ class Module(_StateDictHookMixin):
 
     def load_state_dict(
         self, state_dict: dict[str, Tensor], strict: bool = True, assign: bool = False
-    ) -> object:
+    ) -> _IncompatibleKeys:
         """Load parameters from a state_dict.
 
         Calls each module's ``_load_from_state_dict`` recursively.
