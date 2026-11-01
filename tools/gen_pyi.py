@@ -550,7 +550,7 @@ _TENSOR_HEADER = """\
 # --------------------------------------------------------------------- #
 # fmt: off
 
-from typing import Callable, Iterator, Self, Sequence, overload, override
+from typing import Callable, ClassVar, Iterator, Self, Sequence, overload, override
 import builtins
 
 import numpy as np
@@ -572,11 +572,13 @@ class Tensor:
 
     # ── directly defined ────────────────────────────────────────────────
     _impl: _C_engine.TensorImpl  # raw impl — mutable by _apply() in nn.Module
+    _is_parameter: ClassVar[bool]
 
     @classmethod
     def __new_from_impl__(cls, impl: _C_engine.TensorImpl) -> Self: ...
     @classmethod
     def _from_pickle_impl(cls, impl: _C_engine.TensorImpl) -> Self: ...
+    def __deepcopy__(self, memo: dict[int, object]) -> Self: ...
 
     def __init__(
         self,

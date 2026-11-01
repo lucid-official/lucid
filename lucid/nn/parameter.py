@@ -2,8 +2,7 @@
 nn.Parameter: a Tensor that is automatically registered by Module.
 """
 
-import copy
-from typing import cast, override
+from typing import ClassVar, override
 
 from lucid._tensor.tensor import Tensor
 from lucid._C import engine as _C_engine
@@ -71,7 +70,7 @@ class Parameter(Tensor):
     [('w', Parameter ...), ('b', Parameter ...)]
     """
 
-    _is_parameter: bool = True
+    _is_parameter: ClassVar[bool] = True
 
     def __new__(
         cls, data: Tensor | list[object] | None = None, requires_grad: bool = True
@@ -111,38 +110,6 @@ class Parameter(Tensor):
     ) -> None:
         """Initialise the instance.  See the class docstring for parameter semantics."""
         pass
-
-    def __deepcopy__(self, memo: dict[int, object]) -> Parameter:
-        """Deep-copy into an independent buffer, keeping the subclass.
-
-        ``copy.deepcopy`` on a bare ``Tensor`` subclass falls back to the
-        Tensor reconstruction path, which drops the ``Parameter`` marker and
-        silently demotes the result to a plain ``Tensor``.  For a ``Module``
-        that is fatal: ``deepcopy(model)`` turns every entry of
-        ``_parameters`` into a non-Parameter, so the next attribute rebind
-        evicts it from the registry and the copy trains as a no-op.
-
-        The data is cloned *before* it is wrapped: ``Parameter(tensor)`` binds
-        the tensor's own buffer, so wrapping ``self`` would hand back a
-        parameter sharing storage with the original, and a step on the copy
-        would move the source (LCD-686).  The copy keeps the concrete class
-        (so an :class:`UninitializedParameter` stays pending), its
-        ``requires_grad``, and its other instance attributes, each deep-copied
-        through ``memo``.  Like the reference, the accumulated ``.grad`` is
-        not carried over.  ``memo`` guards shared references and self-cycles
-        exactly as the deepcopy protocol expects: a weight tied across two
-        modules is copied once and stays tied.
-        """
-        existing = memo.get(id(self))
-        if existing is not None:
-            return cast(Parameter, existing)
-        result = object.__new__(type(self))
-        result._impl = _impl_with_grad(self.data.clone()._impl, self.requires_grad)
-        memo[id(self)] = result
-        for name, value in self.__dict__.items():
-            if name != "_impl":
-                result.__dict__[name] = copy.deepcopy(value, memo)
-        return result
 
     @override
     def __repr__(self) -> str:

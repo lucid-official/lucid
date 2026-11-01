@@ -241,6 +241,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Adagrad state at construction; numpy scalars load
 
+- one deepcopy owner keeps grad, refuses non-leaf (LCD-705)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

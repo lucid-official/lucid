@@ -237,6 +237,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid._ops.composite.reductions": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid._ops.composite.shape": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid._ops.composite.statistics": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
+    "lucid._tensor._copy": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid._tensor._dunders": (
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
         ("TensorOrScalar", "lucid._types", "TensorOrScalar"),

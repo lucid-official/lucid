@@ -14,6 +14,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from typing import ClassVar, Self, override
 
+from lucid._tensor._copy import _mark_recomputed
 from lucid._tensor.tensor import Tensor
 from lucid.nn.module import Module
 
@@ -54,8 +55,11 @@ class _ReparamHook(ABC):
 
         A plain attribute write: the derived tensor is recomputed on every forward
         and must not move the module's tree version each time, which would
-        invalidate every compiled call that reads the tree.
+        invalidate every compiled call that reads the tree.  The tensor is marked
+        as one this hook recomputes, so ``copy.deepcopy`` of the module (which
+        refuses any other non-leaf tensor) copies it by value.
         """
+        _mark_recomputed(value)
         object.__setattr__(module, self.target, value)
 
     def _vacate(self, module: Module) -> None:

@@ -986,7 +986,6 @@
     "lucid/nn/modules/container.py": 11,
     "lucid/nn/modules/conv.py": 1,
     "lucid/nn/modules/transformer.py": 2,
-    "lucid/nn/parameter.py": 1,
     "lucid/nn/qat/conv.py": 16,
     "lucid/nn/qat/linear.py": 6,
     "lucid/nn/qat/sparse.py": 3,

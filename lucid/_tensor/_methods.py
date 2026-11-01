@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, cast
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _REAL_FLOATS, _binary_operands, _cannot_cast_inplace, _unwrap, _wrap
+from lucid._tensor._copy import _tensor_deepcopy
 from lucid._tensor._indexing import _adopt_inplace
 from lucid._ops._adapters import _clip_adapter, _clip_dtype, _clip_scalar_bounds
 from lucid._ops._registry import _REGISTRY, OpEntry, _bind_leading
@@ -1212,6 +1213,7 @@ def __ifloordiv__(self: Tensor, other: TensorOrScalar) -> Tensor:
 
 
 _EXTRA_METHODS = (
+    ("__deepcopy__", _tensor_deepcopy),
     ("masked_fill_", _masked_fill_),
     ("scatter_", _scatter_),
     ("scatter_add_", _scatter_add_),
