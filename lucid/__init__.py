@@ -222,6 +222,7 @@ __all__ = [
     "isin", "isneginf", "isposinf", "isreal",
     # ── grad control ──────────────────────────────────────────────────────
     "no_grad", "enable_grad", "is_grad_enabled", "set_grad_enabled", "inference_mode",
+    "is_inference_mode_enabled",
     # ── type predicates ───────────────────────────────────────────────────
     "is_tensor", "is_floating_point", "is_complex", "is_signed",
     # ── serialization ─────────────────────────────────────────────────────
@@ -318,6 +319,7 @@ _OPS_NAMES: frozenset[str] = frozenset([
 
 _GRAD_NAMES: frozenset[str] = frozenset([
     "no_grad", "enable_grad", "is_grad_enabled", "set_grad_enabled", "inference_mode",
+    "is_inference_mode_enabled",
 ])
 
 _PREDICATE_NAMES: frozenset[str] = frozenset([
@@ -410,6 +412,7 @@ def _load_grad() -> dict[str, object]:
         is_grad_enabled,
         set_grad_enabled,
         inference_mode,
+        is_inference_mode_enabled,
     )
 
     return dict(
@@ -418,6 +421,7 @@ def _load_grad() -> dict[str, object]:
         is_grad_enabled=is_grad_enabled,
         set_grad_enabled=set_grad_enabled,
         inference_mode=inference_mode,
+        is_inference_mode_enabled=is_inference_mode_enabled,
     )
 
 

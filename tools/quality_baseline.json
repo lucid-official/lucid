@@ -1105,7 +1105,7 @@
    "type-ignore[return-value]": {
     "lucid/_tensor/_methods.py": 2,
     "lucid/amp/autocast.py": 1,
-    "lucid/autograd/_grad_mode.py": 2,
+    "lucid/autograd/_grad_mode.py": 1,
     "lucid/linalg/__init__.py": 2,
     "lucid/nn/init.py": 1,
     "lucid/nn/module.py": 1,

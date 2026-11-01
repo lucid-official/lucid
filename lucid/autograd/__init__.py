@@ -25,6 +25,7 @@ from lucid.autograd._grad_mode import (
     set_grad_enabled,
     is_grad_enabled,
     inference_mode,
+    is_inference_mode_enabled,
 )
 from lucid.autograd._backward import backward, grad
 from lucid.autograd.function import Function, FunctionCtx
@@ -42,6 +43,7 @@ __all__ = [
     "set_grad_enabled",
     "is_grad_enabled",
     "inference_mode",
+    "is_inference_mode_enabled",
     "backward",
     "grad",
     "Function",

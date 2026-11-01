@@ -3,10 +3,25 @@ Gradient mode context managers and decorators.
 """
 
 import functools
-from contextlib import contextmanager
-from typing import Callable, Iterator
+import threading
+from contextlib import AbstractContextManager
+from typing import Callable, overload, override
 
 from lucid._C import engine as _C_engine
+
+
+def _scoped[F: Callable[..., object]](
+    fn: F, scope: Callable[[], AbstractContextManager[object]]
+) -> F:
+    """Wrap ``fn`` so each call runs inside a fresh ``scope()`` context."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: object, **kwargs: object) -> object:
+        """Decorator-generated wrapper that applies the surrounding behaviour to the wrapped callable."""
+        with scope():
+            return fn(*args, **kwargs)
+
+    return wrapper  # type: ignore[return-value]  # wraps() result is not typed as F
 
 
 class no_grad:
@@ -90,13 +105,7 @@ class no_grad:
     def __call__[F: Callable[..., object]](self, fn: F) -> F:
         """Forward to the underlying callable (see class docstring)."""
 
-        @functools.wraps(fn)
-        def wrapper(*args: object, **kwargs: object) -> object:
-            """Decorator-generated wrapper that applies the surrounding behaviour to the wrapped callable."""
-            with no_grad():
-                return fn(*args, **kwargs)
-
-        return wrapper  # type: ignore[return-value]
+        return _scoped(fn, no_grad)
 
 
 class enable_grad:
@@ -164,13 +173,7 @@ class enable_grad:
     def __call__[F: Callable[..., object]](self, fn: F) -> F:
         """Forward to the underlying callable (see class docstring)."""
 
-        @functools.wraps(fn)
-        def wrapper(*args: object, **kwargs: object) -> object:
-            """Decorator-generated wrapper that applies the surrounding behaviour to the wrapped callable."""
-            with enable_grad():
-                return fn(*args, **kwargs)
-
-        return wrapper  # type: ignore[return-value]
+        return _scoped(fn, enable_grad)
 
 
 def set_grad_enabled(mode: bool) -> None:
@@ -250,53 +253,131 @@ def is_grad_enabled() -> bool:
     return _C_engine.grad_enabled()
 
 
-@contextmanager
-def inference_mode() -> Iterator[None]:
-    r"""Context manager for inference-time autograd suppression.
+class _InferenceState(threading.local):
+    """Per-thread inference-mode flag (grad mode itself lives in the engine)."""
 
-    Like :class:`no_grad` but reserved for fully read-only
-    inference paths: the user guarantees that no in-place
-    mutation of autograd-tracked tensors will occur inside the
-    scope. In the current Lucid implementation
-    ``inference_mode`` is an alias for ``no_grad``; the API
-    exists so that future versions can add stricter optimisations
-    (e.g. skipping version-counter tracking on in-place ops)
-    without changing user code.
+    enabled: bool = False
 
-    Parameters
-    ----------
-    None
 
-    Yields
-    ------
-    None
-        ``inference_mode`` is intended for ``with`` usage; the
-        yielded value is unused.
+_INFERENCE_STATE = _InferenceState()
 
-    Notes
-    -----
-    Mathematically equivalent to wrapping the inference forward
-    pass in
 
-    .. math::
+def is_inference_mode_enabled() -> bool:
+    r"""Return whether inference mode is active on the calling thread.
 
-        y = f(x), \qquad \text{grad mode} = \text{off},
+    Reports the flag that :class:`inference_mode` toggles.  It is
+    independent of :func:`is_grad_enabled`: ``inference_mode(False)``
+    clears this flag *and* turns gradient tracking back on, while
+    :func:`set_grad_enabled` never touches it.
 
-    so no part of :math:`\partial \mathcal{L} / \partial \theta`
-    can be reconstructed afterwards.
+    Returns
+    -------
+    bool
+        ``True`` inside an ``inference_mode(True)`` scope, ``False``
+        otherwise.
 
     Examples
     --------
     >>> import lucid
-    >>> from lucid.autograd import inference_mode
+    >>> lucid.is_inference_mode_enabled()
+    False
+    >>> with lucid.inference_mode():
+    ...     lucid.is_inference_mode_enabled()
+    True
+    """
+    return _INFERENCE_STATE.enabled
+
+
+class _InferenceModeMeta(type):
+    """Lets a bare ``@inference_mode`` wrap the function instead of building a context."""
+
+    @overload
+    def __call__(cls, mode: bool = True) -> inference_mode: ...
+    @overload
+    def __call__[F: Callable[..., object]](cls, mode: F) -> F: ...
+    @override
+    def __call__(cls, mode: object = True) -> object:
+        """Build the context, or wrap ``mode`` when it is a bare-decorator callable."""
+        if isinstance(mode, bool):
+            return super().__call__(mode)
+        if callable(mode):
+            return super().__call__(True)(mode)
+        raise TypeError(f"inference_mode expects a bool or a callable, got {type(mode).__name__}")
+
+
+class inference_mode(metaclass=_InferenceModeMeta):
+    r"""Context manager / decorator for inference-time autograd suppression.
+
+    ``inference_mode(True)`` (the default) disables gradient tracking
+    and marks the thread as being in inference mode; ``inference_mode(False)``
+    clears the mark *and* re-enables gradient tracking, so it can carve a
+    differentiable region out of an enclosing inference or ``no_grad``
+    scope.  The previous gradient mode and inference flag are restored
+    on exit, so scopes nest freely.
+
+    Parameters
+    ----------
+    mode : bool, optional
+        ``True`` to enter inference mode, ``False`` to leave it (and
+        re-enable gradients) for the scope.  Default ``True``.  When a
+        callable is passed instead (bare ``@inference_mode``) it is
+        wrapped and returned.
+
+    Notes
+    -----
+    On exit the state captured at ``__enter__`` is restored:
+
+    .. math::
+
+        (\text{grad}, \text{inference})
+        \leftarrow (\neg m, m) \quad\text{on entry},
+        \qquad
+        (\text{grad}, \text{inference})_{\text{prev}}
+        \quad\text{on exit},
+
+    where :math:`m` is ``mode``.  Tensors created inside are not marked
+    as inference tensors: saving them for backward, or mutating them in
+    place outside the scope, is not rejected.
+
+    Examples
+    --------
+    >>> import lucid
     >>> x = lucid.tensor([1.0, 2.0], requires_grad=True)
-    >>> with inference_mode():
+    >>> with lucid.inference_mode():
     ...     y = x * 3
     >>> y.requires_grad
     False
+    >>> @lucid.inference_mode()
+    ... def predict(x):
+    ...     return x * 3
+    >>> predict(x).requires_grad
+    False
     """
-    with no_grad():
-        yield
+
+    mode: bool
+    _prev: list[tuple[bool, bool]]
+
+    def __init__(self, mode: bool = True) -> None:
+        """Record the requested mode."""
+        self.mode = mode
+        self._prev = []
+
+    def __enter__(self) -> None:
+        """Enter the scope: grad tracking follows ``not mode``, the inference flag follows ``mode``."""
+        self._prev.append((_C_engine.grad_enabled(), _INFERENCE_STATE.enabled))
+        _C_engine.set_grad_enabled(not self.mode)
+        _INFERENCE_STATE.enabled = self.mode
+
+    def __exit__(self, *args: object) -> None:
+        """Restore the grad mode and inference flag captured on entry."""
+        grad, inference = self._prev.pop()
+        _C_engine.set_grad_enabled(grad)
+        _INFERENCE_STATE.enabled = inference
+
+    def __call__[F: Callable[..., object]](self, fn: F) -> F:
+        """Wrap ``fn`` so every call runs inside a fresh scope of this mode."""
+        mode = self.mode
+        return _scoped(fn, lambda: inference_mode(mode))
 
 
 # Mutable flag consulted by detect_anomaly; kept here to avoid circular imports.
