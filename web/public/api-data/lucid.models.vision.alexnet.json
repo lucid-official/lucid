@@ -3,7 +3,7 @@
   "name": "alexnet",
   "path": "lucid.models.vision.alexnet",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/alexnet/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/alexnet/__init__.py#L1",
   "members": [
     {
       "name": "AlexNetConfig",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "AlexNetConfig(num_classes: int = 1000, in_channels: int = 3, dropout: float = 0.5)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/alexnet/_config.py#L10",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/alexnet/_config.py#L10",
       "subcategory": "config",
       "methods": [
         {
@@ -24,7 +24,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(num_classes: int = 1000, in_channels: int = 3, dropout: float = 0.5)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/alexnet/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/alexnet/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -65,7 +65,7 @@
       ],
       "labels": [],
       "signature": "AlexNet(config: AlexNetConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/alexnet/_model.py#L122",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/alexnet/_model.py#L122",
       "subcategory": "model",
       "methods": [
         {
@@ -74,9 +74,9 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: AlexNetConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/alexnet/_model.py#L201",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/alexnet/_model.py#L201",
           "subcategory": "model",
-          "summary": "Initialise the LayerNorm module. See the class docstring for parameter semantics.",
+          "summary": null,
           "extended": null,
           "parameters": [],
           "returns": {
@@ -96,17 +96,26 @@
           "kind": "function",
           "labels": [],
           "signature": "forward_features(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/alexnet/_model.py#L218",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/alexnet/_model.py#L218",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Run the backbone's feature-extraction pass.",
           "extended": null,
-          "parameters": [],
+          "parameters": [
+            {
+              "name": "x",
+              "annotation": "Tensor",
+              "description": "Input image batch, shape `(B, C, H, W)`.",
+              "default": null
+            }
+          ],
           "returns": {
             "annotation": "Tensor",
-            "description": ""
+            "description": "Feature map at the deepest stage.  Concrete subclasses may\nadditionally stash earlier stages on the instance so\nmulti-stage consumers can fetch them."
           },
           "raises": [],
-          "examples": [],
+          "examples": [
+            "The map returned is the one feature_info lists last, so a\nneck can size itself from that entry without running the model.\n>>> import lucid\n>>> from lucid.models import create_model\n>>> backbone = create_model(\"resnet_18\").eval()\n>>> last = backbone.feature_info[-1]\n>>> last.num_channels, last.reduction\n(512, 32)\n>>> backbone.forward_features(lucid.randn((1, 3, 64, 96))).shape\n(1, 512, 2, 3)\nEach side is divided by the advertised reduction on its own, so\na non-square input keeps its aspect ratio."
+          ],
           "notes": [],
           "attributes": [],
           "warns": [],
@@ -118,27 +127,14 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/alexnet/_model.py#L223",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/alexnet/_model.py#L223",
           "subcategory": "model",
-          "summary": "Apply the reconstructed weight, and the fused ReLU if there was one.",
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
-          "parameters": [
-            {
-              "name": "*args",
-              "annotation": "Tensor",
-              "description": "The activation, as the layer this stands in for takes it.",
-              "default": null
-            },
-            {
-              "name": "**kwargs",
-              "annotation": "object",
-              "description": "Accepted and unused, to match the base signature.",
-              "default": null
-            }
-          ],
+          "parameters": [],
           "returns": {
-            "annotation": "Tensor",
-            "description": "`x @ weightᵀ + bias`, through a ReLU when one was fused."
+            "annotation": "BaseModelOutput",
+            "description": ""
           },
           "raises": [],
           "examples": [],
@@ -202,7 +198,7 @@
       ],
       "labels": [],
       "signature": "AlexNetForImageClassification(config: AlexNetConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/alexnet/_model.py#L233",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/alexnet/_model.py#L233",
       "subcategory": "model",
       "methods": [
         {
@@ -211,7 +207,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: AlexNetConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/alexnet/_model.py#L308",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/alexnet/_model.py#L308",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -233,9 +229,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor, labels: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/alexnet/_model.py#L320",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/alexnet/_model.py#L320",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -304,7 +300,7 @@
       "kind": "function",
       "labels": [],
       "signature": "alexnet(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/alexnet/_pretrained.py#L13",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/alexnet/_pretrained.py#L13",
       "subcategory": "pretrained",
       "summary": "AlexNet feature-extracting backbone (no fully-connected head).",
       "extended": "Builds an `AlexNet` with the Krizhevsky 2014 single-stream\nOWT topology: five convolutional blocks (Conv1: 3→64 with\n$11\\times11$ stride-4; Conv2: 64→192 with $5\\times5$;\nConv3: 192→384, Conv4: 384→256, Conv5: 256→256, all\n$3\\times3$), and overlapping $3\\times3$ max-pools\nafter blocks 1, 2, 5.  Approximately 2.5 M parameters in the\nconvolutional trunk alone (≈61.1 M for the full classifier\nvariant).",
@@ -458,7 +454,7 @@
       "kind": "function",
       "labels": [],
       "signature": "alexnet_cls(pretrained: bool | str = False, weights: AlexNetWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/alexnet/_pretrained.py#L79",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/alexnet/_pretrained.py#L79",
       "subcategory": "pretrained",
       "summary": "AlexNet image classifier (backbone + FC6 + FC7 + linear head).",
       "extended": "Builds an `AlexNetForImageClassification` with the\nKrizhevsky 2014 single-stream OWT topology: the five-block conv\ntrunk followed by FC6 (9216 → 4096), FC7 (4096 → 4096), and a\nfinal linear projection to `config.num_classes` (default 1000\nfor ImageNet-1k).  Approximately 61.1 M parameters total,\ndominated by the two 4096-dim FC layers (≈54.5 M).\n`lucid.nn.Dropout` with `p=config.dropout` (default 0.5)\nis applied after both hidden activations.",
@@ -651,7 +647,7 @@
       ],
       "labels": [],
       "signature": "AlexNetWeights()",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/alexnet/_weights.py#L22",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/alexnet/_weights.py#L22",
       "subcategory": "weights",
       "methods": [],
       "summary": "Pretrained weight tags for `lucid.models.alexnet_cls`.",

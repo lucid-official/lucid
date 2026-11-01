@@ -1,0 +1,1177 @@
+{
+  "slug": "lucid.nn.intrinsic.qat",
+  "name": "qat",
+  "path": "lucid.nn.intrinsic.qat",
+  "kind": "module",
+  "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/__init__.py#L1",
+  "members": [
+    {
+      "name": "ConvBn1d",
+      "path": "lucid.nn.intrinsic.qat.modules.ConvBn1d",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_ConvBnNd"
+      ],
+      "labels": [],
+      "signature": "ConvBn1d(conv: nn.Module, bn: nn.Module, qconfig: QConfig | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L134",
+      "subcategory": "modules",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.nn.intrinsic.qat.modules.ConvBn1d.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(conv: nn.Module, bn: nn.Module, qconfig: QConfig | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L247",
+          "subcategory": "modules",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "forward",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(x: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L88",
+          "subcategory": "modules",
+          "summary": "Scale and fake-quant the weight → conv → unscale → BN → (ReLU) → fake-quant.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "update_bn_stats",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.update_bn_stats",
+          "kind": "function",
+          "labels": [],
+          "signature": "update_bn_stats()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L113",
+          "subcategory": "modules",
+          "summary": "Let `bn` normalise with batch statistics and update its running ones.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "freeze_bn_stats",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.freeze_bn_stats",
+          "kind": "function",
+          "labels": [],
+          "signature": "freeze_bn_stats()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L119",
+          "subcategory": "modules",
+          "summary": "Stop the running-stat updates; `bn` normalises with its running stats.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "train",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.train",
+          "kind": "function",
+          "labels": [],
+          "signature": "train(mode: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L125",
+          "subcategory": "modules",
+          "summary": "Set the mode recursively, except that a frozen `bn` stays frozen.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        }
+      ],
+      "summary": "QAT fused `Conv1d` + `BatchNorm1d` — BN folded into the weight every forward.",
+      "extended": "The training-time stand-in for a `Conv1d` immediately followed by a `BatchNorm1d`.\nAt inference the BN scale-and-shift can be absorbed into the conv weight and bias so the\npair runs as a *single* convolution; a naive QAT layer that folded BN once up front,\nhowever, would freeze BN's running statistics and stop it training. This class instead\n**re-folds BN into the conv weight on every forward**, fake-quantizes the *folded*\nweight, convolves, and fake-quantizes the output — all differentiably — so BN keeps\nlearning while the network already experiences the folded-and-quantized numerics it will\nsee at inference.\n\n**Straight-through estimator (STE).** The weight fake-quant rounds the folded kernel in\nthe forward pass but passes gradients *straight through* in the backward pass, so both\nthe conv weight and the BN affine parameters receive clean gradients despite the\nnon-differentiable `round`. The running statistics are not learned — the wrapped\n`bn` updates them from each training batch, exactly as in the unfused model.\n\n**Where it sits.** `lucid.quantization.prepare_qat` builds this from a fused\nconv+BN pattern. After training, `lucid.quantization.convert` folds BN one final\ntime, quantizes the folded weight to int8, and bakes it — together with the calibrated\nactivation qparams — into an inference `lucid.nn.quantized.Conv1d`. No separate\nBN layer survives conversion; it lives entirely inside the conv weight and bias.\n\nThe per-output-channel BN fold ($c$ indexes output channels) is\n\n$$\nw'_{c} = \\gamma_c\\,\\frac{w_c}{\\sqrt{\\sigma_c^2 + \\epsilon}},\n\\qquad\nb'_{c} = \\beta_c + \\gamma_c\\,\\frac{b_c - \\mu_c}{\\sqrt{\\sigma_c^2 + \\epsilon}}\n$$\n\nwith BN affine $(\\gamma, \\beta)$, running statistics\n$(\\mu, \\sigma^2)$, numerical floor $\\epsilon$, and conv weight / bias\n$(w_c, b_c)$. When the conv has no bias (the usual fused case, $b_c = 0$)\nthe shift reduces to $b'_c = \\beta_c - \\gamma_c\\,\\mu_c/\\sqrt{\\sigma_c^2+\\epsilon}$.\nIn eval mode (or once the BN statistics are frozen) the layer is exactly that folded\nconv, with the folded weight fake-quantized under the STE:\n\n$$\ny = \\operatorname{fake\\_quant}_{a}\\!\\bigl(\n    \\operatorname{fake\\_quant}_{w}(w') \\star x + b'\\bigr),\n\\qquad\n\\frac{\\partial\\, \\operatorname{fake\\_quant}(t)}{\\partial t} = 1\n$$\n\nwhere $\\star$ is the 1-D cross-correlation and\n$\\operatorname{fake\\_quant}(t) = (\\operatorname{clamp}(\\operatorname{round}(t/s) + z,q_{\\min}, q_{\\max}) - z)\\, s$.",
+      "parameters": [
+        {
+          "name": "conv",
+          "annotation": "nn.Conv1d",
+          "description": "The float 1-D convolution whose weight receives the folded BN affine.",
+          "default": null
+        },
+        {
+          "name": "bn",
+          "annotation": "nn.BatchNorm1d",
+          "description": "The batch-norm layer folded into `conv`. It must track running statistics; its\naffine parameters train under the STE and its running statistics update from each\ntraining batch (`ValueError` if `track_running_stats=False`).",
+          "default": null
+        },
+        {
+          "name": "qconfig",
+          "annotation": "QConfig",
+          "description": "Quantization recipe supplying the weight and activation\n`lucid.quantization.FakeQuantize` modules applied during training.\nRequired — constructing the layer without one raises `ValueError`.",
+          "default": "None"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid, lucid.nn as nn\n>>> import lucid.quantization as Q\n>>> import lucid.nn.intrinsic.qat as nniqat\n>>> cbn = nniqat.ConvBn1d(\n...     nn.Conv1d(3, 8, 3, padding=1, bias=False),\n...     nn.BatchNorm1d(8),\n...     qconfig=Q.get_default_qat_qconfig(),\n... )\n>>> w, b = cbn._fold()                 # BN folded into (weight, bias)\n>>> w.shape, b.shape\n((8, 3, 3), (8,))\n>>> loss = (cbn(lucid.randn(2, 3, 8)) ** 2).mean()\n>>> loss.backward()                    # STE trains conv weight AND BN params\nA qconfig is mandatory — constructing the layer without one raises:\n>>> nniqat.ConvBn1d(nn.Conv1d(3, 8, 3), nn.BatchNorm1d(8))\nTraceback (most recent call last):\n    ...\nValueError: ConvBn1d requires a qconfig"
+      ],
+      "notes": [
+        "- **Batch statistics in training.** `bn` normalises with them and updates its running\n  ones; `freeze_bn_stats` / `update_bn_stats` stop and resume that.\n- **STE differentiability.** The folded weight is rounded forward but the gradient is\n  passed through as the identity, so the conv weight *and* the BN parameters train.\n- **Both directions are wired for you.** `lucid.quantization.prepare_qat` builds\n  this fused layer *in*; `lucid.quantization.convert` folds it *out* into the\n  matching `lucid.nn.quantized.Conv1d` (BN absorbed, no BN layer left)."
+      ],
+      "attributes": [
+        {
+          "name": "weight_fake_quant",
+          "annotation": "FakeQuantize",
+          "description": "The weight observer + fake-quant from `qconfig.weight()`; rounds the *folded*\nkernel each forward and tracks its range so `convert` can pick the int8 qparams."
+        },
+        {
+          "name": "activation_post_process",
+          "annotation": "FakeQuantize",
+          "description": "The output observer + fake-quant from `qconfig.activation()`; calibrates the\nactivation grid whose `(scale, zero_point)` `convert` later bakes in."
+        }
+      ],
+      "warns": [],
+      "see_also": [
+        {
+          "name": "lucid.nn.quantized.Conv1d",
+          "description": "The int8 inference conv `convert` bakes this into."
+        },
+        {
+          "name": "lucid.nn.intrinsic.qat.ConvBnReLU1d",
+          "description": "Same fold, with a fused ReLU on the output."
+        },
+        {
+          "name": "lucid.quantization.prepare_qat",
+          "description": "Builds this fused QAT layer from conv + BN."
+        },
+        {
+          "name": "lucid.quantization.convert",
+          "description": "Folds BN a final time and bakes the int8 conv."
+        }
+      ]
+    },
+    {
+      "name": "ConvBn2d",
+      "path": "lucid.nn.intrinsic.qat.modules.ConvBn2d",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_ConvBnNd"
+      ],
+      "labels": [],
+      "signature": "ConvBn2d(conv: nn.Module, bn: nn.Module, qconfig: QConfig | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L251",
+      "subcategory": "modules",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.nn.intrinsic.qat.modules.ConvBn2d.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(conv: nn.Module, bn: nn.Module, qconfig: QConfig | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L383",
+          "subcategory": "modules",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "forward",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(x: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L88",
+          "subcategory": "modules",
+          "summary": "Scale and fake-quant the weight → conv → unscale → BN → (ReLU) → fake-quant.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "update_bn_stats",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.update_bn_stats",
+          "kind": "function",
+          "labels": [],
+          "signature": "update_bn_stats()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L113",
+          "subcategory": "modules",
+          "summary": "Let `bn` normalise with batch statistics and update its running ones.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "freeze_bn_stats",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.freeze_bn_stats",
+          "kind": "function",
+          "labels": [],
+          "signature": "freeze_bn_stats()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L119",
+          "subcategory": "modules",
+          "summary": "Stop the running-stat updates; `bn` normalises with its running stats.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "train",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.train",
+          "kind": "function",
+          "labels": [],
+          "signature": "train(mode: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L125",
+          "subcategory": "modules",
+          "summary": "Set the mode recursively, except that a frozen `bn` stays frozen.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        }
+      ],
+      "summary": "QAT fused `Conv2d` + `BatchNorm2d` — BN folded into the weight every forward.",
+      "extended": "The training-time stand-in for a `Conv2d` immediately followed by a `BatchNorm2d`\n— the single most common fused block in quantized vision backbones. At inference the\nBN scale-and-shift can be absorbed into the conv weight and bias so the pair runs as a\n*single* convolution; a naive QAT layer that folded BN once up front, however, would\nfreeze BN's running statistics and stop it training. This class instead **re-folds BN\ninto the conv weight on every forward**, fake-quantizes the *folded* weight, convolves,\nand fake-quantizes the output — all differentiably — so BN keeps learning while the\nnetwork already experiences the folded-and-quantized numerics it will see at inference.\n\n**Straight-through estimator (STE).** The weight fake-quant rounds the folded kernel in\nthe forward pass but passes gradients *straight through* in the backward pass, so both\nthe conv weight and the BN affine parameters receive clean gradients despite the\nnon-differentiable `round`. The running statistics are not learned — the wrapped\n`bn` updates them from each training batch, exactly as in the unfused model.\n\n**Where it sits.** `lucid.quantization.prepare_qat` builds this from a fused\nconv+BN pattern. After training, `lucid.quantization.convert` folds BN one final\ntime, quantizes the folded weight to int8, and bakes it — together with the calibrated\nactivation qparams — into an inference `lucid.nn.quantized.Conv2d`. No separate\nBN layer survives conversion; it lives entirely inside the conv weight and bias.\n\nThe per-output-channel BN fold ($c$ indexes output channels) is\n\n$$\nw'_{c} = \\gamma_c\\,\\frac{w_c}{\\sqrt{\\sigma_c^2 + \\epsilon}},\n\\qquad\nb'_{c} = \\beta_c + \\gamma_c\\,\\frac{b_c - \\mu_c}{\\sqrt{\\sigma_c^2 + \\epsilon}}\n$$\n\nwith BN affine $(\\gamma, \\beta)$, running statistics\n$(\\mu, \\sigma^2)$, numerical floor $\\epsilon$, and conv weight / bias\n$(w_c, b_c)$. When the conv has no bias (the usual fused case, $b_c = 0$)\nthe shift reduces to $b'_c = \\beta_c - \\gamma_c\\,\\mu_c/\\sqrt{\\sigma_c^2+\\epsilon}$.\nIn eval mode (or once the BN statistics are frozen) the layer is exactly that folded\nconv, with the folded weight fake-quantized under the STE:\n\n$$\ny = \\operatorname{fake\\_quant}_{a}\\!\\bigl(\n    \\operatorname{fake\\_quant}_{w}(w') \\star x + b'\\bigr),\n\\qquad\n\\frac{\\partial\\, \\operatorname{fake\\_quant}(t)}{\\partial t} = 1\n$$\n\nwhere $\\star$ is the 2-D cross-correlation and\n$\\operatorname{fake\\_quant}(t) = (\\operatorname{clamp}(\\operatorname{round}(t/s) + z,q_{\\min}, q_{\\max}) - z)\\, s$.\n\nIn training mode the convolution instead sees the **batch** statistics, as the unfused\nconv → BN would: the conv output is divided back by the per-channel scale\n$\\gamma_c/\\sqrt{\\sigma_c^2+\\epsilon}$, the conv bias is added, and the result runs\nthrough `bn`, which normalises with the batch mean $\\mu_B$ and variance\n$\\sigma_B^2$ and updates its running statistics:\n\n$$\nu = \\frac{\\operatorname{fake\\_quant}_{w}(w') \\star x}{\\gamma/\\sqrt{\\sigma^2+\\epsilon}}\n    + b,\n\\qquad\n\\operatorname{BN}(u) = \\gamma\\,\\frac{u - \\mu_B}{\\sqrt{\\sigma_B^2 + \\epsilon}} + \\beta\n$$",
+      "parameters": [
+        {
+          "name": "conv",
+          "annotation": "nn.Conv2d",
+          "description": "The float 2-D convolution whose weight receives the folded BN affine.",
+          "default": null
+        },
+        {
+          "name": "bn",
+          "annotation": "nn.BatchNorm2d",
+          "description": "The batch-norm layer folded into `conv`. It must track running statistics; its\naffine parameters train under the STE and its running statistics update from each\ntraining batch (`ValueError` if `track_running_stats=False`).",
+          "default": null
+        },
+        {
+          "name": "qconfig",
+          "annotation": "QConfig",
+          "description": "Quantization recipe supplying the weight and activation\n`lucid.quantization.FakeQuantize` modules applied during training.\nRequired — constructing the layer without one raises `ValueError`.",
+          "default": "None"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid, lucid.nn as nn\n>>> import lucid.quantization as Q\n>>> import lucid.nn.intrinsic.qat as nniqat\n>>> cbn = nniqat.ConvBn2d(\n...     nn.Conv2d(3, 8, 3, padding=1, bias=False),\n...     nn.BatchNorm2d(8),\n...     qconfig=Q.get_default_qat_qconfig(),\n... )\n>>> w, b = cbn._fold()                 # BN folded into (weight, bias)\n>>> w.shape, b.shape\n((8, 3, 3, 3), (8,))\n>>> loss = (cbn(lucid.randn(2, 3, 8, 8)) ** 2).mean()\n>>> loss.backward()                    # STE trains conv weight AND BN params\n>>> int(cbn.bn.num_batches_tracked.item())   # bn saw the batch statistics\n1\n>>> _ = cbn.freeze_bn_stats()          # running statistics stop updating\n>>> _ = cbn(lucid.randn(2, 3, 8, 8))\n>>> int(cbn.bn.num_batches_tracked.item())\n1\nA qconfig is mandatory — constructing the layer without one raises:\n>>> nniqat.ConvBn2d(nn.Conv2d(3, 8, 3), nn.BatchNorm2d(8))\nTraceback (most recent call last):\n    ...\nValueError: ConvBn2d requires a qconfig"
+      ],
+      "notes": [
+        "- **Batch statistics in training.** `bn` normalises with them and updates its running\n  ones; `freeze_bn_stats` / `update_bn_stats` stop and resume that.\n- **STE differentiability.** The folded weight is rounded forward but the gradient is\n  passed through as the identity, so the conv weight *and* the BN parameters train.\n- **Both directions are wired for you.** `lucid.quantization.prepare_qat` builds\n  this fused layer *in*; `lucid.quantization.convert` folds it *out* into the\n  matching `lucid.nn.quantized.Conv2d` (BN absorbed, no BN layer left)."
+      ],
+      "attributes": [
+        {
+          "name": "weight_fake_quant",
+          "annotation": "FakeQuantize",
+          "description": "The weight observer + fake-quant from `qconfig.weight()`; rounds the *folded*\nkernel each forward and tracks its range so `convert` can pick the int8 qparams."
+        },
+        {
+          "name": "activation_post_process",
+          "annotation": "FakeQuantize",
+          "description": "The output observer + fake-quant from `qconfig.activation()`; calibrates the\nactivation grid whose `(scale, zero_point)` `convert` later bakes in."
+        }
+      ],
+      "warns": [],
+      "see_also": [
+        {
+          "name": "lucid.nn.quantized.Conv2d",
+          "description": "The int8 inference conv `convert` bakes this into."
+        },
+        {
+          "name": "lucid.nn.intrinsic.qat.ConvBnReLU2d",
+          "description": "Same fold, with a fused ReLU on the output."
+        },
+        {
+          "name": "lucid.quantization.prepare_qat",
+          "description": "Builds this fused QAT layer from conv + BN."
+        },
+        {
+          "name": "lucid.quantization.convert",
+          "description": "Folds BN a final time and bakes the int8 conv."
+        }
+      ]
+    },
+    {
+      "name": "ConvBn3d",
+      "path": "lucid.nn.intrinsic.qat.modules.ConvBn3d",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_ConvBnNd"
+      ],
+      "labels": [],
+      "signature": "ConvBn3d(conv: nn.Module, bn: nn.Module, qconfig: QConfig | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L387",
+      "subcategory": "modules",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.nn.intrinsic.qat.modules.ConvBn3d.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(conv: nn.Module, bn: nn.Module, qconfig: QConfig | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L500",
+          "subcategory": "modules",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "forward",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(x: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L88",
+          "subcategory": "modules",
+          "summary": "Scale and fake-quant the weight → conv → unscale → BN → (ReLU) → fake-quant.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "update_bn_stats",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.update_bn_stats",
+          "kind": "function",
+          "labels": [],
+          "signature": "update_bn_stats()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L113",
+          "subcategory": "modules",
+          "summary": "Let `bn` normalise with batch statistics and update its running ones.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "freeze_bn_stats",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.freeze_bn_stats",
+          "kind": "function",
+          "labels": [],
+          "signature": "freeze_bn_stats()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L119",
+          "subcategory": "modules",
+          "summary": "Stop the running-stat updates; `bn` normalises with its running stats.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "train",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.train",
+          "kind": "function",
+          "labels": [],
+          "signature": "train(mode: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L125",
+          "subcategory": "modules",
+          "summary": "Set the mode recursively, except that a frozen `bn` stays frozen.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        }
+      ],
+      "summary": "QAT fused `Conv3d` + `BatchNorm3d` — BN folded into the weight every forward.",
+      "extended": "The training-time stand-in for a `Conv3d` immediately followed by a `BatchNorm3d`\n(volumetric / video backbones). At inference the BN scale-and-shift can be absorbed\ninto the conv weight and bias so the pair runs as a *single* convolution; a naive QAT\nlayer that folded BN once up front, however, would freeze BN's running statistics and\nstop it training. This class instead **re-folds BN into the conv weight on every\nforward**, fake-quantizes the *folded* weight, convolves, and fake-quantizes the output\n— all differentiably — so BN keeps learning while the network already experiences the\nfolded-and-quantized numerics it will see at inference.\n\n**Straight-through estimator (STE).** The weight fake-quant rounds the folded kernel in\nthe forward pass but passes gradients *straight through* in the backward pass, so both\nthe conv weight and the BN affine parameters receive clean gradients despite the\nnon-differentiable `round`. The running statistics are not learned — the wrapped\n`bn` updates them from each training batch, exactly as in the unfused model.\n\n**Where it sits.** `lucid.quantization.prepare_qat` builds this from a fused\nconv+BN pattern. After training, `lucid.quantization.convert` folds BN one final\ntime, quantizes the folded weight to int8, and bakes it — together with the calibrated\nactivation qparams — into an inference `lucid.nn.quantized.Conv3d`. No separate\nBN layer survives conversion; it lives entirely inside the conv weight and bias.\n\nThe per-output-channel BN fold ($c$ indexes output channels) is\n\n$$\nw'_{c} = \\gamma_c\\,\\frac{w_c}{\\sqrt{\\sigma_c^2 + \\epsilon}},\n\\qquad\nb'_{c} = \\beta_c + \\gamma_c\\,\\frac{b_c - \\mu_c}{\\sqrt{\\sigma_c^2 + \\epsilon}}\n$$\n\nwith BN affine $(\\gamma, \\beta)$, running statistics\n$(\\mu, \\sigma^2)$, numerical floor $\\epsilon$, and conv weight / bias\n$(w_c, b_c)$. When the conv has no bias (the usual fused case, $b_c = 0$)\nthe shift reduces to $b'_c = \\beta_c - \\gamma_c\\,\\mu_c/\\sqrt{\\sigma_c^2+\\epsilon}$.\nIn eval mode (or once the BN statistics are frozen) the layer is exactly that folded\nconv, with the folded weight fake-quantized under the STE:\n\n$$\ny = \\operatorname{fake\\_quant}_{a}\\!\\bigl(\n    \\operatorname{fake\\_quant}_{w}(w') \\star x + b'\\bigr),\n\\qquad\n\\frac{\\partial\\, \\operatorname{fake\\_quant}(t)}{\\partial t} = 1\n$$\n\nwhere $\\star$ is the 3-D cross-correlation and\n$\\operatorname{fake\\_quant}(t) = (\\operatorname{clamp}(\\operatorname{round}(t/s) + z,q_{\\min}, q_{\\max}) - z)\\, s$.",
+      "parameters": [
+        {
+          "name": "conv",
+          "annotation": "nn.Conv3d",
+          "description": "The float 3-D convolution whose weight receives the folded BN affine.",
+          "default": null
+        },
+        {
+          "name": "bn",
+          "annotation": "nn.BatchNorm3d",
+          "description": "The batch-norm layer folded into `conv`. It must track running statistics; its\naffine parameters train under the STE and its running statistics update from each\ntraining batch (`ValueError` if `track_running_stats=False`).",
+          "default": null
+        },
+        {
+          "name": "qconfig",
+          "annotation": "QConfig",
+          "description": "Quantization recipe supplying the weight and activation\n`lucid.quantization.FakeQuantize` modules applied during training.\nRequired — constructing the layer without one raises `ValueError`.",
+          "default": "None"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid, lucid.nn as nn\n>>> import lucid.quantization as Q\n>>> import lucid.nn.intrinsic.qat as nniqat\n>>> cbn = nniqat.ConvBn3d(\n...     nn.Conv3d(3, 8, 3, padding=1, bias=False),\n...     nn.BatchNorm3d(8),\n...     qconfig=Q.get_default_qat_qconfig(),\n... )\n>>> w, b = cbn._fold()                 # BN folded into (weight, bias)\n>>> w.shape, b.shape\n((8, 3, 3, 3, 3), (8,))\n>>> loss = (cbn(lucid.randn(2, 3, 4, 4, 4)) ** 2).mean()\n>>> loss.backward()                    # STE trains conv weight AND BN params\nA qconfig is mandatory — constructing the layer without one raises:\n>>> nniqat.ConvBn3d(nn.Conv3d(3, 8, 3), nn.BatchNorm3d(8))\nTraceback (most recent call last):\n    ...\nValueError: ConvBn3d requires a qconfig"
+      ],
+      "notes": [
+        "- **Batch statistics in training.** `bn` normalises with them and updates its running\n  ones; `freeze_bn_stats` / `update_bn_stats` stop and resume that.\n- **STE differentiability.** The folded weight is rounded forward but the gradient is\n  passed through as the identity, so the conv weight *and* the BN parameters train.\n- **Both directions are wired for you.** `lucid.quantization.prepare_qat` builds\n  this fused layer *in*; `lucid.quantization.convert` folds it *out* into the\n  matching `lucid.nn.quantized.Conv3d` (BN absorbed, no BN layer left)."
+      ],
+      "attributes": [
+        {
+          "name": "weight_fake_quant",
+          "annotation": "FakeQuantize",
+          "description": "The weight observer + fake-quant from `qconfig.weight()`; rounds the *folded*\nkernel each forward and tracks its range so `convert` can pick the int8 qparams."
+        },
+        {
+          "name": "activation_post_process",
+          "annotation": "FakeQuantize",
+          "description": "The output observer + fake-quant from `qconfig.activation()`; calibrates the\nactivation grid whose `(scale, zero_point)` `convert` later bakes in."
+        }
+      ],
+      "warns": [],
+      "see_also": [
+        {
+          "name": "lucid.nn.quantized.Conv3d",
+          "description": "The int8 inference conv `convert` bakes this into."
+        },
+        {
+          "name": "lucid.nn.intrinsic.qat.ConvBnReLU3d",
+          "description": "Same fold, with a fused ReLU on the output."
+        },
+        {
+          "name": "lucid.quantization.prepare_qat",
+          "description": "Builds this fused QAT layer from conv + BN."
+        },
+        {
+          "name": "lucid.quantization.convert",
+          "description": "Folds BN a final time and bakes the int8 conv."
+        }
+      ]
+    },
+    {
+      "name": "ConvBnReLU1d",
+      "path": "lucid.nn.intrinsic.qat.modules.ConvBnReLU1d",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_ConvBnNd"
+      ],
+      "labels": [],
+      "signature": "ConvBnReLU1d(conv: nn.Module, bn: nn.Module, relu: bool = True, qconfig: QConfig | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L504",
+      "subcategory": "modules",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.nn.intrinsic.qat.modules.ConvBnReLU1d.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(conv: nn.Module, bn: nn.Module, relu: bool = True, qconfig: QConfig | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L610",
+          "subcategory": "modules",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "forward",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(x: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L88",
+          "subcategory": "modules",
+          "summary": "Scale and fake-quant the weight → conv → unscale → BN → (ReLU) → fake-quant.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "update_bn_stats",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.update_bn_stats",
+          "kind": "function",
+          "labels": [],
+          "signature": "update_bn_stats()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L113",
+          "subcategory": "modules",
+          "summary": "Let `bn` normalise with batch statistics and update its running ones.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "freeze_bn_stats",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.freeze_bn_stats",
+          "kind": "function",
+          "labels": [],
+          "signature": "freeze_bn_stats()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L119",
+          "subcategory": "modules",
+          "summary": "Stop the running-stat updates; `bn` normalises with its running stats.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "train",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.train",
+          "kind": "function",
+          "labels": [],
+          "signature": "train(mode: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L125",
+          "subcategory": "modules",
+          "summary": "Set the mode recursively, except that a frozen `bn` stays frozen.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        }
+      ],
+      "summary": "QAT fused `Conv1d` + `BatchNorm1d` + `ReLU` — BN folded every forward.",
+      "extended": "Like `ConvBn1d`, but a ReLU follows the (BN-folded) convolution and the *output*\nfake-quant observes the **post**-ReLU range, so the calibrated activation grid covers\nonly the non-negative values inference can actually produce. This is the fully-fused\nconv→BN→ReLU block that becomes a single quantized kernel after conversion.\n\nAs in `ConvBn1d`, BN is **re-folded into the conv weight on every forward** and\nthe folded weight is fake-quantized under a straight-through estimator (STE): rounding\nhappens forward, gradients pass straight through, so the conv weight *and* the BN affine\nkeep training while `bn` updates its running statistics from each training batch. Built by `lucid.quantization.prepare_qat`;\n`lucid.quantization.convert` folds BN a final time, quantizes the folded weight to\nint8, and bakes it into a fused inference `lucid.nn.quantized.ConvReLU1d`.\n\nThe per-output-channel BN fold ($c$ indexes output channels) is\n\n$$\nw'_{c} = \\gamma_c\\,\\frac{w_c}{\\sqrt{\\sigma_c^2 + \\epsilon}},\n\\qquad\nb'_{c} = \\beta_c + \\gamma_c\\,\\frac{b_c - \\mu_c}{\\sqrt{\\sigma_c^2 + \\epsilon}}\n$$\n\nwith BN affine $(\\gamma, \\beta)$, running statistics\n$(\\mu, \\sigma^2)$, numerical floor $\\epsilon$, and conv weight / bias\n$(w_c, b_c)$ (reducing to\n$b'_c = \\beta_c - \\gamma_c\\,\\mu_c/\\sqrt{\\sigma_c^2+\\epsilon}$ for a bias-free\nconv). In eval mode (or once the BN statistics are frozen) the layer is that folded conv:\nthe folded weight is fake-quantized, convolved, passed through ReLU, then the output is\nfake-quantized on the observed post-ReLU grid:\n\n$$\ny = \\operatorname{fake\\_quant}_{a}\\!\\Bigl(\n    \\operatorname{ReLU}\\bigl(\n        \\operatorname{fake\\_quant}_{w}(w') \\star x + b'\\bigr)\\Bigr),\n\\qquad\n\\frac{\\partial\\, \\operatorname{fake\\_quant}(t)}{\\partial t} = 1\n$$\n\nwhere $\\star$ is the 1-D cross-correlation and\n$\\operatorname{fake\\_quant}(t) = (\\operatorname{clamp}(\\operatorname{round}(t/s) + z,q_{\\min}, q_{\\max}) - z)\\, s$.",
+      "parameters": [
+        {
+          "name": "conv",
+          "annotation": "nn.Conv1d",
+          "description": "The float 1-D convolution whose weight receives the folded BN affine.",
+          "default": null
+        },
+        {
+          "name": "bn",
+          "annotation": "nn.BatchNorm1d",
+          "description": "The batch-norm layer folded into `conv`. It must track running statistics; its\naffine parameters train under the STE and its running statistics update from each\ntraining batch (`ValueError` if `track_running_stats=False`).",
+          "default": null
+        },
+        {
+          "name": "relu",
+          "annotation": "bool",
+          "description": "Whether the fused ReLU is applied before the output fake-quant.",
+          "default": "True"
+        },
+        {
+          "name": "qconfig",
+          "annotation": "QConfig",
+          "description": "Quantization recipe supplying the weight and activation\n`lucid.quantization.FakeQuantize` modules applied during training.\nRequired — constructing the layer without one raises `ValueError`.",
+          "default": "None"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid, lucid.nn as nn\n>>> import lucid.quantization as Q\n>>> import lucid.nn.intrinsic.qat as nniqat\n>>> cbr = nniqat.ConvBnReLU1d(\n...     nn.Conv1d(3, 8, 3, padding=1, bias=False),\n...     nn.BatchNorm1d(8),\n...     relu=True,\n...     qconfig=Q.get_default_qat_qconfig(),\n... )\n>>> loss = (cbr(lucid.randn(2, 3, 8)) ** 2).mean()\n>>> loss.backward()                    # STE trains conv weight AND BN params\n>>> _ = cbr.eval()\n>>> from lucid.nn.intrinsic.qat.modules import convbnrelu2d_to_quantized\n>>> qc = convbnrelu2d_to_quantized(cbr)     # rank-generic bake\n>>> type(qc).__name__\n'ConvReLU1d'"
+      ],
+      "notes": [
+        "- **Batch statistics in training.** `bn` normalises with them and updates its running\n  ones; `freeze_bn_stats` / `update_bn_stats` stop and resume that.\n- **Post-ReLU calibration.** The activation observer sits after the ReLU, so its grid\n  covers only $[0, \\max]$, roughly doubling resolution versus a symmetric range.\n- **STE differentiability.** The folded weight is rounded forward but the gradient is\n  passed through as the identity, so the conv weight *and* the BN parameters train.\n- **Both directions are wired for you.** `lucid.quantization.prepare_qat` builds\n  this fused layer *in*; `lucid.quantization.convert` folds it *out* into the\n  matching `lucid.nn.quantized.ConvReLU1d`."
+      ],
+      "attributes": [
+        {
+          "name": "weight_fake_quant",
+          "annotation": "FakeQuantize",
+          "description": "The weight observer + fake-quant from `qconfig.weight()`; rounds the *folded*\nkernel each forward and tracks its range so `convert` can pick the int8 qparams."
+        },
+        {
+          "name": "activation_post_process",
+          "annotation": "FakeQuantize",
+          "description": "The output observer + fake-quant from `qconfig.activation()`; here it observes\nthe **post-ReLU** range so the baked-in grid matches inference."
+        }
+      ],
+      "warns": [],
+      "see_also": [
+        {
+          "name": "lucid.nn.quantized.ConvReLU1d",
+          "description": "The fused int8 inference conv `convert` bakes into."
+        },
+        {
+          "name": "lucid.nn.intrinsic.qat.ConvBn1d",
+          "description": "Same fold, without the fused ReLU."
+        },
+        {
+          "name": "lucid.quantization.prepare_qat",
+          "description": "Builds this fused QAT layer from conv + BN + ReLU."
+        },
+        {
+          "name": "lucid.quantization.convert",
+          "description": "Folds BN a final time and bakes the fused int8 conv."
+        }
+      ]
+    },
+    {
+      "name": "ConvBnReLU2d",
+      "path": "lucid.nn.intrinsic.qat.modules.ConvBnReLU2d",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_ConvBnNd"
+      ],
+      "labels": [],
+      "signature": "ConvBnReLU2d(conv: nn.Module, bn: nn.Module, relu: bool = True, qconfig: QConfig | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L616",
+      "subcategory": "modules",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.nn.intrinsic.qat.modules.ConvBnReLU2d.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(conv: nn.Module, bn: nn.Module, relu: bool = True, qconfig: QConfig | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L723",
+          "subcategory": "modules",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "forward",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(x: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L88",
+          "subcategory": "modules",
+          "summary": "Scale and fake-quant the weight → conv → unscale → BN → (ReLU) → fake-quant.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "update_bn_stats",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.update_bn_stats",
+          "kind": "function",
+          "labels": [],
+          "signature": "update_bn_stats()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L113",
+          "subcategory": "modules",
+          "summary": "Let `bn` normalise with batch statistics and update its running ones.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "freeze_bn_stats",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.freeze_bn_stats",
+          "kind": "function",
+          "labels": [],
+          "signature": "freeze_bn_stats()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L119",
+          "subcategory": "modules",
+          "summary": "Stop the running-stat updates; `bn` normalises with its running stats.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "train",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.train",
+          "kind": "function",
+          "labels": [],
+          "signature": "train(mode: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L125",
+          "subcategory": "modules",
+          "summary": "Set the mode recursively, except that a frozen `bn` stays frozen.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        }
+      ],
+      "summary": "QAT fused `Conv2d` + `BatchNorm2d` + `ReLU` — BN folded every forward.",
+      "extended": "Like `ConvBn2d`, but a ReLU follows the (BN-folded) convolution and the *output*\nfake-quant observes the **post**-ReLU range, so the calibrated activation grid covers\nonly the non-negative values inference can actually produce. This conv→BN→ReLU triple\nis *the* canonical fused block of quantized vision backbones and becomes a single\nquantized kernel after conversion.\n\nAs in `ConvBn2d`, BN is **re-folded into the conv weight on every forward** and\nthe folded weight is fake-quantized under a straight-through estimator (STE): rounding\nhappens forward, gradients pass straight through, so the conv weight *and* the BN affine\nkeep training while `bn` updates its running statistics from each training batch. Built by `lucid.quantization.prepare_qat`;\n`lucid.quantization.convert` folds BN a final time, quantizes the folded weight to\nint8, and bakes it into a fused inference `lucid.nn.quantized.ConvReLU2d`.\n\nThe per-output-channel BN fold ($c$ indexes output channels) is\n\n$$\nw'_{c} = \\gamma_c\\,\\frac{w_c}{\\sqrt{\\sigma_c^2 + \\epsilon}},\n\\qquad\nb'_{c} = \\beta_c + \\gamma_c\\,\\frac{b_c - \\mu_c}{\\sqrt{\\sigma_c^2 + \\epsilon}}\n$$\n\nwith BN affine $(\\gamma, \\beta)$, running statistics\n$(\\mu, \\sigma^2)$, numerical floor $\\epsilon$, and conv weight / bias\n$(w_c, b_c)$ (reducing to\n$b'_c = \\beta_c - \\gamma_c\\,\\mu_c/\\sqrt{\\sigma_c^2+\\epsilon}$ for a bias-free\nconv). In eval mode (or once the BN statistics are frozen) the layer is that folded conv:\nthe folded weight is fake-quantized, convolved, passed through ReLU, then the output is\nfake-quantized on the observed post-ReLU grid:\n\n$$\ny = \\operatorname{fake\\_quant}_{a}\\!\\Bigl(\n    \\operatorname{ReLU}\\bigl(\n        \\operatorname{fake\\_quant}_{w}(w') \\star x + b'\\bigr)\\Bigr),\n\\qquad\n\\frac{\\partial\\, \\operatorname{fake\\_quant}(t)}{\\partial t} = 1\n$$\n\nwhere $\\star$ is the 2-D cross-correlation and\n$\\operatorname{fake\\_quant}(t) = (\\operatorname{clamp}(\\operatorname{round}(t/s) + z,q_{\\min}, q_{\\max}) - z)\\, s$.",
+      "parameters": [
+        {
+          "name": "conv",
+          "annotation": "nn.Conv2d",
+          "description": "The float 2-D convolution whose weight receives the folded BN affine.",
+          "default": null
+        },
+        {
+          "name": "bn",
+          "annotation": "nn.BatchNorm2d",
+          "description": "The batch-norm layer folded into `conv`. It must track running statistics; its\naffine parameters train under the STE and its running statistics update from each\ntraining batch (`ValueError` if `track_running_stats=False`).",
+          "default": null
+        },
+        {
+          "name": "relu",
+          "annotation": "bool",
+          "description": "Whether the fused ReLU is applied before the output fake-quant.",
+          "default": "True"
+        },
+        {
+          "name": "qconfig",
+          "annotation": "QConfig",
+          "description": "Quantization recipe supplying the weight and activation\n`lucid.quantization.FakeQuantize` modules applied during training.\nRequired — constructing the layer without one raises `ValueError`.",
+          "default": "None"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid, lucid.nn as nn\n>>> import lucid.quantization as Q\n>>> import lucid.nn.intrinsic.qat as nniqat\n>>> cbr = nniqat.ConvBnReLU2d(\n...     nn.Conv2d(3, 8, 3, padding=1, bias=False),\n...     nn.BatchNorm2d(8),\n...     relu=True,\n...     qconfig=Q.get_default_qat_qconfig(),\n... )\n>>> loss = (cbr(lucid.randn(2, 3, 8, 8)) ** 2).mean()\n>>> loss.backward()                    # STE trains conv weight AND BN params\n>>> _ = cbr.eval()\n>>> from lucid.nn.intrinsic.qat.modules import convbnrelu2d_to_quantized\n>>> qc = convbnrelu2d_to_quantized(cbr)     # BN folded + baked to int8\n>>> type(qc).__name__\n'ConvReLU2d'"
+      ],
+      "notes": [
+        "- **Batch statistics in training.** `bn` normalises with them and updates its running\n  ones; `freeze_bn_stats` / `update_bn_stats` stop and resume that.\n- **Post-ReLU calibration.** The activation observer sits after the ReLU, so its grid\n  covers only $[0, \\max]$, roughly doubling resolution versus a symmetric range.\n- **STE differentiability.** The folded weight is rounded forward but the gradient is\n  passed through as the identity, so the conv weight *and* the BN parameters train.\n- **Both directions are wired for you.** `lucid.quantization.prepare_qat` builds\n  this fused layer *in*; `lucid.quantization.convert` folds it *out* into the\n  matching `lucid.nn.quantized.ConvReLU2d`."
+      ],
+      "attributes": [
+        {
+          "name": "weight_fake_quant",
+          "annotation": "FakeQuantize",
+          "description": "The weight observer + fake-quant from `qconfig.weight()`; rounds the *folded*\nkernel each forward and tracks its range so `convert` can pick the int8 qparams."
+        },
+        {
+          "name": "activation_post_process",
+          "annotation": "FakeQuantize",
+          "description": "The output observer + fake-quant from `qconfig.activation()`; here it observes\nthe **post-ReLU** range so the baked-in grid matches inference."
+        }
+      ],
+      "warns": [],
+      "see_also": [
+        {
+          "name": "lucid.nn.quantized.ConvReLU2d",
+          "description": "The fused int8 inference conv `convert` bakes into."
+        },
+        {
+          "name": "lucid.nn.intrinsic.qat.ConvBn2d",
+          "description": "Same fold, without the fused ReLU."
+        },
+        {
+          "name": "lucid.quantization.prepare_qat",
+          "description": "Builds this fused QAT layer from conv + BN + ReLU."
+        },
+        {
+          "name": "lucid.quantization.convert",
+          "description": "Folds BN a final time and bakes the fused int8 conv."
+        }
+      ]
+    },
+    {
+      "name": "ConvBnReLU3d",
+      "path": "lucid.nn.intrinsic.qat.modules.ConvBnReLU3d",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_ConvBnNd"
+      ],
+      "labels": [],
+      "signature": "ConvBnReLU3d(conv: nn.Module, bn: nn.Module, relu: bool = True, qconfig: QConfig | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L729",
+      "subcategory": "modules",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.nn.intrinsic.qat.modules.ConvBnReLU3d.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(conv: nn.Module, bn: nn.Module, relu: bool = True, qconfig: QConfig | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L836",
+          "subcategory": "modules",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "forward",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(x: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L88",
+          "subcategory": "modules",
+          "summary": "Scale and fake-quant the weight → conv → unscale → BN → (ReLU) → fake-quant.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "update_bn_stats",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.update_bn_stats",
+          "kind": "function",
+          "labels": [],
+          "signature": "update_bn_stats()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L113",
+          "subcategory": "modules",
+          "summary": "Let `bn` normalise with batch statistics and update its running ones.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "freeze_bn_stats",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.freeze_bn_stats",
+          "kind": "function",
+          "labels": [],
+          "signature": "freeze_bn_stats()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L119",
+          "subcategory": "modules",
+          "summary": "Stop the running-stat updates; `bn` normalises with its running stats.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        },
+        {
+          "name": "train",
+          "path": "lucid.nn.intrinsic.qat.modules._ConvBnNd.train",
+          "kind": "function",
+          "labels": [],
+          "signature": "train(mode: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/intrinsic/qat/modules.py#L125",
+          "subcategory": "modules",
+          "summary": "Set the mode recursively, except that a frozen `bn` stays frozen.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConvBnNd"
+        }
+      ],
+      "summary": "QAT fused `Conv3d` + `BatchNorm3d` + `ReLU` — BN folded every forward.",
+      "extended": "Like `ConvBn3d`, but a ReLU follows the (BN-folded) convolution and the *output*\nfake-quant observes the **post**-ReLU range, so the calibrated activation grid covers\nonly the non-negative values inference can actually produce. This is the fully-fused\nconv→BN→ReLU block for volumetric / video backbones and becomes a single quantized\nkernel after conversion.\n\nAs in `ConvBn3d`, BN is **re-folded into the conv weight on every forward** and\nthe folded weight is fake-quantized under a straight-through estimator (STE): rounding\nhappens forward, gradients pass straight through, so the conv weight *and* the BN affine\nkeep training while `bn` updates its running statistics from each training batch. Built by `lucid.quantization.prepare_qat`;\n`lucid.quantization.convert` folds BN a final time, quantizes the folded weight to\nint8, and bakes it into a fused inference `lucid.nn.quantized.ConvReLU3d`.\n\nThe per-output-channel BN fold ($c$ indexes output channels) is\n\n$$\nw'_{c} = \\gamma_c\\,\\frac{w_c}{\\sqrt{\\sigma_c^2 + \\epsilon}},\n\\qquad\nb'_{c} = \\beta_c + \\gamma_c\\,\\frac{b_c - \\mu_c}{\\sqrt{\\sigma_c^2 + \\epsilon}}\n$$\n\nwith BN affine $(\\gamma, \\beta)$, running statistics\n$(\\mu, \\sigma^2)$, numerical floor $\\epsilon$, and conv weight / bias\n$(w_c, b_c)$ (reducing to\n$b'_c = \\beta_c - \\gamma_c\\,\\mu_c/\\sqrt{\\sigma_c^2+\\epsilon}$ for a bias-free\nconv). In eval mode (or once the BN statistics are frozen) the layer is that folded conv:\nthe folded weight is fake-quantized, convolved, passed through ReLU, then the output is\nfake-quantized on the observed post-ReLU grid:\n\n$$\ny = \\operatorname{fake\\_quant}_{a}\\!\\Bigl(\n    \\operatorname{ReLU}\\bigl(\n        \\operatorname{fake\\_quant}_{w}(w') \\star x + b'\\bigr)\\Bigr),\n\\qquad\n\\frac{\\partial\\, \\operatorname{fake\\_quant}(t)}{\\partial t} = 1\n$$\n\nwhere $\\star$ is the 3-D cross-correlation and\n$\\operatorname{fake\\_quant}(t) = (\\operatorname{clamp}(\\operatorname{round}(t/s) + z,q_{\\min}, q_{\\max}) - z)\\, s$.",
+      "parameters": [
+        {
+          "name": "conv",
+          "annotation": "nn.Conv3d",
+          "description": "The float 3-D convolution whose weight receives the folded BN affine.",
+          "default": null
+        },
+        {
+          "name": "bn",
+          "annotation": "nn.BatchNorm3d",
+          "description": "The batch-norm layer folded into `conv`. It must track running statistics; its\naffine parameters train under the STE and its running statistics update from each\ntraining batch (`ValueError` if `track_running_stats=False`).",
+          "default": null
+        },
+        {
+          "name": "relu",
+          "annotation": "bool",
+          "description": "Whether the fused ReLU is applied before the output fake-quant.",
+          "default": "True"
+        },
+        {
+          "name": "qconfig",
+          "annotation": "QConfig",
+          "description": "Quantization recipe supplying the weight and activation\n`lucid.quantization.FakeQuantize` modules applied during training.\nRequired — constructing the layer without one raises `ValueError`.",
+          "default": "None"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid, lucid.nn as nn\n>>> import lucid.quantization as Q\n>>> import lucid.nn.intrinsic.qat as nniqat\n>>> cbr = nniqat.ConvBnReLU3d(\n...     nn.Conv3d(3, 8, 3, padding=1, bias=False),\n...     nn.BatchNorm3d(8),\n...     relu=True,\n...     qconfig=Q.get_default_qat_qconfig(),\n... )\n>>> loss = (cbr(lucid.randn(2, 3, 4, 4, 4)) ** 2).mean()\n>>> loss.backward()                    # STE trains conv weight AND BN params\n>>> _ = cbr.eval()\n>>> from lucid.nn.intrinsic.qat.modules import convbnrelu2d_to_quantized\n>>> qc = convbnrelu2d_to_quantized(cbr)     # rank-generic bake\n>>> type(qc).__name__\n'ConvReLU3d'"
+      ],
+      "notes": [
+        "- **Batch statistics in training.** `bn` normalises with them and updates its running\n  ones; `freeze_bn_stats` / `update_bn_stats` stop and resume that.\n- **Post-ReLU calibration.** The activation observer sits after the ReLU, so its grid\n  covers only $[0, \\max]$, roughly doubling resolution versus a symmetric range.\n- **STE differentiability.** The folded weight is rounded forward but the gradient is\n  passed through as the identity, so the conv weight *and* the BN parameters train.\n- **Both directions are wired for you.** `lucid.quantization.prepare_qat` builds\n  this fused layer *in*; `lucid.quantization.convert` folds it *out* into the\n  matching `lucid.nn.quantized.ConvReLU3d`."
+      ],
+      "attributes": [
+        {
+          "name": "weight_fake_quant",
+          "annotation": "FakeQuantize",
+          "description": "The weight observer + fake-quant from `qconfig.weight()`; rounds the *folded*\nkernel each forward and tracks its range so `convert` can pick the int8 qparams."
+        },
+        {
+          "name": "activation_post_process",
+          "annotation": "FakeQuantize",
+          "description": "The output observer + fake-quant from `qconfig.activation()`; here it observes\nthe **post-ReLU** range so the baked-in grid matches inference."
+        }
+      ],
+      "warns": [],
+      "see_also": [
+        {
+          "name": "lucid.nn.quantized.ConvReLU3d",
+          "description": "The fused int8 inference conv `convert` bakes into."
+        },
+        {
+          "name": "lucid.nn.intrinsic.qat.ConvBn3d",
+          "description": "Same fold, without the fused ReLU."
+        },
+        {
+          "name": "lucid.quantization.prepare_qat",
+          "description": "Builds this fused QAT layer from conv + BN + ReLU."
+        },
+        {
+          "name": "lucid.quantization.convert",
+          "description": "Folds BN a final time and bakes the fused int8 conv."
+        }
+      ]
+    }
+  ],
+  "summary": "`lucid.nn.intrinsic.qat` — fused QAT modules (Conv+BN fold-in-training).",
+  "extended": null,
+  "parameters": [],
+  "returns": null,
+  "raises": [],
+  "examples": [],
+  "notes": [],
+  "attributes": [],
+  "warns": [],
+  "see_also": []
+}

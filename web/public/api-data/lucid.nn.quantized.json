@@ -3,7 +3,7 @@
   "name": "quantized",
   "path": "lucid.nn.quantized",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/__init__.py#L1",
   "members": [
     {
       "name": "ELU",
@@ -15,9 +15,58 @@
       ],
       "labels": [],
       "signature": "ELU(scale: Tensor, zero_point: Tensor, qdtype: QDtype = quint8)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/activation.py#L309",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L309",
       "subcategory": "activation",
-      "methods": [],
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.activation._QuantizedActivation.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L30",
+          "subcategory": "activation",
+          "summary": "Activate, then fake-quantize to the calibrated grid.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedActivation"
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.activation._QuantizedActivation.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L35",
+          "subcategory": "activation",
+          "summary": "Build from a calibrated float activation (reads its output observer).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedActivation"
+        }
+      ],
       "summary": "Quantized `lucid.nn.ELU` — `elu(x, alpha)` then output fake-quant.",
       "extended": "The inference-time replacement for a calibrated float `nn.ELU`, installed\nby `lucid.quantization.convert` / `from_float`. Under the sidecar\nrepresentation (design B) the quantized layer is the float ELU followed by a\nfake-quantize to the calibrated output grid. Unlike the bounded activations,\nELU is **unbounded above** and saturates to $-\\alpha$ below, so its\nrange is data-dependent and must be calibrated with a real observer rather\nthan a `lucid.quantization.FixedQParamsObserver`.\n\nThe negative-branch scale $\\alpha$ is a parameter of the activation,\nnot a learned weight; `from_float` copies it from the source `nn.ELU`\n(via the internal `_configure` hook) so the quantized layer reproduces the\nexact float curve before snapping the output to the grid.\n\n$$\ny = \\operatorname{fake\\_quant}\\bigl(\\operatorname{elu}(x)\\bigr),\n\\qquad\n\\operatorname{elu}(x) =\n    \\begin{cases} x & x > 0 \\\\ \\alpha\\,(e^{x} - 1) & x \\le 0 \\end{cases}\n$$\n\nwith $\\operatorname{fake\\_quant}(t) = (\\operatorname{clamp}( \\operatorname{round}(t/S) + Z, q_{\\min}, q_{\\max}) - Z)\\, S$ and the\ncalibrated output `(scale, zero_point)` $S, Z$.",
       "parameters": [
@@ -81,11 +130,60 @@
       ],
       "labels": [],
       "signature": "Hardsigmoid(scale: Tensor, zero_point: Tensor, qdtype: QDtype = quint8)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/activation.py#L177",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L177",
       "subcategory": "activation",
-      "methods": [],
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.activation._QuantizedActivation.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L30",
+          "subcategory": "activation",
+          "summary": "Activate, then fake-quantize to the calibrated grid.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedActivation"
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.activation._QuantizedActivation.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L35",
+          "subcategory": "activation",
+          "summary": "Build from a calibrated float activation (reads its output observer).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedActivation"
+        }
+      ],
       "summary": "Quantized `lucid.nn.Hardsigmoid` — `hardsigmoid(x)` then fake-quant.",
-      "extended": "The inference-time replacement for a calibrated float `nn.Hardsigmoid`,\ninstalled by `lucid.quantization.convert` / `from_float`.\nHardsigmoid is the piecewise-linear approximation of the sigmoid gate used in\nMobileNetV3's squeeze-and-excitation blocks; like `Sigmoid` its output\nis bounded to $[0, 1]$, so it is a natural **fixed-qparams** activation.\nUnder the sidecar representation (design B) the quantized layer is the float\nactivation followed by a fake-quantize to the calibrated output grid.\n\nBecause the range is fixed to $[0, 1]$, pair it with a\n`lucid.quantization.FixedQParamsObserver` (scale $1/256$,\nzero-point $0$) to skip calibrating a range known a priori.\n\n$$\ny = \\operatorname{fake\\_quant}\\bigl(\\operatorname{hardsigmoid}(x)\\bigr),\n\\qquad\n\\operatorname{hardsigmoid}(x) =\n    \\frac{\\operatorname{clamp}(x + 3,\\ 0,\\ 6)}{6}\n$$\n\nwith $\\operatorname{fake\\_quant}(t) = (\\operatorname{clamp}( \\operatorname{round}(t/S) + Z, q_{\\min}, q_{\\max}) - Z)\\, S$ and, for the\nfixed grid, $S = 1/256,\\ Z = 0$.",
+      "extended": "The inference-time replacement for a calibrated float `nn.Hardsigmoid`,\ninstalled by `lucid.quantization.convert` / `from_float`.\nHardsigmoid is the piecewise-linear approximation of the sigmoid gate used in\nMobileNetV3's squeeze-and-excitation blocks; like `Sigmoid` its output\nis bounded to $[0, 1]$, so it is a natural **fixed-qparams** activation.\nUnder the sidecar representation (design B) the quantized layer is the float\nactivation followed by a fake-quantize to the calibrated output grid.\n\nBecause the range is fixed to $[0, 1]$, pair it with a\n`lucid.quantization.FixedQParamsObserver` (scale $1/256$,\nzero-point $0$) to skip calibrating a range known a priori.\n\n$$\ny = \\operatorname{fake\\_quant}\\bigl(\\operatorname{hardsigmoid}(x)\\bigr),\n\\qquad\n\\operatorname{hardsigmoid}(x) =\n    \\frac{\\operatorname{clamp}(x + 3,\\ 0,\\ 6)}{6}\n$$\n\nwith $\\operatorname{fake\\_quant}(t) = (\\operatorname{clamp}( \\operatorname{round}(t/S) + Z, q_{\\min}, q_{\\max}) - Z)\\, S$ and, for the\nfixed grid, $S = 1/256,Z = 0$.",
       "parameters": [
         {
           "name": "scale",
@@ -141,9 +239,58 @@
       ],
       "labels": [],
       "signature": "Hardswish(scale: Tensor, zero_point: Tensor, qdtype: QDtype = quint8)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/activation.py#L112",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L112",
       "subcategory": "activation",
-      "methods": [],
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.activation._QuantizedActivation.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L30",
+          "subcategory": "activation",
+          "summary": "Activate, then fake-quantize to the calibrated grid.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedActivation"
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.activation._QuantizedActivation.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L35",
+          "subcategory": "activation",
+          "summary": "Build from a calibrated float activation (reads its output observer).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedActivation"
+        }
+      ],
       "summary": "Quantized `lucid.nn.Hardswish` — `hardswish(x)` then output fake-quant.",
       "extended": "The inference-time replacement for a calibrated float `nn.Hardswish`,\ninstalled by `lucid.quantization.convert` / `from_float`.\nHardswish is the cheap piecewise-linear approximation of `x·sigmoid(x)`\nused throughout MobileNetV3 / EfficientNet-lite, chosen precisely because its\nclamp-and-multiply form quantizes cleanly. Under the sidecar representation\n(design B) the quantized layer is the float activation followed by a\nfake-quantize to the calibrated output grid.\n\nUnlike `Sigmoid` / `Tanh`, hardswish is **unbounded above**\n(it grows like $x$ for large $x$), so its output range is *not*\nknown a priori — it must be calibrated with a real observer rather than a\n`lucid.quantization.FixedQParamsObserver`.\n\n$$\ny = \\operatorname{fake\\_quant}\\bigl(\\operatorname{hardswish}(x)\\bigr),\n\\qquad\n\\operatorname{hardswish}(x) = x\\,\n    \\frac{\\operatorname{clamp}(x + 3,\\ 0,\\ 6)}{6}\n$$\n\nwith $\\operatorname{fake\\_quant}(t) = (\\operatorname{clamp}( \\operatorname{round}(t/S) + Z, q_{\\min}, q_{\\max}) - Z)\\, S$ and the\ncalibrated output `(scale, zero_point)` $S, Z$.",
       "parameters": [
@@ -201,9 +348,58 @@
       ],
       "labels": [],
       "signature": "LeakyReLU(scale: Tensor, zero_point: Tensor, qdtype: QDtype = quint8)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/activation.py#L393",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L393",
       "subcategory": "activation",
-      "methods": [],
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.activation._QuantizedActivation.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L30",
+          "subcategory": "activation",
+          "summary": "Activate, then fake-quantize to the calibrated grid.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedActivation"
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.activation._QuantizedActivation.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L35",
+          "subcategory": "activation",
+          "summary": "Build from a calibrated float activation (reads its output observer).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedActivation"
+        }
+      ],
       "summary": "Quantized `lucid.nn.LeakyReLU` — `leaky_relu(x, slope)` then fake-quant.",
       "extended": "The inference-time replacement for a calibrated float `nn.LeakyReLU`,\ninstalled by `lucid.quantization.convert` / `from_float`. Under\nthe sidecar representation (design B) the quantized layer is the float\nleaky-ReLU followed by a fake-quantize to the calibrated output grid. Like\n`ELU` its range is **unbounded** on both sides (linear far from the\norigin), so it is calibrated with a real observer, not a\n`lucid.quantization.FixedQParamsObserver`.\n\nThe `negative_slope` — the small gradient applied to $x < 0$ that\nkeeps dead-unit gradients alive — is a parameter of the activation;\n`from_float` copies it from the source `nn.LeakyReLU` (via the\ninternal `_configure` hook) so the quantized curve matches the float one\nbefore the output is snapped to the grid.\n\n$$\ny = \\operatorname{fake\\_quant}\\bigl(\\operatorname{leaky\\_relu}(x)\\bigr),\n\\qquad\n\\operatorname{leaky\\_relu}(x) =\n    \\begin{cases} x & x \\ge 0 \\\\ \\text{slope}\\cdot x & x < 0 \\end{cases}\n$$\n\nwith $\\operatorname{fake\\_quant}(t) = (\\operatorname{clamp}( \\operatorname{round}(t/S) + Z, q_{\\min}, q_{\\max}) - Z)\\, S$ and the\ncalibrated output `(scale, zero_point)` $S, Z$.",
       "parameters": [
@@ -267,9 +463,58 @@
       ],
       "labels": [],
       "signature": "Sigmoid(scale: Tensor, zero_point: Tensor, qdtype: QDtype = quint8)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/activation.py#L44",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L44",
       "subcategory": "activation",
-      "methods": [],
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.activation._QuantizedActivation.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L30",
+          "subcategory": "activation",
+          "summary": "Activate, then fake-quantize to the calibrated grid.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedActivation"
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.activation._QuantizedActivation.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L35",
+          "subcategory": "activation",
+          "summary": "Build from a calibrated float activation (reads its output observer).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedActivation"
+        }
+      ],
       "summary": "Quantized `lucid.nn.Sigmoid` — `sigmoid(x)` then output fake-quant.",
       "extended": "The inference-time replacement for a calibrated float `nn.Sigmoid` sitting\ninside a quantized region, installed by `lucid.quantization.convert` /\n`from_float`. Under the sidecar representation (design B) a *quantized*\nactivation is simply the float activation followed by a fake-quantize to the\ncalibrated output grid, so a standalone sigmoid is requantized rather than\nleft at full precision between two int8 layers.\n\nBecause $\\sigma(x) \\in [0, 1]$ the output range is known a priori, this\nis the archetypal **fixed-qparams** activation: instead of calibrating the\nrange from data, pair it with a\n`lucid.quantization.FixedQParamsObserver` in the qconfig, which pins\nthe grid to the constant $[0, 1]$ mapping.\n\n$$\ny = \\operatorname{fake\\_quant}\\bigl(\\sigma(x)\\bigr),\n\\qquad\nS = \\tfrac{1}{256},\\quad Z = 0\n$$\n\nso the `quint8` codes `0 .. 255` tile $[0, 1]$ uniformly with step\n$S$. $\\operatorname{fake\\_quant}(t) = (\\operatorname{clamp}( \\operatorname{round}(t/S) + Z, q_{\\min}, q_{\\max}) - Z)\\, S$.",
       "parameters": [
@@ -327,9 +572,58 @@
       ],
       "labels": [],
       "signature": "Tanh(scale: Tensor, zero_point: Tensor, qdtype: QDtype = quint8)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/activation.py#L244",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L244",
       "subcategory": "activation",
-      "methods": [],
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.activation._QuantizedActivation.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L30",
+          "subcategory": "activation",
+          "summary": "Activate, then fake-quantize to the calibrated grid.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedActivation"
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.activation._QuantizedActivation.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/activation.py#L35",
+          "subcategory": "activation",
+          "summary": "Build from a calibrated float activation (reads its output observer).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedActivation"
+        }
+      ],
       "summary": "Quantized `lucid.nn.Tanh` — `tanh(x)` then output fake-quant.",
       "extended": "The inference-time replacement for a calibrated float `nn.Tanh`, installed\nby `lucid.quantization.convert` / `from_float`. Under the sidecar\nrepresentation (design B) the quantized layer is the float `tanh` followed\nby a fake-quantize to the calibrated output grid, so a standalone tanh inside\na quantized region is requantized rather than left at full precision.\n\nBecause $\\tanh(x) \\in [-1, 1]$ the range is known a priori, making this\nanother **fixed-qparams** activation. Since the range is *signed*, the fixed\ngrid centres the zero-point in the middle of the `quint8` codes so that both\nthe `-1` and `+1` extremes are representable.\n\n$$\ny = \\operatorname{fake\\_quant}\\bigl(\\tanh(x)\\bigr),\n\\qquad\nS = \\tfrac{2}{256},\\quad Z = 128\n$$\n\nso codes `0 .. 255` tile $[-1, 1]$ with the real value `0` landing\non code `128`. $\\operatorname{fake\\_quant}(t) = (\\operatorname{clamp}( \\operatorname{round}(t/S) + Z, q_{\\min}, q_{\\max}) - Z)\\, S$.",
       "parameters": [
@@ -387,9 +681,81 @@
       ],
       "labels": [],
       "signature": "Conv1d(in_channels: int, out_channels: int, kernel_size: _IntTuple, stride: _IntTuple, padding: _IntTuple, dilation: _IntTuple, groups: int, bias: bool)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/conv.py#L182",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv.py#L182",
       "subcategory": "conv",
-      "methods": [],
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.conv._QuantizedConvNd.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv.py#L125",
+          "subcategory": "conv",
+          "summary": "Dequantize the kernel, convolve, fake-quantize the output.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvNd"
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.conv._QuantizedConvNd.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv.py#L136",
+          "subcategory": "conv",
+          "summary": "Quantize a calibrated float convolution module.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "_QuantizedConvNd",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvNd"
+        },
+        {
+          "name": "extra_repr",
+          "path": "lucid.nn.quantized.conv._QuantizedConvNd.extra_repr",
+          "kind": "function",
+          "labels": [],
+          "signature": "extra_repr()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv.py#L174",
+          "subcategory": "conv",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvNd"
+        }
+      ],
       "summary": "Quantized 1-D convolution — int8 kernel, dequantize-to-float compute.",
       "extended": "The inference-time replacement that `lucid.quantization.convert`\ninstalls in place of a calibrated float `lucid.nn.Conv1d`. It is the\nquantized member of the 1-D conv family — audio / time-series front ends,\n1-D residual stacks, token-mixing convolutions — and shares the exact sidecar\nrecipe of the quantized `lucid.nn.quantized.Linear`.\n\n**Representation (sidecar design B).** The learned float kernel is quantized\nonce, at `from_float` time, into an `int8` code tensor plus a\nper-output-channel `scale` / `zero_point`; the float kernel is then\ndropped. Only the int8 codes, the qparams, and the (still-float) bias live in\nthe module, so the checkpoint is far smaller than the float layer's. Each\nforward *dequantizes* the kernel back to float, runs the ordinary\n`F.conv1d`, and finally *fake-quantizes* the output onto the activation grid\nthat calibration observed. Keeping the convolution itself in float means the\nresult matches a genuine int8 kernel to within a rounding step **and** the\nlayer runs unchanged on any device, with no int8 conv kernel required.\n\n**Per-channel weights.** The kernel `(out_channels, in_channels/groups, k)`\nis quantized independently for every output channel (axis 0): each filter\ncarries its own scale and zero-point. Because different output filters often\nspan very different dynamic ranges, per-channel quantization tracks them far\nmore tightly than a single per-tensor scale, and is the standard\naccuracy-preserving choice for convolution kernels. The bias is small and\nprecision-sensitive, so it is left in float.\n\nEncoding happens once (at `from_float`); decode + convolve run on every\nforward:\n\n$$\nw^{q}_{o,c,k} = \\operatorname{clamp}\\!\\bigl(\n    \\operatorname{round}(w_{o,c,k}/s_o) + z_o,\\ -128,\\ 127\\bigr),\n\\qquad\n\\hat{w}_{o,c,k} = (w^{q}_{o,c,k} - z_o)\\, s_o\n$$\n\n$$\ny = \\operatorname{fake\\_quant}\\!\\bigl(\n    \\operatorname{conv1d}(x, \\hat{w}) + b\\bigr),\n\\qquad\n\\operatorname{fake\\_quant}(t) = \\bigl(\n    \\operatorname{clamp}(\\operatorname{round}(t/S) + Z,\\ q_{\\min},\\ q_{\\max})\n    - Z\\bigr)\\, S\n$$\n\nwhere $s_o, z_o$ are the per-output-channel weight scale / zero-point\n(index $o$ runs over `out_channels`) and $S, Z$ the scalar\ncalibrated output `(scale, zero_point)` with grid bounds\n$q_{\\min}, q_{\\max}$ (`0, 255` for the default `quint8`). The\ndecode → float-conv → re-quantize round-trip is what makes the output\n*bit-equivalent* to a true int8 kernel without needing one.",
       "parameters": [
@@ -512,9 +878,81 @@
       ],
       "labels": [],
       "signature": "Conv2d(in_channels: int, out_channels: int, kernel_size: _IntTuple, stride: _IntTuple, padding: _IntTuple, dilation: _IntTuple, groups: int, bias: bool)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/conv.py#L336",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv.py#L336",
       "subcategory": "conv",
-      "methods": [],
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.conv._QuantizedConvNd.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv.py#L125",
+          "subcategory": "conv",
+          "summary": "Dequantize the kernel, convolve, fake-quantize the output.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvNd"
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.conv._QuantizedConvNd.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv.py#L136",
+          "subcategory": "conv",
+          "summary": "Quantize a calibrated float convolution module.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "_QuantizedConvNd",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvNd"
+        },
+        {
+          "name": "extra_repr",
+          "path": "lucid.nn.quantized.conv._QuantizedConvNd.extra_repr",
+          "kind": "function",
+          "labels": [],
+          "signature": "extra_repr()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv.py#L174",
+          "subcategory": "conv",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvNd"
+        }
+      ],
       "summary": "Quantized 2-D convolution — int8 kernel, dequantize-to-float compute.",
       "extended": "The workhorse of the quantized vision zoo — the inference-time replacement\nthat `lucid.quantization.convert` installs for a calibrated float\n`lucid.nn.Conv2d`. Backbones such as `resnet_18` are almost\nentirely 2-D convolutions, so this layer is where the checkpoint / working-set\nsavings of int8 quantization are actually realized.\n\n**Representation (sidecar design B).** The learned float kernel is quantized\nonce, at `from_float` time, into an `int8` code tensor plus a\nper-output-channel `scale` / `zero_point`; the float kernel is then\ndropped. Only the int8 codes, the qparams, and the (still-float) bias live in\nthe module, so the checkpoint is far smaller than the float layer's. Each\nforward *dequantizes* the kernel back to float, runs the ordinary\n`F.conv2d`, and finally *fake-quantizes* the output onto the activation grid\nthat calibration observed. Keeping the convolution itself in float means the\nresult matches a genuine int8 kernel to within a rounding step **and** the\nlayer runs unchanged on any device, with no int8 conv kernel required.\n\n**Per-channel weights.** The kernel `(out_channels, in_channels/groups, kh,\nkw)` is quantized independently for every output channel (axis 0): each\nfilter carries its own scale and zero-point. Because different output filters\noften span very different dynamic ranges, per-channel quantization tracks them\nfar more tightly than a single per-tensor scale, and is the standard\naccuracy-preserving choice for convolution kernels. The bias is small and\nprecision-sensitive, so it is left in float.\n\nEncoding happens once (at `from_float`); decode + convolve run on every\nforward:\n\n$$\nw^{q}_{o,c,i,j} = \\operatorname{clamp}\\!\\bigl(\n    \\operatorname{round}(w_{o,c,i,j}/s_o) + z_o,\\ -128,\\ 127\\bigr),\n\\qquad\n\\hat{w}_{o,c,i,j} = (w^{q}_{o,c,i,j} - z_o)\\, s_o\n$$\n\n$$\ny = \\operatorname{fake\\_quant}\\!\\bigl(\n    \\operatorname{conv2d}(x, \\hat{w}) + b\\bigr),\n\\qquad\n\\operatorname{fake\\_quant}(t) = \\bigl(\n    \\operatorname{clamp}(\\operatorname{round}(t/S) + Z,\\ q_{\\min},\\ q_{\\max})\n    - Z\\bigr)\\, S\n$$\n\nwhere $s_o, z_o$ are the per-output-channel weight scale / zero-point\n(index $o$ runs over `out_channels`) and $S, Z$ the scalar\ncalibrated output `(scale, zero_point)` with grid bounds\n$q_{\\min}, q_{\\max}$ (`0, 255` for the default `quint8`). The\ndecode → float-conv → re-quantize round-trip is what makes the output\n*bit-equivalent* to a true int8 kernel without needing one.",
       "parameters": [
@@ -637,9 +1075,81 @@
       ],
       "labels": [],
       "signature": "Conv3d(in_channels: int, out_channels: int, kernel_size: _IntTuple, stride: _IntTuple, padding: _IntTuple, dilation: _IntTuple, groups: int, bias: bool)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/conv.py#L491",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv.py#L491",
       "subcategory": "conv",
-      "methods": [],
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.conv._QuantizedConvNd.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv.py#L125",
+          "subcategory": "conv",
+          "summary": "Dequantize the kernel, convolve, fake-quantize the output.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvNd"
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.conv._QuantizedConvNd.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv.py#L136",
+          "subcategory": "conv",
+          "summary": "Quantize a calibrated float convolution module.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "_QuantizedConvNd",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvNd"
+        },
+        {
+          "name": "extra_repr",
+          "path": "lucid.nn.quantized.conv._QuantizedConvNd.extra_repr",
+          "kind": "function",
+          "labels": [],
+          "signature": "extra_repr()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv.py#L174",
+          "subcategory": "conv",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvNd"
+        }
+      ],
       "summary": "Quantized 3-D convolution — int8 kernel, dequantize-to-float compute.",
       "extended": "The volumetric member of the quantized conv family (video, 3-D medical\nimaging), and the inference-time replacement that\n`lucid.quantization.convert` installs for a calibrated float\n`lucid.nn.Conv3d`. Volumetric kernels are the largest weights in a\n3-D net, so the int8 checkpoint / working-set savings matter most here.\n\n**Representation (sidecar design B).** The learned float kernel is quantized\nonce, at `from_float` time, into an `int8` code tensor plus a\nper-output-channel `scale` / `zero_point`; the float kernel is then\ndropped. Only the int8 codes, the qparams, and the (still-float) bias live in\nthe module, so the checkpoint is far smaller than the float layer's. Each\nforward *dequantizes* the kernel back to float, runs the ordinary\n`F.conv3d`, and finally *fake-quantizes* the output onto the activation grid\nthat calibration observed. Keeping the convolution itself in float means the\nresult matches a genuine int8 kernel to within a rounding step **and** the\nlayer runs unchanged on any device, with no int8 conv kernel required.\n\n**Per-channel weights.** The kernel `(out_channels, in_channels/groups, kd,\nkh, kw)` is quantized independently for every output channel (axis 0): each\nfilter carries its own scale and zero-point. Because different output filters\noften span very different dynamic ranges, per-channel quantization tracks them\nfar more tightly than a single per-tensor scale, and is the standard\naccuracy-preserving choice for convolution kernels. The bias is small and\nprecision-sensitive, so it is left in float.\n\nEncoding happens once (at `from_float`); decode + convolve run on every\nforward:\n\n$$\nw^{q}_{o,c,d,i,j} = \\operatorname{clamp}\\!\\bigl(\n    \\operatorname{round}(w_{o,c,d,i,j}/s_o) + z_o,\\ -128,\\ 127\\bigr),\n\\qquad\n\\hat{w}_{o,c,d,i,j} = (w^{q}_{o,c,d,i,j} - z_o)\\, s_o\n$$\n\n$$\ny = \\operatorname{fake\\_quant}\\!\\bigl(\n    \\operatorname{conv3d}(x, \\hat{w}) + b\\bigr),\n\\qquad\n\\operatorname{fake\\_quant}(t) = \\bigl(\n    \\operatorname{clamp}(\\operatorname{round}(t/S) + Z,\\ q_{\\min},\\ q_{\\max})\n    - Z\\bigr)\\, S\n$$\n\nwhere $s_o, z_o$ are the per-output-channel weight scale / zero-point\n(index $o$ runs over `out_channels`) and $S, Z$ the scalar\ncalibrated output `(scale, zero_point)` with grid bounds\n$q_{\\min}, q_{\\max}$ (`0, 255` for the default `quint8`). The\ndecode → float-conv → re-quantize round-trip is what makes the output\n*bit-equivalent* to a true int8 kernel without needing one.",
       "parameters": [
@@ -762,9 +1272,81 @@
       ],
       "labels": [],
       "signature": "ConvTranspose1d(in_channels: int, out_channels: int, kernel_size: _IntTuple, stride: _IntTuple, padding: _IntTuple, output_padding: _IntTuple, dilation: _IntTuple, groups: int, bias: bool)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/conv_transpose.py#L151",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv_transpose.py#L151",
       "subcategory": "conv",
-      "methods": [],
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.conv_transpose._QuantizedConvTransposeNd.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv_transpose.py#L97",
+          "subcategory": "conv",
+          "summary": "Dequantize the kernel, transposed-convolve, fake-quantize the output.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvTransposeNd"
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.conv_transpose._QuantizedConvTransposeNd.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv_transpose.py#L108",
+          "subcategory": "conv",
+          "summary": "Quantize a calibrated float transposed conv (per-channel int8 weight).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvTransposeNd"
+        },
+        {
+          "name": "extra_repr",
+          "path": "lucid.nn.quantized.conv_transpose._QuantizedConvTransposeNd.extra_repr",
+          "kind": "function",
+          "labels": [],
+          "signature": "extra_repr()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv_transpose.py#L143",
+          "subcategory": "conv",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvTransposeNd"
+        }
+      ],
       "summary": "Quantized 1-D transposed (fractionally-strided) convolution.",
       "extended": "The int8-weight, dequantize-to-float replacement that\n`lucid.quantization.convert` installs for a calibrated float\n`lucid.nn.ConvTranspose1d`. Transposed convolutions *upsample* — they\nare the decoder / generator counterpart of `lucid.nn.quantized.Conv1d`\nin 1-D signal models — and share the exact sidecar recipe of the quantized\n`lucid.nn.quantized.Conv2d` family.\n\n**Representation (sidecar design B).** The learned float kernel is quantized\nonce, at `from_float` time, into an `int8` code tensor plus a\nper-output-channel `scale` / `zero_point`; the float kernel is then\ndropped. Only the int8 codes, the qparams, and the (still-float) bias live in\nthe module. Each forward *dequantizes* the kernel back to float, runs the\nordinary `F.conv_transpose1d`, and finally *fake-quantizes* the output onto\nthe activation grid that calibration observed. Keeping the transposed\nconvolution itself in float means the result matches a genuine int8 kernel to\nwithin a rounding step **and** the layer runs unchanged on any device.\n\n**Per-channel weights (axis 1).** The transposed-weight layout `(in_channels,\nout_channels/groups, k)` places the *output* channels on **axis 1**, not axis\n0, so the kernel is quantized per-channel along axis 1 — each output channel\ngets its own scale, far tighter than one per-tensor scale for wide kernels.\nThe scheme is **symmetric** (`qint8`, `zero_point = 0`), matching the\nreference default for transposed weights; the bias stays float.\n\nEncoding happens once (at `from_float`); decode + transposed-convolve run\non every forward:\n\n$$\nw^{q}_{c,o,k} = \\operatorname{clamp}\\!\\bigl(\n    \\operatorname{round}(w_{c,o,k}/s_o),\\ -128,\\ 127\\bigr),\n\\qquad\n\\hat{w}_{c,o,k} = w^{q}_{c,o,k}\\, s_o\n$$\n\n$$\ny = \\operatorname{fake\\_quant}\\!\\bigl(\n    \\operatorname{convT1d}(x, \\hat{w}) + b\\bigr),\n\\qquad\n\\operatorname{fake\\_quant}(t) = \\bigl(\n    \\operatorname{clamp}(\\operatorname{round}(t/S) + Z,\\ q_{\\min},\\ q_{\\max})\n    - Z\\bigr)\\, S\n$$\n\nwhere $s_o$ is the per-output-channel (axis-1) weight scale — with a zero\nzero-point because the weight scheme is symmetric — and $S, Z$ the scalar\ncalibrated output `(scale, zero_point)` with grid bounds\n$q_{\\min}, q_{\\max}$ (`0, 255` for the default `quint8`).",
       "parameters": [
@@ -889,9 +1471,81 @@
       ],
       "labels": [],
       "signature": "ConvTranspose2d(in_channels: int, out_channels: int, kernel_size: _IntTuple, stride: _IntTuple, padding: _IntTuple, output_padding: _IntTuple, dilation: _IntTuple, groups: int, bias: bool)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/conv_transpose.py#L311",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv_transpose.py#L311",
       "subcategory": "conv",
-      "methods": [],
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.conv_transpose._QuantizedConvTransposeNd.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv_transpose.py#L97",
+          "subcategory": "conv",
+          "summary": "Dequantize the kernel, transposed-convolve, fake-quantize the output.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvTransposeNd"
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.conv_transpose._QuantizedConvTransposeNd.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv_transpose.py#L108",
+          "subcategory": "conv",
+          "summary": "Quantize a calibrated float transposed conv (per-channel int8 weight).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvTransposeNd"
+        },
+        {
+          "name": "extra_repr",
+          "path": "lucid.nn.quantized.conv_transpose._QuantizedConvTransposeNd.extra_repr",
+          "kind": "function",
+          "labels": [],
+          "signature": "extra_repr()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv_transpose.py#L143",
+          "subcategory": "conv",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvTransposeNd"
+        }
+      ],
       "summary": "Quantized 2-D transposed (fractionally-strided) convolution.",
       "extended": "The upsampling counterpart of `lucid.nn.quantized.Conv2d`, and the\nint8-weight, dequantize-to-float replacement that\n`lucid.quantization.convert` installs for a calibrated float\n`lucid.nn.ConvTranspose2d`. It is the standard decoder / up-projection\nlayer of segmentation heads and generative up-samplers, and shares the sidecar\nrecipe of the quantized `lucid.nn.quantized.Conv2d`.\n\n**Representation (sidecar design B).** The learned float kernel is quantized\nonce, at `from_float` time, into an `int8` code tensor plus a\nper-output-channel `scale` / `zero_point`; the float kernel is then\ndropped. Only the int8 codes, the qparams, and the (still-float) bias live in\nthe module. Each forward *dequantizes* the kernel back to float, runs the\nordinary `F.conv_transpose2d`, and finally *fake-quantizes* the output onto\nthe activation grid that calibration observed. Keeping the transposed\nconvolution itself in float means the result matches a genuine int8 kernel to\nwithin a rounding step **and** the layer runs unchanged on any device.\n\n**Per-channel weights (axis 1).** The transposed-weight layout `(in_channels,\nout_channels/groups, kh, kw)` places the *output* channels on **axis 1**, not\naxis 0, so the kernel is quantized per-channel along axis 1 — each output\nchannel gets its own scale, far tighter than one per-tensor scale for wide\nkernels. The scheme is **symmetric** (`qint8`, `zero_point = 0`), matching\nthe reference default for transposed weights; the bias stays float.\n\nEncoding happens once (at `from_float`); decode + transposed-convolve run\non every forward:\n\n$$\nw^{q}_{c,o,i,j} = \\operatorname{clamp}\\!\\bigl(\n    \\operatorname{round}(w_{c,o,i,j}/s_o),\\ -128,\\ 127\\bigr),\n\\qquad\n\\hat{w}_{c,o,i,j} = w^{q}_{c,o,i,j}\\, s_o\n$$\n\n$$\ny = \\operatorname{fake\\_quant}\\!\\bigl(\n    \\operatorname{convT2d}(x, \\hat{w}) + b\\bigr),\n\\qquad\n\\operatorname{fake\\_quant}(t) = \\bigl(\n    \\operatorname{clamp}(\\operatorname{round}(t/S) + Z,\\ q_{\\min},\\ q_{\\max})\n    - Z\\bigr)\\, S\n$$\n\nwhere $s_o$ is the per-output-channel (axis-1) weight scale — with a zero\nzero-point because the weight scheme is symmetric — and $S, Z$ the scalar\ncalibrated output `(scale, zero_point)` with grid bounds\n$q_{\\min}, q_{\\max}$ (`0, 255` for the default `quint8`).",
       "parameters": [
@@ -1020,9 +1674,81 @@
       ],
       "labels": [],
       "signature": "ConvTranspose3d(in_channels: int, out_channels: int, kernel_size: _IntTuple, stride: _IntTuple, padding: _IntTuple, output_padding: _IntTuple, dilation: _IntTuple, groups: int, bias: bool)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/conv_transpose.py#L473",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv_transpose.py#L473",
       "subcategory": "conv",
-      "methods": [],
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.conv_transpose._QuantizedConvTransposeNd.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv_transpose.py#L97",
+          "subcategory": "conv",
+          "summary": "Dequantize the kernel, transposed-convolve, fake-quantize the output.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvTransposeNd"
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.conv_transpose._QuantizedConvTransposeNd.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv_transpose.py#L108",
+          "subcategory": "conv",
+          "summary": "Quantize a calibrated float transposed conv (per-channel int8 weight).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvTransposeNd"
+        },
+        {
+          "name": "extra_repr",
+          "path": "lucid.nn.quantized.conv_transpose._QuantizedConvTransposeNd.extra_repr",
+          "kind": "function",
+          "labels": [],
+          "signature": "extra_repr()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/conv_transpose.py#L143",
+          "subcategory": "conv",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_QuantizedConvTransposeNd"
+        }
+      ],
       "summary": "Quantized 3-D transposed (fractionally-strided) convolution.",
       "extended": "The volumetric upsampling layer (video / 3-D medical decoders), and the\nint8-weight, dequantize-to-float replacement that\n`lucid.quantization.convert` installs for a calibrated float\n`lucid.nn.ConvTranspose3d`. It is the up-projection counterpart of\n`lucid.nn.quantized.Conv3d`, and shares the sidecar recipe of the\nquantized `lucid.nn.quantized.Conv2d` family.\n\n**Representation (sidecar design B).** The learned float kernel is quantized\nonce, at `from_float` time, into an `int8` code tensor plus a\nper-output-channel `scale` / `zero_point`; the float kernel is then\ndropped. Only the int8 codes, the qparams, and the (still-float) bias live in\nthe module. Each forward *dequantizes* the kernel back to float, runs the\nordinary `F.conv_transpose3d`, and finally *fake-quantizes* the output onto\nthe activation grid that calibration observed. Keeping the transposed\nconvolution itself in float means the result matches a genuine int8 kernel to\nwithin a rounding step **and** the layer runs unchanged on any device.\n\n**Per-channel weights (axis 1).** The transposed-weight layout `(in_channels,\nout_channels/groups, kd, kh, kw)` places the *output* channels on **axis 1**,\nnot axis 0, so the kernel is quantized per-channel along axis 1 — each output\nchannel gets its own scale, far tighter than one per-tensor scale for the wide\ndynamic range of volumetric kernels. The scheme is **symmetric** (`qint8`,\n`zero_point = 0`), matching the reference default; the bias stays float.\n\nEncoding happens once (at `from_float`); decode + transposed-convolve run\non every forward:\n\n$$\nw^{q}_{c,o,d,i,j} = \\operatorname{clamp}\\!\\bigl(\n    \\operatorname{round}(w_{c,o,d,i,j}/s_o),\\ -128,\\ 127\\bigr),\n\\qquad\n\\hat{w}_{c,o,d,i,j} = w^{q}_{c,o,d,i,j}\\, s_o\n$$\n\n$$\ny = \\operatorname{fake\\_quant}\\!\\bigl(\n    \\operatorname{convT3d}(x, \\hat{w}) + b\\bigr),\n\\qquad\n\\operatorname{fake\\_quant}(t) = \\bigl(\n    \\operatorname{clamp}(\\operatorname{round}(t/S) + Z,\\ q_{\\min},\\ q_{\\max})\n    - Z\\bigr)\\, S\n$$\n\nwhere $s_o$ is the per-output-channel (axis-1) weight scale — with a zero\nzero-point because the weight scheme is symmetric — and $S, Z$ the scalar\ncalibrated output `(scale, zero_point)` with grid bounds\n$q_{\\min}, q_{\\max}$ (`0, 255` for the default `quint8`).",
       "parameters": [
@@ -1147,7 +1873,7 @@
       ],
       "labels": [],
       "signature": "FloatFunctional()",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L23",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L23",
       "subcategory": "functional_module",
       "methods": [
         {
@@ -1156,7 +1882,7 @@
           "kind": "function",
           "labels": [],
           "signature": "add(x: Tensor, y: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L100",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L100",
           "subcategory": "functional_module",
           "summary": "Observed `x + y` (a residual skip-add).",
           "extended": null,
@@ -1178,7 +1904,7 @@
           "kind": "function",
           "labels": [],
           "signature": "mul(x: Tensor, y: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L104",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L104",
           "subcategory": "functional_module",
           "summary": "Observed `x * y`.",
           "extended": null,
@@ -1200,7 +1926,7 @@
           "kind": "function",
           "labels": [],
           "signature": "add_relu(x: Tensor, y: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L108",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L108",
           "subcategory": "functional_module",
           "summary": "Observed `relu(x + y)` — the fused residual-add of a ResNet block.",
           "extended": null,
@@ -1222,7 +1948,7 @@
           "kind": "function",
           "labels": [],
           "signature": "cat(tensors: list[Tensor], dim: int = 0)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L112",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L112",
           "subcategory": "functional_module",
           "summary": "Observed concatenation along `dim`.",
           "extended": null,
@@ -1244,7 +1970,7 @@
           "kind": "function",
           "labels": [],
           "signature": "add_scalar(x: Tensor, scalar: float)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L116",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L116",
           "subcategory": "functional_module",
           "summary": "Observed `x + scalar`.",
           "extended": null,
@@ -1266,7 +1992,7 @@
           "kind": "function",
           "labels": [],
           "signature": "mul_scalar(x: Tensor, scalar: float)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L120",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L120",
           "subcategory": "functional_module",
           "summary": "Observed `x * scalar`.",
           "extended": null,
@@ -1328,7 +2054,7 @@
       ],
       "labels": [],
       "signature": "QFunctional(scale: Tensor, zero_point: Tensor, qdtype: QDtype = quint8)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L125",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L125",
       "subcategory": "functional_module",
       "methods": [
         {
@@ -1337,7 +2063,7 @@
           "kind": "function",
           "labels": [],
           "signature": "add(x: Tensor, y: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L207",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L207",
           "subcategory": "functional_module",
           "summary": "Quantized `x + y`.",
           "extended": null,
@@ -1359,7 +2085,7 @@
           "kind": "function",
           "labels": [],
           "signature": "mul(x: Tensor, y: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L211",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L211",
           "subcategory": "functional_module",
           "summary": "Quantized `x * y`.",
           "extended": null,
@@ -1381,7 +2107,7 @@
           "kind": "function",
           "labels": [],
           "signature": "add_relu(x: Tensor, y: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L215",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L215",
           "subcategory": "functional_module",
           "summary": "Quantized `relu(x + y)`.",
           "extended": null,
@@ -1403,7 +2129,7 @@
           "kind": "function",
           "labels": [],
           "signature": "cat(tensors: list[Tensor], dim: int = 0)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L219",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L219",
           "subcategory": "functional_module",
           "summary": "Quantized concatenation along `dim`.",
           "extended": null,
@@ -1425,7 +2151,7 @@
           "kind": "function",
           "labels": [],
           "signature": "add_scalar(x: Tensor, scalar: float)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L223",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L223",
           "subcategory": "functional_module",
           "summary": "Quantized `x + scalar`.",
           "extended": null,
@@ -1447,7 +2173,7 @@
           "kind": "function",
           "labels": [],
           "signature": "mul_scalar(x: Tensor, scalar: float)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L227",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L227",
           "subcategory": "functional_module",
           "summary": "Quantized `x * scalar`.",
           "extended": null,
@@ -1471,7 +2197,7 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/functional_module.py#L231",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/functional_module.py#L231",
           "subcategory": "functional_module",
           "summary": "Build from a calibrated `FloatFunctional` (reads its observer).",
           "extended": null,
@@ -1556,7 +2282,7 @@
       ],
       "labels": [],
       "signature": "ConvReLU1d(in_channels: int, out_channels: int, kernel_size: _IntTuple, stride: _IntTuple, padding: _IntTuple, dilation: _IntTuple, groups: int, bias: bool)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/intrinsic.py#L141",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/intrinsic.py#L141",
       "subcategory": "intrinsic",
       "methods": [
         {
@@ -1567,7 +2293,7 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/intrinsic.py#L235",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/intrinsic.py#L235",
           "subcategory": "intrinsic",
           "summary": "Quantize a calibrated float convolution module.",
           "extended": null,
@@ -1697,7 +2423,7 @@
       ],
       "labels": [],
       "signature": "ConvReLU2d(in_channels: int, out_channels: int, kernel_size: _IntTuple, stride: _IntTuple, padding: _IntTuple, dilation: _IntTuple, groups: int, bias: bool)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/intrinsic.py#L241",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/intrinsic.py#L241",
       "subcategory": "intrinsic",
       "methods": [
         {
@@ -1708,9 +2434,9 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/intrinsic.py#L338",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/intrinsic.py#L338",
           "subcategory": "intrinsic",
-          "summary": "Build from a calibrated float activation (reads its output observer).",
+          "summary": "Quantize a calibrated float convolution module.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -1838,7 +2564,7 @@
       ],
       "labels": [],
       "signature": "ConvReLU3d(in_channels: int, out_channels: int, kernel_size: _IntTuple, stride: _IntTuple, padding: _IntTuple, dilation: _IntTuple, groups: int, bias: bool)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/intrinsic.py#L344",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/intrinsic.py#L344",
       "subcategory": "intrinsic",
       "methods": [
         {
@@ -1849,7 +2575,7 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/intrinsic.py#L441",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/intrinsic.py#L441",
           "subcategory": "intrinsic",
           "summary": "Quantize a calibrated float convolution module.",
           "extended": null,
@@ -1979,7 +2705,7 @@
       ],
       "labels": [],
       "signature": "LinearReLU(in_features: int, out_features: int, bias: bool = True)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/intrinsic.py#L40",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/intrinsic.py#L40",
       "subcategory": "intrinsic",
       "methods": [
         {
@@ -1990,9 +2716,9 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/intrinsic.py#L135",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/intrinsic.py#L135",
           "subcategory": "intrinsic",
-          "summary": "Build a QAT `Linear` from a float one (shares the trained weight).",
+          "summary": "Quantize a calibrated float `lucid.nn.Linear`.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -2095,7 +2821,7 @@
       ],
       "labels": [],
       "signature": "Linear(in_features: int, out_features: int, bias: bool = True)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/linear.py#L37",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/linear.py#L37",
       "subcategory": "linear",
       "methods": [
         {
@@ -2104,47 +2830,18 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(in_features: int, out_features: int, bias: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/linear.py#L183",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/linear.py#L183",
           "subcategory": "linear",
-          "summary": "Construct a Tensor from Python data, a NumPy array, or another Tensor.",
-          "extended": "The data is funnelled through `lucid._factories.converters._to_impl`,\nthe canonical bridge between the outside world and Lucid's C++\n`TensorImpl`. Python scalars become 0-d tensors; nested lists are\nrecursively flattened with shape inference; NumPy arrays cross the\nsingle sanctioned host-to-engine boundary; and existing `Tensor`\nsources are rewrapped (optionally with cast and/or device transfer).",
-          "parameters": [
-            {
-              "name": "data",
-              "annotation": "ndarray | list | int | float | bool | Tensor",
-              "description": "Source data. Python scalars become 0-d tensors; lists are\nrecursively converted; NumPy arrays use the bridge boundary\ndocumented in `lucid._factories.converters`; another Tensor\nis shallow-copied to a new Tensor with possibly different\n`dtype` / `device` / `requires_grad`.",
-              "default": null
-            },
-            {
-              "name": "dtype",
-              "annotation": "dtype | str | None",
-              "description": "Element type. If `None`, inferred from `data`.",
-              "default": null
-            },
-            {
-              "name": "device",
-              "annotation": "device | str | None",
-              "description": "Target device (`\"cpu\"` or `\"metal\"`). If `None`, defaults\nto the source device or `\"cpu\"` for host data.",
-              "default": null
-            },
-            {
-              "name": "requires_grad",
-              "annotation": "bool",
-              "description": "Whether to record operations on this tensor for autograd.",
-              "default": null
-            }
-          ],
+          "summary": null,
+          "extended": null,
+          "parameters": [],
           "returns": {
-            "annotation": "Tensor",
-            "description": "A freshly constructed tensor whose storage is owned by the\nengine."
+            "annotation": "None",
+            "description": ""
           },
           "raises": [],
-          "examples": [
-            ">>> import lucid\n>>> lucid.Tensor([1.0, 2.0, 3.0])\ntensor([1., 2., 3.])\n>>> lucid.Tensor([[1, 2], [3, 4]], dtype=lucid.int64).shape\n(2, 2)\n>>> x = lucid.Tensor(3.14, requires_grad=True)\n>>> x.requires_grad\nTrue"
-          ],
-          "notes": [
-            "Constructor is one of the six sanctioned host-to-engine bridge\nboundaries (rule **H4**). NumPy arrays cross the bridge exactly\nonce here; afterwards the data is owned by Lucid's engine. The\nresulting layout is C-contiguous row-major:\n\n\n\n$$\n\\text{stride}[i] = e \\cdot \\prod_{j=i+1}^{d-1} s_j\n$$\n\nwhere $e$ is the element size in bytes and $s_j$ are\nthe dimension sizes."
-          ],
+          "examples": [],
+          "notes": [],
           "attributes": [],
           "warns": [],
           "see_also": []
@@ -2155,7 +2852,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/linear.py#L205",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/linear.py#L205",
           "subcategory": "linear",
           "summary": "Dequantize the weight, run linear, fake-quantize the output.",
           "extended": null,
@@ -2179,7 +2876,7 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/linear.py#L216",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/linear.py#L216",
           "subcategory": "linear",
           "summary": "Quantize a calibrated float `lucid.nn.Linear`.",
           "extended": null,
@@ -2201,9 +2898,9 @@
           "kind": "function",
           "labels": [],
           "signature": "extra_repr()",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/linear.py#L237",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/linear.py#L237",
           "subcategory": "linear",
-          "summary": "Return a string representation of the layer's configuration.",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -2310,7 +3007,7 @@
       ],
       "labels": [],
       "signature": "QuantizedLinearMLX(in_features: int, out_features: int, bias: bool = True, bits: int = 8, group_size: int = 64, relu: bool = False)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/mlx_linear.py#L21",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/mlx_linear.py#L21",
       "subcategory": "mlx_linear",
       "methods": [
         {
@@ -2319,7 +3016,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(in_features: int, out_features: int, bias: bool = True, bits: int = 8, group_size: int = 64, relu: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/mlx_linear.py#L163",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/mlx_linear.py#L163",
           "subcategory": "mlx_linear",
           "summary": null,
           "extended": null,
@@ -2341,7 +3038,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/mlx_linear.py#L194",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/mlx_linear.py#L194",
           "subcategory": "mlx_linear",
           "summary": "Run the MLX low-precision GEMM `x @ packed_wᵀ` (+ bias, +ReLU).",
           "extended": "The kernel is Metal-only, so a CPU-carried activation is moved onto the\nGPU for the GEMM and the result is moved **back to the input's device**.\nThat keeps this layer device-transparent — it accelerates inside an\notherwise-CPU model without forcing the whole model (or residual skip\nbranches) onto Metal.",
@@ -2365,7 +3062,7 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module, bits: int = 8, group_size: int = 64, relu: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/mlx_linear.py#L222",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/mlx_linear.py#L222",
           "subcategory": "mlx_linear",
           "summary": "Quantize a float `Linear`'s weight into MLX packed form (on Metal).",
           "extended": null,
@@ -2387,9 +3084,9 @@
           "kind": "function",
           "labels": [],
           "signature": "extra_repr()",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/mlx_linear.py#L245",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/mlx_linear.py#L245",
           "subcategory": "mlx_linear",
-          "summary": null,
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -2500,7 +3197,7 @@
       ],
       "labels": [],
       "signature": "DeQuantize()",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L281",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L281",
       "subcategory": "modules",
       "methods": [
         {
@@ -2509,7 +3206,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(Xq: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L326",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L326",
           "subcategory": "modules",
           "summary": "Identity (activations are already float-carried).",
           "extended": null,
@@ -2533,7 +3230,7 @@
             "classmethod"
           ],
           "signature": "from_float(stub: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L331",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L331",
           "subcategory": "modules",
           "summary": "Build from a `DeQuantStub` (no state to carry).",
           "extended": null,
@@ -2595,7 +3292,7 @@
       ],
       "labels": [],
       "signature": "DeQuantStub(qconfig: object = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L125",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L125",
       "subcategory": "modules",
       "methods": [
         {
@@ -2604,7 +3301,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(qconfig: object = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L174",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L174",
           "subcategory": "modules",
           "summary": null,
           "extended": null,
@@ -2626,7 +3323,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L179",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L179",
           "subcategory": "modules",
           "summary": "Identity.",
           "extended": null,
@@ -2688,7 +3385,7 @@
       ],
       "labels": [],
       "signature": "Quantize(scale: Tensor, zero_point: Tensor, qdtype: QDtype = quint8)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L185",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L185",
       "subcategory": "modules",
       "methods": [
         {
@@ -2697,7 +3394,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(X: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L262",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L262",
           "subcategory": "modules",
           "summary": "Quantize `X` to the calibrated activation grid (float-carried).",
           "extended": "Integer inputs (e.g. token indices) are passed through unchanged —\nonly real-valued activations are quantized.",
@@ -2721,7 +3418,7 @@
             "classmethod"
           ],
           "signature": "from_float(stub: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L273",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L273",
           "subcategory": "modules",
           "summary": "Build from a calibrated `QuantStub` (reads its observer).",
           "extended": null,
@@ -2810,7 +3507,7 @@
       ],
       "labels": [],
       "signature": "QuantStub(qconfig: object = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L28",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L28",
       "subcategory": "modules",
       "methods": [
         {
@@ -2819,7 +3516,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(qconfig: object = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L105",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L105",
           "subcategory": "modules",
           "summary": null,
           "extended": null,
@@ -2841,7 +3538,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L110",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L110",
           "subcategory": "modules",
           "summary": "Identity for PTQ (a hook observes); fake-quant for QAT.",
           "extended": "In QAT `prepare_qat` attaches a `FakeQuantize` as\n`activation_post_process` — apply it so the input is fake-quantized\nduring training.  In PTQ it's a bare observer fed by a forward hook,\nso the stub stays an identity.",
@@ -2907,7 +3604,7 @@
       ],
       "labels": [],
       "signature": "QuantWrapper(module: nn.Module)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L338",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L338",
       "subcategory": "modules",
       "methods": [
         {
@@ -2916,7 +3613,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(module: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L400",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L400",
           "subcategory": "modules",
           "summary": null,
           "extended": null,
@@ -2938,7 +3635,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/modules.py#L406",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/modules.py#L406",
           "subcategory": "modules",
           "summary": "Quantize the input, run the wrapped model, dequantize the output.",
           "extended": null,
@@ -3020,7 +3717,7 @@
       ],
       "labels": [],
       "signature": "Embedding(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/sparse.py#L28",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/sparse.py#L28",
       "subcategory": "sparse",
       "methods": [
         {
@@ -3029,28 +3726,16 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/sparse.py#L125",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/sparse.py#L125",
           "subcategory": "sparse",
-          "summary": "Initialise the module and validate the supplied config.",
+          "summary": null,
           "extended": null,
-          "parameters": [
-            {
-              "name": "config",
-              "annotation": "ModelConfig",
-              "description": "Must be an instance of the subclass's declared\n`config_class`.",
-              "default": null
-            }
-          ],
+          "parameters": [],
           "returns": {
             "annotation": "None",
             "description": ""
           },
-          "raises": [
-            {
-              "annotation": "TypeError",
-              "description": "If `config_class` has not been set on the concrete subclass,\nor if `config` is not an instance of `config_class`."
-            }
-          ],
+          "raises": [],
           "examples": [],
           "notes": [],
           "attributes": [],
@@ -3063,7 +3748,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(indices: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/sparse.py#L139",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/sparse.py#L139",
           "subcategory": "sparse",
           "summary": "Dequantize the table and look up `indices`.",
           "extended": null,
@@ -3087,7 +3772,7 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/sparse.py#L145",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/sparse.py#L145",
           "subcategory": "sparse",
           "summary": "Quantize a float `lucid.nn.Embedding`'s table (per-row int8).",
           "extended": null,
@@ -3109,9 +3794,9 @@
           "kind": "function",
           "labels": [],
           "signature": "extra_repr()",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/sparse.py#L168",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/sparse.py#L168",
           "subcategory": "sparse",
-          "summary": "Return a string representation of the layer's configuration.",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -3199,7 +3884,7 @@
       ],
       "labels": [],
       "signature": "EmbeddingBag(num_embeddings: int, embedding_dim: int, mode: str = 'mean', padding_idx: int | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/sparse.py#L173",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/sparse.py#L173",
       "subcategory": "sparse",
       "methods": [
         {
@@ -3208,9 +3893,9 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(num_embeddings: int, embedding_dim: int, mode: str = 'mean', padding_idx: int | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/sparse.py#L264",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/sparse.py#L264",
           "subcategory": "sparse",
-          "summary": "Initialise the Embedding module. See the class docstring for parameter semantics.",
+          "summary": null,
           "extended": null,
           "parameters": [],
           "returns": {
@@ -3230,7 +3915,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(indices: Tensor, offsets: Tensor | None = None, per_sample_weights: Tensor | None = None, compressed_indices_mapping: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/sparse.py#L283",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/sparse.py#L283",
           "subcategory": "sparse",
           "summary": "Dequantize the table and run the pooled bag lookup.",
           "extended": null,
@@ -3254,7 +3939,7 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/sparse.py#L306",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/sparse.py#L306",
           "subcategory": "sparse",
           "summary": "Quantize a float `lucid.nn.EmbeddingBag`'s table (per-row int8).",
           "extended": null,
@@ -3276,9 +3961,9 @@
           "kind": "function",
           "labels": [],
           "signature": "extra_repr()",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/quantized/sparse.py#L332",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/sparse.py#L332",
           "subcategory": "sparse",
-          "summary": "Return a string representation of the layer's configuration.",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
           "extended": null,
           "parameters": [],
           "returns": {

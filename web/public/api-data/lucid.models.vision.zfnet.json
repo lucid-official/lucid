@@ -3,7 +3,7 @@
   "name": "zfnet",
   "path": "lucid.models.vision.zfnet",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/zfnet/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/zfnet/__init__.py#L1",
   "members": [
     {
       "name": "ZFNetConfig",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "ZFNetConfig(num_classes: int = 1000, in_channels: int = 3, dropout: float = 0.5)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/zfnet/_config.py#L10",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/zfnet/_config.py#L10",
       "subcategory": "config",
       "methods": [
         {
@@ -24,7 +24,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(num_classes: int = 1000, in_channels: int = 3, dropout: float = 0.5)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/zfnet/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/zfnet/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -65,7 +65,7 @@
       ],
       "labels": [],
       "signature": "ZFNet(config: ZFNetConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/zfnet/_model.py#L70",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/zfnet/_model.py#L70",
       "subcategory": "model",
       "methods": [
         {
@@ -74,7 +74,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: ZFNetConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/zfnet/_model.py#L136",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/zfnet/_model.py#L136",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -96,17 +96,26 @@
           "kind": "function",
           "labels": [],
           "signature": "forward_features(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/zfnet/_model.py#L148",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/zfnet/_model.py#L148",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Run the backbone's feature-extraction pass.",
           "extended": null,
-          "parameters": [],
+          "parameters": [
+            {
+              "name": "x",
+              "annotation": "Tensor",
+              "description": "Input image batch, shape `(B, C, H, W)`.",
+              "default": null
+            }
+          ],
           "returns": {
             "annotation": "Tensor",
-            "description": ""
+            "description": "Feature map at the deepest stage.  Concrete subclasses may\nadditionally stash earlier stages on the instance so\nmulti-stage consumers can fetch them."
           },
           "raises": [],
-          "examples": [],
+          "examples": [
+            "The map returned is the one feature_info lists last, so a\nneck can size itself from that entry without running the model.\n>>> import lucid\n>>> from lucid.models import create_model\n>>> backbone = create_model(\"resnet_18\").eval()\n>>> last = backbone.feature_info[-1]\n>>> last.num_channels, last.reduction\n(512, 32)\n>>> backbone.forward_features(lucid.randn((1, 3, 64, 96))).shape\n(1, 512, 2, 3)\nEach side is divided by the advertised reduction on its own, so\na non-square input keeps its aspect ratio."
+          ],
           "notes": [],
           "attributes": [],
           "warns": [],
@@ -118,9 +127,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/zfnet/_model.py#L153",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/zfnet/_model.py#L153",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -189,7 +198,7 @@
       ],
       "labels": [],
       "signature": "ZFNetForImageClassification(config: ZFNetConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/zfnet/_model.py#L163",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/zfnet/_model.py#L163",
       "subcategory": "model",
       "methods": [
         {
@@ -198,7 +207,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: ZFNetConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/zfnet/_model.py#L218",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/zfnet/_model.py#L218",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -220,9 +229,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor, labels: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/zfnet/_model.py#L228",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/zfnet/_model.py#L228",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -291,7 +300,7 @@
       "kind": "function",
       "labels": [],
       "signature": "zfnet(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/zfnet/_pretrained.py#L20",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/zfnet/_pretrained.py#L20",
       "subcategory": "pretrained",
       "summary": "ZFNet feature-extracting backbone (no fully-connected head).",
       "extended": "Builds a `ZFNet` with the paper-cited Zeiler & Fergus 2014\ntopology: five convolutional blocks with a tightened\n$7\\times7$ stride-2 first convolution and a $5\\times5$\nstride-2 second convolution (versus AlexNet's $11\\times11$\nstride-4 and $5\\times5$ stride-1).  Approximately 62 M\nparameters in the full classifier variant — the topology difference\nversus AlexNet does not change the headline parameter count.",
@@ -459,7 +468,7 @@
       "kind": "function",
       "labels": [],
       "signature": "zfnet_cls(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/zfnet/_pretrained.py#L86",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/zfnet/_pretrained.py#L86",
       "subcategory": "pretrained",
       "summary": "ZFNet image classifier (backbone + FC6 + FC7 + linear head).",
       "extended": "Builds a `ZFNetForImageClassification` with the paper-cited\nZeiler & Fergus 2014 topology and the AlexNet-style two-layer\n4096-dim FC head.  Approximately 62 M parameters total.  Achieves\na top-5 ImageNet-1k validation error of 16.5% (Table 2, single\nnet) in the original\npaper.",

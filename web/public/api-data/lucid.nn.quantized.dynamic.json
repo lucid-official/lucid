@@ -1,0 +1,667 @@
+{
+  "slug": "lucid.nn.quantized.dynamic",
+  "name": "dynamic",
+  "path": "lucid.nn.quantized.dynamic",
+  "kind": "module",
+  "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/__init__.py#L1",
+  "members": [
+    {
+      "name": "Linear",
+      "path": "lucid.nn.quantized.dynamic.linear.Linear",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "Module"
+      ],
+      "labels": [],
+      "signature": "Linear(in_features: int, out_features: int, bias: bool = True)",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/linear.py#L36",
+      "subcategory": "linear",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.nn.quantized.dynamic.linear.Linear.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(in_features: int, out_features: int, bias: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/linear.py#L68",
+          "subcategory": "linear",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.dynamic.linear.Linear.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(x: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/linear.py#L84",
+          "subcategory": "linear",
+          "summary": "Dynamically quantize the input, then run linear with the int8 weight.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.dynamic.linear.Linear.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module, dtype: QDtype = qint8)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/linear.py#L94",
+          "subcategory": "linear",
+          "summary": "Quantize a float `lucid.nn.Linear`'s weight (no calibration).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Linear",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "extra_repr",
+          "path": "lucid.nn.quantized.dynamic.linear.Linear.extra_repr",
+          "kind": "function",
+          "labels": [],
+          "signature": "extra_repr()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/linear.py#L111",
+          "subcategory": "linear",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "int8-weight linear with per-forward dynamic activation quantization.",
+      "extended": "Dynamic quantization keeps the weight permanently in int8 (per-output-channel\nsymmetric) while the activation grid is derived from the *live* input on every\nforward — the input's min/max are measured, it is fake-quantized to a per-tensor\naffine grid, and the ordinary linear op then runs in float with the dequantized\nweight.  Because no representative data is needed to fix the activation range,\nthis layer needs no calibration pass, which makes it the standard choice for\nTransformer / Linear-heavy inference (BERT and friends).  Instances are produced\nby `lucid.quantization.quantize_dynamic`, not constructed directly.",
+      "parameters": [
+        {
+          "name": "in_features",
+          "annotation": "int",
+          "description": "Size of each input sample — the weight's input dimension.",
+          "default": null
+        },
+        {
+          "name": "out_features",
+          "annotation": "int",
+          "description": "Size of each output sample — the weight's output dimension.",
+          "default": null
+        },
+        {
+          "name": "bias",
+          "annotation": "bool",
+          "description": "If `True`, keep a learned float bias buffer; otherwise no bias is added.",
+          "default": "True"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [],
+      "notes": [
+        "The weight lives in the `weight_int8` buffer alongside per-channel\n`weight_scale` / `weight_zero_point`; only the int8 form is the persistent,\ndevice-tracked state, and the float weight is reconstructed on demand."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "GRU",
+      "path": "lucid.nn.quantized.dynamic.rnn.GRU",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "GRU]"
+      ],
+      "labels": [],
+      "signature": "GRU(shell: nn.Module)",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L176",
+      "subcategory": "rnn",
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.dynamic.rnn.GRU.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor | PackedSequence, hx: Tensor | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L194",
+          "subcategory": "rnn",
+          "summary": "Inject dequantized weights into the shell and run it.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "tuple[Tensor | PackedSequence, Tensor]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.dynamic.rnn._DynamicRecurrent.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module, dtype: QDtype = qint8)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L96",
+          "subcategory": "rnn",
+          "summary": "Quantize a float recurrent module's weights to int8 (no calibration).",
+          "extended": "`mod` must be the float type the layer runs — an `nn.LSTM` for\n`LSTM`, an `nn.GRUCell` for `GRUCell`.",
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_DynamicRecurrent"
+        },
+        {
+          "name": "extra_repr",
+          "path": "lucid.nn.quantized.dynamic.rnn._DynamicRecurrent.extra_repr",
+          "kind": "function",
+          "labels": [],
+          "signature": "extra_repr()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L130",
+          "subcategory": "rnn",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_DynamicRecurrent"
+        }
+      ],
+      "summary": "int8-weight GRU built from a float `lucid.nn.GRU`.",
+      "extended": "The GRU counterpart of `LSTM`: each layer's (and direction's)\n`weight_ih` / `weight_hh` is stored int8 per-row symmetric under the\nflat name a float GRU's `state_dict` uses (`weight_ih_l0_int8`,\n`weight_ih_l0_scale`), the biases stay float, and a float `nn.GRU`\nshell outside the module registry runs the recurrence on the dequantized\nweights.  Built by `lucid.quantization.quantize_dynamic`.",
+      "parameters": [
+        {
+          "name": "shell",
+          "annotation": "lucid.nn.GRU",
+          "description": "The float GRU whose configuration and recurrence are reused.",
+          "default": null
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "LSTM",
+      "path": "lucid.nn.quantized.dynamic.rnn.LSTM",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "LSTM]"
+      ],
+      "labels": [],
+      "signature": "LSTM(shell: nn.Module)",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L136",
+      "subcategory": "rnn",
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.dynamic.rnn.LSTM.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor | PackedSequence, hx: tuple[Tensor, Tensor] | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L165",
+          "subcategory": "rnn",
+          "summary": "Inject dequantized weights into the shell and run it.",
+          "extended": "Packed input passes straight through — the shell is a real\n`lucid.nn.LSTM`, so it handles it.",
+          "parameters": [],
+          "returns": {
+            "annotation": "tuple[Tensor | PackedSequence, tuple[Tensor, Tensor]]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.dynamic.rnn._DynamicRecurrent.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module, dtype: QDtype = qint8)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L96",
+          "subcategory": "rnn",
+          "summary": "Quantize a float recurrent module's weights to int8 (no calibration).",
+          "extended": "`mod` must be the float type the layer runs — an `nn.LSTM` for\n`LSTM`, an `nn.GRUCell` for `GRUCell`.",
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_DynamicRecurrent"
+        },
+        {
+          "name": "extra_repr",
+          "path": "lucid.nn.quantized.dynamic.rnn._DynamicRecurrent.extra_repr",
+          "kind": "function",
+          "labels": [],
+          "signature": "extra_repr()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L130",
+          "subcategory": "rnn",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_DynamicRecurrent"
+        }
+      ],
+      "summary": "int8-weight LSTM built from a float `lucid.nn.LSTM`.",
+      "extended": "A dynamically quantized recurrent layer: every recurrent weight matrix\n(`weight_ih_l*` / `weight_hh_l*`) is stored int8 (per-row symmetric) while\nthe biases stay float.  A float `nn.LSTM` *shell*, held outside the module\nregistry so its float weights never enter the `state_dict`, is the actual\ncompute engine — on each forward its weights are overwritten with the values\ndequantized from the int8 buffers, so only the int8 form is the persistent,\ndevice-tracked state.  No calibration is required; the per-timestep activation\nquantization inside the cell is left to the real low-precision kernel.  Build\ninstances with `lucid.quantization.quantize_dynamic`, the recommended\npath for LSTM-heavy inference.",
+      "parameters": [
+        {
+          "name": "shell",
+          "annotation": "lucid.nn.LSTM",
+          "description": "The float LSTM whose configuration and cell arithmetic are reused; it holds\nthe recurrent weights that `from_float` quantizes to int8.",
+          "default": null
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [],
+      "notes": [
+        "The shell is stored via `object.__setattr__` so it stays out of the module\nregistry, keeping the serialized state limited to the int8 weight buffers, the\nper-row scales, and the float biases."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "GRUCell",
+      "path": "lucid.nn.quantized.dynamic.rnn.GRUCell",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "GRUCell]"
+      ],
+      "labels": [],
+      "signature": "GRUCell(shell: nn.Module)",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L226",
+      "subcategory": "rnn",
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.dynamic.rnn.GRUCell.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor, hx: Tensor | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L240",
+          "subcategory": "rnn",
+          "summary": "Inject dequantized weights into the shell and run one step.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.dynamic.rnn._DynamicRecurrent.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module, dtype: QDtype = qint8)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L96",
+          "subcategory": "rnn",
+          "summary": "Quantize a float recurrent module's weights to int8 (no calibration).",
+          "extended": "`mod` must be the float type the layer runs — an `nn.LSTM` for\n`LSTM`, an `nn.GRUCell` for `GRUCell`.",
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_DynamicRecurrent"
+        },
+        {
+          "name": "extra_repr",
+          "path": "lucid.nn.quantized.dynamic.rnn._DynamicRecurrent.extra_repr",
+          "kind": "function",
+          "labels": [],
+          "signature": "extra_repr()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L130",
+          "subcategory": "rnn",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_DynamicRecurrent"
+        }
+      ],
+      "summary": "int8-weight GRU cell built from a float `lucid.nn.GRUCell`.",
+      "extended": "Stored and run like `LSTMCell`, with a float `nn.GRUCell`\nshell.  Built by `lucid.quantization.quantize_dynamic`.",
+      "parameters": [
+        {
+          "name": "shell",
+          "annotation": "lucid.nn.GRUCell",
+          "description": "The float cell whose configuration and arithmetic are reused.",
+          "default": null
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "LSTMCell",
+      "path": "lucid.nn.quantized.dynamic.rnn.LSTMCell",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "LSTMCell]"
+      ],
+      "labels": [],
+      "signature": "LSTMCell(shell: nn.Module)",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L202",
+      "subcategory": "rnn",
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.dynamic.rnn.LSTMCell.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor, hx: tuple[Tensor, Tensor] | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L218",
+          "subcategory": "rnn",
+          "summary": "Inject dequantized weights into the shell and run one step.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "tuple[Tensor, Tensor]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.dynamic.rnn._DynamicRecurrent.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module, dtype: QDtype = qint8)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L96",
+          "subcategory": "rnn",
+          "summary": "Quantize a float recurrent module's weights to int8 (no calibration).",
+          "extended": "`mod` must be the float type the layer runs — an `nn.LSTM` for\n`LSTM`, an `nn.GRUCell` for `GRUCell`.",
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_DynamicRecurrent"
+        },
+        {
+          "name": "extra_repr",
+          "path": "lucid.nn.quantized.dynamic.rnn._DynamicRecurrent.extra_repr",
+          "kind": "function",
+          "labels": [],
+          "signature": "extra_repr()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L130",
+          "subcategory": "rnn",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_DynamicRecurrent"
+        }
+      ],
+      "summary": "int8-weight LSTM cell built from a float `lucid.nn.LSTMCell`.",
+      "extended": "`weight_ih` / `weight_hh` are stored int8 per-row symmetric\n(`weight_ih_int8`, `weight_ih_scale`), the biases stay float, and a\nfloat `nn.LSTMCell` shell runs one step on the dequantized weights.\nBuilt by `lucid.quantization.quantize_dynamic`.",
+      "parameters": [
+        {
+          "name": "shell",
+          "annotation": "lucid.nn.LSTMCell",
+          "description": "The float cell whose configuration and arithmetic are reused.",
+          "default": null
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "RNNCell",
+      "path": "lucid.nn.quantized.dynamic.rnn.RNNCell",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "RNNCell]"
+      ],
+      "labels": [],
+      "signature": "RNNCell(shell: nn.Module)",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L246",
+      "subcategory": "rnn",
+      "methods": [
+        {
+          "name": "forward",
+          "path": "lucid.nn.quantized.dynamic.rnn.RNNCell.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(input: Tensor, hx: Tensor | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L261",
+          "subcategory": "rnn",
+          "summary": "Inject dequantized weights into the shell and run one step.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "from_float",
+          "path": "lucid.nn.quantized.dynamic.rnn._DynamicRecurrent.from_float",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_float(mod: nn.Module, dtype: QDtype = qint8)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L96",
+          "subcategory": "rnn",
+          "summary": "Quantize a float recurrent module's weights to int8 (no calibration).",
+          "extended": "`mod` must be the float type the layer runs — an `nn.LSTM` for\n`LSTM`, an `nn.GRUCell` for `GRUCell`.",
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_DynamicRecurrent"
+        },
+        {
+          "name": "extra_repr",
+          "path": "lucid.nn.quantized.dynamic.rnn._DynamicRecurrent.extra_repr",
+          "kind": "function",
+          "labels": [],
+          "signature": "extra_repr()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/quantized/dynamic/rnn.py#L130",
+          "subcategory": "rnn",
+          "summary": "Override to add extra repr info (e.g. Linear shows in_features, etc.).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_DynamicRecurrent"
+        }
+      ],
+      "summary": "int8-weight Elman cell built from a float `lucid.nn.RNNCell`.",
+      "extended": "Stored and run like `LSTMCell`, with a float `nn.RNNCell`\nshell, so its `nonlinearity` (`tanh` or `relu`) is kept.  Built by\n`lucid.quantization.quantize_dynamic`.",
+      "parameters": [
+        {
+          "name": "shell",
+          "annotation": "lucid.nn.RNNCell",
+          "description": "The float cell whose configuration and arithmetic are reused.",
+          "default": null
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    }
+  ],
+  "summary": "`lucid.nn.quantized.dynamic` — dynamically quantized modules.",
+  "extended": "Weights are quantized to int8 ahead of time; **activations are quantized\nper-forward** from their observed range (no calibration data needed).  This\nis the go-to for Linear-heavy / Transformer inference, produced by\n`lucid.quantization.quantize_dynamic`.",
+  "parameters": [],
+  "returns": null,
+  "raises": [],
+  "examples": [],
+  "notes": [],
+  "attributes": [],
+  "warns": [],
+  "see_also": []
+}

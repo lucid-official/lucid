@@ -3,7 +3,7 @@
   "name": "gpt2",
   "path": "lucid.models.text.gpt2",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/__init__.py#L1",
   "members": [
     {
       "name": "GPT2Config",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "GPT2Config(vocab_size: int = 50257, hidden_size: int = 768, num_hidden_layers: int = 12, num_attention_heads: int = 12, intermediate_size: int = 3072, hidden_act: TextActivation = 'gelu_new', max_position_embeddings: int = 1024, pad_token_id: int | None = None, bos_token_id: int | None = 50256, eos_token_id: int | None = 50256, hidden_dropout: float = 0.1, attention_dropout: float = 0.1, initializer_range: float = 0.02, layer_norm_eps: float = 1e-05, tie_word_embeddings: bool = True, use_cache: bool = True, num_labels: int = 2, classifier_dropout: float | None = None, scale_residual_init: bool = True)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_config.py#L17",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_config.py#L17",
       "subcategory": "config",
       "methods": [
         {
@@ -24,7 +24,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab_size: int = 50257, hidden_size: int = 768, num_hidden_layers: int = 12, num_attention_heads: int = 12, intermediate_size: int = 3072, hidden_act: TextActivation = 'gelu_new', max_position_embeddings: int = 1024, pad_token_id: int | None = None, bos_token_id: int | None = 50256, eos_token_id: int | None = 50256, hidden_dropout: float = 0.1, attention_dropout: float = 0.1, initializer_range: float = 0.02, layer_norm_eps: float = 1e-05, tie_word_embeddings: bool = True, use_cache: bool = True, num_labels: int = 2, classifier_dropout: float | None = None, scale_residual_init: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -64,7 +64,7 @@
       ],
       "labels": [],
       "signature": "GPT2DoubleHeadsModel(config: GPT2Config)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L638",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L638",
       "subcategory": "model",
       "methods": [
         {
@@ -73,7 +73,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: GPT2Config)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L703",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L703",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -95,9 +95,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(input_ids: Tensor, mc_token_ids: Tensor, attention_mask: Tensor | None = None, labels: Tensor | None = None, mc_labels: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L717",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L717",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -160,7 +160,7 @@
       ],
       "labels": [],
       "signature": "GPT2DoubleHeadsOutput(lm_logits: Tensor, mc_logits: Tensor, loss: Tensor | None = None, lm_loss: Tensor | None = None, mc_loss: Tensor | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L569",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L569",
       "subcategory": "model",
       "methods": [
         {
@@ -169,7 +169,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(lm_logits: Tensor, mc_logits: Tensor, loss: Tensor | None = None, lm_loss: Tensor | None = None, mc_loss: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L1",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -242,7 +242,7 @@
       ],
       "labels": [],
       "signature": "GPT2ForSequenceClassification(config: GPT2Config)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L478",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L478",
       "subcategory": "model",
       "methods": [
         {
@@ -251,7 +251,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: GPT2Config)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L537",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L537",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -273,9 +273,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(input_ids: Tensor, attention_mask: Tensor | None = None, labels: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L548",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L548",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -339,7 +339,7 @@
       ],
       "labels": [],
       "signature": "GPT2LMHeadModel(config: GPT2Config)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L362",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L362",
       "subcategory": "model",
       "methods": [
         {
@@ -348,7 +348,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: GPT2Config)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L420",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L420",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -370,9 +370,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(input_ids: Tensor, attention_mask: Tensor | None = None, labels: Tensor | None = None, past_key_values: Cache | None = None, use_cache: bool | None = None, cache_position: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L437",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L437",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -430,7 +430,7 @@
       ],
       "labels": [],
       "signature": "GPT2Model(config: GPT2Config)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L207",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L207",
       "subcategory": "model",
       "methods": [
         {
@@ -439,7 +439,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: GPT2Config)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L282",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L282",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -461,18 +461,22 @@
           "kind": "function",
           "labels": [],
           "signature": "get_input_embeddings()",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L303",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L303",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Return the input-embedding submodule, or `None` if not applicable.",
           "extended": null,
           "parameters": [],
           "returns": {
-            "annotation": "nn.Module",
-            "description": ""
+            "annotation": "nn.Module or None",
+            "description": "The embedding layer for text / token-id models (BERT, GPT,\n…); `None` for vision and other non-embedding models."
           },
           "raises": [],
-          "examples": [],
-          "notes": [],
+          "examples": [
+            ">>> from lucid.models import create_model\n>>> lm = create_model(\"gpt_lm\", vocab_size=100, hidden_size=16,\n...                   num_hidden_layers=1, num_attention_heads=2,\n...                   intermediate_size=32, max_position_embeddings=8)\n>>> lm.get_input_embeddings() is lm.transformer.tokens_embed\nTrue"
+          ],
+          "notes": [
+            "Trunks with an embedding table override this.  A task wrapper does\nnot need to: this implementation hands the call to the trunk stored\nunder `base_model_prefix`, so a wrapper reports the same table\nas the trunk inside it.  Used by tools that need to resize / share /\nintrospect token embeddings without coupling to family-specific\nattribute names."
+          ],
           "attributes": [],
           "warns": [],
           "see_also": []
@@ -483,18 +487,34 @@
           "kind": "function",
           "labels": [],
           "signature": "set_input_embeddings(value: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L307",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L307",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Replace the input-embedding submodule.",
           "extended": null,
-          "parameters": [],
+          "parameters": [
+            {
+              "name": "value",
+              "annotation": "nn.Module",
+              "description": "New embedding module.",
+              "default": null
+            }
+          ],
           "returns": {
             "annotation": "None",
             "description": ""
           },
-          "raises": [],
-          "examples": [],
-          "notes": [],
+          "raises": [
+            {
+              "annotation": "NotImplementedError",
+              "description": "When the model has no embedding table to replace — neither an\noverride of its own nor a trunk under `base_model_prefix`."
+            }
+          ],
+          "examples": [
+            "A text trunk hands its table over, so a larger one can be swapped\nin — here to make room for twenty token ids the original 100-row\ntable could not look up.\n>>> import lucid\n>>> import lucid.nn as nn\n>>> from lucid.models import create_model\n>>> model = create_model(\"gpt\", vocab_size=100, hidden_size=16,\n...                      num_hidden_layers=1, num_attention_heads=2,\n...                      intermediate_size=32,\n...                      max_position_embeddings=8).eval()\n>>> bigger = nn.Embedding(120, 16)\n>>> model.set_input_embeddings(bigger)\n>>> model.get_input_embeddings() is bigger\nTrue\n>>> ids = lucid.tensor([[110, 3]], dtype=lucid.int64)\n>>> model(ids).last_hidden_state.shape\n(1, 2, 16)\nA task wrapper makes the same swap on its trunk.  Its LM head is tied\nto the table, so the head follows and the logits widen to the new\nvocabulary, rather than keep scoring the table it replaced.\n>>> lm = create_model(\"gpt_lm\", vocab_size=100, hidden_size=16,\n...                   num_hidden_layers=1, num_attention_heads=2,\n...                   intermediate_size=32,\n...                   max_position_embeddings=8).eval()\n>>> lm.set_input_embeddings(nn.Embedding(120, 16))\n>>> lm.lm_head.weight is lm.get_input_embeddings().weight\nTrue\n>>> lm(ids).logits.shape\n(1, 2, 120)\nA model with no embedding table keeps this base implementation and\nrefuses, rather than attach a module that nothing would read.\n>>> lenet = create_model(\"lenet_5\")\n>>> lenet.get_input_embeddings() is None\nTrue\n>>> lenet.set_input_embeddings(nn.Embedding(10, 4))\nTraceback (most recent call last):\n    ...\nNotImplementedError: LeNet does not support set_input_embeddings"
+          ],
+          "notes": [
+            "Companion to `get_input_embeddings`.  Trunks with a table\noverride both; a task wrapper inherits this implementation, which\nmakes the swap on its trunk.\n\nWhen the wrapper ties an output head to the table\n(`config.tie_word_embeddings`), the head is re-bound to the new\ntable's weight, so the two stay one matrix and the head scores the\nnew vocabulary.  A head bias sized to the vocabulary is resized with\nit: existing entries are kept and new ones start at zero.  An untied\nhead is left as it is.  Either way `config` is frozen and keeps\nits original `vocab_size`."
+          ],
           "attributes": [],
           "warns": [],
           "see_also": []
@@ -505,9 +525,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(input_ids: Tensor | None = None, attention_mask: Tensor | None = None, past_key_values: Cache | None = None, use_cache: bool | None = None, cache_position: Tensor | None = None, inputs_embeds: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_model.py#L315",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_model.py#L315",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -590,7 +610,7 @@
       ],
       "labels": [],
       "signature": "GPT2Tokenizer(vocab: dict[str, int], merges: list[tuple[str, str]], add_prefix_space: bool = False, normalizer: Normalizer | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_tokenizer.py#L53",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_tokenizer.py#L53",
       "subcategory": "tokenizer",
       "methods": [
         {
@@ -599,7 +619,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int], merges: list[tuple[str, str]], add_prefix_space: bool = False, normalizer: Normalizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_tokenizer.py#L102",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_tokenizer.py#L102",
           "subcategory": "tokenizer",
           "summary": null,
           "extended": null,
@@ -683,7 +703,7 @@
       ],
       "labels": [],
       "signature": "GPT2TokenizerFast(vocab: dict[str, int], merges: list[tuple[str, str]], add_prefix_space: bool = False, normalizer: Normalizer | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_tokenizer.py#L122",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_tokenizer.py#L122",
       "subcategory": "tokenizer",
       "methods": [
         {
@@ -692,7 +712,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int], merges: list[tuple[str, str]], add_prefix_space: bool = False, normalizer: Normalizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_tokenizer.py#L147",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_tokenizer.py#L147",
           "subcategory": "tokenizer",
           "summary": null,
           "extended": null,
@@ -728,7 +748,7 @@
       "kind": "function",
       "labels": [],
       "signature": "gpt2_large(pretrained: bool | str = False, weights: GPT2LargeWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_pretrained.py#L153",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_pretrained.py#L153",
       "subcategory": "pretrained",
       "summary": "Construct a GPT-2 large (774M) decoder trunk.",
       "extended": "Third of the four canonical OpenAI variants: $L=36$ transformer\nblocks, $H=1280$ hidden, $A=20$ attention heads,\nintermediate width 5120.  Roughly 774M parameters — released in\nAugust 2019 after the staged-release decision; SOTA zero-shot on\nLAMBADA at release time.",
@@ -899,7 +919,7 @@
       "kind": "function",
       "labels": [],
       "signature": "gpt2_large_lm(pretrained: bool | str = False, weights: GPT2LargeLMWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_pretrained.py#L378",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_pretrained.py#L378",
       "subcategory": "pretrained",
       "summary": "Construct a GPT-2 large (774M) model with the tied causal-LM head.",
       "extended": "Same trunk as `gpt2_large` (L=36, H=1280, A=20, ~774M parameters),\nwrapped with the tied LM head for pre-training and free-form generation.",
@@ -1085,7 +1105,7 @@
       "kind": "function",
       "labels": [],
       "signature": "gpt2_medium(pretrained: bool | str = False, weights: GPT2MediumWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_pretrained.py#L98",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_pretrained.py#L98",
       "subcategory": "pretrained",
       "summary": "Construct a GPT-2 medium (355M) decoder trunk.",
       "extended": "Second of the four canonical OpenAI variants: $L=24$ transformer\nblocks, $H=1024$ hidden, $A=16$ attention heads,\nintermediate width 4096.  Roughly 355M parameters — the inflection\npoint at which zero-shot performance on reading comprehension /\nsummarisation begins to substantially outperform random baselines\n(Radford 2019 Table 3).",
@@ -1256,7 +1276,7 @@
       "kind": "function",
       "labels": [],
       "signature": "gpt2_medium_lm(pretrained: bool | str = False, weights: GPT2MediumLMWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_pretrained.py#L321",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_pretrained.py#L321",
       "subcategory": "pretrained",
       "summary": "Construct a GPT-2 medium (355M) model with the tied causal-LM head.",
       "extended": "Same trunk as `gpt2_medium` (L=24, H=1024, A=16, ~355M parameters),\nwrapped with the tied LM head for pre-training and free-form generation.",
@@ -1442,7 +1462,7 @@
       "kind": "function",
       "labels": [],
       "signature": "gpt2_small(pretrained: bool | str = False, weights: GPT2SmallWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_pretrained.py#L42",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_pretrained.py#L42",
       "subcategory": "pretrained",
       "summary": "Construct a GPT-2 small (124M) decoder trunk.",
       "extended": "Smallest of the four canonical OpenAI variants from Radford, Wu, Child,\nLuan, Amodei, and Sutskever, 2019: $L=12$ transformer blocks,\n$H=768$ hidden, $A=12$ attention heads, intermediate width\n3072.  Roughly 124M parameters (historically released as the \"117M\"\nfile before a re-count).  This is the default entry point for GPT-2\nresearch and the parameter-count match for GPT-1.",
@@ -1613,7 +1633,7 @@
       "kind": "function",
       "labels": [],
       "signature": "gpt2_small_cls(pretrained: bool | str = False, weights: GPT2SmallWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_pretrained.py#L495",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_pretrained.py#L495",
       "subcategory": "pretrained",
       "summary": "Construct a GPT-2 small (124M) model with a sequence-classification head.",
       "extended": "Same trunk as `gpt2_small` (L=12, H=768, A=12), augmented with a\nlast-token linear classifier of output width `config.num_labels`.\nThe canonical recipe for fine-tuning GPT-2 on GLUE-style sentence\nclassification tasks when decoder-style features are preferred to\nbidirectional ones.",
@@ -1806,7 +1826,7 @@
       "kind": "function",
       "labels": [],
       "signature": "gpt2_small_lm(pretrained: bool | str = False, weights: GPT2SmallLMWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_pretrained.py#L263",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_pretrained.py#L263",
       "subcategory": "pretrained",
       "summary": "Construct a GPT-2 small (124M) model with the tied causal-LM head.",
       "extended": "Same trunk as `gpt2_small` (L=12, H=768, A=12, ~124M parameters),\nwrapped with the tied LM head used for pre-training and free-form\ngeneration via `lucid.models._mixins.CausalLMMixin.generate`.",
@@ -1992,7 +2012,7 @@
       "kind": "function",
       "labels": [],
       "signature": "gpt2_xlarge(pretrained: bool | str = False, weights: GPT2XLargeWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_pretrained.py#L207",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_pretrained.py#L207",
       "subcategory": "pretrained",
       "summary": "Construct a GPT-2 XL (1.5B) decoder trunk.",
       "extended": "Largest of the four canonical OpenAI variants: $L=48$ transformer\nblocks, $H=1600$ hidden, $A=25$ attention heads,\nintermediate width 6400.  Roughly 1.5B parameters — fully released in\nNovember 2019 after staged disclosure; remained the largest publicly\navailable autoregressive LM until GPT-3 (Brown 2020).",
@@ -2163,7 +2183,7 @@
       "kind": "function",
       "labels": [],
       "signature": "gpt2_xlarge_lm(pretrained: bool | str = False, weights: GPT2XLargeLMWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_pretrained.py#L435",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_pretrained.py#L435",
       "subcategory": "pretrained",
       "summary": "Construct a GPT-2 XL (1.5B) model with the tied causal-LM head.",
       "extended": "Same trunk as `gpt2_xlarge` (L=48, H=1600, A=25, ~1.5B parameters),\nwrapped with the tied LM head for pre-training and free-form generation.",
@@ -2353,7 +2373,7 @@
       ],
       "labels": [],
       "signature": "GPT2LargeLMWeights()",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_weights.py#L278",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_weights.py#L278",
       "subcategory": "weights",
       "methods": [],
       "summary": "Pretrained weight tags for `lucid.models.gpt2_large_lm`.",
@@ -2392,7 +2412,7 @@
       ],
       "labels": [],
       "signature": "GPT2LargeWeights()",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_weights.py#L114",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_weights.py#L114",
       "subcategory": "weights",
       "methods": [],
       "summary": "Pretrained weight tags for `lucid.models.gpt2_large`.",
@@ -2431,7 +2451,7 @@
       ],
       "labels": [],
       "signature": "GPT2MediumLMWeights()",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_weights.py#L237",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_weights.py#L237",
       "subcategory": "weights",
       "methods": [],
       "summary": "Pretrained weight tags for `lucid.models.gpt2_medium_lm`.",
@@ -2470,7 +2490,7 @@
       ],
       "labels": [],
       "signature": "GPT2MediumWeights()",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_weights.py#L73",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_weights.py#L73",
       "subcategory": "weights",
       "methods": [],
       "summary": "Pretrained weight tags for `lucid.models.gpt2_medium`.",
@@ -2509,7 +2529,7 @@
       ],
       "labels": [],
       "signature": "GPT2SmallLMWeights()",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_weights.py#L196",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_weights.py#L196",
       "subcategory": "weights",
       "methods": [],
       "summary": "Pretrained weight tags for `lucid.models.gpt2_small_lm`.",
@@ -2548,7 +2568,7 @@
       ],
       "labels": [],
       "signature": "GPT2SmallWeights()",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_weights.py#L33",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_weights.py#L33",
       "subcategory": "weights",
       "methods": [],
       "summary": "Pretrained weight tags for `lucid.models.gpt2_small`.",
@@ -2587,7 +2607,7 @@
       ],
       "labels": [],
       "signature": "GPT2XLargeLMWeights()",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_weights.py#L319",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_weights.py#L319",
       "subcategory": "weights",
       "methods": [],
       "summary": "Pretrained weight tags for `lucid.models.gpt2_xlarge_lm`.",
@@ -2626,7 +2646,7 @@
       ],
       "labels": [],
       "signature": "GPT2XLargeWeights()",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/gpt2/_weights.py#L155",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/gpt2/_weights.py#L155",
       "subcategory": "weights",
       "methods": [],
       "summary": "Pretrained weight tags for `lucid.models.gpt2_xlarge`.",

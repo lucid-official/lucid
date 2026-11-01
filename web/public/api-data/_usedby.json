@@ -136,6 +136,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid._tensor._pickle"
+    },
+    {
+      "kind": "module",
       "module": "lucid._tensor._to"
     },
     {
@@ -2296,6 +2300,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners.c3a._circulant"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners.fourierft._layer"
     }
   ],
@@ -2369,6 +2377,10 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.lora._variants"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.miss._modes"
     },
     {
       "kind": "module",
@@ -13058,6 +13070,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners._shared"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners._support"
     },
     {
@@ -13079,6 +13095,22 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.boft._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.bone._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.bone._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.c3a._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.c3a._model"
     },
     {
       "kind": "module",
@@ -13174,6 +13206,14 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners.miss._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.miss._model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners.multitask_prompt_tuning._model"
     },
     {
@@ -13198,15 +13238,47 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners.randlora._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.randlora._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira._mask"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.trainable_tokens._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.trainable_tokens._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora._model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners.vera._layer"
     },
     {
       "kind": "module",
       "module": "lucid.peft.tuners.vera._model"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.peft.tuners.vera._projection"
     },
     {
       "kind": "module",
@@ -13645,6 +13717,26 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.lora._embedding"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.miss._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.miss._modes"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.trainable_tokens._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora._model"
     },
     {
       "kind": "module",
@@ -14966,6 +15058,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.nn._state_dict_hooks"
+    },
+    {
+      "kind": "module",
       "module": "lucid.nn.module"
     },
     {
@@ -15072,6 +15168,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners.c3a._layer"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners.fourierft._layer"
     },
     {
@@ -15089,6 +15189,10 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.lora._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.miss._layer"
     },
     {
       "kind": "module",
@@ -15127,6 +15231,52 @@
     {
       "kind": "module",
       "module": "lucid.nn.intrinsic"
+    }
+  ],
+  "lucid.nn.intrinsic.qat": [
+    {
+      "kind": "module",
+      "module": "lucid.quantization._quantize"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.quantization.fuse_modules"
+    }
+  ],
+  "lucid.nn.intrinsic.qat.modules.ConvBn1d": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.intrinsic.qat"
+    }
+  ],
+  "lucid.nn.intrinsic.qat.modules.ConvBn2d": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.intrinsic.qat"
+    }
+  ],
+  "lucid.nn.intrinsic.qat.modules.ConvBn3d": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.intrinsic.qat"
+    }
+  ],
+  "lucid.nn.intrinsic.qat.modules.ConvBnReLU1d": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.intrinsic.qat"
+    }
+  ],
+  "lucid.nn.intrinsic.qat.modules.ConvBnReLU2d": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.intrinsic.qat"
+    }
+  ],
+  "lucid.nn.intrinsic.qat.modules.ConvBnReLU3d": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.intrinsic.qat"
     }
   ],
   "lucid.nn.module.Module": [
@@ -16634,6 +16784,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners.c3a._layer"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners.fourierft._layer"
     },
     {
@@ -16678,6 +16832,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners.miss._layer"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners.multitask_prompt_tuning._model"
     },
     {
@@ -16687,6 +16845,22 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.prompt_tuning._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.randlora._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.trainable_tokens._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora._layer"
     },
     {
       "kind": "module",
@@ -16871,6 +17045,48 @@
     {
       "kind": "module",
       "module": "lucid.nn.quantized"
+    }
+  ],
+  "lucid.nn.quantized.dynamic": [
+    {
+      "kind": "module",
+      "module": "lucid.quantization._quantize"
+    }
+  ],
+  "lucid.nn.quantized.dynamic.linear.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.quantized.dynamic"
+    }
+  ],
+  "lucid.nn.quantized.dynamic.rnn.GRU": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.quantized.dynamic"
+    }
+  ],
+  "lucid.nn.quantized.dynamic.rnn.GRUCell": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.quantized.dynamic"
+    }
+  ],
+  "lucid.nn.quantized.dynamic.rnn.LSTM": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.quantized.dynamic"
+    }
+  ],
+  "lucid.nn.quantized.dynamic.rnn.LSTMCell": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.quantized.dynamic"
+    }
+  ],
+  "lucid.nn.quantized.dynamic.rnn.RNNCell": [
+    {
+      "kind": "module",
+      "module": "lucid.nn.quantized.dynamic"
     }
   ],
   "lucid.nn.quantized.functional_module.FloatFunctional": [
@@ -17470,6 +17686,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners._shared"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners._support"
     },
     {
@@ -17483,6 +17703,14 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.lora._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.randlora._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora._model"
     },
     {
       "kind": "module",
@@ -17517,6 +17745,22 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.boft._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.bone._config"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.bone._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.c3a._config"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.c3a._model"
     },
     {
       "kind": "module",
@@ -17576,6 +17820,14 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners.miss._config"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.miss._model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners.multitask_prompt_tuning._config"
     },
     {
@@ -17613,6 +17865,38 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.prompt_tuning._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.randlora._config"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.randlora._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira._config"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.trainable_tokens._config"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.trainable_tokens._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora._config"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora._model"
     },
     {
       "kind": "module",
@@ -17891,6 +18175,22 @@
       "module": "lucid.peft"
     }
   ],
+  "lucid.peft.tuners.adalora": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.tuners.adalora._allocator.RankAllocator": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.adalora"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.adalora._model"
+    }
+  ],
   "lucid.peft.tuners.adalora._config.AdaLoraConfig": [
     {
       "kind": "module",
@@ -17909,10 +18209,42 @@
       "module": "lucid.peft.tuners.adalora._model"
     }
   ],
+  "lucid.peft.tuners.adalora._layer.AdaLoraLayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.adalora"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.adalora._allocator"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.adalora._model"
+    }
+  ],
+  "lucid.peft.tuners.adalora._layer.SVDConv2d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.adalora"
+    }
+  ],
+  "lucid.peft.tuners.adalora._layer.SVDLinear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.adalora"
+    }
+  ],
   "lucid.peft.tuners.adalora._model.AdaLoraModel": [
     {
       "kind": "module",
       "module": "lucid.peft.tuners.adalora"
+    }
+  ],
+  "lucid.peft.tuners.boft": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
     }
   ],
   "lucid.peft.tuners.boft._config.BOFTConfig": [
@@ -17929,10 +18261,122 @@
       "module": "lucid.peft.tuners.boft._model"
     }
   ],
+  "lucid.peft.tuners.boft._layer.BOFTLayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.boft"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.boft._model"
+    }
+  ],
+  "lucid.peft.tuners.boft._layer.Conv2d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.boft"
+    }
+  ],
+  "lucid.peft.tuners.boft._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.boft"
+    }
+  ],
   "lucid.peft.tuners.boft._model.BOFTModel": [
     {
       "kind": "module",
       "module": "lucid.peft.tuners.boft"
+    }
+  ],
+  "lucid.peft.tuners.bone": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.tuners.bone._config.BoneConfig": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.bone"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.bone._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.bone._model"
+    }
+  ],
+  "lucid.peft.tuners.bone._layer.BoneLayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.bone"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.bone._model"
+    }
+  ],
+  "lucid.peft.tuners.bone._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.bone"
+    }
+  ],
+  "lucid.peft.tuners.bone._model.BoneModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.bone"
+    }
+  ],
+  "lucid.peft.tuners.c3a": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.tuners.c3a._config.C3AConfig": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.c3a"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.c3a._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.c3a._model"
+    }
+  ],
+  "lucid.peft.tuners.c3a._layer.C3ALayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.c3a"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.c3a._model"
+    }
+  ],
+  "lucid.peft.tuners.c3a._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.c3a"
+    }
+  ],
+  "lucid.peft.tuners.c3a._model.C3AModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.c3a"
+    }
+  ],
+  "lucid.peft.tuners.fourierft": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
     }
   ],
   "lucid.peft.tuners.fourierft._config.FourierFTConfig": [
@@ -17949,10 +18393,32 @@
       "module": "lucid.peft.tuners.fourierft._model"
     }
   ],
+  "lucid.peft.tuners.fourierft._layer.FourierFTLayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.fourierft"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.fourierft._model"
+    }
+  ],
+  "lucid.peft.tuners.fourierft._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.fourierft"
+    }
+  ],
   "lucid.peft.tuners.fourierft._model.FourierFTModel": [
     {
       "kind": "module",
       "module": "lucid.peft.tuners.fourierft"
+    }
+  ],
+  "lucid.peft.tuners.hra": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
     }
   ],
   "lucid.peft.tuners.hra._config.HRAConfig": [
@@ -17967,6 +18433,28 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.hra._model"
+    }
+  ],
+  "lucid.peft.tuners.hra._layer.Conv2d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.hra"
+    }
+  ],
+  "lucid.peft.tuners.hra._layer.HRALayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.hra"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.hra._model"
+    }
+  ],
+  "lucid.peft.tuners.hra._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.hra"
     }
   ],
   "lucid.peft.tuners.hra._model.HRAModel": [
@@ -17989,7 +18477,41 @@
       "module": "lucid.peft.tuners.ia3._model"
     }
   ],
+  "lucid.peft.tuners.ia3._layer.Conv2d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.ia3"
+    }
+  ],
+  "lucid.peft.tuners.ia3._layer.Conv3d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.ia3"
+    }
+  ],
+  "lucid.peft.tuners.ia3._layer.IA3Layer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.ia3"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.ia3._model"
+    }
+  ],
+  "lucid.peft.tuners.ia3._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.ia3"
+    }
+  ],
   "lucid.peft.tuners.ia3._model.IA3Model": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.tuners.ln_tuning": [
     {
       "kind": "module",
       "module": "lucid.peft"
@@ -18009,6 +18531,16 @@
       "module": "lucid.peft.tuners.ln_tuning._model"
     }
   ],
+  "lucid.peft.tuners.ln_tuning._layer.LNTuningLayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.ln_tuning"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.ln_tuning._model"
+    }
+  ],
   "lucid.peft.tuners.ln_tuning._model.LNTuningModel": [
     {
       "kind": "module",
@@ -18019,6 +18551,34 @@
     {
       "kind": "module",
       "module": "lucid.peft"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.loha._model"
+    }
+  ],
+  "lucid.peft.tuners.loha._layer.Conv1d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.loha"
+    }
+  ],
+  "lucid.peft.tuners.loha._layer.Conv2d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.loha"
+    }
+  ],
+  "lucid.peft.tuners.loha._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.loha"
+    }
+  ],
+  "lucid.peft.tuners.loha._layer.LoHaLayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.loha"
     },
     {
       "kind": "module",
@@ -18045,10 +18605,50 @@
       "module": "lucid.peft.tuners.lokr._model"
     }
   ],
+  "lucid.peft.tuners.lokr._layer.Conv1d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lokr"
+    }
+  ],
+  "lucid.peft.tuners.lokr._layer.Conv2d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lokr"
+    }
+  ],
+  "lucid.peft.tuners.lokr._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lokr"
+    }
+  ],
+  "lucid.peft.tuners.lokr._layer.LoKrLayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lokr"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lokr._model"
+    }
+  ],
+  "lucid.peft.tuners.lokr._layer.factorization": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lokr"
+    }
+  ],
   "lucid.peft.tuners.lokr._model.LoKrModel": [
     {
       "kind": "module",
       "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.tuners.lora._attention.MultiheadAttention": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora"
     }
   ],
   "lucid.peft.tuners.lora._config.LoraConfig": [
@@ -18069,7 +18669,151 @@
       "module": "lucid.peft.tuners.lora._model"
     }
   ],
+  "lucid.peft.tuners.lora._conv.Conv1d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora"
+    }
+  ],
+  "lucid.peft.tuners.lora._conv.Conv2d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora"
+    }
+  ],
+  "lucid.peft.tuners.lora._conv.Conv3d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora"
+    }
+  ],
+  "lucid.peft.tuners.lora._conv.ConvTranspose1d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora"
+    }
+  ],
+  "lucid.peft.tuners.lora._conv.ConvTranspose2d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora"
+    }
+  ],
+  "lucid.peft.tuners.lora._conv.ConvTranspose3d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora"
+    }
+  ],
+  "lucid.peft.tuners.lora._embedding.Embedding": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora"
+    }
+  ],
+  "lucid.peft.tuners.lora._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._merging"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._model"
+    }
+  ],
+  "lucid.peft.tuners.lora._layer.LoraLayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._inits"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._variants"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._weight_space"
+    }
+  ],
   "lucid.peft.tuners.lora._model.LoraModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.tuners.lora._parameter.ParamWrapper": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._model"
+    }
+  ],
+  "lucid.peft.tuners.miss": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.tuners.miss._config.MissConfig": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.bone._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.miss"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.miss._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.miss._model"
+    }
+  ],
+  "lucid.peft.tuners.miss._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.miss"
+    }
+  ],
+  "lucid.peft.tuners.miss._layer.MissLayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.bone._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.miss"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.miss._model"
+    }
+  ],
+  "lucid.peft.tuners.miss._model.MissModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.miss"
+    }
+  ],
+  "lucid.peft.tuners.multitask_prompt_tuning": [
     {
       "kind": "module",
       "module": "lucid.peft"
@@ -18101,6 +18845,18 @@
       "module": "lucid.peft.tuners.multitask_prompt_tuning"
     }
   ],
+  "lucid.peft.tuners.multitask_prompt_tuning._model.MultitaskPromptTuningModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.multitask_prompt_tuning"
+    }
+  ],
+  "lucid.peft.tuners.oft": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
   "lucid.peft.tuners.oft._config.OFTConfig": [
     {
       "kind": "module",
@@ -18115,10 +18871,38 @@
       "module": "lucid.peft.tuners.oft._model"
     }
   ],
+  "lucid.peft.tuners.oft._layer.Conv2d": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.oft"
+    }
+  ],
+  "lucid.peft.tuners.oft._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.oft"
+    }
+  ],
+  "lucid.peft.tuners.oft._layer.OFTLayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.oft"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.oft._model"
+    }
+  ],
   "lucid.peft.tuners.oft._model.OFTModel": [
     {
       "kind": "module",
       "module": "lucid.peft.tuners.oft"
+    }
+  ],
+  "lucid.peft.tuners.p_tuning": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
     }
   ],
   "lucid.peft.tuners.p_tuning._config.PromptEncoderConfig": [
@@ -18147,6 +18931,18 @@
       "module": "lucid.peft.tuners.p_tuning"
     }
   ],
+  "lucid.peft.tuners.p_tuning._model.PromptEncoderModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.p_tuning"
+    }
+  ],
+  "lucid.peft.tuners.prefix_tuning": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
   "lucid.peft.tuners.prefix_tuning._config.PrefixTuningConfig": [
     {
       "kind": "module",
@@ -18161,6 +18957,18 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.prefix_tuning"
+    }
+  ],
+  "lucid.peft.tuners.prefix_tuning._model.PrefixTuningModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.prefix_tuning"
+    }
+  ],
+  "lucid.peft.tuners.prompt_tuning": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
     }
   ],
   "lucid.peft.tuners.prompt_tuning._config.PromptTuningConfig": [
@@ -18197,6 +19005,202 @@
       "module": "lucid.peft.tuners.prompt_tuning"
     }
   ],
+  "lucid.peft.tuners.prompt_tuning._model.PromptTuningModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.prompt_tuning"
+    }
+  ],
+  "lucid.peft.tuners.randlora": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.tuners.randlora._config.RandLoraConfig": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.randlora"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.randlora._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.randlora._model"
+    }
+  ],
+  "lucid.peft.tuners.randlora._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.randlora"
+    }
+  ],
+  "lucid.peft.tuners.randlora._layer.RandLoraLayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.randlora"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.randlora._model"
+    }
+  ],
+  "lucid.peft.tuners.randlora._model.RandLoraModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.randlora"
+    }
+  ],
+  "lucid.peft.tuners.shira": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.tuners.shira._config.ShiraConfig": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira._model"
+    }
+  ],
+  "lucid.peft.tuners.shira._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira"
+    }
+  ],
+  "lucid.peft.tuners.shira._layer.ShiraLayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira._model"
+    }
+  ],
+  "lucid.peft.tuners.shira._mask.random_mask": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira._config"
+    }
+  ],
+  "lucid.peft.tuners.shira._model.ShiraModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.shira"
+    }
+  ],
+  "lucid.peft.tuners.trainable_tokens": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.tuners.trainable_tokens._config.TrainableTokensConfig": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.trainable_tokens"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.trainable_tokens._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.trainable_tokens._model"
+    }
+  ],
+  "lucid.peft.tuners.trainable_tokens._layer.Embedding": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.trainable_tokens"
+    }
+  ],
+  "lucid.peft.tuners.trainable_tokens._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.trainable_tokens"
+    }
+  ],
+  "lucid.peft.tuners.trainable_tokens._layer.TrainableTokensLayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.trainable_tokens"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.trainable_tokens._model"
+    }
+  ],
+  "lucid.peft.tuners.trainable_tokens._model.TrainableTokensModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.trainable_tokens"
+    }
+  ],
+  "lucid.peft.tuners.vblora": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.tuners.vblora._config.VBLoRAConfig": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora._model"
+    }
+  ],
+  "lucid.peft.tuners.vblora._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora"
+    }
+  ],
+  "lucid.peft.tuners.vblora._layer.VBLoRALayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora._model"
+    }
+  ],
+  "lucid.peft.tuners.vblora._model.VBLoRAModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vblora"
+    }
+  ],
+  "lucid.peft.tuners.vera": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
   "lucid.peft.tuners.vera._config.VeraConfig": [
     {
       "kind": "module",
@@ -18205,6 +19209,22 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.vera._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vera._model"
+    }
+  ],
+  "lucid.peft.tuners.vera._layer.Linear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vera"
+    }
+  ],
+  "lucid.peft.tuners.vera._layer.VeraLayer": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.vera"
     },
     {
       "kind": "module",
@@ -19027,6 +20047,12 @@
     {
       "kind": "module",
       "module": "lucid.utils"
+    }
+  ],
+  "lucid.utils.data": [
+    {
+      "kind": "module",
+      "module": "lucid.utils.data.dataset"
     }
   ],
   "lucid.utils.data._mix.CutMixCollator": [

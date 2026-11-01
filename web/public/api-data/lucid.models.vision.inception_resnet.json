@@ -3,7 +3,7 @@
   "name": "inception_resnet",
   "path": "lucid.models.vision.inception_resnet",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/__init__.py#L1",
   "members": [
     {
       "name": "InceptionResNetConfig",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "InceptionResNetConfig(num_classes: int = 1000, in_channels: int = 3, dropout: float = 0.2, scale_a: float = 0.17, scale_b: float = 0.1, scale_c: float = 0.2)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_config.py#L10",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_config.py#L10",
       "subcategory": "config",
       "methods": [
         {
@@ -24,7 +24,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(num_classes: int = 1000, in_channels: int = 3, dropout: float = 0.2, scale_a: float = 0.17, scale_b: float = 0.1, scale_c: float = 0.2)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -42,7 +42,7 @@
         }
       ],
       "summary": "Configuration for Inception-ResNet v2.",
-      "extended": "This is the *TF-Slim* Inception-ResNet-v2 — the network the released\ncheckpoint was trained as — which differs from the paper's figures in\nthree documented ways.  All three are dictated by the weights: the\ntensors in the checkpoint have these shapes and these counts.\n\n`Sequential` stem, not Figure 3's parallel-branch stem\n  Fig. 3 draws three filter-concat junctions\n  (`{MaxPool | Conv}` → `{1x1→3x3 | 1x1→7x1→1x7→3x3}` →\n  `{Conv | MaxPool}`) reaching 35×35×384.  TF-Slim instead runs a\n  plain sequential conv/pool chain into Mixed_5b.\n\nRepeat counts 10 / 20 / 9+1, not Figure 15's 5 / 10 / 5\n  TF-Slim doubles every stage.\n\nResidual widths 320 / 1088 / 2080, not Figures 16/17/19's\n384 / 1154 / 2048\n  The three `Linear` 1×1 projections that close each residual block\n  are sized to TF-Slim's widths.\n\nLayout as built:\n\n- Sequential stem (TF-Slim)\n  - Mixed_5b (192 → 320)\n  - 10× Block35  (scale_a, default 0.17)\n  - Mixed_6a / Reduction-A (320 → 1088)\n  - 20× Block17  (scale_b, default 0.10)\n  - Mixed_7a / Reduction-B (1088 → 2080)\n  -  9× Block8   (scale_c, default 0.20) + 1× Block8 (no ReLU)\n  - Conv2d_7b 1×1 projection (2080 → 1536)\n  - AdaptiveAvgPool → Dropout → FC(1536, num_classes)\n\n`scale_a` — residual scale for Block35 (paper suggests 0.17).\n`scale_b` — residual scale for Block17 (paper suggests 0.10).\n`scale_c` — residual scale for Block8  (paper suggests 0.20).\n`dropout` — head dropout rate (0.2 in the paper).",
+      "extended": "This is the *TF-Slim* Inception-ResNet-v2 — the network the released\ncheckpoint was trained as — which differs from the paper's figures in\nthree documented ways.  All three are dictated by the weights: the\ntensors in the checkpoint have these shapes and these counts.\n\n`Sequential` stem, not Figure 3's parallel-branch stem\n  Fig. 3 draws three filter-concat junctions\n  (`{MaxPool | Conv}` → `{1x1→3x3 | 1x1→7x1→1x7→3x3}` →\n  `{Conv | MaxPool}`) reaching 35×35×384.  TF-Slim instead runs a\n  plain sequential conv/pool chain into Mixed_5b.\n\nRepeat counts 10 / 20 / 9+1, not Figure 15's 5 / 10 / 5\n  TF-Slim doubles every stage.\n\nResidual widths 320 / 1088 / 2080, not Figures 16/17/19's\n384 / 1154 / 2048\n  The three `Linear` 1×1 projections that close each residual block\n  are sized to TF-Slim's widths.\n\nLayout as built:\n\n```text\n- Sequential stem (TF-Slim)\n- Mixed_5b (192 → 320)\n- 10× Block35  (scale_a, default 0.17)\n- Mixed_6a / Reduction-A (320 → 1088)\n- 20× Block17  (scale_b, default 0.10)\n- Mixed_7a / Reduction-B (1088 → 2080)\n-  9× Block8   (scale_c, default 0.20) + 1× Block8 (no ReLU)\n- Conv2d_7b 1×1 projection (2080 → 1536)\n- AdaptiveAvgPool → Dropout → FC(1536, num_classes)\n```\n\n`scale_a` — residual scale for Block35 (paper suggests 0.17).\n`scale_b` — residual scale for Block17 (paper suggests 0.10).\n`scale_c` — residual scale for Block8  (paper suggests 0.20).\n`dropout` — head dropout rate (0.2 in the paper).",
       "parameters": [],
       "returns": null,
       "raises": [],
@@ -64,7 +64,7 @@
       ],
       "labels": [],
       "signature": "InceptionResNetOutput(logits: Tensor, loss: Tensor | None = None, hidden_states: tuple[Tensor, ...] | None = None, attentions: tuple[Tensor, ...] | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_model.py#L318",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_model.py#L318",
       "subcategory": "model",
       "methods": [
         {
@@ -73,7 +73,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(logits: Tensor, loss: Tensor | None = None, hidden_states: tuple[Tensor, ...] | None = None, attentions: tuple[Tensor, ...] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_model.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_model.py#L1",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -127,7 +127,7 @@
       ],
       "labels": [],
       "signature": "InceptionResNetV2(config: InceptionResNetConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_model.py#L410",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_model.py#L410",
       "subcategory": "model",
       "methods": [
         {
@@ -136,7 +136,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: InceptionResNetConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_model.py#L493",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_model.py#L493",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -158,17 +158,26 @@
           "kind": "function",
           "labels": [],
           "signature": "forward_features(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_model.py#L531",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_model.py#L531",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Run the backbone's feature-extraction pass.",
           "extended": null,
-          "parameters": [],
+          "parameters": [
+            {
+              "name": "x",
+              "annotation": "Tensor",
+              "description": "Input image batch, shape `(B, C, H, W)`.",
+              "default": null
+            }
+          ],
           "returns": {
             "annotation": "Tensor",
-            "description": ""
+            "description": "Feature map at the deepest stage.  Concrete subclasses may\nadditionally stash earlier stages on the instance so\nmulti-stage consumers can fetch them."
           },
           "raises": [],
-          "examples": [],
+          "examples": [
+            "The map returned is the one feature_info lists last, so a\nneck can size itself from that entry without running the model.\n>>> import lucid\n>>> from lucid.models import create_model\n>>> backbone = create_model(\"resnet_18\").eval()\n>>> last = backbone.feature_info[-1]\n>>> last.num_channels, last.reduction\n(512, 32)\n>>> backbone.forward_features(lucid.randn((1, 3, 64, 96))).shape\n(1, 512, 2, 3)\nEach side is divided by the advertised reduction on its own, so\na non-square input keeps its aspect ratio."
+          ],
           "notes": [],
           "attributes": [],
           "warns": [],
@@ -180,9 +189,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_model.py#L548",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_model.py#L548",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -290,7 +299,7 @@
       ],
       "labels": [],
       "signature": "InceptionResNetV2ForImageClassification(config: InceptionResNetConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_model.py#L558",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_model.py#L558",
       "subcategory": "model",
       "methods": [
         {
@@ -299,7 +308,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: InceptionResNetConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_model.py#L625",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_model.py#L625",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -321,7 +330,7 @@
           "kind": "function",
           "labels": [],
           "signature": "reset_classifier(num_classes: int)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_model.py#L663",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_model.py#L663",
           "subcategory": "model",
           "summary": "Replace the classification head with a freshly initialised one.",
           "extended": "The head keeps the reference checkpoint's `classif` attribute name,\nso this cannot come from `ClassificationHeadMixin` (which looks for\n`self.classifier`).  The class docstring documented the method\nwithout anything implementing it.",
@@ -343,9 +352,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor, labels: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_model.py#L673",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_model.py#L673",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -414,7 +423,7 @@
       "kind": "function",
       "labels": [],
       "signature": "inception_resnet_v2(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_pretrained.py#L16",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_pretrained.py#L16",
       "subcategory": "pretrained",
       "summary": "Inception-ResNet v2 feature-extracting backbone.",
       "extended": "Builds an `InceptionResNetV2` with the paper-cited Szegedy\n2017 topology: 5-conv stem → Mixed_5b → 10× Block35 → Reduction-A\n→ 20× Block17 → Reduction-B → 9× Block8 (+ 1 no-ReLU block) →\n$1\\times1$ projection to 1536 channels.  Designed for\n$299\\times299$ RGB inputs.  Approximately 54.3 M parameters\nin the backbone alone.",
@@ -1642,7 +1651,7 @@
       "kind": "function",
       "labels": [],
       "signature": "inception_resnet_v2_cls(pretrained: bool | str = False, weights: InceptionResNetV2Weights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_pretrained.py#L75",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_pretrained.py#L75",
       "subcategory": "pretrained",
       "summary": "Inception-ResNet v2 image classifier (backbone + GAP + dropout + linear).",
       "extended": "Builds an `InceptionResNetV2ForImageClassification` with the\npaper-cited Szegedy 2017 topology and a single\n`lucid.nn.Linear` classifier head producing\n`config.num_classes` logits.  Approximately 55.8 M parameters\ntotal; achieves a top-5 ImageNet validation error of 3.08%.",
@@ -2894,7 +2903,7 @@
       ],
       "labels": [],
       "signature": "InceptionResNetV2Weights()",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/vision/inception_resnet/_weights.py#L15",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/vision/inception_resnet/_weights.py#L15",
       "subcategory": "weights",
       "methods": [],
       "summary": "Pretrained weights for `lucid.models.inception_resnet_v2_cls`.",

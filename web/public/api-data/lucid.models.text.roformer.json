@@ -3,7 +3,7 @@
   "name": "roformer",
   "path": "lucid.models.text.roformer",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/__init__.py#L1",
   "members": [
     {
       "name": "RoFormerConfig",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "RoFormerConfig(vocab_size: int = 50000, hidden_size: int = 768, num_hidden_layers: int = 12, num_attention_heads: int = 12, intermediate_size: int = 3072, hidden_act: TextActivation = 'gelu', max_position_embeddings: int = 1536, pad_token_id: int | None = 0, bos_token_id: int | None = None, eos_token_id: int | None = None, hidden_dropout: float = 0.1, attention_dropout: float = 0.1, initializer_range: float = 0.02, layer_norm_eps: float = 1e-12, tie_word_embeddings: bool = True, use_cache: bool = True, embedding_size: int | None = None, rotary_base: float = 10000.0, rotary_value: bool = False, position_embedding_type: Literal['rotary'] = 'rotary', type_vocab_size: int = 2, num_labels: int = 2, classifier_dropout: float | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_config.py#L17",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_config.py#L17",
       "subcategory": "config",
       "methods": [
         {
@@ -24,7 +24,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab_size: int = 50000, hidden_size: int = 768, num_hidden_layers: int = 12, num_attention_heads: int = 12, intermediate_size: int = 3072, hidden_act: TextActivation = 'gelu', max_position_embeddings: int = 1536, pad_token_id: int | None = 0, bos_token_id: int | None = None, eos_token_id: int | None = None, hidden_dropout: float = 0.1, attention_dropout: float = 0.1, initializer_range: float = 0.02, layer_norm_eps: float = 1e-12, tie_word_embeddings: bool = True, use_cache: bool = True, embedding_size: int | None = None, rotary_base: float = 10000.0, rotary_value: bool = False, position_embedding_type: Literal['rotary'] = 'rotary', type_vocab_size: int = 2, num_labels: int = 2, classifier_dropout: float | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_config.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_config.py#L1",
           "subcategory": "config",
           "summary": null,
           "extended": null,
@@ -66,7 +66,7 @@
       ],
       "labels": [],
       "signature": "RoFormerForMaskedLM(config: RoFormerConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L696",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L690",
       "subcategory": "model",
       "methods": [
         {
@@ -75,7 +75,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: RoFormerConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L754",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L748",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -97,9 +97,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(input_ids: Tensor, attention_mask: Tensor | None = None, token_type_ids: Tensor | None = None, labels: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L767",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L761",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -158,7 +158,7 @@
       ],
       "labels": [],
       "signature": "RoFormerForMultipleChoice(config: RoFormerConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L981",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L975",
       "subcategory": "model",
       "methods": [
         {
@@ -167,7 +167,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: RoFormerConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L1038",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L1032",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -189,9 +189,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(input_ids: Tensor, attention_mask: Tensor | None = None, token_type_ids: Tensor | None = None, labels: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L1050",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L1044",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -255,7 +255,7 @@
       ],
       "labels": [],
       "signature": "RoFormerForQuestionAnswering(config: RoFormerConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L1078",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L1072",
       "subcategory": "model",
       "methods": [
         {
@@ -264,7 +264,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: RoFormerConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L1142",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L1136",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -286,9 +286,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(input_ids: Tensor, attention_mask: Tensor | None = None, token_type_ids: Tensor | None = None, start_positions: Tensor | None = None, end_positions: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L1148",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L1142",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -347,7 +347,7 @@
       ],
       "labels": [],
       "signature": "RoFormerForSequenceClassification(config: RoFormerConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L787",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L781",
       "subcategory": "model",
       "methods": [
         {
@@ -356,7 +356,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: RoFormerConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L851",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L845",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -378,9 +378,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(input_ids: Tensor, attention_mask: Tensor | None = None, token_type_ids: Tensor | None = None, labels: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L863",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L857",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -440,7 +440,7 @@
       ],
       "labels": [],
       "signature": "RoFormerForTokenClassification(config: RoFormerConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L883",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L877",
       "subcategory": "model",
       "methods": [
         {
@@ -449,7 +449,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: RoFormerConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L943",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L937",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -471,9 +471,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(input_ids: Tensor, attention_mask: Tensor | None = None, token_type_ids: Tensor | None = None, labels: Tensor | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L955",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L949",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -537,7 +537,7 @@
       ],
       "labels": [],
       "signature": "RoFormerModel(config: RoFormerConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L528",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L522",
       "subcategory": "model",
       "methods": [
         {
@@ -546,7 +546,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: RoFormerConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L605",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L599",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -568,9 +568,9 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(input_ids: Tensor | None = None, attention_mask: Tensor | None = None, token_type_ids: Tensor | None = None, inputs_embeds: Tensor | None = None, past_key_values: Cache | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_model.py#L612",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L606",
           "subcategory": "model",
-          "summary": null,
+          "summary": "Override in subclasses to define the computation.",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -583,6 +583,72 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "get_input_embeddings",
+          "path": "lucid.models.text.roformer._model._RoFormerTrunk.get_input_embeddings",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_input_embeddings()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L448",
+          "subcategory": "model",
+          "summary": "Return the input-embedding submodule, or `None` if not applicable.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "nn.Module or None",
+            "description": "The embedding layer for text / token-id models (BERT, GPT,\n…); `None` for vision and other non-embedding models."
+          },
+          "raises": [],
+          "examples": [
+            ">>> from lucid.models import create_model\n>>> lm = create_model(\"gpt_lm\", vocab_size=100, hidden_size=16,\n...                   num_hidden_layers=1, num_attention_heads=2,\n...                   intermediate_size=32, max_position_embeddings=8)\n>>> lm.get_input_embeddings() is lm.transformer.tokens_embed\nTrue"
+          ],
+          "notes": [
+            "Trunks with an embedding table override this.  A task wrapper does\nnot need to: this implementation hands the call to the trunk stored\nunder `base_model_prefix`, so a wrapper reports the same table\nas the trunk inside it.  Used by tools that need to resize / share /\nintrospect token embeddings without coupling to family-specific\nattribute names."
+          ],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_RoFormerTrunk"
+        },
+        {
+          "name": "set_input_embeddings",
+          "path": "lucid.models.text.roformer._model._RoFormerTrunk.set_input_embeddings",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_input_embeddings(value: nn.Module)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_model.py#L452",
+          "subcategory": "model",
+          "summary": "Replace the input-embedding submodule.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "value",
+              "annotation": "nn.Module",
+              "description": "New embedding module.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "NotImplementedError",
+              "description": "When the model has no embedding table to replace — neither an\noverride of its own nor a trunk under `base_model_prefix`."
+            }
+          ],
+          "examples": [
+            "A text trunk hands its table over, so a larger one can be swapped\nin — here to make room for twenty token ids the original 100-row\ntable could not look up.\n>>> import lucid\n>>> import lucid.nn as nn\n>>> from lucid.models import create_model\n>>> model = create_model(\"gpt\", vocab_size=100, hidden_size=16,\n...                      num_hidden_layers=1, num_attention_heads=2,\n...                      intermediate_size=32,\n...                      max_position_embeddings=8).eval()\n>>> bigger = nn.Embedding(120, 16)\n>>> model.set_input_embeddings(bigger)\n>>> model.get_input_embeddings() is bigger\nTrue\n>>> ids = lucid.tensor([[110, 3]], dtype=lucid.int64)\n>>> model(ids).last_hidden_state.shape\n(1, 2, 16)\nA task wrapper makes the same swap on its trunk.  Its LM head is tied\nto the table, so the head follows and the logits widen to the new\nvocabulary, rather than keep scoring the table it replaced.\n>>> lm = create_model(\"gpt_lm\", vocab_size=100, hidden_size=16,\n...                   num_hidden_layers=1, num_attention_heads=2,\n...                   intermediate_size=32,\n...                   max_position_embeddings=8).eval()\n>>> lm.set_input_embeddings(nn.Embedding(120, 16))\n>>> lm.lm_head.weight is lm.get_input_embeddings().weight\nTrue\n>>> lm(ids).logits.shape\n(1, 2, 120)\nA model with no embedding table keeps this base implementation and\nrefuses, rather than attach a module that nothing would read.\n>>> lenet = create_model(\"lenet_5\")\n>>> lenet.get_input_embeddings() is None\nTrue\n>>> lenet.set_input_embeddings(nn.Embedding(10, 4))\nTraceback (most recent call last):\n    ...\nNotImplementedError: LeNet does not support set_input_embeddings"
+          ],
+          "notes": [
+            "Companion to `get_input_embeddings`.  Trunks with a table\noverride both; a task wrapper inherits this implementation, which\nmakes the swap on its trunk.\n\nWhen the wrapper ties an output head to the table\n(`config.tie_word_embeddings`), the head is re-bound to the new\ntable's weight, so the two stay one matrix and the head scores the\nnew vocabulary.  A head bias sized to the vocabulary is resized with\nit: existing entries are kept and new ones start at zero.  An untied\nhead is left as it is.  Either way `config` is frozen and keeps\nits original `vocab_size`."
+          ],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_RoFormerTrunk"
         }
       ],
       "summary": "Bare RoFormer encoder trunk with rotary position embeddings.",
@@ -638,7 +704,7 @@
       ],
       "labels": [],
       "signature": "RoFormerTokenizer(vocab: dict[str, int], unk_token: str = '[UNK]', continuing_prefix: str = '##', max_chars_per_word: int = 100, do_lower_case: bool = True, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_tokenizer.py#L42",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_tokenizer.py#L42",
       "subcategory": "tokenizer",
       "methods": [
         {
@@ -647,7 +713,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int], unk_token: str = '[UNK]', continuing_prefix: str = '##', max_chars_per_word: int = 100, do_lower_case: bool = True, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_tokenizer.py#L91",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_tokenizer.py#L91",
           "subcategory": "tokenizer",
           "summary": null,
           "extended": null,
@@ -749,7 +815,7 @@
       ],
       "labels": [],
       "signature": "RoFormerTokenizerFast(vocab: dict[str, int], unk_token: str = '[UNK]', continuing_prefix: str = '##', max_chars_per_word: int = 100, do_lower_case: bool = True, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_tokenizer.py#L122",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_tokenizer.py#L122",
       "subcategory": "tokenizer",
       "methods": [
         {
@@ -758,7 +824,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int], unk_token: str = '[UNK]', continuing_prefix: str = '##', max_chars_per_word: int = 100, do_lower_case: bool = True, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_tokenizer.py#L145",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_tokenizer.py#L145",
           "subcategory": "tokenizer",
           "summary": null,
           "extended": null,
@@ -794,7 +860,7 @@
       "kind": "function",
       "labels": [],
       "signature": "roformer(pretrained: bool | str = False, weights: RoFormerWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_pretrained.py#L30",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_pretrained.py#L30",
       "subcategory": "pretrained",
       "summary": "Construct a RoFormer encoder trunk.",
       "extended": "Canonical RoFormer architecture from Su, Lu, Pan, Murtadha, Wen, and\nLiu, 2024: $L=12$ transformer layers, $H=768$ hidden,\n$A=12$ attention heads, intermediate width 3072 — same shape as\nBERT-base, but with absolute learned position embeddings replaced by\nrotary position embedding (RoPE) applied to $Q$ and $K$\ninside every self-attention layer.  Max sequence length is extended\nfrom 512 to 1536 to exercise RoPE's length-extrapolation property.",
@@ -1034,7 +1100,7 @@
       "kind": "function",
       "labels": [],
       "signature": "roformer_cls(pretrained: bool | str = False, weights: RoFormerWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_pretrained.py#L168",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_pretrained.py#L168",
       "subcategory": "pretrained",
       "summary": "Construct a RoFormer model with a sequence-classification head.",
       "extended": "Same trunk as `roformer` (L=12, H=768, A=12), augmented with a\ndropout-regularised linear classifier on the pooled first-token\nembedding.  Use for GLUE-style fine-tunes when the RoPE relative\nposition bias is preferred to absolute position embeddings.",
@@ -1296,7 +1362,7 @@
       "kind": "function",
       "labels": [],
       "signature": "roformer_mlm(pretrained: bool | str = False, weights: RoFormerMLMWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_pretrained.py#L106",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_pretrained.py#L106",
       "subcategory": "pretrained",
       "summary": "Construct a RoFormer model with a tied masked-LM head.",
       "extended": "Same trunk as `roformer` (L=12, H=768, A=12), augmented with the\nBERT-style two-layer projection mapping each hidden state to vocabulary\nlogits via a decoder whose weight matrix is tied to the input\n`word_embeddings` table when `config.tie_word_embeddings` is True.\nUse for MLM pre-training when RoPE relative-position semantics are\npreferred to absolute position embeddings.",
@@ -1589,7 +1655,7 @@
       "kind": "function",
       "labels": [],
       "signature": "roformer_token_cls(pretrained: bool | str = False, weights: RoFormerWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_pretrained.py#L231",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_pretrained.py#L231",
       "subcategory": "pretrained",
       "summary": "Construct a RoFormer model with a per-token classification head.",
       "extended": "Same trunk as `roformer` (L=12, H=768, A=12), augmented with a\ndropout-regularised per-position linear classifier of output width\n`config.num_labels`.  Use for sequence-labelling tasks (NER, POS,\nchunking) when a RoPE-trained encoder is preferred.",
@@ -1836,7 +1902,7 @@
       "kind": "function",
       "labels": [],
       "signature": "roformer_multiple_choice(pretrained: bool | str = False, weights: RoFormerWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_pretrained.py#L294",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_pretrained.py#L294",
       "subcategory": "pretrained",
       "summary": "Construct a RoFormer model with a multiple-choice head.",
       "extended": "Scores each candidate independently and softmaxes across them, so the\ninput is `(N, C, L)` — batch, choices, tokens — rather than the\n`(N, L)` every other head here takes.  The choices are flattened\ninto the batch, run through the shared trunk, and reshaped back to\n`(N, C)` logits.",
@@ -2083,7 +2149,7 @@
       "kind": "function",
       "labels": [],
       "signature": "roformer_qa(pretrained: bool | str = False, weights: RoFormerWeights | None = None, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_pretrained.py#L360",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_pretrained.py#L360",
       "subcategory": "pretrained",
       "summary": "Construct a RoFormer model with an extractive span head.",
       "extended": "A two-way linear over each position, scoring it as the start and the\nend of the answer span.",
@@ -2327,7 +2393,7 @@
       ],
       "labels": [],
       "signature": "RoFormerMLMWeights()",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_weights.py#L69",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_weights.py#L69",
       "subcategory": "weights",
       "methods": [],
       "summary": "Pretrained weight tags for `lucid.models.roformer_mlm`.",
@@ -2366,7 +2432,7 @@
       ],
       "labels": [],
       "signature": "RoFormerWeights()",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/models/text/roformer/_weights.py#L28",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/models/text/roformer/_weights.py#L28",
       "subcategory": "weights",
       "methods": [],
       "summary": "Pretrained weight tags for `lucid.models.roformer`.",

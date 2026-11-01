@@ -3,7 +3,7 @@
   "name": "tokenizer",
   "path": "lucid.utils.tokenizer",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/__init__.py#L1",
   "members": [
     {
       "name": "SpecialTokens",
@@ -13,7 +13,7 @@
       "bases": [],
       "labels": [],
       "signature": "SpecialTokens(pad: str | None = None, unk: str | None = None, bos: str | None = None, eos: str | None = None, mask: str | None = None, sep: str | None = None, extra: dict[str, str] = dict())",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L44",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L44",
       "subcategory": "base",
       "methods": [
         {
@@ -22,7 +22,7 @@
           "kind": "function",
           "labels": [],
           "signature": "all_tokens()",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L86",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L86",
           "subcategory": "base",
           "summary": "Return every special-token surface form (canonical + extra).",
           "extended": null,
@@ -44,9 +44,9 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(pad: str | None = None, unk: str | None = None, bos: str | None = None, eos: str | None = None, mask: str | None = None, sep: str | None = None, extra: dict[str, str] = dict())",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L1",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L1",
           "subcategory": "base",
-          "summary": "Construct the tokenizer. See the class docstring for parameters.",
+          "summary": null,
           "extended": null,
           "parameters": [],
           "returns": {
@@ -84,7 +84,7 @@
       ],
       "labels": [],
       "signature": "Tokenizer(special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L102",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L102",
       "subcategory": "base",
       "methods": [
         {
@@ -93,7 +93,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L181",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L181",
           "subcategory": "base",
           "summary": "Initialise the special-token registry; subclasses must\npopulate the vocab + algorithm state before calling this.",
           "extended": null,
@@ -118,7 +118,7 @@
             "property"
           ],
           "signature": "vocab_size: int",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L212",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L212",
           "summary": "Total number of distinct token ids (including specials).",
           "extended": null,
           "parameters": [],
@@ -142,7 +142,7 @@
             "property"
           ],
           "signature": "algo: str",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L217",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L217",
           "summary": "Short algorithm name (`\"bpe\"` / `\"wordpiece\"` / ...).",
           "extended": "Used by `save` to route serialisation to the right\nformat and by `from_pretrained` to pick the right\nsubclass when loading from a generic path.",
           "parameters": [],
@@ -163,7 +163,7 @@
           "kind": "function",
           "labels": [],
           "signature": "get_vocab()",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L227",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L227",
           "subcategory": "base",
           "summary": "Return the token-string → id map.",
           "extended": "Default returns an empty dict; subclasses with a real vocab\noverride this.  Used by `save` and by special-token-id\nresolution in `_refresh_special_ids`.",
@@ -185,7 +185,7 @@
           "kind": "function",
           "labels": [],
           "signature": "id_to_token(token_id: int)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L236",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L236",
           "subcategory": "base",
           "summary": "Return the surface form for `token_id` or `None` if\nout of range.",
           "extended": "Default does an O(N) reverse scan of `get_vocab`;\nsubclasses with an O(1) reverse table should override.",
@@ -207,7 +207,7 @@
           "kind": "function",
           "labels": [],
           "signature": "convert_tokens_to_ids(tokens: str | Iterable[str])",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L248",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L248",
           "subcategory": "base",
           "summary": "Map one or many token strings to their ids.",
           "extended": "Unknown tokens raise `KeyError` (callers wanting an\nUNK fallback should do their own `.get(token, unk_id)`\nlookup).",
@@ -229,7 +229,7 @@
           "kind": "function",
           "labels": [],
           "signature": "convert_ids_to_tokens(ids: int | Iterable[int])",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L260",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L260",
           "subcategory": "base",
           "summary": "Inverse of `convert_tokens_to_ids`.",
           "extended": null,
@@ -253,7 +253,7 @@
             "property"
           ],
           "signature": "special_tokens: SpecialTokens",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L278",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L278",
           "summary": "The registry of canonical + extra special tokens.",
           "extended": null,
           "parameters": [],
@@ -276,7 +276,7 @@
             "property"
           ],
           "signature": "pad_token_id: int | None",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L283",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L283",
           "summary": "Id of the `pad` special token (`None` if undefined).",
           "extended": null,
           "parameters": [],
@@ -299,7 +299,7 @@
             "property"
           ],
           "signature": "unk_token_id: int | None",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L288",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L288",
           "summary": "Id of the `unk` special token (`None` if undefined).",
           "extended": null,
           "parameters": [],
@@ -322,7 +322,7 @@
             "property"
           ],
           "signature": "bos_token_id: int | None",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L293",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L293",
           "summary": "Id of the `bos` special token (`None` if undefined).",
           "extended": null,
           "parameters": [],
@@ -345,7 +345,7 @@
             "property"
           ],
           "signature": "eos_token_id: int | None",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L298",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L298",
           "summary": "Id of the `eos` special token (`None` if undefined).",
           "extended": null,
           "parameters": [],
@@ -368,7 +368,7 @@
             "property"
           ],
           "signature": "mask_token_id: int | None",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L303",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L303",
           "summary": "Id of the `mask` special token (`None` if undefined).",
           "extended": null,
           "parameters": [],
@@ -391,7 +391,7 @@
             "property"
           ],
           "signature": "cls_token_id: int | None",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L308",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L308",
           "summary": "Id of the `cls` special token (`None` if undefined).",
           "extended": null,
           "parameters": [],
@@ -414,7 +414,7 @@
             "property"
           ],
           "signature": "sep_token_id: int | None",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L313",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L313",
           "summary": "Id of the `sep` special token (`None` if undefined).",
           "extended": null,
           "parameters": [],
@@ -437,7 +437,7 @@
             "property"
           ],
           "signature": "all_special_ids: list[int]",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L318",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L318",
           "summary": "Every special-token id (canonical + extras), deduped.",
           "extended": null,
           "parameters": [],
@@ -458,7 +458,7 @@
           "kind": "function",
           "labels": [],
           "signature": "encode(text: str, add_special_tokens: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L341",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L341",
           "subcategory": "base",
           "summary": "Encode a single string to a list of token ids.",
           "extended": "When `add_special_tokens=True` the sequence is framed by the\ntokenizer's `post_processor` if one is configured (a\n`tokenizer.json` carries it — T5's appends only `</s>`),\nand otherwise by the class's default layout: BOS/EOS, BERT's\n`[CLS] … [SEP]`, or nothing for GPT-2.",
@@ -493,7 +493,7 @@
           "kind": "function",
           "labels": [],
           "signature": "decode(ids: Iterable[int] | list[int], skip_special_tokens: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L375",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L375",
           "subcategory": "base",
           "summary": "Decode a sequence of ids back to text.",
           "extended": "When `skip_special_tokens=True` every id in\n`all_special_ids` is dropped before the\nalgorithm-specific `_decode_one` runs.",
@@ -528,7 +528,7 @@
           "kind": "function",
           "labels": [],
           "signature": "encode_batch(texts: Iterable[str] | list[str], add_special_tokens: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L405",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L405",
           "subcategory": "base",
           "summary": "Vectorised `encode` over a list of strings.",
           "extended": "Default loops through `encode`; subclasses with a true\nbatched fast path (the C++ Fast tokenizers) override.",
@@ -563,7 +563,7 @@
           "kind": "function",
           "labels": [],
           "signature": "decode_batch(batch_ids: Iterable[Iterable[int]] | list[list[int]], skip_special_tokens: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L430",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L430",
           "subcategory": "base",
           "summary": "Vectorised `decode` over a list of id sequences.",
           "extended": null,
@@ -588,7 +588,7 @@
             "writable"
           ],
           "signature": "post_processor: PostProcessor | None",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L440",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L440",
           "summary": "The configured post-processor, or `None` for the class default.",
           "extended": "Assign a `lucid.utils.tokenizer._post_processors.PostProcessor`\nto change how `encode` frames sequences — for example a\n`lucid.utils.tokenizer._post_processors.TemplateProcessing`\nreproducing a checkpoint's template — or `None` to go back to\nthe class's default layout.",
           "parameters": [],
@@ -611,7 +611,7 @@
           "kind": "function",
           "labels": [],
           "signature": "num_special_tokens_to_add(pair: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L475",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L475",
           "subcategory": "base",
           "summary": "Count the special tokens `encode(add_special_tokens=True)` adds.",
           "extended": null,
@@ -642,7 +642,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__call__(text: str | list[str], add_special_tokens: bool = True, padding: bool | str = False, truncation: bool = False, max_length: int | None = None, return_tensors: str | None = None, return_attention_mask: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L562",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L562",
           "subcategory": "base",
           "summary": "Hugging-Face-style entry point.",
           "extended": null,
@@ -707,7 +707,7 @@
           "kind": "function",
           "labels": [],
           "signature": "save(directory: str)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_base.py#L717",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_base.py#L717",
           "subcategory": "base",
           "summary": "Persist the tokenizer to `directory`.",
           "extended": "Default writes `tokenizer.json` (unified format) +\n`special_tokens_map.json`.  Subclasses with algorithm-\nspecific legacy files (`vocab.json` + `merges.txt` for\nBPE, `vocab.txt` for WordPiece) override this hook to\nemit those alongside.",
@@ -753,7 +753,7 @@
       ],
       "labels": [],
       "signature": "BPETokenizer(vocab: dict[str, int], merges: list[tuple[str, str]], normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_bpe.py#L250",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L250",
       "subcategory": "bpe",
       "methods": [
         {
@@ -762,7 +762,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int], merges: list[tuple[str, str]], normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_bpe.py#L298",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L298",
           "subcategory": "bpe",
           "summary": "Construct a pure-Python BPE tokenizer.",
           "extended": null,
@@ -819,7 +819,7 @@
             "property"
           ],
           "signature": "vocab_size: int",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_bpe.py#L365",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L365",
           "summary": "Number of tokens currently registered in the vocab.",
           "extended": null,
           "parameters": [],
@@ -840,7 +840,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 30000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_bpe.py#L457",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L457",
           "subcategory": "bpe",
           "summary": "Re-train this tokenizer from scratch on `corpus`.",
           "extended": "Implements the classical Sennrich-2016 training loop:\n\n1. Pre-tokenize each document (using the configured\n   pre-tokenizer chain) into a frequency-counted set of\n   words.\n2. Seed the vocab with every distinct codepoint appearing\n   in any word.\n3. Iteratively count adjacent symbol-pair frequencies + merge\n   the most frequent pair, growing the vocab by 1 each step\n   until `vocab_size` is reached or no pair appears more\n   than once.\n\nReplaces `_vocab` + `_merges` in place; previous contents\nare discarded.",
@@ -877,7 +877,7 @@
             "classmethod"
           ],
           "signature": "from_file(directory: str, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_bpe.py#L541",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L541",
           "subcategory": "bpe",
           "summary": "Load a pure-Python BPE tokenizer from `directory`.",
           "extended": null,
@@ -917,6 +917,99 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._bpe._BPECommonMixin.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L163",
+          "summary": "Algorithm identifier (`\"bpe\"`).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BPECommonMixin"
+        },
+        {
+          "name": "get_vocab",
+          "path": "lucid.utils.tokenizer._bpe._BPECommonMixin.get_vocab",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_vocab()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L167",
+          "subcategory": "bpe",
+          "summary": "Return a shallow copy of the token → id map.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[str, int]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BPECommonMixin"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._bpe._BPECommonMixin.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L172",
+          "subcategory": "bpe",
+          "summary": "Look up the surface string for a token id.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BPECommonMixin"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._bpe._BPECommonMixin.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L177",
+          "subcategory": "bpe",
+          "summary": "Persist as both legacy (`vocab.json` + `merges.txt`)\nAND unified (`tokenizer.json`) formats.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BPECommonMixin"
         }
       ],
       "summary": "Reference (pure-Python) BPE tokenizer.",
@@ -974,7 +1067,7 @@
       ],
       "labels": [],
       "signature": "BPETokenizerFast(vocab: dict[str, int], merges: list[tuple[str, str]], normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_bpe.py#L609",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L609",
       "subcategory": "bpe",
       "methods": [
         {
@@ -983,7 +1076,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int], merges: list[tuple[str, str]], normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_bpe.py#L646",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L646",
           "subcategory": "bpe",
           "summary": "Construct a C++-backed BPE tokenizer.",
           "extended": null,
@@ -1040,7 +1133,7 @@
             "property"
           ],
           "signature": "vocab_size: int",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_bpe.py#L715",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L715",
           "summary": "Number of tokens in the C++ side vocab.",
           "extended": null,
           "parameters": [],
@@ -1061,7 +1154,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 30000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_bpe.py#L748",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L748",
           "subcategory": "bpe",
           "summary": "Re-train in C++.",
           "extended": "Materialises `corpus` into a list before handing off (the\nC++ binding takes `std::vector<std::string>`); for very\nlarge corpora the user is responsible for chunking.  After\ntraining, the Python-side vocab / merges caches are refreshed\nfrom the C++ side so subsequent encodes see the new state.",
@@ -1098,7 +1191,7 @@
             "classmethod"
           ],
           "signature": "from_file(directory: str, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_bpe.py#L776",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L776",
           "subcategory": "bpe",
           "summary": "Load a C++-backed BPE tokenizer from `directory`.",
           "extended": null,
@@ -1138,6 +1231,99 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._bpe._BPECommonMixin.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L163",
+          "summary": "Algorithm identifier (`\"bpe\"`).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BPECommonMixin"
+        },
+        {
+          "name": "get_vocab",
+          "path": "lucid.utils.tokenizer._bpe._BPECommonMixin.get_vocab",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_vocab()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L167",
+          "subcategory": "bpe",
+          "summary": "Return a shallow copy of the token → id map.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[str, int]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BPECommonMixin"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._bpe._BPECommonMixin.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L172",
+          "subcategory": "bpe",
+          "summary": "Look up the surface string for a token id.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BPECommonMixin"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._bpe._BPECommonMixin.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L177",
+          "subcategory": "bpe",
+          "summary": "Persist as both legacy (`vocab.json` + `merges.txt`)\nAND unified (`tokenizer.json`) formats.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BPECommonMixin"
         }
       ],
       "summary": "C++-backed BPE tokenizer.",
@@ -1176,7 +1362,7 @@
       ],
       "labels": [],
       "signature": "ByteTokenizer(special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L39",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L39",
       "subcategory": "byte",
       "methods": [
         {
@@ -1185,7 +1371,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L67",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L67",
           "subcategory": "byte",
           "summary": "Construct a pure-Python byte tokenizer.",
           "extended": null,
@@ -1216,7 +1402,7 @@
             "property"
           ],
           "signature": "vocab_size: int",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L82",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L82",
           "summary": "Fixed vocab size = 256 (one id per possible byte value).",
           "extended": null,
           "parameters": [],
@@ -1239,7 +1425,7 @@
             "property"
           ],
           "signature": "algo: str",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L88",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L88",
           "summary": "Algorithm identifier (always `\"byte\"`).",
           "extended": null,
           "parameters": [],
@@ -1260,7 +1446,7 @@
           "kind": "function",
           "labels": [],
           "signature": "get_vocab()",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L92",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L92",
           "subcategory": "byte",
           "summary": "Return the canonical 256-entry byte → id map.",
           "extended": null,
@@ -1282,7 +1468,7 @@
           "kind": "function",
           "labels": [],
           "signature": "id_to_token(token_id: int)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L97",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L97",
           "subcategory": "byte",
           "summary": "Inverse of the byte vocab; returns the Latin-1 char for\nvalid byte ids, `None` otherwise.",
           "extended": null,
@@ -1304,7 +1490,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 256)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L116",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L116",
           "subcategory": "byte",
           "summary": "No-op — the byte vocab is fixed at 256.",
           "extended": null,
@@ -1339,7 +1525,7 @@
           "kind": "function",
           "labels": [],
           "signature": "save(directory: str)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L129",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L129",
           "subcategory": "byte",
           "summary": "Persist as `tokenizer.json` only (no per-algorithm\nlegacy file — there's no vocab.txt convention for byte\ntokenizers).",
           "extended": null,
@@ -1370,7 +1556,7 @@
             "classmethod"
           ],
           "signature": "from_file(directory: str, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L148",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L148",
           "subcategory": "byte",
           "summary": "Load from a directory containing `special_tokens_map.json`.",
           "extended": "The vocab itself is not read from disk (always the canonical\n256-entry table); we only consult `special_tokens_map.json`\nso user-defined specials survive a round-trip.",
@@ -1430,7 +1616,7 @@
       ],
       "labels": [],
       "signature": "ByteTokenizerFast(special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L187",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L187",
       "subcategory": "byte",
       "methods": [
         {
@@ -1439,7 +1625,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L210",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L210",
           "subcategory": "byte",
           "summary": "Construct a C++-backed byte tokenizer.",
           "extended": null,
@@ -1472,7 +1658,7 @@
             "property"
           ],
           "signature": "vocab_size: int",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L231",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L231",
           "summary": "Fixed vocab size (256), as reported by the C++ backend.",
           "extended": null,
           "parameters": [],
@@ -1495,7 +1681,7 @@
             "property"
           ],
           "signature": "algo: str",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L237",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L237",
           "summary": "Algorithm identifier (always `\"byte\"`).",
           "extended": null,
           "parameters": [],
@@ -1516,7 +1702,7 @@
           "kind": "function",
           "labels": [],
           "signature": "get_vocab()",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L241",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L241",
           "subcategory": "byte",
           "summary": "Return the canonical 256-entry byte → id map.",
           "extended": null,
@@ -1538,7 +1724,7 @@
           "kind": "function",
           "labels": [],
           "signature": "id_to_token(token_id: int)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L246",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L246",
           "subcategory": "byte",
           "summary": "Return the Latin-1 char for `token_id` or `None`.",
           "extended": null,
@@ -1560,7 +1746,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 256)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L266",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L266",
           "subcategory": "byte",
           "summary": "No-op — the byte vocab is fixed at 256.  See\n`ByteTokenizer.train`.",
           "extended": null,
@@ -1582,7 +1768,7 @@
           "kind": "function",
           "labels": [],
           "signature": "save(directory: str)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L270",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L270",
           "subcategory": "byte",
           "summary": "Persist as `tokenizer.json` + `special_tokens_map.json`.",
           "extended": null,
@@ -1613,7 +1799,7 @@
             "classmethod"
           ],
           "signature": "from_file(directory: str, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte.py#L286",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte.py#L286",
           "subcategory": "byte",
           "summary": "Load from `directory` (only the special-token map is read).",
           "extended": null,
@@ -1674,7 +1860,7 @@
       ],
       "labels": [],
       "signature": "ByteLevelBPETokenizer(vocab: dict[str, int], merges: list[tuple[str, str]], add_prefix_space: bool = False, normalizer: Normalizer | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte_bpe.py#L108",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte_bpe.py#L108",
       "subcategory": "byte_bpe",
       "methods": [
         {
@@ -1683,7 +1869,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int], merges: list[tuple[str, str]], add_prefix_space: bool = False, normalizer: Normalizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte_bpe.py#L173",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte_bpe.py#L173",
           "subcategory": "byte_bpe",
           "summary": "Construct a pure-Python byte-level BPE tokenizer.",
           "extended": null,
@@ -1738,7 +1924,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 50000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte_bpe.py#L214",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte_bpe.py#L214",
           "subcategory": "byte_bpe",
           "summary": "Re-train this tokenizer from scratch on `corpus`.",
           "extended": "Delegates to the parent `BPETokenizer.train`.  The\nconfigured `ByteLevel` pre-tokenizer means the\nalgorithm sees byte-mapped chunks throughout training, so\nthe resulting vocab + merges are in GPT-2 byte-mapped form\n(compatible with Hugging Face GPT-2 / RoBERTa export).",
@@ -1775,7 +1961,7 @@
             "classmethod"
           ],
           "signature": "from_file(directory: str, add_prefix_space: bool = False, normalizer: Normalizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte_bpe.py#L235",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte_bpe.py#L235",
           "subcategory": "byte_bpe",
           "summary": "Load from a Hugging Face-compatible directory.",
           "extended": null,
@@ -1790,6 +1976,99 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._byte_bpe._ByteLevelDecodeMixin.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte_bpe.py#L70",
+          "summary": "Algorithm identifier (always `\"byte_bpe\"`).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ByteLevelDecodeMixin"
+        },
+        {
+          "name": "get_vocab",
+          "path": "lucid.utils.tokenizer._bpe._BPECommonMixin.get_vocab",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_vocab()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L167",
+          "subcategory": "bpe",
+          "summary": "Return a shallow copy of the token → id map.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[str, int]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BPECommonMixin"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._bpe._BPECommonMixin.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L172",
+          "subcategory": "bpe",
+          "summary": "Look up the surface string for a token id.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BPECommonMixin"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._bpe._BPECommonMixin.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L177",
+          "subcategory": "bpe",
+          "summary": "Persist as both legacy (`vocab.json` + `merges.txt`)\nAND unified (`tokenizer.json`) formats.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BPECommonMixin"
         }
       ],
       "summary": "Pure-Python byte-level BPE (GPT-2 / RoBERTa convention).",
@@ -1858,7 +2137,7 @@
       ],
       "labels": [],
       "signature": "ByteLevelBPETokenizerFast(vocab: dict[str, int], merges: list[tuple[str, str]], add_prefix_space: bool = False, normalizer: Normalizer | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte_bpe.py#L260",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte_bpe.py#L260",
       "subcategory": "byte_bpe",
       "methods": [
         {
@@ -1867,7 +2146,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int], merges: list[tuple[str, str]], add_prefix_space: bool = False, normalizer: Normalizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte_bpe.py#L288",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte_bpe.py#L288",
           "subcategory": "byte_bpe",
           "summary": "Construct a C++-backed byte-level BPE tokenizer.",
           "extended": null,
@@ -1922,7 +2201,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 50000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte_bpe.py#L328",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte_bpe.py#L328",
           "subcategory": "byte_bpe",
           "summary": "Re-train in C++ via the parent\n`BPETokenizerFast.train`.",
           "extended": "The ByteLevel pre-tokenizer normalizes every byte to its\nprintable form **before** the corpus reaches the C++\ntraining loop, so the resulting vocab is in byte-mapped form\n(Hugging Face GPT-2 compatible).\n\nNote: the C++ `BPE::train` does its OWN whitespace split\non the raw input, so we pre-encode the corpus through the\nByteLevel pre-tokenizer here in Python before handing off —\notherwise the training would learn merges on raw bytes\nrather than byte-mapped codepoints.",
@@ -1959,7 +2238,7 @@
             "classmethod"
           ],
           "signature": "from_file(directory: str, add_prefix_space: bool = False, normalizer: Normalizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_byte_bpe.py#L364",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte_bpe.py#L364",
           "subcategory": "byte_bpe",
           "summary": "Load from a Hugging Face-compatible directory.",
           "extended": null,
@@ -1974,6 +2253,99 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._byte_bpe._ByteLevelDecodeMixin.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_byte_bpe.py#L70",
+          "summary": "Algorithm identifier (always `\"byte_bpe\"`).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ByteLevelDecodeMixin"
+        },
+        {
+          "name": "get_vocab",
+          "path": "lucid.utils.tokenizer._bpe._BPECommonMixin.get_vocab",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_vocab()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L167",
+          "subcategory": "bpe",
+          "summary": "Return a shallow copy of the token → id map.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[str, int]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BPECommonMixin"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._bpe._BPECommonMixin.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L172",
+          "subcategory": "bpe",
+          "summary": "Look up the surface string for a token id.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BPECommonMixin"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._bpe._BPECommonMixin.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_bpe.py#L177",
+          "subcategory": "bpe",
+          "summary": "Persist as both legacy (`vocab.json` + `merges.txt`)\nAND unified (`tokenizer.json`) formats.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BPECommonMixin"
         }
       ],
       "summary": "C++-backed byte-level BPE tokenizer.",
@@ -2011,7 +2383,7 @@
       ],
       "labels": [],
       "signature": "CharTokenizer(vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_char.py#L35",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_char.py#L35",
       "subcategory": "char",
       "methods": [
         {
@@ -2020,7 +2392,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_char.py#L62",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_char.py#L62",
           "subcategory": "char",
           "summary": "Construct a pure-Python character tokenizer.",
           "extended": null,
@@ -2055,7 +2427,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 1000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_char.py#L96",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_char.py#L96",
           "subcategory": "char",
           "summary": "Build vocab by collecting unique codepoints in insertion order.",
           "extended": "Stops when `vocab_size` distinct codepoints have been\nobserved.",
@@ -2083,6 +2455,148 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "vocab_size",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.vocab_size",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "vocab_size: int",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L122",
+          "summary": "Total number of tokens currently registered in the vocab.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L128",
+          "summary": "Algorithm identifier.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "get_vocab",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.get_vocab",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_vocab()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L132",
+          "subcategory": "lookup_common",
+          "summary": "Return a shallow copy of the token → id map.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[str, int]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L137",
+          "subcategory": "lookup_common",
+          "summary": "Return the surface string for `token_id` or `None`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L148",
+          "subcategory": "lookup_common",
+          "summary": "Persist as `vocab.txt` + unified `tokenizer.json`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "from_file",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.from_file",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_file(directory: str, special_tokens: SpecialTokens | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L160",
+          "subcategory": "lookup_common",
+          "summary": "Load from a directory containing `vocab.txt`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
         }
       ],
       "summary": "Reference (pure-Python) character-level tokenizer.",
@@ -2121,7 +2635,7 @@
       ],
       "labels": [],
       "signature": "CharTokenizerFast(vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_char.py#L112",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_char.py#L112",
       "subcategory": "char",
       "methods": [
         {
@@ -2130,7 +2644,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_char.py#L139",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_char.py#L139",
           "subcategory": "char",
           "summary": "Construct a C++-backed character tokenizer.",
           "extended": null,
@@ -2167,7 +2681,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 1000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_char.py#L167",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_char.py#L167",
           "subcategory": "char",
           "summary": "Train in C++; mirror the resulting vocab back into Python state.",
           "extended": null,
@@ -2195,6 +2709,148 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "vocab_size",
+          "path": "lucid.utils.tokenizer._lookup_common._FastVocabTokenizer.vocab_size",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "vocab_size: int",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L198",
+          "summary": "Total number of tokens in the live C++ vocab.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_FastVocabTokenizer"
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L128",
+          "summary": "Algorithm identifier.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "get_vocab",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.get_vocab",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_vocab()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L132",
+          "subcategory": "lookup_common",
+          "summary": "Return a shallow copy of the token → id map.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[str, int]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L137",
+          "subcategory": "lookup_common",
+          "summary": "Return the surface string for `token_id` or `None`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L148",
+          "subcategory": "lookup_common",
+          "summary": "Persist as `vocab.txt` + unified `tokenizer.json`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "from_file",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.from_file",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_file(directory: str, special_tokens: SpecialTokens | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L160",
+          "subcategory": "lookup_common",
+          "summary": "Load from a directory containing `vocab.txt`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
         }
       ],
       "summary": "C++-backed character tokenizer; bit-identical to `CharTokenizer`.",
@@ -2234,7 +2890,7 @@
       ],
       "labels": [],
       "signature": "RegexTokenizer(pattern: str, vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_regex.py#L115",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_regex.py#L115",
       "subcategory": "regex",
       "methods": [
         {
@@ -2243,7 +2899,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(pattern: str, vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_regex.py#L161",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_regex.py#L161",
           "subcategory": "regex",
           "summary": "Construct a pure-Python regex tokenizer.",
           "extended": null,
@@ -2284,7 +2940,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 30000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_regex.py#L204",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_regex.py#L204",
           "subcategory": "regex",
           "summary": "Build the vocab in insertion order from corpus matches.",
           "extended": "Iterates over `corpus`, applies the regex to each document,\nand assigns each *first-seen* match a fresh id starting at 0.\nStops as soon as `vocab_size` distinct tokens have been\ncollected (no frequency cut-off — the order is purely\ninsertion order).",
@@ -2312,6 +2968,172 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "pattern",
+          "path": "lucid.utils.tokenizer._regex._RegexPersistenceMixin.pattern",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "pattern: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_regex.py#L79",
+          "summary": "The original regex source — useful for serialisation.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_RegexPersistenceMixin"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._regex._RegexPersistenceMixin.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_regex.py#L83",
+          "subcategory": "regex",
+          "summary": "Persist vocab + regex pattern + unified `tokenizer.json`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_RegexPersistenceMixin"
+        },
+        {
+          "name": "from_file",
+          "path": "lucid.utils.tokenizer._regex._RegexPersistenceMixin.from_file",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_file(directory: str, special_tokens: SpecialTokens | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_regex.py#L96",
+          "subcategory": "regex",
+          "summary": "Load from a directory previously written by `save`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_RegexPersistenceMixin"
+        },
+        {
+          "name": "vocab_size",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.vocab_size",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "vocab_size: int",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L122",
+          "summary": "Total number of tokens currently registered in the vocab.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L128",
+          "summary": "Algorithm identifier.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "get_vocab",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.get_vocab",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_vocab()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L132",
+          "subcategory": "lookup_common",
+          "summary": "Return a shallow copy of the token → id map.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[str, int]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L137",
+          "subcategory": "lookup_common",
+          "summary": "Return the surface string for `token_id` or `None`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
         }
       ],
       "summary": "Reference (pure-Python) regex tokenizer.",
@@ -2364,7 +3186,7 @@
       ],
       "labels": [],
       "signature": "RegexTokenizerFast(pattern: str, vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_regex.py#L226",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_regex.py#L226",
       "subcategory": "regex",
       "methods": [
         {
@@ -2373,7 +3195,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(pattern: str, vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_regex.py#L272",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_regex.py#L272",
           "subcategory": "regex",
           "summary": "Construct a C++-backed regex tokenizer.",
           "extended": null,
@@ -2414,7 +3236,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 30000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_regex.py#L296",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_regex.py#L296",
           "subcategory": "regex",
           "summary": "Re-train in C++; refresh Python-side caches afterwards.",
           "extended": null,
@@ -2442,6 +3264,172 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "pattern",
+          "path": "lucid.utils.tokenizer._regex._RegexPersistenceMixin.pattern",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "pattern: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_regex.py#L79",
+          "summary": "The original regex source — useful for serialisation.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_RegexPersistenceMixin"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._regex._RegexPersistenceMixin.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_regex.py#L83",
+          "subcategory": "regex",
+          "summary": "Persist vocab + regex pattern + unified `tokenizer.json`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_RegexPersistenceMixin"
+        },
+        {
+          "name": "from_file",
+          "path": "lucid.utils.tokenizer._regex._RegexPersistenceMixin.from_file",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_file(directory: str, special_tokens: SpecialTokens | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_regex.py#L96",
+          "subcategory": "regex",
+          "summary": "Load from a directory previously written by `save`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_RegexPersistenceMixin"
+        },
+        {
+          "name": "vocab_size",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.vocab_size",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "vocab_size: int",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L122",
+          "summary": "Total number of tokens currently registered in the vocab.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L128",
+          "summary": "Algorithm identifier.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "get_vocab",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.get_vocab",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_vocab()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L132",
+          "subcategory": "lookup_common",
+          "summary": "Return a shallow copy of the token → id map.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[str, int]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L137",
+          "subcategory": "lookup_common",
+          "summary": "Return the surface string for `token_id` or `None`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
         }
       ],
       "summary": "C++-backed regex tokenizer.",
@@ -2494,7 +3482,7 @@
       ],
       "labels": [],
       "signature": "UnigramTokenizer(pieces: list[tuple[str, float]], unk_token: str = '<unk>', unk_log_prob: float = -100.0, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_unigram.py#L600",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L600",
       "subcategory": "unigram",
       "methods": [
         {
@@ -2503,7 +3491,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(pieces: list[tuple[str, float]], unk_token: str = '<unk>', unk_log_prob: float = -100.0, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_unigram.py#L673",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L673",
           "subcategory": "unigram",
           "summary": "Construct a pure-Python Unigram tokenizer.",
           "extended": null,
@@ -2566,7 +3554,7 @@
             "property"
           ],
           "signature": "vocab_size: int",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_unigram.py#L732",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L732",
           "summary": "Number of pieces in the Unigram vocabulary.",
           "extended": null,
           "parameters": [],
@@ -2587,7 +3575,7 @@
           "kind": "function",
           "labels": [],
           "signature": "get_vocab()",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_unigram.py#L742",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L742",
           "subcategory": "unigram",
           "summary": "Return a copy of the piece → id map.",
           "extended": null,
@@ -2609,7 +3597,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 30000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_unigram.py#L853",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L853",
           "subcategory": "unigram",
           "summary": "Re-train this tokenizer from scratch on `corpus`.",
           "extended": null,
@@ -2624,6 +3612,125 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._unigram._UnigramCommonMixin.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L517",
+          "summary": "Algorithm identifier (always `\"unigram\"`).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_UnigramCommonMixin"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._unigram._UnigramCommonMixin.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L521",
+          "subcategory": "unigram",
+          "summary": "Look up the piece string for a token id.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_UnigramCommonMixin"
+        },
+        {
+          "name": "pieces",
+          "path": "lucid.utils.tokenizer._unigram._UnigramCommonMixin.pieces",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "pieces: list[tuple[str, float]]",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L527",
+          "summary": "Raw `(piece, log_prob)` list.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "list[tuple[str, float]]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_UnigramCommonMixin"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._unigram._UnigramCommonMixin.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L549",
+          "subcategory": "unigram",
+          "summary": "Persist as unified `tokenizer.json` + `special_tokens_map.json`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_UnigramCommonMixin"
+        },
+        {
+          "name": "from_file",
+          "path": "lucid.utils.tokenizer._unigram._UnigramCommonMixin.from_file",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_file(directory: str, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L566",
+          "subcategory": "unigram",
+          "summary": "Load from a directory containing `tokenizer.json`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_UnigramCommonMixin"
         }
       ],
       "summary": "Reference (pure-Python) Unigram tokenizer.",
@@ -2698,7 +3805,7 @@
       ],
       "labels": [],
       "signature": "UnigramTokenizerFast(pieces: list[tuple[str, float]], unk_token: str = '<unk>', unk_log_prob: float = -100.0, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_unigram.py#L869",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L869",
       "subcategory": "unigram",
       "methods": [
         {
@@ -2707,7 +3814,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(pieces: list[tuple[str, float]], unk_token: str = '<unk>', unk_log_prob: float = -100.0, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_unigram.py#L902",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L902",
           "subcategory": "unigram",
           "summary": "Construct a C++-backed Unigram tokenizer.",
           "extended": null,
@@ -2770,7 +3877,7 @@
             "property"
           ],
           "signature": "vocab_size: int",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_unigram.py#L957",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L957",
           "summary": "Number of pieces in the live C++ vocabulary.",
           "extended": null,
           "parameters": [],
@@ -2791,7 +3898,7 @@
           "kind": "function",
           "labels": [],
           "signature": "get_vocab()",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_unigram.py#L967",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L967",
           "subcategory": "unigram",
           "summary": "Return a piece → id map from the C++ backend.",
           "extended": null,
@@ -2813,7 +3920,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 30000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_unigram.py#L993",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L993",
           "subcategory": "unigram",
           "summary": "Re-train in C++ (EM with vocab pruning, Kudo 2018).",
           "extended": null,
@@ -2828,6 +3935,125 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._unigram._UnigramCommonMixin.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L517",
+          "summary": "Algorithm identifier (always `\"unigram\"`).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_UnigramCommonMixin"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._unigram._UnigramCommonMixin.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L521",
+          "subcategory": "unigram",
+          "summary": "Look up the piece string for a token id.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_UnigramCommonMixin"
+        },
+        {
+          "name": "pieces",
+          "path": "lucid.utils.tokenizer._unigram._UnigramCommonMixin.pieces",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "pieces: list[tuple[str, float]]",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L527",
+          "summary": "Raw `(piece, log_prob)` list.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "list[tuple[str, float]]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_UnigramCommonMixin"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._unigram._UnigramCommonMixin.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L549",
+          "subcategory": "unigram",
+          "summary": "Persist as unified `tokenizer.json` + `special_tokens_map.json`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_UnigramCommonMixin"
+        },
+        {
+          "name": "from_file",
+          "path": "lucid.utils.tokenizer._unigram._UnigramCommonMixin.from_file",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_file(directory: str, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_unigram.py#L566",
+          "subcategory": "unigram",
+          "summary": "Load from a directory containing `tokenizer.json`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_UnigramCommonMixin"
         }
       ],
       "summary": "C++-backed Unigram tokenizer.",
@@ -2871,7 +4097,7 @@
       ],
       "labels": [],
       "signature": "WhitespaceTokenizer(vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_whitespace.py#L33",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_whitespace.py#L33",
       "subcategory": "whitespace",
       "methods": [
         {
@@ -2880,7 +4106,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_whitespace.py#L59",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_whitespace.py#L59",
           "subcategory": "whitespace",
           "summary": "Construct a pure-Python whitespace tokenizer.",
           "extended": null,
@@ -2915,7 +4141,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 30000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_whitespace.py#L91",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_whitespace.py#L91",
           "subcategory": "whitespace",
           "summary": "Collect unique whitespace-split words in insertion order.",
           "extended": null,
@@ -2943,6 +4169,148 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "vocab_size",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.vocab_size",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "vocab_size: int",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L122",
+          "summary": "Total number of tokens currently registered in the vocab.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L128",
+          "summary": "Algorithm identifier.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "get_vocab",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.get_vocab",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_vocab()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L132",
+          "subcategory": "lookup_common",
+          "summary": "Return a shallow copy of the token → id map.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[str, int]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L137",
+          "subcategory": "lookup_common",
+          "summary": "Return the surface string for `token_id` or `None`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L148",
+          "subcategory": "lookup_common",
+          "summary": "Persist as `vocab.txt` + unified `tokenizer.json`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "from_file",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.from_file",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_file(directory: str, special_tokens: SpecialTokens | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L160",
+          "subcategory": "lookup_common",
+          "summary": "Load from a directory containing `vocab.txt`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
         }
       ],
       "summary": "Reference (pure-Python) whitespace-split tokenizer.",
@@ -2981,7 +4349,7 @@
       ],
       "labels": [],
       "signature": "WhitespaceTokenizerFast(vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_whitespace.py#L105",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_whitespace.py#L105",
       "subcategory": "whitespace",
       "methods": [
         {
@@ -2990,7 +4358,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_whitespace.py#L133",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_whitespace.py#L133",
           "subcategory": "whitespace",
           "summary": "Construct a C++-backed whitespace tokenizer.",
           "extended": null,
@@ -3025,7 +4393,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 30000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_whitespace.py#L154",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_whitespace.py#L154",
           "subcategory": "whitespace",
           "summary": "Collect unique whitespace-split words via the C++ trainer.",
           "extended": null,
@@ -3055,6 +4423,148 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "vocab_size",
+          "path": "lucid.utils.tokenizer._lookup_common._FastVocabTokenizer.vocab_size",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "vocab_size: int",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L198",
+          "summary": "Total number of tokens in the live C++ vocab.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_FastVocabTokenizer"
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L128",
+          "summary": "Algorithm identifier.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "get_vocab",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.get_vocab",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_vocab()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L132",
+          "subcategory": "lookup_common",
+          "summary": "Return a shallow copy of the token → id map.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[str, int]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L137",
+          "subcategory": "lookup_common",
+          "summary": "Return the surface string for `token_id` or `None`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L148",
+          "subcategory": "lookup_common",
+          "summary": "Persist as `vocab.txt` + unified `tokenizer.json`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "from_file",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.from_file",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_file(directory: str, special_tokens: SpecialTokens | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L160",
+          "subcategory": "lookup_common",
+          "summary": "Load from a directory containing `vocab.txt`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
         }
       ],
       "summary": "C++-backed whitespace tokenizer; bit-identical to\n`WhitespaceTokenizer`.",
@@ -3093,7 +4603,7 @@
       ],
       "labels": [],
       "signature": "WordTokenizer(vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_word.py#L45",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_word.py#L45",
       "subcategory": "word",
       "methods": [
         {
@@ -3102,7 +4612,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_word.py#L88",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_word.py#L88",
           "subcategory": "word",
           "summary": "Construct a pure-Python word tokenizer.",
           "extended": null,
@@ -3137,7 +4647,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 30000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_word.py#L133",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_word.py#L133",
           "subcategory": "word",
           "summary": "Collect unique words in insertion order until `vocab_size`.",
           "extended": "Same algorithm as `WhitespaceTokenizer.train` — pure\ninsertion-order vocab build with a hard cap.  No frequency\ncut-off is applied.\n\nTraining does **not** pre-seed an UNK token; the caller is\nresponsible for adding it to the vocab + the special-token\nregistry before encoding OOV text.",
@@ -3165,6 +4675,148 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "vocab_size",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.vocab_size",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "vocab_size: int",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L122",
+          "summary": "Total number of tokens currently registered in the vocab.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L128",
+          "summary": "Algorithm identifier.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "get_vocab",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.get_vocab",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_vocab()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L132",
+          "subcategory": "lookup_common",
+          "summary": "Return a shallow copy of the token → id map.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[str, int]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L137",
+          "subcategory": "lookup_common",
+          "summary": "Return the surface string for `token_id` or `None`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L148",
+          "subcategory": "lookup_common",
+          "summary": "Persist as `vocab.txt` + unified `tokenizer.json`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "from_file",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.from_file",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_file(directory: str, special_tokens: SpecialTokens | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L160",
+          "subcategory": "lookup_common",
+          "summary": "Load from a directory containing `vocab.txt`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
         }
       ],
       "summary": "Reference (pure-Python) word-level tokenizer with UNK fallback.",
@@ -3210,7 +4862,7 @@
       ],
       "labels": [],
       "signature": "WordTokenizerFast(vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_word.py#L155",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_word.py#L155",
       "subcategory": "word",
       "methods": [
         {
@@ -3219,7 +4871,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int] | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_word.py#L200",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_word.py#L200",
           "subcategory": "word",
           "summary": "Construct a C++-backed word tokenizer.",
           "extended": null,
@@ -3254,7 +4906,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 30000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_word.py#L245",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_word.py#L245",
           "subcategory": "word",
           "summary": "Re-train in C++; refresh Python-side caches afterwards.",
           "extended": null,
@@ -3282,6 +4934,148 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "vocab_size",
+          "path": "lucid.utils.tokenizer._lookup_common._FastVocabTokenizer.vocab_size",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "vocab_size: int",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L198",
+          "summary": "Total number of tokens in the live C++ vocab.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_FastVocabTokenizer"
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L128",
+          "summary": "Algorithm identifier.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "get_vocab",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.get_vocab",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_vocab()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L132",
+          "subcategory": "lookup_common",
+          "summary": "Return a shallow copy of the token → id map.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[str, int]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L137",
+          "subcategory": "lookup_common",
+          "summary": "Return the surface string for `token_id` or `None`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L148",
+          "subcategory": "lookup_common",
+          "summary": "Persist as `vocab.txt` + unified `tokenizer.json`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
+        },
+        {
+          "name": "from_file",
+          "path": "lucid.utils.tokenizer._lookup_common._VocabTokenizer.from_file",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_file(directory: str, special_tokens: SpecialTokens | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_lookup_common.py#L160",
+          "subcategory": "lookup_common",
+          "summary": "Load from a directory containing `vocab.txt`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_VocabTokenizer"
         }
       ],
       "summary": "C++-backed word tokenizer with UNK fallback.",
@@ -3328,7 +5122,7 @@
       ],
       "labels": [],
       "signature": "WordPieceTokenizer(vocab: dict[str, int], unk_token: str = '[UNK]', continuing_prefix: str = '##', max_chars_per_word: int = 100, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_wordpiece.py#L172",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L172",
       "subcategory": "wordpiece",
       "methods": [
         {
@@ -3337,7 +5131,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int], unk_token: str = '[UNK]', continuing_prefix: str = '##', max_chars_per_word: int = 100, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_wordpiece.py#L240",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L240",
           "subcategory": "wordpiece",
           "summary": "Construct a pure-Python WordPiece tokenizer.",
           "extended": null,
@@ -3404,7 +5198,7 @@
             "property"
           ],
           "signature": "vocab_size: int",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_wordpiece.py#L290",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L290",
           "summary": "Number of WordPiece tokens currently registered.",
           "extended": null,
           "parameters": [],
@@ -3425,7 +5219,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 30000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_wordpiece.py#L339",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L339",
           "subcategory": "wordpiece",
           "summary": "Re-train this tokenizer from scratch on `corpus`.",
           "extended": "Greedy frequency-based WordPiece training (matches Hugging\nFace's `WordPieceTrainer` semantics; faster than the full\nlog-likelihood training in the original paper).  For each\niteration, counts adjacent symbol-pair frequencies across\nall words and merges the most frequent pair, growing the\nvocab by 1 each step until `vocab_size` is reached or no\npair appears more than once.\n\nReplaces `_vocab` in place; previous contents are\ndiscarded.  The result is a BERT-compatible vocab with\n`##` continuation markers and the configured UNK token\nreserved at id 0.  Tie-break is lexicographic key order for\ndeterminism (same convention as BPE).",
@@ -3453,6 +5247,124 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._wordpiece._WordPieceCommonMixin.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L99",
+          "summary": "Algorithm identifier (always `\"wordpiece\"`).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_WordPieceCommonMixin"
+        },
+        {
+          "name": "get_vocab",
+          "path": "lucid.utils.tokenizer._wordpiece._WordPieceCommonMixin.get_vocab",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_vocab()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L103",
+          "subcategory": "wordpiece",
+          "summary": "Return a shallow copy of the token → id map.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[str, int]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_WordPieceCommonMixin"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._wordpiece._WordPieceCommonMixin.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L108",
+          "subcategory": "wordpiece",
+          "summary": "Look up the surface string for a token id.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_WordPieceCommonMixin"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._wordpiece._WordPieceCommonMixin.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L120",
+          "subcategory": "wordpiece",
+          "summary": "Persist as a BERT-style directory (`vocab.txt` +\nunified `tokenizer.json` + `special_tokens_map.json`).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_WordPieceCommonMixin"
+        },
+        {
+          "name": "from_file",
+          "path": "lucid.utils.tokenizer._wordpiece._WordPieceCommonMixin.from_file",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_file(directory: str, unk_token: str = '[UNK]', continuing_prefix: str = '##', max_chars_per_word: int = 100, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L142",
+          "subcategory": "wordpiece",
+          "summary": "Load from a BERT-style directory containing `vocab.txt`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_WordPieceCommonMixin"
         }
       ],
       "summary": "Reference (pure-Python) WordPiece tokenizer.",
@@ -3529,7 +5441,7 @@
       ],
       "labels": [],
       "signature": "WordPieceTokenizerFast(vocab: dict[str, int], unk_token: str = '[UNK]', continuing_prefix: str = '##', max_chars_per_word: int = 100, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_wordpiece.py#L431",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L431",
       "subcategory": "wordpiece",
       "methods": [
         {
@@ -3538,7 +5450,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(vocab: dict[str, int], unk_token: str = '[UNK]', continuing_prefix: str = '##', max_chars_per_word: int = 100, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_wordpiece.py#L463",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L463",
           "subcategory": "wordpiece",
           "summary": "Construct a C++-backed WordPiece tokenizer.",
           "extended": null,
@@ -3607,7 +5519,7 @@
             "property"
           ],
           "signature": "vocab_size: int",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_wordpiece.py#L517",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L517",
           "summary": "Number of WordPiece tokens in the live C++ vocab.",
           "extended": null,
           "parameters": [],
@@ -3628,7 +5540,7 @@
           "kind": "function",
           "labels": [],
           "signature": "train(corpus: Iterable[str], vocab_size: int = 30000)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/utils/tokenizer/_wordpiece.py#L535",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L535",
           "subcategory": "wordpiece",
           "summary": "Re-train in C++ via `WordPiece.train`.",
           "extended": "Pre-encodes the corpus through the configured normalizer +\npre-tokenizer in Python so the C++ training loop sees\nalready-normalized, whitespace-separated words (its internal\nsplitter is also whitespace, so this composes correctly).\nAfter training, the Python-side vocab cache is refreshed\nfrom the C++ side so subsequent encodes see the new state.",
@@ -3656,6 +5568,124 @@
           "attributes": [],
           "warns": [],
           "see_also": []
+        },
+        {
+          "name": "algo",
+          "path": "lucid.utils.tokenizer._wordpiece._WordPieceCommonMixin.algo",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "algo: str",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L99",
+          "summary": "Algorithm identifier (always `\"wordpiece\"`).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_WordPieceCommonMixin"
+        },
+        {
+          "name": "get_vocab",
+          "path": "lucid.utils.tokenizer._wordpiece._WordPieceCommonMixin.get_vocab",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_vocab()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L103",
+          "subcategory": "wordpiece",
+          "summary": "Return a shallow copy of the token → id map.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "dict[str, int]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_WordPieceCommonMixin"
+        },
+        {
+          "name": "id_to_token",
+          "path": "lucid.utils.tokenizer._wordpiece._WordPieceCommonMixin.id_to_token",
+          "kind": "function",
+          "labels": [],
+          "signature": "id_to_token(token_id: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L108",
+          "subcategory": "wordpiece",
+          "summary": "Look up the surface string for a token id.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_WordPieceCommonMixin"
+        },
+        {
+          "name": "save",
+          "path": "lucid.utils.tokenizer._wordpiece._WordPieceCommonMixin.save",
+          "kind": "function",
+          "labels": [],
+          "signature": "save(directory: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L120",
+          "subcategory": "wordpiece",
+          "summary": "Persist as a BERT-style directory (`vocab.txt` +\nunified `tokenizer.json` + `special_tokens_map.json`).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_WordPieceCommonMixin"
+        },
+        {
+          "name": "from_file",
+          "path": "lucid.utils.tokenizer._wordpiece._WordPieceCommonMixin.from_file",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_file(directory: str, unk_token: str = '[UNK]', continuing_prefix: str = '##', max_chars_per_word: int = 100, normalizer: Normalizer | None = None, pre_tokenizer: PreTokenizer | None = None, special_tokens: SpecialTokens | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/utils/tokenizer/_wordpiece.py#L142",
+          "subcategory": "wordpiece",
+          "summary": "Load from a BERT-style directory containing `vocab.txt`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_WordPieceCommonMixin"
         }
       ],
       "summary": "C++-backed WordPiece tokenizer.",

@@ -214,6 +214,24 @@
         "kind": "backward_node"
       }
     ],
+    "lucid.peft.tuners.loha.Conv1d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.lokr.Conv1d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.lora.Conv1d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
     "lucid.nn.functional.conv1d": [
       {
         "name": "ConvNdBackward",
@@ -237,6 +255,48 @@
       }
     ],
     "lucid.nn.quantized.Conv2d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.boft.Conv2d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.hra.Conv2d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.ia3.Conv2d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.loha.Conv2d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.lokr.Conv2d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.lora.Conv2d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.oft.Conv2d": [
       {
         "name": "ConvNdBackward",
         "kind": "backward_node"
@@ -270,6 +330,18 @@
         "kind": "backward_node"
       }
     ],
+    "lucid.peft.tuners.ia3.Conv3d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.lora.Conv3d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
     "lucid.nn.functional.conv3d": [
       {
         "name": "ConvNdBackward",
@@ -287,6 +359,12 @@
       }
     ],
     "lucid.nn.quantized.ConvTranspose1d": [
+      {
+        "name": "ConvTransposeNdBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.lora.ConvTranspose1d": [
       {
         "name": "ConvTransposeNdBackward",
         "kind": "backward_node"
@@ -314,6 +392,12 @@
         "kind": "backward_node"
       }
     ],
+    "lucid.peft.tuners.lora.ConvTranspose2d": [
+      {
+        "name": "ConvTransposeNdBackward",
+        "kind": "backward_node"
+      }
+    ],
     "lucid.nn.functional.conv_transpose2d": [
       {
         "name": "ConvTransposeNdBackward",
@@ -331,6 +415,12 @@
       }
     ],
     "lucid.nn.quantized.ConvTranspose3d": [
+      {
+        "name": "ConvTransposeNdBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.lora.ConvTranspose3d": [
       {
         "name": "ConvTransposeNdBackward",
         "kind": "backward_node"
@@ -481,6 +571,18 @@
       }
     ],
     "lucid.nn.quantized.Embedding": [
+      {
+        "name": "EmbeddingBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.lora.Embedding": [
+      {
+        "name": "EmbeddingBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.trainable_tokens.Embedding": [
       {
         "name": "EmbeddingBackward",
         "kind": "backward_node"
@@ -694,7 +796,109 @@
         "kind": "backward_node"
       }
     ],
+    "lucid.nn.quantized.dynamic.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
     "lucid.nn.quantized.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.boft.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.bone.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.c3a.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.fourierft.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.hra.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.ia3.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.loha.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.lokr.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.lora.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.miss.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.oft.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.randlora.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.shira.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.trainable_tokens.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.vblora.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.vera.Linear": [
       {
         "name": "LinearBackward",
         "kind": "backward_node"
@@ -2391,6 +2595,21 @@
         "kind": "class"
       },
       {
+        "path": "lucid.peft.tuners.loha.Conv1d",
+        "module": "lucid.peft.tuners.loha",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.lokr.Conv1d",
+        "module": "lucid.peft.tuners.lokr",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.lora.Conv1d",
+        "module": "lucid.peft.tuners.lora",
+        "kind": "class"
+      },
+      {
         "path": "lucid.nn.functional.conv1d",
         "module": "lucid.nn.functional",
         "kind": "function"
@@ -2408,6 +2627,41 @@
       {
         "path": "lucid.nn.quantized.Conv2d",
         "module": "lucid.nn.quantized",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.boft.Conv2d",
+        "module": "lucid.peft.tuners.boft",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.hra.Conv2d",
+        "module": "lucid.peft.tuners.hra",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.ia3.Conv2d",
+        "module": "lucid.peft.tuners.ia3",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.loha.Conv2d",
+        "module": "lucid.peft.tuners.loha",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.lokr.Conv2d",
+        "module": "lucid.peft.tuners.lokr",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.lora.Conv2d",
+        "module": "lucid.peft.tuners.lora",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.oft.Conv2d",
+        "module": "lucid.peft.tuners.oft",
         "kind": "class"
       },
       {
@@ -2431,6 +2685,16 @@
         "kind": "class"
       },
       {
+        "path": "lucid.peft.tuners.ia3.Conv3d",
+        "module": "lucid.peft.tuners.ia3",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.lora.Conv3d",
+        "module": "lucid.peft.tuners.lora",
+        "kind": "class"
+      },
+      {
         "path": "lucid.nn.functional.conv3d",
         "module": "lucid.nn.functional",
         "kind": "function"
@@ -2445,6 +2709,11 @@
       {
         "path": "lucid.nn.quantized.ConvTranspose1d",
         "module": "lucid.nn.quantized",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.lora.ConvTranspose1d",
+        "module": "lucid.peft.tuners.lora",
         "kind": "class"
       },
       {
@@ -2463,6 +2732,11 @@
         "kind": "class"
       },
       {
+        "path": "lucid.peft.tuners.lora.ConvTranspose2d",
+        "module": "lucid.peft.tuners.lora",
+        "kind": "class"
+      },
+      {
         "path": "lucid.nn.functional.conv_transpose2d",
         "module": "lucid.nn.functional",
         "kind": "function"
@@ -2475,6 +2749,11 @@
       {
         "path": "lucid.nn.quantized.ConvTranspose3d",
         "module": "lucid.nn.quantized",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.lora.ConvTranspose3d",
+        "module": "lucid.peft.tuners.lora",
         "kind": "class"
       },
       {
@@ -2590,6 +2869,16 @@
       {
         "path": "lucid.nn.quantized.Embedding",
         "module": "lucid.nn.quantized",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.lora.Embedding",
+        "module": "lucid.peft.tuners.lora",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.trainable_tokens.Embedding",
+        "module": "lucid.peft.tuners.trainable_tokens",
         "kind": "class"
       },
       {
@@ -2745,8 +3034,93 @@
         "kind": "class"
       },
       {
+        "path": "lucid.nn.quantized.dynamic.Linear",
+        "module": "lucid.nn.quantized.dynamic",
+        "kind": "class"
+      },
+      {
         "path": "lucid.nn.quantized.Linear",
         "module": "lucid.nn.quantized",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.boft.Linear",
+        "module": "lucid.peft.tuners.boft",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.bone.Linear",
+        "module": "lucid.peft.tuners.bone",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.c3a.Linear",
+        "module": "lucid.peft.tuners.c3a",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.fourierft.Linear",
+        "module": "lucid.peft.tuners.fourierft",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.hra.Linear",
+        "module": "lucid.peft.tuners.hra",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.ia3.Linear",
+        "module": "lucid.peft.tuners.ia3",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.loha.Linear",
+        "module": "lucid.peft.tuners.loha",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.lokr.Linear",
+        "module": "lucid.peft.tuners.lokr",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.lora.Linear",
+        "module": "lucid.peft.tuners.lora",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.miss.Linear",
+        "module": "lucid.peft.tuners.miss",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.oft.Linear",
+        "module": "lucid.peft.tuners.oft",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.randlora.Linear",
+        "module": "lucid.peft.tuners.randlora",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.shira.Linear",
+        "module": "lucid.peft.tuners.shira",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.trainable_tokens.Linear",
+        "module": "lucid.peft.tuners.trainable_tokens",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.vblora.Linear",
+        "module": "lucid.peft.tuners.vblora",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.vera.Linear",
+        "module": "lucid.peft.tuners.vera",
         "kind": "class"
       },
       {

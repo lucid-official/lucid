@@ -3,7 +3,7 @@
   "name": "qat",
   "path": "lucid.nn.qat",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/__init__.py#L1",
   "members": [
     {
       "name": "Conv1d",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "Conv1d(args: object = (), qconfig: QConfig | None = None, kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L46",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L46",
       "subcategory": "conv",
       "methods": [
         {
@@ -24,9 +24,9 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(args: object = (), qconfig: QConfig | None = None, kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L164",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L164",
           "subcategory": "conv",
-          "summary": "Initialise the Conv1d module. See the class docstring for parameter semantics.",
+          "summary": null,
           "extended": null,
           "parameters": [],
           "returns": {
@@ -46,14 +46,21 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L172",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L172",
           "subcategory": "conv",
-          "summary": "Scale and fake-quant the weight → conv → unscale → BN → (ReLU) → fake-quant.",
+          "summary": "Apply the convolution to the input tensor.",
           "extended": null,
-          "parameters": [],
+          "parameters": [
+            {
+              "name": "input",
+              "annotation": "Tensor",
+              "description": "Input tensor of shape $(N, C_{\\text{in}}, *)$.",
+              "default": null
+            }
+          ],
           "returns": {
             "annotation": "Tensor",
-            "description": ""
+            "description": "Output tensor of shape $(N, C_{\\text{out}}, *)$ with\nspatial dimensions determined by stride, padding, dilation, and\nkernel size."
           },
           "raises": [],
           "examples": [],
@@ -70,9 +77,9 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L178",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L178",
           "subcategory": "conv",
-          "summary": "Quantize a calibrated float convolution module.",
+          "summary": null,
           "extended": null,
           "parameters": [],
           "returns": {
@@ -159,7 +166,7 @@
       ],
       "labels": [],
       "signature": "Conv2d(args: object = (), qconfig: QConfig | None = None, kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L183",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L183",
       "subcategory": "conv",
       "methods": [
         {
@@ -168,9 +175,9 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(args: object = (), qconfig: QConfig | None = None, kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L301",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L301",
           "subcategory": "conv",
-          "summary": "Initialise the encoder. See the class docstring for parameters.",
+          "summary": null,
           "extended": null,
           "parameters": [],
           "returns": {
@@ -190,14 +197,21 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L309",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L309",
           "subcategory": "conv",
-          "summary": "Run the model with every covered weight compressed.",
+          "summary": "Apply the convolution to the input tensor.",
           "extended": null,
-          "parameters": [],
+          "parameters": [
+            {
+              "name": "input",
+              "annotation": "Tensor",
+              "description": "Input tensor of shape $(N, C_{\\text{in}}, *)$.",
+              "default": null
+            }
+          ],
           "returns": {
             "annotation": "Tensor",
-            "description": ""
+            "description": "Output tensor of shape $(N, C_{\\text{out}}, *)$ with\nspatial dimensions determined by stride, padding, dilation, and\nkernel size."
           },
           "raises": [],
           "examples": [],
@@ -214,9 +228,9 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L315",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L315",
           "subcategory": "conv",
-          "summary": "Quantize a calibrated float convolution module.",
+          "summary": null,
           "extended": null,
           "parameters": [],
           "returns": {
@@ -303,7 +317,7 @@
       ],
       "labels": [],
       "signature": "Conv3d(args: object = (), qconfig: QConfig | None = None, kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L320",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L320",
       "subcategory": "conv",
       "methods": [
         {
@@ -312,9 +326,9 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(args: object = (), qconfig: QConfig | None = None, kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L438",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L438",
           "subcategory": "conv",
-          "summary": "Build the three networks. See the class docstring for parameters.",
+          "summary": null,
           "extended": null,
           "parameters": [],
           "returns": {
@@ -334,27 +348,21 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L446",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L446",
           "subcategory": "conv",
-          "summary": "Apply attention gate.",
+          "summary": "Apply the convolution to the input tensor.",
           "extended": null,
           "parameters": [
             {
-              "name": "x",
-              "annotation": null,
-              "description": "`(B, F, *S)` skip features (finer scale).",
-              "default": null
-            },
-            {
-              "name": "g",
-              "annotation": null,
-              "description": "`(B, G, *S/2)` gating signal (coarser).  `S` is two axes\nfor images and three for volumes.",
+              "name": "input",
+              "annotation": "Tensor",
+              "description": "Input tensor of shape $(N, C_{\\text{in}}, *)$.",
               "default": null
             }
           ],
           "returns": {
             "annotation": "Tensor",
-            "description": "`(B, F, *S)` gated skip features.  The coefficients themselves"
+            "description": "Output tensor of shape $(N, C_{\\text{out}}, *)$ with\nspatial dimensions determined by stride, padding, dilation, and\nkernel size."
           },
           "raises": [],
           "examples": [],
@@ -371,9 +379,9 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L452",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L452",
           "subcategory": "conv",
-          "summary": "Quantize a calibrated float convolution module.",
+          "summary": null,
           "extended": null,
           "parameters": [],
           "returns": {
@@ -460,7 +468,7 @@
       ],
       "labels": [],
       "signature": "ConvReLU1d(args: object = (), qconfig: QConfig | None = None, kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L464",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L464",
       "subcategory": "conv",
       "methods": [
         {
@@ -469,14 +477,21 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L560",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L560",
           "subcategory": "conv",
-          "summary": "Scale and fake-quant the weight → conv → unscale → BN → (ReLU) → fake-quant.",
+          "summary": "Apply the convolution to the input tensor.",
           "extended": null,
-          "parameters": [],
+          "parameters": [
+            {
+              "name": "input",
+              "annotation": "Tensor",
+              "description": "Input tensor of shape $(N, C_{\\text{in}}, *)$.",
+              "default": null
+            }
+          ],
           "returns": {
             "annotation": "Tensor",
-            "description": ""
+            "description": "Output tensor of shape $(N, C_{\\text{out}}, *)$ with\nspatial dimensions determined by stride, padding, dilation, and\nkernel size."
           },
           "raises": [],
           "examples": [],
@@ -493,9 +508,9 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L566",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L566",
           "subcategory": "conv",
-          "summary": "Quantize a calibrated float convolution module.",
+          "summary": null,
           "extended": null,
           "parameters": [],
           "returns": {
@@ -582,7 +597,7 @@
       ],
       "labels": [],
       "signature": "ConvReLU2d(args: object = (), qconfig: QConfig | None = None, kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L572",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L572",
       "subcategory": "conv",
       "methods": [
         {
@@ -591,14 +606,21 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L669",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L669",
           "subcategory": "conv",
-          "summary": "Scale and fake-quant the weight → conv → unscale → BN → (ReLU) → fake-quant.",
+          "summary": "Apply the convolution to the input tensor.",
           "extended": null,
-          "parameters": [],
+          "parameters": [
+            {
+              "name": "input",
+              "annotation": "Tensor",
+              "description": "Input tensor of shape $(N, C_{\\text{in}}, *)$.",
+              "default": null
+            }
+          ],
           "returns": {
             "annotation": "Tensor",
-            "description": ""
+            "description": "Output tensor of shape $(N, C_{\\text{out}}, *)$ with\nspatial dimensions determined by stride, padding, dilation, and\nkernel size."
           },
           "raises": [],
           "examples": [],
@@ -615,9 +637,9 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L675",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L675",
           "subcategory": "conv",
-          "summary": "Build from a calibrated float activation (reads its output observer).",
+          "summary": null,
           "extended": null,
           "parameters": [],
           "returns": {
@@ -704,7 +726,7 @@
       ],
       "labels": [],
       "signature": "ConvReLU3d(args: object = (), qconfig: QConfig | None = None, kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L681",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L681",
       "subcategory": "conv",
       "methods": [
         {
@@ -713,14 +735,21 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L777",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L777",
           "subcategory": "conv",
-          "summary": "Scale and fake-quant the weight → conv → unscale → BN → (ReLU) → fake-quant.",
+          "summary": "Apply the convolution to the input tensor.",
           "extended": null,
-          "parameters": [],
+          "parameters": [
+            {
+              "name": "input",
+              "annotation": "Tensor",
+              "description": "Input tensor of shape $(N, C_{\\text{in}}, *)$.",
+              "default": null
+            }
+          ],
           "returns": {
             "annotation": "Tensor",
-            "description": ""
+            "description": "Output tensor of shape $(N, C_{\\text{out}}, *)$ with\nspatial dimensions determined by stride, padding, dilation, and\nkernel size."
           },
           "raises": [],
           "examples": [],
@@ -737,9 +766,9 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/conv.py#L783",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/conv.py#L783",
           "subcategory": "conv",
-          "summary": "Quantize a calibrated float convolution module.",
+          "summary": null,
           "extended": null,
           "parameters": [],
           "returns": {
@@ -826,7 +855,7 @@
       ],
       "labels": [],
       "signature": "Linear(in_features: int, out_features: int, bias: bool = True, qconfig: QConfig | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/linear.py#L23",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/linear.py#L23",
       "subcategory": "linear",
       "methods": [
         {
@@ -835,47 +864,18 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(in_features: int, out_features: int, bias: bool = True, qconfig: QConfig | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/linear.py#L142",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/linear.py#L142",
           "subcategory": "linear",
-          "summary": "Construct a Tensor from Python data, a NumPy array, or another Tensor.",
-          "extended": "The data is funnelled through `lucid._factories.converters._to_impl`,\nthe canonical bridge between the outside world and Lucid's C++\n`TensorImpl`. Python scalars become 0-d tensors; nested lists are\nrecursively flattened with shape inference; NumPy arrays cross the\nsingle sanctioned host-to-engine boundary; and existing `Tensor`\nsources are rewrapped (optionally with cast and/or device transfer).",
-          "parameters": [
-            {
-              "name": "data",
-              "annotation": "ndarray | list | int | float | bool | Tensor",
-              "description": "Source data. Python scalars become 0-d tensors; lists are\nrecursively converted; NumPy arrays use the bridge boundary\ndocumented in `lucid._factories.converters`; another Tensor\nis shallow-copied to a new Tensor with possibly different\n`dtype` / `device` / `requires_grad`.",
-              "default": null
-            },
-            {
-              "name": "dtype",
-              "annotation": "dtype | str | None",
-              "description": "Element type. If `None`, inferred from `data`.",
-              "default": null
-            },
-            {
-              "name": "device",
-              "annotation": "device | str | None",
-              "description": "Target device (`\"cpu\"` or `\"metal\"`). If `None`, defaults\nto the source device or `\"cpu\"` for host data.",
-              "default": null
-            },
-            {
-              "name": "requires_grad",
-              "annotation": "bool",
-              "description": "Whether to record operations on this tensor for autograd.",
-              "default": null
-            }
-          ],
+          "summary": null,
+          "extended": null,
+          "parameters": [],
           "returns": {
-            "annotation": "Tensor",
-            "description": "A freshly constructed tensor whose storage is owned by the\nengine."
+            "annotation": "None",
+            "description": ""
           },
           "raises": [],
-          "examples": [
-            ">>> import lucid\n>>> lucid.Tensor([1.0, 2.0, 3.0])\ntensor([1., 2., 3.])\n>>> lucid.Tensor([[1, 2], [3, 4]], dtype=lucid.int64).shape\n(2, 2)\n>>> x = lucid.Tensor(3.14, requires_grad=True)\n>>> x.requires_grad\nTrue"
-          ],
-          "notes": [
-            "Constructor is one of the six sanctioned host-to-engine bridge\nboundaries (rule **H4**). NumPy arrays cross the bridge exactly\nonce here; afterwards the data is owned by Lucid's engine. The\nresulting layout is C-contiguous row-major:\n\n\n\n$$\n\\text{stride}[i] = e \\cdot \\prod_{j=i+1}^{d-1} s_j\n$$\n\nwhere $e$ is the element size in bytes and $s_j$ are\nthe dimension sizes."
-          ],
+          "examples": [],
+          "notes": [],
           "attributes": [],
           "warns": [],
           "see_also": []
@@ -886,7 +886,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/linear.py#L152",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/linear.py#L152",
           "subcategory": "linear",
           "summary": "Fake-quantize the weight, run linear, fake-quantize the output.",
           "extended": null,
@@ -910,7 +910,7 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/linear.py#L159",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/linear.py#L159",
           "subcategory": "linear",
           "summary": "Build a QAT `Linear` from a float one (shares the trained weight).",
           "extended": null,
@@ -1005,7 +1005,7 @@
       ],
       "labels": [],
       "signature": "LinearReLU(in_features: int, out_features: int, bias: bool = True, qconfig: QConfig | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/linear.py#L177",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/linear.py#L177",
       "subcategory": "linear",
       "methods": [
         {
@@ -1014,7 +1014,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/linear.py#L276",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/linear.py#L276",
           "subcategory": "linear",
           "summary": "Fake-quantize the weight, run linear, ReLU, fake-quantize the output.",
           "extended": null,
@@ -1038,7 +1038,7 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/linear.py#L283",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/linear.py#L283",
           "subcategory": "linear",
           "summary": "Build from a fused float `nni.LinearReLU` (its inner linear).",
           "extended": null,
@@ -1133,7 +1133,7 @@
       ],
       "labels": [],
       "signature": "Embedding(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None, qconfig: QConfig | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/sparse.py#L21",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/sparse.py#L21",
       "subcategory": "sparse",
       "methods": [
         {
@@ -1142,28 +1142,16 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None, qconfig: QConfig | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/sparse.py#L128",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/sparse.py#L128",
           "subcategory": "sparse",
-          "summary": "Initialise the module and validate the supplied config.",
+          "summary": null,
           "extended": null,
-          "parameters": [
-            {
-              "name": "config",
-              "annotation": "ModelConfig",
-              "description": "Must be an instance of the subclass's declared\n`config_class`.",
-              "default": null
-            }
-          ],
+          "parameters": [],
           "returns": {
             "annotation": "None",
             "description": ""
           },
-          "raises": [
-            {
-              "annotation": "TypeError",
-              "description": "If `config_class` has not been set on the concrete subclass,\nor if `config` is not an instance of `config_class`."
-            }
-          ],
+          "raises": [],
           "examples": [],
           "notes": [],
           "attributes": [],
@@ -1176,7 +1164,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/sparse.py#L142",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/sparse.py#L142",
           "subcategory": "sparse",
           "summary": "Fake-quantize the table, then look up `x`.",
           "extended": null,
@@ -1200,7 +1188,7 @@
             "classmethod"
           ],
           "signature": "from_float(mod: nn.Module)",
-          "source": "https://github.com/lucid-official/lucid/blob/81f57db/lucid/nn/qat/sparse.py#L148",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/nn/qat/sparse.py#L148",
           "subcategory": "sparse",
           "summary": "Build a QAT `Embedding` from a float one (shares the trained table).",
           "extended": null,

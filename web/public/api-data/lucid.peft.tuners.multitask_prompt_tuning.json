@@ -1,0 +1,768 @@
+{
+  "slug": "lucid.peft.tuners.multitask_prompt_tuning",
+  "name": "multitask_prompt_tuning",
+  "path": "lucid.peft.tuners.multitask_prompt_tuning",
+  "kind": "module",
+  "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/__init__.py#L1",
+  "members": [
+    {
+      "name": "MultitaskPromptTuningConfig",
+      "path": "lucid.peft.tuners.multitask_prompt_tuning._config.MultitaskPromptTuningConfig",
+      "kind": "class",
+      "class_kind": "dataclass",
+      "bases": [
+        "PromptTuningConfig"
+      ],
+      "labels": [],
+      "signature": "MultitaskPromptTuningConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, num_virtual_tokens: int | None = None, token_dim: int | None = None, num_transformer_submodules: int | None = None, num_attention_heads: int | None = None, num_layers: int | None = None, modules_to_save: list[str] | None = None, prompt_tuning_init: MultitaskPromptTuningInit | str = MultitaskPromptTuningInit.RANDOM, prompt_tuning_init_text: str | None = None, tokenizer_name_or_path: str | None = None, tokenizer_kwargs: dict[str, object] | None = None, prompt_tuning_init_state_dict_path: str | None = None, prompt_tuning_init_task: int = 0, num_ranks: int = 1, num_tasks: int = 1)",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/_config.py#L26",
+      "subcategory": "config",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.multitask_prompt_tuning._config.MultitaskPromptTuningConfig.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, num_virtual_tokens: int | None = None, token_dim: int | None = None, num_transformer_submodules: int | None = None, num_attention_heads: int | None = None, num_layers: int | None = None, modules_to_save: list[str] | None = None, prompt_tuning_init: MultitaskPromptTuningInit | str = MultitaskPromptTuningInit.RANDOM, prompt_tuning_init_text: str | None = None, tokenizer_name_or_path: str | None = None, tokenizer_kwargs: dict[str, object] | None = None, prompt_tuning_init_state_dict_path: str | None = None, prompt_tuning_init_task: int = 0, num_ranks: int = 1, num_tasks: int = 1)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/_config.py#L1",
+          "subcategory": "config",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "How `lucid.peft.get_peft_model` adapts a model with multitask prompt tuning.",
+      "extended": "Multitask prompt tuning (Wang et al., 2023, [arXiv:2303.02861](https://arxiv.org/abs/2303.02861)) learns one\nprompt shared by every task and, per task, a low-rank factor pair\n$u_k \\in \\mathbb{R}^{L \\times r}$, $v_k \\in \\mathbb{R}^{r \\times d}$.\nTask $k$'s prompt is the shared one multiplied elementwise by\n$u_k v_k$, so a new task adds $r\\,(L + d)$ numbers, and a prompt\ntrained on source tasks can start a target task (`prompt_tuning_init` and\n`prompt_tuning_init_state_dict_path`).  Which task each row of a batch is\ncomes from the `task_ids` argument of the model's call.\n\nField names, defaults and `adapter_config.json` are the reference adapter\nlibrary's.  Every field is keyword-only; the prompt tuning fields\n(`num_virtual_tokens`, `tokenizer_name_or_path`, …) hold as for\n`lucid.peft.PromptTuningConfig`.",
+      "parameters": [
+        {
+          "name": "task_type",
+          "annotation": "TaskType or str",
+          "description": "The task the adapter is for (metadata; see `TaskType`).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "peft_type",
+          "annotation": "PeftType or str",
+          "description": "The method; filled in by the subclass when omitted, refused when\nit names another.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "auto_mapping",
+          "annotation": "dict of str to str",
+          "description": "The class of the base model, `{\"base_model_class\": name,\n\"parent_library\": module}` — what `AutoPeftModel*` rebuilds the\nbase with.  `PeftModel.save_pretrained` writes it.",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "base_model_name_or_path",
+          "annotation": "str",
+          "description": "Name of the model the adapter was trained on (metadata).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "revision",
+          "annotation": "str",
+          "description": "Revision of that model (metadata).",
+          "default": "None",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "inference_mode",
+          "annotation": "bool",
+          "description": "Freeze the adapter too, for inference.",
+          "default": "False",
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "num_virtual_tokens",
+          "annotation": "int",
+          "description": "How many learned embeddings go in front of the input.",
+          "default": "None",
+          "inherited_from": "PromptTuningConfig"
+        },
+        {
+          "name": "token_dim",
+          "annotation": "int",
+          "description": "The model's hidden size.",
+          "default": "None",
+          "inherited_from": "PromptLearningConfig"
+        },
+        {
+          "name": "num_transformer_submodules",
+          "annotation": "int",
+          "description": "`1` for an encoder-only or decoder-only model, `2` for an\nencoder-decoder one; `2` for `task_type=\"SEQ_2_SEQ_LM\"` and `1`\notherwise when omitted.",
+          "default": "None",
+          "inherited_from": "PromptLearningConfig"
+        },
+        {
+          "name": "num_attention_heads",
+          "annotation": "int",
+          "description": "The model's head count.",
+          "default": "None",
+          "inherited_from": "PromptLearningConfig"
+        },
+        {
+          "name": "num_layers",
+          "annotation": "int",
+          "description": "The model's layer count.",
+          "default": "None",
+          "inherited_from": "PromptLearningConfig"
+        },
+        {
+          "name": "modules_to_save",
+          "annotation": "list of str",
+          "description": "Modules of the model trained in full beside the prompt (a\nclassification head).",
+          "default": "None",
+          "inherited_from": "PromptLearningConfig"
+        },
+        {
+          "name": "prompt_tuning_init",
+          "annotation": "MultitaskPromptTuningInit or str",
+          "description": "`\"RANDOM\"` and `\"TEXT\"` start the shared prompt as prompt tuning does;\n`\"AVERAGE_SOURCE_TASKS\"`, `\"EXACT_SOURCE_TASK\"` and `\"ONLY_SOURCE_SHARED\"`\nstart from the adapter file at `prompt_tuning_init_state_dict_path`.",
+          "default": "\"RANDOM\""
+        },
+        {
+          "name": "prompt_tuning_init_text",
+          "annotation": "str",
+          "description": "The text `\"TEXT\"` starts from; required then.",
+          "default": "None",
+          "inherited_from": "PromptTuningConfig"
+        },
+        {
+          "name": "tokenizer_name_or_path",
+          "annotation": "str",
+          "description": "Names the tokenizer that turns that text into ids; required for `\"TEXT\"`.",
+          "default": "None",
+          "inherited_from": "PromptTuningConfig"
+        },
+        {
+          "name": "tokenizer_kwargs",
+          "annotation": "dict",
+          "description": "Keyword arguments for loading that tokenizer; only with `\"TEXT\"`.",
+          "default": "None",
+          "inherited_from": "PromptTuningConfig"
+        },
+        {
+          "name": "prompt_tuning_init_state_dict_path",
+          "annotation": "str",
+          "description": "A `.safetensors` adapter file of a multitask prompt trained on the source\ntasks; required by the three source initialisations.",
+          "default": "None"
+        },
+        {
+          "name": "prompt_tuning_init_task",
+          "annotation": "int",
+          "description": "With `\"EXACT_SOURCE_TASK\"`, the source task whose factors are taken.",
+          "default": "0"
+        },
+        {
+          "name": "num_ranks",
+          "annotation": "int",
+          "description": "The rank $r$ of each task's factor pair.",
+          "default": "1"
+        },
+        {
+          "name": "num_tasks",
+          "annotation": "int",
+          "description": "How many tasks the prompt serves.",
+          "default": "1"
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "TypeError",
+          "description": "A field holds a value of the wrong type."
+        },
+        {
+          "annotation": "ValueError",
+          "description": "A count is not positive, or `\"TEXT\"` lacks its text or tokenizer."
+        }
+      ],
+      "examples": [
+        ">>> from lucid.peft import MultitaskPromptTuningConfig\n>>> config = MultitaskPromptTuningConfig(num_virtual_tokens=8, num_tasks=3, num_ranks=2)\n>>> config.peft_type, config.num_tasks\n(<PeftType.MULTITASK_PROMPT_TUNING: 'MULTITASK_PROMPT_TUNING'>, 3)\n>>> MultitaskPromptTuningConfig.from_dict(config.to_dict()) == config\nTrue"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "MultitaskPromptTuningInit",
+      "path": "lucid.peft.tuners.multitask_prompt_tuning._config.MultitaskPromptTuningInit",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "StrEnum"
+      ],
+      "labels": [],
+      "signature": "MultitaskPromptTuningInit()",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/_config.py#L11",
+      "subcategory": "config",
+      "methods": [
+        {
+          "name": "TEXT",
+          "path": "lucid.peft.tuners.multitask_prompt_tuning._config.MultitaskPromptTuningInit.TEXT",
+          "kind": "function",
+          "labels": [
+            "attribute"
+          ],
+          "signature": "TEXT",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/_config.py#L15",
+          "summary": "From the embeddings of `prompt_tuning_init_text`'s tokens, as prompt tuning does.",
+          "extended": null,
+          "parameters": [],
+          "returns": null,
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "RANDOM",
+          "path": "lucid.peft.tuners.multitask_prompt_tuning._config.MultitaskPromptTuningInit.RANDOM",
+          "kind": "function",
+          "labels": [
+            "attribute"
+          ],
+          "signature": "RANDOM",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/_config.py#L17",
+          "summary": "From the embedding table's random initialisation.",
+          "extended": null,
+          "parameters": [],
+          "returns": null,
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "AVERAGE_SOURCE_TASKS",
+          "path": "lucid.peft.tuners.multitask_prompt_tuning._config.MultitaskPromptTuningInit.AVERAGE_SOURCE_TASKS",
+          "kind": "function",
+          "labels": [
+            "attribute"
+          ],
+          "signature": "AVERAGE_SOURCE_TASKS",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/_config.py#L19",
+          "summary": "The shared prompt, and the mean of the source tasks' low-rank task factors.",
+          "extended": null,
+          "parameters": [],
+          "returns": null,
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "EXACT_SOURCE_TASK",
+          "path": "lucid.peft.tuners.multitask_prompt_tuning._config.MultitaskPromptTuningInit.EXACT_SOURCE_TASK",
+          "kind": "function",
+          "labels": [
+            "attribute"
+          ],
+          "signature": "EXACT_SOURCE_TASK",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/_config.py#L21",
+          "summary": "The shared prompt, and the task factors of the one source task `prompt_tuning_init_task`.",
+          "extended": null,
+          "parameters": [],
+          "returns": null,
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "ONLY_SOURCE_SHARED",
+          "path": "lucid.peft.tuners.multitask_prompt_tuning._config.MultitaskPromptTuningInit.ONLY_SOURCE_SHARED",
+          "kind": "function",
+          "labels": [
+            "attribute"
+          ],
+          "signature": "ONLY_SOURCE_SHARED",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/_config.py#L23",
+          "summary": "The shared prompt alone; the task factors start at random.",
+          "extended": null,
+          "parameters": [],
+          "returns": null,
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "How a multitask prompt starts: from text, at random, or from a prompt trained on source tasks.",
+      "extended": null,
+      "parameters": [],
+      "returns": null,
+      "raises": [],
+      "examples": [],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "MultitaskPromptEmbedding",
+      "path": "lucid.peft.tuners.multitask_prompt_tuning._model.MultitaskPromptEmbedding",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "PromptEmbedding"
+      ],
+      "labels": [],
+      "signature": "MultitaskPromptEmbedding(config: MultitaskPromptTuningConfig, word_embeddings: nn.Module | None, tokenizer: _TextEncoder | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/_model.py#L75",
+      "subcategory": "model",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.multitask_prompt_tuning._model.MultitaskPromptEmbedding.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(config: MultitaskPromptTuningConfig, word_embeddings: nn.Module | None, tokenizer: _TextEncoder | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/_model.py#L125",
+          "subcategory": "model",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "from_config",
+          "path": "lucid.peft.tuners.multitask_prompt_tuning._model.MultitaskPromptEmbedding.from_config",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_config(config: PromptLearningConfig, word_embeddings: nn.Module | None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/_model.py#L172",
+          "subcategory": "model",
+          "summary": "The encoder for `config`; `word_embeddings` is the model's token table, when the method reads it.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Self",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "prompts",
+          "path": "lucid.peft.tuners.multitask_prompt_tuning._model.MultitaskPromptEmbedding.prompts",
+          "kind": "function",
+          "labels": [],
+          "signature": "prompts(batch: int, tasks: Tensor | None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/_model.py#L178",
+          "subcategory": "model",
+          "summary": "The prompt of each of `batch` rows: `(batch, num_embeddings, width)`.",
+          "extended": "`tasks` is the task of each row, which a `per_task` encoder needs and the others\ndo not read.",
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "forward",
+          "path": "lucid.peft.tuners.multitask_prompt_tuning._model.MultitaskPromptEmbedding.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(indices: Tensor, task_ids: Tensor | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/_model.py#L182",
+          "subcategory": "model",
+          "summary": "The prompt of each row's task: `(B, rows)` ids and `(B,)` task ids to `(B, rows, token_dim)`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "`task_ids` is missing, or is not one integer per row."
+            },
+            {
+              "annotation": "IndexError",
+              "description": "A task id is not in `[0, num_tasks)`."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "The prompt of multitask prompt tuning: a shared prompt scaled by a low-rank factor pair per task.",
+      "extended": "For a row of task $k$ the prompt is `embedding(ids) * (cols[k] @ rows[k])` —\nthe shared `(num_virtual_tokens, token_dim)` prompt times the product of\n`(num_virtual_tokens, num_ranks)` and `(num_ranks, token_dim)` factors.",
+      "parameters": [
+        {
+          "name": "config",
+          "annotation": "MultitaskPromptTuningConfig",
+          "description": "Sizes (`num_virtual_tokens`, `num_transformer_submodules` and\n`token_dim` set), the tasks and ranks, and the initialisation.",
+          "default": null
+        },
+        {
+          "name": "word_embeddings",
+          "annotation": "nn.Module",
+          "description": "The model's token table, which `\"TEXT\"` copies rows of.",
+          "default": null
+        },
+        {
+          "name": "tokenizer",
+          "annotation": "object with encode(text) -> list[int]",
+          "description": "As for `lucid.peft.PromptEmbedding`.",
+          "default": "None"
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "ValueError",
+          "description": "A source initialisation without `prompt_tuning_init_state_dict_path`, a source file\nthat is not `.safetensors`, lacks a tensor, or whose shapes do not fit this adapter."
+        }
+      ],
+      "examples": [
+        ">>> import lucid\n>>> import lucid.nn as nn\n>>> from lucid.peft import MultitaskPromptEmbedding, MultitaskPromptTuningConfig\n>>> config = MultitaskPromptTuningConfig(\n...     num_virtual_tokens=3, token_dim=8, num_transformer_submodules=1, num_tasks=2\n... )\n>>> prompt = MultitaskPromptEmbedding(config, nn.Embedding(10, 8))\n>>> prompt(lucid.arange(3).long().reshape(1, 3), lucid.tensor([1])).shape\n(1, 3, 8)"
+      ],
+      "notes": [],
+      "attributes": [
+        {
+          "name": "embedding",
+          "annotation": "nn.Embedding",
+          "description": "The shared prompt."
+        },
+        {
+          "name": "prefix_task_cols",
+          "annotation": "Parameter",
+          "description": "`(num_tasks, num_virtual_tokens * num_transformer_submodules, num_ranks)`."
+        },
+        {
+          "name": "prefix_task_rows",
+          "annotation": "Parameter",
+          "description": "`(num_tasks, num_ranks, token_dim)`."
+        }
+      ],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "MultitaskPromptTuningModel",
+      "path": "lucid.peft.tuners.multitask_prompt_tuning._model.MultitaskPromptTuningModel",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_PromptLearningTuner"
+      ],
+      "labels": [],
+      "signature": "MultitaskPromptTuningModel(model: nn.Module, config: PeftConfig, adapter_name: str = 'default')",
+      "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/multitask_prompt_tuning/_model.py#L214",
+      "subcategory": "model",
+      "methods": [
+        {
+          "name": "active_adapters",
+          "path": "lucid.peft.tuners._prompt._tuner._PromptLearningTuner.active_adapters",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "active_adapters: list[str]",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/_prompt/_tuner.py#L151",
+          "summary": null,
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "list[str]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_PromptLearningTuner"
+        },
+        {
+          "name": "add_adapter",
+          "path": "lucid.peft.tuners._prompt._tuner._PromptLearningTuner.add_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "add_adapter(adapter_name: str, peft_config: PeftConfig, low_cpu_mem_usage: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/_prompt/_tuner.py#L206",
+          "subcategory": "tuner",
+          "summary": "Add a prompt beside the ones held; it starts frozen, and `set_adapter` switches to it.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "The name is taken, or the config is another method's."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_PromptLearningTuner"
+        },
+        {
+          "name": "set_adapter",
+          "path": "lucid.peft.tuners._prompt._tuner._PromptLearningTuner.set_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_adapter(adapter_name: str | list[str], inference_mode: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/_prompt/_tuner.py#L228",
+          "subcategory": "tuner",
+          "summary": "Apply the named prompt — one at a time — and train it unless `inference_mode`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_PromptLearningTuner"
+        },
+        {
+          "name": "set_requires_grad",
+          "path": "lucid.peft.tuners._prompt._tuner._PromptLearningTuner.set_requires_grad",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_requires_grad(adapter_names: str | Sequence[str], requires_grad: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/_prompt/_tuner.py#L241",
+          "subcategory": "tuner",
+          "summary": "Enable or disable gradients on the named adapters.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_PromptLearningTuner"
+        },
+        {
+          "name": "delete_adapter",
+          "path": "lucid.peft.tuners._prompt._tuner._PromptLearningTuner.delete_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "delete_adapter(adapter_name: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/_prompt/_tuner.py#L252",
+          "subcategory": "tuner",
+          "summary": "Remove a prompt and its `modules_to_save` copies; another takes over if it was in use.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_PromptLearningTuner"
+        },
+        {
+          "name": "unload",
+          "path": "lucid.peft.tuners._prompt._tuner._PromptLearningTuner.unload",
+          "kind": "function",
+          "labels": [],
+          "signature": "unload()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/_prompt/_tuner.py#L274",
+          "subcategory": "tuner",
+          "summary": "Take the hooks and the `modules_to_save` copies out and give every parameter its old `requires_grad`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "nn.Module",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_PromptLearningTuner"
+        },
+        {
+          "name": "merge_and_unload",
+          "path": "lucid.peft.tuners._prompt._tuner._PromptLearningTuner.merge_and_unload",
+          "kind": "function",
+          "labels": [],
+          "signature": "merge_and_unload(progressbar: bool = False, safe_merge: bool = False, adapter_names: list[str] | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/_prompt/_tuner.py#L290",
+          "subcategory": "tuner",
+          "summary": "Refused: a prompt has no weight to fold into the model.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "nn.Module",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_PromptLearningTuner"
+        },
+        {
+          "name": "enable_adapter_layers",
+          "path": "lucid.peft.tuners._prompt._tuner._PromptLearningTuner.enable_adapter_layers",
+          "kind": "function",
+          "labels": [],
+          "signature": "enable_adapter_layers()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/_prompt/_tuner.py#L304",
+          "subcategory": "tuner",
+          "summary": "Apply the adapter again after `disable_adapter_layers`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_PromptLearningTuner"
+        },
+        {
+          "name": "disable_adapter_layers",
+          "path": "lucid.peft.tuners._prompt._tuner._PromptLearningTuner.disable_adapter_layers",
+          "kind": "function",
+          "labels": [],
+          "signature": "disable_adapter_layers()",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/_prompt/_tuner.py#L310",
+          "subcategory": "tuner",
+          "summary": "Run the base model alone.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_PromptLearningTuner"
+        },
+        {
+          "name": "forward",
+          "path": "lucid.peft.tuners._prompt._tuner._PromptLearningTuner.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(args: object = (), kwargs: object = {})",
+          "source": "https://github.com/lucid-official/lucid/blob/c918150/lucid/peft/tuners/_prompt/_tuner.py#L325",
+          "subcategory": "tuner",
+          "summary": "Override in subclasses to define the computation.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "object",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_PromptLearningTuner"
+        }
+      ],
+      "summary": "The tuner of multitask prompt tuning: a `MultitaskPromptEmbedding` per adapter, in front of the input.",
+      "extended": null,
+      "parameters": [],
+      "returns": null,
+      "raises": [],
+      "examples": [],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    }
+  ],
+  "summary": "`lucid.peft.tuners.multitask_prompt_tuning` — multitask prompt tuning: `MultitaskPromptEmbedding` and its tuner.",
+  "extended": "The config (`MultitaskPromptTuningConfig`, `MultitaskPromptTuningInit`) is exported from\n`lucid.peft` as well.",
+  "parameters": [],
+  "returns": null,
+  "raises": [],
+  "examples": [],
+  "notes": [],
+  "attributes": [],
+  "warns": [],
+  "see_also": [],
+  "canonical_name": "Multitask Prompt Tuning",
+  "citation": "Wang, Zhen, et al. \"Multitask Prompt Tuning Enables Parameter-Efficient Transfer Learning.\" [arXiv:2303.02861](https://arxiv.org/abs/2303.02861), 2023.",
+  "theory": "Multitask prompt tuning (Wang et al., 2023, [arXiv:2303.02861](https://arxiv.org/abs/2303.02861)) learns one\nprompt shared by every task and, per task, a low-rank factor pair\n$u_k \\in \\mathbb{R}^{L \\times r}$, $v_k \\in \\mathbb{R}^{r \\times d}$.\nTask $k$'s prompt is the shared one multiplied elementwise by\n$u_k v_k$, so a new task adds $r\\,(L + d)$ numbers, and a prompt\ntrained on source tasks can start a target task (`prompt_tuning_init` and\n`prompt_tuning_init_state_dict_path`).  Which task each row of a batch is\ncomes from the `task_ids` argument of the model's call."
+}
