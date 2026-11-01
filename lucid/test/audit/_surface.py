@@ -12,6 +12,7 @@ reached ``set_grad_enabled``, called it with a tensor, and every op after
 it failed — 278 of them.  ``STATEFUL`` is that lesson.
 """
 
+import functools
 import importlib
 import inspect
 import re
@@ -334,6 +335,7 @@ def _is_lucid_owned(name: str, obj: Any) -> bool:
 _SKIP_PACKAGES = ("lucid.models", "lucid.test", "lucid._C", "lucid.benchmarks")
 
 
+@functools.cache
 def _walkable_modules() -> list[str]:
     """Every importable public module under ``lucid``, shallowest first.
 
@@ -383,8 +385,35 @@ def _declaring_module(obj: Any, found_in: str) -> str:
     """
     origin = getattr(obj, "__module__", None)
     if isinstance(origin, str) and (origin == "lucid" or origin.startswith("lucid.")):
-        return origin
+        return _public_home(obj, origin) if _is_private_path(origin) else origin
     return found_in
+
+
+def _is_private_path(path: str) -> bool:
+    return any(part.startswith("_") for part in path.split(".")[1:])
+
+
+def _public_home(obj: Any, origin: str) -> str:
+    """The public module that a privately defined ``obj`` is published from.
+
+    A class written in a private module of a package
+    (``lucid.optim._reduce_on_plateau``) and re-exported by a public sibling
+    (``lucid.optim.lr_scheduler``) belongs to that sibling: the subsystem and
+    kind follow where the API lives, as they do for every scheduler written in
+    ``lr_scheduler`` itself.  Anything else keeps its private origin, which
+    the subsystem prefix match already resolves to the enclosing package.
+    """
+    package, _, leaf = origin.rpartition(".")
+    if package.count(".") < 1 or _is_private_path(package) or not leaf.startswith("_"):
+        return origin
+    siblings = [
+        path
+        for path in _walkable_modules()
+        if path.rpartition(".")[0] == package
+        if (module := _import(path)) is not None
+        and any(getattr(module, name, None) is obj for name in _names(module))
+    ]
+    return siblings[0] if len(siblings) == 1 else origin
 
 
 def _longest_prefix(path: str) -> tuple[str, str] | None:
