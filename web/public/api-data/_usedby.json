@@ -668,6 +668,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.diffeq._implicit"
+    },
+    {
+      "kind": "module",
       "module": "lucid.distributions.student"
     },
     {
@@ -1470,6 +1474,12 @@
     }
   ],
   "lucid.diffeq._adjoint.odeint_adjoint": [
+    {
+      "kind": "module",
+      "module": "lucid.diffeq"
+    }
+  ],
+  "lucid.diffeq._implicit.ImplicitSolveError": [
     {
       "kind": "module",
       "module": "lucid.diffeq"
