@@ -426,9 +426,9 @@ class ContiguityAxis(Axis):
 
         try:
             args = list(call.args)
-            args[call.primary] = packed_probe
+            args[call.primary] = _probe.as_operand(call.args[call.primary], packed_probe)
             packed = _probe.to_numpy(fn(*args, **call.kwargs))
-            args[call.primary] = view
+            args[call.primary] = _probe.as_operand(call.args[call.primary], view)
             strided = _probe.to_numpy(fn(*args, **call.kwargs))
         except Exception as exc:  # noqa: BLE001
             return self._refusal(symbol, f"{type(exc).__name__}: {str(exc)[:60]}", call)

@@ -15,6 +15,7 @@ zero, so a finite-difference check passes while testing nothing — the
 failure mode the VACUOUS status exists to name.
 """
 
+import collections.abc
 import contextlib
 import math
 from typing import TYPE_CHECKING, Any
@@ -378,10 +379,38 @@ def dtype_args(call: Any, name: str, build: Callable[..., Any]) -> list[Any]:
     args: list[Any] = []
     for index, value in enumerate(call.args):
         if index == call.primary:
-            args.append(build(call.base if in_domain else np.abs(call.base) + 1.0, True))
+            primary = build(call.base if in_domain else np.abs(call.base) + 1.0, True)
+            args.append(as_operand(value, primary))
         else:
             args.append(_rebuild(value, build))
     return args
+
+
+class _Rows(lucid.Tensor):
+    """One leaf handed to a parameter that takes a sequence of tensors.
+
+    The axes differentiate, perturb and re-lay-out a single tensor, but
+    ``cat``, ``stack`` and the other sequence ops refuse a bare tensor as
+    the reference does (LCD-731).  This one is a ``Sequence`` whose items
+    are its rows, so the op sees a sequence while the axis keeps one leaf.
+    """
+
+
+collections.abc.Sequence.register(_Rows)
+
+
+def is_tensor_sequence(value: Any) -> bool:
+    """Whether ``value`` is a non-empty list or tuple of tensors."""
+    return (
+        isinstance(value, (list, tuple)) and bool(value) and isinstance(value[0], lucid.Tensor)
+    )
+
+
+def as_operand(original: Any, tensor: Any) -> Any:
+    """``tensor`` in the form ``original`` was passed: its rows when that was a sequence."""
+    if is_tensor_sequence(original) and isinstance(tensor, lucid.Tensor):
+        return _Rows.__new_from_impl__(tensor._impl)
+    return tensor
 
 
 def _rebuild(value: Any, build: Callable[..., Any]) -> Any:

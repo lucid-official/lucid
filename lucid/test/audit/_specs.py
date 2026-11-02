@@ -57,6 +57,13 @@ def _rebuild(original: Any, array: Any, *, keep_integer: bool = False) -> Any:
     return _probe.as_f64(array)
 
 
+def _rebuild_operand(original: Any, array: Any) -> Any:
+    """:func:`_rebuild` for any operand, a sequence of tensors included."""
+    if _probe.is_tensor_sequence(original):
+        return _probe.as_operand(original, _rebuild(original[0], array))
+    return _rebuild(original, array)
+
+
 def _own(value: Any) -> Any:
     """``value`` on storage of its own when it is a tensor, else ``value``."""
     if not isinstance(value, lucid.Tensor):
@@ -158,7 +165,7 @@ class Call:
         """
         args = list(self.args)
         original = args[self.primary] if 0 <= self.primary < len(args) else None
-        args[self.primary] = _rebuild(original, array)
+        args[self.primary] = _rebuild_operand(original, array)
         return Call(
             args,
             dict(self.kwargs),
