@@ -935,7 +935,7 @@
     "lucid/optim/lbfgs.py": 2,
     "lucid/optim/optimizer.py": 7,
     "lucid/optim/others.py": 4,
-    "lucid/serialization/__init__.py": 7
+    "lucid/serialization/__init__.py": 4
    },
    "cast": {
     "lucid/_ops/_adapters.py": 1,

@@ -145,9 +145,9 @@ def save_safetensors(
     metadata: dict[str, str] | None = None,
 ) -> None: ...
 def load_safetensors(
-    path: str,
+    path: str | os.PathLike[str],
     *,
-    device: str = "cpu",
+    device: str | device = "cpu",
 ) -> dict[str, object]: ...
 
 # ── Subpackages ───────────────────────────────────────────────────────────────

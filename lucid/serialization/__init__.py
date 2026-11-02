@@ -13,12 +13,20 @@ import os
 import pickle
 import warnings
 from collections.abc import Mapping
-from typing import Any, Callable, TYPE_CHECKING, cast, final, override
+from typing import Any, Callable, TYPE_CHECKING, Self, cast, final, override
 
 from lucid._tensor.tensor import Tensor as _T
 from lucid._C import engine as _C_engine
-from lucid._dispatch import _wrap
+from lucid._device import device as _device_cls
+from lucid._dispatch import _parse_device, _wrap
 from lucid._dtype import _ENGINE_TO_DTYPE, _resolve_dtype_name, to_engine_dtype
+from lucid.serialization._safetensors import (
+    SCALAR_KEYS_KEY,
+    _ST_CODES,
+    _SafeTensorsFile,
+    checked_metadata,
+    encode_scalar_keys,
+)
 from lucid.serialization._storage_plan import (
     _StoragePlan,
     _build_storage_plan,
@@ -144,23 +152,35 @@ class _LucidPickler(pickle.Pickler):
         )
 
 
-def _restore_tensor(shape: list[int], dtype_name: str, device_str: str, raw_bytes: bytes) -> _T:
-    eng_device = _C_engine.Device.GPU if device_str == "metal" else _C_engine.Device.CPU
+def _restore_tensor(
+    shape: list[int], dtype_name: str, device: _C_engine.Device, raw_bytes: bytes
+) -> _T:
     eng_dtype = to_engine_dtype(_resolve_dtype_name(dtype_name))
-    impl = _C_engine.TensorImpl.from_bytes(raw_bytes, list(shape), eng_dtype, eng_device, False)
+    impl = _C_engine.TensorImpl.from_bytes(raw_bytes, list(shape), eng_dtype, device, False)
     return _wrap(impl)
 
 
-def _resolve_target_device(device_str: str, map_location: object) -> str:
-    from lucid._device import device as _device_cls
-
-    if isinstance(map_location, (str, _device_cls)):
-        loc = str(map_location)
-        return "metal" if ("metal" in loc or "gpu" in loc) else "cpu"
+def _resolve_target_device(device_str: str, map_location: object) -> _C_engine.Device:
+    """Where a tensor saved on ``device_str`` loads, parsed as ``Tensor.to`` parses a device."""
     if isinstance(map_location, dict):
-        mapped = str(map_location.get(device_str, device_str))
-        return "metal" if ("metal" in mapped or "gpu" in mapped) else "cpu"
-    return device_str
+        return _parse_device(map_location.get(device_str, device_str))
+    if isinstance(map_location, (str, _device_cls)):
+        return _parse_device(map_location)
+    return _parse_device(device_str)
+
+
+def _validate_map_location(map_location: object) -> None:
+    """Refuse a ``map_location`` no tensor would be loaded with, before any file is read."""
+    if isinstance(map_location, dict):
+        for target in map_location.values():
+            _parse_device(target)
+    elif isinstance(map_location, (str, _device_cls)):
+        _parse_device(map_location)
+    elif map_location is not None and not callable(map_location):
+        raise TypeError(
+            "map_location must be a device, a device name, a dict of them or a callable, "
+            f"got {type(map_location).__name__}"
+        )
 
 
 def _load_v3_11tuple(
@@ -182,8 +202,7 @@ def _load_v3_11tuple(
         sid,
         raw_bytes,
     ) = pid
-    target_dev = _resolve_target_device(device_str, map_location)
-    eng_device = _C_engine.Device.GPU if target_dev == "metal" else _C_engine.Device.CPU
+    eng_device = _resolve_target_device(device_str, map_location)
     eng_dtype = to_engine_dtype(_resolve_dtype_name(dtype_name))
     itemsize = _ENGINE_TO_DTYPE[eng_dtype].itemsize
     base_impl = storages.get(int(sid))
@@ -227,12 +246,12 @@ class _LucidUnpickler(pickle.Unpickler):
                 return _load_v3_11tuple(pid, self._map_location, self._storages, self._tensors)
             if tag == "tensor_v3" and len(pid) == 5:
                 _, shape, dtype_name, device_str, raw_bytes = pid
-                target_dev = _resolve_target_device(device_str, self._map_location)
-                return _restore_tensor(shape, dtype_name, target_dev, raw_bytes)
+                target = _resolve_target_device(device_str, self._map_location)
+                return _restore_tensor(shape, dtype_name, target, raw_bytes)
             if tag == "tensor":
                 _, shape, dtype_name, device_str, raw_bytes, _np_dtype_str = pid
-                target_dev = _resolve_target_device(device_str, self._map_location)
-                return _restore_tensor(shape, dtype_name, target_dev, raw_bytes)
+                target = _resolve_target_device(device_str, self._map_location)
+                return _restore_tensor(shape, dtype_name, target, raw_bytes)
         raise pickle.UnpicklingError(f"Unknown persistent id: {pid}")
 
 
@@ -402,11 +421,13 @@ def load(
     safe_only = _validate_load_options(
         pickle_module, weights_only=weights_only, mmap=mmap, extra=pickle_load_args
     )
+    _validate_map_location(map_location)
     if isinstance(f, (str, bytes, os.PathLike)):
         raw_path = os.fspath(f)
         path_str = raw_path.decode() if isinstance(raw_path, bytes) else str(raw_path)
         if path_str.endswith(".safetensors"):
-            return load_safetensors(path_str)
+            tensors = load_safetensors(path_str)
+            return tensors if map_location is None else _apply_map_location(tensors, map_location)
         with open(raw_path, "rb") as fp:
             data = fp.read()
     else:
@@ -490,7 +511,7 @@ def _check_no_frozenset(obj: object, seen: set[int]) -> None:
 
 def _remap_dict(
     obj: dict[object, object],
-    map_location: str | Callable[..., Any] | dict[str, str],
+    map_location: object,
     memo: dict[int, object],
 ) -> dict[object, object]:
     """Rebuild ``obj`` with remapped entries while preserving subtype and attrs."""
@@ -516,7 +537,7 @@ def _remap_dict(
 
 def _remap_seq(
     obj: list[object] | tuple[object, ...] | set[object],
-    map_location: str | Callable[..., Any] | dict[str, str],
+    map_location: object,
     memo: dict[int, object],
 ) -> object:
     """Rebuild a sequence/set with remapped items while preserving namedtuple types."""
@@ -533,7 +554,7 @@ def _remap_seq(
 
 def _apply_map_location(
     obj: object,
-    map_location: str | Callable[..., Any] | dict[str, str],
+    map_location: object,
     _memo: dict[int, object] | None = None,
 ) -> object:
     """Recursively apply map_location to all Tensors in obj."""
@@ -553,8 +574,10 @@ def _apply_map_location(
             device_str = "metal" if obj.is_metal else "cpu"
             target = map_location.get(device_str, device_str)
             mapped = obj.to(target)
-        else:
+        elif isinstance(map_location, (str, _device_cls)):
             mapped = obj.to(map_location)
+        else:
+            raise TypeError(f"map_location must name a device, got {type(map_location).__name__}")
         if isinstance(mapped, _T):
             mapped = _wrap_loaded_impl(mapped._impl, is_param, req_grad)
         _memo[oid] = mapped
@@ -771,6 +794,7 @@ def load_sharded(
     import os
     from collections import OrderedDict
 
+    _validate_map_location(map_location)
     path_str = _as_directory(path, "load_sharded")
     index_path = os.path.join(path_str, "index.json")
 
@@ -810,44 +834,6 @@ def load_sharded(
     return result
 
 
-# SafeTensors dtype codes for the dtypes Lucid holds natively.  The file is
-# read and written here rather than through the ``safetensors`` package's
-# numpy backend, which has no bfloat16 — the default dtype of most language
-# and diffusion checkpoints — and failed on every such file.
-_ST_CODES: dict[str, str] = {
-    "float64": "F64",
-    "float32": "F32",
-    "float16": "F16",
-    "bfloat16": "BF16",
-    "int64": "I64",
-    "int32": "I32",
-    "int16": "I16",
-    "int8": "I8",
-    "bool": "BOOL",
-    "complex64": "C64",
-}
-_ST_ENGINE: dict[str, _C_engine.Dtype] = {
-    "F64": _C_engine.Dtype.F64,
-    "F32": _C_engine.Dtype.F32,
-    "F16": _C_engine.Dtype.F16,
-    "BF16": _C_engine.Dtype.BF16,
-    "I64": _C_engine.Dtype.I64,
-    "I32": _C_engine.Dtype.I32,
-    "I16": _C_engine.Dtype.I16,
-    "I8": _C_engine.Dtype.I8,
-    "BOOL": _C_engine.Dtype.Bool,
-    "C64": _C_engine.Dtype.C64,
-}
-# Unsigned integers have no Lucid dtype; each widens losslessly to the next
-# signed width, as :func:`lucid.from_numpy` does.
-_ST_UNSIGNED: dict[str, tuple[str, str]] = {
-    "U8": ("<u1", "int16"),
-    "U16": ("<u2", "int32"),
-    "U32": ("<u4", "int64"),
-    "U64": ("<u8", "int64"),
-}
-
-
 def save_safetensors(
     state_dict: Mapping[str, object], path: str, *, metadata: dict[str, str] | None = None
 ) -> None:
@@ -870,7 +856,9 @@ def save_safetensors(
         convention.
     metadata : dict of str to str, optional
         Free-form string metadata stored in the file header (model
-        version, training framework, etc.).
+        version, training framework, etc.), read back with
+        ``safe_open(path).metadata()``.  Keys and values must be strings;
+        ``"__lucid_scalar_keys__"`` is reserved.
 
     Returns
     -------
@@ -892,6 +880,8 @@ def save_safetensors(
     """
     import json
     import struct
+
+    meta = checked_metadata(metadata)
 
     header: dict[str, object] = {}
     blobs: list[bytes] = []
@@ -920,11 +910,10 @@ def save_safetensors(
         blobs.append(blob)
         offset += len(blob)
 
-    combined_meta: dict[str, str] = dict(metadata) if metadata else {}
     if scalar_keys:
-        combined_meta["__lucid_scalar_keys__"] = ",".join(scalar_keys)
-    if combined_meta:
-        header["__metadata__"] = combined_meta
+        meta[SCALAR_KEYS_KEY] = encode_scalar_keys(scalar_keys)
+    if meta:
+        header["__metadata__"] = meta
     encoded = json.dumps(header, separators=(",", ":")).encode("utf-8")
     # The data section starts 8-aligned, as the reference writer pads it.
     encoded += b" " * (-len(encoded) % 8)
@@ -942,7 +931,9 @@ def _host_bytes(value: _T) -> bytes:
     return bytes(_unwrap(value).to_bytes())
 
 
-def load_safetensors(path: str, *, device: str = "cpu") -> dict[str, object]:
+def load_safetensors(
+    path: str | os.PathLike[str], *, device: str | _device_cls = "cpu"
+) -> dict[str, object]:
     r"""Load a SafeTensors file into a flat state dict.
 
     Reads the header and each tensor's bytes directly, builds a Lucid
@@ -955,9 +946,9 @@ def load_safetensors(path: str, *, device: str = "cpu") -> dict[str, object]:
     ----------
     path : str
         Path to a ``.safetensors`` file.
-    device : str, optional
-        Target device for every loaded tensor: ``"cpu"`` (default) or
-        ``"metal"``.
+    device : str or device, optional
+        Target device for every loaded tensor, parsed as :class:`device`
+        parses it: ``"cpu"`` (default), ``"metal"`` or ``"metal:0"``.
 
     Returns
     -------
@@ -967,8 +958,13 @@ def load_safetensors(path: str, *, device: str = "cpu") -> dict[str, object]:
     Raises
     ------
     ValueError
-        If the file is not a well-formed SafeTensors file, or stores a
-        dtype Lucid cannot represent (the 8-bit floats).
+        If ``device`` names no Lucid device, if the file is not a
+        well-formed SafeTensors file, or if it stores a dtype Lucid cannot
+        represent (the 8-bit floats).  A header whose offsets leave the
+        file, overlap, leave gaps or stop short of the end of the file is
+        malformed; the message names the file and the tensor.
+    TypeError
+        If ``device`` is not a string or a :class:`device`.
 
     Notes
     -----
@@ -985,67 +981,87 @@ def load_safetensors(path: str, *, device: str = "cpu") -> dict[str, object]:
     >>> loaded["w"].tolist()
     [1.0, 1.0, 1.0]
     """
-    import json
-    import mmap
-    import struct
-
-    import lucid as _lucid
-
-    result: dict[str, object] = {}
-    with open(path, "rb") as fh:
-        prefix = fh.read(8)
-        if len(prefix) != 8:
-            raise ValueError(f"load_safetensors: {path!r} is too short to be SafeTensors")
-        (header_len,) = struct.unpack("<Q", prefix)
-        try:
-            header = json.loads(fh.read(header_len))
-        except ValueError as exc:
-            raise ValueError(f"load_safetensors: {path!r} has no readable header") from exc
-        base = 8 + header_len
-        meta: dict[str, str] = header.pop("__metadata__", None) or {}
-        scalar_keys = set(meta.get("__lucid_scalar_keys__", "").split(",")) - {""}
-        with mmap.mmap(fh.fileno(), 0, access=mmap.ACCESS_READ) as data:
-            for name, info in header.items():
-                start, end = (int(v) for v in info["data_offsets"])
-                shape = [int(d) for d in info["shape"]]
-                raw = data[base + start : base + end]
-                t = _tensor_from_safetensors(name, str(info["dtype"]), shape, raw)
-                if name in scalar_keys:
-                    t = _lucid.squeeze(t)
-                if device in ("metal", "gpu"):
-                    t = t.to("metal")
-                result[name] = t
-    return result
+    target = _parse_device(device)
+    return dict(_SafeTensorsFile(path).read_all(target))
 
 
-def _tensor_from_safetensors(name: str, code: str, shape: list[int], raw: bytes) -> _T:
-    """One SafeTensors entry as a Lucid tensor of its own dtype."""
-    count = 1
-    for d in shape:
-        count *= d
-    engine_dtype = _ST_ENGINE.get(code)
-    if engine_dtype is not None:
-        impl = _C_engine.TensorImpl.from_bytes(
-            raw, shape, engine_dtype, _C_engine.Device.CPU, False
-        )
-        return _wrap(impl)
-    widening = _ST_UNSIGNED.get(code)
-    if widening is None:
-        raise ValueError(
-            f"load_safetensors: tensor {name!r} is stored as {code}, which Lucid "
-            "cannot represent"
-        )
-    import numpy as _np
+class safe_open:
+    r"""Read a SafeTensors file's header and tensors one at a time.
 
-    from lucid._factories.converters import from_numpy as _from_numpy
+    The file's header is read and validated when the object is made; each
+    tensor's bytes are read only when it is asked for, so a single tensor
+    or the metadata of a large checkpoint can be had without loading the
+    rest.  It is a context manager for parity with the reference reader,
+    but holds no file handle: leaving the block releases nothing.
 
-    stored, target = widening
-    arr = _np.frombuffer(raw, dtype=stored, count=count).reshape(shape)
-    if code == "U64" and count and int(arr.max()) > _np.iinfo(_np.int64).max:
-        raise ValueError(
-            f"load_safetensors: tensor {name!r} holds uint64 values past int64's range"
-        )
-    return _from_numpy(arr.astype(target))
+    Parameters
+    ----------
+    filename : str or os.PathLike
+        Path to a ``.safetensors`` file.
+    device : str or device, optional
+        Device the tensors :meth:`get_tensor` returns are placed on,
+        parsed as :class:`device` parses it.  Default ``"cpu"``.
+
+    Raises
+    ------
+    ValueError
+        If ``device`` names no Lucid device or the file is malformed, as
+        for :func:`load_safetensors`.
+    TypeError
+        If ``device`` is not a string or a :class:`device`.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.serialization.save_safetensors(
+    ...     {"w": lucid.ones(3)}, "/tmp/meta.safetensors", metadata={"format": "lucid"}
+    ... )
+    >>> with lucid.serialization.safe_open("/tmp/meta.safetensors") as f:
+    ...     f.metadata()
+    ...     f.keys()
+    ...     f.get_tensor("w").tolist()
+    {'format': 'lucid'}
+    ['w']
+    [1.0, 1.0, 1.0]
+    """
+
+    def __init__(self, filename: str | os.PathLike[str], device: str | _device_cls = "cpu") -> None:
+        self._device = _parse_device(device)
+        self._file = _SafeTensorsFile(filename)
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+    def metadata(self) -> dict[str, str] | None:
+        """The string metadata :func:`save_safetensors` stored, or ``None`` if there is none."""
+        return dict(self._file.metadata) if self._file.metadata else None
+
+    def keys(self) -> list[str]:
+        """The tensor names, in file order."""
+        return list(self._file.entries)
+
+    def get_tensor(self, name: str) -> _T:
+        """The tensor stored as ``name``.
+
+        Raises
+        ------
+        KeyError
+            If the file holds no tensor of that name.
+        """
+        if name not in self._file.entries:
+            raise KeyError(f"{self._file.path!r} holds no tensor named {name!r}")
+        return self._file.read(name, self._device)
 
 
-__all__ = ["save", "load", "save_sharded", "load_sharded", "save_safetensors", "load_safetensors"]
+__all__ = [
+    "save",
+    "load",
+    "save_sharded",
+    "load_sharded",
+    "save_safetensors",
+    "load_safetensors",
+    "safe_open",
+]

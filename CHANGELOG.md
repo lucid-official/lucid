@@ -271,6 +271,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - keep Beta/Dirichlet rsample ordered at tiny alpha
 
+- check devices and safetensors headers on load
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
