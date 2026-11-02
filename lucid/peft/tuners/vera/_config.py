@@ -1,6 +1,6 @@
 """``VeraConfig``: the VeRA hyper-parameters on top of the shared targeting fields."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, Final, Literal, override
 
 from lucid.peft._config import (
@@ -17,7 +17,7 @@ from lucid.peft.tuners._shared import _ProjectionConfig
 _BIASES: Final[tuple[Literal["none", "all", "vera_only"], ...]] = ("none", "all", "vera_only")
 
 
-@dataclass(kw_only=True)
+@dataclass
 class VeraConfig(_ProjectionConfig, peft_type=PeftType.VERA):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with VeRA.
 
@@ -34,13 +34,15 @@ class VeraConfig(_ProjectionConfig, peft_type=PeftType.VERA):
     The update folds into the weight exactly, so a merged model costs what the
     base does.
 
-    Field names, defaults and ``adapter_config.json`` are the reference
-    adapter library's.  Every field is keyword-only.  Unlike the reference's,
+    Field names, their order, defaults and ``adapter_config.json`` are the reference
+    adapter library's.  Unlike the reference's,
     this config also takes ``exclude_modules``, which selects modules the way
     ``LoraConfig``'s does.
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     r : int, default=256
         The shared projections' rank.  VeRA trains far fewer parameters than LoRA
         at a given rank, so it takes ranks far above LoRA's.
@@ -75,9 +77,12 @@ class VeraConfig(_ProjectionConfig, peft_type=PeftType.VERA):
         ``True``: :math:`\lambda_d = d_{initial}` and :math:`\lambda_b = 0`.
         ``False``: :math:`\lambda_d \sim \mathcal N(0, 1)` and :math:`\lambda_b = 1`
         (the update is non-zero from the start — for tests).
-    exclude_modules, layers_to_transform, layers_pattern
-        As in ``LoraConfig``.  The reference's config has no ``exclude_modules``,
-        so ``adapter_config.json`` holds it only when it is set.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    exclude_modules : str or list of str, optional
+        Modules never adapted, matched like ``target_modules``.
 
     Raises
     ------
@@ -109,11 +114,18 @@ class VeraConfig(_ProjectionConfig, peft_type=PeftType.VERA):
     }
 
     r: int = 256
+    target_modules: str | list[str] | set[str] | None = None
+    projection_prng_key: int = 0
+    save_projection: bool = True
     vera_dropout: float = 0.0
     d_initial: float = 0.1
     fan_in_fan_out: bool = False
     bias: Literal["none", "all", "vera_only"] = "none"
+    modules_to_save: list[str] | None = None
     init_weights: bool = True
+    layers_to_transform: int | list[int] | None = None
+    layers_pattern: str | list[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = field(default=None, kw_only=True)
 
     @override
     def _check_fields(self) -> None:

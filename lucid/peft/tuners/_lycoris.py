@@ -19,7 +19,6 @@ the per-adapter bookkeeping are here once.
 import math
 from abc import abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, field
 from typing import ClassVar, Final, NamedTuple, override
 
 import lucid
@@ -55,9 +54,10 @@ _WEIGHT: Final = "base_layer.weight"
 _TINY: Final = 1e-12
 
 
-@dataclass(kw_only=True)
 class _LycorisConfig(_TargetedConfig):
-    r"""The fields every LyCORIS method has, on top of the shared targeting fields.
+    r"""The checks every LyCORIS method's config shares, on top of the targeting ones.
+
+    Each method's config declares the fields below itself, in the reference's order.
 
     Parameters
     ----------
@@ -91,13 +91,13 @@ class _LycorisConfig(_TargetedConfig):
         "alpha_pattern": _keyed(_check_number),
     }
 
-    r: int = 8
-    alpha: float = 8
-    rank_dropout: float = 0.0
-    module_dropout: float = 0.0
-    use_effective_conv2d: bool = False
-    rank_pattern: dict[str, int] = field(default_factory=dict)
-    alpha_pattern: dict[str, float] = field(default_factory=dict)
+    r: int
+    alpha: float
+    rank_dropout: float
+    module_dropout: float
+    use_effective_conv2d: bool
+    rank_pattern: dict[str, int]
+    alpha_pattern: dict[str, float]
 
     @override
     def _check_fields(self) -> None:

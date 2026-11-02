@@ -1,13 +1,13 @@
 """``LoHaConfig``: the LoHa hyper-parameters on top of the LyCORIS fields."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar
 
 from lucid.peft._config import PeftType, _Check, _check_bool
 from lucid.peft.tuners._lycoris import _LycorisConfig
 
 
-@dataclass(kw_only=True)
+@dataclass
 class LoHaConfig(_LycorisConfig, peft_type=PeftType.LOHA):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with LoHa.
 
@@ -23,11 +23,17 @@ class LoHaConfig(_LycorisConfig, peft_type=PeftType.LOHA):
     :math:`f(x) + \Delta W\!\cdot x` with :math:`\Delta W` applied like the
     base weight.
 
-    Field names, defaults and ``adapter_config.json`` are the reference
-    adapter library's.  Every field is keyword-only.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference
+    adapter library's.
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
+    rank_pattern : dict of str to int, optional
+        Per-module rank overrides, keyed by name or regex suffix.
+    alpha_pattern : dict of str to float, optional
+        Per-module :math:`\alpha` overrides, keyed the same way.
     r : int, default=8
         Rank of the two low-rank products.
     alpha : float, default=8
@@ -51,12 +57,12 @@ class LoHaConfig(_LycorisConfig, peft_type=PeftType.LOHA):
     init_weights : bool, default=True
         ``True``: :math:`W_{2b} = 0` and the rest Kaiming-uniform, so the update starts at zero.
         ``False``: every factor Kaiming-uniform (for tests).
-    layers_to_transform, layers_pattern, modules_to_save
-        As in ``LoraConfig``.
-    rank_pattern : dict of str to int, optional
-        Per-module rank overrides, keyed by name or regex suffix.
-    alpha_pattern : dict of str to float, optional
-        Per-module :math:`\alpha` overrides, keyed the same way.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    modules_to_save : list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
 
     Raises
     ------
@@ -77,4 +83,16 @@ class LoHaConfig(_LycorisConfig, peft_type=PeftType.LOHA):
 
     _field_checks: ClassVar[dict[str, _Check]] = {"init_weights": _check_bool}
 
+    rank_pattern: dict[str, int] = field(default_factory=dict)
+    alpha_pattern: dict[str, float] = field(default_factory=dict)
+    r: int = 8
+    alpha: float = 8
+    rank_dropout: float = 0.0
+    module_dropout: float = 0.0
+    use_effective_conv2d: bool = False
+    target_modules: str | list[str] | set[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = None
     init_weights: bool = True
+    layers_to_transform: int | list[int] | None = None
+    layers_pattern: str | list[str] | None = None
+    modules_to_save: list[str] | None = None

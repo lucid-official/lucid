@@ -1,6 +1,7 @@
 """``LoraConfig``: the LoRA hyper-parameters on top of the shared targeting fields."""
 
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import ClassVar, Final, Literal, override
 
@@ -23,8 +24,112 @@ from lucid.peft.tuners.lora._inits import _check_init, _Init
 _BIASES: Final[tuple[Literal["none", "all", "lora_only"], ...]] = ("none", "all", "lora_only")
 
 
-@dataclass(kw_only=True)
-class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
+#: The reference ``LoraConfig`` fields this package accepts at their default and refuses otherwise.
+_LORA_UNSUPPORTED: Final = {
+    "megatron_config": "Megatron tensor-parallel layers do not exist here",
+    "megatron_core": "Megatron tensor-parallel layers do not exist here",
+    "trainable_token_indices": "use TrainableTokensConfig for trainable tokens",
+    "loftq_config": "LoftQ quantisation-aware initialisation is not implemented",
+    "eva_config": "EVA initialisation is not implemented",
+    "corda_config": "CorDA initialisation is not implemented",
+    "lora_ga_config": "LoRA-GA initialisation is not implemented",
+    "velora_config": "VeLoRA is not implemented",
+    "alora_invocation_tokens": "activated LoRA is not implemented",
+    "use_qalora": "quantisation-aware LoRA needs a quantised base layer",
+    "qalora_group_size": "quantisation-aware LoRA needs a quantised base layer",
+    "monteclora_config": "MonteCLoRA is not implemented",
+    "layer_replication": "layer replication is not implemented",
+    "use_bdlora": "block-diagonal LoRA is not implemented",
+    "arrow_config": "Arrow routing is not implemented",
+    "kasa_config": "KaSA is not implemented",
+    "ensure_weight_tying": "weight-tying bookkeeping is not implemented",
+}
+
+
+@dataclass
+class LoraRuntimeConfig:
+    """Settings that are valid at runtime only and never written to an adapter file.
+
+    Parameters
+    ----------
+    ephemeral_gpu_offload : bool, default=False
+        The reference keeps a layer's weights on the CPU and moves them to the accelerator
+        for one forward pass.  Not implemented: ``True`` raises ``NotImplementedError``.
+    """
+
+    ephemeral_gpu_offload: bool = False
+
+    def __post_init__(self) -> None:
+        if self.ephemeral_gpu_offload:
+            raise NotImplementedError(
+                "LoraRuntimeConfig: `ephemeral_gpu_offload=True` is not supported by lucid.peft: "
+                "adapter layers are never offloaded"
+            )
+
+
+def _check_runtime(name: str, value: object) -> LoraRuntimeConfig:
+    """A ``LoraRuntimeConfig``, or the dict of its fields."""
+    if isinstance(value, LoraRuntimeConfig):
+        return value
+    if isinstance(value, Mapping):
+        return LoraRuntimeConfig(**value)
+    raise TypeError(f"`{name}` must be a LoraRuntimeConfig, got {value!r}")
+
+
+@dataclass
+class _LoraFields(_TargetedConfig):
+    """The fields of the reference's ``LoraConfig``, in its order, for the configs that extend it.
+
+    The reference's ``AdaLoraConfig`` is a ``LoraConfig`` with more fields; here the two share
+    this base instead, since an AdaLoRA config is not a LoRA one (it does not take its
+    initialisations, its patterns or its adapters).  The fields the library lacks are accepted at
+    their defaults only (``_LORA_UNSUPPORTED``).
+    """
+
+    _unsupported: ClassVar[dict[str, str]] = _LORA_UNSUPPORTED
+    #: ``runtime_config`` is valid at runtime only: a file never holds it.
+    _extension_fields: ClassVar[frozenset[str]] = frozenset({"runtime_config"})
+    _field_checks: ClassVar[dict[str, _Check]] = {"runtime_config": _check_runtime}
+
+    r: int = 8
+    target_modules: str | list[str] | set[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = None
+    lora_alpha: float = 8
+    lora_dropout: float = 0.0
+    fan_in_fan_out: bool = False
+    bias: Literal["none", "all", "lora_only"] = "none"
+    use_rslora: bool = False
+    modules_to_save: list[str] | None = None
+    init_lora_weights: bool | str = True
+    layers_to_transform: int | list[int] | None = None
+    layers_pattern: str | list[str] | None = None
+    rank_pattern: dict[str, int] = field(default_factory=dict)
+    alpha_pattern: dict[str, float] = field(default_factory=dict)
+    megatron_config: dict[str, object] | None = None
+    megatron_core: str | None = "megatron.core"
+    trainable_token_indices: list[int] | dict[str, list[int]] | None = None
+    loftq_config: dict[str, object] = field(default_factory=dict)
+    eva_config: object | None = None
+    corda_config: object | None = None
+    lora_ga_config: object | None = None
+    use_dora: bool = False
+    velora_config: object | None = None
+    alora_invocation_tokens: list[int] | None = None
+    use_qalora: bool = False
+    qalora_group_size: int = 16
+    monteclora_config: object | None = None
+    layer_replication: list[tuple[int, int]] | None = None
+    runtime_config: LoraRuntimeConfig = field(default_factory=LoraRuntimeConfig)
+    lora_bias: bool = False
+    target_parameters: list[str] | None = None
+    use_bdlora: object | None = None
+    arrow_config: object | None = None
+    kasa_config: object | None = None
+    ensure_weight_tying: bool = False
+
+
+@dataclass
+class LoraConfig(_LoraFields, peft_type=PeftType.LORA):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with LoRA.
 
     LoRA (Hu et al., 2021, arXiv:2106.09685) freezes a pretrained weight
@@ -34,22 +139,18 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
     :math:`B \in \mathbb{R}^{d_{out} \times r}` and scale
     :math:`s = \alpha / r` (or :math:`\alpha / \sqrt{r}` with rsLoRA).
 
-    Field names, defaults and ``adapter_config.json`` are the reference
-    adapter library's.  Every field is keyword-only.
+    Field names, their order, defaults and ``adapter_config.json`` are the
+    reference adapter library's.  The reference's options for features this
+    package lacks (``eva_config``, ``loftq_config``, ``use_qalora`` …) are
+    fields too, at the reference's defaults; any other value raises
+    ``NotImplementedError`` naming the field.
 
     Parameters
     ----------
-    task_type : TaskType or str, optional
-        The task the adapter is for (picks the ``PeftModelFor*`` class
-        ``get_peft_model`` returns; see ``TaskType``).
-    peft_type : PeftType or str, optional
-        Always ``PeftType.LORA``; filled in when omitted.
-    base_model_name_or_path : str, optional
-        Name of the model the adapter was trained on (metadata).
-    revision : str, optional
-        Revision of that model (metadata).
-    inference_mode : bool, default=False
-        Freeze the adapter too, for inference.
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
+    r : int, default=8
+        Rank of the update.
     target_modules : str or list of str, optional
         The modules to adapt: ``nn.Linear``, ``nn.Embedding``,
         ``nn.Conv1d`` / ``nn.Conv2d`` / ``nn.Conv3d``, their
@@ -65,27 +166,6 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
         a model type with no row raises ``ValueError``.
     exclude_modules : str or list of str, optional
         Modules never adapted, matched like ``target_modules``.
-    modules_to_save : list of str, optional
-        Modules trained in full beside the adapter (a classifier head);
-        a trainable copy is kept and saved with it, the original stays.
-        An entry matches a module whose dotted name equals it or ends
-        with ``"." + entry`` — on a dot boundary, so ``classifier`` does
-        not also catch ``pre_classifier`` as the reference's bare suffix
-        test does.  Nothing inside these modules is adapted.
-    layers_to_transform : int or list of int, optional
-        Adapt only these layer indices (the number after the layer list's
-        name, ``transformer.h.3.attn`` → 3).  Applies to modules matched
-        by suffix; one named in full is adapted regardless.  The index is
-        the reference's current rule: the first (outer) ``<list>.<n>.`` in
-        the name, so ``encoder.layers.0.blocks.1.qkv`` is layer 0.  A
-        layer list at the model's root (``h.3.attn``) is indexed too,
-        where the reference finds no index without a ``layers_pattern``.
-    layers_pattern : str or list of str, optional
-        Name of the layer list (``"h"``, ``"layers"``), a regex fragment;
-        the first match in the name gives the index.  Needs
-        ``layers_to_transform``.
-    r : int, default=8
-        Rank of the update.
     lora_alpha : float, default=8
         :math:`\alpha` in the scale.
     lora_dropout : float, default=0.0
@@ -98,6 +178,13 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
         only the biases of the adapted layers.
     use_rslora : bool, default=False
         Scale by :math:`\alpha / \sqrt{r}` (Kalajdzievski, 2023).
+    modules_to_save : list of str, optional
+        Modules trained in full beside the adapter (a classifier head);
+        a trainable copy is kept and saved with it, the original stays.
+        An entry matches a module whose dotted name equals it or ends
+        with ``"." + entry`` — on a dot boundary, so ``classifier`` does
+        not also catch ``pre_classifier`` as the reference's bare suffix
+        test does.  Nothing inside these modules is adapted.
     init_lora_weights : bool or str, default=True
         ``True``: Kaiming-uniform :math:`A` (``a = \sqrt 5``) and zero
         :math:`B`, so the adapted model starts as the base.
@@ -116,10 +203,43 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
         to get a plain LoRA of twice the rank that fits the original base;
         they apply to ``nn.Linear`` targets only.  ``"eva"``, ``"corda"``, ``"loftq"`` and
         the reference's other initialisations raise ``NotImplementedError``.
+    layers_to_transform : int or list of int, optional
+        Adapt only these layer indices (the number after the layer list's
+        name, ``transformer.h.3.attn`` → 3).  Applies to modules matched
+        by suffix; one named in full is adapted regardless.  The index is
+        the reference's current rule: the first (outer) ``<list>.<n>.`` in
+        the name, so ``encoder.layers.0.blocks.1.qkv`` is layer 0.  A
+        layer list at the model's root (``h.3.attn``) is indexed too,
+        where the reference finds no index without a ``layers_pattern``.
+    layers_pattern : str or list of str, optional
+        Name of the layer list (``"h"``, ``"layers"``), a regex fragment;
+        the first match in the name gives the index.  Needs
+        ``layers_to_transform``.
     rank_pattern : dict of str to int, optional
         Per-module rank overrides, keyed by name or regex suffix.
     alpha_pattern : dict of str to float, optional
         Per-module :math:`\alpha` overrides, keyed the same way.
+    megatron_config : dict, optional
+        Megatron tensor-parallel layers do not exist here.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    megatron_core : str, default='megatron.core'
+        Megatron tensor-parallel layers do not exist here.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    trainable_token_indices : list of int or dict of str to list of int, optional
+        Use TrainableTokensConfig for trainable tokens.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    loftq_config : dict, optional
+        LoftQ quantisation-aware initialisation is not implemented.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    eva_config : object, optional
+        EVA initialisation is not implemented.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    corda_config : object, optional
+        CorDA initialisation is not implemented.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    lora_ga_config : object, optional
+        LoRA-GA initialisation is not implemented.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
     use_dora : bool, default=False
         Weight-decomposed low-rank adaptation (Liu et al., 2024): a trainable
         magnitude per output unit beside :math:`BA`, so the adapted weight
@@ -128,6 +248,27 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
         ones); ``nn.MultiheadAttention`` and ``target_parameters`` refuse it,
         as the reference does.  Costs a norm of the full weight per forward
         pass; merge before inference.
+    velora_config : object, optional
+        VeLoRA is not implemented.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    alora_invocation_tokens : list of int, optional
+        Activated LoRA is not implemented.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    use_qalora : bool, default=False
+        Quantisation-aware LoRA needs a quantised base layer.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    qalora_group_size : int, default=16
+        Quantisation-aware LoRA needs a quantised base layer.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    monteclora_config : object, optional
+        MonteCLoRA is not implemented.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    layer_replication : list of tuple of int, optional
+        Layer replication is not implemented.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    runtime_config : LoraRuntimeConfig
+        Settings valid at runtime only, never written to a file.  Only the default
+        (``ephemeral_gpu_offload=False``) is supported.
     lora_bias : bool, default=False
         Give :math:`B` a bias, folded into the base bias on merge.  For
         adapters extracted from a fully fine-tuned layer; needs
@@ -142,6 +283,18 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
         them, ``(experts, out, in)``; ``lora_dropout`` must be 0 for it.
         The holding module cannot also be in ``target_modules``.  With no
         ``target_modules``, no module is adapted (the model-type default is not taken).
+    use_bdlora : object, optional
+        Block-diagonal LoRA is not implemented.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    arrow_config : object, optional
+        Arrow routing is not implemented.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    kasa_config : object, optional
+        KaSA is not implemented.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
+    ensure_weight_tying : bool, default=False
+        Weight-tying bookkeeping is not implemented.  Accepted at the reference's default only:
+        any other value raises ``NotImplementedError``.
 
     Raises
     ------
@@ -179,19 +332,6 @@ class LoraConfig(_TargetedConfig, peft_type=PeftType.LORA):
         "target_parameters": _optional_strings,
         "lora_bias": _check_bool,
     }
-
-    r: int = 8
-    lora_alpha: float = 8
-    lora_dropout: float = 0.0
-    fan_in_fan_out: bool = False
-    bias: Literal["none", "all", "lora_only"] = "none"
-    use_rslora: bool = False
-    init_lora_weights: bool | str = True
-    rank_pattern: dict[str, int] = field(default_factory=dict)
-    alpha_pattern: dict[str, float] = field(default_factory=dict)
-    use_dora: bool = False
-    target_parameters: list[str] | None = None
-    lora_bias: bool = False
 
     @override
     def _load_fields(self) -> dict[str, object]:

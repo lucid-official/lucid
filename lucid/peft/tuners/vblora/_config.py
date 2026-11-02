@@ -17,7 +17,7 @@ from lucid.peft._config import (
 _BIASES: Final[tuple[Literal["none", "all", "vblora_only"], ...]] = ("none", "all", "vblora_only")
 
 
-@dataclass(kw_only=True)
+@dataclass
 class VBLoRAConfig(_TargetedConfig, peft_type=PeftType.VBLORA):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with VB-LoRA.
 
@@ -37,11 +37,13 @@ class VBLoRAConfig(_TargetedConfig, peft_type=PeftType.VBLORA):
     the whole model.  The adapter does **not** start as the base: both factors are
     non-zero from the first step (as in the paper).
 
-    Field names, defaults and ``adapter_config.json`` are the reference
-    adapter library's.  Every field is keyword-only.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference
+    adapter library's.
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     r : int, default=4
         Rank of the factors.
     num_vectors : int, default=256
@@ -77,8 +79,10 @@ class VBLoRAConfig(_TargetedConfig, peft_type=PeftType.VBLORA):
         The bank starts uniform in ``[-bound, bound]`` (not zero, or the gradients vanish).
     init_logits_std : float, default=0.1
         The logits start normal with this standard deviation.
-    layers_to_transform, layers_pattern
-        As in ``LoraConfig``.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
 
     Raises
     ------
@@ -116,12 +120,17 @@ class VBLoRAConfig(_TargetedConfig, peft_type=PeftType.VBLORA):
     num_vectors: int = 256
     vector_length: int = 256
     topk: int = 2
+    target_modules: str | list[str] | set[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = None
     save_only_topk_weights: bool = False
     vblora_dropout: float = 0.0
     fan_in_fan_out: bool = False
     bias: Literal["none", "all", "vblora_only"] = "none"
+    modules_to_save: list[str] | None = None
     init_vector_bank_bound: float = 0.02
     init_logits_std: float = 0.1
+    layers_to_transform: int | list[int] | None = None
+    layers_pattern: str | list[str] | None = None
 
     @override
     def _check_fields(self) -> None:

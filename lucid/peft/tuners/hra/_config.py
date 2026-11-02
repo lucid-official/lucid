@@ -8,7 +8,7 @@ from lucid.peft._config import PeftType, _Check, _check_bool, _check_rank, _choi
 _BIASES = ("none", "all", "hra_only")
 
 
-@dataclass(kw_only=True)
+@dataclass
 class HRAConfig(_TargetedConfig, peft_type=PeftType.HRA):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with HRA.
 
@@ -24,11 +24,13 @@ class HRAConfig(_TargetedConfig, peft_type=PeftType.HRA):
     ``r`` the vectors start in equal pairs, so the chain is the identity and the
     adapted model starts as the base; the transform folds into the weight.
 
-    Field names, defaults and ``adapter_config.json`` are the reference
-    adapter library's.  Every field is keyword-only.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference
+    adapter library's.
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     r : int, default=8
         Number of reflections.  Best even: an odd ``r`` cannot start at the identity.
     apply_GS : bool, default=False
@@ -43,11 +45,15 @@ class HRAConfig(_TargetedConfig, peft_type=PeftType.HRA):
     init_weights : bool, default=True
         ``True``: the vectors start in equal pairs (the identity).  ``False``: every
         vector Kaiming-uniform (for tests).
-    layers_to_transform, layers_pattern, modules_to_save
-        As in ``LoraConfig``.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
     bias : {"none"}, default="none"
         The reference also offers ``"all"`` and ``"hra_only"``; here the adapter
         trains its own vectors only, and those raise ``NotImplementedError``.
+    modules_to_save : list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
 
     Raises
     ------
@@ -77,8 +83,13 @@ class HRAConfig(_TargetedConfig, peft_type=PeftType.HRA):
 
     r: int = 8
     apply_GS: bool = False
+    target_modules: str | list[str] | set[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = None
     init_weights: bool = True
+    layers_to_transform: int | list[int] | None = None
+    layers_pattern: str | list[str] | None = None
     bias: Literal["none", "all", "hra_only"] = "none"
+    modules_to_save: list[str] | None = None
 
     @override
     def _check_fields(self) -> None:

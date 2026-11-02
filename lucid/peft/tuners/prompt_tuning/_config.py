@@ -26,7 +26,7 @@ def _optional_dict(name: str, value: object) -> dict[str, object] | None:
     return {str(k): v for k, v in value.items()}
 
 
-@dataclass(kw_only=True)
+@dataclass
 class PromptTuningConfig(PromptLearningConfig, peft_type=PeftType.PROMPT_TUNING):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with prompt tuning.
 
@@ -36,13 +36,15 @@ class PromptTuningConfig(PromptLearningConfig, peft_type=PeftType.PROMPT_TUNING)
     ``num_virtual_tokens * token_dim`` numbers, and a task is a file of that size.
     An encoder-decoder model gets them in front of the encoder's input.
 
-    Field names, defaults and ``adapter_config.json`` are the reference adapter
-    library's.  Every field is keyword-only.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference adapter
+    library's.
 
     Parameters
     ----------
-    num_virtual_tokens : int
-        How many learned embeddings go in front of the input.
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
+    num_virtual_tokens, token_dim, num_transformer_submodules, num_attention_heads, num_layers, modules_to_save
+        As in :class:`~lucid.peft.PromptLearningConfig`.
     prompt_tuning_init : PromptTuningInit or str, default="RANDOM"
         ``"RANDOM"`` keeps the embedding table's initialisation; ``"SAMPLE_VOCAB"``
         starts from the embeddings of random vocabulary tokens; ``"TEXT"``

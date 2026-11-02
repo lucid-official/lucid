@@ -24,8 +24,10 @@ import os
 import re
 import warnings
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, Final, Self, override
+
+from lucid.peft._refusals import refuse_kwargs
 
 _CONFIG_NAME: Final = "adapter_config.json"
 
@@ -54,7 +56,7 @@ _INERT_KEYS: Final = frozenset(
 #: Keys that describe where an adapter came from, not what it computes.
 _METADATA_KEYS: Final = frozenset(
     {"peft_version", "runtime_config", "megatron_core", "qalora_group_size"}
-)
+)  # a key that is also a field of the config being read is that field
 
 
 class PeftType(enum.StrEnum):
@@ -329,16 +331,26 @@ def _read_json_object(path: str | os.PathLike[str]) -> dict[str, object]:
     raise ValueError(f"{os.fspath(path)} does not hold a JSON object")
 
 
+def _default_of(f: dataclasses.Field[object]) -> object:
+    """The default a dataclass field starts at (a factory's product, for those)."""
+    if f.default is not dataclasses.MISSING:
+        return f.default
+    factory = f.default_factory
+    if callable(factory):
+        return factory()
+    raise ValueError(f"field {f.name!r} has no default")
+
+
 #: ``PeftType`` → the config class that reads it, filled as each is defined.
 _CONFIG_CLASSES: dict[PeftType, type[PeftConfig]] = {}
 
 
-@dataclass(kw_only=True)
+@dataclass
 class PeftConfig:
     r"""What every adapter config holds, and the ``adapter_config.json`` round trip.
 
     The base of each method's config (``LoraConfig``), with the fields
-    the reference's ``PeftConfig`` has.  Called on ``PeftConfig`` itself,
+    the reference's ``PeftConfig`` has, in its order.  Called on ``PeftConfig`` itself,
     ``from_pretrained`` / ``from_dict`` read the method the file names and
     return that method's config — the reference's idiom for learning which
     base model an adapter needs before loading either.  It is not built
@@ -355,6 +367,9 @@ class PeftConfig:
         The class of the base model, ``{"base_model_class": name,
         "parent_library": module}`` — what ``AutoPeftModel*`` rebuilds the
         base with.  ``PeftModel.save_pretrained`` writes it.
+    peft_version : str, optional
+        The library version that wrote the adapter file (metadata).  Left
+        ``None`` it is not written; a file that carries one keeps it.
     base_model_name_or_path : str, optional
         Name of the model the adapter was trained on (metadata).
     revision : str, optional
@@ -384,18 +399,27 @@ class PeftConfig:
     _field_checks: ClassVar[dict[str, _Check]] = {
         "task_type": _task_type,
         "auto_mapping": _check_auto_mapping,
+        "peft_version": _optional_str,
         "base_model_name_or_path": _optional_str,
         "revision": _optional_str,
         "inference_mode": _check_bool,
     }
     _all_checks: ClassVar[dict[str, _Check]] = dict(_field_checks)
-    #: Fields this class has that the reference's config of the same method lacks.  ``to_dict`` writes
-    #: one only when it holds a value, so an ordinary adapter's file stays one the reference reads.
-    _extension_fields: ClassVar[frozenset[str]] = frozenset()
+    #: Fields this class has that the reference's config of the same method lacks, and the
+    #: provenance ``peft_version``.  ``to_dict`` writes one only when it holds a value, so an
+    #: ordinary adapter's file stays one the reference reads.  ``_all_extension`` adds the bases'.
+    _extension_fields: ClassVar[frozenset[str]] = frozenset({"peft_version"})
+    _all_extension: ClassVar[frozenset[str]] = _extension_fields
+    #: Reference fields this package does not implement, with what each would do.  They are
+    #: accepted under the reference's name and default; any other value raises
+    #: ``NotImplementedError`` naming the field.  ``_all_unsupported`` adds the bases'.
+    _unsupported: ClassVar[dict[str, str]] = {}
+    _all_unsupported: ClassVar[dict[str, str]] = {}
 
     task_type: TaskType | str | None = None
     peft_type: PeftType | str | None = None
     auto_mapping: dict[str, str] | None = None
+    peft_version: str | None = field(default=None, compare=False)
     base_model_name_or_path: str | None = None
     revision: str | None = None
     inference_mode: bool = False
@@ -405,6 +429,8 @@ class PeftConfig:
         """Merge the subclass's field checks and register it under ``peft_type``."""
         super().__init_subclass__(**kwargs)
         cls._all_checks = {**cls._all_checks, **cls.__dict__.get("_field_checks", {})}
+        cls._all_extension = cls._all_extension | cls.__dict__.get("_extension_fields", frozenset())
+        cls._all_unsupported = {**cls._all_unsupported, **cls.__dict__.get("_unsupported", {})}
         if peft_type is not None:
             cls._peft_type = peft_type
             _CONFIG_CLASSES[peft_type] = cls
@@ -417,14 +443,27 @@ class PeftConfig:
                 f"{type(self).__name__} is the base of the adapter configs; build one of "
                 f"{', '.join(c.__name__ for c in _CONFIG_CLASSES.values())}"
             )
+        present = {f.name for f in dataclasses.fields(self)}
         for name, check in self._all_checks.items():
-            setattr(self, name, check(name, getattr(self, name)))
+            if name in present:
+                setattr(self, name, check(name, getattr(self, name)))
+        self._refuse_unsupported()
         if self.peft_type is not None and self.peft_type != own:
             raise ValueError(
                 f"{type(self).__name__} describes a {own} adapter; got peft_type={self.peft_type!r}"
             )
         self.peft_type = own
         self._check_fields()
+
+    def _refuse_unsupported(self) -> None:
+        """Raise for a field of ``_all_unsupported`` that holds anything but its default or an "off" value."""
+        by_name = {f.name: f for f in dataclasses.fields(self)}
+        for name, why in self._all_unsupported.items():
+            value = getattr(self, name)
+            if value != _default_of(by_name[name]) and not _is_off(value):
+                raise NotImplementedError(
+                    f"{type(self).__name__}: `{name}={value!r}` is not supported by lucid.peft: {why}"
+                )
 
     def _check_fields(self) -> None:
         """Checks that read more than one field; a subclass adds its own."""
@@ -470,7 +509,7 @@ class PeftConfig:
         return {
             f.name: _json_value(getattr(self, f.name))
             for f in dataclasses.fields(self)
-            if f.name not in self._extension_fields or getattr(self, f.name) != f.default
+            if f.name not in self._all_extension or getattr(self, f.name) != _default_of(f)
         }
 
     def _load_fields(self) -> dict[str, object]:
@@ -538,6 +577,8 @@ class PeftConfig:
         values: dict[str, object] = {}
         dropped: list[str] = []
         for key, value in config_dict.items():
+            if key == "runtime_config":
+                continue
             if key in names:
                 values[key] = value
             elif key in _METADATA_KEYS:
@@ -561,7 +602,7 @@ class PeftConfig:
         config.__post_init__()
         return config
 
-    def save_pretrained(self, save_directory: str | os.PathLike[str]) -> None:
+    def save_pretrained(self, save_directory: str | os.PathLike[str], **kwargs: object) -> None:
         r"""Write ``adapter_config.json`` into ``save_directory``.
 
         The file is the reference's: ``to_dict`` with its keys sorted,
@@ -571,11 +612,17 @@ class PeftConfig:
         ----------
         save_directory : str or os.PathLike
             Directory to write into.
+        **kwargs
+            ``auto_mapping_dict`` replaces the ``auto_mapping`` the file records.
+            The reference forwards any other keyword to its hub upload; there
+            is no hub here, so another key raises.
 
         Raises
         ------
         NotADirectoryError
             ``save_directory`` names an existing file.
+        NotImplementedError
+            ``kwargs`` holds a key other than ``auto_mapping_dict``.
 
         Examples
         --------
@@ -586,14 +633,20 @@ class PeftConfig:
         ...     LoraConfig.from_pretrained(d).r
         2
         """
+        auto_mapping = kwargs.pop("auto_mapping_dict", None)
+        refuse_kwargs("PeftConfig.save_pretrained", kwargs, "it would configure a hub upload")
         path = _output_directory(save_directory)
         payload = self.to_dict()
+        if auto_mapping is not None:
+            payload["auto_mapping"] = auto_mapping
         ordered = {key: payload[key] for key in sorted(payload)}
         with open(os.path.join(path, _CONFIG_NAME), "w", encoding="utf-8") as fh:
             fh.write(json.dumps(ordered, indent=2))
 
-    @staticmethod
-    def from_json_file(path_json_file: str | os.PathLike[str]) -> dict[str, object]:
+    @classmethod
+    def from_json_file(
+        cls, path_json_file: str | os.PathLike[str], **kwargs: object
+    ) -> dict[str, object]:
         r"""Read a config file into the dict it holds, unchanged but for ``runtime_config``.
 
         What ``from_pretrained`` reads before it chooses a config class: the
@@ -604,6 +657,9 @@ class PeftConfig:
         ----------
         path_json_file : str or os.PathLike
             The path of a JSON file such as ``adapter_config.json``.
+        **kwargs
+            Accepted for the reference's signature; it passes none to the
+            reader, and any key given here raises.
 
         Returns
         -------
@@ -618,6 +674,8 @@ class PeftConfig:
             There is no file at ``path_json_file``.
         ValueError
             The file does not hold a JSON object.
+        NotImplementedError
+            ``kwargs`` is not empty.
 
         Examples
         --------
@@ -629,6 +687,7 @@ class PeftConfig:
         >>> raw["peft_type"], raw["r"]
         ('LORA', 2)
         """
+        refuse_kwargs("PeftConfig.from_json_file", kwargs, "the reader takes only the path")
         data = _read_json_object(path_json_file)
         if "runtime_config" in data:
             warnings.warn(
@@ -641,7 +700,10 @@ class PeftConfig:
 
     @classmethod
     def from_pretrained(
-        cls, pretrained_model_name_or_path: str | os.PathLike[str], subfolder: str | None = None
+        cls,
+        pretrained_model_name_or_path: str | os.PathLike[str],
+        subfolder: str | None = None,
+        **kwargs: object,
     ) -> Self:
         r"""Read ``adapter_config.json`` from a local adapter directory.
 
@@ -660,6 +722,10 @@ class PeftConfig:
             A directory under ``pretrained_model_name_or_path`` that holds
             the file, e.g. the sub-directory ``save_pretrained`` gives each
             adapter but the one named ``"default"``.
+        **kwargs
+            The reference forwards these to its hub download (``revision``,
+            ``token``, ``cache_dir`` …).  Adapters are read from a local
+            directory, so any key given here raises.
 
         Returns
         -------
@@ -672,6 +738,8 @@ class PeftConfig:
             The directory has no ``adapter_config.json``.
         ValueError
             The file does not hold a JSON object.
+        NotImplementedError
+            ``kwargs`` is not empty.
 
         Examples
         --------
@@ -683,6 +751,9 @@ class PeftConfig:
         >>> loaded.r, loaded.lora_alpha, loaded.target_modules
         (16, 32, 'all-linear')
         """
+        refuse_kwargs(
+            "PeftConfig.from_pretrained", kwargs, "adapters are read from a local directory"
+        )
         directory = _adapter_directory(pretrained_model_name_or_path, subfolder)
         path = os.path.join(directory, _CONFIG_NAME)
         if not os.path.isfile(path):
@@ -703,14 +774,22 @@ def _require_config(name: str, value: object) -> PeftConfig:
     )
 
 
-@dataclass(kw_only=True)
 class _TargetedConfig(PeftConfig):
-    """The fields of a method that adapts chosen modules, and their joint checks.
+    """The checks of a method that adapts chosen modules.
 
     Every tuner the reference ships beside prompt tuning picks modules
-    the same way; they live here once rather than in each method's
-    config, and the matcher (``lucid.peft._targeting``) reads them.
+    the same way, and the matcher (``lucid.peft._targeting``) reads the
+    same five fields.  The fields themselves are not declared here: each
+    config declares the ones the reference's has, in the reference's
+    order, since a dataclass keeps a base's fields first.  The checks
+    below apply to whichever of them the config has; one it lacks reads as unset.
     """
+
+    target_modules: str | list[str] | set[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = None
+    modules_to_save: list[str] | None = None
+    layers_to_transform: int | list[int] | None = None
+    layers_pattern: str | list[str] | None = None
 
     _field_checks: ClassVar[dict[str, _Check]] = {
         "target_modules": _name_set,
@@ -720,23 +799,19 @@ class _TargetedConfig(PeftConfig):
         "layers_pattern": _check_patterns,
     }
 
-    target_modules: str | list[str] | set[str] | None = None
-    exclude_modules: str | list[str] | set[str] | None = None
-    modules_to_save: list[str] | None = None
-    layers_to_transform: int | list[int] | None = None
-    layers_pattern: str | list[str] | None = None
-
     @override
     def _check_fields(self) -> None:
         super()._check_fields()
+        layers_to_transform = self.layers_to_transform
+        layers_pattern = self.layers_pattern
         if isinstance(self.target_modules, str):
-            if self.layers_to_transform is not None:
+            if layers_to_transform is not None:
                 raise ValueError(
                     "`layers_to_transform` cannot be used when `target_modules` is a str."
                 )
-            if self.layers_pattern is not None:
+            if layers_pattern is not None:
                 raise ValueError("`layers_pattern` cannot be used when `target_modules` is a str.")
-        if self.layers_pattern and self.layers_to_transform in (None, []):
+        if layers_pattern and layers_to_transform in (None, []):
             raise ValueError(
                 "When `layers_pattern` is specified, `layers_to_transform` must also be specified."
             )
@@ -746,7 +821,7 @@ class _TargetedConfig(PeftConfig):
             pattern = getattr(self, name)
             if isinstance(pattern, str):
                 _check_regex(name, pattern)
-        patterns = self.layers_pattern
+        patterns = layers_pattern
         for pattern in [patterns] if isinstance(patterns, str) else patterns or []:
             _check_regex("layers_pattern", _layer_regex(pattern))
 
@@ -756,7 +831,7 @@ def _optional_count(name: str, value: object) -> int | None:
     return None if value is None else _check_rank(name, value)
 
 
-@dataclass(kw_only=True)
+@dataclass
 class PromptLearningConfig(PeftConfig):
     r"""The fields of a method that learns an input rather than a weight.
 

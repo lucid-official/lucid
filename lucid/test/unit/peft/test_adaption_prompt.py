@@ -53,19 +53,13 @@ def _config(
     adapter_len: int | None = 4,
     adapter_layers: int | None = 2,
     target_modules: str | None = None,
-    exclude_modules: list[str] | None = None,
     modules_to_save: list[str] | None = None,
-    layers_to_transform: list[int] | None = None,
-    layers_pattern: str | None = None,
 ) -> AdaptionPromptConfig:
     return AdaptionPromptConfig(
         adapter_len=adapter_len,
         adapter_layers=adapter_layers,
         target_modules=target_modules,
-        exclude_modules=exclude_modules,
         modules_to_save=modules_to_save,
-        layers_to_transform=layers_to_transform,
-        layers_pattern=layers_pattern,
         task_type="CAUSAL_LM",
     )
 
@@ -108,7 +102,9 @@ class TestConfig:
         ids=lambda unused: next(iter(unused)),
     )
     def test_targeting_fields_the_method_lacks_are_refused(self, unused: dict[str, object]) -> None:
-        with pytest.raises(ValueError, match="not a field of an adaption prompt"):
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            AdaptionPromptConfig(adapter_len=4, adapter_layers=2, **unused)
+        with pytest.raises(NotImplementedError, match="not supported"):
             AdaptionPromptConfig.from_dict({"adapter_len": 4, "adapter_layers": 2, **unused})
 
     def test_modules_to_save_is_an_extension_written_only_when_used(self) -> None:

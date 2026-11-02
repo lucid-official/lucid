@@ -12,7 +12,7 @@ def _zero_or_none(name: str, value: object) -> str | None:
     raise ValueError(f"`{name}` must be 'zero' or None, got {value!r}")
 
 
-@dataclass(kw_only=True)
+@dataclass
 class PrefixTuningConfig(PromptLearningConfig, peft_type=PeftType.PREFIX_TUNING):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with prefix tuning.
 
@@ -25,20 +25,22 @@ class PrefixTuningConfig(PromptLearningConfig, peft_type=PeftType.PREFIX_TUNING)
     still stores the finished vectors.  An encoder-decoder model gets the prefix
     on the decoder's self-attention.
 
-    Field names, defaults and ``adapter_config.json`` are the reference adapter
-    library's.  Every field is keyword-only.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference adapter
+    library's.
 
     Parameters
     ----------
-    num_virtual_tokens : int
-        How many positions the prefix has.
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
+    num_virtual_tokens, token_dim, num_transformer_submodules, num_attention_heads, num_layers, modules_to_save
+        As in :class:`~lucid.peft.PromptLearningConfig`.
+    init_weights : {"zero"} or None, default=None
+        ``"zero"`` starts the prefix at zeros (the output layer of the
+        projection, when there is one) so the keys and values it adds are null.
     encoder_hidden_size : int, optional
         Width of the projection MLP's hidden layer; ``token_dim`` when omitted.
     prefix_projection : bool, default=False
         Produce the prefix through the projection MLP while training.
-    init_weights : {"zero"} or None, default=None
-        ``"zero"`` starts the prefix at zeros (the output layer of the
-        projection, when there is one) so the keys and values it adds are null.
 
     Raises
     ------
@@ -59,6 +61,6 @@ class PrefixTuningConfig(PromptLearningConfig, peft_type=PeftType.PREFIX_TUNING)
         "init_weights": _zero_or_none,
     }
 
+    init_weights: str | None = None
     encoder_hidden_size: int | None = None
     prefix_projection: bool = False
-    init_weights: str | None = None

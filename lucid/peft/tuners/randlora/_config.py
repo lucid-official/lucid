@@ -1,6 +1,6 @@
 """``RandLoraConfig``: the RandLoRA hyper-parameters on top of the shared targeting fields."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, Final, Literal, override
 
 from lucid.peft._config import (
@@ -21,7 +21,7 @@ _BIASES: Final[tuple[Literal["none", "all", "randlora_only"], ...]] = (
 )
 
 
-@dataclass(kw_only=True)
+@dataclass
 class RandLoraConfig(_ProjectionConfig, peft_type=PeftType.RANDLORA):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with RandLoRA.
 
@@ -39,12 +39,14 @@ class RandLoraConfig(_ProjectionConfig, peft_type=PeftType.RANDLORA):
     :math:`r` *raises* the number of trained parameters.  :math:`\lambda` starts at
     zero, so the adapted model starts as the base; the update folds into the weight.
 
-    Names, defaults and the ``adapter_config.json`` layout follow the reference
-    adapter library; all fields are keyword-only.  ``exclude_modules`` is an addition
+    Names, order, defaults and the ``adapter_config.json`` layout follow the reference
+    adapter library.  ``exclude_modules`` is an addition
     (it selects modules as ``LoraConfig``'s does).
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     r : int, default=32
         The random bases' rank.  All adapters of a model share one ``r``.
     target_modules : str or list of str, optional
@@ -76,8 +78,12 @@ class RandLoraConfig(_ProjectionConfig, peft_type=PeftType.RANDLORA):
     init_weights : bool, default=True
         ``True``: :math:`\lambda = 0`.  ``False``: :math:`\lambda \sim \mathcal N(0, 1)`
         (the update is non-zero from the start — for tests).
-    exclude_modules, layers_to_transform, layers_pattern
-        As in ``LoraConfig``; the file holds ``exclude_modules`` only when it is set.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    exclude_modules : str or list of str, optional
+        Modules never adapted, matched like ``target_modules``.
 
     Raises
     ------
@@ -111,13 +117,20 @@ class RandLoraConfig(_ProjectionConfig, peft_type=PeftType.RANDLORA):
     }
 
     r: int = 32
+    target_modules: str | list[str] | set[str] | None = None
+    projection_prng_key: int = 0
+    save_projection: bool = True
     sparse: bool = False
     very_sparse: bool = False
     randlora_dropout: float = 0.0
     fan_in_fan_out: bool = False
     randlora_alpha: float = 640
     bias: Literal["none", "all", "randlora_only"] = "none"
+    modules_to_save: list[str] | None = None
     init_weights: bool = True
+    layers_to_transform: int | list[int] | None = None
+    layers_pattern: str | list[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = field(default=None, kw_only=True)
 
     @override
     def _check_fields(self) -> None:

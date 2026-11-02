@@ -22,7 +22,7 @@ class PromptEncoderReparameterizationType(enum.StrEnum):
     LSTM = "LSTM"
 
 
-@dataclass(kw_only=True)
+@dataclass
 class PromptEncoderConfig(PromptLearningConfig, peft_type=PeftType.P_TUNING):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with p-tuning.
 
@@ -32,13 +32,15 @@ class PromptEncoderConfig(PromptLearningConfig, peft_type=PeftType.P_TUNING):
     so the tokens depend on each other.  The encoder is only used while
     training: the file stores the prompt it produced.
 
-    Field names, defaults and ``adapter_config.json`` are the reference adapter
-    library's.  Every field is keyword-only.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference adapter
+    library's.
 
     Parameters
     ----------
-    num_virtual_tokens : int
-        How many learned embeddings go in front of the input.
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
+    num_virtual_tokens, token_dim, num_transformer_submodules, num_attention_heads, num_layers, modules_to_save
+        As in :class:`~lucid.peft.PromptLearningConfig`.
     encoder_reparameterization_type : {"MLP", "LSTM"}, default="MLP"
         The encoder.
     encoder_hidden_size : int, optional

@@ -1,17 +1,12 @@
 """``AdaptionPromptConfig``: the LLaMA-Adapter hyper-parameters on top of the shared targeting fields."""
 
-from dataclasses import dataclass
-from typing import ClassVar, override
+from dataclasses import dataclass, field
+from typing import ClassVar
 
 from lucid.peft._config import PeftType, _Check, _optional_count, _optional_str, _TargetedConfig
 
-#: Fields the targeting base has that the reference's config of this method lacks, and that mean
-#: nothing here (the layers are chosen by ``adapter_layers`` alone): refused rather than silently unused.
-#: ``modules_to_save`` is the one extension that does something, and is written only when set.
-_UNUSED_FIELDS = ("exclude_modules", "layers_to_transform", "layers_pattern")
 
-
-@dataclass(kw_only=True)
+@dataclass
 class AdaptionPromptConfig(_TargetedConfig, peft_type=PeftType.ADAPTION_PROMPT):
     r"""How :func:`lucid.peft.get_peft_model` adapts a decoder with adaption prompts (LLaMA-Adapter).
 
@@ -21,13 +16,15 @@ class AdaptionPromptConfig(_TargetedConfig, peft_type=PeftType.ADAPTION_PROMPT):
     added to the layer's own, scaled by a gate that starts at zero, so the adapted model starts as
     the base.
 
-    Field names, defaults and ``adapter_config.json`` are the reference adapter library's.  Every
-    field is keyword-only.  Unlike the reference's, this config also takes ``modules_to_save``
-    (modules trained in full beside the prompts, a classification head); ``adapter_config.json``
-    holds it only when it is set.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference adapter
+    library's.  Unlike the reference's, this config also takes ``modules_to_save`` as a trailing
+    keyword-only field (modules trained in full beside the prompts, a classification head);
+    ``adapter_config.json`` holds it only when it is set.
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     target_modules : str, optional
         The name of the attention module inside each decoder block (``"attn"``); ``None`` takes the
         base model type's.
@@ -55,7 +52,7 @@ class AdaptionPromptConfig(_TargetedConfig, peft_type=PeftType.ADAPTION_PROMPT):
     True
     """
 
-    _extension_fields: ClassVar[frozenset[str]] = frozenset((*_UNUSED_FIELDS, "modules_to_save"))
+    _extension_fields: ClassVar[frozenset[str]] = frozenset({"modules_to_save"})
     _field_checks: ClassVar[dict[str, _Check]] = {
         "target_modules": _optional_str,
         "adapter_len": _optional_count,
@@ -65,13 +62,4 @@ class AdaptionPromptConfig(_TargetedConfig, peft_type=PeftType.ADAPTION_PROMPT):
     target_modules: str | None = None
     adapter_len: int | None = None
     adapter_layers: int | None = None
-
-    @override
-    def _check_fields(self) -> None:
-        for name in _UNUSED_FIELDS:
-            if getattr(self, name) is not None:
-                raise ValueError(
-                    f"`{name}` is not a field of an adaption prompt: the layers are the top "
-                    "`adapter_layers` attention modules"
-                )
-        super()._check_fields()
+    modules_to_save: list[str] | None = field(default=None, kw_only=True)

@@ -17,7 +17,7 @@ def _check_init(name: str, value: object) -> bool | Literal["bat"]:
     raise ValueError(f"`{name}` must be True, False or 'bat', got {value!r}")
 
 
-@dataclass(kw_only=True)
+@dataclass
 class BoneConfig(_TargetedConfig, peft_type=PeftType.BONE):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with Bone.
 
@@ -29,6 +29,8 @@ class BoneConfig(_TargetedConfig, peft_type=PeftType.BONE):
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     r : int, default=64
         Shard width, as MiSS's ``r``.
     target_modules : str or list of str, optional
@@ -39,11 +41,15 @@ class BoneConfig(_TargetedConfig, peft_type=PeftType.BONE):
     init_weights : bool or {"bat"}, default=True
         ``True``: zero blocks, the additive update.  ``False``: the same with a random
         start (for tests).  ``"bat"``: the weight-space variant.
-    layers_to_transform, layers_pattern, modules_to_save
-        As in ``LoraConfig``.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
     bias : {"none"}, default="none"
         The reference also offered ``"all"`` and ``"bone_only"``; those raise
         ``NotImplementedError``.
+    modules_to_save : list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
 
     Raises
     ------
@@ -71,8 +77,13 @@ class BoneConfig(_TargetedConfig, peft_type=PeftType.BONE):
     }
 
     r: int = 64
+    target_modules: str | list[str] | set[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = None
     init_weights: bool | Literal["bat"] = True
+    layers_to_transform: int | list[int] | None = None
+    layers_pattern: str | list[str] | None = None
     bias: Literal["none", "all", "bone_only"] = "none"
+    modules_to_save: list[str] | None = None
 
     @override
     def _check_fields(self) -> None:

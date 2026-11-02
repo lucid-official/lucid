@@ -26,7 +26,7 @@ def _check_init(name: str, value: object) -> bool | Literal["bat", "mini"]:
     raise ValueError(f"`{name}` must be True, False, 'bat' or 'mini', got {value!r}")
 
 
-@dataclass(kw_only=True)
+@dataclass
 class MissConfig(_TargetedConfig, peft_type=PeftType.MISS):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with MiSS.
 
@@ -45,11 +45,13 @@ class MissConfig(_TargetedConfig, peft_type=PeftType.MISS):
     :math:`r \times r` block per run of :math:`r` output rows, applied *to the weight*
     — :math:`W' = W (I + S) + S` blockwise — so it is non-linear in the shards.
 
-    Field names, defaults and ``adapter_config.json`` are the reference
-    adapter library's.  Every field is keyword-only.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference
+    adapter library's.
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     r : int, default=64
         Shard width: the rank along the input axis.  Must not exceed a layer's input
         size; the ``"bat"`` variant needs it to divide both of a layer's sizes.
@@ -66,11 +68,15 @@ class MissConfig(_TargetedConfig, peft_type=PeftType.MISS):
     init_weights : bool or {"bat", "mini"}, default=True
         ``True``: the balance variant, :math:`S = 0`.  ``False``: the balance variant with a
         random start (for tests).  ``"bat"`` or ``"mini"``: that variant, :math:`S = 0`.
-    layers_to_transform, layers_pattern, modules_to_save
-        As in ``LoraConfig``.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
     bias : {"none"}, default="none"
         The reference also offers ``"all"`` and ``"MiSS_only"``; here the adapter trains
         its own blocks only, and those raise ``NotImplementedError``.
+    modules_to_save : list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
 
     Raises
     ------
@@ -103,8 +109,13 @@ class MissConfig(_TargetedConfig, peft_type=PeftType.MISS):
     r: int = 64
     miss_dropout: float = 0.0
     mini_r: int = 1
+    target_modules: str | list[str] | set[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = None
     init_weights: bool | Literal["bat", "mini"] = True
+    layers_to_transform: int | list[int] | None = None
+    layers_pattern: str | list[str] | None = None
     bias: Literal["none", "all", "MiSS_only"] = "none"
+    modules_to_save: list[str] | None = None
 
     @override
     def _check_fields(self) -> None:

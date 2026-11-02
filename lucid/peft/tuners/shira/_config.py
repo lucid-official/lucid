@@ -2,7 +2,7 @@
 
 import warnings
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, override
 
 from lucid._tensor.tensor import Tensor
@@ -27,7 +27,7 @@ def _check_seed(name: str, value: object) -> int | None:
     return value
 
 
-@dataclass(kw_only=True)
+@dataclass
 class ShiraConfig(_TargetedConfig, peft_type=PeftType.SHIRA):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with SHiRA.
 
@@ -46,11 +46,13 @@ class ShiraConfig(_TargetedConfig, peft_type=PeftType.SHIRA):
     ``random_seed`` (or of your own ``mask_fn``), and the adapter file holds the
     indices beside the values.
 
-    Field names, defaults and ``adapter_config.json`` are the reference adapter
-    library's.  Every field is keyword-only.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference adapter
+    library's.
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     r : int, default=32
         Sizes the number of trained entries per layer to ``r (d_out + d_in)``.
     mask_type : str, default="random"
@@ -68,8 +70,12 @@ class ShiraConfig(_TargetedConfig, peft_type=PeftType.SHIRA):
         the start — for tests).
     modules_to_save : list of str, optional
         Modules trained in full beside the adapter (a classifier head).
-    exclude_modules, layers_to_transform, layers_pattern
-        As in ``LoraConfig``; the file holds each only when it is set.
+    exclude_modules : str or list of str, optional
+        Modules never adapted, matched like ``target_modules``.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
 
     Attributes
     ----------
@@ -109,8 +115,13 @@ class ShiraConfig(_TargetedConfig, peft_type=PeftType.SHIRA):
     r: int = 32
     mask_type: str = "random"
     random_seed: int | None = None
+    target_modules: str | list[str] | set[str] | None = None
     fan_in_fan_out: bool = False
     init_weights: bool = True
+    modules_to_save: list[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = field(default=None, kw_only=True)
+    layers_to_transform: int | list[int] | None = field(default=None, kw_only=True)
+    layers_pattern: str | list[str] | None = field(default=None, kw_only=True)
 
     #: Not a field (so not in the file): the instance's own ``mask_fn``, set below, shadows this.
     mask_fn: ClassVar[MaskFn | None] = None

@@ -18,7 +18,7 @@ from lucid.peft._config import (
 _BIASES = ("none", "all", "oft_only")
 
 
-@dataclass(kw_only=True)
+@dataclass
 class OFTConfig(_TargetedConfig, peft_type=PeftType.OFT):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with OFT.
 
@@ -31,11 +31,13 @@ class OFTConfig(_TargetedConfig, peft_type=PeftType.OFT):
     :math:`Q`\ s start at zero, so the adapted model starts as the base; the
     rotation folds into the weight, so a merged model costs what the base does.
 
-    Field names, defaults and ``adapter_config.json`` are the reference
-    adapter library's.  Every field is keyword-only.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference
+    adapter library's.
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     r : int, default=0
         Number of blocks per layer.  Give exactly one of ``r`` and
         ``oft_block_size`` (their product is the layer's input size): the default
@@ -50,19 +52,23 @@ class OFTConfig(_TargetedConfig, peft_type=PeftType.OFT):
         The ``nn.Linear`` / ``nn.Conv2d`` modules to adapt, matched as
         ``LoraConfig.target_modules`` is.  ``None`` takes the default for the base
         model's ``model_type`` (the LoRA table, as the reference does).
-    exclude_modules : str or list of str, optional
-        Modules never adapted, matched like ``target_modules``.
     fan_in_fan_out : bool, default=False
         For bases that store their weight ``(in, out)``.  ``nn.Linear`` does not,
         so ``True`` warns and is reset to ``False``.
     bias : {"none"}, default="none"
         The reference also offers ``"all"`` and ``"oft_only"``; here the adapter
         trains its own tensors only, and those raise ``NotImplementedError``.
+    exclude_modules : str or list of str, optional
+        Modules never adapted, matched like ``target_modules``.
     init_weights : bool, default=True
         ``True``: every :math:`Q` starts at zero (the update is the identity).
         ``False``: :math:`Q \sim \mathcal N(0, 0.1^2)` (for tests).
-    layers_to_transform, layers_pattern, modules_to_save
-        As in ``LoraConfig``.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    modules_to_save : list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
     coft : bool, default=False
         The constrained variant: each block's :math:`Q` is projected into a ball
         of radius ``eps`` around zero every time the rotation is computed.
@@ -115,9 +121,14 @@ class OFTConfig(_TargetedConfig, peft_type=PeftType.OFT):
     r: int = 0
     oft_block_size: int = 32
     module_dropout: float = 0.0
+    target_modules: str | list[str] | set[str] | None = None
     fan_in_fan_out: bool = False
     bias: Literal["none", "all", "oft_only"] = "none"
+    exclude_modules: str | list[str] | set[str] | None = None
     init_weights: bool = True
+    layers_to_transform: int | list[int] | None = None
+    layers_pattern: str | list[str] | None = None
+    modules_to_save: list[str] | None = None
     coft: bool = False
     eps: float = 6e-5
     block_share: bool = False

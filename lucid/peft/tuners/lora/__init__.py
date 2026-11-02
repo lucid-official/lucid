@@ -11,13 +11,15 @@ Where the reference library keeps them, so ``isinstance(m, LoraLayer)`` and ``fr
 lucid.peft.tuners.lora import Linear`` read as they do there.  One layer type per module the method
 adapts: ``Linear``, ``Embedding``, the convolutions ``Conv1d`` / ``Conv2d`` / ``Conv3d`` and their
 transposes ``ConvTranspose1d`` / ``ConvTranspose2d`` / ``ConvTranspose3d``, ``MultiheadAttention``,
-and ``ParamWrapper`` for a raw parameter. ``LoraConfig`` and ``LoraModel`` are defined here too and
+and ``ParamWrapper`` for a raw parameter. ``LoraRuntimeConfig`` is the type of ``LoraConfig.runtime_config``
+(settings valid at runtime only). ``LoraConfig`` and ``LoraModel`` are defined here too and
 exported from ``lucid.peft``, which is where ``get_peft_model`` is.  Importing the package registers
 the method (its config under ``PeftType.LORA``, its tuner and layers), which is what makes
 ``get_peft_model`` and ``PeftModel.from_pretrained`` know it.
 """
 
 from lucid.peft.tuners.lora._attention import MultiheadAttention
+from lucid.peft.tuners.lora._config import LoraRuntimeConfig
 from lucid.peft.tuners.lora._conv import (
     Conv1d,
     Conv2d,
@@ -42,4 +44,5 @@ __all__ = [
     "ConvTranspose3d",
     "MultiheadAttention",
     "ParamWrapper",
+    "LoraRuntimeConfig",
 ]

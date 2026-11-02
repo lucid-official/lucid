@@ -17,7 +17,7 @@ from lucid.peft._config import (
 _BIASES = ("none", "all", "boft_only")
 
 
-@dataclass(kw_only=True)
+@dataclass
 class BOFTConfig(_TargetedConfig, peft_type=PeftType.BOFT):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with BOFT.
 
@@ -35,11 +35,13 @@ class BOFTConfig(_TargetedConfig, peft_type=PeftType.BOFT):
     model starts as the base; the transform folds into the weight.  With
     ``boft_n_butterfly_factor=1`` the method is OFT.
 
-    Field names, defaults and ``adapter_config.json`` are the reference
-    adapter library's.  Every field is keyword-only.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference
+    adapter library's.
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     boft_block_size : int, default=4
         Size of each block.  Give exactly one of this and ``boft_block_num``
         (their product is the layer's input size); set this to ``0`` when you give the number.
@@ -67,8 +69,10 @@ class BOFTConfig(_TargetedConfig, peft_type=PeftType.BOFT):
     init_weights : bool, default=True
         ``True``: the blocks start at zero (the identity rotation) and :math:`s` at one.
         ``False``: both random (for tests).
-    layers_to_transform, layers_pattern
-        As in ``LoraConfig``.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
 
     Raises
     ------
@@ -102,10 +106,15 @@ class BOFTConfig(_TargetedConfig, peft_type=PeftType.BOFT):
     boft_block_size: int = 4
     boft_block_num: int = 0
     boft_n_butterfly_factor: int = 1
+    target_modules: str | list[str] | set[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = None
     boft_dropout: float = 0.0
     fan_in_fan_out: bool = False
     bias: Literal["none", "all", "boft_only"] = "none"
+    modules_to_save: list[str] | None = None
     init_weights: bool = True
+    layers_to_transform: int | list[int] | None = None
+    layers_pattern: str | list[str] | None = None
 
     @override
     def _check_fields(self) -> None:

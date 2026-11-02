@@ -41,7 +41,7 @@ def _positive_number(name: str, value: object) -> float:
     return number
 
 
-@dataclass(kw_only=True)
+@dataclass
 class XLoraConfig(PeftConfig, peft_type=PeftType.XLORA):
     r"""How :func:`lucid.peft.get_peft_model` mixes LoRA adapters with X-LoRA.
 
@@ -52,12 +52,13 @@ class XLoraConfig(PeftConfig, peft_type=PeftType.XLORA):
     ``layerwise_scalings``), and the real pass adds each expert's update with its weight.  Only the
     classifier trains unless ``use_trainable_adapters``.
 
-    Field names, defaults and ``adapter_config.json`` are the reference adapter library's.  Every
-    field is keyword-only.  Unlike the reference's, ``hidden_size`` left unset is read off the model
+    Field names, their order, defaults and ``adapter_config.json`` are the reference adapter library's.  Unlike the reference's, ``hidden_size`` left unset is read off the model
     rather than guessed, and an empty ``adapters`` is refused when the model is built.
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     hidden_size : int, optional
         Hidden size of the base model, the classifier's input width; the model's when ``None``.
     adapters : dict of str to str, optional

@@ -23,7 +23,7 @@ class MultitaskPromptTuningInit(enum.StrEnum):
     ONLY_SOURCE_SHARED = "ONLY_SOURCE_SHARED"
 
 
-@dataclass(kw_only=True)
+@dataclass
 class MultitaskPromptTuningConfig(PromptTuningConfig, peft_type=PeftType.MULTITASK_PROMPT_TUNING):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with multitask prompt tuning.
 
@@ -36,17 +36,19 @@ class MultitaskPromptTuningConfig(PromptTuningConfig, peft_type=PeftType.MULTITA
     ``prompt_tuning_init_state_dict_path``).  Which task each row of a batch is
     comes from the ``task_ids`` argument of the model's call.
 
-    Field names, defaults and ``adapter_config.json`` are the reference adapter
-    library's.  Every field is keyword-only; the prompt tuning fields
+    Field names, their order, defaults and ``adapter_config.json`` are the reference adapter
+    library's.  The prompt tuning fields
     (``num_virtual_tokens``, ``tokenizer_name_or_path``, …) hold as for
     :class:`~lucid.peft.PromptTuningConfig`.
 
     Parameters
     ----------
-    prompt_tuning_init : MultitaskPromptTuningInit or str, default="RANDOM"
-        ``"RANDOM"`` and ``"TEXT"`` start the shared prompt as prompt tuning does;
-        ``"AVERAGE_SOURCE_TASKS"``, ``"EXACT_SOURCE_TASK"`` and ``"ONLY_SOURCE_SHARED"``
-        start from the adapter file at ``prompt_tuning_init_state_dict_path``.
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
+    num_virtual_tokens, token_dim, num_transformer_submodules, num_attention_heads, num_layers, modules_to_save
+        As in :class:`~lucid.peft.PromptLearningConfig`.
+    prompt_tuning_init, prompt_tuning_init_text, tokenizer_name_or_path, tokenizer_kwargs
+        As in :class:`~lucid.peft.PromptTuningConfig`.
     prompt_tuning_init_state_dict_path : str, optional
         A ``.safetensors`` adapter file of a multitask prompt trained on the source
         tasks; required by the three source initialisations.

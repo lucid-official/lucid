@@ -1,6 +1,6 @@
 """``IA3Config``: the (IA)^3 hyper-parameters on top of the shared targeting fields."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, override
 
 from lucid.peft._config import (
@@ -13,7 +13,7 @@ from lucid.peft._config import (
 )
 
 
-@dataclass(kw_only=True)
+@dataclass
 class IA3Config(_TargetedConfig, peft_type=PeftType.IA3):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with (IA)^3.
 
@@ -25,8 +25,8 @@ class IA3Config(_TargetedConfig, peft_type=PeftType.IA3):
     The vector starts at ones, so the adapted model starts as the base, and it
     folds into the weight (and bias), so a merged model costs what the base does.
 
-    Field names, defaults and ``adapter_config.json`` are the reference
-    adapter library's.  Every field is keyword-only.  Unlike the reference's,
+    Field names, their order, defaults and ``adapter_config.json`` are the reference
+    adapter library's.  Unlike the reference's,
     this config also takes ``layers_to_transform`` / ``layers_pattern``, which
     select layers the way ``LoraConfig``'s do; ``adapter_config.json`` holds
     them only when they are set, and ``from_pretrained`` reads files with or
@@ -34,6 +34,8 @@ class IA3Config(_TargetedConfig, peft_type=PeftType.IA3):
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     target_modules : str or list of str, optional
         The ``nn.Linear`` / ``nn.Conv2d`` / ``nn.Conv3d`` modules to adapt,
         matched as ``LoraConfig.target_modules`` is.  ``None`` takes the
@@ -55,6 +57,10 @@ class IA3Config(_TargetedConfig, peft_type=PeftType.IA3):
     init_ia3_weights : bool, default=True
         Start every vector at ones (the adapted model equals the base).
         ``False`` leaves them random — for tests.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
 
     Raises
     ------
@@ -82,9 +88,14 @@ class IA3Config(_TargetedConfig, peft_type=PeftType.IA3):
         "init_ia3_weights": _check_bool,
     }
 
+    target_modules: str | list[str] | set[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = None
     feedforward_modules: str | list[str] | set[str] | None = None
     fan_in_fan_out: bool = False
+    modules_to_save: list[str] | None = None
     init_ia3_weights: bool = True
+    layers_to_transform: int | list[int] | None = field(default=None, kw_only=True)
+    layers_pattern: str | list[str] | None = field(default=None, kw_only=True)
 
     @override
     def _check_fields(self) -> None:

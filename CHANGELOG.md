@@ -340,6 +340,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ContinuousBernoulli lims keyword
 - the constraints missing from the reference
 - Relaxed families are TransformedDistribution
+- configs take the reference's fields, order and kinds
 
 ---
 

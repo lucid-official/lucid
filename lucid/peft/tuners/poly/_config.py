@@ -1,6 +1,6 @@
 """``PolyConfig``: the Poly / MHR hyper-parameters on top of the shared targeting fields."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, Literal
 
 from lucid.peft._config import PeftType, _Check, _check_bool, _check_rank, _choice, _TargetedConfig
@@ -8,7 +8,7 @@ from lucid.peft._config import PeftType, _Check, _check_bool, _check_rank, _choi
 _POLY_TYPES = ("poly",)
 
 
-@dataclass(kw_only=True)
+@dataclass
 class PolyConfig(_TargetedConfig, peft_type=PeftType.POLY):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with Poly (multi-skill LoRA with a task router).
 
@@ -21,13 +21,14 @@ class PolyConfig(_TargetedConfig, peft_type=PeftType.POLY):
     sigmoid of the task's logits, normalised to sum to one — in training a relaxed Bernoulli
     sample of them instead, which makes the routing stochastic.
 
-    Field names, defaults and ``adapter_config.json`` are the reference adapter library's.  Every
-    field is keyword-only.  Unlike the reference's, this config also takes
+    Field names, their order, defaults and ``adapter_config.json`` are the reference adapter library's.  Unlike the reference's, this config also takes
     ``layers_to_transform`` / ``layers_pattern``, which select layers the way ``LoraConfig``'s do;
     ``adapter_config.json`` holds them only when they are set.
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     r : int, default=8
         Rank of every skill.
     target_modules : str or list of str, optional
@@ -49,6 +50,10 @@ class PolyConfig(_TargetedConfig, peft_type=PeftType.POLY):
     n_splits : int, default=1
         Blocks each skill is split into along the features; ``> 1`` is Multi-Head Routing.  Must
         divide the input and output size of every adapted layer.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
 
     Raises
     ------
@@ -80,8 +85,13 @@ class PolyConfig(_TargetedConfig, peft_type=PeftType.POLY):
     }
 
     r: int = 8
+    target_modules: str | list[str] | set[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = None
+    modules_to_save: list[str] | None = None
     init_weights: bool = True
     poly_type: Literal["poly"] = "poly"
     n_tasks: int = 1
     n_skills: int = 4
     n_splits: int = 1
+    layers_to_transform: int | list[int] | None = field(default=None, kw_only=True)
+    layers_pattern: str | list[str] | None = field(default=None, kw_only=True)

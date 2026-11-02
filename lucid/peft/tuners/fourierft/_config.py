@@ -28,7 +28,7 @@ def _check_seed(name: str, value: object) -> int:
     return value
 
 
-@dataclass(kw_only=True)
+@dataclass
 class FourierFTConfig(_TargetedConfig, peft_type=PeftType.FOURIERFT):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with FourierFT.
 
@@ -46,11 +46,13 @@ class FourierFTConfig(_TargetedConfig, peft_type=PeftType.FOURIERFT):
     same :math:`\Delta W`.  A targeted ``nn.Linear`` computes
     :math:`f(x) + \Delta W\,x`; the update folds into the weight.
 
-    Field names, defaults and ``adapter_config.json`` are the reference
-    adapter library's.  Every field is keyword-only.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference
+    adapter library's.
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     n_frequency : int, default=1000
         Number of learned coefficients per layer; at most ``d_out * d_in``.
     scaling : float, default=150.0
@@ -58,22 +60,24 @@ class FourierFTConfig(_TargetedConfig, peft_type=PeftType.FOURIERFT):
     random_loc_seed : int, default=777
         Seed of the generator that picks the locations.  The locations are
         those the reference framework's CPU generator picks for the same seed.
+    fan_in_fan_out : bool, default=False
+        For bases that store their weight ``(in, out)``.  ``nn.Linear`` does not,
+        so ``True`` warns and is reset to ``False``.
     target_modules : str or list of str, optional
         The ``nn.Linear`` modules to adapt, matched as ``LoraConfig.target_modules``
         is.  ``None`` takes the default for the base model's ``model_type`` (the
         LoRA table with ``gpt2`` narrowed to ``mlp.c_proj``, as the reference does).
     exclude_modules : str or list of str, optional
         Modules never adapted, matched like ``target_modules``.
-    fan_in_fan_out : bool, default=False
-        For bases that store their weight ``(in, out)``.  ``nn.Linear`` does not,
-        so ``True`` warns and is reset to ``False``.
     bias : {"none"}, default="none"
         The reference also offers ``"all"`` and ``"fourier_only"``; here the adapter
         trains its own coefficients only, and those raise ``NotImplementedError``.
     modules_to_save : list of str, optional
         Modules trained in full beside the adapter (a classifier head).
-    layers_to_transform, layers_pattern
-        As in ``LoraConfig``.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
     n_frequency_pattern : dict of str to int, optional
         Per-module ``n_frequency`` overrides, keyed by name or regex suffix.
     init_weights : bool, default=False
@@ -113,7 +117,12 @@ class FourierFTConfig(_TargetedConfig, peft_type=PeftType.FOURIERFT):
     scaling: float = 150.0
     random_loc_seed: int = 777
     fan_in_fan_out: bool = False
+    target_modules: str | list[str] | set[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = None
     bias: Literal["none", "all", "fourier_only"] = "none"
+    modules_to_save: list[str] | None = None
+    layers_to_transform: int | list[int] | None = None
+    layers_pattern: str | list[str] | None = None
     n_frequency_pattern: dict[str, int] = field(default_factory=dict)
     init_weights: bool = False
 

@@ -1,6 +1,6 @@
 """``LoKrConfig``: the LoKr hyper-parameters on top of the LyCORIS fields."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, Literal
 
 from lucid.peft._config import PeftType, _Check, _check_bool
@@ -27,7 +27,7 @@ def _check_factor(name: str, value: object) -> int:
     return value
 
 
-@dataclass(kw_only=True)
+@dataclass
 class LoKrConfig(_LycorisConfig, peft_type=PeftType.LOKR):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with LoKr.
 
@@ -45,43 +45,62 @@ class LoKrConfig(_LycorisConfig, peft_type=PeftType.LOKR):
     ``nn.Conv1d`` or ``nn.Conv2d`` computes :math:`f(x) + \Delta W\!\cdot x`
     with :math:`\Delta W` applied like the base weight.
 
-    The fields, their defaults and ``adapter_config.json`` are the reference
-    adapter library's; all are keyword-only.
+    The fields, their order, defaults and ``adapter_config.json`` are the reference
+    adapter library's.
 
     Parameters
     ----------
-    decompose_both : bool, default=False
-        Let the left factor :math:`W_1` be low-rank too (otherwise it is always full).
-    decompose_factor : int, default=-1
-        The factor to split each dimension by: the first factor is as close to
-        it as divides the dimension.  ``-1`` searches near the square root.
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
+    rank_pattern : dict of str to int, optional
+        Rank overrides per module name or regex suffix.
+    alpha_pattern : dict of str to float, optional
+        :math:`\alpha` overrides per module name or regex suffix.
     r : int, default=8
         Rank of the low-rank factors (when a factor is low-rank).
     alpha : float, default=8
         The numerator of the scale :math:`\alpha / r`.
     rank_dropout : float, default=0.0
         Training only: the chance that an output unit's row of :math:`\Delta W` is zeroed.
-    rank_dropout_scale : bool, default=False
-        Scale the rows kept under rank dropout to keep the mean.
     module_dropout : float, default=0.0
         Training only: the chance that a forward pass leaves the adapter out.
     use_effective_conv2d : bool, default=False
         Factor a convolution's :math:`W_2` with a spatial core (``lokr_t2``)
         instead of flattening it; ignored for ``nn.Linear``, kernels of size 1
         and a full-matrix :math:`W_2`.
+    decompose_both : bool, default=False
+        Let the left factor :math:`W_1` be low-rank too (otherwise it is always full).
+    decompose_factor : int, default=-1
+        The factor to split each dimension by: the first factor is as close to
+        it as divides the dimension.  ``-1`` searches near the square root.
+    rank_dropout_scale : bool, default=False
+        Scale the rows kept under rank dropout to keep the mean.
+    target_modules : str or list of str, optional
+        The modules to adapt: ``nn.Linear``, ``nn.Embedding``,
+        ``nn.Conv1d`` / ``nn.Conv2d`` / ``nn.Conv3d``, their
+        ``nn.ConvTranspose`` counterparts and ``nn.MultiheadAttention``;
+        the module's type picks the LoRA layer that wraps it
+        (``lucid.peft.tuners.lora``).  A list matches a module whose
+        dotted name equals an entry or ends with ``"." + entry``; a string
+        is a regular expression the whole name must match; ``"all-linear"``
+        selects every ``nn.Linear`` except the output head and any layer
+        whose weight is shared with another module.  ``None`` takes the
+        default for the base model's ``model_type``
+        (``DEFAULT_LORA_TARGET_MODULES`` in ``lucid.peft._target_defaults``);
+        a model type with no row raises ``ValueError``.
+    exclude_modules : str or list of str, optional
+        Modules never adapted, matched like ``target_modules``.
     init_weights : bool or "lycoris", default=True
         ``True``: :math:`W_1` zero, :math:`W_2` Kaiming-uniform (the update
         starts at zero).  ``"lycoris"``: the LyCORIS repository's way, :math:`W_1`
         Kaiming-uniform and :math:`W_2` zero (also starts at zero).  ``False``:
         every factor Kaiming-uniform (for tests).
-    target_modules, exclude_modules, layers_to_transform, layers_pattern, modules_to_save
-        As in :class:`~lucid.peft.LoHaConfig`: ``nn.Linear`` / ``nn.Conv1d`` /
-        ``nn.Conv2d`` modules matched as in ``LoraConfig``, the LoRA table of
-        defaults when ``target_modules`` is ``None``.
-    rank_pattern : dict of str to int, optional
-        Rank overrides per module name or regex suffix.
-    alpha_pattern : dict of str to float, optional
-        :math:`\alpha` overrides per module name or regex suffix.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    modules_to_save : list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
 
     Raises
     ------
@@ -107,7 +126,19 @@ class LoKrConfig(_LycorisConfig, peft_type=PeftType.LOKR):
         "init_weights": _check_init_weights,
     }
 
+    rank_pattern: dict[str, int] = field(default_factory=dict)
+    alpha_pattern: dict[str, float] = field(default_factory=dict)
+    r: int = 8
+    alpha: float = 8
+    rank_dropout: float = 0.0
+    module_dropout: float = 0.0
+    use_effective_conv2d: bool = False
     decompose_both: bool = False
     decompose_factor: int = -1
     rank_dropout_scale: bool = False
+    target_modules: str | list[str] | set[str] | None = None
+    exclude_modules: str | list[str] | set[str] | None = None
     init_weights: bool | Literal["lycoris"] = True
+    layers_to_transform: int | list[int] | None = None
+    layers_pattern: str | list[str] | None = None
+    modules_to_save: list[str] | None = None

@@ -20,7 +20,7 @@ def _check_indices(name: str, value: object) -> list[int]:
     return ids
 
 
-@dataclass(kw_only=True)
+@dataclass
 class TrainableTokensConfig(_TargetedConfig, peft_type=PeftType.TRAINABLE_TOKENS):
     r"""How :func:`lucid.peft.get_peft_model` trains a few rows of an embedding table.
 
@@ -35,11 +35,13 @@ class TrainableTokensConfig(_TargetedConfig, peft_type=PeftType.TRAINABLE_TOKENS
     size, and the adapted model is the base until the rows move.  Merging writes the rows
     into the table; unmerging puts the originals back.
 
-    Field names, defaults and ``adapter_config.json`` are the reference adapter
-    library's.  Every field is keyword-only.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference adapter
+    library's.
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
     token_indices : list of int
         The ids of the tokens to train (a tokenizer's ``input_ids``).  The closer their number
         is to the vocabulary's, the less this saves.  Must not be empty by the time an adapter
@@ -51,8 +53,14 @@ class TrainableTokensConfig(_TargetedConfig, peft_type=PeftType.TRAINABLE_TOKENS
     init_weights : bool, default=True
         ``True``: the rows start as the table's (the adapter is a no-op until trained).
         ``False``: a standard normal sample (for tests).
-    exclude_modules, modules_to_save, layers_to_transform, layers_pattern
-        As in ``LoraConfig``; the file holds each only when it is set.
+    exclude_modules : str or list of str, optional
+        Modules never adapted, matched like ``target_modules``.
+    modules_to_save : list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_to_transform : int or list of int, optional
+        As in :class:`~lucid.peft.LoraConfig`.
+    layers_pattern : str or list of str, optional
+        As in :class:`~lucid.peft.LoraConfig`.
 
     Raises
     ------
@@ -80,4 +88,9 @@ class TrainableTokensConfig(_TargetedConfig, peft_type=PeftType.TRAINABLE_TOKENS
     }
 
     token_indices: list[int] = field(default_factory=list)
+    target_modules: str | list[str] | set[str] | None = None
     init_weights: bool = True
+    exclude_modules: str | list[str] | set[str] | None = field(default=None, kw_only=True)
+    modules_to_save: list[str] | None = field(default=None, kw_only=True)
+    layers_to_transform: int | list[int] | None = field(default=None, kw_only=True)
+    layers_pattern: str | list[str] | None = field(default=None, kw_only=True)

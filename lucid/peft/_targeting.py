@@ -7,6 +7,7 @@ the index after the layer list's name.  Where v1 differs is stated on
 ``LoraConfig``'s fields, which is where a user reads it.
 """
 
+import copy
 import dataclasses
 import re
 from collections.abc import Callable, Iterable, Mapping
@@ -206,7 +207,10 @@ def _with_heads(model: nn.Module, config: PeftConfig, heads: Iterable[str]) -> P
     added = [head for head in heads if head not in saved and _module_names_matching(model, [head])]
     if not added:
         return config
-    return dataclasses.replace(config, modules_to_save=[*saved, *added])
+    stored = copy.copy(config)
+    stored.modules_to_save = [*saved, *added]
+    stored.__post_init__()
+    return stored
 
 
 def _config_for_model(model: nn.Module, config: PeftConfig) -> PeftConfig:

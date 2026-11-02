@@ -37,7 +37,7 @@ def _non_negative(name: str, value: object) -> float:
     return number
 
 
-@dataclass(kw_only=True)
+@dataclass
 class CPTConfig(PromptLearningConfig, peft_type=PeftType.CPT):
     r"""How :func:`lucid.peft.get_peft_model` adapts a causal language model with context-aware prompt tuning.
 
@@ -51,11 +51,14 @@ class CPTConfig(PromptLearningConfig, peft_type=PeftType.CPT):
     covers the output tokens of the prompt and of the batch, optionally down-weighted for earlier
     examples (``opt_weighted_loss_type="decay"``).
 
-    Field names, defaults and ``adapter_config.json`` are the reference adapter library's.  Every
-    field is keyword-only; ``num_virtual_tokens`` is ``len(cpt_token_ids)`` whatever is passed.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference adapter library's.  ``num_virtual_tokens`` is ``len(cpt_token_ids)`` whatever is passed.
 
     Parameters
     ----------
+    task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
+        As in :class:`~lucid.peft.PeftConfig`.
+    num_virtual_tokens, token_dim, num_transformer_submodules, num_attention_heads, num_layers, modules_to_save
+        As in :class:`~lucid.peft.PromptLearningConfig`.
     cpt_token_ids : list of int, optional
         The vocabulary ids whose embeddings the prompt starts from; ``[0]`` by default.
     cpt_mask : list of int, optional

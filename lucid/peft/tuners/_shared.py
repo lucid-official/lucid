@@ -15,7 +15,6 @@ the reference writes it (``base_model.<table>``), not once per layer.
 import warnings
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
 from typing import ClassVar, Final, Protocol, override, runtime_checkable
 
 import lucid
@@ -43,9 +42,10 @@ def _check_key(name: str, value: object) -> int:
     return value
 
 
-@dataclass(kw_only=True)
 class _ProjectionConfig(_TargetedConfig):
-    """The fields of a method whose shared tables are random projections: the key they are drawn from, and whether a file holds them.
+    """The checks of a method whose shared tables are random projections: the key they are drawn from, and whether a file holds them.
+
+    Each method's config declares the two fields itself, in the reference's order.
 
     Parameters
     ----------
@@ -65,8 +65,8 @@ class _ProjectionConfig(_TargetedConfig):
     #: The projections' names as a warning spells them (``"vera_A and vera_B"``).
     _projection_names: ClassVar[str] = ""
 
-    projection_prng_key: int = 0
-    save_projection: bool = True
+    projection_prng_key: int
+    save_projection: bool
 
     @override
     def _check_fields(self) -> None:

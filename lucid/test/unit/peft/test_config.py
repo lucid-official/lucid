@@ -18,29 +18,46 @@ from lucid.peft import LoraConfig, PeftConfig, PeftType, TaskType
 #: lora_dropout=0.05, target_modules=["c_attn"], task_type="CAUSAL_LM")``
 #: saved for inference, restricted to the keys v1 has.
 GOLDEN_CONFIG = {
+    "alora_invocation_tokens": None,
     "alpha_pattern": {},
+    "arrow_config": None,
     "auto_mapping": None,
     "base_model_name_or_path": None,
     "bias": "none",
+    "corda_config": None,
+    "ensure_weight_tying": False,
+    "eva_config": None,
     "exclude_modules": None,
     "fan_in_fan_out": False,
     "inference_mode": True,
     "init_lora_weights": True,
+    "kasa_config": None,
+    "layer_replication": None,
     "layers_pattern": None,
     "layers_to_transform": None,
+    "loftq_config": {},
     "lora_alpha": 16,
     "lora_bias": False,
     "lora_dropout": 0.05,
+    "lora_ga_config": None,
+    "megatron_config": None,
+    "megatron_core": "megatron.core",
     "modules_to_save": None,
+    "monteclora_config": None,
     "peft_type": "LORA",
+    "qalora_group_size": 16,
     "r": 8,
     "rank_pattern": {},
     "revision": None,
     "target_modules": ["c_attn"],
     "target_parameters": None,
     "task_type": "CAUSAL_LM",
+    "trainable_token_indices": None,
+    "use_bdlora": None,
     "use_dora": False,
+    "use_qalora": False,
     "use_rslora": False,
+    "velora_config": None,
 }
 
 #: An ``adapter_config.json`` as a recent reference release writes it for a
@@ -79,9 +96,8 @@ class TestDefaults:
     def test_task_type_string_becomes_the_enum(self) -> None:
         assert LoraConfig(task_type="SEQ_CLS").task_type is TaskType.SEQ_CLS
 
-    def test_fields_are_keyword_only(self) -> None:
-        with pytest.raises(TypeError):
-            LoraConfig(None)  # type: ignore[misc]
+    def test_fields_are_positional_as_the_references_are(self) -> None:
+        assert LoraConfig("SEQ_CLS").task_type is TaskType.SEQ_CLS
 
     def test_init_scheme_is_case_insensitive(self) -> None:
         assert LoraConfig(init_lora_weights="Gaussian").init_lora_weights == "gaussian"
