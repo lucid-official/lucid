@@ -21,18 +21,25 @@ children, so the whole file costs a few seconds:
 A refusal is a ``TypeError`` that names ``Tensor`` and the type it got.
 """
 
+import inspect
 import json
 import pickle
 import re
 import subprocess
 import sys
 import types
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
 import lucid
+import lucid.einops
 import lucid.nn
+from lucid import Tensor
+from lucid._dispatch import _unwrap_or_scalar
+from lucid._tensor_args import _slots_of, guard_functions
+from lucid._types import TensorLike
 
 #: A bad value for a tensor slot: the one that crashes, and one wrong type.
 _BAD = (None, "bad")
@@ -462,6 +469,118 @@ def test_a_module_holding_a_public_function_saves_and_loads(tmp_path: Path) -> N
     assert loaded.act is lucid.nn.functional.relu
     x = lucid.randn(3, 2)
     assert loaded(x).tolist() == module(x).tolist()
+
+
+# ── the in-process half: what a child process cannot report to coverage ──────
+
+
+def _probe_rest(*tensors: Tensor) -> int:
+    return len(tensors)
+
+
+def _probe_many(group: Sequence[Tensor] | None = None) -> int:
+    return 0 if group is None else len(group)
+
+
+def _probe_like(first: Tensor | TensorLike, second: Tensor | TensorLike | None = None) -> int:
+    return 1
+
+
+def _probe_keyword_only(*, mask: Tensor) -> int:
+    return 1
+
+
+_PROBES = ("_probe_rest", "_probe_many", "_probe_like", "_probe_keyword_only")
+guard_functions(sys.modules[__name__], _PROBES)
+
+
+def test_a_variadic_tensor_parameter_names_the_element_it_refused() -> None:
+    x = lucid.ones(2)
+    assert _probe_rest(x, x) == 2
+    with pytest.raises(TypeError, match="expected Tensor as element 1 in argument 'tensors'"):
+        _probe_rest(x, None)  # type: ignore[arg-type]  # the refusal under test
+
+
+def test_a_sequence_parameter_is_refused_unless_it_is_a_sequence_of_tensors() -> None:
+    x = lucid.ones(2)
+    assert _probe_many() == 0
+    assert _probe_many(None) == 0
+    assert _probe_many((x, x)) == 2
+    with pytest.raises(TypeError, match="must be a sequence of Tensors, not str"):
+        _probe_many("abc")  # type: ignore[arg-type]  # the refusal under test
+    with pytest.raises(TypeError, match="expected Tensor as element 1 in argument 0"):
+        _probe_many([x, None])  # type: ignore[list-item]  # the refusal under test
+
+
+def test_a_tensor_like_parameter_refuses_none_only_by_position_or_by_name() -> None:
+    x = lucid.ones(2)
+    assert _probe_like(x) == 1
+    assert _probe_like([1.0, 2.0], None) == 1
+    with pytest.raises(TypeError, match=r"argument 'first' \(position 1\) must be Tensor or array"):
+        _probe_like(None)  # type: ignore[arg-type]  # the refusal under test
+    with pytest.raises(TypeError, match=r"argument 'first' must be Tensor or array-like"):
+        _probe_like(first=None)  # type: ignore[arg-type]  # the refusal under test
+
+
+def test_a_keyword_only_tensor_parameter_is_found_by_its_name() -> None:
+    assert _probe_keyword_only(mask=lucid.ones(2)) == 1
+    with pytest.raises(TypeError, match=r"argument 'mask' must be Tensor, not str"):
+        _probe_keyword_only(mask="x")  # type: ignore[arg-type]  # the refusal under test
+
+
+def test_a_function_without_a_findable_home_is_still_guarded() -> None:
+    def local(x: Tensor) -> Tensor:
+        return x
+
+    home = types.SimpleNamespace(local=local)
+    guard_functions(home, ["local"])
+    assert home.local is not local
+    with pytest.raises(TypeError, match="must be Tensor"):
+        home.local(None)
+
+
+def test_a_signature_that_cannot_be_read_guards_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(*args: object, **kwargs: object) -> inspect.Signature:
+        raise ValueError("no signature")
+
+    monkeypatch.setattr(inspect, "signature", refuse)
+    assert _slots_of(print) == ()
+
+
+def test_meshgrid_takes_only_the_two_indexings_the_reference_names() -> None:
+    a, b = lucid.arange(3.0), lucid.arange(2.0)
+    assert lucid.meshgrid(a, b, indexing="xy")[0].shape == (2, 3)
+    assert lucid.meshgrid(a, b)[0].shape == (3, 2)
+    for bad in ("zz", "XY", ""):
+        with pytest.raises(ValueError, match="indexing must be one of 'xy' or 'ij'"):
+            lucid.meshgrid(a, b, indexing=bad)
+    for wrong in (None, 3):
+        with pytest.raises(TypeError, match="argument 'indexing' must be str"):
+            lucid.meshgrid(a, b, indexing=wrong)  # type: ignore[arg-type]  # the refusal under test
+
+
+def test_block_diag_refuses_more_than_two_dimensions() -> None:
+    with pytest.raises(ValueError, match="input 1 has 3 dimensions"):
+        lucid.block_diag(lucid.ones(2, 2), lucid.ones(2, 2, 2))
+
+
+def test_einsum_takes_a_list_of_operands_and_a_string_equation() -> None:
+    x, y = lucid.randn(2, 3), lucid.randn(3, 4)
+    assert lucid.einops.einsum("ij,jk->ik", [x, y]).shape == (2, 4)
+    with pytest.raises(TypeError, match="argument 'equation' must be str, not NoneType"):
+        lucid.einops.einsum(None, x)  # type: ignore[arg-type]  # the refusal under test
+
+
+def test_a_method_alias_names_the_operand_it_refused() -> None:
+    with pytest.raises(
+        TypeError, match=r"lerp\(\): argument 'input' \(position 1\) must be Tensor"
+    ):
+        lucid.lerp(None, lucid.ones(2), 0.5)  # type: ignore[arg-type]  # the refusal under test
+
+
+def test_an_operand_that_is_neither_tensor_nor_number_is_refused_by_the_unwrap() -> None:
+    with pytest.raises(TypeError, match="expected Tensor or Number, but got NoneType"):
+        _unwrap_or_scalar(None)
 
 
 if __name__ == "__main__":
