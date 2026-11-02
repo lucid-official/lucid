@@ -33,7 +33,7 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 import lucid.optim as optim
 from lucid.amp import GradScaler
-from lucid.compile import fused_step
+from lucid.compile import compile_optimizer, fused_step
 from lucid.optim.optimizer import Optimizer
 from lucid.test.unit.compile.test_compiled_optimizer_eager_equivalence import (
     TOL,
@@ -129,8 +129,9 @@ GROUP_ONLY: dict[str, dict[str, object]] = {"AdamW": {"decoupled_weight_decay": 
 
 # What the compiled path does not do.  LBFGS's compiled step is a different
 # algorithm — per-element Barzilai-Borwein, no closure, no line search —
-# documented on ``_CompiledLBFGS`` and in ``compile_optimizer``; only ``lr``
-# reaches it.
+# documented on ``_CompiledLBFGS`` and in ``compile_optimizer``.  Only ``lr``
+# reaches it; every other key is refused when set off its default (see
+# ``REFUSED``), never silently ignored (LCD-702).
 ALGORITHM_DIFFERS: dict[str, frozenset[str]] = {
     "LBFGS": frozenset(
         {
@@ -142,6 +143,19 @@ ALGORITHM_DIFFERS: dict[str, frozenset[str]] = {
             "history_size",
             "line_search_fn",
         }
+    )
+}
+
+# The keys of ``ALGORITHM_DIFFERS`` the compiled step ignores, each with a
+# non-default value to refuse.
+REFUSED: dict[str, dict[str, object]] = {
+    "LBFGS": dict(
+        max_iter=7,
+        max_eval=40,
+        tolerance_grad=1e-3,
+        tolerance_change=1e-4,
+        history_size=5,
+        line_search_fn="strong_wolfe",
     )
 }
 
@@ -198,6 +212,12 @@ def test_every_option_is_in_the_table(name: str) -> None:
     assert (
         accounted - kept == set()
     ), f"{name}: entries for options it lacks: {sorted(accounted - kept)}"
+
+
+def test_every_ignored_option_has_a_refused_value() -> None:
+    """Whatever the compiled path ignores is refused: only ``lr`` of LBFGS is read."""
+    for name, differs in ALGORITHM_DIFFERS.items():
+        assert set(REFUSED[name]) == differs - {"lr"}, name
 
 
 def test_a_table_key_is_a_constructor_argument() -> None:
@@ -424,3 +444,88 @@ def test_fused_step_with_a_grad_scaler_maximizes_too() -> None:
             step(x, t)
         steps[mode] = _snapshot(model)
     assert _drift(steps["eager"], steps["fused"]) < FUSED_TOL
+
+
+# ── What the compiled path ignores is refused, not ignored ──────────
+
+LBFGS_REFUSED = [pytest.param(k, v, id=k) for k, v in REFUSED["LBFGS"].items()]
+
+
+def _lbfgs(**kwargs: object) -> optim.LBFGS:
+    return optim.LBFGS(_net().parameters(), **kwargs)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("key, value", LBFGS_REFUSED)
+def test_compiling_lbfgs_refuses_an_ignored_option(key: str, value: object) -> None:
+    """Each option the compiled step would ignore is refused, by name, when compiled."""
+    with pytest.raises(NotImplementedError, match=key):
+        compile_optimizer(_lbfgs(**{key: value}))
+
+
+def test_compiling_lbfgs_names_every_option_set() -> None:
+    with pytest.raises(NotImplementedError) as err:
+        compile_optimizer(_lbfgs(**REFUSED["LBFGS"]))
+    for key in REFUSED["LBFGS"]:
+        assert key in str(err.value)
+
+
+def test_a_changed_max_iter_is_one_option_not_two() -> None:
+    """``max_eval`` unset follows ``max_iter``: only the one the caller set is named."""
+    with pytest.raises(NotImplementedError) as err:
+        compile_optimizer(_lbfgs(max_iter=7))
+    assert "max_iter" in str(err.value)
+    assert "max_eval" not in str(err.value)
+
+
+def test_lbfgs_at_its_defaults_compiles_and_steps() -> None:
+    """``lr`` is the option the compiled step reads, so any value of it is fine."""
+    x, t = _data()
+    model = _net()
+    copt = compile_optimizer(optim.LBFGS(model.parameters(), lr=0.05))
+    before = _snapshot(model)
+    F.mse_loss(model(x), t).backward()
+    copt.step()
+    assert _drift(before, _snapshot(model)) > 0.0
+
+
+@pytest.mark.parametrize("key, value", LBFGS_REFUSED)
+def test_a_group_edit_of_an_ignored_option_is_refused_at_the_next_step(
+    key: str, value: object
+) -> None:
+    """Editing the key after compiling is refused before anything moves; restoring it steps again."""
+    x, t = _data()
+    model = _net()
+    opt = optim.LBFGS(model.parameters(), lr=0.05)
+    copt = compile_optimizer(opt)
+    group = opt.param_groups[0]
+    default = group[key]
+
+    F.mse_loss(model(x), t).backward()
+    copt.step()
+    group[key] = value
+    before = _snapshot(model)
+    with pytest.raises(NotImplementedError, match=key):
+        copt.step()
+    assert _drift(before, _snapshot(model)) == 0.0
+
+    group[key] = default
+    copt.step()
+    assert _drift(before, _snapshot(model)) > 0.0
+
+
+def test_fused_step_refuses_an_ignored_lbfgs_option() -> None:
+    """``fused_step`` compiles the optimizer through the same wrapper, so it refuses too."""
+    model = _net()
+    with pytest.raises(NotImplementedError, match="history_size"):
+        fused_step(model, F.mse_loss, optim.LBFGS(model.parameters(), history_size=5))
+
+
+def test_fused_step_refuses_a_later_edit_of_an_ignored_lbfgs_option() -> None:
+    model = _net()
+    x, t = _data()
+    opt = optim.LBFGS(model.parameters(), lr=0.05)
+    step = fused_step(model, F.mse_loss, opt)
+    step(x, t)
+    opt.param_groups[0]["max_iter"] = 3
+    with pytest.raises(NotImplementedError, match="max_iter"):
+        step(x, t)

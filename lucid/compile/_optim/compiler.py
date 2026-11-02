@@ -94,9 +94,8 @@ def compile_optimizer(opt: Optimizer) -> _CompiledStepBase:
           :class:`~lucid.optim.Rprop`, :class:`~lucid.optim.SparseAdam`
           — the eager update rule, with every step-dependent factor fed
           as a per-step scalar.
-        * :class:`~lucid.optim.LBFGS` — a closure-less single-step
-          subset (per-element Barzilai-Borwein direction); not the eager
-          line-search algorithm.
+        * :class:`~lucid.optim.LBFGS` — a closure-less single-step subset
+          (per-element Barzilai-Borwein); not the eager line search.
 
     Every parameter group compiles into the same executable: each
     parameter reads its own group's hyper-parameters.
@@ -111,9 +110,8 @@ def compile_optimizer(opt: Optimizer) -> _CompiledStepBase:
     checkpoints move freely between eager and compiled runs.  Compiling
     the same optimizer again returns the same wrapper.
 
-    The exception is :class:`~lucid.optim.LBFGS`, whose compiled step is
-    a different algorithm: ``opt`` keeps its own eager state and methods,
-    and the wrapper's state is its own.
+    The exception is :class:`~lucid.optim.LBFGS`, a different algorithm:
+    ``opt`` keeps its own state and methods, and only ``lr`` is read.
 
     Parameters
     ----------
@@ -132,10 +130,12 @@ def compile_optimizer(opt: Optimizer) -> _CompiledStepBase:
     Raises
     ------
     TypeError
-        When ``opt`` is not one of the supported optimizer classes —
-        the message lists the supported set.
+        When ``opt`` is not a supported optimizer class (listed in the message).
     ValueError
         When ``opt`` has no parameters.
+    lucid._C.engine.NotImplementedError
+        When an :class:`~lucid.optim.LBFGS` has an option other than ``lr`` off
+        its default (it would be ignored); a later edit is refused at the next step.
 
     Examples
     --------
@@ -187,6 +187,7 @@ def _wrapper_class(opt: Optimizer) -> type[_CompiledStepBase]:
     )
     from lucid.optim.lbfgs import LBFGS
     from lucid.compile._optim import adam_family
+    from lucid.compile._optim.lbfgs import _CompiledLBFGS
     from lucid.compile._optim.sparse_adam import _CompiledSparseAdam
 
     wrappers: tuple[tuple[type[Optimizer], type[_CompiledStepBase]], ...] = (
@@ -515,6 +516,8 @@ class _CompiledStepBase:
         self._sync_params()
         if not self._params:
             raise ValueError("compile_optimizer: optimizer has no trainable parameters")
+        for group in opt.param_groups:
+            self._check_options(group)
         self._take_over(opt)
 
     def _take_over(self, opt: Optimizer) -> None:
@@ -784,6 +787,8 @@ class _CompiledStepBase:
         packed or run.
         """
         self._opt._sync_group_hyperparams()
+        for group in self._opt.param_groups:
+            self._check_options(group)
         return tuple(
             _GroupFlags(bool(g.get("maximize", False)), self._flags(g))
             for g in self._opt.param_groups
@@ -1105,6 +1110,20 @@ class _CompiledStepBase:
         return new_params + new_states, p_slots + s_slots
 
     # ── Subclass hooks ───────────────────────────────────────────
+
+    def _check_options(self, group: dict[str, object]) -> None:
+        """Refuse an option of ``group`` that this compiled algorithm does not honour.
+
+        Runs when the optimizer is compiled and again before every step, so
+        an edit of the group is caught as well; the default honours every
+        option.
+
+        Raises
+        ------
+        lucid._C.engine.NotImplementedError
+            ``group`` sets an option the compiled step would silently ignore.
+        """
+        del group
 
     def _flags(self, group: dict[str, object]) -> _Flags:
         """Structural choices of ``group`` — part of the executable's key."""
@@ -1747,76 +1766,3 @@ class _CompiledRprop(_CompiledStepBase):
         eff_g = _lucid.where(flip, 0.0, g)
         new_p = p - _lucid.sign(eff_g) * new_ss
         return new_p, {"prev": eff_g, "step_size": new_ss}
-
-
-# ── LBFGS ───────────────────────────────────────────────────────────
-
-
-@final
-class _CompiledLBFGS(_CompiledStepBase):
-    r"""Compiled :class:`~lucid.optim.LBFGS` — single-iteration, no-line-search variant.
-
-    L-BFGS in general needs a closure-driven line search whose iteration
-    count depends on the loss value — incompatible with a fixed MPSGraph
-    executable.  This path runs a restricted subset: one step per call,
-    no closure, ``line_search_fn`` / ``max_iter`` / tolerances ignored,
-    and a **per-element** Barzilai-Borwein direction from the last
-    curvature pair instead of the flat-vector two-loop recursion:
-
-    ::
-
-        s     = param - prev_param
-        y     = grad  - prev_grad
-        alpha = clamp(|s| / (|y| + 1e-10), 0, 10)
-        d     = -alpha * g        (steepest descent -g on a parameter's first two steps)
-        param = param + lr * d
-
-    It is not the eager algorithm, so its checkpoint (``step``,
-    ``prev_param``, ``prev_grad``) is its own, read through the wrapper;
-    the eager optimizer keeps its own state, ``step`` and checkpoint
-    methods (it neither hands its state over nor answers for this one).
-
-    See Also
-    --------
-    :class:`lucid.optim.LBFGS` : eager counterpart (full closure-driven
-        line search).
-    """
-
-    _EPS_HISTORY: float = 1e-10
-    # A different algorithm from the eager LBFGS: ``opt`` keeps its state.
-    _OWNS_EAGER_STATE = False
-
-    @override
-    def _state_names(self, flags: _Flags) -> tuple[str, ...]:
-        return ("prev_param", "prev_grad")
-
-    @override
-    def _group_scalar_names(self, flags: _Flags) -> tuple[str, ...]:
-        return ("lr",)
-
-    @override
-    def _param_scalar_names(self, flags: _Flags) -> tuple[str, ...]:
-        return ("use_history",)
-
-    @override
-    def _group_values(self, group: dict[str, object], flags: _Flags) -> dict[str, float]:
-        return {"lr": _hp(group, "lr", 1.0)}
-
-    @override
-    def _param_values(
-        self, i: int, step: int, gv: dict[str, float], flags: _Flags
-    ) -> dict[str, float]:
-        return {"use_history": 1.0 if step >= 2 else 0.0}
-
-    @override
-    def _update(
-        self, p: Tensor, g: Tensor, state: _State, flags: _Flags, gs: _ScalarFn, ps: _ScalarFn
-    ) -> _Update:
-        import lucid as _lucid
-
-        s = p - state["prev_param"]
-        y = g - state["prev_grad"]
-        alpha = (_lucid.abs(s) / (_lucid.abs(y) + self._EPS_HISTORY)).clip(0.0, 10.0)
-        d = _lucid.where(ps("use_history") > 0.5, -alpha * g, -g)
-        new_p = p + gs("lr") * d
-        return new_p, {"prev_param": p, "prev_grad": g}

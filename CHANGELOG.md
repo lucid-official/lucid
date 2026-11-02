@@ -279,6 +279,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - damped Newton for implicit solvers, dtype warn, aliases
 
+- refuse LBFGS options the compiled step ignores
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

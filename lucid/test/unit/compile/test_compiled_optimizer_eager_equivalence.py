@@ -638,7 +638,7 @@ def test_lbfgs_keeps_its_eager_state_and_step() -> None:
 
     def run(compile_first: bool) -> tuple[list[lucid.Tensor], dict[str, object]]:
         model = _net()
-        opt = optim.LBFGS(model.parameters(), lr=0.5, max_iter=4)
+        opt = optim.LBFGS(model.parameters(), lr=0.5)
         if compile_first:
             compile_optimizer(opt)
             for name in ("step", "state_dict", "load_state_dict"):
