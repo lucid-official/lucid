@@ -504,6 +504,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.optim._state_view"
+    },
+    {
+      "kind": "module",
       "module": "lucid.optim.adam"
     },
     {
@@ -16815,6 +16819,10 @@
     {
       "kind": "module",
       "module": "lucid.optim._state_load"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.optim._state_view"
     },
     {
       "kind": "module",
