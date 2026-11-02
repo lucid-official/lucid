@@ -2137,6 +2137,12 @@
       "module": "lucid.distributions.transforms"
     }
   ],
+  "lucid.distributions.transformed_distribution.ReshapeTransform": [
+    {
+      "kind": "module",
+      "module": "lucid.distributions.transforms"
+    }
+  ],
   "lucid.distributions.transformed_distribution.Transform": [
     {
       "kind": "module",
@@ -2236,12 +2242,6 @@
     }
   ],
   "lucid.distributions.transforms.PowerTransform": [
-    {
-      "kind": "module",
-      "module": "lucid.distributions"
-    }
-  ],
-  "lucid.distributions.transforms.ReshapeTransform": [
     {
       "kind": "module",
       "module": "lucid.distributions"
