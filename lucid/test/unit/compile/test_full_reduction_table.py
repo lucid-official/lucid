@@ -17,6 +17,7 @@ Compile is Metal-only; the eager shape and gradient rows also run on the CPU str
 from collections.abc import Callable
 from dataclasses import dataclass
 from types import ModuleType
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -24,6 +25,9 @@ import lucid
 import lucid.nn as nn
 from lucid.test._fixtures.devices import metal_available
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
+
+if TYPE_CHECKING:
+    from lucid.compile._entry.module import CompiledModule
 
 _SHAPES = {1: (5,), 2: (2, 3), 3: (2, 3, 2), 4: (2, 3, 2, 2)}
 _RANKS = sorted(_SHAPES)
@@ -162,6 +166,12 @@ def test_the_eager_gradient_matches_the_reference(
 needs_metal = pytest.mark.skipif(not metal_available(), reason="compile needs Metal")
 
 
+def _assert_compiled(compiled: CompiledModule[..., lucid.Tensor], why: str) -> None:
+    """The match above means something only if a graph ran, not the eager fallback."""
+    info = compiled.cache_info()
+    assert info["entries"] == 1 and not info["eager_only"], f"{why} fell back to eager: {info}"
+
+
 def _vector() -> lucid.Tensor:
     return lucid.tensor([0.0, 1.0, 2.0, 3.0], device=COMPILE_DEVICE)
 
@@ -176,6 +186,7 @@ def test_a_compiled_broadcast_of_the_reduction_is_eager(case: tuple[str, str, bo
     compiled = lucid.compile(fn)
     compiled(x, a)  # the first call traces; the second runs the executable
     _close(compiled(x, a), fn(x, a), _ids(case))
+    _assert_compiled(compiled, _ids(case))
 
 
 @needs_metal
@@ -192,6 +203,7 @@ def test_joining_reduced_scalars_is_eager(case: tuple[str, str, bool, int], join
     compiled = lucid.compile(fn)
     compiled(x, a)
     _close(compiled(x, a), fn(x, a), f"{join} {_ids(case)}")
+    _assert_compiled(compiled, f"{join} {_ids(case)}")
 
 
 class _Reduced(nn.Module):
