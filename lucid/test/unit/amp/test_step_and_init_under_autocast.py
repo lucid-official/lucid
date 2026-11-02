@@ -71,10 +71,11 @@ _STEPS = 3
 
 def _params_and_state(model: nn.Module, opt: optim.Optimizer) -> list[Any]:
     """Every parameter and every state value, in a fixed order."""
-    out: list[Any] = [p for p in model.parameters()]
-    for index in sorted(opt.state):
-        for key in sorted(opt.state[index]):
-            out.append((key, opt.state[index][key]))
+    params = list(model.parameters())
+    out: list[Any] = [*params]
+    for p in params:
+        for key in sorted(opt.state[p]):
+            out.append((key, opt.state[p][key]))
     return out
 
 
@@ -84,7 +85,9 @@ def _assert_identical(inside: list[Any], outside: list[Any]) -> None:
         if isinstance(a, tuple):
             assert a[0] == b[0]
             a, b = a[1], b[1]
-        if isinstance(a, lucid.Tensor):
+        if isinstance(a, list):
+            _assert_identical(a, b)
+        elif isinstance(a, lucid.Tensor):
             assert isinstance(b, lucid.Tensor)
             assert a.dtype == b.dtype
             np.testing.assert_array_equal(a.detach().numpy(), b.detach().numpy())

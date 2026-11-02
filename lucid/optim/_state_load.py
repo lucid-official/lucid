@@ -36,6 +36,14 @@ class _StateLoader(Protocol):
     ) -> None: ...
 
 
+def _group_params(group: dict[str, object]) -> list[Parameter]:
+    """The parameters of one param group (``add_param_group`` stores a list)."""
+    params = group["params"]
+    if not isinstance(params, list):
+        raise TypeError(f"a param group's 'params' must be a list, got {type(params).__name__}")
+    return params
+
+
 def _follow(src: _C_engine.TensorImpl, like: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
     """``src`` in ``like``'s dtype and on its device; ``src`` itself when it already is.
 

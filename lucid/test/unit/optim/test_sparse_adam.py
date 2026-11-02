@@ -56,7 +56,7 @@ def _lucid_run(
         opt.zero_grad()
         _loss(emb, lucid.tensor(ids).to(device)).backward()
         opt.step()
-        st = opt.state[0]
+        st = opt.state[emb.weight]
         out.append(
             {
                 "weight": emb.weight.numpy().copy(),
@@ -129,8 +129,8 @@ def test_a_vector_and_a_scalar_parameter_update_their_nonzero_entries(device: st
     # Each moved by lr against its gradient's sign: the first Adam step.
     np.testing.assert_allclose(vec.numpy(), [0.9, 2.0, 3.1], rtol=1e-6)
     np.testing.assert_allclose(scalar.numpy(), 3.9, rtol=1e-6)
-    assert opt.state[0]["exp_avg"].shape == (3,)
-    assert opt.state[1]["exp_avg"].shape == ()
+    assert opt.state[vec]["exp_avg"].shape == (3,)
+    assert opt.state[scalar]["exp_avg"].shape == ()
 
 
 def test_a_missing_gradient_skips_and_a_zero_gradient_only_counts(device: str) -> None:
@@ -140,9 +140,9 @@ def test_a_missing_gradient_skips_and_a_zero_gradient_only_counts(device: str) -
     a.grad = lucid.zeros(1, 2).to(device)
     opt.step()
     np.testing.assert_array_equal(a.numpy(), [[1.0, 2.0]])
-    assert opt.state[0]["step"] == 1
-    assert not np.any(_as_array(opt.state[0]["exp_avg"]))
-    assert 1 not in opt.state  # b had no gradient
+    assert opt.state[a]["step"] == 1
+    assert not np.any(_as_array(opt.state[a]["exp_avg"]))
+    assert b not in opt.state  # b had no gradient
 
 
 def test_a_group_added_after_a_step_trains(device: str) -> None:
@@ -155,7 +155,7 @@ def test_a_group_added_after_a_step_trains(device: str) -> None:
     a.grad = lucid.ones(2, 2).to(device)
     b.grad = lucid.ones(3).to(device)
     opt.step()
-    assert opt.state[0]["step"] == 2 and opt.state[1]["step"] == 1
+    assert opt.state[a]["step"] == 2 and opt.state[b]["step"] == 1
     np.testing.assert_allclose(b.numpy(), [0.9, 0.9, 0.9], rtol=1e-6)
 
 
@@ -205,7 +205,7 @@ def test_a_restored_optimizer_continues_bit_identically(
     resumed.to(device)
     opt2 = optim.SparseAdam(resumed.parameters(), lr=_LR)
     opt2.load_state_dict(transfer(saved))
-    assert opt2.state[0]["exp_avg"].device == live.weight.device
+    assert opt2.state[resumed.weight]["exp_avg"].device == live.weight.device
 
     for k, ids in enumerate(batches[4:]):
         step(live, opt, ids)
@@ -214,15 +214,22 @@ def test_a_restored_optimizer_continues_bit_identically(
             resumed.weight.numpy(), live.weight.numpy(), err_msg=f"step {k + 5}"
         )
     for key in ("exp_avg", "exp_avg_sq", "step"):
-        np.testing.assert_array_equal(_as_array(opt2.state[0][key]), _as_array(opt.state[0][key]))
+        np.testing.assert_array_equal(
+            _as_array(opt2.state[resumed.weight][key]), _as_array(opt.state[live.weight][key])
+        )
 
 
 def test_state_dict_leaves_the_live_state_alone(device: str) -> None:
     _, opt = _lucid_run(device, [[0, 1]])
-    before = opt.state[0]["exp_avg"]
+    weight = _first_param(opt)
+    before = opt.state[weight]["exp_avg"]
     opt.state_dict()
-    assert opt.state[0]["exp_avg"] is before
+    assert opt.state[weight]["exp_avg"] is before
     assert isinstance(before, lucid.Tensor)
+
+
+def _first_param(opt: optim.SparseAdam) -> nn.Parameter:
+    return opt.param_groups[0]["params"][0]
 
 
 def _saved(device: str) -> tuple[optim.SparseAdam, dict[str, Any]]:
@@ -256,8 +263,8 @@ def test_a_malformed_checkpoint_is_refused_and_the_state_kept(
     opt, sd = _saved(device)
     sd = copy.deepcopy(sd)
     corrupt(sd)
-    before = {k: _as_array(v) for k, v in opt.state[0].items()}
+    before = {k: _as_array(v) for k, v in opt.state[_first_param(opt)].items()}
     with pytest.raises(error):
         opt.load_state_dict(sd)
     for key, want in before.items():
-        np.testing.assert_array_equal(_as_array(opt.state[0][key]), want)
+        np.testing.assert_array_equal(_as_array(opt.state[_first_param(opt)][key]), want)

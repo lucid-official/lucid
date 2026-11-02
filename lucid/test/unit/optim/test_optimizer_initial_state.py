@@ -16,6 +16,7 @@ Two leftovers of the optimizer-state parity work (LCD-722):
 """
 
 import copy
+from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -295,7 +296,7 @@ def test_an_array_with_one_element_is_not_taken_for_a_scalar() -> None:
 
 
 def _assert_no_host_arrays(value: object, where: str) -> None:
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         for k, v in value.items():
             _assert_no_host_arrays(v, f"{where}/{k}")
     elif isinstance(value, (list, tuple)):
@@ -309,7 +310,7 @@ def _assert_no_host_arrays(value: object, where: str) -> None:
 
 @pytest.mark.parametrize("case", [pytest.param(c, id=_id(c)) for c in _OPTIMIZERS])
 def test_opt_state_holds_no_host_arrays_before_or_after_a_step(
-    case: tuple[str, dict[str, Any]]
+    case: tuple[str, dict[str, Any]],
 ) -> None:
     """``opt.state`` shows the optimizer's own state; host arrays belong to checkpoints."""
     name, kw = case
@@ -335,12 +336,14 @@ def test_lbfgs_state_holds_no_host_arrays_after_a_step() -> None:
     _assert_no_host_arrays(opt.state, "LBFGS")
 
 
-def test_adagrad_seed_is_not_parked_in_state_and_nothing_stale_survives_a_step() -> None:
+def test_adagrad_seed_shows_in_state_and_follows_the_steps() -> None:
     params = _lucid_params()
     opt = optim.Adagrad(params, lr=0.1, initial_accumulator_value=0.5)
-    assert opt.state == {}
+    for p in params:
+        assert float(opt.state[p]["sum"].min()) == 0.5, "the seed, before the engines exist"
     _step(opt, params, 0)
-    assert opt.state == {}
+    for p in params:
+        assert float(opt.state[p]["sum"].min()) > 0.5, "the live sum, not the seed"
     sums = [_as_array(e["sum"]) for e in opt.state_dict()["state"].values()]
     assert all(np.all(s > 0.5) for s in sums), "the exported sum is the live one"
 
@@ -357,3 +360,139 @@ def test_adagrad_parameter_without_a_gradient_keeps_its_seeded_state(ref: Any) -
     opt.step()
     ref_opt.step()
     _assert_state_agrees(opt, ref_opt, "a parameter that never got a gradient")
+
+
+# ── `opt.state` is live, whatever was called on the optimizer (LCD-812) ───
+
+
+def _is_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _kind(value: object) -> object:
+    """A state value's structure: ``"number"``, ``"tensor"`` or a list of them."""
+    if isinstance(value, (list, tuple)):
+        return [_kind(v) for v in value]
+    return "number" if _is_number(value) else "tensor"
+
+
+def _flat(value: object) -> list[np.ndarray]:
+    """The arrays inside a state value (a tensor, a number or a list of them)."""
+    if isinstance(value, (list, tuple)):
+        return [a for v in value for a in _flat(v)]
+    return [_as_array(value)]
+
+
+def _state_by_index(opt: Any, params: list[Any]) -> dict[int, dict[str, Any]]:
+    index = {id(p): i for i, p in enumerate(params)}
+    return {index[id(p)]: dict(opt.state[p]) for p in opt.state}
+
+
+def _assert_state_is_live_and_the_references(
+    opt: Any, params: list[Any], ref_opt: Any, where: str
+) -> None:
+    """``opt.state`` is tensors and numbers, equals ``state_dict()`` and has the reference's shape."""
+    _assert_no_host_arrays(opt.state, where)
+    live = _state_by_index(opt, params)
+    saved = opt.state_dict()["state"]
+    assert sorted(live) == sorted(saved), f"{where}: parameters with state"
+    for idx, entry in saved.items():
+        assert set(live[idx]) == set(entry), f"{where}: keys of {idx}"
+        for key, want in entry.items():
+            for got_arr, want_arr in zip(_flat(live[idx][key]), _flat(want), strict=True):
+                np.testing.assert_array_equal(got_arr, want_arr, err_msg=f"{where}: {idx}/{key}")
+    ref_state = ref_opt.state_dict()["state"]
+    assert sorted(live) == sorted(ref_state), f"{where}: reference parameters with state"
+    for idx, ref_entry in ref_state.items():
+        assert set(live[idx]) == set(ref_entry), f"{where}: reference keys of {idx}"
+        for key, want in ref_entry.items():
+            assert _kind(live[idx][key]) == _kind(want), f"{where}: type of {idx}/{key}"
+
+
+@pytest.mark.parametrize("case", [pytest.param(c, id=_id(c)) for c in _OPTIMIZERS])
+def test_opt_state_is_live_through_step_state_dict_load_and_step(
+    case: tuple[str, dict[str, Any]], ref: Any
+) -> None:
+    name, kw = case
+    params = _lucid_params()
+    ref_params = _ref_params(ref, params)
+    opt = getattr(optim, name)(params, **kw)
+    ref_opt = getattr(ref.optim, name)(ref_params, **kw)
+    _assert_state_is_live_and_the_references(opt, params, ref_opt, "before the first step")
+
+    for k in range(2):
+        _feed(ref, params, ref_params, k)
+        opt.step()
+        ref_opt.step()
+        _assert_state_is_live_and_the_references(opt, params, ref_opt, f"after step {k + 1}")
+
+    saved = copy.deepcopy(opt.state_dict())
+    ref_saved = ref_opt.state_dict()
+    _assert_state_is_live_and_the_references(opt, params, ref_opt, "after state_dict")
+    before = {
+        i: {k: _as_array(v).copy() for k, v in e.items()}
+        for i, e in _state_by_index(opt, params).items()
+    }
+    _feed(ref, params, ref_params, 2)
+    opt.step()
+    ref_opt.step()
+    _assert_state_is_live_and_the_references(opt, params, ref_opt, "after state_dict and a step")
+    after = _state_by_index(opt, params)
+    for idx, entry in before.items():
+        assert any(
+            not np.array_equal(_as_array(after[idx][key]), want) for key, want in entry.items()
+        ), f"parameter {idx}: opt.state is still the state at state_dict()"
+
+    twin_params = _lucid_params()
+    ref_twin_params = _ref_params(ref, twin_params)
+    twin = getattr(optim, name)(twin_params, **kw)
+    ref_twin = getattr(ref.optim, name)(ref_twin_params, **kw)
+    twin.load_state_dict(saved)
+    ref_twin.load_state_dict(ref_saved)
+    _assert_state_is_live_and_the_references(twin, twin_params, ref_twin, "after load_state_dict")
+    for k in range(2):
+        _feed(ref, twin_params, ref_twin_params, 3 + k)
+        twin.step()
+        ref_twin.step()
+        _assert_state_is_live_and_the_references(
+            twin, twin_params, ref_twin, f"after load_state_dict and step {k + 1}"
+        )
+
+
+def test_lbfgs_state_is_live_and_the_references(ref: Any) -> None:
+    params = _lucid_params()
+    ref_params = _ref_params(ref, params)
+    opt = optim.LBFGS(params, lr=0.1)
+    ref_opt = ref.optim.LBFGS(ref_params, lr=0.1)
+
+    def closure() -> lucid.Tensor:
+        opt.zero_grad()
+        loss = sum((p**2).sum() for p in params)
+        loss.backward()
+        return loss
+
+    def ref_closure() -> Any:
+        ref_opt.zero_grad()
+        loss = sum((p**2).sum() for p in ref_params)
+        loss.backward()
+        return loss
+
+    assert len(opt.state) == 0
+    opt.step(closure)
+    ref_opt.step(ref_closure)
+    assert list(opt.state) == [params[0]]
+    entry, ref_entry = dict(opt.state[params[0]]), ref_opt.state[ref_params[0]]
+    # ``al`` is the reference's scratch buffer for the two-loop recursion.
+    assert set(entry) == set(ref_entry) - {"al"}
+    for key in entry:
+        assert _kind(entry[key]) == _kind(ref_entry[key]), key
+    _assert_no_host_arrays(opt.state, "LBFGS")
+    assert dict(opt.state[params[1]]) == {}, "a parameter without state reads as empty"
+
+    saved = opt.state_dict()
+    before = int(opt.state[params[0]]["n_iter"])
+    opt.step(closure)
+    assert int(opt.state[params[0]]["n_iter"]) > before, (
+        "opt.state follows the step after state_dict"
+    )
+    assert saved["state"][0]["n_iter"] == before

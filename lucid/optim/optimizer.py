@@ -5,6 +5,7 @@ Optimizer base class.
 import math
 import operator
 import warnings
+from collections import defaultdict
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, ClassVar, Protocol, SupportsFloat, SupportsIndex, override
@@ -15,6 +16,15 @@ from lucid._types import _OptimizerClosure
 from lucid.autograd._grad_inplace import negated_grads, zero_grads_
 from lucid.nn.parameter import Parameter
 from lucid.optim._state_load import LoadedCheckpoint, _follow, _load_group_state
+from lucid.optim._state_load import _group_params as _group_params
+from lucid.optim._state_view import (
+    EngineStateView,
+    StateEntry,
+    StateMap,
+    group_entries,
+    held_checkpoint,
+    held_from_checkpoint,
+)
 from lucid.optim._step_counter import _CountedStep
 
 from lucid._C import engine as _C_engine
@@ -144,14 +154,6 @@ def _from_host(value: object, device: _C_engine.Device) -> _C_engine.TensorImpl:
     if isinstance(value, Tensor):
         return value._impl.transfer_to_device(device, False)
     return _C_engine.TensorImpl(value, device, False)
-
-
-def _group_params(group: dict[str, object]) -> list[Parameter]:
-    """The parameters of one param group (``add_param_group`` stores a list)."""
-    params = group["params"]
-    if not isinstance(params, list):
-        raise TypeError(f"a param group's 'params' must be a list, got {type(params).__name__}")
-    return params
 
 
 def _group_float(group: dict[str, object], key: str = "lr") -> float:
@@ -495,11 +497,15 @@ class Optimizer:
         ``defaults`` (possibly overridden per group).
     defaults : dict
         The default hyperparameters passed at construction.
-    state : dict
-        Per-parameter optimizer state indexed by flat parameter index.
-        Populated by :meth:`state_dict` and consumed by
-        :meth:`load_state_dict`; an optimizer that keeps its state in
-        Python (:class:`~lucid.optim.SparseAdam`) holds its live state here.
+    state : mapping
+        Per-parameter optimizer state keyed by :class:`~lucid.nn.Parameter`,
+        as the reference framework keys it: each value maps the state's names
+        (``"exp_avg"``, ``"step"`` ...) to tensors and numbers.  It is read
+        from the optimizer's live state each time, so it is current after any
+        :meth:`step`, :meth:`state_dict` or :meth:`load_state_dict`.  Replace
+        a whole state with :meth:`load_state_dict`; assigning to a key of an
+        engine optimizer's entry replaces that one buffer.  A tensor read from
+        it is a copy of the buffer at that moment.
 
     Notes
     -----
@@ -578,11 +584,11 @@ class Optimizer:
     # :meth:`_check_hyperparams`.
     _ENGINE_RULES: ClassVar[_EngineRules | None] = None
 
-    # ``True`` for an optimizer whose live per-parameter state *is*
-    # :attr:`state` (SparseAdam).  Checkpointing then snapshots and rebuilds
-    # that state through ``_save_state`` / ``_load_state`` instead of
-    # replacing it with the host-array snapshot, which ``step`` cannot read.
-    _LIVE_STATE: ClassVar[bool] = False
+    # ``True`` for an optimizer that builds engine optimizers (it overrides
+    # :meth:`_append_engine_optim`): its state lives in the engines and
+    # :attr:`state` reads it there.  Any other keeps its state in Python (a
+    # user subclass, SparseAdam) and :attr:`state` is the dict it writes to.
+    _ENGINE_BACKED: ClassVar[bool] = False
 
     # Pair hyper-parameters exposed in ``param_groups`` as a 2-tuple (e.g.
     # ``"betas": ("beta1", "beta2")``, ``"etas": ("eta_minus", "eta_plus")``)
@@ -620,6 +626,7 @@ class Optimizer:
         """
         super().__init_subclass__(**kwargs)
         cls._read_hparams = _hyperparam_reader(cls._HYPERPARAMS)
+        cls._ENGINE_BACKED = cls._append_engine_optim is not Optimizer._append_engine_optim
         if not cls.AUTO_EVAL_AFTER_STEP:
             # Default path: no wrapper, user's step() runs raw.
             return
@@ -687,7 +694,10 @@ class Optimizer:
         # Parallel to ``param_groups``: each group's hyper-parameters as they
         # were last checked or handed to its engine.
         self._group_hparams: list[tuple[object, ...]] = []
-        self.state: dict[int, dict[str, object]] = {}
+        # A checkpoint waiting for the engines (an unpickled optimizer), consumed
+        # by the first build; and the state of an optimizer that keeps it in Python.
+        self._pending_state: dict[int, dict[str, object]] = {}
+        self._held_state: defaultdict[Parameter, StateEntry] = defaultdict(dict)
         self._normalize_group_pairs(defaults, defaults)
         self.defaults: dict[str, object] = defaults
 
@@ -766,8 +776,9 @@ class Optimizer:
             for group in self.param_groups:
                 self._bind_engine_optim(group)
             self._group_hparams = hparams
-            if not self._LIVE_STATE and self.state:
-                self._load_engine_state(self.state)
+            if self._pending_state:
+                self._load_engine_state(self._pending_state)
+                self._pending_state = {}
         else:
             self._rebind_replaced_params()
             self._sync_group_hyperparams()
@@ -1262,20 +1273,26 @@ class Optimizer:
     # ── state_dict round-trip ─────────────────────────────────────────────────
     #
     # Format follows reference framework: ``param_groups`` mirrors the live
-    # groups but each ``params`` entry is replaced with a list of integer
-    # parameter ids; ``state`` is keyed by those same ids. Parameter tensors
-    # themselves live on the model — saving them inside the optimizer would
-    # double-checkpoint the weights and break partial restores.
-    #
-    # Engine optimizers (Adam, AdamW, SGD) expose their per-parameter mutable
-    # state via the C++ ``state_buffers``/``load_state_buffers`` hooks; the base
-    # class harvests those automatically below. Subclasses that own additional
-    # Python-side state (e.g. LBFGS history) should override _save_state /
-    # _load_state to round-trip it.
+    # groups with each ``params`` entry replaced by integer parameter ids;
+    # ``state`` is keyed by those ids.  Engine optimizers export their state
+    # through the C++ ``state_buffers`` / ``load_state_buffers`` hooks;
+    # subclasses with Python-side state (LBFGS history) override _save_state /
+    # _load_state.
+
+    @property
+    def state(self) -> StateMap:
+        """Per-parameter state keyed by parameter, read live (see the class notes)."""
+        return self._state_map()
+
+    def _state_map(self) -> StateMap:
+        """What :attr:`state` shows; an optimizer keeping its state elsewhere overrides this."""
+        return EngineStateView(self) if self._ENGINE_BACKED else self._held_state
 
     def _save_state(self) -> dict[int, dict[str, object]]:
-        """Snapshot per-parameter state. Default: pull from engine optimizers."""
-        return self._save_engine_state()
+        """Snapshot per-parameter state: the engines', or the Python-held state."""
+        if self._ENGINE_BACKED:
+            return self._save_engine_state()
+        return held_checkpoint(self._held_state, self.param_groups, _host_copy)
 
     def _load_state(self, state: dict[int, dict[str, object]]) -> None:
         """Replace per-parameter state with ``state``. Default: the engine optimizers'.
@@ -1284,43 +1301,32 @@ class Optimizer:
         without an entry starts afresh — and refuses a bad entry before it
         changes anything, so a failed load leaves the old state in place.
         """
-        self._load_engine_state(state)
+        if self._ENGINE_BACKED:
+            self._load_engine_state(state)
+        else:
+            self._held_state = held_from_checkpoint(state, self.param_groups)
 
     def _save_engine_state(self) -> dict[int, dict[str, object]]:
         """Snapshot every engine optimizer's per-parameter state.
 
-        Output is keyed by flat parameter index.  Each entry holds one
-        numpy array per entry the engine exports for that parameter, keyed
-        by the reference framework's names: buffers shaped like the
-        parameter (``exp_avg``, ``exp_avg_sq``, ``momentum_buffer`` ...)
-        and per-parameter scalars as 0-d arrays — ``step``, the parameter's
-        own step count (int64), and e.g. NAdam's ``mu_product``.  A
-        parameter that has never been updated has no entry.
+        Output is keyed by flat parameter index.  Each entry holds one numpy
+        array per entry the engine exports for that parameter, under the
+        reference framework's names: buffers shaped like the parameter and
+        per-parameter scalars as 0-d arrays (``step``, NAdam's ``mu_product``).
+        A parameter never updated has no entry.
 
         Before the engines exist there is no state to save, and building
         them here would bind whatever impls the parameters hold now — a
         model converted afterwards then needs a rebuild at the first step.
         """
         if not self._engines_built:
-            return self.state
+            return self._pending_state
         out: dict[int, dict[str, object]] = {}
         flat_idx: int = 0
         for group, eng in zip(self.param_groups, self._engine_optims, strict=True):
-            params: list[Parameter] = _group_params(group)
-            buffers = eng.state_buffers()
-            step_count: int = int(getattr(eng, "step_count", 0) or 0)
-            for slot, _ in enumerate(params):
-                snapshot: dict[str, object] = {}
-                for name, tensors in buffers:
-                    buf = tensors[slot] if slot < len(tensors) else None
-                    if buf is not None:
-                        snapshot[name] = _host_copy(buf)
-                if step_count != 0 and "step" not in snapshot:
-                    # An engine with one count per group, not per parameter.
-                    snapshot["step"] = step_count
-                if snapshot:
-                    out[flat_idx + slot] = snapshot
-            flat_idx += len(params)
+            entries = group_entries(eng, len(_group_params(group)), _host_copy)
+            out.update({flat_idx + slot: e for slot, e in enumerate(entries) if e})
+            flat_idx += len(entries)
         return out
 
     def _load_engine_state(self, state: dict[int, dict[str, object]]) -> None:
@@ -1338,6 +1344,7 @@ class Optimizer:
         step.
         """
         if not (state or self._engines_built):
+            self._pending_state = {}
             return
         if not self._engine_optims:  # builds them on first use
             return
@@ -1382,10 +1389,7 @@ class Optimizer:
             g: dict[str, object] = {k: v for k, v in group.items() if k != "params"}
             g["params"] = [id_map[id(p)] for p in _group_params(group)]
             groups_out.append(g)
-        state = self._save_state()
-        if not self._LIVE_STATE:
-            self.state = state
-        return {"state": state, "param_groups": groups_out}
+        return {"state": self._save_state(), "param_groups": groups_out}
 
     def load_state_dict(self, state_dict: dict[str, object]) -> None:
         """Restore from a state_dict produced by :meth:`state_dict`.
@@ -1446,8 +1450,6 @@ class Optimizer:
         self._load_state(saved.state)
         for group, edit in zip(self.param_groups, edits, strict=True):
             group.update(edit)
-        if not self._LIVE_STATE:
-            self.state = saved.state
         self._sync_hyperparams()
 
     def _staged_group_edits(
@@ -1470,19 +1472,19 @@ class Optimizer:
 
     @override
     def __getstate__(self) -> dict[str, object]:
-        """Snapshot engine state into ``self.state`` and drop live engine handles.
+        """Snapshot engine state as a pending checkpoint and drop live engine handles.
 
         C++ engine optimizers hold raw ``TensorImpl`` pointers and cannot be
-        pickled directly.  Synchronising ``self.state`` first and clearing
-        ``_engines`` / ``_engine_binds`` / ``_engines_built`` in the returned
-        dict lets ``pickle`` and ``copy.deepcopy`` serialise only Python state
-        while leaving the source optimizer's live engines untouched; the next
+        pickled directly.  Putting the engines' state in the returned dict's
+        pending checkpoint and clearing ``_engines`` / ``_engine_binds`` /
+        ``_engines_built`` lets ``pickle`` and ``copy.deepcopy`` serialise only
+        Python state while leaving the source optimizer untouched; the next
         :meth:`step` on the restored instance rebuilds its engines over the
-        restored parameters and reloads ``self.state`` into them.
+        restored parameters and loads the pending checkpoint into them.
         """
-        if not self._LIVE_STATE and self._engines_built:
-            self.state = self._save_engine_state()
         state = dict(self.__dict__)
+        if self._engines_built:
+            state["_pending_state"] = self._save_engine_state()
         state["_engines"] = []
         state["_engine_binds"] = []
         state["_engines_built"] = False

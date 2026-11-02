@@ -57,6 +57,7 @@ from lucid.compile._optim._load import StagedEntry, stage_checkpoint
 from lucid.compile._optim.spec import _hp
 from lucid.autograd._grad_mode import no_grad
 from lucid.optim._state_load import LoadedCheckpoint
+from lucid.optim._state_view import StateMap
 from lucid.optim._step_counter import _counts_as_step, _record_step
 from lucid.optim.optimizer import _group_params
 
@@ -562,8 +563,8 @@ class _CompiledStepBase:
         return self._opt.param_groups
 
     @property
-    def state(self) -> dict[int, dict[str, object]]:
-        """The state snapshot of the last :meth:`state_dict` / :meth:`load_state_dict`."""
+    def state(self) -> StateMap:
+        """The wrapped eager optimizer's live ``state`` (empty unless it stepped eagerly)."""
         return self._opt.state
 
     @property
@@ -629,7 +630,6 @@ class _CompiledStepBase:
                     entry[name] = buf.detach().numpy().copy()
             if entry:
                 state[i] = entry
-        self._opt.state = state
         return {"state": state, "param_groups": groups_out}
 
     def load_state_dict(self, sd: dict[str, object]) -> None:
@@ -669,7 +669,6 @@ class _CompiledStepBase:
         staged = stage_checkpoint(saved.state, self._params, self._PSTATE_NAMES, buffer_names)
         for group, edit in zip(opt.param_groups, edits, strict=True):
             group.update(edit)
-        opt.state = saved.state
         flags = self._flags_now()
         with no_grad():
             self._restart_state()

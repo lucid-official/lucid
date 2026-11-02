@@ -14,7 +14,8 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import _OptimizerClosure
 from lucid.nn.parameter import Parameter
 from lucid._dispatch import _wrap
-from lucid.optim._state_load import _follow
+from lucid.optim._state_load import _follow, _group_params
+from lucid.optim._state_view import ReadOnlyMap, StateMap
 from lucid.optim.optimizer import Optimizer
 
 from lucid._C import engine as _C_engine
@@ -28,6 +29,13 @@ _LS_TOLERANCE_CHANGE = 1e-9
 # A curvature pair with ``yᵀs`` at or below this is not stored.
 _CURVATURE_EPS = 1e-10
 _LINE_SEARCHES = (None, "strong_wolfe")
+_READ_ONLY = "LBFGS keeps its state itself; change it through load_state_dict()"
+
+
+def _empty_entry() -> ReadOnlyMap[str, object]:
+    """What a parameter without LBFGS state reads as."""
+    return ReadOnlyMap({}, _READ_ONLY)
+
 
 # A step, slope or scale.  Where the reference holds one as a 0-d tensor of
 # the gradient's dtype this does too, so every comparison rounds the way the
@@ -574,6 +582,17 @@ class LBFGS(Optimizer):
     # LBFGS has only global state.  Like the reference, it is filed under the
     # first parameter's index (0), with tensors as host arrays so a checkpoint
     # carries no autograd plumbing.
+
+    @override
+    def _state_map(self) -> StateMap:
+        """The global state under the first parameter, as the reference files it (read-only)."""
+        st = self._lbfgs_state
+        if st.func_evals == 0:
+            return ReadOnlyMap({}, _READ_ONLY, _empty_entry)
+        entry = ReadOnlyMap(st.snapshot(lambda v: v), _READ_ONLY)
+        return ReadOnlyMap(
+            {_group_params(self.param_groups[0])[0]: entry}, _READ_ONLY, _empty_entry
+        )
 
     @override
     def _save_state(self) -> dict[int, dict[str, object]]:

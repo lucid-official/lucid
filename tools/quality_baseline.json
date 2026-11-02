@@ -1013,7 +1013,7 @@
    "file-loc-over-cap": {
     "lucid/_tensor/_dunders.py": 226,
     "lucid/_tensor/tensor.py": 2402,
-    "lucid/compile/_optim/compiler.py": 323,
+    "lucid/compile/_optim/compiler.py": 322,
     "lucid/coreml/_build.py": 1096,
     "lucid/coreml/_emit.py": 1024,
     "lucid/fft/__init__.py": 339,

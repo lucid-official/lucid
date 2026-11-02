@@ -4,6 +4,7 @@ Additional optimizers: RMSprop, Adagrad, Adadelta, Adamax, RAdam, NAdam, ASGD, R
 
 import math
 import operator
+from collections import defaultdict
 from collections.abc import Iterable
 from typing import Any, SupportsFloat, SupportsIndex, override
 
@@ -14,7 +15,8 @@ from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid.nn.parameter import Parameter
 from lucid.optim._state_load import _follow, _load_group_state, initial_state
-from lucid.optim.optimizer import Optimizer, _from_host, _group_float, _group_params, _host_copy
+from lucid.optim._state_view import StateEntry, flat_params
+from lucid.optim.optimizer import Optimizer, _from_host, _group_float, _group_params
 
 
 class RMSprop(Optimizer):
@@ -277,14 +279,19 @@ class Adagrad(Optimizer):
     @override
     def _save_state(self) -> dict[int, dict[str, object]]:
         """The seed while no engine exists yet and nothing has been loaded or restored."""
-        if self._fresh and not self._engines_built and not self.state:
+        if self._fresh and not self._engines_built and not self._pending_state:
             return self._seed_state(self.param_groups[: self._seeded])
         return super()._save_state()
 
     @override
     def _load_state(self, state: dict[int, dict[str, object]]) -> None:
-        self._fresh = False
+        """Load ``state``; only a load that succeeds retires the seed.
+
+        A refused checkpoint leaves the seeded engines (or the unbuilt seed)
+        as they were.
+        """
         super()._load_state(state)
+        self._fresh = False
 
     @override
     def step(self, closure: _OptimizerClosure = None) -> Tensor | None:
@@ -1013,7 +1020,7 @@ def _moment_like(src: _C_engine.TensorImpl, param: Parameter) -> Tensor | None:
     return _wrap(_follow(src, param._impl))
 
 
-def _moment(entry: dict[str, object], key: str) -> Tensor:
+def _moment(entry: StateEntry, key: str) -> Tensor:
     """State entry ``key`` of one parameter, which must be a tensor."""
     value = entry[key]
     if not isinstance(value, Tensor):
@@ -1124,10 +1131,10 @@ class SparseAdam(Optimizer):
     defaults : dict
         Default hyperparameter values.
     state : dict
-        The live state of each parameter that has stepped, by flat
-        parameter index: ``"step"`` (int), ``"exp_avg"`` and
-        ``"exp_avg_sq"`` (tensors shaped like the parameter).  It is what
-        :meth:`state_dict` saves and :meth:`load_state_dict` restores.
+        The live state of each parameter that has stepped, keyed by the
+        parameter: ``"step"`` (int), ``"exp_avg"`` and ``"exp_avg_sq"``
+        (tensors shaped like the parameter).  It is what :meth:`state_dict`
+        saves and :meth:`load_state_dict` restores.
 
     Notes
     -----
@@ -1159,12 +1166,11 @@ class SparseAdam(Optimizer):
     >>> optimizer.step()
     >>> (embedding.weight != before).any(dim=1).tolist()
     [True, False, True, False]
-    >>> optimizer.state[0]["step"]
+    >>> optimizer.state[embedding.weight]["step"]
     1
     """
 
     _HYPERPARAMS = ("lr", "betas", "eps", "maximize")
-    _LIVE_STATE = True
 
     def __init__(
         self,
@@ -1200,17 +1206,13 @@ class SparseAdam(Optimizer):
                 f"SparseAdam: maximize must be a bool, got {type(values['maximize']).__name__}"
             )
 
-    def _flat_params(self) -> list[Parameter]:
-        """Every parameter, in the flat order ``state`` is indexed by."""
-        return [p for group in self.param_groups for p in _group_params(group)]
-
-    def _state_for(self, idx: int, param: Parameter) -> dict[str, object]:
-        """Parameter ``idx``'s state, its moments ready for ``param``'s buffer.
+    def _state_for(self, param: Parameter) -> StateEntry:
+        """``param``'s state, its moments ready for its buffer.
 
         A parameter with no state yet, or whose shape no longer matches its
         moments, starts from zero moments and a zero step count.
         """
-        entry = self.state.get(idx)
+        entry = self._held_state.get(param)
         if entry:
             m = _moment_like(_moment(entry, "exp_avg")._impl, param)
             v = _moment_like(_moment(entry, "exp_avg_sq")._impl, param)
@@ -1223,7 +1225,7 @@ class SparseAdam(Optimizer):
             "exp_avg": lucid.zeros_like(param),
             "exp_avg_sq": lucid.zeros_like(param),
         }
-        self.state[idx] = entry
+        self._held_state[param] = entry
         return entry
 
     @override
@@ -1265,7 +1267,6 @@ class SparseAdam(Optimizer):
         # The groups are read below as they are; an edited one is checked
         # first.
         self._sync_hyperparams()
-        idx = 0
         with lucid.no_grad():
             for group in self.param_groups:
                 hp = self._hyperparam_dict(self._hyperparams_of(group))
@@ -1275,21 +1276,19 @@ class SparseAdam(Optimizer):
                 for p in _group_params(group):
                     grad = p.grad
                     if grad is not None:
-                        self._step_param(idx, p, grad, hparams, maximize=maximize)
-                    idx += 1
+                        self._step_param(p, grad, hparams, maximize=maximize)
         return loss
 
     def _step_param(
         self,
-        idx: int,
         param: Parameter,
         grad: Tensor,
         hparams: tuple[float, float, float, float],
         *,
         maximize: bool = False,
     ) -> None:
-        """Advance parameter ``idx``'s step count and update its touched rows."""
-        entry = self._state_for(idx, param)
+        """Advance ``param``'s step count and update its touched rows."""
+        entry = self._state_for(param)
         step = _step_count(entry["step"]) + 1
         entry["step"] = step
         if grad.numel() == 0:
@@ -1306,20 +1305,9 @@ class SparseAdam(Optimizer):
 
     # ── state_dict round-trip ────────────────────────────────────────────────
     #
-    # The live state is ``self.state`` itself (``_LIVE_STATE``); a
-    # checkpoint holds host-array copies under the reference's keys.
-
-    @override
-    def _save_state(self) -> dict[int, dict[str, object]]:
-        """Each stepped parameter's step count and moments, as host arrays."""
-        return {
-            idx: {
-                "step": entry["step"],
-                "exp_avg": _host_copy(_moment(entry, "exp_avg")._impl),
-                "exp_avg_sq": _host_copy(_moment(entry, "exp_avg_sq")._impl),
-            }
-            for idx, entry in self.state.items()
-        }
+    # The live state is ``self.state`` itself (a dict keyed by parameter,
+    # not engine-backed); a checkpoint holds host-array copies under the
+    # reference's keys, which the base ``_save_state`` makes.
 
     @override
     def _load_state(self, state: dict[int, dict[str, object]]) -> None:
@@ -1338,8 +1326,8 @@ class SparseAdam(Optimizer):
         lucid._C.engine.ShapeMismatch
             A moment not shaped like its parameter.
         """
-        params = self._flat_params()
-        loaded: dict[int, dict[str, object]] = {}
+        params = flat_params(self.param_groups)
+        loaded: dict[Parameter, StateEntry] = {}
         for idx, entry in state.items():
             if not 0 <= idx < len(params):
                 raise IndexError(
@@ -1358,5 +1346,5 @@ class SparseAdam(Optimizer):
                         f"{list(param._impl.shape)}"
                     )
                 restored[key] = moment
-            loaded[idx] = restored
-        self.state = loaded
+            loaded[param] = restored
+        self._held_state = defaultdict(dict, loaded)
