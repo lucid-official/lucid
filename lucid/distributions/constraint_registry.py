@@ -84,11 +84,13 @@ class SoftplusTransform(Transform):
 
 
 class PositiveDefiniteTransform(Transform):
-    r"""Bijection from unconstrained matrices to symmetric positive-definite matrices.
+    r"""Map from unconstrained matrices to symmetric positive-definite matrices.
 
     Applies :class:`LowerCholeskyTransform` to obtain a lower-triangular
-    Cholesky factor :math:`L` with positive diagonal and returns
-    :math:`Y = L L^\top`.  ``event_dim = 2``.
+    Cholesky factor :math:`L` with positive (``exp``-mapped) diagonal and
+    returns :math:`Y = L L^\top`.  ``event_dim = 2``.  Only the lower triangle
+    of the input is read, so the map is registered with :data:`transform_to`
+    and not :data:`biject_to`, as in the reference framework.
     """
 
     domain: Constraint = constraints.independent(constraints.real, 2)
@@ -409,12 +411,14 @@ def _transform_to_simplex(_constraint: _Simplex) -> Transform:
     return SoftmaxTransform()
 
 
-@_register(biject_to, transform_to, _LowerCholesky)
+# Both matrix transforms read only the lower triangle of their input, so they
+# are surjective but not one-to-one: ``transform_to`` only, as the reference.
+@_register(transform_to, _LowerCholesky)
 def _transform_to_lower_cholesky(_constraint: _LowerCholesky) -> Transform:
     return LowerCholeskyTransform()
 
 
-@_register(biject_to, transform_to, _PositiveDefinite)
+@_register(transform_to, _PositiveDefinite)
 def _transform_to_positive_definite(_constraint: _PositiveDefinite) -> Transform:
     return PositiveDefiniteTransform()
 

@@ -220,14 +220,15 @@ def test_lower_cholesky_lands_on_a_positive_diagonal_factor(x):
 def test_lower_cholesky_round_trips(x):
     """It had no working inverse at all.
 
-    The diagonal was masked out *before* inverting the softplus, so every
-    off-diagonal lane computed ``log(exp(0) - 1) = log(0) = -inf`` and
-    then ``-inf * 0``, i.e. NaN.  The whole strict lower triangle came
-    back NaN — and with it ``log_prob`` for any distribution pushed
-    through this transform, since that goes through the inverse.
+    The diagonal was masked out *before* inverting, so every off-diagonal
+    lane computed ``log(0) = -inf`` and then ``-inf * 0``, i.e. NaN.  The
+    whole strict lower triangle came back NaN — and with it ``log_prob`` for
+    any distribution pushed through this transform, since that goes through
+    the inverse.
 
-    The last case has a diagonal of 30: ``exp(z) - 1`` loses its
-    significant digits well before that, so ``expm1`` is not decoration.
+    The last case has a diagonal of 30, whose ``exp`` is 1e13: the round
+    trip has to hold at the scale where a diagonal map is most easily
+    lossy.
     """
     transform = T.LowerCholeskyTransform()
     back = _v(transform.inv(transform(_t(x))))

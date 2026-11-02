@@ -259,6 +259,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Transform.sign and TransformedDistribution cdf/icdf
 
+- LowerCholesky exp diagonal, registry as reference
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

@@ -456,11 +456,18 @@ def test_biject_to_and_transform_to_cover_constraints(device: str) -> None:
             _lt([0.2, -0.3], device),
         ),
     ]
+    # The matrix transforms read only the lower triangle, so they are not
+    # bijections and only ``transform_to`` has them (LCD-816).
+    not_bijective = (constraints.lower_cholesky, constraints.positive_definite)
     for constraint, inp in cases:
-        t_bij = D.biject_to(constraint)
-        y_bij = t_bij(inp)
-        assert bool(constraint.check(y_bij).all().item())
-        np.testing.assert_allclose(_np(t_bij.inv(y_bij)), _np(inp), rtol=1e-4, atol=1e-5)
+        if constraint in not_bijective:
+            with pytest.raises(NotImplementedError):
+                D.biject_to(constraint)
+        else:
+            t_bij = D.biject_to(constraint)
+            y_bij = t_bij(inp)
+            assert bool(constraint.check(y_bij).all().item())
+            np.testing.assert_allclose(_np(t_bij.inv(y_bij)), _np(inp), rtol=1e-4, atol=1e-5)
 
         t_tr = D.transform_to(constraint)
         y_tr = t_tr(inp)

@@ -117,7 +117,7 @@ class SigmoidTransform(Transform):
 
         \log\!\left|\frac{\partial y}{\partial x}\right|
         = \log\bigl(\sigma(x)(1 - \sigma(x))\bigr)
-        = \log y + \log(1 - y)
+        = -\operatorname{softplus}(-x) - \operatorname{softplus}(x)
 
     The transform is closely related to the :class:`StickBreakingTransform`
     (which generalises to the simplex) and to :class:`TanhTransform`
@@ -150,23 +150,28 @@ class SigmoidTransform(Transform):
 
     @override
     def log_abs_det_jacobian(self, x: Tensor, y: Tensor) -> Tensor:
-        r"""Log-Jacobian :math:`\log\bigl(y\,(1-y)\bigr)` of the sigmoid map.
+        r"""Log-Jacobian :math:`-\operatorname{softplus}(-x) - \operatorname{softplus}(x)`.
+
+        Written in the logit ``x`` rather than the probability ``y``: ``y``
+        rounds to exactly 0 or 1 for a large ``|x|``, where
+        :math:`\log y + \log(1 - y)` is :math:`-\infty` and the
+        softplus form stays finite.
 
         Parameters
         ----------
         x : Tensor
-            Pre-transform input (sigmoid logit); ignored — the
-            log-Jacobian is cheaper to express via ``y``.
+            Pre-transform input (sigmoid logit).
         y : Tensor
-            Post-transform output in :math:`(0, 1)`.
+            Post-transform output; ignored.
 
         Returns
         -------
         Tensor
-            :math:`\log y + \log (1 - y)`.
+            :math:`\log\sigma(x) + \log\sigma(-x)`.
         """
-        # log|y · (1 − y)|.
-        return y.log() + (1.0 - y).log()
+        from lucid.nn.functional.activations import softplus
+
+        return -softplus(-x) - softplus(x)
 
 
 class TanhTransform(Transform):
@@ -699,15 +704,19 @@ class StickBreakingTransform(Transform):
 
 
 class LowerCholeskyTransform(Transform):
-    r"""Bijection mapping an unconstrained matrix to a positive-diagonal Cholesky factor.
+    r"""Map an unconstrained matrix to a positive-diagonal lower-triangular factor.
 
     The standard reparameterisation used to learn covariance / scale
     matrices: a free :math:`D \times D` matrix is mapped to a lower
     triangular matrix with strictly positive diagonal by zeroing the
-    strict upper triangle and applying ``softplus`` to the diagonal.
-    Composing with a base on :math:`\mathbb{R}^{D \times D}` produces a
-    pushforward over the cone of valid Cholesky factors.
+    strict upper triangle and exponentiating the diagonal, as the reference
+    framework does.  Composing with a base on :math:`\mathbb{R}^{D \times D}`
+    produces a pushforward over the cone of valid Cholesky factors.
     ``event_dim = 2``.
+
+    The strict upper triangle of the input is discarded, so the map is onto
+    the lower-Cholesky cone but not one-to-one on :math:`\mathbb{R}^{D \times D}`;
+    it is registered with :data:`transform_to` and not :data:`biject_to`.
 
     Notes
     -----
@@ -717,7 +726,7 @@ class LowerCholeskyTransform(Transform):
 
         L_{ij} =
         \begin{cases}
-            \operatorname{softplus}(X_{ii}) & i = j \\
+            \exp(X_{ii}) & i = j \\
             X_{ij} & i > j \\
             0 & i < j
         \end{cases}
@@ -726,8 +735,7 @@ class LowerCholeskyTransform(Transform):
 
     .. math::
 
-        X_{ii} = \operatorname{softplus}^{-1}(L_{ii})
-               = \log(e^{L_{ii}} - 1),
+        X_{ii} = \log L_{ii},
         \qquad
         X_{ij} = L_{ij}\;\;(i > j)
 
@@ -735,11 +743,11 @@ class LowerCholeskyTransform(Transform):
 
     .. math::
 
-        \log|\det J| = \sum_{i=1}^{D} \log \sigma(X_{ii})
-                     = -\sum_{i=1}^{D} \operatorname{softplus}(-X_{ii})
+        \log|\det J| = \sum_{i=1}^{D} \log \exp(X_{ii})
+                     = \sum_{i=1}^{D} X_{ii}
 
     Off-diagonal entries contribute unit Jacobian (identity map); only
-    the softplus applied to the diagonal carries a non-trivial factor.
+    the exponential applied to the diagonal carries a non-trivial factor.
 
     For correlation-matrix factors (unit diagonal) use
     :class:`CorrCholeskyTransform` instead.
@@ -750,7 +758,7 @@ class LowerCholeskyTransform(Transform):
     >>> from lucid.distributions.transforms import LowerCholeskyTransform
     >>> T = LowerCholeskyTransform()
     >>> X = lucid.tensor([[0.0, 0.0], [0.5, 0.0]])
-    >>> L = T(X)  # softplus on diagonal, raw on strict lower
+    >>> L = T(X)  # exp on diagonal, raw on strict lower
     """
 
     event_dim: int = 2
@@ -759,66 +767,42 @@ class LowerCholeskyTransform(Transform):
 
     @override
     def _call(self, x: Tensor) -> Tensor:
-        """Forward: lower-triangular extraction with softplus on the diagonal.
+        """Forward: lower-triangular extraction with ``exp`` on the diagonal.
 
         Off-diagonal entries pass through unchanged; diagonal entries are
-        mapped via ``softplus`` to keep them strictly positive; the upper
-        triangle is masked to zero.
+        exponentiated to keep them strictly positive; the upper triangle is
+        masked to zero.
         """
-        from lucid.nn.functional.activations import softplus
-
-        # ``x`` is already a ``(*batch, D, D)`` matrix; we mask out the
-        # upper triangle (lucid has no native vec→tril helper, so the
-        # caller pre-shapes the input).
         D: int = int(x.shape[-1])
-        # Build a lower-triangular mask.
-        mask: Tensor = _tril_mask(D, x.dtype, x.device)
+        tril_mask: Tensor = _tril_mask(D, x.dtype, x.device)
         diag_mask: Tensor = _eye_mask(D, x.dtype, x.device)
-        off_mask: Tensor = mask - diag_mask
-        # Diagonal: softplus; off-diagonal: identity; rest: zero.
-        diag: Tensor = softplus(x * diag_mask) * diag_mask
-        off: Tensor = x * off_mask
-        return diag + off
+        off_mask: Tensor = tril_mask - diag_mask
+        # ``exp`` runs on the diagonal lanes only: an off-diagonal ``x`` that
+        # is large would overflow to ``inf`` and ``inf * 0`` is NaN.
+        diag: Tensor = (x * diag_mask).exp() * diag_mask
+        return diag + x * off_mask
 
     @override
     def _inverse(self, y: Tensor) -> Tensor:
-        """Inverse: invert softplus on the diagonal, leave the rest unchanged.
+        """Inverse: ``log`` on the diagonal, strict lower triangle copied.
 
-        Uses ``softplus^{-1}(z) = log(exp(z) - 1)`` on the diagonal entries
-        of ``y`` and copies the strict lower triangle directly.
+        The off-diagonal lanes are filled with 1 before the ``log`` so the
+        masked-out entries stay finite (``log 0`` is ``-inf`` and
+        ``-inf * 0`` is NaN).
         """
-        # Inverse: invert softplus on the diagonal, off-diagonal as-is,
-        # zero out the upper triangle.
         D: int = int(y.shape[-1])
         diag_mask: Tensor = _eye_mask(D, y.dtype, y.device)
         tril_mask: Tensor = _tril_mask(D, y.dtype, y.device)
         off_mask: Tensor = tril_mask - diag_mask
-        # ``softplus^{-1}(z) = log(expm1(z))``.
-        #
-        # Two things have to be right here and neither was.  Masking to the
-        # diagonal *before* the inverse leaves zeros off it, and
-        # ``log(exp(0) - 1) = log(0) = -inf``; multiplying that back by a
-        # zero mask gives NaN, so the entire strict lower triangle came back
-        # NaN and the transform had no working inverse at all — nor, in
-        # consequence, did any ``TransformedDistribution`` built on it, since
-        # ``log_prob`` goes through the inverse.  Substituting 1.0 off the
-        # diagonal keeps the masked-out lanes finite.
-        #
-        # ``exp(z) - 1`` also loses every significant digit as ``z`` grows;
-        # ``expm1`` is the form that survives a large diagonal.
         safe: Tensor = y * diag_mask + (1.0 - diag_mask)
-        diag_in: Tensor = lucid.log(lucid.expm1(safe)) * diag_mask
-        off_in: Tensor = y * off_mask
-        return diag_in + off_in
+        return lucid.log(safe) * diag_mask + y * off_mask
 
     @override
     def log_abs_det_jacobian(self, x: Tensor, y: Tensor) -> Tensor:
-        r"""Sum of :math:`\log \sigma(x_{ii})` over the diagonal.
+        r"""Sum of the diagonal of ``x``: :math:`\sum_i x_{ii}`.
 
-        Off-diagonal entries contribute unit Jacobian; only the softplus
-        applied to the diagonal contributes the non-trivial factor
-        :math:`\sigma'(x) = \sigma(x)`, computed via the stable identity
-        :math:`\log \sigma(x) = -\operatorname{softplus}(-x)`.
+        Off-diagonal entries contribute unit Jacobian; the exponential on
+        the diagonal contributes :math:`\log \exp(x_{ii}) = x_{ii}`.
 
         Parameters
         ----------
@@ -833,13 +817,7 @@ class LowerCholeskyTransform(Transform):
         Tensor
             Per-sample log-Jacobian (reduces the last two matrix axes).
         """
-        D: int = int(x.shape[-1])
-        diag_mask: Tensor = _eye_mask(D, x.dtype, x.device)
-        # σ(x) = 1/(1+exp(-x)) ⇒ log σ(x) = −softplus(−x).
-        from lucid.nn.functional.activations import softplus
-
-        log_sig: Tensor = -softplus(-(x * diag_mask))
-        return (log_sig * diag_mask).sum(dim=(-2, -1))
+        return x.diagonal(dim1=-2, dim2=-1).sum(dim=-1)
 
 
 def _eye_mask(D: int, dtype: DTypeLike, device: DeviceLike) -> Tensor:
