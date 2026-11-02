@@ -20,6 +20,7 @@ import struct
 from collections.abc import Mapping
 from dataclasses import dataclass
 
+from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid._tensor.tensor import Tensor as _T
@@ -58,25 +59,22 @@ _ST_UNSIGNED: dict[str, tuple[str, str, _C_engine.Dtype]] = {
     "U32": ("I", "q", _C_engine.Dtype.I64),
     "U64": ("Q", "q", _C_engine.Dtype.I64),
 }
-# Bytes per element, for every dtype whose stored length can be checked
-# against its shape.  A dtype outside the table (the 8-bit floats) is refused
-# by name when it is decoded, not here.
-_ST_ITEMSIZE: dict[str, int] = {
-    "F64": 8,
-    "F32": 4,
-    "F16": 2,
-    "BF16": 2,
-    "I64": 8,
-    "I32": 4,
-    "I16": 2,
-    "I8": 1,
-    "BOOL": 1,
-    "C64": 8,
-    "U8": 1,
-    "U16": 2,
-    "U32": 4,
-    "U64": 8,
-}
+
+
+def _itemsize(code: str) -> int | None:
+    """Bytes per element of the safetensors dtype ``code``, from the one dtype table.
+
+    A dtype Lucid stores reads its width from :mod:`lucid._promotion`; an
+    unsigned one from the ``array`` typecode it is stored as.  ``None`` for a
+    dtype outside both (the 8-bit floats), which is refused by name when it is
+    decoded.
+    """
+    if code in _ST_ENGINE:
+        return (_promotion.bit_width(_ST_ENGINE[code]) + 7) // 8
+    if code in _ST_UNSIGNED:
+        return array.array(_ST_UNSIGNED[code][0]).itemsize
+    return None
+
 
 _INT64_MAX = 2**63 - 1
 
@@ -246,7 +244,7 @@ class _SafeTensorsFile:
                 "data section (the file is truncated or the header is wrong)",
                 entry.name,
             )
-        itemsize = _ST_ITEMSIZE.get(entry.code)
+        itemsize = _itemsize(entry.code)
         if itemsize is None:
             return
         needed = math.prod(entry.shape) * itemsize
