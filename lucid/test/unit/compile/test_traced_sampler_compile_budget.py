@@ -53,7 +53,7 @@ _STALL_S = 30.0
 #: Targets that run eagerly by design (a traced value is read on the host), so there is no
 #: graph to compile.  Strict both ways: one that starts to compile, or one missing here
 #: that stops compiling, fails the guard.
-_EAGER_BY_DESIGN = frozenset({"random:poisson"})
+_EAGER_BY_DESIGN: frozenset[str] = frozenset()
 #: The signature of a known engine defect (LCD-804). A full reduction is bound keepdim-shaped
 #: against a 0-d trace shape, so the backward builds an element-count-changing reshape. The
 #: macOS 26 CI image's MPSGraph rejects it ("original module failed verification"); older

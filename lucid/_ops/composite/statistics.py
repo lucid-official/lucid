@@ -768,8 +768,8 @@ def poisson(input: Tensor, generator: _C_engine.Generator | None = None) -> Tens
     Parameters
     ----------
     input : Tensor
-        Non-negative rates :math:`\lambda_i` per output position.  Any
-        shape.
+        Non-negative, finite rates :math:`\lambda_i` per output position.
+        Any shape.
     generator : engine.Generator, optional
         Override Lucid's default Philox generator with an isolated
         stream.  When ``None`` (default), draws are controlled by
@@ -778,74 +778,49 @@ def poisson(input: Tensor, generator: _C_engine.Generator | None = None) -> Tens
     Returns
     -------
     Tensor
-        ``int64`` tensor with the same shape as ``input``.  Zero rates
-        always return zero.
+        ``int64`` tensor with the same shape as ``input``, on its device.
+        Zero rates always return zero.
 
     Raises
     ------
     ValueError
-        If any element of ``input`` is negative.
+        If any element of ``input`` is negative or not finite.
 
     Notes
     -----
-    Two-branch implementation:
+    Exact for every rate, and the algorithm is chosen per element:
 
-    * **Knuth's multiplication method** for ``rate < 30`` — exact but
-      runtime grows with the rate.
-    * **Normal approximation** :math:`\mathrm{Pois}(\lambda) \approx
-      \lfloor \mathcal{N}(\lambda, \sqrt{\lambda}) + 0.5 \rfloor`
-      for ``rate >= 30`` — bias < 0.05 standard deviations, orders of
-      magnitude faster than Knuth in the tail.
+    * **Inversion** for :math:`\lambda < 10`: the pmf table is accumulated
+      and a uniform draw is placed in it.
+    * **Transformed rejection with squeeze (PTRS**, Hoermann 1993) for
+      :math:`\lambda \ge 10`: elements whose proposal is rejected are
+      redrawn, as whole-tensor rounds, until every element has one.
+
+    Arithmetic is float64 on the CPU and float32 on Metal, where rates beyond
+    about :math:`1.6 \times 10^7` are no longer representable.
+
+    Examples
+    --------
+    >>> _ = lucid.manual_seed(0)
+    >>> draws = lucid.poisson(lucid.full((20000,), 5.0))
+    >>> bool((draws.float().mean() - 5.0).abs() < 0.1)
+    True
     """
-    from lucid._factories.random import _default_stream
+    from lucid._ops.composite._count_samplers import poisson_counts
 
-    g: _C_engine.Generator = generator if generator is not None else _default_stream()
+    if not input._impl.is_phantom:
+        # Only decides whether to raise; nothing read here reaches the draws.
+        from lucid.compile import _host_check
 
-    flat: Tensor = input.reshape(-1)
-    n: int = int(flat.numel())
-    out: list[int] = []
-    _SMALL_RATE_CUTOFF: float = 30.0
-    _TWO_PI: float = 2.0 * math.pi
-
-    for i in range(n):
-        r: float = float(flat[i].item())
-        if r < 0.0:
-            raise ValueError(f"poisson: rate must be non-negative, got {r} at flat index {i}")
-        if r == 0.0:
-            out.append(0)
-            continue
-
-        if r < _SMALL_RATE_CUTOFF:
-            # Knuth: keep multiplying U(0,1) draws until product ≤ e^{-rate}.
-            L: float = math.exp(-r)
-            k: int = 0
-            p: float = 1.0
-            while True:
-                k += 1
-                u: float = g.next_uniform_float()
-                # Guard against u==0 (Philox 24-bit mantissa never returns
-                # exactly 0, but be defensive against future RNG changes).
-                if u <= 0.0:
-                    u = 1e-300
-                p *= u
-                if p <= L:
-                    break
-            out.append(k - 1)
-        else:
-            # Normal approximation: Box-Muller for one std-normal, scale
-            # by √rate, shift by rate, round to nearest non-negative int.
-            u1: float = g.next_uniform_float()
-            u2: float = g.next_uniform_float()
-            if u1 <= 0.0:
-                u1 = 1e-30
-            z: float = math.sqrt(-2.0 * math.log(u1)) * math.cos(_TWO_PI * u2)
-            s: int = int(math.floor(r + math.sqrt(r) * z + 0.5))
-            out.append(max(0, s))
-
-    # Knuth sampling runs on the host, but the result must ride the input's
-    # device — a CPU return device-mismatched every downstream op (e.g.
-    # ``Poisson.log_prob`` combining the sample with a Metal ``rate``).
-    return lucid.tensor(out, dtype=lucid.int64, device=input.device).reshape(input.shape)
+        with _host_check():
+            lowest = float(input.min().item()) if input.numel() else 0.0
+            highest = float(input.max().item()) if input.numel() else 0.0
+        if lowest < 0.0 or not math.isfinite(highest) or not math.isfinite(lowest):
+            raise ValueError(
+                f"poisson: rate must be finite and non-negative, got values in "
+                f"[{lowest}, {highest}]"
+            )
+    return poisson_counts(input, generator)
 
 
 def histogram2d(

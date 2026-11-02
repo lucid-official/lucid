@@ -251,6 +251,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - state leftovers - legacy pickle, bad index, partial update
 
+- exact vectorised Poisson and Binomial samplers
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

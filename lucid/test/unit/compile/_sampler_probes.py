@@ -75,6 +75,22 @@ FUNCTIONS: dict[str, Draw] = {
 
 # ── top-level random ops ─────────────────────────────────────────────────────
 
+
+def _poisson_draw(w: Tensor) -> Tensor:
+    rate = lucid.full((3,), 25.0, device=DEVICE) * w
+    return D.Poisson(rate).sample().float() * w
+
+
+def _binomial_draw(w: Tensor) -> Tensor:
+    probs = lucid.full((3,), 0.3, device=DEVICE) * w
+    return D.Binomial(lucid.full((3,), 80.0, device=DEVICE), probs=probs).sample().float() * w
+
+
+def _negative_binomial_draw(w: Tensor) -> Tensor:
+    probs = lucid.full((3,), 0.3, device=DEVICE) * w
+    return D.NegativeBinomial(lucid.full((3,), 4.0, device=DEVICE), probs=probs).sample() * w
+
+
 _RANDOM: dict[str, Draw] = {
     "rand": lambda w: lucid.rand(3, device=DEVICE) * w,
     "randn": lambda w: lucid.randn(3, device=DEVICE) * w,
@@ -90,6 +106,10 @@ _RANDOM: dict[str, Draw] = {
     ).float()
     * w,
     "poisson": lambda w: lucid.poisson(lucid.full((3,), 2.0, device=DEVICE) * w) * w,
+    # The discrete laws' ``sample`` (LCD-681): whole-tensor inversion and rejection rounds.
+    "Poisson.sample": _poisson_draw,
+    "Binomial.sample": _binomial_draw,
+    "NegativeBinomial.sample": _negative_binomial_draw,
 }
 
 #: Public ``lucid.*`` names that look random and are not draws.

@@ -155,9 +155,9 @@ class Poisson(ExponentialFamily):
     def sample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:
         r"""Draw samples from the Poisson distribution.
 
-        Delegates to :func:`lucid.poisson`, which uses the Knuth exact
-        algorithm for small :math:`\lambda` and a Normal approximation
-        with rounding for large :math:`\lambda`.
+        Delegates to :func:`lucid.poisson`, which is exact for every
+        :math:`\lambda` (inversion below 10, PTRS transformed rejection
+        above).
 
         Parameters
         ----------
@@ -170,9 +170,8 @@ class Poisson(ExponentialFamily):
             Non-negative integer samples of shape
             ``(*sample_shape, *batch_shape)``.
         """
-        # Top-level ``lucid.poisson`` does the Knuth + Normal-approx work
-        # using the Lucid Philox PRNG, so ``manual_seed`` controls the
-        # stream end-to-end.
+        # ``lucid.poisson`` draws from the Lucid Philox PRNG, so
+        # ``manual_seed`` controls the stream end-to-end.
         rate_b: Tensor = self.rate + lucid.zeros(
             self._extended_shape(sample_shape), dtype=self.rate.dtype, device=self.rate.device
         )
@@ -337,10 +336,9 @@ class Binomial(_CountTrialDistribution):
     - Mean: :math:`E[X] = np`
     - Variance: :math:`\operatorname{Var}[X] = np(1-p)`
 
-    **Sampling strategy**: for :math:`n \leq 25` Bernoulli draws are summed
-    exactly along a dedicated axis.  For larger :math:`n` a Normal
-    approximation is used with the result rounded and clamped to
-    :math:`[0, n]`.
+    **Sampling strategy**: exact for every :math:`n`, with the algorithm
+    chosen per batch element — pmf-table inversion below :math:`np = 10`
+    and BTRS transformed rejection above it.
 
     Examples
     --------
@@ -357,8 +355,6 @@ class Binomial(_CountTrialDistribution):
 
     arg_constraints = {"total_count": nonnegative_integer, "probs": unit_interval, "logits": real}
     has_enumerate_support = True
-
-    _SMALL_N_CUTOFF: int = 25
 
     def __init__(
         self,
@@ -440,8 +436,12 @@ class Binomial(_CountTrialDistribution):
     def sample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:
         r"""Draw samples from the Binomial distribution.
 
-        Uses an exact strategy for small :math:`n` (sum of Bernoulli draws)
-        and a Normal approximation with rounding for large :math:`n`.
+        Exact for every :math:`n` and :math:`p`, and the algorithm is chosen
+        per batch element from its own :math:`np`: inversion of the pmf table
+        below :math:`np = 10`, the BTRS transformed-rejection sampler
+        (Hoermann 1993) above it, on :math:`\min(p, 1-p)` as the reference
+        does.  Arithmetic is float64 on the CPU and float32 on Metal, where
+        counts beyond :math:`n \approx 10^6` lose accuracy.
 
         Parameters
         ----------
@@ -454,44 +454,14 @@ class Binomial(_CountTrialDistribution):
             Non-negative integer samples in :math:`\{0, 1, \ldots, n\}`,
             shape ``(*sample_shape, *batch_shape)``.
         """
-        # Strategy:
-        #   * If max(total_count) ≤ cutoff: sum of Bernoullis along an
-        #     extra axis — exact.
-        #   * Otherwise: Normal approximation rounded to the integer
-        #     range [0, total_count].
-        max_n: int = int(self.total_count.max().item())
+        from lucid._ops.composite._count_samplers import binomial_counts
+
         out_shape: tuple[int, ...] = self._extended_shape(sample_shape)
         device = self._probs.device
         dtype = self._probs.dtype
-
-        if max_n <= self._SMALL_N_CUTOFF:
-            # Build (max_n, *out_shape) uniform draws, mask by trial-wise
-            # `i < total_count`, count where U < p.
-            full_shape: tuple[int, ...] = (max_n,) + out_shape
-            u: Tensor = lucid.rand(max_n, *out_shape, dtype=dtype, device=device)
-            p_b: Tensor = self._probs + lucid.zeros(full_shape, dtype=dtype, device=device)
-            tc_b_full: Tensor = self.total_count + lucid.zeros(
-                full_shape, dtype=dtype, device=device
-            )
-            # Per-trial active mask: trial index i is active if i < tc.
-            i_flat: Tensor = lucid.arange(0, max_n, 1, dtype=dtype, device=device)
-            i_idx: Tensor = i_flat.reshape([max_n] + [1] * len(out_shape)) + lucid.zeros(
-                full_shape, dtype=dtype, device=device
-            )
-            active: Tensor = (i_idx < tc_b_full).to(dtype)
-            success: Tensor = (u < p_b).to(dtype) * active
-            return success.sum(dim=0).to(lucid.int64).detach()
-
-        # Normal approximation.
-        mu: Tensor = self.mean + lucid.zeros(out_shape, dtype=dtype, device=device)
-        sigma: Tensor = self.variance.sqrt() + lucid.zeros(out_shape, dtype=dtype, device=device)
-        z: Tensor = lucid.randn(*out_shape, dtype=dtype, device=device)
-        sample: Tensor = (mu + sigma * z + 0.5).floor()
-        # Clamp to [0, total_count].
-        zero: Tensor = lucid.zeros_like(sample)
-        tc_b = self.total_count + zero
-        sample = sample.maximum(zero).minimum(tc_b)
-        return sample.to(lucid.int64).detach()
+        n: Tensor = self.total_count + lucid.zeros(out_shape, dtype=dtype, device=device)
+        p: Tensor = self._probs + lucid.zeros(out_shape, dtype=dtype, device=device)
+        return binomial_counts(n, p)
 
     @override
     def log_prob(self, value: Tensor) -> Tensor:
