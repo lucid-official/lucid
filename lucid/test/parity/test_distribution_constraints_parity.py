@@ -383,6 +383,9 @@ _EXCEPTIONS: dict[tuple[str, str], str] = {
     "concentration1 = 2 their power x^a lands in the base's support",
     ("LogNormal", "validates:cdf"): "the reference admits 0, whose log -inf "
     "is in its base Normal's support; 0 is not in the positive support",
+    ("TransformedDistribution", "validates:cdf"): "the reference admits 0, whose "
+    "inverse under exp is -inf, in its base Normal's support; 0 is not in the "
+    "positive codomain of the transform",
     ("Weibull", "validates:cdf"): "the reference admits -inf and 0 through its "
     "base Exponential; neither is in the positive support",
 }
@@ -658,12 +661,7 @@ _METHODS = ("cdf", "icdf", "entropy")
 
 # Where the reference answers and Lucid does not yet: each is pinned so that
 # implementing it shows up as an XPASS and the entry has to go.
-_PENDING: dict[tuple[str, str], str] = {
-    ("TransformedDistribution", "cdf"): "LCD-397: transforms declare no "
-    "sign/codomain to monotonize the base cdf with",
-    ("TransformedDistribution", "icdf"): "LCD-397: as cdf",
-    ("Wishart", "entropy"): "Wishart entropy (matrix.py, held by LCD-410)",
-}
+_PENDING: dict[tuple[str, str], str] = {}
 
 _PROBABILITIES: list[float] = [0.0, 1e-6, 0.1, 0.3, 0.5, 0.7, 0.9, 0.999, 1.0]
 

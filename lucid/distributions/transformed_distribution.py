@@ -1,5 +1,6 @@
-"""``TransformedDistribution`` and base/composite ``Transform`` abstractions."""
+"""``TransformedDistribution`` and the structural transforms (base, compose, inverse, reshape)."""
 
+import math
 from collections.abc import Sequence
 from typing import Self, final, override
 
@@ -46,10 +47,14 @@ class Transform:
     bijective : bool
         ``True`` if the transform is invertible (most are; notable
         exception: :class:`AbsTransform`).
-    sign : int
+    sign : int or Tensor
         :math:`+1` for monotone-increasing scalar bijections,
-        :math:`-1` for monotone-decreasing.  Used by the change-of-variable
-        machinery to track CDF orientation.
+        :math:`-1` for monotone-decreasing (a tensor when the slope is a
+        tensor, as with an :class:`AffineTransform` whose ``scale`` is).
+        :class:`TransformedDistribution` reads it to orient its CDF.  A
+        transform with no meaningful sign (:class:`AbsTransform`, the
+        vector-valued transforms) raises :class:`NotImplementedError` on
+        access, so a missing sign is never mistaken for ``+1``.
     event_dim : int
         Number of trailing tensor dimensions that the transform treats
         as a single event.  ``0`` for element-wise maps,
@@ -80,12 +85,27 @@ class Transform:
     """
 
     bijective: bool = True
-    sign: int = 1  # +1 if monotone increasing, −1 if decreasing.
     event_dim: int = 0
 
     def __init__(self) -> None:
         """Initialise the transform with an empty inverse cache."""
         self._inv: Transform | None = None
+
+    @property
+    def sign(self) -> int | Tensor:
+        """Orientation of the map: ``+1`` increasing, ``-1`` decreasing.
+
+        Only meaningful for a monotone scalar bijection.  A subclass states
+        its own (a class attribute for a fixed one, a property for one that
+        depends on parameters); the base refuses, so a transform that never
+        declared a sign cannot be silently read as increasing.
+
+        Raises
+        ------
+        NotImplementedError
+            For a transform with no defined sign.
+        """
+        raise NotImplementedError(f"{type(self).__name__}.sign")
 
     @property
     def domain(self) -> Constraint:
@@ -168,8 +188,13 @@ class _InverseTransform(Transform):
         self._base = base
         self.bijective = base.bijective
         self.event_dim = base.event_dim
-        self.sign = base.sign
         self._inv = base
+
+    @override
+    @property
+    def sign(self) -> int | Tensor:
+        """Sign of the base transform: a monotone map and its inverse share one."""
+        return self._base.sign
 
     @override
     @property
@@ -309,6 +334,21 @@ class ComposeTransform(Transform):
 
     @override
     @property
+    def sign(self) -> int | Tensor:
+        """Product of the parts' signs.
+
+        Raises
+        ------
+        NotImplementedError
+            If any part has no defined sign.
+        """
+        sign: int | Tensor = 1
+        for part in self.parts:
+            sign = sign * part.sign
+        return sign
+
+    @override
+    @property
     def domain(self) -> Constraint:
         """Input domain of the composite transform."""
         if not self.parts:
@@ -389,6 +429,123 @@ class ComposeTransform(Transform):
             total = total + p.log_abs_det_jacobian(cur, nxt)
             cur = nxt
         return total
+
+
+class ReshapeTransform(Transform):
+    r"""Pure-shape reinterpretation of the event shape :math:`y = \mathrm{reshape}(x)`.
+
+    Maps the trailing event tail of a tensor from ``in_shape`` to
+    ``out_shape``.  This is a *volume-preserving* bijection — the
+    underlying storage is unchanged, only the interpretation of which
+    axes constitute the event differs.  The product of dimensions must
+    match.
+
+    Parameters
+    ----------
+    in_shape : tuple[int, ...]
+        Event shape of the input tail.
+    out_shape : tuple[int, ...]
+        Event shape of the output tail.  Must satisfy
+        :math:`\prod_i \mathrm{in\_shape}_i = \prod_i \mathrm{out\_shape}_i`.
+
+    Raises
+    ------
+    ValueError
+        If ``prod(in_shape) != prod(out_shape)``.
+
+    Notes
+    -----
+    Forward:  :math:`\mathbf{y} = \mathrm{reshape}(\mathbf{x},
+    \mathrm{out\_shape})`.
+
+    Inverse:  :math:`\mathbf{x} = \mathrm{reshape}(\mathbf{y},
+    \mathrm{in\_shape})`.
+
+    Log Jacobian determinant:
+
+    .. math::
+
+        \log|\det J| = 0
+
+    everywhere — a reshape preserves Lebesgue measure exactly.  Useful
+    for stitching together transforms that expect different event
+    layouts (e.g. flatten a matrix event for a Cholesky-style
+    transform, then reshape back).
+
+    Examples
+    --------
+    >>> import lucid
+    >>> from lucid.distributions.transforms import ReshapeTransform
+    >>> T = ReshapeTransform(in_shape=(2, 3), out_shape=(6,))
+    >>> T(lucid.zeros(2, 3)).shape
+    (6,)
+    """
+
+    def __init__(self, in_shape: tuple[int, ...], out_shape: tuple[int, ...]) -> None:
+        """Validate that ``in_shape`` and ``out_shape`` have the same total size and store them.
+
+        Raises
+        ------
+        ValueError
+            If ``prod(in_shape) != prod(out_shape)``.
+        """
+        super().__init__()
+        in_n = math.prod(in_shape) if in_shape else 1
+        out_n = math.prod(out_shape) if out_shape else 1
+        if in_n != out_n:
+            raise ValueError(
+                f"ReshapeTransform: in_shape {in_shape} ({in_n} elements) "
+                f"!= out_shape {out_shape} ({out_n} elements)."
+            )
+        self.in_shape = in_shape
+        self.out_shape = out_shape
+        self.event_dim = max(len(in_shape), len(out_shape))
+
+    @override
+    @property
+    def domain(self) -> Constraint:
+        """``independent(real, len(in_shape))``."""
+        return constraints.independent(constraints.real, len(self.in_shape))
+
+    @override
+    @property
+    def codomain(self) -> Constraint:
+        """``independent(real, len(out_shape))``."""
+        return constraints.independent(constraints.real, len(self.out_shape))
+
+    @override
+    def forward_shape(self, shape: tuple[int, ...]) -> tuple[int, ...]:
+        """Replace the trailing ``in_shape`` dimensions with ``out_shape``."""
+        if len(shape) < len(self.in_shape):
+            return tuple(shape)
+        cut = len(shape) - len(self.in_shape)
+        return tuple(shape[:cut]) + tuple(self.out_shape)
+
+    @override
+    def inverse_shape(self, shape: tuple[int, ...]) -> tuple[int, ...]:
+        """Replace the trailing ``out_shape`` dimensions with ``in_shape``."""
+        if len(shape) < len(self.out_shape):
+            return tuple(shape)
+        cut = len(shape) - len(self.out_shape)
+        return tuple(shape[:cut]) + tuple(self.in_shape)
+
+    @override
+    def _call(self, x: Tensor) -> Tensor:
+        """Reshape the event tail of ``x`` from ``in_shape`` to ``out_shape``."""
+        batch = x.shape[: x.dim() - len(self.in_shape)]
+        return x.reshape(*batch, *self.out_shape)
+
+    @override
+    def _inverse(self, y: Tensor) -> Tensor:
+        """Reshape the event tail of ``y`` from ``out_shape`` back to ``in_shape``."""
+        batch = y.shape[: y.dim() - len(self.out_shape)]
+        return y.reshape(*batch, *self.in_shape)
+
+    @override
+    def log_abs_det_jacobian(self, x: Tensor, y: Tensor) -> Tensor:
+        """Zero Jacobian — pure reshape is volume-preserving."""
+        batch = x.shape[: x.dim() - len(self.in_shape)]
+        return lucid.zeros(tuple(batch), dtype=x.dtype, device=x.device)
 
 
 class TransformedDistribution(Distribution):
@@ -566,6 +723,110 @@ class TransformedDistribution(Distribution):
             )
             - log_det
         )
+
+    def _orientation(self) -> int | Tensor:
+        """Product of the transforms' signs: ``+1`` when the chain increases.
+
+        Read before anything is evaluated, so a chain containing a transform
+        with no sign — and so no CDF — is refused for that reason, rather
+        than by whatever its inverse does to the point first.
+        """
+        sign: int | Tensor = 1
+        for transform in self.transforms:
+            sign = sign * transform.sign
+        return sign
+
+    @staticmethod
+    def _monotonize_cdf(value: Tensor, sign: int | Tensor) -> Tensor:
+        """Flip ``value -> 1 - value`` when ``sign`` says the chain decreases.
+
+        The CDF of ``T(X)`` is ``F_X(T^-1(y))`` for an increasing ``T`` and
+        ``1 - F_X(T^-1(y))`` for a decreasing one; the quantile is the same
+        flip applied to the probability.  ``sign`` may be a tensor (a negative
+        ``scale`` in one element of a batch, say), in which case the flip is
+        per element.
+        """
+        if isinstance(sign, int) and sign == 1:
+            return value
+        return sign * (value - 0.5) + 0.5
+
+    @override
+    def cdf(self, value: Tensor) -> Tensor:
+        r"""Cumulative distribution function of the transformed variable.
+
+        Inverts the transform chain, scores the preimage under the base
+        distribution's CDF, and flips the answer to :math:`1 - F` when the
+        chain is decreasing:
+
+        .. math::
+
+            F_Y(y) = F_X(T^{-1}(y)) \quad (T \text{ increasing}),
+            \qquad 1 - F_X(T^{-1}(y)) \quad (T \text{ decreasing}).
+
+        Parameters
+        ----------
+        value : Tensor
+            Point(s) of the transformed variable.
+
+        Returns
+        -------
+        Tensor
+            Probabilities in :math:`[0, 1]`.
+
+        Raises
+        ------
+        NotImplementedError
+            If the base distribution has no CDF, or a transform in the
+            chain has no defined :attr:`~Transform.sign`.
+
+        Examples
+        --------
+        >>> import lucid
+        >>> from lucid.distributions import Normal
+        >>> from lucid.distributions.transforms import ExpTransform, TransformedDistribution
+        >>> d = TransformedDistribution(Normal(0.0, 1.0), [ExpTransform()])
+        >>> d.cdf(lucid.tensor(1.0))  # the median of a LogNormal(0, 1) is 1
+        tensor(0.5)
+        """
+        sign = self._orientation()
+        for transform in self.transforms[::-1]:
+            value = transform.inv(value)
+        return self._monotonize_cdf(self.base_dist.cdf(value), sign)
+
+    @override
+    def icdf(self, value: Tensor) -> Tensor:
+        r"""Inverse CDF (quantile function) of the transformed variable.
+
+        Flips the probability to :math:`1 - p` when the chain is decreasing,
+        takes the base distribution's quantile, and pushes it forward through
+        the transforms.
+
+        Parameters
+        ----------
+        value : Tensor
+            Probabilities in :math:`[0, 1]`.
+
+        Returns
+        -------
+        Tensor
+            Quantiles of the transformed variable.
+
+        Raises
+        ------
+        NotImplementedError
+            If the base distribution has no inverse CDF, or a transform in
+            the chain has no defined :attr:`~Transform.sign`.
+
+        Examples
+        --------
+        >>> import lucid
+        >>> from lucid.distributions import Normal
+        >>> from lucid.distributions.transforms import AffineTransform, TransformedDistribution
+        >>> d = TransformedDistribution(Normal(0.0, 1.0), [AffineTransform(0.0, -1.0)])
+        >>> d.icdf(lucid.tensor(0.975))  # a decreasing map reflects the quantile
+        tensor(1.96)
+        """
+        return self._push(self.base_dist.icdf(self._monotonize_cdf(value, self._orientation())))
 
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:

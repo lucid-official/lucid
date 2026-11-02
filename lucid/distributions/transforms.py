@@ -23,6 +23,7 @@ from lucid.distributions.constraints import Constraint
 from lucid.distributions.distribution import Distribution
 from lucid.distributions.transformed_distribution import (
     ComposeTransform as ComposeTransform,
+    ReshapeTransform as ReshapeTransform,
     Transform as Transform,
     TransformedDistribution as TransformedDistribution,
     _InverseTransform as _InverseTransform,
@@ -63,6 +64,7 @@ class ExpTransform(Transform):
 
     domain: Constraint = constraints.real
     codomain: Constraint = constraints.positive
+    sign: int = 1
 
     @override
     def _call(self, x: Tensor) -> Tensor:
@@ -132,6 +134,7 @@ class SigmoidTransform(Transform):
 
     domain: Constraint = constraints.real
     codomain: Constraint = constraints.unit_interval
+    sign: int = 1
 
     @override
     def _call(self, x: Tensor) -> Tensor:
@@ -205,6 +208,7 @@ class TanhTransform(Transform):
 
     domain: Constraint = constraints.real
     codomain: Constraint = constraints.interval(-1.0, 1.0)
+    sign: int = 1
 
     @override
     def _call(self, x: Tensor) -> Tensor:
@@ -249,16 +253,17 @@ class AffineTransform(Transform):
     The fundamental location-scale transform.  Composing with a
     standard Normal yields :math:`\mathcal{N}(\mathrm{loc},
     \mathrm{scale}^2)`; it underpins virtually every reparameterised
-    sampler in the codebase.  Bijective with sign matching
-    ``sign(scale)``; the implementation fixes ``self.sign = +1``, so the
-    caller is responsible for ensuring ``scale > 0``.
+    sampler in the codebase.  Bijective, with :attr:`sign` that of ``scale``
+    (``+1``, ``0`` or ``-1`` for a number; the element-wise sign tensor for
+    a tensor).
 
     Parameters
     ----------
     loc : Tensor or float
         Additive offset :math:`b`.
     scale : Tensor or float
-        Multiplicative slope :math:`a` (assumed positive).
+        Multiplicative slope :math:`a`; a negative one makes the map
+        decreasing.
     event_dim : int, optional
         Number of trailing dimensions treated as a single event. Default ``0``.
 
@@ -289,16 +294,21 @@ class AffineTransform(Transform):
     """
 
     def __init__(self, loc: Tensor | float, scale: Tensor | float, event_dim: int = 0) -> None:
-        """Store the affine offset ``loc``, multiplier ``scale``, and ``event_dim``.
-
-        The caller is responsible for ensuring ``scale > 0``; ``sign`` is
-        fixed at ``+1`` here so the transform is treated as increasing.
-        """
+        """Store the affine offset ``loc``, multiplier ``scale``, and ``event_dim``."""
         super().__init__()
         self.loc = _as_tensor(loc)
         self.scale = _as_tensor(scale)
         self.event_dim = event_dim
-        self.sign = 1  # Caller is responsible for ``scale > 0``.
+        # Held as a tensor, a number's sign would cost a device read: keep it.
+        self._scale_number = float(scale) if isinstance(scale, (int, float)) else None
+
+    @override
+    @property
+    def sign(self) -> int | Tensor:
+        """Sign of ``scale``: ``1`` / ``0`` / ``-1`` for a number, else the sign tensor."""
+        if self._scale_number is not None:
+            return 1 if self._scale_number > 0 else -1 if self._scale_number < 0 else 0
+        return self.scale.sign()
 
     @override
     @property
@@ -405,6 +415,12 @@ class PowerTransform(Transform):
         """Store the (element-wise) power ``exponent``."""
         super().__init__()
         self.exponent = _as_tensor(exponent)
+
+    @override
+    @property
+    def sign(self) -> int | Tensor:
+        """Sign of ``exponent``: the map is increasing for ``p > 0``, decreasing for ``p < 0``."""
+        return self.exponent.sign()
 
     @override
     def _call(self, x: Tensor) -> Tensor:
@@ -843,7 +859,8 @@ class AbsTransform(Transform):
     Maps :math:`\mathbb{R} \to [0, \infty)` element-wise by folding the
     sign.  Useful when composing with symmetric base distributions
     (e.g. a Normal) to produce a half-Normal or folded-Normal
-    pushforward.  ``bijective = False`` and ``sign = +1``.
+    pushforward.  ``bijective = False`` and it has no :attr:`sign` — a fold
+    is neither increasing nor decreasing.
 
     Because both :math:`x` and :math:`-x` map to the same :math:`y`,
     the transform is non-invertible.  The pseudo-inverse used here is
@@ -883,7 +900,6 @@ class AbsTransform(Transform):
     """
 
     bijective: bool = False
-    sign: int = 1
     domain: Constraint = constraints.real
     codomain: Constraint = constraints.positive
 
@@ -953,8 +969,13 @@ class IndependentTransform(Transform):
         self.transform = transform
         self.reinterpreted_batch_ndims = reinterpreted_batch_ndims
         self.bijective = transform.bijective
-        self.sign = transform.sign
         self.event_dim = transform.event_dim + reinterpreted_batch_ndims
+
+    @override
+    @property
+    def sign(self) -> int | Tensor:
+        """Sign of the wrapped transform."""
+        return self.transform.sign
 
     @override
     @property
@@ -993,125 +1014,6 @@ class IndependentTransform(Transform):
         """Sum the wrapped Jacobian over the reinterpreted trailing dims."""
         lp = self.transform.log_abs_det_jacobian(x, y)
         return _sum_rightmost(lp, self.reinterpreted_batch_ndims)
-
-
-class ReshapeTransform(Transform):
-    r"""Pure-shape reinterpretation of the event shape :math:`y = \mathrm{reshape}(x)`.
-
-    Maps the trailing event tail of a tensor from ``in_shape`` to
-    ``out_shape``.  This is a *volume-preserving* bijection — the
-    underlying storage is unchanged, only the interpretation of which
-    axes constitute the event differs.  The product of dimensions must
-    match.
-
-    Parameters
-    ----------
-    in_shape : tuple[int, ...]
-        Event shape of the input tail.
-    out_shape : tuple[int, ...]
-        Event shape of the output tail.  Must satisfy
-        :math:`\prod_i \mathrm{in\_shape}_i = \prod_i \mathrm{out\_shape}_i`.
-
-    Raises
-    ------
-    ValueError
-        If ``prod(in_shape) != prod(out_shape)``.
-
-    Notes
-    -----
-    Forward:  :math:`\mathbf{y} = \mathrm{reshape}(\mathbf{x},
-    \mathrm{out\_shape})`.
-
-    Inverse:  :math:`\mathbf{x} = \mathrm{reshape}(\mathbf{y},
-    \mathrm{in\_shape})`.
-
-    Log Jacobian determinant:
-
-    .. math::
-
-        \log|\det J| = 0
-
-    everywhere — a reshape preserves Lebesgue measure exactly.  Useful
-    for stitching together transforms that expect different event
-    layouts (e.g. flatten a matrix event for a Cholesky-style
-    transform, then reshape back).
-
-    Examples
-    --------
-    >>> import lucid
-    >>> from lucid.distributions.transforms import ReshapeTransform
-    >>> T = ReshapeTransform(in_shape=(2, 3), out_shape=(6,))
-    >>> T(lucid.zeros(2, 3)).shape
-    (6,)
-    """
-
-    def __init__(self, in_shape: tuple[int, ...], out_shape: tuple[int, ...]) -> None:
-        """Validate that ``in_shape`` and ``out_shape`` have the same total size and store them.
-
-        Raises
-        ------
-        ValueError
-            If ``prod(in_shape) != prod(out_shape)``.
-        """
-        super().__init__()
-        import math as _math
-
-        in_n = _math.prod(in_shape) if in_shape else 1
-        out_n = _math.prod(out_shape) if out_shape else 1
-        if in_n != out_n:
-            raise ValueError(
-                f"ReshapeTransform: in_shape {in_shape} ({in_n} elements) "
-                f"!= out_shape {out_shape} ({out_n} elements)."
-            )
-        self.in_shape = in_shape
-        self.out_shape = out_shape
-        self.event_dim = max(len(in_shape), len(out_shape))
-
-    @override
-    @property
-    def domain(self) -> Constraint:
-        """``independent(real, len(in_shape))``."""
-        return constraints.independent(constraints.real, len(self.in_shape))
-
-    @override
-    @property
-    def codomain(self) -> Constraint:
-        """``independent(real, len(out_shape))``."""
-        return constraints.independent(constraints.real, len(self.out_shape))
-
-    @override
-    def forward_shape(self, shape: tuple[int, ...]) -> tuple[int, ...]:
-        """Replace the trailing ``in_shape`` dimensions with ``out_shape``."""
-        if len(shape) < len(self.in_shape):
-            return tuple(shape)
-        cut = len(shape) - len(self.in_shape)
-        return tuple(shape[:cut]) + tuple(self.out_shape)
-
-    @override
-    def inverse_shape(self, shape: tuple[int, ...]) -> tuple[int, ...]:
-        """Replace the trailing ``out_shape`` dimensions with ``in_shape``."""
-        if len(shape) < len(self.out_shape):
-            return tuple(shape)
-        cut = len(shape) - len(self.out_shape)
-        return tuple(shape[:cut]) + tuple(self.in_shape)
-
-    @override
-    def _call(self, x: Tensor) -> Tensor:
-        """Reshape the event tail of ``x`` from ``in_shape`` to ``out_shape``."""
-        batch = x.shape[: x.dim() - len(self.in_shape)]
-        return x.reshape(*batch, *self.out_shape)
-
-    @override
-    def _inverse(self, y: Tensor) -> Tensor:
-        """Reshape the event tail of ``y`` from ``out_shape`` back to ``in_shape``."""
-        batch = y.shape[: y.dim() - len(self.out_shape)]
-        return y.reshape(*batch, *self.in_shape)
-
-    @override
-    def log_abs_det_jacobian(self, x: Tensor, y: Tensor) -> Tensor:
-        """Zero Jacobian — pure reshape is volume-preserving."""
-        batch = x.shape[: x.dim() - len(self.in_shape)]
-        return lucid.zeros(tuple(batch), dtype=x.dtype, device=x.device)
 
 
 class CorrCholeskyTransform(Transform):
@@ -1448,6 +1350,7 @@ class CumulativeDistributionTransform(Transform):
 
     codomain: Constraint = constraints.unit_interval
     event_dim: int = 0
+    sign: int = 1
 
     def __init__(self, distribution: Distribution) -> None:
         """Store the distribution whose CDF/ICDF pair defines the transform."""
