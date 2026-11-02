@@ -275,6 +275,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - follow decoupled_weight_decay edits in Adam, NAdam, RAdam
 
+- compiled AdamW reads decoupled_weight_decay from the group
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

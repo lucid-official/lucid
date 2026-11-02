@@ -122,10 +122,10 @@ OPTIONS: dict[str, dict[str, object]] = {
     ),
 }
 
-# A key an optimizer keeps that is no choice of the caller's: AdamW's engine
-# is the decoupled one, so the group's copy of the flag changes nothing in
-# eager — and nothing in the compiled twin.
-FIXED: dict[str, dict[str, object]] = {"AdamW": {"decoupled_weight_decay": False}}
+# A key an optimizer keeps that is no constructor argument: AdamW starts
+# decoupled, and an edit of the group's flag to ``False`` switches it to
+# Adam's coupled rule in eager (as in the reference) and in the compiled twin.
+GROUP_ONLY: dict[str, dict[str, object]] = {"AdamW": {"decoupled_weight_decay": False}}
 
 # What the compiled path does not do.  LBFGS's compiled step is a different
 # algorithm — per-element Barzilai-Borwein, no closure, no line search —
@@ -192,7 +192,7 @@ def test_every_option_is_in_the_table(name: str) -> None:
     only the table has is one the optimizer no longer keeps.
     """
     kept = _group_options(name)
-    accounted = set(OPTIONS.get(name, ())) | set(FIXED.get(name, ()))
+    accounted = set(OPTIONS.get(name, ())) | set(GROUP_ONLY.get(name, ()))
     accounted |= ALGORITHM_DIFFERS.get(name, frozenset())
     assert kept - accounted == set(), f"{name}: options with no entry: {sorted(kept - accounted)}"
     assert (
@@ -280,18 +280,49 @@ def test_a_flipped_option_follows_eager(name: str, key: str) -> None:
     assert moved > 1e-5, f"{name}: flipping {key} changes nothing in {STEPS} steps"
 
 
-@pytest.mark.parametrize("name", sorted(FIXED))
-def test_a_fixed_key_changes_nothing_in_either_path(name: str) -> None:
-    """AdamW decays decoupled whatever its group's copy of the flag says."""
+@pytest.mark.parametrize("flip_at", [(0,), (2,), (1, 3)], ids=["from-start", "mid-run", "and-back"])
+@pytest.mark.parametrize("name", sorted(GROUP_ONLY))
+def test_a_group_only_key_follows_eager(name: str, flip_at: tuple[int, ...]) -> None:
+    """A key edited on the group (AdamW's decoupled flag) is read by both paths each step."""
     x, t = _data()
     eager, comp = _both("compiled", _maker(name))
-    for runner in (eager, comp):
-        runner.opt.param_groups[0].update(FIXED[name])
-    for _ in range(STEPS):
+    plain = _run("eager", _maker(name))
+    for k in range(STEPS):
+        if k in flip_at:
+            for runner in (eager, comp):
+                group = runner.opt.param_groups[0]
+                for key, value in GROUP_ONLY[name].items():
+                    group[key] = value if group[key] != value else not value
         eager.step(x, t)
         comp.step(x, t)
-    assert _drift(_snapshot(eager.model), _snapshot(comp.model)) < TOL
+        plain.step(x, t)
+        drift = _drift(_snapshot(eager.model), _snapshot(comp.model))
+        assert drift < TOL, f"{name}: step {k + 1}: drift {drift:.3e}"
     assert _state_gap(comp.opt.state_dict(), eager.opt.state_dict()) <= TOL
+    # The edit must show in the run, or agreeing proves nothing.
+    assert _drift(_snapshot(plain.model), _snapshot(eager.model)) > 1e-5
+
+
+@pytest.mark.parametrize("start", [False, True], ids=["coupled-first", "decoupled-first"])
+@pytest.mark.parametrize("name", ["Adam", "NAdam", "RAdam"])
+def test_decoupled_weight_decay_flipped_mid_run_follows_eager(name: str, start: bool) -> None:
+    """The flag is read from the group at every step, in both directions (LCD-702)."""
+    x, t = _data()
+    maker = _maker(name, decoupled_weight_decay=start)
+    eager, comp = _both("compiled", maker)
+    plain = _run("eager", maker)
+    for k in range(STEPS):
+        if k in (2, 4):
+            for runner in (eager, comp):
+                group = runner.opt.param_groups[0]
+                group["decoupled_weight_decay"] = not group["decoupled_weight_decay"]
+        eager.step(x, t)
+        comp.step(x, t)
+        plain.step(x, t)
+        drift = _drift(_snapshot(eager.model), _snapshot(comp.model))
+        assert drift < TOL, f"{name}: step {k + 1}: drift {drift:.3e}"
+    assert _state_gap(comp.opt.state_dict(), eager.opt.state_dict()) <= TOL
+    assert _drift(_snapshot(plain.model), _snapshot(eager.model)) > 1e-5
 
 
 # ── maximize, the option every optimizer has ────────────────────────

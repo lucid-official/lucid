@@ -2,8 +2,8 @@
 
 :func:`~lucid.compile._optim.compiler.compile_optimizer` dispatches here.
 These four share one weight-decay rule — coupled L2 folded into the
-gradient, or, when the group sets ``decoupled_weight_decay`` (always, for
-AdamW), a decay of the parameter itself — which ``_AdamLike._prepared`` states once.
+gradient, or, when the group sets ``decoupled_weight_decay`` (on by default
+for AdamW), a decay of the parameter itself — which ``_AdamLike._prepared`` states once.
 """
 
 import math
@@ -23,11 +23,6 @@ from lucid.compile._optim.compiler import (
 from lucid.compile._optim.spec import _hp
 
 
-def _decoupled(group: dict[str, object]) -> bool:
-    """Whether ``group`` decays its weights apart from the gradient."""
-    return bool(group.get("decoupled_weight_decay", False))
-
-
 class _AdamLike(_CompiledStepBase):
     """What Adam, NAdam and RAdam share: the betas, two moments and one weight-decay rule.
 
@@ -38,14 +33,15 @@ class _AdamLike(_CompiledStepBase):
     # What a group without its own gets.
     _DEFAULT_LR: float = 1e-3
     _DEFAULT_WD: float = 0.0
-    # AdamW decays its weights decoupled whatever its group says: its eager
-    # engine is the decoupled one.
-    _ALWAYS_DECOUPLED: bool = False
+    # Whether a group that does not carry the flag decays decoupled.  A group
+    # that does is read as it stands (AdamW's too, as eager reads it).
+    _DEFAULT_DECOUPLED: bool = False
     _BETA_SCALARS: tuple[str, ...] = ("beta1", "one_minus_beta1", "beta2", "one_minus_beta2")
 
     @override
     def _flags(self, group: dict[str, object]) -> _Flags:
-        return (_wd_on(group, self._DEFAULT_WD), self._ALWAYS_DECOUPLED or _decoupled(group))
+        decoupled = bool(group.get("decoupled_weight_decay", self._DEFAULT_DECOUPLED))
+        return (_wd_on(group, self._DEFAULT_WD), decoupled)
 
     @override
     def _state_names(self, flags: _Flags) -> tuple[str, ...]:
@@ -182,7 +178,7 @@ class _CompiledAdamW(_CompiledAdam):
     :class:`lucid.optim.AdamW` : eager counterpart.
     """
 
-    _ALWAYS_DECOUPLED = True
+    _DEFAULT_DECOUPLED = True
     _DEFAULT_WD = 1e-2
 
 
