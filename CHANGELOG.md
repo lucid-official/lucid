@@ -347,6 +347,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - configs take the reference's fields, order and kinds
 - models and entry points take the reference's signatures
 - uniform package cards on the API reference index
+- reference module names resolve on the zoo's classes
 
 ---
 

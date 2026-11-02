@@ -57,6 +57,7 @@ from lucid.peft._slots import (
     _outside_slots,
     _SlotState,
 )
+from lucid.peft._target_aliases import _zoo_target_names
 from lucid.peft._target_defaults import (
     DEFAULT_LORA_TARGET_MODULES,
     DEFAULT_LORA_TARGET_PARAMETERS,
@@ -868,6 +869,8 @@ class _BaseTuner(_AdapterHost, ABC):
                 stored.exclude_modules = _with_subtrees_excluded(stored.exclude_modules, skipped)
             if parameters and isinstance(stored, _NamesParameters):
                 stored.target_parameters = sorted(parameters)
+        elif stored.target_modules is not None and not isinstance(stored.target_modules, str):
+            stored.target_modules = _zoo_target_names(model, stored.target_modules)
         resolved = _resolve_all_linear(stored, model, cls._adapted_linear)
         if resolved is not None:
             stored.target_modules = resolved
