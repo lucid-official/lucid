@@ -289,6 +289,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - squeeze loss, norm, dot, trace and all/any to trace shape
 
+- AdaLoRA takes the reference's own default table
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

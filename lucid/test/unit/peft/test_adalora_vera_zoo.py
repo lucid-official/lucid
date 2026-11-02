@@ -299,13 +299,33 @@ def test_vera_with_no_names_adapts_what_the_reference_s_table_says(family: str) 
     assert all(isinstance(layer, VeraLayer) for layer in layers.values())
 
 
+#: The reference's AdaLoRA table widens T5 to every attention projection and the feed-forward matrices.
+_T5_ADALORA = {
+    f"t5.{stack}.blocks.{i}.{attention}.{n}"
+    for stack, attentions in (
+        ("encoder", ("self_attention",)),
+        ("decoder", ("self_attention", "cross_attention")),
+    )
+    for i in range(_DEPTH)
+    for attention in attentions
+    for n in ("q", "k", "v", "o")
+} | {
+    f"t5.{stack}.blocks.{i}.feed_forward.{n}"
+    for stack in ("encoder", "decoder")
+    for i in range(_DEPTH)
+    for n in ("wi", "wo")
+}
+
+
 @pytest.mark.parametrize("family", ["gpt2", "bert", "t5"])
-def test_adalora_with_no_names_takes_the_lora_table(family: str) -> None:
+def test_adalora_with_no_names_takes_the_reference_s_table(family: str) -> None:
+    """LoRA's rows, but T5's is the reference's own wider one (``test_reference_targets.py``)."""
     spec = _DEFAULTS[family]
     lucid.manual_seed(0)
     model = create_model(spec.factory, **spec.overrides)
     get_peft_model(model, AdaLoraConfig(total_step=10, init_r=2, target_r=1))
-    assert set(dict(_tuner_layers(model))) == spec.adapted
+    expected = _T5_ADALORA if family == "t5" else spec.adapted
+    assert set(dict(_tuner_layers(model))) == expected
 
 
 @pytest.mark.parametrize("family", sorted(_DEFAULTS))

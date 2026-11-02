@@ -24,6 +24,7 @@ from lucid.peft.tuners._support import _reset_fan_in_fan_out
 from lucid.peft.tuners.adalora._allocator import RankAllocator
 from lucid.peft.tuners.adalora._checks import _check_rank_pattern
 from lucid.peft.tuners.adalora._config import AdaLoraConfig
+from lucid.peft.tuners.adalora._defaults import ADALORA_DEFAULT_TARGET_MODULES
 from lucid.peft.tuners.adalora._layer import AdaLoraLayer
 
 _E: str = "lora_E"
@@ -116,7 +117,8 @@ class AdaLoraModel(_FileFormat, _BaseTuner, peft_type=PeftType.ADALORA):
 
     _layer_types = AdaLoraLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = AdaLoraConfig
-    # The LoRA table, as the reference does; its raw-parameter defaults are LoRA's alone.
+    _default_targets: ClassVar[Mapping[str, frozenset[str]]] = ADALORA_DEFAULT_TARGET_MODULES
+    # Its raw-parameter defaults are LoRA's alone.
     _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = _NO_PARAMETERS
 
     def __init__(
