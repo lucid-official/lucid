@@ -267,6 +267,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse non-tensor arguments with TypeError at the boundary
 
+- one guard per function, installed where it is defined
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

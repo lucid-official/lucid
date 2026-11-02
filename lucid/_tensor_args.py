@@ -324,13 +324,8 @@ def _slots_of(fn: Callable[..., object]) -> tuple[_Slot, ...]:
     return tuple(slots)
 
 
-def _guarded[**P, R](fn: Callable[P, R], restore: Callable[[], None]) -> Callable[P, R]:
-    """``fn`` behind a check of its tensor parameters (read on the first call).
-
-    A function with no tensor parameter has nothing to check: on its first call
-    ``restore`` puts ``fn`` itself back where the wrapper stood, so only a
-    caller that kept the wrapper pays for it.
-    """
+def _guarded[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
+    """``fn`` behind a check of its tensor parameters (read on the first call)."""
     slots: tuple[_Slot, ...] | None = None
     op = fn.__name__
 
@@ -339,8 +334,6 @@ def _guarded[**P, R](fn: Callable[P, R], restore: Callable[[], None]) -> Callabl
         nonlocal slots
         if slots is None:
             slots = _slots_of(fn)
-            if not slots:
-                restore()
         for slot in slots:
             slot.check(op, args, kwargs)
         return fn(*args, **kwargs)
@@ -349,26 +342,52 @@ def _guarded[**P, R](fn: Callable[P, R], restore: Callable[[], None]) -> Callabl
     return wrapper
 
 
+#: The guard of each function, so one function has one guard however many
+#: namespaces re-export it: ``pickle`` finds a function by ``__module__`` and
+#: ``__qualname__`` and refuses it unless that lookup returns the very object.
+_GUARDS: dict[types.FunctionType, Callable[..., object]] = {}
+
+
+def _owner_slot(fn: types.FunctionType) -> tuple[object, str] | None:
+    """The object and attribute name under which ``fn`` is found by ``__module__`` and ``__qualname__``."""
+    if "<locals>" in fn.__qualname__:
+        return None
+    *path, last = fn.__qualname__.split(".")
+    owner: object = sys.modules.get(fn.__module__)
+    for part in path:
+        owner = getattr(owner, part, None)
+    return (owner, last) if owner is not None and vars(owner).get(last) is fn else None
+
+
 def guard_functions(namespace: types.ModuleType | type, names: Sequence[str]) -> None:
     """Put the tensor-argument check in front of the functions ``names`` of ``namespace``.
 
-    The functions are replaced in ``namespace`` itself, so a caller that looks
-    one up later — a Tensor method importing its composite, another module of
-    the package — meets the guarded one.  A name that is not a plain Python
-    function (a class, a constant, an engine builtin) is left as it is, and a
-    function already guarded is not wrapped twice.
+    The guard is installed where the function is defined as well as in
+    ``namespace``, and one function has one guard: ``module.name`` is the
+    function whichever door it is reached by, a Tensor method importing its
+    composite, a package re-exporting it, or ``pickle`` looking it up by name.
+    A name that is not a plain Python function (a class, a constant, an engine
+    builtin) is left as it is, and a function already guarded is not wrapped
+    twice.
 
     Parameters
     ----------
     namespace : module or type
-        Where the functions live, and where the guarded ones are put back.
+        Where the functions are found, and where the guarded ones are put.
     names : sequence of str
         The names to guard.
     """
     for name in names:
         fn = vars(namespace).get(name)
-        if isinstance(fn, types.FunctionType) and not getattr(fn, _MARK, False):
-            setattr(namespace, name, _guarded(fn, functools.partial(setattr, namespace, name, fn)))
+        if not isinstance(fn, types.FunctionType) or getattr(fn, _MARK, False):
+            continue
+        guard = _GUARDS.get(fn)
+        if guard is None:
+            guard = _GUARDS[fn] = _guarded(fn)
+            if (home := _owner_slot(fn)) is not None:
+                owner, attr = home
+                setattr(owner, attr, guard)
+        setattr(namespace, name, guard)
 
 
 def guard_namespace(name: str, names: Sequence[str]) -> None:

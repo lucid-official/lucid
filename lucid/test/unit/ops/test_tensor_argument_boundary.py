@@ -22,12 +22,17 @@ A refusal is a ``TypeError`` that names ``Tensor`` and the type it got.
 """
 
 import json
+import pickle
 import re
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import pytest
+
+import lucid
+import lucid.nn
 
 #: A bad value for a tensor slot: the one that crashes, and one wrong type.
 _BAD = (None, "bad")
@@ -381,6 +386,82 @@ def test_the_guard_does_not_move_a_warning_off_the_caller(site: str) -> None:
     with pytest.warns(UserWarning) as record:
         call()  # type: ignore[operator]
     assert record[0].filename == __file__
+
+
+def _guarded_functions() -> list[types.FunctionType]:
+    """Every guarded function the public namespaces hold, and the Tensor class's."""
+    import importlib
+
+    import lucid
+    from lucid import _tensor_args as guard
+
+    found: dict[int, types.FunctionType] = {}
+    for ns_name in (
+        "lucid",
+        "lucid.nn.functional",
+        "lucid.linalg",
+        "lucid.special",
+        "lucid.einops",
+    ):
+        ns = importlib.import_module(ns_name)
+        for name in getattr(ns, "__all__", ()):
+            fn = getattr(ns, name, None)
+            if isinstance(fn, types.FunctionType) and getattr(fn, guard._MARK, False):
+                found[id(fn)] = fn
+    for fn in vars(lucid.Tensor).values():
+        if isinstance(fn, types.FunctionType) and getattr(fn, guard._MARK, False):
+            found[id(fn)] = fn
+    return list(found.values())
+
+
+def _found_by_name(fn: types.FunctionType) -> object:
+    """What ``pickle`` finds when it looks ``fn`` up by ``__module__`` and ``__qualname__``."""
+    found: object = sys.modules[fn.__module__]
+    for part in fn.__qualname__.split("."):
+        found = getattr(found, part, None)
+    return found
+
+
+def test_a_guarded_function_is_the_one_its_module_names() -> None:
+    """One function, one guard: the defining module holds the very object a
+    package re-exports, so ``pickle`` (which checks exactly that) accepts it."""
+    guarded = _guarded_functions()
+    assert len(guarded) > 400
+    assert [f.__qualname__ for f in guarded if _found_by_name(f) is not f] == []
+
+
+def test_a_guarded_function_survives_a_pickle_round_trip() -> None:
+    guarded = _guarded_functions()
+    broken = []
+    for fn in guarded:
+        try:
+            ok = pickle.loads(pickle.dumps(fn)) is fn
+        except pickle.PicklingError:
+            ok = False
+        if not ok:
+            broken.append(f"{fn.__module__}.{fn.__qualname__}")
+    assert broken == []
+
+
+class _HoldsAFunction(lucid.nn.Module):
+    """A module that keeps a public function as an attribute."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.lin = lucid.nn.Linear(2, 2)
+        self.act = lucid.nn.functional.relu
+
+    def forward(self, x: lucid.Tensor) -> lucid.Tensor:
+        return self.act(self.lin(x))
+
+
+def test_a_module_holding_a_public_function_saves_and_loads(tmp_path: Path) -> None:
+    module = _HoldsAFunction()
+    lucid.save(module, tmp_path / "m.lucid")
+    loaded = lucid.load(tmp_path / "m.lucid", weights_only=False)
+    assert loaded.act is lucid.nn.functional.relu
+    x = lucid.randn(3, 2)
+    assert loaded(x).tolist() == module(x).tolist()
 
 
 if __name__ == "__main__":
