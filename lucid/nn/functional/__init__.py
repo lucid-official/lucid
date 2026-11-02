@@ -16,6 +16,7 @@ a Metal tensor stays on Metal end to end.  A function that silently returned
 CPU state would force a round trip on every step of a training loop.
 """
 
+from lucid._tensor_args import guard_namespace
 from lucid.nn.functional.activations import (
     relu,
     leaky_relu,
@@ -336,3 +337,8 @@ __all__ = [
     "accuracy",
     "correct_count",
 ]
+
+# The public boundary: a ``None`` or a stray type in a tensor parameter is a
+# ``TypeError`` here, not an ``AttributeError`` from wherever the function
+# first reads it.  The layers import from the submodules, past this check.
+guard_namespace(__name__, __all__)

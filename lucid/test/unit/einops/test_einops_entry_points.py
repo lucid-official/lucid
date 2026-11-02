@@ -334,7 +334,7 @@ def test_pack_refuses_mismatched_axes_around_the_star() -> None:
 def test_pack_refuses_no_tensors_and_non_tensors() -> None:
     with pytest.raises(_C_engine.InvalidArgument, match="no tensors"):
         le.pack([], "a *")
-    with pytest.raises(TypeError, match="not a Tensor"):
+    with pytest.raises(TypeError, match="expected Tensor as element 1"):
         le.pack([lucid.ones(2, 3), 5], "a *")  # type: ignore[list-item]
 
 

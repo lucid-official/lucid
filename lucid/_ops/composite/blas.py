@@ -684,6 +684,11 @@ def block_diag(*tensors: Tensor) -> Tensor:
         ``(sum(h_i), sum(w_i))`` where ``h_i, w_i`` are the (promoted)
         block heights and widths.
 
+    Raises
+    ------
+    ValueError
+        If an input has more than two dimensions.
+
     Notes
     -----
     For blocks :math:`A_1, A_2, \dots, A_k`, the result is
@@ -712,7 +717,12 @@ def block_diag(*tensors: Tensor) -> Tensor:
         return lucid.zeros(0, 0)
 
     parts: list[Tensor] = []
-    for t_i in tensors:
+    for index, t_i in enumerate(tensors):
+        if t_i.ndim > 2:
+            raise ValueError(
+                f"block_diag(): inputs must have 2 or fewer dimensions, but input {index} "
+                f"has {t_i.ndim} dimensions"
+            )
         if t_i.ndim == 0:
             t_i = t_i.reshape(1, 1)
         elif t_i.ndim == 1:

@@ -14,6 +14,7 @@ The five ``*_window`` factories are the reference's top-level spelling
 import warnings
 
 import lucid
+from lucid._tensor_args import GUARD_FRAMES
 from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike
@@ -629,6 +630,7 @@ def _pad_tail(signal: Tensor, missing: int) -> Tensor:
         f"istft: length runs {missing} samples past what the frames cover; the "
         "tail is padded with zeros",
         stacklevel=3,
+        skip_file_prefixes=GUARD_FRAMES,
     )
     from lucid.nn.functional import pad
 

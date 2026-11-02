@@ -220,7 +220,7 @@ def _unwrap_or_scalar(
             return _scalar_impl(x, _promotion.result_type(x), _C_engine.Device.CPU)
         return _scalar_impl(x, _promotion.result_type(ref_impl, x), ref_impl.device)
 
-    raise TypeError(f"Cannot convert {type(x).__name__} to TensorImpl")
+    raise TypeError(f"expected Tensor or Number, but got {type(x).__name__}")
 
 
 def _is_opmath_operand(impl: _C_engine.TensorImpl, peer_device: _C_engine.Device) -> bool:

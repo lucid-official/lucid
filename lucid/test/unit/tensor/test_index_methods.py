@@ -172,7 +172,7 @@ class TestGatherOrder:
         [
             (lambda x, i: lucid.gather(x, 1), "required positional argument: 'index'"),
             (lambda x, i: lucid.gather(x, 1.5, i), "dim must be an int"),
-            (lambda x, i: lucid.gather(x, 1, [0, 1]), "index must be a Tensor"),
+            (lambda x, i: lucid.gather(x, 1, [0, 1]), "argument 'index'.*must be Tensor"),
             (lambda x, i: lucid.gather(x, 1, i, axis=1), "unexpected keyword argument 'axis'"),
             (lambda x, i: lucid.gather(x, 1, dim=1, index=i), "multiple values for argument 'dim'"),
             (lambda x, i: lucid.gather(x, i, index=i), "0-d integer tensor"),

@@ -271,8 +271,7 @@ def cholesky(input: Tensor, *, upper: bool = False) -> Tensor:
         return cast(Tensor, _CholeskyAutograd.apply(_wrap(x_impl), upper))
 
 
-from lucid.autograd.function import Function as _AutogradFunction
-from lucid.autograd.function import FunctionCtx
+from lucid.autograd.function import Function as _AutogradFunction, FunctionCtx
 from lucid._unsupported import unsupported_if
 
 
@@ -3359,3 +3358,4 @@ __all__ = [
     "matrix_exp",
     "diagonal",
 ]
+lucid._tensor_args.guard_namespace(__name__, __all__)

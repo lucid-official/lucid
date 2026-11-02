@@ -10,6 +10,7 @@ for the same code, with the reference's signatures; new code calls
 import warnings
 from typing import TYPE_CHECKING
 
+from lucid._tensor_args import GUARD_FRAMES
 from lucid.nn.functional.sampling import interpolate
 
 if TYPE_CHECKING:
@@ -26,6 +27,7 @@ def _warn_use_interpolate(name: str) -> None:
         f"`nn.functional.{name}` is deprecated. Use `nn.functional.interpolate` instead.",
         UserWarning,
         stacklevel=3,
+        skip_file_prefixes=GUARD_FRAMES,
     )
 
 

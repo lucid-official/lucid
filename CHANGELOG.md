@@ -265,6 +265,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - max/min(dim) and cummax/cummin gradient follows the index
 
+- refuse non-tensor arguments with TypeError at the boundary
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

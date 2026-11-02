@@ -466,9 +466,9 @@ def test_the_reference_answers_equal_the_same(ref: ModuleType, case: str) -> Non
 @pytest.mark.parametrize("other", [1, 1.0, [1.0], None])
 def test_equal_refuses_what_is_not_a_tensor(other: object) -> None:
     x = lucid.tensor([1.0])
-    with pytest.raises(TypeError, match="lucid.equal"):
+    with pytest.raises(TypeError, match=r"equal\(\): argument 'other'.*must be Tensor"):
         lucid.equal(x, other)  # type: ignore[arg-type]  # the refusal under test
-    with pytest.raises(TypeError, match="lucid.equal"):
+    with pytest.raises(TypeError, match=r"equal\(\): argument 'other'.*must be Tensor"):
         x.equal(other)
 
 

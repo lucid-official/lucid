@@ -64,7 +64,6 @@ from lucid.special._polynomials import (
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
 
-
 # ── Error-function family ──────────────────────────────────────────────────
 
 
@@ -1723,3 +1722,4 @@ __all__ = [
     "modified_bessel_i0",
     "modified_bessel_i1",
 ]
+lucid._tensor_args.guard_namespace(__name__, __all__)

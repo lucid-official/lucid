@@ -145,8 +145,8 @@ def test_gcd_and_lcm_answer_the_promoted_dtype(name: str, device: str) -> None:
         (([4.0, 6.0], "float32"), ([6.0, 9.0], "float32"), "integer tensors"),
         (([4, 6], "int64"), ([6.0, 9.0], "float32"), "integer tensors"),
         (([True], "bool_"), ([True], "bool_"), "integer tensors"),
-        (([3], "int64"), 2, "must be a Tensor"),
-        (3, ([2], "int64"), "must be a Tensor"),
+        (([3], "int64"), 2, "must be Tensor"),
+        (3, ([2], "int64"), "must be Tensor"),
     ],
     ids=["float", "int-float", "bool", "scalar-other", "scalar-input"],
 )
@@ -159,7 +159,7 @@ def test_gcd_and_lcm_refuse_what_is_not_an_integer_tensor(
             return lucid.tensor(data, dtype=getattr(lucid, dtype))
         return spec
 
-    with pytest.raises(TypeError, match=f"lucid.{name}.*{what}"):
+    with pytest.raises(TypeError, match=f"{name}.*{what}"):
         getattr(lucid, name)(build(a), build(b))
 
 

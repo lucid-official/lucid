@@ -531,17 +531,14 @@ def _load_method_aliases() -> dict[str, object]:
     import inspect
 
     from lucid._tensor.tensor import Tensor as _T
+    from lucid._tensor_args import require_tensor
 
     def _make(method_name: str) -> _Callable[..., object]:
         """Build a free-function wrapper that forwards to ``Tensor.<method_name>``."""
 
         def _fn(input: object, *args: object, **kwargs: object) -> object:
             """Dispatch ``lucid.<method_name>(input, ...)`` to ``input.<method_name>(...)``."""
-            if not isinstance(input, _T):
-                raise TypeError(
-                    f"lucid.{method_name}() expects a Tensor as the first "
-                    f"argument, got {type(input).__name__}"
-                )
+            require_tensor(method_name, "input", input, 0)
             return getattr(input, method_name)(*args, **kwargs)
 
         _fn.__name__ = method_name

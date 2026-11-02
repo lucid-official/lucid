@@ -30,6 +30,7 @@ from typing import SupportsIndex
 
 import lucid
 from lucid import _contraction
+from lucid._tensor_args import guard_namespace
 from lucid._C import engine as _C_engine
 from lucid._C.engine import einops as _C_einops
 from lucid._dispatch import _REAL_FLOATS, _unwrap, _wrap
@@ -388,6 +389,8 @@ def einsum(equation: str, *operands: Tensor | Sequence[Tensor]) -> Tensor:
 
     Raises
     ------
+    TypeError
+        ``equation`` is not a string, or an operand is not a Tensor.
     lucid._C.engine.InvalidArgument
         The equation is malformed: a subscript outside ``[a-zA-Z]``, a
         stray ``.``, the wrong number of operands, or an output subscript
@@ -412,6 +415,8 @@ def einsum(equation: str, *operands: Tensor | Sequence[Tensor]) -> Tensor:
     >>> lucid.einops.einsum("ii->", m)
     tensor(5.)
     """
+    if not isinstance(equation, str):
+        raise TypeError(f"einsum(): argument 'equation' must be str, not {type(equation).__name__}")
     raw_impls = [_unwrap(t) for t in _einsum_operands(operands)]
     explicit, impl_list = _einsum.normalise(equation, raw_impls)
     stand_alone, contracted = _contraction.split_sums(explicit)
@@ -469,3 +474,4 @@ def parse_shape(tensor: Tensor, pattern: str) -> dict[str, int]:
 
 
 __all__ = ["rearrange", "reduce", "repeat", "einsum", "pack", "unpack", "parse_shape"]
+guard_namespace(__name__, __all__)

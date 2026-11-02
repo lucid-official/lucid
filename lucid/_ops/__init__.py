@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
+from lucid._tensor_args import require_tensor, require_tensors, slot_name
 from lucid._ops._registry import OpEntry, _REGISTRY, _bind_leading
 
 
@@ -286,6 +287,13 @@ def _leading_tensor_names(entry: OpEntry) -> tuple[str, ...]:
 # ── Wrapper factories ────────────────────────────────────────────────────────
 
 
+def _operand(op: str, names: tuple[str, ...], a: object, i: int) -> object:
+    """``a``, the ``i``-th tensor operand of ``op`` that is no tensor: a number
+    the adapter takes, or an object the engine would take for a null handle."""
+    require_tensor(op, slot_name(names, i, "input"), a, i, number=True)
+    return a
+
+
 def _make_free_fn(name: str) -> object:
     """Build a free function that unwraps Tensors → TensorImpls, calls the
     engine op, and rewraps the result.  The returned wrapper carries an
@@ -302,6 +310,7 @@ def _make_free_fn(name: str) -> object:
     if e.n_tensor_args == -1:
 
         def _fn_list(tensors: list[Tensor], *args: object, **kwargs: object) -> object:
+            require_tensors(fn_name, "tensors", tensors, 0)
             impls = [_unwrap(t) for t in tensors]
             result = e.engine_fn(impls, *args, **kwargs)
             if e.returns_tensor:
@@ -320,12 +329,14 @@ def _make_free_fn(name: str) -> object:
     engine_fn = e.engine_fn
     returns_tensor = e.returns_tensor
 
+    operand = functools.partial(_operand, fn_name, leading)
+
     def _fn(*args: object, **kwargs: object) -> object:
         if kwargs and leading:
             args, kwargs = _bind_leading(fn_name, leading, args, kwargs)
         proc = [
             (
-                (a if (impl := _promotion.try_unwrap(a)) is None else impl)
+                (operand(a, i) if (impl := _promotion.try_unwrap(a)) is None else impl)
                 if i < n_tensor_args
                 else a
             )

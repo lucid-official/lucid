@@ -40,7 +40,7 @@ def test_the_function_and_method_forms_agree() -> None:
     assert lucid.div(_ints(7, 8), 2).tolist() == [3.5, 4.0]
     assert _ints(7, 8).div(2).tolist() == [3.5, 4.0]
     assert lucid.divide(_ints(7, 8), 2).tolist() == [3.5, 4.0]
-    assert lucid.true_divide(7, _ints(2)).tolist() == [3.5]
+    assert lucid.true_divide(_ints(7), 2).tolist() == [3.5]
 
 
 def test_a_half_precision_operand_keeps_its_precision() -> None:

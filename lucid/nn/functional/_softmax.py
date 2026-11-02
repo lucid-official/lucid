@@ -9,6 +9,7 @@ import operator
 import warnings
 
 import lucid as _l
+from lucid._tensor_args import GUARD_FRAMES
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._reduce import _log_softmax_adapter, _softmax_adapter, _softmin_adapter
 from lucid._tensor.tensor import Tensor
@@ -23,6 +24,7 @@ def _get_softmax_dim(name: str, ndim: int, dim: int | None, stacklevel: int) -> 
         "Change the call to include dim=X as an argument.",
         UserWarning,
         stacklevel=stacklevel,
+        skip_file_prefixes=GUARD_FRAMES,
     )
     return 0 if ndim in (0, 1, 3) else 1
 
@@ -281,7 +283,11 @@ def gumbel_softmax(
     1.0
     """
     if eps != 1e-10:
-        warnings.warn("`eps` parameter is deprecated and has no effect.", stacklevel=2)
+        warnings.warn(
+            "`eps` parameter is deprecated and has no effect.",
+            stacklevel=2,
+            skip_file_prefixes=GUARD_FRAMES,
+        )
     # Sample Gumbel noise: −log(−log U) with U ∈ (0, 1).  Clamp away
     # from the boundaries to avoid log(0).
     u: Tensor = _l.rand_like(logits).clip(1e-7, 1.0 - 1e-7)

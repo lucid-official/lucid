@@ -212,11 +212,6 @@ def equal(input: Tensor, other: Tensor) -> bool:
     >>> lucid.equal(lucid.tensor([1, 2]), lucid.tensor([[1, 2]]))
     False
     """
-    for name, x in (("input", input), ("other", other)):
-        if not _is_tensor(x):
-            raise TypeError(
-                f"lucid.equal(): argument '{name}' must be a Tensor, " f"got {type(x).__name__}"
-            )
     if tuple(input.shape) != tuple(other.shape):
         return False
     return bool(lucid.eq(input, other).all().item())

@@ -29,6 +29,7 @@ from lucid._C import engine as _C_engine
 from lucid._dispatch import _REAL_FLOATS, _binary_operands, _cannot_cast_inplace, _unwrap, _wrap
 from lucid._tensor._copy import _tensor_deepcopy
 from lucid._tensor._indexing import _adopt_inplace
+from lucid._tensor_args import guard_methods, require_tensor, slot_name
 from lucid._ops._adapters import _clip_adapter, _clip_dtype, _clip_scalar_bounds
 from lucid._ops._registry import _REGISTRY, OpEntry, _bind_leading
 
@@ -99,6 +100,14 @@ def _fixed_arity_method(e: OpEntry, tensor_cls: type) -> object:
     spreads = e.method_name in _SPREAD_INT_LIST
     engine_fn = e.engine_fn
 
+    def _operand(a: object, i: int) -> object:
+        """``a``, a tensor slot's argument that is no tensor: a number the
+        op takes, or an object the engine would take for a null handle."""
+        require_tensor(
+            method.__name__, slot_name(_operand_names(e), i, "other"), a, i + 1, number=True
+        )
+        return a
+
     def method(self: Tensor, *args: object, **kwargs: object) -> Tensor:
         """Standard-arity method body for registry-driven Tensor methods."""
         if spreads and (len(args) > 1 or not (args or kwargs)):
@@ -106,7 +115,15 @@ def _fixed_arity_method(e: OpEntry, tensor_cls: type) -> object:
         if kwargs and binds:
             args, kwargs = _bind_leading(method.__name__, _operand_names(e), args, kwargs)
         proc = [
-            _unwrap(a) if i < n_after_self and isinstance(a, tensor_cls) else a  # type: ignore[arg-type]
+            (
+                (
+                    _unwrap(a)  # type: ignore[arg-type]
+                    if isinstance(a, tensor_cls)
+                    else _operand(a, i)
+                )
+                if i < n_after_self
+                else a
+            )
             for i, a in enumerate(args)
         ]
         result = engine_fn(self._impl, *proc, **kwargs)
@@ -1311,3 +1328,4 @@ def _inject_methods(tensor_cls: type) -> None:
         _fn.__name__ = _name
         setattr(tensor_cls, _name, _fn)
     type.__setattr__(tensor_cls, "_version", property(lambda self: self._impl.version))
+    guard_methods(tensor_cls)

@@ -283,7 +283,7 @@ def test_a_refused_in_place_write_leaves_its_input_alone(device: str, name: str)
 
 
 def test_an_index_that_is_not_a_tensor_is_a_type_error() -> None:
-    with pytest.raises(TypeError, match="index_copy: index must be a Tensor"):
+    with pytest.raises(TypeError, match=r"index_copy\(\): argument 'index'.*must be Tensor"):
         lucid.index_copy(lucid.zeros(3), 0, [0, 1], lucid.ones(2))
 
 

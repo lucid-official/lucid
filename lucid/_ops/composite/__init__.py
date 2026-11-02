@@ -28,6 +28,7 @@ to the top level" is ``COMPOSITE_NAMES`` below.  The top-level
 ``lucid/__init__.py`` consumes that set via its lazy-loader registry.
 """
 
+from lucid._tensor_args import guard_functions
 from lucid._ops.composite import (
     constants,
     elementwise,
@@ -65,6 +66,9 @@ _SUBMODULES = (
 _seen: set[str] = set()
 _names: list[str] = []
 for _m in _SUBMODULES:
+    # Guarded in the submodule itself, not just here: the Tensor methods
+    # import their composite from it.
+    guard_functions(_m, getattr(_m, "__all__", ()))
     for _n in getattr(_m, "__all__", ()):
         if _n in _seen:
             raise RuntimeError(f"composite name collision: {_n!r} appears in multiple submodules")

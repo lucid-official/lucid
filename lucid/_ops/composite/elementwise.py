@@ -361,7 +361,7 @@ def rsub(input: Tensor, other: Tensor | Scalar, *, alpha: float = 1.0) -> Tensor
     )
 
 
-def arctan2(input: Tensor, other: Tensor) -> Tensor:
+def arctan2(input: Tensor, other: Tensor | Scalar) -> Tensor:
     r"""Quadrant-correct two-argument arctangent.
 
     Verbose alias of :func:`lucid.atan2`.  Returns the polar angle
@@ -372,7 +372,7 @@ def arctan2(input: Tensor, other: Tensor) -> Tensor:
     ----------
     input : Tensor
         Ordinate (imaginary / y-coordinate). Must broadcast with ``other``.
-    other : Tensor
+    other : Tensor | Scalar
         Abscissa (real / x-coordinate). Must broadcast with ``input``.
 
     Returns

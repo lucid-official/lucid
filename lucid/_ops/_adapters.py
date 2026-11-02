@@ -36,6 +36,7 @@ from lucid._ops._dims import (
     _wrap_dims,
 )
 from lucid._ops._reduce import _ValuesIndices
+from lucid._tensor_args import require_tensor, require_tensors
 from lucid._types import Scalar, TensorOrScalar
 
 if TYPE_CHECKING:
@@ -257,9 +258,8 @@ def _gather_adapter(input: _Impl, dim: int, index: Tensor, *, sparse_grad: bool 
     """
     if sparse_grad:
         raise _C_engine.NotImplementedError("gather(): sparse_grad=True is not supported")
-    index_impl = _promotion.try_unwrap(index)
-    if index_impl is None:
-        raise TypeError(f"gather(): index must be a Tensor, got {type(index).__name__}")
+    require_tensor("gather", "index", index, 2)
+    index_impl = _unwrap(index)
     d = dim if type(dim) is int else _as_dim(dim)
     return _C_engine.gather(_unwrap(input), index_impl, d)
 
@@ -955,8 +955,17 @@ _keep_engine_signature(_kron_adapter, _C_engine.kron)
 def _meshgrid_adapter(*tensors: Tensor, indexing: str = "ij") -> list[_Impl]:
     """meshgrid(*tensors, indexing='ij') — variadic input; ``indexing`` kwarg
     selects between matrix ('ij') and Cartesian ('xy') ordering."""
+    if not isinstance(indexing, str):
+        raise TypeError(
+            f"meshgrid(): argument 'indexing' must be str, not {type(indexing).__name__}"
+        )
+    if indexing not in ("ij", "xy"):
+        raise ValueError(
+            f"meshgrid(): indexing must be one of 'xy' or 'ij', but received: {indexing}"
+        )
     if len(tensors) == 1 and isinstance(tensors[0], (list, tuple)):
         tensors = tuple(tensors[0])
+    require_tensors("meshgrid", "tensors", tensors)
     impls = [_unwrap(t) for t in tensors]
     return _C_engine.meshgrid(impls, indexing == "xy")
 

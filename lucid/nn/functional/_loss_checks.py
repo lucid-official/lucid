@@ -33,6 +33,7 @@ from collections.abc import Callable
 from typing import Literal, TYPE_CHECKING, override, overload
 
 import lucid as _lucid
+from lucid._tensor_args import GUARD_FRAMES
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap
@@ -269,6 +270,7 @@ def _check_target(x: Tensor, target: Tensor, op: str) -> tuple[int, ...]:
             "is rarely what a regression means",
             UserWarning,
             stacklevel=3,
+            skip_file_prefixes=GUARD_FRAMES,
         )
     return shape
 
