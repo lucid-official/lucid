@@ -314,8 +314,8 @@ class TestGenerate:
         mask = lucid.ones(2, 5, device=device).long()
         peft = get_peft_model(_t5(device), _METHODS[method]("SEQ_2_SEQ_LM"))
         assert type(peft) is PeftModelForSeq2SeqLM
-        cached = peft.generate(src, max_length=7, attention_mask=mask)
-        plain = peft.generate(src, max_length=7, attention_mask=mask, use_cache=False)
+        cached = peft.generate(input_ids=src, max_length=7, attention_mask=mask)
+        plain = peft.generate(input_ids=src, max_length=7, attention_mask=mask, use_cache=False)
         assert cached.shape == (2, 7) and bool((cached == plain).all().item())
 
 
@@ -548,7 +548,9 @@ class TestRefusals:
 
     def test_a_model_that_cannot_take_embeddings_is_named(self) -> None:
         net = nn.Sequential(nn.Embedding(5, 4), nn.Linear(4, 4))
-        net.config = type("C", (), {"hidden_size": 4, "num_hidden_layers": 1, "num_attention_heads": 1})()  # type: ignore[assignment]
+        net.config = type(
+            "C", (), {"hidden_size": 4, "num_hidden_layers": 1, "num_attention_heads": 1}
+        )()  # type: ignore[assignment]
         with pytest.raises(NotImplementedError, match="inputs_embeds"):
             get_peft_model(net, PromptTuningConfig(num_virtual_tokens=2))
 

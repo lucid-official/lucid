@@ -318,7 +318,7 @@ class TestTuner:
     def test_a_standalone_tuner_takes_task_ids_itself(self) -> None:
         lucid.manual_seed(0)
         net = nn.Sequential(nn.Linear(8, 4))
-        poly = PolyModel(net, _config(target_modules=["0"]))
+        poly = PolyModel(net, _config(target_modules=["0"]), adapter_name="default")
         assert tuple(poly(lucid.randn(2, 8), task_ids=lucid.tensor([0, 2])).shape) == (2, 4)
 
     def test_training_lowers_the_loss_and_moves_only_the_adapter(self, device: str) -> None:

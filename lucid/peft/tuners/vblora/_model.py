@@ -60,10 +60,12 @@ class VBLoRAModel(_SharedTablesTuner, _ConfigTuner, peft_type=PeftType.VBLORA):
     ----------
     model : nn.Module
         The model to adapt.
-    config : VBLoRAConfig
+    peft_config : VBLoRAConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``vblora_logits_*`` and in the bank.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -80,7 +82,7 @@ class VBLoRAModel(_SharedTablesTuner, _ConfigTuner, peft_type=PeftType.VBLORA):
     >>> from lucid.peft.tuners.vblora import VBLoRAConfig, VBLoRAModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 4))
     >>> config = VBLoRAConfig(r=2, num_vectors=6, vector_length=4, target_modules=["0", "2"])
-    >>> vblora = VBLoRAModel(net, config)
+    >>> vblora = VBLoRAModel(net, config, "default")
     >>> tuple(vblora.vblora_vector_bank["default"].shape)
     (6, 4)
     >>> net[0].base_layer.weight.requires_grad, vblora.vblora_vector_bank["default"].requires_grad
@@ -93,12 +95,6 @@ class VBLoRAModel(_SharedTablesTuner, _ConfigTuner, peft_type=PeftType.VBLORA):
     _config_class: ClassVar[type[_TargetedConfig]] = VBLoRAConfig
     _default_targets: ClassVar[Mapping[str, frozenset[str]]] = VBLORA_DEFAULT_TARGET_MODULES
     _table_names: ClassVar[tuple[str, ...]] = ("vblora_vector_bank",)
-
-    def __init__(
-        self, model: nn.Module, config: VBLoRAConfig, adapter_name: str = "default"
-    ) -> None:
-        """Adapt ``model`` in place, building VB-LoRA's logits and bank as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)
 
     @property
     def vblora_vector_bank(self) -> nn.ParameterDict:

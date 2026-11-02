@@ -312,7 +312,7 @@ class TestDefaults:
 
     def test_no_names_takes_the_defaults_for_the_model_type(self) -> None:
         net = _Model()
-        tuner = IA3Model(net, IA3Config())
+        tuner = IA3Model(net, IA3Config(), adapter_name="default")
         config = tuner.peft_config["default"]
         assert isinstance(config, IA3Config)
         assert config.target_modules == {"key", "value", "output.dense"}
@@ -323,44 +323,56 @@ class TestDefaults:
         assert layers["output.dense"].is_feedforward  # type: ignore[attr-defined]
 
     def test_given_names_are_kept_and_feedforward_still_comes_from_the_table(self) -> None:
-        tuner = IA3Model(_Model(), IA3Config(target_modules=["key", "output.dense"]))
+        tuner = IA3Model(
+            _Model(), IA3Config(target_modules=["key", "output.dense"]), adapter_name="default"
+        )
         config = tuner.peft_config["default"]
         assert isinstance(config, IA3Config) and config.feedforward_modules == {"output.dense"}
 
     def test_a_model_type_with_no_row_is_told_what_to_give(self) -> None:
         with pytest.raises(ValueError, match="Please specify `target_modules`"):
-            IA3Model(_Model("custom"), IA3Config())
+            IA3Model(_Model("custom"), IA3Config(), adapter_name="default")
         with pytest.raises(ValueError, match="Please specify `feedforward_modules`"):
-            IA3Model(_Model("custom"), IA3Config(target_modules=["key"]))
-        IA3Model(_Model("custom"), IA3Config(target_modules=["key"], feedforward_modules=[]))
+            IA3Model(_Model("custom"), IA3Config(target_modules=["key"]), adapter_name="default")
+        IA3Model(
+            _Model("custom"),
+            IA3Config(target_modules=["key"], feedforward_modules=[]),
+            adapter_name="default",
+        )
 
     def test_the_config_passed_in_is_not_changed(self) -> None:
         config = IA3Config()
-        IA3Model(_Model(), config)
+        IA3Model(_Model(), config, adapter_name="default")
         assert config.target_modules is None and config.feedforward_modules is None
 
     def test_feedforward_is_matched_as_a_regex_over_the_whole_name(self) -> None:
         net = _Model()
         config = IA3Config(target_modules=["key", "dense"], feedforward_modules="output\\..*")
-        IA3Model(net, config)
+        IA3Model(net, config, adapter_name="default")
         layers = dict(_tuner_layers(net))
         assert layers["output.dense"].is_feedforward  # type: ignore[attr-defined]
         assert not layers["attention.key"].is_feedforward  # type: ignore[attr-defined]
         net2 = _Model()
         # A regex must match the whole name, not a tail of it.
-        IA3Model(net2, IA3Config(target_modules=["key"], feedforward_modules="key"))
+        IA3Model(
+            net2,
+            IA3Config(target_modules=["key"], feedforward_modules="key"),
+            adapter_name="default",
+        )
         assert not dict(_tuner_layers(net2))["attention.key"].is_feedforward  # type: ignore[attr-defined]
 
     def test_fan_in_fan_out_is_reset_with_a_warning(self) -> None:
         with pytest.warns(UserWarning, match="fan_in_fan_out is set to True"):
-            tuner = IA3Model(_Model(), IA3Config(fan_in_fan_out=True))
+            tuner = IA3Model(_Model(), IA3Config(fan_in_fan_out=True), adapter_name="default")
         config = tuner.peft_config["default"]
         assert isinstance(config, IA3Config) and config.fan_in_fan_out is False
 
     def test_an_unsupported_module_is_named(self) -> None:
         net = nn.Sequential(nn.Embedding(5, 4))
         with pytest.raises(ValueError, match=r"Target module 0 \(Embedding\) is not supported"):
-            IA3Model(net, IA3Config(target_modules=["0"], feedforward_modules=[]))
+            IA3Model(
+                net, IA3Config(target_modules=["0"], feedforward_modules=[]), adapter_name="default"
+            )
 
 
 class TestTuner:

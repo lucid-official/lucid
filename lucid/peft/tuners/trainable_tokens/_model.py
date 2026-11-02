@@ -38,10 +38,12 @@ class TrainableTokensModel(_ConfigTuner, peft_type=PeftType.TRAINABLE_TOKENS):
     ----------
     model : nn.Module
         The model to adapt.
-    config : TrainableTokensConfig
+    peft_config : TrainableTokensConfig
         Which tokens, and which table.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``trainable_tokens_delta``.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -57,7 +59,7 @@ class TrainableTokensModel(_ConfigTuner, peft_type=PeftType.TRAINABLE_TOKENS):
     >>> from lucid.peft import TrainableTokensConfig, TrainableTokensModel
     >>> net = nn.Sequential(nn.Embedding(10, 4), nn.Linear(4, 2))
     >>> config = TrainableTokensConfig(token_indices=[1, 2], target_modules=["0"])
-    >>> tokens = TrainableTokensModel(net, config)
+    >>> tokens = TrainableTokensModel(net, config, "default")
     >>> tuple(net[0].trainable_tokens_delta["default"].shape)
     (2, 4)
     >>> net[0].base_layer.weight.requires_grad, net[0].trainable_tokens_delta["default"].requires_grad
@@ -68,12 +70,6 @@ class TrainableTokensModel(_ConfigTuner, peft_type=PeftType.TRAINABLE_TOKENS):
 
     _layer_types = TrainableTokensLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = TrainableTokensConfig
-
-    def __init__(
-        self, model: nn.Module, config: TrainableTokensConfig, adapter_name: str = "default"
-    ) -> None:
-        """Adapt ``model`` in place, building the trained token rows as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)
 
     @override
     @classmethod

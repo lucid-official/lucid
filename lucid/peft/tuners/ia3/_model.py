@@ -55,10 +55,12 @@ class IA3Model(_BaseTuner, peft_type=PeftType.IA3):
     ----------
     model : nn.Module
         The model to adapt.
-    config : IA3Config
+    peft_config : IA3Config
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``ia3_l``.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -76,7 +78,7 @@ class IA3Model(_BaseTuner, peft_type=PeftType.IA3):
     >>> import lucid.nn as nn
     >>> from lucid.peft import IA3Config, IA3Model
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
-    >>> ia3 = IA3Model(net, IA3Config(target_modules=["0", "2"], feedforward_modules=["2"]))
+    >>> ia3 = IA3Model(net, IA3Config(target_modules=["0", "2"], feedforward_modules=["2"]), "default")
     >>> ia3.targeted_module_names
     ['0', '2']
     >>> tuple(net[0].ia3_l["default"].shape), tuple(net[2].ia3_l["default"].shape)
@@ -89,10 +91,6 @@ class IA3Model(_BaseTuner, peft_type=PeftType.IA3):
     _config_class: ClassVar[type[_TargetedConfig]] = IA3Config
     _default_targets: ClassVar[Mapping[str, frozenset[str]]] = IA3_DEFAULT_TARGET_MODULES
     _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = _NO_PARAMETERS
-
-    def __init__(self, model: nn.Module, config: IA3Config, adapter_name: str = "default") -> None:
-        """Adapt ``model`` in place, building (IA)^3's scaling vectors as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)
 
     @override
     @classmethod

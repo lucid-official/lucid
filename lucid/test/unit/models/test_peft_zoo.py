@@ -48,7 +48,7 @@ import dataclasses
 import json
 from collections.abc import Callable
 from pathlib import Path
-from typing import NamedTuple, TypedDict
+from typing import Any, NamedTuple, TypedDict
 
 import pytest
 
@@ -139,6 +139,14 @@ _VIT = _Overrides(
 class _Batch(NamedTuple):
     inputs: tuple[lucid.Tensor, ...]
     labels: lucid.Tensor
+    #: Keyword names of ``inputs[1:]``: a task wrapper names its arguments as the reference's do,
+    #: so a second positional input would be its ``attention_mask``.
+    names: tuple[str, ...] = ()
+
+    def call(self, model: nn.Module, **extra: lucid.Tensor) -> Any:
+        """``model`` on the first input positionally and the rest by name."""
+        named = dict(zip(self.names, self.inputs[1:], strict=True))
+        return model(self.inputs[0], **named, **extra)
 
 
 def _tokens(device: str, low: int, shape: tuple[int, ...], seed: int) -> lucid.Tensor:
@@ -159,7 +167,8 @@ def _seq2seq_batch(device: str) -> _Batch:
     source = _tokens(device, 2, (2, 9), seed=1)
     target = _tokens(device, 2, (2, 6), seed=2)
     start = lucid.zeros((2, 1), dtype=lucid.int64, device=device)
-    return _Batch((source, lucid.cat([start, target[:, :-1]], dim=1)), target)
+    decoder = lucid.cat([start, target[:, :-1]], dim=1)
+    return _Batch((source, decoder), target, names=("decoder_input_ids",))
 
 
 def _images(size: int) -> Callable[[str], _Batch]:
@@ -523,7 +532,7 @@ def _peft(family: _Family, mode: str, device: str, init_lora_weights: bool = Tru
 
 
 def _logits(model: nn.Module, batch: _Batch) -> lucid.Tensor:
-    return model(*batch.inputs).logits
+    return batch.call(model).logits
 
 
 def _same(a: lucid.Tensor, b: lucid.Tensor) -> bool:
@@ -554,7 +563,7 @@ def _train(peft: PeftModel, batch: _Batch, lr: float = _LR) -> list[float]:
     losses = []
     for _ in range(_STEPS):
         opt.zero_grad()
-        loss = peft(*batch.inputs, labels=batch.labels).loss
+        loss = batch.call(peft, labels=batch.labels).loss
         loss.backward()
         opt.step()
         losses.append(float(loss.item()))
@@ -676,7 +685,7 @@ def test_disable_adapter_gives_the_pre_injection_outputs(family: _Family, device
 
 def _generate(model: nn.Module, family: _Family, batch: _Batch) -> lucid.Tensor:
     if family.name == "t5":
-        return model.generate(batch.inputs[0], max_length=8)
+        return model.generate(input_ids=batch.inputs[0], max_length=8)
     return model.generate(batch.inputs[0][:, :4], max_new_tokens=6)
 
 

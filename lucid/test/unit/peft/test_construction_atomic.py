@@ -134,10 +134,10 @@ def test_a_failure_in_the_last_step_leaves_the_model_as_it_was(
     before = _state(model)
     monkeypatch.setattr(host, "_mark_only_adapters_as_trainable", _refuse)
     with pytest.raises(_Refused):
-        host(model, config)
+        host(model, config, "default")
     _assert_unchanged(before, _state(model))
     monkeypatch.undo()
-    assert isinstance(host(model, config), host), "the model is fit to be adapted again"
+    assert isinstance(host(model, config, "default"), host), "the model is fit to be adapted again"
 
 
 @pytest.mark.parametrize(
@@ -153,7 +153,7 @@ def test_a_prompt_on_a_model_without_an_encoder_and_decoder_is_refused_whole(
     )
     before = _state(model)
     with pytest.raises(NotImplementedError, match="get_encoder"):
-        host(model, config)
+        host(model, config, "default")
     _assert_unchanged(before, _state(model))
 
 
@@ -168,7 +168,7 @@ def test_a_token_level_prompt_without_a_head_to_cut_is_refused_whole(
     config = dataclasses.replace(config, task_type=TaskType.TOKEN_CLS, modules_to_save=["lm_head"])
     before = _state(model)
     with pytest.raises(NotImplementedError, match="classifier / score"):
-        host(model, config)
+        host(model, config, "default")
     _assert_unchanged(before, _state(model))
 
 
@@ -181,7 +181,7 @@ def test_an_initialisation_that_rewrites_the_base_is_undone_when_a_later_layer_i
     before = _state(net)
     config = LoraConfig(r=4, target_modules=["0", "2"], init_lora_weights=init)
     with pytest.raises(ValueError, match="r <= min"):
-        _TUNERS[PeftType.LORA](net, config)
+        _TUNERS[PeftType.LORA](net, config, "default")
     _assert_unchanged(before, _state(net))
 
 
@@ -195,5 +195,5 @@ def test_an_initialisation_that_rewrites_the_base_is_undone_when_the_constructor
     host = _TUNERS[PeftType.LORA]
     monkeypatch.setattr(host, "_mark_only_adapters_as_trainable", _refuse)
     with pytest.raises(_Refused):
-        host(net, LoraConfig(r=2, target_modules=["0", "2"], init_lora_weights=init))
+        host(net, LoraConfig(r=2, target_modules=["0", "2"], init_lora_weights=init), "default")
     _assert_unchanged(before, _state(net))

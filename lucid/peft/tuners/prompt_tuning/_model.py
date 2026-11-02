@@ -64,6 +64,7 @@ class PromptEmbedding(_PromptEncoder):
         self,
         config: PromptTuningConfig,
         word_embeddings: nn.Module | None,
+        *,
         tokenizer: _TextEncoder | None = None,
     ) -> None:
         """Build the virtual-token embedding.

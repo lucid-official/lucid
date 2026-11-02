@@ -542,7 +542,7 @@ class TestMasking:
 
     def test_updating_without_a_trainable_adapter_is_refused(self) -> None:
         net = _mlp()
-        tuner = AdaLoraModel(net, _config(inference_mode=True))
+        tuner = AdaLoraModel(net, _config(inference_mode=True), adapter_name="default")
         assert tuner.trainable_adapter_name is None
         with pytest.raises(RuntimeError, match="inference_mode"):
             tuner.update_and_allocate(1)
@@ -551,7 +551,7 @@ class TestMasking:
 
     def test_a_standalone_allocator_names_its_adapter(self) -> None:
         net = _mlp()
-        tuner = AdaLoraModel(net, _config())
+        tuner = AdaLoraModel(net, _config(), adapter_name="default")
         config = tuner.peft_config["default"]
         assert isinstance(config, AdaLoraConfig)
         with pytest.raises(ValueError, match="no AdaLoRA layer"):
@@ -608,7 +608,9 @@ class TestPenalty:
         x = lucid.randn(5, 6, device=device)
         bare = net(x).loss
         tuner = AdaLoraModel(
-            net, _config(target_modules=["a", "b"], init_lora_weights=False, orth_reg_weight=0.5)
+            net,
+            _config(target_modules=["a", "b"], init_lora_weights=False, orth_reg_weight=0.5),
+            adapter_name="default",
         )
         out = tuner(x)
         assert isinstance(out, kind)
@@ -619,7 +621,9 @@ class TestPenalty:
 
     def test_the_penalty_is_differentiable_through_the_loss(self) -> None:
         net = _Net()
-        tuner = AdaLoraModel(net, _config(target_modules=["a", "b"], init_lora_weights=False))
+        tuner = AdaLoraModel(
+            net, _config(target_modules=["a", "b"], init_lora_weights=False), adapter_name="default"
+        )
         tuner(lucid.randn(5, 6)).loss.backward()
         layer = _layer(net, "a")
         assert layer.lora_A["default"].grad is not None
@@ -629,24 +633,30 @@ class TestPenalty:
         net = _Net()
         x = lucid.randn(5, 6)
         tuner = AdaLoraModel(
-            net, _config(target_modules=["a", "b"], init_lora_weights=False, orth_reg_weight=0.0)
+            net,
+            _config(target_modules=["a", "b"], init_lora_weights=False, orth_reg_weight=0.0),
+            adapter_name="default",
         )
         assert _same(tuner(x).loss, net(x).loss)
 
     def test_an_output_without_a_loss_is_left_alone(self) -> None:
         net = _Net(with_loss=False)
         x = lucid.randn(5, 6)
-        tuner = AdaLoraModel(net, _config(target_modules=["a", "b"], init_lora_weights=False))
+        tuner = AdaLoraModel(
+            net, _config(target_modules=["a", "b"], init_lora_weights=False), adapter_name="default"
+        )
         out = tuner(x)
         assert out.loss is None and _same(out.logits, net(x).logits)
 
     def test_a_tensor_output_passes_through(self) -> None:
-        tuner = AdaLoraModel(_mlp(), _config())
+        tuner = AdaLoraModel(_mlp(), _config(), adapter_name="default")
         assert tuner(lucid.randn(3, 6)).shape == (3, 4)
 
     def test_only_the_trainable_adapter_is_penalised(self) -> None:
         net = _Net()
-        tuner = AdaLoraModel(net, _config(target_modules=["a", "b"], init_lora_weights=False))
+        tuner = AdaLoraModel(
+            net, _config(target_modules=["a", "b"], init_lora_weights=False), adapter_name="default"
+        )
         tuner.add_adapter("other", _config(target_modules=["a"], inference_mode=True))
         x = lucid.randn(5, 6)
         assert tuner.trainable_adapter_name == "default"
@@ -844,17 +854,17 @@ class TestFile:
 class TestTuner:
     def test_the_layer_types_follow_the_module(self) -> None:
         net = nn.Sequential(nn.Linear(4, 4), nn.Conv2d(2, 2, 1))
-        AdaLoraModel(net, _config(target_modules=["0", "1"]))
+        AdaLoraModel(net, _config(target_modules=["0", "1"]), adapter_name="default")
         assert isinstance(net[0], SVDLinear) and isinstance(net[1], SVDConv2d)
 
     def test_a_module_with_no_layer_is_refused_and_nothing_changes(self) -> None:
         net = nn.Sequential(nn.Linear(4, 4), nn.Embedding(5, 4))
         with pytest.raises(ValueError, match="not supported"):
-            AdaLoraModel(net, _config(target_modules=["0", "1"]))
+            AdaLoraModel(net, _config(target_modules=["0", "1"]), adapter_name="default")
         assert type(net[0]) is nn.Linear
 
     def test_only_one_adapter_may_train(self) -> None:
-        tuner = AdaLoraModel(_mlp(), _config())
+        tuner = AdaLoraModel(_mlp(), _config(), adapter_name="default")
         with pytest.raises(ValueError, match="only 1 trainable adapter"):
             tuner.add_adapter("second", _config())
         assert sorted(tuner.peft_config) == ["default"]
@@ -862,19 +872,19 @@ class TestTuner:
         assert tuner.trainable_adapter_name == "default"
 
     def test_a_second_trainable_adapter_is_refused_at_construction_of_its_config(self) -> None:
-        tuner = AdaLoraModel(_mlp(), _config(inference_mode=True))
+        tuner = AdaLoraModel(_mlp(), _config(inference_mode=True), adapter_name="default")
         tuner.add_adapter("live", _config())
         assert tuner.trainable_adapter_name == "live"
         assert tuner.rankallocator.adapter_name == "live"
 
     def test_weighted_adapters_are_not_supported(self) -> None:
-        tuner = AdaLoraModel(_mlp(), _config())
+        tuner = AdaLoraModel(_mlp(), _config(), adapter_name="default")
         with pytest.raises(TypeError, match="does not support add_weighted_adapter"):
             tuner.add_weighted_adapter(["default"], [1.0], "mix")
 
     def test_fan_in_fan_out_is_reset_with_a_warning(self) -> None:
         with pytest.warns(UserWarning, match="fan_in_fan_out"):
-            tuner = AdaLoraModel(_mlp(), _config(fan_in_fan_out=True))
+            tuner = AdaLoraModel(_mlp(), _config(fan_in_fan_out=True), adapter_name="default")
         config = tuner.peft_config["default"]
         assert isinstance(config, AdaLoraConfig) and not config.fan_in_fan_out
 
@@ -889,13 +899,13 @@ class TestTuner:
                 return self.c_attn(x)
 
         net = Tiny()
-        tuner = AdaLoraModel(net, AdaLoraConfig(total_step=10))
+        tuner = AdaLoraModel(net, AdaLoraConfig(total_step=10), adapter_name="default")
         assert tuner.targeted_module_names == ["c_attn"]
 
     def test_unload_gives_the_base_back(self) -> None:
         net = _mlp()
         before = {k: v.clone() for k, v in net.state_dict().items()}
-        tuner = AdaLoraModel(net, _config(init_lora_weights=False))
+        tuner = AdaLoraModel(net, _config(init_lora_weights=False), adapter_name="default")
         assert tuner.unload() is net
         assert sorted(net.state_dict()) == sorted(before)
         assert all(_same(v, before[k]) for k, v in net.state_dict().items())
@@ -910,7 +920,7 @@ class TestTuner:
 
     def test_the_audit_names_are_the_reference_s(self) -> None:
         net = _mlp()
-        AdaLoraModel(net, _config())
+        AdaLoraModel(net, _config(), adapter_name="default")
         assert sorted(k for k in net.state_dict() if "default" in k and "base" not in k) == [
             "0.lora_A.default",
             "0.lora_B.default",

@@ -2,7 +2,6 @@
 
 from typing import ClassVar
 
-import lucid.nn as nn
 from lucid.peft._config import PeftType, _TargetedConfig
 from lucid.peft.tuners._lycoris import _LycorisTuner
 from lucid.peft.tuners.loha._config import LoHaConfig
@@ -26,10 +25,12 @@ class LoHaModel(_LycorisTuner, peft_type=PeftType.LOHA):
     ----------
     model : nn.Module
         The model to adapt.
-    config : LoHaConfig
+    peft_config : LoHaConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``hada_*`` table.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -44,7 +45,7 @@ class LoHaModel(_LycorisTuner, peft_type=PeftType.LOHA):
     >>> import lucid.nn as nn
     >>> from lucid.peft import LoHaConfig, LoHaModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
-    >>> loha = LoHaModel(net, LoHaConfig(r=2, target_modules=["0"]))
+    >>> loha = LoHaModel(net, LoHaConfig(r=2, target_modules=["0"]), "default")
     >>> loha.targeted_module_names
     ['0']
     >>> net[0].base_layer.weight.requires_grad, net[0].hada_w1_a["default"].requires_grad
@@ -55,7 +56,3 @@ class LoHaModel(_LycorisTuner, peft_type=PeftType.LOHA):
 
     _layer_types = LoHaLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = LoHaConfig
-
-    def __init__(self, model: nn.Module, config: LoHaConfig, adapter_name: str = "default") -> None:
-        """Adapt ``model`` in place, building LoHa's Hadamard factors as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)

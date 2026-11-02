@@ -69,8 +69,15 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
     _config_class: ClassVar[type[PromptLearningConfig]]
     _encoder_class: ClassVar[type[_PromptEncoder]]
 
-    def __init__(self, model: nn.Module, config: PeftConfig, adapter_name: str = "default") -> None:
-        """Prompt ``model`` with ``config`` under the name ``adapter_name``.
+    def __init__(
+        self,
+        model: nn.Module,
+        peft_config: PeftConfig,
+        adapter_name: str = "default",
+        low_cpu_mem_usage: bool = False,
+        state_dict: dict[str, Tensor] | None = None,
+    ) -> None:
+        """Prompt ``model`` with ``peft_config`` under the name ``adapter_name``.
 
         The prompt encoder trains and the model is frozen.  ``ValueError`` if the model already
         holds adapters: ``unload()`` them first, or add the prompt to the ``PeftModel`` that holds them.
@@ -78,15 +85,15 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
         if not isinstance(model, nn.Module):
             raise TypeError(f"model must be an nn.Module, got {type(model).__name__}")
         kind = type(self)._config_class
-        if not isinstance(config, kind):
-            raise TypeError(f"config must be a {kind.__name__}, got {type(config).__name__}")
+        if not isinstance(peft_config, kind):
+            raise TypeError(f"config must be a {kind.__name__}, got {type(peft_config).__name__}")
         if "peft_config" in model.__dict__:
             raise ValueError(
                 "the model already holds adapters; unload() them before adding a prompt, "
                 "or add the prompt to the PeftModel that holds them"
             )
         adapter_name = _check_adapter_name(adapter_name)
-        super().__init__(model, config, adapter_name)
+        super().__init__(model, peft_config, adapter_name, low_cpu_mem_usage, state_dict)
         self.model = model
         self.peft_config: dict[str, PeftConfig] = {}
         self.active_adapter = adapter_name
@@ -101,8 +108,8 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
         }
         self._handles: list[RemovableHandle] = []
         try:
-            self._add(adapter_name, config)
-            layout = _Layout.for_task(config.task_type)
+            self._add(adapter_name, peft_config)
+            layout = _Layout.for_task(peft_config.task_type)
             for module, site in layout.sites(self, model, type(self)._encoder_class.injection):
                 self._handles.append(module.register_forward_pre_hook(site, with_kwargs=True))
             model.peft_config = self.peft_config
@@ -213,9 +220,7 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
     # ── the host's contract ───────────────────────────────────────────────
 
     @override
-    def add_adapter(
-        self, adapter_name: str, peft_config: PeftConfig, low_cpu_mem_usage: bool = False
-    ) -> None:
+    def add_adapter(self, adapter_name: str, config: PeftConfig) -> None:
         """Add a prompt beside the ones held; it starts frozen, and ``set_adapter`` switches to it.
 
         Raises
@@ -223,10 +228,9 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
         ValueError
             The name is taken, or the config is another method's.
         """
-        del low_cpu_mem_usage  # the encoder is allocated the one way
-        adapter_name = self._admit(adapter_name, peft_config)
-        assert isinstance(peft_config, PromptLearningConfig)  # _admit checked the class
-        self._add(adapter_name, peft_config)
+        adapter_name = self._admit(adapter_name, config)
+        assert isinstance(config, PromptLearningConfig)  # _admit checked the class
+        self._add(adapter_name, config)
         self.set_requires_grad(adapter_name, False)
 
     def _require_known(self, adapter_names: Sequence[str]) -> None:
@@ -352,7 +356,14 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
 
     @classmethod
     @override
-    def _adapt_in_place(cls, model: nn.Module, config: PeftConfig, adapter_name: str) -> None:
+    def _adapt_in_place(
+        cls,
+        model: nn.Module,
+        config: PeftConfig,
+        adapter_name: str,
+        low_cpu_mem_usage: bool = False,
+        state_dict: dict[str, Tensor] | None = None,
+    ) -> None:
         raise TypeError(
             f"{cls.__name__} keeps its prompt beside the model, which a bare model has no place "
             "for; adapt with get_peft_model"

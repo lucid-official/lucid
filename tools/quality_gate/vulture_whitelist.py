@@ -118,3 +118,22 @@ _.long_targets  # VJEPAPredictorOutput field in lucid/models/vision/vjepa/_model
 _.mask_token_id  # TokenizerBase.mask_token_id property in lucid/utils/tokenizer/_base.py
 _.sep_token_id  # TokenizerBase.sep_token_id property in lucid/utils/tokenizer/_base.py
 _.label_fields  # BboxParams.label_fields field in lucid/utils/transforms/_base.py
+
+# ── LoraConfig fields the library accepts at their default and refuses otherwise ──
+_.megatron_config  # LoraConfig field read by name through PeftConfig._refuse_unsupported (lucid/peft/_config.py)
+_.megatron_core  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.trainable_token_indices  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.loftq_config  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.eva_config  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.corda_config  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.lora_ga_config  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.velora_config  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.alora_invocation_tokens  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.use_qalora  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.qalora_group_size  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.monteclora_config  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.layer_replication  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.use_bdlora  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.arrow_config  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.kasa_config  # LoraConfig field read by name through PeftConfig._refuse_unsupported
+_.ensure_weight_tying  # LoraConfig field read by name through PeftConfig._refuse_unsupported

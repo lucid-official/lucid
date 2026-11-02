@@ -63,7 +63,7 @@ def _add_adapter(model: nn.Module) -> None:
 _ENTRY_POINTS: dict[str, Callable[[nn.Module], object]] = {
     "get_peft_model": lambda model: get_peft_model(model, LoraConfig(r=2)),
     "inject_adapter_in_model": lambda model: inject_adapter_in_model(LoraConfig(r=2), model),
-    "LoraModel": lambda model: LoraModel(model, LoraConfig(r=2)),
+    "LoraModel": lambda model: LoraModel(model, LoraConfig(r=2), adapter_name="default"),
     "add_adapter": _add_adapter,
 }
 
@@ -104,7 +104,7 @@ class TestTheDefaultApplies:
         assert not hasattr(model.get_submodule("layers.0.key"), "lora_A")
 
     def test_lora_model(self) -> None:
-        lora = LoraModel(_Encoder(), LoraConfig(r=2))
+        lora = LoraModel(_Encoder(), LoraConfig(r=2), adapter_name="default")
         assert lora.peft_config["default"].target_modules == {"query", "value"}
 
     def test_a_second_adapter_takes_it_too(self) -> None:

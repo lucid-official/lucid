@@ -356,7 +356,7 @@ class TestTuner:
         config = LoHaConfig(
             r=2, alpha=4, target_modules=["0", "2"], rank_pattern={"2": 3}, alpha_pattern={"0": 8}
         )
-        LoHaModel(net, config)
+        LoHaModel(net, config, adapter_name="default")
         layers = dict(_tuner_layers(net))
         assert (layers["0"].r["default"], layers["0"].alpha["default"]) == (2, 8)  # type: ignore[attr-defined]
         assert (layers["2"].r["default"], layers["2"].alpha["default"]) == (3, 4)  # type: ignore[attr-defined]
@@ -368,18 +368,19 @@ class TestTuner:
 
     def test_a_convolution_model_is_adapted_and_its_class_follows_the_module(self) -> None:
         net = nn.Sequential(nn.Conv2d(3, 4, 3), nn.Conv1d(2, 2, 1), nn.Linear(4, 2))
-        LoHaModel(net, LoHaConfig(r=2, target_modules=["0", "1", "2"]))
+        LoHaModel(net, LoHaConfig(r=2, target_modules=["0", "1", "2"]), adapter_name="default")
         kinds = [type(m) for m in net]
         assert kinds == [loha.Conv2d, loha.Conv1d, loha.Linear]
 
     def test_an_unsupported_module_is_named(self) -> None:
         net = nn.Sequential(nn.Embedding(5, 4), nn.Conv3d(2, 2, 1))
         with pytest.raises(ValueError, match=r"Target module 0 \(Embedding\) is not supported"):
-            LoHaModel(net, LoHaConfig(target_modules=["0"]))
+            LoHaModel(net, LoHaConfig(target_modules=["0"]), adapter_name="default")
         with pytest.raises(ValueError, match=r"Target module 1 \(Conv3d\) is not supported"):
             LoHaModel(
                 nn.Sequential(nn.Embedding(5, 4), nn.Conv3d(2, 2, 1)),
                 LoHaConfig(target_modules=["1"]),
+                adapter_name="default",
             )
 
     def test_all_linear_adapts_the_linears_but_the_head(self) -> None:
@@ -393,7 +394,7 @@ class TestTuner:
                 return self.lm_head(self.body(x))
 
         net = Net()
-        tuner = LoHaModel(net, LoHaConfig(r=2, target_modules="all-linear"))
+        tuner = LoHaModel(net, LoHaConfig(r=2, target_modules="all-linear"), adapter_name="default")
         assert tuner.targeted_module_names == ["body.0", "body.1"]
 
     def test_get_peft_model_trains_only_the_factors(self) -> None:

@@ -29,7 +29,7 @@
   "vulture_ignore_decorators": "@_emitter,@register_kl,@register_model,@register_weights,@_register_preset,@_register",
   "vulture_ignore_names": "__*__",
   "vulture_min_confidence": 60,
-  "vulture_whitelist_ast_sha256": "f159c5b3f027325b"
+  "vulture_whitelist_ast_sha256": "2190075f0336ebb5"
  },
  "rebaselines": [
   {
@@ -125,6 +125,11 @@
   {
    "date": "2026-11-01",
    "reason": "user editor reformat (black, 88 columns) on main 2026-11-01: format-only, AST-identical in 38 files; re-wrapping lengthens functions in lucid/nn/utils/rnn.py (memory user-reformats-main)",
+   "by": "chanlee"
+  },
+  {
+   "date": "2026-11-03",
+   "reason": "LCD-819: lucid.peft reference signature parity with HF peft 0.21.2 \u2014 reference-narrowed overrides, refused reference fields, Parameters docs for new reference parameters, per-config field declarations",
    "by": "chanlee"
   }
  ],
@@ -1066,6 +1071,7 @@
     "lucid/nn/modules/container.py": 1,
     "lucid/nn/modules/normalization.py": 1,
     "lucid/nn/parameter.py": 1,
+    "lucid/peft/tuners/adalora/_config.py": 1,
     "lucid/utils/tokenizer/_byte_bpe.py": 2,
     "lucid/weights/_loading.py": 1
    },
@@ -1097,6 +1103,8 @@
    "type-ignore[override]": {
     "lucid/_factories/_generator.py": 1,
     "lucid/models/vision/crossvit/_model.py": 1,
+    "lucid/peft/_task_models.py": 5,
+    "lucid/peft/tuners/poly/_model.py": 1,
     "lucid/utils/data/dataset.py": 1,
     "lucid/utils/data/sampler.py": 1,
     "lucid/utils/tokenizer/_byte_bpe.py": 2
@@ -1527,6 +1535,36 @@
     "lucid/optim/lr_scheduler.py": 20,
     "lucid/optim/others.py": 13,
     "lucid/optim/sgd.py": 2,
+    "lucid/peft/_mapping.py": 1,
+    "lucid/peft/_peft_model.py": 3,
+    "lucid/peft/_task_models.py": 4,
+    "lucid/peft/tuners/_base.py": 1,
+    "lucid/peft/tuners/_prompt/_tuner.py": 1,
+    "lucid/peft/tuners/adalora/_config.py": 1,
+    "lucid/peft/tuners/boft/_config.py": 11,
+    "lucid/peft/tuners/c3a/_config.py": 4,
+    "lucid/peft/tuners/fourierft/_config.py": 1,
+    "lucid/peft/tuners/hra/_config.py": 2,
+    "lucid/peft/tuners/ia3/_config.py": 3,
+    "lucid/peft/tuners/ln_tuning/_config.py": 3,
+    "lucid/peft/tuners/loha/_config.py": 5,
+    "lucid/peft/tuners/lokr/_config.py": 4,
+    "lucid/peft/tuners/lora/_config.py": 2,
+    "lucid/peft/tuners/lora/_model.py": 1,
+    "lucid/peft/tuners/miss/_config.py": 1,
+    "lucid/peft/tuners/oft/_config.py": 1,
+    "lucid/peft/tuners/p_tuning/_config.py": 3,
+    "lucid/peft/tuners/poly/_config.py": 1,
+    "lucid/peft/tuners/prefix_tuning/_config.py": 1,
+    "lucid/peft/tuners/prompt_tuning/_config.py": 1,
+    "lucid/peft/tuners/randlora/_config.py": 2,
+    "lucid/peft/tuners/randlora/_model.py": 1,
+    "lucid/peft/tuners/shira/_config.py": 1,
+    "lucid/peft/tuners/trainable_tokens/_config.py": 2,
+    "lucid/peft/tuners/vblora/_config.py": 3,
+    "lucid/peft/tuners/vera/_config.py": 2,
+    "lucid/peft/tuners/vera/_model.py": 1,
+    "lucid/peft/tuners/xlora/_model.py": 1,
     "lucid/quantization/_functional.py": 1,
     "lucid/quantization/_quantize.py": 2,
     "lucid/quantization/_quantize_fx.py": 1,
@@ -1865,6 +1903,8 @@
     "lucid/nn/modules/transformer.py": 1,
     "lucid/nn/utils/parametrize.py": 1,
     "lucid/nn/utils/rnn.py": 1,
+    "lucid/peft/_peft_model.py": 3,
+    "lucid/peft/auto.py": 1,
     "lucid/quantization/_functional.py": 2,
     "lucid/quantization/_qparams.py": 1,
     "lucid/quantization/_quantize.py": 3,
@@ -1972,6 +2012,8 @@
     "lucid/nn/modules/transformer.py": 17,
     "lucid/nn/utils/parametrize.py": 7,
     "lucid/nn/utils/rnn.py": 5,
+    "lucid/peft/_peft_model.py": 87,
+    "lucid/peft/auto.py": 9,
     "lucid/quantization/_functional.py": 41,
     "lucid/quantization/_qparams.py": 13,
     "lucid/quantization/_quantize.py": 22,

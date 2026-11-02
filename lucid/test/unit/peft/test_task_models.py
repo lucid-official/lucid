@@ -218,10 +218,10 @@ class TestGenerate:
         x = lucid.randn(2, 8, device=device)
         plain = base.generate(x, steps=3)
         peft = wrapper(base, _config(init_lora_weights=False, lora_alpha=64))
-        adapted = peft.generate(x, steps=3)  # type: ignore[operator]
+        adapted = peft.generate(x=x, steps=3)  # type: ignore[operator]
         assert not bool((adapted == plain).all().item())
         with peft.disable_adapter():
-            assert bool((peft.generate(x, steps=3) == plain).all().item())  # type: ignore[operator]
+            assert bool((peft.generate(x=x, steps=3) == plain).all().item())  # type: ignore[operator]
 
     def test_arguments_are_passed_as_given(self) -> None:
         seen: list[tuple[tuple[object, ...], dict[str, object]]] = []
@@ -243,14 +243,20 @@ class TestGenerate:
     def test_a_model_that_cannot_decode_says_so(self, wrapper: type[PeftModel]) -> None:
         peft = wrapper(nn.Sequential(nn.Linear(2, 2)), LoraConfig(r=2, target_modules=["0"]))
         with pytest.raises(AttributeError, match="Sequential has no generate"):
-            peft.generate(1)  # type: ignore[operator]
+            peft.generate()  # type: ignore[operator]
 
-    def test_the_other_wrappers_leave_generate_to_the_model(self) -> None:
+    def test_seq2seq_generate_takes_keywords_only_as_the_references_does(self) -> None:
+        peft = PeftModelForSeq2SeqLM(_net(), _config())
+        with pytest.raises(TypeError, match="positional"):
+            peft.generate(1)  # type: ignore[call-arg]
+
+    def test_every_wrapper_has_generate_and_says_so_when_the_model_has_none(self) -> None:
         with_generate = PeftModelForSequenceClassification(_net(), _config())
-        assert callable(with_generate.generate)  # forwarded from the model
+        assert callable(with_generate.generate)
         bare = nn.Sequential(nn.Linear(2, 2))
         without = PeftModelForFeatureExtraction(bare, _config(None, target_modules=["0"]))
-        assert not hasattr(without, "generate")
+        with pytest.raises(AttributeError, match="Sequential has no generate"):
+            without.generate()
 
 
 class _Base(nn.Module):

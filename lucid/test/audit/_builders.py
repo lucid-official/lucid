@@ -248,16 +248,26 @@ class _Gate(nn.Module):
 BUILDERS: dict[type, Callable[[], Any]] = {
     nn.AdaptiveLogSoftmaxWithLoss: lambda: nn.AdaptiveLogSoftmaxWithLoss(4, 10, [3, 6]),
     nn.RNNBase: lambda: nn.RNNBase("LSTM", 4, 4),
-    LoraModel: lambda: LoraModel(_base_model(), _config()),
+    LoraModel: lambda: LoraModel(_base_model(), _config(), adapter_name="default"),
     IA3Model: lambda: IA3Model(
-        _base_model(), IA3Config(target_modules=["0", "2"], feedforward_modules=["2"])
+        _base_model(),
+        IA3Config(target_modules=["0", "2"], feedforward_modules=["2"]),
+        adapter_name="default",
     ),
-    LoHaModel: lambda: LoHaModel(_base_model(), LoHaConfig(r=2, target_modules=["0", "2"])),
-    LoKrModel: lambda: LoKrModel(_base_model(), LoKrConfig(r=2, target_modules=["0", "2"])),
+    LoHaModel: lambda: LoHaModel(
+        _base_model(), LoHaConfig(r=2, target_modules=["0", "2"]), adapter_name="default"
+    ),
+    LoKrModel: lambda: LoKrModel(
+        _base_model(), LoKrConfig(r=2, target_modules=["0", "2"]), adapter_name="default"
+    ),
     AdaLoraModel: lambda: AdaLoraModel(
-        _base_model(), AdaLoraConfig(init_r=2, total_step=10, target_modules=["0", "2"])
+        _base_model(),
+        AdaLoraConfig(init_r=2, total_step=10, target_modules=["0", "2"]),
+        adapter_name="default",
     ),
-    VeraModel: lambda: VeraModel(_base_model(), VeraConfig(r=2, target_modules=["0", "2"])),
+    VeraModel: lambda: VeraModel(
+        _base_model(), VeraConfig(r=2, target_modules=["0", "2"]), adapter_name="default"
+    ),
     PeftModel: lambda: PeftModel(_base_model(), _config()),
     PromptTuningModel: lambda: PromptTuningModel(
         _text_model(), PromptTuningConfig(num_virtual_tokens=2, task_type="CAUSAL_LM")
@@ -281,6 +291,7 @@ BUILDERS: dict[type, Callable[[], Any]] = {
     CPTModel: lambda: CPTModel(
         _text_model(),
         CPTConfig(cpt_token_ids=[1, 2], cpt_tokens_type_mask=[1, 4], task_type="CAUSAL_LM"),
+        adapter_name="default",
     ),
     CPTEmbedding: lambda: CPTEmbedding(
         CPTConfig(
@@ -289,7 +300,9 @@ BUILDERS: dict[type, Callable[[], Any]] = {
         nn.Embedding(5, 4),
     ),
     XLoraModel: lambda: XLoraModel(
-        _text_model(), XLoraConfig(adapters={"a": _expert_directory()}, task_type="CAUSAL_LM")
+        _text_model(),
+        XLoraConfig(adapters={"a": _expert_directory()}, task_type="CAUSAL_LM"),
+        adapter_name="default",
     ),
     XLoraClassifier: lambda: XLoraClassifier(
         XLoraConfig(hidden_size=4, adapters={"a": "unused"}), 1, 1, lucid.float32, "cpu"
@@ -318,6 +331,7 @@ BUILDERS.update(
         AdaptionPromptModel: lambda: AdaptionPromptModel(
             _text_model(),
             AdaptionPromptConfig(adapter_len=2, adapter_layers=1, task_type="CAUSAL_LM"),
+            adapter_name="default",
         ),
         AdaptedAttention: lambda: AdaptedAttention(
             _text_model().transformer.h[0].attn,
@@ -330,7 +344,11 @@ BUILDERS.update(
 # Every tuner whose method has an example config is built on the audit's model with it.
 BUILDERS.update(
     {
-        tuner: (lambda tuner=tuner, make=_EXAMPLE_CONFIGS[peft_type]: tuner(_base_model(), make()))
+        tuner: (
+            lambda tuner=tuner, make=_EXAMPLE_CONFIGS[peft_type]: tuner(
+                _base_model(), make(), "default"
+            )
+        )
         for peft_type, tuner in _TUNERS.items()
         if issubclass(tuner, _BaseTuner) and peft_type in _EXAMPLE_CONFIGS
     }

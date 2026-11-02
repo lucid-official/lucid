@@ -2,7 +2,6 @@
 
 from typing import ClassVar
 
-import lucid.nn as nn
 from lucid.peft._config import PeftType, _TargetedConfig
 from lucid.peft.tuners._support import _ConfigTuner
 from lucid.peft.tuners.hra._config import HRAConfig
@@ -24,10 +23,12 @@ class HRAModel(_ConfigTuner, peft_type=PeftType.HRA):
     ----------
     model : nn.Module
         The model to adapt.
-    config : HRAConfig
+    peft_config : HRAConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``hra_u``.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -42,7 +43,7 @@ class HRAModel(_ConfigTuner, peft_type=PeftType.HRA):
     >>> import lucid.nn as nn
     >>> from lucid.peft import HRAConfig, HRAModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
-    >>> hra = HRAModel(net, HRAConfig(r=4, target_modules=["0"]))
+    >>> hra = HRAModel(net, HRAConfig(r=4, target_modules=["0"]), "default")
     >>> hra.targeted_module_names
     ['0']
     >>> net[0].base_layer.weight.requires_grad, net[0].hra_u["default"].requires_grad
@@ -53,7 +54,3 @@ class HRAModel(_ConfigTuner, peft_type=PeftType.HRA):
 
     _layer_types = HRALayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = HRAConfig
-
-    def __init__(self, model: nn.Module, config: HRAConfig, adapter_name: str = "default") -> None:
-        """Adapt ``model`` in place, building HRA's reflections as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)

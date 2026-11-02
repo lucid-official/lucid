@@ -2,10 +2,11 @@
 
 import dataclasses
 import os
+import re
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from types import TracebackType
-from typing import ClassVar, Final, Self, override
+from typing import ClassVar, Final, Literal, Self, override
 
 import lucid.nn as nn
 from lucid.nn._incompatible_keys import _IncompatibleKeys
@@ -20,6 +21,13 @@ from lucid.peft._config import (
 )
 from lucid.peft._convert import AdapterFile, ConversionContext, ConvertMode, convert_adapter
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
+from lucid.peft._refusals import (
+    NO_HUB,
+    NO_MISMATCH_SKIPPING,
+    refuse_build_options,
+    refuse_kwargs,
+    refuse_value,
+)
 from lucid.peft._status import TunerLayerStatus, TunerModelStatus, _parameter_counts
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
 from lucid.peft._targeting import _config_for_model, _with_heads
@@ -63,7 +71,7 @@ class _DisabledAdapter(AbstractContextManager[None]):
             model.base_model.enable_adapter_layers()
 
 
-def _adapter_weights(directory: str) -> dict[str, Tensor]:
+def _adapter_weights(directory: str, device: str | None = None) -> dict[str, Tensor]:
     path = os.path.join(directory, _WEIGHTS_NAME)
     if not os.path.isfile(path):
         if os.path.isfile(os.path.join(directory, _PICKLE_WEIGHTS_NAME)):
@@ -73,7 +81,56 @@ def _adapter_weights(directory: str) -> dict[str, Tensor]:
             )
         raise FileNotFoundError(f"no {_WEIGHTS_NAME} in {directory!r}")
     loaded = load_safetensors(path)
-    return {key: value for key, value in loaded.items() if isinstance(value, Tensor)}
+    weights = {key: value for key, value in loaded.items() if isinstance(value, Tensor)}
+    if device is not None:
+        weights = {key: value.to(device) for key, value in weights.items()}
+    return weights
+
+
+def _remapped(
+    weights: dict[str, Tensor], key_mapping: Mapping[str, str] | None
+) -> dict[str, Tensor]:
+    """``weights`` with each key renamed by the first ``key_mapping`` pattern that matches it.
+
+    As the reference does it: the ``base_model.model.`` (or ``base_model.``) prefix is set aside,
+    the patterns are tried in order with ``re.sub`` on the rest of the key, and the prefix goes back.
+    """
+    if not key_mapping:
+        return weights
+    renamed: dict[str, Tensor] = {}
+    for key, value in weights.items():
+        prefix = next((p for p in ("base_model.model.", "base_model.") if key.startswith(p)), None)
+        if prefix is None:
+            raise ValueError(
+                f"key_mapping needs adapter keys under 'base_model.'; got {key!r} (an adapter "
+                "file of a method that keeps its tensors elsewhere cannot be remapped)"
+            )
+        rest = key.removeprefix(prefix)
+        for pattern, replacement in key_mapping.items():
+            changed, count = re.subn(pattern, replacement, rest)
+            if count:
+                rest = changed
+                break
+        renamed[prefix + rest] = value
+    return renamed
+
+
+def _names_or_none(value: object) -> Sequence[str] | None:
+    """The ``adapter_names`` a call was given, checked: ``None``, or a sequence of ``str``."""
+    if value is None:
+        return None
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        names = [item for item in value if isinstance(item, str)]
+        if len(names) == len(value):
+            return names
+    raise TypeError(f"adapter_names must be a sequence of str, got {value!r}")
+
+
+def _tensor_or_none(value: object) -> Tensor | None:
+    """The ``task_ids`` a call was given, checked: ``None`` or a ``Tensor``."""
+    if value is None or isinstance(value, Tensor):
+        return value
+    raise TypeError(f"task_ids must be a Tensor, got {type(value).__name__}")
 
 
 def _converted(model: nn.Module, adapter: AdapterFile, convert: ConvertMode) -> AdapterFile:
@@ -116,11 +173,20 @@ class PeftModel(_ForwardsAttributes):
         What to adapt and how — a ``LoraConfig``.
     adapter_name : str, default="default"
         Name of the adapter.
+    autocast_adapter_dtype : bool, default=True
+        Cast a half-precision base's adapter weights to float32.  Always the case here;
+        ``False`` raises ``NotImplementedError``.
+    low_cpu_mem_usage : bool, default=False
+        Build the adapter on the meta device.  Not implemented: ``True`` raises
+        ``NotImplementedError``.
 
     Raises
     ------
     TypeError
         ``peft_config`` is not an adapter config.
+    NotImplementedError
+        ``autocast_adapter_dtype`` or ``low_cpu_mem_usage`` holds a value the library cannot
+        honour.
 
     Examples
     --------
@@ -162,12 +228,22 @@ class PeftModel(_ForwardsAttributes):
         return _with_heads(model, config, cls._head_names)
 
     def __init__(
-        self, model: nn.Module, peft_config: PeftConfig, adapter_name: str = "default"
+        self,
+        model: nn.Module,
+        peft_config: PeftConfig,
+        adapter_name: str = "default",
+        autocast_adapter_dtype: bool = True,
+        low_cpu_mem_usage: bool = False,
     ) -> None:
         """Adapt ``model`` in place with ``peft_config`` and wrap it.
 
         ``adapter_name`` names the first adapter.
         """
+        refuse_build_options(
+            "PeftModel",
+            autocast_adapter_dtype=autocast_adapter_dtype,
+            low_cpu_mem_usage=low_cpu_mem_usage,
+        )
         config = self._prepared(model, _require_config("peft_config", peft_config))
         super().__init__()
         self.base_model: _AdapterHost = _tuner_for(config)(model, config, adapter_name)
@@ -198,7 +274,11 @@ class PeftModel(_ForwardsAttributes):
         return self.base_model.model
 
     def add_adapter(
-        self, adapter_name: str, peft_config: PeftConfig, low_cpu_mem_usage: bool = False
+        self,
+        adapter_name: str,
+        peft_config: PeftConfig,
+        low_cpu_mem_usage: bool = False,
+        autocast_adapter_dtype: bool = True,
     ) -> None:
         """Add an adapter beside the ones the model holds.
 
@@ -216,8 +296,11 @@ class PeftModel(_ForwardsAttributes):
         peft_config : PeftConfig
             What to adapt and how.
         low_cpu_mem_usage : bool, default=False
-            Accepted for the reference's signature; the adapter is built
-            the same way either way.
+            Build the adapter on the meta device.  Not implemented: ``True``
+            raises ``NotImplementedError``.
+        autocast_adapter_dtype : bool, default=True
+            Cast a half-precision base's adapter weights to float32.  Always
+            the case here; ``False`` raises ``NotImplementedError``.
 
         Raises
         ------
@@ -225,6 +308,9 @@ class PeftModel(_ForwardsAttributes):
             The name is taken, the config is another method's, no module
             matches it, or two adapters would train biases.  The model is
             left as it was.
+        NotImplementedError
+            ``low_cpu_mem_usage`` or ``autocast_adapter_dtype`` holds a value
+            the library cannot honour.
 
         Examples
         --------
@@ -240,11 +326,16 @@ class PeftModel(_ForwardsAttributes):
         >>> peft.get_base_model()[1].lora_A["second"].weight.shape
         (4, 4)
         """
+        refuse_build_options(
+            "PeftModel.add_adapter",
+            autocast_adapter_dtype=autocast_adapter_dtype,
+            low_cpu_mem_usage=low_cpu_mem_usage,
+        )
         model = self.get_base_model()
         config = self._prepared(
             model, _config_for_model(model, _require_config("peft_config", peft_config))
         )
-        self.base_model.add_adapter(adapter_name, config, low_cpu_mem_usage)
+        self.base_model.add_adapter(adapter_name, config)
 
     def set_adapter(self, adapter_name: str, inference_mode: bool = False) -> None:
         """Make ``adapter_name`` the adapter in use.
@@ -313,32 +404,27 @@ class PeftModel(_ForwardsAttributes):
         return self.base_model._task_scope(task_ids)
 
     @override
-    def forward(
-        self,
-        *args: object,
-        adapter_names: Sequence[str] | None = None,
-        task_ids: Tensor | None = None,
-        **kwargs: object,
-    ) -> object:
+    def forward(self, *args: object, **kwargs: object) -> object:
         r"""Run the adapted model; every other argument goes to it as given.
 
         Parameters
         ----------
         *args : object
             Positional arguments of the model's ``forward``.
-        adapter_names : sequence of str, optional
-            One adapter per row of the batch (the first dimension of the
-            inputs): row ``i`` is computed with ``adapter_names[i]`` alone,
-            ``"__base__"`` for the base model, all in one pass, so requests
-            for different adapters can share a batch.  The adapters in use
-            are ignored.  Inference only, for LoRA on ``nn.Linear``,
-            ``nn.Embedding`` and convolution layers (and ``modules_to_save``
-            modules).
-        task_ids : Tensor, optional
-            For multitask prompt tuning: the task of each row of the batch, ``(batch,)``
-            integers in ``[0, num_tasks)``, whose prompt is put in front of that row.
         **kwargs : object
-            Keyword arguments of the model's ``forward``.
+            Keyword arguments of the model's ``forward``, and two of the adapter's own:
+
+            ``adapter_names`` (sequence of str)
+                One adapter per row of the batch (the first dimension of the
+                inputs): row ``i`` is computed with ``adapter_names[i]`` alone,
+                ``"__base__"`` for the base model, all in one pass, so requests
+                for different adapters can share a batch.  The adapters in use
+                are ignored.  Inference only, for LoRA on ``nn.Linear``,
+                ``nn.Embedding`` and convolution layers (and ``modules_to_save``
+                modules).
+            ``task_ids`` (Tensor)
+                For multitask prompt tuning: the task of each row of the batch, ``(batch,)``
+                integers in ``[0, num_tasks)``, whose prompt is put in front of that row.
 
         Returns
         -------
@@ -374,8 +460,54 @@ class PeftModel(_ForwardsAttributes):
         """
         # Through the tuner, whose forward is the model's own unless the method adds to it
         # (AdaLoRA's orthogonality penalty on the loss).
+        adapter_names = _names_or_none(kwargs.pop("adapter_names", None))
+        task_ids = _tensor_or_none(kwargs.pop("task_ids", None))
         with self._routed(adapter_names), self._tasked(task_ids):
             return self.base_model(*args, **kwargs)
+
+    def generate(self, *args: object, **kwargs: object) -> object:
+        r"""Generate with the adapted model: its own ``generate``, called as given.
+
+        The adapter applies at every step, since the model's layers are
+        the adapted ones; ``with model.disable_adapter():`` generates with
+        the base model alone.
+
+        Parameters
+        ----------
+        *args : object
+            Positional arguments of the model's ``generate``.
+        **kwargs : object
+            Keyword arguments of the model's ``generate``, and two of the adapter's own:
+
+            ``adapter_names`` (sequence of str)
+                One adapter per prompt, as for :meth:`forward`: every step of prompt ``i``
+                uses ``adapter_names[i]`` alone (``"__base__"``: the base model).  With beam
+                search (``num_beams``) each name covers that prompt's beams; an encoder, if
+                the model has one, sees the prompts once.
+            ``task_ids`` (Tensor)
+                For multitask prompt tuning: the task of each prompt of the batch, as for
+                :meth:`forward`.
+
+        Returns
+        -------
+        object
+            What the model's ``generate`` returns.
+
+        Raises
+        ------
+        AttributeError
+            The adapted model has no ``generate``.
+        """
+        adapter_names = _names_or_none(kwargs.pop("adapter_names", None))
+        task_ids = _tensor_or_none(kwargs.pop("task_ids", None))
+        model = self.get_base_model()
+        generate = getattr(model, "generate", None)
+        if generate is None:
+            raise AttributeError(f"{type(model).__name__} has no generate() to call")
+        beams = kwargs.get("num_beams")
+        routed = self._routed(adapter_names, beams if isinstance(beams, int) and beams > 1 else 1)
+        with routed, self._tasked(task_ids):
+            return generate(*args, **kwargs)
 
     def get_nb_trainable_parameters(self) -> tuple[int, int]:
         """Return ``(trainable, total)`` parameter counts, each shared parameter once.
@@ -518,7 +650,10 @@ class PeftModel(_ForwardsAttributes):
         save_directory: str | os.PathLike[str],
         safe_serialization: bool = True,
         selected_adapters: list[str] | None = None,
+        save_embedding_layers: bool | Literal["auto"] = "auto",
+        is_main_process: bool = True,
         path_initial_model_for_weight_conversion: str | os.PathLike[str] | None = None,
+        **kwargs: object,
     ) -> None:
         r"""Write the adapters — not the base model — under ``save_directory``.
 
@@ -541,6 +676,14 @@ class PeftModel(_ForwardsAttributes):
             ``False`` is not one Lucid can produce.
         selected_adapters : list of str, optional
             The adapters to write; every adapter of the model by default.
+        save_embedding_layers : bool or "auto", default="auto"
+            The reference saves the input and output embeddings beside the adapter when the
+            vocabulary was resized.  Here an adapter file holds the adapter alone (and its
+            ``modules_to_save``), so ``"auto"`` and ``False`` write that; ``True`` raises
+            ``NotImplementedError``.
+        is_main_process : bool, default=True
+            ``False`` writes nothing, for the processes of a distributed run that are not the
+            main one.
         path_initial_model_for_weight_conversion : str or os.PathLike, optional
             For an adapter initialised with ``"pissa"``, ``"pissa_niter_<k>"``
             or ``"olora"``, which rewrote the base weight: the directory
@@ -552,11 +695,14 @@ class PeftModel(_ForwardsAttributes):
             beside other adapters.  It converts one adapter, so pass
             ``selected_adapters`` if the model holds several; the directory
             is only read.
+        **kwargs : object
+            The reference forwards these to its hub upload.  Any key raises
+            ``NotImplementedError``.
 
         Raises
         ------
         NotImplementedError
-            ``safe_serialization=False``.
+            ``safe_serialization=False``, ``save_embedding_layers=True``, or a key in ``kwargs``.
         ValueError
             ``selected_adapters`` names an adapter the model lacks, or
             ``path_initial_model_for_weight_conversion`` is given with
@@ -588,6 +734,12 @@ class PeftModel(_ForwardsAttributes):
             raise NotImplementedError(
                 "safe_serialization=False writes a pickle; lucid.peft writes safetensors only"
             )
+        if save_embedding_layers is True:
+            raise NotImplementedError(
+                "PeftModel.save_pretrained: `save_embedding_layers=True` is not supported by "
+                "lucid.peft: an adapter file holds the adapter and its modules_to_save only"
+            )
+        refuse_kwargs("PeftModel.save_pretrained", kwargs, "it would configure a hub upload")
         names = list(self.peft_config) if selected_adapters is None else list(selected_adapters)
         unknown = [name for name in names if name not in self.peft_config]
         if unknown:
@@ -604,6 +756,8 @@ class PeftModel(_ForwardsAttributes):
         }
         if path_initial_model_for_weight_conversion is not None:
             files = self._converted_to_plain(files, path_initial_model_for_weight_conversion)
+        if not is_main_process:
+            return
         root = _output_directory(save_directory)
         for name, file in files.items():
             path = root if name == "default" else _output_directory(os.path.join(root, name))
@@ -655,9 +809,14 @@ class PeftModel(_ForwardsAttributes):
         adapter_name: str = "default",
         is_trainable: bool = False,
         config: PeftConfig | None = None,
+        autocast_adapter_dtype: bool = True,
+        ephemeral_gpu_offload: bool = False,
+        low_cpu_mem_usage: bool = False,
+        key_mapping: Mapping[str, str] | None = None,
         *,
         subfolder: str | None = None,
         convert: ConvertMode = "auto",
+        **kwargs: object,
     ) -> PeftModel:
         r"""Adapt ``model`` with the adapter saved in ``model_id``.
 
@@ -687,8 +846,22 @@ class PeftModel(_ForwardsAttributes):
             model is put in ``eval()`` mode, for inference.
         config : PeftConfig, optional
             Use this config instead of the directory's.
+        autocast_adapter_dtype : bool, default=True
+            Cast a half-precision base's adapter weights to float32.  Always the case here;
+            ``False`` raises ``NotImplementedError``.
+        ephemeral_gpu_offload : bool, default=False
+            Not implemented: ``True`` raises ``NotImplementedError``.
+        low_cpu_mem_usage : bool, default=False
+            Build the adapter on the meta device.  Not implemented: ``True`` raises
+            ``NotImplementedError``.
+        key_mapping : dict of str to str, optional
+            Renames the adapter file's keys before they are loaded: for each key, with its
+            ``base_model.model.`` prefix set aside, the first pattern (a regular expression)
+            that matches is replaced by its value, as the reference does.  Applied before
+            ``convert``.
         subfolder : str, optional
-            The directory under ``model_id`` that holds the adapter.
+            The directory under ``model_id`` that holds the adapter.  (The reference takes
+            it among ``**kwargs``; it is named here.)
         convert : bool or "auto", default="auto"
             Convert an adapter written for the reference library's model to the
             zoo model's layout (``lucid.peft`` lists what each converter does):
@@ -697,6 +870,9 @@ class PeftModel(_ForwardsAttributes):
             ``qkv``, LoRA only).  ``"auto"`` converts when the model's type has
             a converter and the file is in a layout it changes; ``True`` always
             converts and refuses a type with none; ``False`` reads it as it is.
+        **kwargs : object
+            The reference forwards these to its hub download (``revision``, ``token``,
+            ``cache_dir`` …).  Any key raises ``NotImplementedError``.
 
         Returns
         -------
@@ -710,7 +886,8 @@ class PeftModel(_ForwardsAttributes):
             The directory lacks ``adapter_config.json`` or the weights.
         NotImplementedError
             The weights are a pickle (``adapter_model.bin``), the config
-            describes something lucid.peft does not implement.
+            describes something lucid.peft does not implement, or an option the
+            library cannot honour is set (see the parameters).
         ValueError
             The adapter's tensors do not fit ``model``, or ``convert`` cannot apply.
 
@@ -733,6 +910,14 @@ class PeftModel(_ForwardsAttributes):
         >>> bool(lucid.allclose(loaded(x), trained(x)))
         True
         """
+        where = "PeftModel.from_pretrained"
+        refuse_kwargs(where, kwargs, NO_HUB)
+        refuse_build_options(
+            where,
+            autocast_adapter_dtype=autocast_adapter_dtype,
+            low_cpu_mem_usage=low_cpu_mem_usage,
+            ephemeral_gpu_offload=ephemeral_gpu_offload,
+        )
         directory = _adapter_directory(model_id, subfolder)
         # Without a config, the file's ``peft_type`` picks the method.
         given = PeftConfig.from_pretrained(directory) if config is None else config
@@ -740,10 +925,11 @@ class PeftModel(_ForwardsAttributes):
             _require_config("config", given), inference_mode=not is_trainable
         )
         _tuner_for(config)._check_loadable(config, is_trainable)
-        converted = _converted(model, AdapterFile(config, _adapter_weights(directory)), convert)
-        config, weights = converted.config, converted.tensors
+        read = _remapped(_adapter_weights(directory), key_mapping)
+        converted = _converted(model, AdapterFile(config, read), convert)
+        config = converted.config
         peft_model = cls._model_class(config.task_type)._filled(
-            model, config, weights, adapter_name
+            model, config, converted.tensors, adapter_name
         )
         if not is_trainable:
             peft_model.eval()
@@ -754,10 +940,15 @@ class PeftModel(_ForwardsAttributes):
         model_id: str | os.PathLike[str],
         adapter_name: str,
         is_trainable: bool = False,
+        device: str | None = None,
+        autocast_adapter_dtype: bool = True,
+        ephemeral_gpu_offload: bool = False,
         low_cpu_mem_usage: bool = False,
+        key_mapping: Mapping[str, str] | None = None,
         *,
         subfolder: str | None = None,
         convert: ConvertMode = "auto",
+        **kwargs: object,
     ) -> _IncompatibleKeys:
         r"""Load a saved adapter into the model, beside the ones it holds.
 
@@ -778,14 +969,30 @@ class PeftModel(_ForwardsAttributes):
         is_trainable : bool, default=False
             Make the adapter trainable.  Otherwise it stays frozen and the
             model is put in ``eval()`` mode, for inference.
+        device : str, optional
+            The device the adapter file's tensors are read onto before they are copied into
+            the model.  The reference names this parameter after its tensor framework; that
+            name is not used in this library's source.
+        autocast_adapter_dtype : bool, default=True
+            Cast a half-precision base's adapter weights to float32.  Always the case here;
+            ``False`` raises ``NotImplementedError``.
+        ephemeral_gpu_offload : bool, default=False
+            Not implemented: ``True`` raises ``NotImplementedError``.
         low_cpu_mem_usage : bool, default=False
-            Accepted for the reference's signature; ignored as in
-            ``add_adapter``.
+            Build the adapter on the meta device.  Not implemented: ``True`` raises
+            ``NotImplementedError``.
+        key_mapping : dict of str to str, optional
+            As for :meth:`from_pretrained`.
         subfolder : str, optional
-            The directory under ``model_id`` that holds the adapter.
+            The directory under ``model_id`` that holds the adapter.  (The reference takes
+            it among ``**kwargs``; it is named here.)
         convert : bool or "auto", default="auto"
             As for :meth:`from_pretrained`: convert an adapter written for the
             reference library's model to the zoo model's layout.
+        **kwargs : object
+            The reference forwards these to its hub download and its state-dict loader.
+            ``ignore_mismatched_sizes`` is accepted at its default ``False``; any other key
+            raises ``NotImplementedError``.
 
         Returns
         -------
@@ -798,8 +1005,9 @@ class PeftModel(_ForwardsAttributes):
         FileNotFoundError
             The directory lacks ``adapter_config.json`` or the weights.
         NotImplementedError
-            The weights are a pickle, or the config describes something
-            lucid.peft does not implement.
+            The weights are a pickle, the config describes something
+            lucid.peft does not implement, or an option the library cannot
+            honour is set (see the parameters).
         ValueError
             The adapter's tensors do not fit the model, or its config cannot
             sit beside the adapters held.
@@ -818,6 +1026,18 @@ class PeftModel(_ForwardsAttributes):
         >>> sorted(mine.peft_config), mine.active_adapter
         (['default', 'loaded'], 'default')
         """
+        where = "PeftModel.load_adapter"
+        ignore_mismatched_sizes = kwargs.pop("ignore_mismatched_sizes", False)
+        refuse_kwargs(where, kwargs, NO_HUB)
+        refuse_build_options(
+            where,
+            autocast_adapter_dtype=autocast_adapter_dtype,
+            low_cpu_mem_usage=low_cpu_mem_usage,
+            ephemeral_gpu_offload=ephemeral_gpu_offload,
+        )
+        refuse_value(
+            where, "ignore_mismatched_sizes", ignore_mismatched_sizes, False, NO_MISMATCH_SKIPPING
+        )
         directory = _adapter_directory(model_id, subfolder)
         added = adapter_name not in self.peft_config
         config = None
@@ -827,7 +1047,7 @@ class PeftModel(_ForwardsAttributes):
             )
             _tuner_for(config)._check_loadable(config, is_trainable)
         # Read before anything is changed, so a missing file leaves the model alone.
-        weights = _adapter_weights(directory)
+        weights = _remapped(_adapter_weights(directory, device), key_mapping)
         if convert is not False:
             source = config if config is not None else PeftConfig.from_pretrained(directory)
             converted = _converted(self.get_base_model(), AdapterFile(source, weights), convert)
@@ -835,7 +1055,7 @@ class PeftModel(_ForwardsAttributes):
             if config is not None:
                 config = dataclasses.replace(converted.config, inference_mode=not is_trainable)
         if config is not None:
-            self.add_adapter(adapter_name, config._staged(), low_cpu_mem_usage)
+            self.add_adapter(adapter_name, config._staged())
             if is_trainable:
                 self.set_requires_grad(adapter_name)
         try:

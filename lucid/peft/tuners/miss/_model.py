@@ -2,7 +2,6 @@
 
 from typing import ClassVar
 
-import lucid.nn as nn
 from lucid.peft._config import PeftType, _TargetedConfig
 from lucid.peft.tuners._support import _ConfigTuner
 from lucid.peft.tuners.miss._config import MissConfig
@@ -22,10 +21,12 @@ class MissModel(_ConfigTuner, peft_type=PeftType.MISS):
     ----------
     model : nn.Module
         The model to adapt.
-    config : MissConfig
+    peft_config : MissConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``miss_block``.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -40,7 +41,7 @@ class MissModel(_ConfigTuner, peft_type=PeftType.MISS):
     >>> import lucid.nn as nn
     >>> from lucid.peft import MissConfig, MissModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
-    >>> miss = MissModel(net, MissConfig(r=4, target_modules=["0"]))
+    >>> miss = MissModel(net, MissConfig(r=4, target_modules=["0"]), "default")
     >>> miss.targeted_module_names
     ['0']
     >>> net[0].base_layer.weight.requires_grad, net[0].miss_block["default"].requires_grad
@@ -51,7 +52,3 @@ class MissModel(_ConfigTuner, peft_type=PeftType.MISS):
 
     _layer_types = MissLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = MissConfig
-
-    def __init__(self, model: nn.Module, config: MissConfig, adapter_name: str = "default") -> None:
-        """Adapt ``model`` in place, building MiSS's shard matrices as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)

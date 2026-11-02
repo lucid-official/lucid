@@ -75,7 +75,7 @@ def _same(a: lucid.Tensor, b: lucid.Tensor) -> bool:
 
 
 def _targets(config: LoraConfig, model: nn.Module | None = None) -> list[str]:
-    return sorted(LoraModel(model or _lm(), config).targeted_module_names)
+    return sorted(LoraModel(model or _lm(), config, adapter_name="default").targeted_module_names)
 
 
 class TestTargeting:
@@ -167,13 +167,13 @@ class TestTargeting:
     def test_a_layer_pattern_that_is_absent_matches_nothing(self) -> None:
         config = LoraConfig(target_modules=["q_proj"], layers_to_transform=[0], layers_pattern="h")
         with pytest.raises(ValueError, match="layers_pattern"):
-            LoraModel(_lm(), config)
+            LoraModel(_lm(), config, adapter_name="default")
 
     def test_a_layer_filter_on_an_unindexed_name_matches_nothing(self) -> None:
         model = nn.ModuleDict({"block": nn.ModuleDict({"proj": nn.Linear(2, 2)})})
         config = LoraConfig(target_modules=["proj"], layers_to_transform=[0])
         with pytest.raises(ValueError, match="layers_to_transform"):
-            LoraModel(model, config)
+            LoraModel(model, config, adapter_name="default")
 
     def test_an_exact_name_passes_the_layer_filter(self) -> None:
         config = LoraConfig(target_modules=["lm_head"], layers_to_transform=[0])
@@ -190,6 +190,7 @@ class TestTargeting:
                 rank_pattern={"layers.1.q_proj": 6, r"layers\.2\.q_proj": 1},
                 alpha_pattern={"q_proj": 12},
             ),
+            adapter_name="default",
         )
         ranks = [model.layers[i].q_proj.r["default"] for i in range(3)]
         assert ranks == [2, 6, 1]
@@ -228,13 +229,13 @@ class TestAllLinear:
         config = LoraConfig(
             target_modules="all-linear", modules_to_save=["classifier"], exclude_modules=["encoder"]
         )
-        lora = LoraModel(_Classifier(), config)
+        lora = LoraModel(_Classifier(), config, adapter_name="default")
         assert lora.targeted_module_names == ["pre_classifier"]
         assert lora.peft_config["default"].target_modules == {"pre_classifier"}
 
     def test_the_stored_config_spells_out_the_names(self) -> None:
         config = LoraConfig(target_modules="all-linear")
-        lora = LoraModel(_lm(), config)
+        lora = LoraModel(_lm(), config, adapter_name="default")
         assert config.target_modules == "all-linear"
         assert lora.peft_config["default"].target_modules == set(lora.targeted_module_names)
 
@@ -244,28 +245,34 @@ class TestRefusals:
         model = _lm()
         before = list(model.state_dict())
         with pytest.raises(ValueError, match="not found in the base model"):
-            LoraModel(model, LoraConfig(target_modules=["k_proj"]))
+            LoraModel(model, LoraConfig(target_modules=["k_proj"]), adapter_name="default")
         assert list(model.state_dict()) == before
 
     def test_target_modules_is_required(self) -> None:
         with pytest.raises(ValueError, match="specify `target_modules`"):
-            LoraModel(_lm(), LoraConfig())
+            LoraModel(_lm(), LoraConfig(), adapter_name="default")
 
     def test_a_non_linear_match_raises_before_anything_changes(self) -> None:
         model = _lm()
         with pytest.raises(ValueError, match=r"layers\.0 \(_Block\) is not supported"):
-            LoraModel(model, LoraConfig(target_modules=r"layers\.0(\.q_proj)?"))
+            LoraModel(
+                model, LoraConfig(target_modules=r"layers\.0(\.q_proj)?"), adapter_name="default"
+            )
         assert type(model.layers[0].q_proj) is nn.Linear
 
     def test_a_module_type_with_no_layer_is_refused_naming_the_supported_ones(self) -> None:
         model = _lm()
         with pytest.raises(ValueError, match=r"norm \(LayerNorm\) is not supported.*nn.Embedding"):
-            LoraModel(model, LoraConfig(target_modules=["layers.0.norm"]))
+            LoraModel(model, LoraConfig(target_modules=["layers.0.norm"]), adapter_name="default")
         assert type(model.layers[0].norm) is nn.LayerNorm
 
     def test_a_lazy_linear_is_refused(self) -> None:
         with pytest.raises(ValueError, match=r"0 \(LazyLinear\) is not supported"):
-            LoraModel(nn.Sequential(nn.LazyLinear(4)), LoraConfig(target_modules=["0"]))
+            LoraModel(
+                nn.Sequential(nn.LazyLinear(4)),
+                LoraConfig(target_modules=["0"]),
+                adapter_name="default",
+            )
 
     def test_a_failure_while_planning_leaves_the_model(self) -> None:
         class Locked(nn.Module):
@@ -279,28 +286,28 @@ class TestRefusals:
         model = Locked()
         config = LoraConfig(target_modules=["c"], modules_to_save=["a", "b"])
         with pytest.raises(TypeError):
-            LoraModel(model, config)
+            LoraModel(model, config, adapter_name="default")
         assert all(p.requires_grad for p in model.parameters())
         assert type(model.a) is nn.Linear and type(model.c) is nn.Linear
         assert "peft_config" not in model.__dict__
 
     def test_double_injection_adds_beside_the_first_and_warns(self) -> None:
         model = _lm()
-        LoraModel(model, LoraConfig(target_modules=["q_proj"]))
+        LoraModel(model, LoraConfig(target_modules=["q_proj"]), adapter_name="default")
         with pytest.warns(UserWarning, match="second time"):
             second = LoraModel(model, LoraConfig(target_modules=["v_proj"]), adapter_name="v")
         assert second.active_adapters == ["v"] and sorted(second.peft_config) == ["default", "v"]
 
     def test_double_injection_under_a_taken_name_is_refused(self) -> None:
         model = _lm()
-        LoraModel(model, LoraConfig(target_modules=["q_proj"]))
+        LoraModel(model, LoraConfig(target_modules=["q_proj"]), adapter_name="default")
         with pytest.raises(ValueError, match="already exists"):
-            LoraModel(model, LoraConfig(target_modules=["v_proj"]))
+            LoraModel(model, LoraConfig(target_modules=["v_proj"]), adapter_name="default")
 
     def test_modules_to_save_that_matches_nothing(self) -> None:
         config = LoraConfig(target_modules=["q_proj"], modules_to_save=["score"])
         with pytest.raises(ValueError, match="modules_to_save"):
-            LoraModel(_lm(), config)
+            LoraModel(_lm(), config, adapter_name="default")
 
     @pytest.mark.parametrize(
         ("model", "config", "error"),
@@ -313,7 +320,7 @@ class TestRefusals:
         self, model: object, config: object, error: type[Exception]
     ) -> None:
         with pytest.raises(error):
-            LoraModel(model, config)  # type: ignore[arg-type]
+            LoraModel(model, config, adapter_name="default")  # type: ignore[arg-type]
 
     def test_peft_model_wants_a_lora_config(self) -> None:
         with pytest.raises(TypeError, match="LoraConfig"):
@@ -323,7 +330,11 @@ class TestRefusals:
 
     def test_fan_in_fan_out_warns_and_is_reset(self) -> None:
         with pytest.warns(UserWarning, match="fan_in_fan_out"):
-            lora = LoraModel(_lm(), LoraConfig(target_modules=["q_proj"], fan_in_fan_out=True))
+            lora = LoraModel(
+                _lm(),
+                LoraConfig(target_modules=["q_proj"], fan_in_fan_out=True),
+                adapter_name="default",
+            )
         assert lora.peft_config["default"].fan_in_fan_out is False
 
 
@@ -365,13 +376,13 @@ class TestTraining:
     )
     def test_bias_option(self, bias: str, trainable: set[str]) -> None:
         model = _lm(depth=2)
-        LoraModel(model, LoraConfig(target_modules=["q_proj"], bias=bias))  # type: ignore[arg-type]
+        LoraModel(model, LoraConfig(target_modules=["q_proj"], bias=bias), adapter_name="default")  # type: ignore[arg-type]
         found = {n for n, p in model.named_parameters() if p.requires_grad and ".lora_" not in n}
         assert found == trainable
 
     def test_bias_all_trains_every_bias(self) -> None:
         model = _lm(depth=1)
-        LoraModel(model, LoraConfig(target_modules=["q_proj"], bias="all"))
+        LoraModel(model, LoraConfig(target_modules=["q_proj"], bias="all"), adapter_name="default")
         found = {n for n, p in model.named_parameters() if p.requires_grad and ".lora_" not in n}
         assert found == {
             "layers.0.q_proj.base_layer.bias",
@@ -382,7 +393,11 @@ class TestTraining:
 
     def test_inference_mode_freezes_everything(self) -> None:
         model = _lm()
-        LoraModel(model, LoraConfig(target_modules=["q_proj"], inference_mode=True))
+        LoraModel(
+            model,
+            LoraConfig(target_modules=["q_proj"], inference_mode=True),
+            adapter_name="default",
+        )
         assert not any(p.requires_grad for p in model.parameters())
 
 
@@ -618,5 +633,5 @@ class TestWrapper:
 
     def test_lora_model_forward_runs_the_model(self) -> None:
         model = _lm()
-        lora = LoraModel(model, LoraConfig(target_modules=["q_proj"]))
+        lora = LoraModel(model, LoraConfig(target_modules=["q_proj"]), adapter_name="default")
         assert _same(lora(_ids()), model(_ids()))

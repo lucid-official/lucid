@@ -47,10 +47,12 @@ class RandLoraModel(_ProjectionTuner, _ConfigTuner, peft_type=PeftType.RANDLORA)
     ----------
     model : nn.Module
         The model to adapt.
-    config : RandLoraConfig
+    peft_config : RandLoraConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``randlora_lambda`` / ``randlora_gamma``.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -66,7 +68,7 @@ class RandLoraModel(_ProjectionTuner, _ConfigTuner, peft_type=PeftType.RANDLORA)
     >>> import lucid.nn as nn
     >>> from lucid.peft.tuners.randlora import RandLoraConfig, RandLoraModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
-    >>> randlora = RandLoraModel(net, RandLoraConfig(r=2, target_modules=["0", "2"]))
+    >>> randlora = RandLoraModel(net, RandLoraConfig(r=2, target_modules=["0", "2"]), "default")
     >>> tuple(randlora.randlora_A["default"].shape), tuple(randlora.randlora_B["default"].shape)
     ((2, 1, 8), (8, 4, 2))
     >>> net[0].base_layer.weight.requires_grad, net[0].randlora_lambda["default"].requires_grad
@@ -78,12 +80,6 @@ class RandLoraModel(_ProjectionTuner, _ConfigTuner, peft_type=PeftType.RANDLORA)
     _layer_types = RandLoraLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = RandLoraConfig
     _table_names: ClassVar[tuple[str, ...]] = ("randlora_A", "randlora_B")
-
-    def __init__(
-        self, model: nn.Module, config: RandLoraConfig, adapter_name: str = "default"
-    ) -> None:
-        """Adapt ``model`` in place, building RandLoRA's scale vectors as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)
 
     @property
     def randlora_A(self) -> _BufferDict:

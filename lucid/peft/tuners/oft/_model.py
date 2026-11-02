@@ -24,10 +24,12 @@ class OFTModel(_ConfigTuner, peft_type=PeftType.OFT):
     ----------
     model : nn.Module
         The model to adapt.
-    config : OFTConfig
+    peft_config : OFTConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``oft_R``.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -42,7 +44,7 @@ class OFTModel(_ConfigTuner, peft_type=PeftType.OFT):
     >>> import lucid.nn as nn
     >>> from lucid.peft import OFTConfig, OFTModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
-    >>> oft = OFTModel(net, OFTConfig(oft_block_size=4, target_modules=["0"]))
+    >>> oft = OFTModel(net, OFTConfig(oft_block_size=4, target_modules=["0"]), "default")
     >>> oft.targeted_module_names
     ['0']
     >>> net[0].base_layer.weight.requires_grad, net[0].oft_R["default"].requires_grad
@@ -53,10 +55,6 @@ class OFTModel(_ConfigTuner, peft_type=PeftType.OFT):
 
     _layer_types = OFTLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = OFTConfig
-
-    def __init__(self, model: nn.Module, config: OFTConfig, adapter_name: str = "default") -> None:
-        """Adapt ``model`` in place, building OFT's block rotations as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)
 
     @override
     @classmethod

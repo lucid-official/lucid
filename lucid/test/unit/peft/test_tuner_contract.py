@@ -172,7 +172,10 @@ def _adalora(targets: tuple[str, ...], random: bool, **kw: object) -> AdaLoraCon
 
 def _vera(targets: tuple[str, ...], random: bool, **kw: object) -> VeraConfig:
     return VeraConfig(
-        r=3, target_modules=list(targets), init_weights=not random, **kw  # type: ignore[arg-type]
+        r=3,
+        target_modules=list(targets),
+        init_weights=not random,
+        **kw,  # type: ignore[arg-type]
     )
 
 
@@ -197,7 +200,10 @@ def _boft(targets: tuple[str, ...], random: bool, **kw: object) -> BOFTConfig:
 
 def _hra(targets: tuple[str, ...], random: bool, **kw: object) -> HRAConfig:
     return HRAConfig(
-        r=2, target_modules=list(targets), init_weights=not random, **kw  # type: ignore[arg-type]
+        r=2,
+        target_modules=list(targets),
+        init_weights=not random,
+        **kw,  # type: ignore[arg-type]
     )
 
 
@@ -218,7 +224,10 @@ def _ln_tuning(targets: tuple[str, ...], random: bool, **kw: object) -> LNTuning
 
 def _miss(targets: tuple[str, ...], random: bool, **kw: object) -> MissConfig:
     return MissConfig(
-        r=2, target_modules=list(targets), init_weights=not random, **kw  # type: ignore[arg-type]
+        r=2,
+        target_modules=list(targets),
+        init_weights=not random,
+        **kw,  # type: ignore[arg-type]
     )
 
 
@@ -522,12 +531,12 @@ class TestRegistration:
         config = method.make(targets=())
         config.target_modules = None  # type: ignore[attr-defined]
         with pytest.raises(ValueError, match="Please specify `target_modules`"):
-            method.tuner(net, config)
+            method.tuner(net, config, "default")
 
     def test_a_config_of_another_method_is_refused(self, method: _Method) -> None:
         other = next(m for m in _METHODS if m is not method)
         with pytest.raises(TypeError, match="config must be a"):
-            method.tuner(_mlp(), other.make())
+            method.tuner(_mlp(), other.make(), "default")
 
     def test_the_audit_builds_a_fresh_working_instance(self, method: _Method) -> None:
         first, second = BUILDERS[method.tuner](), BUILDERS[method.tuner]()

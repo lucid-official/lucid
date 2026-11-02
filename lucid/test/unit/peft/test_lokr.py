@@ -341,19 +341,23 @@ class TestTuner:
     def test_rank_and_alpha_patterns_change_the_shapes_per_module(self) -> None:
         net = nn.Sequential(nn.Linear(32, 32), nn.ReLU(), nn.Linear(32, 32))
         config = LoKrConfig(r=8, alpha=8, target_modules=["0", "2"], rank_pattern={"2": 1})
-        LoKrModel(net, config)
+        LoKrModel(net, config, adapter_name="default")
         layers = dict(_tuner_layers(net))
         assert "default" in layers["0"].lokr_w2 and "default" in layers["2"].lokr_w2_a  # type: ignore[attr-defined]
         assert layers["2"].scaling["default"] == 8.0  # type: ignore[attr-defined]
 
     def test_a_model_of_each_kind_is_adapted(self) -> None:
         net = nn.Sequential(nn.Conv2d(3, 4, 3), nn.Conv1d(2, 2, 1), nn.Linear(4, 2))
-        LoKrModel(net, LoKrConfig(r=2, target_modules=["0", "1", "2"]))
+        LoKrModel(net, LoKrConfig(r=2, target_modules=["0", "1", "2"]), adapter_name="default")
         assert [type(m) for m in net] == [lokr.Conv2d, lokr.Conv1d, lokr.Linear]
 
     def test_an_unsupported_module_is_named(self) -> None:
         with pytest.raises(ValueError, match=r"Target module 0 \(Embedding\) is not supported"):
-            LoKrModel(nn.Sequential(nn.Embedding(5, 4)), LoKrConfig(target_modules=["0"]))
+            LoKrModel(
+                nn.Sequential(nn.Embedding(5, 4)),
+                LoKrConfig(target_modules=["0"]),
+                adapter_name="default",
+            )
 
     def test_get_peft_model_trains_only_the_factors(self) -> None:
         peft = get_peft_model(nn.Sequential(nn.Linear(6, 6)), LoKrConfig(r=2, target_modules=["0"]))

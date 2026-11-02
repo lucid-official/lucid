@@ -28,10 +28,12 @@ class FourierFTModel(_ConfigTuner, peft_type=PeftType.FOURIERFT):
     ----------
     model : nn.Module
         The model to adapt.
-    config : FourierFTConfig
+    peft_config : FourierFTConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``fourierft_spectrum``.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -47,7 +49,7 @@ class FourierFTModel(_ConfigTuner, peft_type=PeftType.FOURIERFT):
     >>> import lucid.nn as nn
     >>> from lucid.peft import FourierFTConfig, FourierFTModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
-    >>> fourier = FourierFTModel(net, FourierFTConfig(n_frequency=10, target_modules=["0"]))
+    >>> fourier = FourierFTModel(net, FourierFTConfig(n_frequency=10, target_modules=["0"]), "default")
     >>> fourier.targeted_module_names
     ['0']
     >>> net[0].base_layer.weight.requires_grad, net[0].fourierft_spectrum["default"].requires_grad
@@ -59,12 +61,6 @@ class FourierFTModel(_ConfigTuner, peft_type=PeftType.FOURIERFT):
     _layer_types = FourierFTLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = FourierFTConfig
     _default_targets: ClassVar[Mapping[str, frozenset[str]]] = FOURIERFT_DEFAULT_TARGET_MODULES
-
-    def __init__(
-        self, model: nn.Module, config: FourierFTConfig, adapter_name: str = "default"
-    ) -> None:
-        """Adapt ``model`` in place, building FourierFT's coefficients as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)
 
     @override
     @classmethod

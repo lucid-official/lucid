@@ -134,7 +134,7 @@ class MultitaskPromptEmbedding(PromptEmbedding):
         shared prompt starts as :class:`PromptEmbedding`'s does, or from a source-task prompt
         when ``config.prompt_tuning_init`` asks.
         """
-        super().__init__(config, word_embeddings, tokenizer)
+        super().__init__(config, word_embeddings, tokenizer=tokenizer)
         assert config.token_dim is not None  # the tuner resolved it
         self.num_tasks = config.num_tasks
         self.prefix_task_cols = Parameter(

@@ -35,6 +35,7 @@ import lucid.nn as nn
 from lucid.peft._config import PeftConfig, TaskType, _adapter_directory
 from lucid.peft._convert import ConvertMode
 from lucid.peft._peft_model import PeftModel
+from lucid.peft._refusals import NO_HUB, refuse_kwargs, refuse_value
 from lucid.peft._task_models import (
     MODEL_TYPE_TO_PEFT_MODEL_MAPPING,
     PeftModelForCausalLM,
@@ -103,10 +104,12 @@ class _BaseAutoPeftModel:
         adapter_name: str = "default",
         is_trainable: bool = False,
         config: PeftConfig | None = None,
+        revision: str | None = None,
+        import_allowlist: list[str] | None = None,
         *,
         subfolder: str | None = None,
-        import_allowlist: list[str] | None = None,
         convert: ConvertMode = "auto",
+        **kwargs: object,
     ) -> PeftModel:
         r"""Build the base model the adapter names and load the adapter onto it.
 
@@ -128,17 +131,23 @@ class _BaseAutoPeftModel:
         config : PeftConfig, optional
             Use this config for the adapter instead of the directory's.  The
             base model is still the one the directory's config names.
-        subfolder : str, optional
-            The directory under ``pretrained_model_name_or_path`` that holds
-            the adapter.
+        revision : str, optional
+            A revision on the hub.  There is no hub here: anything but ``None``
+            raises ``NotImplementedError``.
         import_allowlist : list of str, optional
             Only for ``AutoPeftModel``: the packages whose classes the
             adapter's ``auto_mapping`` may name; ``["lucid.models"]`` by
             default.  The mapping is data from a file, and importing what it
             names would run that package's code.
+        subfolder : str, optional
+            The directory under ``pretrained_model_name_or_path`` that holds
+            the adapter.  (The reference takes it among ``**kwargs``; it is named here.)
         convert : bool or "auto", default="auto"
             Read an adapter written for the reference library's model in the
             zoo's layout; see :meth:`PeftModel.from_pretrained`.
+        **kwargs : object
+            The reference forwards these to its hub download and to the base model's
+            loader.  Any key raises ``NotImplementedError``.
 
         Returns
         -------
@@ -156,6 +165,8 @@ class _BaseAutoPeftModel:
             The ``auto_mapping`` names something that is not a model class.
         FileNotFoundError
             The directory lacks ``adapter_config.json`` or the weights.
+        NotImplementedError
+            ``revision`` or a key of ``kwargs`` is given.
 
         Examples
         --------
@@ -174,6 +185,9 @@ class _BaseAutoPeftModel:
         >>> type(loaded).__name__
         'PeftModelForCausalLM'
         """
+        where = f"{cls.__name__}.from_pretrained"
+        refuse_value(where, "revision", revision, None, NO_HUB)
+        refuse_kwargs(where, kwargs, NO_HUB)
         peft_config = PeftConfig.from_pretrained(pretrained_model_name_or_path, subfolder)
         loader = cls._loader_for(peft_config, import_allowlist)
         base_name = peft_config.base_model_name_or_path

@@ -2,7 +2,6 @@
 
 from typing import ClassVar
 
-import lucid.nn as nn
 from lucid.peft._config import PeftType, _TargetedConfig
 from lucid.peft.tuners._support import _ConfigTuner
 from lucid.peft.tuners.bone._config import BoneConfig
@@ -19,10 +18,12 @@ class BoneModel(_ConfigTuner, peft_type=PeftType.BONE):
     ----------
     model : nn.Module
         The model to adapt.
-    config : BoneConfig
+    peft_config : BoneConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``bone_block``.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -37,7 +38,7 @@ class BoneModel(_ConfigTuner, peft_type=PeftType.BONE):
     >>> import lucid.nn as nn
     >>> from lucid.peft.tuners.bone import BoneConfig, BoneModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
-    >>> bone = BoneModel(net, BoneConfig(r=4, target_modules=["0"]))
+    >>> bone = BoneModel(net, BoneConfig(r=4, target_modules=["0"]), "default")
     >>> net[0].bone_block["default"].requires_grad
     True
     >>> bone.unload() is net
@@ -46,7 +47,3 @@ class BoneModel(_ConfigTuner, peft_type=PeftType.BONE):
 
     _layer_types = BoneLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = BoneConfig
-
-    def __init__(self, model: nn.Module, config: BoneConfig, adapter_name: str = "default") -> None:
-        """Adapt ``model`` in place, building Bone's blocks as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)

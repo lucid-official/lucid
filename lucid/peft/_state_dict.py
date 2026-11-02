@@ -10,11 +10,17 @@ own name contains ``lora_`` or the adapter's name is not misread.
 
 import warnings
 from collections.abc import Mapping
+from typing import Literal
 
 import lucid.nn as nn
 from lucid.nn._incompatible_keys import _IncompatibleKeys
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig
+from lucid.peft._refusals import (
+    NO_META_DEVICE,
+    NO_MISMATCH_SKIPPING,
+    refuse_value,
+)
 from lucid.peft._slots import _adapter_slots
 from lucid.peft.tuners._base import _AdapterHost, _join, _tuner_for
 from lucid.peft.tuners._files import _FileContext, _FileFormat
@@ -71,7 +77,11 @@ def _adapter_keys(context: _FileContext) -> dict[str, str]:
 
 
 def get_peft_model_state_dict(
-    model: nn.Module, state_dict: Mapping[str, Tensor] | None = None, adapter_name: str = "default"
+    model: nn.Module,
+    state_dict: Mapping[str, Tensor] | None = None,
+    adapter_name: str = "default",
+    unwrap_compiled: bool = False,
+    save_embedding_layers: bool | Literal["auto"] = "auto",
 ) -> dict[str, Tensor]:
     r"""Return the adapter's tensors under the keys an adapter file uses.
 
@@ -90,6 +100,13 @@ def get_peft_model_state_dict(
         keyed as that would be.
     adapter_name : str, default="default"
         The adapter to extract.
+    unwrap_compiled : bool, default=False
+        The reference looks through a compiled model's wrapper.  A compiled Lucid callable
+        is not a module to look through: ``True`` raises ``NotImplementedError``.
+    save_embedding_layers : bool or "auto", default="auto"
+        The reference adds the input and output embeddings when the vocabulary was resized.
+        The adapter alone is returned here (with its ``modules_to_save``), which is what
+        ``"auto"`` and ``False`` ask for; ``True`` raises ``NotImplementedError``.
 
     Returns
     -------
@@ -100,6 +117,8 @@ def get_peft_model_state_dict(
     ------
     ValueError
         ``model`` holds no adapter named ``adapter_name``.
+    NotImplementedError
+        ``unwrap_compiled`` or ``save_embedding_layers`` is ``True``.
     RuntimeError
         The adapter was merged or unloaded, so no adapter layer is left.
     KeyError
@@ -114,6 +133,20 @@ def get_peft_model_state_dict(
     >>> sorted(get_peft_model_state_dict(peft))
     ['base_model.model.0.lora_A.weight', 'base_model.model.0.lora_B.weight']
     """
+    refuse_value(
+        "get_peft_model_state_dict",
+        "unwrap_compiled",
+        unwrap_compiled,
+        False,
+        "a compiled callable has no wrapped module to look through",
+    )
+    refuse_value(
+        "get_peft_model_state_dict",
+        "save_embedding_layers",
+        save_embedding_layers is True,
+        False,
+        "an adapter's tensors are the adapter and its modules_to_save only",
+    )
     context = _file_context(model, adapter_name)
     keys = _adapter_keys(context)
     source = model.state_dict() if state_dict is None else state_dict
@@ -126,7 +159,11 @@ def get_peft_model_state_dict(
 
 
 def set_peft_model_state_dict(
-    model: nn.Module, peft_model_state_dict: Mapping[str, Tensor], adapter_name: str = "default"
+    model: nn.Module,
+    peft_model_state_dict: Mapping[str, Tensor],
+    adapter_name: str = "default",
+    ignore_mismatched_sizes: bool = False,
+    low_cpu_mem_usage: bool = False,
 ) -> _IncompatibleKeys:
     r"""Load an adapter's tensors, keyed as an adapter file keys them, into ``model``.
 
@@ -146,6 +183,12 @@ def set_peft_model_state_dict(
         On-disk key to tensor, as ``get_peft_model_state_dict`` returns.
     adapter_name : str, default="default"
         The adapter to load into.
+    ignore_mismatched_sizes : bool, default=False
+        The reference skips a tensor whose shape differs from the model's.  Here it raises;
+        ``True`` raises ``NotImplementedError``.
+    low_cpu_mem_usage : bool, default=False
+        Load into an adapter built on the meta device.  Not implemented: ``True`` raises
+        ``NotImplementedError``.
 
     Returns
     -------
@@ -161,6 +204,8 @@ def set_peft_model_state_dict(
         A key matches no tensor of the model, or a shape differs.
     TypeError
         A value is not a Tensor.
+    NotImplementedError
+        ``ignore_mismatched_sizes`` or ``low_cpu_mem_usage`` is ``True``.
 
     Examples
     --------
@@ -175,6 +220,11 @@ def set_peft_model_state_dict(
     >>> bool((a == source.base_model.model[0].lora_A["default"].weight).all().item())
     True
     """
+    where = "set_peft_model_state_dict"
+    refuse_value(
+        where, "ignore_mismatched_sizes", ignore_mismatched_sizes, False, NO_MISMATCH_SKIPPING
+    )
+    refuse_value(where, "low_cpu_mem_usage", low_cpu_mem_usage, False, NO_META_DEVICE)
     context = _file_context(model, adapter_name)
     tuner = _tuner_for(context.config)
     if issubclass(tuner, _FileFormat):

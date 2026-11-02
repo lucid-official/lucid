@@ -3,7 +3,6 @@
 from collections.abc import Mapping
 from typing import ClassVar
 
-import lucid.nn as nn
 from lucid.peft._config import PeftType, _TargetedConfig
 from lucid.peft.tuners._support import _ConfigTuner
 from lucid.peft.tuners.ln_tuning._config import LNTuningConfig
@@ -29,10 +28,12 @@ class LNTuningModel(_ConfigTuner, peft_type=PeftType.LN_TUNING):
     ----------
     model : nn.Module
         The model to adapt.
-    config : LNTuningConfig
+    peft_config : LNTuningConfig
         What to adapt.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``ln_tuning_layers``.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -47,7 +48,7 @@ class LNTuningModel(_ConfigTuner, peft_type=PeftType.LN_TUNING):
     >>> import lucid.nn as nn
     >>> from lucid.peft import LNTuningConfig, LNTuningModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.LayerNorm(8), nn.Linear(8, 2))
-    >>> tuned = LNTuningModel(net, LNTuningConfig(target_modules=["1"]))
+    >>> tuned = LNTuningModel(net, LNTuningConfig(target_modules=["1"]), "default")
     >>> tuned.targeted_module_names
     ['1']
     >>> net[1].base_layer.weight.requires_grad, net[1].ln_tuning_layers["default"].weight.requires_grad
@@ -59,9 +60,3 @@ class LNTuningModel(_ConfigTuner, peft_type=PeftType.LN_TUNING):
     _layer_types = LNTuningLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = LNTuningConfig
     _default_targets: ClassVar[Mapping[str, frozenset[str]]] = LN_TUNING_DEFAULT_TARGET_MODULES
-
-    def __init__(
-        self, model: nn.Module, config: LNTuningConfig, adapter_name: str = "default"
-    ) -> None:
-        """Adapt ``model`` in place, building LN tuning's norm copies as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)

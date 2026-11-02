@@ -277,7 +277,7 @@ class TestAdding:
 
         monkeypatch.setattr(_base, "_set_submodule", flaky)
         with pytest.raises(RuntimeError, match="cannot place"):
-            LoraModel(net, _config(2, ["0", "2"]))
+            LoraModel(net, _config(2, ["0", "2"]), adapter_name="default")
         assert type(net[0]) is nn.Linear and type(net[2]) is nn.Linear
         assert "peft_config" not in vars(net) and all(p.requires_grad for p in net.parameters())
 

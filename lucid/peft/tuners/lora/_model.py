@@ -146,10 +146,16 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
     ----------
     model : nn.Module
         The model to adapt.
-    config : LoraConfig
+    peft_config : LoraConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``lora_A`` / ``lora_B``.
+    low_cpu_mem_usage : bool, default=False
+        Build the adapter on the meta device.  Not implemented: ``True`` raises
+        ``NotImplementedError``.
+    state_dict : dict of str to Tensor, optional
+        The reference matches targets against these keys instead of the model's modules.
+        Not implemented: anything but ``None`` raises ``NotImplementedError``.
 
     Raises
     ------
@@ -171,7 +177,7 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
     >>> import lucid.nn as nn
     >>> from lucid.peft import LoraConfig, LoraModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
-    >>> lora = LoraModel(net, LoraConfig(r=2, target_modules=["0"]))
+    >>> lora = LoraModel(net, LoraConfig(r=2, target_modules=["0"]), "default")
     >>> lora.targeted_module_names
     ['0']
     >>> net[0].base_layer.weight.requires_grad, net[0].lora_A["default"].weight.requires_grad
@@ -188,10 +194,6 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
 
     _layer_types = LoraLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = LoraConfig
-
-    def __init__(self, model: nn.Module, config: LoraConfig, adapter_name: str = "default") -> None:
-        """Adapt ``model`` in place, building LoRA's low-rank factors as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)
 
     @override
     @classmethod

@@ -4,7 +4,6 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import ClassVar, override
 
-import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.nn.hooks import RemovableHandle
 from lucid.peft._config import PeftType, _TargetedConfig
@@ -32,10 +31,12 @@ class PolyModel(_ConfigTuner, peft_type=PeftType.POLY):
     ----------
     model : nn.Module
         The model to adapt.
-    config : PolyConfig
+    peft_config : PolyConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``poly_lora_A``.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -51,7 +52,7 @@ class PolyModel(_ConfigTuner, peft_type=PeftType.POLY):
     >>> import lucid.nn as nn
     >>> from lucid.peft import PolyConfig, PolyModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
-    >>> poly = PolyModel(net, PolyConfig(r=2, n_tasks=3, target_modules=["0"]))
+    >>> poly = PolyModel(net, PolyConfig(r=2, n_tasks=3, target_modules=["0"]), "default")
     >>> poly.targeted_module_names
     ['0']
     >>> poly(lucid.randn(4, 8), task_ids=lucid.tensor([0, 1, 2, 0])).shape
@@ -60,10 +61,6 @@ class PolyModel(_ConfigTuner, peft_type=PeftType.POLY):
 
     _layer_types = PolyLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = PolyConfig
-
-    def __init__(self, model: nn.Module, config: PolyConfig, adapter_name: str = "default") -> None:
-        """Adapt ``model`` in place, building Poly's skills and router as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)
 
     @override
     @contextmanager
@@ -90,9 +87,10 @@ class PolyModel(_ConfigTuner, peft_type=PeftType.POLY):
                 handle.remove()
 
     @override
-    def forward(self, *args: object, **kwargs: object) -> object:
+    def forward(  # type: ignore[override]  # the reference names task_ids, which the base call takes by keyword
+        self, *args: object, task_ids: Tensor | None = None, **kwargs: object
+    ) -> object:
         """Call the model; ``task_ids``, if given, goes to every Poly layer for the call."""
-        task_ids = kwargs.pop("task_ids", None)
         if task_ids is not None and not isinstance(task_ids, Tensor):
             raise TypeError(f"task_ids must be a Tensor, got {type(task_ids).__name__}")
         with self._task_scope(task_ids):

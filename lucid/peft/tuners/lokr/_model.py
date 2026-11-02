@@ -2,7 +2,6 @@
 
 from typing import ClassVar
 
-import lucid.nn as nn
 from lucid.peft._config import PeftType, _TargetedConfig
 from lucid.peft.tuners._lycoris import _LycorisTuner
 from lucid.peft.tuners.lokr._config import LoKrConfig
@@ -27,10 +26,12 @@ class LoKrModel(_LycorisTuner, peft_type=PeftType.LOKR):
     ----------
     model : nn.Module
         The model to adapt.
-    config : LoKrConfig
+    peft_config : LoKrConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``lokr_*`` table.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -45,7 +46,7 @@ class LoKrModel(_LycorisTuner, peft_type=PeftType.LOKR):
     >>> import lucid.nn as nn
     >>> from lucid.peft import LoKrConfig, LoKrModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
-    >>> lokr = LoKrModel(net, LoKrConfig(r=2, target_modules=["0"]))
+    >>> lokr = LoKrModel(net, LoKrConfig(r=2, target_modules=["0"]), "default")
     >>> lokr.targeted_module_names
     ['0']
     >>> sorted(net[0].state_dict())
@@ -56,7 +57,3 @@ class LoKrModel(_LycorisTuner, peft_type=PeftType.LOKR):
 
     _layer_types = LoKrLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = LoKrConfig
-
-    def __init__(self, model: nn.Module, config: LoKrConfig, adapter_name: str = "default") -> None:
-        """Adapt ``model`` in place, building LoKr's Kronecker factors as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)

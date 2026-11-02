@@ -196,8 +196,13 @@ def test_t5_adapter_loads_by_role_names_and_matches_the_hand_folded_model(tmp_pa
     }
     src, dec = _t5_batch()
     with lucid.no_grad():
-        assert _same(loaded(src, dec).logits, folded(src, dec).logits)
-        assert not _same(folded(src, dec).logits, _base("t5_small_seq2seq", _T5)(src, dec).logits)
+        assert _same(
+            loaded(src, decoder_input_ids=dec).logits, folded(src, decoder_input_ids=dec).logits
+        )
+        assert not _same(
+            folded(src, decoder_input_ids=dec).logits,
+            _base("t5_small_seq2seq", _T5)(src, dec).logits,
+        )
     config = loaded.peft_config["default"]
     assert sorted(config.target_modules) == sorted(_T5_MODULES.values())
 
@@ -717,7 +722,9 @@ def test_cli_round_trip_loads_like_the_reference_file(tmp_path: Path) -> None:
         _base("t5_small_seq2seq", _T5), tmp_path / "out", convert=False
     )
     with lucid.no_grad():
-        assert _same(direct(src, dec).logits, plain(src, dec).logits)
+        assert _same(
+            direct(src, decoder_input_ids=dec).logits, plain(src, decoder_input_ids=dec).logits
+        )
 
 
 def test_cli_picks_the_converter_from_the_reference_class_or_the_flag(tmp_path: Path) -> None:
@@ -772,7 +779,9 @@ def test_convert_must_be_a_flag_or_auto(tmp_path: Path) -> None:
     _t5_adapter(tmp_path)
     with pytest.raises(ValueError, match="True, False or 'auto'"):
         PeftModel.from_pretrained(
-            _base("t5_small_seq2seq", _T5), tmp_path, convert="yes"  # type: ignore[arg-type]  # the refusal under test
+            _base("t5_small_seq2seq", _T5),
+            tmp_path,
+            convert="yes",  # type: ignore[arg-type]  # the refusal under test
         )
 
 

@@ -37,9 +37,10 @@ class AdaptionPromptModel(_ConfigTuner, peft_type=PeftType.ADAPTION_PROMPT):
     ----------
     model : nn.Module
         The decoder to adapt; ``model.config.model_type`` must be one the method supports.
-    config : AdaptionPromptConfig
-        What to adapt.
-    adapter_name : str, default="default"
+    configs : AdaptionPromptConfig or dict of str to AdaptionPromptConfig
+        What to adapt: the reference passes the configs of the adapters by name and builds the
+        one named ``adapter_name``; a single config is built as that adapter.
+    adapter_name : str
         Name of the adapter, the key in ``adaption_prompt`` and ``adaption_gate``.
 
     Raises
@@ -56,7 +57,7 @@ class AdaptionPromptModel(_ConfigTuner, peft_type=PeftType.ADAPTION_PROMPT):
     >>> from lucid.peft import AdaptionPromptConfig, AdaptionPromptModel
     >>> gpt = GPT2Model(GPT2Config(num_hidden_layers=3, hidden_size=16, num_attention_heads=2,
     ...                            intermediate_size=32, vocab_size=20))
-    >>> tuned = AdaptionPromptModel(gpt, AdaptionPromptConfig(adapter_len=4, adapter_layers=2))
+    >>> tuned = AdaptionPromptModel(gpt, AdaptionPromptConfig(adapter_len=4, adapter_layers=2), "default")
     >>> tuned.targeted_module_names
     ['h.1.attn', 'h.2.attn']
     >>> tuned.unload() is gpt, type(gpt.h[2].attn).__name__
@@ -65,13 +66,18 @@ class AdaptionPromptModel(_ConfigTuner, peft_type=PeftType.ADAPTION_PROMPT):
 
     _layer_types = AdaptedAttention._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = AdaptionPromptConfig
-    _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = _NO_PARAMETERS
 
     def __init__(
-        self, model: nn.Module, config: AdaptionPromptConfig, adapter_name: str = "default"
+        self,
+        model: nn.Module,
+        configs: AdaptionPromptConfig | Mapping[str, AdaptionPromptConfig],
+        adapter_name: str,
     ) -> None:
         """Adapt ``model`` in place, building the prompts and gates of ``adapter_name``."""
+        config = configs if isinstance(configs, AdaptionPromptConfig) else configs[adapter_name]
         super().__init__(model, config, adapter_name)
+
+    _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = _NO_PARAMETERS
 
     @override
     @classmethod

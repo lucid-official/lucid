@@ -13,6 +13,7 @@ from lucid._types import _ModuleOutput
 from lucid.nn.hooks import RemovableHandle
 from lucid.peft._config import PeftConfig, PeftType
 from lucid.peft._peft_model import PeftModel
+from lucid.peft._refusals import refuse_build_options, refuse_kwargs, refuse_value
 from lucid.peft._slots import _as_names
 from lucid.peft.tuners._base import _AdapterHost, _check_adapter_name, _tuner_layers
 from lucid.peft.tuners._files import _FileContext, _FileFormat
@@ -58,8 +59,18 @@ class XLoraModel(_FileFormat, _AdapterHost, peft_type=PeftType.XLORA):
         The base model; its trunk (``base_model_prefix``) should return ``last_hidden_state``.
     config : XLoraConfig
         The experts and the classifier.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the X-LoRA adapter (the experts keep their own names).
+    device : str, optional
+        The reference loads the experts onto this device.  They load onto the model's own;
+        anything but ``None`` raises ``NotImplementedError``.
+    ephemeral_gpu_offload : bool, default=False
+        Not implemented: ``True`` raises ``NotImplementedError``.
+    autocast_adapter_dtype : bool, default=True
+        Always the case here; ``False`` raises ``NotImplementedError``.
+    **kwargs : object
+        Accepted for the reference's signature (it forwards them to its loader); any key
+        raises ``NotImplementedError``.
 
     Raises
     ------
@@ -83,7 +94,7 @@ class XLoraModel(_FileFormat, _AdapterHost, peft_type=PeftType.XLORA):
     ...         get_peft_model(create_model("gpt2_small_lm", **arch),
     ...                        LoraConfig(r=2, target_modules=["c_attn"])).save_pretrained(f"{d}/{name}")
     ...     lm = create_model("gpt2_small_lm", **arch)
-    ...     xlora = XLoraModel(lm, XLoraConfig(adapters={"a": f"{d}/a", "b": f"{d}/b"}))
+    ...     xlora = XLoraModel(lm, XLoraConfig(adapters={"a": f"{d}/a", "b": f"{d}/b"}), "default")
     ...     out = xlora(lucid.randint(0, 32, (1, 5)))
     >>> out.logits.shape, xlora.get_latest_scalings().shape   # (batch, tokens, layers, experts)
     ((1, 5, 32), (1, 5, 2, 2))
@@ -91,8 +102,26 @@ class XLoraModel(_FileFormat, _AdapterHost, peft_type=PeftType.XLORA):
 
     _config_class: ClassVar[type[PeftConfig]] = XLoraConfig
 
-    def __init__(self, model: nn.Module, config: PeftConfig, adapter_name: str = "default") -> None:
+    def __init__(
+        self,
+        model: nn.Module,
+        config: PeftConfig,
+        adapter_name: str,
+        device: str | None = None,
+        ephemeral_gpu_offload: bool = False,
+        autocast_adapter_dtype: bool = True,
+        **kwargs: object,
+    ) -> None:
         """Load the experts into ``model``, build the classifier and hook the model; ``model`` is as given if that fails."""
+        refuse_value("XLoraModel", "device", device, None, "experts load onto the model's device")
+        refuse_build_options(
+            "XLoraModel",
+            autocast_adapter_dtype=autocast_adapter_dtype,
+            ephemeral_gpu_offload=ephemeral_gpu_offload,
+        )
+        refuse_kwargs(
+            "XLoraModel", kwargs, "the experts are LoRA adapters read from local directories"
+        )
         if not isinstance(model, nn.Module):
             raise TypeError(f"model must be an nn.Module, got {type(model).__name__}")
         if not isinstance(config, XLoraConfig):
@@ -352,11 +381,9 @@ class XLoraModel(_FileFormat, _AdapterHost, peft_type=PeftType.XLORA):
         return _as_names(self.active_adapter)
 
     @override
-    def add_adapter(
-        self, adapter_name: str, peft_config: PeftConfig, low_cpu_mem_usage: bool = False
-    ) -> None:
+    def add_adapter(self, adapter_name: str, config: PeftConfig) -> None:
         """Refused: an X-LoRA model holds one classifier; build another model to mix other experts."""
-        del adapter_name, peft_config, low_cpu_mem_usage
+        del adapter_name, config
         raise NotImplementedError(
             "an X-LoRA model holds one adapter; the experts it mixes are managed through "
             "`lora_model` (the multi-adapter API of the LoRA adapters)"
@@ -432,7 +459,14 @@ class XLoraModel(_FileFormat, _AdapterHost, peft_type=PeftType.XLORA):
 
     @classmethod
     @override
-    def _adapt_in_place(cls, model: nn.Module, config: PeftConfig, adapter_name: str) -> None:
+    def _adapt_in_place(
+        cls,
+        model: nn.Module,
+        config: PeftConfig,
+        adapter_name: str,
+        low_cpu_mem_usage: bool = False,
+        state_dict: dict[str, Tensor] | None = None,
+    ) -> None:
         raise TypeError(
             f"{cls.__name__} keeps its classifier beside the model, which a bare model has no "
             "place for; adapt with get_peft_model"

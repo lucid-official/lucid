@@ -29,10 +29,12 @@ class C3AModel(_ConfigTuner, peft_type=PeftType.C3A):
     ----------
     model : nn.Module
         The model to adapt.
-    config : C3AConfig
+    peft_config : C3AConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``c3a_kernel``.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -47,7 +49,7 @@ class C3AModel(_ConfigTuner, peft_type=PeftType.C3A):
     >>> import lucid.nn as nn
     >>> from lucid.peft import C3AConfig, C3AModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
-    >>> c3a = C3AModel(net, C3AConfig(block_size=2, target_modules=["0"]))
+    >>> c3a = C3AModel(net, C3AConfig(block_size=2, target_modules=["0"]), "default")
     >>> tuple(net[0].c3a_kernel["default"].shape)
     (4, 4, 2)
     >>> net[0].base_layer.weight.requires_grad, net[0].c3a_kernel["default"].requires_grad
@@ -59,10 +61,6 @@ class C3AModel(_ConfigTuner, peft_type=PeftType.C3A):
     _layer_types = C3ALayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = C3AConfig
     _default_targets: ClassVar[Mapping[str, frozenset[str]]] = C3A_DEFAULT_TARGET_MODULES
-
-    def __init__(self, model: nn.Module, config: C3AConfig, adapter_name: str = "default") -> None:
-        """Adapt ``model`` in place, building C3A's circulant kernels as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)
 
     @staticmethod
     def _sized(config: _TargetedConfig, key: str) -> _TargetedConfig:

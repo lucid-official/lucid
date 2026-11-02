@@ -49,6 +49,7 @@ from lucid.peft._adapter_file import _AdapterFile
 from lucid.peft._config import PeftConfig, PeftType, PromptLearningConfig, _TargetedConfig
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
+from lucid.peft._refusals import NO_META_DEVICE, NO_STATE_DICT_MATCHING, refuse_value
 from lucid.peft._slots import (
     _adapter_slots,
     _as_names,
@@ -538,9 +539,24 @@ class _AdapterHost(_ForwardsAttributes, ABC):
     #: The config class this method takes.
     _config_class: ClassVar[type[PeftConfig]]
 
-    def __init__(self, model: nn.Module, config: PeftConfig, adapter_name: str = "default") -> None:
-        """Make the host; a method's host builds its adapter from ``model`` and ``config`` after this."""
-        del model, config, adapter_name  # the subclass keeps what it needs
+    def __init__(
+        self,
+        model: nn.Module,
+        peft_config: PeftConfig,
+        adapter_name: str,
+        low_cpu_mem_usage: bool = False,
+        state_dict: dict[str, Tensor] | None = None,
+    ) -> None:
+        """Make the host; a method's host builds its adapter from ``model`` and ``peft_config`` after this.
+
+        ``low_cpu_mem_usage`` and ``state_dict`` are the reference's options for building an
+        adapter on the meta device and for matching targets against a state dict; neither
+        exists here, so anything but their defaults is refused.
+        """
+        del model, peft_config, adapter_name  # the subclass keeps what it needs
+        where = type(self).__name__
+        refuse_value(where, "low_cpu_mem_usage", low_cpu_mem_usage, False, NO_META_DEVICE)
+        refuse_value(where, "state_dict", state_dict, None, NO_STATE_DICT_MATCHING)
         super().__init__()
 
     @override
@@ -602,9 +618,16 @@ class _AdapterHost(_ForwardsAttributes, ABC):
         """Parameters beyond the adapters' own that train, by name under ``model``."""
 
     @classmethod
-    def _adapt_in_place(cls, model: nn.Module, config: PeftConfig, adapter_name: str) -> None:
+    def _adapt_in_place(
+        cls,
+        model: nn.Module,
+        config: PeftConfig,
+        adapter_name: str,
+        low_cpu_mem_usage: bool = False,
+        state_dict: dict[str, Tensor] | None = None,
+    ) -> None:
         """Adapt a bare ``model`` without a wrapper (``inject_adapter_in_model``)."""
-        cls(model, config, adapter_name)
+        cls(model, config, adapter_name, low_cpu_mem_usage=low_cpu_mem_usage, state_dict=state_dict)
 
     @classmethod
     def _require_adapter_state(cls, model: nn.Module, adapter_name: str) -> None:
@@ -635,9 +658,7 @@ class _AdapterHost(_ForwardsAttributes, ABC):
         )
 
     @abstractmethod
-    def add_adapter(
-        self, adapter_name: str, peft_config: PeftConfig, low_cpu_mem_usage: bool = False
-    ) -> None:
+    def add_adapter(self, adapter_name: str, config: PeftConfig) -> None:
         """Add an adapter beside the ones held."""
 
     @abstractmethod
@@ -708,12 +729,45 @@ class _BaseTuner(_AdapterHost, ABC):
     #: The raw parameters it adapts instead, for a model type whose weights are not layers'.
     _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = DEFAULT_LORA_TARGET_PARAMETERS
 
-    def __init__(self, model: nn.Module, config: PeftConfig, adapter_name: str = "default") -> None:
+    def __init__(
+        self,
+        model: nn.Module,
+        peft_config: PeftConfig,
+        adapter_name: str,
+        low_cpu_mem_usage: bool = False,
+        state_dict: dict[str, Tensor] | None = None,
+    ) -> None:
+        """Adapt ``model`` in place with ``peft_config``, building the method's layers as ``adapter_name``.
+
+        Parameters
+        ----------
+        model : nn.Module
+            The model to adapt.
+        peft_config : PeftConfig
+            What to adapt and how: the config class of this tuner's method.
+        adapter_name : str
+            Name of the adapter, the key in every one of its tables.
+        low_cpu_mem_usage : bool, default=False
+            Build the adapter on the meta device.  Not implemented: ``True`` raises
+            ``NotImplementedError``.
+        state_dict : dict of str to Tensor, optional
+            The reference matches targets against these keys instead of the model's modules.
+            Not implemented: anything but ``None`` raises ``NotImplementedError``.
+
+        Raises
+        ------
+        TypeError
+            ``model`` is not a module or ``peft_config`` is another method's config.
+        ValueError
+            The adapter cannot be applied; ``model`` is left as it was.
+        NotImplementedError
+            ``low_cpu_mem_usage`` or ``state_dict`` holds a value the library cannot honour.
+        """
         if not isinstance(model, nn.Module):
             raise TypeError(f"model must be an nn.Module, got {type(model).__name__}")
         kind = type(self)._config_class
-        if not isinstance(config, kind):
-            raise TypeError(f"config must be a {kind.__name__}, got {type(config).__name__}")
+        if not isinstance(peft_config, kind):
+            raise TypeError(f"config must be a {kind.__name__}, got {type(peft_config).__name__}")
         adapter_name = _check_adapter_name(adapter_name)
         earlier = self._adopted_configs(model, adapter_name)
         # By name, which a deep copy or a pickle of the model keeps; a model
@@ -725,14 +779,14 @@ class _BaseTuner(_AdapterHost, ABC):
         flags = model.__dict__.get(_FLAGS_KEY) if earlier is not None else None
         if flags is None:
             flags = trainable_now
-        super().__init__(model, config, adapter_name)
+        super().__init__(model, peft_config, adapter_name, low_cpu_mem_usage, state_dict)
         self.model = model
         self.peft_config: dict[str, PeftConfig] = {} if earlier is None else earlier
         self.active_adapter: str | list[str] = adapter_name
         self.targeted_module_names: list[str] = []
         self.targeted_parameter_names: list[str] = []
         self._requires_grad_before = flags
-        injected = self._inject(adapter_name, config)
+        injected = self._inject(adapter_name, peft_config)
         try:
             if earlier is not None:
                 # The newest adapter is the one in use; a merged earlier one would hide it.
@@ -1016,9 +1070,7 @@ class _BaseTuner(_AdapterHost, ABC):
         )
 
     @override
-    def add_adapter(
-        self, adapter_name: str, peft_config: PeftConfig, low_cpu_mem_usage: bool = False
-    ) -> None:
+    def add_adapter(self, adapter_name: str, config: PeftConfig) -> None:
         """Add an adapter beside the ones the model holds.
 
         The new adapter starts frozen and inactive: the forward pass keeps
@@ -1032,11 +1084,8 @@ class _BaseTuner(_AdapterHost, ABC):
         ----------
         adapter_name : str
             Name of the new adapter; unique among the model's adapters.
-        peft_config : PeftConfig
+        config : PeftConfig
             What to adapt and how — the config class of this tuner's method.
-        low_cpu_mem_usage : bool, default=False
-            Accepted for the reference's signature.  There is no meta
-            device to build the adapter on: it is allocated either way.
 
         Raises
         ------
@@ -1045,12 +1094,11 @@ class _BaseTuner(_AdapterHost, ABC):
             method's, no module matches it, or it cannot sit beside the
             adapters held (two adapters training biases).
         TypeError
-            ``peft_config`` is not an adapter config.
+            ``config`` is not an adapter config.
         """
-        del low_cpu_mem_usage  # a build-time memory hint; the adapter is the same either way
-        adapter_name = self._admit(adapter_name, peft_config)
-        assert isinstance(peft_config, _TargetedConfig)  # _admit checked the class
-        self._inject(adapter_name, peft_config)
+        adapter_name = self._admit(adapter_name, config)
+        assert isinstance(config, _TargetedConfig)  # _admit checked the class
+        self._inject(adapter_name, config)
         self.set_requires_grad(adapter_name, False)
 
     # ── switching, freezing, deleting ─────────────────────────────────────

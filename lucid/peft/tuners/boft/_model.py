@@ -24,10 +24,12 @@ class BOFTModel(_ConfigTuner, peft_type=PeftType.BOFT):
     ----------
     model : nn.Module
         The model to adapt.
-    config : BOFTConfig
+    peft_config : BOFTConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in ``boft_R`` and ``boft_s``.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -42,7 +44,7 @@ class BOFTModel(_ConfigTuner, peft_type=PeftType.BOFT):
     >>> import lucid.nn as nn
     >>> from lucid.peft import BOFTConfig, BOFTModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
-    >>> boft = BOFTModel(net, BOFTConfig(boft_block_size=4, target_modules=["0"]))
+    >>> boft = BOFTModel(net, BOFTConfig(boft_block_size=4, target_modules=["0"]), "default")
     >>> boft.targeted_module_names
     ['0']
     >>> net[0].base_layer.weight.requires_grad, net[0].boft_R["default"].requires_grad
@@ -53,10 +55,6 @@ class BOFTModel(_ConfigTuner, peft_type=PeftType.BOFT):
 
     _layer_types = BOFTLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = BOFTConfig
-
-    def __init__(self, model: nn.Module, config: BOFTConfig, adapter_name: str = "default") -> None:
-        """Adapt ``model`` in place, building BOFT's butterfly rotations as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)
 
     @override
     @classmethod

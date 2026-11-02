@@ -12,6 +12,12 @@ import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
+from lucid.peft._refusals import (
+    NO_META_DEVICE,
+    NO_STATE_DICT_MATCHING,
+    reject_unexpected,
+    refuse_value,
+)
 from lucid.peft.tuners._base import _NO_PARAMETERS, _BaseTuner, _Target, _tuner_layers
 from lucid.peft.tuners._files import _FileContext, _FileFormat
 from lucid.peft.tuners._support import _reset_fan_in_fan_out
@@ -75,8 +81,12 @@ class AdaLoraModel(_FileFormat, _BaseTuner, peft_type=PeftType.ADALORA):
         The model to adapt.
     config : AdaLoraConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``lora_*`` table.
+    **kwargs : object
+        ``low_cpu_mem_usage`` and ``state_dict`` of :class:`~lucid.peft.LoraModel`, which the
+        reference's AdaLoRA tuner forwards.  Neither is implemented: a value other than the
+        default raises ``NotImplementedError``, and any other key ``TypeError``.
 
     Raises
     ------
@@ -95,7 +105,7 @@ class AdaLoraModel(_FileFormat, _BaseTuner, peft_type=PeftType.ADALORA):
     >>> from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
     >>> config = AdaLoraConfig(init_r=4, target_r=2, total_step=10, target_modules=["0"])
-    >>> ada = AdaLoraModel(net, config)
+    >>> ada = AdaLoraModel(net, config, "default")
     >>> ada.targeted_module_names, net[0].r["default"]
     (['0'], 4)
     >>> ada(lucid.randn(3, 8)).sum().backward()
@@ -110,9 +120,21 @@ class AdaLoraModel(_FileFormat, _BaseTuner, peft_type=PeftType.ADALORA):
     _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = _NO_PARAMETERS
 
     def __init__(
-        self, model: nn.Module, config: AdaLoraConfig, adapter_name: str = "default"
+        self, model: nn.Module, config: AdaLoraConfig, adapter_name: str, **kwargs: object
     ) -> None:
         """Adapt ``model`` in place, building AdaLoRA's triplets as ``adapter_name``."""
+        where = type(self).__name__
+        refuse_value(
+            where,
+            "low_cpu_mem_usage",
+            kwargs.pop("low_cpu_mem_usage", False),
+            False,
+            NO_META_DEVICE,
+        )
+        refuse_value(
+            where, "state_dict", kwargs.pop("state_dict", None), None, NO_STATE_DICT_MATCHING
+        )
+        reject_unexpected(where, kwargs)
         super().__init__(model, config, adapter_name)
         self._allocator: RankAllocator | None = None
 

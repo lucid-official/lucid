@@ -11,23 +11,28 @@ What a wrapper adds to ``PeftModel`` is what the task means for the model:
 * a classification or question-answering task trains the model's head, so
   the wrapper names it (``_head_names``) and the head joins
   ``modules_to_save`` of every adapter the model takes;
-* a language-modelling task decodes, so the wrapper has ``generate``.
-
-``forward`` is the base class's: the call is passed to the model as it is.
-The reference spells each task's arguments out because its models share
-them; the zoo's forwards differ by family (an encoder-decoder takes
-``decoder_input_ids`` where a causal model does not), so a wrapper that
-named them would be wrong for half of its models.
+* its ``forward`` names the arguments the reference's does (``input_ids``,
+  ``attention_mask``, ``labels`` …) and hands the ones given to the model by
+  keyword, the first positional one staying positional, so a call reads the
+  same on both sides.  A model whose ``forward`` has no parameter of such a
+  name raises ``TypeError`` for it, as any call with an unknown keyword does.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from types import MappingProxyType
-from typing import ClassVar, Final
+from typing import ClassVar, Final, override
 
+import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
-from lucid.peft._config import TaskType
+from lucid.peft._config import PeftConfig, TaskType, _require_config
 from lucid.peft._heads import CLASSIFIER_HEADS, SPAN_HEADS
 from lucid.peft._peft_model import PeftModel
+from lucid.peft._refusals import (
+    NO_FLOAT_AUTOCAST_OFF,
+    NO_META_DEVICE,
+    reject_unexpected,
+    refuse_value,
+)
 
 #: Wrapper class by the task it serves, as the reference's table of the same name.  Read-only.
 MODEL_TYPE_TO_PEFT_MODEL_MAPPING: Final[Mapping[TaskType, type[PeftModel]]] = MappingProxyType(
@@ -35,65 +40,122 @@ MODEL_TYPE_TO_PEFT_MODEL_MAPPING: Final[Mapping[TaskType, type[PeftModel]]] = Ma
 )
 
 
-class _GeneratingPeftModel(PeftModel):
-    """A wrapper for a task that decodes: ``generate`` runs the model's own."""
+class _TaskPeftModel(PeftModel):
+    """A wrapper for a task: the constructor the reference's wrappers share, and the call that names its arguments."""
 
-    def generate(
+    def __init__(
         self,
-        *args: object,
-        adapter_names: Sequence[str] | None = None,
+        model: nn.Module,
+        peft_config: PeftConfig,
+        adapter_name: str = "default",
+        **kwargs: object,
+    ) -> None:
+        """Adapt ``model`` in place with ``peft_config`` and wrap it for this task.
+
+        ``kwargs`` are the options of :class:`~lucid.peft.PeftModel` the reference's
+        wrappers pass on (``autocast_adapter_dtype``, ``low_cpu_mem_usage``); another key
+        raises ``TypeError``.
+        """
+        where = type(self).__name__
+        autocast = kwargs.pop("autocast_adapter_dtype", True)
+        refuse_value(where, "autocast_adapter_dtype", autocast, True, NO_FLOAT_AUTOCAST_OFF)
+        refuse_value(
+            where,
+            "low_cpu_mem_usage",
+            kwargs.pop("low_cpu_mem_usage", False),
+            False,
+            NO_META_DEVICE,
+        )
+        reject_unexpected(where, kwargs)
+        super().__init__(model, peft_config, adapter_name)
+
+    def _called(
+        self,
+        input_ids: Tensor | None,
+        named: Mapping[str, object],
+        task_ids: Tensor | None,
+        kwargs: dict[str, object],
+    ) -> object:
+        """Run the model on what was given: ``input_ids`` positionally, the other named arguments by keyword."""
+        args = () if input_ids is None else (input_ids,)
+        given = {name: value for name, value in named.items() if value is not None}
+        return PeftModel.forward(self, *args, task_ids=task_ids, **given, **kwargs)
+
+
+class _TextForward(_TaskPeftModel):
+    """The call of a task whose model reads ``input_ids`` and answers with logits or a loss."""
+
+    @override
+    def forward(  # type: ignore[override]  # narrows the base call to the reference task signature
+        self,
+        input_ids: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+        inputs_embeds: Tensor | None = None,
+        labels: Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         task_ids: Tensor | None = None,
         **kwargs: object,
     ) -> object:
-        r"""Generate with the adapted model: its own ``generate``, called as given.
-
-        The adapter applies at every step, since the model's layers are
-        the adapted ones; ``with model.disable_adapter():`` generates with
-        the base model alone.
+        r"""Run the adapted model; the arguments given go to it as they are.
 
         Parameters
         ----------
-        *args : object
-            Positional arguments of the model's ``generate``.
-        adapter_names : sequence of str, optional
-            One adapter per prompt, as for :meth:`~lucid.peft.PeftModel.forward`:
-            every step of prompt ``i`` uses ``adapter_names[i]`` alone
-            (``"__base__"``: the base model).  With beam search
-            (``num_beams`` in ``kwargs``) each name covers that prompt's
-            beams; an encoder, if the model has one, sees the prompts once.
+        input_ids : Tensor, optional
+            The token ids.
+        attention_mask : Tensor, optional
+            Which positions are tokens (1) and which padding (0).
+        inputs_embeds : Tensor, optional
+            Embeddings in place of ``input_ids``.
+        labels : Tensor, optional
+            The targets, for a model that computes its own loss.
+        output_attentions : bool, optional
+            Ask the model for its attention weights.
+        output_hidden_states : bool, optional
+            Ask the model for its hidden states.
+        return_dict : bool, optional
+            Ask the model for a result object rather than a tuple.
         task_ids : Tensor, optional
-            For multitask prompt tuning: the task of each prompt of the batch,
-            as for :meth:`~lucid.peft.PeftModel.forward`.
+            For multitask prompt tuning: the task of each row of the batch, ``(batch,)``
+            integers in ``[0, num_tasks)``.
         **kwargs : object
-            Keyword arguments of the model's ``generate``.
+            Further keyword arguments of the model's ``forward``, and ``adapter_names``
+            as for :meth:`~lucid.peft.PeftModel.forward`.
 
         Returns
         -------
         object
-            What the model's ``generate`` returns.
+            What the model's ``forward`` returns.
 
         Raises
         ------
-        AttributeError
-            The adapted model has no ``generate``.
+        TypeError
+            The model's ``forward`` has no parameter for an argument that was given.
         """
-        model = self.get_base_model()
-        generate = getattr(model, "generate", None)
-        if generate is None:
-            raise AttributeError(f"{type(model).__name__} has no generate() to call")
-        beams = kwargs.get("num_beams")
-        routed = self._routed(adapter_names, beams if isinstance(beams, int) and beams > 1 else 1)
-        with routed, self._tasked(task_ids):
-            return generate(*args, **kwargs)
+        named = {
+            "attention_mask": attention_mask,
+            "inputs_embeds": inputs_embeds,
+            "labels": labels,
+            "output_attentions": output_attentions,
+            "output_hidden_states": output_hidden_states,
+            "return_dict": return_dict,
+        }
+        return self._called(input_ids, named, task_ids, kwargs)
 
 
-class PeftModelForCausalLM(_GeneratingPeftModel, task_type=TaskType.CAUSAL_LM):
+class PeftModelForCausalLM(_TextForward, task_type=TaskType.CAUSAL_LM):
     r"""An adapted causal language model: the ``PeftModel`` for ``task_type="CAUSAL_LM"``.
 
     What :func:`~lucid.peft.get_peft_model` returns for a ``CAUSAL_LM``
     config.  Built, called and trained as :class:`~lucid.peft.PeftModel`
     is, and ``generate`` runs the adapted model's own, so the adapter
     shapes every decoded token.
+
+    Parameters
+    ----------
+    model, peft_config, adapter_name, **kwargs
+        As in :class:`~lucid.peft.PeftModel`.
 
     Examples
     --------
@@ -114,12 +176,17 @@ class PeftModelForCausalLM(_GeneratingPeftModel, task_type=TaskType.CAUSAL_LM):
     """
 
 
-class PeftModelForSeq2SeqLM(_GeneratingPeftModel, task_type=TaskType.SEQ_2_SEQ_LM):
+class PeftModelForSeq2SeqLM(_TaskPeftModel, task_type=TaskType.SEQ_2_SEQ_LM):
     r"""An adapted encoder-decoder model: the ``PeftModel`` for ``task_type="SEQ_2_SEQ_LM"``.
 
     What :func:`~lucid.peft.get_peft_model` returns for a ``SEQ_2_SEQ_LM``
     config.  Calling it is calling the model — which takes the decoder's
     input as well — and ``generate`` runs the adapted model's own.
+
+    Parameters
+    ----------
+    model, peft_config, adapter_name, **kwargs
+        As in :class:`~lucid.peft.PeftModel`.
 
     Examples
     --------
@@ -130,8 +197,84 @@ class PeftModelForSeq2SeqLM(_GeneratingPeftModel, task_type=TaskType.SEQ_2_SEQ_L
     'PeftModelForSeq2SeqLM'
     """
 
+    @override
+    def forward(  # type: ignore[override]  # narrows the base call to the reference task signature
+        self,
+        input_ids: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+        inputs_embeds: Tensor | None = None,
+        decoder_input_ids: Tensor | None = None,
+        decoder_attention_mask: Tensor | None = None,
+        decoder_inputs_embeds: Tensor | None = None,
+        labels: Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        task_ids: Tensor | None = None,
+        **kwargs: object,
+    ) -> object:
+        r"""Run the adapted encoder-decoder; the arguments given go to it as they are.
 
-class PeftModelForSequenceClassification(PeftModel, task_type=TaskType.SEQ_CLS):
+        Parameters
+        ----------
+        input_ids, attention_mask, inputs_embeds
+            The encoder's inputs, as in :meth:`~lucid.peft.PeftModelForCausalLM.forward`.
+        decoder_input_ids : Tensor, optional
+            The decoder's token ids.
+        decoder_attention_mask : Tensor, optional
+            Which decoder positions are tokens (1) and which padding (0).
+        decoder_inputs_embeds : Tensor, optional
+            Embeddings in place of ``decoder_input_ids``.
+        labels, output_attentions, output_hidden_states, return_dict, task_ids, **kwargs
+            As in :meth:`~lucid.peft.PeftModelForCausalLM.forward`.
+
+        Returns
+        -------
+        object
+            What the model's ``forward`` returns.
+
+        Raises
+        ------
+        TypeError
+            The model's ``forward`` has no parameter for an argument that was given.
+        """
+        named = {
+            "attention_mask": attention_mask,
+            "inputs_embeds": inputs_embeds,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+            "decoder_inputs_embeds": decoder_inputs_embeds,
+            "labels": labels,
+            "output_attentions": output_attentions,
+            "output_hidden_states": output_hidden_states,
+            "return_dict": return_dict,
+        }
+        return self._called(input_ids, named, task_ids, kwargs)
+
+    @override
+    def generate(self, **kwargs: object) -> object:  # type: ignore[override]  # the reference takes keywords only
+        r"""Generate with the adapted model: its own ``generate``, called with these keywords.
+
+        Parameters
+        ----------
+        **kwargs : object
+            Keyword arguments of the model's ``generate`` (``input_ids``, ``max_new_tokens`` …),
+            and ``adapter_names`` / ``task_ids`` as for :meth:`~lucid.peft.PeftModel.generate`.
+
+        Returns
+        -------
+        object
+            What the model's ``generate`` returns.
+
+        Raises
+        ------
+        AttributeError
+            The adapted model has no ``generate``.
+        """
+        return super().generate(**kwargs)
+
+
+class PeftModelForSequenceClassification(_TextForward, task_type=TaskType.SEQ_CLS):
     r"""An adapted sequence classifier: the ``PeftModel`` for ``task_type="SEQ_CLS"``.
 
     The classification head is trained in full beside the adapter: a
@@ -140,6 +283,11 @@ class PeftModelForSequenceClassification(PeftModel, task_type=TaskType.SEQ_CLS):
     task's labels are learned whatever the base model's head was.  The
     config passed in is not changed; the wrapper keeps a copy with the head
     added.
+
+    Parameters
+    ----------
+    model, peft_config, adapter_name, **kwargs
+        As in :class:`~lucid.peft.PeftModel`.
 
     Examples
     --------
@@ -155,7 +303,7 @@ class PeftModelForSequenceClassification(PeftModel, task_type=TaskType.SEQ_CLS):
     _head_names: ClassVar[tuple[str, ...]] = CLASSIFIER_HEADS
 
 
-class PeftModelForTokenClassification(PeftModel, task_type=TaskType.TOKEN_CLS):
+class PeftModelForTokenClassification(_TextForward, task_type=TaskType.TOKEN_CLS):
     r"""An adapted token classifier: the ``PeftModel`` for ``task_type="TOKEN_CLS"``.
 
     As for :class:`~lucid.peft.PeftModelForSequenceClassification`, the
@@ -163,6 +311,18 @@ class PeftModelForTokenClassification(PeftModel, task_type=TaskType.TOKEN_CLS):
     adapter.  With a prompt (prompt tuning, p-tuning) in front of the input, the
     head reads the input's positions alone, so the logits and the labels are as
     long as the input the caller gave.
+
+    Parameters
+    ----------
+    model : nn.Module
+        The model to adapt, changed in place.
+    peft_config : PeftConfig
+        What to adapt and how; required, though the reference's signature gives it a default.
+    adapter_name : str, default="default"
+        Name of the adapter.
+    **kwargs : object
+        ``autocast_adapter_dtype`` and ``low_cpu_mem_usage`` of
+        :class:`~lucid.peft.PeftModel`.
 
     Examples
     --------
@@ -177,8 +337,22 @@ class PeftModelForTokenClassification(PeftModel, task_type=TaskType.TOKEN_CLS):
 
     _head_names: ClassVar[tuple[str, ...]] = CLASSIFIER_HEADS
 
+    def __init__(
+        self,
+        model: nn.Module,
+        peft_config: PeftConfig | None = None,
+        adapter_name: str = "default",
+        **kwargs: object,
+    ) -> None:
+        """Adapt ``model`` in place with ``peft_config`` and wrap it for token classification.
 
-class PeftModelForQuestionAnswering(PeftModel, task_type=TaskType.QUESTION_ANS):
+        ``peft_config`` has a default only because the reference's signature does; leaving it
+        out raises ``TypeError``.
+        """
+        super().__init__(model, _require_config("peft_config", peft_config), adapter_name, **kwargs)
+
+
+class PeftModelForQuestionAnswering(_TaskPeftModel, task_type=TaskType.QUESTION_ANS):
     r"""An adapted question-answering model: the ``PeftModel`` for ``task_type="QUESTION_ANS"``.
 
     The span head — the model's ``qa_outputs`` module — is trained in full
@@ -186,6 +360,11 @@ class PeftModelForQuestionAnswering(PeftModel, task_type=TaskType.QUESTION_ANS):
     whatever the base model's head was.  With a prompt in front of the input,
     the head reads the input's positions alone, so the start and end logits
     and the answer positions are in the caller's coordinates.
+
+    Parameters
+    ----------
+    model, peft_config, adapter_name, **kwargs
+        As in :class:`~lucid.peft.PeftModel`.
 
     Examples
     --------
@@ -200,12 +379,75 @@ class PeftModelForQuestionAnswering(PeftModel, task_type=TaskType.QUESTION_ANS):
 
     _head_names: ClassVar[tuple[str, ...]] = SPAN_HEADS
 
+    @override
+    def forward(  # type: ignore[override]  # narrows the base call to the reference task signature
+        self,
+        input_ids: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+        token_type_ids: Tensor | None = None,
+        position_ids: Tensor | None = None,
+        inputs_embeds: Tensor | None = None,
+        start_positions: Tensor | None = None,
+        end_positions: Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        task_ids: Tensor | None = None,
+        **kwargs: object,
+    ) -> object:
+        r"""Run the adapted reader; the arguments given go to it as they are.
 
-class PeftModelForFeatureExtraction(PeftModel, task_type=TaskType.FEATURE_EXTRACTION):
+        Parameters
+        ----------
+        input_ids, attention_mask
+            As in :meth:`~lucid.peft.PeftModelForCausalLM.forward`.
+        token_type_ids : Tensor, optional
+            Which segment each position belongs to.
+        position_ids : Tensor, optional
+            The position of each token.
+        inputs_embeds
+            As in :meth:`~lucid.peft.PeftModelForCausalLM.forward`.
+        start_positions : Tensor, optional
+            The answer's first token, for a model that computes its own loss.
+        end_positions : Tensor, optional
+            The answer's last token, for a model that computes its own loss.
+        output_attentions, output_hidden_states, return_dict, task_ids, **kwargs
+            As in :meth:`~lucid.peft.PeftModelForCausalLM.forward`.
+
+        Returns
+        -------
+        object
+            What the model's ``forward`` returns.
+
+        Raises
+        ------
+        TypeError
+            The model's ``forward`` has no parameter for an argument that was given.
+        """
+        named = {
+            "attention_mask": attention_mask,
+            "token_type_ids": token_type_ids,
+            "position_ids": position_ids,
+            "inputs_embeds": inputs_embeds,
+            "start_positions": start_positions,
+            "end_positions": end_positions,
+            "output_attentions": output_attentions,
+            "output_hidden_states": output_hidden_states,
+            "return_dict": return_dict,
+        }
+        return self._called(input_ids, named, task_ids, kwargs)
+
+
+class PeftModelForFeatureExtraction(_TaskPeftModel, task_type=TaskType.FEATURE_EXTRACTION):
     r"""An adapted feature encoder: the ``PeftModel`` for ``task_type="FEATURE_EXTRACTION"``.
 
     There is no head to train: the adapter alone shapes the representation
     the model returns.  Calling it calls the model with the arguments given.
+
+    Parameters
+    ----------
+    model, peft_config, adapter_name, **kwargs
+        As in :class:`~lucid.peft.PeftModel`.
 
     Examples
     --------
@@ -217,3 +459,42 @@ class PeftModelForFeatureExtraction(PeftModel, task_type=TaskType.FEATURE_EXTRAC
     >>> peft(lucid.randn(3, 4)).shape
     (3, 6)
     """
+
+    @override
+    def forward(  # type: ignore[override]  # narrows the base call to the reference task signature
+        self,
+        input_ids: Tensor | None = None,
+        attention_mask: Tensor | None = None,
+        inputs_embeds: Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        task_ids: Tensor | None = None,
+        **kwargs: object,
+    ) -> object:
+        r"""Run the adapted encoder; the arguments given go to it as they are.
+
+        Parameters
+        ----------
+        input_ids, attention_mask, inputs_embeds, output_attentions, output_hidden_states, return_dict, task_ids, **kwargs
+            As in :meth:`~lucid.peft.PeftModelForCausalLM.forward`; ``input_ids`` is the
+            model's input where it is not text.
+
+        Returns
+        -------
+        object
+            What the model's ``forward`` returns.
+
+        Raises
+        ------
+        TypeError
+            The model's ``forward`` has no parameter for an argument that was given.
+        """
+        named = {
+            "attention_mask": attention_mask,
+            "inputs_embeds": inputs_embeds,
+            "output_attentions": output_attentions,
+            "output_hidden_states": output_hidden_states,
+            "return_dict": return_dict,
+        }
+        return self._called(input_ids, named, task_ids, kwargs)

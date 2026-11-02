@@ -51,7 +51,7 @@ def _config(**kw: object) -> VeraConfig:
 
 
 def _tuner(device: str = "cpu", **kw: object) -> VeraModel:
-    return VeraModel(_mlp(device), _config(**kw))
+    return VeraModel(_mlp(device), _config(**kw), adapter_name="default")
 
 
 def _vera(model: nn.Module, name: str) -> VeraLayer:
@@ -299,7 +299,7 @@ class TestLayer:
         net = _mlp(device)
         x = lucid.randn(5, 6, device=device)
         base = net(x)
-        tuner = VeraModel(net, _config(d_initial=0.25))
+        tuner = VeraModel(net, _config(d_initial=0.25), adapter_name="default")
         layer = _vera(net, "0")
         assert _same(layer.vera_lambda_d["default"], lucid.full((3,), 0.25, device=device))
         assert _same(layer.vera_lambda_b["default"], lucid.zeros(8, device=device))
@@ -312,7 +312,7 @@ class TestLayer:
 
     def test_the_update_is_lambda_b_times_b_lambda_d_a_x(self, device: str) -> None:
         net = _mlp(device)
-        tuner = VeraModel(net, _config(init_weights=False))
+        tuner = VeraModel(net, _config(init_weights=False), adapter_name="default")
         layer = _vera(net, "0")
         x = lucid.randn(5, 6, device=device)
         a, b = tuner.vera_A["default"], tuner.vera_B["default"]
@@ -324,7 +324,7 @@ class TestLayer:
 
     def test_a_smaller_layer_reads_a_slice_of_the_pair(self, device: str) -> None:
         net = _mlp(device)
-        tuner = VeraModel(net, _config(init_weights=False))
+        tuner = VeraModel(net, _config(init_weights=False), adapter_name="default")
         layer = _vera(net, "2")  # in 8, out 4: B is sliced to 4 rows
         x = lucid.randn(5, 8, device=device)
         a, b = tuner.vera_A["default"], tuner.vera_B["default"]
@@ -334,7 +334,7 @@ class TestLayer:
 
     def test_the_delta_weight_is_the_update_as_a_matrix(self, device: str) -> None:
         net = _mlp(device)
-        VeraModel(net, _config(init_weights=False))
+        VeraModel(net, _config(init_weights=False), adapter_name="default")
         layer = _vera(net, "0")
         x = lucid.randn(5, 6, device=device)
         delta = layer.get_delta_weight("default")
@@ -357,7 +357,7 @@ class TestLayer:
 
     def test_dropout_acts_on_the_adapter_input_only(self) -> None:
         net = _mlp()
-        VeraModel(net, _config(init_weights=False, vera_dropout=0.5))
+        VeraModel(net, _config(init_weights=False, vera_dropout=0.5), adapter_name="default")
         layer = _vera(net, "0")
         x = lucid.randn(8, 6)
         layer.eval()
@@ -385,7 +385,9 @@ class TestLayer:
 
     def test_a_half_base_gets_float32_vectors_and_keeps_its_dtype(self) -> None:
         net = nn.Sequential(nn.Linear(6, 4)).to(lucid.float16)
-        tuner = VeraModel(net, _config(target_modules=["0"], init_weights=False))
+        tuner = VeraModel(
+            net, _config(target_modules=["0"], init_weights=False), adapter_name="default"
+        )
         layer = _vera(net, "0")
         assert layer.vera_lambda_d["default"].dtype == lucid.float32
         assert tuner.vera_A["default"].dtype == lucid.float32
@@ -394,12 +396,12 @@ class TestLayer:
     def test_only_nn_linear_is_adapted(self) -> None:
         net = nn.Sequential(nn.Linear(4, 4), nn.Conv2d(2, 2, 1))
         with pytest.raises(ValueError, match="not supported"):
-            VeraModel(net, _config(target_modules=["0", "1"]))
+            VeraModel(net, _config(target_modules=["0", "1"]), adapter_name="default")
         assert type(net[0]) is nn.Linear
 
     def test_the_delete_removes_the_dropout_and_the_spec(self) -> None:
         net = _mlp()
-        tuner = VeraModel(net, _config(vera_dropout=0.1))
+        tuner = VeraModel(net, _config(vera_dropout=0.1), adapter_name="default")
         tuner.add_adapter("b", _config(vera_dropout=0.1))
         layer = _vera(net, "0")
         tuner.delete_adapter("b")
@@ -461,7 +463,7 @@ class TestSharing:
     def test_a_failed_first_adapter_leaves_the_model_alone(self) -> None:
         net = nn.Sequential(nn.Linear(4, 4), nn.Embedding(5, 4))
         with pytest.raises(ValueError, match="not supported"):
-            VeraModel(net, _config(target_modules=["0", "1"]))
+            VeraModel(net, _config(target_modules=["0", "1"]), adapter_name="default")
         assert type(net[0]) is nn.Linear
 
 
@@ -653,7 +655,7 @@ class TestTuner:
         net = nn.Sequential(nn.Linear(4, 4))
         net.config = type("C", (), {"model_type": "resnet"})()  # type: ignore[assignment]
         with pytest.raises(ValueError, match="Please specify `target_modules`"):
-            VeraModel(net, VeraConfig())
+            VeraModel(net, VeraConfig(), adapter_name="default")
 
     def test_the_default_targets_are_the_reference_s_for_the_zoo_types(self) -> None:
         from lucid.peft.tuners.vera._defaults import VERA_DEFAULT_TARGET_MODULES

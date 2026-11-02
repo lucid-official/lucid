@@ -83,10 +83,12 @@ class VeraModel(_FileFormat, _BaseTuner, peft_type=PeftType.VERA):
     ----------
     model : nn.Module
         The model to adapt.
-    config : VeraConfig
+    peft_config : VeraConfig
         What to adapt and how.
-    adapter_name : str, default="default"
+    adapter_name : str
         Name of the adapter, the key in every ``vera_lambda_*`` table.
+    low_cpu_mem_usage, state_dict
+        As in :class:`~lucid.peft.LoraModel`.
 
     Raises
     ------
@@ -103,7 +105,7 @@ class VeraModel(_FileFormat, _BaseTuner, peft_type=PeftType.VERA):
     >>> import lucid.nn as nn
     >>> from lucid.peft.tuners.vera import VeraConfig, VeraModel
     >>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))
-    >>> vera = VeraModel(net, VeraConfig(r=4, target_modules=["0", "2"]))
+    >>> vera = VeraModel(net, VeraConfig(r=4, target_modules=["0", "2"]), "default")
     >>> tuple(vera.vera_A["default"].shape), tuple(vera.vera_B["default"].shape)
     ((4, 8), (8, 4))
     >>> net[0].base_layer.weight.requires_grad, net[0].vera_lambda_d["default"].requires_grad
@@ -116,10 +118,6 @@ class VeraModel(_FileFormat, _BaseTuner, peft_type=PeftType.VERA):
     _config_class: ClassVar[type[_TargetedConfig]] = VeraConfig
     _default_targets: ClassVar[Mapping[str, frozenset[str]]] = VERA_DEFAULT_TARGET_MODULES
     _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = _NO_PARAMETERS
-
-    def __init__(self, model: nn.Module, config: VeraConfig, adapter_name: str = "default") -> None:
-        """Adapt ``model`` in place, building VeRA's scaling vectors as ``adapter_name``."""
-        super().__init__(model, config, adapter_name)
 
     @property
     def vera_A(self) -> _BufferDict:
