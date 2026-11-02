@@ -291,6 +291,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - AdaLoRA takes the reference's own default table
 
+- ViT adapters in the reference's release-5 layout convert
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

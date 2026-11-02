@@ -24,6 +24,11 @@ The rest of the layout is renamed: ``encoder.layer.N.attention.output.dense`` �
 ``mlp.fc1`` / ``mlp.fc2``, ``layernorm_before`` / ``layernorm_after`` →
 ``norm1`` / ``norm2``, the head ``classifier`` → ``head``.
 
+Both generations of the reference's ViT are read.  Through release 4 a block is
+``encoder.layer.N`` with ``attention.attention.{query,key,value}``,
+``attention.output.dense``, ``intermediate.dense`` and ``output.dense``; since release 5 it is
+``layers.N`` with ``attention.{q_proj,k_proj,v_proj,o_proj}`` and ``mlp.{fc1,fc2}``.
+
 Beside the factors, a ``lora_bias`` bias is stacked (zeros for an absent
 projection) and a DoRA magnitude is stacked — both are per output row, so
 stacking is exact.  An absent projection's DoRA magnitude is its base
@@ -53,8 +58,19 @@ from lucid.peft._targeting import _pattern_value
 from lucid.peft.tuners.lora._config import LoraConfig
 
 _PROJECTIONS: Final = ("query", "key", "value")
+#: Where a projection's name says which of the three it is, in either generation of the reference's ViT.
+_ROLE_INDEX: Final = {
+    "query": 0,
+    "key": 1,
+    "value": 2,
+    "q_proj": 0,
+    "k_proj": 1,
+    "v_proj": 2,
+}
+#: A block of the reference's ViT: ``encoder.layer.N`` through release 4, ``layers.N`` since 5.
+_BLOCK: Final = r"(?:vit\.)?(?:encoder\.layer|layers)\.(?P<n>\d+)"
 _FUSED: Final = re.compile(
-    r"(?:vit\.)?encoder\.layer\.(?P<n>\d+)\.attention\.attention\.(?P<role>query|key|value)"
+    rf"{_BLOCK}\.attention\.(?:attention\.)?(?P<role>query|key|value|q_proj|k_proj|v_proj)"
 )
 _FACTOR_A: Final = ".lora_A.weight"
 _FACTOR_B: Final = ".lora_B.weight"
@@ -63,11 +79,11 @@ _MAGNITUDE: Final = ".lora_magnitude_vector.weight"
 _SUPPORTED: Final = frozenset({_FACTOR_A, _FACTOR_B, _BIAS, _MAGNITUDE})
 
 _RENAMES: Final = (
-    (r"(?:vit\.)?encoder\.layer\.(\d+)\.attention\.output\.dense", r"blocks.\1.attn.proj"),
-    (r"(?:vit\.)?encoder\.layer\.(\d+)\.intermediate\.dense", r"blocks.\1.mlp.fc1"),
-    (r"(?:vit\.)?encoder\.layer\.(\d+)\.output\.dense", r"blocks.\1.mlp.fc2"),
-    (r"(?:vit\.)?encoder\.layer\.(\d+)\.layernorm_before", r"blocks.\1.norm1"),
-    (r"(?:vit\.)?encoder\.layer\.(\d+)\.layernorm_after", r"blocks.\1.norm2"),
+    (rf"{_BLOCK}\.attention\.(?:output\.dense|o_proj)", r"blocks.\g<n>.attn.proj"),
+    (rf"{_BLOCK}\.(?:intermediate\.dense|mlp\.fc1)", r"blocks.\g<n>.mlp.fc1"),
+    (rf"{_BLOCK}\.(?:output\.dense|mlp\.fc2)", r"blocks.\g<n>.mlp.fc2"),
+    (rf"{_BLOCK}\.layernorm_before", r"blocks.\g<n>.norm1"),
+    (rf"{_BLOCK}\.layernorm_after", r"blocks.\g<n>.norm2"),
     (r"(?:vit\.)?layernorm", "norm"),
     (r"(?:vit\.)?embeddings\.patch_embeddings\.projection", "patch_embed.proj"),
     (r"classifier", "head"),
@@ -240,7 +256,7 @@ class ViTConverter(AdapterConverter, model_type="vit"):
                     f"{key!r}: only the LoRA factors, lora_bias and the DoRA magnitude of a "
                     "query / key / value projection can be fused into the zoo's qkv"
                 )
-            role = _PROJECTIONS.index(fused["role"])
+            role = _ROLE_INDEX[fused["role"]]
             projections = groups.setdefault(f"blocks.{fused['n']}.attn.qkv", {})
             projections.setdefault(role, _Projection(module, {})).tensors[rest] = tensor
         return groups, others
