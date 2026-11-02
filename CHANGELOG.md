@@ -245,6 +245,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - load_state_dict is typed as _IncompatibleKeys (LCD-706)
 
+- Adagrad seed lives in the engine, not in opt.state
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

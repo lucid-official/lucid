@@ -214,7 +214,7 @@ def test_an_optimizers_state_before_its_first_step_is_the_references(
 
 
 def _as_numpy_scalars(state: dict[int, dict[str, Any]], kind: type) -> None:
-    """Turn every 0-d entry of ``state`` into a ``kind`` scalar (integer counts only, for an integer kind)."""
+    """Make every 0-d entry of ``state`` a ``kind`` scalar (only counts, for an integer kind)."""
     for entry in state.values():
         for key, value in entry.items():
             arr = np.asarray(value)
@@ -289,3 +289,71 @@ def test_an_array_with_one_element_is_not_taken_for_a_scalar() -> None:
     saved["state"][1]["exp_avg"] = np.zeros((1,), dtype=np.float32)
     with pytest.raises(_C_engine.ShapeMismatch):
         opt.load_state_dict(saved)
+
+
+# ── what `opt.state` shows ────────────────────────────────────────────────
+
+
+def _assert_no_host_arrays(value: object, where: str) -> None:
+    if isinstance(value, dict):
+        for k, v in value.items():
+            _assert_no_host_arrays(v, f"{where}/{k}")
+    elif isinstance(value, (list, tuple)):
+        for i, v in enumerate(value):
+            _assert_no_host_arrays(v, f"{where}[{i}]")
+    else:
+        assert isinstance(value, (lucid.Tensor, int, float, bool)), (
+            f"{where} is a {type(value).__name__}, not a tensor or a Python number"
+        )
+
+
+@pytest.mark.parametrize("case", [pytest.param(c, id=_id(c)) for c in _OPTIMIZERS])
+def test_opt_state_holds_no_host_arrays_before_or_after_a_step(
+    case: tuple[str, dict[str, Any]]
+) -> None:
+    """``opt.state`` shows the optimizer's own state; host arrays belong to checkpoints."""
+    name, kw = case
+    params = _lucid_params()
+    opt = getattr(optim, name)(params, **kw)
+    _assert_no_host_arrays(opt.state, "before the first step")
+    for k in range(2):
+        _step(opt, params, k)
+        _assert_no_host_arrays(opt.state, f"after step {k + 1}")
+
+
+def test_lbfgs_state_holds_no_host_arrays_after_a_step() -> None:
+    params = _lucid_params()
+    opt = optim.LBFGS(params, lr=0.1)
+
+    def closure() -> lucid.Tensor:
+        opt.zero_grad()
+        loss = sum((p**2).sum() for p in params)
+        loss.backward()
+        return loss
+
+    opt.step(closure)
+    _assert_no_host_arrays(opt.state, "LBFGS")
+
+
+def test_adagrad_seed_is_not_parked_in_state_and_nothing_stale_survives_a_step() -> None:
+    params = _lucid_params()
+    opt = optim.Adagrad(params, lr=0.1, initial_accumulator_value=0.5)
+    assert opt.state == {}
+    _step(opt, params, 0)
+    assert opt.state == {}
+    sums = [_as_array(e["sum"]) for e in opt.state_dict()["state"].values()]
+    assert all(np.all(s > 0.5) for s in sums), "the exported sum is the live one"
+
+
+def test_adagrad_parameter_without_a_gradient_keeps_its_seeded_state(ref: Any) -> None:
+    params = _lucid_params()
+    ref_params = _ref_params(ref, params)
+    opt = optim.Adagrad(params, lr=0.1, initial_accumulator_value=0.5)
+    ref_opt = ref.optim.Adagrad(ref_params, lr=0.1, initial_accumulator_value=0.5)
+    _feed(ref, params, ref_params, 0)
+    for p, rp in zip(params[1:], ref_params[1:], strict=True):
+        p.grad = None
+        rp.grad = None
+    opt.step()
+    ref_opt.step()
+    _assert_state_agrees(opt, ref_opt, "a parameter that never got a gradient")

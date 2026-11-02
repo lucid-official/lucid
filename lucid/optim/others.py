@@ -13,7 +13,7 @@ from lucid._types import _OptimizerClosure
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid.nn.parameter import Parameter
-from lucid.optim._state_load import _follow, initial_state
+from lucid.optim._state_load import _follow, _load_group_state, initial_state
 from lucid.optim.optimizer import Optimizer, _from_host, _group_float, _group_params, _host_copy
 
 
@@ -243,16 +243,48 @@ class Adagrad(Optimizer):
             fused=fused,
         )
         super().__init__(params, defaults)
-        self.state = initial_state(
+        # The groups the constructor was given are the ones the reference seeds.
+        self._seeded: int = len(self.param_groups)
+        # Cleared by the first load: a checkpoint is the state, nothing seeded.
+        self._fresh: bool = True
+
+    def _seed_state(self, groups: list[dict[str, object]]) -> dict[int, dict[str, object]]:
+        """Each of ``groups``' parameters at ``step`` 0 with its ``sum`` at the starting value."""
+        return initial_state(
             [
                 (_group_params(g), {"sum": _group_float(g, "initial_accumulator_value")})
-                for g in self.param_groups
+                for g in groups
             ]
         )
 
     @override
     def _append_engine_optim(self, group: dict[str, object]) -> None:
         self._engines.append(self._build_engine(_C_engine.Adagrad, group))
+
+    @override
+    def _bind_engine_optim(self, group: dict[str, object]) -> None:
+        """Bind the engine, and seed it if its group is one the constructor was given.
+
+        The seed goes into the engine, not into ``state``: that holds only a
+        checkpoint waiting for the engines, as it does for every optimizer.
+        """
+        super()._bind_engine_optim(group)
+        idx = len(self._engines) - 1
+        if self._fresh and idx < self._seeded:
+            params = _group_params(group)
+            _load_group_state(self._engines[idx], params, 0, self._seed_state([group]))
+
+    @override
+    def _save_state(self) -> dict[int, dict[str, object]]:
+        """The seed while no engine exists yet and nothing has been loaded or restored."""
+        if self._fresh and not self._engines_built and not self.state:
+            return self._seed_state(self.param_groups[: self._seeded])
+        return super()._save_state()
+
+    @override
+    def _load_state(self, state: dict[int, dict[str, object]]) -> None:
+        self._fresh = False
+        super()._load_state(state)
 
     @override
     def step(self, closure: _OptimizerClosure = None) -> Tensor | None:
