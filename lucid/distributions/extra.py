@@ -1002,8 +1002,24 @@ class ContinuousBernoulli(Distribution):
     logits : Tensor or float, optional
         Log-odds :math:`\ell = \log(\lambda / (1 - \lambda))`.  Mutually
         exclusive with ``probs``.
+    lims : tuple[float, float], optional
+        Interval of :math:`\lambda` around :math:`\tfrac12`, as
+        ``(lower, upper)``, inside which the normaliser, mean, variance and
+        entropy are evaluated from their series expansions about
+        :math:`\tfrac12` instead of their closed forms (which divide
+        :math:`0` by :math:`0` there).  Default ``(0.499, 0.501)``, the
+        reference framework's.  The distribution also switches to the
+        series wherever float32 needs it (:math:`|\lambda - \tfrac12| <
+        0.1` for the moments), so ``lims`` can only widen that region.
+        :meth:`cdf`, :meth:`icdf` and sampling are cancellation-free closed
+        forms and ignore it.
     validate_args : bool, optional
         If ``True``, validate parameter constraints at construction time.
+
+    Raises
+    ------
+    ValueError
+        If ``lims`` is not a pair ``lower <= upper`` inside :math:`[0, 1]`.
 
     Notes
     -----
@@ -1085,6 +1101,7 @@ class ContinuousBernoulli(Distribution):
         self,
         probs: Tensor | float | None = None,
         logits: Tensor | float | None = None,
+        lims: tuple[float, float] = (0.499, 0.501),
         validate_args: bool | None = None,
     ) -> None:
         r"""Initialise a Continuous Bernoulli distribution.
@@ -1097,9 +1114,24 @@ class ContinuousBernoulli(Distribution):
         logits : Tensor | float | None, optional
             Log-odds :math:`l = \log(p/(1-p)) \in \mathbb{R}`.  Mutually
             exclusive with ``probs``.
+        lims : tuple[float, float], optional
+            Interval of :math:`p` around :math:`\tfrac12` evaluated from
+            series expansions rather than closed forms.
         validate_args : bool | None, optional
             If ``True``, validate parameter constraints at construction time.
+
+        Raises
+        ------
+        ValueError
+            If ``lims`` is not a pair ``lower <= upper`` inside ``[0, 1]``.
         """
+        lower, upper = lims
+        if not 0.0 <= lower <= upper <= 1.0:
+            raise ValueError(
+                "ContinuousBernoulli: lims must be (lower, upper) with "
+                f"0 <= lower <= upper <= 1, got {lims!r}"
+            )
+        self._lims: tuple[float, float] = (float(lower), float(upper))
         # Stored through the lazy parameters, as ``Bernoulli`` does, so the
         # one given is in ``arg_constraints``' reach: held in a private
         # ``_param`` instead, both ``probs`` and ``logits`` looked derived
@@ -1110,7 +1142,14 @@ class ContinuousBernoulli(Distribution):
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`ContinuousBernoulli` with batch dimensions expanded to ``batch_shape``."""
-        return self._expand_probs_or_logits(ContinuousBernoulli, batch_shape, _instance)
+        new = self._expand_probs_or_logits(ContinuousBernoulli, batch_shape, _instance)
+        new._lims = self._lims
+        return new
+
+    def _in_lims(self) -> Tensor:
+        """Where ``probs`` lies in ``lims`` — the reference's unstable region ``(lower, upper]``."""
+        p: Tensor = self._probs
+        return (p > self._lims[0]) & (p <= self._lims[1])
 
     @property
     def _param(self) -> Tensor:
@@ -1164,7 +1203,7 @@ class ContinuousBernoulli(Distribution):
         is used.
         """
         l: Tensor = self._logits
-        near: Tensor = l.abs() < 0.05
+        near: Tensor = (l.abs() < 0.05) | self._in_lims()
         l_far: Tensor = lucid.where(near, 1.0, l)
         closed: Tensor = l_far.abs().log() - (0.5 * l_far).tanh().abs().log()
         x: Tensor = l * l
@@ -1185,7 +1224,7 @@ class ContinuousBernoulli(Distribution):
         """
         p: Tensor = self._probs
         t: Tensor = p - 0.5
-        near: Tensor = t.abs() < _CB_TAYLOR_HALF_WIDTH
+        near: Tensor = (t.abs() < _CB_TAYLOR_HALF_WIDTH) | self._in_lims()
         p_far: Tensor = lucid.where(near, 0.25, p)
         l_far: Tensor = lucid.where(near, 1.0, self._logits)
         return t, near, p_far, l_far

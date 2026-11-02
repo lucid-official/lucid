@@ -1276,7 +1276,7 @@
     "lucid/distributions/continuous_extra.py": 7,
     "lucid/distributions/discrete.py": 11,
     "lucid/distributions/exponential.py": 13,
-    "lucid/distributions/extra.py": 2,
+    "lucid/distributions/extra.py": 1,
     "lucid/distributions/gamma.py": 3,
     "lucid/distributions/independent.py": 2,
     "lucid/distributions/mixture.py": 2,

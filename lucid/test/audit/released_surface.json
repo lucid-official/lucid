@@ -952,7 +952,7 @@
   "lucid.distributions.ComposeTransform.log_abs_det_jacobian": {"params": ["a:self", "a:x", "a:y"]},
   "lucid.distributions.ConstraintRegistry": {"params": []},
   "lucid.distributions.ConstraintRegistry.register": {"params": ["a:self", "a:constraint", "a:factory="]},
-  "lucid.distributions.ContinuousBernoulli": {"params": ["a:probs=", "a:logits=", "a:validate_args="]},
+  "lucid.distributions.ContinuousBernoulli": {"params": ["a:probs=", "a:logits=", "a:lims=", "a:validate_args="]},
   "lucid.distributions.ContinuousBernoulli.cdf": {"params": ["a:self", "a:value"]},
   "lucid.distributions.ContinuousBernoulli.entropy": {"params": ["a:self"]},
   "lucid.distributions.ContinuousBernoulli.expand": {"params": ["a:self", "a:batch_shape", "a:_instance="]},
