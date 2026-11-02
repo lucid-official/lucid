@@ -212,9 +212,9 @@ def _packed_sequence(domain: str) -> Any:
 def _module_for(name: str) -> Any:
     """A small module for a parameter that takes one."""
     build = _MODULE_BY_NAME.get(name)
-    if build is not None:
-        return build()
-    return lucid.nn.Linear(_COUT, _COUT)
+    module = build() if build is not None else lucid.nn.Linear(_COUT, _COUT)
+    # Eval, because the fusion helpers refuse a module in training mode.
+    return module.eval()
 
 
 #: Parameters that take a module, by name.  ``prune`` and the fusion

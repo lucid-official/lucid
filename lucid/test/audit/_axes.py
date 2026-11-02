@@ -147,6 +147,11 @@ class Axis:
     ) -> Finding:
         return Finding(self.name, symbol.qualname, status, detail, evidence)
 
+    def _detached_by_contract(self, symbol: Symbol) -> Finding | None:
+        """NOT_APPLICABLE for an op that returns detached leaves by contract."""
+        why = DETACHED_BY_CONTRACT.get(_surface.recorded_as(symbol.qualname))
+        return None if why is None else self._finding(symbol, Status.NOT_APPLICABLE, why)
+
     def _draws_randomly(self, fn: Any, call: Call) -> bool:
         """Whether two identical calls disagree.
 
@@ -595,6 +600,15 @@ NOT_DIFFERENTIABLE: dict[str, str] = {
     ),
 }
 
+#: Ops whose result is a fresh leaf by contract, so none of the gradient
+#: axes has a path to ask about.  The reference builds the same results with
+#: ``nn.Parameter(...)``, which detaches.
+DETACHED_BY_CONTRACT: dict[str, str] = {
+    "lucid.nn.utils.fuse_conv_bn_weights": "returns new Parameters (detached), as the reference does",
+    "lucid.nn.utils.fuse_linear_bn_weights": "returns new Parameters (detached), as the reference does",
+}
+
+
 #: Window functions take a length and shape parameters, never data.
 _NOT_DIFFERENTIABLE_PREFIXES = ("lucid.signal.windows.",)
 
@@ -637,6 +651,9 @@ class GradientAxis(_DifferenceAxis):
     summary = "d/dx vs central finite differences (float64)"
 
     def run(self, symbol: Symbol, ctx: Context) -> Finding:
+        detached = self._detached_by_contract(symbol)
+        if detached is not None:
+            return detached
         fn = _surface.resolve(symbol)
         if fn is None:
             return self._finding(symbol, Status.SKIP, "not resolvable")
@@ -992,6 +1009,9 @@ class SecondGradientAxis(_DifferenceAxis):
         )
 
     def run(self, symbol: Symbol, ctx: Context) -> Finding:
+        detached = self._detached_by_contract(symbol)
+        if detached is not None:
+            return detached
         fn = _surface.resolve(symbol)
         if fn is None:
             return self._finding(symbol, Status.SKIP, "not resolvable")
@@ -1179,6 +1199,9 @@ class CreateGraphAxis(Axis):
     summary = "autograd.grad(create_graph=True) vs backward()"
 
     def run(self, symbol: Symbol, ctx: Context) -> Finding:
+        detached = self._detached_by_contract(symbol)
+        if detached is not None:
+            return detached
         fn = _surface.resolve(symbol)
         if fn is None:
             return self._finding(symbol, Status.SKIP, "not resolvable")
