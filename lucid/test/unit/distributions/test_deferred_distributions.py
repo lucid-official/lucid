@@ -30,12 +30,11 @@ class TestAbsTransform:
         y = lucid.tensor([1.0, 2.0, 3.0])
         assert lucid.allclose(t._inverse(y), y)
 
-    def test_ladj_zero(self) -> None:
+    def test_no_ladj(self) -> None:
         t = D.AbsTransform()
         x = lucid.randn(5)
-        y = t(x)
-        ladj = t.log_abs_det_jacobian(x, y)
-        assert lucid.allclose(ladj, lucid.zeros_like(ladj))
+        with pytest.raises(NotImplementedError):
+            t.log_abs_det_jacobian(x, t(x))
 
     def test_not_bijective(self) -> None:
         assert not D.AbsTransform.bijective

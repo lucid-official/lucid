@@ -109,6 +109,19 @@ def _align_device(t: Tensor, ref: Tensor) -> Tensor:
     return t
 
 
+def _operand(t: Tensor, number: float | None, like: Tensor) -> Tensor | float:
+    """The operand a transform combines with ``like``: a held number, else ``t`` aligned.
+
+    A parameter given as a Python number is kept as that number (``number``)
+    next to its 0-dim tensor ``t``.  Combined as a Python scalar it takes the
+    dtype and device of ``like`` — a float64 input stays exact, where the
+    float32 scalar ``t`` would round it — and the reference framework keeps the
+    number the same way.  A tensor parameter (``number is None``) goes through
+    :func:`_align_device` as before.
+    """
+    return _align_device(t, like) if number is None else number
+
+
 def _sum_rightmost(value: Tensor, dim: int) -> Tensor:
     """``value`` with its ``dim`` rightmost dimensions summed out.
 

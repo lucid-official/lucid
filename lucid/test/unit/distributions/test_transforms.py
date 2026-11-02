@@ -417,18 +417,17 @@ def test_a_chain_of_transforms_pushes_the_density_through_each():
 # ── the non-injective ones ────────────────────────────────────────────────────
 
 
-def test_abs_is_forward_only_and_reports_a_zero_log_det():
-    """Recorded rather than endorsed.
+def test_abs_is_forward_only_and_has_no_log_det():
+    """``abs`` is not injective, so it has no inverse and no determinant.
 
-    ``abs`` is not injective, so it has no inverse and no determinant.
-    The reference refuses ``log_abs_det_jacobian`` outright; Lucid
-    answers ``0``, which is the right value on each of the two branches
-    but reads as "this is a volume-preserving bijection", which it is
-    not.  Pinned so the choice is at least visible.
+    It used to answer ``0``, right on each of the two branches but reading as
+    "this is a volume-preserving bijection", which it is not; it refuses, as
+    the reference does (LCD-818).
     """
     transform = T.AbsTransform()
     assert np.allclose(_v(transform(_t(X))), np.abs(X))
-    assert np.allclose(_v(transform.log_abs_det_jacobian(_t(X), transform(_t(X)))), 0.0)
+    with pytest.raises(NotImplementedError, match="AbsTransform.log_abs_det_jacobian"):
+        transform.log_abs_det_jacobian(_t(X), transform(_t(X)))
 
 
 # ── domain / codomain constraints, support, and boundary clamping (LCD-397) ──

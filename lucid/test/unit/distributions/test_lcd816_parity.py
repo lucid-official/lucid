@@ -46,10 +46,7 @@ def _arr(x: Any) -> np.ndarray:
 
 
 def _tol(dtype: Any) -> dict[str, float]:
-    # The float64 bound is 1e-6, not machine precision: ``AffineTransform``
-    # holds a Python-number ``loc`` / ``scale`` as a float32 scalar, so the
-    # ``interval`` / ``greater_than`` maps are off by ~1e-7 on float64 input.
-    return {"rtol": 1e-6, "atol": 1e-8} if dtype == np.float64 else {"rtol": 3e-4, "atol": 1e-5}
+    return {"rtol": 1e-12, "atol": 1e-12} if dtype == np.float64 else {"rtol": 3e-4, "atol": 1e-5}
 
 
 def _outcome(fn: Callable[[], Any]) -> tuple[str, Any]:
@@ -78,10 +75,7 @@ _REGISTRY_CASES: dict[str, tuple[Callable[[Any, Callable[[Any], Any]], Any], Any
     "positive": (lambda C_, t: C_.positive, _ELEMENTWISE),
     "nonnegative": (lambda C_, t: C_.nonnegative, _ELEMENTWISE),
     "greater_than": (lambda C_, t: C_.greater_than(2.0), _ELEMENTWISE),
-    "greater_than(tensor)": (
-        lambda C_, t: C_.greater_than(t([1.0, 2.0, -1.0, 0.5])),
-        _ELEMENTWISE,
-    ),
+    "greater_than(tensor)": (lambda C_, t: C_.greater_than(t([1.0, 2.0, -1.0, 0.5])), _ELEMENTWISE),
     "greater_than_eq": (lambda C_, t: C_.greater_than_eq(-1.0), _ELEMENTWISE),
     "less_than": (lambda C_, t: C_.less_than(5.0), _ELEMENTWISE),
     "unit_interval": (lambda C_, t: C_.unit_interval, _ELEMENTWISE),
@@ -105,15 +99,9 @@ _REGISTRIES = ["biject_to", "transform_to"]
 
 # Where the reference defines no ``log_abs_det_jacobian`` (it does not call
 # these maps bijections) Lucid keeps one; it is held to the numerical
-# Jacobian instead, below.
-_LUCID_ONLY_LADJ = {
-    "lower_cholesky",
-    "positive_definite",
-    "positive_semidefinite",
-    # ``SoftmaxTransform`` answers a "pseudo-Jacobian" the reference refuses;
-    # removing it is a decision of its own, not part of this registry sweep.
-    "simplex",
-}
+# Jacobian instead, below.  The simplex is not among them: ``SoftmaxTransform``
+# has no determinant and refuses in both (LCD-818).
+_LUCID_ONLY_LADJ = {"lower_cholesky", "positive_definite", "positive_semidefinite"}
 
 
 def _pair(name: str, registry: str, ref: Any, device: str, dtype: Any) -> tuple[Any, Any]:
@@ -187,9 +175,7 @@ def test_registry_log_abs_det_matches_reference(
     name: str, registry: str, place: Any, ref: Any
 ) -> None:
     device, dtype = place
-    if _refusals(name, registry, ref)[1] != "ok" or (
-        name in _LUCID_ONLY_LADJ and not (name == "simplex" and registry == "biject_to")
-    ):
+    if _refusals(name, registry, ref)[1] != "ok" or name in _LUCID_ONLY_LADJ:
         pytest.skip("the reference has no such transform, or no log-det for it")
     ours, theirs = _pair(name, registry, ref, device, dtype)
     x = _REGISTRY_CASES[name][1]

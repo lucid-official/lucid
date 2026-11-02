@@ -18,7 +18,7 @@ from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
 from lucid._types import DTypeLike, DeviceLike
 from lucid.distributions import constraints
-from lucid.distributions._util import _align_device, _as_tensor, _sum_rightmost
+from lucid.distributions._util import _align_device, _as_tensor, _operand, _sum_rightmost
 from lucid.distributions.constraints import Constraint
 from lucid.distributions.distribution import Distribution
 from lucid.distributions.transformed_distribution import (
@@ -304,7 +304,9 @@ class AffineTransform(Transform):
         self.loc = _as_tensor(loc)
         self.scale = _as_tensor(scale)
         self.event_dim = event_dim
-        # Held as a tensor, a number's sign would cost a device read: keep it.
+        # A number is kept as one beside its tensor: held only as a float32
+        # scalar it rounds a float64 input, and its sign would cost a device read.
+        self._loc_number = float(loc) if isinstance(loc, (int, float)) else None
         self._scale_number = float(scale) if isinstance(scale, (int, float)) else None
 
     @override
@@ -334,14 +336,19 @@ class AffineTransform(Transform):
     @override
     def _call(self, x: Tensor) -> Tensor:
         """Forward: :math:`y = \\text{loc} + \\text{scale} \\cdot x`."""
-        # A ``loc`` / ``scale`` given as a number is a 0-dim host tensor; it
-        # follows ``x`` to its device.
-        return _align_device(self.loc, x) + _align_device(self.scale, x) * x
+        # A ``loc`` / ``scale`` given as a number stays a number, so it takes
+        # ``x``'s dtype and device; a tensor one follows ``x`` to its device.
+        return (
+            _operand(self.loc, self._loc_number, x)
+            + _operand(self.scale, self._scale_number, x) * x
+        )
 
     @override
     def _inverse(self, y: Tensor) -> Tensor:
         """Inverse: :math:`x = (y - \\text{loc}) / \\text{scale}`."""
-        return (y - _align_device(self.loc, y)) / _align_device(self.scale, y)
+        return (y - _operand(self.loc, self._loc_number, y)) / _operand(
+            self.scale, self._scale_number, y
+        )
 
     @override
     def log_abs_det_jacobian(self, x: Tensor, y: Tensor) -> Tensor:
@@ -364,10 +371,14 @@ class AffineTransform(Transform):
         Tensor
             ``log|scale|`` broadcast to ``x.shape`` and summed over ``event_dim``.
         """
-        ladj = _align_device(self.scale, x).abs().log() + lucid.zeros(
-            tuple(x.shape), dtype=x.dtype, device=x.device
-        )
-        return _sum_rightmost(ladj, self.event_dim)
+        zeros = lucid.zeros(tuple(x.shape), dtype=x.dtype, device=x.device)
+        if self._scale_number is not None:
+            # ``log 0`` is ``-inf`` here, where ``math.log`` would raise.
+            number = abs(self._scale_number)
+            return _sum_rightmost(
+                zeros + (math.log(number) if number else -math.inf), self.event_dim
+            )
+        return _sum_rightmost(_align_device(self.scale, x).abs().log() + zeros, self.event_dim)
 
 
 class PowerTransform(Transform):
@@ -459,6 +470,10 @@ class PowerTransform(Transform):
         # |dy/dx| = exponent · x^(exponent − 1) ⇒ log|dy/dx| =
         #   log|exponent| + (exponent − 1)·log(x).
         exponent = _align_device(self.exponent, x)
+        if x.is_floating_point():
+            # The held exponent is float32 (as in the reference); its log is
+            # taken at ``x``'s precision, not rounded to float32 first.
+            exponent = exponent.to(dtype=x.dtype)
         return exponent.abs().log() + (exponent - 1.0) * x.log()
 
 
@@ -491,15 +506,11 @@ class SoftmaxTransform(Transform):
 
         x_k = \log y_k
 
-    Pseudo-Jacobian used in change-of-variable bookkeeping:
-
-    .. math::
-
-        \log|\det J| = \sum_{k=1}^{K} \log y_k
-
-    This is the convention that keeps the simplex-valued pushforward
-    consistent in flow stacks; for a *true* bijection between
-    :math:`\mathbb{R}^{K-1}` and the simplex use
+    There is no log-determinant: the map is not injective, so it has no
+    Jacobian determinant and :meth:`log_abs_det_jacobian` raises
+    :class:`NotImplementedError`, as in the reference.  A density through
+    ``SoftmaxTransform`` is therefore not defined; for a *true* bijection
+    between :math:`\mathbb{R}^{K-1}` and the simplex use
     :class:`StickBreakingTransform` instead.
 
     Examples
@@ -532,27 +543,6 @@ class SoftmaxTransform(Transform):
         # Standard convention: take the un-normalised log-probabilities.
         # Any constant shift gives the same softmax — we anchor at log y.
         return y.log()
-
-    @override
-    def log_abs_det_jacobian(self, x: Tensor, y: Tensor) -> Tensor:
-        r"""Pseudo-Jacobian :math:`\sum_k \log y_k` for the over-parameterised softmax.
-
-        Parameters
-        ----------
-        x : Tensor
-            Pre-softmax logits.  Used only for shape; the formula
-            collapses through ``y``.
-        y : Tensor
-            Post-softmax probabilities in the simplex.
-
-        Returns
-        -------
-        Tensor
-            :math:`\sum_k \log y_k`, reduced over the last axis.
-        """
-        # log |det J| = sum_k log y_k — pseudo-Jacobian for the
-        # over-parameterised softmax, matching the reference framework.
-        return y.log().sum(dim=-1)
 
 
 class StickBreakingTransform(Transform):
@@ -851,22 +841,12 @@ class AbsTransform(Transform):
 
     Pseudo-inverse:  :math:`x = y` (assumes :math:`x \geq 0`).
 
-    Log Jacobian determinant:
-
-    .. math::
-
-        \log\!\left|\frac{\partial y}{\partial x}\right| = 0
-
-    everywhere off the measure-zero set :math:`\{x = 0\}` where the map
-    is non-differentiable.
-
-    Folding the sign halves the density: composing with a Normal(0,1)
-    base gives the half-Normal density :math:`p(y) = 2 \phi(y)` for
-    :math:`y \geq 0`, which requires special handling outside the
-    standard change-of-variable formula.  Lucid's
-    :class:`TransformedDistribution` does not currently correct for
-    this folding factor — apply the :math:`+\log 2` constant manually
-    when needed.
+    There is no log-determinant: the map folds the two half-lines onto one, so
+    it is not a bijection and :meth:`log_abs_det_jacobian` raises
+    :class:`NotImplementedError`, as in the reference.  Folding the sign halves
+    the density (composing with a Normal(0,1) base gives the half-Normal
+    :math:`p(y) = 2 \phi(y)`, :math:`y \geq 0`), which the standard
+    change-of-variable formula cannot express.
 
     Examples
     --------
@@ -890,11 +870,6 @@ class AbsTransform(Transform):
     def _inverse(self, y: Tensor) -> Tensor:
         """Pseudo-inverse: returns ``y`` unchanged (assumes non-negative input)."""
         return y  # convention: non-negative pre-image
-
-    @override
-    def log_abs_det_jacobian(self, x: Tensor, y: Tensor) -> Tensor:
-        """Zero everywhere — :math:`|dy/dx| = 1` outside the kink at zero."""
-        return lucid.zeros(tuple(x.shape), dtype=x.dtype, device=x.device)
 
 
 class IndependentTransform(Transform):
