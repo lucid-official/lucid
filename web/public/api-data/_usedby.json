@@ -80,6 +80,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid._ops.composite._count_samplers"
+    },
+    {
+      "kind": "module",
       "module": "lucid._ops.composite._rounding"
     },
     {

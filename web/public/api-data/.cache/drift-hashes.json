@@ -4,7 +4,7 @@
   "lucid.compile": "ab954691290bf0167deaf79dd39848bf1ec9eafa70e15b74700d03c11a24ff32",
   "lucid.coreml": "145bc90b45fe8d6212baf6e76e2f3a5ca506207490d4e5f8e860185dbd04e14e",
   "lucid.diffeq": "edcffa20a5499e5f8e23bd68edc096286ce06e423ffa55bc4a83a87180a0b4a7",
-  "lucid.distributions": "27fea39b143f5a7e503f8b13b50a36537517474b86002d58391cd65ba4f1f950",
+  "lucid.distributions": "5eea4cc624fda3ea139b91b58e1cad4fe952edfdc58f8befaf73b54a3583ea57",
   "lucid.einops": "b950f7802dd1136c1b7fda061a0d58807ddc045ec6927cc0547917aaf3dbfc6e",
   "lucid.fft": "4e66eade1807674b17620c6a248ade9f1c20d2a3bceb2fb8671cd86e662fd165",
   "lucid.func": "e33f4a9e415155251bbd8a09f887e56df89ccc16af2cb30e7189e5f2e499e959",
