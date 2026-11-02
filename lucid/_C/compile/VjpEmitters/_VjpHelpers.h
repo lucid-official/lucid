@@ -101,15 +101,30 @@ cast_if_needed(MPSGraph* g, MPSGraphTensor* t, MPSDataType target) {
 //
 // Used by the walker to seed ``∂loss/∂loss = 1`` before iterating the
 // trace in reverse.  Explicit shape so an N-D loss (per-sample loss
-// w/ ``reduction='none'``) seeds correctly; using
-// ``constantWithScalar:dataType:`` (0-D) would broadcast on the first
-// VJP and confuse the unreduce.
+// w/ ``reduction='none'``) seeds correctly.  A 0-d loss seeds a 0-d
+// gradient: every consumer of it (``unreduce_impl`` included) reads the
+// gradient's own shape, so nothing depends on it being rank 1.
 [[maybe_unused]] inline MPSGraphTensor*
 ones_like_loss(MPSGraph* graph, const std::vector<std::int64_t>& loss_shape, Dtype dtype) {
     // A loss is a real float, which always has an MPSGraph type.
-    return [graph constantWithScalar:1.0
-                               shape:shape_to_ns(loss_shape)
-                            dataType:mps_dtype_of(dtype).value_or(MPSDataTypeFloat32)];
+    const MPSDataType dt = mps_dtype_of(dtype).value_or(MPSDataTypeFloat32);
+    if (!loss_shape.empty())
+        return [graph constantWithScalar:1.0 shape:shape_to_ns(loss_shape) dataType:dt];
+    // A scalar constant's rank is up to MPSGraph; pin it to 0-d.
+    return [graph reshapeTensor:[graph constantWithScalar:1.0 dataType:dt] withShape:@[] name:nil];
+}
+
+// Extract the int64 vector at ``shape`` from an MPSGraphTensor's
+// ``.shape`` NSArray<NSNumber*>.  Convenient when only the live
+// MPSGraph shape is available (e.g. forward-feed placeholders).
+[[maybe_unused]] inline std::vector<std::int64_t> shape_of_mps(MPSGraphTensor* t) {
+    std::vector<std::int64_t> out;
+    if (t == nil || t.shape == nil)
+        return out;
+    out.reserve(t.shape.count);
+    for (NSNumber* n in t.shape)
+        out.push_back((std::int64_t)n.longLongValue);
+    return out;
 }
 
 // Compute the axes that need to be reduce-summed in order to go from
@@ -117,6 +132,10 @@ ones_like_loss(MPSGraph* graph, const std::vector<std::int64_t>& loss_shape, Dty
 // :func:`broadcast_back_for_reduce`'s axis computation.  Broadcast
 // rules: align right, treat missing leading dims as 1, dims that are
 // 1 in ``target`` but > 1 in ``broadcast`` were broadcast.
+//
+// A ``target`` of higher rank than ``broadcast`` has leading axes with no
+// counterpart; they are not reduced (nothing to sum), so the index into
+// ``broadcast`` is only formed for the aligned trailing axes.
 [[maybe_unused]] inline std::vector<std::int64_t>
 axes_for_unreduce(const std::vector<std::int64_t>& broadcast,
                   const std::vector<std::int64_t>& target) {
@@ -127,24 +146,50 @@ axes_for_unreduce(const std::vector<std::int64_t>& broadcast,
     for (std::size_t i = 0; i + tr < br; ++i)
         axes.push_back(static_cast<std::int64_t>(i));
     // Aligned trailing axes: size-1 in target but >1 in broadcast → reduce.
-    for (std::size_t j = 0; j < tr; ++j) {
-        const std::size_t i = br - tr + j;
+    for (std::size_t j = (tr > br ? tr - br : 0); j < tr; ++j) {
+        const std::size_t i = br + j - tr;
         if (target[j] == 1 && broadcast[i] != 1)
             axes.push_back(static_cast<std::int64_t>(i));
     }
     return axes;
 }
 
-// Broadcast-back: reduce ``grad`` (shape == ``broadcast``) back to
-// ``target`` by summing over the broadcast-expanded axes, then reshape
-// to match ``target`` rank exactly.
+// True when two shapes hold the same number of elements; a dynamic (-1)
+// axis on either side makes the count unknowable here, so it passes.
+[[maybe_unused]] inline bool same_numel_or_dynamic(const std::vector<std::int64_t>& a,
+                                                   const std::vector<std::int64_t>& b) {
+    std::int64_t na = 1, nb = 1;
+    for (std::int64_t d : a) {
+        if (d < 0)
+            return true;
+        na *= d;
+    }
+    for (std::int64_t d : b) {
+        if (d < 0)
+            return true;
+        nb *= d;
+    }
+    return na == nb;
+}
+
+// Broadcast-back: reduce ``grad`` back to ``target`` by summing over the
+// broadcast-expanded axes, then reshape to match ``target`` rank exactly.
 //
-// If ``broadcast == target`` (no broadcast happened) this returns
-// ``grad`` unchanged.
-[[maybe_unused]] inline MPSGraphTensor* unreduce_impl(MPSGraph* graph,
-                                                      MPSGraphTensor* grad,
-                                                      const std::vector<std::int64_t>& broadcast,
-                                                      const std::vector<std::int64_t>& target) {
+// The shape being reduced is the gradient's own (``grad.shape``): a caller's
+// ``broadcast_hint`` comes from the trace, and the two disagreeing is what
+// made the axes below index out of range.  The hint is used only for a grad
+// whose shape MPSGraph has not inferred.
+//
+// If the shapes already agree this returns ``grad`` unchanged.  Returns nil
+// when the reduction cannot land on ``target`` (different element count), so
+// the caller declines the VJP rather than reshaping into a wrong gradient.
+[[maybe_unused]] inline MPSGraphTensor*
+unreduce_impl(MPSGraph* graph,
+              MPSGraphTensor* grad,
+              const std::vector<std::int64_t>& broadcast_hint,
+              const std::vector<std::int64_t>& target) {
+    const std::vector<std::int64_t> broadcast =
+        grad.shape != nil ? shape_of_mps(grad) : broadcast_hint;
     if (broadcast == target)
         return grad;
     std::vector<std::int64_t> axes = axes_for_unreduce(broadcast, target);
@@ -155,6 +200,8 @@ axes_for_unreduce(const std::vector<std::int64_t>& broadcast,
             [axes_ns addObject:[NSNumber numberWithLongLong:a]];
         reduced = [graph reductionSumWithTensor:reduced axes:axes_ns name:nil];
     }
+    if (reduced.shape != nil && !same_numel_or_dynamic(shape_of_mps(reduced), target))
+        return nil;
     // Reshape to exact target shape (collapse the size-1 axes left
     // behind by keepdim=true reductionSum, plus any leading axes).
     NSArray<NSNumber*>* target_ns = shape_to_ns(target);
@@ -189,19 +236,6 @@ axes_for_unreduce(const std::vector<std::int64_t>& broadcast,
         }
     }
     return Dtype::F32;
-}
-
-// Extract the int64 vector at ``shape`` from an MPSGraphTensor's
-// ``.shape`` NSArray<NSNumber*>.  Convenient when only the live
-// MPSGraph shape is available (e.g. forward-feed placeholders).
-[[maybe_unused]] inline std::vector<std::int64_t> shape_of_mps(MPSGraphTensor* t) {
-    std::vector<std::int64_t> out;
-    if (t == nil || t.shape == nil)
-        return out;
-    out.reserve(t.shape.count);
-    for (NSNumber* n in t.shape)
-        out.push_back((std::int64_t)n.longLongValue);
-    return out;
 }
 
 // ════════════════════════════════════════════════════════════════════

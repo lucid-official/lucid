@@ -1,4 +1,4 @@
-"""A full reduction keeps its graph shape equal to its trace shape (LCD-800).
+"""A full reduction keeps its graph shape equal to its trace shape (LCD-800, LCD-804).
 
 ``emit_reduce`` leaves a reduction over every axis of a rank-r tensor in the
 graph as ``keepdim`` -- r ones -- while the trace records ``()``.  The tensor
@@ -19,8 +19,8 @@ Everything downstream is then built from the wrong-rank tensor.
   ``test_traced_sampler_compile_budget`` that aborted on the CI image reshaped
   ``(1, 4)`` into ``(1, 1)`` in exactly this place.
 
-The tests are strict ``xfail`` until the engine squeezes the reduction (or
-checks the shape of every tensor it binds).  Remove the marks with the fix.
+The emitter now squeezes a full reduction to ``()`` and the builder refuses any
+value bound at a shape other than the trace's, so the compiled result matches eager.
 """
 
 import subprocess
@@ -38,9 +38,6 @@ pytestmark = [
     pytest.mark.deadline(300),
 ]
 
-_BROKEN = "LCD-800: a full reduction stays keepdim-shaped in the graph; a broadcast promotes it"
-_XFAIL = pytest.mark.xfail(strict=True, raises=AssertionError, reason=_BROKEN)
-
 #: Reductions over every axis of a rank-2 tensor, by the call that makes them.
 _REDUCTIONS = {
     "sum": lambda a: a.sum(),
@@ -55,9 +52,6 @@ _REDUCTIONS = {
     "norm": lambda a: lucid.linalg.norm(a),
     "logsumexp": lambda a: lucid.logsumexp(a, dim=(0, 1)),
 }
-#: ``logsumexp`` squeezes its result itself, which is why it is the control.
-_HEALTHY = frozenset({"logsumexp"})
-
 _CONSUMERS = {
     "sum0": lambda v: v.sum(dim=0),
     "softmax0": lambda v: F.softmax(v, dim=0),
@@ -71,12 +65,8 @@ def _inputs() -> tuple[lucid.Tensor, lucid.Tensor]:
     return x, a
 
 
-def _reduction_cases() -> list[object]:
-    return [pytest.param(name, marks=[] if name in _HEALTHY else [_XFAIL]) for name in _REDUCTIONS]
-
-
 @pytest.mark.parametrize("consumer", sorted(_CONSUMERS))
-@pytest.mark.parametrize("reduction", _reduction_cases())
+@pytest.mark.parametrize("reduction", sorted(_REDUCTIONS))
 def test_compiled_matches_eager_after_a_full_reduction(reduction: str, consumer: str) -> None:
     reduce, consume = _REDUCTIONS[reduction], _CONSUMERS[consumer]
 
@@ -104,7 +94,6 @@ print("RESULT", c(x, a).tolist() == fn(x, a).tolist(), flush=True)
 """
 
 
-@_XFAIL
 @pytest.mark.parametrize("join", ["cat", "stack"])
 def test_joining_a_reduced_scalar_with_a_vector_does_not_abort(join: str) -> None:
     done = subprocess.run(

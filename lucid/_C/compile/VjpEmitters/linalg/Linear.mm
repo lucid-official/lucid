@@ -195,7 +195,8 @@ public:
 
         bctx.accumulate_grad(a_id, dA_red);
         bctx.accumulate_grad(b_id, dB_red);
-        return true;
+        // A null grad (cannot be reduced to its input's shape) declines the VJP.
+        return (dA_red != nullptr) & (dB_red != nullptr);
     }
 };
 

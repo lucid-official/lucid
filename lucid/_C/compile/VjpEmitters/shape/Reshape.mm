@@ -102,6 +102,8 @@ public:
         std::vector<std::int64_t> out_shape =
             node.outputs.empty() ? shape_of_mps(grad) : node.outputs[0].shape;
         void* dx = bctx.unreduce(from_tensor(grad), in_shape, out_shape);
+        if (dx == nullptr)
+            return false;
         bctx.accumulate_grad(x_id, dx);
         return true;
     }

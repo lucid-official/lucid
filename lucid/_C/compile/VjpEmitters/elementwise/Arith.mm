@@ -44,6 +44,8 @@ inline bool accumulate_binary(BackwardContext& bctx,
         return false;
     MPSGraphTensor* da = as_tensor(bctx.unreduce(from_tensor(g.da), c.a_shape, c.out_shape));
     MPSGraphTensor* db = as_tensor(bctx.unreduce(from_tensor(g.db), c.b_shape, c.out_shape));
+    if (da == nil || db == nil)
+        return false;  // the grad cannot be reduced to an input's shape
     bctx.accumulate_grad(c.a_id, from_tensor(da));
     bctx.accumulate_grad(c.b_id, from_tensor(db));
     return true;

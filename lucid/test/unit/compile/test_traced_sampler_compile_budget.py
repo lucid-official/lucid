@@ -54,17 +54,6 @@ _STALL_S = 30.0
 #: graph to compile.  Strict both ways: one that starts to compile, or one missing here
 #: that stops compiling, fails the guard.
 _EAGER_BY_DESIGN: frozenset[str] = frozenset()
-#: The signature of a known engine defect (LCD-804). A full reduction is bound keepdim-shaped
-#: against a 0-d trace shape, so the backward builds an element-count-changing reshape. The
-#: macOS 26 CI image's MPSGraph rejects it ("original module failed verification"); older
-#: MPSGraph builds tolerate it. Which samplers hit it depends on how each one lowers, so the
-#: defect is recognised by its signature rather than by a list of names. The defect itself is
-#: pinned strictly in test_scalar_reduction_rank.py. Remove this when LCD-804 lands.
-_LCD804_SIGNATURE = ("mps.reshape", "failed verification")
-
-
-def _is_lcd804(problem: str) -> bool:
-    return all(part in problem for part in _LCD804_SIGNATURE)
 
 
 def _targets() -> list[str]:
@@ -153,8 +142,6 @@ def outcomes() -> dict[str, _Outcome]:
 def test_first_compile_is_within_budget(target: str, outcomes: dict[str, _Outcome]) -> None:
     outcome = outcomes.get(target)
     assert outcome is not None, f"{target}: never reached"
-    if _is_lcd804(outcome.problem):
-        pytest.xfail(f"LCD-804: {target} hits the full-reduction rank mismatch on this MPSGraph")
     assert not outcome.problem, f"{target}: {outcome.problem}"
     if outcome.skip:
         pytest.skip(outcome.skip)
@@ -195,9 +182,3 @@ def test_every_traced_backward_function_has_a_probe() -> None:
 
 def test_every_random_op_has_a_probe() -> None:
     assert probes.random_names_in_package() <= probes.random_table()
-
-
-def test_the_lcd804_signature_is_recognised() -> None:
-    seen = 'operation: "mps.reshape"(%1, %2) | MPSGraphExecutable.mm: failed assertion `original module failed verification\''
-    assert _is_lcd804(seen)
-    assert not _is_lcd804("child died: signal 11")

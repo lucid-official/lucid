@@ -34,6 +34,40 @@ class CompiledExecutable;
 
 namespace {
 
+// MPSGraph's ``gradientForPrimaryTensor:`` mishandles a 0-d primary.  A loss
+// is bound at its trace shape (0-d for a full reduction), so differentiate a
+// rank-1 view of it; the loss the executable returns stays the 0-d tensor.
+MPSGraphTensor* autodiff_primary(MPSGraph* graph, MPSGraphTensor* loss) {
+    if (loss.shape == nil || loss.shape.count != 0)
+        return loss;
+    return [graph reshapeTensor:loss withShape:@[ @1 ] name:@"lucid_autodiff_primary"];
+}
+
+// The shape a value was bound at must be the shape the trace recorded for it:
+// every emitter after it reads the trace.  A dynamic (-1) axis in the graph
+// stands for any trace-time size.  Empty when they agree.
+std::string bound_shape_mismatch(MPSGraphTensor* bound, const OpNode& node, const TensorMeta& meta) {
+    if (bound.shape == nil)
+        return {};
+    const NSUInteger rank = bound.shape.count;
+    bool same = rank == meta.shape.size();
+    for (NSUInteger i = 0; same && i < rank; ++i) {
+        const long long d = bound.shape[i].longLongValue;
+        same = d < 0 || d == meta.shape[i];
+    }
+    if (same)
+        return {};
+    std::ostringstream os;
+    os << "compile_trace: op '" << node.name << "' bound (";
+    for (NSUInteger i = 0; i < rank; ++i)
+        os << (i ? "," : "") << bound.shape[i].longLongValue;
+    os << "), trace says (";
+    for (std::size_t i = 0; i < meta.shape.size(); ++i)
+        os << (i ? "," : "") << meta.shape[i];
+    os << ")";
+    return os.str();
+}
+
 // Emit ``node`` and hold every output it bound at the dtype the trace
 // declared (``held_at``).  Every op of every compile mode goes through here,
 // so an emitter whose MPSGraph primitive picks its own result type cannot
@@ -47,6 +81,8 @@ std::string emit_node(OpEmitter& emitter, BuilderContext& ctx, const OpNode& nod
         auto* bound = (__bridge MPSGraphTensor*)ctx.resolve(meta.id);
         if (bound == nil)
             continue;  // a dead piece of a multi-output op, never bound
+        if (const std::string why = bound_shape_mismatch(bound, node, meta); !why.empty())
+            return why;
         MPSGraphTensor* held = held_at(g, bound, meta.dtype);
         if (held == nil)
             return "op '" + node.name + "' produced a value that cannot be held at its declared " +
@@ -1174,7 +1210,7 @@ MpsBuilder::compile_trace_with_backward(TensorId loss_id,
                     [reach_arr addObject:param_arr[i]];
             NSDictionary<MPSGraphTensor*, MPSGraphTensor*>* grad_map =
                 reach_arr.count == 0 ? @{}
-                                     : [graph_obj gradientForPrimaryTensor:loss_t
+                                     : [graph_obj gradientForPrimaryTensor:autodiff_primary(graph_obj, loss_t)
                                                                withTensors:reach_arr
                                                                       name:@"lucid_grads"];
             if (grad_map == nil)
@@ -1606,7 +1642,7 @@ CompiledExecutable* MpsBuilder::compile_fused_training_step(
                 return fail("compile_fused_training_step: " + vjp_err + "; op '" + bad +
                             "' rules out MPSGraph's autodiff as the fallback");
             NSDictionary<MPSGraphTensor*, MPSGraphTensor*>* grad_map =
-                [graph_obj gradientForPrimaryTensor:loss_t
+                [graph_obj gradientForPrimaryTensor:autodiff_primary(graph_obj, loss_t)
                                         withTensors:param_arr
                                                name:@"lucid_fused_grads"];
             if (grad_map == nil)
@@ -1963,7 +1999,7 @@ MpsBuilder::compile_generic_fused_step(TensorId loss_id,
                 return false;
             }
             NSDictionary<MPSGraphTensor*, MPSGraphTensor*>* grad_map =
-                [graph_obj gradientForPrimaryTensor:loss_t
+                [graph_obj gradientForPrimaryTensor:autodiff_primary(graph_obj, loss_t)
                                         withTensors:param_arr
                                                name:@"lucid_generic_grads"];
             if (grad_map == nil) {
@@ -2368,7 +2404,7 @@ CompiledExecutable* MpsBuilder::compile_generic_fused_step_with_vars(
             }
 
             NSDictionary<MPSGraphTensor*, MPSGraphTensor*>* grad_map =
-                [graph_obj gradientForPrimaryTensor:loss_t
+                [graph_obj gradientForPrimaryTensor:autodiff_primary(graph_obj, loss_t)
                                         withTensors:param_arr
                                                name:@"lucid_var_grads"];
             if (grad_map == nil) {

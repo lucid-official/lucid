@@ -63,33 +63,28 @@ inline bool emit_reduce(BuilderContext& ctx, const OpNode& node, BuilderBlock bu
     x_t = promote_to_float_output(graph, x_t, node);
     MPSGraphTensor* reduced = builder(graph, x_t, axes);
 
-    // Two regimes:
+    // MPSGraph's reductions keep the reduced axes at size 1, so with
+    // ``keepdim=false`` the result is reshaped to the trace's output shape:
+    // a tensor bound to a trace id must have exactly that shape, or the first
+    // op that broadcasts it against a lower-rank operand promotes its result
+    // (``(4,) + (1,1)`` is ``(1,4)``) and everything downstream is built from
+    // the wrong rank.
     //
-    // (a) **0-D scalar reduction** (trace recorded an empty output
-    //     shape — typical for full-reduce losses like
-    //     ``cross_entropy(...).mean()``).  We deliberately leave the
-    //     size-1 axes alone inside MPSGraph: the loss tensor stays
-    //     keepdim=true so ``gradientForPrimaryTensor:`` can chain
-    //     backwards through it.  The runtime buffer wrap uses the
-    //     trace's squeezed ``output_shapes[i]`` (empty), and since
-    //     byte size = sizeof(dtype) for both views, the Python-side
-    //     scalar materialisation works.
-    //
-    // (b) **Non-scalar reduction with keepdim=false** (the much more
-    //     common case, e.g. ``mean(x, dim=1)``).  Here the trace
-    //     records a rank-1+ output and downstream ops consume the
-    //     squeezed shape.  Leaving the size-1 axes in place causes
-    //     the MPSGraph→buffer copy to misalign (graph tensor is
-    //     (B,1), buffer is (B,)) and only the first element is
-    //     populated.  We reshape to the trace's output shape so the
-    //     MPSGraphTensorData binding and the in-graph tensor agree.
+    // A full reduction (empty trace shape) used to stay ``(1,..,1)`` so that
+    // ``gradientForPrimaryTensor:`` could chain through a loss; that
+    // differentiation now goes through a rank-1 alias made where the loss is
+    // handed to it (``autodiff_primary`` in ``MpsBuilder.mm``).
     const auto& out_shape = node.outputs[0].shape;
-    if (!*keepdim && !out_shape.empty()) {
-        // Dynamic-batch-aware squeeze: a reduction over non-batch axes keeps the
-        // symbolic (-1) batch, so pin it -1 in the target instead of the
-        // trace-time concrete value (which would abort the MLIR pass).  nil =
-        // symbolic batch not provably at dim 0 → bail (compile falls back).
-        reduced = reshape_dynamic_aware(graph, reduced, out_shape, @"reduce_squeeze");
+    if (!*keepdim) {
+        if (out_shape.empty()) {
+            reduced = [graph reshapeTensor:reduced withShape:@[] name:@"reduce_scalar"];
+        } else {
+            // Dynamic-batch-aware squeeze: a reduction over non-batch axes keeps the
+            // symbolic (-1) batch, so pin it -1 in the target instead of the
+            // trace-time concrete value (which would abort the MLIR pass).  nil =
+            // symbolic batch not provably at dim 0 → bail (compile falls back).
+            reduced = reshape_dynamic_aware(graph, reduced, out_shape, @"reduce_squeeze");
+        }
         if (reduced == nil)
             return false;
     }
