@@ -401,9 +401,7 @@ collections.abc.Sequence.register(_Rows)
 
 def is_tensor_sequence(value: Any) -> bool:
     """Whether ``value`` is a non-empty list or tuple of tensors."""
-    return (
-        isinstance(value, (list, tuple)) and bool(value) and isinstance(value[0], lucid.Tensor)
-    )
+    return isinstance(value, (list, tuple)) and bool(value) and isinstance(value[0], lucid.Tensor)
 
 
 def as_operand(original: Any, tensor: Any) -> Any:

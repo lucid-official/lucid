@@ -172,10 +172,7 @@ def _adalora(targets: tuple[str, ...], random: bool, **kw: object) -> AdaLoraCon
 
 def _vera(targets: tuple[str, ...], random: bool, **kw: object) -> VeraConfig:
     return VeraConfig(
-        r=3,
-        target_modules=list(targets),
-        init_weights=not random,
-        **kw,  # type: ignore[arg-type]
+        r=3, target_modules=list(targets), init_weights=not random, **kw  # type: ignore[arg-type]
     )
 
 
@@ -200,10 +197,7 @@ def _boft(targets: tuple[str, ...], random: bool, **kw: object) -> BOFTConfig:
 
 def _hra(targets: tuple[str, ...], random: bool, **kw: object) -> HRAConfig:
     return HRAConfig(
-        r=2,
-        target_modules=list(targets),
-        init_weights=not random,
-        **kw,  # type: ignore[arg-type]
+        r=2, target_modules=list(targets), init_weights=not random, **kw  # type: ignore[arg-type]
     )
 
 
@@ -224,10 +218,7 @@ def _ln_tuning(targets: tuple[str, ...], random: bool, **kw: object) -> LNTuning
 
 def _miss(targets: tuple[str, ...], random: bool, **kw: object) -> MissConfig:
     return MissConfig(
-        r=2,
-        target_modules=list(targets),
-        init_weights=not random,
-        **kw,  # type: ignore[arg-type]
+        r=2, target_modules=list(targets), init_weights=not random, **kw  # type: ignore[arg-type]
     )
 
 
@@ -283,8 +274,7 @@ def _shira_tensors() -> dict[str, lucid.Tensor]:
             lucid.randint(-2, 3, (count,)).to(lucid.float32) * 0.5
         )
         made[f"{_PREFIX}{index}.shira_indices"] = lucid.tensor(
-            [[p // inn for p in range(count)], [p % inn for p in range(count)]],
-            dtype=lucid.int32,
+            [[p // inn for p in range(count)], [p % inn for p in range(count)]], dtype=lucid.int32
         )
     return made
 
@@ -397,10 +387,7 @@ _METHODS = [
         _fourierft,
         FourierFTModel,
         FourierFTLayer,
-        {
-            f"{_PREFIX}0.fourierft_spectrum": (5,),
-            f"{_PREFIX}2.fourierft_spectrum": (5,),
-        },
+        {f"{_PREFIX}0.fourierft_spectrum": (5,), f"{_PREFIX}2.fourierft_spectrum": (5,)},
     ),
     _Method(
         "ln_tuning",
@@ -495,9 +482,7 @@ def _perturb(model: nn.Module, seed: int = 3) -> None:
 
 
 class TestRegistration:
-    def test_the_method_registers_its_config_tuner_and_layers(
-        self, method: _Method
-    ) -> None:
+    def test_the_method_registers_its_config_tuner_and_layers(self, method: _Method) -> None:
         assert _TUNERS[method.peft_type] is method.tuner
         assert _CONFIG_CLASSES[method.peft_type] is type(method.make())
         assert method.tuner._layer_types is method.layer_root._layer_types
@@ -523,9 +508,9 @@ class TestRegistration:
         method.make().save_pretrained(tmp_path)
         read = PeftConfig.from_pretrained(tmp_path)
         assert type(read) is type(method.make()) and read == method.make()
-        assert json.loads((tmp_path / "adapter_config.json").read_text())[
-            "peft_type"
-        ] == str(method.peft_type)
+        assert json.loads((tmp_path / "adapter_config.json").read_text())["peft_type"] == str(
+            method.peft_type
+        )
 
     def test_a_default_of_raw_parameters_is_not_taken_for_a_module_method(
         self, method: _Method
@@ -547,16 +532,12 @@ class TestRegistration:
     def test_the_audit_builds_a_fresh_working_instance(self, method: _Method) -> None:
         first, second = BUILDERS[method.tuner](), BUILDERS[method.tuner]()
         assert type(first) is method.tuner
-        assert {id(p) for p in first.parameters()}.isdisjoint(
-            id(p) for p in second.parameters()
-        )
+        assert {id(p) for p in first.parameters()}.isdisjoint(id(p) for p in second.parameters())
         assert first(lucid.randn(2, 4)).shape == (2, 4)
 
 
 class TestForward:
-    def test_the_default_start_is_the_base_bit_for_bit(
-        self, method: _Method, device: str
-    ) -> None:
+    def test_the_default_start_is_the_base_bit_for_bit(self, method: _Method, device: str) -> None:
         net = _mlp(device)
         x = lucid.randn(5, 6, device=device)
         base = net(x)
@@ -564,15 +545,9 @@ class TestForward:
         if not method.starts_at_base:
             assert not _close(peft(x), base, atol=1e-6)
             return
-        assert (
-            _same(peft(x), base)
-            if method.exact_start
-            else _close(peft(x), base, atol=1e-6)
-        )
+        assert _same(peft(x), base) if method.exact_start else _close(peft(x), base, atol=1e-6)
 
-    def test_a_random_start_changes_the_output(
-        self, method: _Method, device: str
-    ) -> None:
+    def test_a_random_start_changes_the_output(self, method: _Method, device: str) -> None:
         net = _mlp(device)
         x = lucid.randn(5, 6, device=device)
         base = net(x)
@@ -649,14 +624,10 @@ class TestMerging:
         peft = get_peft_model(net, method.make())
         _perturb(peft)
         with warnings.catch_warnings():
-            warnings.simplefilter(
-                "ignore"
-            )  # (IA)^3 warns that unmerging is approximate
+            warnings.simplefilter("ignore")  # (IA)^3 warns that unmerging is approximate
             peft.base_model.merge_adapter()
             peft.base_model.unmerge_adapter()
-        after = [
-            p for _, layer in _layers(peft) for p in layer.get_base_layer().parameters()
-        ]
+        after = [p for _, layer in _layers(peft) for p in layer.get_base_layer().parameters()]
         assert len(before) == len(after) == 4
         for old, new in zip(before, after, strict=True):
             assert _close(old, new, atol=1e-5)
@@ -697,9 +668,7 @@ def _layers(peft: PeftModel) -> list[tuple[str, _BaseTunerLayer]]:
 
 
 class TestMultiAdapter:
-    def _two(
-        self, method: _Method, device: str = "cpu"
-    ) -> tuple[PeftModel, lucid.Tensor]:
+    def _two(self, method: _Method, device: str = "cpu") -> tuple[PeftModel, lucid.Tensor]:
         net = _mlp(device)
         peft = get_peft_model(net, method.make(), adapter_name="a")
         lucid.manual_seed(11)
@@ -707,9 +676,7 @@ class TestMultiAdapter:
         _perturb(peft)  # only the trainable ones move: "a"
         return peft, lucid.randn(5, 6, device=device)
 
-    def test_a_new_adapter_is_frozen_and_inactive(
-        self, method: _Method, device: str
-    ) -> None:
+    def test_a_new_adapter_is_frozen_and_inactive(self, method: _Method, device: str) -> None:
         peft, x = self._two(method, device)
         assert peft.active_adapters == ["a"]
         layer = peft.base_model.model[0]
@@ -717,9 +684,7 @@ class TestMultiAdapter:
         assert not any(p.requires_grad for p in layer._adapter_parameters("b"))
         assert all(p.requires_grad for p in layer._adapter_parameters("a"))
 
-    def test_switching_follows_the_chosen_adapter(
-        self, method: _Method, device: str
-    ) -> None:
+    def test_switching_follows_the_chosen_adapter(self, method: _Method, device: str) -> None:
         peft, x = self._two(method, device)
         with lucid.no_grad():
             on_a = peft(x)
@@ -797,9 +762,7 @@ class TestFiles:
             "adapter_model.safetensors",
         ]
 
-    def test_a_named_second_adapter_round_trips(
-        self, method: _Method, tmp_path: Path
-    ) -> None:
+    def test_a_named_second_adapter_round_trips(self, method: _Method, tmp_path: Path) -> None:
         peft = get_peft_model(_mlp(), method.make(), adapter_name="a")
         peft.add_adapter("b", method.add())
         peft.set_adapter("b")
@@ -811,9 +774,7 @@ class TestFiles:
         with lucid.no_grad():
             assert _same(loaded(x), peft(x))
 
-    def test_set_refuses_what_does_not_fit_and_changes_nothing(
-        self, method: _Method
-    ) -> None:
+    def test_set_refuses_what_does_not_fit_and_changes_nothing(self, method: _Method) -> None:
         peft = get_peft_model(_mlp(), method.make())
         before = get_peft_model_state_dict(peft)
         key = next(iter(before))
@@ -823,13 +784,9 @@ class TestFiles:
         for k, v in get_peft_model_state_dict(peft).items():
             assert _same(v, before[k])
 
-    def test_the_task_type_picks_the_wrapper_class(
-        self, method: _Method, tmp_path: Path
-    ) -> None:
+    def test_the_task_type_picks_the_wrapper_class(self, method: _Method, tmp_path: Path) -> None:
         peft = get_peft_model(_mlp(), method.make(task_type="CAUSAL_LM"))
-        assert (
-            type(peft) is PeftModelForCausalLM and type(peft.base_model) is method.tuner
-        )
+        assert type(peft) is PeftModelForCausalLM and type(peft.base_model) is method.tuner
         peft.save_pretrained(tmp_path)
         loaded = PeftModel.from_pretrained(_mlp(), tmp_path)
         assert type(loaded) is PeftModelForCausalLM
@@ -837,9 +794,7 @@ class TestFiles:
     def test_modules_to_save_trains_a_copy_and_saves_it(
         self, method: _Method, tmp_path: Path
     ) -> None:
-        peft = get_peft_model(
-            _mlp(), method.make(targets=("0",), modules_to_save=["2"])
-        )
+        peft = get_peft_model(_mlp(), method.make(targets=("0",), modules_to_save=["2"]))
         with lucid.no_grad():
             peft.base_model.model[2].modules_to_save["default"].weight.add_(1.0)
         peft.save_pretrained(tmp_path)
@@ -1217,12 +1172,8 @@ def _reference_forward(
             delta = (t[p + "lora_B"] @ (t[p + "lora_A"] * t[p + "lora_E"])) * (6 / 3)
         elif method.name == "vera":
             out, inn = net[index].weight.shape
-            rows = (
-                t[p + "vera_lambda_b"].unsqueeze(-1) * t["base_model.vera_B"][:out, :3]
-            )
-            columns = (
-                t[p + "vera_lambda_d"].unsqueeze(-1) * t["base_model.vera_A"][:3, :inn]
-            )
+            rows = t[p + "vera_lambda_b"].unsqueeze(-1) * t["base_model.vera_B"][:out, :3]
+            columns = t[p + "vera_lambda_d"].unsqueeze(-1) * t["base_model.vera_A"][:3, :inn]
             delta = rows @ columns
         elif method.name == "loha":
             delta = (t[p + "hada_w1_a"] @ t[p + "hada_w1_b"]) * (
@@ -1248,9 +1199,7 @@ def test_a_reference_written_adapter_loads(method: _Method, tmp_path: Path) -> N
     save_safetensors(
         tensors, str(tmp_path / "adapter_model.safetensors"), metadata={"format": "pt"}
     )
-    (tmp_path / "adapter_config.json").write_text(
-        json.dumps(_REFERENCE_CONFIGS[method.name])
-    )
+    (tmp_path / "adapter_config.json").write_text(json.dumps(_REFERENCE_CONFIGS[method.name]))
     loaded = PeftModel.from_pretrained(_mlp(), tmp_path)
     assert type(loaded.base_model) is method.tuner
     assert loaded.peft_config["default"].base_model_name_or_path == "tiny"
@@ -1261,9 +1210,7 @@ def test_a_reference_written_adapter_loads(method: _Method, tmp_path: Path) -> N
 
 # ── compile ──────────────────────────────────────────────────────────────────
 
-metal_only = pytest.mark.skipif(
-    not metal_available(), reason="compiled executables run on Metal"
-)
+metal_only = pytest.mark.skipif(not metal_available(), reason="compiled executables run on Metal")
 
 
 @metal_only

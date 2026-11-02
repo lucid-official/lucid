@@ -209,9 +209,7 @@ class DynamicSpec(NamedTuple):
 
 
 def normalize_dynamic_spec(
-    spec: object,
-    dtype: QDtype,
-    default_types: Collection[type],
+    spec: object, dtype: QDtype, default_types: Collection[type]
 ) -> DynamicSpec:
     """Fold every accepted ``qconfig_spec`` form into one :class:`QConfigMapping`.
 

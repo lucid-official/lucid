@@ -13,14 +13,7 @@ from types import ModuleType
 import pytest
 
 import lucid
-from lucid.utils.data import (
-    DataLoader,
-    Dataset,
-    StackDataset,
-    Subset,
-    TensorDataset,
-    random_split,
-)
+from lucid.utils.data import DataLoader, Dataset, StackDataset, Subset, TensorDataset, random_split
 from lucid.utils.data._batched import collated_fetcher
 
 

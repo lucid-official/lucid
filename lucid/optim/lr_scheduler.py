@@ -18,11 +18,7 @@ from lucid.optim._scheduler_base import (
     _require_group_keys,
     _reset_to_base,
 )
-from lucid.optim._warm_restarts import (
-    _check_cycle_lengths,
-    _current_cycle_keys,
-    _WarmRestartCycle,
-)
+from lucid.optim._warm_restarts import _check_cycle_lengths, _current_cycle_keys, _WarmRestartCycle
 from lucid.optim.optimizer import (
     Optimizer,
     _CyclicLike,

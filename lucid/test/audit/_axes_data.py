@@ -232,7 +232,10 @@ _BUILD_BY_NAME: dict[str, Any] = {
     # siblings reject an empty sequence by design, which is the right
     # refusal and left them unconstructible for want of one element.
     "transform": lambda: lucid.distributions.ExpTransform(),
-    "parts": lambda: [lucid.distributions.AffineTransform(0.0, 2.0), lucid.distributions.ExpTransform()],
+    "parts": lambda: [
+        lucid.distributions.AffineTransform(0.0, 2.0),
+        lucid.distributions.ExpTransform(),
+    ],
     "tseq": lambda: [lucid.distributions.ExpTransform()],
     # ``CatTransform``/``StackTransform``/``ComposeTransform`` all refuse
     # an empty sequence, which is the right refusal — the table used to
@@ -240,7 +243,10 @@ _BUILD_BY_NAME: dict[str, Any] = {
     # Both parts are bijections with a log-det: ``TransformedDistribution`` takes
     # this list too, and a part with none (``AbsTransform``) makes its
     # ``log_prob`` refuse, as the reference does (LCD-818).
-    "transforms": lambda: [lucid.distributions.AffineTransform(0.0, 2.0), lucid.distributions.ExpTransform()],
+    "transforms": lambda: [
+        lucid.distributions.AffineTransform(0.0, 2.0),
+        lucid.distributions.ExpTransform(),
+    ],
     "reinterpreted_batch_ndims": lambda: 1,
     "registered": list,
     "engine_dtype": lambda: lucid.float32._engine_dtype,

@@ -218,9 +218,11 @@ def _adaptive_pool_python(x: Tensor, output_size: tuple[int, ...], reduce: str) 
     lead = x.ndim - n
     dims = tuple(range(lead, x.ndim))
     values = [
-        window.reshape(*x.shape[:lead], -1).max(dim=-1).values
-        if reduce == "max"
-        else window.mean(dim=dims)
+        (
+            window.reshape(*x.shape[:lead], -1).max(dim=-1).values
+            if reduce == "max"
+            else window.mean(dim=dims)
+        )
         for _, window in _adaptive_cells(x, output_size)
     ]
     return _lucid.stack(values, dim=-1).reshape(*x.shape[:lead], *output_size)

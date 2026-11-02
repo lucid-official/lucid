@@ -19,7 +19,6 @@ import lucid
 from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
 
-
 __all__ = [
     "Constraint",
     "MixtureSameFamilyConstraint",

@@ -176,22 +176,8 @@ _F32X4 = np.arange(4, dtype=np.float32).tobytes()  # 16 bytes
 MALFORMED = [
     ("negative-start", {"w": _entry(-8, 0, shape=[0])}, _F32X2, None, "w", "forward range"),
     ("backwards-range", {"w": _entry(8, 0, shape=[0])}, _F32X2, None, "w", "forward range"),
-    (
-        "overlap",
-        {"a": _entry(0, 8), "b": _entry(4, 12)},
-        _F32X4 + _F32X2,
-        None,
-        "b",
-        "overlap",
-    ),
-    (
-        "identical-ranges",
-        {"a": _entry(0, 8), "b": _entry(0, 8)},
-        _F32X2,
-        None,
-        "b",
-        "overlap",
-    ),
+    ("overlap", {"a": _entry(0, 8), "b": _entry(4, 12)}, _F32X4 + _F32X2, None, "b", "overlap"),
+    ("identical-ranges", {"a": _entry(0, 8), "b": _entry(0, 8)}, _F32X2, None, "b", "overlap"),
     (
         "gap",
         {"a": _entry(0, 8), "b": _entry(12, 20)},
@@ -292,11 +278,7 @@ class TestHeaderValidation:
 
     def test_a_failed_read_leaves_no_partial_result(self, tmp_path: Path) -> None:
         # A damaged tail must not hand back the tensors before it.
-        path = _raw(
-            tmp_path / "tail.safetensors",
-            {"a": _entry(0, 8), "b": _entry(8, 24)},
-            _F32X2,
-        )
+        path = _raw(tmp_path / "tail.safetensors", {"a": _entry(0, 8), "b": _entry(8, 24)}, _F32X2)
         with pytest.raises(ValueError, match="tensor 'b'"):
             load_safetensors(path)
 

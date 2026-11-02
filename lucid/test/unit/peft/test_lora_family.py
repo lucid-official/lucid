@@ -39,6 +39,7 @@ from lucid.peft.tuners.miss._modes import _Mode
 from lucid.serialization import load_safetensors
 from lucid.test.unit.peft._parity import adapter_library, gap
 
+
 def _mlp(inn: int = 8, hidden: int = 8, out: int = 4) -> nn.Sequential:
     lucid.manual_seed(0)
     return nn.Sequential(nn.Linear(inn, hidden), nn.ReLU(), nn.Linear(hidden, out))

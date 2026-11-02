@@ -27,7 +27,6 @@ from lucid.nn._incompatible_keys import _IncompatibleKeys
 from lucid.nn.module import Module, _tensors_replaced
 from lucid._types import StateDict
 
-
 # ── state_dict (load side) ────────────────────────────────────────────────────
 
 
@@ -294,15 +293,7 @@ def _load_state_dict(
     error_msgs: list[str] = []
 
     _walk_load(
-        module,
-        state_dict,
-        "",
-        metadata,
-        strict,
-        missing_keys,
-        unexpected_keys,
-        error_msgs,
-        assign,
+        module, state_dict, "", metadata, strict, missing_keys, unexpected_keys, error_msgs, assign
     )
 
     # Strict mode: turn what the hooks left of missing/unexpected into errors.

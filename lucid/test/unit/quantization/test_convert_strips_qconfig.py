@@ -48,9 +48,7 @@ def _ref_qengine(ref: Any) -> Iterator[None]:
 
 def _build(lib: Any) -> Any:
     return lib.nn.Sequential(
-        lib.nn.Linear(8, 8),
-        lib.nn.ReLU(),
-        lib.nn.Sequential(lib.nn.Linear(8, 4), lib.nn.Tanh()),
+        lib.nn.Linear(8, 8), lib.nn.ReLU(), lib.nn.Sequential(lib.nn.Linear(8, 4), lib.nn.Tanh())
     )
 
 
@@ -200,7 +198,5 @@ class TestDynamicStrips:
             want = _with_qconfig(ao.quantize_dynamic(theirs))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            got = _with_qconfig(
-                Q.quantize_dynamic(self._configured(lucid, dynamic_qconfig(qint8)))
-            )
+            got = _with_qconfig(Q.quantize_dynamic(self._configured(lucid, dynamic_qconfig(qint8))))
         assert got == want

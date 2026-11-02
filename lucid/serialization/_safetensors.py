@@ -235,8 +235,7 @@ class _SafeTensorsFile:
         """``entry``'s bytes lie inside the data section and are as long as its shape needs."""
         if entry.start < 0 or entry.end < entry.start:
             raise self._error(
-                f"its data_offsets [{entry.start}, {entry.end}] are not a forward range",
-                entry.name,
+                f"its data_offsets [{entry.start}, {entry.end}] are not a forward range", entry.name
             )
         if entry.end > self._payload:
             raise self._error(

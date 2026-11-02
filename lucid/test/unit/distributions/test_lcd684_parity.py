@@ -542,9 +542,9 @@ def test_matrix_constraint_check_matches_reference(
     value = _MATRICES[matrix]
     ours = _outcome(lambda: getattr(constraints, name).check(_lt(value, device)))
     theirs = _outcome(lambda: getattr(ref.distributions.constraints, name).check(_rt(ref, value)))
-    assert ours[0] == theirs[0], (
-        f"{name}.check({matrix}): Lucid {ours[0]}, the reference {theirs[0]}"
-    )
+    assert (
+        ours[0] == theirs[0]
+    ), f"{name}.check({matrix}): Lucid {ours[0]}, the reference {theirs[0]}"
     if ours[0] != "ok":
         return
     assert ours[1].shape == theirs[1].shape

@@ -510,9 +510,7 @@ def _check_no_frozenset(obj: object, seen: set[int]) -> None:
 
 
 def _remap_dict(
-    obj: dict[object, object],
-    map_location: object,
-    memo: dict[int, object],
+    obj: dict[object, object], map_location: object, memo: dict[int, object]
 ) -> dict[object, object]:
     """Rebuild ``obj`` with remapped entries while preserving subtype and attrs."""
     from collections import defaultdict
@@ -553,9 +551,7 @@ def _remap_seq(
 
 
 def _apply_map_location(
-    obj: object,
-    map_location: object,
-    _memo: dict[int, object] | None = None,
+    obj: object, map_location: object, _memo: dict[int, object] | None = None
 ) -> object:
     """Recursively apply map_location to all Tensors in obj."""
     if _memo is None:

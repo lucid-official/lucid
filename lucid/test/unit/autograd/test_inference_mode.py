@@ -214,12 +214,7 @@ def test_a_reused_instance_nests_correctly() -> None:
     # The reference keeps one saved state per instance, so re-entering the
     # same object leaves the thread stuck in the inner state; Lucid keeps a
     # stack and restores each level.
-    assert _reused_instance(lucid) == [
-        (True, False),
-        (True, False),
-        (True, False),
-        (False, True),
-    ]
+    assert _reused_instance(lucid) == [(True, False), (True, False), (True, False), (False, True)]
 
 
 @pytest.mark.parametrize("name", list(_SCENARIOS))

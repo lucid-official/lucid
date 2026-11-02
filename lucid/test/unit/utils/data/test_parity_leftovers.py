@@ -360,11 +360,7 @@ def test_every_batch_arrives_once_whatever_the_order(in_order):
 def test_out_of_order_does_not_wait_for_a_slow_batch():
     """Sample 0 sleeps; with ``in_order=False`` the batches behind it come first."""
     loader = lucid_data.DataLoader(
-        wd.FirstSlow(6, delay=3.0),
-        batch_size=1,
-        num_workers=2,
-        in_order=False,
-        collate_fn=wd.as_is,
+        wd.FirstSlow(6, delay=3.0), batch_size=1, num_workers=2, in_order=False, collate_fn=wd.as_is
     )
     seen = [i for batch in loader for i in batch]
     assert sorted(seen) == [0, 1, 2, 3, 4, 5]

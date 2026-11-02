@@ -303,9 +303,9 @@ def _assert_no_host_arrays(value: object, where: str) -> None:
         for i, v in enumerate(value):
             _assert_no_host_arrays(v, f"{where}[{i}]")
     else:
-        assert isinstance(value, (lucid.Tensor, int, float, bool)), (
-            f"{where} is a {type(value).__name__}, not a tensor or a Python number"
-        )
+        assert isinstance(
+            value, (lucid.Tensor, int, float, bool)
+        ), f"{where} is a {type(value).__name__}, not a tensor or a Python number"
 
 
 @pytest.mark.parametrize("case", [pytest.param(c, id=_id(c)) for c in _OPTIMIZERS])
@@ -492,7 +492,7 @@ def test_lbfgs_state_is_live_and_the_references(ref: Any) -> None:
     saved = opt.state_dict()
     before = int(opt.state[params[0]]["n_iter"])
     opt.step(closure)
-    assert int(opt.state[params[0]]["n_iter"]) > before, (
-        "opt.state follows the step after state_dict"
-    )
+    assert (
+        int(opt.state[params[0]]["n_iter"]) > before
+    ), "opt.state follows the step after state_dict"
     assert saved["state"][0]["n_iter"] == before
