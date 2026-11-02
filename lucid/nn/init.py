@@ -9,6 +9,7 @@ import threading
 import warnings
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 import lucid as _lucid
@@ -438,7 +439,7 @@ def xavier_uniform_(
     """
     fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
     if 0 in tensor.shape:
-        warnings.warn("Initializing zero-element tensors is a no-op", stacklevel=2)
+        warnings.warn("Initializing zero-element tensors is a no-op", stacklevel=3)
         return tensor
     std = gain * math.sqrt(2.0 / (fan_in + fan_out))
     a = math.sqrt(3.0) * std
@@ -500,7 +501,7 @@ def xavier_normal_(
     """
     fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
     if 0 in tensor.shape:
-        warnings.warn("Initializing zero-element tensors is a no-op", stacklevel=2)
+        warnings.warn("Initializing zero-element tensors is a no-op", stacklevel=3)
         return tensor
     std = gain * math.sqrt(2.0 / (fan_in + fan_out))
     return normal_(tensor, 0.0, std, generator=generator)
@@ -572,7 +573,7 @@ def kaiming_uniform_(
     True
     """
     if 0 in tensor.shape:
-        warnings.warn("Initializing zero-element tensors is a no-op", stacklevel=2)
+        warnings.warn("Initializing zero-element tensors is a no-op", stacklevel=3)
         return tensor
     fan = _calculate_correct_fan(tensor, mode)
     gain = calculate_gain(nonlinearity, a)
@@ -639,7 +640,7 @@ def kaiming_normal_(
     True
     """
     if 0 in tensor.shape:
-        warnings.warn("Initializing zero-element tensors is a no-op", stacklevel=2)
+        warnings.warn("Initializing zero-element tensors is a no-op", stacklevel=3)
         return tensor
     fan = _calculate_correct_fan(tensor, mode)
     gain = calculate_gain(nonlinearity, a)
@@ -649,6 +650,105 @@ def kaiming_normal_(
 
 def _norm_cdf(x: float) -> float:
     return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
+
+
+# Beyond this many standard deviations from the mean the bounds' CDF values are
+# too close to 0 or 1 to tell apart in a float32 draw, so the inverse CDF
+# collapses the samples onto the near bound.  Sampling there is done in the tail
+# itself, where the density is resolved.
+_FAR_TAIL_Z = 3.5
+_FAR_TAIL_MAX_ROUNDS = 200
+
+
+@dataclass(frozen=True)
+class _Sampler:
+    """Where and how a draw is made: the output shape, dtype, device and generator."""
+
+    shape: list[int]
+    dtype: _C_engine.Dtype
+    device: _C_engine.Device
+    generator: _C_engine.Generator | None
+
+    def uniform(self, low: float, high: float) -> _C_engine.TensorImpl:
+        return _C_engine.uniform(self.shape, low, high, self.dtype, self.device, self.generator)
+
+    def scalar(self, value: float) -> _C_engine.TensorImpl:
+        return _C_engine.full([], value, self.dtype, self.device)
+
+    def filled(self, value: float) -> _C_engine.TensorImpl:
+        return _C_engine.full(self.shape, value, self.dtype, self.device)
+
+
+def _far_tail_offsets(draw: _Sampler, start: float, width: float) -> _C_engine.TensorImpl:
+    r"""Draw ``t`` in ``[0, width]`` with density :math:`\propto e^{-\text{start}\,t - t^2/2}`.
+
+    That is a standard normal truncated to ``[start, start + width]`` with
+    ``start > 0``, measured from its near edge.  Robert's rejection sampler: a
+    truncated exponential proposal of rate
+    :math:`\lambda = (\text{start} + \sqrt{\text{start}^2 + 4}) / 2`, accepted with
+    probability :math:`e^{-(t + \text{start} - \lambda)^2 / 2}`.  Every step is
+    relative to the near edge, so nothing is lost to the large offset.
+    """
+    lam = 0.5 * (start + math.sqrt(start * start + 4.0))
+    coverage = -math.expm1(-lam * width)  # P(proposal <= width); 1 for an infinite width
+    neg_scale, neg_inv_lam = draw.scalar(-coverage), draw.scalar(-1.0 / lam)
+    shift, neg_half = draw.scalar(start - lam), draw.scalar(-0.5)
+
+    def propose() -> tuple[_C_engine.TensorImpl, _C_engine.TensorImpl]:
+        t = _C_engine.mul(
+            _C_engine.log1p(_C_engine.mul(draw.uniform(0.0, 1.0), neg_scale)), neg_inv_lam
+        )
+        gap = _C_engine.add(t, shift)
+        ratio = _C_engine.exp(_C_engine.mul(_C_engine.square(gap), neg_half))
+        return t, _C_engine.less_equal(draw.uniform(0.0, 1.0), ratio)
+
+    result, accepted = propose()
+    pending = _C_engine.logical_not(accepted)
+    for _ in range(_FAR_TAIL_MAX_ROUNDS):
+        if not _C_engine.any(pending).item():
+            break
+        t, accepted = propose()
+        result = _C_engine.where(_C_engine.logical_and(pending, accepted), t, result)
+        pending = _C_engine.logical_and(pending, _C_engine.logical_not(accepted))
+    return result
+
+
+def _far_tail_draw(
+    draw: _Sampler, mean: float, std: float, a: float, b: float
+) -> _C_engine.TensorImpl | None:
+    """Truncated-normal samples when ``[a, b]`` sits in one far tail, else ``None``.
+
+    The draw walks in from the bound nearest the mean: ``a + std * t`` above
+    it, ``b - std * t`` below, with ``t`` from :func:`_far_tail_offsets`.
+    """
+    z_lo, z_hi = (a - mean) / std, (b - mean) / std
+    if not (std > 0 and a <= b and (z_lo > _FAR_TAIL_Z or z_hi < -_FAR_TAIL_Z)):
+        return None
+    upper = z_lo > _FAR_TAIL_Z
+    offsets = _far_tail_offsets(draw, z_lo if upper else -z_hi, (b - a) / std)
+    near, step = (a, std) if upper else (b, -std)
+    moved = _C_engine.add(_C_engine.mul(offsets, draw.scalar(step)), draw.scalar(near))
+    return _C_engine.clip(moved, a, b)
+
+
+def _inverse_cdf_draw(
+    draw: _Sampler, mean: float, std: float, bounds: tuple[float, float], cdf: tuple[float, float]
+) -> _C_engine.TensorImpl:
+    """Truncated-normal samples by ``erfinv`` of a uniform draw over ``cdf``."""
+    a, b = bounds
+    lo, hi = cdf
+    if (
+        draw.device == _C_engine.Device.CPU
+        and draw.dtype in (_C_engine.F32, _C_engine.F64)
+        and (abs(lo) > 0.999999 or abs(hi) > 0.999999)
+    ):
+        draw = replace(draw, dtype=_C_engine.F64)
+    if lo == hi:
+        draw.uniform(0.0, 1.0)
+        return draw.filled(a)
+    z = _C_engine.erfinv(draw.uniform(lo, hi))
+    scaled = _C_engine.add(_C_engine.mul(z, draw.scalar(std * math.sqrt(2.0))), draw.scalar(mean))
+    return _C_engine.clip(scaled, a, b)
 
 
 @_skippable
@@ -705,6 +805,13 @@ def trunc_normal_(
     where :math:`Z = \Phi((b - \text{mean})/\text{std}) -
     \Phi((a - \text{mean})/\text{std})` is the normalising constant.
 
+    When ``[a, b]`` lies more than 3.5 ``std`` to one side of ``mean`` the
+    inverse CDF cannot tell the bounds apart (both CDF values round to 0 or
+    1), so the draw walks in from the near bound with a rejection sampler
+    instead and every sample still lands in ``[a, b]`` with the right
+    density.  A ``UserWarning`` is still raised when ``mean`` is more than
+    2 ``std`` outside ``[a, b]``, as the reference does.
+
     Examples
     --------
     >>> import lucid
@@ -718,12 +825,10 @@ def trunc_normal_(
         warnings.warn(
             "mean is more than 2 std from [a, b] in nn.init.trunc_normal_. "
             "The distribution of values may be incorrect.",
-            stacklevel=2,
+            stacklevel=3,
         )
-    l = _norm_cdf((a - mean) / std)
-    u = _norm_cdf((b - mean) / std)
-    lo = 2.0 * l - 1.0
-    hi = 2.0 * u - 1.0
+    lo = 2.0 * _norm_cdf((a - mean) / std) - 1.0
+    hi = 2.0 * _norm_cdf((b - mean) / std) - 1.0
     dt = tensor._impl.dtype
     dev = tensor._impl.device
     if a > b or lo > hi:
@@ -733,23 +838,11 @@ def trunc_normal_(
         _C_engine.uniform(shape, 0.0, 1.0, dt, dev, generator)
         return tensor
     work_dt = _C_engine.F32 if dt in (_C_engine.F16, _C_engine.BF16) else dt
-    if (
-        dev == _C_engine.Device.CPU
-        and work_dt in (_C_engine.F32, _C_engine.F64)
-        and (abs(lo) > 0.999999 or abs(hi) > 0.999999)
-    ):
-        work_dt = _C_engine.F64
-    if lo == hi:
-        _C_engine.uniform(shape, 0.0, 1.0, work_dt, dev, generator)
-        clamped = _C_engine.full(shape, a, work_dt, dev)
-    else:
-        u_impl = _C_engine.uniform(shape, lo, hi, work_dt, dev, generator)
-        z = _C_engine.erfinv(u_impl)
-        scale = _C_engine.full([], std * math.sqrt(2.0), work_dt, dev)
-        loc = _C_engine.full([], mean, work_dt, dev)
-        scaled = _C_engine.add(_C_engine.mul(z, scale), loc)
-        clamped = _C_engine.clip(scaled, a, b)
-    return _fill_from_impl(tensor, clamped)
+    draw = _Sampler(shape, work_dt, dev, generator)
+    drawn = _far_tail_draw(draw, mean, std, a, b)
+    if drawn is None:
+        drawn = _inverse_cdf_draw(draw, mean, std, (a, b), (lo, hi))
+    return _fill_from_impl(tensor, drawn)
 
 
 @_skippable
