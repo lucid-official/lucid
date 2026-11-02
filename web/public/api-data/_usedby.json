@@ -2412,11 +2412,19 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft._kappa"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners._cayley"
     },
     {
       "kind": "module",
       "module": "lucid.peft.tuners._orthogonal"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners._spectral"
     },
     {
       "kind": "module",
@@ -13050,6 +13058,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft._base_state_dict"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft._convert._base"
     },
     {
@@ -13062,7 +13074,15 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft._kappa"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft._mapping"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft._model_prep"
     },
     {
       "kind": "module",
@@ -13086,6 +13106,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft._target_aliases"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft._target_defaults"
     },
     {
@@ -13094,11 +13118,11 @@
     },
     {
       "kind": "module",
-      "module": "lucid.peft.auto"
+      "module": "lucid.peft._task_models"
     },
     {
       "kind": "module",
-      "module": "lucid.peft.tuners._base"
+      "module": "lucid.peft.auto"
     },
     {
       "kind": "module",
@@ -13106,11 +13130,23 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners._host"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners._kinds"
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners._layer"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners._lycoris"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners._plan"
     },
     {
       "kind": "module",
@@ -13135,6 +13171,10 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners._support"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners._tuner"
     },
     {
       "kind": "module",
@@ -13174,10 +13214,6 @@
     },
     {
       "kind": "module",
-      "module": "lucid.peft.tuners.bone._model"
-    },
-    {
-      "kind": "module",
       "module": "lucid.peft.tuners.c3a._layer"
     },
     {
@@ -13202,10 +13238,6 @@
     },
     {
       "kind": "module",
-      "module": "lucid.peft.tuners.hra._model"
-    },
-    {
-      "kind": "module",
       "module": "lucid.peft.tuners.ia3._defaults"
     },
     {
@@ -13222,23 +13254,11 @@
     },
     {
       "kind": "module",
-      "module": "lucid.peft.tuners.ln_tuning._model"
-    },
-    {
-      "kind": "module",
       "module": "lucid.peft.tuners.loha._layer"
     },
     {
       "kind": "module",
-      "module": "lucid.peft.tuners.loha._model"
-    },
-    {
-      "kind": "module",
       "module": "lucid.peft.tuners.lokr._layer"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.peft.tuners.lokr._model"
     },
     {
       "kind": "module",
@@ -13286,10 +13306,6 @@
     },
     {
       "kind": "module",
-      "module": "lucid.peft.tuners.miss._model"
-    },
-    {
-      "kind": "module",
       "module": "lucid.peft.tuners.multitask_prompt_tuning._model"
     },
     {
@@ -13307,10 +13323,6 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.poly._layer"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.peft.tuners.poly._model"
     },
     {
       "kind": "module",
@@ -16860,6 +16872,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft._kappa"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft._modules_to_save"
     },
     {
@@ -16872,11 +16888,15 @@
     },
     {
       "kind": "module",
-      "module": "lucid.peft.tuners._base"
+      "module": "lucid.peft.tuners._layer"
     },
     {
       "kind": "module",
       "module": "lucid.peft.tuners._lycoris"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners._plan"
     },
     {
       "kind": "module",
@@ -17763,6 +17783,18 @@
       "module": "lucid.optim"
     }
   ],
+  "lucid.peft._base_state_dict.get_base_model_state_dict": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft._base_state_dict.set_base_model_state_dict": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
   "lucid.peft._config.PeftConfig": [
     {
       "kind": "module",
@@ -17798,15 +17830,19 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft._task_models"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.auto"
     },
     {
       "kind": "module",
-      "module": "lucid.peft.tuners._base"
+      "module": "lucid.peft.tuners._files"
     },
     {
       "kind": "module",
-      "module": "lucid.peft.tuners._files"
+      "module": "lucid.peft.tuners._host"
     },
     {
       "kind": "module",
@@ -17823,6 +17859,10 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners._support"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners._tuner"
     },
     {
       "kind": "module",
@@ -17868,7 +17908,15 @@
     },
     {
       "kind": "module",
-      "module": "lucid.peft.tuners._base"
+      "module": "lucid.peft._mapping"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners._host"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners._tuner"
     },
     {
       "kind": "module",
@@ -18090,7 +18138,7 @@
     },
     {
       "kind": "module",
-      "module": "lucid.peft.tuners._base"
+      "module": "lucid.peft.tuners._plan"
     },
     {
       "kind": "module",
@@ -18179,6 +18227,50 @@
       "module": "lucid.peft.tuners.cpt._config"
     }
   ],
+  "lucid.peft._errors.NoMatchingPeftModuleError": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners._plan"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._model"
+    }
+  ],
+  "lucid.peft._errors.PeftError": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft._errors.PeftWarning": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft._kappa.find_kappa_target_modules": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft._load_weights.load_peft_weights": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft._mapping.get_peft_config": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
   "lucid.peft._mapping.get_peft_model": [
     {
       "kind": "module",
@@ -18191,6 +18283,24 @@
       "module": "lucid.peft"
     }
   ],
+  "lucid.peft._model_prep.cast_mixed_precision_params": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft._model_prep.prepare_model_for_kbit_training": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft._model_prep.shift_tokens_right": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
   "lucid.peft._modules_to_save.ModulesToSaveWrapper": [
     {
       "kind": "module",
@@ -18198,11 +18308,15 @@
     },
     {
       "kind": "module",
-      "module": "lucid.peft.tuners._base"
+      "module": "lucid.peft._base_state_dict"
     },
     {
       "kind": "module",
       "module": "lucid.peft.tuners._prompt._tuner"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners._tuner"
     },
     {
       "kind": "module",
@@ -18217,6 +18331,10 @@
     {
       "kind": "module",
       "module": "lucid.peft"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft._base_state_dict"
     },
     {
       "kind": "module",
@@ -18242,6 +18360,12 @@
     }
   ],
   "lucid.peft._peft_model.get_model_status": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft._prefix_postprocess.bloom_model_postprocess_past_key_value": [
     {
       "kind": "module",
       "module": "lucid.peft"
@@ -18967,6 +19091,12 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.lora._model"
+    }
+  ],
+  "lucid.peft.tuners.lora._config.LoraRuntimeConfig": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora"
     }
   ],
   "lucid.peft.tuners.lora._conv.Conv1d": [
