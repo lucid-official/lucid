@@ -31,6 +31,7 @@ from lucid.peft import (
     LNTuningConfig,
     LoraConfig,
     LoraModel,
+    NoMatchingPeftModuleError,
     PeftModel,
     PeftType,
     get_peft_model,
@@ -281,8 +282,9 @@ def test_an_alias_never_replaces_a_name_the_model_has() -> None:
 
 def test_a_name_that_selects_nothing_and_has_no_alias_is_left_for_the_error() -> None:
     model = ROWS["vit"].build()
-    with pytest.raises(ValueError, match="'nonexistent'.*not found"):
+    with pytest.raises(NoMatchingPeftModuleError, match="'nonexistent'.*not found") as raised:
         get_peft_model(model, LoraConfig(target_modules=["nonexistent"]))
+    assert isinstance(raised.value, ValueError)
 
 
 def test_the_aliased_adapter_trains_saves_and_loads_under_the_zoo_s_names(tmp_path: Path) -> None:

@@ -32,14 +32,6 @@ def _net() -> nn.Sequential:
     return nn.Sequential(nn.Linear(4, 4), nn.Linear(4, 2))
 
 
-_BASE_CLAIMED = pytest.mark.xfail(
-    strict=True,
-    raises=ValueError,
-    reason="LCD-821: tuners/_base.py (_not_found, _plan_modules_to_save) is claimed by LCD-829; "
-    "the one-line retrofit to NoMatchingPeftModuleError follows its land",
-)
-
-
 class TestErrors:
     def test_hierarchy(self) -> None:
         assert issubclass(PeftError, Exception)
@@ -53,7 +45,6 @@ class TestErrors:
             warnings.warn("x", PeftWarning)
         assert [w.category for w in caught] == [PeftWarning]
 
-    @_BASE_CLAIMED
     def test_missing_target_modules_raise_the_class_and_keep_value_error(self) -> None:
         net = _net()
         before = list(net.state_dict())
@@ -62,7 +53,6 @@ class TestErrors:
         assert isinstance(hit.value, ValueError) and isinstance(hit.value, PeftError)
         assert list(net.state_dict()) == before
 
-    @_BASE_CLAIMED
     def test_the_layer_filters_are_named_in_the_message(self) -> None:
         config = LoraConfig(target_modules=["absent"], layers_to_transform=[0], layers_pattern="x")
         with pytest.raises(NoMatchingPeftModuleError, match="layers_to_transform"):
@@ -72,7 +62,6 @@ class TestErrors:
         with pytest.raises(ValueError):
             LoraModel(_net(), LoraConfig(target_modules=["absent"]), adapter_name="default")
 
-    @_BASE_CLAIMED
     def test_modules_to_save_that_matches_nothing(self) -> None:
         config = LoraConfig(target_modules=["0"], modules_to_save=["absent"])
         with pytest.raises(NoMatchingPeftModuleError, match="modules_to_save"):

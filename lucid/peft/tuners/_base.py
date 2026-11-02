@@ -47,6 +47,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
 from lucid.peft._adapter_file import _AdapterFile
 from lucid.peft._config import PeftConfig, PeftType, PromptLearningConfig, _TargetedConfig
+from lucid.peft._errors import NoMatchingPeftModuleError
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft._refusals import NO_META_DEVICE, NO_STATE_DICT_MATCHING, refuse_value
@@ -1450,7 +1451,7 @@ class _BaseTuner(_AdapterHost, ABC):
             slot.enable_adapters(False)
 
 
-def _not_found(config: _TargetedConfig) -> ValueError:
+def _not_found(config: _TargetedConfig) -> NoMatchingPeftModuleError:
     targets = config.target_modules
     shown = sorted(targets) if isinstance(targets, set) else targets
     message = (
@@ -1461,7 +1462,7 @@ def _not_found(config: _TargetedConfig) -> ValueError:
         message += f" Note: You specified 'layers_to_transform': {config.layers_to_transform}."
     if config.layers_pattern is not None:
         message += f" You also specified 'layers_pattern': {config.layers_pattern}."
-    return ValueError(message)
+    return NoMatchingPeftModuleError(message)
 
 
 def _plan_modules_to_save(
@@ -1472,7 +1473,7 @@ def _plan_modules_to_save(
         return []
     keys = _module_names_matching(model, names)
     if not keys:
-        raise ValueError(f"modules_to_save {names} matched no module of the model")
+        raise NoMatchingPeftModuleError(f"modules_to_save {names} matched no module of the model")
     paths = _parameter_paths(model)
     for key in keys:
         tied = _shared_outside(paths, key, model.get_submodule(key))

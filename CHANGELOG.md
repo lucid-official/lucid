@@ -293,6 +293,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - ViT adapters in the reference's release-5 layout convert
 
+- no-match errors are NoMatchingPeftModuleError
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)
