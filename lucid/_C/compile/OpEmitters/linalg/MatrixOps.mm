@@ -46,7 +46,6 @@ public:
         MPSGraphTensor* x = (__bridge MPSGraphTensor*)ctx.resolve(x_id);
         if (g == nil || x == nil) return false;
         double ord = double_attr(node, "ord", 2.0);
-        bool keepdims = bool_attr(node, "keepdims", false);
         // Pull axis list — if absent or empty, reduce over all axes.
         NSMutableArray<NSNumber*>* axes = [NSMutableArray array];
         if (const auto* v = int_vec_attr(node, "axis_list")) {
@@ -82,20 +81,11 @@ public:
                 [g constantWithScalar:(1.0 / ord) dataType:x.dataType];
             r = [g powerWithPrimaryTensor:s secondaryTensor:inv_ord_c name:nil];
         }
-        // Re-insert reduced axes as size-1 dims when keepdims=true.
-        if (keepdims) {
-            NSMutableArray<NSNumber*>* kept = [NSMutableArray array];
-            std::vector<bool> mask(x.shape.count, false);
-            for (NSNumber* a in axes) {
-                NSInteger p = a.longLongValue;
-                if (p >= 0 && p < (NSInteger)x.shape.count) mask[p] = true;
-            }
-            for (NSUInteger d = 0; d < x.shape.count; ++d) {
-                if (mask[d]) [kept addObject:@1];
-                else [kept addObject:x.shape[d]];
-            }
-            r = [g reshapeTensor:r withShape:kept name:nil];
-        }
+        // MPSGraph keeps the reduced axes at size 1; the trace records the
+        // result with them dropped (keepdims=false) or kept (true), so land on
+        // the trace's shape whichever the attr says.
+        r = reshape_dynamic_aware(g, r, node.outputs[0].shape, @"norm_shape");
+        if (r == nil) return false;
         ctx.bind(node.outputs[0].id, (__bridge void*)(r));
         return true;
     }
@@ -454,7 +444,9 @@ public:
         NSMutableArray<NSNumber*>* all_axes = [NSMutableArray arrayWithCapacity:nd];
         for (NSUInteger d = 0; d < nd; ++d)
             [all_axes addObject:[NSNumber numberWithLongLong:(long long)d]];
-        ctx.bind(node.outputs[0].id, (__bridge void*)([g reductionSumWithTensor:prod axes:all_axes name:@"dot"]));
+        MPSGraphTensor* total = [g reductionSumWithTensor:prod axes:all_axes name:@"dot"];
+        ctx.bind(node.outputs[0].id,
+                 (__bridge void*)([g reshapeTensor:total withShape:@[] name:@"dot_scalar"]));
         return true;
     }
 };
@@ -473,9 +465,9 @@ public:
         if (x.shape.count != 2) return false;
         MPSGraphTensor* band =
             [g bandPartWithTensor:x numLower:0 numUpper:0 name:nil];
-        ctx.bind(node.outputs[0].id, (__bridge void*)([g reductionSumWithTensor:band
-                                                     axes:@[@0, @1]
-                                                     name:@"trace"]));
+        MPSGraphTensor* total = [g reductionSumWithTensor:band axes:@[@0, @1] name:@"trace"];
+        ctx.bind(node.outputs[0].id,
+                 (__bridge void*)([g reshapeTensor:total withShape:@[] name:@"trace_scalar"]));
         return true;
     }
 };

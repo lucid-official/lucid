@@ -1726,7 +1726,7 @@
     "lucid/_C/compile/MpsBuilder.mm": 279,
     "lucid/_C/compile/OpEmitters/elementwise/Compare.mm": 5,
     "lucid/_C/compile/OpEmitters/index/Scatter.mm": 6,
-    "lucid/_C/compile/OpEmitters/linalg/MatrixOps.mm": 38,
+    "lucid/_C/compile/OpEmitters/linalg/MatrixOps.mm": 33,
     "lucid/_C/compile/OpEmitters/nn/Attention.mm": 34,
     "lucid/_C/compile/OpEmitters/nn/Conv.mm": 49,
     "lucid/_C/compile/OpEmitters/nn/Norm.mm": 16,

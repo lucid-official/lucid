@@ -126,6 +126,8 @@ public:
                                          name:nil];
         MPSGraphTensor* r = IS_AND ? [g reductionMinimumWithTensor:truth axes:all_axes name:nil]
                                    : [g reductionMaximumWithTensor:truth axes:all_axes name:nil];
+        // The engine's all / any reduce every axis to a 0-d bool.
+        r = [g reshapeTensor:r withShape:@[] name:nil];
         ctx.bind(node.outputs[0].id,
                  (__bridge void*)([g castTensor:r toType:MPSDataTypeBool name:IS_AND ? @"all" : @"any"]));
         return true;

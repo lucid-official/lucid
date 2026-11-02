@@ -38,10 +38,10 @@ inline std::int64_t reduction_of(const OpNode& node) {
 }
 
 // Apply ``reduction`` to a fully-shaped element-wise loss tensor.
-// Mean / Sum collapse over every axis, leaving an empty-shape (0-D)
-// scalar in MPSGraph — the trace's keepdim=true workaround keeps the
-// tensor shape implicitly broadcast-compatible (the runtime view is
-// still a scalar because the trace's output shape is empty).
+// Mean / Sum collapse over every axis and are squeezed to the 0-D scalar
+// the trace records for the loss (MPSGraph keeps the reduced axes at size
+// 1, and a value bound at another rank than its trace id promotes the next
+// broadcast).
 inline MPSGraphTensor* apply_reduction(MPSGraph* g, MPSGraphTensor* per_sample,
                                         std::int64_t reduction) {
     if (reduction == 0)
@@ -51,9 +51,10 @@ inline MPSGraphTensor* apply_reduction(MPSGraph* g, MPSGraphTensor* per_sample,
         [NSMutableArray arrayWithCapacity:shape.count];
     for (NSUInteger d = 0; d < shape.count; ++d)
         [axes addObject:[NSNumber numberWithLongLong:(long long)d]];
-    if (reduction == 2)
-        return [g reductionSumWithTensor:per_sample axes:axes name:@"loss_sum"];
-    return [g meanOfTensor:per_sample axes:axes name:@"loss_mean"];
+    MPSGraphTensor* reduced =
+        reduction == 2 ? [g reductionSumWithTensor:per_sample axes:axes name:@"loss_sum"]
+                       : [g meanOfTensor:per_sample axes:axes name:@"loss_mean"];
+    return [g reshapeTensor:reduced withShape:@[] name:@"loss_scalar"];
 }
 
 class MseLossEmitter final : public OpEmitter {
