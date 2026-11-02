@@ -276,6 +276,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.compile._optim.lbfgs"
+    },
+    {
+      "kind": "module",
       "module": "lucid.coreml"
     },
     {
@@ -15909,30 +15913,18 @@
     {
       "kind": "module",
       "module": "lucid.nn.modules"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.utils.fusion"
     }
   ],
   "lucid.nn.modules.conv.Conv2d": [
     {
       "kind": "module",
       "module": "lucid.nn.modules"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.utils.fusion"
     }
   ],
   "lucid.nn.modules.conv.Conv3d": [
     {
       "kind": "module",
       "module": "lucid.nn.modules"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.utils.fusion"
     }
   ],
   "lucid.nn.modules.conv.LazyConv1d": [
@@ -16247,30 +16239,18 @@
     {
       "kind": "module",
       "module": "lucid.nn.modules"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.utils.fusion"
     }
   ],
   "lucid.nn.modules.normalization.BatchNorm2d": [
     {
       "kind": "module",
       "module": "lucid.nn.modules"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.utils.fusion"
     }
   ],
   "lucid.nn.modules.normalization.BatchNorm3d": [
     {
       "kind": "module",
       "module": "lucid.nn.modules"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.nn.utils.fusion"
     }
   ],
   "lucid.nn.modules.normalization.GroupNorm": [
@@ -16757,6 +16737,10 @@
     {
       "kind": "module",
       "module": "lucid.compile._entry.step"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.compile._optim.lbfgs"
     },
     {
       "kind": "module",
@@ -17525,6 +17509,10 @@
     {
       "kind": "module",
       "module": "lucid.compile._optim.compiler"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.compile._optim.lbfgs"
     },
     {
       "kind": "module",
