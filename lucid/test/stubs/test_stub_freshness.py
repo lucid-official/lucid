@@ -168,7 +168,8 @@ def test_tensor_self_annotations_are_limited_to_inplace_and_factory() -> None:
     """LCD-523: out-of-place Tensor methods return a base ``Tensor`` even when
     called on a ``Parameter`` subclass, so only constructors that build
     ``cls`` (``__new_from_impl__`` and other ``@classmethod`` factories such as
-    the pickle rebuild hook) and in-place ``*_`` methods may annotate
+    the pickle rebuild hook), the copy protocol (``__copy__`` / ``__deepcopy__``)
+    and in-place ``*_`` methods may annotate
     ``-> Self`` (and no parameter may be typed ``Self``)."""
     import ast
 
@@ -189,9 +190,12 @@ def test_tensor_self_annotations_are_limited_to_inplace_and_factory() -> None:
                 builds_cls = any(
                     isinstance(d, ast.Name) and d.id == "classmethod" for d in item.decorator_list
                 )
+                # The copy protocol returns ``type(self)``, as every subclass copy must.
+                copies_self = item.name in ("__copy__", "__deepcopy__")
                 assert (
                     item.name == "__new_from_impl__"
                     or builds_cls
+                    or copies_self
                     or (item.name.endswith("_") and not item.name.startswith("__"))
                 ), f"{rel}: Tensor.{item.name} must not return Self"
             for arg in item.args.posonlyargs + item.args.args[1:] + item.args.kwonlyargs:
