@@ -451,7 +451,12 @@ def _cumprod_adapter(x_impl: _Impl, dim: int = -1, *, dtype: DTypeLike | None = 
 def _cumext_adapter(
     engine_fn: Callable[[_Impl, int], _Impl], x_impl: _Impl, dim: int = -1
 ) -> _ValuesIndices[_Impl]:
-    """Shared body of ``cummax`` and ``cummin``: ``(values, indices)`` along ``dim``."""
+    """Shared body of ``cummax`` and ``cummin``: ``(values, indices)`` along ``dim``.
+
+    A float output is gathered at its own index, so the values-gradient
+    reaches the element the index names (the later of a tie) -- the engine
+    scan alone credits the earlier one, which disagrees with the indices.
+    """
     axis = operator.index(dim)
     values = engine_fn(x_impl, axis)
     shape = list(x_impl.shape)
@@ -474,6 +479,8 @@ def _cumext_adapter(
         )
         zero = _C_engine.zeros([], _C_engine.I64, x_impl.device)
     indices = _C_engine.cummax(_C_engine.where(hit, pos, zero), d)
+    if not _promotion.is_integral(x_impl.dtype):
+        values = _C_engine.gather(x_impl, indices, d)
     return _ValuesIndices((values, indices))
 
 
@@ -527,14 +534,26 @@ def _extreme_adapter(
     dim: int | Sequence[int] | None,
     keepdim: bool,
 ) -> _Impl | _ValuesIndices[_Impl]:
-    """Shared body of ``max`` and ``min``."""
+    """Shared body of ``max`` and ``min``.
+
+    With an int ``dim`` a float result is gathered at the returned index, so
+    a tie sends its whole gradient to that index (the first extremum), as the
+    reference does.  The tuple/``None`` reductions keep the engine's even
+    split across every extremum.
+    """
     axes = _reduction_axes(x_impl, dim, name)
-    values = val_fn(x_impl, axes, bool(keepdim))
     if dim is None or isinstance(dim, Sequence):
-        return values
+        return val_fn(x_impl, axes, bool(keepdim))
     axis = axes[0] if axes else 0
     idx_in = _C_engine.astype(x_impl, _C_engine.I8) if x_impl.dtype == _C_engine.Bool else x_impl
-    return _ValuesIndices((values, idx_fn(idx_in, axis, bool(keepdim))))
+    if not axes or _promotion.is_integral(x_impl.dtype):
+        values = val_fn(x_impl, axes, bool(keepdim))
+        return _ValuesIndices((values, idx_fn(idx_in, axis, bool(keepdim))))
+    kept = idx_fn(idx_in, axis, True)
+    picked = _C_engine.gather(x_impl, kept, axis)
+    if keepdim:
+        return _ValuesIndices((picked, kept))
+    return _ValuesIndices((_C_engine.squeeze(picked, axis), _C_engine.squeeze(kept, axis)))
 
 
 def _max_adapter(

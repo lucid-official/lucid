@@ -263,6 +263,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - transform log-det refusals, Affine keeps numbers
 
+- max/min(dim) and cummax/cummin gradient follows the index
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

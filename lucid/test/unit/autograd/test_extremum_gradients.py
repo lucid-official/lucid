@@ -160,12 +160,23 @@ _REDUCE_TIES = {
     "max_all": lambda lib, x: x.max(),
     "min_all": lambda lib, x: x.min(),
 }
+# ``max(dim)`` / ``min(dim)`` are the odd ones out: the whole gradient goes
+# to the returned (first) extremum, not an even split.
+for _op in ("max", "min"):
+    for _dim in (0, 1, -1):
+        for _keep in (False, True):
+            _REDUCE_TIES[f"{_op}_dim{_dim}_keep{_keep}"] = (
+                lambda lib, x, _op=_op, _dim=_dim, _keep=_keep: getattr(x.reshape(4, 4), _op)(
+                    dim=_dim, keepdim=_keep
+                )[0]
+            )
 
 
 @pytest.mark.parametrize("name", list(_REDUCE_TIES))
-def test_reduction_ties_split_evenly(ref, device, name):
-    """The siblings' rule: ``amax``/``amin`` and the full ``max``/``min``
-    split a tie evenly across every extremum, as the reference does."""
+def test_reduction_ties_follow_the_reference(ref, device, name):
+    """``amax``/``amin`` and the full ``max``/``min`` split a tie evenly
+    across every extremum; ``max(dim)``/``min(dim)`` send it to the returned
+    index.  Either way the gradient is the reference's."""
     vals = [5.0, 5.0, 1.0, 5.0, -2.0, -2.0, -2.0, 0.0, -0.0, 0.0, -1.0, 1.0, 3.0, 3.0, 3.0, 3.0]
     call = _REDUCE_TIES[name]
 
@@ -175,3 +186,88 @@ def test_reduction_ties_split_evenly(ref, device, name):
         return x.grad.tolist()
 
     _same(run(lucid, device=device), run(ref))
+
+
+# 3-d block with ties on every axis, signed zeros and NaN included.
+_TIE_BLOCK = [
+    [[1.0, 3.0, 3.0, 3.0], [2.0, 3.0, 0.0, 3.0], [3.0, 1.0, 3.0, 1.0]],
+    [[-0.0, 0.0, -0.0, 2.0], [1.0, 1.0, 1.0, 1.0], [_NAN, 2.0, _NAN, 2.0]],
+]
+
+
+def _dim_extremum(lib, op, dim, keepdim, **kw):
+    x = lib.tensor(_TIE_BLOCK, requires_grad=True, **kw)
+    values, indices = getattr(x, op)(dim=dim, keepdim=keepdim)
+    weights = lib.arange(float(values.numel()), **kw).reshape(*values.shape) + 1.0
+    (values * weights).sum().backward()
+    return x.grad.flatten().tolist(), indices.flatten().tolist()
+
+
+@pytest.mark.parametrize("keepdim", [False, True])
+@pytest.mark.parametrize("dim", [0, 1, 2, -1])
+@pytest.mark.parametrize("op", ["max", "min"])
+def test_dim_extremum_gradient_follows_the_returned_index(ref, device, op, dim, keepdim):
+    """Weighted, so a gradient credited to a sibling tie shows."""
+    want_grad, want_idx = _dim_extremum(ref, op, dim, keepdim)
+    got_grad, got_idx = _dim_extremum(lucid, op, dim, keepdim, device=device)
+    assert got_idx == want_idx
+    _same(got_grad, want_grad)
+
+
+@pytest.mark.parametrize("op", ["max", "min"])
+def test_dim_extremum_values_are_the_indexed_elements(device, op):
+    x = lucid.tensor(_TIE_BLOCK, device=device)
+    values, indices = getattr(x, op)(dim=2)
+    gathered = lucid.gather(x, 2, indices.unsqueeze(-1)).squeeze(-1)
+    _same(values.flatten().tolist(), gathered.flatten().tolist())
+
+
+def test_dim_extremum_on_a_scalar_and_an_integer_tensor(device):
+    assert lucid.tensor(3.0, device=device).max(dim=0)[1].item() == 0
+    values, indices = lucid.tensor([[1, 4, 4], [7, 0, 7]], device=device).max(dim=1)
+    assert values.tolist() == [4, 7]
+    assert indices.tolist() == [1, 0]
+
+
+_TIE_POOL_SHAPE = {1: (1, 1, 7), 2: (1, 1, 5, 5), 3: (1, 1, 4, 4, 4)}
+
+_POOL_CALLS = {
+    "dilated": lambda F, n, x: getattr(F, f"max_pool{n}d")(x, 2, stride=1, dilation=2),
+    "adaptive": lambda F, n, x: getattr(F, f"adaptive_max_pool{n}d")(x, (2,) * n),
+    "adaptive_uneven": lambda F, n, x: getattr(F, f"adaptive_max_pool{n}d")(x, (3,) * n),
+}
+
+
+@pytest.mark.parametrize("n", [1, 2, 3])
+@pytest.mark.parametrize("kind", list(_POOL_CALLS))
+def test_pool_fallback_ties_go_to_the_first_maximum(ref, device, kind, n):
+    """The dilated and uneven-adaptive max pools reduce windows in Python;
+    on an all-equal input every window is a tie, and the gradient follows
+    the first-maximum index ``return_indices`` reports."""
+    shape = _TIE_POOL_SHAPE[n]
+
+    def run(lib, **kw):
+        x = lib.ones(*shape, requires_grad=True, **kw)
+        _POOL_CALLS[kind](lib.nn.functional, n, x).sum().backward()
+        return x.grad.flatten().tolist()
+
+    _same(run(lucid, device=device), run(ref))
+
+
+@pytest.mark.parametrize("name", ["cummax", "cummin"])
+@pytest.mark.parametrize("dim", [0, 1])
+def test_cumulative_extreme_values_gradient_follows_its_indices(ref, device, name, dim):
+    """A running extreme's value is a copy of the element its index names,
+    the later of a tie: ``cummax([1, 3, 3])`` credits all three."""
+    block = [[1.0, 3.0, 3.0, 2.0], [2.0, 2.0, 5.0, 5.0], [2.0, 1.0, 1.0, 2.0]]
+
+    def run(lib, **kw):
+        x = lib.tensor(block, requires_grad=True, **kw)
+        values, indices = getattr(lib, name)(x, dim)
+        (values * (lib.arange(12.0, **kw).reshape(3, 4) + 1.0)).sum().backward()
+        return x.grad.flatten().tolist(), indices.flatten().tolist()
+
+    want_grad, want_idx = run(ref)
+    got_grad, got_idx = run(lucid, device=device)
+    assert got_idx == want_idx
+    _same(got_grad, want_grad)

@@ -210,13 +210,17 @@ def _adaptive_pool_python(x: Tensor, output_size: tuple[int, ...], reduce: str) 
     the reference's contract.  Each window is a ``narrow`` and a reduction,
     engine ops both, so the result stays on the input's device with no
     host round-trip.  ``reduce`` is ``"mean"`` for average pooling and
-    ``"max"`` for max pooling; the window geometry is the same for both.
+    ``"max"`` for max pooling; the window geometry is the same for both.  A
+    max window is flattened and reduced with ``max(dim=-1)`` so a tie sends
+    its gradient to the first maximum, the index ``return_indices`` reports.
     """
     n = len(output_size)
     lead = x.ndim - n
     dims = tuple(range(lead, x.ndim))
     values = [
-        window.max(dim=dims) if reduce == "max" else window.mean(dim=dims)
+        window.reshape(*x.shape[:lead], -1).max(dim=-1).values
+        if reduce == "max"
+        else window.mean(dim=dims)
         for _, window in _adaptive_cells(x, output_size)
     ]
     return _lucid.stack(values, dim=-1).reshape(*x.shape[:lead], *output_size)

@@ -148,14 +148,10 @@ _SAVES_OUTPUT: dict[
     "SoftmaxBackward": (_rows, lambda x: F.softmax(x, dim=-1)),
     "LogSoftmaxBackward": (_rows, lambda x: F.log_softmax(x, dim=-1)),
     "CumprodBackward": (_vector, lambda x: lucid.cumprod(x, 0)),
-    "CummaxBackward": (
-        _vector,
-        lambda x: r[0] if isinstance(r := lucid.cummax(x, 0), tuple) else r,
-    ),
-    "CumminBackward": (
-        _vector,
-        lambda x: r[0] if isinstance(r := lucid.cummin(x, 0), tuple) else r,
-    ),
+    # The engine op itself: the public cummax gathers its values from the index.
+    "CummaxBackward": (_vector, _engine(lambda a: _C_engine.cummax(a, 0))),
+    # The engine op itself: the public cummin gathers its values from the index.
+    "CumminBackward": (_vector, _engine(lambda a: _C_engine.cummin(a, 0))),
     "DetBackward": (_spd, lucid.linalg.det),
     "InvBackward": (_spd, lucid.linalg.inv),
     "SolveBackward": (_spd, lambda A: lucid.linalg.solve(A, _rhs(A))),

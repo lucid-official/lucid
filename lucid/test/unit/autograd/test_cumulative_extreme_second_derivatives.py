@@ -1,9 +1,9 @@
 """cummax and cummin differentiate twice.
 
 Each output of a running maximum is a copy of one input, so its gradient
-is a scatter-add onto the positions the extremes came from — positions
-read from the saved output, the same strict comparison the eager backward
-uses, so a tie keeps crediting the earlier element.  The graph-mode form
+is a scatter-add onto the positions the extremes came from.  The values
+are gathered at the returned indices, so a tie credits the later element,
+the one its index names.  The graph-mode form
 is that scatter-add as an op: differentiable in the incoming gradient and,
 rightly, piecewise constant in the input.
 
@@ -63,14 +63,14 @@ def test_the_second_derivative_matches_central_differences(
     assert np.abs(np.asarray(hvp.numpy())).max() > 1e-3
 
 
-def test_a_tie_credits_the_earlier_position_in_both_modes() -> None:
+def test_a_tie_credits_the_indexed_position_in_both_modes() -> None:
     values = [2.0, 1.0, 2.0, 3.0, 3.0]
     grads = []
     for create_graph in (False, True):
         x = lucid.tensor(values, requires_grad=True)
         (g,) = grad(lucid.cummax(x, 0).values.sum(), [x], create_graph=create_graph)
         grads.append(np.asarray(g.numpy()))
-    np.testing.assert_array_equal(grads[0], [3.0, 0.0, 0.0, 2.0, 0.0])
+    np.testing.assert_array_equal(grads[0], [2.0, 0.0, 1.0, 1.0, 1.0])
     np.testing.assert_array_equal(grads[1], grads[0])
 
 
