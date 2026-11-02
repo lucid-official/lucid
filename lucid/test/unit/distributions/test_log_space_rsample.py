@@ -198,3 +198,53 @@ def test_rsample_gradients_are_finite_where_every_gamma_underflowed(c: float, de
     D.Beta(b, b).rsample((2000,)).sum().backward()
     assert a.grad is not None and b.grad is not None
     assert all(math.isfinite(v) for v in _flat(a.grad) + _flat(b.grad)), c
+
+
+# ── FisherSnedecor: a ratio of two gammas, formed on the logarithms ─────────
+
+
+@pytest.mark.parametrize("draw", ["sample", "rsample"])
+@pytest.mark.parametrize("df", [1e-3, 1e-2, 0.5, 5.0])
+def test_fisher_snedecor_stays_inside_the_support_without_a_phantom_one(
+    df: float, draw: str, device: str
+) -> None:
+    # Both chi-squared draws under the float floor used to read tiny / tiny = 1.
+    lucid.manual_seed(4)
+    x = _flat(getattr(D.FisherSnedecor(_t(lucid, device, df), _t(lucid, device, df)), draw)((_N,)))
+    assert all(math.isfinite(v) and v > 0.0 for v in x), (df, draw)
+    assert sum(v == 1.0 for v in x) / _N < 0.005, (df, draw)
+
+
+@pytest.mark.parametrize("df", [1e-2, 0.5, 5.0])
+def test_fisher_snedecor_rsample_and_sample_agree_and_expand_keeps_working(
+    df: float, device: str
+) -> None:
+    lucid.manual_seed(6)
+    dist = D.FisherSnedecor(_t(lucid, device, df, 2.0 * df), _t(lucid, device, 3.0 * df, df))
+    r, s = dist.rsample((_N,)), dist.sample((_N,))
+    for k in range(2):
+        assert _ks(_flat(r[:, k].log()), _flat(s[:, k].log())) < _KS_LIMIT, (df, k)
+    assert tuple(dist.expand((3, 2)).rsample((4,)).shape) == (4, 3, 2)
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("df", [1.0, 5.0])
+def test_fisher_snedecor_rsample_follows_the_reference(
+    df: float, ref: ModuleType, device: str
+) -> None:
+    lucid.manual_seed(8)
+    ref.manual_seed(8)
+    mine = D.FisherSnedecor(_t(lucid, device, df), _t(lucid, device, 2.0 * df)).rsample((_N,))
+    theirs = ref.distributions.FisherSnedecor(_t(ref, "cpu", df), _t(ref, "cpu", 2.0 * df))
+    assert _ks(_flat(mine.log()), _flat(theirs.rsample((_N,)).log())) < _KS_LIMIT, df
+
+
+@pytest.mark.parametrize("df", [1e-2, 1.0, 5.0])
+def test_fisher_snedecor_rsample_gradient_is_finite_and_nonzero(df: float, device: str) -> None:
+    d1 = _t(lucid, device, df).requires_grad_(True)
+    d2 = _t(lucid, device, 2.0 * df).requires_grad_(True)
+    lucid.manual_seed(9)
+    D.FisherSnedecor(d1, d2).rsample((256,)).log().sum().backward()
+    assert d1.grad is not None and d2.grad is not None
+    got = _flat(d1.grad) + _flat(d2.grad)
+    assert all(math.isfinite(v) for v in got) and any(v != 0.0 for v in got), df
