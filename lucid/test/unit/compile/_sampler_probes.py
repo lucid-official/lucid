@@ -256,8 +256,10 @@ class _DistributionDraw(nn.Module):
         self._base = _map_tensors(build_distribution(name), lambda t: t.to(DEVICE))
         widths: list[int] = []
 
+        # A 0-d parameter (a TransformedDistribution base's temperature) is tied as a
+        # length-1 vector, so every float tensor reaches the sampler through ``t @ W``.
         def record(t: Tensor) -> Tensor:
-            widths.append(t.shape[-1])
+            widths.append(t.shape[-1] if t.ndim else 1)
             return t
 
         _map_tensors(self._base, record)
@@ -268,6 +270,8 @@ class _DistributionDraw(nn.Module):
 
         def tie(t: Tensor) -> Tensor:
             weight = next(slots)
+            if not t.ndim:
+                return (F.softplus(t.reshape(1) @ weight) + 0.5).reshape(())
             return F.softplus(t @ weight) + 0.5
 
         tied = _map_tensors(self._base, tie)
