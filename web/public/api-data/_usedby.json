@@ -2168,6 +2168,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.distributions.relaxed"
+    },
+    {
+      "kind": "module",
       "module": "lucid.distributions.transforms"
     },
     {
@@ -2219,6 +2223,10 @@
     {
       "kind": "module",
       "module": "lucid.distributions.constraint_registry"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.distributions.relaxed"
     }
   ],
   "lucid.distributions.transforms.IndependentTransform": [
@@ -2255,6 +2263,10 @@
     {
       "kind": "module",
       "module": "lucid.distributions.constraint_registry"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.distributions.relaxed"
     }
   ],
   "lucid.distributions.transforms.SoftmaxTransform": [
