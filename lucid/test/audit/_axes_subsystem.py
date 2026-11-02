@@ -648,7 +648,14 @@ class DistributionAxis(Axis):
         cdf, icdf = _moment(dist, "cdf"), _moment(dist, "icdf")
         if cdf is None:
             return problems, checked
-        dist._validate_args = False
+        # The distributions it wraps validate on their own (a
+        # ``TransformedDistribution`` hands the preimage to its base), so
+        # the probe turns theirs off too.
+        held = [dist]
+        while held:
+            current = held.pop()
+            current._validate_args = False
+            held += [v for v in vars(current).values() if isinstance(v, _dist_base())]
         # One column of the grid per member of the batch.  A batch-(3,)
         # distribution refuses a length-9 value — the reference raises the
         # same broadcast error — so a flat grid asked only the batch-less
