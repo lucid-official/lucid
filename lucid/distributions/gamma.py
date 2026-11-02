@@ -8,13 +8,14 @@ the residual probability of any unsampled cell below ``2 ** −60``.
 A small concentration puts most of the mass below the smallest float32, so
 the draws are made as logarithms and held in a range the dtype can hold:
 a ``Gamma`` draw at or above ``tiny``, a ``Beta`` or ``Dirichlet`` draw in
-``[tiny, 1 - eps/2]`` — the reference's ranges.  The ``sample`` of ``Beta``
-and ``Dirichlet`` normalises the logarithms directly and stays exact down
-to any concentration; their ``rsample`` normalises the clamped Gamma draws,
-so below a concentration of a few hundredths it loses the ordering of
-components that are all under ``tiny``.
+``[tiny, 1 - eps/2]`` — the reference's ranges.  ``Beta`` and ``Dirichlet``
+normalise the logarithms directly and stay exact down
+to any concentration; their ``rsample`` draws the
+logarithms through ``_StandardLogGamma`` (implicit-reparameterisation gradient
+of ``log G``, finite where ``G`` underflows).
 """
 
+import math
 from collections.abc import Sequence
 from typing import Self, override
 
@@ -177,24 +178,15 @@ _GAMMA_GRAD_COEF_UV: tuple[tuple[float, ...], ...] = (
 )
 
 
-def _standard_gamma_grad(alpha: Tensor, z: Tensor) -> Tensor:
-    r"""Implicit-reparameterisation derivative :math:`\partial z / \partial \alpha = -(\partial P(\alpha, z) / \partial \alpha) / p(z; \alpha)`.
+def _gamma_grad_regimes(alpha: Tensor, x: Tensor, log_x: Tensor) -> tuple[Tensor, Tensor]:
+    r"""The three regimes of :math:`\partial z / \partial \alpha`, as ``(small_over_x, far)``.
 
-    Matches the three-regime approximation in ``standard_gamma_grad_one``
-    (Jankowiak & Obermeyer, 2018):
-      1. ``z < 0.8``: 6-term Taylor series with :math:`z^\alpha / z^{\alpha-1} = z`
-         cancelled analytically.
-      2. ``alpha > 8.0``: Rice saddle-point expansion (with Taylor series near
-         :math:`0.9\alpha \le z \le 1.1\alpha`).
-      3. Otherwise: bivariate rational approximation in
-         :math:`u = \ln(z / \alpha)` and :math:`v = \ln \alpha`.
+    ``small_over_x`` is the ``z < 0.8`` Taylor-series result *divided by* ``z``
+    (the factor cancels analytically, so it is exact even where ``z`` itself
+    rounds to ``0``); ``far`` is the Rice / rational result used for
+    ``z >= 0.8``.  ``x`` and ``log_x`` are passed separately so that a caller
+    holding only :math:`\log z` need not exponentiate it for the small regime.
     """
-    # Floored at the smallest normal float, which is where a sample is held:
-    # a larger floor would price a sample of 1e-38 as one of 1e-30, a
-    # derivative 1e8 times too large for the ratios taken of it.
-    x = z.clamp(min=float(finfo(z.dtype).tiny))
-    log_x = x.log()
-
     # 1. Small-x Taylor series (x < 0.8).
     numer = lucid.ones_like(x)
     denom = alpha
@@ -205,9 +197,7 @@ def _standard_gamma_grad(alpha: Tensor, z: Tensor) -> Tensor:
         denom = denom + 1.0
         series1 = series1 + numer / denom
         series2 = series2 + numer / (denom * denom)
-    small_x_res = (
-        -x * x.clamp(max=20.0).exp() * ((log_x - lucid.digamma(alpha)) * series1 - series2)
-    )
+    small_over_x = -x.clamp(max=20.0).exp() * ((log_x - lucid.digamma(alpha)) * series1 - series2)
 
     # 2. Rice saddle-point expansion (alpha > 8.0).
     near_mode = (x >= 0.9 * alpha) & (x <= 1.1 * alpha)
@@ -243,8 +233,45 @@ def _standard_gamma_grad(alpha: Tensor, z: Tensor) -> Tensor:
     q = cv[4] + v * (cv[5] + v * (cv[6] + v * cv[7]))
     rat_res = (p / q).exp()
 
-    out = lucid.where(alpha > 8.0, rice_res, rat_res)
-    out = lucid.where(x < 0.8, small_x_res, out)
+    return small_over_x, lucid.where(alpha > 8.0, rice_res, rat_res)
+
+
+def _standard_gamma_grad(alpha: Tensor, z: Tensor) -> Tensor:
+    r"""Implicit-reparameterisation derivative :math:`\partial z / \partial \alpha = -(\partial P(\alpha, z) / \partial \alpha) / p(z; \alpha)`.
+
+    Matches the three-regime approximation in ``standard_gamma_grad_one``
+    (Jankowiak & Obermeyer, 2018):
+      1. ``z < 0.8``: 6-term Taylor series with :math:`z^\alpha / z^{\alpha-1} = z`
+         cancelled analytically.
+      2. ``alpha > 8.0``: Rice saddle-point expansion (with Taylor series near
+         :math:`0.9\alpha \le z \le 1.1\alpha`).
+      3. Otherwise: bivariate rational approximation in
+         :math:`u = \ln(z / \alpha)` and :math:`v = \ln \alpha`.
+    """
+    # Floored at the smallest normal float, which is where a sample is held:
+    # a larger floor would price a sample of 1e-38 as one of 1e-30, a
+    # derivative 1e8 times too large for the ratios taken of it.
+    x = z.clamp(min=float(finfo(z.dtype).tiny))
+    small_over_x, far = _gamma_grad_regimes(alpha, x, x.log())
+    out = lucid.where(x < 0.8, x * small_over_x, far)
+    return lucid.where(lucid.isnan(out), lucid.zeros_like(out), out)
+
+
+def _standard_log_gamma_grad(alpha: Tensor, log_z: Tensor) -> Tensor:
+    r"""Implicit-reparameterisation derivative :math:`\partial \log z / \partial \alpha`.
+
+    The derivative of the logarithm is the one that stays exact when
+    :math:`z` is below the smallest float32: in the small regime
+    :math:`\partial z / \partial \alpha` carries a factor :math:`z` that the
+    division by :math:`z` cancels, so it is evaluated from :math:`\log z`
+    alone and is finite for any :math:`\log z` (for :math:`\alpha = 10^{-3}`
+    it is about :math:`-\log z / \alpha`, of order :math:`10^6`).  From
+    :math:`z \ge 0.8` on, :math:`z` is an ordinary number and the quotient is
+    taken directly.
+    """
+    x = log_z.exp().clamp(min=float(finfo(log_z.dtype).tiny))
+    small_over_x, far = _gamma_grad_regimes(alpha, x, log_z)
+    out = lucid.where(log_z < math.log(0.8), small_over_x, far / x)
     return lucid.where(lucid.isnan(out), lucid.zeros_like(out), out)
 
 
@@ -266,6 +293,42 @@ class _StandardGamma(Function):
     def backward(ctx: FunctionCtx, grad_output: Tensor) -> Tensor:
         concentration, sample = ctx.saved_tensors
         return grad_output * _standard_gamma_grad(concentration, sample)
+
+
+class _StandardLogGamma(Function):
+    r"""Differentiable :math:`\log G`, :math:`G \sim \text{Gamma}(\alpha, 1)`, with the implicit gradient.
+
+    The logarithm is what a caller that normalises (:class:`Beta`,
+    :class:`Dirichlet`) needs, and it is held *unclamped*: below a
+    concentration of a few hundredths most draws are under the smallest
+    float32 and clamping the gamma itself throws away which component is
+    larger.  Backward is :math:`\partial \log G / \partial \alpha`
+    (:func:`_standard_log_gamma_grad`), which stays finite where :math:`G`
+    underflows.
+    """
+
+    _traced_backward = True
+
+    @staticmethod
+    @override
+    def forward(ctx: FunctionCtx, concentration: Tensor) -> Tensor:
+        with lucid.no_grad():
+            log_sample = _sample_standard_log_gamma(concentration, ())
+        ctx.save_for_backward(concentration, log_sample)
+        return log_sample
+
+    @staticmethod
+    @override
+    def backward(ctx: FunctionCtx, grad_output: Tensor) -> Tensor:
+        concentration, log_sample = ctx.saved_tensors
+        return grad_output * _standard_log_gamma_grad(concentration, log_sample)
+
+
+def _standard_log_gamma(concentration: Tensor) -> Tensor:
+    """Draw ``log G`` for reparameterised ``G ~ Gamma(concentration, 1)``, unclamped."""
+    out = _StandardLogGamma.apply(concentration)
+    assert isinstance(out, Tensor)
+    return out
 
 
 def _standard_gamma(concentration: Tensor) -> Tensor:
@@ -924,17 +987,18 @@ class Beta(ExponentialFamily):
         Uses :math:`X = G_\alpha / (G_\alpha + G_\beta)` where
         :math:`G_\alpha \sim \text{Gamma}(\alpha, 1)` and
         :math:`G_\beta \sim \text{Gamma}(\beta, 1)` carry implicit-reparameterisation
-        gradients.
+        gradients.  The quotient is the sigmoid of
+        :math:`\log G_\alpha - \log G_\beta`, so it stays ordered at any
+        concentration, where the gammas themselves would underflow.
         """
         shape = self._extended_shape(sample_shape)
         pair = lucid.stack(
             [self.concentration1.expand(shape), self.concentration0.expand(shape)], dim=0
         )
-        g = _standard_gamma(pair)
-        # g[0] / (g[0] + g[1]) as a sigmoid of the logs: both draws can sit
-        # at the float floor, and the quotient's backward then divides by a
-        # square that underflows to 0.
-        return _hold_off_the_boundary(lucid.sigmoid(g[0].log() - g[1].log()))
+        # The logarithms of the two gamma draws, unclamped: X is their
+        # sigmoid-difference, taken before either can round to 0.
+        log_g = _standard_log_gamma(pair)
+        return _hold_off_the_boundary(lucid.sigmoid(log_g[0] - log_g[1]))
 
     @override
     def sample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:
@@ -1267,9 +1331,10 @@ class Dirichlet(ExponentialFamily):
         carry implicit-reparameterisation gradients.
         """
         shape = self._extended_shape(sample_shape)
-        log_g = _standard_gamma(self.concentration.expand(shape)).log()
-        # A softmax of the logs, not gammas / gammas.sum(): at the float floor
-        # the quotient's backward divides by a square that underflows to 0.
+        # A softmax of the unclamped log-draws, not gammas / gammas.sum():
+        # below a concentration of a few hundredths the gammas themselves
+        # round to 0 and the quotient loses which component is larger.
+        log_g = _standard_log_gamma(self.concentration.expand(shape))
         weights = (log_g - log_g.amax(dim=-1, keepdim=True).detach()).exp()
         return _hold_off_the_boundary(weights / weights.sum(dim=-1, keepdim=True))
 

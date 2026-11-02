@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from typing import Self, override
 
 import lucid
+from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import _as_tensor
 from lucid.distributions._util import _broadcast_pair
@@ -1102,13 +1103,9 @@ class FisherSnedecor(Distribution):
         validate_args : bool | None, optional
             If ``True``, validate parameter constraints at construction time.
         """
-        from lucid.distributions.gamma import Chi2
-
         self.df1 = _as_tensor(df1)
         self.df2 = _as_tensor(df2)
         self.df1, self.df2 = _broadcast_pair(self.df1, self.df2)
-        self._chi1 = Chi2(self.df1, validate_args=False)
-        self._chi2 = Chi2(self.df2, validate_args=False)
         super().__init__(
             batch_shape=tuple(self.df1.shape), event_shape=(), validate_args=validate_args
         )
@@ -1116,9 +1113,7 @@ class FisherSnedecor(Distribution):
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`FisherSnedecor` with batch dimensions expanded to ``batch_shape``."""
-        return self._expand_attributes(
-            FisherSnedecor, batch_shape, _instance, "df1", "df2", "_chi1", "_chi2"
-        )
+        return self._expand_attributes(FisherSnedecor, batch_shape, _instance, "df1", "df2")
 
     @override
     @property
@@ -1181,13 +1176,33 @@ class FisherSnedecor(Distribution):
         :math:`X \sim \chi^2(d_1)` and :math:`Y \sim \chi^2(d_2)` carry
         implicit-reparameterisation gradients.
         """
-        from lucid.distributions.gamma import _standard_gamma
+        from lucid.distributions.gamma import _standard_log_gamma
 
         shape = self._extended_shape(sample_shape)
         pair = lucid.stack([self.df1.expand(shape) * 0.5, self.df2.expand(shape) * 0.5], dim=0)
-        g = _standard_gamma(pair) * 2.0
-        x, y = g[0], g[1]
-        return (x / self.df1) / (y / self.df2)
+        log_g = _standard_log_gamma(pair)
+        return self._ratio_from_logs(log_g[0], log_g[1])
+
+    def _ratio_from_logs(self, log_x: Tensor, log_y: Tensor) -> Tensor:
+        """``(X / d1) / (Y / d2)`` from the logs of the two gamma draws, ``X = 2 G1``, ``Y = 2 G2``.
+
+        The quotient is formed on the logarithms: at a small ``df`` both
+        chi-squared draws are under the smallest float32, and dividing them
+        after the clamp would read ``tiny / tiny = 1`` whichever is larger.
+        The result is held in the dtype's normal range (``tiny`` to ``max``),
+        the interior of the support, with the gradient of the unclamped value.
+        """
+        from lucid.distributions.gamma import _hold_in_range
+
+        info = finfo(log_x.dtype)
+        log_f = (log_x - log_y) + (self.df2.log() - self.df1.log())
+        # A margin inside the ends: ``exp`` of a float32 that rounds just past
+        # ``log(max)`` is ``inf``, and just below ``log(tiny)`` a denormal.
+        margin = 1e-3
+        held = _hold_in_range(
+            log_f, math.log(float(info.tiny)) + margin, math.log(float(info.max)) - margin
+        )
+        return held.exp()
 
     @override
     def sample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:
@@ -1207,9 +1222,12 @@ class FisherSnedecor(Distribution):
         Tensor
             Positive samples of shape ``(*sample_shape, *batch_shape)``.
         """
-        x: Tensor = self._chi1.sample(sample_shape)
-        y: Tensor = self._chi2.sample(sample_shape)
-        return (x / self.df1) / (y / self.df2)
+        from lucid.distributions.gamma import _sample_standard_log_gamma
+
+        with lucid.no_grad():
+            log_x = _sample_standard_log_gamma(self.df1 * 0.5, sample_shape)
+            log_y = _sample_standard_log_gamma(self.df2 * 0.5, sample_shape)
+            return self._ratio_from_logs(log_x, log_y).detach()
 
     @override
     def log_prob(self, value: Tensor) -> Tensor:

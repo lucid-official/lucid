@@ -3,7 +3,8 @@
 Covers:
 1. Built-in ``_traced_backward = True`` ``Function`` subclasses:
    - ``_FakeQuantizeAffine`` (``Q.fake_quantize`` and ``Q.prepare_qat``)
-   - ``_StandardGamma`` (``Gamma.rsample``, ``Beta.rsample``, ``Dirichlet.rsample``)
+   - ``_StandardGamma`` (``Gamma.rsample``)
+   - ``_StandardLogGamma`` (``Beta.rsample``, ``Dirichlet.rsample``, ``FisherSnedecor.rsample``)
    - ``_LogAbsDet`` (``lucid.linalg.slogdet``)
    - ``_MatrixPowerZero`` (``lucid.linalg.matrix_power(A, 0)``)
 2. User-defined ``Function`` subclasses with ``_traced_backward = True``:

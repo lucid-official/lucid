@@ -269,6 +269,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - one guard per function, installed where it is defined
 
+- keep Beta/Dirichlet rsample ordered at tiny alpha
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

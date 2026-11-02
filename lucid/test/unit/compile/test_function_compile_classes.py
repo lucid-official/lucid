@@ -48,6 +48,7 @@ TRACED_BACKWARD: frozenset[str] = frozenset(
         "_MatrixPowerZero",
         "_LogAbsDet",
         "_StandardGamma",
+        "_StandardLogGamma",
         "_FakeQuantizeAffine",
         "_CholeskyAutograd",
         "_SVD",

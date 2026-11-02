@@ -45,6 +45,7 @@ _DIST_OVERRIDES: dict[str, Callable[[], D.Distribution]] = {
 #: member missing here fails the guard instead of going unprobed.
 FUNCTION_ENTRY: dict[str, str] = {
     "_StandardGamma": "dist:Gamma",
+    "_StandardLogGamma": "dist:Beta",
     "_MatrixPowerZero": "fn:matrix_power0",
     "_LogAbsDet": "fn:slogdet",
     "_FakeQuantizeAffine": "fn:fake_quantize",
