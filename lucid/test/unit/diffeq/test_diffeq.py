@@ -2179,22 +2179,6 @@ class TestImplicitMethods:
         assert got[1][0] == pytest.approx(math.exp(-0.37), abs=1e-6)
         assert got[2][0] == pytest.approx(self.DECAY_EXACT, abs=1e-8)
 
-    def test_warns_when_the_solve_will_not_converge(self) -> None:
-        # One iteration cannot resolve a stiff step, and a step that silently
-        # used an unconverged iterate would look like a successful solve.
-        def stiff(t: lucid.Tensor, y: lucid.Tensor) -> lucid.Tensor:
-            return -1000.0 * y
-
-        with pytest.warns(RuntimeWarning, match="did not converge"):
-            diffeq.odeint(
-                stiff,
-                lucid.tensor([1.0], dtype=lucid.float64),
-                _grid(4),
-                method="gl6",
-                options={"max_iters": 1},
-                return_trajectory=False,
-            )
-
     @pytest.mark.parametrize(
         ("options", "match"),
         [

@@ -32,6 +32,10 @@ methods — :data:`IMPLICIT_EULER`, :data:`IMPLICIT_MIDPOINT`, :data:`TRAPEZOID`
 is expensive but is what lets them take large steps on a stiff problem, where
 an explicit method is held to tiny ones by stability alone.
 
+A fixed-step implicit method that cannot solve a step's stage equations raises
+:class:`ImplicitSolveError`, naming the method, the time and the stage, rather
+than carrying on from an iterate that does not satisfy them.
+
 Everything here is reached as ``lucid.diffeq.*`` and nowhere else — there are
 no top-level aliases and no ``Tensor`` methods, so each name has exactly one
 canonical path.
@@ -142,6 +146,7 @@ TRBDF2 : ButcherTableau
 """
 
 from lucid.diffeq._adjoint import odeint_adjoint
+from lucid.diffeq._implicit import ImplicitSolveError
 from lucid.diffeq._solvers import odeint, odeint_dense, odeint_event
 from lucid.diffeq._tableau import (
     ADAPTIVE_HEUN,
@@ -174,6 +179,7 @@ __all__ = [
     "odeint_dense",
     "odeint_event",
     "ButcherTableau",
+    "ImplicitSolveError",
     "DOPRI5",
     "DOPRI8",
     "TSIT5",

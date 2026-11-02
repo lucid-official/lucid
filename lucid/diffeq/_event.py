@@ -265,7 +265,8 @@ def integrate_until_event(
 
             return find_event(interp_adaptive, step.t0, step.t1, event_fn, scalar)
     else:
-        fixed_opts = _fixed.parse_options(options)
+        implicit_opts = _implicit.parse_options(options) if tableau.is_implicit else None
+        fixed_opts = implicit_opts.fixed if implicit_opts else _fixed.parse_options(options)
         if fixed_opts.step_size is None:
             raise ValueError(
                 f"method {tableau.name!r} is a fixed-step method, so an event "
@@ -279,8 +280,6 @@ def integrate_until_event(
         # recipe below would read coefficients that do not belong to it.  Its
         # steps come from the nonlinear solve instead; everything after that —
         # bracketing, the Hermite fit, the bisection — is shared.
-        implicit_opts = _implicit.parse_options(options) if tableau.is_implicit else None
-
         for index in range(_MAX_EVENT_STEPS):
             t_next = t_cur + dt
             if implicit_opts is not None:

@@ -14,16 +14,20 @@ size.  On a stiff problem an explicit method is forced into steps far smaller
 than the solution's own timescale; an implicit one is not, and wins on total
 cost despite losing badly per step.
 
-The system is solved with Broyden's method: a quasi-Newton iteration that
-builds up an approximate Jacobian from the residuals it has already seen,
-rather than computing a real one.  That keeps the solver from having to
-differentiate the right-hand side — which would mean running nested autograd
-inside a solve that may itself already be under grad — and matches what the
-reference implementation does.
+The system is solved with a damped, simplified Newton iteration.  Its Jacobian
+is a real one -- reverse-mode differentiation of the stage residual -- factorised
+once and reused while the iteration keeps contracting, then re-taken when it
+stalls.  A quasi-Newton iteration that *estimates* the Jacobian from residuals
+(the reference implementation's Broyden) starts from the identity and has no
+way to know a stiff problem's Jacobian is thousands of times larger; on
+Robertson's kinetics or a stiff Van der Pol oscillator it takes steps that are
+wrong by orders of magnitude and then settles for a "best iterate".  A solve
+that cannot converge raises :class:`ImplicitSolveError` instead: these are
+fixed-step methods, so there is no smaller step to retry with, and an iterate
+that does not satisfy the stage equations is not a step.
 """
 
 import math
-import warnings
 from dataclasses import dataclass
 from typing import Callable
 
@@ -31,11 +35,12 @@ import lucid
 import lucid.linalg as linalg
 from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
+from lucid.autograd import jacobian
 from lucid.diffeq import _fixed, _fused
 from lucid.diffeq._tableau import ButcherTableau
 from lucid.diffeq._typing import RightHandSide, ScalarFactory, StageCheck
 
-__all__: list[str] = []
+__all__: list[str] = ["ImplicitSolveError"]
 
 
 _DEFAULT_MAX_ITERS = 100
@@ -52,17 +57,36 @@ _DEFAULT_MAX_ITERS = 100
 # These are targets, not promises: an absolute residual bound is not always
 # reachable, because the residual's own noise floor scales with the problem
 # rather than with the number written here.  What guarantees termination is
-# the step test in :func:`_broyden`, not this table.
+# the step test in :class:`_Newton`, not this table.
 _TOL_BY_DTYPE = {"float64": 1e-12, "float32": 1e-6, "float16": 1e-3}
 _FALLBACK_TOL = 1e-6
 
-# Multiple of the state's machine epsilon at which a Broyden step stops being
+# Multiple of the state's machine epsilon at which a Newton step stops being
 # able to move the iterate.  Adding a step of eps*||x|| to x changes x by
 # about one unit in the last place, so a step below that is arithmetic noise
 # and iterating on it cannot improve anything.  The margin covers the residual
 # noise the step is computed from, which is a small multiple of eps*||x||
 # rather than eps*||x|| exactly.
 _STEP_FLOOR_FACTOR = 16.0
+
+# A pass that leaves more than this fraction of the residual means the held
+# Jacobian has gone stale; it is re-taken at the current iterate.  One half is
+# the usual contraction test for simplified Newton.
+_REFRESH_RATIO = 0.1
+
+# The damped step is accepted once it lowers the residual norm by this
+# fraction of the step length (Armijo's condition), and halved at most this
+# many times before the pass is declared a failure.
+_SUFFICIENT_DECREASE = 1e-4
+_MAX_HALVINGS = 20
+
+# Newton steps differentiated at the root to attach a gradient to it.  Each
+# settles one order of derivative; three give second-order differentiation
+# through the solve (create_graph) as well as the first.
+_POLISH_PASSES = 3
+
+# Dtypes the linear algebra does not factorise natively.
+_HALF_DTYPES = (lucid.float16, lucid.bfloat16)
 
 _IMPLICIT_KEYS = frozenset({"max_iters"})
 
@@ -128,131 +152,270 @@ def _tolerance(y: Tensor) -> float:
     return _TOL_BY_DTYPE.get(str(y.dtype).rsplit(".", 1)[-1], _FALLBACK_TOL)
 
 
-def _broyden(
-    residual: Callable[[Tensor], Tensor], guess: Tensor, max_iters: int, tol: float, where: str
-) -> Tensor:
-    """Solve ``residual(x) == 0`` by Broyden's method, starting from ``guess``.
+class ImplicitSolveError(RuntimeError):
+    """An implicit method's nonlinear stage solve failed.
+
+    A fixed-step implicit method has no step to shrink, so a stage system the
+    Newton iteration cannot solve leaves nothing honest to return: the
+    iterate it stopped on does not satisfy the stage equations, and carrying
+    on from it is how a stiff solve ends in ``NaN`` fifty steps later.  The
+    solve stops here instead and says where.
+
+    Parameters
+    ----------
+    method : str
+        Name of the implicit method.
+    t : float
+        Start time of the failing step.
+    stage : int or None
+        Index of the stage whose system failed, or ``None`` when all stages
+        are solved together.
+    reason : str
+        What went wrong.
+
+    Attributes
+    ----------
+    method : str
+        Name of the implicit method.
+    t : float
+        Start time of the failing step.
+    stage : int or None
+        Failing stage, or ``None`` for a coupled solve.
+
+    Notes
+    -----
+    Taking a smaller step (``options={"step_size": ...}`` or a finer ``t``
+    grid) makes the stage system easier, and a larger ``max_iters`` helps
+    when the reason names the iteration budget.
+    """
+
+    def __init__(self, method: str, t: float, stage: int | None, reason: str) -> None:
+        self.method = method
+        self.t = t
+        self.stage = stage
+        where = "" if stage is None else f", stage {stage}"
+        super().__init__(
+            f"implicit method {method!r} failed to solve its stage equations at "
+            f"t={t!r}{where}: {reason}. Use a smaller step (a finer t grid or "
+            f"options['step_size']) so the stage system stays within reach of "
+            f"the Newton iteration"
+        )
+
+
+@dataclass(frozen=True)
+class _Site:
+    """Where a stage solve is happening, for the error it may have to raise."""
+
+    method: str
+    t: float
+    stage: int | None
+
+    def failure(self, reason: str) -> ImplicitSolveError:
+        return ImplicitSolveError(self.method, self.t, self.stage, reason)
+
+
+@dataclass(frozen=True)
+class _Iterate:
+    """A point of the Newton iteration, with the numbers it is judged by."""
+
+    x: Tensor
+    f: Tensor
+    residual_sq: float
+    state_sq: float
+
+
+@dataclass(frozen=True)
+class _Move:
+    """An accepted Newton step, and whether it reached the precision floor."""
+
+    iterate: _Iterate
+    settled: bool
+
+
+class _Newton:
+    """Damped, simplified Newton iteration for one stage system.
 
     Parameters
     ----------
     residual : callable
         The function to drive to zero.  Takes and returns a flat vector.
-    guess : Tensor
-        Starting point; a good one costs iterations, not correctness.
     max_iters : int
-        Ceiling on iterations.
+        Ceiling on Newton iterations.
     tol : float
         Converged once the residual's Euclidean norm falls below this.
-    where : str
-        Human-readable location, used only in the non-convergence warning.
-
-    Returns
-    -------
-    Tensor
-        The best point found.
+    site : _Site
+        Where the solve is happening, named in the error if it fails.
 
     Notes
     -----
-    Broyden approximates the Jacobian instead of computing one, updating it by
-    the rank-one correction that makes it consistent with the step just taken:
+    The Jacobian is a real one, taken by reverse-mode differentiation of the
+    residual at the current iterate and factorised once.  It is held fixed
+    for as long as the iteration keeps contracting (*simplified* Newton, as
+    Radau implementations do) and re-taken at the current iterate when a pass
+    contracts the residual by less than :data:`_REFRESH_RATIO` or finds no
+    descent at all.  The Jacobian is differentiated at a detached copy of the
+    iterate, so no second-order graph is recorded; the iterates themselves
+    stay in the caller's graph, which is what carries gradients through the
+    solve to whatever the right-hand side closes over.
 
-    .. math::
+    Each pass is damped: the Newton step is halved until it lowers the
+    residual norm.  With a current Jacobian the step is a descent direction
+    for the squared residual, so a short enough step always exists, and that
+    is what stops a far-off start on a stiff problem from overshooting into
+    a region the right-hand side cannot be evaluated in.
 
-        J \\leftarrow J + \\frac{(\\Delta F - J \\Delta x)\\,\\Delta x^{T}}
-                                {\\Delta x^{T} \\Delta x}
+    The iteration finishes for one of three reasons.  The residual meets
+    ``tol``.  Or the step falls below ``eps * (1 + ||x||)`` of the state's
+    precision: a step that small cannot change the iterate, so the residual's
+    own noise floor, not ``tol``, is what is stopping it -- on a stiff
+    problem in float32 an absolute ``tol`` is often unreachable.  Or it
+    cannot converge, and raises :class:`ImplicitSolveError`: a singular
+    Jacobian, no damped step that lowers the residual from a fresh Jacobian,
+    or the iteration budget spent.  Handing back the last iterate instead
+    would pass off a step that does not satisfy its own equations as a
+    finished one.
 
-    It starts from the identity, which is a poor Jacobian but a safe one — the
-    first step is then simply ``-F``, and the approximation improves from
-    there.
-
-    The iteration stops for one of two good reasons and one bad one.  It has
-    converged when the residual meets ``tol``.  It has finished when the step
-    falls below ``eps * (1 + ||x||)`` — a step that small cannot change the
-    iterate at the state's precision, so further passes would burn iterations
-    to return the same answer.  That second test is what makes an unreachable
-    ``tol`` harmless: an absolute residual bound assumes the residual can be
-    driven that low, and on a stiff problem in float32 it often cannot, since
-    the residual's own noise floor rises with the stiffness.  Judging the step
-    instead measures against the state's magnitude, which is where the
-    precision limit actually lives, and needs no tuned patience count.
-
-    A step test alone would not do, and neither would a stagnation test: the
-    approximate Jacobian starts as the identity, so the first few passes make
-    little progress before the approximation becomes useful, and reading that
-    warm-up as failure makes the iteration abandon a step it was about to
-    solve.  A short step is immune to that confusion in a way a flat residual
-    is not — while the Jacobian is still the identity the step *is* the
-    residual, so a warm-up pass is never a short one.
-
-    Two further ways out, both returning the last trustworthy iterate rather
-    than a wrong answer dressed up as a right one: a singular approximate
-    Jacobian stops the iteration immediately, and exhausting ``max_iters``
-    warns.  Silence in either case would mean a step that looks successful and
-    is not.
-
-    Each iteration needs several scalars on the host -- the residual norm, the
-    solve's status, and the step and state norms -- and asking for them one at
-    a time is what an implicit solve on the GPU actually spends its time on:
-    MLX evaluates lazily, so every read waits on the whole queued pipeline.
-    :func:`lucid.diffeq._fused.broyden_probe` returns them all from one pass,
-    leaving a single synchronisation per iteration.
+    Each trial needs several scalars on the host -- the residual norm, the
+    step and state norms -- and asking for them one at a time is what an
+    implicit solve on the GPU actually spends its time on: MLX evaluates
+    lazily, so every read waits on the whole queued pipeline.
+    :func:`lucid.diffeq._fused.broyden_probe` returns them all from one pass.
     """
-    x = guess
-    f = residual(x)
-    size = int(f.shape[0])
-    jacobian = lucid.eye(size, dtype=f.dtype, device=f.device)
-    # Seeded once so the first pass has something to test; every later value
-    # comes from the probe below, which measures the residual it has just
-    # produced.  That is what lets one probe answer both this iteration's
-    # step questions and the next one's convergence question.
-    residual_sq, _, _, _ = _fused.broyden_probe(f, f, x)
-    # Keyed on the state rather than on the promoted probe dtype: what limits
-    # the iteration is the precision `x + step` is accumulated at.
-    floor = _STEP_FLOOR_FACTOR * finfo(x.dtype).eps
 
-    for _ in range(max_iters):
-        if residual_sq <= tol * tol:
-            return x
+    def __init__(
+        self, residual: Callable[[Tensor], Tensor], max_iters: int, tol: float, site: _Site
+    ) -> None:
+        self._residual = residual
+        self._max_iters = max_iters
+        self._tol_sq = tol * tol
+        self._site = site
 
-        column, info = linalg.solve_ex(jacobian, (-f).reshape(size, 1))
-        step = column.reshape(size)
-        x_next = x + step
-        f_next = residual(x_next)
+    def solve(self, guess: Tensor) -> Tensor:
+        """Return the root of the residual found from ``guess``.
 
-        residual_sq, step_sq, state_sq, singular = _fused.broyden_probe(
-            f_next, column, x_next, info
+        Raises
+        ------
+        ImplicitSolveError
+            If the iteration cannot reach a root.
+
+        Notes
+        -----
+        The iteration runs outside the autograd graph, and the gradient is
+        attached afterwards by differentiating a few more Newton steps taken
+        at the root with a Jacobian taken there.  They return the same value
+        to within the residual, and because the root satisfies ``F == 0``
+        whatever Jacobian is used, they carry the derivative of the root
+        itself, :math:`-J^{-1}\\,\\partial F / \\partial\\theta`.
+
+        Differentiating the iterations instead would be right only to the
+        extent they had stopped moving: a step taken far from the root
+        evaluates :math:`\\partial F / \\partial\\theta` there, not at the
+        root, and the derivative lags the value by a pass.  It would also keep
+        every trial's graph alive.  Each pass at the root settles one more
+        order of derivative, so :data:`_POLISH_PASSES` of them make
+        ``create_graph=True`` through the solve right to second order.  They
+        are taken only when something upstream requires a gradient.
+        """
+        with lucid.no_grad():
+            root = self._converge(guess)
+        if not lucid.is_grad_enabled():
+            return root
+        f = self._residual(root)
+        if not f.requires_grad:
+            return root
+        packed, pivots = self._factorise(root)
+        x = root - self._newton_step(packed, pivots, f)
+        for _ in range(_POLISH_PASSES - 1):
+            x = x - self._newton_step(packed, pivots, self._residual(x))
+        return x
+
+    def _newton_step(self, packed: Tensor, pivots: Tensor, f: Tensor) -> Tensor:
+        """``J^-1 f`` from the factors of ``J``, in ``f``'s dtype."""
+        size = int(f.shape[0])
+        rhs = f.reshape(size, 1)
+        if rhs.dtype != packed.dtype:
+            rhs = rhs.to(packed.dtype)
+        step = linalg.lu_solve(packed, pivots, rhs).reshape(size)
+        return step if step.dtype == f.dtype else step.to(f.dtype)
+
+    def _converge(self, guess: Tensor) -> Tensor:
+        """Newton iteration proper; see :meth:`solve`."""
+        current = self._evaluate(guess)
+        # Keyed on the state rather than on the promoted probe dtype: what
+        # limits the iteration is the precision `x + step` is accumulated at.
+        floor = _STEP_FLOOR_FACTOR * finfo(guess.dtype).eps
+        factor: tuple[Tensor, Tensor] | None = None
+        fresh = False
+
+        for _ in range(self._max_iters):
+            if current.residual_sq <= self._tol_sq:
+                return current.x
+            if factor is None:
+                factor, fresh = self._factorise(current.x), True
+
+            move = self._damped_step(factor, current, floor)
+            if move is None:
+                if fresh:
+                    raise self._site.failure(
+                        "no damped Newton step lowers the residual from a freshly "
+                        "evaluated Jacobian"
+                    )
+                factor = None
+                continue
+
+            slow = move.iterate.residual_sq > _REFRESH_RATIO**2 * current.residual_sq
+            if move.settled:
+                return move.iterate.x
+            current = move.iterate
+            if slow:
+                factor = None
+            fresh = False
+
+        if current.residual_sq <= self._tol_sq:
+            return current.x
+        raise self._site.failure(
+            f"the residual is still {math.sqrt(current.residual_sq):.3e} after {self._max_iters} iterations"
         )
 
-        # A singular approximation carries no information about where to go
-        # next, and a zero step means the iteration has stalled; either way
-        # the last trustworthy iterate is the one before this step.  The
-        # residual just computed is discarded along with it -- evaluating it
-        # before knowing the step was usable costs nothing on the common path
-        # and only this one wasted call on a path that is already ending.
-        if singular != 0.0 or step_sq == 0.0:
-            return x
+    def _evaluate(self, x: Tensor) -> _Iterate:
+        f = self._residual(x)
+        residual_sq, _, state_sq, _ = _fused.broyden_probe(f, f, x)
+        return _Iterate(x, f, residual_sq, state_sq)
 
-        # Below the floor the step is smaller than the rounding of the
-        # addition that applied it, so `x_next` is as far as this precision
-        # goes.  It is the better of the two iterates, so it is the one kept.
-        limit = floor * (1.0 + math.sqrt(state_sq))
-        if step_sq <= limit * limit:
-            return x_next
+    def _factorise(self, x: Tensor) -> tuple[Tensor, Tensor]:
+        """LU factors of the residual's Jacobian at ``x``."""
+        jac = jacobian(self._residual, x.detach())
+        assert isinstance(jac, Tensor)
+        if jac.dtype in _HALF_DTYPES:
+            jac = jac.to(lucid.float32)
+        packed, pivots, info = linalg.lu_factor_ex(jac)
+        if int(info.item()) != 0:
+            raise self._site.failure("the Jacobian of the stage equations is singular")
+        return packed, pivots
 
-        change = f_next - f
-        correction = change - (jacobian @ column).reshape(size)
-        outer = correction.reshape(size, 1) * step.reshape(1, size)
-        jacobian = jacobian + outer / step_sq
-        x, f = x_next, f_next
+    def _damped_step(
+        self, factor: tuple[Tensor, Tensor], current: _Iterate, floor: float
+    ) -> _Move | None:
+        """Halve the Newton step until it lowers the residual; ``None`` if none does."""
+        step = -self._newton_step(*factor, current.f)
 
-    if residual_sq > tol * tol:
-        warnings.warn(
-            f"implicit solve did not converge at {where} after {max_iters} "
-            f"iterations; the step was taken with the best iterate found",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-    return x
+        damping = 1.0
+        for _ in range(_MAX_HALVINGS + 1):
+            x = current.x + damping * step
+            f = self._residual(x)
+            residual_sq, step_sq, state_sq, _ = _fused.broyden_probe(f, step, x)
+            limit = floor * (1.0 + math.sqrt(state_sq))
+            # A Newton step below the floor is smaller than the rounding of
+            # the addition that applies it, so `x` is as far as this precision
+            # goes whether or not the residual fell.  It is the *undamped*
+            # step that is judged: a damped one is short because it was
+            # shortened, which says nothing about how close the root is.
+            if step_sq <= limit * limit:
+                return _Move(_Iterate(x, f, residual_sq, state_sq), settled=True)
+            if residual_sq <= (1.0 - _SUFFICIENT_DECREASE * damping) ** 2 * current.residual_sq:
+                return _Move(_Iterate(x, f, residual_sq, state_sq), settled=False)
+            damping *= 0.5
+        return None
 
 
 def _step(
@@ -268,13 +431,18 @@ def _step(
 ) -> Tensor:
     """Advance one step, solving the tableau's stage equations.
 
+    Raises
+    ------
+    ImplicitSolveError
+        If a stage system cannot be solved.
+
     Notes
     -----
     Diagonally implicit tableaux are solved stage by stage; the rest are
     solved as one coupled system.  The distinction is worth making because
-    Broyden carries a dense Jacobian: ``s`` solves over ``n`` unknowns need
-    ``n**2`` entries, one solve over ``s*n`` unknowns needs ``s**2`` times
-    that.
+    the Newton iteration carries a dense Jacobian: ``s`` solves over ``n``
+    unknowns need ``n**2`` entries, one solve over ``s*n`` unknowns needs
+    ``s**2`` times that.
     """
     shape = y.shape
     width = math.prod(shape)
@@ -297,11 +465,10 @@ def _step(
                 value = check(func(scalar(stage_t[i]), stage_y), step_index, i)
                 return flat - value.reshape(width)
 
-            seed = check(func(scalar(stage_t[i]), known), step_index, i)
-            solved = _broyden(
-                residual, seed.reshape(width), opts.max_iters, tol, f"t={t0!r}, stage {i}"
+            newton = _Newton(residual, opts.max_iters, tol, _Site(tableau.name, t0, i))
+            ks.append(
+                newton.solve(lucid.zeros(width, dtype=y.dtype, device=y.device)).reshape(shape)
             )
-            ks.append(solved.reshape(shape))
         return _fused.combine(y, ks, tableau.b, dt)
 
     # Fully implicit: every stage sees every other, so they solve together.
@@ -316,10 +483,8 @@ def _step(
             out.append(rows[i].reshape(width) - value.reshape(width))
         return lucid.concat(out, dim=0)
 
-    initial = check(func(scalar(t0), y), step_index, 0).reshape(width)
-    solved = _broyden(
-        coupled, lucid.concat([initial] * stages, dim=0), opts.max_iters, tol, f"t={t0!r}"
-    )
+    newton = _Newton(coupled, opts.max_iters, tol, _Site(tableau.name, t0, None))
+    solved = newton.solve(lucid.zeros(stages * width, dtype=y.dtype, device=y.device))
     ks = [solved[i * width : (i + 1) * width].reshape(shape) for i in range(stages)]
     return _fused.combine(y, ks, tableau.b, dt)
 

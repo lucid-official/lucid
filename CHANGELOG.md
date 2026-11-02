@@ -277,6 +277,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - compiled AdamW reads decoupled_weight_decay from the group
 
+- damped Newton for implicit solvers, dtype warn, aliases
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

@@ -25,6 +25,7 @@ from typing import Callable, Sequence, SupportsFloat, cast
 
 import lucid
 from lucid._C import engine as _C_engine
+from lucid._dtype import finfo
 from lucid._dispatch import _unwrap, _wrap
 from lucid._tensor.tensor import Tensor
 from lucid.diffeq import _adaptive, _event, _fixed, _flatten, _fused, _implicit, _multistep
@@ -37,6 +38,36 @@ from lucid.diffeq._typing import EventFunction, RightHandSide, ScalarFactory, St
 _combine = _fused.combine
 
 __all__ = ["odeint", "odeint_dense", "odeint_event"]
+
+
+def _fold(name: str) -> str:
+    """Spell ``name`` the way method names are compared: lower case, no separators."""
+    return name.lower().replace("_", "").replace("-", "")
+
+
+def _alias_table() -> dict[str, str]:
+    """Map each folded method name to its registered spelling.
+
+    The registered names mix conventions -- ``"radauIIA3"`` next to
+    ``"implicit_euler"`` -- and the constants that carry them are spelled
+    ``RADAU_IIA3``, so ``"radau_iia3"`` is as natural a thing to type as the
+    registered form.  Comparing folded names accepts every such spelling; two
+    registered names folding together would make that ambiguous, which is
+    caught here at import rather than as a wrong solver at run time.
+    """
+    table: dict[str, str] = {}
+    for name in (*_METHODS, *_multistep.METHODS):
+        if table.setdefault(_fold(name), name) != name:
+            raise ValueError(f"method names {table[_fold(name)]!r} and {name!r} fold together")
+    return table
+
+
+_METHOD_ALIASES = _alias_table()
+
+
+def _canonical_name(method: str) -> str:
+    """The registered spelling of ``method``, or ``method`` itself if unknown."""
+    return _METHOD_ALIASES.get(_fold(method), method)
 
 
 def _resolve_method(method: str | ButcherTableau | None) -> ButcherTableau:
@@ -65,7 +96,7 @@ def _resolve_method(method: str | ButcherTableau | None) -> ButcherTableau:
     if isinstance(method, ButcherTableau):
         return method
     if isinstance(method, str):
-        tableau = _METHODS.get(method)
+        tableau = _METHODS.get(_canonical_name(method))
         if tableau is None:
             known = ", ".join(sorted({*_METHODS, *_multistep.METHODS}))
             raise ValueError(f"unknown method {method!r}; expected one of: {known}")
@@ -89,7 +120,7 @@ def _multistep_kind(method: str | ButcherTableau | None) -> bool | None:
         method that a tableau describes.
     """
     if isinstance(method, str):
-        return _multistep.METHODS.get(method)
+        return _multistep.METHODS.get(_canonical_name(method))
     return None
 
 
@@ -350,6 +381,62 @@ def _warn_coarse_interpolant(tableau: ButcherTableau, what: str) -> None:
     )
 
 
+def _warn_unreachable_tolerance(
+    y0: Tensor, rtol: float, atol: float, tableau: ButcherTableau, multistep: bool | None
+) -> None:
+    """Warn when the tolerances ask for more precision than the state holds.
+
+    Parameters
+    ----------
+    y0 : Tensor
+        Initial state; its dtype is the precision the solve is carried out in.
+    rtol, atol : float
+        The caller's tolerances.
+    tableau : ButcherTableau
+        The resolved method.
+    multistep : bool or None
+        The Adams variant, or ``None`` for a Runge-Kutta method.
+
+    Notes
+    -----
+    A state held to ``p`` bits cannot be told apart from its neighbours below
+    the unit roundoff ``u = eps / 2``, so a step controller asked for an error
+    under about ``u`` per unit of state is steering by rounding noise: it
+    accepts or rejects steps at random and, in half precision, returns values
+    that are simply wrong.  Nothing about that is visible from the result --
+    on a float16 or bfloat16 state the default tolerances (``1e-7`` and
+    ``1e-9``, far below ``u``) return a finite, plausible, wrong trajectory.
+
+    The test is on ``rtol + atol``, the per-unit-of-state error a state of
+    magnitude one is allowed.  Each alone is not the quantity that matters:
+    ``atol`` is an absolute bound, so judging it against a relative precision
+    assumes a state scale, and a deliberately tiny ``atol`` beside a sensible
+    ``rtol`` is ordinary practice.  Judged on the sum, float32 with the
+    defaults (``1.01e-7`` against ``u = 6e-8``) is fine, as it is in practice,
+    while float16 and bfloat16 are not.
+
+    Only methods that read the tolerances are checked.  A fixed-step
+    explicit or implicit method ignores them, so a warning there would be
+    about numbers nothing uses.
+    """
+    uses_tolerances = multistep is not None or (tableau.is_adaptive and not tableau.is_implicit)
+    if not uses_tolerances:
+        return
+    roundoff = finfo(y0.dtype).eps / 2.0
+    if rtol + atol >= roundoff:
+        return
+    warnings.warn(
+        f"rtol={rtol:g} and atol={atol:g} ask for more precision than {y0.dtype} "
+        f"can hold: its unit roundoff is {roundoff:.3g}, so the effective floor "
+        f"on rtol + atol is about {roundoff:.3g}. Below it the step controller "
+        f"is steering by rounding noise and the result can be wrong without "
+        f"any other sign. Loosen rtol/atol to at least {roundoff:.3g}, or "
+        f"integrate in a wider dtype.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
+
 @dataclass(frozen=True)
 class _Problem:
     """One flat initial-value problem and everything its solvers share."""
@@ -532,19 +619,18 @@ def odeint(
         Strictly monotonic 1-D grid of at least two finite time points.
         Descending grids integrate backwards in time.
     rtol : float, default=1e-7
-        Relative tolerance.  Adaptive methods only.
+        Relative tolerance.  Adaptive methods only; warns when ``rtol + atol``
+        is below the state dtype's unit roundoff (``6e-8`` for float32).
     atol : float, default=1e-9
         Absolute tolerance.  Adaptive methods only.
     method : str or ButcherTableau or None, default=None
         ``None`` selects ``"dopri5"``.  Otherwise one of ``"dopri5"``,
-        ``"dopri8"``, ``"tsit5"``, ``"bosh3"``, ``"fehlberg2"``,
-        ``"adaptive_heun"``,
-        ``"euler"``, ``"midpoint"``, ``"heun2"``, ``"heun3"``, ``"rk4"``,
-        ``"rk4_classic"``,
+        ``"dopri8"``, ``"tsit5"``, ``"bosh3"``, ``"fehlberg2"``, ``"adaptive_heun"``,
+        ``"euler"``, ``"midpoint"``, ``"heun2"``, ``"heun3"``, ``"rk4"``, ``"rk4_classic"``,
         ``"explicit_adams"``, ``"implicit_adams"``, ``"fixed_adams"``,
-        ``"implicit_euler"``, ``"implicit_midpoint"``, ``"trapezoid"``,
-        ``"radauIIA3"``, ``"radauIIA5"``, ``"gl4"``, ``"gl6"``, ``"sdirk2"``,
-        ``"trbdf2"``, or a custom :class:`ButcherTableau`.
+        ``"implicit_euler"``, ``"implicit_midpoint"``, ``"trapezoid"``, ``"radauIIA3"``,
+        ``"radauIIA5"``, ``"gl4"``, ``"gl6"``, ``"sdirk2"``, ``"trbdf2"``, or a custom
+        :class:`ButcherTableau`.  Case and ``_`` are ignored: ``"radau_iia3"`` works.
     options : dict or None, default=None
         Per-method settings.  Adaptive methods accept ``min_step``,
         ``max_step``, ``first_step``, ``step_t``, ``jump_t``, ``safety``,
@@ -565,9 +651,9 @@ def odeint(
         steps can contribute regardless of ``max_order``.
 
         Implicit methods accept the fixed-step keys plus ``max_iters``
-        (default 100), the ceiling on iterations of the nonlinear solve.  A
-        step whose solve runs out of iterations warns rather than passing off
-        an unconverged iterate as a completed step.
+        (default 100), the ceiling on Newton iterations per stage solve.  A
+        step whose solve cannot converge raises :class:`ImplicitSolveError`
+        rather than passing off an unconverged iterate as a completed step.
     event_fn : callable or None, default=None
         ``g(t, y)`` returning a single-element tensor.  When given, the solve
         ignores every entry of ``t`` but the first, runs until ``g`` changes
@@ -607,7 +693,7 @@ def odeint(
         if ``func`` returns something other than a tensor.
     RuntimeError
         If an adaptive solve exceeds ``max_num_steps`` or its step size
-        collapses.
+        collapses, or (:class:`ImplicitSolveError`) a stage solve fails.
 
     Notes
     -----
@@ -654,11 +740,11 @@ def odeint(
     if not y0.is_floating_point():
         raise ValueError(f"y0 must have a floating dtype for integration, got {y0.dtype}")
 
+    _warn_unreachable_tolerance(y0, rtol, atol, tableau, multistep)
     scalar, check = _make_callbacks(y0)
-
-    # A time grid that asks for a gradient is kept in the graph.  A fixed-step
-    # solve that steps on that grid differentiates its own arithmetic; every
-    # other route attaches the exact solution's sensitivity to the times.
+    # A time grid that asks for a gradient stays in the graph: a fixed-step solve
+    # on it differentiates its own arithmetic, every other route attaches the
+    # exact solution's sensitivity to the times.
     times = TimeGrid.of(t, grid)
     probe = RhsProbe(func, scalar, check)
     problem = _Problem(func, y0, grid, tableau, scalar, check, rtol, atol, options)
@@ -678,8 +764,7 @@ def odeint(
             y = times.tie_final(y, y0, probe)
         return y if shapes is None else tuple(_flatten.unflatten(y, shapes))
     # Promotion can lift the state above y0's dtype (a float64 RHS over a
-    # float32 y0), which would leave trajectory[0] as the odd one out and
-    # make the stack fail.  Settle the whole trajectory on the final dtype.
+    # float32 y0), leaving trajectory[0] odd one out; settle on the final dtype.
     trajectory = [s if s.dtype == y.dtype else s.to(y.dtype) for s in trajectory]
     stacked = lucid.stack(trajectory, dim=0)
     if times is not None and not exact_steps:
@@ -783,6 +868,7 @@ def odeint_dense(
     if not y0.is_floating_point():
         raise ValueError(f"y0 must have a floating dtype for integration, got {y0.dtype}")
 
+    _warn_unreachable_tolerance(y0, rtol, atol, tableau, None)
     scalar, check = _make_callbacks(y0)
 
     if tableau.is_implicit:
