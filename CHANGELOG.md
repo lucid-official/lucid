@@ -281,6 +281,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse LBFGS options the compiled step ignores
 
+- fusion refuses train mode and covers transposed convs
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

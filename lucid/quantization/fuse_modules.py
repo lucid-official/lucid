@@ -69,8 +69,10 @@ def _fuse_run(mods: Sequence[nn.Module]) -> list[nn.Module]:
     if isinstance(first, _CONV_TYPES):
         conv: nn.Module = first
         rest = list(mods[1:])
-        if rest and isinstance(rest[0], (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
-            conv = cast("nn.Module", fuse_conv_bn_eval(conv, rest.pop(0)))
+        norm = rest[0] if rest else None
+        if isinstance(norm, (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)):
+            rest.pop(0)
+            conv = fuse_conv_bn_eval(first, norm)
         if rest and isinstance(rest[0], nn.ReLU):
             rest.pop(0)
             return [_conv_relu(conv, nn.ReLU()), *ids]

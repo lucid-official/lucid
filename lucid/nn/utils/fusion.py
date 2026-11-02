@@ -2,33 +2,126 @@
 lucid.nn.utils.fusion — inference-time layer fusion utilities.
 
 The canonical entry point is ``fuse_conv_bn_eval(conv, bn)`` which
-returns a new Conv2d-like module with the BatchNorm's running
-statistics + affine parameters absorbed into the conv's weight and
-bias.  The result computes exactly the same thing as ``bn(conv(x))``
-*at eval time* but with one fewer kernel launch.
+returns a new conv module with the BatchNorm's running statistics +
+affine parameters absorbed into the conv's weight and bias.  The result
+computes exactly the same thing as ``bn(conv(x))`` *at eval time* but
+with one fewer kernel launch.
 
 Only valid in evaluation mode (when BN uses its frozen running
-statistics rather than batch statistics).  Calling this on a training
-graph silently produces incorrect results — guard with ``module.eval()``.
+statistics rather than batch statistics), so the module-level entry
+points refuse a module in training mode, as the reference does.
 """
 
 import copy as _copy_module
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import Self
 
 import lucid as _lucid
-from lucid.nn.modules.conv import Conv1d, Conv2d, Conv3d
+from lucid._tensor.tensor import Tensor
+from lucid.nn.modules.conv import _ConvNd
+from lucid.nn.modules.conv_transpose import _ConvTransposeNd
 from lucid.nn.modules.linear import Linear
-from lucid.nn.modules.normalization import BatchNorm1d, BatchNorm2d, BatchNorm3d
-
-if TYPE_CHECKING:
-    from lucid._tensor.tensor import Tensor
+from lucid.nn.modules.normalization import _BatchNormBase
+from lucid.nn.parameter import Parameter
 
 
-_CONV_TYPES = (Conv1d, Conv2d, Conv3d)
-_BN_TYPES = (BatchNorm1d, BatchNorm2d, BatchNorm3d)
+@dataclass(frozen=True)
+class _BatchNormState:
+    """The BatchNorm tensors a fold reads, as constants (no graph, no grad)."""
+
+    mean: Tensor
+    var: Tensor
+    eps: float
+    weight: Tensor | None
+    bias: Tensor | None
+
+    @classmethod
+    def of(cls, bn: _BatchNormBase, *modules: _ConvNd | _ConvTransposeNd | Linear) -> Self:
+        """Read ``bn``, refusing training mode and a BatchNorm with no running statistics."""
+        if bn.training or any(module.training for module in modules):
+            raise AssertionError("Fusion only for eval!")
+        mean, var = bn.running_mean, bn.running_var
+        if isinstance(mean, Tensor) and isinstance(var, Tensor):
+            return cls(mean, var, bn.eps, bn.weight, bn.bias)
+        raise AssertionError("bn.running_mean and bn.running_var must not be None")
+
+    @property
+    def features(self) -> int:
+        return int(self.mean.shape[0])
+
+    def scale(self) -> Tensor:
+        """``gamma / sqrt(var + eps)``, with ``gamma = 1`` when there is no affine."""
+        inv_std = _lucid.rsqrt(self.var.detach() + self.eps)
+        return inv_std if self.weight is None else inv_std * self.weight.detach()
+
+    def fold_bias(self, bias: Tensor | None, out_features: int) -> Tensor:
+        """``(bias - mean) * scale + beta``, a missing ``bias`` being zero."""
+        if bias is None:
+            bias = _lucid.zeros(out_features, dtype=self.mean.dtype, device=self.mean.device)
+        folded = (bias.detach() - self.mean.detach()) * self.scale()
+        return folded if self.bias is None else folded + self.bias.detach()
 
 
-def fuse_conv_bn_eval(conv: object, bn: object) -> object:
+def _as_parameters(
+    weight: Tensor, bias: Tensor, source_w: Tensor, source_b: Tensor | None
+) -> tuple[Parameter, Parameter]:
+    """Wrap the fused tensors as parameters of the source's dtype and ``requires_grad``.
+
+    A missing source bias leaves a fresh bias that does not require grad —
+    what the reference gives.
+    """
+    bias_dtype = source_b.dtype if source_b is not None else source_w.dtype
+    return (
+        Parameter(weight.to(dtype=source_w.dtype), requires_grad=source_w.requires_grad),
+        Parameter(
+            bias.to(dtype=bias_dtype),
+            requires_grad=source_b.requires_grad if source_b is not None else False,
+        ),
+    )
+
+
+def _scaled_weight(weight: Tensor, scale: Tensor, transpose: bool, groups: int) -> Tensor:
+    """Scale ``weight`` per output channel — dim 0, or dim 1 (per group) when transposed."""
+    tail = (1,) * (weight.ndim - 2)
+    if not transpose:
+        return weight * scale.reshape((-1, 1, *tail))
+    if groups == 1:
+        return weight * scale.reshape((1, -1, *tail))
+    # A grouped transposed weight is (in, out / groups, *k); the groups sit in dim 0.
+    in_channels, per_group = int(weight.shape[0]), int(weight.shape[1])
+    grouped = weight.reshape((groups, in_channels // groups, per_group, *weight.shape[2:]))
+    return (grouped * scale.reshape((groups, 1, per_group, *tail))).reshape(tuple(weight.shape))
+
+
+def _fuse_conv_tensors(
+    conv_w: Tensor, conv_b: Tensor | None, bn: _BatchNormState, transpose: bool, groups: int
+) -> tuple[Parameter, Parameter]:
+    channels = int(conv_w.shape[1]) * groups if transpose else int(conv_w.shape[0])
+    if bn.features != channels:
+        raise ValueError(
+            f"fuse_conv_bn_weights: the BatchNorm has {bn.features} features but the "
+            f"convolution has {channels} output channels"
+        )
+    weight = _scaled_weight(conv_w.detach(), bn.scale(), transpose, groups)
+    return _as_parameters(weight, bn.fold_bias(conv_b, channels), conv_w, conv_b)
+
+
+def _fuse_linear_tensors(
+    linear_w: Tensor, linear_b: Tensor | None, bn: _BatchNormState
+) -> tuple[Parameter, Parameter]:
+    out_features = int(linear_w.shape[0])
+    if bn.features not in (out_features, 1):
+        raise ValueError(
+            f"fuse_linear_bn_weights: the BatchNorm has {bn.features} features but the "
+            f"linear layer has {out_features} outputs"
+        )
+    weight = linear_w.detach() * bn.scale().reshape((-1, 1))
+    return _as_parameters(weight, bn.fold_bias(linear_b, out_features), linear_w, linear_b)
+
+
+def fuse_conv_bn_eval[ConvT: (_ConvNd | _ConvTransposeNd)](
+    conv: ConvT, bn: _BatchNormBase, transpose: bool = False
+) -> ConvT:
     r"""Fold a BatchNorm layer into the preceding Conv weights (inference-only).
 
     Because BN at eval time is an affine map with frozen statistics, the
@@ -40,13 +133,15 @@ def fuse_conv_bn_eval(conv: object, bn: object) -> object:
 
     Parameters
     ----------
-    conv : Conv1d | Conv2d | Conv3d
+    conv : Conv1d | Conv2d | Conv3d | ConvTranspose1d | ConvTranspose2d | ConvTranspose3d
         Convolution module whose weight / bias will absorb the BN.
     bn : BatchNorm1d | BatchNorm2d | BatchNorm3d
-        BatchNorm whose rank matches ``conv``.  Must be in eval mode (or
-        otherwise be using its frozen ``running_mean`` /
-        ``running_var``); calling on a training-mode graph silently
-        yields wrong outputs.
+        BatchNorm whose rank matches ``conv`` and whose feature count is
+        the convolution's output channel count.
+    transpose : bool, optional
+        ``True`` for a transposed convolution, whose weight keeps the
+        output channels in dim 1 (``(in, out / groups, *kernel)``).  Must
+        agree with the type of ``conv``.  Default ``False``.
 
     Returns
     -------
@@ -58,6 +153,12 @@ def fuse_conv_bn_eval(conv: object, bn: object) -> object:
     ------
     TypeError
         If ``conv`` or ``bn`` is not one of the supported types.
+    AssertionError
+        If ``conv`` or ``bn`` is in training mode, or ``bn`` keeps no
+        running statistics (``track_running_stats=False``).
+    ValueError
+        If ``transpose`` disagrees with the type of ``conv``, or the
+        BatchNorm's feature count is not the convolution's output channels.
 
     Notes
     -----
@@ -92,48 +193,23 @@ def fuse_conv_bn_eval(conv: object, bn: object) -> object:
     >>> (fused(x) - bn(conv(x))).abs().max().item() < 1e-4
     True
     """
-    if not isinstance(conv, _CONV_TYPES):
-        raise TypeError(f"fuse_conv_bn_eval: conv must be Conv1d/2d/3d, got {type(conv).__name__}")
-    if not isinstance(bn, _BN_TYPES):
+    if not isinstance(conv, (_ConvNd, _ConvTransposeNd)):
+        raise TypeError(
+            f"fuse_conv_bn_eval: conv must be a Conv or ConvTranspose module, "
+            f"got {type(conv).__name__}"
+        )
+    if not isinstance(bn, _BatchNormBase):
         raise TypeError(f"fuse_conv_bn_eval: bn must be BatchNorm1d/2d/3d, got {type(bn).__name__}")
+    if transpose != isinstance(conv, _ConvTransposeNd):
+        raise ValueError(
+            f"fuse_conv_bn_eval: transpose={transpose} does not match {type(conv).__name__}"
+        )
+    state = _BatchNormState.of(bn, conv)
 
     fused = _copy_module.deepcopy(conv)
-
-    # Pull out the relevant tensors as detached leaves on the conv's device.
-    eps = float(bn.eps)
-    running_mean = bn.running_mean.detach()
-    running_var = bn.running_var.detach()
-    gamma = bn.weight.detach() if bn.affine and bn.weight is not None else None
-    beta = bn.bias.detach() if bn.affine and bn.bias is not None else None
-
-    # scale = γ / sqrt(σ² + ε)  (γ defaults to 1 if affine is off)
-    inv_std = (running_var + eps).rsqrt()
-    scale = inv_std if gamma is None else gamma * inv_std
-
-    # Broadcast scale to weight shape: (out_channels, 1, 1, ...).
-    weight = fused.weight.detach()
-    out_channels = int(weight.shape[0])
-    scale_view = scale.reshape(out_channels, *([1] * (weight.ndim - 1)))
-    new_weight = weight * scale_view
-
-    # bias: start from (-running_mean) if conv had no bias.
-    old_bias: Tensor
-    if fused.bias is not None:
-        old_bias = fused.bias.detach()
-    else:
-        old_bias = _lucid.zeros(out_channels, dtype=weight.dtype, device=weight.device)
-    new_bias = (old_bias - running_mean) * scale
-    if beta is not None:
-        new_bias = new_bias + beta
-
-    # Write back as parameters on the fused module.
-    from lucid.nn.parameter import Parameter
-
-    fused.weight = Parameter(new_weight)
-    if fused.bias is None:
-        fused.bias = Parameter(new_bias)
-    else:
-        fused.bias = Parameter(new_bias)
+    fused.weight, fused.bias = _fuse_conv_tensors(
+        fused.weight, fused.bias, state, transpose, fused.groups
+    )
     return fused
 
 
@@ -145,7 +221,8 @@ def fuse_conv_bn_weights(
     bn_eps: float,
     bn_w: Tensor | None,
     bn_b: Tensor | None,
-) -> tuple[Tensor, Tensor]:
+    transpose: bool = False,
+) -> tuple[Parameter, Parameter]:
     r"""Low-level form of :func:`fuse_conv_bn_eval` operating on raw tensors.
 
     Takes the relevant Conv and BN tensors as plain arguments and
@@ -171,11 +248,22 @@ def fuse_conv_bn_weights(
         ``affine=False``.
     bn_b : Tensor or None
         BatchNorm affine bias :math:`\beta`, or ``None``.
+    transpose : bool, optional
+        ``True`` if ``conv_w`` is a transposed-convolution weight
+        ``(in_channels, out_channels, *kernel)``, whose output channels are
+        in dim 1.  Default ``False``.
 
     Returns
     -------
-    (Tensor, Tensor)
-        Fused ``(weight, bias)`` on the same dtype / device as ``conv_w``.
+    (Parameter, Parameter)
+        Fused ``(weight, bias)`` on the dtype / device of ``conv_w``; the
+        weight keeps ``conv_w.requires_grad``.
+
+    Raises
+    ------
+    ValueError
+        If the BatchNorm's feature count is not the convolution's output
+        channel count.
 
     Notes
     -----
@@ -200,24 +288,11 @@ def fuse_conv_bn_weights(
     >>> W.shape, b.shape
     ((16, 3, 3, 3), (16,))
     """
-    out_channels = int(conv_w.shape[0])
-    inv_std = (bn_rv + bn_eps).rsqrt()
-    scale = inv_std if bn_w is None else bn_w * inv_std
-    scale_view = scale.reshape(out_channels, *([1] * (conv_w.ndim - 1)))
-    new_weight = conv_w * scale_view
-
-    bias = (
-        conv_b
-        if conv_b is not None
-        else _lucid.zeros(out_channels, dtype=conv_w.dtype, device=conv_w.device)
-    )
-    new_bias = (bias - bn_rm) * scale
-    if bn_b is not None:
-        new_bias = new_bias + bn_b
-    return new_weight, new_bias
+    state = _BatchNormState(bn_rm, bn_rv, bn_eps, bn_w, bn_b)
+    return _fuse_conv_tensors(conv_w, conv_b, state, transpose, 1)
 
 
-def fuse_linear_bn_eval(linear: object, bn: object) -> object:
+def fuse_linear_bn_eval[LinearT: Linear](linear: LinearT, bn: _BatchNormBase) -> LinearT:
     r"""Fold a BatchNorm1d into the preceding Linear weights (inference-only).
 
     The 1-D analogue of :func:`fuse_conv_bn_eval` — absorbs the BN's
@@ -230,9 +305,9 @@ def fuse_linear_bn_eval(linear: object, bn: object) -> object:
     linear : Linear
         Linear layer to absorb the BN into.
     bn : BatchNorm1d
-        BatchNorm whose feature dimension matches ``linear.out_features``.
-        Must be in eval mode (or otherwise be using its frozen
-        statistics).
+        BatchNorm whose feature dimension matches ``linear.out_features``
+        (or is ``1``, which broadcasts).  Must be in eval mode and keep
+        running statistics.
 
     Returns
     -------
@@ -244,7 +319,11 @@ def fuse_linear_bn_eval(linear: object, bn: object) -> object:
     ------
     TypeError
         If ``linear`` is not :class:`~lucid.nn.modules.linear.Linear` or
-        ``bn`` is not :class:`~lucid.nn.modules.normalization.BatchNorm1d`.
+        ``bn`` is not a BatchNorm.
+    AssertionError
+        If ``linear`` or ``bn`` is in training mode, ``bn`` keeps no running
+        statistics, or its feature count is neither ``linear.out_features``
+        nor ``1``.
 
     Notes
     -----
@@ -266,22 +345,17 @@ def fuse_linear_bn_eval(linear: object, bn: object) -> object:
     """
     if not isinstance(linear, Linear):
         raise TypeError(f"fuse_linear_bn_eval: linear must be Linear, got {type(linear).__name__}")
-    if not isinstance(bn, BatchNorm1d):
-        raise TypeError(f"fuse_linear_bn_eval: bn must be BatchNorm1d, got {type(bn).__name__}")
-
-    from lucid.nn.parameter import Parameter
+    if not isinstance(bn, _BatchNormBase):
+        raise TypeError(f"fuse_linear_bn_eval: bn must be a BatchNorm, got {type(bn).__name__}")
+    state = _BatchNormState.of(bn, linear)
+    if linear.out_features != bn.num_features and bn.num_features != 1:
+        raise AssertionError(
+            f"To fuse, linear.out_features == bn.num_features or bn.num_features == 1, "
+            f"got linear.out_features={linear.out_features} and bn.num_features={bn.num_features}"
+        )
 
     fused = _copy_module.deepcopy(linear)
-    eps = float(bn.eps)
-    rm = bn.running_mean.detach()
-    rv = bn.running_var.detach()
-    gamma = bn.weight.detach() if bn.affine and bn.weight is not None else None
-    beta = bn.bias.detach() if bn.affine and bn.bias is not None else None
-
-    conv_b = fused.bias.detach() if fused.bias is not None else None
-    new_w, new_b = fuse_conv_bn_weights(fused.weight.detach(), conv_b, rm, rv, eps, gamma, beta)
-    fused.weight = Parameter(new_w)
-    fused.bias = Parameter(new_b)
+    fused.weight, fused.bias = _fuse_linear_tensors(fused.weight, fused.bias, state)
     return fused
 
 
@@ -293,7 +367,7 @@ def fuse_linear_bn_weights(
     bn_eps: float,
     bn_w: Tensor | None,
     bn_b: Tensor | None,
-) -> tuple[Tensor, Tensor]:
+) -> tuple[Parameter, Parameter]:
     r"""Low-level form of :func:`fuse_linear_bn_eval` operating on raw tensors.
 
     Internally identical to :func:`fuse_conv_bn_weights` — a Linear's
@@ -320,9 +394,14 @@ def fuse_linear_bn_weights(
 
     Returns
     -------
-    (Tensor, Tensor)
-        Fused ``(weight, bias)`` on the same dtype / device as
-        ``linear_w``.
+    (Parameter, Parameter)
+        Fused ``(weight, bias)`` on the dtype / device of ``linear_w``.
+
+    Raises
+    ------
+    ValueError
+        If the BatchNorm's feature count is neither ``linear_w.shape[0]``
+        nor ``1``.
 
     Notes
     -----
@@ -347,4 +426,6 @@ def fuse_linear_bn_weights(
     >>> W.shape, b.shape
     ((64, 128), (64,))
     """
-    return fuse_conv_bn_weights(linear_w, linear_b, bn_rm, bn_rv, bn_eps, bn_w, bn_b)
+    return _fuse_linear_tensors(
+        linear_w, linear_b, _BatchNormState(bn_rm, bn_rv, bn_eps, bn_w, bn_b)
+    )
