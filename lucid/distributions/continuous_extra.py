@@ -1125,15 +1125,16 @@ class FisherSnedecor(Distribution):
     def mean(self) -> Tensor:
         """Mean of the F-distribution: :math:`E[X] = d_2 / (d_2 - 2)`.
 
-        Defined only for :math:`d_2 > 2`; returns ``inf`` or ``nan`` otherwise.
+        Defined only for :math:`d_2 > 2`; ``nan`` at or below it, where the
+        integral diverges.  The closed form evaluated there would be
+        negative (or ``inf`` at :math:`d_2 = 2`), which no distribution has.
 
         Returns
         -------
         Tensor
             Mean values of shape ``batch_shape``.
         """
-        # Defined for d2 > 2.
-        return self.df2 / (self.df2 - 2.0)
+        return lucid.where(self.df2 > 2.0, self.df2 / (self.df2 - 2.0), float("nan"))
 
     @override
     @property
@@ -1158,16 +1159,19 @@ class FisherSnedecor(Distribution):
         :math:`\operatorname{Var}[X] = 2 d_2^2 (d_1 + d_2 - 2) /
         [d_1 (d_2 - 2)^2 (d_2 - 4)]`
 
-        Defined only for :math:`d_2 > 4`.
+        Defined only for :math:`d_2 > 4`; ``nan`` at or below it, as the
+        reference framework answers.  Outside that range the closed form
+        changes sign (or divides by zero at :math:`d_2 = 2, 4`) instead of
+        diverging.
 
         Returns
         -------
         Tensor
             Variance values of shape ``batch_shape``.
         """
-        # Defined for d2 > 4.
         d1, d2 = self.df1, self.df2
-        return 2.0 * d2 * d2 * (d1 + d2 - 2.0) / (d1 * (d2 - 2.0) ** 2 * (d2 - 4.0))
+        closed = 2.0 * d2 * d2 * (d1 + d2 - 2.0) / (d1 * (d2 - 2.0) ** 2 * (d2 - 4.0))
+        return lucid.where(d2 > 4.0, closed, float("nan"))
 
     @override
     def rsample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:

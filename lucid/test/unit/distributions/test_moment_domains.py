@@ -16,6 +16,8 @@ valid on and returned a *negative* variance rather than the divergence it
 stands for.
 """
 
+import itertools
+
 import numpy as np
 import pytest
 
@@ -214,3 +216,220 @@ def test_binomial_keeps_its_precision_at_a_tiny_probability() -> None:
     got = _scalar(dist.log_prob(_T(10.0)))
     expected = float(np.log(184756.0) + 10.0 * np.log(1e-8) + 10.0 * np.log1p(-1e-8))
     assert np.isclose(got, expected, rtol=1e-9), (got, expected)
+
+
+# ── LCD-680: a moment is nan or +inf outside its domain, never a number ──────
+#
+# ``FisherSnedecor.mean`` and ``.variance`` and ``StudentT.mean`` evaluated
+# their closed form with no domain mask: F(5, 1.5) had mean -3.0 and F(5, 3)
+# variance -21.6, F(5, 2) mean +inf where the reference answers nan, and
+# StudentT(df=1) the location where the integral does not exist.  The table
+# below states each family's thresholds once; the parity sweep underneath it
+# holds Lucid to the reference over a wider grid than the table.
+
+_NAN = "nan"
+_INF = "inf"
+
+DEVICES = ["cpu", "metal"]
+
+
+def _tt(values: object, device: str) -> lucid.Tensor:
+    return lucid.tensor(np.asarray(values, dtype=np.float32), device=device)
+
+
+def _check(got: float, expected: object, what: str) -> None:
+    if expected == _NAN:
+        assert np.isnan(got), (what, got)
+    elif expected == _INF:
+        assert np.isposinf(got), (what, got)
+    else:
+        assert np.isclose(got, expected, rtol=1e-4, atol=1e-6), (what, got, expected)
+
+
+# (family, constructor kwargs, moment, expected).  Thresholds of F and
+# StudentT first, then the other families whose moment diverges or does not
+# exist at a valid parameter.
+_MOMENT_TABLE = [
+    # F: mean needs d2 > 2, variance needs d2 > 4; nan on and below the edge.
+    ("FisherSnedecor", {"df1": 5.0, "df2": 0.25}, "mean", _NAN),
+    ("FisherSnedecor", {"df1": 5.0, "df2": 1.0}, "mean", _NAN),
+    ("FisherSnedecor", {"df1": 5.0, "df2": 1.5}, "mean", _NAN),
+    ("FisherSnedecor", {"df1": 5.0, "df2": 2.0}, "mean", _NAN),
+    ("FisherSnedecor", {"df1": 3.0, "df2": 3.0}, "mean", 3.0),
+    ("FisherSnedecor", {"df1": 5.0, "df2": 4.0}, "mean", 2.0),
+    ("FisherSnedecor", {"df1": 3.0, "df2": 1.0}, "variance", _NAN),
+    ("FisherSnedecor", {"df1": 5.0, "df2": 0.5}, "variance", _NAN),
+    ("FisherSnedecor", {"df1": 5.0, "df2": 2.0}, "variance", _NAN),
+    ("FisherSnedecor", {"df1": 5.0, "df2": 3.0}, "variance", _NAN),
+    ("FisherSnedecor", {"df1": 5.0, "df2": 4.0}, "variance", _NAN),
+    ("FisherSnedecor", {"df1": 5.0, "df2": 6.0}, "variance", 2 * 36 * 9 / (5 * 16 * 2)),
+    ("FisherSnedecor", {"df1": 5.0, "df2": 6.0}, "stddev", np.sqrt(2 * 36 * 9 / (5 * 16 * 2))),
+    ("FisherSnedecor", {"df1": 5.0, "df2": 3.0}, "stddev", _NAN),
+    # StudentT: mean needs df > 1; variance needs df > 2 (inf on (1, 2]).
+    ("StudentT", {"df": 0.5, "loc": 2.0}, "mean", _NAN),
+    ("StudentT", {"df": 1.0, "loc": 2.0}, "mean", _NAN),
+    ("StudentT", {"df": 1.5, "loc": 2.0}, "mean", 2.0),
+    ("StudentT", {"df": 5.0, "loc": 2.0}, "mean", 2.0),
+    ("StudentT", {"df": 1.0}, "variance", _NAN),
+    ("StudentT", {"df": 1.5}, "variance", _INF),
+    ("StudentT", {"df": 2.0}, "variance", _INF),
+    ("StudentT", {"df": 1.0}, "stddev", _NAN),
+    ("StudentT", {"df": 2.0}, "stddev", _INF),
+    # Pareto: mean needs alpha > 1, variance needs alpha > 2.
+    ("Pareto", {"scale": 1.0, "alpha": 0.5}, "mean", _INF),
+    ("Pareto", {"scale": 1.0, "alpha": 1.0}, "mean", _INF),
+    ("Pareto", {"scale": 1.0, "alpha": 2.0}, "mean", 2.0),
+    ("Pareto", {"scale": 1.0, "alpha": 2.0}, "variance", _INF),
+    ("Pareto", {"scale": 1.0, "alpha": 3.0}, "variance", 0.75),
+    # InverseGamma: mean needs concentration > 1, variance > 2.
+    ("InverseGamma", {"concentration": 1.0, "rate": 1.0}, "mean", _INF),
+    ("InverseGamma", {"concentration": 2.0, "rate": 1.0}, "variance", _INF),
+    ("InverseGamma", {"concentration": 3.0, "rate": 1.0}, "variance", 0.25),
+    # GeneralizedPareto: mean needs concentration < 1, variance < 1/2; nan beyond.
+    ("GeneralizedPareto", {"loc": 0.0, "scale": 1.0, "concentration": 1.0}, "mean", _NAN),
+    ("GeneralizedPareto", {"loc": 0.0, "scale": 1.0, "concentration": 0.5}, "variance", _NAN),
+    ("GeneralizedPareto", {"loc": 0.0, "scale": 1.0, "concentration": 0.25}, "mean", 4.0 / 3.0),
+    # No first moment at any parameter.
+    ("HalfCauchy", {"scale": 1.0}, "mean", _INF),
+    ("Cauchy", {"loc": 0.0, "scale": 1.0}, "mean", _NAN),
+    # Weibull's mode is 0 up to k = 1 (the density is not increasing there).
+    ("Weibull", {"scale": 1.0, "concentration": 0.5}, "mode", 0.0),
+    ("Weibull", {"scale": 2.0, "concentration": 1.0}, "mode", 0.0),
+]
+
+
+def _table_id(row: tuple) -> str:
+    family, params, moment, _ = row
+    return f"{family}-{'-'.join(f'{k}{v}' for k, v in params.items())}-{moment}"
+
+
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("row", _MOMENT_TABLE, ids=[_table_id(r) for r in _MOMENT_TABLE])
+def test_moment_is_nan_or_inf_outside_its_domain(device: str, row: tuple) -> None:
+    """Each moment is its closed form inside the domain, nan/+inf outside."""
+    family, params, moment, expected = row
+    dist = getattr(D, family)(**{k: _tt(v, device) for k, v in params.items()})
+    _check(_scalar(getattr(dist, moment)), expected, f"{family}{params}.{moment}")
+
+
+@pytest.mark.parametrize("device", DEVICES)
+def test_f_and_student_t_masks_are_per_element(device: str) -> None:
+    """A batch mixes valid and invalid parameters; each element is judged alone."""
+    f = D.FisherSnedecor(_tt([5.0] * 6, device), _tt([1.0, 2.0, 3.0, 4.0, 5.0, 8.0], device))
+    mean = np.asarray(f.mean.numpy(), dtype=np.float64)
+    var = np.asarray(f.variance.numpy(), dtype=np.float64)
+    assert np.isnan(mean[:2]).all() and np.allclose(mean[2:], [3.0, 2.0, 5.0 / 3.0, 4.0 / 3.0])
+    assert np.isnan(var[:4]).all() and np.isfinite(var[4:]).all() and (var[4:] > 0).all()
+
+    t = D.StudentT(df=_tt([0.5, 1.0, 1.5, 3.0], device), loc=_tt(7.0, device))
+    got = np.asarray(t.mean.numpy(), dtype=np.float64)
+    assert np.isnan(got[:2]).all() and np.allclose(got[2:], 7.0)
+
+
+def test_moment_masks_keep_the_parameter_dtype() -> None:
+    """The nan branch must not promote a float64 parameter to float32."""
+    f = D.FisherSnedecor(_T(5.0, 5.0), _T(1.0, 8.0))
+    t = D.StudentT(df=_T(1.0, 3.0))
+    for tensor in (f.mean, f.variance, t.mean):
+        assert tensor.dtype == lucid.float64, tensor.dtype
+
+
+# ── the reference answers the same over a wider grid ─────────────────────────
+
+_GRID = [0.1, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 7.0]
+_UNIT = [0.1, 0.5, 1.0, 2.0, 5.0]
+_MOMENTS = ["mean", "variance", "mode", "stddev", "entropy"]
+
+# family -> parameter name -> values; the sweep is their product.
+_PARITY_GRIDS: dict[str, dict[str, list[float]]] = {
+    "FisherSnedecor": {"df1": [1.0, 5.0], "df2": _GRID},
+    "StudentT": {"df": _GRID},
+    "Pareto": {"scale": [1.0], "alpha": _GRID},
+    "InverseGamma": {"concentration": _GRID, "rate": [1.0]},
+    "GeneralizedPareto": {
+        "loc": [0.0],
+        "scale": [1.0],
+        "concentration": [-1.0, -0.1, 0.0, 0.1, 0.25, 0.4, 0.5, 0.6, 1.0, 2.0],
+    },
+    "Weibull": {"scale": [1.0], "concentration": _GRID},
+    "Gamma": {"concentration": [0.01, 0.1, 0.5, 1.0, 2.0, 5.0], "rate": [1.0]},
+    "Chi2": {"df": _GRID},
+    "Beta": {"concentration1": _UNIT, "concentration0": _UNIT},
+    "Kumaraswamy": {"concentration1": _UNIT, "concentration0": _UNIT},
+    "HalfCauchy": {"scale": [0.5, 2.0]},
+    "LogNormal": {"loc": [-1.0, 1.0], "scale": [0.1, 3.0]},
+    "VonMises": {"loc": [0.0], "concentration": [0.01, 1.0, 50.0]},
+    "NegativeBinomial": {"total_count": [1.0, 5.0], "probs": [0.3, 0.7]},
+    "Binomial": {"total_count": [0.0, 5.0], "probs": [0.0, 0.3, 1.0]},
+}
+
+# Differences kept on purpose, with the reason.  Both are the reference
+# evaluating a different expression from the one the mode is.
+_MODE_DIFFERS = {
+    "Weibull": (
+        lambda p: p["concentration"] < 1.0,
+        "below k = 1 the mode is 0; the reference raises a negative base to a "
+        "fractional power and returns 81 at k = 0.25",
+    ),
+    "Kumaraswamy": (
+        lambda p: True,
+        "Lucid answers ((a-1)/(ab-1))^(1/a); the reference's expression is nan "
+        "for every concentration0 > 1",
+    ),
+}
+
+
+def _parity_cases(family: str) -> list[dict[str, float]]:
+    grid = _PARITY_GRIDS[family]
+    names = list(grid)
+    return [
+        dict(zip(names, combo, strict=True))
+        for combo in itertools.product(*(grid[n] for n in names))
+    ]
+
+
+def _moment(dist, name: str):
+    """The five moments are properties except ``entropy``, a method."""
+    return dist.entropy() if name == "entropy" else getattr(dist, name)
+
+
+def _outcome(compute) -> np.ndarray | type[Exception]:
+    """The moment as float64, or the exception class that stood in for it."""
+    try:
+        return np.asarray(compute(), dtype=np.float64)
+    except NotImplementedError as exc:
+        return type(exc)
+
+
+def _agree(ours: np.ndarray | type, theirs: np.ndarray | type) -> bool:
+    """Two answers agree when both are the same refusal or the same array."""
+    if isinstance(ours, type) or isinstance(theirs, type):
+        return ours is theirs
+    if ours.shape != theirs.shape:
+        return False
+    return bool(np.allclose(ours, theirs, rtol=1e-3, atol=1e-4, equal_nan=True))
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("device", DEVICES)
+@pytest.mark.parametrize("family", list(_PARITY_GRIDS))
+def test_moments_match_the_reference_over_a_grid(family: str, device: str, ref) -> None:
+    """mean, variance, mode, stddev and entropy agree element for element.
+
+    ``nan`` must meet ``nan`` and ``inf`` meet ``inf``: a number where the
+    reference has a divergence is the defect this file exists for.
+    """
+    mismatches: list[str] = []
+    for params in _parity_cases(family):
+        ours_dist = getattr(D, family)(**{k: _tt(v, device) for k, v in params.items()})
+        theirs_dist = getattr(ref.distributions, family)(
+            **{k: ref.tensor(np.float32(v)) for k, v in params.items()}
+        )
+        for moment in _MOMENTS:
+            if moment == "mode" and family in _MODE_DIFFERS and _MODE_DIFFERS[family][0](params):
+                continue
+            ours = _outcome(lambda: _moment(ours_dist, moment).numpy())
+            theirs = _outcome(lambda: _moment(theirs_dist, moment).detach().cpu().numpy())
+            if not _agree(ours, theirs):
+                mismatches.append(f"{params} {moment}: {ours} vs {theirs}")
+    assert not mismatches, "\n".join(mismatches)

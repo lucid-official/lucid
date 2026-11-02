@@ -255,6 +255,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - count draws keep the parameter's float dtype
 
+- mask F and StudentT moments outside their domain
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

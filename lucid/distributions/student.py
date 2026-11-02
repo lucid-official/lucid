@@ -181,24 +181,22 @@ class StudentT(Distribution):
 
         The mean is only mathematically defined for :math:`\nu > 1`.  For
         :math:`\nu \leq 1` (e.g., the Cauchy distribution) the first
-        moment does not exist.  Following the convention of most
-        distribution libraries, this property returns :math:`\mu`
-        unconditionally — callers are responsible for checking
-        :math:`\nu > 1` when that matters.
+        moment does not exist and this property returns ``nan``, as the
+        reference framework does.  The mode, which exists for every
+        :math:`\nu`, is :math:`\mu`.
 
         Returns
         -------
         Tensor
-            Location parameter :math:`\mu`, shape ``batch_shape``.
+            Location parameter :math:`\mu` where :math:`\nu > 1`, ``nan``
+            elsewhere; shape ``batch_shape``.
 
         Examples
         --------
         >>> StudentT(df=5.0, loc=3.0).mean
         tensor(3.)
         """
-        # Defined for df > 1 — we follow the reference framework and
-        # return ``loc`` regardless.
-        return self.loc + 0 * self.df
+        return lucid.where(self.df > 1.0, self.loc + 0 * self.df, float("nan"))
 
     @override
     @property
