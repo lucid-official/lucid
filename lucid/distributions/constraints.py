@@ -12,11 +12,49 @@ Every domain has one definition here — an interval with either end open is
 one class, not one class per combination.
 """
 
-from typing import final, override
+from collections.abc import Callable
+from typing import Self, final, overload, override
 
 import lucid
 from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
+
+
+__all__ = [
+    "Constraint",
+    "MixtureSameFamilyConstraint",
+    "boolean",
+    "cat",
+    "corr_cholesky",
+    "dependent",
+    "dependent_property",
+    "greater_than",
+    "greater_than_eq",
+    "half_open_interval",
+    "independent",
+    "integer_interval",
+    "interval",
+    "is_dependent",
+    "less_than",
+    "lower_cholesky",
+    "lower_triangular",
+    "multinomial",
+    "nonnegative",
+    "nonnegative_integer",
+    "one_hot",
+    "open_unit_interval",
+    "positive",
+    "positive_definite",
+    "positive_integer",
+    "positive_semidefinite",
+    "real",
+    "real_vector",
+    "simplex",
+    "square",
+    "stack",
+    "symmetric",
+    "unit_interval",
+]
 
 
 class Constraint:
@@ -92,6 +130,178 @@ def _is_integral(value: Tensor) -> Tensor:
     reference framework's ``x % 1 == 0`` refuses it.
     """
     return lucid.isfinite(value) & (lucid.floor(value) == value)
+
+
+class _StaticAttribute[T]:
+    """A constraint attribute a :class:`_DependentBase` may leave undetermined.
+
+    ``is_discrete`` and ``event_dim`` are plain class attributes on every
+    other constraint.  A dependent one stands for a support that follows
+    other variables, so they are usually not known until the support is
+    built; reading one that was never declared raises instead of answering
+    with a default that would be wrong half the time.
+    """
+
+    def __init__(self) -> None:
+        self._name = ""
+
+    def __set_name__(self, owner: type, name: str) -> None:
+        self._name = name
+
+    @overload
+    def __get__(self, instance: None, owner: type | None = None) -> Self: ...
+
+    @overload
+    def __get__(self, instance: object, owner: type | None = None) -> T: ...
+
+    def __get__(self, instance: object | None, owner: type | None = None) -> Self | T:
+        if instance is None:
+            return self
+        value: T | None = vars(instance).get("_" + self._name)
+        if value is None:
+            raise NotImplementedError(f".{self._name} cannot be determined statically")
+        return value
+
+    def __set__(self, instance: object, value: T | None) -> None:
+        vars(instance)["_" + self._name] = value
+
+
+class _DependentBase(Constraint):
+    """What :func:`is_dependent` recognises: a support that depends on other variables.
+
+    These variables obey no simple coordinate-wise constraint, so
+    :meth:`check` cannot answer.  ``is_discrete`` and ``event_dim`` may be
+    declared when they can be known statically and raise
+    :class:`NotImplementedError` when read otherwise.
+    """
+
+    is_discrete = _StaticAttribute[bool]()
+    event_dim = _StaticAttribute[int]()
+
+    def __init__(self, *, is_discrete: bool | None = None, event_dim: int | None = None) -> None:
+        """Declare ``is_discrete`` and ``event_dim`` where they are known."""
+        self.is_discrete = is_discrete
+        self.event_dim = event_dim
+
+    @override
+    def check(self, value: Tensor) -> Tensor:
+        """Refuse: validity of a dependent constraint cannot be determined.
+
+        Raises
+        ------
+        ValueError
+            Always.
+        """
+        raise ValueError("Cannot determine validity of dependent constraint")
+
+    def _declared(self) -> tuple[bool | None, int | None]:
+        """``(is_discrete, event_dim)`` as declared, ``None`` for each left undetermined."""
+        return vars(self).get("_is_discrete"), vars(self).get("_event_dim")
+
+
+@final
+class _Dependent(_DependentBase):
+    """Placeholder for a support that depends on other variables.
+
+    Calling it with ``is_discrete`` and/or ``event_dim`` returns a copy with
+    those declared, keeping whatever it already declared for the other.
+
+    Examples
+    --------
+    >>> from lucid.distributions import constraints
+    >>> constraints.is_dependent(constraints.dependent(event_dim=1))
+    True
+    >>> constraints.dependent(event_dim=1).event_dim
+    1
+    """
+
+    def __call__(
+        self, *, is_discrete: bool | None = None, event_dim: int | None = None
+    ) -> _Dependent:
+        """Return a copy declaring ``is_discrete`` and ``event_dim`` where given."""
+        declared_discrete, declared_event_dim = self._declared()
+        return _Dependent(
+            is_discrete=declared_discrete if is_discrete is None else is_discrete,
+            event_dim=declared_event_dim if event_dim is None else event_dim,
+        )
+
+
+class _DependentProperty(property, _DependentBase):
+    """A property that is also a :class:`_Dependent` constraint when read off the class.
+
+    ``@dependent_property`` turns a method into a property whose value is
+    computed per instance, while ``Class.support`` — the property object
+    itself — answers :func:`is_dependent` and carries the static
+    ``is_discrete`` / ``event_dim`` the decorator declared.  This is how a
+    distribution says "my support is built from my parameters" without
+    building it.
+
+    Parameters
+    ----------
+    fn : callable, optional
+        The method to wrap.  Omitted when the decorator is called with
+        keyword arguments first, ``@dependent_property(is_discrete=True)``.
+    is_discrete : bool, optional
+        Static value of ``is_discrete``, if it can be known.
+    event_dim : int, optional
+        Static value of ``event_dim``, if it can be known.
+
+    Examples
+    --------
+    >>> from lucid.distributions import constraints
+    >>> class Box:
+    ...     def __init__(self, high):
+    ...         self.high = high
+    ...     @constraints.dependent_property(is_discrete=False, event_dim=0)
+    ...     def support(self):
+    ...         return constraints.interval(0.0, self.high)
+    >>> constraints.is_dependent(Box.support)
+    True
+    >>> Box(2.0).support
+    Interval(lower_bound=0.0, upper_bound=2.0)
+    """
+
+    def __init__(
+        self,
+        fn: Callable[..., Constraint] | None = None,
+        *,
+        is_discrete: bool | None = None,
+        event_dim: int | None = None,
+    ) -> None:
+        """Wrap ``fn`` as a property and declare the static attributes."""
+        property.__init__(self, fn)
+        _DependentBase.__init__(self, is_discrete=is_discrete, event_dim=event_dim)
+
+    def __call__(self, fn: Callable[..., Constraint]) -> _DependentProperty:
+        """Wrap ``fn`` keeping the declared ``is_discrete`` / ``event_dim``."""
+        is_discrete, event_dim = self._declared()
+        return _DependentProperty(fn, is_discrete=is_discrete, event_dim=event_dim)
+
+
+def is_dependent(constraint: object) -> bool:
+    """Whether ``constraint`` is a placeholder for a support that depends on other variables.
+
+    Parameters
+    ----------
+    constraint : object
+        A :class:`Constraint` — ``dependent``, a ``dependent_property`` read
+        off its class, or any other constraint.
+
+    Returns
+    -------
+    bool
+        ``True`` for ``dependent`` and for ``dependent_property``; ``False``
+        for every other constraint, whose support is a fixed domain.
+
+    Examples
+    --------
+    >>> from lucid.distributions import constraints
+    >>> constraints.is_dependent(constraints.dependent)
+    True
+    >>> constraints.is_dependent(constraints.positive)
+    False
+    """
+    return isinstance(constraint, _DependentBase)
 
 
 @final
@@ -331,8 +541,18 @@ class _Multinomial(Constraint):
         return f"Multinomial(upper_bound={self.upper_bound})"
 
 
-@final
-class _LowerCholesky(Constraint):
+class _LowerTriangular(Constraint):
+    """Lower-triangular matrices — everything above the diagonal is zero."""
+
+    event_dim = 2
+
+    @override
+    def check(self, value: Tensor) -> Tensor:
+        """Return ``True`` per matrix where it equals its lower triangle."""
+        return _all_trailing(lucid.tril(value) == value, 2)
+
+
+class _LowerCholesky(_LowerTriangular):
     """Lower-triangular square matrices with a positive diagonal — a
     Cholesky factor, the domain of a ``scale_tril``.
 
@@ -346,15 +566,12 @@ class _LowerCholesky(Constraint):
     tensor(False, dtype=lucid.bool)
     """
 
-    event_dim = 2
-
     @override
     def check(self, value: Tensor) -> Tensor:
         """Return ``True`` per matrix where it is lower-triangular with a
         positive diagonal."""
-        lower = _all_trailing(lucid.tril(value) == value, 2)
         positive_diagonal = _all_trailing(value.diagonal(dim1=-2, dim2=-1) > 0, 1)
-        return lower & positive_diagonal
+        return super().check(value) & positive_diagonal
 
 
 @final
@@ -384,8 +601,50 @@ class _OneHot(Constraint):
         return binary & (value.sum(dim=-1) == 1)
 
 
-@final
-class _PositiveDefinite(Constraint):
+def _is_square(value: Tensor) -> bool:
+    """Whether the last two axes of ``value`` have the same size."""
+    return value.shape[-1] == value.shape[-2]
+
+
+class _Square(Constraint):
+    """Square matrices — the last two axes are the same size."""
+
+    event_dim = 2
+
+    @override
+    def check(self, value: Tensor) -> Tensor:
+        """Return ``True`` for every matrix when the last two axes match,
+        ``False`` for every one when they do not."""
+        return lucid.full(
+            tuple(value.shape[:-2]), _is_square(value), dtype=lucid.bool, device=value.device
+        )
+
+
+class _Symmetric(_Square):
+    """Symmetric square matrices, compared within ``1e-6``."""
+
+    @override
+    def check(self, value: Tensor) -> Tensor:
+        """Return ``True`` per matrix where it is square and equals its transpose."""
+        square = super().check(value)
+        if not _is_square(value):
+            return square
+        return _all_trailing(lucid.isclose(value, value.mT, atol=1e-6), 2)
+
+
+class _PositiveSemidefinite(_Symmetric):
+    """Symmetric positive-semidefinite matrices: every eigenvalue is ``>= 0``."""
+
+    @override
+    def check(self, value: Tensor) -> Tensor:
+        """Return ``True`` per matrix where it is symmetric with no negative eigenvalue."""
+        symmetric = super().check(value)
+        if not _is_square(value):
+            return symmetric
+        return symmetric & _all_trailing(lucid.linalg.eigvalsh(value) >= 0, 1)
+
+
+class _PositiveDefinite(_Symmetric):
     """Symmetric positive-definite matrices.
 
     Symmetry is checked first, within ``1e-6``: a Cholesky factorisation
@@ -394,21 +653,19 @@ class _PositiveDefinite(Constraint):
     a Cholesky *factor* among them.
     """
 
-    event_dim = 2
-
     @override
     def check(self, value: Tensor) -> Tensor:
         """Return ``True`` per matrix where it is symmetric and has a
         Cholesky factorisation."""
-        if value.shape[-1] != value.shape[-2]:
-            return lucid.zeros(tuple(value.shape[:-2]), dtype=lucid.bool, device=value.device)
-        symmetric = _all_trailing(lucid.isclose(value, value.mT, atol=1e-6), 2)
+        symmetric = super().check(value)
+        if not _is_square(value):
+            return symmetric
         _, info = lucid.linalg.cholesky_ex(value)
         return symmetric & (info == 0)
 
 
 @final
-class _CorrCholesky(Constraint):
+class _CorrCholesky(_LowerCholesky):
     """Cholesky factors of correlation matrices: lower-triangular, positive
     diagonal, every row of unit Euclidean norm — the support of
     :class:`~lucid.distributions.LKJCholesky`.
@@ -426,18 +683,14 @@ class _CorrCholesky(Constraint):
     tensor(False, dtype=lucid.bool)
     """
 
-    event_dim = 2
-
     @override
     def check(self, value: Tensor) -> Tensor:
         """Return ``True`` per matrix where it is the Cholesky factor of a
         correlation matrix."""
         tol = float(finfo(value.dtype).eps) * value.shape[-1] * 10
-        lower = _all_trailing(lucid.tril(value) == value, 2)
-        positive_diagonal = _all_trailing(value.diagonal(dim1=-2, dim2=-1) > 0, 1)
         row_norm = lucid.linalg.vector_norm(value.detach(), dim=-1)
         unit_rows = _all_trailing((row_norm - 1.0).abs() <= tol, 1)
-        return lower & positive_diagonal & unit_rows
+        return super().check(value) & unit_rows
 
 
 @final
@@ -485,6 +738,66 @@ class _IndependentConstraint(Constraint):
         )
 
 
+@final
+class MixtureSameFamilyConstraint(Constraint):
+    """The support of a :class:`~lucid.distributions.MixtureSameFamily`.
+
+    The components carry a mixture axis that a sample does not: a mixture
+    value of shape ``batch + event`` is scored against components of shape
+    ``batch + (K,) + event``.  This constraint puts that axis back, checks
+    the value against the support of every component, and answers ``True``
+    for a value only when all of them admit it.
+
+    Parameters
+    ----------
+    base_constraint : Constraint
+        The component distribution's support.
+
+    Raises
+    ------
+    TypeError
+        If ``base_constraint`` is not a :class:`Constraint`.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> from lucid.distributions import constraints
+    >>> c = constraints.MixtureSameFamilyConstraint(constraints.positive)
+    >>> c.check(lucid.tensor([1.0, -1.0]))
+    tensor([True, False], dtype=lucid.bool)
+    """
+
+    def __init__(self, base_constraint: Constraint) -> None:
+        """Store the component support; ``is_discrete`` and ``event_dim`` are its."""
+        if not isinstance(base_constraint, Constraint):
+            raise TypeError(
+                "MixtureSameFamilyConstraint: base_constraint must be a Constraint, "
+                f"got {type(base_constraint).__name__}"
+            )
+        self.base_constraint = base_constraint
+        self.is_discrete = base_constraint.is_discrete
+        self.event_dim = base_constraint.event_dim
+
+    @override
+    def check(self, value: Tensor) -> Tensor:
+        """Check ``value`` against the component support with the mixture axis restored.
+
+        Raises
+        ------
+        ValueError
+            If ``value`` has fewer dimensions than the event needs.
+        """
+        if value.ndim < self.event_dim:
+            raise ValueError(f"Expected value.ndim >= {self.event_dim} but got {value.ndim}")
+        result = self.base_constraint.check(value.unsqueeze(-1 - self.event_dim))
+        kept = value.ndim - self.event_dim
+        return result.reshape(*result.shape[:kept], -1).min(dim=-1).values
+
+    @override
+    def __repr__(self) -> str:
+        return f"MixtureSameFamilyConstraint({self.base_constraint!r})"
+
+
 # Public singletons (functions/objects users actually reach for).
 real = _Real()
 boolean = _Boolean()
@@ -497,7 +810,14 @@ one_hot = _OneHot()
 positive_definite = _PositiveDefinite()
 corr_cholesky = _CorrCholesky()
 lower_cholesky = _LowerCholesky()
+lower_triangular = _LowerTriangular()
+square = _Square()
+symmetric = _Symmetric()
+positive_semidefinite = _PositiveSemidefinite()
 nonnegative_integer = _IntegerGreaterThan(0)
+positive_integer = _IntegerGreaterThan(1)
+dependent = _Dependent()
+dependent_property = _DependentProperty
 # ``ℝⁿ`` read as one event: a vector with no NaN in it.
 real_vector = _IndependentConstraint(real, 1)
 

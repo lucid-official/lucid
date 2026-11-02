@@ -23,6 +23,7 @@ from lucid.distributions.constraints import (
     _LessThan,
     _LowerCholesky,
     _PositiveDefinite,
+    _PositiveSemidefinite,
     _Real,
     _Simplex,
     _Stack,
@@ -415,6 +416,13 @@ def _transform_to_lower_cholesky(_constraint: _LowerCholesky) -> Transform:
 
 @_register(biject_to, transform_to, _PositiveDefinite)
 def _transform_to_positive_definite(_constraint: _PositiveDefinite) -> Transform:
+    return PositiveDefiniteTransform()
+
+
+# The factor is positive-definite, which satisfies the looser semidefinite
+# domain; it is not a bijection onto it, so only ``transform_to`` has it.
+@_register(transform_to, _PositiveSemidefinite)
+def _transform_to_positive_semidefinite(_constraint: _PositiveSemidefinite) -> Transform:
     return PositiveDefiniteTransform()
 
 

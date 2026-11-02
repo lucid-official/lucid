@@ -6,7 +6,7 @@ from typing import Self, override
 import lucid
 from lucid._tensor.tensor import Tensor
 from lucid.distributions.categorical import Categorical
-from lucid.distributions.constraints import Constraint
+from lucid.distributions.constraints import Constraint, MixtureSameFamilyConstraint
 from lucid.distributions.distribution import Distribution
 
 
@@ -151,11 +151,14 @@ class MixtureSameFamily(Distribution):
         Returns
         -------
         Constraint or None
-            ``component_distribution.support``: every component shares a
-            family, so a value the mixture can produce is one a component
-            can.
+            :class:`~lucid.distributions.constraints.MixtureSameFamilyConstraint`
+            over the components' support, which restores the mixture axis a
+            sample does not have; ``None`` if the components declare none.
         """
-        return self.component_distribution.support
+        component_support = self.component_distribution.support
+        if component_support is None:
+            return None
+        return MixtureSameFamilyConstraint(component_support)
 
     @property
     @override

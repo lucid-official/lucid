@@ -312,6 +312,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - inference_mode(mode) and is_inference_mode_enabled
 - Wishart.entropy
 - ContinuousBernoulli lims keyword
+- the constraints missing from the reference
 
 ---
 
