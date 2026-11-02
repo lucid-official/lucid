@@ -362,6 +362,48 @@ class Wishart(Distribution):
         return t1 + t2 + t3 + t4 + t5
 
     @override
+    def entropy(self) -> Tensor:
+        r"""Differential entropy of the Wishart distribution, in nats.
+
+        With :math:`p` the matrix dimension, :math:`\nu` the degrees of
+        freedom and :math:`L` the Cholesky factor of the scale matrix:
+
+        .. math::
+
+            H = (p + 1)\left(\tfrac{p \log 2}{2} + \sum_i \log L_{ii}\right)
+              + \log\Gamma_p\!\left(\tfrac{\nu}{2}\right)
+              - \tfrac{\nu - p - 1}{2}\,\psi_p\!\left(\tfrac{\nu}{2}\right)
+              + \tfrac{\nu p}{2}
+
+        where :math:`\psi_p(a) = \sum_{i=0}^{p-1} \psi(a - i/2)` is the
+        multivariate digamma function.  :attr:`perplexity` is its exponential.
+
+        Returns
+        -------
+        Tensor
+            Entropy of shape ``batch_shape``.
+
+        Examples
+        --------
+        >>> import lucid
+        >>> from lucid.distributions import Wishart
+        >>> Wishart(df=4.0, covariance_matrix=lucid.eye(2)).entropy()
+        tensor(6.301)
+        """
+        p: int = self._dim
+        nu: Tensor = self.df
+        half_nu = nu / 2.0
+        log_det_factor = self.scale_tril.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+        offsets = lucid.arange(p, dtype=nu.dtype, device=nu.device) / 2.0
+        mvdigamma = lucid.digamma(half_nu.unsqueeze(-1) - offsets).sum(dim=-1)
+        return (
+            (p + 1) * (p * math.log(2.0) / 2.0 + log_det_factor)
+            + _sp.multigammaln(half_nu, p)
+            - (nu - p - 1.0) / 2.0 * mvdigamma
+            + nu * p / 2.0
+        )
+
+    @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
         """Return a new :class:`Wishart` instance with parameters expanded to ``batch_shape``."""
         new = self._get_checked_instance(Wishart, _instance)

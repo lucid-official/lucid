@@ -310,6 +310,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Poly / MHR tuner, task-routed low-rank skills
 - X-LoRA, LoRA experts weighed per token
 - inference_mode(mode) and is_inference_mode_enabled
+- Wishart.entropy
 
 ---
 

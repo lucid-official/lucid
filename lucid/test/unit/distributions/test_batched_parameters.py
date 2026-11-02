@@ -260,12 +260,11 @@ def test_batch_shape_and_values_match_the_reference(
         assert tuple(mine.rsample((4,)).shape) == tuple(theirs.rsample((4,)).shape)
 
 
-@pytest.mark.xfail(
-    strict=True, raises=NotImplementedError, reason="Wishart.entropy is not implemented"
-)
-def test_wishart_entropy_is_implemented() -> None:
-    d = D.Wishart(lucid.tensor(4.0), covariance_matrix=lucid.tensor(_S2))
-    d.entropy()
+def test_wishart_entropy_is_batched_over_df_and_scale() -> None:
+    df = lucid.tensor([3.5, 4.0, 6.0])
+    d = D.Wishart(df, covariance_matrix=lucid.tensor(_S2))
+    assert d.entropy().shape == (3,)
+    assert d.perplexity().shape == (3,)
 
 
 # ── the reported cases, verbatim ────────────────────────────────────────────
