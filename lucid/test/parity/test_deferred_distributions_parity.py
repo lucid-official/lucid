@@ -34,14 +34,15 @@ class TestAbsTransformParity:
         x_r = ref.tensor([-3.0, -1.0, 0.0, 2.0])
         assert_close(lt(x_l), rt(x_r))
 
-    def test_ladj_zero(self, ref: Any) -> None:
-        # The reference framework raises NotImplementedError for AbsTransform.ladj.
-        # Lucid's convention: return 0. (same convention for non-bijective transforms.)
+    def test_ladj_refused(self, ref: Any) -> None:
+        # |x| is not bijective, so neither side defines its log-det (LCD-818).
+        x_l, x_r = lucid.randn(5), ref.randn(5)
+        rt = ref.distributions.transforms.AbsTransform()
+        with pytest.raises(NotImplementedError):
+            rt.log_abs_det_jacobian(x_r, rt(x_r))
         lt = D.AbsTransform()
-        x_l = lucid.randn(5)
-        y_l = lt(x_l)
-        ladj = lt.log_abs_det_jacobian(x_l, y_l)
-        assert lucid.allclose(ladj, lucid.zeros_like(ladj))
+        with pytest.raises(NotImplementedError):
+            lt.log_abs_det_jacobian(x_l, lt(x_l))
 
 
 # ── ReshapeTransform ──────────────────────────────────────────────────────────
