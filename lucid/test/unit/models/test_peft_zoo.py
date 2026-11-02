@@ -608,11 +608,21 @@ def test_all_linear_leaves_out_the_head_and_the_tied_weights(family: _Family) ->
     assert stored == family.all_linear
 
 
-def test_vit_has_no_query_and_value_modules_to_name() -> None:
+def test_vit_reads_the_reference_s_query_and_value_as_its_fused_qkv() -> None:
+    """The zoo's ViT has one ``qkv``; the reference's recipes name three projections (LCD-829)."""
+    family = _family("vit")
+    with pytest.warns(UserWarning, match="reference library's names"):
+        peft = get_peft_model(
+            _base(family, "cpu"), LoraConfig(r=4, target_modules=["query", "value"])
+        )
+    assert peft.peft_config["default"].target_modules == {"qkv"}
+
+
+def test_vit_still_refuses_a_name_neither_it_nor_the_reference_has() -> None:
     family = _family("vit")
     model = _base(family, "cpu")
     with pytest.raises(ValueError, match="not found"):
-        get_peft_model(model, LoraConfig(r=4, target_modules=["query", "value"]))
+        get_peft_model(model, LoraConfig(r=4, target_modules=["gate_proj", "up_proj"]))
     assert all(p.requires_grad for p in model.parameters())
 
 

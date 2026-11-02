@@ -15,6 +15,10 @@ taken as it is, so a zoo name always wins.  An alias can be wider than the name 
 (``query`` → the fused ``qkv`` adapts the key too), which is why using one warns, and the
 config stores the zoo's names, so a saved adapter reads the same everywhere.
 
+The reference renamed its ViT, Swin and DETR projections between release 4 (``query`` /
+``key`` / ``value``, ``out_proj``) and release 5 (``q_proj`` / ``k_proj`` / ``v_proj`` /
+``o_proj``); a recipe may use either, so both spellings are listed.
+
 Only names the reference's classes really use are listed; a model type with no counterpart
 there (``transformer``, the convolutional families) has no row.
 """
@@ -43,6 +47,11 @@ REFERENCE_TARGET_ALIASES: Final[Mapping[str, Mapping[str, tuple[str, ...]]]] = M
                 "intermediate.dense": ("mlp.fc1",),
                 "output.dense": ("attn.proj", "mlp.fc2"),
                 "dense": ("attn.proj", "mlp.fc1", "mlp.fc2"),
+                # release 5 of the reference names the projections as a decoder does
+                "q_proj": ("qkv",),
+                "k_proj": ("qkv",),
+                "v_proj": ("qkv",),
+                "o_proj": ("attn.proj",),
             }
         ),
         "swin": MappingProxyType(
@@ -54,6 +63,12 @@ REFERENCE_TARGET_ALIASES: Final[Mapping[str, Mapping[str, tuple[str, ...]]]] = M
                 "intermediate.dense": ("mlp.0",),
                 "output.dense": ("attn.proj", "mlp.3"),
                 "dense": ("attn.proj", "mlp.0", "mlp.3"),
+                "q_proj": ("qkv",),
+                "k_proj": ("qkv",),
+                "v_proj": ("qkv",),
+                "o_proj": ("attn.proj",),
+                "fc1": ("mlp.0",),
+                "fc2": ("mlp.3",),
             }
         ),
         "clip": MappingProxyType(
@@ -72,6 +87,7 @@ REFERENCE_TARGET_ALIASES: Final[Mapping[str, Mapping[str, tuple[str, ...]]]] = M
                 "k_proj": ("self_attn", "multihead_attn"),
                 "v_proj": ("self_attn", "multihead_attn"),
                 "out_proj": ("self_attn", "multihead_attn"),
+                "o_proj": ("self_attn", "multihead_attn"),
                 "encoder_attn": ("multihead_attn",),
                 "fc1": ("linear1",),
                 "fc2": ("linear2",),

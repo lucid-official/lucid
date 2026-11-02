@@ -352,6 +352,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - models and entry points take the reference's signatures
 - uniform package cards on the API reference index
 - reference module names resolve on the zoo's classes
+- release-5 names in the aliases; per-type target tests
 
 ---
 
