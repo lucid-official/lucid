@@ -1,6 +1,6 @@
 """Compiled steps that abort the process inside MPSGraph, pinned (LCD-786 FOUND).
 
-Both were found by ``test_traced_sampler_compile_budget`` and are not about
+Each was found by ``test_traced_sampler_compile_budget`` and are not about
 samplers: an elementwise graph is enough.  MPSGraph's verifier rejects a node
 the emitter produced and the process dies on a failed assertion -- not a Python
 exception, so a user's training script has nothing to catch.  Each runs in a
@@ -46,29 +46,34 @@ if __name__ == "__main__":
 _BODIES = {
     # ``mps.reinterpret_cast`` rejects a rank-0 si32 operand.  Pareto(0-d, 0-d).rsample() is this.
     "rank0_pow_rank0": "x + (self.w.reshape(()) + 1.0) ** (self.w.reshape(()) * 2.0)",
-    # ``mps.reshape``: result shape not compatible with the input shape.
+}
+
+#: Aborts that were fixed; they stay as plain tests.  A constant rank-2 full reduction was bound
+#: ``(1, 1)`` against a 0-d trace shape, so the backward reshaped it into the wrong element count
+#: (``mps.reshape``); a bound value now has its trace's shape (LCD-804).
+_FIXED = {
     "param_beside_constant_rank2_reduction": (
         'x * self.w + lucid.ones(3, 3, device="metal").sum()'
     ),
 }
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        pytest.param(
-            name,
-            marks=pytest.mark.xfail(
-                strict=True, reason=f"LCD-786 FOUND: {name} aborts the process in MPSGraph"
-            ),
-        )
-        for name in _BODIES
-    ],
-)
+_BROKEN = [
+    pytest.param(
+        name,
+        marks=pytest.mark.xfail(
+            strict=True, reason=f"LCD-786 FOUND: {name} aborts the process in MPSGraph"
+        ),
+    )
+    for name in _BODIES
+]
+
+
+@pytest.mark.parametrize("name", [*_BROKEN, *_FIXED])
 def test_compiled_step_does_not_abort(name: str, device_gpu_only: str) -> None:
     root = str(Path(lucid.__file__).resolve().parent.parent)
     done = subprocess.run(
-        [sys.executable, "-c", _PRELUDE.replace("BODY", _BODIES[name])],
+        [sys.executable, "-c", _PRELUDE.replace("BODY", {**_BODIES, **_FIXED}[name])],
         cwd=root,
         capture_output=True,
         text=True,
