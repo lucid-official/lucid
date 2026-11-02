@@ -172,10 +172,7 @@ def _adalora(targets: tuple[str, ...], random: bool, **kw: object) -> AdaLoraCon
 
 def _vera(targets: tuple[str, ...], random: bool, **kw: object) -> VeraConfig:
     return VeraConfig(
-        r=3,
-        target_modules=list(targets),
-        init_weights=not random,
-        **kw,  # type: ignore[arg-type]
+        r=3, target_modules=list(targets), init_weights=not random, **kw  # type: ignore[arg-type]
     )
 
 
@@ -200,10 +197,7 @@ def _boft(targets: tuple[str, ...], random: bool, **kw: object) -> BOFTConfig:
 
 def _hra(targets: tuple[str, ...], random: bool, **kw: object) -> HRAConfig:
     return HRAConfig(
-        r=2,
-        target_modules=list(targets),
-        init_weights=not random,
-        **kw,  # type: ignore[arg-type]
+        r=2, target_modules=list(targets), init_weights=not random, **kw  # type: ignore[arg-type]
     )
 
 
@@ -224,10 +218,7 @@ def _ln_tuning(targets: tuple[str, ...], random: bool, **kw: object) -> LNTuning
 
 def _miss(targets: tuple[str, ...], random: bool, **kw: object) -> MissConfig:
     return MissConfig(
-        r=2,
-        target_modules=list(targets),
-        init_weights=not random,
-        **kw,  # type: ignore[arg-type]
+        r=2, target_modules=list(targets), init_weights=not random, **kw  # type: ignore[arg-type]
     )
 
 

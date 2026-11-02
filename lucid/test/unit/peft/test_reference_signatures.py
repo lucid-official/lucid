@@ -59,7 +59,7 @@ _TARGETING_REASON = (
 #: ``_EXPECTED_EXTRAS``.
 ALLOWED_EXTRAS: dict[str, dict[str, str]] = {
     "AdaptionPromptConfig.<fields>": {
-        "modules_to_save": "trains a classification head in full beside the prompts; written to the file only when set",
+        "modules_to_save": "trains a classification head in full beside the prompts; written to the file only when set"
     },
     "C3AConfig.<fields>": {"exclude_modules": _TARGETING_REASON},
     "IA3Config.<fields>": {
@@ -100,7 +100,7 @@ ALLOWED_EXTRAS: dict[str, dict[str, str]] = {
         "convert": "reads an adapter written for the reference's model into the zoo model's layout",
     },
     "PromptEmbedding.__init__": {
-        "tokenizer": "turns prompt_tuning_init_text into ids; the reference imports its tokenizer library instead",
+        "tokenizer": "turns prompt_tuning_init_text into ids; the reference imports its tokenizer library instead"
     },
 }
 
@@ -186,9 +186,9 @@ def _default_matches(ref: Param, got: Param) -> bool:
 
 
 def _factory_matches(source: str, factory: object) -> bool:
-    assert callable(factory), (
-        f"a field with a factory default must hold a callable, got {factory!r}"
-    )
+    assert callable(
+        factory
+    ), f"a field with a factory default must hold a callable, got {factory!r}"
     produced = factory()
     simple = {"list": [], "dict": {}, "set": set(), "tuple": ()}
     if source in simple:
@@ -311,9 +311,11 @@ def _field_problems(name: str, cls: type) -> list[str]:
         got.append(
             Param(
                 f.name,
-                inspect.Parameter.KEYWORD_ONLY
-                if f.kw_only
-                else inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                (
+                    inspect.Parameter.KEYWORD_ONLY
+                    if f.kw_only
+                    else inspect.Parameter.POSITIONAL_OR_KEYWORD
+                ),
                 has_default,
                 f.default if f.default is not dataclasses.MISSING else f.default_factory,
             )

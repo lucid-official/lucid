@@ -161,10 +161,7 @@ class TestConfig:
 
 # -- PeftModel --------------------------------------------------------------
 
-_OPTIONS = [
-    ("autocast_adapter_dtype", False),
-    ("low_cpu_mem_usage", True),
-]
+_OPTIONS = [("autocast_adapter_dtype", False), ("low_cpu_mem_usage", True)]
 
 
 class TestPeftModelOptions:

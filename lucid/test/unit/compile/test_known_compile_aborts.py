@@ -45,16 +45,14 @@ if __name__ == "__main__":
 
 _BODIES = {
     # ``mps.reinterpret_cast`` rejects a rank-0 si32 operand.  Pareto(0-d, 0-d).rsample() is this.
-    "rank0_pow_rank0": "x + (self.w.reshape(()) + 1.0) ** (self.w.reshape(()) * 2.0)",
+    "rank0_pow_rank0": "x + (self.w.reshape(()) + 1.0) ** (self.w.reshape(()) * 2.0)"
 }
 
 #: Aborts that were fixed; they stay as plain tests.  A constant rank-2 full reduction was bound
 #: ``(1, 1)`` against a 0-d trace shape, so the backward reshaped it into the wrong element count
 #: (``mps.reshape``); a bound value now has its trace's shape (LCD-804).
 _FIXED = {
-    "param_beside_constant_rank2_reduction": (
-        'x * self.w + lucid.ones(3, 3, device="metal").sum()'
-    ),
+    "param_beside_constant_rank2_reduction": ('x * self.w + lucid.ones(3, 3, device="metal").sum()')
 }
 
 
