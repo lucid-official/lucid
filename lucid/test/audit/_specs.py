@@ -29,9 +29,9 @@ import lucid.fft
 import lucid.linalg
 import lucid.nn.utils.prune
 import lucid.nn.utils.rnn
-from lucid.peft import PeftModel, get_peft_model_state_dict
+from lucid.peft import PeftModel, get_base_model_state_dict, get_peft_model_state_dict
 from lucid.test.audit import _probe, _surface
-from lucid.test.audit._builders import BUILDERS
+from lucid.test.audit._builders import BUILDERS, _config, _expert_directory
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -1262,6 +1262,26 @@ def _set_peft_state(domain: str) -> Iterator[Call]:
     )
 
 
+def _set_base_state(domain: str) -> Iterator[Call]:
+    """An adapted model, and its own base weights under the names they had before adapting.
+
+    Built fresh for the same reason as :func:`_set_peft_state`: the call writes into the model.
+    """
+    model = BUILDERS[PeftModel]()
+    yield Call(
+        [model, get_base_model_state_dict(model)],
+        {},
+        0,
+        "set_base_model_state_dict(peft model, its own base state)",
+    )
+
+
+def _bloom_prompt(domain: str) -> Iterator[Call]:
+    """Two layers' keys then values, each ``(n, batch, heads, tokens, head_dim)``, as the docstring has it."""
+    prompt = tuple(_f((1, 2, 4, 3, 8), domain) for _ in range(4))
+    yield Call([prompt], {}, 0, "bloom_model_postprocess_past_key_value(2 layers of keys, values)")
+
+
 _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
     "lucid.autograd.grad": _autograd_grad,
     # A name not on the surface yet costs nothing: lookup is by qualname.
@@ -1340,6 +1360,18 @@ _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
         [Call([BUILDERS[PeftModel]()], {}, 0, "get_peft_model_state_dict(peft model)")]
     ),
     "lucid.peft.set_peft_model_state_dict": _set_peft_state,
+    "lucid.peft.get_base_model_state_dict": lambda d: iter(
+        [Call([BUILDERS[PeftModel]()], {}, 0, "get_base_model_state_dict(peft model)")]
+    ),
+    "lucid.peft.set_base_model_state_dict": _set_base_state,
+    # Read-only, so the one saved adapter the X-LoRA builder loads is shared.
+    "lucid.peft.load_peft_weights": lambda d: iter(
+        [Call([_expert_directory()], {}, 0, "load_peft_weights(saved adapter directory)")]
+    ),
+    "lucid.peft.get_peft_config": lambda d: iter(
+        [Call([_config().to_dict()], {}, 0, "get_peft_config(LoRA config dict)")]
+    ),
+    "lucid.peft.bloom_model_postprocess_past_key_value": _bloom_prompt,
     "lucid.initial_seed": lambda d: iter([Call([], {}, 0, "initial_seed()")]),
     "lucid.is_grad_enabled": lambda d: iter([Call([], {}, 0, "is_grad_enabled()")]),
     "lucid.is_nonzero": lambda d: iter(
