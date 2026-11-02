@@ -9,10 +9,12 @@ Found 2026-07-26 by coverage-directed probing (``lucid/distributions`` was at
   so it now reconciles devices there rather than threading a device through all
   ~67 ``_as_tensor`` call sites.
 * ``Poisson.sample`` passed the right device down, but ``lucid.poisson`` itself
-  returned a CPU tensor regardless of its input — Knuth sampling runs on the
-  host and the result was never brought back.  ``log_prob`` then combined a CPU
-  sample with a Metal ``rate``.  Same family as the ``nonzero``/``unique``/
-  ``bincount`` device leaks.
+  returned a CPU tensor regardless of its input — the sampler then walked the
+  elements on the host and the result was never brought back.  ``log_prob``
+  then combined a CPU sample with a Metal ``rate``.  Same family as the
+  ``nonzero``/``unique``/``bincount`` device leaks.  (The sampler is vectorised
+  on the input's device since LCD-681, so the leak cannot recur that way; the
+  test keeps the device contract.)
 """
 
 import numpy as np
@@ -75,7 +77,7 @@ def test_log_prob_of_own_sample_is_finite(name, kwargs, device):
 
 @pytest.mark.parametrize("device", DEVICES)
 def test_poisson_factory_rides_the_input_device(device):
-    """``lucid.poisson`` samples on the host but must return on the input's device."""
+    """``lucid.poisson`` must return on the device of its input."""
     rate = lucid.tensor(np.full(16, 3.0, dtype=np.float32), device=device)
     out = lucid.poisson(rate)
     assert str(out.device) == f"device('{device}')"

@@ -51,9 +51,9 @@ def _binomial_pmf(n: int, p: float) -> Callable[[int], float]:
     return pmf
 
 
-def _tv_and_noise(samples: list[int], pmf: Callable[[int], float]) -> tuple[float, float]:
+def _tv_and_noise(samples: list[float], pmf: Callable[[int], float]) -> tuple[float, float]:
     """Total-variation distance of the histogram to ``pmf``, and the distance an exact sampler shows."""
-    counts = Counter(samples)
+    counts = Counter(int(x) for x in samples)
     lo, hi = max(0, min(counts) - 60), max(counts) + 60
     total = len(samples)
     tv = noise = mass = 0.0
@@ -66,7 +66,7 @@ def _tv_and_noise(samples: list[int], pmf: Callable[[int], float]) -> tuple[floa
     return 0.5 * tv, 0.5 * noise
 
 
-def _assert_exact(samples: list[int], pmf: Callable[[int], float], what: str) -> None:
+def _assert_exact(samples: list[float], pmf: Callable[[int], float], what: str) -> None:
     tv, noise = _tv_and_noise(samples, pmf)
     assert tv <= 1.6 * noise + 0.0015, f"{what}: TV {tv:.4f} against sampling noise {noise:.4f}"
 
@@ -75,7 +75,7 @@ def _assert_exact(samples: list[int], pmf: Callable[[int], float], what: str) ->
 def test_poisson_matches_the_exact_pmf(rate: float, device: str) -> None:
     lucid.manual_seed(11)
     draws = lucid.poisson(lucid.full((N,), rate, device=device))
-    assert draws.dtype == lucid.int64 and draws.device.type == device
+    assert draws.dtype == lucid.float32 and draws.device.type == device
     _assert_exact(draws.tolist(), _poisson_pmf(rate), f"Poisson({rate})")
 
 
@@ -172,7 +172,7 @@ def test_poisson_rejects_a_rate_it_cannot_draw(bad: float) -> None:
 
 
 def test_the_same_seed_gives_the_same_samples(device: str) -> None:
-    def draw() -> list[list[int]]:
+    def draw() -> list[list[float]]:
         lucid.manual_seed(21)
         binom = D.Binomial(100, lucid.tensor(0.3, device=device)).sample((500,)).tolist()
         pois = lucid.poisson(lucid.full((500,), 30.0, device=device)).tolist()
