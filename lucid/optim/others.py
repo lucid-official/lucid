@@ -574,7 +574,7 @@ class RAdam(Optimizer):
     >>> optimizer.step()
     """
 
-    _HYPERPARAMS = ("lr", "beta1", "beta2", "eps", "weight_decay")
+    _HYPERPARAMS = ("lr", "beta1", "beta2", "eps", "weight_decay", "decoupled_weight_decay")
     _PAIR_KEYS = {"betas": ("beta1", "beta2")}
     _ENGINE_RULES = _C_engine.RAdam
     _PYTHON_DECOUPLED_WD = True
@@ -687,6 +687,7 @@ class NAdam(Optimizer):
         "decoupled_weight_decay",
     )
     _PAIR_KEYS = {"betas": ("beta1", "beta2")}
+    _REBUILD_KEYS = ("momentum_decay",)
     _ENGINE_RULES = _C_engine.NAdam
     _PYTHON_DECOUPLED_WD = True
 
@@ -717,9 +718,6 @@ class NAdam(Optimizer):
     @override
     @classmethod
     def _check_hyperparams(cls, values: dict[str, Any]) -> None:
-        _C_engine.NAdam.check_hyperparams(
-            {k: values[k] for k in ("lr", "beta1", "beta2", "eps", "weight_decay")}
-        )
         mom_decay = values["momentum_decay"]
         if isinstance(mom_decay, bool) or not isinstance(mom_decay, (SupportsFloat, SupportsIndex)):
             raise TypeError(
@@ -727,50 +725,11 @@ class NAdam(Optimizer):
             )
         if not float(mom_decay) >= 0.0:
             raise _C_engine.InvalidArgument("NAdam: momentum_decay must be >= 0")
-        dwd = values["decoupled_weight_decay"]
-        if not isinstance(dwd, bool):
-            raise TypeError(
-                f"NAdam: decoupled_weight_decay must be a bool, got {type(dwd).__name__}"
-            )
+        super()._check_hyperparams(values)
 
     @override
     def _append_engine_optim(self, group: dict[str, object]) -> None:
-        hp = self._hyperparam_dict(self._hyperparams_of(group))
-        wd = 0.0 if hp["decoupled_weight_decay"] else float(hp["weight_decay"])
-        self._engines.append(
-            _C_engine.NAdam(
-                [p._impl for p in _group_params(group)],
-                lr=float(hp["lr"]),
-                beta1=float(hp["beta1"]),
-                beta2=float(hp["beta2"]),
-                eps=float(hp["eps"]),
-                weight_decay=wd,
-                momentum_decay=float(hp["momentum_decay"]),
-            )
-        )
-
-    @override
-    def _apply_hyperparams(self, idx: int, values: dict[str, Any]) -> None:
-        self._check_hyperparams(values)
-        engines = self._engines
-        engine = engines[idx] if idx < len(engines) else None
-        if engine is None:
-            return
-        old_mom_decay = self._group_hparams[idx][5]
-        if values["momentum_decay"] != old_mom_decay:
-            self.param_groups[idx]["momentum_decay"] = values["momentum_decay"]
-            self._rebuild_engine_optim(idx, self.param_groups[idx])
-            return
-        wd = 0.0 if values["decoupled_weight_decay"] else float(values["weight_decay"])
-        engine.set_hyperparams(
-            {
-                "lr": values["lr"],
-                "beta1": values["beta1"],
-                "beta2": values["beta2"],
-                "eps": values["eps"],
-                "weight_decay": wd,
-            }
-        )
+        self._engines.append(self._build_engine(_C_engine.NAdam, group))
 
     @override
     def step(self, closure: _OptimizerClosure = None) -> Tensor | None:

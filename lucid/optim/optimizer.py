@@ -15,6 +15,7 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import _OptimizerClosure
 from lucid.autograd._grad_inplace import negated_grads, zero_grads_
 from lucid.nn.parameter import Parameter
+from lucid.optim._engine_args import check_decoupled_flag, engine_args, rule_args
 from lucid.optim._state_load import LoadedCheckpoint, _follow, _load_group_state
 from lucid.optim._state_load import _group_params as _group_params
 from lucid.optim._state_view import (
@@ -600,6 +601,10 @@ class Optimizer:
     # applied on the parameter buffer before ``optim.step()`` (RAdam, NAdam).
     _PYTHON_DECOUPLED_WD: ClassVar[bool] = False
 
+    # ``_HYPERPARAMS`` entries the engine takes only at construction (or that
+    # pick its rule): an edit of one rebuilds the engine, keeping its state.
+    _REBUILD_KEYS: ClassVar[tuple[str, ...]] = ()
+
     # The reader of ``_HYPERPARAMS`` out of a group, derived once per class
     # by :meth:`__init_subclass__`.  On the class rather than the instance,
     # so an optimizer pickles without it.
@@ -914,7 +919,8 @@ class Optimizer:
             optimizer without a table, which has nothing to check.
         """
         if values and cls._ENGINE_RULES is not None:
-            cls._ENGINE_RULES.check_hyperparams(values)
+            cls._ENGINE_RULES.check_hyperparams(rule_args(cls._REBUILD_KEYS, values))
+            check_decoupled_flag(cls.__name__, values)
 
     def _sync_group_hyperparams(self) -> None:
         """Hand every edited group's hyper-parameters to where they apply.
@@ -941,22 +947,16 @@ class Optimizer:
             seen[idx] = values
 
     def _apply_hyperparams(self, idx: int, values: dict[str, Any]) -> None:
-        """Hand group ``idx``'s edited hyper-parameters to its engine.
-
-        A group without an engine (not built yet, or an optimizer that runs
-        in Python) has them checked instead.
-        """
+        """Hand group ``idx``'s edits to its engine; with no engine yet, only check them."""
         self._check_hyperparams(values)
-        engines = self._engines
-        engine = engines[idx] if idx < len(engines) else None
-        if engine is not None:
-            hp = (
-                {**values, "weight_decay": 0.0}
-                if self._PYTHON_DECOUPLED_WD
-                and self.param_groups[idx].get("decoupled_weight_decay", False)
-                else values
-            )
-            engine.set_hyperparams(hp)
+        engine = self._engines[idx] if idx < len(self._engines) else None
+        if engine is None:
+            return
+        last = dict(zip(self._HYPERPARAMS, self._group_hparams[idx], strict=True))
+        if any(values[k] != last[k] for k in self._REBUILD_KEYS):
+            self._rebuild_engine_optim(idx, self.param_groups[idx])
+        else:
+            engine.set_hyperparams(engine_args(self, values, constructing=False))
 
     @staticmethod
     def _group_binding(
@@ -1107,9 +1107,8 @@ class Optimizer:
         self, cls: Callable[..., _EngineOptimizer], group: dict[str, object]
     ) -> _EngineOptimizer:
         """Construct one engine optimizer ``cls`` for ``group``."""
-        hp = self._hyperparam_dict(self._hyperparams_of(group))
-        if self._PYTHON_DECOUPLED_WD and group.get("decoupled_weight_decay", False):
-            hp["weight_decay"] = 0.0
+        values = self._hyperparam_dict(self._hyperparams_of(group))
+        hp = engine_args(self, values, constructing=True)
         return cls([p._impl for p in _group_params(group)], **hp)
 
     def _apply_decoupled_wd(self, group: dict[str, object], params: list[Parameter]) -> None:

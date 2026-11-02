@@ -66,6 +66,37 @@ _CASES: list[Case] = [
     ("RAdam", {"lr": 0.05}, [{"lr": 0.01, "beta1": 0.8}]),
     # beta2 = 0.5 keeps the rectified branch reachable within a few steps.
     ("RAdam", {"lr": 0.05}, [{"beta2": 0.5, "eps": 1e-3, "weight_decay": 0.1}]),
+    # The decoupled-decay switch, both ways and back, with decay on from the start.
+    ("Adam", {"lr": 0.05, "weight_decay": 0.2}, [{"decoupled_weight_decay": True}]),
+    (
+        "Adam",
+        {"lr": 0.05, "weight_decay": 0.2, "decoupled_weight_decay": True},
+        [{"decoupled_weight_decay": False}],
+    ),
+    (
+        "Adam",
+        {"lr": 0.05, "weight_decay": 0.2, "amsgrad": True},
+        [{"decoupled_weight_decay": True}, {"decoupled_weight_decay": False}],
+    ),
+    ("NAdam", {"lr": 0.05, "weight_decay": 0.2}, [{"decoupled_weight_decay": True}]),
+    (
+        "NAdam",
+        {"lr": 0.05, "weight_decay": 0.2, "decoupled_weight_decay": True},
+        [{"decoupled_weight_decay": False}],
+    ),
+    ("RAdam", {"lr": 0.05, "weight_decay": 0.2}, [{"decoupled_weight_decay": True}]),
+    (
+        "RAdam",
+        {"lr": 0.05, "weight_decay": 0.2, "decoupled_weight_decay": True},
+        [{"decoupled_weight_decay": False}],
+    ),
+    (
+        "RAdam",
+        {"lr": 0.05, "weight_decay": 0.2, "betas": (0.9, 0.5)},
+        [{"decoupled_weight_decay": True}, {"decoupled_weight_decay": False}],
+    ),
+    # NAdam's momentum_decay is an engine constructor argument: an edit rebuilds it.
+    ("NAdam", {"lr": 0.05}, [{"momentum_decay": 0.05}]),
     ("Adamax", {"lr": 0.05}, [{"lr": 0.01, "beta1": 0.7, "beta2": 0.9}]),
     ("Adamax", {"lr": 0.05}, [{"weight_decay": 0.1}]),
     ("Adamax", {"lr": 0.05}, [{"eps": 1e-3}]),
@@ -837,3 +868,118 @@ def test_a_value_of_the_wrong_type_is_a_type_error(value: object) -> None:
 
 def _match(name: str, message: str) -> str:
     return f"^{name}: " + message.replace("[", r"\[").replace("(", r"\(").replace(")", r"\)")
+
+
+# ── group keys the engine is built from (LCD-702) ──────────────────────────
+#
+# ``decoupled_weight_decay`` picks Adam's engine rule (Adam against AdamW) and
+# switches the engine's own decay off in NAdam and RAdam, which decay in
+# Python.  Neither used to follow an edit.  AdamW keeps the key too, and the
+# reference reads an edit of it there as well.
+
+_DECOUPLED = "decoupled_weight_decay"
+_DECAY = {"lr": 0.05, "weight_decay": 0.2}
+
+_ADAMW_FLIPS: list[Case] = [
+    ("AdamW", dict(_DECAY), [{_DECOUPLED: False}]),
+    ("AdamW", dict(_DECAY), [{_DECOUPLED: False}, {_DECOUPLED: True}]),
+    ("AdamW", {**_DECAY, "amsgrad": True}, [{_DECOUPLED: False}]),
+]
+
+# Flags the engine never sees: reading them each step is the whole job.
+_FLAG_FLIPS: list[Case] = [
+    (name, {"lr": 0.05}, [{key: value}])
+    for name in (
+        "SGD",
+        "Adam",
+        "AdamW",
+        "NAdam",
+        "RAdam",
+        "Adamax",
+        "RMSprop",
+        "Rprop",
+        "Adagrad",
+        "Adadelta",
+        "ASGD",
+    )
+    for key, value in (("maximize", True), ("foreach", True))
+]
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize(
+    "case", [pytest.param(c, id=_case_id(c)) for c in [*_ADAMW_FLIPS, *_FLAG_FLIPS]]
+)
+def test_a_flag_edit_takes_effect_as_in_the_reference(case: Case, device: str, ref: Any) -> None:
+    ours = _run_lucid(case, device)
+    theirs = _run_ref(case, ref)
+    for k, (got, want) in enumerate(zip(ours, theirs)):
+        for i, (a, b) in enumerate(zip(got, want)):
+            np.testing.assert_allclose(
+                a, b, rtol=_RTOL, atol=_ATOL, err_msg=f"param {i} after step {k + 1}"
+            )
+
+
+@pytest.mark.parametrize("name", ["Adam", "AdamW", "NAdam", "RAdam"])
+@pytest.mark.parametrize("target", [True, False])
+def test_switching_the_decay_rule_keeps_the_moments_and_the_step(
+    name: str, target: bool, device: str
+) -> None:
+    params = _params(_arrays(0, _SHAPES), device)
+    kw = {**_DECAY, **({} if name == "AdamW" else {_DECOUPLED: not target})}
+    opt = getattr(optim, name)(params, **kw)
+    if name == "AdamW":
+        # AdamW starts decoupled; start the other way round to switch to ``target``.
+        opt.param_groups[0][_DECOUPLED] = not target
+    for k in range(_PHASE):
+        _feed(params, _grads(name, k), device)
+        opt.step()
+    before = copy.deepcopy(opt.state_dict()["state"])
+    opt.param_groups[0][_DECOUPLED] = target
+    opt._sync_hyperparams()
+    after = opt.state_dict()["state"]
+    assert after.keys() == before.keys() and before
+    for slot, entry in before.items():
+        assert after[slot].keys() == entry.keys()
+        for key, value in entry.items():
+            np.testing.assert_array_equal(after[slot][key], value, err_msg=f"{slot}.{key}")
+
+
+def test_an_adamw_switched_off_is_adam_on_the_same_state() -> None:
+    params = _params(_arrays(0, _SHAPES), "cpu")
+    opt = optim.AdamW(params, **_DECAY)
+    for k in range(_PHASE):
+        _feed(params, _grads("AdamW", k), "cpu")
+        opt.step()
+    opt.param_groups[0][_DECOUPLED] = False
+    fresh_params = _params(_values(params), "cpu")
+    fresh = optim.Adam(fresh_params, **_DECAY)
+    _transfer_state(opt, fresh)
+    for k in range(_PHASE, 2 * _PHASE):
+        grads = _grads("AdamW", k)
+        _feed(params, grads, "cpu")
+        opt.step()
+        _feed(fresh_params, grads, "cpu")
+        fresh.step()
+        for a, b in zip(_values(params), _values(fresh_params)):
+            np.testing.assert_array_equal(a, b)
+
+
+@pytest.mark.parametrize("name", ["Adam", "AdamW", "NAdam", "RAdam"])
+def test_a_decoupled_flag_that_is_no_bool_is_a_type_error(name: str) -> None:
+    params = _params(_arrays(0, _SHAPES), "cpu")
+    opt = getattr(optim, name)(params, lr=0.05)
+    _step(name, opt, params, 0)
+    opt.param_groups[0][_DECOUPLED] = "yes"
+    with pytest.raises(TypeError, match=f"{name}: {_DECOUPLED} must be a bool, got str"):
+        _step(name, opt, params, 1)
+
+
+@pytest.mark.parametrize("name", ["SGD", "Adam", "NAdam", "RAdam", "RMSprop"])
+def test_a_differentiable_edit_is_refused_at_the_step(name: str) -> None:
+    params = _params(_arrays(0, _SHAPES), "cpu")
+    opt = getattr(optim, name)(params, lr=0.05)
+    _step(name, opt, params, 0)
+    opt.param_groups[0]["differentiable"] = True
+    with pytest.raises(_C_engine.NotImplementedError, match="differentiable=True"):
+        _step(name, opt, params, 1)

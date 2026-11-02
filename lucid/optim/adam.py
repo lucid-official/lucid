@@ -10,6 +10,24 @@ from lucid._C import engine as _C_engine
 from lucid.nn.parameter import Parameter
 from lucid.optim.optimizer import Optimizer
 
+# The group keys Adam and AdamW share; ``decoupled_weight_decay`` picks the engine
+# rule between them, so an edit of it rebuilds the engine.
+_ADAM_HYPERPARAMS = (
+    "lr",
+    "beta1",
+    "beta2",
+    "eps",
+    "weight_decay",
+    "amsgrad",
+    "decoupled_weight_decay",
+)
+
+
+def _append_adam_engine(self: Optimizer, group: dict[str, object]) -> None:
+    """Build a group's engine: AdamW's rule when its ``decoupled_weight_decay`` is on."""
+    cls = _C_engine.AdamW if group.get("decoupled_weight_decay", False) else _C_engine.Adam
+    self._engines.append(self._build_engine(cls, group))
+
 
 class Adam(Optimizer):
     r"""Adaptive Moment Estimation optimizer (Kingma & Ba, 2015).
@@ -41,6 +59,11 @@ class Adam(Optimizer):
         directly into the gradient before the moment update, which
         couples it with the adaptive learning rate; prefer
         :class:`AdamW` for properly decoupled weight decay.
+    decoupled_weight_decay : bool, optional
+        Whether to decay the weights as :class:`AdamW` does instead (default:
+        ``False``).  The flag is read from the group on every step, so editing
+        ``param_groups[i]["decoupled_weight_decay"]`` switches the rule while
+        keeping the moments and step count.
     amsgrad : bool, optional
         Whether to use the AMSGrad variant (Reddi et al., 2018), which
         keeps the running max of the second moment to guarantee
@@ -75,8 +98,9 @@ class Adam(Optimizer):
     >>> optimizer = optim.Adam(model.parameters(), lr=1e-3)
     """
 
-    _HYPERPARAMS = ("lr", "beta1", "beta2", "eps", "weight_decay", "amsgrad")
+    _HYPERPARAMS = _ADAM_HYPERPARAMS
     _PAIR_KEYS = {"betas": ("beta1", "beta2")}
+    _REBUILD_KEYS = ("decoupled_weight_decay",)
     _ENGINE_RULES = _C_engine.Adam
 
     def __init__(
@@ -105,10 +129,7 @@ class Adam(Optimizer):
             decoupled_weight_decay=decoupled_weight_decay,
         )
 
-    @override
-    def _append_engine_optim(self, group: dict[str, object]) -> None:
-        cls = _C_engine.AdamW if group.get("decoupled_weight_decay", False) else _C_engine.Adam
-        self._engines.append(self._build_engine(cls, group))
+    _append_engine_optim = _append_adam_engine
 
     @override
     def step(self, closure: _OptimizerClosure = None) -> Tensor | None:
@@ -190,9 +211,10 @@ class AdamW(Optimizer):
     param_groups : list of dict
         Parameter groups, each containing ``"params"``, ``"lr"``,
         ``"betas"``, ``"beta1"``, ``"beta2"``, ``"eps"``, ``"weight_decay"``,
-        ``"amsgrad"``, and ``"decoupled_weight_decay"`` (always ``True``; it
-        is not a constructor argument, and editing it does not switch the
-        update rule).
+        ``"amsgrad"``, and ``"decoupled_weight_decay"`` (``True``; it is not a
+        constructor argument, but a group may be edited to ``False``, which
+        makes its next step Adam's coupled :math:`L_2` update as in the
+        reference, keeping the moments).
     defaults : dict
         Default hyperparameter values.
 
@@ -218,8 +240,9 @@ class AdamW(Optimizer):
     >>> optimizer.step()
     """
 
-    _HYPERPARAMS = ("lr", "beta1", "beta2", "eps", "weight_decay", "amsgrad")
+    _HYPERPARAMS = _ADAM_HYPERPARAMS
     _PAIR_KEYS = {"betas": ("beta1", "beta2")}
+    _REBUILD_KEYS = ("decoupled_weight_decay",)
     _ENGINE_RULES = _C_engine.AdamW
 
     def __init__(
@@ -247,9 +270,7 @@ class AdamW(Optimizer):
             decoupled_weight_decay=True,
         )
 
-    @override
-    def _append_engine_optim(self, group: dict[str, object]) -> None:
-        self._engines.append(self._build_engine(_C_engine.AdamW, group))
+    _append_engine_optim = _append_adam_engine
 
     @override
     def step(self, closure: _OptimizerClosure = None) -> Tensor | None:

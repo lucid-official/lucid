@@ -934,7 +934,7 @@
     "lucid/nn/module.py": 4,
     "lucid/optim/lbfgs.py": 2,
     "lucid/optim/optimizer.py": 7,
-    "lucid/optim/others.py": 4,
+    "lucid/optim/others.py": 3,
     "lucid/serialization/__init__.py": 4
    },
    "cast": {
@@ -1525,7 +1525,7 @@
     "lucid/optim/adam.py": 12,
     "lucid/optim/lbfgs.py": 1,
     "lucid/optim/lr_scheduler.py": 20,
-    "lucid/optim/others.py": 14,
+    "lucid/optim/others.py": 13,
     "lucid/optim/sgd.py": 2,
     "lucid/quantization/_functional.py": 1,
     "lucid/quantization/_quantize.py": 2,
