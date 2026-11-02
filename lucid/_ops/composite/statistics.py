@@ -778,8 +778,9 @@ def poisson(input: Tensor, generator: _C_engine.Generator | None = None) -> Tens
     Returns
     -------
     Tensor
-        ``int64`` tensor with the same shape as ``input``, on its device.
-        Zero rates always return zero.
+        Integral counts with the shape, device and floating dtype of
+        ``input`` (the default dtype for an integer ``input``), as the
+        reference answers.  Zero rates always return zero.
 
     Raises
     ------

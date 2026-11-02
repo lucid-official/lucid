@@ -167,8 +167,8 @@ class Poisson(ExponentialFamily):
         Returns
         -------
         Tensor
-            Non-negative integer samples of shape
-            ``(*sample_shape, *batch_shape)``.
+            Counts of shape ``(*sample_shape, *batch_shape)`` held in
+            ``rate``'s floating dtype.
         """
         # ``lucid.poisson`` draws from the Lucid Philox PRNG, so
         # ``manual_seed`` controls the stream end-to-end.
@@ -451,8 +451,9 @@ class Binomial(_CountTrialDistribution):
         Returns
         -------
         Tensor
-            Non-negative integer samples in :math:`\{0, 1, \ldots, n\}`,
-            shape ``(*sample_shape, *batch_shape)``.
+            Non-negative integer-valued samples in
+            :math:`\{0, 1, \ldots, n\}`, shape
+            ``(*sample_shape, *batch_shape)``, in the dtype of ``probs``.
         """
         from lucid._ops.composite._count_samplers import binomial_counts
 
@@ -489,9 +490,8 @@ class Binomial(_CountTrialDistribution):
         # log p(k) = lgamma(n+1) − lgamma(k+1) − lgamma(n−k+1)
         #           + k·log(p) + (n−k)·log(1−p).
         n: Tensor = self.total_count
-        # ``sample`` answers in the integer dtype a count belongs in, and
-        # everything below is float arithmetic — so the counts join the
-        # parameters rather than the other way round.
+        # A caller may score counts held as integers; everything below is
+        # float arithmetic, so the counts join the parameters.
         k: Tensor = value.to(self._logits.dtype)
         log_comb: Tensor = lucid.lgamma(n + 1.0) - lucid.lgamma(k + 1.0) - lucid.lgamma(n - k + 1.0)
         # Stable form via logits: k·l − n·softplus(l).
@@ -777,9 +777,7 @@ class NegativeBinomial(_CountTrialDistribution):
         # would prepend it twice and hand back ``sample_shape * 2``.
         std_gamma: Tensor = _sample_standard_gamma(r, ())
         lam: Tensor = std_gamma / rate
-        # In the parameters' floating dtype, as the reference framework
-        # returns its counts — ``poisson`` itself answers in int64.
-        return lucid.poisson(lam).to(lam.dtype).detach()
+        return lucid.poisson(lam).detach()
 
     @override
     def log_prob(self, value: Tensor) -> Tensor:

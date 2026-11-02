@@ -959,7 +959,14 @@ class Multinomial(Distribution):
 
     @override
     def sample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:
-        """Draw samples by summing one-hot Categorical draws."""
+        """Draw samples by summing one-hot Categorical draws.
+
+        Returns
+        -------
+        Tensor
+            Category counts of shape ``(*sample_shape, *batch_shape, K)``,
+            in the dtype of ``probs``.
+        """
         n: int = int(self.total_count.item())
         p: Tensor = self._probs  # (..., K)
         K: int = int(p.shape[-1])
@@ -970,7 +977,7 @@ class Multinomial(Distribution):
             lucid.stack([(d == k).to(p.dtype) for d in draws]).sum(dim=0) for k in range(K)
         ]
         # Stack along last dim: (*sample_shape, *batch_shape, K)
-        return lucid.stack(counts, dim=-1).to(lucid.int64).detach()
+        return lucid.stack(counts, dim=-1).detach()
 
 
 # ── ContinuousBernoulli ───────────────────────────────────────────────────────

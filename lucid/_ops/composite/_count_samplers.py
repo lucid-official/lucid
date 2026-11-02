@@ -18,7 +18,9 @@ shape the Metal graph compiler needs (see ``Gamma``'s sampler for why).
 
 Arithmetic is float64 on the CPU stream and float32 on the GPU stream, where
 a Binomial with ``n`` beyond about ``1e6`` loses accuracy in the acceptance
-test.  The returned counts are ``int64``.
+test.  The counts come back as integral values in the parameter's floating
+dtype (the default dtype for an integer parameter), as the reference answers:
+only an index-valued draw is ``int64``, and a count is not an index.
 """
 
 import math
@@ -48,6 +50,11 @@ _HALF_LOG_2PI = 0.5 * math.log(2.0 * math.pi)
 
 def _work_dtype(device_type: str) -> DTypeLike:
     return lucid.float64 if device_type == "cpu" else lucid.float32
+
+
+def _count_dtype(param: Tensor) -> DTypeLike:
+    """The dtype a count drawn for ``param`` is answered in."""
+    return param.dtype if param.is_floating_point() else lucid.get_default_dtype()
 
 
 def _is_traced() -> bool:
@@ -181,14 +188,15 @@ def poisson_counts(rate: Tensor, generator: _C_engine.Generator | None = None) -
     Returns
     -------
     Tensor
-        ``int64`` counts, the shape of ``rate``.
+        Integral counts in ``rate``'s floating dtype, the shape of ``rate``.
     """
     f = _work_dtype(rate.device.type)
     lam = rate.detach().to(f)
     traced = _is_traced()
     out = lucid.zeros_like(lam)
+    answer = _count_dtype(rate)
     if lam.numel() == 0:
-        return out.to(lucid.int64)
+        return out.to(answer)
 
     large = lam >= _REJECTION_MEAN
     if traced or bool(large.any().item()):
@@ -202,7 +210,7 @@ def poisson_counts(rate: Tensor, generator: _C_engine.Generator | None = None) -
         u = lucid.rand(*lam.shape, dtype=f, device=lam.device, generator=generator)
         draw = _invert_in_chunks([lam_s], u, length, _poisson_table)
         out = lucid.where(small, draw, out)
-    return out.to(lucid.int64)
+    return out.to(answer)
 
 
 # ── Binomial ─────────────────────────────────────────────────────────────────
@@ -290,7 +298,8 @@ def binomial_counts(
     Returns
     -------
     Tensor
-        ``int64`` counts in ``[0, n]``, the shape of ``count``.
+        Integral counts in ``[0, n]``, in ``prob``'s floating dtype, the shape
+        of ``count``.
     """
     f = _work_dtype(count.device.type)
     n = count.detach().to(f)
@@ -299,8 +308,9 @@ def binomial_counts(
     q = lucid.where(flip, 1.0 - p, p)
     traced = _is_traced()
     out = lucid.zeros_like(n)
+    answer = _count_dtype(prob)
     if n.numel() == 0:
-        return out.to(lucid.int64)
+        return out.to(answer)
 
     live = (n > 0.0) & (q > 0.0)
     large = live & (n * q >= _REJECTION_MEAN)
@@ -316,4 +326,4 @@ def binomial_counts(
         u = lucid.rand(*n.shape, dtype=f, device=n.device, generator=generator)
         draw = _invert_in_chunks([n_s, q_s], u, _table_length(mean), _binomial_table)
         out = lucid.where(small, draw, out)
-    return lucid.where(flip, n - out, out).to(lucid.int64)
+    return lucid.where(flip, n - out, out).to(answer)
