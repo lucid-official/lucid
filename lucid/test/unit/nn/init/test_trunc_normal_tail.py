@@ -8,6 +8,7 @@ against the exact truncated-normal CDF, not only against its bounds.
 
 import math
 import warnings
+from typing import Any
 
 import numpy as np
 import pytest
@@ -136,7 +137,17 @@ class TestWarning:
             warnings.simplefilter("error")
             init.trunc_normal_(lucid.empty(8), mean=mean)
 
-    def test_zero_element_warning_is_attributed_to_the_caller(self) -> None:
+    @pytest.mark.parametrize(
+        "initialiser",
+        [init.xavier_uniform_, init.xavier_normal_, init.kaiming_uniform_, init.kaiming_normal_],
+    )
+    def test_zero_element_warning_is_attributed_to_the_caller(self, initialiser: Any) -> None:
         with pytest.warns(UserWarning, match="zero-element") as caught:
-            init.xavier_uniform_(lucid.empty(0, 3))
+            initialiser(lucid.empty(0, 3))
         assert caught[0].filename == __file__
+
+
+def test_degenerate_interval_is_its_single_point() -> None:
+    w = lucid.empty(16)
+    init.trunc_normal_(w, mean=0.0, std=1.0, a=1.0, b=1.0)
+    assert w.tolist() == [1.0] * 16

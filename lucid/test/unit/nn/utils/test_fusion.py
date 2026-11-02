@@ -180,3 +180,18 @@ class TestRefusals:
             fusion.fuse_linear_bn_eval(nn.Conv2d(3, 6, 3), nn.BatchNorm1d(2))
         with pytest.raises(TypeError, match="bn must be a BatchNorm"):
             fusion.fuse_linear_bn_eval(nn.Linear(2, 2), nn.Linear(2, 2))
+
+
+def test_fuse_modules_folds_a_conv_bn_relu_run_in_eval_and_refuses_train() -> None:
+    from lucid.quantization import fuse_modules
+
+    model = nn.Sequential(nn.Conv2d(3, 6, 3), nn.BatchNorm2d(6), nn.ReLU())
+    model[1].running_mean.copy_(lucid.randn(6))
+    model[1].running_var.copy_(lucid.rand(6) + 0.5)
+    x = lucid.randn(2, 3, 7, 7)
+    with pytest.raises(AssertionError, match="Fusion only for eval!"):
+        fuse_modules(model.train(), [["0", "1", "2"]])
+    want = model.eval()(x)
+    fused = fuse_modules(model, [["0", "1", "2"]])
+    assert isinstance(fused[1], nn.Identity)
+    assert (fused(x) - want).abs().max().item() < 1e-4
