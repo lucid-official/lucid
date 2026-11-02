@@ -24,6 +24,7 @@ from lucid.optim._state_view import (
     group_entries,
     held_checkpoint,
     held_from_checkpoint,
+    moved_legacy_state,
 )
 from lucid.optim._step_counter import _CountedStep
 
@@ -1272,12 +1273,10 @@ class Optimizer:
 
     # ── state_dict round-trip ─────────────────────────────────────────────────
     #
-    # Format follows reference framework: ``param_groups`` mirrors the live
-    # groups with each ``params`` entry replaced by integer parameter ids;
-    # ``state`` is keyed by those ids.  Engine optimizers export their state
-    # through the C++ ``state_buffers`` / ``load_state_buffers`` hooks;
-    # subclasses with Python-side state (LBFGS history) override _save_state /
-    # _load_state.
+    # Format follows the reference framework: ``param_groups`` mirrors the live groups with
+    # each ``params`` replaced by integer ids; ``state`` is keyed by those ids.  Engine
+    # optimizers export through the C++ ``state_buffers`` / ``load_state_buffers`` hooks;
+    # subclasses with Python-side state (LBFGS history) override _save_state / _load_state.
 
     @property
     def state(self) -> StateMap:
@@ -1416,6 +1415,8 @@ class Optimizer:
         ------
         TypeError
             ``param_groups`` or ``state`` is the wrong kind of container.
+        IndexError
+            ``state`` has an entry for a parameter the optimizer lacks.
         ValueError
             The checkpoint has another number of groups than the optimizer,
             or a group of another size, or a group hyper-parameter the
@@ -1492,9 +1493,8 @@ class Optimizer:
 
     def __setstate__(self, state: dict[str, object]) -> None:
         """Restore pickled or deep-copied optimizer state; engines rebuild lazily."""
-        self.__dict__.update(state)
+        self.__dict__.update(moved_legacy_state(state, self._ENGINE_BACKED))
         # The scheduler's step counter counts one optimizer: every copy —
         # shallow, deep or unpickled — gets one of its own.
-        step = state.get("step")
-        if isinstance(step, _CountedStep):
+        if isinstance(step := state.get("step"), _CountedStep):
             self.__dict__["step"] = step.on(self)

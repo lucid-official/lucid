@@ -249,6 +249,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Optimizer.state is a live view keyed by parameter (LCD-812)
 
+- state leftovers - legacy pickle, bad index, partial update
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

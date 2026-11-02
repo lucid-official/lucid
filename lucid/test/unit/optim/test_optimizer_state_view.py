@@ -91,6 +91,35 @@ def test_writes_that_cannot_work_say_why() -> None:
         del opt.state[params[0]]
 
 
+def test_update_checks_every_key_before_writing_any() -> None:
+    params = _params()
+    opt = optim.Adam(params, lr=0.1)
+    _step(opt, params)
+    entry = opt.state[params[0]]
+    before = {k: np.array(v.numpy()) for k, v in entry.items()}
+    good = lucid.full((3, 2), 7.0)
+    with pytest.raises(KeyError, match="no state entry"):
+        entry.update({"exp_avg": good, "not_a_buffer": good})
+    with pytest.raises(lucid._C.engine.ShapeMismatch):
+        entry.update({"exp_avg": good, "exp_avg_sq": lucid.ones(5)})
+    for k, v in before.items():
+        np.testing.assert_array_equal(
+            entry[k].numpy(), v, err_msg=f"{k} changed by a refused update"
+        )
+
+
+def test_update_writes_all_its_keys_in_every_calling_form() -> None:
+    params = _params()
+    opt = optim.Adam(params, lr=0.1)
+    _step(opt, params)
+    entry = opt.state[params[0]]
+    entry.update({"exp_avg": lucid.full((3, 2), 7.0)}, exp_avg_sq=lucid.full((3, 2), 8.0))
+    entry.update([("exp_avg", lucid.full((3, 2), 9.0))])
+    assert np.all(entry["exp_avg"].numpy() == 9.0)
+    assert np.all(entry["exp_avg_sq"].numpy() == 8.0)
+    assert np.all(opt.state[params[1]]["exp_avg"].numpy() != 9.0), "only that parameter's"
+
+
 def test_state_follows_a_conversion() -> None:
     model = nn.Linear(3, 2)
     opt = optim.Adam(model.parameters(), lr=0.1)
@@ -171,3 +200,54 @@ def test_python_held_state_is_refused_for_a_parameter_index_it_does_not_have() -
     saved["state"] = {5: {"n": 1}}
     with pytest.raises(IndexError):
         opt.load_state_dict(saved)
+
+
+# ── a pickle from before ``state`` was a view ──────────────────────────────
+
+
+def _legacy_dict(opt: optim.Optimizer, state: object) -> dict[str, Any]:
+    """The ``__dict__`` an older Lucid pickled: ``state`` an attribute keyed by flat index."""
+    d = {k: v for k, v in opt.__getstate__().items() if k not in ("_pending_state", "_held_state")}
+    d["state"] = state
+    return d
+
+
+def test_an_engine_optimizers_old_pickle_keeps_its_state() -> None:
+    params = _params()
+    opt = optim.Adam(params, lr=0.1)
+    _step(opt, params)
+    _step(opt, params)
+    saved = copy.deepcopy(opt.state_dict()["state"])
+
+    twin_params = _params()
+    twin = optim.Adam.__new__(optim.Adam)
+    twin.__setstate__(_legacy_dict(optim.Adam(twin_params, lr=0.1), copy.deepcopy(saved)))
+    assert "state" not in twin.__dict__, "the property must not be shadowed"
+    assert int(twin.state[twin_params[0]]["step"]) == 2
+    for idx, entry in saved.items():
+        for key, want in entry.items():
+            np.testing.assert_array_equal(np.asarray(twin.state_dict()["state"][idx][key]), want)
+
+    _step(twin, twin_params)
+    assert int(twin.state[twin_params[0]]["step"]) == 3
+
+
+def test_a_python_held_optimizers_old_pickle_keeps_its_state() -> None:
+    params = _params()
+    opt = _Momentum(params)
+    _step(opt, params)
+    saved = copy.deepcopy(opt.state_dict()["state"])
+
+    twin_params = _params()
+    twin = _Momentum.__new__(_Momentum)
+    twin.__setstate__(_legacy_dict(_Momentum(twin_params), saved))
+    assert twin.state[twin_params[1]]["n"] == 1
+    np.testing.assert_array_equal(
+        twin.state[twin_params[1]]["buf"].numpy(), opt.state[params[1]]["buf"].numpy()
+    )
+
+
+def test_an_old_pickle_whose_state_is_not_a_mapping_is_refused() -> None:
+    opt = optim.Adam(_params(), lr=0.1)
+    with pytest.raises(TypeError, match="'state' must be a mapping"):
+        optim.Adam.__new__(optim.Adam).__setstate__(_legacy_dict(opt, [1, 2]))

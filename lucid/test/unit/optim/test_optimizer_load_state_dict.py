@@ -456,11 +456,17 @@ def _break_buffer_shape(sd: dict[str, Any]) -> type[Exception]:
     return _C_engine.ShapeMismatch
 
 
+def _break_state_index(sd: dict[str, Any]) -> type[Exception]:
+    sd["state"][99] = {"step": np.asarray(1)}
+    return IndexError
+
+
 _BREAKS = [
     pytest.param(_break_hyperparam, id="hyper-parameter"),
     pytest.param(_break_group_size, id="group-size"),
     pytest.param(_break_group_count, id="group-count"),
     pytest.param(_break_buffer_shape, id="buffer-shape"),
+    pytest.param(_break_state_index, id="state-index"),
 ]
 # SGD without momentum keeps no buffer to break.
 _STATEFUL = [p for p in _CASE_PARAMS if p.values[0] != ("SGD", {"lr": 0.1})]
@@ -647,6 +653,16 @@ def test_a_rejected_hyperparameter_leaves_python_side_optimizers_untouched(
     assert _hyperparams(live) == hyper
 
 
+@pytest.mark.parametrize(("name", "kw"), _PYTHON_SIDE)
+def test_a_state_entry_for_a_missing_parameter_is_refused_by_python_side_optimizers(
+    name: str, kw: dict[str, Any]
+) -> None:
+    saved = _flat(name, kw, 2).state_dict()
+    saved["state"] = {2: {"step": 1}}
+    with pytest.raises(IndexError, match="state for parameter 2, but the optimizer has 2"):
+        _flat(name, kw, 2).load_state_dict(saved)
+
+
 def test_lbfgs_checkpoint_before_the_first_step_resets_its_history() -> None:
     p = nn.Parameter(lucid.tensor([1.0, 2.0]))
     opt = optim.LBFGS([p], lr=1.0, max_iter=3)
@@ -698,3 +714,43 @@ def test_a_payload_of_the_wrong_kind_is_refused(payload: dict[str, Any], message
     opt = _Bare([nn.Parameter(lucid.zeros(1))])
     with pytest.raises(TypeError, match=message):
         opt.load_state_dict(payload)
+
+
+@pytest.mark.parametrize("compiled", _EAGER_AND_COMPILED)
+@pytest.mark.parametrize("key", [-1, 2, 99])
+def test_a_state_index_outside_the_parameters_is_refused_before_a_step(
+    key: int, compiled: bool
+) -> None:
+    """The reference keeps such an entry unread; here a checkpoint means the same to every optimizer."""
+    opt = _make("Adam", _lucid_params(_arrays(0)), {"lr": 0.05}, compiled)
+    saved = opt.state_dict()
+    saved["state"] = {key: {"step": np.asarray(1)}}
+    with pytest.raises(IndexError, match=f"state for parameter {key}, but the optimizer has 2"):
+        opt.load_state_dict(saved)
+
+
+def test_a_state_key_that_is_not_an_index_is_refused() -> None:
+    opt = optim.Adam(_lucid_params(_arrays(0)), lr=0.05)
+    saved = opt.state_dict()
+    saved["state"] = {"0": {"step": np.asarray(1)}}
+    with pytest.raises(TypeError, match="keyed by parameter index"):
+        opt.load_state_dict(saved)
+
+
+def test_a_refused_checkpoint_leaves_adagrads_constructor_seed() -> None:
+    """The seed is retired by a load that succeeds, not by one that is refused."""
+    params = _lucid_params(_arrays(0))
+    opt = optim.Adagrad(params, lr=0.1, initial_accumulator_value=0.5)
+    seeded = copy.deepcopy(opt.state_dict())
+    bad = copy.deepcopy(seeded)
+    bad["state"][99] = {"step": np.asarray(1)}
+    with pytest.raises(IndexError):
+        opt.load_state_dict(bad)
+    after = opt.state_dict()["state"]
+    assert sorted(after) == sorted(seeded["state"]) == [0, 1]
+    for idx, entry in seeded["state"].items():
+        np.testing.assert_array_equal(_as_array(after[idx]["sum"]), _as_array(entry["sum"]))
+    _feed(params, _arrays(1), "cpu")
+    opt.step()
+    assert sorted(opt.state_dict()["state"]) == [0, 1]
+    assert np.all(_as_array(opt.state_dict()["state"][0]["sum"]) >= 0.5)

@@ -20,6 +20,7 @@ from collections import defaultdict
 from collections.abc import (
     Callable,
     ItemsView,
+    Iterable,
     Iterator,
     Mapping,
     MutableMapping,
@@ -27,7 +28,7 @@ from collections.abc import (
     ValuesView,
 )
 from dataclasses import dataclass
-from typing import Protocol, override
+from typing import Protocol, override, runtime_checkable
 
 from lucid._dispatch import _wrap
 from lucid._tensor.tensor import Tensor
@@ -38,6 +39,15 @@ from lucid._C import engine as _C_engine
 
 StateEntry = MutableMapping[str, object]
 StateMap = MutableMapping[Parameter, StateEntry]
+
+
+@runtime_checkable
+class _KeysAndGetItem(Protocol):
+    """What ``dict.update`` takes as a mapping: ``keys()`` and ``[]``."""
+
+    def keys(self) -> Iterable[str]: ...
+
+    def __getitem__(self, key: str, /) -> object: ...
 
 
 class _BufferEngine(Protocol):
@@ -192,27 +202,50 @@ class EngineEntry(MutableMapping[str, object]):
 
     @override
     def __setitem__(self, name: str, value: object) -> None:
+        self._write({name: value})
+
+    @override
+    def update(
+        self, other: _KeysAndGetItem | Iterable[tuple[str, object]] = (), /, **kwds: object
+    ) -> None:
+        """Replace several buffers at once: every key and shape is checked before any is written."""
+        pairs = (
+            {k: other[k] for k in list(other.keys())}
+            if isinstance(other, _KeysAndGetItem)
+            else dict(other)
+        )
+        self._write({**pairs, **kwds})
+
+    def _write(self, items: Mapping[str, object]) -> None:
         owner, where = self._owner, self._where
         if not owner._engines_built:
             raise RuntimeError(
                 f"optimizer state is written once the optimizer has stepped; before "
-                f"that, load it with load_state_dict() (state[{name!r}] assigned)"
+                f"that, load it with load_state_dict() (state[{sorted(items)!r}] assigned)"
             )
         engine = owner._engine_optims[where.group]
         count = len(_group_params(owner.param_groups[where.group]))
         held = {
-            n
+            n: buf
             for n, tensors in engine.state_buffers()
-            if where.slot < len(tensors) and tensors[where.slot] is not None
+            if where.slot < len(tensors) and (buf := tensors[where.slot]) is not None
         }
-        if name not in held:
+        if absent := sorted(n for n in items if n not in held):
             raise KeyError(
-                f"this parameter has no state entry {name!r} to replace "
+                f"this parameter has no state entry {absent!r} to replace "
                 f"(it has {sorted(held)}); the optimizer decides what it keeps"
             )
-        slots: list[_C_engine.TensorImpl | None] = [None] * count
-        slots[where.slot] = _loaded_state_like(name, value, where.param._impl)
-        engine.load_state_buffers([(name, slots)])
+        staged: list[tuple[str, Sequence[_C_engine.TensorImpl | None]]] = []
+        for name, value in items.items():
+            new = _loaded_state_like(name, value, where.param._impl)
+            if tuple(new.shape) != tuple(held[name].shape):
+                raise _C_engine.ShapeMismatch(
+                    f"state[{name!r}] is shaped {tuple(held[name].shape)}, got {tuple(new.shape)}"
+                )
+            slots: list[_C_engine.TensorImpl | None] = [None] * count
+            slots[where.slot] = new
+            staged.append((name, slots))
+        engine.load_state_buffers(staged)
 
     @override
     def __delitem__(self, name: str) -> None:
@@ -399,6 +432,51 @@ def held_from_checkpoint(
             )
         device = params[idx]._impl.device
         out[params[idx]] = {k: _revive(v, device) for k, v in entry.items()}
+    return out
+
+
+def moved_legacy_state(state: Mapping[str, object], engine_backed: bool) -> dict[str, object]:
+    """A pickled optimizer ``__dict__`` with an old-format ``state`` moved to where state lives now.
+
+    Before ``state`` became a view, every optimizer pickled it as its own
+    attribute, keyed by flat parameter index: the checkpoint an engine
+    optimizer rebuilds from, or the live state of one that keeps it in Python.
+    Left in the dict it would be shadowed by the property and lost without a
+    word.  An engine optimizer's goes to its pending checkpoint; any other's
+    is revived on its parameters.
+
+    Parameters
+    ----------
+    state : mapping
+        The unpickled ``__dict__``.
+    engine_backed : bool
+        Whether the optimizer's class keeps its state in the engine.
+
+    Returns
+    -------
+    dict
+        ``state`` without the ``state`` entry, plus the field it became.
+
+    Raises
+    ------
+    TypeError
+        The old ``state`` is not a mapping, or the optimizer's groups are not a list.
+    """
+    if "state" not in state:
+        return dict(state)
+    out = {k: v for k, v in state.items() if k != "state"}
+    legacy = state["state"]
+    if not isinstance(legacy, Mapping):
+        raise TypeError(
+            f"a pickled optimizer's 'state' must be a mapping, got {type(legacy).__name__}"
+        )
+    if engine_backed:
+        out["_pending_state"] = dict(legacy)
+    else:
+        groups = out.get("param_groups")
+        if not isinstance(groups, list):
+            raise TypeError("a pickled optimizer's 'param_groups' must be a list")
+        out["_held_state"] = held_from_checkpoint(legacy, groups)
     return out
 
 

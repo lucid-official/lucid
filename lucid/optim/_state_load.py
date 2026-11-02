@@ -200,7 +200,10 @@ class LoadedCheckpoint:
         Raises
         ------
         TypeError
-            ``param_groups`` or ``state`` is the wrong kind of container.
+            ``param_groups`` or ``state`` is the wrong kind of container, or
+            a ``state`` key is not an integer.
+        IndexError
+            ``state`` has an entry for a parameter index the optimizer lacks.
         ValueError
             The saved groups are not the optimizer's: another count, or a
             group of another size.  Every saved group is checked, so a
@@ -226,7 +229,28 @@ class LoadedCheckpoint:
         raw_state = state_dict.get("state", {})
         if not isinstance(raw_state, dict):
             raise TypeError("load_state_dict: 'state' must be a dict")
+        cls._check_state_keys(raw_state, sum(live_sizes))
         return cls(raw_groups, raw_state)
+
+    @staticmethod
+    def _check_state_keys(state: dict[object, object], total: int) -> None:
+        """Refuse an entry for a parameter the optimizer does not have.
+
+        The reference keeps such an entry in ``state`` unread; here it would
+        be dropped by an engine optimizer and refused by one that keeps its
+        state in Python, so the same checkpoint loaded or not by optimizer.
+        """
+        for key in state:
+            if not isinstance(key, numbers.Integral):
+                raise TypeError(
+                    f"load_state_dict: state is keyed by parameter index, got {key!r} "
+                    f"({type(key).__name__})"
+                )
+            if not 0 <= key < total:
+                raise IndexError(
+                    f"load_state_dict: state for parameter {key}, "
+                    f"but the optimizer has {total} parameters"
+                )
 
     @staticmethod
     def _saved_size(idx: int, saved: object) -> int:
