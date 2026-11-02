@@ -105,29 +105,38 @@ def test_split_and_chunk_follow_the_reference_rule(n: int) -> None:
 
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("op", ["max", "min"])
-def test_ties_share_the_gradient(device: str, op: str) -> None:
+def test_a_tie_sends_the_gradient_to_the_returned_index(device: str, op: str) -> None:
+    """``max(dim)``/``min(dim)`` credit the first extremum, as the reference does (LCD-730).
+
+    The full reduction still splits a tie: its ``backward`` sums to one.
+    """
     extreme = 5.0 if op == "max" else -5.0
     a = np.array([[extreme, extreme, 0.0, extreme], [1.0, extreme, 2.0, 0.5]], dtype=np.float32)
     reduce = getattr(lucid, op)
 
     x = lucid.tensor(a, device=device, requires_grad=True)
-    reduce(x, dim=1).values.sum().backward()
-    np.testing.assert_allclose(x.grad.numpy(), [[1 / 3, 1 / 3, 0, 1 / 3], [0, 1, 0, 0]], rtol=1e-6)
+    out = reduce(x, dim=1)
+    out.values.sum().backward()
+    assert out.indices.tolist() == [0, 1]
+    np.testing.assert_allclose(x.grad.numpy(), [[1, 0, 0, 0], [0, 1, 0, 0]], rtol=1e-6)
 
     x = lucid.tensor(a, device=device, requires_grad=True)
     reduce(x).backward()
     assert float(x.grad.sum().item()) == pytest.approx(1.0)
 
-    # The graph-mode backward takes the same shares.
+    # The graph-mode backward routes the same way.
     x = lucid.tensor(a, device=device, requires_grad=True)
     (d,) = grad(reduce(x, dim=1).values.sum(), [x], create_graph=True)
-    np.testing.assert_allclose(d.numpy(), [[1 / 3, 1 / 3, 0, 1 / 3], [0, 1, 0, 0]], rtol=1e-6)
+    np.testing.assert_allclose(d.numpy(), [[1, 0, 0, 0], [0, 1, 0, 0]], rtol=1e-6)
 
 
-def test_a_nan_slice_gets_no_gradient_rather_than_nan() -> None:
+def test_a_nan_slice_sends_the_gradient_to_the_nan_it_returns() -> None:
+    """The NaN is the slice's maximum and its index is returned, so it gets the gradient."""
     x = lucid.tensor([[1.0, float("nan")], [2.0, 3.0]], requires_grad=True)
-    lucid.max(x, dim=1).values.sum().backward()
-    assert x.grad.tolist() == [[0.0, 0.0], [0.0, 1.0]]
+    out = lucid.max(x, dim=1)
+    out.values.sum().backward()
+    assert out.indices.tolist() == [1, 1]
+    assert x.grad.tolist() == [[0.0, 1.0], [0.0, 1.0]]
 
 
 def test_radix_sort_stability_signed_zero_nan_and_short_rows() -> None:
