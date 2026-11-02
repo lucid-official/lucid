@@ -544,6 +544,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.serialization._safetensors"
+    },
+    {
+      "kind": "module",
       "module": "lucid.serialization._storage_plan"
     },
     {
@@ -1955,10 +1959,6 @@
     {
       "kind": "module",
       "module": "lucid.distributions"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.distributions.continuous_extra"
     }
   ],
   "lucid.distributions.gamma.Dirichlet": [
