@@ -53,6 +53,9 @@ interface FadeInStaggerProps {
   children: React.ReactNode;
   staggerDelay?: number;
   className?: string;
+  /** Class for the per-child wrapper — e.g. ``h-full`` so cards in a grid row
+   *  stretch to equal height. */
+  itemClassName?: string;
   /** Use whileInView (for below-fold content). Default: false */
   inView?: boolean;
 }
@@ -61,6 +64,7 @@ export function FadeInStagger({
   children,
   staggerDelay = 0.07,
   className,
+  itemClassName,
   inView = false,
 }: FadeInStaggerProps) {
   const viewportProps = inView
@@ -78,6 +82,7 @@ export function FadeInStagger({
     >
       {React.Children.map(children, (child) => (
         <motion.div
+          className={itemClassName}
           variants={{
             hidden: { opacity: 0, y: 12 },
             visible: { opacity: 1, y: 0, transition: springs.smooth },
