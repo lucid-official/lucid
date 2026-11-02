@@ -15,6 +15,7 @@ from typing import ClassVar, Literal, TypedDict, override
 import lucid
 import lucid.nn as nn
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
+from lucid.peft._errors import NoMatchingPeftModuleError
 from lucid.peft._adapter_file import _AdapterFile
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft._slots import _AdapterSlot, _outside_slots
@@ -259,7 +260,7 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
             return []
         targets = _parameter_targets(model, names, claimed)
         if not targets and not claimed:
-            raise ValueError(
+            raise NoMatchingPeftModuleError(
                 f"Target parameters {names} not found in the base model. "
                 "Please check the target parameters and try again."
             )

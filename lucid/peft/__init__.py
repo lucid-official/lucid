@@ -167,13 +167,40 @@ adapter (``model(x, adapter_names=[...])``).  ``get_layer_status`` and
 ``get_model_status`` report what each adapter layer, and the model, is doing.
 Adapting a model a second time adds the new adapter beside the first, with a
 warning.
+
+The helpers a script moved from the reference library reaches for are here under its
+names: ``PeftError`` / ``NoMatchingPeftModuleError`` / ``PeftWarning``, the method tables
+``PEFT_TYPE_TO_CONFIG_MAPPING`` and ``PEFT_TYPE_TO_TUNER_MAPPING`` (read-only views),
+``get_peft_config``, ``load_peft_weights``, ``get_base_model_state_dict`` /
+``set_base_model_state_dict``, ``cast_mixed_precision_params``, ``shift_tokens_right``,
+``prepare_model_for_kbit_training`` (freezes and upcasts; a quantized model is refused),
+``find_kappa_target_modules`` and the bloom prefix-tuning reshaper.
 """
 
 from lucid.peft import tuners
+from lucid.peft._base_state_dict import get_base_model_state_dict, set_base_model_state_dict
 from lucid.peft._config import PeftConfig, PeftType, PromptLearningConfig, TaskType
-from lucid.peft._mapping import get_peft_model, inject_adapter_in_model
+from lucid.peft._errors import NoMatchingPeftModuleError, PeftError, PeftWarning
+from lucid.peft._kappa import find_kappa_target_modules
+from lucid.peft._load_weights import load_peft_weights
+from lucid.peft._mapping import (
+    PEFT_TYPE_TO_CONFIG_MAPPING,
+    PEFT_TYPE_TO_TUNER_MAPPING,
+    get_peft_config,
+    get_peft_model,
+    inject_adapter_in_model,
+)
+from lucid.peft._model_prep import (
+    cast_mixed_precision_params,
+    prepare_model_for_kbit_training,
+    shift_tokens_right,
+)
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft._peft_model import PeftModel, get_layer_status, get_model_status
+from lucid.peft._prefix_postprocess import (
+    TRANSFORMERS_MODELS_TO_PREFIX_TUNING_POSTPROCESS_MAPPING,
+    bloom_model_postprocess_past_key_value,
+)
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
 from lucid.peft._status import TunerLayerStatus, TunerModelStatus
 from lucid.peft._task_models import (
@@ -243,6 +270,12 @@ __all__ = [
     "AutoPeftModelForTokenClassification",
     "MODEL_TYPE_TO_PEFT_MODEL_MAPPING",
     "ModulesToSaveWrapper",
+    "NoMatchingPeftModuleError",
+    "PEFT_TYPE_TO_CONFIG_MAPPING",
+    "PEFT_TYPE_TO_TUNER_MAPPING",
+    "PeftError",
+    "PeftWarning",
+    "TRANSFORMERS_MODELS_TO_PREFIX_TUNING_POSTPROCESS_MAPPING",
     "MultitaskPromptEmbedding",
     "MultitaskPromptTuningConfig",
     "MultitaskPromptTuningInit",
@@ -313,10 +346,19 @@ __all__ = [
     "PeftModelForSeq2SeqLM",
     "PeftModelForSequenceClassification",
     "PeftModelForTokenClassification",
+    "bloom_model_postprocess_past_key_value",
+    "cast_mixed_precision_params",
+    "find_kappa_target_modules",
+    "get_base_model_state_dict",
     "get_layer_status",
     "get_model_status",
+    "get_peft_config",
     "get_peft_model",
     "inject_adapter_in_model",
     "get_peft_model_state_dict",
+    "load_peft_weights",
+    "prepare_model_for_kbit_training",
+    "set_base_model_state_dict",
     "set_peft_model_state_dict",
+    "shift_tokens_right",
 ]

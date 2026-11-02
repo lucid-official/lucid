@@ -1,14 +1,69 @@
-"""The two ways in: ``get_peft_model`` (wrapped) and ``inject_adapter_in_model`` (bare)."""
+"""The two ways in (``get_peft_model`` wrapped, ``inject_adapter_in_model`` bare) and the method tables."""
 
 import dataclasses
+from collections.abc import Mapping
+from types import MappingProxyType
 
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
-from lucid.peft._config import PeftConfig, _require_config
+from lucid.peft._config import _CONFIG_CLASSES, PeftConfig, PeftType, _require_config
 from lucid.peft._peft_model import PeftModel
 from lucid.peft._refusals import refuse_value
 from lucid.peft._targeting import _config_for_model
-from lucid.peft.tuners._base import _tuner_for
+from lucid.peft.tuners._base import _TUNERS, _AdapterHost, _tuner_for
+
+#: The config class of each method, by ``PeftType``: a read-only view of the registry that
+#: ``PeftConfig`` subclasses join as they are defined, so a method added later appears here.
+PEFT_TYPE_TO_CONFIG_MAPPING: Mapping[PeftType, type[PeftConfig]] = MappingProxyType(_CONFIG_CLASSES)
+
+#: The tuner (the model class that puts a method's adapters into a model) of each method, by
+#: ``PeftType``: a read-only view of the tuner registry, like ``PEFT_TYPE_TO_CONFIG_MAPPING``.
+PEFT_TYPE_TO_TUNER_MAPPING: Mapping[PeftType, type[_AdapterHost]] = MappingProxyType(_TUNERS)
+
+
+def get_peft_config(config_dict: dict[str, object]) -> PeftConfig:
+    r"""Build the adapter config a dict describes, of the class its ``peft_type`` names.
+
+    The dict is the shape ``PeftConfig.to_dict`` returns and ``adapter_config.json``
+    holds.  The class is looked up in ``PEFT_TYPE_TO_CONFIG_MAPPING`` and reads the dict
+    as :meth:`~lucid.peft.PeftConfig.from_dict` does, so a key from the reference's file
+    that this library has no field for is accepted at a value that turns its feature off.
+
+    Parameters
+    ----------
+    config_dict : dict of str to object
+        The config's fields, by name, with the method under ``"peft_type"``.
+
+    Returns
+    -------
+    PeftConfig
+        The validated config, of the method's own class.
+
+    Raises
+    ------
+    KeyError
+        ``config_dict`` has no ``"peft_type"``, or it names a method this library lacks.
+    NotImplementedError
+        The dict turns on a feature the library does not implement.
+
+    Examples
+    --------
+    >>> from lucid.peft import get_peft_config
+    >>> config = get_peft_config({"peft_type": "LORA", "r": 4, "target_modules": ["q"]})
+    >>> type(config).__name__, config.r
+    ('LoraConfig', 4)
+    """
+    named = config_dict["peft_type"]
+    if not isinstance(named, str):
+        raise TypeError(f"peft_type must be a str, got {type(named).__name__}")
+    try:
+        peft_type = PeftType(named)
+    except ValueError:
+        raise KeyError(
+            f"{named!r} is not a method of lucid.peft; "
+            f"the methods are {', '.join(PEFT_TYPE_TO_CONFIG_MAPPING)}"
+        ) from None
+    return PEFT_TYPE_TO_CONFIG_MAPPING[peft_type].from_dict(config_dict)
 
 
 def get_peft_model(

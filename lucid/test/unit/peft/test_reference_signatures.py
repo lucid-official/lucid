@@ -370,12 +370,12 @@ def test_signature_matches_reference(name: str) -> None:
 
 
 def test_shared_surface_is_the_known_size() -> None:
-    assert len(_shared_names()) == 77
+    assert len(_shared_names()) == 92
 
 
 def test_reference_gap_is_the_known_size() -> None:
     """The names Lucid lacks are the next phase's work; their count must not hide."""
-    assert len([n for n in _SNAPSHOT["exports"] if n not in peft.__all__]) == 77
+    assert len([n for n in _SNAPSHOT["exports"] if n not in peft.__all__]) == 62
 
 
 def test_the_snapshot_is_of_the_reference_release_it_says() -> None:
