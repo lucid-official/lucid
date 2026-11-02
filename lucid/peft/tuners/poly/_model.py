@@ -7,7 +7,7 @@ from typing import ClassVar, override
 from lucid._tensor.tensor import Tensor
 from lucid.nn.hooks import RemovableHandle
 from lucid.peft._config import PeftType, _TargetedConfig
-from lucid.peft.tuners._base import _tuner_layers
+from lucid.peft.tuners._layer import _tuner_layers
 from lucid.peft.tuners._support import _ConfigTuner
 from lucid.peft.tuners.poly._config import PolyConfig
 from lucid.peft.tuners.poly._layer import PolyLayer

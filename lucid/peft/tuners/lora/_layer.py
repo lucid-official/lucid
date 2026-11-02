@@ -29,7 +29,7 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike
 from lucid.nn.parameter import Parameter
 from lucid.peft._config import _check_dropout, _check_number, _check_rank
-from lucid.peft.tuners._base import _BaseTunerLayer, _check_adapter_name, _entry_parameters
+from lucid.peft.tuners._layer import _BaseTunerLayer, _check_adapter_name, _entry_parameters
 from lucid.peft.tuners.lora._inits import _check_init, _Init
 from lucid.peft.tuners.lora._variants import MAGNITUDE_TABLE, _Magnitude, _rows_view, _Variant
 from lucid.peft.tuners.lora._weight_site import _WeightSite

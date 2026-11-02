@@ -26,12 +26,9 @@ from lucid.nn.hooks import RemovableHandle
 from lucid.peft._config import PeftConfig, PromptLearningConfig, TaskType
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft._slots import _adapter_slots, _as_names, _outermost_slots
-from lucid.peft.tuners._base import (
-    _AdapterHost,
-    _check_adapter_name,
-    _plan_modules_to_save,
-    _set_submodule,
-)
+from lucid.peft.tuners._host import _AdapterHost
+from lucid.peft.tuners._layer import _check_adapter_name
+from lucid.peft.tuners._plan import _plan_modules_to_save, _set_submodule
 from lucid.peft.tuners._files import _FileContext, _FileFormat
 from lucid.peft.tuners._prompt._encoder import _PromptEncoder
 from lucid.peft.tuners._prompt._layout import _Layout

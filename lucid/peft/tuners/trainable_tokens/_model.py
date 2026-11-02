@@ -6,7 +6,7 @@ from typing import ClassVar, override
 import lucid.nn as nn
 from lucid.peft._config import PeftType, _TargetedConfig
 from lucid.peft._targeting import _parameter_paths, _shared_outside
-from lucid.peft.tuners._base import _Placement, _Target
+from lucid.peft.tuners._plan import _Placement, _Target
 from lucid.peft.tuners._support import _ConfigTuner
 from lucid.peft.tuners.trainable_tokens._config import TrainableTokensConfig
 from lucid.peft.tuners.trainable_tokens._layer import TrainableTokensLayer

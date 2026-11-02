@@ -1,7 +1,7 @@
 """``IA3Model``: the (IA)^3 half of a tuner — which layers are feed-forward, and weighted adapters.
 
 Everything that is not (IA)^3 — planning, applying, freezing, switching,
-merging, unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._base``.
+merging, unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._tuner``.
 """
 
 import dataclasses
@@ -13,7 +13,9 @@ import lucid
 import lucid.nn as nn
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
 from lucid.peft._targeting import _suffix_match
-from lucid.peft.tuners._base import _NO_PARAMETERS, _BaseTuner, _Target, _tuner_layers
+from lucid.peft.tuners._layer import _tuner_layers
+from lucid.peft.tuners._plan import _NO_PARAMETERS, _Target
+from lucid.peft.tuners._tuner import _BaseTuner
 from lucid.peft.tuners._support import _reset_fan_in_fan_out
 from lucid.peft.tuners.ia3._config import IA3Config
 from lucid.peft.tuners.ia3._defaults import IA3_DEFAULT_TARGET_MODULES, _default_feedforward_modules

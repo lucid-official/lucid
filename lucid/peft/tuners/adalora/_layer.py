@@ -19,7 +19,7 @@ import lucid.nn as nn
 import lucid.nn.init as init
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
-from lucid.peft.tuners._base import _check_adapter_name, _parameter_at
+from lucid.peft.tuners._layer import _check_adapter_name, _parameter_at
 from lucid.peft.tuners._support import _adapter_dtype, _ResidualUpdate, _SpecField
 from lucid.peft.tuners._kinds import _Geometry, _Kind
 from lucid.peft.tuners.adalora._config import AdaLoraConfig

@@ -1,7 +1,7 @@
 """``VBLoRAModel``: the VB-LoRA half of a tuner — the vector bank its layers share, and how a file is written.
 
 Everything that is not VB-LoRA — planning, applying, freezing, switching,
-merging, unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._base``; the
+merging, unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._tuner``; the
 bank the layers share and where it goes in the adapter file are
 ``lucid.peft.tuners._shared``'s.
 """
@@ -15,7 +15,8 @@ import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 from lucid._types import DTypeLike
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
-from lucid.peft.tuners._base import _Target, _tuner_layers
+from lucid.peft.tuners._layer import _tuner_layers
+from lucid.peft.tuners._plan import _Target
 from lucid.peft.tuners._files import _FileContext
 from lucid.peft.tuners._shared import _base_linear, _SharedTablesTuner
 from lucid.peft.tuners._support import _ConfigTuner, _reset_fan_in_fan_out

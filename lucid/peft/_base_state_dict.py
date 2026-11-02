@@ -15,7 +15,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.nn._incompatible_keys import _IncompatibleKeys
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft._peft_model import PeftModel
-from lucid.peft.tuners._base import _BaseTunerLayer, _join
+from lucid.peft.tuners._layer import _BaseTunerLayer, _join
 
 #: The class of module that stands in for a base module, and the attribute it keeps the base in.
 _STAND_INS: Final[tuple[tuple[type[nn.Module], str], ...]] = (

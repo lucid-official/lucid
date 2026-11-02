@@ -35,7 +35,7 @@ from lucid._types import _ModuleOutput
 from lucid.nn.hooks import RemovableHandle
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft._slots import _adapter_slots
-from lucid.peft.tuners._base import _BaseTunerLayer
+from lucid.peft.tuners._layer import _BaseTunerLayer
 from lucid.peft.tuners.lora._layer import _Residual
 
 # The routes are reached through ``_Route.of``, by the slot type each registers for.

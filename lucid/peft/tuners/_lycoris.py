@@ -39,13 +39,9 @@ from lucid.peft._config import (
     _TargetedConfig,
 )
 from lucid.peft._targeting import _pattern_value
-from lucid.peft.tuners._base import (
-    _BaseTuner,
-    _NO_PARAMETERS,
-    _check_adapter_name,
-    _parameter_at,
-    _Target,
-)
+from lucid.peft.tuners._layer import _check_adapter_name, _parameter_at
+from lucid.peft.tuners._plan import _NO_PARAMETERS, _Target
+from lucid.peft.tuners._tuner import _BaseTuner
 from lucid.peft.tuners._kinds import _Geometry, _Kind
 from lucid.peft.tuners._support import _AdditiveWeight, _SpecField
 

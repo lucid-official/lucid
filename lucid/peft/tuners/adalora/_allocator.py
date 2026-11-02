@@ -17,7 +17,7 @@ import lucid
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
 import lucid.nn as nn
-from lucid.peft.tuners._base import _parameter_at, _tuner_layers
+from lucid.peft.tuners._layer import _parameter_at, _tuner_layers
 from lucid.peft.tuners.adalora._checks import _check_rank_pattern
 from lucid.peft.tuners.adalora._config import AdaLoraConfig
 from lucid.peft.tuners.adalora._layer import AdaLoraLayer

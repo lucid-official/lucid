@@ -21,14 +21,9 @@ import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig, _Check, _check_bool, _TargetedConfig
-from lucid.peft.tuners._base import (
-    _NO_PARAMETERS,
-    _BaseTuner,
-    _BaseTunerLayer,
-    _Injected,
-    _Placement,
-    _Target,
-)
+from lucid.peft.tuners._layer import _BaseTunerLayer
+from lucid.peft.tuners._plan import _NO_PARAMETERS, _Injected, _Placement, _Target
+from lucid.peft.tuners._tuner import _BaseTuner
 from lucid.peft.tuners._files import _FileContext, _FileFormat
 
 #: Where the reference's adapter file keeps a shared table: ``base_model.<table>``, one tensor for the whole model.

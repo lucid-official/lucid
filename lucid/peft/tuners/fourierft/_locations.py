@@ -54,9 +54,9 @@ def _spectrum_positions(size: int, count: int, seed: int) -> tuple[int, ...]:
         )
     generator = random.Random()
     generator.setstate((_STATE_VERSION, _initial_state(seed), None))
-    moved: dict[int, int] = (
-        {}
-    )  # positions the shuffle has overwritten so far; the rest hold their own index
+    moved: dict[
+        int, int
+    ] = {}  # positions the shuffle has overwritten so far; the rest hold their own index
     picked: list[int] = []
     for i in range(count):
         j = i + generator.getrandbits(32) % (size - i)

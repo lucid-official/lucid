@@ -7,7 +7,7 @@ from typing import ClassVar, override
 import lucid.nn as nn
 from lucid.peft._config import PeftType, _TargetedConfig
 from lucid.peft._slots import _outside_slots
-from lucid.peft.tuners._base import _NO_PARAMETERS, _Target
+from lucid.peft.tuners._plan import _NO_PARAMETERS, _Target
 from lucid.peft.tuners._support import _ConfigTuner
 from lucid.peft.tuners.adaption_prompt._attention import _AttentionKind
 from lucid.peft.tuners.adaption_prompt._config import AdaptionPromptConfig

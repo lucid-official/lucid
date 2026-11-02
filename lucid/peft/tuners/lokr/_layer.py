@@ -20,7 +20,7 @@ from typing import ClassVar, override
 import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
-from lucid.peft.tuners._base import _parameter_at
+from lucid.peft.tuners._layer import _parameter_at
 from lucid.peft.tuners._kinds import _Geometry, _tucker
 from lucid.peft.tuners._lycoris import _LycorisConfig, _LycorisLayer
 from lucid.peft.tuners.lokr._config import LoKrConfig
@@ -176,8 +176,9 @@ class LoKrLayer(_LycorisLayer, family=True):
         """:math:`W_2`, whole, as a product, or from its spatial core."""
         if adapter in self.lokr_w2:
             return _parameter_at(self.lokr_w2, adapter)
-        rows, columns = _parameter_at(self.lokr_w2_a, adapter), _parameter_at(
-            self.lokr_w2_b, adapter
+        rows, columns = (
+            _parameter_at(self.lokr_w2_a, adapter),
+            _parameter_at(self.lokr_w2_b, adapter),
         )
         if adapter in self.lokr_t2:
             return _tucker(_parameter_at(self.lokr_t2, adapter), rows, columns)

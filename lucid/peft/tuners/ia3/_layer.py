@@ -24,7 +24,7 @@ import lucid.nn as nn
 import lucid.nn.init as init
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
-from lucid.peft.tuners._base import _BaseTunerLayer, _check_adapter_name, _parameter_at
+from lucid.peft.tuners._layer import _BaseTunerLayer, _check_adapter_name, _parameter_at
 from lucid.peft.tuners.ia3._config import IA3Config
 
 _WEIGHT = "base_layer.weight"

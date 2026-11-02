@@ -7,7 +7,7 @@ from typing import ClassVar
 import lucid.nn as nn
 from lucid.peft._config import PeftType, _TargetedConfig
 from lucid.peft._targeting import _pattern_value
-from lucid.peft.tuners._base import _Target
+from lucid.peft.tuners._plan import _Target
 from lucid.peft.tuners._support import _ConfigTuner
 from lucid.peft.tuners.c3a._config import C3AConfig
 from lucid.peft.tuners.c3a._defaults import C3A_DEFAULT_TARGET_MODULES

@@ -15,7 +15,7 @@ from typing import NamedTuple
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig
-from lucid.peft.tuners._base import _BaseTunerLayer, _dotted, _tuner_layers
+from lucid.peft.tuners._layer import _BaseTunerLayer, _dotted, _tuner_layers
 
 
 class _FileContext(NamedTuple):

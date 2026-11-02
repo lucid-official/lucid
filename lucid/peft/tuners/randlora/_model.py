@@ -1,7 +1,7 @@
 """``RandLoraModel``: the RandLoRA half of a tuner — the bases its layers share; the rest is the generic tuner's.
 
 Everything that is not RandLoRA — planning, applying, freezing, switching,
-merging, unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._base``; the
+merging, unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._tuner``; the
 tables the layers share and the file they are written to are
 ``lucid.peft.tuners._shared``'s.
 """
@@ -12,7 +12,8 @@ from typing import ClassVar, override
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
-from lucid.peft.tuners._base import _BaseTunerLayer, _Target
+from lucid.peft.tuners._layer import _BaseTunerLayer
+from lucid.peft.tuners._plan import _Target
 from lucid.peft.tuners._shared import _base_linear, _BufferDict, _ProjectionTuner
 from lucid.peft.tuners._support import _adapter_dtype, _ConfigTuner, _reset_fan_in_fan_out
 from lucid.peft.tuners.randlora._bases import _Bases, _num_bases

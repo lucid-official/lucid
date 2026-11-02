@@ -1,7 +1,7 @@
 """``VeraModel``: the VeRA half of a tuner — the projections its layers share, and how they are saved.
 
 Everything that is not VeRA — planning, applying, freezing, switching,
-merging, unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._base``.
+merging, unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._tuner``.
 """
 
 import warnings
@@ -12,14 +12,9 @@ import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
-from lucid.peft.tuners._base import (
-    _NO_PARAMETERS,
-    _BaseTuner,
-    _BaseTunerLayer,
-    _Injected,
-    _Placement,
-    _Target,
-)
+from lucid.peft.tuners._layer import _BaseTunerLayer
+from lucid.peft.tuners._plan import _NO_PARAMETERS, _Injected, _Placement, _Target
+from lucid.peft.tuners._tuner import _BaseTuner
 from lucid.peft.tuners._files import _FileContext, _FileFormat
 from lucid.peft.tuners._support import _adapter_dtype, _reset_fan_in_fan_out
 from lucid.peft.tuners.vera._config import VeraConfig

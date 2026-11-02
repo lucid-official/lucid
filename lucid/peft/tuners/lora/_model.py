@@ -1,7 +1,7 @@
 """``LoraModel``: the LoRA half of a tuner — its layers, ranks, trainable biases and weighted adapters.
 
 Everything that is not LoRA — planning, applying, freezing, switching,
-merging, unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._base``.
+merging, unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._tuner``.
 """
 
 import dataclasses
@@ -20,14 +20,9 @@ from lucid.peft._adapter_file import _AdapterFile
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft._slots import _AdapterSlot, _outside_slots
 from lucid.peft._targeting import _pattern_value
-from lucid.peft.tuners._base import (
-    _BaseTuner,
-    _BaseTunerLayer,
-    _join,
-    _named,
-    _Target,
-    _tuner_layers,
-)
+from lucid.peft.tuners._layer import _BaseTunerLayer, _join, _tuner_layers
+from lucid.peft.tuners._plan import _named, _Target
+from lucid.peft.tuners._tuner import _BaseTuner
 from lucid.peft.tuners.lora._config import LoraConfig
 from lucid.peft.tuners.lora._inits import _Init
 from lucid.peft.tuners.lora._layer import Linear, LoraLayer

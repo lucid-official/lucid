@@ -15,7 +15,7 @@ from typing import ClassVar, override
 
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
-from lucid.peft.tuners._base import _parameter_at
+from lucid.peft.tuners._layer import _parameter_at
 from lucid.peft.tuners._kinds import _Geometry, _tucker
 from lucid.peft.tuners._lycoris import _LycorisConfig, _LycorisLayer
 

@@ -7,7 +7,7 @@ from typing import ClassVar, override
 import lucid.nn as nn
 from lucid.peft._config import PeftType, _TargetedConfig
 from lucid.peft._targeting import _pattern_value
-from lucid.peft.tuners._base import _Target
+from lucid.peft.tuners._plan import _Target
 from lucid.peft.tuners._support import _ConfigTuner, _reset_fan_in_fan_out
 from lucid.peft.tuners.fourierft._config import FourierFTConfig
 from lucid.peft.tuners.fourierft._defaults import FOURIERFT_DEFAULT_TARGET_MODULES

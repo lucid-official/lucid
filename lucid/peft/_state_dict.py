@@ -18,7 +18,8 @@ from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig
 from lucid.peft._refusals import NO_META_DEVICE, NO_MISMATCH_SKIPPING, refuse_value
 from lucid.peft._slots import _adapter_slots
-from lucid.peft.tuners._base import _AdapterHost, _join, _tuner_for
+from lucid.peft.tuners._host import _AdapterHost, _tuner_for
+from lucid.peft.tuners._layer import _join
 from lucid.peft.tuners._files import _FileContext, _FileFormat
 
 

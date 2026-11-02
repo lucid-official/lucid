@@ -15,7 +15,8 @@ from lucid.peft._config import PeftConfig, PeftType
 from lucid.peft._peft_model import PeftModel
 from lucid.peft._refusals import refuse_build_options, refuse_kwargs, refuse_value
 from lucid.peft._slots import _as_names
-from lucid.peft.tuners._base import _AdapterHost, _check_adapter_name, _tuner_layers
+from lucid.peft.tuners._host import _AdapterHost
+from lucid.peft.tuners._layer import _check_adapter_name, _tuner_layers
 from lucid.peft.tuners._files import _FileContext, _FileFormat
 from lucid.peft.tuners._prompt._tuner import _model_size
 from lucid.peft.tuners.lora import Linear, LoraLayer

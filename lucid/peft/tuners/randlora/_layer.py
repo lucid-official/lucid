@@ -23,7 +23,7 @@ import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
-from lucid.peft.tuners._base import _parameter_at
+from lucid.peft.tuners._layer import _parameter_at
 from lucid.peft._config import _TargetedConfig
 from lucid.peft.tuners._shared import _BufferDict, _SharingLayer
 from lucid.peft.tuners._support import (
@@ -172,8 +172,9 @@ class RandLoraLayer(_SharingLayer, _ConfigLayer, _LinearSized, _ResidualUpdate, 
         drawn = self._unbound.get(adapter)
         if drawn is None:
             spec, anchor = self._spec(adapter), self.weight
-            max_dim, min_dim = max(self.in_features, self.out_features), min(
-                self.in_features, self.out_features
+            max_dim, min_dim = (
+                max(self.in_features, self.out_features),
+                min(self.in_features, self.out_features),
             )
             drawn = _Bases.draw(
                 spec.projection_prng_key,

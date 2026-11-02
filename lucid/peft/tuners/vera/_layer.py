@@ -18,7 +18,7 @@ import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
-from lucid.peft.tuners._base import _check_adapter_name, _parameter_at
+from lucid.peft.tuners._layer import _check_adapter_name, _parameter_at
 from lucid.peft.tuners._support import _adapter_dtype, _LinearSized, _ResidualUpdate, _SpecField
 from lucid.peft.tuners.vera._config import VeraConfig
 from lucid.peft.tuners.vera._projection import _BufferDict, _Projection, _Shared

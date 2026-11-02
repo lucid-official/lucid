@@ -23,7 +23,7 @@ from typing import ClassVar, Final, Literal, NamedTuple, Self, overload, overrid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig, _pattern_key_regex, _TargetedConfig
-from lucid.peft.tuners._base import _BaseTunerLayer
+from lucid.peft.tuners._layer import _BaseTunerLayer
 
 #: Where an adapter file keeps the tensors that sit on the user's model.
 MODEL_PREFIX: Final = "base_model.model."

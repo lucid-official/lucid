@@ -16,7 +16,7 @@ import lucid.nn as nn
 import lucid.nn.init as init
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
-from lucid.peft.tuners._base import _parameter_at
+from lucid.peft.tuners._layer import _parameter_at
 from lucid.peft._config import _TargetedConfig
 from lucid.peft.tuners._support import (
     _config_as,

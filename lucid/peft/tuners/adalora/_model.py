@@ -1,7 +1,7 @@
 """``AdaLoraModel``: the AdaLoRA half of a tuner — its layers, the rank allocation and the loss penalty.
 
 Everything that is not AdaLoRA — planning, applying, freezing, switching,
-merging, unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._base``.
+merging, unloading — is ``_BaseTuner``'s, in ``lucid.peft.tuners._tuner``.
 """
 
 import dataclasses
@@ -18,7 +18,9 @@ from lucid.peft._refusals import (
     reject_unexpected,
     refuse_value,
 )
-from lucid.peft.tuners._base import _NO_PARAMETERS, _BaseTuner, _Target, _tuner_layers
+from lucid.peft.tuners._layer import _tuner_layers
+from lucid.peft.tuners._plan import _NO_PARAMETERS, _Target
+from lucid.peft.tuners._tuner import _BaseTuner
 from lucid.peft.tuners._files import _FileContext, _FileFormat
 from lucid.peft.tuners._support import _reset_fan_in_fan_out
 from lucid.peft.tuners.adalora._allocator import RankAllocator

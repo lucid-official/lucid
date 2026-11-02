@@ -32,7 +32,7 @@ from lucid.peft import (
 )
 from lucid.peft._config import _CONFIG_CLASSES
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
-from lucid.peft.tuners import _base
+from lucid.peft.tuners import _tuner
 from lucid.peft.tuners.lora import Linear, LoraLayer
 from lucid.peft.tuners.lora._merging import _Combination
 from lucid.serialization import load_safetensors, save_safetensors
@@ -267,7 +267,7 @@ class TestAdding:
     ) -> None:
         net = _mlp(device)
         placed: list[str] = []
-        real = _base._set_submodule
+        real = _tuner._set_submodule
 
         def flaky(model: nn.Module, key: str, module: nn.Module) -> None:
             placed.append(key)
@@ -275,7 +275,7 @@ class TestAdding:
                 raise RuntimeError("cannot place")
             real(model, key, module)
 
-        monkeypatch.setattr(_base, "_set_submodule", flaky)
+        monkeypatch.setattr(_tuner, "_set_submodule", flaky)
         with pytest.raises(RuntimeError, match="cannot place"):
             LoraModel(net, _config(2, ["0", "2"]), adapter_name="default")
         assert type(net[0]) is nn.Linear and type(net[2]) is nn.Linear

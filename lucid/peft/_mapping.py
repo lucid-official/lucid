@@ -10,7 +10,7 @@ from lucid.peft._config import _CONFIG_CLASSES, PeftConfig, PeftType, _require_c
 from lucid.peft._peft_model import PeftModel
 from lucid.peft._refusals import refuse_value
 from lucid.peft._targeting import _config_for_model
-from lucid.peft.tuners._base import _TUNERS, _AdapterHost, _tuner_for
+from lucid.peft.tuners._host import _TUNERS, _AdapterHost, _tuner_for
 
 #: The config class of each method, by ``PeftType``: a read-only view of the registry that
 #: ``PeftConfig`` subclasses join as they are defined, so a method added later appears here.

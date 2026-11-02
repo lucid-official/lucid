@@ -31,7 +31,7 @@ from lucid.peft._refusals import (
 from lucid.peft._status import TunerLayerStatus, TunerModelStatus, _parameter_counts
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
 from lucid.peft._targeting import _config_for_model, _with_heads
-from lucid.peft.tuners._base import _AdapterHost, _tuner_for
+from lucid.peft.tuners._host import _AdapterHost, _tuner_for
 from lucid.serialization import load_safetensors, save_safetensors
 
 _WEIGHTS_NAME: Final = "adapter_model.safetensors"

@@ -12,13 +12,9 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import DTypeLike
 from lucid.nn.parameter import Parameter
 from lucid.peft._config import PeftConfig, _TargetedConfig
-from lucid.peft.tuners._base import (
-    _NO_PARAMETERS,
-    _BaseTuner,
-    _BaseTunerLayer,
-    _check_adapter_name,
-    _Target,
-)
+from lucid.peft.tuners._layer import _BaseTunerLayer, _check_adapter_name
+from lucid.peft.tuners._plan import _NO_PARAMETERS, _Target
+from lucid.peft.tuners._tuner import _BaseTuner
 
 _HALF: Final = (lucid.float16, lucid.bfloat16)
 _WEIGHT: Final = "base_layer.weight"
@@ -228,7 +224,7 @@ def _config_as[C: _TargetedConfig](kind: type[C], config: _TargetedConfig) -> C:
     return config
 
 
-class _ConfigLayer(_BaseTunerLayer):
+class _ConfigLayer[C: _TargetedConfig = _TargetedConfig](_BaseTunerLayer):
     """A layer built from the module, an adapter name and the method's config alone.
 
     The shape OFT, BOFT, HRA and LN tuning share: a family root names its
@@ -237,13 +233,16 @@ class _ConfigLayer(_BaseTunerLayer):
     keeps its scalar state in ``_specs`` — a tuple per adapter, so the scalars
     ``lucid.compile`` keys a trace on include them.
 
+    ``C`` is the config class of the method: a layer that parametrises the base
+    (``_ConfigLayer[OftConfig]``) receives its config typed, with no cast.
+
     Parameters
     ----------
     base_layer : nn.Module
         The module to adapt; kept as ``base_layer``, its parameters shared.
     adapter_name : str
         Name of the adapter created at once.
-    config : _TargetedConfig
+    config : C
         The method's config, read by ``update_layer``.
 
     Raises
@@ -258,7 +257,7 @@ class _ConfigLayer(_BaseTunerLayer):
     #: The prefix of the layer's ``repr`` (``"oft."``), as the reference prints it.
     _repr_prefix: ClassVar[str] = ""
 
-    def __init__(self, base_layer: nn.Module, adapter_name: str, config: _TargetedConfig) -> None:
+    def __init__(self, base_layer: nn.Module, adapter_name: str, config: C) -> None:
         """Wrap ``base_layer`` and build the adapter ``adapter_name`` on it as ``config`` says."""
         super().__init__(base_layer)
         self._specs = {}
@@ -267,7 +266,7 @@ class _ConfigLayer(_BaseTunerLayer):
         self._prepare(config)
         self.update_layer(adapter_name, config)
 
-    def _prepare(self, config: _TargetedConfig) -> None:
+    def _prepare(self, config: C) -> None:
         """Make the state a layer keeps beside its per-adapter tables, before the first adapter is entered.
 
         Dropout tables, references to tables the tuner shares: whatever ``_enter`` reads that is
@@ -279,7 +278,7 @@ class _ConfigLayer(_BaseTunerLayer):
         """An empty per-adapter table: bare parameters by default, modules where an adapter is one (LN tuning)."""
         return nn.ParameterDict()
 
-    def update_layer(self, adapter_name: str, config: _TargetedConfig) -> None:
+    def update_layer(self, adapter_name: str, config: C) -> None:
         """Create adapter ``adapter_name`` from ``config``.
 
         The adapter is built whole before the layer holds any of it.  A layer
@@ -291,7 +290,7 @@ class _ConfigLayer(_BaseTunerLayer):
         ----------
         adapter_name : str
             Key of the adapter in each of the layer's tables.
-        config : _TargetedConfig
+        config : C
             The method's config.
 
         Raises
@@ -307,7 +306,7 @@ class _ConfigLayer(_BaseTunerLayer):
             self.active_adapter = adapter_name
 
     @abstractmethod
-    def _enter(self, adapter_name: str, config: _TargetedConfig) -> None:
+    def _enter(self, adapter_name: str, config: C) -> None:
         """Allocate the adapter's tensors, then put them (and its spec) in the tables; the name is free."""
 
     @override
@@ -330,21 +329,19 @@ class _ConfigLayer(_BaseTunerLayer):
         self._specs.pop(adapter_name, None)
 
 
-class _ConfigTuner(_BaseTuner):
+class _ConfigTuner[C: _TargetedConfig = _TargetedConfig](_BaseTuner[C]):
     """A tuner whose layers are built by ``layer(module, adapter, config)`` and extended by ``layer.update_layer(adapter, config)``."""
 
     @override
     @classmethod
-    def _create_new_module(
-        cls, config: _TargetedConfig, adapter_name: str, target: _Target
-    ) -> nn.Module:
+    def _create_new_module(cls, config: C, adapter_name: str, target: _Target) -> nn.Module:
         layer = target.layer
         assert layer is not None and issubclass(layer, _ConfigLayer)
         return layer(target.module, adapter_name, config)
 
     @override
     @classmethod
-    def _add_to_layer(cls, config: _TargetedConfig, adapter_name: str, target: _Target) -> None:
+    def _add_to_layer(cls, config: C, adapter_name: str, target: _Target) -> None:
         layer = target.module
         assert isinstance(layer, _ConfigLayer)
         layer.update_layer(adapter_name, config)
