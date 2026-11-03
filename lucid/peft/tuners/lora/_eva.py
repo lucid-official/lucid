@@ -275,7 +275,7 @@ def _move_inputs_to_device(inputs: object, device: lucid.device) -> object:
     return inputs
 
 
-def prepare_model_inputs_fn_language_modeling(
+def _prepare_model_inputs_fn_language_modeling(
     model_input: object, peft_config: LoraConfig
 ) -> Tensor:
     """Extract the boolean non-masked token mask from a language-modeling batch dictionary."""
@@ -306,7 +306,7 @@ def prepare_model_inputs_fn_language_modeling(
     return lucid.ones_like(first).to(lucid.bool)
 
 
-def prepare_layer_inputs_fn_language_modeling(
+def _prepare_layer_inputs_fn_language_modeling(
     layer_input: tuple[Tensor, ...] | Tensor, model_input: Tensor, layer_name: str
 ) -> Tensor:
     """Select active token representations from ``layer_input`` using the boolean mask ``model_input``."""
@@ -323,7 +323,7 @@ def prepare_layer_inputs_fn_language_modeling(
     return x[model_input]
 
 
-def forward_fn_dict(model: nn.Module, inputs: object) -> object:
+def _forward_fn_dict(model: nn.Module, inputs: object) -> object:
     """Default forward callback for EVA: unpack a mapping as keyword arguments, or pass a Tensor directly."""
     if isinstance(inputs, Mapping):
         return model(**inputs)
@@ -592,9 +592,9 @@ def get_eva_state_dict(
     model: nn.Module,
     dataloader: Iterable[object],
     peft_config: LoraConfig | None = None,
-    forward_fn: _ForwardFn = forward_fn_dict,
-    prepare_model_inputs_fn: _ModelInputFn = prepare_model_inputs_fn_language_modeling,
-    prepare_layer_inputs_fn: _LayerInputFn = prepare_layer_inputs_fn_language_modeling,
+    forward_fn: _ForwardFn = _forward_fn_dict,
+    prepare_model_inputs_fn: _ModelInputFn = _prepare_model_inputs_fn_language_modeling,
+    prepare_layer_inputs_fn: _LayerInputFn = _prepare_layer_inputs_fn_language_modeling,
     adapter_name: str = "default",
     gather_distributed_inputs: bool = True,
     show_progress_bar: bool = True,
@@ -616,7 +616,7 @@ def get_eva_state_dict(
     was_training = model.training
     device = _model_device(model)
     model.eval()
-    run_forward = forward_fn if forward_fn is not None else forward_fn_dict
+    run_forward = forward_fn if forward_fn is not None else _forward_fn_dict
     session = _EvaSession(model, peft_config, eva_cfg, device, run_forward, prepare_model_inputs_fn)
 
     with lucid.no_grad():
@@ -745,9 +745,9 @@ def initialize_lora_eva_weights(
     model: nn.Module,
     dataloader: Iterable[object] | None = None,
     eva_state_dict: dict[str, Tensor] | None = None,
-    forward_fn: _ForwardFn = forward_fn_dict,
-    prepare_model_inputs_fn: _ModelInputFn = prepare_model_inputs_fn_language_modeling,
-    prepare_layer_inputs_fn: _LayerInputFn = prepare_layer_inputs_fn_language_modeling,
+    forward_fn: _ForwardFn = _forward_fn_dict,
+    prepare_model_inputs_fn: _ModelInputFn = _prepare_model_inputs_fn_language_modeling,
+    prepare_layer_inputs_fn: _LayerInputFn = _prepare_layer_inputs_fn_language_modeling,
     adapter_name: str = "default",
     gather_distributed_inputs: bool = True,
     show_progress_bar: bool = True,
@@ -782,3 +782,8 @@ def initialize_lora_eva_weights(
         )
     with lucid.no_grad():
         _load_eva_state_dict(model, eva_state_dict, adapter_name)
+
+
+_prepare_model_inputs_fn_language_modeling.__name__ = "prepare_model_inputs_fn_language_modeling"
+_prepare_layer_inputs_fn_language_modeling.__name__ = "prepare_layer_inputs_fn_language_modeling"
+_forward_fn_dict.__name__ = "forward_fn_dict"
