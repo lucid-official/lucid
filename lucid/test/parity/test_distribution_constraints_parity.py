@@ -833,8 +833,24 @@ def _grad_points(case: _Case, method: str, ref: Any) -> list[Any]:
         return [None]
     if method == "icdf":
         return [0.1, 0.5, 0.9]
-    # Inside the support, away from its edges, where a derivative exists.
-    return [v for v in _admitted(case, ref) if np.all(np.isfinite(v)) and v not in (0.0, 1.0)]
+    # Inside the support, away from its edges (including continuous interval bounds
+    # such as Uniform.high where clamp subgradients are version-dependent), where a
+    # derivative exists.
+    edges: set[float] = {0.0, 1.0}
+    rt = _ref_tensor(ref)
+    support = case.build(ref.distributions, rt, True).support
+    if not getattr(support, "is_discrete", False):
+        for attr in ("lower_bound", "upper_bound"):
+            bound = getattr(support, attr, None)
+            if bound is not None:
+                for b in np.asarray(bound).reshape(-1).tolist():
+                    if isinstance(b, (int, float)) and np.isfinite(b):
+                        edges.add(float(b))
+    return [
+        v
+        for v in _admitted(case, ref)
+        if np.all(np.isfinite(v)) and not (isinstance(v, (int, float)) and float(v) in edges)
+    ]
 
 
 _GRAD_PARAMS = [(n, m, p) for n in sorted(CASES) for m in _METHODS for p in CASES[n].nominal]

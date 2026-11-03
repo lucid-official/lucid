@@ -551,12 +551,18 @@ def verify_opinfo_second_order_strided(
         for idx, (lg2, rg2) in enumerate(zip(l_grads2, r_grads2, strict=True)):
             if lg2 is None and rg2 is None:
                 continue
-            assert (
-                lg2 is not None and rg2 is not None
-            ), f"{op.name}[{sample.name}] 2nd-order strided HVP[{idx}] None mismatch ({device})"
+            # Under allow_unused=True, a leaf that enters only linearly (e.g. group_norm bias)
+            # has an identically zero 2nd derivative: one graph may prune the edge (None) while
+            # the other materialises zeros. Compare against zeros so a non-zero HVP still fails.
+            l_arr = (
+                _to_numpy(lg2).astype(np.float32)
+                if lg2 is not None
+                else np.zeros_like(_to_numpy(rg2).astype(np.float32))
+            )
+            r_arr = _to_numpy(rg2).astype(np.float32) if rg2 is not None else np.zeros_like(l_arr)
             assert_close(
-                _to_numpy(lg2).astype(np.float32),
-                _to_numpy(rg2).astype(np.float32),
+                l_arr,
+                r_arr,
                 atol=atol,
                 rtol=rtol,
                 msg=f"{op.name}[{sample.name}] 2nd-order strided HVP[{idx}] ({device})",
