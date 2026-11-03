@@ -366,3 +366,38 @@ class iinfo:
         object.__setattr__(self, "min", lo)
         object.__setattr__(self, "max", hi)
         object.__setattr__(self, "dtype", name)
+
+
+class layout:
+    """Tensor memory layout descriptor.
+
+    Lucid tensors use dense strided storage (`lucid.strided`). The class and
+    its canonical `strided` singleton are provided for API compatibility with
+    the reference framework.
+    """
+
+    def __init__(self, name: str = "strided") -> None:
+        self._name = name
+
+    @override
+    def __repr__(self) -> str:
+        return f"lucid.{self._name}"
+
+    @override
+    def __eq__(self, other: object) -> bool:
+        if self is other:
+            return True
+        if isinstance(other, layout):
+            return self._name == other._name
+        return False
+
+    @override
+    def __hash__(self) -> int:
+        return hash(self._name)
+
+    @override
+    def __reduce__(self) -> str:
+        return self._name
+
+
+strided: layout = layout("strided")

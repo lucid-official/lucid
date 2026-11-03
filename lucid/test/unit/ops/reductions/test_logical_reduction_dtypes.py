@@ -26,8 +26,13 @@ _FLOATS = [lucid.float16, lucid.bfloat16, lucid.float32, lucid.float64]
 _COMPLEX = [lucid.complex64, lucid.complex128]
 _DTYPES = [lucid.bool, *_INT_BITS, *_FLOATS, *_COMPLEX]
 
-#: The smallest positive subnormal of each float format that has a Metal type.
-_TINY = {lucid.float16: 2.0**-24, lucid.bfloat16: 2.0**-133, lucid.float32: 2.0**-149}
+#: The smallest positive subnormal of each float format.
+_TINY = {
+    lucid.float16: 2.0**-24,
+    lucid.bfloat16: 2.0**-133,
+    lucid.float32: 2.0**-149,
+    lucid.float64: float.fromhex("0x1p-1074"),
+}
 
 
 def _name(dtype: lucid.dtype) -> str:
@@ -196,7 +201,9 @@ _SUBNORMAL_VALUES = {
     lucid.float16: [_TINY[lucid.float16]],
     lucid.bfloat16: [_TINY[lucid.bfloat16]],
     lucid.float32: [_TINY[lucid.float32]],
+    lucid.float64: [_TINY[lucid.float64]],
     lucid.complex64: [complex(_TINY[lucid.float32], 0.0), complex(0.0, -_TINY[lucid.float32])],
+    lucid.complex128: [complex(_TINY[lucid.float64], 0.0), complex(0.0, -_TINY[lucid.float64])],
 }
 
 
@@ -209,8 +216,20 @@ def test_a_subnormal_element_is_true(device: str, dtype: lucid.dtype) -> None:
         # ``lucid.tensor(..., device="metal")`` runs, before any reduction sees it.
         only = lucid.tensor([tiny, zero], dtype=dtype).to(device)
         both = lucid.tensor([tiny, tiny], dtype=dtype).to(device)
+        zeros = lucid.zeros_like(only)
         assert only.tolist()[0] == tiny
         assert lucid.any(only).item() and not lucid.all(only).item(), tiny
         assert lucid.all(both).item(), tiny
         assert lucid.any(only, dim=0).item() and not lucid.all(only, dim=0).item(), tiny
         assert lucid.all(both, dim=0, keepdim=True).tolist() == [True], tiny
+        assert lucid.count_nonzero(only).item() == 1, tiny
+        assert lucid.count_nonzero(only, dim=0).item() == 1, tiny
+        assert lucid.count_nonzero(both).item() == 2, tiny
+        assert lucid.logical_not(only).tolist() == [False, True], tiny
+        assert only.logical_not().tolist() == [False, True], tiny
+        assert lucid.logical_and(only, both).tolist() == [True, False], tiny
+        assert only.logical_and(both).tolist() == [True, False], tiny
+        assert lucid.logical_or(only, zeros).tolist() == [True, False], tiny
+        assert only.logical_or(zeros).tolist() == [True, False], tiny
+        assert lucid.logical_xor(only, both).tolist() == [False, True], tiny
+        assert only.logical_xor(both).tolist() == [False, True], tiny

@@ -1770,6 +1770,7 @@ class NonFiniteAxis(Axis):
             "fmax",
             "fmin",
             "sign",
+            "sgn",
             "isnan",
             "isinf",
             "isfinite",
@@ -2067,7 +2068,7 @@ class BroadcastAxis(Axis):
         # ``answered`` guards the vacuous case: an op that refuses *every*
         # direction leaves both flags untouched at True, and exempting it
         # would hide an op that ought to broadcast and raises instead.
-        if failures and answered and (follows_first or follows_second):
+        if failures and (follows_first or follows_second):
             which = "first" if follows_first else "second"
             return self._finding(
                 symbol,

@@ -10,7 +10,7 @@ import lucid
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._globals import get_default_device
-from lucid._types import DTypeLike, DeviceLike
+from lucid._types import DTypeLike, DeviceLike, Scalar
 from lucid._ops._dims import _dim_size, _require_real_axis, _to_axes, _wrap_dim
 from lucid._ops.composite._shared import _swap_dims
 from lucid._tensor._indexing import _broadcast_shape, broadcast_shapes, broadcast_tensors
@@ -1318,6 +1318,93 @@ def select(input: Tensor, dim: int, index: int) -> Tensor:
     return input[(slice(None),) * d + (idx,)]
 
 
+def diag(input: Tensor, diagonal: int = 0) -> Tensor:
+    """Extract a diagonal from a 2-D tensor or construct a 2-D diagonal matrix from a 1-D tensor."""
+    if input.ndim == 1:
+        return diag_embed(input, offset=diagonal)
+    if input.ndim == 2:
+        return lucid.diagonal(input, offset=diagonal)
+    raise _C_engine.InvalidArgument(f"diag: input must be 1-D or 2-D, got {input.ndim}-D")
+
+
+def diagflat(input: Tensor, offset: int = 0) -> Tensor:
+    """Flatten ``input`` to 1-D and construct a 2-D matrix with the elements placed on ``offset`` diagonal.
+
+    Parameters
+    ----------
+    input : Tensor
+        Input tensor.
+    offset : int, optional
+        Diagonal offset (default ``0``).
+    """
+    return diag_embed(input.reshape(-1), offset=offset)
+
+
+def concatenate(
+    tensors: Sequence[Tensor], dim: int = 0, *, axis: int | None = None
+) -> Tensor:
+    """Concatenate a sequence of tensors along an existing dimension (alias of :func:`lucid.cat`)."""
+    return lucid.cat(list(tensors), dim=dim if axis is None else axis)
+
+
+def split_with_sizes(
+    input: Tensor, split_sizes: Sequence[int], dim: int = 0
+) -> tuple[Tensor, ...]:
+    """Split ``input`` into a tuple of views with the exact section lengths ``split_sizes`` along ``dim``."""
+    return tuple(lucid.split(input, list(split_sizes), dim=dim))
+
+
+def unsafe_chunk(input: Tensor, chunks: int, dim: int = 0) -> tuple[Tensor, ...]:
+    """Split ``input`` into ``chunks`` pieces along ``dim`` (alias of :func:`lucid.chunk`)."""
+    return tuple(lucid.chunk(input, chunks, dim=dim))
+
+
+def unsafe_split(
+    tensor: Tensor, split_size_or_sections: int | Sequence[int], dim: int = 0
+) -> tuple[Tensor, ...]:
+    """Split ``tensor`` into sections along ``dim`` (alias of :func:`lucid.split`).
+
+    Parameters
+    ----------
+    tensor : Tensor
+        Tensor to split.
+    split_size_or_sections : int or Sequence[int]
+        Chunk size or section sizes.
+    dim : int, optional
+        Dimension along which to split.
+    """
+    sections = split_size_or_sections if isinstance(split_size_or_sections, int) else list(split_size_or_sections)
+    return tuple(lucid.split(tensor, sections, dim=dim))
+
+
+def constant_pad_nd(input: Tensor, pad: Sequence[int], value: Scalar = 0) -> Tensor:
+    """Pad the trailing dimensions of ``input`` with constant ``value`` according to ``pad`` pairs."""
+    import lucid.nn.functional as F
+
+    return F.pad(input, list(pad), mode="constant", value=float(value))
+
+
+def unravel_index(indices: Tensor, shape: int | Sequence[int]) -> tuple[Tensor, ...]:
+    """Convert flat integer ``indices`` into a tuple of coordinate tensors for ``shape``."""
+    if indices.dtype == lucid.bool or not _promotion.is_integral(indices._impl.dtype):
+        raise _C_engine.DtypeMismatch(
+            f"expected 'indices' to be integer dtype, but got {indices.dtype}"
+        )
+    dims = (
+        (operator.index(shape),)
+        if isinstance(shape, int)
+        else tuple(operator.index(s) for s in shape)
+    )
+    if any(d <= 0 for d in dims):
+        raise _C_engine.InvalidArgument(f"unravel_index: shape dimensions must be > 0, got {dims}")
+    coords: list[Tensor] = []
+    rem = indices
+    for d in reversed(dims):
+        coords.append(lucid.remainder(rem, d))
+        rem = lucid.div(rem, d, rounding_mode="floor")
+    return tuple(reversed(coords))
+
+
 __all__ = [
     "broadcast_shapes",
     "broadcast_tensors",
@@ -1343,6 +1430,14 @@ __all__ = [
     "combinations",
     "rot90",
     "select",
+    "diag",
+    "diagflat",
+    "concatenate",
+    "split_with_sizes",
+    "unsafe_chunk",
+    "unsafe_split",
+    "constant_pad_nd",
+    "unravel_index",
 ]
 
 # Bound at runtime, not only for type checking: PEP 649 evaluates a

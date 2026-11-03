@@ -704,3 +704,99 @@ def to_dlpack(tensor: Tensor) -> object:
     _refuse_dlpack_of_grad(tensor)
     _require_numpy("lucid.to_dlpack")
     return tensor.numpy().__dlpack__()
+
+
+
+def _asarray_tensor(
+    obj: Tensor, dtype: DTypeLike, device: DeviceLike, copy: bool | None, rg: bool
+) -> Tensor:
+    from lucid._dispatch import _wrap
+    from lucid._engine_scope import untraced
+    from lucid._tensor.tensor import Tensor
+
+    if copy is True:
+        return Tensor.__new_from_impl__(
+            _copy_tensor(obj, dtype=dtype, device=device, requires_grad=rg)
+        )
+    dt, dev, _ = normalize_factory_kwargs(
+        dtype if dtype is not None else obj.dtype,
+        device if device is not None else obj.device,
+    )
+    if obj._impl.dtype != dt or obj._impl.device != dev:
+        if copy is False:
+            raise ValueError("asarray: cannot alias tensor across differing dtype or device")
+        out = obj.to(device=dev, dtype=dt)
+        return out.detach() if (not rg and out.requires_grad) else (out.requires_grad_(True) if rg else out)
+    if rg == obj.requires_grad:
+        return obj
+    if not rg:
+        return obj.detach()
+    with untraced():
+        return _wrap(obj._impl.data_alias()).requires_grad_(True)
+
+
+def _asarray_dlpack(
+    obj: object, dtype: DTypeLike, device: DeviceLike, copy: bool | None, rg: bool
+) -> Tensor:
+    out = from_dlpack(obj, device=device, copy=copy)
+    if dtype is not None:
+        dt, _, _ = normalize_factory_kwargs(dtype, None)
+        if out._impl.dtype != dt:
+            if copy is False:
+                raise ValueError("asarray: cannot alias DLPack object into a different dtype")
+            out = out.to(dtype=dt)
+    return out.requires_grad_(True) if rg else out
+
+
+def asarray(
+    obj: object,
+    *,
+    dtype: DTypeLike = None,
+    device: DeviceLike = None,
+    copy: bool | None = None,
+    requires_grad: bool | None = None,
+) -> Tensor:
+    """Convert `obj` to a `Tensor`, sharing storage when `obj` is already a matching `Tensor`."""
+    from lucid._tensor.tensor import Tensor
+
+    if isinstance(obj, Tensor):
+        rg = obj.requires_grad if requires_grad is None else bool(requires_grad)
+        return _asarray_tensor(obj, dtype, device, copy, rg)
+    if hasattr(obj, "__dlpack__"):
+        return _asarray_dlpack(obj, dtype, device, copy, bool(requires_grad))
+    if copy is False:
+        raise ValueError("asarray: cannot alias arbitrary Python or host sequence without copying")
+    return tensor(obj, dtype=dtype, device=device, requires_grad=bool(requires_grad))
+
+
+def scalar_tensor(
+    s: int | float | bool | complex | Tensor,
+    *,
+    dtype: DTypeLike = None,
+    layout: object = None,
+    device: DeviceLike = None,
+    requires_grad: bool = False,
+) -> Tensor:
+    """Construct a 0-dimensional scalar `Tensor` initialized with the numeric value `s` on `device`."""
+    from lucid._globals import get_default_dtype
+    from lucid._tensor.tensor import Tensor
+
+    del layout
+    if isinstance(s, Tensor):
+        if s.ndim != 0:
+            raise TypeError(
+                f"scalar_tensor(): argument 's' must be a Number or 0-D Tensor, got {s.ndim}-D Tensor"
+            )
+        val: object = s.item()
+    elif isinstance(s, (int, float, bool, complex)) or _is_scalar_leaf(s):
+        val = s
+    else:
+        raise TypeError(
+            f"scalar_tensor(): argument 's' (position 1) must be Number, not {type(s).__name__}"
+        )
+    target_dtype: DTypeLike = (
+        dtype
+        if dtype is not None
+        else (get_default_dtype() if not isinstance(val, complex) else None)
+    )
+    return tensor(val, dtype=target_dtype, device=device, requires_grad=requires_grad)

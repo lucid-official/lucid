@@ -31,7 +31,7 @@ from lucid._deprecation import _PACKAGE_DIR
 from lucid._dtype import _ENGINE_TO_DTYPE, to_engine_dtype
 from lucid._ops._autocast import _autocast_suspended
 from lucid._ops._dims import _to_axes, _wrap_dims
-from lucid._types import DTypeLike
+from lucid._types import DTypeLike, Scalar
 
 _Impl = _C_engine.TensorImpl
 
@@ -183,7 +183,7 @@ def _p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
     else:
         # A zero entry contributes 0 to the sum (``inf`` for p < 0, which
         # makes the norm 0) and nothing to the gradient.
-        nonzero = _C_engine.not_equal(magnitude, _C_engine.zeros_like(magnitude))
+        nonzero = _truth_mask(magnitude)
         safe = _C_engine.where(nonzero, magnitude, _C_engine.ones_like(magnitude))
         raised = _C_engine.pow_scalar(safe, p)
         fill = _C_engine.full_like(raised, 0.0 if p > 0 else math.inf)
@@ -597,15 +597,21 @@ def _argmin_adapter(x_impl: _Impl, dim: int | None = None, keepdim: bool = False
     return _C_engine.argmin(x_impl, int(dim), bool(keepdim))
 
 
-def _truth_count(a_impl: _Impl, axes: list[int], keepdim: bool, falsy: bool) -> _Impl:
-    """How many entries along ``axes`` are non-zero (``falsy``: are zero)."""
+def _truth_mask(a_impl: _Impl) -> _Impl:
+    """Element-wise boolean truth mask (subnormal-preserving on Metal)."""
+    if a_impl.dtype == _C_engine.Bool:
+        return a_impl
     if a_impl.dtype in (_C_engine.C64, _C_engine.C128):
-        truth = _C_engine.logical_or(
+        return _C_engine.logical_or(
             _C_engine.astype(_C_engine.real(a_impl), _C_engine.Bool),
             _C_engine.astype(_C_engine.imag(a_impl), _C_engine.Bool),
         )
-    else:
-        truth = _C_engine.astype(a_impl, _C_engine.Bool)
+    return _C_engine.astype(a_impl, _C_engine.Bool)
+
+
+def _truth_count(a_impl: _Impl, axes: list[int], keepdim: bool, falsy: bool) -> _Impl:
+    """How many entries along ``axes`` are non-zero (``falsy``: are zero)."""
+    truth = _truth_mask(a_impl)
     if falsy:
         truth = _C_engine.logical_not(truth)
     return _C_engine.sum(truth, axes, keepdim)
@@ -645,3 +651,33 @@ def _logsumexp_adapter(
     if _promotion.is_integral(a_impl.dtype):
         a_impl = _C_engine.astype(a_impl, to_engine_dtype(None))
     return _C_engine.logsumexp(a_impl, axes, bool(keepdim))
+
+
+def _to_truth_operand(x: _Impl | Scalar) -> _Impl | bool:
+    if isinstance(x, _C_engine.TensorImpl):
+        return _truth_mask(x)
+    return bool(_promotion.as_number(x))
+
+
+def _make_logical_adapter(
+    engine_fn: Callable[[_Impl, _Impl], _Impl],
+) -> Callable[..., _Impl]:
+    """Wrap a binary logical engine op with subnormal-preserving truth masks."""
+    from lucid._dispatch import _binary_operands
+    from lucid._ops._adapters import _BINARY_SIGNATURE
+
+    name = getattr(engine_fn, "__name__", "_logical_adapter")
+
+    def _adapter(input: _Impl, other: _Impl, /) -> _Impl:
+        a, b = _binary_operands(_to_truth_operand(input), _to_truth_operand(other))
+        return engine_fn(a, b)
+
+    _adapter.__doc__ = getattr(engine_fn, "__doc__", None)
+    _adapter.__name__ = name
+    _adapter.__dict__["__signature__"] = _BINARY_SIGNATURE
+    return _adapter
+
+
+def _logical_not_adapter(input: _Impl) -> _Impl:
+    """logical_not(input) — subnormal-preserving boolean negation."""
+    return _C_engine.logical_not(_truth_mask(input))

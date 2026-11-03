@@ -31,6 +31,7 @@ The in-place forms (``Tensor.index_add_`` and the rest, and
 destination through :func:`_write_inplace`.
 """
 
+import operator
 from collections.abc import Callable
 from typing import TYPE_CHECKING, final, override
 
@@ -1100,6 +1101,114 @@ def argwhere(input: Tensor) -> Tensor:
     return lucid.nonzero(input)
 
 
+def select_scatter(input: Tensor, src: Tensor, dim: int, index: int) -> Tensor:
+    """Embed the values of ``src`` into a copy of ``input`` at ``index`` along ``dim``.
+
+    Parameters
+    ----------
+    input : Tensor
+        Destination tensor.
+    src : Tensor
+        Source tensor to scatter.
+    dim : int
+        Dimension along which to index.
+    index : int
+        Index along ``dim``.
+    """
+    if input.ndim == 0:
+        raise _C_engine.InvalidArgument("select_scatter: input cannot be a 0-D tensor")
+    d = _wrap_dim(dim, input.ndim, "select_scatter")
+    size = int(input.shape[d])
+    idx = operator.index(index)
+    if idx < -size or idx >= size:
+        raise IndexError(f"select_scatter: index {idx} out of range for dim {d} of size {size}")
+    if idx < 0:
+        idx += size
+    expected = input.shape[:d] + input.shape[d + 1 :]
+    if src.shape != expected:
+        raise _C_engine.ShapeMismatch(
+            f"select_scatter: expected src shape {expected}, got {src.shape}"
+        )
+    idx_t = lucid.full(
+        (*input.shape[:d], 1, *input.shape[d + 1 :]),
+        idx,
+        dtype=lucid.int64,
+        device=input.device,
+    )
+    return lucid.scatter(input, d, idx_t, src.to(input.dtype).unsqueeze(d))
+
+
+def slice_scatter(
+    input: Tensor,
+    src: Tensor,
+    dim: int = 0,
+    start: int | None = None,
+    end: int | None = None,
+    step: int = 1,
+) -> Tensor:
+    """Embed the values of ``src`` into ``input`` along slice ``start:end:step`` of ``dim``."""
+    if input.ndim == 0:
+        raise _C_engine.InvalidArgument("slice_scatter: input cannot be a 0-D tensor")
+    step_i = operator.index(step)
+    if step_i <= 0:
+        raise ValueError(f"slice_scatter: step must be > 0, got {step_i}")
+    d = _wrap_dim(dim, input.ndim, "slice_scatter")
+    start_i, stop_i, step_i = slice(start, end, step_i).indices(int(input.shape[d]))
+    slice_len = len(range(start_i, stop_i, step_i))
+    expected = (*input.shape[:d], slice_len, *input.shape[d + 1 :])
+    if src.shape != expected:
+        raise _C_engine.ShapeMismatch(
+            f"slice_scatter: expected src shape {expected}, got {src.shape}"
+        )
+    if slice_len == 0:
+        return input.clone()
+    pos = lucid.arange(start_i, stop_i, step_i, dtype=lucid.int64, device=input.device)
+    pos = pos.reshape([1] * d + [slice_len] + [1] * (input.ndim - 1 - d)).expand(*expected)
+    return lucid.scatter(input, d, pos, src.to(input.dtype))
+
+
+def diagonal_scatter(
+    input: Tensor,
+    src: Tensor,
+    offset: int = 0,
+    dim1: int = 0,
+    dim2: int = 1,
+) -> Tensor:
+    """Embed the values of ``src`` into ``input`` along the ``offset`` diagonal of ``(dim1, dim2)``."""
+    if input.ndim < 2:
+        raise _C_engine.InvalidArgument(
+            f"diagonal_scatter: input must be at least 2-D, got {input.ndim}-D"
+        )
+    d1 = _wrap_dim(dim1, input.ndim, "diagonal_scatter")
+    d2 = _wrap_dim(dim2, input.ndim, "diagonal_scatter")
+    if d1 == d2:
+        raise _C_engine.InvalidArgument(
+            f"diagonal_scatter: dim1 and dim2 cannot be identical ({dim1}, {dim2})"
+        )
+    diag_view = lucid.diagonal(input, offset=offset, dim1=d1, dim2=d2)
+    if src.shape != diag_view.shape:
+        raise _C_engine.ShapeMismatch(
+            f"diagonal_scatter: expected src shape {diag_view.shape}, got {src.shape}"
+        )
+    diag_len = int(src.shape[-1])
+    if diag_len == 0:
+        return input.clone()
+    moved = lucid.movedim(input, (d1, d2), (-2, -1))
+    batch = moved.shape[:-2]
+    r_size, c_size = int(moved.shape[-2]), int(moved.shape[-1])
+    r_start = max(0, -offset)
+    c_start = max(0, offset)
+    r_idx = lucid.arange(r_start, r_start + diag_len, dtype=lucid.int64, device=input.device)
+    c_idx = lucid.arange(c_start, c_start + diag_len, dtype=lucid.int64, device=input.device)
+    flat_idx = (r_idx * c_size + c_idx).reshape([1] * len(batch) + [diag_len]).expand(
+        *batch, diag_len
+    )
+    scattered = lucid.scatter(
+        moved.reshape(*batch, r_size * c_size), -1, flat_idx, src.to(input.dtype)
+    ).reshape(*batch, r_size, c_size)
+    return lucid.movedim(scattered, (-2, -1), (d1, d2))
+
+
 __all__ = [
     "index_fill",
     "index_add",
@@ -1110,4 +1219,10 @@ __all__ = [
     "index_put",
     "index_put_",
     "argwhere",
+    "select_scatter",
+    "slice_scatter",
+    "diagonal_scatter",
 ]
+
+from lucid._tensor.tensor import Tensor
+

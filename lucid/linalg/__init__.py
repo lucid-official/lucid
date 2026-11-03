@@ -12,7 +12,7 @@ from lucid._dtype import _ENGINE_TO_DTYPE, to_engine_dtype
 from lucid._ops._adapters import _outer_adapter
 from lucid._ops._autocast import _autocast_entry
 from lucid._ops._dims import _wrap_dim
-from lucid._ops._reduce import _p_norm, _reduction_axes, _require_normable
+from lucid._ops._reduce import _p_norm, _reduction_axes, _require_normable, _truth_mask
 from lucid._promotion import try_unwrap as _try_unwrap
 from lucid._tensor._indexing import broadcast_shapes as _broadcast_batch
 from lucid._tensor.tensor import Tensor
@@ -2144,7 +2144,7 @@ def vector_norm(
         # Every axis, rather than a flatten, for ``dim=None`` so ``keepdim`` retains rank.
         axes = list(range(len(r.shape))) if dim is None else _reduction_axes(r, dim, "vector_norm")
         if ord == 0:
-            nz = _C_engine.not_equal(r, _C_engine.zeros_like(r))
+            nz = _truth_mask(xi)
             return _wrap(_C_engine.astype(_C_engine.sum(nz, axes, keepdim), r.dtype))
         return _wrap(_p_norm(r, float(ord), axes, keepdim))
 
@@ -3303,11 +3303,11 @@ from lucid.linalg._ex import (
     _SlogdetResult,
     _sv_cutoff,
     cholesky_ex,
+    cholesky_inverse,
     inv_ex,
     ldl_factor,
     ldl_factor_ex,
-    lu_factor_ex,
-    solve_ex,
+    lu_factor_ex, lu_unpack, solve_ex,
     tensorinv,
     tensorsolve,
 )
@@ -3350,7 +3350,7 @@ __all__ = [
     "ldl_factor_ex",
     "ldl_solve",
     "lu",
-    "cholesky_ex",
+    "cholesky_ex", "cholesky_inverse", "lu_unpack",
     "inv_ex",
     "solve_ex",
     "tensorinv",

@@ -52,7 +52,13 @@ def _length_for_sym(M: int, sym: bool) -> int:
     return M if sym else M + 1
 
 
-def _degenerate(M: int, dtype: DTypeLike, device: DeviceLike) -> Tensor | None:
+def _degenerate(
+    M: int,
+    dtype: DTypeLike,
+    device: DeviceLike,
+    requires_grad: bool = False,
+    layout: object = None,
+) -> Tensor | None:
     """Check the request; return the window for ``M <= 1``, or ``None`` when
     there is shape to compute.
 
@@ -72,6 +78,7 @@ def _degenerate(M: int, dtype: DTypeLike, device: DeviceLike) -> Tensor | None:
     Bartlett or a Hann, which annihilates the frame it was meant to taper,
     and ``0.08`` for a Hamming, which is worse for being plausible.
     """
+    del layout
     if M < 0:
         raise _C_engine.InvalidArgument(f"window length must be >= 0, got {M}")
     resolved = lucid.get_default_dtype() if dtype is None else dtype
@@ -80,21 +87,28 @@ def _degenerate(M: int, dtype: DTypeLike, device: DeviceLike) -> Tensor | None:
             f"a window is computed in a floating-point dtype, got {resolved}"
         )
     if M <= 1:
-        return lucid.ones(M, dtype=dtype, device=device)
+        return lucid.ones(M, dtype=dtype, device=device, requires_grad=requires_grad)
     return None
 
 
-def _trim(window: Tensor, M: int, sym: bool) -> Tensor:
+def _trim(window: Tensor, M: int, sym: bool, requires_grad: bool = False) -> Tensor:
     """Drop the last sample when ``sym=False`` so the periodic form has the
     user-requested length ``M``."""
-    return window if sym else window[:M]
+    out = window if sym else window[:M]
+    return out.requires_grad_(True) if requires_grad else out
 
 
 # ── one-parameter shape windows ────────────────────────────────────────────
 
 
 def bartlett(
-    M: int, *, sym: bool = True, dtype: DTypeLike = None, device: DeviceLike = None
+    M: int,
+    *,
+    sym: bool = True,
+    dtype: DTypeLike = None,
+    layout: object = None,
+    device: DeviceLike = None,
+    requires_grad: bool = False,
 ) -> Tensor:
     r"""Bartlett (triangular) window.
 
@@ -115,8 +129,12 @@ def bartlett(
         form with the last sample dropped).
     dtype : DTypeLike, optional
         Desired dtype of the output tensor; defaults to ``float32``.
+    layout : object, optional
+        Memory layout descriptor (`lucid.strided`).
     device : DeviceLike, optional
         Target device for the output tensor.
+    requires_grad : bool, optional
+        Whether autograd should record operations on the returned window.
 
     Returns
     -------
@@ -143,17 +161,23 @@ def bartlett(
     >>> bartlett(5)
     tensor([0., 0.5, 1., 0.5, 0.])
     """
-    degenerate = _degenerate(M, dtype, device)
+    degenerate = _degenerate(M, dtype, device, requires_grad, layout)
     if degenerate is not None:
         return degenerate
     N = _length_for_sym(M, sym)
     n = _ramp(N, dtype=dtype, device=device)
     w = 1.0 - lucid.abs(2.0 * n / float(N - 1) - 1.0)
-    return _trim(w, M, sym)
+    return _trim(w, M, sym, requires_grad)
 
 
 def cosine(
-    M: int, *, sym: bool = True, dtype: DTypeLike = None, device: DeviceLike = None
+    M: int,
+    *,
+    sym: bool = True,
+    dtype: DTypeLike = None,
+    layout: object = None,
+    device: DeviceLike = None,
+    requires_grad: bool = False,
 ) -> Tensor:
     r"""Cosine (half-sine) window.
 
@@ -170,8 +194,12 @@ def cosine(
         Symmetric (``True``, default) or periodic (``False``) variant.
     dtype : DTypeLike, optional
         Desired dtype of the output tensor.
+    layout : object, optional
+        Memory layout descriptor (`lucid.strided`).
     device : DeviceLike, optional
         Target device for the output tensor.
+    requires_grad : bool, optional
+        Whether autograd should record operations on the returned window.
 
     Returns
     -------
@@ -197,16 +225,22 @@ def cosine(
     >>> cosine(4)
     tensor([0.3827, 0.9239, 0.9239, 0.3827])
     """
-    degenerate = _degenerate(M, dtype, device)
+    degenerate = _degenerate(M, dtype, device, requires_grad, layout)
     if degenerate is not None:
         return degenerate
     N = _length_for_sym(M, sym)
     n = _ramp(N, dtype=dtype, device=device)
     w = lucid.sin(math.pi * (n + 0.5) / float(N))
-    return _trim(w, M, sym)
+    return _trim(w, M, sym, requires_grad)
 
 
-def hann(M: int, *, sym: bool = True, dtype: DTypeLike = None, device: DeviceLike = None) -> Tensor:
+def hann(M: int,
+    *,
+    sym: bool = True,
+    dtype: DTypeLike = None,
+    layout: object = None,
+    device: DeviceLike = None,
+    requires_grad: bool = False,) -> Tensor:
     r"""Hann (raised-cosine) window.
 
     The Hann window is a single full cycle of a raised cosine.  Its
@@ -223,8 +257,12 @@ def hann(M: int, *, sym: bool = True, dtype: DTypeLike = None, device: DeviceLik
         Symmetric (``True``, default) or periodic (``False``) variant.
     dtype : DTypeLike, optional
         Desired dtype of the output tensor.
+    layout : object, optional
+        Memory layout descriptor (`lucid.strided`).
     device : DeviceLike, optional
         Target device for the output tensor.
+    requires_grad : bool, optional
+        Whether autograd should record operations on the returned window.
 
     Returns
     -------
@@ -253,11 +291,19 @@ def hann(M: int, *, sym: bool = True, dtype: DTypeLike = None, device: DeviceLik
     >>> lucid.allclose(w, lucid.tensor([0.0, 0.5, 1.0, 0.5, 0.0]), atol=1e-6)
     True
     """
-    return general_hamming(M, alpha=0.5, sym=sym, dtype=dtype, device=device)
+    return general_hamming(
+        M, alpha=0.5, sym=sym, dtype=dtype, layout=layout, device=device, requires_grad=requires_grad
+    )
 
 
 def hamming(
-    M: int, *, sym: bool = True, dtype: DTypeLike = None, device: DeviceLike = None
+    M: int,
+    *,
+    sym: bool = True,
+    dtype: DTypeLike = None,
+    layout: object = None,
+    device: DeviceLike = None,
+    requires_grad: bool = False,
 ) -> Tensor:
     r"""Hamming window.
 
@@ -275,8 +321,12 @@ def hamming(
         Symmetric (``True``, default) or periodic (``False``) variant.
     dtype : DTypeLike, optional
         Desired dtype of the output tensor.
+    layout : object, optional
+        Memory layout descriptor (`lucid.strided`).
     device : DeviceLike, optional
         Target device for the output tensor.
+    requires_grad : bool, optional
+        Whether autograd should record operations on the returned window.
 
     Returns
     -------
@@ -301,7 +351,9 @@ def hamming(
     >>> hamming(5)
     tensor([0.08, 0.54, 1., 0.54, 0.08])
     """
-    return general_hamming(M, alpha=0.54, sym=sym, dtype=dtype, device=device)
+    return general_hamming(
+        M, alpha=0.54, sym=sym, dtype=dtype, layout=layout, device=device, requires_grad=requires_grad
+    )
 
 
 def general_hamming(
@@ -310,7 +362,9 @@ def general_hamming(
     *,
     sym: bool = True,
     dtype: DTypeLike = None,
+    layout: object = None,
     device: DeviceLike = None,
+    requires_grad: bool = False,
 ) -> Tensor:
     r"""Generalised Hamming-family window.
 
@@ -331,8 +385,12 @@ def general_hamming(
         Symmetric (``True``, default) or periodic (``False``) variant.
     dtype : DTypeLike, optional
         Desired dtype of the output tensor.
+    layout : object, optional
+        Memory layout descriptor (`lucid.strided`).
     device : DeviceLike, optional
         Target device for the output tensor.
+    requires_grad : bool, optional
+        Whether autograd should record operations on the returned window.
 
     Returns
     -------
@@ -358,13 +416,13 @@ def general_hamming(
     >>> general_hamming(5, alpha=0.54)  # the classic Hamming window
     tensor([0.08, 0.54, 1., 0.54, 0.08])
     """
-    degenerate = _degenerate(M, dtype, device)
+    degenerate = _degenerate(M, dtype, device, requires_grad, layout)
     if degenerate is not None:
         return degenerate
     N = _length_for_sym(M, sym)
     n = _ramp(N, dtype=dtype, device=device)
     w = alpha - (1.0 - alpha) * lucid.cos(2.0 * math.pi * n / float(N - 1))
-    return _trim(w, M, sym)
+    return _trim(w, M, sym, requires_grad)
 
 
 # ── multi-term cosine windows ──────────────────────────────────────────────
@@ -376,7 +434,9 @@ def general_cosine(
     *,
     sym: bool = True,
     dtype: DTypeLike = None,
+    layout: object = None,
     device: DeviceLike = None,
+    requires_grad: bool = False,
 ) -> Tensor:
     r"""Generic weighted sum of cosines.
 
@@ -397,8 +457,12 @@ def general_cosine(
         Symmetric (``True``, default) or periodic (``False``) variant.
     dtype : DTypeLike, optional
         Desired dtype of the output tensor.
+    layout : object, optional
+        Memory layout descriptor (`lucid.strided`).
     device : DeviceLike, optional
         Target device for the output tensor.
+    requires_grad : bool, optional
+        Whether autograd should record operations on the returned window.
 
     Returns
     -------
@@ -428,7 +492,7 @@ def general_cosine(
     >>> general_cosine(5, [0.54, 0.46])  # Hamming, as a two-term cosine sum
     tensor([0.08, 0.54, 1., 0.54, 0.08])
     """
-    degenerate = _degenerate(M, dtype, device)
+    degenerate = _degenerate(M, dtype, device, requires_grad, layout)
     if degenerate is not None:
         return degenerate
     N = _length_for_sym(M, sym)
@@ -439,11 +503,17 @@ def general_cosine(
     for k in range(1, len(a)):
         w = w + sign * float(a[k]) * lucid.cos(float(k) * base)
         sign = -sign
-    return _trim(w, M, sym)
+    return _trim(w, M, sym, requires_grad)
 
 
 def blackman(
-    M: int, *, sym: bool = True, dtype: DTypeLike = None, device: DeviceLike = None
+    M: int,
+    *,
+    sym: bool = True,
+    dtype: DTypeLike = None,
+    layout: object = None,
+    device: DeviceLike = None,
+    requires_grad: bool = False,
 ) -> Tensor:
     r"""Blackman window.
 
@@ -461,8 +531,12 @@ def blackman(
         Symmetric (``True``, default) or periodic (``False``) variant.
     dtype : DTypeLike, optional
         Desired dtype of the output tensor.
+    layout : object, optional
+        Memory layout descriptor (`lucid.strided`).
     device : DeviceLike, optional
         Target device for the output tensor.
+    requires_grad : bool, optional
+        Whether autograd should record operations on the returned window.
 
     Returns
     -------
@@ -492,11 +566,19 @@ def blackman(
     >>> lucid.allclose(w, lucid.tensor([0.0, 0.34, 1.0, 0.34, 0.0]), atol=1e-6)
     True
     """
-    return general_cosine(M, [0.42, 0.50, 0.08], sym=sym, dtype=dtype, device=device)
+    return general_cosine(
+        M, [0.42, 0.50, 0.08], sym=sym, dtype=dtype, layout=layout, device=device, requires_grad=requires_grad
+    )
 
 
 def nuttall(
-    M: int, *, sym: bool = True, dtype: DTypeLike = None, device: DeviceLike = None
+    M: int,
+    *,
+    sym: bool = True,
+    dtype: DTypeLike = None,
+    layout: object = None,
+    device: DeviceLike = None,
+    requires_grad: bool = False,
 ) -> Tensor:
     r"""Nuttall four-term window.
 
@@ -514,8 +596,12 @@ def nuttall(
         Symmetric (``True``, default) or periodic (``False``) variant.
     dtype : DTypeLike, optional
         Desired dtype of the output tensor.
+    layout : object, optional
+        Memory layout descriptor (`lucid.strided`).
     device : DeviceLike, optional
         Target device for the output tensor.
+    requires_grad : bool, optional
+        Whether autograd should record operations on the returned window.
 
     Returns
     -------
@@ -543,7 +629,7 @@ def nuttall(
     tensor([0.0003628, 0.227, 1., 0.227, 0.0003628])
     """
     return general_cosine(
-        M, [0.3635819, 0.4891775, 0.1365995, 0.0106411], sym=sym, dtype=dtype, device=device
+        M, [0.3635819, 0.4891775, 0.1365995, 0.0106411], sym=sym, dtype=dtype, layout=layout, device=device, requires_grad=requires_grad
     )
 
 
@@ -556,7 +642,9 @@ def gaussian(
     *,
     sym: bool = True,
     dtype: DTypeLike = None,
+    layout: object = None,
     device: DeviceLike = None,
+    requires_grad: bool = False,
 ) -> Tensor:
     r"""Gaussian window.
 
@@ -578,8 +666,12 @@ def gaussian(
         Symmetric (``True``, default) or periodic (``False``) variant.
     dtype : DTypeLike, optional
         Desired dtype of the output tensor.
+    layout : object, optional
+        Memory layout descriptor (`lucid.strided`).
     device : DeviceLike, optional
         Target device for the output tensor.
+    requires_grad : bool, optional
+        Whether autograd should record operations on the returned window.
 
     Returns
     -------
@@ -607,14 +699,14 @@ def gaussian(
     >>> gaussian(5, std=1.0)
     tensor([0.1353, 0.6065, 1., 0.6065, 0.1353])
     """
-    degenerate = _degenerate(M, dtype, device)
+    degenerate = _degenerate(M, dtype, device, requires_grad, layout)
     if degenerate is not None:
         return degenerate
     N = _length_for_sym(M, sym)
     n = _ramp(N, dtype=dtype, device=device)
     centred = n - 0.5 * float(N - 1)
     w = lucid.exp(-0.5 * (centred / float(std)) ** 2)
-    return _trim(w, M, sym)
+    return _trim(w, M, sym, requires_grad)
 
 
 def general_gaussian(
@@ -624,7 +716,9 @@ def general_gaussian(
     *,
     sym: bool = True,
     dtype: DTypeLike = None,
+    layout: object = None,
     device: DeviceLike = None,
+    requires_grad: bool = False,
 ) -> Tensor:
     r"""Generalised Gaussian window.
 
@@ -647,8 +741,12 @@ def general_gaussian(
         Symmetric (``True``, default) or periodic (``False``) variant.
     dtype : DTypeLike, optional
         Desired dtype of the output tensor.
+    layout : object, optional
+        Memory layout descriptor (`lucid.strided`).
     device : DeviceLike, optional
         Target device for the output tensor.
+    requires_grad : bool, optional
+        Whether autograd should record operations on the returned window.
 
     Returns
     -------
@@ -675,7 +773,7 @@ def general_gaussian(
     >>> general_gaussian(5, p=2.0, sig=1.5)
     tensor([0.2059, 0.906, 1., 0.906, 0.2059])
     """
-    degenerate = _degenerate(M, dtype, device)
+    degenerate = _degenerate(M, dtype, device, requires_grad, layout)
     if degenerate is not None:
         return degenerate
     N = _length_for_sym(M, sym)
@@ -683,7 +781,7 @@ def general_gaussian(
     centred = lucid.abs(n - 0.5 * float(N - 1))
     twop = 2.0 * float(p)
     w = lucid.exp(-0.5 * (centred**twop) / (float(sig) ** twop))
-    return _trim(w, M, sym)
+    return _trim(w, M, sym, requires_grad)
 
 
 # ── exponential window ────────────────────────────────────────────────────
@@ -696,7 +794,9 @@ def exponential(
     *,
     sym: bool = True,
     dtype: DTypeLike = None,
+    layout: object = None,
     device: DeviceLike = None,
+    requires_grad: bool = False,
 ) -> Tensor:
     r"""Exponential (Poisson) window.
 
@@ -720,8 +820,12 @@ def exponential(
         When ``sym=True``, ``center`` must be ``None``.
     dtype : DTypeLike, optional
         Desired dtype of the output tensor.
+    layout : object, optional
+        Layout handle for the exponential window (`lucid.strided`).
     device : DeviceLike, optional
-        Target device for the output tensor.
+        Placement device for the exponential window.
+    requires_grad : bool, optional
+        If True, record autograd operations on the exponential window.
 
     Returns
     -------
@@ -749,7 +853,7 @@ def exponential(
     """
     if sym and center is not None:
         raise ValueError("center must be None for symmetric windows")
-    degenerate = _degenerate(M, dtype, device)
+    degenerate = _degenerate(M, dtype, device, requires_grad, layout)
     if degenerate is not None:
         return degenerate
     N = _length_for_sym(M, sym)
@@ -757,7 +861,7 @@ def exponential(
         center = 0.5 * float(N - 1)
     n = _ramp(N, dtype=dtype, device=device)
     w = lucid.exp(-lucid.abs(n - float(center)) / float(tau))
-    return _trim(w, M, sym)
+    return _trim(w, M, sym, requires_grad)
 
 
 # ── Kaiser window — uses the modified Bessel function I0 ───────────────────
@@ -769,7 +873,9 @@ def kaiser(
     *,
     sym: bool = True,
     dtype: DTypeLike = None,
+    layout: object = None,
     device: DeviceLike = None,
+    requires_grad: bool = False,
 ) -> Tensor:
     r"""Kaiser–Bessel window.
 
@@ -793,8 +899,12 @@ def kaiser(
         Symmetric (``True``, default) or periodic (``False``) variant.
     dtype : DTypeLike, optional
         Desired dtype of the output tensor.
+    layout : object, optional
+        Memory layout descriptor (`lucid.strided`).
     device : DeviceLike, optional
         Target device for the output tensor.
+    requires_grad : bool, optional
+        Whether autograd should record operations on the returned window.
 
     Returns
     -------
@@ -823,7 +933,7 @@ def kaiser(
     >>> kaiser(5, beta=8.0)
     tensor([0.002339, 0.369, 1., 0.369, 0.002339])
     """
-    degenerate = _degenerate(M, dtype, device)
+    degenerate = _degenerate(M, dtype, device, requires_grad, layout)
     if degenerate is not None:
         return degenerate
     N = _length_for_sym(M, sym)
@@ -839,7 +949,7 @@ def kaiser(
     # ``i0`` evaluations differing in the last bit).
     denom = lucid.i0(lucid.full_like(num[:1], float(beta)))
     w = num / denom
-    return _trim(w, M, sym)
+    return _trim(w, M, sym, requires_grad)
 
 
 __all__ = [

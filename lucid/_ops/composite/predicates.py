@@ -467,7 +467,7 @@ def isreal(input: Tensor) -> Tensor:
     [True, False, True]
     """
     if input.is_complex():
-        return lucid.imag(input) == 0.0
+        return lucid.logical_not(lucid.imag(input))
     return lucid.ones_like(input, dtype=lucid.bool_)
 
 

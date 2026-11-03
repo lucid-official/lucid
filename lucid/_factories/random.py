@@ -33,6 +33,7 @@ from lucid._factories._generator import (
     _state_tensor,
     _unpack_state,
 )
+import lucid
 from lucid import _promotion
 from lucid._dtype import _ENGINE_TO_DTYPE, finfo, iinfo, int64
 from lucid._types import DeviceLike, DTypeLike
@@ -1359,3 +1360,107 @@ def randperm(
     if perm_impl.dtype != _dt:
         perm_impl = _C_engine.astype(perm_impl, _dt)
     return _wrap(_leaf(perm_impl, requires_grad))
+
+
+def _require_real_float(
+    input: Tensor, name: str
+) -> tuple[list[int], _C_engine.Dtype, _C_engine.Device]:
+    """Verify `input` has a real floating-point dtype for continuous random draws."""
+    _check_random()
+    impl = input._impl
+    if impl.dtype not in (_C_engine.F16, _C_engine.BF16, _C_engine.F32, _C_engine.F64):
+        raise _C_engine.NotImplementedError(f'"{name}" not implemented for {input.dtype}')
+    return list(impl.shape), impl.dtype, impl.device
+
+
+def _exponential_like(
+    input: Tensor, lambd: float, generator: _C_engine.Generator | None
+) -> Tensor:
+    """Samples of Exp(lambd) shaped like `input`."""
+    if not lambd > 0.0:
+        raise _C_engine.InvalidArgument(
+            f"exponential_ expects lambda > 0.0, but found lambda={lambd}"
+        )
+    shape, dt, dev = _require_real_float(input, "exponential_")
+    work_dt = _C_engine.F64 if dt == _C_engine.F64 else _C_engine.F32
+    u = _wrap(_C_engine.uniform(shape, 0.0, 1.0, work_dt, dev, generator))
+    eps = finfo(_ENGINE_TO_DTYPE[work_dt]).tiny
+    out = -lucid.log(lucid.clamp(1.0 - u, min=eps)) / lambd
+    return out.to(dtype=input.dtype) if out.dtype != input.dtype else out
+
+
+def _cauchy_like(
+    input: Tensor, median: float, sigma: float, generator: _C_engine.Generator | None
+) -> Tensor:
+    """Samples of Cauchy(median, sigma) shaped like `input`."""
+    if not sigma > 0.0:
+        raise _C_engine.InvalidArgument(f"cauchy_ expects sigma > 0.0, but found sigma={sigma}")
+    shape, dt, dev = _require_real_float(input, "cauchy_")
+    work_dt = _C_engine.F64 if dt == _C_engine.F64 else _C_engine.F32
+    u = _wrap(_C_engine.uniform(shape, 0.0, 1.0, work_dt, dev, generator))
+    out = median + sigma * lucid.tan(math.pi * (u - 0.5))
+    return out.to(dtype=input.dtype) if out.dtype != input.dtype else out
+
+
+def _log_normal_like(
+    input: Tensor, mean: float, std: float, generator: _C_engine.Generator | None
+) -> Tensor:
+    """Samples of LogNormal(mean, std) shaped like `input`."""
+    if not std > 0.0:
+        raise _C_engine.InvalidArgument(f"log_normal_ expects std > 0.0, but found std={std}")
+    shape, dt, dev = _require_real_float(input, "log_normal_")
+    return lucid.exp(_wrap(_C_engine.normal(shape, mean, std, dt, dev, generator)))
+
+
+def _geometric_like(
+    input: Tensor, p: float, generator: _C_engine.Generator | None
+) -> Tensor:
+    """Samples of Geometric(p) in {1, 2, ...} shaped like `input`."""
+    _check_random()
+    impl = input._impl
+    if impl.dtype in _PART_DTYPE or impl.dtype == _C_engine.Bool:
+        raise _C_engine.NotImplementedError(f'"geometric_" not implemented for {input.dtype}')
+    if not (0.0 < p < 1.0):
+        raise _C_engine.InvalidArgument(f"geometric_ expects p to be in (0, 1), but got p={p}")
+    shape = list(impl.shape)
+    work_dt = (
+        _C_engine.F64
+        if impl.device == _C_engine.Device.CPU and impl.dtype in (_C_engine.F64, _C_engine.I64)
+        else _C_engine.F32
+    )
+    u = _wrap(_C_engine.uniform(shape, 0.0, 1.0, work_dt, impl.device, generator))
+    eps = finfo(_ENGINE_TO_DTYPE[work_dt]).tiny
+    k = lucid.floor(lucid.log(lucid.clamp(1.0 - u, min=eps)) / math.log1p(-p)) + 1.0
+    return k.to(dtype=input.dtype) if k.dtype != input.dtype else k
+
+
+def _random_like(
+    input: Tensor,
+    from_: int | None,
+    to: int | None,
+    generator: _C_engine.Generator | None,
+) -> Tensor:
+    """Discrete uniform integer samples shaped like `input` for `Tensor.random_`."""
+    _check_random()
+    dt = input._impl.dtype
+    if dt in _PART_DTYPE:
+        raise _C_engine.NotImplementedError(f'"random_" not implemented for {input.dtype}')
+    if from_ is None and to is None:
+        lo = 0
+        if dt == _C_engine.Bool:
+            hi = 2
+        elif _promotion.is_integer(dt):
+            hi = int(iinfo(dt).max) if dt == _C_engine.I64 else int(iinfo(dt).max) + 1
+        else:
+            hi = _exact_integers(dt) + 1
+    elif to is None:
+        lo, hi = _int_bounds("random_", 0, from_)
+    else:
+        lo, hi = _int_bounds("random_", 0 if from_ is None else from_, to)
+    _require_holds("random_", lo, hi, dt, stacklevel=3)
+    impl = _C_engine.randint(
+        list(input.shape), lo, hi, _C_engine.I64, input._impl.device, generator
+    )
+    if dt != _C_engine.I64:
+        impl = _C_engine.astype(impl, dt)
+    return _wrap(impl)

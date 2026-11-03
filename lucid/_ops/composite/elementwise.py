@@ -19,7 +19,7 @@ import lucid
 from lucid import _promotion
 from lucid._dispatch import _float_input
 from lucid._ops.composite import _bessel
-from lucid._ops.composite._expm1 import _expm1
+from lucid._ops.composite._expm1 import _erfc_double, _erfc_single, _expm1, _logaddexp2, _sgn
 from lucid._ops.composite._gamma import _LogGamma, _polygamma
 from lucid._ops.composite._opmath import _promote_pair, _real
 from lucid._ops.composite._pow2 import _copysign, _frexp, _ldexp_dtype, _ldexp_to, _signbit
@@ -1026,7 +1026,7 @@ def signbit(input: Tensor) -> Tensor:
     return _signbit(input)
 
 
-def float_power(input: Tensor | Scalar, exponent: Tensor | Scalar) -> Tensor:
+def float_power(input: Tensor | Scalar | complex, exponent: Tensor | Scalar | complex) -> Tensor:
     r"""Element-wise power that always promotes operands to ``float64``.
 
     Unlike the regular :func:`lucid.pow`, ``float_power`` upcasts both
@@ -1228,47 +1228,6 @@ def erfc(input: Tensor) -> Tensor:
     return accurate + (erf_val.detach() - erf_val)
 
 
-def _erfc_single(input: Tensor) -> Tensor:
-    """erfc by the Numerical Recipes Chebyshev fit, good to 1.2e-7."""
-    z = lucid.where(input >= 0.0, input, -input)
-    t = 1.0 / (1.0 + 0.5 * z)
-    poly = lucid.full_like(t, 0.17087277)
-    for c in (
-        -0.82215223,
-        1.48851587,
-        -1.13520398,
-        0.27886807,
-        -0.18628806,
-        0.09678418,
-        0.37409196,
-        1.00002368,
-        -1.26551223,
-    ):
-        poly = c + t * poly
-    tail = t * lucid.exp(poly - z * z)
-    return lucid.where(input >= 0.0, tail, 2.0 - tail)
-
-
-def _erfc_double(x: Tensor) -> Tensor:
-    """erfc in float64, where the Chebyshev fit's 1.2e-7 is float32 grade.
-
-    ``1 - erf(x)`` holds to float64's spacing until erfc itself shrinks
-    toward it, so it serves below x = 3; from there the continued fraction
-    for erfcx does, at 60 terms, without ever subtracting.  Both branches
-    are evaluated — ``where`` selects — so each is clamped onto its own
-    side first, keeping the losing one finite for the gradient.
-    """
-    z = lucid.where(x >= 0.0, x, -x)
-    head = 1.0 - lucid.erf(lucid.clamp(z, max=3.0))
-    far = lucid.clamp(z, min=3.0)
-    frac = lucid.zeros_like(far)
-    for k in range(60, 0, -1):
-        frac = (0.5 * k) / (far + frac)
-    tail = lucid.exp(-far * far) / (math.sqrt(math.pi) * (far + frac))
-    value = lucid.where(z < 3.0, head, tail)
-    return lucid.where(x >= 0.0, value, 2.0 - value)
-
-
 def copysign(input: Tensor, other: TensorOrScalar) -> Tensor:
     """Element-wise sign transplant: magnitudes from ``input``, signs from ``other``.
 
@@ -1455,6 +1414,37 @@ def i0(input: Tensor) -> Tensor:
     return out
 
 
+def deg2rad(input: Tensor) -> Tensor:
+    """Convert angles from degrees to radians element-wise (:math:`x \\cdot \\pi / 180`)."""
+    return _real(input) * (math.pi / 180.0)
+
+
+def rad2deg(input: Tensor) -> Tensor:
+    """Convert angles from radians to degrees element-wise (:math:`x \\cdot 180 / \\pi`)."""
+    return _real(input) * (180.0 / math.pi)
+
+
+def logaddexp2(input: TensorOrScalar, other: TensorOrScalar) -> Tensor:
+    """Logarithm of the sum of exponentiations in base 2.
+
+    Parameters
+    ----------
+    input, other : Tensor or Scalar
+        Input exponents.
+    """
+    return _logaddexp2(input, other)
+
+
+def sgn(input: Tensor) -> Tensor:
+    """Compute the element-wise sign (:math:`z / |z|` for complex, :func:`lucid.sign` for real)."""
+    return _sgn(input)
+
+
+def fix(input: Tensor) -> Tensor:
+    """Round floating-point elements towards zero in a new tensor (alias of :func:`lucid.trunc`)."""
+    return lucid.trunc(input)
+
+
 __all__ = [
     "absolute",
     "negative",
@@ -1487,6 +1477,7 @@ __all__ = [
     "lgamma",
     "digamma",
     "i0",
+    "deg2rad", "rad2deg", "logaddexp2", "sgn", "fix",
 ]
 
 

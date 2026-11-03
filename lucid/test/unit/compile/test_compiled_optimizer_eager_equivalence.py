@@ -615,7 +615,7 @@ def test_every_state_entry_point_has_one_owner(make_opt: OptFactory) -> None:
         if not name.startswith("_") and callable(getattr(Optimizer, name))
     }
     stateless = {"zero_grad", "add_param_group"}
-    assert public - stateless == set(_STATE_ENTRY_POINTS)
+    assert public - stateless == {n for n in _STATE_ENTRY_POINTS if not n.startswith("_")}
 
     opt = make_opt(_net())
     wrapper = compile_optimizer(opt)

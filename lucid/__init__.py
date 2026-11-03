@@ -52,7 +52,7 @@ from lucid._dtype import (
     bool_   as bool,    # lucid.bool   == bool_   == bool_
 )
 from lucid._device import device
-from lucid._dtype import finfo, iinfo
+from lucid._dtype import finfo, iinfo, layout, strided
 from lucid._globals import (
     set_default_dtype,
     get_default_dtype,
@@ -129,7 +129,7 @@ __all__ = [
     "set_default_dtype", "get_default_dtype",
     "set_default_device", "get_default_device",
     # ── dtype info ────────────────────────────────────────────────────────
-    "finfo", "iinfo",
+    "finfo", "iinfo", "layout", "strided",
     # ── threading (advisory — see lucid/_threads.py) ──────────────────────
     "set_num_threads", "get_num_threads",
     "set_num_interop_threads", "get_num_interop_threads",
@@ -138,7 +138,7 @@ __all__ = [
     # ── core tensor ───────────────────────────────────────────────────────
     "Tensor", "eval",
     # ── factory — deterministic ───────────────────────────────────────────
-    "tensor", "as_tensor", "from_numpy", "from_dlpack", "to_dlpack",
+    "tensor", "as_tensor", "asarray", "scalar_tensor", "from_numpy", "from_dlpack", "to_dlpack",
     "zeros", "ones", "empty", "empty_strided", "full", "eye", "arange", "linspace", "logspace",
     "zeros_like", "ones_like", "empty_like", "full_like",
     # ── factory — random ──────────────────────────────────────────────────
@@ -242,6 +242,11 @@ __all__ = [
     "corrcoef", "cov", "cdist", "combinations",
     "tril_indices", "triu_indices", "diag_embed", "logdet",
     "multinomial", "poisson",
+    "deg2rad", "rad2deg", "logaddexp2", "sgn", "fix",
+    "diag", "diagflat", "concatenate", "split_with_sizes",
+    "unsafe_chunk", "unsafe_split", "constant_pad_nd", "unravel_index",
+    "select_scatter", "slice_scatter", "diagonal_scatter",
+    "dist", "gradient",
     # ── subpackages ───────────────────────────────────────────────────────
     "nn", "optim", "autograd", "func", "linalg", "fft", "signal", "special",
     "diffeq", "utils", "amp", "profiler", "einops", "compile", "quantization",
@@ -256,7 +261,7 @@ __all__ = [
 # ── Name sets used by the dispatch table ─────────────────────────────────────
 _FACTORY_NAMES: frozenset[str] = frozenset([
     # ── deterministic ─────────────────────────────────────────────────────
-    "tensor", "as_tensor", "from_numpy", "from_dlpack", "to_dlpack",
+    "tensor", "as_tensor", "asarray", "scalar_tensor", "from_numpy", "from_dlpack", "to_dlpack",
     "zeros", "ones", "empty", "empty_strided", "full", "eye", "arange", "linspace", "logspace",
     "zeros_like", "ones_like", "empty_like", "full_like",
     # ── random ────────────────────────────────────────────────────────────

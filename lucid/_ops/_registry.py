@@ -16,6 +16,7 @@ from typing import Any, Callable
 from lucid import _dispatch
 from lucid._C import engine as _C_engine
 from lucid._ops import _adapters as A  # accessor for every signature-normaliser
+from lucid._ops._reduce import _logical_not_adapter, _make_logical_adapter
 from lucid._ops._division import _make_div_adapter, _make_round_adapter
 from lucid._ops._reduce import (
     _all_adapter,
@@ -488,13 +489,13 @@ _REGISTRY: list[OpEntry] = [
     OpEntry("kron", A._kron_adapter, 2, method_name="kron", free_fn_name="kron"),
 
     # ── logical compositions ────────────────────────────────────────────────
-    OpEntry("logical_and", A._make_arith_adapter(_R.logical_and), 2,
+    OpEntry("logical_and", _make_logical_adapter(_R.logical_and), 2,
             method_name="logical_and", free_fn_name="logical_and"),
-    OpEntry("logical_or",  A._make_arith_adapter(_R.logical_or), 2,
+    OpEntry("logical_or",  _make_logical_adapter(_R.logical_or), 2,
             method_name="logical_or",  free_fn_name="logical_or"),
-    OpEntry("logical_xor", A._make_arith_adapter(_R.logical_xor), 2,
+    OpEntry("logical_xor", _make_logical_adapter(_R.logical_xor), 2,
             method_name="logical_xor", free_fn_name="logical_xor"),
-    OpEntry("logical_not", _R.logical_not, 1,
+    OpEntry("logical_not", _logical_not_adapter, 1,
             method_name="logical_not", free_fn_name="logical_not"),
 
     # ── indexing compositions ───────────────────────────────────────────────

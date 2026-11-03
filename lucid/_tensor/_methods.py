@@ -773,19 +773,23 @@ _UNARY_INPLACE_TWINS: tuple[str, ...] = (
     "atan_",
     "atanh_",
     "conj_physical_",
+    "deg2rad_",
     "digamma_",
     "erf_",
     "erfc_",
     "erfinv_",
     "exp2_",
     "expm1_",
+    "fix_",
     "frac_",
     "i0_",
     "lgamma_",
     "log10_",
     "log1p_",
     "negative_",
+    "rad2deg_",
     "rsqrt_",
+    "sgn_",
     "sinc_",
     "trunc_",
 )
@@ -920,7 +924,7 @@ def _make_bmm_inplace(name: str) -> Callable[..., Tensor]:
     return method
 
 
-def _float_power_(self: Tensor, exponent: TensorOrScalar) -> Tensor:
+def _float_power_(self: Tensor, exponent: TensorOrScalar | complex) -> Tensor:
     """Write ``lucid.float_power(self, exponent)`` into ``self`` in place."""
     import lucid
 
@@ -1155,6 +1159,28 @@ def _uniform_(
     return _fill_drawn(self, "uniform_", lambda base: _uniform_like(base, from_, to, generator))
 
 
+
+
+from lucid._tensor._free_fn_methods import (
+    _cauchy_,
+    _exponential_,
+    _fill_diagonal_,
+    _geometric_,
+    _log_normal_,
+    _ndimension,
+    _nelement,
+    _polygamma,
+    _random_,
+    _squeeze_,
+    _sum_to_size,
+    _swapaxes_,
+    _swapdims_,
+    _t_,
+    _transpose_,
+    _unsqueeze_,
+)
+
+
 _GENERATED_INPLACE_TWINS: tuple[tuple[str, Callable[..., Tensor]], ...] = (
     *((n, _make_unary_inplace(n)) for n in _UNARY_INPLACE_TWINS),
     *((n, _make_binary_inplace(n)) for n in _BINARY_INPLACE_TWINS),
@@ -1174,6 +1200,18 @@ _GENERATED_INPLACE_TWINS: tuple[tuple[str, Callable[..., Tensor]], ...] = (
     ("bernoulli_", _bernoulli_),
     ("normal_", _normal_),
     ("uniform_", _uniform_),
+    ("exponential_", _exponential_),
+    ("cauchy_", _cauchy_),
+    ("log_normal_", _log_normal_),
+    ("geometric_", _geometric_),
+    ("random_", _random_),
+    ("fill_diagonal_", _fill_diagonal_),
+    ("t_", _t_),
+    ("transpose_", _transpose_),
+    ("swapaxes_", _swapaxes_),
+    ("swapdims_", _swapdims_),
+    ("squeeze_", _squeeze_),
+    ("unsqueeze_", _unsqueeze_),
 )
 
 
@@ -1301,6 +1339,10 @@ _EXTRA_METHODS = (
     ("bernoulli", _bernoulli),
     ("divide", _divide),
     ("true_divide", _true_divide),
+    ("ndimension", _ndimension),
+    ("nelement", _nelement),
+    ("polygamma", _polygamma),
+    ("sum_to_size", _sum_to_size),
     ("bitwise_and_", _bitwise_and_),
     ("bitwise_or_", _bitwise_or_),
     ("bitwise_xor_", _bitwise_xor_),

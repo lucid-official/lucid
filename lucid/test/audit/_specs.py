@@ -65,11 +65,11 @@ def _rebuild(original: Any, array: Any, *, keep_integer: bool = False) -> Any:
     return _probe.as_f64(array)
 
 
-def _rebuild_operand(original: Any, array: Any) -> Any:
+def _rebuild_operand(original: Any, array: Any, *, keep_integer: bool = False) -> Any:
     """:func:`_rebuild` for any operand, a sequence of tensors included."""
     if _probe.is_tensor_sequence(original):
-        return _probe.as_operand(original, _rebuild(original[0], array))
-    return _rebuild(original, array)
+        return _probe.as_operand(original, _rebuild(original[0], array, keep_integer=keep_integer))
+    return _rebuild(original, array, keep_integer=keep_integer)
 
 
 def _own(value: Any) -> Any:
@@ -159,7 +159,7 @@ class Call:
         self.joint = joint
         self.strided = strided
 
-    def with_primary(self, array: np.ndarray) -> Call:
+    def with_primary(self, array: np.ndarray, *, keep_integer: bool = False) -> Call:
         """A copy whose differentiated argument is replaced by ``array``.
 
         At the *original argument's* dtype, not unconditionally float64.
@@ -173,7 +173,7 @@ class Call:
         """
         args = list(self.args)
         original = args[self.primary] if 0 <= self.primary < len(args) else None
-        args[self.primary] = _rebuild_operand(original, array)
+        args[self.primary] = _rebuild_operand(original, array, keep_integer=keep_integer)
         return Call(
             args,
             dict(self.kwargs),
@@ -224,7 +224,7 @@ class Call:
         """
         if self.joint is not None:
             return self.joint(self, array)
-        call = self.with_primary(array)
+        call = self.with_primary(array, keep_integer=True)
         for index in self.same_shape:
             peer = self.args[index]
             values = _probe.to_numpy(peer)
@@ -743,6 +743,8 @@ def _indexing(name: str, domain: str) -> Iterator[Call]:
         yield Call([values, sorted_1d], {}, 0, "bucketize(values, boundaries)")
     elif name in ("narrow",):
         yield Call([x, 1, 1, 2], {}, 0, "narrow(x, dim, start, length)")
+    elif name in ("slice_scatter",):
+        yield Call([x, _f((2, 5), domain), 0, 1, 3], {}, 0, "slice_scatter(x, src, dim, start, end)")
     elif name in ("where",):
         cond = lucid.tensor((_probe.rng(6).random((4, 5)) > 0.5))
         yield Call([cond, x, src], {}, 1, "where(cond, a, b)")
@@ -1095,7 +1097,7 @@ _FAMILIES: list[tuple[str, Callable[[str, str], Iterator[Call]]]] = [
     (
         r"^(gather|scatter_?|scatter_add|scatter_reduce|index_select|index_put_?|"
         r"index_copy_?|put_?|take|take_along_dim|take_along_axis|masked_fill_?|"
-        r"searchsorted|bucketize|narrow|where)$",
+        r"searchsorted|bucketize|narrow|slice_scatter|where)$",
         _indexing,
     ),
     (

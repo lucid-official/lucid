@@ -274,3 +274,134 @@ def test_empty_strided_and_is_set_to(ref: Any, device: str) -> None:
     assert not base.is_set_to(base.clone())
     assert not lucid.zeros((0,), device=device).is_set_to(lucid.zeros((0,), device=device))
     assert base[:0].is_set_to(base[:0])
+
+
+@pytest.mark.parametrize("device", _DEVICES)
+def test_lcd685_elementwise_and_factories(ref: Any, device: str) -> None:
+    assert isinstance(lucid.strided, lucid.layout)
+    assert repr(lucid.strided) == "lucid.strided"
+    x = lucid.tensor([0.0, 90.0, 180.0], device=device, requires_grad=True)
+    rx = ref.tensor([0.0, 90.0, 180.0], requires_grad=True)
+    np.testing.assert_allclose(
+        lucid.deg2rad(x).detach().cpu().numpy(), ref.deg2rad(rx).detach().numpy(), rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        x.rad2deg().detach().cpu().numpy(), rx.rad2deg().detach().numpy(), rtol=1e-5
+    )
+    a = lucid.tensor([1.0, 50.0, -50.0], device=device, requires_grad=True)
+    b = lucid.tensor([2.0, -50.0, 50.0], device=device, requires_grad=True)
+    ra = ref.tensor([1.0, 50.0, -50.0], requires_grad=True)
+    rb = ref.tensor([2.0, -50.0, 50.0], requires_grad=True)
+    out = lucid.logaddexp2(a, b)
+    rout = ref.logaddexp2(ra, rb)
+    np.testing.assert_allclose(out.detach().cpu().numpy(), rout.detach().numpy(), rtol=1e-5)
+    out.sum().backward()
+    rout.sum().backward()
+    np.testing.assert_allclose(a.grad.cpu().numpy(), ra.grad.numpy(), rtol=1e-5)
+
+    z = lucid.tensor([3.0 + 4.0j, 0.0 + 0.0j], device=device)
+    rz = ref.tensor([3.0 + 4.0j, 0.0 + 0.0j])
+    np.testing.assert_allclose(lucid.sgn(z).cpu().numpy(), ref.sgn(rz).numpy(), rtol=1e-5)
+    f = lucid.tensor([-2.7, 0.0, 2.7], device=device)
+    assert lucid.fix(f).tolist() == [-2.0, 0.0, 2.0]
+    assert f.clone().fix_().tolist() == [-2.0, 0.0, 2.0]
+
+    # asarray and scalar_tensor
+    base = lucid.tensor([1.0, 2.0], device=device, requires_grad=True)
+    assert lucid.asarray(base) is base
+    copied = lucid.asarray(base, copy=True)
+    assert copied is not base and copied.requires_grad and copied.is_leaf
+    sc = lucid.scalar_tensor(3.5, device=device, requires_grad=True)
+    assert sc.ndim == 0 and sc.requires_grad and abs(sc.item() - 3.5) < 1e-6
+
+
+@pytest.mark.parametrize("device", _DEVICES)
+def test_lcd685_shape_scatter_reductions_and_linalg(ref: Any, device: str) -> None:
+    v = lucid.tensor([1.0, 2.0, 3.0], device=device)
+    rv = ref.tensor([1.0, 2.0, 3.0])
+    np.testing.assert_allclose(lucid.diag(v, 1).cpu().numpy(), ref.diag(rv, 1).numpy())
+    np.testing.assert_allclose(
+        lucid.diagflat(v.reshape(1, 3)).cpu().numpy(), ref.diagflat(rv.reshape(1, 3)).numpy()
+    )
+    np.testing.assert_allclose(
+        lucid.concatenate([v, v], dim=0).cpu().numpy(), ref.concatenate([rv, rv], dim=0).numpy()
+    )
+    assert [t.shape for t in lucid.split_with_sizes(v, [1, 2])] == [(1,), (2,)]
+    assert [t.shape for t in lucid.unsafe_chunk(v, 2)] == [(2,), (1,)]
+    assert [t.shape for t in lucid.unsafe_split(v, 2)] == [(2,), (1,)]
+    np.testing.assert_allclose(
+        lucid.constant_pad_nd(v, (1, 2), 9.0).cpu().numpy(),
+        ref.constant_pad_nd(rv, (1, 2), 9.0).numpy(),
+    )
+    idx = lucid.tensor([0, 3, 5], device=device)
+    ridx = ref.tensor([0, 3, 5])
+    for lt, rt in zip(lucid.unravel_index(idx, (2, 3)), ref.unravel_index(ridx, (2, 3))):
+        np.testing.assert_array_equal(lt.cpu().numpy(), rt.numpy())
+
+    mat = lucid.zeros(3, 3, device=device, requires_grad=True)
+    rmat = ref.zeros(3, 3, requires_grad=True)
+    s1 = lucid.select_scatter(mat, lucid.ones(3, device=device), 0, 1)
+    rs1 = ref.select_scatter(rmat, ref.ones(3), 0, 1)
+    s2 = lucid.slice_scatter(s1, lucid.full((2, 3), 2.0, device=device), 0, 1, 3)
+    rs2 = ref.slice_scatter(rs1, ref.full((2, 3), 2.0), 0, 1, 3)
+    s3 = lucid.diagonal_scatter(s2, lucid.full((3,), 5.0, device=device))
+    rs3 = ref.diagonal_scatter(rs2, ref.full((3,), 5.0))
+    np.testing.assert_allclose(s3.detach().cpu().numpy(), rs3.detach().numpy())
+
+    np.testing.assert_allclose(
+        lucid.dist(v, lucid.zeros_like(v), p=2.0).cpu().numpy(),
+        ref.dist(rv, ref.zeros_like(rv), p=2.0).numpy(),
+        rtol=1e-5,
+    )
+    g_in = lucid.arange(6.0, device=device).reshape(2, 3)
+    rg_in = ref.arange(6.0).reshape(2, 3)
+    for lg, rg in zip(lucid.gradient(g_in), ref.gradient(rg_in)):
+        np.testing.assert_allclose(lg.cpu().numpy(), rg.numpy(), rtol=1e-5)
+
+    spd = lucid.tensor([[4.0, 1.0], [1.0, 3.0]], device=device)
+    rspd = ref.tensor([[4.0, 1.0], [1.0, 3.0]])
+    chol = lucid.linalg.cholesky(spd)
+    rchol = ref.linalg.cholesky(rspd)
+    np.testing.assert_allclose(
+        lucid.linalg.cholesky_inverse(chol).cpu().numpy(),
+        ref.cholesky_inverse(rchol).numpy(),
+        rtol=1e-5,
+    )
+    rect = lucid.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], device=device)
+    lu_data, lu_piv = lucid.linalg.lu_factor(rect)
+    p_mat, l_mat, u_mat = lucid.linalg.lu_unpack(lu_data, lu_piv)
+    np.testing.assert_allclose((p_mat @ l_mat @ u_mat).cpu().numpy(), rect.cpu().numpy(), atol=1e-5)
+
+
+@pytest.mark.parametrize("device", _DEVICES)
+def test_lcd685_tensor_methods_and_signal_windows_kwargs(ref: Any, device: str) -> None:
+    t = lucid.ones(2, 3, device=device)
+    assert t.is_cpu == (device == "cpu")
+    assert not t.is_meta
+    assert t.layout is lucid.strided
+    assert t.ndimension() == 2 and t.nelement() == 6
+    assert t.mH.shape == (3, 2)
+    assert t.sum_to_size(1, 3).shape == (1, 3)
+    np.testing.assert_allclose(t.polygamma(1).cpu().numpy(), ref.ones(2, 3).polygamma(1).numpy(), rtol=1e-5)
+
+    d = lucid.zeros(3, 3, device=device)
+    d.fill_diagonal_(4.0)
+    assert d.diagonal().tolist() == [4.0, 4.0, 4.0]
+
+    v = lucid.zeros(2, 3, device=device)
+    assert v.t_().shape == (3, 2)
+    assert v.transpose_(0, 1).shape == (2, 3)
+    assert v.swapaxes_(0, 1).shape == (3, 2)
+    assert v.swapdims_(0, 1).shape == (2, 3)
+    assert v.unsqueeze_(0).shape == (1, 2, 3)
+    assert v.squeeze_(0).shape == (2, 3)
+
+    r = lucid.empty(16, device=device)
+    assert (r.exponential_(2.0) >= 0).all().item()
+    assert r.cauchy_(0.0, 1.0).shape == (16,)
+    assert (r.log_normal_(0.0, 1.0) > 0).all().item()
+    assert (r.geometric_(0.5) >= 1).all().item()
+    assert ((r.random_(0, 5) >= 0) & (r < 5)).all().item()
+
+    w = lucid.signal.windows.hann(8, device=device, layout=lucid.strided, requires_grad=True)
+    assert w.shape == (8,) and w.requires_grad and w.layout is lucid.strided

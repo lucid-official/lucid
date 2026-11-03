@@ -558,7 +558,7 @@ from numpy.typing import DTypeLike as NpDTypeLike
 
 from lucid._C import engine as _C_engine
 from lucid.autograd._hooks import RemovableHandle as _RemovableHandle
-from lucid._dtype import dtype as _dtype_cls
+from lucid._dtype import dtype as _dtype_cls, layout as _layout_cls
 from lucid._device import device as _device_cls
 from lucid._ops._reduce import _MinMax as _MinMax, _ValuesIndices as _ValuesIndices
 from lucid._types import DeviceLike, DTypeLike, DimLike, ShapeLike, Scalar, TensorOrScalar, _IndexType  # noqa: F401
@@ -603,6 +603,8 @@ class Tensor:
     @property
     def mT(self) -> Tensor: ...
     @property
+    def mH(self) -> Tensor: ...
+    @property
     def real(self) -> Tensor: ...
     @real.setter
     def real(self, value: Tensor | float) -> None: ...
@@ -612,6 +614,12 @@ class Tensor:
     def imag(self, value: Tensor | float) -> None: ...
     @property
     def is_metal(self) -> bool: ...
+    @property
+    def is_cpu(self) -> bool: ...
+    @property
+    def is_meta(self) -> bool: ...
+    @property
+    def layout(self) -> _layout_cls: ...
     @property
     def is_shared(self) -> bool: ...
     @property
@@ -1153,6 +1161,22 @@ def gen_tensor_pyi() -> tuple[str, int]:
             "    def addmm_(self, mat1: Tensor, mat2: Tensor, *, beta: _float = 1.0, alpha: _float = 1.0) -> Self: ...",
             "    def addmv_(self, mat: Tensor, vec: Tensor, *, beta: _float = 1.0, alpha: _float = 1.0) -> Self: ...",
             "    def addr_(self, vec1: Tensor, vec2: Tensor, *, beta: _float = 1.0, alpha: _float = 1.0) -> Self: ...",
+            "    def ndimension(self) -> _int: ...",
+            "    def nelement(self) -> _int: ...",
+            "    def polygamma(self, n: _int) -> Tensor: ...",
+            "    def sum_to_size(self, *size: _int | Sequence[_int]) -> Tensor: ...",
+            "    def fill_diagonal_(self, fill_value: _float | _int | _bool | complex, wrap: _bool = False) -> Self: ...",
+            "    def t_(self) -> Self: ...",
+            "    def transpose_(self, dim0: _int, dim1: _int) -> Self: ...",
+            "    def swapaxes_(self, axis0: _int, axis1: _int) -> Self: ...",
+            "    def swapdims_(self, dim0: _int, dim1: _int) -> Self: ...",
+            "    def squeeze_(self, dim: _int | Sequence[_int] | None = None) -> Self: ...",
+            "    def unsqueeze_(self, dim: _int) -> Self: ...",
+            "    def exponential_(self, lambd: _float = 1.0, *, generator: _C_engine.Generator | None = None) -> Self: ...",
+            "    def cauchy_(self, median: _float = 0.0, sigma: _float = 1.0, *, generator: _C_engine.Generator | None = None) -> Self: ...",
+            "    def log_normal_(self, mean: _float = 1.0, std: _float = 2.0, *, generator: _C_engine.Generator | None = None) -> Self: ...",
+            "    def geometric_(self, p: _float, *, generator: _C_engine.Generator | None = None) -> Self: ...",
+            "    def random_(self, from_: _int | None = None, to: _int | None = None, *, generator: _C_engine.Generator | None = None) -> Self: ...",
         ]
     )
 
@@ -1256,7 +1280,7 @@ import numpy as np
 # strict-mode type checkers (pyright, mypy ``--no-implicit-reexport``) treat
 # these as private imports and IDEs miss ``lucid.Tensor`` autocompletion.
 from lucid._C import engine as _C_engine
-from lucid._dtype import dtype as dtype, finfo as finfo, iinfo as iinfo
+from lucid._dtype import dtype as dtype, finfo as finfo, iinfo as iinfo, layout as layout, strided as strided
 from lucid._device import device as device
 from lucid._factories._generator import Generator as Generator
 from lucid._ops._reduce import _MinMax as _MinMax, _ValuesIndices as _ValuesIndices
@@ -1467,6 +1491,22 @@ def as_tensor(
     *,
     dtype: DTypeLike = None,
     device: DeviceLike = None,
+) -> Tensor: ...
+def asarray(
+    obj: object,
+    *,
+    dtype: DTypeLike = None,
+    device: DeviceLike = None,
+    copy: _bool | None = None,
+    requires_grad: _bool | None = None,
+) -> Tensor: ...
+def scalar_tensor(
+    s: _int | _float | _bool | _complex | Tensor,
+    *,
+    dtype: DTypeLike = None,
+    layout: object = None,
+    device: DeviceLike = None,
+    requires_grad: _bool = False,
 ) -> Tensor: ...
 def from_numpy(ndarray: np.ndarray, /) -> Tensor: ...
 def from_dlpack(
@@ -2139,7 +2179,8 @@ def _avoid_dtype_shadow(sig: str) -> str:
     """
     import re as _re
 
-    return _re.sub(r"\b(int|float|bool)\b", r"_\1", sig)
+    sig = _re.sub(r"\b(int|float|bool)\b", r"_\1", sig)
+    return _re.sub(r"(?<!def )\bcomplex\b", "_complex", sig)
 
 
 def _sig_from_callable(name: str, fn: object) -> str:

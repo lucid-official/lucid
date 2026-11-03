@@ -7,7 +7,7 @@ from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid._ops._dims import _wrap_dim
-from lucid._ops._reduce import _MinMax, _ValuesIndices, _reduction_axes, _run_with_dtype
+from lucid._ops._reduce import _MinMax, _ValuesIndices, _reduction_axes, _run_with_dtype, _truth_count
 from lucid._types import DTypeLike
 
 if TYPE_CHECKING:
@@ -432,9 +432,8 @@ def count_nonzero(input: Tensor, dim: int | Sequence[int] | None = None) -> Tens
     float sum back — three full-size temporaries and ten times a plain
     reduction, from a time the CPU could not sum a bool.
     """
-    mask = input != 0
-    _dim2 = None if dim is None else _reduction_axes(input._impl, dim, "count_nonzero")
-    return lucid.sum(mask) if _dim2 is None else lucid.sum(mask, _dim2, False)
+    axes = _reduction_axes(input._impl, dim, "count_nonzero")
+    return _wrap(_truth_count(input._impl, axes, keepdim=False, falsy=False))
 
 
 def amax(input: Tensor, dim: int | Sequence[int] | None = None, keepdim: bool = False) -> Tensor:
@@ -790,6 +789,125 @@ def _diff(
     return result
 
 
+def dist(input: Tensor, other: Tensor, p: float = 2.0) -> Tensor:
+    """Compute the ``p``-norm of ``(input - other)`` across all elements.
+
+    Parameters
+    ----------
+    input, other : Tensor
+        Input tensors to compare.
+    p : float, optional
+        Norm order (default ``2.0``).
+    """
+    from lucid.linalg import vector_norm
+
+    return vector_norm(input - other, ord=p)
+
+
+def _gradient_1d_uniform(x: Tensor, h: float, d: int, edge_order: int) -> Tensor:
+    n = int(x.shape[d])
+    if edge_order == 1:
+        left = (x.narrow(d, 1, 1) - x.narrow(d, 0, 1)) / h
+        right = (x.narrow(d, n - 1, 1) - x.narrow(d, n - 2, 1)) / h
+    else:
+        left = (-1.5 * x.narrow(d, 0, 1) + 2.0 * x.narrow(d, 1, 1) - 0.5 * x.narrow(d, 2, 1)) / h
+        right = (
+            0.5 * x.narrow(d, n - 3, 1)
+            - 2.0 * x.narrow(d, n - 2, 1)
+            + 1.5 * x.narrow(d, n - 1, 1)
+        ) / h
+    if n == 2:
+        return lucid.cat([left, right], dim=d)
+    mid = (x.narrow(d, 2, n - 2) - x.narrow(d, 0, n - 2)) / (2.0 * h)
+    return lucid.cat([left, mid, right], dim=d)
+
+
+def _gradient_1d_coords(x: Tensor, coords: Tensor, d: int, edge_order: int) -> Tensor:
+    n = int(x.shape[d])
+    if coords.ndim != 1 or int(coords.shape[0]) != n:
+        raise ValueError(f"gradient: spacing coordinate tensor must be 1-D of length {n}")
+    hd = (coords[1:] - coords[:-1]).to(x.dtype)
+    shape_b = [1] * x.ndim
+    if edge_order == 1:
+        left = (x.narrow(d, 1, 1) - x.narrow(d, 0, 1)) / hd[0]
+        right = (x.narrow(d, n - 1, 1) - x.narrow(d, n - 2, 1)) / hd[-1]
+    else:
+        d1, d2 = hd[0], hd[1]
+        left = (
+            -(2.0 * d1 + d2) / (d1 * (d1 + d2)) * x.narrow(d, 0, 1)
+            + (d1 + d2) / (d1 * d2) * x.narrow(d, 1, 1)
+            - d1 / (d2 * (d1 + d2)) * x.narrow(d, 2, 1)
+        )
+        r1, r2 = hd[-2], hd[-1]
+        right = (
+            r2 / (r1 * (r1 + r2)) * x.narrow(d, n - 3, 1)
+            - (r1 + r2) / (r1 * r2) * x.narrow(d, n - 2, 1)
+            + (r1 + 2.0 * r2) / (r2 * (r1 + r2)) * x.narrow(d, n - 1, 1)
+        )
+    if n == 2:
+        return lucid.cat([left, right], dim=d)
+    shape_b[d] = n - 2
+    h1 = hd[:-1].reshape(shape_b)
+    h2 = hd[1:].reshape(shape_b)
+    f_prev = x.narrow(d, 0, n - 2)
+    f_curr = x.narrow(d, 1, n - 2)
+    f_next = x.narrow(d, 2, n - 2)
+    mid = (h1 * h1 * f_next + (h2 * h2 - h1 * h1) * f_curr - h2 * h2 * f_prev) / (
+        h1 * h2 * (h1 + h2)
+    )
+    return lucid.cat([left, mid, right], dim=d)
+
+
+def _parse_gradient_spacings(
+    spacing: float | Sequence[float | Tensor] | Tensor | None, n_axes: int
+) -> list[float | Tensor]:
+    if spacing is None:
+        return [1.0] * n_axes
+    if isinstance(spacing, (int, float)):
+        return [float(spacing)] * n_axes
+    if isinstance(spacing, Tensor):
+        if n_axes != 1:
+            raise TypeError("gradient: single Tensor spacing requires a single dim")
+        return [spacing]
+    spacings = list(spacing)
+    if len(spacings) != n_axes:
+        raise ValueError(f"gradient: expected {n_axes} spacing values, got {len(spacings)}")
+    return spacings
+
+
+def gradient(
+    input: Tensor,
+    *,
+    spacing: float | Sequence[float | Tensor] | Tensor | None = None,
+    dim: int | Sequence[int] | None = None,
+    edge_order: int = 1,
+) -> tuple[Tensor, ...]:
+    """Estimate the numerical gradient of ``input`` along ``dim`` using second-order central differences."""
+    if input.ndim == 0:
+        raise _C_engine.InvalidArgument("gradient: input cannot be a 0-D tensor")
+    if edge_order not in (1, 2):
+        raise ValueError(f"gradient: edge_order must be 1 or 2, got {edge_order}")
+    axes = (
+        list(range(input.ndim))
+        if dim is None
+        else [_wrap_dim(a, input.ndim, "gradient") for a in ([dim] if isinstance(dim, int) else dim)]
+    )
+    x = input.to(lucid.get_default_dtype()) if _promotion.is_integral(input._impl.dtype) else input
+    spacings = _parse_gradient_spacings(spacing, len(axes))
+    out: list[Tensor] = []
+    for ax, sp in zip(axes, spacings, strict=True):
+        if int(x.shape[ax]) < edge_order + 1:
+            raise ValueError(
+                f"gradient: dim {ax} size {x.shape[ax]} is too small for edge_order={edge_order}"
+            )
+        out.append(
+            _gradient_1d_coords(x, sp, ax, edge_order)
+            if isinstance(sp, Tensor)
+            else _gradient_1d_uniform(x, float(sp), ax, edge_order)
+        )
+    return tuple(out)
+
+
 __all__ = [
     "nansum",
     "nanmean",
@@ -805,6 +923,8 @@ __all__ = [
     "renorm",
     "trapezoid",
     "cumulative_trapezoid",
+    "dist",
+    "gradient",
 ]
 
 # Bound at runtime, not only for type checking: PEP 649 evaluates a

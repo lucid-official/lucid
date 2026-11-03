@@ -17,6 +17,7 @@ from lucid._ops._reduce import (
     _p_norm,
     _reduction_axes,
     _require_floating,
+    _truth_mask,
     _variance_operands,
     _zero_safe_root,
 )
@@ -537,10 +538,9 @@ def cdist(
         last = [len(diff.shape) - 1]
         if p == 0.0:
             # Count the non-zero differences; NaN is not one.
-            abs_diff = _C_engine.abs(diff)
             counted = _C_engine.logical_and(
-                _C_engine.not_equal(abs_diff, _C_engine.zeros_like(abs_diff)),
-                _C_engine.logical_not(_C_engine.isnan(abs_diff)),
+                _truth_mask(diff),
+                _C_engine.logical_not(_C_engine.isnan(diff)),
             )
             return _wrap(_C_engine.astype(_C_engine.sum(counted, last, False), diff.dtype))
         # Every other order — 1, inf, and the general p whose root used to give

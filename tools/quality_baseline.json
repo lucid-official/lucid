@@ -1566,7 +1566,7 @@
     "lucid/quantization/_quantize_fx.py": 1,
     "lucid/quantization/fuse_modules.py": 2,
     "lucid/quantization/observer.py": 1,
-    "lucid/signal/windows.py": 19,
+    "lucid/signal/windows.py": 18,
     "lucid/special/__init__.py": 2,
     "lucid/utils/cache/_base.py": 3,
     "lucid/utils/cache/_dynamic.py": 2,

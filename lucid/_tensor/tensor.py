@@ -58,7 +58,6 @@ from lucid._tensor._pickle import _reduce_tensor
 if TYPE_CHECKING:
     from lucid.autograd._hooks import RemovableHandle as _RemovableHandle
 
-
 # DLPack device type for Metal — what a GPU-resident tensor reports and
 # what MLX tags its own capsules with.
 _DLPACK_METAL = 8
@@ -513,6 +512,7 @@ class Tensor:
         (4, 5, 3)
         """
         return Tensor.__new_from_impl__(_C_engine.mT(self._impl))
+
 
     @property
     def real(self) -> Tensor:

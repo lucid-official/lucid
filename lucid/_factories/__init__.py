@@ -1,4 +1,12 @@
-from lucid._factories.converters import tensor, as_tensor, from_numpy, from_dlpack, to_dlpack
+from lucid._factories.converters import (
+    tensor,
+    as_tensor,
+    asarray,
+    scalar_tensor,
+    from_numpy,
+    from_dlpack,
+    to_dlpack,
+)
 from lucid._factories.creation import (
     zeros,
     ones,
@@ -35,6 +43,8 @@ from lucid._factories.random import (
 __all__ = [
     "tensor",
     "as_tensor",
+    "asarray",
+    "scalar_tensor",
     "from_numpy",
     "from_dlpack",
     "to_dlpack",

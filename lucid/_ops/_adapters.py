@@ -35,7 +35,7 @@ from lucid._ops._dims import (
     _wrap_dim,
     _wrap_dims,
 )
-from lucid._ops._reduce import _ValuesIndices
+from lucid._ops._reduce import _ValuesIndices, _logical_not_adapter
 from lucid._tensor_args import require_tensor, require_tensors
 from lucid._types import Scalar, TensorOrScalar
 
@@ -191,6 +191,10 @@ def _make_arith_adapter(
         _ADD_SUB_SIGNATURE if adds_or_subtracts else _BINARY_SIGNATURE
     )
     return _adapter
+
+
+
+_keep_engine_signature(_logical_not_adapter, _C_engine.logical_not)
 
 
 _complex_parts = _make_arith_adapter(_C_engine.complex)
@@ -1486,8 +1490,3 @@ def _isclose_adapter(
     return _C_engine.isclose(a_impl, b_impl, float(rtol), float(atol))
 
 
-# Sub-module forwarders for ``cross`` / ``norm`` / ``einsum`` were removed
-# (2026-05-08).  Lucid's API tree exposes those ops only via their canonical
-# sub-package paths — ``lucid.linalg.cross``, ``lucid.linalg.norm``,
-# ``lucid.einops.einsum`` — so the adapters that used to forward them at the
-# top level were dead code under the new policy.

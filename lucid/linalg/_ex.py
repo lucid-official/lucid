@@ -1321,3 +1321,58 @@ def _matrix_norm_sv(
     for axis in rest:
         shape[axis] = list(xi.shape)[axis]
     return _wrap(_C_engine.reshape(reduced, shape))
+
+
+def cholesky_inverse(L: Tensor, upper: bool = False) -> Tensor:
+    """Compute the inverse of a Hermitian/symmetric positive-definite matrix from its Cholesky factor."""
+    sh = tuple(int(s) for s in L.shape)
+    if len(sh) < 2 or sh[-1] != sh[-2]:
+        raise ValueError(f"cholesky_inverse: L must be a square matrix or batch of them, got {sh}")
+    n = sh[-1]
+    eye = lucid.eye(n, dtype=L.dtype, device=L.device)
+    if L.ndim > 2:
+        eye = lucid.broadcast_to(eye, sh).contiguous()
+    if upper:
+        z = solve_triangular(L.mH, eye, upper=False)
+        return solve_triangular(L, z, upper=True)
+    y = solve_triangular(L, eye, upper=False)
+    return solve_triangular(L.mH, y, upper=True)
+
+
+def lu_unpack(
+    LU_data: Tensor,
+    LU_pivots: Tensor,
+    unpack_data: bool = True,
+    unpack_pivots: bool = True,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """Unpack the packed LU factorization `(LU_data, LU_pivots)` into `(P, L, U)`.
+
+    Parameters
+    ----------
+    LU_data : Tensor
+        Packed LU matrix from `lu_factor`.
+    LU_pivots : Tensor
+        1-based pivot indices from `lu_factor`.
+    unpack_data : bool, optional
+        Whether to unpack `L` and `U`.
+    unpack_pivots : bool, optional
+        Whether to unpack `P`.
+    """
+    sh = tuple(int(s) for s in LU_data.shape)
+    if len(sh) < 2:
+        raise ValueError(f"lu_unpack: LU_data must have at least 2 dimensions, got {sh}")
+    m, n = sh[-2], sh[-1]
+    k = min(m, n)
+    piv = _check_pivots(LU_pivots, LU_data, "lu_unpack")
+    if unpack_pivots:
+        P = _build_permutation_matrix(piv, m, LU_data.dtype, LU_data.device)
+    else:
+        P = lucid.empty(0, dtype=LU_data.dtype, device=LU_data.device)
+    if unpack_data:
+        eye = lucid.eye(m, k, dtype=LU_data.dtype, device=LU_data.device)
+        L = lucid.tril(LU_data[..., :, :k], -1) + eye
+        U = lucid.triu(LU_data[..., :k, :])
+    else:
+        L = lucid.empty(0, dtype=LU_data.dtype, device=LU_data.device)
+        U = lucid.empty(0, dtype=LU_data.dtype, device=LU_data.device)
+    return _LuResult(P, L, U)
