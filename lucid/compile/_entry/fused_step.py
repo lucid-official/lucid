@@ -150,6 +150,8 @@ class _FusedTrace:
     output_target_ids: list[int] = dataclass_field(default_factory=list)
     dropout_pairs: list[tuple[int, int]] = dataclass_field(default_factory=list)
     bn_pairs: list[tuple[int, int]] = dataclass_field(default_factory=list)
+    write_ids: list[int] = dataclass_field(default_factory=list)
+    written: list[_C_engine.TensorImpl] = dataclass_field(default_factory=list)
 
 
 def fused_step(
@@ -319,6 +321,8 @@ def _fallback_category(why: Exception) -> str:
         return "custom-backward"
     if isinstance(why, NotImplementedError):
         return "cumulative-bn"
+    if "wrote in place to one of its own arguments" in str(why):
+        return "argument-write"
     return "first-run" if "MPSGraph failed" in str(why) else "lowering"
 
 
@@ -856,7 +860,7 @@ class _FusedStep:
     ) -> _FusedTrace:
         """Trace forward + loss in the caller's grad mode and optimizer update under ``no_grad()``."""
         from lucid.autograd._grad_mode import no_grad
-        from lucid.compile._core.buffer_writes import refuse
+        from lucid.compile._core.buffer_writes import require_outside_writes
         from lucid.compile._core.trace_context import recording
 
         copt = self._copt
@@ -893,10 +897,15 @@ class _FusedStep:
                             opt_outputs, slots = copt._emit(
                                 members, ghost_grads, layout, vectors, flags, False
                             )
-                finally:
-                    refuse(tracer)
+                except BaseException:
+                    tracer.restore_outside_writes()
+                    raise
         finally:
             _tls.active = False
+
+        write_ids, written = require_outside_writes(
+            tracer, {id(_unwrap_hot(a)) for a in args}, "fused_step"
+        )
 
         return _FusedTrace(
             tracer=tracer,
@@ -912,6 +921,8 @@ class _FusedStep:
             slots=slots,
             found_inf_f32=found_inf_f32,
             scaler_enabled=scaler_enabled,
+            write_ids=write_ids,
+            written=written,
         )
 
     def _lookup_trace_ids(self, traced: _FusedTrace) -> None:
@@ -969,6 +980,7 @@ class _FusedStep:
         ]
         for _bn_feed_id, bn_new_id in traced.bn_pairs:
             traced.output_target_ids.append(bn_new_id)
+        traced.output_target_ids.extend(traced.write_ids)
         if traced.unscaled_loss_tid is not None:
             traced.output_target_ids.append(traced.unscaled_loss_tid)
 
@@ -1076,6 +1088,7 @@ class _FusedStep:
                     f"fused_step: BN running-stat feed id {bn_feed_id} not in external_feeds"
                 )
             output_targets.append(_wrap(bn_impl))
+        output_targets.extend(_wrap(w) for w in traced.written)
 
         checked_ids = (
             traced.output_target_ids[:-1]

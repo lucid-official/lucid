@@ -170,3 +170,22 @@ class TestBackendsToggle:
         backends.quantized.engine = "auto"  # restore
         with pytest.raises(ValueError):
             backends.quantized.engine = "nonsense"
+
+    def test_half_dtype_preserved_and_cpu_module_forward_works(self) -> None:
+        import copy
+
+        lin = nn.Linear(64, 32).half().to("metal")
+        q = nnq.QuantizedLinearMLX.from_float(lin, bits=8)
+        x_half = lucid.randn(2, 64, dtype=lucid.float16, device="metal")
+        y_half = q(x_half)
+        assert y_half.dtype == lucid.float16
+
+        q_cpu = copy.deepcopy(q).to("cpu")
+        x_cpu = lucid.randn(2, 64)
+        y_cpu = q_cpu(x_cpu)
+        assert not y_cpu.is_metal
+        assert y_cpu.shape == (2, 32)
+
+        x_grad = lucid.randn(2, 64, device="metal", requires_grad=True)
+        with pytest.warns(UserWarning, match="inference-only kernel"):
+            _ = q(x_grad)

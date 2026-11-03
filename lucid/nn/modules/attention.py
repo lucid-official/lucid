@@ -14,6 +14,7 @@ from lucid._C import engine as _C_engine
 import lucid as _lucid
 import lucid.nn.init as init
 from lucid.nn.functional.linear import linear
+from lucid.nn.modules.linear import Linear
 from lucid.nn.functional.attention import (
     _causal_additive_mask,
     _keep_mask_to_additive,
@@ -124,6 +125,30 @@ def _kv_head_count(embed_dim: int, num_heads: int, num_kv_heads: int | None) -> 
     if kv_heads <= 0 or num_heads % kv_heads != 0:
         raise ValueError(f"num_heads ({num_heads}) must be divisible by num_kv_heads ({kv_heads})")
     return kv_heads
+
+
+
+
+class _OutProjView(Linear):
+    """Linear view over :class:`MultiheadAttention`'s flat output projection parameters."""
+
+    def __init__(self, owner: MultiheadAttention) -> None:
+        Module.__init__(self)
+        object.__setattr__(self, "_owner", owner)
+        self.in_features = owner.embed_dim
+        self.out_features = owner.embed_dim
+        self._parameters["weight"] = owner.out_proj_weight
+        self._parameters["bias"] = owner.out_proj_bias
+
+    @override
+    def __setattr__(self, name: str, value: object) -> None:
+        super().__setattr__(name, value)
+        owner: MultiheadAttention | None = self.__dict__.get("_owner")
+        if owner is not None:
+            if name == "weight" and isinstance(value, Parameter):
+                owner.out_proj_weight = value
+            elif name == "bias" and (value is None or isinstance(value, Parameter)):
+                owner.out_proj_bias = value
 
 
 class MultiheadAttention(Module):
@@ -491,6 +516,69 @@ class MultiheadAttention(Module):
     def _reset_parameters(self) -> None:
         """:meth:`reset_parameters`, under the name the reference gives it."""
         self.reset_parameters()
+
+    @property
+    def out_proj(self) -> Linear:
+        """Linear view over ``out_proj_weight`` and ``out_proj_bias``."""
+        view: _OutProjView | None = self.__dict__.get("_out_proj_view")
+        if view is None:
+            view = _OutProjView(self)
+            object.__setattr__(self, "_out_proj_view", view)
+        view._parameters["weight"] = self.out_proj_weight
+        view._parameters["bias"] = self.out_proj_bias
+        return view
+
+    @override
+    def get_submodule(self, target: str) -> Module:
+        """Return submodule at dotted path, including ``out_proj``."""
+        if target == "out_proj":
+            return self.out_proj
+        return super().get_submodule(target)
+
+    def merge_masks(
+        self,
+        attn_mask: Tensor | None,
+        key_padding_mask: Tensor | None,
+        query: Tensor,
+    ) -> tuple[Tensor | None, int | None]:
+        r"""Determine mask type and combine ``attn_mask`` and ``key_padding_mask`` if needed.
+
+        Parameters
+        ----------
+        attn_mask : Tensor or None
+            Attention mask of shape ``(seq_len, seq_len)`` or ``(batch * num_heads, seq_len, seq_len)``.
+        key_padding_mask : Tensor or None
+            Padding mask of shape ``(batch_size, seq_len)``.
+        query : Tensor
+            Query embeddings of shape ``(batch_size, seq_len, embed_dim)``.
+
+        Returns
+        -------
+        tuple[Tensor | None, int | None]
+            ``(merged_mask, mask_type)`` where ``mask_type`` is ``1`` for key-padding
+            only, ``2`` when ``attn_mask`` is present, or ``None`` when neither is set.
+        """
+        mask_type: int | None = None
+        merged_mask: Tensor | None = None
+        if key_padding_mask is not None:
+            mask_type = 1
+            merged_mask = key_padding_mask
+        if attn_mask is not None:
+            batch_size, seq_len, _ = query.shape
+            mask_type = 2
+            if attn_mask.ndim == 3:
+                attn_mask_expanded = attn_mask.reshape(batch_size, -1, seq_len, seq_len)
+            else:
+                attn_mask_expanded = attn_mask.reshape(1, 1, seq_len, seq_len).expand(
+                    batch_size, self.num_heads, -1, -1
+                )
+            merged_mask = attn_mask_expanded
+            if key_padding_mask is not None:
+                key_padding_mask_expanded = key_padding_mask.reshape(
+                    batch_size, 1, 1, seq_len
+                ).expand(-1, self.num_heads, -1, -1)
+                merged_mask = attn_mask_expanded + key_padding_mask_expanded
+        return merged_mask, mask_type
 
     # ── reference-checkpoint loading: accept ``out_proj.weight`` / ``out_proj.bias``
     @override

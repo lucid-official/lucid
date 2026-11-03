@@ -60,27 +60,30 @@ def _accumulate_grads(
     from lucid._dispatch import _wrap
     from lucid.autograd import backward
 
+    observed_params = [p for p, seen in zip(params, targets.observed, strict=True) if seen]
+    n_params = len(observed_params)
     loose = targets.loose
     absent, input_grads, loose_present = _grad_slots(
-        exe, len(params), targets.input_positions, len(loose)
+        exe, n_params, targets.input_positions, len(loose)
     )
     roots: list[Tensor] = []
     seeds: list[Tensor] = []
-    for i, (p, g) in enumerate(zip(params, grads[: len(params)], strict=True)):
+    for i, (p, g) in enumerate(zip(observed_params, grads[:n_params], strict=True)):
         if p.requires_grad and not (absent and absent[i]):
             roots.append(p)
             seeds.append(_wrap(g))
     n_in = len(targets.input_positions)
-    for pos, g in zip(input_grads, grads[len(params) : len(params) + n_in], strict=True):
+    for pos, g in zip(input_grads, grads[n_params : n_params + n_in], strict=True):
         if pos is not None:
             roots.append(leaves[pos])
             seeds.append(_wrap(g))
-    for impl, present, g in zip(loose, loose_present, grads[len(params) + n_in :], strict=True):
+    for impl, present, g in zip(loose, loose_present, grads[n_params + n_in :], strict=True):
         if present:
             roots.append(_wrap(impl))
             seeds.append(_wrap(g))
-    if roots:
-        backward(roots, seeds)
+    if not roots:
+        raise RuntimeError("element 0 of tensors does not require grad and does not have a grad_fn")
+    backward(roots, seeds)
 
 
 def _forward_loss(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor]) -> Tensor:
@@ -92,7 +95,14 @@ def _forward_loss(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
             "compiled_step: model must return a Tensor for the loss_fn "
             f"to consume, got {type(out).__name__}"
         )
-    return loss_fn(out)
+    loss = loss_fn(out)
+    if not isinstance(loss, Tensor):
+        raise TypeError(f"compiled_step: loss_fn must return a Tensor, got {type(loss).__name__}")
+    if loss.numel() != 1:
+        raise RuntimeError("compiled_step: grad can be implicitly created only for scalar outputs")
+    if not loss.requires_grad:
+        raise RuntimeError("element 0 of tensors does not require grad and does not have a grad_fn")
+    return loss
 
 
 def _eager_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor], why: str) -> Tensor:
@@ -185,28 +195,21 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
         return _eager_step(model, x, loss_fn, off_gpu)
 
     with compile_attempt():
-        with recording(watch=(x,), module=model) as tracer:
+        with recording(watch=(x,), module=model, grad_mode=True) as tracer:
             loss_t = _forward_loss(model, x, loss_fn)
 
         g = tracer.graph
         ext = tracer.external_feeds
-        # No write-back on this path: a traced in-place buffer write sends it eager.
         refuse(tracer)
         if not g.ops:
             raise RuntimeError("compiled_step: empty trace (model produced no ops)")
         maybe_probe_for_graph(g)
-        # The tensor ``loss_fn`` returned, not the last op traced — see make_step.
-        found = tracer.lookup_id(_unwrap(loss_t)) if isinstance(loss_t, Tensor) else None
+        found = tracer.lookup_id(_unwrap(loss_t))
         if found is None:
             raise RuntimeError("compiled_step: loss_fn's result is not a traced tensor")
         loss_id = int(found)
 
         targets = _grad_targets(tracer, params, (x,))
-        if not all(targets.observed):
-            raise RuntimeError(
-                "compiled_step: a model parameter was not observed in the trace "
-                "(model.forward did not use it, or the parameter was wrapped/copied)"
-            )
         grad_ids = targets.ids
         refuse_custom_backward(tracer, loss_id, grad_ids)
 

@@ -149,12 +149,12 @@ class TransformerEncoderLayer(Module):
         Layer normalisation applied around the self-attention sub-layer.
     norm2 : LayerNorm
         Layer normalisation applied around the FFN sub-layer.
+    dropout : Dropout
+        Dropout applied inside the FFN (after the activation).
     dropout1 : Dropout
         Dropout applied to the self-attention output before the
         residual addition.
     dropout2 : Dropout
-        Dropout applied inside the FFN (after the activation).
-    dropout3 : Dropout
         Dropout applied to the FFN output before the residual addition.
 
     Shape
@@ -168,8 +168,8 @@ class TransformerEncoderLayer(Module):
 
     Notes
     -----
-    The three ``Dropout`` modules (``dropout1``, ``dropout2``,
-    ``dropout3``) are each initialised with the same probability but
+    The three ``Dropout`` modules (``dropout``, ``dropout1``,
+    ``dropout2``) are each initialised with the same probability but
     are distinct instances.  This ensures that each sub-layer's dropout
     mask is sampled independently, giving the model more regularisation
     diversity.
@@ -249,14 +249,14 @@ class TransformerEncoderLayer(Module):
         self.linear2 = Linear(dim_feedforward, d_model, bias, device, dtype)
         self.norm1 = LayerNorm(d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype)
         self.norm2 = LayerNorm(d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype)
+        self.dropout = Dropout(dropout)
         self.dropout1 = Dropout(dropout)
         self.dropout2 = Dropout(dropout)
-        self.dropout3 = Dropout(dropout)
 
     def _ff(self, x: Tensor) -> Tensor:
         """Internal helper for the TransformerEncoderLayer module."""
         act = _resolve_activation(self.activation)
-        return self.linear2(self.dropout2(act(self.linear1(x))))
+        return self.linear2(self.dropout(act(self.linear1(x))))
 
     @override
     def forward(
@@ -296,7 +296,7 @@ class TransformerEncoderLayer(Module):
                 is_causal=is_causal,
             )
             src = src + self.dropout1(src2)
-            src = src + self.dropout3(self._ff(self.norm2(src)))
+            src = src + self.dropout2(self._ff(self.norm2(src)))
         else:
             src2, _ = self.self_attn(
                 src,
@@ -308,7 +308,7 @@ class TransformerEncoderLayer(Module):
                 is_causal=is_causal,
             )
             src = self.norm1(src + self.dropout1(src2))
-            src = self.norm2(src + self.dropout3(self._ff(src)))
+            src = self.norm2(src + self.dropout2(self._ff(src)))
         return src
 
     @override
@@ -496,6 +496,9 @@ class TransformerEncoder(Module):
         """Initialise the TransformerEncoder module. See the class docstring for parameter semantics."""
         super().__init__()
         self.enable_nested_tensor = enable_nested_tensor
+        self.use_nested_tensor = bool(
+            enable_nested_tensor and not encoder_layer.norm_first and encoder_layer.batch_first
+        )
         self.mask_check = mask_check
         # Rebuild from the prototype's *full* configuration.  Dropping
         # ``layer_norm_eps`` / ``device`` / ``dtype`` here silently reset every
@@ -697,13 +700,13 @@ class TransformerDecoderLayer(Module):
         Normalisation for the cross-attention sub-layer.
     norm3 : LayerNorm
         Normalisation for the FFN sub-layer.
+    dropout : Dropout
+        Dropout inside the FFN (after activation).
     dropout1 : Dropout
         Dropout after the self-attention output.
     dropout2 : Dropout
-        Dropout inside the FFN (after activation).
-    dropout3 : Dropout
         Dropout after the cross-attention output.
-    dropout4 : Dropout
+    dropout3 : Dropout
         Dropout after the FFN output.
 
     Shape
@@ -803,15 +806,15 @@ class TransformerDecoderLayer(Module):
         self.norm1 = LayerNorm(d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype)
         self.norm2 = LayerNorm(d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype)
         self.norm3 = LayerNorm(d_model, layer_norm_eps, bias=bias, device=device, dtype=dtype)
+        self.dropout = Dropout(dropout)
         self.dropout1 = Dropout(dropout)
         self.dropout2 = Dropout(dropout)
         self.dropout3 = Dropout(dropout)
-        self.dropout4 = Dropout(dropout)
 
     def _ff(self, x: Tensor) -> Tensor:
         """Internal helper for the TransformerDecoderLayer module."""
         act = _resolve_activation(self.activation)
-        return self.linear2(self.dropout2(act(self.linear1(x))))
+        return self.linear2(self.dropout(act(self.linear1(x))))
 
     @override
     def forward(
@@ -896,8 +899,8 @@ class TransformerDecoderLayer(Module):
                 cache_position=cache_position,
                 is_cross_attention=True,
             )
-            tgt = tgt + self.dropout3(tgt2)
-            tgt = tgt + self.dropout4(self._ff(self.norm3(tgt)))
+            tgt = tgt + self.dropout2(tgt2)
+            tgt = tgt + self.dropout3(self._ff(self.norm3(tgt)))
         else:
             tgt2, _ = self.self_attn(
                 tgt,
@@ -928,8 +931,8 @@ class TransformerDecoderLayer(Module):
                 cache_position=cache_position,
                 is_cross_attention=True,
             )
-            tgt = self.norm2(tgt + self.dropout3(tgt2))
-            tgt = self.norm3(tgt + self.dropout4(self._ff(tgt)))
+            tgt = self.norm2(tgt + self.dropout2(tgt2))
+            tgt = self.norm3(tgt + self.dropout3(self._ff(tgt)))
         return tgt
 
     @override

@@ -1029,7 +1029,7 @@
     "lucid/nn/modules/activation.py": 707,
     "lucid/nn/modules/loss.py": 990,
     "lucid/nn/modules/normalization.py": 532,
-    "lucid/nn/modules/pooling.py": 737,
+    "lucid/nn/modules/pooling.py": 736,
     "lucid/optim/lr_scheduler.py": 76,
     "lucid/special/__init__.py": 224,
     "lucid/utils/transforms/_color.py": 231
@@ -1958,7 +1958,7 @@
     "lucid/autograd/_backward.py": 80,
     "lucid/autograd/gradcheck.py": 30,
     "lucid/compile/__init__.py": 34,
-    "lucid/compile/_entry/function.py": 39,
+    "lucid/compile/_entry/function.py": 32,
     "lucid/compile/_entry/module.py": 41,
     "lucid/compile/_entry/segmented_step.py": 11,
     "lucid/compile/_optim/compiler.py": 1,

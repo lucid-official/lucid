@@ -146,3 +146,32 @@ def test_a_write_to_an_argument_runs_eager_once_per_call() -> None:
     # Once per call — including the call that traced.
     assert float(x[0, 0].item()) == 3.0
     assert compiled.cache_info()["eager_only"]
+
+
+
+def test_fused_step_compiles_qat_model() -> None:
+    import lucid.nn.functional as F
+    import lucid.optim as optim
+    from lucid.quantization import get_default_qat_qconfig, prepare_qat
+
+    class _TinyQAT(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.fc1 = nn.Linear(8, 4)
+            self.fc2 = nn.Linear(4, 2)
+
+        def forward(self, x: lucid.Tensor) -> lucid.Tensor:
+            return self.fc2(F.relu(self.fc1(x)))
+
+    model = _TinyQAT()
+    model.qconfig = get_default_qat_qconfig()
+    prepare_qat(model, inplace=True)
+    model.to(COMPILE_DEVICE)
+    opt = optim.Adam(model.parameters(), lr=1e-2)
+    step = lucid.compile.fused_step(model, F.mse_loss, opt)
+    x = lucid.randn(4, 8, device=COMPILE_DEVICE)
+    t = lucid.randn(4, 2, device=COMPILE_DEVICE)
+    for _ in range(3):
+        step(x, t)
+    assert len(step._plans) == 1
+    assert not step._eager_only

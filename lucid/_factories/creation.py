@@ -476,6 +476,7 @@ def eye(
 _EXACT_IN_DOUBLE = 2**53
 _INT64_MIN = -(2**63)
 _INT64_MAX = 2**63 - 1
+_MAX_HOST_ARANGE = 1 << 27
 
 
 def _arange_number(value: SupportsFloat) -> int | float:
@@ -502,15 +503,18 @@ def _exact_int64_arange(
     Python's ``range`` is exact at any size, so the sequence is built
     from it and handed over as int64 bytes.
     """
-    values = range(start, end, step)
-    if values:
-        low, high = sorted((values[0], values[-1]))
+    count = 0 if (end - start) * step <= 0 else (abs(end - start) - 1) // abs(step) + 1
+    if count > 0:
+        low, high = sorted((start, start + (count - 1) * step))
         if low < _INT64_MIN or high > _INT64_MAX:
             raise OverflowError(
-                f"arange: values from {values[0]} to {values[-1]} do not fit " "in int64"
+                f"arange: values from {start} to {start + (count - 1) * step} do not fit in int64"
             )
-    packed = struct.pack(f"={len(values)}q", *values)
-    return _C_engine.TensorImpl.from_bytes(packed, [len(values)], _C_engine.I64, device, False)
+    if _C_engine.phantom_mode() or count > _MAX_HOST_ARANGE:
+        return _C_engine.arange(0.0, float(count), 1.0, _C_engine.I64, device)
+    values = range(start, end, step)
+    packed = struct.pack(f"={count}q", *values)
+    return _C_engine.TensorImpl.from_bytes(packed, [count], _C_engine.I64, device, False)
 
 
 def arange(

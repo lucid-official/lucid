@@ -7,6 +7,7 @@ compute + memory win.  It is Metal-only (the kernel is GPU-only) and is built
 from a float ``Linear`` via :meth:`from_float`, choosing ``bits`` (4 or 8).
 """
 
+import warnings
 from typing import TYPE_CHECKING, cast, override
 
 import lucid
@@ -121,6 +122,9 @@ class QuantizedLinearMLX(nn.Module):
       :func:`lucid.quantization._qgemm.is_available` before relying on this fast
       path. :func:`lucid.quantization.convert` routes the Linear family here only
       when the MLX backend is active.
+    - **Inference-only.** The packed kernel does not define a backward pass:
+      when called with a ``requires_grad=True`` input under grad mode, a
+      ``UserWarning`` is emitted and the returned tensor is detached.
 
     Examples
     --------
@@ -201,22 +205,37 @@ class QuantizedLinearMLX(nn.Module):
         otherwise-CPU model without forcing the whole model (or residual skip
         branches) onto Metal.
         """
+        if x.requires_grad and lucid.is_grad_enabled():
+            warnings.warn(
+                "QuantizedLinearMLX is an inference-only kernel and does not "
+                "propagate gradients to its input; upstream parameters will "
+                "receive no gradient.",
+                UserWarning,
+                stacklevel=2,
+            )
+        in_dtype = x.dtype
         on_metal = x.is_metal
         if not on_metal:
             x = x.to("metal")
+        pw = self.packed_weight if self.packed_weight.is_metal else self.packed_weight.to("metal")
+        sc = self.scales if self.scales.is_metal else self.scales.to("metal")
+        bi = self.biases if self.biases.is_metal else self.biases.to("metal")
         y = quantized_matmul(
             x,
-            self.packed_weight,
-            self.scales,
-            self.biases,
+            pw,
+            sc,
+            bi,
             transpose=True,
             group_size=self.group_size,
             bits=self.bits,
         )
         if self.bias is not None:
-            y = y + self.bias
+            b = self.bias if self.bias.is_metal else self.bias.to("metal")
+            y = y + (b if b.dtype == y.dtype else b.to(y.dtype))
         if self.relu:
             y = F.relu(y)
+        if y.dtype != in_dtype:
+            y = y.to(in_dtype)
         return y if on_metal else y.to("cpu")
 
     @classmethod

@@ -300,3 +300,48 @@ class TestEmbeddingScaleGradByFreq:
             emb(lucid.tensor(idx).long()).sum().backward()
             got = emb.weight.grad.numpy()[1]
             assert np.allclose(got, np.ones(3) * (count / count), atol=1e-6), count
+
+
+
+class TestModuleAttributeParity:
+    """Reference attribute parity across recurrent, attention, transformer, and pooling modules."""
+
+    def test_mha_out_proj_and_merge_masks(self) -> None:
+        mha = nn.MultiheadAttention(8, 2, batch_first=True)
+        assert isinstance(mha.out_proj, nn.Linear)
+        assert mha.out_proj.weight is mha.out_proj_weight
+        assert mha.out_proj.bias is mha.out_proj_bias
+        assert mha.get_submodule("out_proj") is mha.out_proj
+        assert mha.get_parameter("out_proj.weight") is mha.out_proj_weight
+        x = lucid.randn(2, 4, 8)
+        assert np.allclose(
+            mha.out_proj(x).numpy(),
+            nn.functional.linear(x, mha.out_proj_weight, mha.out_proj_bias).numpy(),
+            atol=1e-6,
+        )
+        attn_mask = lucid.zeros(4, 4, dtype=lucid.bool)
+        kpm = lucid.tensor([[False, False, True, True], [False, False, False, True]])
+        merged, mask_type = mha.merge_masks(attn_mask, kpm, x)
+        assert merged is not None
+        assert merged.shape == (2, 2, 4, 4)
+        assert mask_type == 2
+
+    def test_transformer_and_lppool2d_attributes(self) -> None:
+        enc_layer = nn.TransformerEncoderLayer(8, 2, batch_first=True)
+        assert isinstance(enc_layer.dropout, nn.Dropout)
+        assert isinstance(enc_layer.dropout1, nn.Dropout)
+        assert isinstance(enc_layer.dropout2, nn.Dropout)
+        assert not hasattr(enc_layer, "dropout3")
+        enc = nn.TransformerEncoder(enc_layer, 1)
+        assert enc.use_nested_tensor is True
+
+        dec_layer = nn.TransformerDecoderLayer(8, 2, batch_first=True)
+        assert isinstance(dec_layer.dropout, nn.Dropout)
+        assert isinstance(dec_layer.dropout1, nn.Dropout)
+        assert isinstance(dec_layer.dropout2, nn.Dropout)
+        assert isinstance(dec_layer.dropout3, nn.Dropout)
+        assert not hasattr(dec_layer, "dropout4")
+
+        pool = nn.LPPool2d(2, 3)
+        assert pool.kernel_size == 3
+        assert pool.stride is None

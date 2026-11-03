@@ -42,9 +42,24 @@ _ARGUMENT = (
 )
 
 
-def _written(tracer: Tracer) -> list[tuple[int, object]]:
+def _written(tracer: Tracer) -> list[tuple[int, _C_engine.TensorImpl]]:
     """``(final id, impl)`` for each outside tensor the trace wrote in place."""
     return [(int(tid), impl) for tid, impl in tracer.outside_writes()]
+
+
+def require_outside_writes(
+    tracer: Tracer, arguments: set[int], caller: str
+) -> tuple[list[int], list[_C_engine.TensorImpl]]:
+    """Put the written tensors back; return their ids and impls or raise ``RuntimeError``."""
+    tracer.restore_outside_writes()
+    ids: list[int] = []
+    targets: list[_C_engine.TensorImpl] = []
+    for latest, impl in _written(tracer):
+        if id(impl) in arguments:
+            raise RuntimeError(f"{caller}: {_ARGUMENT}")
+        ids.append(latest)
+        targets.append(impl)
+    return ids, targets
 
 
 def outside_writes(tracer: Tracer, arguments: set[int]) -> tuple[list[int], list[object]] | str:

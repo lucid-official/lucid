@@ -1550,11 +1550,10 @@ class LPPool2d(Module):
     ) -> None:
         """Initialise the LPPool2d module. See the class docstring for parameter semantics."""
         super().__init__()
-        self.norm_type = norm_type
+        self.norm_type, self.ceil_mode = norm_type, ceil_mode
+        self.kernel_size, self.stride = kernel_size, stride
         self.kh, self.kw = _ntuple(kernel_size, 2, "LPPool2d", "kernel_size")
-        step = kernel_size if stride is None else stride
-        self.sh, self.sw = _ntuple(step, 2, "LPPool2d", "stride")
-        self.ceil_mode = ceil_mode
+        self.sh, self.sw = _ntuple(kernel_size if stride is None else stride, 2, "LPPool2d", "stride")
 
     @override
     def forward(self, input: Tensor) -> Tensor:
