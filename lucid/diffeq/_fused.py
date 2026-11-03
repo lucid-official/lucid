@@ -80,6 +80,13 @@ def combine(y0: Tensor, ks: Sequence[Tensor], coeffs: Sequence[float], dt: float
     if not ks or not any(coeffs):
         return y0
     base, *stages = _promote([y0, *ks])
+    if base.is_complex() and base.device.type == "cpu":
+        out = base
+        for stage, coeff in zip(stages, coeffs, strict=True):
+            scale = dt * float(coeff)
+            if scale != 0.0:
+                out = out + scale * stage
+        return out
     return _wrap(
         _C_engine.diffeq.rk_combine(_unwrap(base), [_unwrap(s) for s in stages], list(coeffs), dt)
     )
@@ -150,6 +157,15 @@ def error_ratio(
     tensors in Python.
     """
     operands = _promote([y0, y1, *ks])
+    if operands[0].is_complex():
+        base, end, *stages = operands
+        zero = lucid.zeros_like(base)
+        err = combine(zero, stages, coeffs, dt).abs()
+        base_abs = (zero + base).abs()
+        end_abs = (zero + end).abs()
+        return _C_engine.diffeq.rk_error_norm(
+            _unwrap(base_abs), _unwrap(end_abs), [_unwrap(err)], [1.0], 1.0, rtol, atol
+        )
     if not operands[0].is_floating_point():
         operands = tuple(t.to(lucid.float32) for t in operands)
     base, end, *stages = operands

@@ -378,7 +378,7 @@ def _cases() -> list[Case]:
             lucid.zeros_like(t), 1, _idx(5, 4, 3, 2, 1, 0).reshape(1, 6).expand(4, 6), t
         ),
         "unfold_dim": lambda t: t.unfold(1, 3, 2) * 1,
-        "one_hot": lambda t: F.one_hot(t.abs().clamp(max=4), 5),
+        "one_hot": lambda t: F.one_hot(t.abs().clamp(max=4).to(lucid.int64), 5),
         "meshgrid": lambda t: lucid.meshgrid(t[0], t[1], indexing="ij"),
         # Unequal lengths, or the xy axis swap would be invisible.
         "meshgrid_xy": lambda t: lucid.meshgrid(t[0][:3], t[1], indexing="xy"),

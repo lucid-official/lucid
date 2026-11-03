@@ -4,10 +4,21 @@ Padding modules: Constant, Reflection, Replication, Zero padding.
 
 from typing import override
 
+from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
 from lucid._types import _Size2d
 from lucid.nn.module import Module
 from lucid.nn.functional.sampling import pad
+
+
+def _pad_nonconstant(input: Tensor, padding: tuple[int, ...], mode: str, name: str) -> Tensor:
+    spatial = len(padding) // 2
+    if input.ndim not in (spatial + 1, spatial + 2):
+        raise _C_engine.InvalidArgument(
+            f"{name}: expected {spatial + 1}-D or {spatial + 2}-D input, "
+            f"got {input.ndim}-D input of shape {tuple(input.shape)}"
+        )
+    return pad(input, padding, mode=mode)
 
 
 class _ConstantPadNd(Module):
@@ -506,7 +517,7 @@ class ReflectionPad1d(Module):
             Padded tensor with spatial dimensions expanded by the configured
             padding amounts.
         """
-        return pad(input, self.padding, mode="reflect")
+        return _pad_nonconstant(input, self.padding, "reflect", type(self).__name__)
 
     @override
     def extra_repr(self) -> str:
@@ -596,7 +607,7 @@ class ReflectionPad2d(Module):
             Padded tensor with spatial dimensions expanded by the configured
             padding amounts.
         """
-        return pad(input, self.padding, mode="reflect")
+        return _pad_nonconstant(input, self.padding, "reflect", type(self).__name__)
 
     @override
     def extra_repr(self) -> str:
@@ -682,7 +693,7 @@ class ReplicationPad1d(Module):
             Padded tensor with spatial dimensions expanded by the configured
             padding amounts.
         """
-        return pad(input, self.padding, mode="replicate")
+        return _pad_nonconstant(input, self.padding, "replicate", type(self).__name__)
 
     @override
     def extra_repr(self) -> str:
@@ -771,7 +782,7 @@ class ReplicationPad2d(Module):
             Padded tensor with spatial dimensions expanded by the configured
             padding amounts.
         """
-        return pad(input, self.padding, mode="replicate")
+        return _pad_nonconstant(input, self.padding, "replicate", type(self).__name__)
 
     @override
     def extra_repr(self) -> str:
@@ -842,7 +853,7 @@ class ReplicationPad3d(Module):
             Padded tensor with spatial dimensions expanded by the configured
             padding amounts.
         """
-        return pad(input, self.padding, mode="replicate")
+        return _pad_nonconstant(input, self.padding, "replicate", type(self).__name__)
 
     @override
     def extra_repr(self) -> str:
@@ -922,7 +933,7 @@ class ReflectionPad3d(Module):
             Padded tensor with spatial dimensions expanded by the configured
             padding amounts.
         """
-        return pad(input, self.padding, mode="reflect")
+        return _pad_nonconstant(input, self.padding, "reflect", type(self).__name__)
 
     @override
     def extra_repr(self) -> str:
@@ -1008,7 +1019,7 @@ class CircularPad1d(Module):
             Padded tensor with spatial dimensions expanded by the configured
             padding amounts.
         """
-        return pad(input, self.padding, mode="circular")
+        return _pad_nonconstant(input, self.padding, "circular", type(self).__name__)
 
     @override
     def extra_repr(self) -> str:
@@ -1097,7 +1108,7 @@ class CircularPad2d(Module):
             Padded tensor with spatial dimensions expanded by the configured
             padding amounts.
         """
-        return pad(input, self.padding, mode="circular")
+        return _pad_nonconstant(input, self.padding, "circular", type(self).__name__)
 
     @override
     def extra_repr(self) -> str:
@@ -1182,7 +1193,7 @@ class CircularPad3d(Module):
             Padded tensor with spatial dimensions expanded by the configured
             padding amounts.
         """
-        return pad(input, self.padding, mode="circular")
+        return _pad_nonconstant(input, self.padding, "circular", type(self).__name__)
 
     @override
     def extra_repr(self) -> str:

@@ -110,27 +110,17 @@ def batch_norm(
     from lucid._factories.creation import ones, zeros
 
     _check_batch_norm_input(input, eps, training)
-
-    C = input.shape[1]
-    ndim = input.ndim
-    xi = _unwrap(input)
-    w = (
-        _unwrap(weight)
-        if weight is not None
-        else _unwrap(ones(C, device=input.device, dtype=input.dtype))
-    )
-    b = (
-        _unwrap(bias)
-        if bias is not None
-        else _unwrap(zeros(C, device=input.device, dtype=input.dtype))
-    )
-
-    # ── Eval mode: use precomputed running statistics ─────────────────────────
+    if not training and (running_mean is None or running_var is None):
+        raise _C_engine.InvalidArgument(
+            "batch_norm: running_mean and running_var must be defined in evaluation mode"
+        )
+    C, ndim, xi = input.shape[1], input.ndim, _unwrap(input)
+    w = _unwrap(weight if weight is not None else ones(C, device=input.device, dtype=input.dtype))
+    b = _unwrap(bias if bias is not None else zeros(C, device=input.device, dtype=input.dtype))
     if not training and running_mean is not None and running_var is not None:
-        rm = _unwrap(running_mean)
-        rv = _unwrap(running_var)
-        out_impl = _C_engine.nn.batch_norm_eval(xi, rm, rv, w, b, eps)
-        return _wrap(out_impl)
+        return _wrap(
+            _C_engine.nn.batch_norm_eval(xi, _unwrap(running_mean), _unwrap(running_var), w, b, eps)
+        )
 
     # ── Training mode: dispatch by dimensionality ─────────────────────────────
     # When ``running_mean`` / ``running_var`` are supplied the C++ kernel

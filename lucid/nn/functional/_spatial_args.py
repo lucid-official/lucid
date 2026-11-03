@@ -66,6 +66,11 @@ def _weight_kernel(weight: Tensor, n: int, op: str) -> tuple[int, ...]:
     """
     if weight.ndim != n + 2:
         return (1,) * n
+    if int(weight.shape[0]) <= 0 or int(weight.shape[1]) <= 0:
+        raise _C_engine.InvalidArgument(
+            f"{op}: expected weight to have positive channel dimensions, "
+            f"got weight of shape {tuple(int(d) for d in weight.shape)}"
+        )
     kernel = tuple(int(v) for v in weight.shape[2:])
     _require_positive(kernel, op, "kernel_size")
     return kernel

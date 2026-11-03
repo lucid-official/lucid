@@ -271,6 +271,17 @@ def _unpack(stacked: Tensor, shapes: list[tuple[int, ...]] | None) -> State:
     return tuple(_flatten.unflatten_rows(stacked, shapes))
 
 
+_TIME_DTYPE = {
+    _C_engine.Dtype.C64: _C_engine.Dtype.F32,
+    _C_engine.Dtype.C128: _C_engine.Dtype.F64,
+}
+
+
+def _require_integrable(y0: Tensor) -> None:
+    if not (y0.is_floating_point() or y0.is_complex()):
+        raise ValueError(f"y0 must have a floating dtype for integration, got {y0.dtype}")
+
+
 def _make_callbacks(y0: Tensor) -> tuple[ScalarFactory, StageCheck]:
     """Build the time-tensor factory and right-hand-side validator for a solve.
 
@@ -302,7 +313,7 @@ def _make_callbacks(y0: Tensor) -> tuple[ScalarFactory, StageCheck]:
     that only shows up in a profile.
     """
     base = _unwrap(y0)
-    dtype_enum = base.dtype
+    dtype_enum = _TIME_DTYPE.get(base.dtype, base.dtype)
     device_enum = base.device
     shape = y0.shape
 
@@ -737,8 +748,7 @@ def odeint(
     grid = _resolve_grid(t)
     func, y0, event_fn, shapes = _pack_state(func, y0, event_fn)
 
-    if not y0.is_floating_point():
-        raise ValueError(f"y0 must have a floating dtype for integration, got {y0.dtype}")
+    _require_integrable(y0)
 
     _warn_unreachable_tolerance(y0, rtol, atol, tableau, multistep)
     scalar, check = _make_callbacks(y0)
@@ -865,8 +875,7 @@ def odeint_dense(
     tableau = _resolve_method(method)
     _warn_coarse_interpolant(tableau, "the continuous solution")
     func, y0, _unused, shapes = _pack_state(func, y0, None)
-    if not y0.is_floating_point():
-        raise ValueError(f"y0 must have a floating dtype for integration, got {y0.dtype}")
+    _require_integrable(y0)
 
     _warn_unreachable_tolerance(y0, rtol, atol, tableau, None)
     scalar, check = _make_callbacks(y0)

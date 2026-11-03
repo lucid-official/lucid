@@ -2807,3 +2807,25 @@ class TestDiffeqKernelDtypesAndHalfPrecision:
         got_g = y0.grad.to("cpu").to(lucid.float32)
         assert float((got_y - want_y).abs().max().item()) < atol
         assert float((got_g - want_g).abs().max().item()) < atol
+
+    @pytest.mark.parametrize("method", ["rk4", "dopri5"])
+    def test_odeint_complex_harmonic_oscillator(self, device: str, method: str) -> None:
+        """LCD-817: odeint integrates complex states y' = i * omega * y on fixed and adaptive solvers."""
+        import cmath
+
+        omega = 2.0
+        y0 = lucid.tensor([1.0 + 0.5j, -0.5 + 1.0j], dtype=lucid.complex64, device=device)
+        t = lucid.linspace(0.0, 1.0, 21, device=device)
+        traj = diffeq.odeint(
+            lambda _s, y: (1j * omega) * y, y0, t, method=method, rtol=1e-5, atol=1e-6
+        )
+        assert isinstance(traj, lucid.Tensor)
+        assert traj.dtype == lucid.complex64
+        assert traj.device == device
+        final = traj[-1].tolist()
+        expected = [
+            (1.0 + 0.5j) * cmath.exp(1j * omega),
+            (-0.5 + 1.0j) * cmath.exp(1j * omega),
+        ]
+        for got, want in zip(final, expected, strict=True):
+            assert abs(got - want) < 1e-4

@@ -290,6 +290,7 @@ class finfo:
         # Resolve to a lucid dtype name first — bfloat16 and float16 share the
         # same engine enum (F16), so we can't distinguish them via the engine.
         name = _resolve_dtype_name(dt)
+        name = {"complex64": "float32", "complex128": "float64"}.get(name, name)
         table: dict[str, tuple[int, float, float, float, float, float]] = {
             "float64": (
                 64,

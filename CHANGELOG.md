@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `lucid.float_power` promotes complex operands to `complex128` instead of dropping the imaginary part into `float64`, and `lucid.expm1` / `lucid.sinc` avoid ordering comparisons (`clamp`) on complex inputs so higher-order derivatives (`create_graph=True`) work on complex tensors (LCD-698).
 - `compile_optimizer`: `CompiledOptimizer.state` (and the wrapped optimizer's `.state`) is now a live read-only view over the compiled state buffers keyed by `Parameter`, matching `state_dict()["state"]` and eager `Optimizer.state` (LCD-813).
+- `lucid.diffeq.odeint` and `odeint_dense`: support complex initial states `y0` (`complex64` / `complex128`) across fixed-step and adaptive Runge–Kutta solvers (`rk4`, `dopri5`), and `lucid.finfo` now accepts complex dtypes and returns the underlying real component limits (LCD-817).
+- `lucid.nn`: `F.one_hot` rejects non-integer index tensors, `F.batch_norm(..., training=False)` requires `running_mean` and `running_var` to be defined, `F.conv{1,2,3}d` / `F.conv_transpose{1,2,3}d` reject weights with zero channel dimensions, and `ReflectionPad{1,2,3}d`, `ReplicationPad{1,2,3}d`, and `CircularPad{1,2,3}d` enforce batched or unbatched spatial input ranks (LCD-699).
+
+### Performance
+
+- `lucid.special.log_ndtr`: replace `log1p` on the upper-tail `erfcx` correction ($|q| \le 2.34 	imes 10^{-3}$) with a short Horner Mercator series, cutting Metal first-compile time from 4.4 s to 1.6 s while preserving full `float32` / `float64` accuracy (LCD-795).
 
 ### Tooling
 

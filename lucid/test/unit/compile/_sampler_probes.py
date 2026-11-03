@@ -207,19 +207,20 @@ def _required(fn: Callable[..., Tensor]) -> list[inspect.Parameter]:
     ]
 
 
-def special_names() -> list[str]:
-    """Every ``lucid.special`` function of one or two tensors -- composites with series loops.
+# Binary special functions that only differentiate w.r.t. their second tensor argument
+# (the first argument is held as a non-trainable constant so make_step traces the valid backward).
+_SECOND_ARG_GRAD_ONLY = frozenset({"gammainc", "gammaincc"})
 
-    A function whose required argument is an ``int`` (``polygamma``'s order,
-    ``multigammaln``'s dimension) takes no tensor there, so the shared feed does not fit.
-    """
+
+def special_names() -> list[str]:
+    """Every ``lucid.special`` function of one or two required arguments -- composites with series loops."""
     names: list[str] = []
     for name in S.__all__:
         fn = getattr(S, name)
         if not inspect.isroutine(fn):
             continue
         required = _required(fn)
-        if len(required) in (1, 2) and all(p.annotation is not int for p in required):
+        if len(required) in (1, 2) and any(p.annotation is not int for p in required):
             names.append(name)
     return names
 
@@ -229,13 +230,22 @@ class _SpecialDraw(nn.Module):
 
     def __init__(self, name: str) -> None:
         super().__init__()
+        self._name = name
         self._fn = getattr(S, name)
-        self._arity = len(_required(self._fn))
+        self._required = _required(self._fn)
         self.mix = nn.Parameter(lucid.eye(4))
 
     def forward(self, _w: Tensor) -> Tensor:
         a = F.softplus(lucid.full((4, 4), 1.2, device=DEVICE) @ self.mix) + 0.5
-        out = self._fn(*[a] * self._arity)
+        args: list[Tensor | int] = []
+        for idx, param in enumerate(self._required):
+            if param.annotation is int:
+                args.append(2)
+            elif idx == 0 and self._name in _SECOND_ARG_GRAD_ONLY:
+                args.append(lucid.full((4, 4), 1.5, device=DEVICE))
+            else:
+                args.append(a)
+        out = self._fn(*args)
         assert isinstance(out, Tensor)
         return out
 

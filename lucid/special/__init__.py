@@ -463,8 +463,6 @@ def log_ndtr(input: Tensor) -> Tensor:
     tensor([-53.23, -1.841, -0.6931, -0.1728])
     """
     x = _real(input)
-    lo = lucid.full_like(x, -1.0)
-    hi = lucid.full_like(x, _LOG_NDTR_UPPER)
     # Each branch sees only its own stretch of the line: ``where``
     # evaluates all three, and a -inf in a branch that loses is a NaN in
     # the gradient.
@@ -477,8 +475,9 @@ def log_ndtr(input: Tensor) -> Tensor:
     xu = lucid.clamp(x, min=_LOG_NDTR_UPPER, max=1e4)
     # exp(-x²/2) is as ill-conditioned as its argument is large: a rounded
     # u = x/√2 squared carries ~4 times the error of x*x, ~4e-13 at x = 37.
-    upper = lucid.log1p(-0.5 * _erfcx_stable(xu * _INV_SQRT2) * lucid.exp(-0.5 * xu * xu))
-    return lucid.where(x < lo, tail, lucid.where(x > hi, upper, direct))
+    q = -0.5 * _erfcx_stable(xu * _INV_SQRT2) * lucid.exp(-0.5 * xu * xu)
+    upper = q * (1.0 + q * (-0.5 + q * (1.0 / 3.0 + q * (-0.25 + q * (0.2 - q / 6.0)))))
+    return lucid.where(x < -1.0, tail, lucid.where(x > _LOG_NDTR_UPPER, upper, direct))
 
 
 def ndtri(input: Tensor) -> Tensor:

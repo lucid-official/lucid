@@ -393,6 +393,11 @@ def one_hot(input: Tensor, num_classes: int = -1) -> Tensor:
     tensor([[0, 1],
             [1, 0]], dtype=lucid.int64)
     """
+    if input.dtype not in (lucid.int8, lucid.int16, lucid.int32, lucid.int64):
+        raise _C_engine.InvalidArgument(
+            f"one_hot: input must be an integer tensor, got {input.dtype}; "
+            "cast with .to(lucid.int64) first"
+        )
     if num_classes != -1 and num_classes <= 0:
         raise _C_engine.InvalidArgument(
             f"one_hot: num_classes must be positive, or -1 to infer it, " f"got {num_classes}"

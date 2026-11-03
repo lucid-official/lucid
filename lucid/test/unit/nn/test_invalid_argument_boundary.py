@@ -197,6 +197,11 @@ _row(
     None,
     _call(lambda lib: lib.nn.functional.one_hot(lib.tensor([-1, 1]), num_classes=3)),
 )
+_row(
+    "F.one_hot float index",
+    None,
+    _call(lambda lib: lib.nn.functional.one_hot(lib.tensor([0.0, 1.0]), num_classes=3)),
+)
 for _n, _shape in (
     ("Dropout", (2, 3)),
     ("Dropout1d", (2, 3, 4)),
@@ -364,6 +369,9 @@ _row("Flatten dim out of range", _nn("Flatten", 5), _fwd(2, 3, 4))
 _row("Unflatten sizes do not multiply to the axis", _nn("Unflatten", 1, (2, 2)), _fwd(2, 3))
 _row("Unflatten zero size", _nn("Unflatten", 1, (0, 3)), _fwd(2, 3))
 _row("ReflectionPad2d wider than the input", _nn("ReflectionPad2d", 5), _fwd(*_X4))
+_row("ReflectionPad1d 1-D input", _nn("ReflectionPad1d", 1), _fwd(4))
+_row("ReplicationPad1d 1-D input", _nn("ReplicationPad1d", 1), _fwd(4))
+_row("CircularPad1d 1-D input", _nn("CircularPad1d", 1), _fwd(4))
 _row("ZeroPad2d wrong length", _nn("ZeroPad2d", (1, 2, 3)), _fwd(*_X4))
 for _label, _fn in (
     (
@@ -603,6 +611,10 @@ _f(
     "conv2d weight of the wrong rank",
     lambda lib: _F(lib).conv2d(lib.randn(*_X4), lib.randn(1, 1, 3)),
 )
+_f(
+    "conv2d weight with 0 out_channels",
+    lambda lib: _F(lib).conv2d(lib.randn(1, 2, 4, 4), lib.randn(0, 2, 3, 3)),
+)
 _f("max_unpool2d 1-D input", lambda lib: _F(lib).max_unpool2d(lib.randn(4), lib.zeros(4).long(), 2))
 _row(
     "FractionalMaxPool2d ratio as a pair",
@@ -657,6 +669,10 @@ _f(
 _f(
     "batch_norm one value per channel",
     lambda lib: _F(lib).batch_norm(lib.randn(1, 3), None, None, training=True),
+)
+_f(
+    "batch_norm eval without running_mean",
+    lambda lib: _F(lib).batch_norm(lib.randn(2, 3), None, None, training=False),
 )
 _f("instance_norm 2-D input", lambda lib: _F(lib).instance_norm(lib.randn(2, 3)))
 _f("instance_norm one spatial element", lambda lib: _F(lib).instance_norm(lib.randn(2, 3, 1)))
@@ -775,6 +791,8 @@ _DIVERGENT: dict[str, tuple[str, type[BaseException]]] = {
     "Upsample mode": (_RUN, ValueError),
     "Upsample 2-D input": (_RUN, ValueError),
     "F.affine_grid size of 3 entries": (_RUN, ValueError),
+    "ReflectionPad1d 1-D input": (_RUN, ValueError),
+    "ReplicationPad1d 1-D input": (_RUN, ValueError),
     # A bare ``IndexError`` ("tuple index out of range") from reading a missing axis.
     "F.max_unpool2d 1-D input": (_RUN, ValueError),
     "FractionalMaxPool2d 2-D input": (_RUN, ValueError),
