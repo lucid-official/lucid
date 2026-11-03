@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [3.16.3] — 2026-11-04
+
+Adds `lucid.peft` (24 parameter-efficient fine-tuning methods across the model zoo, with reference-compatible signatures, adapter-file conversion, EVA and LoRA-GA initialisers, `convert_to_lora` / `save_as_lora`, and TIES / DARE merging), C++ inference-tensor tracking (`inference_mode`, `is_inference_mode_enabled`, `Tensor.is_inference`), `lucid.optim.swa_utils`, `amp.custom_fwd` / `custom_bwd` and the reference `GradScaler`, `BasePruningMethod` pruning, live `Optimizer.state` views, and compilation / parity fixes across `compile`, `autograd`, `nn`, `optim`, `distributions`, `special`, and `utils.data`. Engine ABI 40 (bumped from 39).
+
 ### Changed
 
 - `Tensor.__dlpack__`, `lucid.from_dlpack` and `lucid.to_dlpack` raise `BufferError` for a tensor that requires grad, as the reference does. Detach it first (LCD-653)
@@ -6645,7 +6651,8 @@ across every public surface.
 
 ---
 
-[Unreleased]: https://github.com/lucid-official/lucid/compare/v3.16.2...HEAD
+[Unreleased]: https://github.com/lucid-official/lucid/compare/v3.16.3...HEAD
+[3.16.3]: https://github.com/lucid-official/lucid/releases/tag/v3.16.3
 [3.16.2]: https://github.com/lucid-official/lucid/releases/tag/v3.16.2
 [3.16.1]: https://github.com/lucid-official/lucid/releases/tag/v3.16.1
 [3.16.0]: https://github.com/lucid-official/lucid/releases/tag/v3.16.0
