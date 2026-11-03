@@ -363,11 +363,26 @@ public:
     // ``requires_grad_`` from the user.  A tensor that asks for gradients
     // again is an ordinary leaf, not the untracked alias ``detach_`` / ``.data``
     // left, so its views refuse in-place writes like any such leaf (LCD-650).
-    void request_grad(bool v) noexcept {
+    void request_grad(bool v) {
+        if (v && inference_)
+            check_inference_requires_grad();
         set_requires_grad(v);
         if (v)
             detached_alias_ = false;
     }
+
+    // Predicate: was this tensor created inside an ``inference_mode(True)``
+    // scope (or derived as a view of one)?
+    bool is_inference() const noexcept { return inference_; }
+
+    // Refuse an in-place mutation of an inference tensor outside InferenceMode.
+    void check_inference_mutation(const char* name = "inplace") const;
+
+    // Refuse setting requires_grad=True on an inference tensor outside InferenceMode.
+    void check_inference_requires_grad() const;
+
+    // Refuse saving an inference tensor for backward.
+    void check_not_inference_saved(std::string_view op_name = "save_for_backward") const;
 
     // Predicate: is this tensor a view returned as an output of a tracked
     // custom ``Function``?  In-place writes directly into such a view are
@@ -921,7 +936,9 @@ public:
     // A Metal shared buffer's counter moves too, because another alias of
     // the same bytes may have been saved.  So does a view family's, for the
     // same reason.
-    void bump_version() noexcept {
+    void bump_version() {
+        if (inference_)
+            check_inference_mutation("inplace");
         if (shared_)
             shared_->bump_version();
         else if (family_)
@@ -1256,6 +1273,9 @@ private:
     bool detached_alias_ = false;
     // Set on a view returned by a tracked custom ``Function``.
     bool custom_function_output_ = false;
+    // Set when constructed under ``GradMode::inference_enabled()`` or as a view
+    // of an inference tensor.
+    bool inference_ = false;
     // The leaf-eligible bases this view was made from, linked through a shared
     // parent chain; null for a tensor that is no view or a view of a detached
     // alias.  See views_grad_leaf().

@@ -35,6 +35,8 @@ lu_solve_aligned(const TensorImplPtr& LU, const TensorImplPtr& pivots, const Ten
                       .linalg_lu_solve(LU->storage(), pivots->storage(), b->storage(), LU->shape(),
                                        b->shape(), LU->dtype());
     auto out = linalg_detail::fresh(std::move(result), b->shape(), LU->dtype(), LU->device());
+    if (GradMode::is_enabled() && (LU->requires_grad() || b->requires_grad()))
+        pivots->check_not_inference_saved("lu_solve");
     auto bwd = std::make_shared<LUSolveBackward>();
     bwd->pivots_ = pivots;
     bwd->pivots_version_ = pivots->version();

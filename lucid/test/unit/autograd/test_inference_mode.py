@@ -245,3 +245,114 @@ def test_the_flag_is_per_thread() -> None:
         t.join()
         assert lucid.is_inference_mode_enabled()
     assert seen == [False]
+
+
+def _tensor_is_inference(m: ModuleType, device: str) -> object:
+    normal = m.ones(4, device=device)
+    with m.inference_mode():
+        inf = m.ones(4, device=device)
+        v_normal_in = normal[:2]
+        with m.inference_mode(False):
+            escaped = m.ones(4, device=device)
+    v_inf_out = inf[:2]
+    cloned = inf.clone()
+    return [
+        normal.is_inference(),
+        inf.is_inference(),
+        v_normal_in.is_inference(),
+        escaped.is_inference(),
+        v_inf_out.is_inference(),
+        cloned.is_inference(),
+    ]
+
+
+def _enable_grad_and_set_grad_enabled_do_not_track_inside(m: ModuleType, device: str) -> object:
+    w = m.ones(4, device=device, requires_grad=True)
+    with m.inference_mode():
+        with m.enable_grad():
+            y_enable = w * 2
+            grad_in_enable = m.is_grad_enabled()
+        m.set_grad_enabled(True)
+        y_set = w * 2
+        grad_in_set = m.is_grad_enabled()
+    y_after = w * 2
+    return [
+        grad_in_enable,
+        y_enable.requires_grad,
+        y_enable.grad_fn is not None,
+        grad_in_set,
+        y_set.requires_grad,
+        y_set.grad_fn is not None,
+        y_after.requires_grad,
+    ]
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize(("dev_l", "dev_r"), [("cpu", "cpu"), ("metal", "mps")])
+def test_is_inference_and_grad_suppression_match_the_reference(
+    dev_l: str, dev_r: str, ref: ModuleType
+) -> None:
+    assert _tensor_is_inference(lucid, dev_l) == _tensor_is_inference(ref, dev_r)
+    assert _enable_grad_and_set_grad_enabled_do_not_track_inside(
+        lucid, dev_l
+    ) == _enable_grad_and_set_grad_enabled_do_not_track_inside(ref, dev_r)
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize(("dev_l", "dev_r"), [("cpu", "cpu"), ("metal", "mps")])
+def test_saving_inference_tensor_for_backward_is_refused(
+    dev_l: str, dev_r: str, ref: ModuleType
+) -> None:
+    for m, dev in ((lucid, dev_l), (ref, dev_r)):
+        w = m.ones(4, device=dev, requires_grad=True)
+        with m.inference_mode():
+            x = m.ones(4, device=dev)
+            cond = x > 0
+        v_x = x[:2]
+        # Addition does not save its inputs for backward, so it is allowed.
+        out = (w + x).sum()
+        out.backward()
+        assert w.grad is not None
+        # Ops that save the inference tensor (or a view of it) for backward raise.
+        for op in (
+            lambda: w * x,
+            lambda: w[:2] * v_x,
+            lambda: m.where(cond, w, w),
+        ):
+            with pytest.raises(RuntimeError, match="Inference tensors cannot be saved for backward"):
+                op()
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize(("dev_l", "dev_r"), [("cpu", "cpu"), ("metal", "mps")])
+def test_inplace_mutation_and_requires_grad_outside_inference_mode_are_refused(
+    dev_l: str, dev_r: str, ref: ModuleType
+) -> None:
+    for m, dev in ((lucid, dev_l), (ref, dev_r)):
+        normal = m.ones(4, device=dev)
+        with m.inference_mode():
+            x = m.ones(4, device=dev)
+            # In-place updates inside inference_mode succeed.
+            x.add_(1.0)
+            x[0] = 3.0
+        v_x = x[:2]
+        for mut in (
+            lambda: x.add_(1.0),
+            lambda: v_x.add_(1.0),
+            lambda: x.zero_(),
+            lambda: x.fill_(2.0),
+            lambda: x.copy_(normal),
+            lambda: x.__setitem__(0, 1.0),
+        ):
+            with pytest.raises(
+                RuntimeError,
+                match="Inplace update to inference tensor outside InferenceMode is not allowed",
+            ):
+                mut()
+        # Setting requires_grad=False is a no-op; setting requires_grad=True outside raises.
+        x.requires_grad_(False)
+        with pytest.raises(
+            RuntimeError,
+            match="Setting requires_grad=True on inference tensor outside InferenceMode is not allowed",
+        ):
+            x.requires_grad_(True)

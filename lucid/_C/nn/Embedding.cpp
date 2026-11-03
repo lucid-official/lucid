@@ -322,6 +322,10 @@ TensorImplPtr embedding_bag_op(const TensorImplPtr& weight,
     // so ``weight.grad`` stayed ``None`` and an ``nn.EmbeddingBag`` layer
     // silently never trained.  No error, no NaN — the loss just never
     // moved through it.  The reference gives a gradient here.
+    if (GradMode::is_enabled() && weight->requires_grad()) {
+        indices->check_not_inference_saved("embedding_bag");
+        offsets->check_not_inference_saved("embedding_bag");
+    }
     auto bwd = std::make_shared<EmbeddingBagBackward>();
     bwd->saved_indices_ = indices->storage();
     bwd->saved_offsets_ = offsets->storage();

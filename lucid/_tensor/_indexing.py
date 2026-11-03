@@ -1134,7 +1134,12 @@ def _written_positions(
 
 
 def _refuse_illegal_setitem_target(impl: _C_engine.TensorImpl) -> None:
-    """Refuse in-place assignment to a grad leaf or custom Function view."""
+    """Refuse in-place assignment to an inference tensor, grad leaf, or custom Function view."""
+    if impl.is_inference() and not _C_engine.inference_enabled():
+        raise RuntimeError(
+            "Inplace update to inference tensor outside InferenceMode is not allowed. "
+            "You can make a clone to get a normal tensor before doing inplace update."
+        )
     if not _C_engine.grad_enabled():
         return
     if impl.requires_grad and impl.is_leaf:

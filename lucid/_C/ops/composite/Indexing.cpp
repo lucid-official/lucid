@@ -213,6 +213,7 @@ TensorImplPtr scatter_op(const TensorImplPtr& base,
     if (!GradMode::is_enabled() || !(base->requires_grad() || values->requires_grad()))
         return out;
 
+    idx->check_not_inference_saved("scatter");
     auto bwd = std::make_shared<ScatterSetNode>();
     bwd->dim_ = d;
     bwd->saved_indices_ = idx;

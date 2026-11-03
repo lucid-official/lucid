@@ -401,6 +401,7 @@ TensorImplPtr attach_where_grad(const TensorImplPtr& cond,
     if (!needs_grad)
         return out;
 
+    cond->check_not_inference_saved("where");
     auto bwd = std::make_shared<WhereBackward>();
     bwd->cond_ = cond->storage();
     bwd->shape_ = out->shape();
@@ -429,6 +430,7 @@ attach_masked_fill_grad(const TensorImplPtr& a, const TensorImplPtr& mask, Tenso
     if (!GradMode::is_enabled() || !a->requires_grad())
         return out;
 
+    mask->check_not_inference_saved("masked_fill");
     auto bwd = std::make_shared<MaskedFillBackward>();
     bwd->mask_ = mask->storage();
     bwd->mask_dtype_ = mask->dtype();
@@ -673,6 +675,7 @@ TensorImplPtr gather_op(const TensorImplPtr& a, const TensorImplPtr& indices, in
         trc->on_op_attr("axis", static_cast<std::int64_t>(ax));
     }
     if (GradMode::is_enabled() && a->requires_grad()) {
+        indices->check_not_inference_saved("gather");
         auto bwd = std::make_shared<GatherBackward>();
         bwd->indices_ = indices->storage();
         bwd->input_shape_ = a->shape();

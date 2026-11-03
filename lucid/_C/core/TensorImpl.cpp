@@ -202,7 +202,7 @@ make_numpy_view(const CpuStorage& s, const Shape& shape, const Stride& stride, s
 // Stride is computed after all meta fields are set because contiguous_stride()
 // needs both shape and elem_size; element size depends on dtype.
 TensorImpl::TensorImpl(Storage storage, Shape shape, Dtype dtype, Device device, bool requires_grad)
-    : storage_(std::move(storage)) {
+    : storage_(std::move(storage)), inference_(GradMode::inference_enabled()) {
     meta_.shape = std::move(shape);
     meta_.dtype = dtype;
     meta_.device = device;
@@ -697,6 +697,7 @@ void rebind_gpu_grad_slot(const std::shared_ptr<ViewFamily>& family,
 }
 
 void check_write_through_target(const TensorImpl& dst, const TensorImpl& src, const char* name) {
+    dst.check_inference_mutation(name);
     if (src.shape() != dst.shape())
         throw ShapeMismatch(dst.shape(), src.shape(),
                             std::string(name) + " (in-place: shape changed)");
@@ -2189,6 +2190,7 @@ void TensorImpl::copy_from(const TensorImpl& other) {
 }
 
 void TensorImpl::copy_from_named(const TensorImpl& other, const char* name) {
+    check_inference_mutation(name);
     if (other.device() != device())
         throw DeviceMismatch(std::string(device_name(meta_.device)),
                              std::string(device_name(other.device())), name);
@@ -2230,7 +2232,31 @@ void TensorImpl::copy_from_named(const TensorImpl& other, const char* name) {
     bump_version();
 }
 
+void TensorImpl::check_inference_mutation(const char* name) const {
+    if (inference_ && !GradMode::inference_enabled())
+        ErrorBuilder(name).fail(
+            "Inplace update to inference tensor outside InferenceMode is not allowed. "
+            "You can make a clone to get a normal tensor before doing inplace update.");
+}
+
+void TensorImpl::check_inference_requires_grad() const {
+    if (inference_ && !GradMode::inference_enabled())
+        ErrorBuilder("requires_grad_")
+            .fail("Setting requires_grad=True on inference tensor outside InferenceMode is not "
+                  "allowed.");
+}
+
+void TensorImpl::check_not_inference_saved(std::string_view op_name) const {
+    if (inference_) {
+        const std::string op(op_name);
+        ErrorBuilder(op.c_str())
+            .fail("Inference tensors cannot be saved for backward. To work around this, you can "
+                  "make a clone to get a normal tensor and use it in autograd.");
+    }
+}
+
 void TensorImpl::assign_from(const TensorImpl& other, const char* name) {
+    check_inference_mutation(name);
     // is_leaf(), not !grad_fn(): a used leaf carries its accumulator as
     // grad_fn (see inplace::refuse_on_leaf).
     if (GradMode::is_enabled() && requires_grad() && is_leaf())
@@ -2344,6 +2370,7 @@ std::shared_ptr<TensorImpl> TensorImpl::make_dtype_view(const std::shared_ptr<Te
         auto view =
             std::make_shared<TensorImpl>(Storage{gpu::wrap_mlx_array(std::move(elems), dtype)},
                                          std::move(shape), dtype, base->meta_.device, false);
+        view->inference_ = base->inference_;
         if (root_is_shared_buffer(base->shared_, root, root.dtype))
             view->shared_ = base->shared_;
         return view;
@@ -2358,6 +2385,7 @@ std::shared_ptr<TensorImpl> TensorImpl::make_dtype_view(const std::shared_ptr<Te
     }
     auto view = std::make_shared<TensorImpl>(std::move(view_storage), std::move(shape), dtype,
                                              base->meta_.device, false);
+    view->inference_ = base->inference_;
     view->meta_.stride = std::move(stride);
     view->offset_ = offset;
     // A view of a shared buffer reads the same bytes, so it shares the
@@ -2427,10 +2455,13 @@ std::shared_ptr<TensorImpl> TensorImpl::make_block_view(const std::shared_ptr<Te
     // A run of a phantom is a phantom of the run's size.  It stays out of
     // the base's family, as every phantom view does (make_view): a family
     // shares values and their version, and a phantom has no values.
-    if (base->is_phantom())
-        return std::make_shared<TensorImpl>(
+    if (base->is_phantom()) {
+        auto view = std::make_shared<TensorImpl>(
             phantom_storage(shape, base->meta_.dtype, base->meta_.device), std::move(shape),
             base->meta_.dtype, base->meta_.device, false);
+        view->inference_ = base->inference_;
+        return view;
+    }
     Stride stride = contiguous_stride(shape, elem);
     auto view = make_view(base, std::move(shape), std::move(stride), byte_offset);
     auto& cpu = std::get<CpuStorage>(view->storage_);
@@ -2553,6 +2584,8 @@ std::shared_ptr<TensorImpl> TensorImpl::data_alias() {
 }
 
 std::shared_ptr<TensorImpl> TensorImpl::clone_with_grad(bool requires_grad) {
+    if (requires_grad && inference_)
+        check_inference_requires_grad();
     auto self = shared_from_this();
     auto alias = make_view(self, shape(), stride(), 0);
     if (requires_grad)

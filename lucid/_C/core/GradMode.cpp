@@ -12,14 +12,27 @@ namespace {
 // One bool per thread.  No synchronisation needed because reads and writes
 // only ever occur on the owning thread.
 thread_local bool g_grad_enabled = true;
+thread_local bool g_inference_enabled = false;
 }  // namespace
 
 bool GradMode::is_enabled() {
-    return g_grad_enabled;
+    return g_grad_enabled && !g_inference_enabled;
 }
 
 void GradMode::set_enabled(bool value) {
     g_grad_enabled = value;
+}
+
+bool GradMode::raw_enabled() {
+    return g_grad_enabled;
+}
+
+bool GradMode::inference_enabled() {
+    return g_inference_enabled;
+}
+
+void GradMode::set_inference_enabled(bool value) {
+    g_inference_enabled = value;
 }
 
 NoGradGuard::NoGradGuard() : prev_(g_grad_enabled) {

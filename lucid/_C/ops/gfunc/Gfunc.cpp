@@ -644,6 +644,7 @@ TensorImplPtr scatter_add_op(const TensorImplPtr& base_in,
         }
     };
 
+    idx->check_not_inference_saved("scatter_add");
     auto bwd = std::make_shared<ScatterAddNode>();
     bwd->dim_ = d;
     bwd->saved_indices_ = idx;
@@ -881,6 +882,9 @@ struct ScatterReduceNode : Node {
               const TensorImplPtr& src,
               const TensorImplPtr& out,
               int dim) {
+        base->check_not_inference_saved(node_name());
+        indices->check_not_inference_saved(node_name());
+        src->check_not_inference_saved(node_name());
         dim_ = dim;
         saved_impl_inputs_ = {base, indices, src};
         saved_base_ = snapshot_scatter_operand(base);

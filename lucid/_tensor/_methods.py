@@ -389,6 +389,45 @@ def _addcdiv(self: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: float = 1
     return _acd(self, tensor1, tensor2, value=value)
 
 
+def _is_inference(self: Tensor) -> bool:
+    r"""Return ``True`` if this tensor is an inference tensor.
+
+    A tensor is an inference tensor when it is created inside a
+    :class:`lucid.inference_mode` scope with ``mode=True`` (or is a view
+    of such a tensor).  Inference tensors cannot be saved for backward,
+    and mutating them in place or setting ``requires_grad=True`` on them
+    outside :class:`lucid.inference_mode` raises a :class:`RuntimeError`.
+    Clone the tensor outside ``inference_mode`` to obtain a normal tensor.
+
+    Returns
+    -------
+    bool
+        ``True`` if this tensor was created in inference mode, ``False``
+        otherwise.
+
+    Notes
+    -----
+    Let :math:`\mathcal{I}` be the set of allocations created while the
+    thread-local inference flag is active; then
+
+    .. math::
+
+        \text{is\_inference}(t) = \mathbf{1}\{\text{base}(t) \in \mathcal{I}\}.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> x = lucid.ones(2)
+    >>> x.is_inference()
+    False
+    >>> with lucid.inference_mode():
+    ...     y = lucid.ones(2)
+    >>> y.is_inference()
+    True
+    """
+    return self._impl.is_inference()
+
+
 def _is_set_to(self: Tensor, tensor: Tensor) -> bool:
     """Return ``True`` when ``self`` and ``tensor`` share the same storage, offset, shape, and stride."""
     from lucid._ops.composite._shared import _is_tensor
@@ -1257,6 +1296,7 @@ _EXTRA_METHODS = (
     ("logcumsumexp", _logcumsumexp),
     ("addcmul", _addcmul),
     ("addcdiv", _addcdiv),
+    ("is_inference", _is_inference),
     ("is_set_to", _is_set_to),
     ("bernoulli", _bernoulli),
     ("divide", _divide),

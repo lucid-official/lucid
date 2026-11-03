@@ -281,7 +281,10 @@ void register_core(py::module_& m) {
              [](NoGradGuard&, py::object, py::object, py::object) { return py::none(); });
 
     m.def("grad_enabled", &GradMode::is_enabled);
+    m.def("raw_grad_enabled", &GradMode::raw_enabled);
     m.def("set_grad_enabled", &GradMode::set_enabled);
+    m.def("inference_enabled", &GradMode::inference_enabled);
+    m.def("set_inference_enabled", &GradMode::set_inference_enabled);
 
     // Phantom mode, per thread like grad mode: while it is on, every factory
     // and op on the calling thread returns a phantom tensor — shape, dtype,
@@ -353,9 +356,9 @@ void register_tensor_impl(py::module_& m) {
             "allocation — simultaneously accessible from CPU and GPU without a "
             "memcpy.  Created by make_shared_tensor() or to_shared_storage().")
         .def_property_readonly(
-            "is_phantom", [](const TensorImpl& t) { return t.is_phantom(); },
-            "True for a phantom tensor: a shape, dtype, device and autograd state "
-            "with no storage, made while phantom mode is on.  Reading its values raises.")
+            "is_phantom", &TensorImpl::is_phantom,
+            "True for a phantom tensor made while phantom mode is on.")
+        .def("is_inference", &TensorImpl::is_inference)
         .def("numel", &TensorImpl::numel)
         .def("nbytes", &TensorImpl::nbytes)
         .def("is_contiguous", &TensorImpl::is_contiguous)

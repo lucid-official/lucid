@@ -229,7 +229,7 @@ public:
             bwd->input_tensors_v_.push_back(inp);
             // One entry per slot, so entry ``i`` is input ``i``'s values.
             if (save_ins)
-                bwd->saved_inputs_v_.push_back(inp ? inp->storage() : Storage{CpuStorage{}});
+                bwd->saved_inputs_v_.push_back(save_input_storage(inp));
             edges.emplace_back(detail::ensure_grad_fn(inp), inp ? inp->grad_output_nr() : 0);
             versions.push_back(inp ? inp->version() : 0);
         }
@@ -267,6 +267,14 @@ public:
                               const TensorImplPtr& out,
                               bool save_ins = true) {
         return wire_autograd(std::make_shared<Derived>(), inputs, out, save_ins);
+    }
+
+private:
+    static Storage save_input_storage(const TensorImplPtr& inp) {
+        if (!inp)
+            return Storage{CpuStorage{}};
+        inp->check_not_inference_saved(Derived::schema_v1.name);
+        return inp->storage();
     }
 };
 

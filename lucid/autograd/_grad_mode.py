@@ -3,7 +3,6 @@ Gradient mode context managers and decorators.
 """
 
 import functools
-import threading
 from contextlib import AbstractContextManager
 from typing import Callable, overload, override
 
@@ -94,7 +93,7 @@ class no_grad:
 
     def __enter__(self) -> no_grad:
         """Enter the context.  Returns self so the value can be bound via ``with ... as``."""
-        self._prev = _C_engine.grad_enabled()
+        self._prev = _C_engine.raw_grad_enabled()
         _C_engine.set_grad_enabled(False)
         return self
 
@@ -162,7 +161,7 @@ class enable_grad:
 
     def __enter__(self) -> enable_grad:
         """Enter the context.  Returns self so the value can be bound via ``with ... as``."""
-        self._prev = _C_engine.grad_enabled()
+        self._prev = _C_engine.raw_grad_enabled()
         _C_engine.set_grad_enabled(True)
         return self
 
@@ -250,16 +249,7 @@ def is_grad_enabled() -> bool:
     ...     is_grad_enabled()
     False
     """
-    return _C_engine.grad_enabled()
-
-
-class _InferenceState(threading.local):
-    """Per-thread inference-mode flag (grad mode itself lives in the engine)."""
-
-    enabled: bool = False
-
-
-_INFERENCE_STATE = _InferenceState()
+    return _C_engine.raw_grad_enabled()
 
 
 def is_inference_mode_enabled() -> bool:
@@ -285,7 +275,7 @@ def is_inference_mode_enabled() -> bool:
     ...     lucid.is_inference_mode_enabled()
     True
     """
-    return _INFERENCE_STATE.enabled
+    return _C_engine.inference_enabled()
 
 
 class _InferenceModeMeta(type):
@@ -335,9 +325,11 @@ class inference_mode(metaclass=_InferenceModeMeta):
         (\text{grad}, \text{inference})_{\text{prev}}
         \quad\text{on exit},
 
-    where :math:`m` is ``mode``.  Tensors created inside are not marked
-    as inference tensors: saving them for backward, or mutating them in
-    place outside the scope, is not rejected.
+    where :math:`m` is ``mode``.  Tensors created inside an
+    ``inference_mode(True)`` scope are marked as inference tensors
+    (``Tensor.is_inference()``): saving them for backward or
+    mutating them in place outside ``inference_mode`` raises a
+    :class:`RuntimeError`.
 
     Examples
     --------
@@ -364,15 +356,15 @@ class inference_mode(metaclass=_InferenceModeMeta):
 
     def __enter__(self) -> None:
         """Enter the scope: grad tracking follows ``not mode``, the inference flag follows ``mode``."""
-        self._prev.append((_C_engine.grad_enabled(), _INFERENCE_STATE.enabled))
+        self._prev.append((_C_engine.raw_grad_enabled(), _C_engine.inference_enabled()))
         _C_engine.set_grad_enabled(not self.mode)
-        _INFERENCE_STATE.enabled = self.mode
+        _C_engine.set_inference_enabled(self.mode)
 
     def __exit__(self, *args: object) -> None:
         """Restore the grad mode and inference flag captured on entry."""
         grad, inference = self._prev.pop()
         _C_engine.set_grad_enabled(grad)
-        _INFERENCE_STATE.enabled = inference
+        _C_engine.set_inference_enabled(inference)
 
     def __call__[F: Callable[..., object]](self, fn: F) -> F:
         """Wrap ``fn`` so every call runs inside a fresh scope of this mode."""

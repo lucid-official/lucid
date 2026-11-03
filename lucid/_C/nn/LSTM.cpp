@@ -216,6 +216,8 @@ void record_saved_sources(LstmBackward& bwd,
     bwd.saved_sources.reserve(source_tensors.size());
     for (std::size_t arg = 0; arg < source_tensors.size(); ++arg) {
         const bool held = read_by_bptt(arg);
+        if (held && source_tensors[arg])
+            source_tensors[arg]->check_not_inference_saved("lstm");
         bwd.saved_sources.push_back(held ? source_tensors[arg] : TensorImplPtr{});
         versions.push_back(held ? source_tensors[arg]->version() : 0);
     }

@@ -299,6 +299,8 @@ public:
     // release replaces — so a released one must be refused, as the
     // reference refuses it.
     void keep_input(std::size_t i, Storage s) {
+        if (auto inp = input_tensors_[i].lock())
+            inp->check_not_inference_saved(Derived::schema_v1.name);
         saved_inputs_[i] = std::move(s);
         input_saved_[i] = true;
         keeps_values_ = true;
@@ -311,6 +313,7 @@ public:
     void bind_saved_output(const TensorImplPtr& out) {
         if (!keeps_output_ || !out)
             return;
+        out->check_not_inference_saved(Derived::schema_v1.name);
         saved_output_ = out->saved_output_storage();
         saved_impl_output_ = out;
         saved_output_version_ = out->version();
@@ -353,8 +356,27 @@ public:
         if (!saves) {
             saved_impl_inputs_[i] = impl;
         } else if (read_by_a_needed_gradient(i)) {
+            impl->check_not_inference_saved(Derived::schema_v1.name);
+            if (storage_src)
+                storage_src->check_not_inference_saved(Derived::schema_v1.name);
             keep_input(i, storage_src->storage());
             saved_impl_inputs_[i] = impl;
+        }
+    }
+
+    // Refuse any inference input or output whose values were kept for backward.
+    void check_no_inference_saved() const {
+        for (std::size_t i = 0; i < N_IN; ++i) {
+            if ((input_saved_[i] || ::lucid::holds_saved_values(saved_inputs_[i])) &&
+                read_by_a_needed_gradient(i)) {
+                if (auto inp = input_tensors_[i].lock())
+                    inp->check_not_inference_saved(Derived::schema_v1.name);
+            }
+        }
+        if ((keeps_output_ || ::lucid::holds_saved_values(saved_output_)) &&
+            any_needed_gradient()) {
+            if (auto out = saved_impl_output_.lock())
+                out->check_not_inference_saved(Derived::schema_v1.name);
         }
     }
 

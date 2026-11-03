@@ -1078,7 +1078,7 @@ def pinv(
         rtol = rcond
     if atol is not None or rtol is not None or hermitian:
         return _pinv_with_tol(input, atol=atol, rtol=rtol, hermitian=hermitian)
-    if input.requires_grad and lucid.is_grad_enabled():
+    if input.requires_grad and _C_engine.grad_enabled():
         return cast(Tensor, _Pinv.apply(input))
     return _wrap(_la.pinv(_unwrap(input)))
 
@@ -1183,7 +1183,7 @@ def eig(input: Tensor) -> tuple[Tensor, Tensor]:
     """
     with _autocast_entry("eig", _unwrap(input)) as (a_impl,):
         A_cast = _wrap(a_impl)
-        if A_cast.requires_grad and lucid.is_grad_enabled():
+        if A_cast.requires_grad and _C_engine.grad_enabled():
             w, V = cast(tuple[Tensor, Tensor], _Eig.apply(A_cast))
             return _EigResult(w, V)
         raw_vals, raw_vecs = _la.eig(a_impl)
@@ -1223,7 +1223,7 @@ def eigvals(input: Tensor) -> Tensor:
     """
     with _autocast_entry("eigvals", _unwrap(input)) as (a_impl,):
         A_cast = _wrap(a_impl)
-        if A_cast.requires_grad and lucid.is_grad_enabled():
+        if A_cast.requires_grad and _C_engine.grad_enabled():
             return cast(tuple[Tensor, Tensor], _Eig.apply(A_cast))[0]
         vals, _ = _la.eig(a_impl)
         return _wrap(vals)
@@ -1541,7 +1541,7 @@ def _lu_factor_packed(A: Tensor) -> tuple[Tensor, Tensor, Tensor]:
     whether that is an error is the caller's call."""
     lu, pivots, info = _la.lu_factor(_unwrap(A))
     LU, piv = _wrap(lu), _wrap(pivots)
-    if A.requires_grad and lucid.is_grad_enabled():
+    if A.requires_grad and _C_engine.grad_enabled():
         n = int(A.shape[-1])
         if int(A.shape[-2]) != n:
             raise NotImplementedError(

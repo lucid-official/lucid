@@ -86,6 +86,7 @@ void write_elements(std::shared_ptr<TensorImpl>& t,
                     const Storage& src,
                     const char* op,
                     Write&& write) {
+    t->check_inference_mutation(op);
     if (absorbs_phantom_write(t->raw_storage(), src, op)) {
         t->bump_version();
         return;

@@ -699,7 +699,7 @@ def _ldl_factor_ex(A: Tensor, *, check_errors: bool, op: str) -> _LdlFactorExRes
     LD, pivots, info = lucid.tril(_wrap(ld_impl)), _wrap(piv_impl), _wrap(info_impl)
     if check_errors:
         _raise_ex_failure(op, info, _zero_block_reason)
-    if A.requires_grad and lucid.is_grad_enabled():
+    if A.requires_grad and _C_engine.grad_enabled():
         tracked = _LDLFactorGrad.apply(A, LD, pivots, info)
         assert isinstance(tracked, Tensor)
         LD = tracked
@@ -917,7 +917,7 @@ def _pinv_with_tol(
     """Compute ``pinv(A)`` under custom ``atol``/``rtol`` or ``hermitian=True``."""
     if A.ndim < 2 or (hermitian and A.shape[-1] != A.shape[-2]):
         raise ValueError(f"pinv: invalid input shape {tuple(A.shape)}")
-    if A.requires_grad and lucid.is_grad_enabled():
+    if A.requires_grad and _C_engine.grad_enabled():
         out = _Pinv.apply(
             A, lambda x: _pinv_compute_tol(x, atol=atol, rtol=rtol, hermitian=hermitian)
         )
@@ -1278,7 +1278,7 @@ def _householder_product(H: Tensor, tau: Tensor) -> Tensor:
         use_ops = (
             H_cast.ndim > 2
             or r != k
-            or ((H_cast.requires_grad or tau_cast.requires_grad) and lucid.is_grad_enabled())
+            or ((H_cast.requires_grad or tau_cast.requires_grad) and _C_engine.grad_enabled())
         )
         if use_ops:
             return _householder_product_ops(H_cast, tau_cast)

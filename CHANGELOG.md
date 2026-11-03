@@ -361,6 +361,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - release-5 names in the aliases; per-type target tests
 - reference utilities for adapter-library users
 - EVA and LoRA-GA initialisers, convert_to_lora / save_as_lora, and LoftQ refusal (LCD-827)
+- Tensor.is_inference() and C++ inference-tensor tracking in inference_mode (LCD-811)
 
 ---
 

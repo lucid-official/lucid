@@ -65,6 +65,8 @@ void FunctionCtx::save_for_backward(std::vector<std::shared_ptr<TensorImpl>> ten
     saved_.clear();
     saved_.reserve(tensors.size());
     for (auto& t : tensors) {
+        if (t)
+            t->check_not_inference_saved("save_for_backward");
         if (t && owner && t->grad_fn() == owner) {
             saved_.push_back(SavedVariable{
                 make_saved_output_alias(t),

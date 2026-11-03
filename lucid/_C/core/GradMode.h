@@ -81,6 +81,15 @@ public:
     // --------
     // :class:`NoGradGuard` — exception-safe scoped toggle.
     static void set_enabled(bool value);
+
+    // Returns the calling thread's raw grad-mode flag, ignoring inference mode.
+    static bool raw_enabled();
+
+    // Returns whether inference mode is currently active on the calling thread.
+    static bool inference_enabled();
+
+    // Sets the inference-mode flag for the calling thread.
+    static void set_inference_enabled(bool value);
 };
 
 // RAII guard that disables gradient tracking for the lifetime of the
