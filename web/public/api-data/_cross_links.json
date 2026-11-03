@@ -1728,6 +1728,12 @@
         "kind": "free_function"
       }
     ],
+    "lucid.ops.composite.concatenate": [
+      {
+        "name": "concatenate_op",
+        "kind": "free_function"
+      }
+    ],
     "lucid.ops.cummax": [
       {
         "name": "cummax_op",
@@ -3860,6 +3866,13 @@
       {
         "path": "lucid.ops.complex",
         "module": "lucid.ops",
+        "kind": "function"
+      }
+    ],
+    "concatenate_op": [
+      {
+        "path": "lucid.ops.composite.concatenate",
+        "module": "lucid.ops.composite",
         "kind": "function"
       }
     ],

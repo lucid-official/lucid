@@ -84,6 +84,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid._ops.composite._expm1"
+    },
+    {
+      "kind": "module",
       "module": "lucid._ops.composite._rounding"
     },
     {
@@ -129,6 +133,10 @@
     {
       "kind": "module",
       "module": "lucid._tensor._dunders"
+    },
+    {
+      "kind": "module",
+      "module": "lucid._tensor._free_fn_methods"
     },
     {
       "kind": "module",
@@ -481,6 +489,10 @@
     {
       "kind": "module",
       "module": "lucid.nn.modules.normalization"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.nn.modules.padding"
     },
     {
       "kind": "module",
@@ -2384,6 +2396,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid._ops.composite.reductions"
+    },
+    {
+      "kind": "module",
       "module": "lucid.diffeq._implicit"
     },
     {
@@ -2469,6 +2485,12 @@
       "module": "lucid.linalg"
     }
   ],
+  "lucid.linalg._ex.cholesky_inverse": [
+    {
+      "kind": "module",
+      "module": "lucid.linalg"
+    }
+  ],
   "lucid.linalg._ex.inv_ex": [
     {
       "kind": "module",
@@ -2488,6 +2510,12 @@
     }
   ],
   "lucid.linalg._ex.lu_factor_ex": [
+    {
+      "kind": "module",
+      "module": "lucid.linalg"
+    }
+  ],
+  "lucid.linalg._ex.lu_unpack": [
     {
       "kind": "module",
       "module": "lucid.linalg"
@@ -2570,6 +2598,10 @@
     }
   ],
   "lucid.linalg.vector_norm": [
+    {
+      "kind": "module",
+      "module": "lucid._ops.composite.reductions"
+    },
     {
       "kind": "module",
       "module": "lucid.nn.functional.normalization"
@@ -13448,6 +13480,10 @@
   "lucid.nn.functional": [
     {
       "kind": "module",
+      "module": "lucid._ops.composite.shape"
+    },
+    {
+      "kind": "module",
       "module": "lucid._ops.composite.spectral"
     },
     {
@@ -16127,6 +16163,10 @@
     {
       "kind": "module",
       "module": "lucid.nn.modules.adaptive"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.nn.modules.attention"
     },
     {
       "kind": "module",
@@ -20498,6 +20538,10 @@
   "lucid.special": [
     {
       "kind": "module",
+      "module": "lucid._tensor._free_fn_methods"
+    },
+    {
+      "kind": "module",
       "module": "lucid.distributions._kl_cross"
     },
     {
@@ -20597,6 +20641,12 @@
     {
       "kind": "module",
       "module": "lucid.distributions._kl_cross"
+    }
+  ],
+  "lucid.special.polygamma": [
+    {
+      "kind": "module",
+      "module": "lucid._tensor._free_fn_methods"
     }
   ],
   "lucid.special.xlog1py": [
