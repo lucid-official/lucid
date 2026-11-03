@@ -246,6 +246,17 @@ TensorImplPtr contract_via_matmul(const TensorImplPtr& cur,
     return reshape_op(prod, oshape);
 }
 
+void validate_einsum_inputs(const std::string& pattern,
+                            const std::vector<TensorImplPtr>& operands) {
+    if (operands.empty())
+        ErrorBuilder("einsum").fail("at least one operand required");
+    for (const auto& t : operands)
+        Validator::input(t, "einsum.operand").non_null();
+    if (pattern.find("...") != std::string::npos)
+        ErrorBuilder("einsum").not_implemented(
+            "ellipsis (...) patterns not yet supported in C++ engine");
+}
+
 }  // namespace
 
 // Compute an Einstein summation over a list of operands.
@@ -255,11 +266,7 @@ TensorImplPtr contract_via_matmul(const TensorImplPtr& cur,
 // of contracting operands[0..k-1], and `cur_labels` is its axis label list
 // in the same order as the tensor dimensions.
 TensorImplPtr einsum_op(const std::string& pattern, const std::vector<TensorImplPtr>& operands) {
-    if (operands.empty())
-        ErrorBuilder("einsum").fail("at least one operand required");
-    if (pattern.find("...") != std::string::npos)
-        ErrorBuilder("einsum").not_implemented(
-            "ellipsis (...) patterns not yet supported in C++ engine");
+    validate_einsum_inputs(pattern, operands);
 
     OpScopeFull scope{"einsum", operands[0]->device(), operands[0]->dtype(), operands[0]->shape()};
 

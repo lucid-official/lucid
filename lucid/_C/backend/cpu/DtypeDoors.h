@@ -11,6 +11,7 @@
 #include <complex>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <optional>
@@ -669,6 +670,60 @@ scan_axis(const Storage& a, const Shape& shape, int axis, Dtype dt, const char* 
         ErrorBuilder(op_name).not_implemented("dtype not supported");
     }
     return Storage{CpuStorage{ptr, nb, dt}};
+}
+
+template <typename T>
+inline void fill_pad_typed(void* raw, std::size_t n, double value) {
+    T v{};
+    if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
+        if (std::isnan(value)) {
+            v = T{0};
+        } else if (value <= static_cast<double>(std::numeric_limits<T>::lowest())) {
+            v = std::numeric_limits<T>::lowest();
+        } else if (value >= static_cast<double>(std::numeric_limits<T>::max())) {
+            v = std::numeric_limits<T>::max();
+        } else {
+            v = static_cast<T>(value);
+        }
+    } else {
+        v = static_cast<T>(value);
+    }
+    auto* dst = reinterpret_cast<T*>(raw);
+    for (std::size_t i = 0; i < n; ++i)
+        dst[i] = v;
+}
+
+inline void
+fill_pad_buffer(void* ptr, std::size_t nb, std::size_t out_numel, Dtype dt, double constant) {
+    if (constant == 0.0) {
+        std::memset(ptr, 0, nb);
+        return;
+    }
+    switch (dt) {
+    case Dtype::F32:
+        fill_pad_typed<float>(ptr, out_numel, constant);
+        break;
+    case Dtype::F64:
+        fill_pad_typed<double>(ptr, out_numel, constant);
+        break;
+    case Dtype::I8:
+        fill_pad_typed<std::int8_t>(ptr, out_numel, constant);
+        break;
+    case Dtype::I16:
+        fill_pad_typed<std::int16_t>(ptr, out_numel, constant);
+        break;
+    case Dtype::I32:
+        fill_pad_typed<std::int32_t>(ptr, out_numel, constant);
+        break;
+    case Dtype::I64:
+        fill_pad_typed<std::int64_t>(ptr, out_numel, constant);
+        break;
+    case Dtype::Bool:
+        fill_pad_typed<bool>(ptr, out_numel, constant);
+        break;
+    default:
+        ErrorBuilder("cpu_backend::pad").not_implemented("dtype not supported");
+    }
 }
 
 }  // namespace detail

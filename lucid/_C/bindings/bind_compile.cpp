@@ -17,6 +17,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <algorithm>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -24,6 +25,9 @@
 #include <vector>
 
 #include <sys/stat.h>
+
+#include <mlx/ops.h>
+#include <mlx/transforms.h>
 
 #include "../backend/gpu/mps/MpsBridge.h"
 #include "../compile/CompiledExecutable.h"
@@ -72,23 +76,61 @@ public:
 
 namespace lucid::bindings {
 
+void run_then_wait(std::vector<mlx::core::array> arrays);
+
 namespace {
+
+template <typename Pred, typename Rewrite>
+void rewrite_and_wait(const std::vector<std::shared_ptr<mlx::core::array>>& holders,
+                      Pred pred,
+                      Rewrite rewrite) {
+    std::vector<mlx::core::array> pending;
+    for (const auto& arr : holders) {
+        if (!pred(*arr))
+            continue;
+        *arr = rewrite(*arr);
+        if (!arr->is_available())
+            pending.push_back(*arr);
+    }
+    run_then_wait(std::move(pending));
+}
 
 // MPSGraph reads a tensor's Metal buffer in place, so ``array_to_buffer``
 // first runs the tensor's pending MLX work and gives it a contiguous buffer
 // of its own.  That is MLX encoding onto the streams every thread shares,
-// which two threads must not do at once (SharedStreams.h).  Doing it here,
-// with the GIL held, leaves the run that follows without the GIL nothing to
-// encode: every buffer it reads is ready.  Four threads running compiled
-// models crashed in each of four runs when the run did it unlocked.  A view
-// is skipped: a run never reads a view's buffer in place.
+// which two threads must not do at once (SharedStreams.h).  Doing the
+// encoding here with the GIL held and waiting via ``run_then_wait`` without
+// it leaves the run that follows nothing to encode while letting other
+// Python threads run while feeds finish.  A view is skipped: a run never
+// reads a view's buffer in place.
 void ready_buffers(const std::vector<lucid::TensorImplPtr>& tensors) {
+    std::vector<std::shared_ptr<mlx::core::array>> holders;
+    std::vector<mlx::core::array> pending;
+    holders.reserve(tensors.size());
     for (const auto& t : tensors) {
         if (!t || t->device() != lucid::Device::GPU || t->family_key() != nullptr)
             continue;
-        if (const auto* gs = std::get_if<lucid::GpuStorage>(&t->storage()); gs && gs->arr)
-            lucid::gpu::mps::array_to_buffer(*gs->arr);
+        if (const auto* gs = std::get_if<lucid::GpuStorage>(&t->storage()); gs && gs->arr) {
+            holders.push_back(gs->arr);
+            if (!gs->arr->is_available())
+                pending.push_back(*gs->arr);
+        }
     }
+    if (holders.empty())
+        return;
+    run_then_wait(std::move(pending));
+    rewrite_and_wait(
+        holders,
+        [](const mlx::core::array& a) { return !a.flags().row_contiguous; },
+        [](const mlx::core::array& a) { return mlx::core::contiguous(a); });
+    rewrite_and_wait(
+        holders,
+        [](const mlx::core::array& a) { return a.offset() != 0; },
+        [](const mlx::core::array& a) {
+            return mlx::core::multiply(a, mlx::core::array(1, a.dtype()));
+        });
+    for (const auto& arr : holders)
+        lucid::gpu::mps::array_to_buffer(*arr);
 }
 
 // The feeds a compiled run reads once the GIL is released.  A Metal view

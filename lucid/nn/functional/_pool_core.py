@@ -108,10 +108,6 @@ def _pool_windows(x: Tensor, g: _PoolGeometry, out_spatial: tuple[int, ...]) -> 
     """
     kernel, stride, padding, dilation = g
     n = len(kernel)
-    if x.dtype in (_lucid.int8, _lucid.int16):
-        # The CPU ``pad`` has no kernel for the narrow integers.  A window is only
-        # compared, so it is read in ``int32``; the caller casts any value back.
-        x = x.to(_lucid.int32)
     lead = x.ndim - n
     spatial = tuple(int(s) for s in x.shape[lead:])
     span = tuple(dl * (k - 1) + 1 for k, dl in zip(kernel, dilation, strict=True))
@@ -140,12 +136,38 @@ def _window_argmax_indices(
     Per leading ``(N, C)`` slice, a flat index into the input's unpadded
     spatial extent — the form :func:`max_unpool2d` and its siblings take.
     ``windows`` is :func:`_pool_windows` of ``x``; a tie goes to the first
-    element of the window in row-major order, as the reference's does.
+    in-bounds element of the window in row-major order, as the reference's
+    does.
     """
     kernel, stride, padding, dilation = g
     n = len(kernel)
     spatial = tuple(int(s) for s in x.shape[x.ndim - n :])
-    local = _lucid.argmax(windows, dim=-1)
+    k_total = math.prod(kernel)
+    if any(p > 0 for p in padding) or any(
+        (out_spatial[d] - 1) * stride[d] + dilation[d] * (kernel[d] - 1) >= spatial[d] + padding[d]
+        for d in range(n)
+    ):
+        k_idx = _lucid.arange(k_total, dtype=_lucid.int64, device=x.device).reshape(
+            *([1] * (x.ndim - n + n)), k_total
+        )
+        in_bounds = None
+        for d in range(n):
+            offset = _digit(k_idx, math.prod(kernel[d + 1 :]), kernel[d]) * dilation[d]
+            shape = [1] * (x.ndim - n + n + 1)
+            shape[x.ndim - n + d] = out_spatial[d]
+            origin = _lucid.arange(out_spatial[d], dtype=_lucid.int64, device=x.device)
+            coord = offset + (origin * stride[d] - padding[d]).reshape(*shape)
+            valid = (coord >= 0) & (coord < spatial[d])
+            in_bounds = valid if in_bounds is None else (in_bounds & valid)
+        assert in_bounds is not None
+        win_max = windows.max(dim=-1, keepdim=True).values
+        is_winner = in_bounds & (
+            (windows == win_max)
+            | (_lucid.isnan(windows) if _lucid.is_floating_point(windows) else False)
+        )
+        local = _lucid.argmax(is_winner.to(_lucid.int32), dim=-1)
+    else:
+        local = _lucid.argmax(windows, dim=-1)
     index = None
     for d in range(n):
         offset = _digit(local, math.prod(kernel[d + 1 :]), kernel[d]) * dilation[d]
@@ -267,6 +289,12 @@ def _max_pool(
                 f"kernel_size={g.kernel} with dilation={g.dilation}"
             )
         windows = _pool_windows(xb, g, out_spatial)
+        if any(p > 0 for p in g.padding) or ceil_mode:
+            index = _window_argmax_indices(xb, g, out_spatial, windows)
+            out = xb.flatten(2).gather(-1, index.flatten(2)).reshape_as(index)
+            if not return_indices:
+                return _drop_batch_axis(out, unbatched)
+            return _drop_batch_axis(out, unbatched), _drop_batch_axis(index, unbatched)
         out = windows.max(dim=-1).values.to(x.dtype)
     else:
         out = _wrap(_MAX_POOL[n](_unwrap(xb), *g.kernel, *g.stride, *g.padding, ceil_mode))

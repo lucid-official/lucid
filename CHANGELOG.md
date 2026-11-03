@@ -22,10 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `metal`: `wrap_mlx_array` binds thread streams and evaluates in place when an op outside the dispatcher (`fft`, `qr`, `eigh`, `scatter_add`) is a thread's first MLX work; `synchronize_gpu` and `ready_buffers` release the GIL only while waiting on a stream token after encoding (`run_then_wait`), closing cross-thread command-buffer deadlock windows (LCD-701).
+- `_C.engine`: validate `TensorImplPtr` arguments at C++ entry points (`cummax`, `cummin`, `ravel`, `sum`, `prod`, `square`, `cube`, `concatenate`, `concat`, `stack`, `meshgrid`, `einops.einsum`) so passing `None` raises `TypeError` instead of dereferencing a null pointer (LCD-683).
+- `random_uniform`: clamp floating-point uniform draws to `nextafter(hi, -inf)` in the target dtype precision (`float16`, `bfloat16`, `float32`, `float64`, `complex64`) on both CPU and Metal so the half-open interval $[lo, hi)$ never rounds up to `hi` (LCD-774).
+- `matmul` (`mm`, `bmm`) and `dot`: reject `bool` operands with `NotImplementedError` on CPU and Metal rather than promoting to integer accumulation (LCD-775).
+- `pad`: add `int8`, `int16`, and `bool` kernels with saturating constant-fill conversion on CPU and Metal, and remove the `int8`/`int16` promotion workaround in pooling windows (LCD-791).
+- `cummax` and `cummin`: support `float16` and `bfloat16` backward passes (`create_graph=False` and `create_graph=True`) on CPU and Metal (LCD-682).
+- `max_pool{1,2,3}d` and `adaptive_max_pool{1,2,3}d`: return zero gradient (instead of routing gradient to index `0`) on all-`-inf` windows, pick the first `NaN` window index on CPU and Metal, and map constant-padded window positions to valid input indices when `return_indices=True` (LCD-748).
+- `lucid.tensor(..., dtype=bfloat16, device="metal")`: convert float64 host sequences to `bfloat16` bits on CPU before uploading raw uint16 words to Metal so `bfloat16` subnormals are preserved on M4 Max (LCD-746).
 - `count_nonzero`, `logical_not`, `logical_and`, `logical_or`, `logical_xor`, `cdist(..., p=0)`, and `linalg.vector_norm(..., ord=0)`: route truthiness tests through `_truth_mask` (`astype(Bool)` / complex real-or-imag mask) so subnormal floating-point values on Metal are preserved as nonzero rather than flushed to zero by `not_equal(..., 0)` (LCD-745).
 - `nn`: `MultiheadAttention` exposes an `out_proj` `nn.Linear` view over `out_proj_weight`/`out_proj_bias` and `merge_masks(attn_mask, key_padding_mask, query)`, `TransformerEncoderLayer` and `TransformerDecoderLayer` name their FFN/residual dropout modules `dropout`/`dropout1`/`dropout2`(/`dropout3`), `TransformerEncoder` exposes `use_nested_tensor`, and `LPPool2d` exposes `kernel_size` and `stride` attributes (LCD-753).
 - `compile` / `quantization`: `fused_step` carries outside in-place buffer writes (including QAT `FakeQuantize` observers) back via `run_executable_inplace` instead of falling back to eager; `QuantizedLinearMLX` preserves input floating dtype (`float16`/`bfloat16`), moves CPU-resident packed buffers onto Metal on demand, and warns when called with a `requires_grad=True` input; `compiled_step` supports models with unused parameters and raises clear errors on non-scalar or detached losses (LCD-724).
-- `arange`: `_exact_int64_arange` checks the range element count before unpacking into `struct.pack`, delegating oversized or phantom-mode requests to the engine allocator (LCD-700).
+- `arange` / `as_strided` / `conv{1,2,3}d` / `unfold` / `fold`: `_exact_int64_arange` checks the range element count before unpacking into `struct.pack`, `as_strided_positions` refuses output sizes above `INT32_MAX`, and `ConvNd` / `Unfold` / `Fold` compute output spatial dimensions in `int64_t` before checking bounds so oversized padding or shapes raise `RuntimeError`/`ValueError` cleanly (LCD-700).
 - `lucid.float_power` promotes complex operands to `complex128` instead of dropping the imaginary part into `float64`, and `lucid.expm1` / `lucid.sinc` avoid ordering comparisons (`clamp`) on complex inputs so higher-order derivatives (`create_graph=True`) work on complex tensors (LCD-698).
 - `compile_optimizer`: `CompiledOptimizer.state` (and the wrapped optimizer's `.state`) is now a live read-only view over the compiled state buffers keyed by `Parameter`, matching `state_dict()["state"]` and eager `Optimizer.state` (LCD-813).
 - `lucid.diffeq.odeint` and `odeint_dense`: support complex initial states `y0` (`complex64` / `complex128`) across fixed-step and adaptive Runge–Kutta solvers (`rk4`, `dopri5`), and `lucid.finfo` now accepts complex dtypes and returns the underlying real component limits (LCD-817).
@@ -33,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- `CpuBackend::roll`: replace the per-element modulo and single-element `memcpy` loop on 1-D shifts with a row-wise two-slice `std::memcpy` rotation (LCD-769).
 - `lucid.special.log_ndtr`: replace `log1p` on the upper-tail `erfcx` correction ($|q| \le 2.34 	imes 10^{-3}$) with a short Horner Mercator series, cutting Metal first-compile time from 4.4 s to 1.6 s while preserving full `float32` / `float64` accuracy (LCD-795).
 
 ### Tooling

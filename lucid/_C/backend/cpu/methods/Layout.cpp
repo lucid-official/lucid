@@ -207,6 +207,13 @@ Storage CpuBackend::roll(const Storage& a,
                          const std::vector<int>& axes) {
     const auto& as = std::get<CpuStorage>(a);
     const std::size_t ndim = shape.size();
+    const std::size_t elem = dtype_size(dt);
+    const std::size_t total = shape_numel(shape);
+    const std::size_t nb = total * elem;
+    auto ptr = allocate_aligned_bytes(nb, Device::CPU);
+    if (total == 0)
+        return Storage{CpuStorage{ptr, nb, dt}};
+
     std::vector<std::int64_t> shift_per_dim(ndim, 0);
     for (std::size_t i = 0; i < axes.size(); ++i) {
         int ax = axes[i];
@@ -214,28 +221,48 @@ Storage CpuBackend::roll(const Storage& a,
             ax += static_cast<int>(ndim);
         shift_per_dim[static_cast<std::size_t>(ax)] += shifts[i];
     }
-    std::size_t nb = shape_numel(shape) * dtype_size(dt);
-    auto ptr = allocate_aligned_bytes(nb, Device::CPU);
-    const std::size_t elem = dtype_size(dt);
-    Stride stride(ndim);
-    if (ndim > 0) {
-        stride.back() = 1;
-        for (std::ptrdiff_t d = static_cast<std::ptrdiff_t>(ndim) - 2; d >= 0; --d)
-            stride[static_cast<std::size_t>(d)] =
-                stride[static_cast<std::size_t>(d) + 1] * shape[static_cast<std::size_t>(d) + 1];
+    bool any_shift = false;
+    for (std::size_t d = 0; d < ndim; ++d) {
+        const std::int64_t L = shape[d];
+        shift_per_dim[d] = L > 0 ? ((shift_per_dim[d] % L) + L) % L : 0;
+        if (shift_per_dim[d] != 0)
+            any_shift = true;
     }
-    const std::size_t total = shape_numel(shape);
-    std::vector<std::int64_t> coord(ndim, 0);
-    for (std::size_t out_flat = 0; out_flat < total; ++out_flat) {
-        std::size_t in_flat = 0;
-        for (std::size_t d = 0; d < ndim; ++d) {
+    if (!any_shift) {
+        std::memcpy(ptr.get(), as.ptr.get(), nb);
+        return Storage{CpuStorage{ptr, nb, dt}};
+    }
+
+    Stride stride(ndim);
+    stride.back() = 1;
+    for (std::ptrdiff_t d = static_cast<std::ptrdiff_t>(ndim) - 2; d >= 0; --d)
+        stride[static_cast<std::size_t>(d)] =
+            stride[static_cast<std::size_t>(d) + 1] * shape[static_cast<std::size_t>(d) + 1];
+
+    const std::size_t row_len = static_cast<std::size_t>(shape.back());
+    const std::size_t s_last = static_cast<std::size_t>(shift_per_dim.back());
+    const std::size_t tail_len = row_len - s_last;
+    const std::size_t rows = total / row_len;
+
+    std::vector<std::int64_t> coord(ndim > 1 ? ndim - 1 : 0, 0);
+    for (std::size_t r = 0; r < rows; ++r) {
+        std::size_t in_row_base = 0;
+        for (std::size_t d = 0; d + 1 < ndim; ++d) {
+            const std::int64_t L = shape[d];
             std::int64_t c = coord[d] - shift_per_dim[d];
-            std::int64_t L = shape[d];
-            c = ((c % L) + L) % L;
-            in_flat += static_cast<std::size_t>(c) * static_cast<std::size_t>(stride[d]);
+            if (c < 0)
+                c += L;
+            in_row_base += static_cast<std::size_t>(c) * static_cast<std::size_t>(stride[d]);
         }
-        std::memcpy(ptr.get() + out_flat * elem, as.ptr.get() + in_flat * elem, elem);
-        for (std::ptrdiff_t d = static_cast<std::ptrdiff_t>(ndim) - 1; d >= 0; --d) {
+        auto* dst_row = ptr.get() + r * row_len * elem;
+        const auto* src_row = as.ptr.get() + in_row_base * elem;
+        if (s_last == 0) {
+            std::memcpy(dst_row, src_row, row_len * elem);
+        } else {
+            std::memcpy(dst_row, src_row + tail_len * elem, s_last * elem);
+            std::memcpy(dst_row + s_last * elem, src_row, tail_len * elem);
+        }
+        for (std::ptrdiff_t d = static_cast<std::ptrdiff_t>(ndim) - 2; d >= 0; --d) {
             if (++coord[static_cast<std::size_t>(d)] < shape[static_cast<std::size_t>(d)])
                 break;
             coord[static_cast<std::size_t>(d)] = 0;
@@ -851,33 +878,7 @@ Storage CpuBackend::pad(const Storage& a,
 
     std::size_t nb = shape_numel(out_shape) * dtype_size(dt);
     auto ptr = allocate_aligned_bytes(nb, Device::CPU);
-    auto fill = [&](auto* dst, std::size_t n, double value) {
-        using T = std::remove_pointer_t<decltype(dst)>;
-        const T v = static_cast<T>(value);
-        for (std::size_t i = 0; i < n; ++i)
-            dst[i] = v;
-    };
-    const std::size_t out_numel = shape_numel(out_shape);
-    if (constant == 0.0) {
-        std::memset(ptr.get(), 0, nb);
-    } else {
-        switch (dt) {
-        case Dtype::F32:
-            fill(reinterpret_cast<float*>(ptr.get()), out_numel, constant);
-            break;
-        case Dtype::F64:
-            fill(reinterpret_cast<double*>(ptr.get()), out_numel, constant);
-            break;
-        case Dtype::I32:
-            fill(reinterpret_cast<std::int32_t*>(ptr.get()), out_numel, constant);
-            break;
-        case Dtype::I64:
-            fill(reinterpret_cast<std::int64_t*>(ptr.get()), out_numel, constant);
-            break;
-        default:
-            ErrorBuilder("cpu_backend::pad").not_implemented("dtype not supported");
-        }
-    }
+    detail::fill_pad_buffer(ptr.get(), nb, shape_numel(out_shape), dt, constant);
 
     const std::size_t elem = dtype_size(dt);
     Stride in_stride(ndim), out_stride(ndim);

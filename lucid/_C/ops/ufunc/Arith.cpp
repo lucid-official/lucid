@@ -224,6 +224,8 @@ namespace {
 // ``square`` and ``cube`` are ``x ** 2`` and ``x ** 3``, and a power of a bool
 // is an int64 in the reference — ``x * x`` is a logical and, a different op.
 TensorImplPtr power_operand(const TensorImplPtr& a) {
+    if (!a)
+        return a;
     return a->dtype() == Dtype::Bool ? astype_op(a, Dtype::I64) : a;
 }
 

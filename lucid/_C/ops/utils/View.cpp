@@ -376,6 +376,8 @@ std::vector<std::int32_t> as_strided_positions(const Shape& size,
                                                std::int64_t n_out) {
     if (capacity > std::numeric_limits<std::int32_t>::max())
         ErrorBuilder("as_strided").not_implemented("a storage past 2^31 elements");
+    if (n_out > std::numeric_limits<std::int32_t>::max())
+        ErrorBuilder("as_strided").not_implemented("a window past 2^31 elements");
     std::vector<std::int32_t> positions(static_cast<std::size_t>(n_out));
     std::vector<std::int64_t> idx(size.size(), 0);
     for (std::int64_t i = 0; i < n_out; ++i) {

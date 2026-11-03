@@ -122,14 +122,11 @@ def test_the_step_matches_eager_and_only_a_cumulative_batch_norm_runs_eager(
     entry: str, device: str, norm: str
 ) -> None:
     _, _, ran_eager = _run(entry, device, norm)
-    # Only Metal traces lower: a CPU step always runs eager.  make_step carries
-    # InstanceNorm's in-place buffer writes back; fused_step has no buffer
-    # write-back and falls back to eager when InstanceNorm folds non-zero
-    # momentum into its running buffers.
+    # Only Metal traces lower: a CPU step always runs eager.  Both make_step
+    # and fused_step carry InstanceNorm's in-place buffer writes back, so only
+    # cumulative BatchNorm (momentum=None) falls back to eager.
     if device == "metal":
-        expected_eager = (
-            norm in ("batch-none", "instance-0.1") if entry == "fused" else (norm == "batch-none")
-        )
+        expected_eager = norm == "batch-none"
         assert ran_eager is expected_eager
 
 

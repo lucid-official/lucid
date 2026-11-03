@@ -94,3 +94,16 @@ def test_randn_gives_each_complex_part_half_the_variance(device: str) -> None:
 def test_what_the_reference_refuses_is_refused_in_lucids_words(device: str, make: object) -> None:
     with pytest.raises(NotImplementedError, match="not implemented for"):
         make(device)  # type: ignore[operator]
+
+
+@pytest.mark.parametrize("device", DEVICES)
+def test_bfloat16_tensor_creation_preserves_subnormals(device: str) -> None:
+    """Creating a bfloat16 tensor on Metal does not flush subnormals to zero (LCD-746)."""
+    sub = 2.0**-133
+    t = lucid.tensor([sub, -sub], dtype=lucid.bfloat16, device=device)
+    assert t.dtype == lucid.bfloat16
+    vals = t.float().cpu().tolist()
+    assert vals == [sub, -sub]
+    arr = np.array([sub, -sub], dtype=np.float32)
+    t_np = lucid.tensor(arr, dtype=lucid.bfloat16, device=device)
+    assert t_np.float().cpu().tolist() == [sub, -sub]

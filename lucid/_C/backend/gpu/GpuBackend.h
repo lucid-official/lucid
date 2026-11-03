@@ -77,11 +77,13 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -95,6 +97,7 @@
 
 #include "../../core/Allocator.h"
 #include "../../core/ErrorBuilder.h"
+#include "../../core/Half.h"
 #include "../../core/MemoryStats.h"
 #include "../../core/Shape.h"
 #include "../Dispatcher.h"
@@ -139,6 +142,130 @@ inline ::mlx::core::array eye_or_empty(int n, int m, int k, ::mlx::core::Dtype d
     if (n == 0 || m == 0)
         return ::mlx::core::zeros({n, m}, dtype);
     return ::mlx::core::eye(n, m, k, dtype);
+}
+
+inline ::mlx::core::array pool_window_axis_coord(const ::mlx::core::array& k_index,
+                                                 int k_suffix_next,
+                                                 int k_dim,
+                                                 int o_dim,
+                                                 int stride_dim,
+                                                 int rank,
+                                                 int axis_idx) {
+    using SE = ::mlx::core::ShapeElem;
+    const auto idt = ::mlx::core::int32;
+    auto div_a = ::mlx::core::array(static_cast<std::int32_t>(k_suffix_next), idt);
+    auto mod_a = ::mlx::core::array(static_cast<std::int32_t>(k_dim), idt);
+    auto ki = ::mlx::core::remainder(::mlx::core::floor_divide(k_index, div_a), mod_a);
+    ::mlx::core::Shape o_sh(rank, 1);
+    o_sh[2 + axis_idx] = static_cast<SE>(o_dim);
+    auto o_r = ::mlx::core::reshape(::mlx::core::arange(0, o_dim, 1, idt), o_sh);
+    return ::mlx::core::add(
+        ::mlx::core::multiply(o_r, ::mlx::core::array(static_cast<std::int32_t>(stride_dim), idt)),
+        ki);
+}
+
+inline std::optional<::mlx::core::array>
+build_pool_window_bounds_mask(const IBackend::PoolOpts& opts,
+                              const int* S,
+                              const int* O,
+                              const int* K,
+                              const int* stride,
+                              const int* right_extra,
+                              int N,
+                              int K_total,
+                              int amax_axis) {
+    bool has_padding_or_overhang = false;
+    for (int i = 0; i < N; ++i) {
+        if (opts.pad[i] > 0 || right_extra[i] > 0)
+            has_padding_or_overhang = true;
+    }
+    if (!has_padding_or_overhang)
+        return std::nullopt;
+    using SE = ::mlx::core::ShapeElem;
+    const auto idt = ::mlx::core::int32;
+    int K_suffix[4];
+    K_suffix[N] = 1;
+    for (int i = N - 1; i >= 0; --i)
+        K_suffix[i] = K_suffix[i + 1] * K[i];
+    ::mlx::core::Shape k_sh(2 + N + 1, 1);
+    k_sh[amax_axis] = static_cast<SE>(K_total);
+    auto k_idx = ::mlx::core::reshape(::mlx::core::arange(0, K_total, 1, idt), k_sh);
+    std::optional<::mlx::core::array> mask;
+    for (int i = 0; i < N; ++i) {
+        auto padded_coord =
+            pool_window_axis_coord(k_idx, K_suffix[i + 1], K[i], O[i], stride[i], 2 + N + 1, i);
+        auto coord = ::mlx::core::subtract(
+            padded_coord, ::mlx::core::array(static_cast<std::int32_t>(opts.pad[i]), idt));
+        auto valid = ::mlx::core::logical_and(
+            ::mlx::core::greater_equal(coord, ::mlx::core::array(0, idt)),
+            ::mlx::core::less(coord, ::mlx::core::array(static_cast<std::int32_t>(S[i]), idt)));
+        mask = mask ? ::mlx::core::logical_and(*mask, valid) : std::move(valid);
+    }
+    return mask;
+}
+
+inline ::mlx::core::array is_pool_better(const ::mlx::core::array& ek,
+                                         const ::mlx::core::array& best) {
+    return ::mlx::core::logical_or(
+        ::mlx::core::greater(ek, best),
+        ::mlx::core::logical_and(::mlx::core::isnan(ek),
+                                 ::mlx::core::logical_not(::mlx::core::isnan(best))));
+}
+
+inline ::mlx::core::array max_pool_pad_value(Dtype dt) {
+    const auto pad_dt = gpu::to_mlx_dtype(dt);
+    switch (dt) {
+    case Dtype::Bool:
+        return ::mlx::core::array(false, pad_dt);
+    case Dtype::I8:
+        return ::mlx::core::array(std::numeric_limits<std::int8_t>::lowest(), pad_dt);
+    case Dtype::I16:
+        return ::mlx::core::array(std::numeric_limits<std::int16_t>::lowest(), pad_dt);
+    case Dtype::I32:
+        return ::mlx::core::array(std::numeric_limits<std::int32_t>::lowest(), pad_dt);
+    case Dtype::I64:
+        return ::mlx::core::array(std::numeric_limits<std::int64_t>::lowest(), pad_dt);
+    default:
+        return ::mlx::core::array(-std::numeric_limits<double>::infinity(), pad_dt);
+    }
+}
+
+inline ::mlx::core::array
+pool_window_argmax_small(const ::mlx::core::array& wins_flat,
+                         const std::optional<::mlx::core::array>& win_in_bounds,
+                         const ::mlx::core::Shape& am_shape,
+                         int N,
+                         int K_total,
+                         int amax_axis) {
+    auto take_k = [&](const ::mlx::core::array& src, const ::mlx::core::Shape& sh, int k) {
+        ::mlx::core::Shape lo(2 + N + 1, 0), hi = src.shape();
+        lo[amax_axis] = k;
+        hi[amax_axis] = k + 1;
+        return ::mlx::core::reshape(::mlx::core::slice(src, lo, hi), sh);
+    };
+    auto best = take_k(wins_flat, am_shape, 0);
+    auto argmax = ::mlx::core::zeros(am_shape, ::mlx::core::int32);
+    std::optional<::mlx::core::array> have;
+    ::mlx::core::Shape mask_shape = am_shape;
+    if (win_in_bounds) {
+        mask_shape[0] = 1;
+        mask_shape[1] = 1;
+        have = take_k(*win_in_bounds, mask_shape, 0);
+    }
+    for (int k = 1; k < K_total; ++k) {
+        auto ek = take_k(wins_flat, am_shape, k);
+        auto cond = is_pool_better(ek, best);
+        if (win_in_bounds) {
+            auto vk = take_k(*win_in_bounds, mask_shape, k);
+            cond = ::mlx::core::logical_and(
+                vk, ::mlx::core::logical_or(::mlx::core::logical_not(*have), cond));
+            have = ::mlx::core::logical_or(*have, vk);
+        }
+        argmax = ::mlx::core::where(
+            cond, ::mlx::core::array(static_cast<std::int32_t>(k), ::mlx::core::int32), argmax);
+        best = ::mlx::core::where(cond, ek, best);
+    }
+    return argmax;
 }
 
 // Concrete GPU backend routing every Lucid op through Apple's MLX library.

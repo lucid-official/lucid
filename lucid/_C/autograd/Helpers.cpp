@@ -789,8 +789,11 @@ template <typename T>
 void fill_uniform(T* dst, std::size_t numel, double lo, double hi, Generator& gen) {
     const T span = static_cast<T>(hi - lo);
     const T offset = static_cast<T>(lo);
+    const T hi_t = static_cast<T>(hi);
+    const T max_val = (offset < hi_t) ? std::nextafter(hi_t, offset) : hi_t;
     for (std::size_t i = 0; i < numel; ++i) {
-        dst[i] = next_uniform<T>(gen) * span + offset;
+        const T v = next_uniform<T>(gen) * span + offset;
+        dst[i] = (v > max_val) ? max_val : v;
     }
 }
 
@@ -902,6 +905,32 @@ void require_random_dtype(const char* op, Dtype dt) {
                                          "; draw a floating tensor and cast it");
 }
 
+void clamp_half_uniform(Storage& out, std::size_t n, double lo, double hi, Dtype dt) {
+    const bool is_bf16 = (dt == Dtype::BF16);
+    auto narrow = [is_bf16](float v) {
+        return is_bf16 ? backend::detail::float_to_bfloat16_bits(v)
+                       : backend::detail::float_to_half_bits(v);
+    };
+    auto widen = [is_bf16](std::uint16_t b) {
+        return is_bf16 ? backend::detail::bfloat16_bits_to_float(b)
+                       : backend::detail::half_bits_to_float(b);
+    };
+    const float lo_h = widen(narrow(static_cast<float>(lo)));
+    const float hi_h = widen(narrow(static_cast<float>(hi)));
+    if (!(lo_h < hi_h))
+        return;
+    const std::uint16_t hi_bits = narrow(static_cast<float>(hi));
+    const std::uint16_t max_bits =
+        (hi_h > 0.0f) ? static_cast<std::uint16_t>(hi_bits - 1u)
+                      : (hi_h == 0.0f ? (is_bf16 ? 0x8080u : 0x8001u)
+                                      : static_cast<std::uint16_t>(hi_bits + 1u));
+    auto* p = reinterpret_cast<std::uint16_t*>(std::get<CpuStorage>(out).ptr.get());
+    for (std::size_t i = 0; i < n; ++i) {
+        if (widen(p[i]) >= hi_h)
+            p[i] = max_bits;
+    }
+}
+
 }  // namespace
 
 Storage random_uniform_storage(
@@ -913,10 +942,13 @@ Storage random_uniform_storage(
         return backend::Dispatcher::for_device(device).random_uniform(shape, lo, hi, dt,
                                                                       gpu_random_key_seed(gen));
     }
-    if (is_half_float(dt))
-        return random_half_via_f32(shape, dt, device, [&](Dtype inner) {
+    if (is_half_float(dt)) {
+        Storage out = random_half_via_f32(shape, dt, device, [&](Dtype inner) {
             return random_uniform_storage(shape, lo, hi, inner, device, gen);
         });
+        clamp_half_uniform(out, shape_numel(shape), lo, hi, dt);
+        return out;
+    }
     auto cpu = allocate_for_random(shape, dt);
     const std::size_t n = shape_numel(shape);
     switch (dt) {

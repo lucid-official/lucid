@@ -172,8 +172,7 @@ void register_utils(py::module_& m) {
     m.def(
         "ravel",
         [](const TensorImplPtr& a) {
-            const std::int64_t n = static_cast<std::int64_t>(a->numel());
-            return reshape_op(a, std::vector<std::int64_t>{n});
+            return reshape_op(a, {a ? static_cast<std::int64_t>(a->numel()) : -1});
         },
         py::arg("a"), "Flatten to 1-D (alias for reshape(a, [-1])).");
 

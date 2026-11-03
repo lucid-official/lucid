@@ -238,7 +238,9 @@ GpuStorage wrap_mlx_array(::mlx::core::array&& arr, Dtype dtype);
 //     with the count of failures.  A ``LucidError`` subclass keeps its
 //     class, MLX's ``std::invalid_argument`` becomes ``InvalidArgument``,
 //     and any other ``std::exception`` a ``LucidError``.
-std::size_t evaluate_pending();
+using EvalRunner = void (*)(std::vector<::mlx::core::array>);
+
+std::size_t evaluate_pending(EvalRunner runner = nullptr);
 
 // Convert a Lucid :class:`Shape` (int64) to an ``mlx::core::Shape`` (int32).
 //

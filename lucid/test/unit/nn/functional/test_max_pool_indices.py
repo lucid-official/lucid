@@ -84,3 +84,36 @@ def test_unpooling_defaults_to_the_size_pooling_started_from(n: int) -> None:
     shape = (1, 2) + (8,) * n
     out, idx = getattr(F, f"max_pool{n}d")(lucid.randn(*shape), 2, return_indices=True)
     assert tuple(getattr(F, f"max_unpool{n}d")(out, idx, 2).shape) == shape
+
+
+@pytest.mark.parametrize("device", ["cpu", "metal"])
+def test_max_pool_all_neginf_and_nan_and_padded_indices(device: str) -> None:
+    """All -inf windows route gradient to the first element, NaN wins at its first position,
+    and padded windows never return negative indices (LCD-748)."""
+    if device == "metal" and not lucid.metal.is_available():
+        pytest.skip("Metal unavailable")
+    neginf = float("-inf")
+    nan = float("nan")
+
+    x1 = lucid.full((1, 1, 4), neginf, device=device, requires_grad=True)
+    F.max_pool1d(x1, 2, 2).sum().backward()
+    assert x1.grad is not None
+    assert x1.grad.cpu().tolist() == [[[1.0, 0.0, 1.0, 0.0]]]
+
+    x2 = lucid.full((1, 1, 2, 2), neginf, device=device, requires_grad=True)
+    F.max_pool2d(x2, 2, 2).sum().backward()
+    assert x2.grad is not None
+    assert x2.grad.cpu().tolist() == [[[[1.0, 0.0], [0.0, 0.0]]]]
+
+    xn = lucid.tensor([[[1.0, nan, 5.0, nan]]], device=device, requires_grad=True)
+    out_n, idx_n = F.max_pool1d(xn, 4, 4, return_indices=True)
+    assert lucid.isnan(out_n).all().item()
+    assert idx_n.cpu().tolist() == [[[1]]]
+    out_n.sum().backward()
+    assert xn.grad is not None
+    assert xn.grad.cpu().tolist() == [[[0.0, 1.0, 0.0, 0.0]]]
+
+    xp = lucid.full((1, 1, 2, 2), -10.0, device=device)
+    _, idx_p = F.max_pool2d(xp, 2, 1, padding=1, return_indices=True)
+    assert int(idx_p.min().item()) >= 0
+    assert int(idx_p.max().item()) < 4

@@ -350,7 +350,33 @@ Storage GpuBackend::pad(const Storage& a,
     mlx_pad.reserve(pad_width.size());
     for (const auto& [lo, hi] : pad_width)
         mlx_pad.emplace_back(static_cast<int>(lo), static_cast<int>(hi));
-    ::mlx::core::array pad_value(static_cast<float>(constant), gpu::to_mlx_dtype(dt));
+    const auto mdt = gpu::to_mlx_dtype(dt);
+    auto sat_int = [constant](auto tag) {
+        using Int = decltype(tag);
+        if (std::isnan(constant))
+            return Int{0};
+        if (constant <= static_cast<double>(std::numeric_limits<Int>::lowest()))
+            return std::numeric_limits<Int>::lowest();
+        if (constant >= static_cast<double>(std::numeric_limits<Int>::max()))
+            return std::numeric_limits<Int>::max();
+        return static_cast<Int>(constant);
+    };
+    ::mlx::core::array pad_value = [&]() -> ::mlx::core::array {
+        switch (dt) {
+        case Dtype::Bool:
+            return ::mlx::core::array(constant != 0.0, mdt);
+        case Dtype::I8:
+            return ::mlx::core::array(sat_int(std::int8_t{}), mdt);
+        case Dtype::I16:
+            return ::mlx::core::array(sat_int(std::int16_t{}), mdt);
+        case Dtype::I32:
+            return ::mlx::core::array(sat_int(std::int32_t{}), mdt);
+        case Dtype::I64:
+            return ::mlx::core::array(sat_int(std::int64_t{}), mdt);
+        default:
+            return ::mlx::core::array(static_cast<float>(constant), mdt);
+        }
+    }();
     auto result = ::mlx::core::pad(*gs.arr, mlx_pad, pad_value);
     return Storage{gpu::wrap_mlx_array(::mlx::core::contiguous(result), dt)};
 }

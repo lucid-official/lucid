@@ -74,3 +74,27 @@ def test_metal_gives_the_same_values_and_writes_through_like_cpu() -> None:
     lucid.as_strided(m, (2,), (1,)).fill_(-1.0)
     assert x.tolist()[:3] == [-1.0, -1.0, 2.0]
     assert m.to("cpu").tolist() == x.tolist()
+
+
+def test_oversized_as_strided_and_conv_padding_refuse_cleanly() -> None:
+    """Oversized view shapes and 2**30 conv padding do not overflow 32-bit int (LCD-700)."""
+    x = lucid.zeros(1, requires_grad=True)
+    with pytest.raises(NotImplementedError):
+        lucid.as_strided(x, (1 << 31,), (0,))
+    img = lucid.zeros(1, 1, 4, 4)
+    w = lucid.zeros(1, 1, 3, 3)
+    with pytest.raises(Exception):
+        lucid.nn.functional.conv2d(img, w, padding=1 << 30)
+
+
+@pytest.mark.parametrize("device", ["cpu", "metal"])
+@pytest.mark.parametrize("dtype", [lucid.int8, lucid.int16, lucid.bool])
+def test_pad_supports_narrow_integers_and_bool(device: str, dtype: lucid.dtype) -> None:
+    """Constant pad supports int8, int16, and bool on CPU and Metal (LCD-791)."""
+    if device == "metal" and not lucid.metal.is_available():
+        pytest.skip("Metal unavailable")
+    x = lucid.ones((2, 2), dtype=dtype, device=device)
+    out = lucid.nn.functional.pad(x, (1, 1, 1, 1), value=0)
+    assert out.dtype == dtype
+    assert out.shape == (4, 4)
+    assert int(out.float().sum().item()) == 4

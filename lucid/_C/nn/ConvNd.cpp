@@ -58,13 +58,6 @@ const OpSchema Conv3dBackward::schema_v1{"conv3d", 1, AmpPolicy::Promote, true};
 
 namespace {
 
-// Compute the output size for one spatial dimension.
-// S – input size, K – kernel size, stride, pad, dilation are scalars.
-inline int compute_out(int S, int K, int stride, int pad, int dilation) {
-    const int eff = dilation * (K - 1) + 1;  // Effective (dilated) kernel size.
-    return (S + 2 * pad - eff) / stride + 1;
-}
-
 // ``v`` as the ``int`` the im2col / col2im kernels and their saved geometry
 // count in.  Those sizes used to be formed in ``int`` as well, and wrapped: a
 // 2^16 x 2^16 kernel over a padded 1 x 1 input made a column matrix of 0
@@ -158,9 +151,9 @@ TensorImplPtr ConvNdBackward<N>::forward(const TensorImplPtr& x,
     int K[N];
     int O[N];
     for (int i = 0; i < N; ++i) {
-        S[i] = static_cast<int>(x_eff->shape()[2 + i]);
-        K[i] = static_cast<int>(W_eff->shape()[2 + i]);
-        O[i] = compute_out(S[i], K[i], stride[i], pad[i], dilation[i]);
+        S[i] = sliding_int(x_eff->shape()[2 + i], op.c_str(), "an input extent");
+        K[i] = sliding_int(W_eff->shape()[2 + i], op.c_str(), "a kernel extent");
+        O[i] = window_count(S[i], K[i], stride[i], pad[i], dilation[i], op.c_str());
         if (O[i] <= 0)
             throw ShapeMismatch(x_eff->shape(), W_eff->shape(), "conv: output shape non-positive");
     }
@@ -511,8 +504,7 @@ std::vector<Storage> UnfoldBackward::apply(Storage grad_out) {
     std::vector<int> S(N), K = kernel_, O(N);
     for (int i = 0; i < N; ++i) {
         S[i] = static_cast<int>(this->input_shapes_[0][2 + i]);
-        const int eff = dilation_[i] * (K[i] - 1) + 1;
-        O[i] = (S[i] + 2 * pad_[i] - eff) / stride_[i] + 1;
+        O[i] = window_count(S[i], K[i], stride_[i], pad_[i], dilation_[i], "unfold");
     }
     auto& be = backend::Dispatcher::for_device(this->device_);
     // fold / col2im to recover the original input gradient.
@@ -632,8 +624,7 @@ std::vector<Storage> FoldBackward::apply(Storage grad_out) {
 
     std::vector<int> S = output_size_, K = kernel_, O(N);
     for (int i = 0; i < N; ++i) {
-        const int eff = dilation_[i] * (K[i] - 1) + 1;
-        O[i] = (S[i] + 2 * pad_[i] - eff) / stride_[i] + 1;
+        O[i] = window_count(S[i], K[i], stride_[i], pad_[i], dilation_[i], "fold");
     }
     Shape out_shape = this->input_shapes_[0];
     auto& be = backend::Dispatcher::for_device(this->device_);

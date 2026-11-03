@@ -57,6 +57,7 @@ FREE_FN_METHODS: tuple[str, ...] = (
     "deg2rad",
     "diag",
     "diag_embed",
+    "diagflat",
     "diagonal_scatter",
     "digamma",
     "dist",

@@ -52,34 +52,12 @@ std::vector<Storage> GpuBackend::max_pool_nd_forward(const Storage& x,
         O[i] = static_cast<int>(out_shape[2 + i]);
         K[i] = opts.K[i];
         stride[i] = opts.stride[i];
-        // Ceil mode lets the last window overhang the padded input; give
-        // it room on the right so the window view stays in bounds.  The
-        // fill is -inf, so the overhang can never win a max.
         const int extra = gpu_ceil_overhang(S[i], K[i], stride[i], opts.pad[i], O[i]);
         Sp[i] = S[i] + 2 * opts.pad[i] + extra;
         right_extra[i] = extra;
         K_total *= K[i];
     }
-    // The pad must never win a max: -inf for a float, the type's lowest
-    // value for an integer.  Converting -inf to an integer is undefined —
-    // the UBSan build halted on every integer max-pool here.
-    const auto pad_dt = gpu::to_mlx_dtype(dt);
-    ::mlx::core::array neg_inf = [&]() -> ::mlx::core::array {
-        switch (dt) {
-        case Dtype::Bool:
-            return ::mlx::core::array(false, pad_dt);
-        case Dtype::I8:
-            return ::mlx::core::array(std::numeric_limits<std::int8_t>::lowest(), pad_dt);
-        case Dtype::I16:
-            return ::mlx::core::array(std::numeric_limits<std::int16_t>::lowest(), pad_dt);
-        case Dtype::I32:
-            return ::mlx::core::array(std::numeric_limits<std::int32_t>::lowest(), pad_dt);
-        case Dtype::I64:
-            return ::mlx::core::array(std::numeric_limits<std::int64_t>::lowest(), pad_dt);
-        default:
-            return ::mlx::core::array(-std::numeric_limits<double>::infinity(), pad_dt);
-        }
-    }();
+    auto neg_inf = max_pool_pad_value(dt);
     std::vector<std::pair<int, int>> pad_widths;
     pad_widths.emplace_back(0, 0);
     pad_widths.emplace_back(0, 0);
@@ -99,15 +77,9 @@ std::vector<Storage> GpuBackend::max_pool_nd_forward(const Storage& x,
         flat_win.push_back(O[i]);
     flat_win.push_back(K_total);
     auto wins_flat = ::mlx::core::reshape(wins, flat_win);
-    // Window-argmax (saved for the backward), chosen by window size K_total.
-    // ``mlx::core::argmax`` is pathological for a TINY reduction axis with
-    // MANY groups (regular pools: K_total=4/9, millions of windows — measured
-    // 168 vs 1.8 ms for max @64ch@112 BS8), but FAST for a LARGE axis with
-    // FEW groups (adaptive/global pools: K_total=3136, ~3.4 ms). The manual
-    // max+strict-greater select is the inverse: O(K_total) ops, great for
-    // small windows (bit-exact first-max tie-break) but ~924 ms at K_total=
-    // 3136. So pick per K_total. (Both give argmax's first-max index.)
     const int amax_axis = 2 + N;
+    auto win_in_bounds =
+        build_pool_window_bounds_mask(opts, S, O, K, stride, right_extra, N, K_total, amax_axis);
     ::mlx::core::array argmax = ::mlx::core::array(0);
     if (K_total <= 16) {
         ::mlx::core::Shape am_shape;
@@ -115,21 +87,16 @@ std::vector<Storage> GpuBackend::max_pool_nd_forward(const Storage& x,
         am_shape.push_back(C);
         for (int i = 0; i < N; ++i)
             am_shape.push_back(O[i]);
-        auto take_k = [&](int k) -> ::mlx::core::array {
-            ::mlx::core::Shape lo(2 + N + 1, 0), hi = wins_flat.shape();
-            lo[amax_axis] = k;
-            hi[amax_axis] = k + 1;
-            return ::mlx::core::reshape(::mlx::core::slice(wins_flat, lo, hi), am_shape);
-        };
-        auto best = take_k(0);
-        argmax = ::mlx::core::zeros(am_shape, ::mlx::core::int32);
-        for (int k = 1; k < K_total; ++k) {
-            auto ek = take_k(k);
-            auto cond = ::mlx::core::greater(ek, best);
-            argmax = ::mlx::core::where(
-                cond, ::mlx::core::array(static_cast<std::int32_t>(k), ::mlx::core::int32), argmax);
-            best = ::mlx::core::maximum(best, ek);
-        }
+        argmax = pool_window_argmax_small(wins_flat, win_in_bounds, am_shape, N, K_total, amax_axis);
+    } else if (win_in_bounds && wins_flat.size() > 0) {
+        auto y_exp = ::mlx::core::expand_dims(y, amax_axis);
+        auto is_max = ::mlx::core::logical_or(::mlx::core::equal(wins_flat, y_exp),
+                                              ::mlx::core::isnan(wins_flat));
+        auto is_winner = ::mlx::core::logical_and(*win_in_bounds, is_max);
+        argmax = ::mlx::core::astype(
+            ::mlx::core::argmax(::mlx::core::astype(is_winner, ::mlx::core::int32), amax_axis,
+                                false),
+            ::mlx::core::int32);
     } else {
         argmax = wins_flat.size() == 0
                      ? empty_extreme(wins_flat, {amax_axis}, false, ::mlx::core::int32)
@@ -224,16 +191,8 @@ Storage GpuBackend::max_pool_nd_backward(const Storage& grad_out,
     using SE = ::mlx::core::ShapeElem;
     const auto idt = ::mlx::core::int32;
     auto compute_ih = [&](int i) -> ::mlx::core::array {
-        auto div_a = ::mlx::core::array(static_cast<std::int32_t>(K_suffix[i + 1]), idt);
-        auto mod_a = ::mlx::core::array(static_cast<std::int32_t>(opts.K[i]), idt);
-        auto ki = ::mlx::core::remainder(::mlx::core::floor_divide(*gA.arr, div_a), mod_a);
-        ::mlx::core::Shape rs(N + 2, 1);
-        rs[2 + i] = static_cast<SE>(O[i]);
-        auto o_r = ::mlx::core::reshape(::mlx::core::arange(0, O[i], 1, idt), rs);
-        return ::mlx::core::add(
-            ::mlx::core::multiply(
-                o_r, ::mlx::core::array(static_cast<std::int32_t>(opts.stride[i]), idt)),
-            ki);
+        return pool_window_axis_coord(*gA.arr, K_suffix[i + 1], opts.K[i], O[i], opts.stride[i],
+                                      N + 2, i);
     };
     ::mlx::core::array flat_idx = compute_ih(0);
     for (int i = 1; i < N; ++i)

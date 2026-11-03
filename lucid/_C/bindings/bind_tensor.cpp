@@ -66,6 +66,10 @@ std::shared_ptr<mlx::core::array> pending_array(const lucid::TensorImpl& t) {
     return gpu_st != nullptr ? gpu_st->arr : nullptr;
 }
 
+}  // namespace
+
+namespace lucid::bindings {
+
 // Only the wait goes without the GIL.  Every thread's work runs on the
 // process's shared MLX streams, which two threads must not encode onto at
 // once, and the GIL is what keeps them apart (SharedStreams.h): the encoding
@@ -89,6 +93,12 @@ void run_then_wait(std::vector<mlx::core::array> arrays) {
     for (auto& arr : arrays)
         arr.wait();
 }
+
+}  // namespace lucid::bindings
+
+namespace {
+
+using lucid::bindings::run_then_wait;
 
 void evaluate_without_gil(const lucid::TensorImpl& t) {
     if (const std::shared_ptr<mlx::core::array> arr = pending_array(t))
@@ -573,9 +583,8 @@ void register_tensor_impl(py::module_& m) {
     m.def(
         "synchronize_gpu",
         [] {
-            // Both calls encode onto the shared streams, so both keep the GIL
-            // (SharedStreams.h) — the wait included, for now.
-            const std::size_t ran = lucid::gpu::evaluate_pending();
+            const std::size_t ran = lucid::gpu::evaluate_pending(&run_then_wait);
+            run_then_wait({mlx::core::copy(mlx::core::array(0.0f))});
             mlx::core::synchronize();
             return ran;
         },

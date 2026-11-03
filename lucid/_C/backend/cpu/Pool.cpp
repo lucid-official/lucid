@@ -23,6 +23,29 @@ namespace lucid::backend::cpu {
 
 namespace {
 
+template <typename T>
+inline void update_max_pool_best(T v, int idx, T& best, int& best_idx) {
+    if (best_idx < 0 || v > best || (std::isnan(v) && !std::isnan(best))) {
+        best = v;
+        best_idx = idx;
+    }
+}
+
+template <typename T>
+void max_pool_scatter_backward(
+    const T* g, const std::int32_t* argmax, T* dx, int BC, int in_spatial, int out_spatial) {
+    for (int bc = 0; bc < BC; ++bc) {
+        const T* gb = g + bc * out_spatial;
+        const auto* ab = argmax + bc * out_spatial;
+        T* dxb = dx + bc * in_spatial;
+        for (int o = 0; o < out_spatial; ++o) {
+            const int idx = ab[o];
+            if (idx >= 0)
+                dxb[idx] += gb[o];
+        }
+    }
+}
+
 // 2-D max pooling forward typed implementation.
 template <typename T>
 // NaN wins the pooling window, exactly as it does in ``max``.
@@ -65,11 +88,7 @@ void max_pool2d_forward_typed(const T* x,
                             if (iw < 0 || iw >= W)
                                 continue;
                             const int idx = ih * W + iw;
-                            const T v = xb[idx];
-                            if (std::isnan(v) || v > best) {
-                                best = v;
-                                best_idx = idx;
-                            }
+                            update_max_pool_best(xb[idx], idx, best, best_idx);
                         }
                     }
                     yb[oh * OW + ow] = best;
@@ -83,18 +102,7 @@ void max_pool2d_forward_typed(const T* x,
 template <typename T>
 void max_pool2d_backward_typed(
     const T* g, const std::int32_t* argmax, T* dx, int B, int C, int H, int W, int OH, int OW) {
-    for (int b = 0; b < B; ++b) {
-        for (int c = 0; c < C; ++c) {
-            const T* gb = g + (b * C + c) * OH * OW;
-            const auto* ab = argmax + (b * C + c) * OH * OW;
-            T* dxb = dx + (b * C + c) * H * W;
-            for (int o = 0; o < OH * OW; ++o) {
-                const int idx = ab[o];
-                if (idx >= 0)
-                    dxb[idx] += gb[o];
-            }
-        }
-    }
+    max_pool_scatter_backward(g, argmax, dx, B * C, H * W, OH * OW);
 }
 
 // Per-axis divisor contribution for the average-pool window at output index
@@ -219,11 +227,7 @@ void max_pool1d_forward_typed(
                     const int il = ol * sl - pl + kl;
                     if (il < 0 || il >= L)
                         continue;
-                    const T v = xb[il];
-                    if (std::isnan(v) || v > best) {
-                        best = v;
-                        best_idx = il;
-                    }
+                    update_max_pool_best(xb[il], il, best, best_idx);
                 }
                 yb[ol] = best;
                 ab[ol] = best_idx;
@@ -235,18 +239,7 @@ void max_pool1d_forward_typed(
 template <typename T>
 void max_pool1d_backward_typed(
     const T* g, const std::int32_t* argmax, T* dx, int B, int C, int L, int OL) {
-    for (int b = 0; b < B; ++b) {
-        for (int c = 0; c < C; ++c) {
-            const T* gb = g + (b * C + c) * OL;
-            const auto* ab = argmax + (b * C + c) * OL;
-            T* dxb = dx + (b * C + c) * L;
-            for (int o = 0; o < OL; ++o) {
-                const int idx = ab[o];
-                if (idx >= 0)
-                    dxb[idx] += gb[o];
-            }
-        }
-    }
+    max_pool_scatter_backward(g, argmax, dx, B * C, L, OL);
 }
 
 template <typename T>
@@ -349,11 +342,7 @@ void max_pool3d_forward_typed(const T* x,
                                     if (iw < 0 || iw >= W)
                                         continue;
                                     const int idx = (id * H + ih) * W + iw;
-                                    const T v = xb[idx];
-                                    if (std::isnan(v) || v > best) {
-                                        best = v;
-                                        best_idx = idx;
-                                    }
+                                    update_max_pool_best(xb[idx], idx, best, best_idx);
                                 }
                             }
                         }
@@ -379,20 +368,7 @@ void max_pool3d_backward_typed(const T* g,
                                int OD,
                                int OH,
                                int OW) {
-    const int OHW = OD * OH * OW;
-    const int IHW = D * H * W;
-    for (int b = 0; b < B; ++b) {
-        for (int c = 0; c < C; ++c) {
-            const T* gb = g + (b * C + c) * OHW;
-            const auto* ab = argmax + (b * C + c) * OHW;
-            T* dxb = dx + (b * C + c) * IHW;
-            for (int o = 0; o < OHW; ++o) {
-                const int idx = ab[o];
-                if (idx >= 0)
-                    dxb[idx] += gb[o];
-            }
-        }
-    }
+    max_pool_scatter_backward(g, argmax, dx, B * C, D * H * W, OD * OH * OW);
 }
 
 template <typename T>

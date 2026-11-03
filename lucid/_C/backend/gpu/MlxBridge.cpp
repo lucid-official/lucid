@@ -58,6 +58,7 @@
 #include "../../core/MemoryStats.h"
 #include "MetalAllocator.h"
 #include "SharedBufferWrites.h"
+#include "SharedStreams.h"
 
 namespace lucid::gpu {
 
@@ -309,6 +310,7 @@ GpuStorage wrap_mlx_array(::mlx::core::array&& arr, Dtype dtype) {
     // The array's dtype is the fact; the parameter is the request.  When
     // they differ the values are converted, so the bytes match the label
     // that goes with them.
+    const bool bound_now = bind_thread_streams();
     const auto want = to_mlx_dtype(dtype);
     ::mlx::core::array held = arr.dtype() == want ? std::move(arr) : ::mlx::core::astype(arr, want);
     // An empty result is replaced by a fresh empty array, dropping the graph
@@ -326,14 +328,23 @@ GpuStorage wrap_mlx_array(::mlx::core::array&& arr, Dtype dtype) {
     // described by its shape and dtype, and nothing can be written into or
     // read out of it, so the substitute is indistinguishable.  Costs one
     // size comparison on every other result.
-    if (held.size() == 0)
+    if (held.size() == 0) {
         held = ::mlx::core::zeros(held.shape(), held.dtype());
-    else if (g_pinned_count.load(std::memory_order_relaxed) > 0 && !is_pending(held))
-        // An MLX op that passed an evaluated input through unchanged
-        // (``contiguous`` on a row-contiguous shared buffer) shares its
-        // ArrayDesc with the input; ``copy`` gives the result a descriptor of
-        // its own so detaching it before a host write leaves the input intact.
-        held = ::mlx::core::copy(held);
+    } else {
+        // An op that never asks the dispatcher (e.g. fft) run as a fresh
+        // thread's first MLX work built ``arr`` on that thread's own stream
+        // before ``bind_thread_streams`` above bound the shared streams;
+        // evaluate it here on the building thread so no other thread waits on
+        // a stream it does not share.
+        if (bound_now && is_pending(held))
+            held.eval();
+        if (g_pinned_count.load(std::memory_order_relaxed) > 0 && !is_pending(held))
+            // An MLX op that passed an evaluated input through unchanged
+            // (``contiguous`` on a row-contiguous shared buffer) shares its
+            // ArrayDesc with the input; ``copy`` gives the result a descriptor of
+            // its own so detaching it before a host write leaves the input intact.
+            held = ::mlx::core::copy(held);
+    }
     GpuStorage out;
     out.dtype = dtype;
     out.nbytes = held.nbytes();
@@ -371,12 +382,15 @@ raise_eval_failure(const std::exception_ptr& first, std::size_t failed, std::siz
 // Run each array on its own, so one graph that cannot run does not keep the
 // others from completing, and raise the first failure once all have had
 // their turn.  Rerunning an array the batch already evaluated is a no-op.
-void evaluate_each(std::vector<::mlx::core::array>& arrays) {
+void evaluate_each(std::vector<::mlx::core::array>& arrays, EvalRunner runner) {
     std::exception_ptr first;
     std::size_t failed = 0;
     for (auto& arr : arrays) {
         try {
-            arr.eval();
+            if (runner)
+                runner({arr});
+            else
+                arr.eval();
         } catch (const std::exception&) {
             if (!first)
                 first = std::current_exception();
@@ -389,7 +403,7 @@ void evaluate_each(std::vector<::mlx::core::array>& arrays) {
 
 }  // namespace
 
-std::size_t evaluate_pending() {
+std::size_t evaluate_pending(EvalRunner runner) {
     std::vector<::mlx::core::array> arrays;
     {
         std::lock_guard<std::mutex> lock(g_pending_mu);
@@ -402,13 +416,16 @@ std::size_t evaluate_pending() {
     if (arrays.empty())
         return 0;
     try {
-        ::mlx::core::eval(arrays);
+        if (runner)
+            runner(arrays);
+        else
+            ::mlx::core::eval(arrays);
     } catch (const std::exception&) {
         // One graph that cannot run fails the whole batch and leaves the
         // rest unrun.  The batch's error is not raised here: the per-array
         // pass meets the same failure and raises it with the count, and a
         // batch too large as a whole that runs piece by piece is no error.
-        evaluate_each(arrays);
+        evaluate_each(arrays, runner);
     }
     return arrays.size();
 }

@@ -51,8 +51,14 @@ _CASES: dict[str, tuple[object, tuple[object, ...], dict[str, object]]] = {
     "corrcoef": (_t([[1.0, 2.0, 4.0], [2.0, 1.0, 0.5]]), (), {}),
     "count_nonzero": (_t([[0.0, 1.0], [2.0, 0.0]]), (), {"dim": 0}),
     "cov": (_t([[1.0, 2.0, 4.0], [2.0, 1.0, 0.5]]), (), {"correction": 0}),
+    "deg2rad": (_t([0.0, 90.0, 180.0]), (), {}),
+    "diag": (_t([1.0, 2.0, 3.0]), (), {"diagonal": 1}),
     "diag_embed": (_t([[1.0, 2.0], [3.0, 4.0]]), (), {"offset": 1}),
+    "diagflat": (_t([[1.0, 2.0], [3.0, 4.0]]), (), {"offset": 1}),
+    "diagonal_scatter": (_t([[0.0, 0.0], [0.0, 0.0]]), (_t([1.0, 2.0]),), {"offset": 0}),
+    "dist": (_t([1.0, 2.0]), (_t([4.0, 6.0]),), {"p": 2.0}),
     "equal": (_t([1.0, 2.0]), (_t([1, 2], "int64"),), {}),
+    "fix": (_t([-1.7, 0.0, 2.3]), (), {}),
     "fmax": (_t([1.0, _NAN, 3.0]), (_t([2.0, 1.0, _NAN]),), {}),
     "fmin": (_t([1.0, _NAN, 3.0]), (_t([2.0, 1.0, _NAN]),), {}),
     "ger": (_t([1.0, 2.0]), (_t([3.0, 4.0, 5.0]),), {}),
@@ -138,6 +144,7 @@ _CASES: dict[str, tuple[object, tuple[object, ...], dict[str, object]]] = {
     "less": (_t([1.0, 2.0, 3.0]), (_t([2.0, 2.0, 2.0]),), {}),
     "less_equal": (_t([1.0, 2.0, 3.0]), (_t([2.0, 2.0, 2.0]),), {}),
     "lgamma": (_t([0.5, 3.0]), (), {}),
+    "logaddexp2": (_t([1.0, 2.0]), (_t([3.0, 4.0]),), {}),
     "logit": (_t([0.05, 0.25, 0.75]), (), {"eps": 0.1}),
     "multiply": (_t([1.0, 2.0]), (_t([3.0, -4.0]),), {}),
     "negative": (_t([1.0, -2.0]), (), {}),
@@ -147,8 +154,15 @@ _CASES: dict[str, tuple[object, tuple[object, ...], dict[str, object]]] = {
         (_t([0, 5, 0], "int64"), _t([10.0, 20.0, 1.0])),
         {"accumulate": True},
     ),
+    "rad2deg": (_t([0.0, 1.5, 3.0]), (), {}),
+    "select_scatter": (_t([[1.0, 2.0], [3.0, 4.0]]), (_t([9.0, 8.0]), 0, 1), {}),
+    "sgn": (_t([-2.0, 0.0, 3.0]), (), {}),
     "sinc": (_t([0.5, 1.5, 0.0]), (), {}),
+    "slice_scatter": (_t([1.0, 2.0, 3.0, 4.0]), (_t([9.0, 8.0]),), {"dim": 0, "start": 1, "end": 3}),
+    "split_with_sizes": (_t([1.0, 2.0, 3.0, 4.0]), ([1, 3],), {"dim": 0}),
     "subtract": (_t([3.0, 4.0]), (_t([1.0, 1.0]),), {"alpha": 2.0}),
+    "unsafe_chunk": (_t([1.0, 2.0, 3.0, 4.0]), (2,), {"dim": 0}),
+    "unsafe_split": (_t([1.0, 2.0, 3.0, 4.0]), (2,), {"dim": 0}),
     "xlogy": (_t([0.0, 2.0]), (_t([3.0, 4.0]),), {}),
 }
 
@@ -277,7 +291,23 @@ def test_copysign_takes_the_sign_bit_of_a_negative_zero(ref: ModuleType) -> None
 #: Lucid has none: ``fill_`` / ``zero_`` / ``copy_`` write a given value,
 #: ``normal_`` / ``uniform_`` draw into the tensor, ``share_memory_`` moves
 #: it — and ``cube_``, which the reference has in neither form.
-_NO_TWIN = frozenset({"copy_", "cube_", "fill_", "normal_", "share_memory_", "uniform_", "zero_"})
+_NO_TWIN = frozenset(
+    {
+        "cauchy_",
+        "copy_",
+        "cube_",
+        "exponential_",
+        "fill_",
+        "fill_diagonal_",
+        "geometric_",
+        "log_normal_",
+        "normal_",
+        "random_",
+        "share_memory_",
+        "uniform_",
+        "zero_",
+    }
+)
 
 
 def _inplace_methods() -> list[str]:

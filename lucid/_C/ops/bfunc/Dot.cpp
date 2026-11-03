@@ -151,18 +151,28 @@ public:
 const OpSchema Dot1DBackward::schema_v1{"dot_1d", 1, AmpPolicy::KeepInput, true};
 const OpSchema Dot2DBackward::schema_v1{"dot_2d", 1, AmpPolicy::KeepInput, true};
 
+bool is_1d_pair(const TensorImplPtr& a, const TensorImplPtr& b) {
+    return a && b && a->shape().size() == 1 && b->shape().size() == 1;
+}
+
+void refuse_bool_dot(Dtype dt) {
+    if (dt == Dtype::Bool)
+        ErrorBuilder("dot").not_implemented("not implemented for bool");
+}
+
 }  // namespace
 
 TensorImplPtr dot_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in) {
     // The vector dot's row is WIDEST under Metal autocast: a float16 and a
     // float32 vector meet in float32, as the reference's do, instead of
     // failing the pair check.  The matrix form has no row.
-    const bool vectors = a_in && b_in && a_in->shape().size() == 1 && b_in->shape().size() == 1;
-    const auto operands = vectors ? promote_for_schema(Dot1DBackward::schema_v1, {a_in, b_in})
-                                  : std::vector<TensorImplPtr>{a_in, b_in};
+    const auto operands = is_1d_pair(a_in, b_in)
+                              ? promote_for_schema(Dot1DBackward::schema_v1, {a_in, b_in})
+                              : std::vector<TensorImplPtr>{a_in, b_in};
     const TensorImplPtr& a = operands[0];
     const TensorImplPtr& b = operands[1];
     validate_pair(a, b, "dot");
+    refuse_bool_dot(a->dtype());
     const Dtype dt = a->dtype();
     const Device device = a->device();
     OpScopeFull scope{"dot", device, dt, Shape{}};

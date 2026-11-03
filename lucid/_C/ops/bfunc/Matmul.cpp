@@ -159,6 +159,8 @@ TensorImplPtr MatmulBackward::forward(const TensorImplPtr& a, const TensorImplPt
     if (a_eff->dtype() != b_eff->dtype())
         throw DtypeMismatch(std::string(dtype_name(a_eff->dtype())),
                             std::string(dtype_name(b_eff->dtype())), "matmul");
+    if (a_eff->dtype() == Dtype::Bool)
+        ErrorBuilder("matmul").not_implemented("not implemented for bool");
     const Dtype eff_dt = a_eff->dtype();
 
     const auto info = plan_nd_matmul(a_eff->shape(), b_eff->shape());

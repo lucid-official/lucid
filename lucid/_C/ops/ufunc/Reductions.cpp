@@ -247,6 +247,8 @@ Storage SumBackward::grad_formula(const Storage& grad_out) {
 // during the M4 Max parity smoke when training accuracy reported 1.56%
 // (= 1/batch) instead of the real count.
 TensorImplPtr promote_int_for_reduce(const TensorImplPtr& a) {
+    if (!a)
+        return a;
     switch (a->dtype()) {
     case Dtype::Bool:
     case Dtype::I8:

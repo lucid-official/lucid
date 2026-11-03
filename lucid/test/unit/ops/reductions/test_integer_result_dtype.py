@@ -272,3 +272,38 @@ def test_integer_matmul_family_keeps_the_operand_dtype(device: str) -> None:
         assert lucid.matmul(a, a).dtype == dtype
         assert lucid.bmm(a[None], a[None]).dtype == dtype
         assert lucid.mv(a, a[0]).dtype == dtype
+
+
+@pytest.mark.parametrize("device", ["cpu", "metal"])
+def test_bool_matmul_and_dot_are_refused(device: str) -> None:
+    """Bool operands are rejected by matmul, mm, bmm, dot, and inner (LCD-775)."""
+    if device == "metal" and not metal_available():
+        pytest.skip("Metal unavailable")
+    b2 = lucid.tensor([[True, False], [False, True]], device=device)
+    b3 = b2.unsqueeze(0)
+    b1 = lucid.tensor([True, False], device=device)
+    for fn in (
+        lambda: lucid.matmul(b2, b2),
+        lambda: lucid.mm(b2, b2),
+        lambda: lucid.bmm(b3, b3),
+        lambda: lucid.linalg.dot(b1, b1),
+        lambda: lucid.linalg.inner(b1, b1),
+    ):
+        with pytest.raises(NotImplementedError):
+            fn()
+
+
+@pytest.mark.parametrize("device", ["cpu", "metal"])
+@pytest.mark.parametrize("dtype", [lucid.float16, lucid.bfloat16])
+def test_cummax_and_cummin_backward_support_half_floats(
+    device: str, dtype: lucid.dtype
+) -> None:
+    """cummax and cummin backward support float16 and bfloat16 on CPU and Metal (LCD-682)."""
+    if device == "metal" and not metal_available():
+        pytest.skip("Metal unavailable")
+    for op in (lucid.cummax, lucid.cummin):
+        x = lucid.tensor([[3.0, 1.0, 4.0, 2.0]], dtype=dtype, device=device, requires_grad=True)
+        vals, _ = op(x, dim=1)
+        vals.sum().backward()
+        assert x.grad is not None
+        assert x.grad.dtype == dtype

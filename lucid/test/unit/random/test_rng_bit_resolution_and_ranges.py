@@ -160,3 +160,16 @@ class TestRandpermTieFree:
             -(1 << 63), (1 << 63) - 1, (n,), dtype=lucid.int64, device=device
         ).numpy()
         assert len(np.unique(keys)) == n
+
+    @pytest.mark.parametrize("device", DEVICES)
+    @pytest.mark.parametrize("dtype", [lucid.float16, lucid.bfloat16])
+    def test_half_float_uniform_stays_strictly_below_upper_bound(
+        self, device: str, dtype: lucid.dtype
+    ) -> None:
+        """Half-precision uniform draws never round up to the upper bound (LCD-774)."""
+        lucid.manual_seed(42)
+        r = lucid.rand(200_000, dtype=dtype, device=device)
+        assert float(r.max().item()) < 1.0
+        u = lucid.empty(200_000, dtype=dtype, device=device).uniform_(0.5, 0.51)
+        hi = float(lucid.tensor([0.51], dtype=dtype).float().item())
+        assert float(u.max().item()) < hi

@@ -31,6 +31,7 @@
 #include "../../core/Error.h"
 #include "../../core/ErrorBuilder.h"
 #include "../../core/GradMode.h"
+#include "../../core/Half.h"
 #include "../../core/Helpers.h"
 #include "../../core/MemoryStats.h"
 #include "../../core/OpSchema.h"
@@ -405,16 +406,28 @@ Storage cummax_backward_cpu(
     std::size_t nb = g_cs.nbytes;
     auto ptr = allocate_aligned_bytes(nb, Device::CPU);
 
-    if (dt == Dtype::F32)
+    if (dt == Dtype::F32) {
         scan_ext_backward_loop<true>(reinterpret_cast<const float*>(g_cs.ptr.get()),
                                      reinterpret_cast<const float*>(o_cs.ptr.get()),
                                      reinterpret_cast<float*>(ptr.get()), shape, axis);
-    else if (dt == Dtype::F64)
+    } else if (dt == Dtype::F64) {
         scan_ext_backward_loop<true>(reinterpret_cast<const double*>(g_cs.ptr.get()),
                                      reinterpret_cast<const double*>(o_cs.ptr.get()),
                                      reinterpret_cast<double*>(ptr.get()), shape, axis);
-    else
+    } else if (is_half_float(dt)) {
+        const std::size_t n = shape_numel(shape);
+        const bool is_bf16 = (dt == Dtype::BF16);
+        std::vector<float> g_f32(n), o_f32(n), dx_f32(n, 0.0f);
+        backend::detail::half_or_bfloat16_to_float_bulk(
+            reinterpret_cast<const std::uint16_t*>(g_cs.ptr.get()), g_f32.data(), n, is_bf16);
+        backend::detail::half_or_bfloat16_to_float_bulk(
+            reinterpret_cast<const std::uint16_t*>(o_cs.ptr.get()), o_f32.data(), n, is_bf16);
+        scan_ext_backward_loop<true>(g_f32.data(), o_f32.data(), dx_f32.data(), shape, axis);
+        backend::detail::float_to_half_or_bfloat16_bulk(
+            dx_f32.data(), reinterpret_cast<std::uint16_t*>(ptr.get()), n, is_bf16);
+    } else {
         ErrorBuilder("cummax_backward").not_implemented("dtype not supported");
+    }
 
     return Storage{CpuStorage{ptr, nb, dt}};
 }
@@ -426,16 +439,28 @@ Storage cummin_backward_cpu(
     std::size_t nb = g_cs.nbytes;
     auto ptr = allocate_aligned_bytes(nb, Device::CPU);
 
-    if (dt == Dtype::F32)
+    if (dt == Dtype::F32) {
         scan_ext_backward_loop<false>(reinterpret_cast<const float*>(g_cs.ptr.get()),
                                       reinterpret_cast<const float*>(o_cs.ptr.get()),
                                       reinterpret_cast<float*>(ptr.get()), shape, axis);
-    else if (dt == Dtype::F64)
+    } else if (dt == Dtype::F64) {
         scan_ext_backward_loop<false>(reinterpret_cast<const double*>(g_cs.ptr.get()),
                                       reinterpret_cast<const double*>(o_cs.ptr.get()),
                                       reinterpret_cast<double*>(ptr.get()), shape, axis);
-    else
+    } else if (is_half_float(dt)) {
+        const std::size_t n = shape_numel(shape);
+        const bool is_bf16 = (dt == Dtype::BF16);
+        std::vector<float> g_f32(n), o_f32(n), dx_f32(n, 0.0f);
+        backend::detail::half_or_bfloat16_to_float_bulk(
+            reinterpret_cast<const std::uint16_t*>(g_cs.ptr.get()), g_f32.data(), n, is_bf16);
+        backend::detail::half_or_bfloat16_to_float_bulk(
+            reinterpret_cast<const std::uint16_t*>(o_cs.ptr.get()), o_f32.data(), n, is_bf16);
+        scan_ext_backward_loop<false>(g_f32.data(), o_f32.data(), dx_f32.data(), shape, axis);
+        backend::detail::float_to_half_or_bfloat16_bulk(
+            dx_f32.data(), reinterpret_cast<std::uint16_t*>(ptr.get()), n, is_bf16);
+    } else {
         ErrorBuilder("cummin_backward").not_implemented("dtype not supported");
+    }
 
     return Storage{CpuStorage{ptr, nb, dt}};
 }
@@ -485,10 +510,13 @@ TensorImplPtr scan_ext_graph_backward(const TensorImplPtr& grad_out,
     auto* src = reinterpret_cast<std::int32_t*>(sources.ptr.get());
     const auto fill = [&](const auto* y) { scan_ext_sources<IsMax>(y, src, shape, axis); };
     if (device == Device::GPU) {
-        auto y = ::mlx::core::contiguous(*std::get<GpuStorage>(saved_y).arr);
+        auto y_arr = *std::get<GpuStorage>(saved_y).arr;
+        if (is_half_float(dt))
+            y_arr = ::mlx::core::astype(y_arr, ::mlx::core::float32);
+        auto y = ::mlx::core::contiguous(y_arr);
         y.eval();
         MemoryTracker::track_host_sync(y.nbytes());
-        if (dt == Dtype::F32)
+        if (dt == Dtype::F32 || is_half_float(dt))
             fill(y.data<float>());
         else if (dt == Dtype::F64)
             fill(y.data<double>());
@@ -496,12 +524,19 @@ TensorImplPtr scan_ext_graph_backward(const TensorImplPtr& grad_out,
             ErrorBuilder(name).not_implemented("dtype");
     } else {
         const auto* y = std::get<CpuStorage>(saved_y).ptr.get();
-        if (dt == Dtype::F32)
+        if (dt == Dtype::F32) {
             fill(reinterpret_cast<const float*>(y));
-        else if (dt == Dtype::F64)
+        } else if (dt == Dtype::F64) {
             fill(reinterpret_cast<const double*>(y));
-        else
+        } else if (is_half_float(dt)) {
+            const std::size_t n = shape_numel(shape);
+            std::vector<float> y_f32(n);
+            backend::detail::half_or_bfloat16_to_float_bulk(
+                reinterpret_cast<const std::uint16_t*>(y), y_f32.data(), n, dt == Dtype::BF16);
+            fill(y_f32.data());
+        } else {
             ErrorBuilder(name).not_implemented("dtype");
+        }
     }
     auto index = std::make_shared<TensorImpl>(
         backend::Dispatcher::for_device(device).from_cpu(std::move(sources), shape), shape,
@@ -510,6 +545,56 @@ TensorImplPtr scan_ext_graph_backward(const TensorImplPtr& grad_out,
 }
 
 // Backward node for cummax.
+template <bool IsMax>
+Storage scan_ext_backward_gpu(const Storage& grad_out,
+                              const Storage& saved_output,
+                              const Shape& input_shape,
+                              int axis,
+                              Dtype dt,
+                              const char* op_name) {
+    const auto& g_gs = std::get<GpuStorage>(grad_out);
+    const auto& y_gs = std::get<GpuStorage>(saved_output);
+    g_gs.arr->eval();
+    y_gs.arr->eval();
+    auto g_cont = ::mlx::core::contiguous(*g_gs.arr);
+    auto y_cont = ::mlx::core::contiguous(*y_gs.arr);
+    g_cont.eval();
+    y_cont.eval();
+
+    std::size_t n = shape_numel(input_shape);
+    auto shape_mlx = gpu::to_mlx_shape(input_shape);
+    auto mlx_dt = gpu::to_mlx_dtype(dt);
+
+    if (dt == Dtype::F32 || is_half_float(dt)) {
+        if (is_half_float(dt)) {
+            g_cont = ::mlx::core::contiguous(::mlx::core::astype(g_cont, ::mlx::core::float32));
+            y_cont = ::mlx::core::contiguous(::mlx::core::astype(y_cont, ::mlx::core::float32));
+            g_cont.eval();
+            y_cont.eval();
+        }
+        std::vector<float> dx(n, 0.0f);
+        MemoryTracker::track_host_sync(g_cont.nbytes());
+        MemoryTracker::track_host_sync(y_cont.nbytes());
+        scan_ext_backward_loop<IsMax>(g_cont.data<float>(), y_cont.data<float>(), dx.data(),
+                                      input_shape, axis);
+        ::mlx::core::array dx_arr(dx.data(), shape_mlx, ::mlx::core::float32);
+        if (is_half_float(dt))
+            dx_arr = ::mlx::core::astype(dx_arr, mlx_dt);
+        return Storage{gpu::wrap_mlx_array(std::move(dx_arr), dt)};
+    }
+    if (dt == Dtype::F64) {
+        std::vector<double> dx(n, 0.0);
+        MemoryTracker::track_host_sync(g_cont.nbytes());
+        MemoryTracker::track_host_sync(y_cont.nbytes());
+        scan_ext_backward_loop<IsMax>(g_cont.data<double>(), y_cont.data<double>(), dx.data(),
+                                      input_shape, axis);
+        ::mlx::core::array dx_arr(dx.data(), shape_mlx, mlx_dt);
+        return Storage{gpu::wrap_mlx_array(std::move(dx_arr), dt)};
+    }
+    ErrorBuilder(op_name).not_implemented("dtype");
+    return {};
+}
+
 class CummaxBackward : public AutogradNode<CummaxBackward, 1> {
 public:
     static const OpSchema schema_v1;
@@ -518,43 +603,10 @@ public:
     int axis_;
 
     std::vector<Storage> apply(Storage grad_out) override {
-        // For GPU devices: evaluate MLX arrays, compute loop on CPU, rewrap.
         if (device_ == Device::GPU) {
-            const auto& g_gs = std::get<GpuStorage>(grad_out);
-            const auto& y_gs = std::get<GpuStorage>(saved_output_);
-            g_gs.arr->eval();
-            y_gs.arr->eval();
-            auto g_cont = ::mlx::core::contiguous(*g_gs.arr);
-            auto y_cont = ::mlx::core::contiguous(*y_gs.arr);
-            g_cont.eval();
-            y_cont.eval();
-
-            std::size_t n = shape_numel(input_shape_);
-            auto shape_mlx = gpu::to_mlx_shape(input_shape_);
-            auto mlx_dt = gpu::to_mlx_dtype(dtype_);
-
-            if (dtype_ == Dtype::F32) {
-                std::vector<float> dx(n, 0.0f);
-                MemoryTracker::track_host_sync(g_cont.nbytes());
-                MemoryTracker::track_host_sync(y_cont.nbytes());
-                scan_ext_backward_loop<true>(g_cont.data<float>(), y_cont.data<float>(), dx.data(),
-                                             input_shape_, axis_);
-                ::mlx::core::array dx_arr(dx.data(), shape_mlx, mlx_dt);
-                return {Storage{gpu::wrap_mlx_array(std::move(dx_arr), dtype_)}};
-            } else if (dtype_ == Dtype::F64) {
-                std::vector<double> dx(n, 0.0);
-                MemoryTracker::track_host_sync(g_cont.nbytes());
-                MemoryTracker::track_host_sync(y_cont.nbytes());
-                scan_ext_backward_loop<true>(g_cont.data<double>(), y_cont.data<double>(),
-                                             dx.data(), input_shape_, axis_);
-                ::mlx::core::array dx_arr(dx.data(), shape_mlx, mlx_dt);
-                return {Storage{gpu::wrap_mlx_array(std::move(dx_arr), dtype_)}};
-            } else {
-                ErrorBuilder("cummax_backward").not_implemented("dtype");
-                return {};
-            }
+            return {scan_ext_backward_gpu<true>(grad_out, saved_output_, input_shape_, axis_,
+                                                dtype_, "cummax_backward")};
         }
-        // CPU path
         return {cummax_backward_cpu(grad_out, saved_output_, input_shape_, axis_, dtype_)};
     }
 
@@ -574,39 +626,8 @@ public:
 
     std::vector<Storage> apply(Storage grad_out) override {
         if (device_ == Device::GPU) {
-            const auto& g_gs = std::get<GpuStorage>(grad_out);
-            const auto& y_gs = std::get<GpuStorage>(saved_output_);
-            g_gs.arr->eval();
-            y_gs.arr->eval();
-            auto g_cont = ::mlx::core::contiguous(*g_gs.arr);
-            auto y_cont = ::mlx::core::contiguous(*y_gs.arr);
-            g_cont.eval();
-            y_cont.eval();
-
-            std::size_t n = shape_numel(input_shape_);
-            auto shape_mlx = gpu::to_mlx_shape(input_shape_);
-            auto mlx_dt = gpu::to_mlx_dtype(dtype_);
-
-            if (dtype_ == Dtype::F32) {
-                std::vector<float> dx(n, 0.0f);
-                MemoryTracker::track_host_sync(g_cont.nbytes());
-                MemoryTracker::track_host_sync(y_cont.nbytes());
-                scan_ext_backward_loop<false>(g_cont.data<float>(), y_cont.data<float>(), dx.data(),
-                                              input_shape_, axis_);
-                ::mlx::core::array dx_arr(dx.data(), shape_mlx, mlx_dt);
-                return {Storage{gpu::wrap_mlx_array(std::move(dx_arr), dtype_)}};
-            } else if (dtype_ == Dtype::F64) {
-                std::vector<double> dx(n, 0.0);
-                MemoryTracker::track_host_sync(g_cont.nbytes());
-                MemoryTracker::track_host_sync(y_cont.nbytes());
-                scan_ext_backward_loop<false>(g_cont.data<double>(), y_cont.data<double>(),
-                                              dx.data(), input_shape_, axis_);
-                ::mlx::core::array dx_arr(dx.data(), shape_mlx, mlx_dt);
-                return {Storage{gpu::wrap_mlx_array(std::move(dx_arr), dtype_)}};
-            } else {
-                ErrorBuilder("cummin_backward").not_implemented("dtype");
-                return {};
-            }
+            return {scan_ext_backward_gpu<false>(grad_out, saved_output_, input_shape_, axis_,
+                                                 dtype_, "cummin_backward")};
         }
         return {cummin_backward_cpu(grad_out, saved_output_, input_shape_, axis_, dtype_)};
     }
@@ -623,7 +644,7 @@ const OpSchema CumminBackward::schema_v1{"cummin", 1, AmpPolicy::KeepInput, true
 }  // anonymous namespace
 
 TensorImplPtr cummax_op(const TensorImplPtr& a, int axis) {
-    if (a->shape().empty())
+    if (a && a->shape().empty())
         return on_scalar_axis(a, axis, "cummax", cummax_op);
     auto out = scan_ext_dispatch(a, axis, true, "cummax");
     int ax = axis < 0 ? axis + (int)a->shape().size() : axis;
@@ -636,7 +657,7 @@ TensorImplPtr cummax_op(const TensorImplPtr& a, int axis) {
 }
 
 TensorImplPtr cummin_op(const TensorImplPtr& a, int axis) {
-    if (a->shape().empty())
+    if (a && a->shape().empty())
         return on_scalar_axis(a, axis, "cummin", cummin_op);
     auto out = scan_ext_dispatch(a, axis, false, "cummin");
     int ax = axis < 0 ? axis + (int)a->shape().size() : axis;

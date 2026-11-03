@@ -241,8 +241,11 @@ def _from_values(
 ) -> _C_engine.TensorImpl:
     r"""A tensor (not yet a leaf of the caller's choosing) holding ``flat``."""
     if dtype == _D.BF16:
-        f32 = _C_engine.TensorImpl.from_bytes(_pack(flat, _D.F32), shape, _D.F32, device, False)
-        return _C_engine.astype(f32, _D.BF16)
+        f32 = _C_engine.TensorImpl.from_bytes(
+            _pack(flat, _D.F32), shape, _D.F32, _C_engine.Device.CPU, False
+        )
+        bf16 = _C_engine.astype(f32, _D.BF16)
+        return bf16 if device == _C_engine.Device.CPU else _C_engine.to_device(bf16, device)
     return _C_engine.TensorImpl.from_bytes(_pack(flat, dtype), shape, dtype, device, False)
 
 

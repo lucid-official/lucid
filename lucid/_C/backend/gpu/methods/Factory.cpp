@@ -46,12 +46,44 @@ Storage GpuBackend::random_uniform(
         pairs_shape.push_back(2);
         auto pairs = ::mlx::core::random::uniform(static_cast<float>(lo), static_cast<float>(hi),
                                                   pairs_shape, ::mlx::core::float32, key);
+        const float lo_f = static_cast<float>(lo);
+        const float hi_f = static_cast<float>(hi);
+        if (lo_f < hi_f) {
+            pairs = ::mlx::core::minimum(
+                pairs, ::mlx::core::array(std::nextafter(hi_f, lo_f), ::mlx::core::float32));
+        }
         auto z = ::mlx::core::reshape(::mlx::core::view(pairs, ::mlx::core::complex64),
                                       gpu::to_mlx_shape(shape));
         return Storage{gpu::wrap_mlx_array(std::move(z), dt)};
     }
+    const auto mdt = gpu::to_mlx_dtype(dt);
     auto arr = ::mlx::core::random::uniform(static_cast<float>(lo), static_cast<float>(hi),
-                                            gpu::to_mlx_shape(shape), gpu::to_mlx_dtype(dt), key);
+                                            gpu::to_mlx_shape(shape), mdt, key);
+    if (is_half_float(dt)) {
+        const bool is_bf16 = (dt == Dtype::BF16);
+        auto narrow = [is_bf16](float v) {
+            return is_bf16 ? detail::float_to_bfloat16_bits(v) : detail::float_to_half_bits(v);
+        };
+        auto widen = [is_bf16](std::uint16_t b) {
+            return is_bf16 ? detail::bfloat16_bits_to_float(b) : detail::half_bits_to_float(b);
+        };
+        const float lo_h = widen(narrow(static_cast<float>(lo)));
+        const float hi_h = widen(narrow(static_cast<float>(hi)));
+        if (lo_h < hi_h) {
+            const std::uint16_t hi_bits = narrow(static_cast<float>(hi));
+            const std::uint16_t max_bits =
+                (hi_h > 0.0f) ? static_cast<std::uint16_t>(hi_bits - 1u)
+                              : (hi_h == 0.0f ? (is_bf16 ? 0x8080u : 0x8001u)
+                                              : static_cast<std::uint16_t>(hi_bits + 1u));
+            arr = ::mlx::core::minimum(arr, ::mlx::core::array(widen(max_bits), mdt));
+        }
+    } else if (dt == Dtype::F32) {
+        const float lo_f = static_cast<float>(lo);
+        const float hi_f = static_cast<float>(hi);
+        if (lo_f < hi_f) {
+            arr = ::mlx::core::minimum(arr, ::mlx::core::array(std::nextafter(hi_f, lo_f), mdt));
+        }
+    }
     return Storage{gpu::wrap_mlx_array(std::move(arr), dt)};
 }
 

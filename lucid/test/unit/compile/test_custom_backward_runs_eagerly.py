@@ -388,11 +388,6 @@ def test_each_clause_alone_sends_the_step_eager(clause: str, device: str) -> Non
 def test_each_clause_alone_makes_compiled_step_refuse(clause: str, device_gpu_only: str) -> None:
     model = _weighted(clause, device_gpu_only)
     x, t = _data(device_gpu_only)
-    if clause == "leaf input forward ignores":
-        # A parameter the trace never saw stops compiled_step first.
-        with pytest.raises(RuntimeError, match="not observed in the trace"):
-            compiled_step(model, x, lambda y: F.mse_loss(y, t))
-    else:
-        with pytest.raises(NotImplementedError, match=_CLAUSES[clause][0]):
-            compiled_step(model, x, lambda y: F.mse_loss(y, t))
+    with pytest.raises(NotImplementedError, match=_CLAUSES[clause][0]):
+        compiled_step(model, x, lambda y: F.mse_loss(y, t))
     assert all(p.grad is None for p in model.parameters())

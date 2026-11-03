@@ -282,14 +282,6 @@ print(y.abs().sum().item())
 
 
 class TestFirstWorkOutsideTheDispatcher:
-    # Run apart: today the read in the main thread hangs rather than raises.
-    @pytest.mark.xfail(
-        strict=True,
-        raises=(AssertionError, subprocess.TimeoutExpired),
-        reason="LCD-671 follow-up: an op that never asks the dispatcher (fft) as a thread's "
-        "first MLX work builds on that thread's own CPU stream, and reading the result in "
-        "another thread hangs; wrap_mlx_array must bind the thread (MlxBridge.cpp)",
-    )
     def test_fft_is_a_threads_first_op(self) -> None:
         done = subprocess.run(
             [sys.executable, "-c", _FFT_FIRST], capture_output=True, text=True, timeout=20

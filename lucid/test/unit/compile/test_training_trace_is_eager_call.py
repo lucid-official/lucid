@@ -366,7 +366,9 @@ class _RandomLinearBlock(nn.Module):
             seen = cast(lucid.Tensor, self.seen)
             with lucid.no_grad():
                 self.seen = 0.9 * seen + 0.1 * r.mean(dim=0, keepdim=True)
-            return self.lin(h + r) + cast(lucid.Tensor, self.seen)
+            return cast(lucid.Tensor, _RoundSTE.apply(self.lin(h + r))) + cast(
+                lucid.Tensor, self.seen
+            )
         return self.lin(h + r)
 
 

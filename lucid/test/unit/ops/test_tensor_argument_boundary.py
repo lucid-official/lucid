@@ -583,5 +583,27 @@ def test_an_operand_that_is_neither_tensor_nor_number_is_refused_by_the_unwrap()
         _unwrap_or_scalar(None)
 
 
+def test_engine_callables_refuse_null_tensor_impl_without_crashing() -> None:
+    """Direct _C.engine calls with None raise LucidError instead of segfaulting (LCD-683)."""
+    from lucid._C import engine as _C_engine
+
+    x = _C_engine.ones([2, 2])
+    for call in (
+        lambda: _C_engine.cummax(None, 0),
+        lambda: _C_engine.cummin(None, 0),
+        lambda: _C_engine.ravel(None),
+        lambda: _C_engine.sum(None, [], False),
+        lambda: _C_engine.prod(None, [], False),
+        lambda: _C_engine.square(None),
+        lambda: _C_engine.cube(None),
+        lambda: _C_engine.concatenate([None, x], 0),
+        lambda: _C_engine.stack([None, x], 0),
+        lambda: _C_engine.meshgrid([None, x], False),
+        lambda: _C_engine.einops.einsum("ij,jk->ik", [None, x]),
+    ):
+        with pytest.raises(_C_engine.LucidError):
+            call()
+
+
 if __name__ == "__main__":
     _BATCHES[sys.argv[1]](sys.stdout)

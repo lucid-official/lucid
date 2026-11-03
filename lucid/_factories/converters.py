@@ -275,15 +275,22 @@ def _numpy_impl(
     else:
         arr = arr.astype(_engine_dtype_to_np(dtype_eng), copy=False)
     with np.errstate(invalid="ignore", over="ignore"):  # type: ignore[attr-defined]
-        impl = _ndarray_impl(arr, device_eng)
+        if dtype_eng == _C_engine.Dtype.BF16:
+            impl = _ndarray_impl(arr, _C_engine.Device.CPU)
+        else:
+            impl = _ndarray_impl(arr, device_eng)
     # bfloat16 has no NumPy counterpart, so the array above is float32 and
     # the engine narrows afterwards.  Doing it this way round rather than
     # picking the nearest NumPy dtype matters: float16 is *not* a
     # substitute — a bfloat16 value can exceed float16's maximum, and
     # routing through it would turn a representable number into infinity
-    # before the engine ever saw it.
+    # before the engine ever saw it.  The narrowing runs on the CPU so
+    # subnormals survive on Metal architectures whose GPU F32->BF16 cast
+    # flushes them to zero.
     if dtype_eng == _C_engine.Dtype.BF16 and impl.dtype != _C_engine.Dtype.BF16:
         impl = _C_engine.astype(impl, _C_engine.Dtype.BF16)
+        if device_eng != _C_engine.Device.CPU:
+            impl = _C_engine.to_device(impl, device_eng)
     return impl
 
 
