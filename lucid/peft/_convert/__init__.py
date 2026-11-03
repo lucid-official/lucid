@@ -16,8 +16,11 @@ from lucid.peft._convert._base import (
     convert_adapter,
     split_key,
 )
+from lucid.peft._convert._clip import CLIPConverter
+from lucid.peft._convert._detr import DETRConverter
 from lucid.peft._convert._gpt2 import GPT2Converter
 from lucid.peft._convert._roformer import RoFormerConverter
+from lucid.peft._convert._swin import SwinConverter
 from lucid.peft._convert._t5 import T5Converter, t5_reference_name
 from lucid.peft._convert._vit import ViTConverter
 
@@ -25,11 +28,14 @@ __all__ = [
     "MODEL_PREFIX",
     "AdapterConverter",
     "AdapterFile",
+    "CLIPConverter",
     "ConversionContext",
     "ConvertMode",
+    "DETRConverter",
     "GPT2Converter",
     "ModulePair",
     "RoFormerConverter",
+    "SwinConverter",
     "T5Converter",
     "UnmappedKey",
     "ViTConverter",

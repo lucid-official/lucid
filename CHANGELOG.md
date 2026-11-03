@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `lucid.peft`: `SwinConverter`, `CLIPConverter`, and `DETRConverter` adapter-file converters supporting both release-4 and release-5 reference module layouts, fusing separate `query`/`key`/`value` (`q_proj`/`k_proj`/`v_proj`) and `out_proj` (`o_proj`) projections into the zoo's `qkv` `nn.Linear` and `nn.MultiheadAttention` modules (LCD-830).
+
 ---
 
 ## [3.16.3] — 2026-11-04

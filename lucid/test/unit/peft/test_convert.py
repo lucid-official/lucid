@@ -17,6 +17,9 @@ import lucid.nn as nn
 from lucid.models import create_model
 from lucid.peft import IA3Config, LoraConfig, PeftModel, get_peft_model_state_dict
 from lucid.peft._convert import (
+    CLIPConverter,
+    DETRConverter,
+    SwinConverter,
     AdapterConverter,
     AdapterFile,
     ConversionContext,
@@ -798,8 +801,11 @@ def test_load_adapter_converts_too(tmp_path: Path) -> None:
 
 
 def test_the_registry_serves_each_model_type() -> None:
-    assert AdapterConverter.registered() == ["gpt2", "roformer", "t5", "vit"]
+    assert AdapterConverter.registered() == ["clip", "detr", "gpt2", "roformer", "swin", "t5", "vit"]
     assert AdapterConverter.lookup(reference_class="ViTModel") is ViTConverter
+    assert AdapterConverter.lookup(reference_class="SwinForImageClassification") is SwinConverter
+    assert AdapterConverter.lookup(reference_class="CLIPModel") is CLIPConverter
+    assert AdapterConverter.lookup(reference_class="DetrForObjectDetection") is DETRConverter
     assert AdapterConverter.lookup(reference_class="NoSuchModel") is None
     assert AdapterConverter.lookup(model_type="bert") is None
 

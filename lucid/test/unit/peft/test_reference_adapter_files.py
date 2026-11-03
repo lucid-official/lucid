@@ -267,3 +267,186 @@ def test_vit_adapter_in_the_release_5_layout_saves_back_fused(tmp_path: Path) ->
     pixels = lucid.randn(2, 3, 16, 16)
     with lucid.no_grad():
         assert _same(again(pixels).logits, loaded(pixels).logits)
+
+
+# ── Swin, CLIP, DETR (release 4 and release 5) ───────────────────────────────
+
+_SWIN: dict[str, object] = {
+    "image_size": 32,
+    "patch_size": 4,
+    "embed_dim": 16,
+    "depths": (1, 1),
+    "num_heads": (2, 4),
+    "window_size": 2,
+    "num_classes": 5,
+    "dropout": 0.0,
+    "attention_dropout": 0.0,
+    "drop_path_rate": 0.0,
+}
+
+_CLIP_TINY: dict[str, object] = {
+    "embed_dim": 16,
+    "image_size": 16,
+    "patch_size": 8,
+    "vision_layers": 1,
+    "vision_width": 16,
+    "vision_heads": 2,
+    "context_length": 8,
+    "vocab_size": 32,
+    "text_width": 16,
+    "text_heads": 2,
+    "text_layers": 1,
+}
+
+_DETR_TINY: dict[str, object] = {
+    "num_classes": 5,
+    "backbone_layers": (1, 1, 1, 1),
+    "d_model": 16,
+    "n_head": 2,
+    "num_encoder_layers": 1,
+    "num_decoder_layers": 1,
+    "dim_feedforward": 32,
+    "dropout": 0.0,
+    "num_queries": 4,
+    "bbox_hidden_dim": 16,
+}
+
+
+def _swin() -> nn.Module:
+    lucid.manual_seed(0)
+    return create_model("swin_tiny_cls", **_SWIN).eval()
+
+
+def _clip() -> nn.Module:
+    lucid.manual_seed(0)
+    return create_model("clip_vit_base_32", **_CLIP_TINY).eval()
+
+
+def _detr() -> nn.Module:
+    lucid.manual_seed(0)
+    return create_model("detr_resnet50", **_DETR_TINY).eval()
+
+
+@pytest.mark.parametrize("release", [4, 5])
+def test_swin_adapter_fuses_into_qkv_and_renames_layers(tmp_path: Path, release: int) -> None:
+    tensors: dict[str, lucid.Tensor] = {}
+    deltas: dict[str, lucid.Tensor] = {}
+    q_name, v_name, o_name = (
+        ("attention.self.query", "attention.self.value", "attention.output.dense")
+        if release == 4
+        else ("attention.q_proj", "attention.v_proj", "attention.o_proj")
+    )
+    fc1_name = "intermediate.dense" if release == 4 else "mlp.fc1"
+    targets = ["query", "value", "dense"] if release == 4 else ["q_proj", "v_proj", "o_proj", "fc1"]
+    for stage, dim in enumerate((16, 32)):
+        prefix = f"swin.encoder.layers.{stage}.blocks.0"
+        fused = lucid.zeros(3 * dim, dim)
+        for idx, (role, row) in enumerate(((q_name, 0), (v_name, 2))):
+            a, b = _factors(100 + 10 * stage + idx, dim, dim)
+            tensors.update(lora_tensors(f"{prefix}.{role}", a, b))
+            fused[row * dim : (row + 1) * dim] = _SCALE * (b @ a)
+        deltas[f"stages.{stage}.blocks.0.attn.qkv.weight"] = fused
+        ao, bo = _factors(120 + stage, dim, dim)
+        tensors.update(lora_tensors(f"{prefix}.{o_name}", ao, bo))
+        deltas[f"stages.{stage}.blocks.0.attn.proj.weight"] = _SCALE * (bo @ ao)
+        af, bf = _factors(130 + stage, 4 * dim, dim)
+        tensors.update(lora_tensors(f"{prefix}.{fc1_name}", af, bf))
+        deltas[f"stages.{stage}.blocks.0.mlp.0.weight"] = _SCALE * (bf @ af)
+    config = reference_lora_config(
+        "SwinForImageClassification",
+        "transformers.models.swin.modeling_swin",
+        targets,
+        r=_RANK,
+        lora_alpha=_ALPHA,
+    )
+    write_adapter(tmp_path / "ref", config, tensors)
+    twin = _folded(_swin(), deltas)
+    loaded = PeftModel.from_pretrained(_swin(), tmp_path / "ref").eval()
+    lucid.manual_seed(7)
+    pixels = lucid.randn(2, 3, 32, 32)
+    with lucid.no_grad():
+        assert _same(loaded(pixels).logits, twin(pixels).logits)
+
+
+@pytest.mark.parametrize("release", [4, 5])
+def test_clip_adapter_fuses_into_multihead_attention(tmp_path: Path, release: int) -> None:
+    tensors: dict[str, lucid.Tensor] = {}
+    deltas: dict[str, lucid.Tensor] = {}
+    dim = 16
+    out_role = "out_proj" if release == 4 else "o_proj"
+    for t_idx, (ref_tower, zoo_tower) in enumerate((("vision", "visual"), ("text", "textual"))):
+        prefix = f"clip.{ref_tower}_model.encoder.layers.0.self_attn"
+        fused_in = lucid.zeros(3 * dim, dim)
+        for idx, (role, row) in enumerate((("q_proj", 0), ("v_proj", 2))):
+            a, b = _factors(200 + 10 * t_idx + idx, dim, dim)
+            tensors.update(lora_tensors(f"{prefix}.{role}", a, b))
+            fused_in[row * dim : (row + 1) * dim] = _SCALE * (b @ a)
+        ao, bo = _factors(220 + t_idx, dim, dim)
+        tensors.update(lora_tensors(f"{prefix}.{out_role}", ao, bo))
+        attn_path = f"{zoo_tower}.transformer.resblocks.0.attn"
+        deltas[f"{attn_path}.in_proj_weight"] = fused_in
+        deltas[f"{attn_path}.out_proj_weight"] = _SCALE * (bo @ ao)
+        af, bf = _factors(230 + t_idx, 4 * dim, dim)
+        tensors.update(lora_tensors(f"clip.{ref_tower}_model.encoder.layers.0.mlp.fc1", af, bf))
+        deltas[f"{zoo_tower}.transformer.resblocks.0.mlp.0.weight"] = _SCALE * (bf @ af)
+    config = reference_lora_config(
+        "CLIPModel",
+        "transformers.models.clip.modeling_clip",
+        ["q_proj", "v_proj", out_role, "fc1"],
+        r=_RANK,
+        lora_alpha=_ALPHA,
+    )
+    write_adapter(tmp_path / "ref", config, tensors)
+    twin = _folded(_clip(), deltas)
+    loaded = PeftModel.from_pretrained(_clip(), tmp_path / "ref").eval()
+    lucid.manual_seed(8)
+    pixels = lucid.randn(2, 3, 16, 16)
+    tokens = lucid.randint(0, 32, (2, 8))
+    with lucid.no_grad():
+        out_loaded = loaded(pixels, tokens)
+        out_twin = twin(pixels, tokens)
+        assert _same(out_loaded.logits_per_image, out_twin.logits_per_image)
+
+
+@pytest.mark.parametrize("release", [4, 5])
+def test_detr_adapter_fuses_encoder_and_decoder_attentions(tmp_path: Path, release: int) -> None:
+    tensors: dict[str, lucid.Tensor] = {}
+    deltas: dict[str, lucid.Tensor] = {}
+    dim = 16
+    out_role = "out_proj" if release == 4 else "o_proj"
+    fc1_name = "fc1" if release == 4 else "mlp.fc1"
+    blocks = (
+        ("model.encoder.layers.0.self_attn", "transformer.encoder.layers.0.self_attn"),
+        ("model.decoder.layers.0.self_attn", "transformer.decoder.layers.0.self_attn"),
+        ("model.decoder.layers.0.encoder_attn", "transformer.decoder.layers.0.multihead_attn"),
+    )
+    for b_idx, (ref_attn, zoo_attn) in enumerate(blocks):
+        fused_in = lucid.zeros(3 * dim, dim)
+        for idx, (role, row) in enumerate((("q_proj", 0), ("v_proj", 2))):
+            a, b = _factors(300 + 10 * b_idx + idx, dim, dim)
+            tensors.update(lora_tensors(f"{ref_attn}.{role}", a, b))
+            fused_in[row * dim : (row + 1) * dim] = _SCALE * (b @ a)
+        ao, bo = _factors(340 + b_idx, dim, dim)
+        tensors.update(lora_tensors(f"{ref_attn}.{out_role}", ao, bo))
+        deltas[f"{zoo_attn}.in_proj_weight"] = fused_in
+        deltas[f"{zoo_attn}.out_proj_weight"] = _SCALE * (bo @ ao)
+    af, bf = _factors(360, 32, dim)
+    tensors.update(lora_tensors(f"model.encoder.layers.0.{fc1_name}", af, bf))
+    deltas["transformer.encoder.layers.0.linear1.weight"] = _SCALE * (bf @ af)
+    config = reference_lora_config(
+        "DetrForObjectDetection",
+        "transformers.models.detr.modeling_detr",
+        ["q_proj", "v_proj", out_role, "fc1"],
+        r=_RANK,
+        lora_alpha=_ALPHA,
+    )
+    write_adapter(tmp_path / "ref", config, tensors)
+    twin = _folded(_detr(), deltas)
+    loaded = PeftModel.from_pretrained(_detr(), tmp_path / "ref").eval()
+    lucid.manual_seed(9)
+    pixels = lucid.randn(2, 3, 64, 64)
+    with lucid.no_grad():
+        out_loaded = loaded(pixels)
+        out_twin = twin(pixels)
+        assert _same(out_loaded.logits, out_twin.logits)
+        assert _same(out_loaded.pred_boxes, out_twin.pred_boxes)
