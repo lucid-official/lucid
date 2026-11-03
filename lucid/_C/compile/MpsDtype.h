@@ -76,15 +76,32 @@ inline MPSDataType mps_dtype_or_throw(Dtype dt) {
 // widening it to float32.  MPSGraph's MLIR optimizer otherwise folds
 // ``cast(op_f16(...), f32)`` into ``op_f32(...)``, eliding the IEEE binary16 /
 // bfloat16 rounding and finite-range clamp (65504 for float16).
+// ``[g reinterpretCastTensor:x toType:dst name:name]`` safe on a rank-0 tensor.
+// MPSGraph's ``mps.reinterpret_cast`` verifier rejects a 0-D operand
+// ("operand #0 must be ... rank equal to or greater than 1, but got 'tensor<si32>'")
+// because it scales the last dimension by ``sizeof(src) / sizeof(dst)``; expanding
+// a 0-D tensor to ``(1,)`` and squeezing a single-element result back to ``()``
+// gives it a last dimension without changing its value.
+inline MPSGraphTensor*
+reinterpret_cast_mps_tensor(MPSGraph* g, MPSGraphTensor* x, MPSDataType dst, NSString* name = nil) {
+    if (g == nil || x == nil)
+        return nil;
+    const bool scalar = (x.shape != nil && x.shape.count == 0);
+    MPSGraphTensor* r = scalar ? [g expandDimsOfTensor:x axis:0 name:nil] : x;
+    MPSGraphTensor* cast = [g reinterpretCastTensor:r toType:dst name:name];
+    if (!scalar)
+        return cast;
+    return (cast.shape != nil && cast.shape.count == 1 && cast.shape[0].longLongValue == 1)
+               ? [g squeezeTensor:cast axis:0 name:nil]
+               : cast;
+}
+
 inline MPSGraphTensor* commit_half_before_widen(MPSGraph* g, MPSGraphTensor* x, MPSDataType dst) {
     if (g == nil || x == nil || dst != MPSDataTypeFloat32 ||
         (x.dataType != MPSDataTypeFloat16 && x.dataType != MPSDataTypeBFloat16))
         return x;
-    const bool scalar = (x.shape != nil && x.shape.count == 0);
-    MPSGraphTensor* r = scalar ? [g expandDimsOfTensor:x axis:0 name:nil] : x;
-    MPSGraphTensor* i16 = [g reinterpretCastTensor:r toType:MPSDataTypeInt16 name:nil];
-    MPSGraphTensor* back = [g reinterpretCastTensor:i16 toType:x.dataType name:nil];
-    return scalar ? [g squeezeTensor:back axis:0 name:nil] : back;
+    MPSGraphTensor* i16 = reinterpret_cast_mps_tensor(g, x, MPSDataTypeInt16);
+    return reinterpret_cast_mps_tensor(g, i16, x.dataType);
 }
 
 inline MPSGraphTensor*

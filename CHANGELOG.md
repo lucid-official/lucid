@@ -297,6 +297,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - no-match errors are NoMatchingPeftModuleError
 
+- guard rank-0 reinterpretCastTensor in MPSGraph compile emitters (LCD-793)
+
 ### Performance
 
 - skip the per-parameter phantom walk on engine steps (LCD-466)

@@ -32,6 +32,7 @@
 #include <cstdint>
 #include <limits>
 
+#include "../MpsDtype.h"
 #include "_DataMovement.h"
 
 namespace lucid::compile {
@@ -147,7 +148,7 @@ inline MPSGraphTensor* graph_order_key(MPSGraph* g, MPSGraphTensor* x) {
         return nil;
     }
     MPSGraphTensor* xf = graph_sort_key(g, x);  // float32, -0.0 made +0.0
-    MPSGraphTensor* bits = [g reinterpretCastTensor:xf toType:MPSDataTypeInt32 name:nil];
+    MPSGraphTensor* bits = reinterpret_cast_mps_tensor(g, xf, MPSDataTypeInt32);
     MPSGraphTensor* int32_max =
         [g constantWithScalar:static_cast<double>(std::numeric_limits<std::int32_t>::max())
                      dataType:MPSDataTypeInt32];

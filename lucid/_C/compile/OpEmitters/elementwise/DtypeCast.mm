@@ -67,10 +67,7 @@ public:
         CastInputs in;
         if (!resolve_cast_inputs(ctx, node, in))
             return false;
-        const bool scalar = (in.x.shape != nil && in.x.shape.count == 0);
-        MPSGraphTensor* r = scalar ? [in.graph expandDimsOfTensor:in.x axis:0 name:nil] : in.x;
-        MPSGraphTensor* cast = [in.graph reinterpretCastTensor:r toType:in.dst name:@"bitcast"];
-        MPSGraphTensor* out = scalar ? [in.graph squeezeTensor:cast axis:0 name:nil] : cast;
+        MPSGraphTensor* out = reinterpret_cast_mps_tensor(in.graph, in.x, in.dst, @"bitcast");
         ctx.bind(node.outputs[0].id, (__bridge void*)out);
         return true;
     }

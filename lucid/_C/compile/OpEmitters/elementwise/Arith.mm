@@ -459,7 +459,7 @@ inline MPSGraphTensor* exact_exp2_f32(MPSGraph* g, MPSGraphTensor* y) {
                                secondaryTensor:[g constantWithScalar:8388608.0
                                                             dataType:MPSDataTypeInt32]
                                           name:nil];
-        return [g reinterpretCastTensor:bits toType:MPSDataTypeFloat32 name:nil];
+        return reinterpret_cast_mps_tensor(g, bits, MPSDataTypeFloat32);
     };
     auto clamp_exp = [g, &f32](MPSGraphTensor* k) {
         return [g minimumWithPrimaryTensor:[g maximumWithPrimaryTensor:k
@@ -818,8 +818,8 @@ public:
         return emit_binary(ctx, node, [](MPSGraph* g, MPSGraphTensor* a, MPSGraphTensor* b) {
             auto i32 = [g](double v) { return [g constantWithScalar:v dataType:MPSDataTypeInt32]; };
             MPSGraphTensor* zero = [g constantWithScalar:0.0 dataType:MPSDataTypeFloat32];
-            MPSGraphTensor* a_bits = [g reinterpretCastTensor:a toType:MPSDataTypeInt32 name:nil];
-            MPSGraphTensor* b_bits = [g reinterpretCastTensor:b toType:MPSDataTypeInt32 name:nil];
+            MPSGraphTensor* a_bits = reinterpret_cast_mps_tensor(g, a, MPSDataTypeInt32);
+            MPSGraphTensor* b_bits = reinterpret_cast_mps_tensor(g, b, MPSDataTypeInt32);
 
             // Toward b is +1 in value; a negative float's bits order the
             // other way, so the bit step flips sign with a.
@@ -871,7 +871,7 @@ public:
                             truePredicateTensor:i32(static_cast<std::int32_t>(0x7FC00000u))
                            falsePredicateTensor:step
                                            name:nil];
-            return [g reinterpretCastTensor:step toType:MPSDataTypeFloat32 name:@"nextafter"];
+            return reinterpret_cast_mps_tensor(g, step, MPSDataTypeFloat32, @"nextafter");
         });
     }
 };
