@@ -41,7 +41,6 @@ from lucid.peft._targeting import (
 )
 from lucid.peft.tuners._layer import _BaseTunerLayer, _dotted
 
-
 #: For a method that adapts modules only: no model type has raw parameters as its default.
 _NO_PARAMETERS: Final[Mapping[str, frozenset[str]]] = MappingProxyType({})
 

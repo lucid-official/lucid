@@ -26,12 +26,7 @@ from lucid.peft._slots import _adapter_slots, _as_names, _outermost_slots
 from lucid.peft._target_defaults import DEFAULT_LORA_TARGET_MODULES, DEFAULT_LORA_TARGET_PARAMETERS
 from lucid.peft._targeting import _parameter_paths, _shared_outside
 from lucid.peft.tuners._host import _AdapterHost
-from lucid.peft.tuners._layer import (
-    _BaseTunerLayer,
-    _check_adapter_name,
-    _join,
-    _tuner_layers,
-)
+from lucid.peft.tuners._layer import _BaseTunerLayer, _check_adapter_name, _join, _tuner_layers
 from lucid.peft.tuners._plan import (
     _Injected,
     _Placement,

@@ -59,14 +59,7 @@ from lucid.peft.tuners.lora._config import LoraConfig
 
 _PROJECTIONS: Final = ("query", "key", "value")
 #: Where a projection's name says which of the three it is, in either generation of the reference's ViT.
-_ROLE_INDEX: Final = {
-    "query": 0,
-    "key": 1,
-    "value": 2,
-    "q_proj": 0,
-    "k_proj": 1,
-    "v_proj": 2,
-}
+_ROLE_INDEX: Final = {"query": 0, "key": 1, "value": 2, "q_proj": 0, "k_proj": 1, "v_proj": 2}
 #: A block of the reference's ViT: ``encoder.layer.N`` through release 4, ``layers.N`` since 5.
 _BLOCK: Final = r"(?:vit\.)?(?:encoder\.layer|layers)\.(?P<n>\d+)"
 _FUSED: Final = re.compile(

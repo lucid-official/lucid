@@ -28,7 +28,6 @@ from lucid.peft._forwarding import _as_module, _ForwardsAttributes
 from lucid.peft._refusals import NO_META_DEVICE, NO_STATE_DICT_MATCHING, refuse_value
 from lucid.peft.tuners._layer import _check_adapter_name
 
-
 #: ``PeftType`` → the tuner that applies it, filled as each is defined.
 _TUNERS: dict[PeftType, type[_AdapterHost]] = {}
 
