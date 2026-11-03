@@ -803,6 +803,14 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
         for _, slot in _adapter_slots(self.model):
             slot.enable_adapters(False)
 
+    def supports_lora_conversion(self, adapter_name: str = "default") -> bool:
+        """Whether every adapted layer in this tuner supports conversion to LoRA."""
+        return all(
+            module.supports_lora_conversion(adapter_name)
+            for module in self.modules()
+            if isinstance(module, _BaseTunerLayer)
+        )
+
 
 def _parametrised_config(tuner: type[_BaseTuner]) -> type[_TargetedConfig] | None:
     """The config class ``tuner`` names by parametrising ``_BaseTuner`` (or a subclass of it), if it does.

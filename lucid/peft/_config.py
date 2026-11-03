@@ -296,9 +296,11 @@ def _task_type(name: str, value: object) -> TaskType | None:
 
 
 def _json_value(value: object) -> object:
-    """``value`` as JSON writes it: an enum as its string, a set as a sorted list."""
+    """``value`` as JSON writes it: an enum as its string, a set as a sorted list, a dataclass as a dict."""
     if isinstance(value, enum.Enum):
         return value.value
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        return dataclasses.asdict(value)
     if isinstance(value, (set, frozenset)):
         return sorted(value)
     if isinstance(value, dict):
@@ -762,6 +764,11 @@ class PeftConfig:
                 "(lucid.peft reads adapters from a local directory)"
             )
         return cls.from_dict(cls.from_json_file(path))
+
+    @property
+    def is_prompt_learning(self) -> bool:
+        """Whether this config is a prompt-learning method (:class:`PromptLearningConfig`)."""
+        return isinstance(self, PromptLearningConfig)
 
 
 def _require_config(name: str, value: object) -> PeftConfig:

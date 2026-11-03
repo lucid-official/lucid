@@ -820,6 +820,12 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
         )
 
     @override
+    def supports_lora_conversion(self, adapter_name: str = "default") -> bool:
+        """Whether ``adapter_name`` on this LoRA linear layer can be converted to LoRA."""
+        del adapter_name
+        return True
+
+    @override
     def get_delta_weight(self, adapter: str) -> Tensor:
         r"""Return :math:`s\,B A`, the update ``adapter`` adds to the weight.
 

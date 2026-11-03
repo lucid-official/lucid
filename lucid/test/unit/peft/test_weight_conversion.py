@@ -334,5 +334,5 @@ class TestInitsThatLeftTheBaseAlone:
 
     def test_only_a_factorising_strategy_converts(self) -> None:
         converting = {s for s in _Init._strategies.values() if s.factorises}
-        assert {s.spelling for s in converting} == {"pissa", "olora"}
+        assert {s.spelling for s in converting} == {"lora_ga", "olora", "pissa"}
         assert isinstance(_Init.of("pissa_niter_3"), _Pissa)

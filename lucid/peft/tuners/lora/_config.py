@@ -1,9 +1,11 @@
 """``LoraConfig``: the LoRA hyper-parameters on top of the shared targeting fields."""
 
 import warnings
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import ClassVar, Final, Literal, override
+
+import lucid.nn as nn
 
 from lucid.peft._config import (
     PeftType,
@@ -30,9 +32,7 @@ _LORA_UNSUPPORTED: Final = {
     "megatron_core": "Megatron tensor-parallel layers do not exist here",
     "trainable_token_indices": "use TrainableTokensConfig for trainable tokens",
     "loftq_config": "LoftQ quantisation-aware initialisation is not implemented",
-    "eva_config": "EVA initialisation is not implemented",
     "corda_config": "CorDA initialisation is not implemented",
-    "lora_ga_config": "LoRA-GA initialisation is not implemented",
     "velora_config": "VeLoRA is not implemented",
     "alora_invocation_tokens": "activated LoRA is not implemented",
     "use_qalora": "quantisation-aware LoRA needs a quantised base layer",
@@ -77,6 +77,193 @@ def _check_runtime(name: str, value: object) -> LoraRuntimeConfig:
 
 
 @dataclass
+class EvaConfig:
+    r"""Configuration for Explained Variance Adaptation (EVA) data-driven LoRA initialisation.
+
+    EVA (Paischer et al., 2024, arXiv:2410.07170) runs an incremental SVD over
+    calibration activations to redistribute the LoRA rank budget across layers
+    according to their explained variance ratios and initialise :math:`A` from
+    the top right-singular vectors.
+
+    Parameters
+    ----------
+    rho : float, default=2.0
+        Maximum rank redistribution multiplier (``>= 1.0``); a layer of rank ``r``
+        may receive up to ``round(r * rho)`` components.
+    tau : float, default=0.99
+        Cosine-similarity convergence threshold in ``[0, 1]`` between consecutive
+        SVD steps.
+    use_label_mask : bool, default=True
+        Ignore token positions where ``labels == label_mask_value`` during the SVD.
+    label_mask_value : int, default=-100
+        Label value marking ignored positions when ``use_label_mask=True``.
+    whiten : bool, default=False
+        Divide each singular vector by the square root of its singular value.
+    adjust_scaling_factors : bool, default=True
+        Scale ``lora_alpha`` proportionally when a layer's rank changes during
+        redistribution.
+
+    Raises
+    ------
+    ValueError
+        ``rho < 1.0`` or ``tau`` is outside ``[0.0, 1.0]``.
+
+    Examples
+    --------
+    >>> from lucid.peft import EvaConfig
+    >>> cfg = EvaConfig(rho=1.5, tau=0.95, whiten=True)
+    >>> cfg.rho, cfg.whiten
+    (1.5, True)
+    """
+
+    rho: float = 2.0
+    tau: float = 0.99
+    use_label_mask: bool = True
+    label_mask_value: int = -100
+    whiten: bool = False
+    adjust_scaling_factors: bool = True
+
+    def __post_init__(self) -> None:
+        if self.rho < 1.0:
+            raise ValueError("`rho` must be >= 1.0")
+        if self.tau < 0.0 or self.tau > 1.0:
+            raise ValueError("`tau` must be between 0.0 and 1.0.")
+
+
+def _check_eva(name: str, value: object) -> EvaConfig | None:
+    if value is None or isinstance(value, EvaConfig):
+        return value
+    if isinstance(value, Mapping):
+        return EvaConfig(**value)
+    raise TypeError(f"`{name}` must be an EvaConfig, a dict, or None, got {value!r}")
+
+
+_LORAGA_DIRECTIONS: Final = ("ArBr", "A2rBr", "ArB2r", "random")
+_LORAGA_SCALES: Final = ("stable", "weight_svd", "gd_scale", "unit")
+
+
+@dataclass
+class LoraGAConfig:
+    r"""Configuration for LoRA-GA (Gradient Approximation) initialisation.
+
+    LoRA-GA (Wang et al., 2024, arXiv:2407.05000) estimates full-model weight
+    gradients over a calibration step (:func:`~lucid.peft.preprocess_loraga`),
+    aligned via low-rank SVD into :math:`A` and :math:`B`, and subtracts
+    :math:`s\,BA` from the base weight so the adapted layer starts at the
+    pretrained function while its first gradient step matches full fine-tuning.
+
+    Parameters
+    ----------
+    direction : {"ArBr", "A2rBr", "ArB2r", "random"}, default="ArB2r"
+        How the top-:math:`2r` singular vectors of the gradient are partitioned
+        between :math:`A` and :math:`B`.
+    scale : {"stable", "weight_svd", "gd_scale", "unit"}, default="stable"
+        How the initialised factors are scaled.
+    stable_gamma : int, default=16
+        Denominator hyperparameter :math:`\gamma` for ``scale="stable"``.
+
+    Raises
+    ------
+    ValueError
+        ``direction`` or ``scale`` is unknown, or ``stable_gamma <= 0``.
+
+    Examples
+    --------
+    >>> from lucid.peft import LoraGAConfig
+    >>> cfg = LoraGAConfig(direction="ArB2r", scale="stable", stable_gamma=16)
+    >>> cfg.direction, cfg.scale
+    ('ArB2r', 'stable')
+    """
+
+    direction: Literal["ArBr", "A2rBr", "ArB2r", "random"] = "ArB2r"
+    scale: Literal["stable", "weight_svd", "gd_scale", "unit"] = "stable"
+    stable_gamma: int = 16
+
+    def __post_init__(self) -> None:
+        if self.direction not in _LORAGA_DIRECTIONS:
+            raise ValueError(
+                f"Invalid `direction` {self.direction!r}; must be one of {_LORAGA_DIRECTIONS}."
+            )
+        if self.scale not in _LORAGA_SCALES:
+            raise ValueError(f"Invalid `scale` {self.scale!r}; must be one of {_LORAGA_SCALES}.")
+        if (
+            isinstance(self.stable_gamma, bool)
+            or not isinstance(self.stable_gamma, int)
+            or self.stable_gamma <= 0
+        ):
+            raise ValueError(f"`stable_gamma` must be a positive int, got {self.stable_gamma!r}.")
+
+
+def _check_lora_ga(name: str, value: object) -> LoraGAConfig | None:
+    if value is None or isinstance(value, LoraGAConfig):
+        return value
+    if isinstance(value, Mapping):
+        return LoraGAConfig(**value)
+    raise TypeError(f"`{name}` must be a LoraGAConfig, a dict, or None, got {value!r}")
+
+
+@dataclass
+class LoftQConfig:
+    r"""Configuration stub for LoftQ quantisation-aware LoRA initialisation.
+
+    Kept for signature parity with the reference adapter library; passing a
+    non-empty ``loftq_config`` or ``init_lora_weights="loftq"`` to
+    :class:`LoraConfig` raises ``NotImplementedError`` until 4-bit quantised
+    LoRA layers land (LCD-717).
+
+    Parameters
+    ----------
+    loftq_bits : int, default=4
+        Quantisation bit-width for LoftQ.
+    loftq_iter : int, default=1
+        Number of alternating quantisation / SVD iterations.
+
+    Examples
+    --------
+    >>> from lucid.peft import LoftQConfig
+    >>> cfg = LoftQConfig(loftq_bits=4, loftq_iter=1)
+    >>> cfg.loftq_bits, cfg.loftq_iter
+    (4, 1)
+    """
+
+    loftq_bits: int = 4
+    loftq_iter: int = 1
+
+
+def replace_lora_weights_loftq(
+    peft_model: nn.Module,
+    model_path: str | None = None,
+    adapter_name: str = "default",
+    callback: Callable[[nn.Module, str], bool] | None = None,
+) -> None:
+    r"""Refused with ``NotImplementedError``: 4-bit quantised LoRA layers are not implemented yet.
+
+    Provided for API parity with the reference adapter library.
+
+    Parameters
+    ----------
+    peft_model : nn.Module
+        Quantised PEFT model whose LoRA weights would be replaced.
+    model_path : str, optional
+        Path to the unquantised safetensors weights.
+    adapter_name : str, default="default"
+        Adapter name to update.
+    callback : callable, optional
+        Per-module acceptance callback ``(model, module_name) -> bool``.
+
+    Raises
+    ------
+    NotImplementedError
+        Always raised; 4-bit quantised LoRA layers are not implemented yet.
+    """
+    del peft_model, model_path, adapter_name, callback
+    raise NotImplementedError(
+        "replace_lora_weights_loftq requires 4-bit quantized LoRA layers, "
+        "which are not implemented in lucid.peft yet."
+    )
+
+
+@dataclass
 class _LoraFields(_TargetedConfig):
     """The fields of the reference's ``LoraConfig``, in its order, for the configs that extend it.
 
@@ -109,9 +296,9 @@ class _LoraFields(_TargetedConfig):
     megatron_core: str | None = "megatron.core"
     trainable_token_indices: list[int] | dict[str, list[int]] | None = None
     loftq_config: dict[str, object] = field(default_factory=dict)
-    eva_config: object | None = None
+    eva_config: EvaConfig | None = None
     corda_config: object | None = None
-    lora_ga_config: object | None = None
+    lora_ga_config: LoraGAConfig | None = None
     use_dora: bool = False
     velora_config: object | None = None
     alora_invocation_tokens: list[int] | None = None
@@ -331,15 +518,36 @@ class LoraConfig(_LoraFields, peft_type=PeftType.LORA):
         "use_dora": _check_bool,
         "target_parameters": _optional_strings,
         "lora_bias": _check_bool,
+        "eva_config": _check_eva,
+        "lora_ga_config": _check_lora_ga,
     }
 
     @override
     def _load_fields(self) -> dict[str, object]:
         return {"init_lora_weights": _Init.of(self.init_lora_weights).on_load().value}
 
+    def _check_init_subconfigs(self) -> None:
+        if self.init_lora_weights == "eva" and self.eva_config is None:
+            warnings.warn(
+                "`init_lora_weights` is 'eva' but `eva_config` is not specified. Using default EVA config.",
+                stacklevel=3,
+            )
+            self.eva_config = EvaConfig()
+        elif self.init_lora_weights != "eva" and self.eva_config is not None:
+            warnings.warn(
+                "`eva_config` specified but will be ignored when `init_lora_weights` is not 'eva'.",
+                stacklevel=3,
+            )
+        if self.init_lora_weights != "lora_ga" and self.lora_ga_config is not None:
+            warnings.warn(
+                "`lora_ga_config` specified but will be ignored when `init_lora_weights` is not 'lora_ga'.",
+                stacklevel=3,
+            )
+
     @override
     def _check_fields(self) -> None:
         super()._check_fields()
+        self._check_init_subconfigs()
         if self.lora_bias:
             if self.init_lora_weights not in (True, False):
                 raise ValueError(

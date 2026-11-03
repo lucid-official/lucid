@@ -139,6 +139,12 @@ class _ResidualUpdate(_AdditiveWeight):
                 out = out + self._contribution(adapter, x)
         return out if out.dtype == result.dtype else out.to(result.dtype)
 
+    @override
+    def supports_lora_conversion(self, adapter_name: str = "default") -> bool:
+        """Whether ``adapter_name`` on this additive linear layer can be converted to LoRA."""
+        del adapter_name
+        return True
+
 
 class _Unmergeable(_BaseTunerLayer):
     """A layer whose adapter computes something no change of the base weights can hold.

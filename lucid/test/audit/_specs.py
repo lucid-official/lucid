@@ -29,9 +29,17 @@ import lucid.fft
 import lucid.linalg
 import lucid.nn.utils.prune
 import lucid.nn.utils.rnn
-from lucid.peft import PeftModel, get_base_model_state_dict, get_peft_model_state_dict
+from lucid.peft import (
+    EvaConfig,
+    LoHaConfig,
+    LoraConfig,
+    LoraGAConfig,
+    PeftModel,
+    get_base_model_state_dict,
+    get_peft_model_state_dict,
+)
 from lucid.test.audit import _probe, _surface
-from lucid.test.audit._builders import BUILDERS, _config, _expert_directory
+from lucid.test.audit._builders import BUILDERS, _base_model, _config, _expert_directory
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -1282,6 +1290,72 @@ def _bloom_prompt(domain: str) -> Iterator[Call]:
     yield Call([prompt], {}, 0, "bloom_model_postprocess_past_key_value(2 layers of keys, values)")
 
 
+def _eva_state(domain: str) -> Iterator[Call]:
+    """A bare two-linear model and an eight-row batch (>= n_components=4), with plain tensor forward hooks."""
+    cfg = LoraConfig(r=2, target_modules=["0"], init_lora_weights="eva", eva_config=EvaConfig())
+    yield Call(
+        [_base_model(), [_f((8, 4), domain).float()], cfg],
+        {
+            "forward_fn": lambda m, b: m(b),
+            "prepare_model_inputs_fn": None,
+            "prepare_layer_inputs_fn": None,
+        },
+        0,
+        "get_eva_state_dict(model, dataloader, config)",
+    )
+
+
+def _init_eva_weights(domain: str) -> Iterator[Call]:
+    """A fresh ``init_lora_weights='eva'`` model and an eight-row batch to populate its SVD factors."""
+    model = PeftModel(
+        _base_model(),
+        LoraConfig(r=2, target_modules=["0"], init_lora_weights="eva", eva_config=EvaConfig()),
+    )
+    yield Call(
+        [model, [_f((8, 4), domain).float()]],
+        {
+            "forward_fn": lambda m, b: m(b),
+            "prepare_model_inputs_fn": None,
+            "prepare_layer_inputs_fn": None,
+        },
+        0,
+        "initialize_lora_eva_weights(peft model, dataloader)",
+    )
+
+
+def _preprocess_loraga(domain: str) -> Iterator[Call]:
+    """A fresh base model and a one-step backward callback that records gradients on its linears."""
+    model = _base_model()
+    x = _f((2, 4), domain).float()
+    cfg = LoraConfig(
+        r=2, target_modules=["0", "2"], init_lora_weights="lora_ga", lora_ga_config=LoraGAConfig()
+    )
+    yield Call(
+        [model, cfg, lambda: model(x).sum().backward()],
+        {},
+        0,
+        "preprocess_loraga(model, config, train_step)",
+    )
+
+
+def _convert_to_lora(domain: str) -> Iterator[Call]:
+    """A fresh LoHa-adapted model converted in place into an SVD-approximated LoRA adapter."""
+    model = PeftModel(_base_model(), LoHaConfig(r=2, target_modules=["0", "2"]))
+    yield Call([model, 2], {}, 0, "convert_to_lora(LoHa peft model, rank=2)")
+
+
+def _save_as_lora(domain: str) -> Iterator[Call]:
+    """A fresh LoHa-adapted model saved to a scratch directory as a LoRA checkpoint."""
+    import atexit
+    import shutil
+    import tempfile
+
+    directory = tempfile.mkdtemp(prefix="lucid-audit-save-lora-")
+    atexit.register(shutil.rmtree, directory, ignore_errors=True)
+    model = PeftModel(_base_model(), LoHaConfig(r=2, target_modules=["0", "2"]))
+    yield Call([directory, model, 2], {}, 0, "save_as_lora(directory, LoHa peft model, rank=2)")
+
+
 _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
     "lucid.autograd.grad": _autograd_grad,
     # A name not on the surface yet costs nothing: lookup is by qualname.
@@ -1372,6 +1446,11 @@ _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
         [Call([_config().to_dict()], {}, 0, "get_peft_config(LoRA config dict)")]
     ),
     "lucid.peft.bloom_model_postprocess_past_key_value": _bloom_prompt,
+    "lucid.peft.get_eva_state_dict": _eva_state,
+    "lucid.peft.initialize_lora_eva_weights": _init_eva_weights,
+    "lucid.peft.preprocess_loraga": _preprocess_loraga,
+    "lucid.peft.convert_to_lora": _convert_to_lora,
+    "lucid.peft.save_as_lora": _save_as_lora,
     "lucid.initial_seed": lambda d: iter([Call([], {}, 0, "initial_seed()")]),
     "lucid.is_grad_enabled": lambda d: iter([Call([], {}, 0, "is_grad_enabled()")]),
     "lucid.is_nonzero": lambda d: iter(

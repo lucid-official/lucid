@@ -1070,6 +1070,15 @@ class PeftModel(_ForwardsAttributes):
             self.eval()
         return loaded
 
+    def supports_lora_conversion(self, adapter_name: str = "default") -> bool:
+        """Whether the adapter ``adapter_name`` on this model can be converted to LoRA."""
+        config = self.peft_config.get(adapter_name) or next(iter(self.peft_config.values()), None)
+        if config is not None and config.is_prompt_learning:
+            return False
+        if not hasattr(self.base_model, "supports_lora_conversion"):
+            return False
+        return bool(self.base_model.supports_lora_conversion(adapter_name))
+
 
 def get_layer_status(model: nn.Module) -> list[TunerLayerStatus]:
     r"""The state of each adapter layer of ``model``: enabled, active, merged, trainable, and where.

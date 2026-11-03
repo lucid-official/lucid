@@ -172,7 +172,7 @@ def test_a_bad_field_is_refused_with_its_class(
         LoraConfig(**fields)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize("init", ["eva", "corda", "loftq", "lora_ga", "orthogonal", "mica", "EVA"])
+@pytest.mark.parametrize("init", ["corda", "loftq", "orthogonal", "mica", "CORDA"])
 def test_an_initialisation_the_library_lacks_raises_not_implemented(init: str) -> None:
     with pytest.raises(NotImplementedError, match=init):
         LoraConfig(init_lora_weights=init)

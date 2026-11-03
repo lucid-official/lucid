@@ -182,13 +182,15 @@ def _default_matches(ref: Param, got: Param) -> bool:
         return _factory_matches(source.removeprefix("<factory>:"), got.default)
     if "." in source and isinstance(got.default, enum.Enum):  # ``Enum.MEMBER``
         return source.rsplit(".", 1)[-1] == got.default.name
+    if source.isidentifier() and callable(got.default):
+        return getattr(got.default, "__name__", None) == source
     return False
 
 
 def _factory_matches(source: str, factory: object) -> bool:
-    assert callable(
-        factory
-    ), f"a field with a factory default must hold a callable, got {factory!r}"
+    assert callable(factory), (
+        f"a field with a factory default must hold a callable, got {factory!r}"
+    )
     produced = factory()
     simple = {"list": [], "dict": {}, "set": set(), "tuple": ()}
     if source in simple:
@@ -370,12 +372,12 @@ def test_signature_matches_reference(name: str) -> None:
 
 
 def test_shared_surface_is_the_known_size() -> None:
-    assert len(_shared_names()) == 92
+    assert len(_shared_names()) == 101
 
 
 def test_reference_gap_is_the_known_size() -> None:
     """The names Lucid lacks are the next phase's work; their count must not hide."""
-    assert len([n for n in _SNAPSHOT["exports"] if n not in peft.__all__]) == 62
+    assert len([n for n in _SNAPSHOT["exports"] if n not in peft.__all__]) == 53
 
 
 def test_the_snapshot_is_of_the_reference_release_it_says() -> None:

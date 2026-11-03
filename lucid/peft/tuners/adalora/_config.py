@@ -143,6 +143,8 @@ class AdaLoraConfig(_LoraFields, peft_type=PeftType.ADALORA):
         "use_dora": "AdaLoRA has no weight-decomposed variant",
         "lora_bias": "AdaLoRA has no bias on its update",
         "target_parameters": "AdaLoRA adapts modules only",
+        "eva_config": "AdaLoRA does not use EVA initialisation",
+        "lora_ga_config": "AdaLoRA does not use LoRA-GA initialisation",
     }
     _field_checks: ClassVar[dict[str, _Check]] = {
         "target_r": _check_rank,

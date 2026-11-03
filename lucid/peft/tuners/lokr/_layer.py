@@ -214,6 +214,12 @@ class Linear(LoKrLayer, base_type=nn.Linear):
 
     base_layer: nn.Linear
 
+    @override
+    def supports_lora_conversion(self, adapter_name: str = "default") -> bool:
+        """Whether ``adapter_name`` on this LoKr linear layer can be converted to LoRA."""
+        del adapter_name
+        return True
+
 
 class Conv1d(LoKrLayer, base_type=nn.Conv1d):
     """An ``nn.Conv1d`` with a LoKr update: the Kronecker kernel is convolved with the base's stride, padding and groups.

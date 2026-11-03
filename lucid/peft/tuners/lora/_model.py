@@ -223,7 +223,10 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
         layer = target.layer
         # Planning took it from ``LoraLayer``'s table, or made it ``ParamWrapper``.
         assert layer is not None and issubclass(layer, LoraLayer)
-        arguments = _layer_arguments(_as_lora(config), target.full_name)
+        lora_cfg = _as_lora(config)
+        if lora_cfg.init_lora_weights == "lora_ga":
+            target.module.__dict__["_peft_loraga_config"] = lora_cfg.lora_ga_config
+        arguments = _layer_arguments(lora_cfg, target.full_name)
         if target.parameter is not None:
             return ParamWrapper(target.module, adapter_name, target.parameter, **arguments)
         return layer(target.module, adapter_name, **arguments)
@@ -233,7 +236,10 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
     def _add_to_layer(cls, config: _TargetedConfig, adapter_name: str, target: _Target) -> None:
         layer = target.module
         assert isinstance(layer, LoraLayer)
-        layer.update_layer(adapter_name, **_layer_arguments(_as_lora(config), target.full_name))
+        lora_cfg = _as_lora(config)
+        if lora_cfg.init_lora_weights == "lora_ga":
+            layer.get_base_layer().__dict__["_peft_loraga_config"] = lora_cfg.lora_ga_config
+        layer.update_layer(adapter_name, **_layer_arguments(lora_cfg, target.full_name))
 
     @override
     @classmethod

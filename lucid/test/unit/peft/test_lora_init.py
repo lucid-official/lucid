@@ -205,7 +205,7 @@ class TestRefusals:
             with pytest.raises(ValueError, match="dense"):
                 build()
 
-    @pytest.mark.parametrize("init", ["eva", "corda", "loftq", "lora_ga", "orthogonal", "mica"])
+    @pytest.mark.parametrize("init", ["corda", "loftq", "orthogonal", "mica"])
     def test_the_reference_s_other_inits_say_what_is_missing(self, init: str) -> None:
         with pytest.raises(NotImplementedError, match=f"{init}.*not implemented in lucid.peft"):
             _check_init("init_lora_weights", init)

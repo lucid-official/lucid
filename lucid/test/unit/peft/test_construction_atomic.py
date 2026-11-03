@@ -120,7 +120,7 @@ def _lm() -> nn.Module:
 def test_the_registry_has_every_family_this_guard_is_for() -> None:
     assert len(_HOSTS) >= 10
     assert {PeftType.LORA, PeftType.PROMPT_TUNING} <= set(_TUNERS)
-    assert _IN_FRONT and _FACTORISING == ["olora", "pissa"]
+    assert _IN_FRONT and _FACTORISING == ["lora_ga", "olora", "pissa"]
 
 
 @pytest.mark.parametrize("host", _HOSTS, ids=lambda host: host.__name__)

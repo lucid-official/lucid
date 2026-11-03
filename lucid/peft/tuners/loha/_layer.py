@@ -125,6 +125,12 @@ class Linear(LoHaLayer, base_type=nn.Linear):
 
     base_layer: nn.Linear
 
+    @override
+    def supports_lora_conversion(self, adapter_name: str = "default") -> bool:
+        """Whether ``adapter_name`` on this LoHa linear layer can be converted to LoRA."""
+        del adapter_name
+        return True
+
 
 class Conv1d(LoHaLayer, base_type=nn.Conv1d):
     """An ``nn.Conv1d`` with a LoHa update: the factored kernel is convolved with the base's stride, padding and groups.

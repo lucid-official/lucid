@@ -34,10 +34,8 @@ if TYPE_CHECKING:
 
 #: Initialisations of the reference that need machinery lucid.peft does not have yet.
 _PLANNED: Final = {
-    "eva": "it is data-driven: it needs a calibration pass over batches of inputs",
     "corda": "it is data-driven: it needs a calibration pass over batches of inputs",
     "loftq": "it needs a quantized base weight",
-    "lora_ga": "it needs a gradient-estimation pass over batches of data",
     "orthogonal": "it is not implemented",
     "mica": "it is not implemented",
 }
@@ -351,6 +349,118 @@ class _Olora(_Factorising, init="olora"):
             _install(layer, adapter, lora_a, lora_b, weight - spec.scaling * (lora_b @ lora_a))
 
 
+class _Eva(_Init, init="eva"):
+    """Leave factors untouched at construction; :func:`initialize_lora_eva_weights` populates them from activations."""
+
+    @property
+    @override
+    def value(self) -> str:
+        return "eva"
+
+    @override
+    def apply(self, layer: LoraLayer, adapter: str) -> None:
+        layer._reset_factors(adapter, gaussian=False)
+
+
+def _loraga_direction_factors(
+    u: Tensor, v: Tensor, r: int, direction: str, device: lucid.device
+) -> tuple[Tensor, Tensor]:
+    if direction == "ArBr":
+        return v[r : 2 * r, :], u[:, :r]
+    if direction == "A2rBr":
+        return v[:r, :], u[:, r : 2 * r]
+    if direction == "ArB2r":
+        return v[r : 2 * r, :], u[:, r : 2 * r]
+    rand_idx = lucid.randperm(2 * r, device=device)
+    a_idx = rand_idx[:r]
+    b_idx = rand_idx[r : 2 * r]
+    return v[a_idx, :], u[:, b_idx]
+
+
+def _loraga_rescale(
+    lora_a: Tensor,
+    lora_b: Tensor,
+    weight: Tensor,
+    r: int,
+    ga_cfg: object,
+    scaling: float,
+) -> tuple[Tensor, Tensor]:
+    scale = getattr(ga_cfg, "scale", "stable")
+    if scale == "gd_scale":
+        return lora_a / scaling, lora_b / scaling
+    if scale == "unit":
+        _, s_a, _ = linalg.svd(lora_a, full_matrices=False)
+        _, s_b, _ = linalg.svd(lora_b, full_matrices=False)
+        norm_a = s_a[0].clamp(min=1e-12)
+        norm_b = s_b[0].clamp(min=1e-12)
+        return lora_a / norm_a, lora_b / norm_b
+    if scale == "stable":
+        d_out, d_in = int(weight.shape[0]), int(weight.shape[1])
+        gamma = float(getattr(ga_cfg, "stable_gamma", 16))
+        return lora_a * (d_out**0.25 / gamma**0.5), lora_b * (d_in**0.25 / gamma**0.5)
+    _, s_b, _ = linalg.svd(lora_b, full_matrices=False)
+    _, weight_s, _ = _svd_lowrank(weight, r, 4)
+    if float(s_b[0].item()) > 0.0:
+        lora_b = lora_b * (weight_s[0] / s_b[0])
+    return lora_a, lora_b
+
+
+class _LoraGa(_Factorising, init="lora_ga"):
+    @property
+    @override
+    def value(self) -> str:
+        return "lora_ga"
+
+    r"""Gradient-approximated LoRA initialisation (:func:`preprocess_loraga`).
+
+    Decomposes the cached base-weight gradient :math:`G = U S V^	op` at rank
+    :math:`2r`, selects the :math:`(A, B)` subspace per ``LoraGAConfig.direction``,
+    rescales per ``LoraGAConfig.scale``, and subtracts :math:`s B A` from the
+    base weight so the initial forward output matches the unadapted model.
+    """
+
+    @override
+    def apply(self, layer: LoraLayer, adapter: str) -> None:
+        base_layer = layer.get_base_layer()
+        grad = base_layer.__dict__.get("_peft_loraga_grad")
+        if not isinstance(grad, Tensor):
+            warnings.warn(
+                "Tune the model with `preprocess_loraga` before calling `get_peft_model` when "
+                "`init_lora_weights='lora_ga'`. Falling back to standard LoRA initialization.",
+                UserWarning,
+                stacklevel=3,
+            )
+            layer._reset_factors(adapter, gaussian=False)
+            return
+
+        spec = layer._specs[adapter]
+        r = spec.r
+        ga_cfg = base_layer.__dict__.get("_peft_loraga_config")
+        direction = getattr(ga_cfg, "direction", "ArB2r")
+
+        with lucid.no_grad():
+            weight = layer.weight.to(lucid.float32)
+            grad_f32 = grad.to(device=weight.device, dtype=lucid.float32)
+            d_out, d_in = int(weight.shape[0]), int(weight.shape[1])
+            if min(d_out, d_in) < 2 * r:
+                raise ValueError(
+                    f"LoRA-GA requires min(in_features, out_features) >= 2 * r ({2 * r}), "
+                    f"got shape ({d_out}, {d_in})."
+                )
+            u, _, v = _svd_lowrank(grad_f32, 2 * r, 4)
+            lora_a, lora_b = _loraga_direction_factors(u, v.mT, r, direction, weight.device)
+            lora_a, lora_b = _loraga_rescale(lora_a, lora_b, weight, r, ga_cfg, spec.scaling)
+            target_dtype = layer.weight.dtype
+            lora_a_cast = lora_a.to(target_dtype)
+            lora_b_cast = lora_b.to(target_dtype)
+            residual = weight - spec.scaling * (
+                lora_b_cast.to(lucid.float32) @ lora_a_cast.to(lucid.float32)
+            )
+            _install(layer, adapter, lora_a_cast, lora_b_cast, residual)
+            base_layer.__dict__.pop("_peft_loraga_grad", None)
+            base_layer.__dict__.pop("_peft_loraga_config", None)
+
+
 def _check_convertible(trained: LoraConfig, initial: LoraConfig) -> None:
     """Raise ``ValueError`` unless ``trained`` can become a plain LoRA against ``initial``."""
     if trained.use_dora:
@@ -445,9 +555,11 @@ def _check_init(name: str, value: object) -> bool | str:
 # The strategies are reached through ``_Init.of``, by the spelling each registers under.
 __all__ = [
     "_Default",
+    "_Eva",
     "_Factorising",
     "_Gaussian",
     "_Init",
+    "_LoraGa",
     "_Olora",
     "_Pissa",
     "_Random",

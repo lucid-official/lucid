@@ -384,3 +384,8 @@ class _BaseTunerLayer(nn.Module, ABC):
             self._unfold()
         self.merged_adapters.clear()
         self.merged = False
+
+    def supports_lora_conversion(self, adapter_name: str = "default") -> bool:
+        """Whether ``adapter_name`` on this layer can be converted to a plain LoRA update."""
+        del adapter_name
+        return False

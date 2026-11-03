@@ -236,7 +236,16 @@ from lucid.peft.tuners.loha._config import LoHaConfig
 from lucid.peft.tuners.loha._model import LoHaModel
 from lucid.peft.tuners.lokr._config import LoKrConfig
 from lucid.peft.tuners.lokr._model import LoKrModel
-from lucid.peft.tuners.lora._config import LoraConfig
+from lucid.peft.tuners.lora._config import (
+    EvaConfig,
+    LoftQConfig,
+    LoraConfig,
+    LoraGAConfig,
+    replace_lora_weights_loftq,
+)
+from lucid.peft.tuners.lora._conversion import convert_to_lora, save_as_lora
+from lucid.peft.tuners.lora._eva import get_eva_state_dict, initialize_lora_eva_weights
+from lucid.peft.tuners.lora._loraga import preprocess_loraga
 from lucid.peft.tuners.lora._model import LoraModel
 from lucid.peft.tuners.miss import MissConfig, MissModel
 from lucid.peft.tuners.multitask_prompt_tuning import (
@@ -300,8 +309,11 @@ __all__ = [
     "IA3Config",
     "LNTuningConfig",
     "LoHaConfig",
+    "EvaConfig",
+    "LoftQConfig",
     "LoKrConfig",
     "LoraConfig",
+    "LoraGAConfig",
     "MissConfig",
     "OFTConfig",
     "PolyConfig",
@@ -359,6 +371,12 @@ __all__ = [
     "load_peft_weights",
     "prepare_model_for_kbit_training",
     "set_base_model_state_dict",
+    "convert_to_lora",
+    "get_eva_state_dict",
+    "initialize_lora_eva_weights",
+    "preprocess_loraga",
+    "replace_lora_weights_loftq",
+    "save_as_lora",
     "set_peft_model_state_dict",
     "shift_tokens_right",
 ]
