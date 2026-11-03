@@ -45,11 +45,7 @@ def _svd_lowrank_factors(delta_weight: Tensor, rank: int | float) -> tuple[Tenso
         )
     lora_b = u[:, :effective_rank] * s[:effective_rank]
     lora_a = v[:effective_rank]
-    return (
-        lora_a.to(orig_dtype).contiguous(),
-        lora_b.to(orig_dtype).contiguous(),
-        effective_rank,
-    )
+    return (lora_a.to(orig_dtype).contiguous(), lora_b.to(orig_dtype).contiguous(), effective_rank)
 
 
 def _convert_miss_module_to_lora(

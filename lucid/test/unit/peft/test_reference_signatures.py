@@ -188,9 +188,9 @@ def _default_matches(ref: Param, got: Param) -> bool:
 
 
 def _factory_matches(source: str, factory: object) -> bool:
-    assert callable(factory), (
-        f"a field with a factory default must hold a callable, got {factory!r}"
-    )
+    assert callable(
+        factory
+    ), f"a field with a factory default must hold a callable, got {factory!r}"
     produced = factory()
     simple = {"list": [], "dict": {}, "set": set(), "tuple": ()}
     if source in simple:

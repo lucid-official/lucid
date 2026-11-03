@@ -186,11 +186,8 @@ class LoraGAConfig:
             )
         if self.scale not in _LORAGA_SCALES:
             raise ValueError(f"Invalid `scale` {self.scale!r}; must be one of {_LORAGA_SCALES}.")
-        if (
-            isinstance(self.stable_gamma, bool)
-            or not isinstance(self.stable_gamma, int)
-            or self.stable_gamma <= 0
-        ):
+        gamma: object = self.stable_gamma
+        if isinstance(gamma, bool) or not isinstance(gamma, int) or gamma <= 0:
             raise ValueError(f"`stable_gamma` must be a positive int, got {self.stable_gamma!r}.")
 
 

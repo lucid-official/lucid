@@ -103,10 +103,7 @@ class _IncrementalPCA:
 
     @staticmethod
     def _incremental_mean_and_var(
-        x: Tensor,
-        last_mean: Tensor | None,
-        last_variance: Tensor | None,
-        last_sample_count: int,
+        x: Tensor, last_mean: Tensor | None, last_variance: Tensor | None, last_sample_count: int
     ) -> tuple[Tensor, Tensor, int]:
         new_count = int(x.shape[0])
         new_sum = lucid.sum(x, dim=0)
@@ -189,10 +186,7 @@ class _HashHook(_Hook):
         self.hashed_inputs: list[int] = []
 
     def __call__(
-        self,
-        module: object,
-        inputs: tuple[Tensor, ...],
-        output: Tensor | tuple[Tensor, ...],
+        self, module: object, inputs: tuple[Tensor, ...], output: Tensor | tuple[Tensor, ...]
     ) -> None:
         del module, output
         states = self.prepare_layer_inputs(inputs)
@@ -230,10 +224,7 @@ class _SVDHook(_Hook):
         self.converged = lucid.zeros((n_components,), dtype=lucid.bool)
 
     def __call__(
-        self,
-        module: object,
-        inputs: tuple[Tensor, ...],
-        output: Tensor | tuple[Tensor, ...],
+        self, module: object, inputs: tuple[Tensor, ...], output: Tensor | tuple[Tensor, ...]
     ) -> None:
         del module, output
         previous = (
@@ -316,9 +307,7 @@ def prepare_model_inputs_fn_language_modeling(
 
 
 def prepare_layer_inputs_fn_language_modeling(
-    layer_input: tuple[Tensor, ...] | Tensor,
-    model_input: Tensor,
-    layer_name: str,
+    layer_input: tuple[Tensor, ...] | Tensor, model_input: Tensor, layer_name: str
 ) -> Tensor:
     """Select active token representations from ``layer_input`` using the boolean mask ``model_input``."""
     del layer_name
@@ -705,9 +694,7 @@ def _apply_eva_layer(
 
 
 def _load_eva_state_dict(
-    model: nn.Module,
-    eva_state_dict: dict[str, Tensor],
-    adapter_name: str,
+    model: nn.Module, eva_state_dict: dict[str, Tensor], adapter_name: str
 ) -> None:
     peft_configs = getattr(model, "peft_config", None)
     assert isinstance(peft_configs, dict)

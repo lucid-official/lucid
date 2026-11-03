@@ -378,12 +378,7 @@ def _loraga_direction_factors(
 
 
 def _loraga_rescale(
-    lora_a: Tensor,
-    lora_b: Tensor,
-    weight: Tensor,
-    r: int,
-    ga_cfg: object,
-    scaling: float,
+    lora_a: Tensor, lora_b: Tensor, weight: Tensor, r: int, ga_cfg: object, scaling: float
 ) -> tuple[Tensor, Tensor]:
     scale = getattr(ga_cfg, "scale", "stable")
     if scale == "gd_scale":

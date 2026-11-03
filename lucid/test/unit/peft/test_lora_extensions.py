@@ -64,10 +64,7 @@ class _TinyLM(nn.Module):
         self.v_proj = nn.Linear(d, d)
 
     def forward(
-        self,
-        input_ids: Tensor,
-        attention_mask: Tensor | None = None,
-        labels: Tensor | None = None,
+        self, input_ids: Tensor, attention_mask: Tensor | None = None, labels: Tensor | None = None
     ) -> Tensor:
         del attention_mask, labels
         h = self.embed(input_ids)
@@ -270,8 +267,7 @@ class TestLoraGA:
         preprocess_loraga(m2, cfg, train_step=should_not_run, cache_file=cache_path)
         assert bool(
             lucid.allclose(
-                getattr(m1.fc1, "_peft_loraga_grad"),
-                getattr(m2.fc1, "_peft_loraga_grad"),
+                getattr(m1.fc1, "_peft_loraga_grad"), getattr(m2.fc1, "_peft_loraga_grad")
             )
         )
 
@@ -340,11 +336,7 @@ class TestLoraConversion:
         lucid.manual_seed(23)
         base = _TwoLayerMLP(d_in=8, d_mid=8, d_out=4)
         cfg = LoHaConfig(
-            r=2,
-            alpha=4,
-            target_modules=["fc1"],
-            modules_to_save=["fc2"],
-            init_weights=False,
+            r=2, alpha=4, target_modules=["fc1"], modules_to_save=["fc2"], init_weights=False
         )
         adapted = get_peft_model(base, cfg)
         lora_cfg, state = convert_to_lora(adapted, rank=0.95)
