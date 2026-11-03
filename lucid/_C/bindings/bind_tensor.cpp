@@ -333,8 +333,7 @@ void register_tensor_impl(py::module_& m) {
         .def_property_readonly("stride", [](const TensorImpl& t) { return py::cast(t.stride()); })
         .def_property_readonly("dtype", [](const TensorImpl& t) { return t.dtype(); })
         .def_property_readonly("device", [](const TensorImpl& t) { return t.device(); })
-        .def_property_readonly("requires_grad",
-                               [](const TensorImpl& t) { return t.requires_grad(); })
+        .def_property_readonly("requires_grad", &TensorImpl::requires_grad)
         .def_property_readonly(
             "grad_fn", [](const TensorImpl& t) -> std::shared_ptr<Node> { return t.grad_fn(); },
             "The backward function that produced this tensor, or None "
@@ -355,9 +354,8 @@ void register_tensor_impl(py::module_& m) {
             "True when the tensor's storage is a MTLResourceStorageModeShared "
             "allocation — simultaneously accessible from CPU and GPU without a "
             "memcpy.  Created by make_shared_tensor() or to_shared_storage().")
-        .def_property_readonly(
-            "is_phantom", &TensorImpl::is_phantom,
-            "True for a phantom tensor made while phantom mode is on.")
+        .def_property_readonly("is_phantom", &TensorImpl::is_phantom,
+                               "True for a phantom tensor made while phantom mode is on.")
         .def("is_inference", &TensorImpl::is_inference)
         .def("numel", &TensorImpl::numel)
         .def("nbytes", &TensorImpl::nbytes)

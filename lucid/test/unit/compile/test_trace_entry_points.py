@@ -58,6 +58,7 @@ _NOT_A_READ = {
 _BARE_MEMBERS = {
     "numel",
     "nbytes",
+    "is_inference",
     "is_contiguous",
     "is_dense",
     "storage_offset_bytes",

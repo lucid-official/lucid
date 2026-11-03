@@ -58,7 +58,9 @@ _FIXED = {
     "rank0_nextafter_rank0": (
         "x + lucid.nextafter(self.w.reshape(()) + 1.0, self.w.reshape(()) * 2.0)"
     ),
-    "param_beside_constant_rank2_reduction": ('x * self.w + lucid.ones(3, 3, device="metal").sum()'),
+    "param_beside_constant_rank2_reduction": (
+        'x * self.w + lucid.ones(3, 3, device="metal").sum()'
+    ),
 }
 
 

@@ -314,12 +314,10 @@ def test_saving_inference_tensor_for_backward_is_refused(
         out.backward()
         assert w.grad is not None
         # Ops that save the inference tensor (or a view of it) for backward raise.
-        for op in (
-            lambda: w * x,
-            lambda: w[:2] * v_x,
-            lambda: m.where(cond, w, w),
-        ):
-            with pytest.raises(RuntimeError, match="Inference tensors cannot be saved for backward"):
+        for op in (lambda: w * x, lambda: w[:2] * v_x, lambda: m.where(cond, w, w)):
+            with pytest.raises(
+                RuntimeError, match="Inference tensors cannot be saved for backward"
+            ):
                 op()
 
 
