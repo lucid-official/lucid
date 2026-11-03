@@ -364,3 +364,57 @@ def test_fused_step_repeated_calls_reuse_executable() -> None:
     # All finite — no NaN explosions from the autodiff path.
     for L in losses:
         assert L == L, f"NaN loss in step: {losses}"  # NaN != NaN
+
+
+
+@pytest.mark.parametrize(
+    "make_opt",
+    [
+        lambda params: optim.Adam(params, lr=0.02),
+        lambda params: optim.NAdam(params, lr=0.02),
+        lambda params: optim.ASGD(params, lr=0.02),
+        lambda params: optim.SGD(params, lr=0.02, momentum=0.9),
+    ],
+)
+def test_compiled_optimizer_state_is_live_and_matches_eager(make_opt) -> None:
+    """LCD-813: CompiledOptimizer.state exposes live Tensors matching state_dict and eager."""
+    lucid.manual_seed(0)
+    eager_model = _tiny_model()
+    lucid.manual_seed(0)
+    comp_model = _tiny_model()
+    eager_opt = make_opt(list(eager_model.parameters()))
+    raw_opt = make_opt(list(comp_model.parameters()))
+    comp_opt = compile_optimizer(raw_opt)
+    x = metal_tensor(4, 8)
+    t = metal_tensor(4, 4)
+
+    assert len(comp_opt.state) == 0
+    for _ in range(3):
+        eager_opt.zero_grad()
+        F.mse_loss(eager_model(x), t).backward()
+        eager_opt.step()
+
+        comp_opt.zero_grad()
+        F.mse_loss(comp_model(x), t).backward()
+        comp_opt.step()
+
+    sd_state = comp_opt.state_dict()["state"]
+    comp_params = list(comp_model.parameters())
+    eager_params = list(eager_model.parameters())
+    assert len(comp_opt.state) == len(comp_params)
+    assert len(raw_opt.state) == len(comp_params)
+
+    for idx, (cp, ep) in enumerate(zip(comp_params, eager_params, strict=True)):
+        c_entry = comp_opt.state[cp]
+        r_entry = raw_opt.state[cp]
+        e_entry = eager_opt.state[ep]
+        s_entry = sd_state[idx]
+        assert set(c_entry.keys()) == set(s_entry.keys()) == set(e_entry.keys())
+        assert set(r_entry.keys()) == set(c_entry.keys())
+        for k, val in c_entry.items():
+            assert isinstance(val, (lucid.Tensor, int, float))
+            if isinstance(val, lucid.Tensor):
+                assert float((val.cpu() - lucid.tensor(s_entry[k])).abs().max().item()) < 1e-6
+                e_val = e_entry[k]
+                assert isinstance(e_val, lucid.Tensor)
+                assert float((val.cpu() - e_val.cpu()).abs().max().item()) < 1e-5

@@ -163,9 +163,7 @@ _STOCHASTIC = re.compile(
 
 #: label -> why it differs from the reference.  Strict: an entry that starts
 #: matching fails the sweep until it is removed.
-_KNOWN: dict[tuple[str, str], str] = {
-    ("cpu", "lucid.float_power"): "float_power drops the imaginary part (works in float64)"
-}
+_KNOWN: dict[tuple[str, str], str] = {}
 
 #: Must be compared on Metal — a sweep that skipped them would pass vacuously.
 _FIRST_ORDER_FLOOR = frozenset(
@@ -182,7 +180,7 @@ _FIRST_ORDER_FLOOR = frozenset(
 _SECOND_ORDER_FLOOR = frozenset(
     f"_ops.{n}"
     for n in ("exp", "log", "sqrt", "sin", "tanh", "pow", "mul", "div", "matmul", "dot", "outer")
-) | {"nn.functional.linear"}
+) | {"lucid.expm1", "lucid.sinc", "nn.functional.linear"}
 
 
 @dataclass(frozen=True)

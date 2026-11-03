@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `lucid.peft`: `SwinConverter`, `CLIPConverter`, and `DETRConverter` adapter-file converters supporting both release-4 and release-5 reference module layouts, fusing separate `query`/`key`/`value` (`q_proj`/`k_proj`/`v_proj`) and `out_proj` (`o_proj`) projections into the zoo's `qkv` `nn.Linear` and `nn.MultiheadAttention` modules (LCD-830).
 
+### Fixed
+
+- `lucid.float_power` promotes complex operands to `complex128` instead of dropping the imaginary part into `float64`, and `lucid.expm1` / `lucid.sinc` avoid ordering comparisons (`clamp`) on complex inputs so higher-order derivatives (`create_graph=True`) work on complex tensors (LCD-698).
+- `compile_optimizer`: `CompiledOptimizer.state` (and the wrapped optimizer's `.state`) is now a live read-only view over the compiled state buffers keyed by `Parameter`, matching `state_dict()["state"]` and eager `Optimizer.state` (LCD-813).
+
+### Tooling
+
+- `lucid-audit`: `--subsystem` now narrows the test-suite and doctest stages and per-file coverage checks to the selected subsystems (LCD-733).
+
 ---
 
 ## [3.16.3] — 2026-11-04

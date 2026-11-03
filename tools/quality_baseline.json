@@ -958,7 +958,6 @@
     "lucid/compile/_entry/module.py": 6,
     "lucid/compile/_entry/segmented_step.py": 11,
     "lucid/compile/_entry/step.py": 3,
-    "lucid/compile/_optim/compiler.py": 2,
     "lucid/coreml/__init__.py": 2,
     "lucid/coreml/_build.py": 6,
     "lucid/diffeq/_adaptive.py": 2,
@@ -1018,7 +1017,7 @@
    "file-loc-over-cap": {
     "lucid/_tensor/_dunders.py": 226,
     "lucid/_tensor/tensor.py": 2402,
-    "lucid/compile/_optim/compiler.py": 268,
+    "lucid/compile/_optim/compiler.py": 265,
     "lucid/coreml/_build.py": 1096,
     "lucid/coreml/_emit.py": 1024,
     "lucid/fft/__init__.py": 339,

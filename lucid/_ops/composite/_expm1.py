@@ -35,6 +35,6 @@ def _expm1(input: Tensor) -> Tensor:
     # equals x bit-for-bit (preserving expm1(-0) = -0 and keeping ±inf finite
     # in MulBackward) while carrying both the unit slope and unit curvature of
     # exp(x) at the origin for higher-order autograd.
-    c = lucid.clamp(input, -1.0, 1.0)
+    c = lucid.where(u == 1.0, input, lucid.zeros_like(input))
     small_branch = input + 0.5 * c * (c - c.detach())
     return lucid.where(u == 1.0, small_branch, naive + correction)

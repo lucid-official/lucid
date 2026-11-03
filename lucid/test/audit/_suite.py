@@ -145,6 +145,53 @@ class SuiteResult:
         )
 
 
+
+_SUBSYSTEM_TEST_DIRS: dict[str, tuple[str, ...]] = {
+    "lucid": ("ops", "factories", "dtype", "device", "random", "rng"),
+    "utils.data": ("utils_data",),
+    "func": ("func", "func_transforms"),
+}
+
+
+def suite_paths_for_subsystems(
+    root: Path, subsystems: str, default: str = "lucid/test"
+) -> list[str]:
+    """Narrow the suite to the test subtrees of ``subsystems`` when ``default`` is unfiltered."""
+    if default != "lucid/test" or subsystems.strip() in ("", "all"):
+        return [default]
+    out: list[str] = []
+    for raw in subsystems.split(","):
+        key = raw.strip()
+        if not key:
+            continue
+        dirs = _SUBSYSTEM_TEST_DIRS.get(key, (key.split(".")[0],))
+        for d in dirs:
+            for tier in ("unit", "parity"):
+                rel = f"lucid/test/{tier}/{d}"
+                if (root / rel).exists() and rel not in out:
+                    out.append(rel)
+    return out or [default]
+
+
+def file_prefixes_for_subsystems(subsystems: str) -> tuple[str, ...] | None:
+    """Source-file prefixes corresponding to ``subsystems``, or ``None`` when unfiltered."""
+    if subsystems.strip() in ("", "all"):
+        return None
+    prefixes: list[str] = []
+    for raw in subsystems.split(","):
+        key = raw.strip()
+        if not key:
+            continue
+        if key == "lucid":
+            prefixes.extend(("lucid/_ops/", "lucid/_tensor/"))
+        elif key == "tensor":
+            prefixes.append("lucid/_tensor/")
+        else:
+            top = key.replace(".", "/")
+            prefixes.extend((f"lucid/{top}/", f"lucid/{top}.py"))
+    return tuple(dict.fromkeys(prefixes)) or None
+
+
 def chunks_for(root: Path, path: str, ignore: Sequence[str] = ()) -> list[str]:
     """Split ``path`` into subtrees, each run in its own interpreter.
 
@@ -201,7 +248,7 @@ def chunks_for(root: Path, path: str, ignore: Sequence[str] = ()) -> list[str]:
 
 def run_suite(
     console: Console,
-    path: str = "lucid/test",
+    path: str | Sequence[str] = "lucid/test",
     *,
     with_coverage: bool = True,
     root: Path | None = None,
@@ -242,8 +289,10 @@ def run_suite(
         started at all — a wheel install, or ``coverage`` missing.
     """
     root = root or Path(__file__).resolve().parents[3]
-    if not (root / path).exists():
-        return SuiteResult(unavailable=f"{path} is not in this checkout")
+    paths = [path] if isinstance(path, str) else list(path)
+    missing = [p for p in paths if not (root / p).exists()]
+    if missing:
+        return SuiteResult(unavailable=f"{missing[0]} is not in this checkout")
 
     argv = [sys.executable]
     if with_coverage:
@@ -284,8 +333,12 @@ def run_suite(
         f"--color={'yes' if console.colour else 'no'}",
     ]
 
-    chunks = chunks_for(root, path, ignore or ())
-    scope = path + ("".join(f"  (without {sub})" for sub in (ignore or ())))
+    chunks: list[str] = []
+    for p in paths:
+        for c in chunks_for(root, p, ignore or ()):
+            if c not in chunks:
+                chunks.append(c)
+    scope = ", ".join(paths) + ("".join(f"  (without {sub})" for sub in (ignore or ())))
     console.always(
         console.paint(
             f"  running {scope} in {len(chunks)} chunk(s) — this is the long stage", "grey"
@@ -504,7 +557,11 @@ def save_floor(path: Path, result: SuiteResult) -> None:
 
 
 def report_line_coverage_diff(
-    result: SuiteResult, floor: dict[str, object], console: Console
+    result: SuiteResult,
+    floor: dict[str, object],
+    console: Console,
+    *,
+    prefixes: Sequence[str] | None = None,
 ) -> int:
     """Compare against the floor and report what moved.
 
@@ -529,6 +586,8 @@ def report_line_coverage_diff(
     lost: list[tuple[str, float, float]] = []
     if isinstance(recorded, dict):
         for name, entry in recorded.items():
+            if prefixes is not None and not name.startswith(tuple(prefixes)):
+                continue
             if not isinstance(entry, dict):
                 continue
             old_total = entry.get("total", 0)
@@ -545,20 +604,21 @@ def report_line_coverage_diff(
             if before - after > _FILE_TOLERANCE:
                 lost.append((name, before, after))
 
-    if not lost and now >= was - _TOTAL_TOLERANCE:
+    total_dropped = prefixes is None and now < was - _TOTAL_TOLERANCE
+    if not lost and not total_dropped:
         console.always(
             console.paint(
                 f"  line coverage {now:.2f}% — at or above the recorded " f"{was:.2f}%", "green"
             )
         )
-        if now > was + _TOTAL_TOLERANCE:
+        if prefixes is None and now > was + _TOTAL_TOLERANCE:
             console.always(
                 console.paint("  run with --update-suite to record the new floor", "grey")
             )
         return 0
 
     console.rule(f"line coverage regressions · {len(lost) or 1}", "red")
-    if now < was - _TOTAL_TOLERANCE:
+    if total_dropped:
         console.always(console.paint(f"  TOTAL  {was:.2f}% → {now:.2f}%", "red"))
     for name, before, after in sorted(lost, key=lambda r: r[1] - r[2], reverse=True):
         console.always(console.paint(f"  LOST   {name}  {before:.1f}% → {after:.1f}%", "red"))
@@ -664,6 +724,8 @@ def report_suite(result: SuiteResult, console: Console) -> None:
 
 __all__ = [
     "SuiteResult",
+    "file_prefixes_for_subsystems",
+    "suite_paths_for_subsystems",
     "load_floor",
     "report_line_coverage_diff",
     "report_suite",

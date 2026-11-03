@@ -17,7 +17,13 @@ reading it, which is what these tests are for.
 from pathlib import Path
 
 from lucid.test.audit._console import Console
-from lucid.test.audit._suite import SuiteResult, chunks_for, run_suite
+from lucid.test.audit._suite import (
+    SuiteResult,
+    chunks_for,
+    file_prefixes_for_subsystems,
+    run_suite,
+    suite_paths_for_subsystems,
+)
 
 
 def _tree(root: Path) -> None:
@@ -101,3 +107,22 @@ def test_skipped_chunks_make_the_stage_red() -> None:
     assert result.broken == 0
     result.skipped_chunks.append(("suite/heavy", "300 MB available, floor 1024 MB"))
     assert result.broken == 1
+
+
+
+def test_subsystem_narrows_suite_paths_and_file_prefixes() -> None:
+    """LCD-733: --subsystem narrows the suite stage to the subsystem's test subtrees."""
+    root = Path(__file__).resolve().parents[4]
+    paths = suite_paths_for_subsystems(root, "peft,peft.tuners.lora")
+    assert paths == ["lucid/test/unit/peft"]
+    assert suite_paths_for_subsystems(root, "all") == ["lucid/test"]
+    assert suite_paths_for_subsystems(root, "peft", default="lucid/test/unit/nn") == [
+        "lucid/test/unit/nn"
+    ]
+    assert file_prefixes_for_subsystems("peft,peft.tuners.lora") == (
+        "lucid/peft/",
+        "lucid/peft.py",
+        "lucid/peft/tuners/lora/",
+        "lucid/peft/tuners/lora.py",
+    )
+    assert file_prefixes_for_subsystems("all") is None

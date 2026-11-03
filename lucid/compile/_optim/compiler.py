@@ -47,13 +47,17 @@ optimizers skip them: no update, no state change, no step advance.
 
 import struct
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Sequence, cast, final, override
+from typing import TYPE_CHECKING, Callable, Sequence, final, override
 
 from lucid._C import engine as _C_engine
-from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
 from lucid.compile._core.fallback import refuse_off_gpu
-from lucid.compile._optim._load import StagedEntry, stage_checkpoint
+from lucid.compile._optim._load import (
+    StagedEntry,
+    compiled_state_view,
+    export_compiled_entries,
+    stage_checkpoint,
+)
 from lucid.compile._optim.spec import _hp
 from lucid.autograd._grad_mode import no_grad
 from lucid.optim._state_load import LoadedCheckpoint
@@ -227,7 +231,7 @@ _OWNER_ATTR = "_compiled_step"
 
 # Every method of an eager optimizer that reads or advances its state —
 # all of them answer for the compiled wrapper once it owns the state.
-_STATE_ENTRY_POINTS: tuple[str, ...] = ("step", "state_dict", "load_state_dict")
+_STATE_ENTRY_POINTS: tuple[str, ...] = ("step", "state_dict", "load_state_dict", "_state_map")
 
 # Structural choices of one parameter group that are the optimizer's own
 # (weight decay on, momentum on, AMSGrad …) — the part of its
@@ -567,8 +571,12 @@ class _CompiledStepBase:
 
     @property
     def state(self) -> StateMap:
-        """The wrapped eager optimizer's live ``state`` (empty unless it stepped eagerly)."""
-        return self._opt.state
+        """Per-parameter state keyed by :class:`~lucid.nn.Parameter`, read live from the compiled buffers."""
+        return self._state_map()
+
+    def _state_map(self) -> StateMap:
+        """Live read-only view over the compiled state buffers, keyed by parameter."""
+        return compiled_state_view(self._opt.param_groups, self._collect_entries())
 
     @property
     def defaults(self) -> dict[str, object]:
@@ -603,37 +611,26 @@ class _CompiledStepBase:
         other's checkpoint.  ``param_groups`` mirrors the live groups with
         ``params`` replaced by flat indices.
         """
-        import lucid as _lucid
 
         self._sync_params()
         id_map = {id(p): k for k, p in enumerate(self._params)}
         groups_out: list[dict[str, object]] = []
         for group in self._opt.param_groups:
             g: dict[str, object] = {k: v for k, v in group.items() if k != "params"}
-            g["params"] = [id_map[id(p)] for p in cast(list[Tensor], group["params"])]
+            g["params"] = [id_map[id(p)] for p in _group_params(group)]
             groups_out.append(g)
 
-        # Checks an edited group, as the eager ``state_dict`` does.
+        return {"state": self._collect_entries(lambda t: t.detach().numpy().copy()), "param_groups": groups_out}
+
+    def _collect_entries(self, convert: Callable[[Tensor], object] | None = None) -> dict[int, dict[str, object]]:
+        """Per-parameter state by flat index: converted host buffers or live Tensors."""
+        self._sync_params()
         self._flags_now()
-        state: dict[int, dict[str, object]] = {}
-        for i, p in enumerate(self._params):
-            if not self._initialized[i]:
-                continue
-            entry: dict[str, object] = {}
-            if self._EXPORTS_STEP:
-                entry["step"] = self._step_entry(i)
-            scalar_dt = _float32_or_wider(p.dtype)
-            for name in self._PSTATE_NAMES:
-                if (value := self._pstate[i].get(name)) is not None:
-                    entry[name] = _lucid.tensor(value, dtype=scalar_dt).numpy()
-            # Every buffer the parameter holds, including one kept after its
-            # feature was switched off — the eager state keeps it too.
-            for name, buf in self._state[i].items():
-                if self._exports_state(i, name):
-                    entry[name] = buf.detach().numpy().copy()
-            if entry:
-                state[i] = entry
-        return {"state": state, "param_groups": groups_out}
+        return export_compiled_entries(
+            (self._params, self._initialized, self._steps, self._pstate, self._state),
+            (self._EXPORTS_STEP, self._step_entry, self._PSTATE_NAMES, self._exports_state),
+            convert=convert,
+        )
 
     def load_state_dict(self, sd: dict[str, object]) -> None:
         """Replace the state with a checkpoint written by this class or its eager optimizer.
@@ -750,12 +747,12 @@ class _CompiledStepBase:
         A parameter put in another's place keeps the sizes (LCD-560).  State
         and step counts follow each parameter; every executable is dropped.
         """
-        groups = [cast(list[Tensor], g["params"]) for g in self._opt.param_groups]
+        groups = [_group_params(g) for g in self._opt.param_groups]
         layout = tuple(tuple(map(id, ps)) for ps in groups)  # _params holds each
         if layout == self._group_ids:
             return
         old = {id(p): k for k, p in enumerate(self._params)}
-        params = [p for ps in groups for p in ps]
+        params: list[Tensor] = [p for ps in groups for p in ps]
         group_of = [gi for gi, ps in enumerate(groups) for _ in ps]
 
         def carry[T](values: list[T], default: Callable[[], T]) -> list[T]:

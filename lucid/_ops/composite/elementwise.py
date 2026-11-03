@@ -757,7 +757,7 @@ def sinc(input: Tensor) -> Tensor:
     # stands in for the small arguments, the series on u clamped into [-1, 1].
     safe_px = lucid.where(small, lucid.full_like(input, 1.0), px)
     val = lucid.sin(safe_px) / safe_px
-    u2 = lucid.clamp(px, -1.0, 1.0) ** 2
+    u2 = lucid.where(small, px, lucid.zeros_like(px)) ** 2
     series = lucid.full_like(input, _SINC_SERIES[0])
     for c in _SINC_SERIES[1:]:
         series = series * u2 + c
@@ -1064,14 +1064,27 @@ def float_power(input: Tensor | Scalar, exponent: Tensor | Scalar) -> Tensor:
     >>> lucid.float_power(x, 0.5).dtype
     lucid.float64
     """
+    is_complex = (
+        (_is_tensor(input) and input.is_complex())
+        or (_is_tensor(exponent) and exponent.is_complex())
+        or isinstance(input, complex)
+        or isinstance(exponent, complex)
+    )
+    target = lucid.complex128 if is_complex else lucid.float64
     if _is_tensor(input):
-        input = input.to(dtype=lucid.float64)
+        input = input.to(dtype=target)
     if _is_tensor(exponent):
-        exponent = exponent.to(dtype=lucid.float64)
+        exponent = exponent.to(dtype=target)
     if not _is_tensor(input) and _is_tensor(exponent):
-        input = exponent.new_full((), float(_promotion.as_number(input)))
+        val = complex(input) if isinstance(input, complex) else float(_promotion.as_number(input))
+        input = lucid.full((), val, dtype=target, device=exponent.device)
     if not _is_tensor(exponent) and _is_tensor(input):
-        exponent = input.new_full((), float(_promotion.as_number(exponent)))
+        val = (
+            complex(exponent)
+            if isinstance(exponent, complex)
+            else float(_promotion.as_number(exponent))
+        )
+        exponent = lucid.full((), val, dtype=target, device=input.device)
     # ``cast`` evaluates its first argument at run time, and ``Tensor``
     # is imported here only under ``TYPE_CHECKING`` — so the bare name
     # raised ``NameError`` on **every** call and float_power had never

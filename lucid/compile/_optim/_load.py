@@ -14,7 +14,9 @@ from typing import SupportsFloat, SupportsInt
 
 from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
+from lucid._dtype import _float32_or_wider
 from lucid.optim._state_load import _loaded_state_like
+from lucid.optim._state_view import ReadOnlyMap, StateEntry, StateMap, flat_params
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,3 +118,83 @@ def stage_checkpoint(
                 i, entry, params[i], scalar_names=scalar_names, buffer_names=buffer_names(i)
             )
     return staged
+
+
+_READ_ONLY_STATE = "a compiled optimizer's state is replaced through load_state_dict()"
+
+
+def _empty_compiled_entry() -> StateEntry:
+    return ReadOnlyMap({}, _READ_ONLY_STATE)
+
+
+def export_compiled_entries(
+    arrays: tuple[
+        Sequence[Tensor],
+        Sequence[bool],
+        Sequence[int],
+        Sequence[dict[str, float]],
+        Sequence[dict[str, Tensor]],
+    ],
+    hooks: tuple[bool, Callable[[int], object], Sequence[str], Callable[[int, str], bool]],
+    *,
+    convert: Callable[[Tensor], object] | None = None,
+) -> dict[int, dict[str, object]]:
+    """Per-parameter state by flat index: converted host buffers or live Tensors.
+
+    Parameters
+    ----------
+    arrays : tuple
+        Flat parameter list, initialized flags, step counts, scalar state, and buffers.
+    hooks : tuple
+        Step export flag, step value hook, scalar state names, and buffer export predicate.
+    convert : callable or None, optional
+        Optional tensor-to-host converter; when ``None``, returns live detached tensors.
+    """
+    import lucid as _lucid
+
+    params, initialized, steps, pstate, state_bufs = arrays
+    exports_step, step_entry, pstate_names, exports_state = hooks
+
+    out: dict[int, dict[str, object]] = {}
+    for i, p in enumerate(params):
+        if not initialized[i]:
+            continue
+        entry: dict[str, object] = {}
+        if exports_step:
+            step_val = step_entry(i)
+            entry["step"] = (
+                step_val
+                if convert is not None or isinstance(step_val, int)
+                else _lucid.tensor(steps[i], dtype=_lucid.int64)
+            )
+        scalar_dt = _float32_or_wider(p.dtype)
+        for name in pstate_names:
+            if (value := pstate[i].get(name)) is not None:
+                t = _lucid.tensor(value, dtype=scalar_dt)
+                entry[name] = convert(t) if convert is not None else t
+        for name, buf in state_bufs[i].items():
+            if exports_state(i, name):
+                entry[name] = convert(buf) if convert is not None else buf.detach().clone()
+        if entry:
+            out[i] = entry
+    return out
+
+
+def compiled_state_view(
+    groups: Sequence[dict[str, object]], entries: dict[int, dict[str, object]]
+) -> StateMap:
+    """Live read-only view over the compiled state buffers, keyed by parameter.
+
+    Parameters
+    ----------
+    groups : Sequence[dict[str, object]]
+        Live parameter groups from the wrapped optimizer.
+    entries : dict[int, dict[str, object]]
+        Per-parameter exported state dicts keyed by flat parameter index.
+    """
+    params = flat_params(groups)
+    return ReadOnlyMap(
+        {params[i]: ReadOnlyMap(entry, _READ_ONLY_STATE) for i, entry in entries.items()},
+        _READ_ONLY_STATE,
+        _empty_compiled_entry,
+    )

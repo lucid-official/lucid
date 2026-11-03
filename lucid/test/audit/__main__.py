@@ -945,8 +945,10 @@ def _run_suite_stage(args: argparse.Namespace, console: Console) -> tuple[int, i
     Returns ``(broken tests, line-coverage regressions)``.
     """
     console.banner("Suite", "the values, where the sweep checks the contracts")
+    root = Path(__file__).resolve().parents[3]
+    suite_paths = _suite.suite_paths_for_subsystems(root, args.subsystem, args.suite_path)
     result = _suite.run_suite(
-        console, args.suite_path, with_coverage=not args.no_line_coverage, ignore=args.suite_ignore
+        console, suite_paths, with_coverage=not args.no_line_coverage, ignore=args.suite_ignore
     )
     _suite.report_suite(result, console)
 
@@ -978,7 +980,9 @@ def _run_suite_stage(args: argparse.Namespace, console: Console) -> tuple[int, i
                 )
             )
         else:
-            regressions = _suite.report_line_coverage_diff(result, floor, console)
+            regressions = _suite.report_line_coverage_diff(
+                result, floor, console, prefixes=_suite.file_prefixes_for_subsystems(args.subsystem)
+            )
 
     return result.broken, regressions
 
@@ -994,7 +998,14 @@ def _run_doctest_stage(args: argparse.Namespace, console: Console) -> int:
     from lucid.test.audit import _doctests
 
     console.banner("Docstrings", "every documented example, run as written")
-    result = _doctests.run()
+    mod_prefixes: list[str] | None = None
+    if args.subsystem.strip() not in ("", "all"):
+        mod_prefixes = [
+            _surface.SUBSYSTEMS[k][0]
+            for k in (s.strip() for s in args.subsystem.split(","))
+            if k in _surface.SUBSYSTEMS
+        ]
+    result = _doctests.run(mod_prefixes)
     if not result.ran or not result.attempted:
         console.always(console.paint("  no docstring examples found", "grey"))
         return 0
