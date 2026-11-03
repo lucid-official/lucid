@@ -35,12 +35,7 @@ class SwinConverter(_FusedQKVConverter, model_type="swin"):
     """Swin adapters: reference ``query`` / ``key`` / ``value`` projections fuse into ``stages.S.blocks.B.attn.qkv``."""
 
     reference_classes = frozenset(
-        {
-            "SwinModel",
-            "SwinForImageClassification",
-            "SwinForMaskedImageModeling",
-            "SwinBackbone",
-        }
+        {"SwinModel", "SwinForImageClassification", "SwinForMaskedImageModeling", "SwinBackbone"}
     )
     _FUSED = re.compile(
         rf"{_BLOCK}\.attention\.(?:self\.)?(?P<role>query|key|value|q_proj|k_proj|v_proj)"

@@ -41,13 +41,7 @@ _RENAMES: Final = (
 class DETRConverter(_FusedMhaConverter, model_type="detr"):
     """DETR adapters: ``{self,encoder}_attn.{q,k,v,out}_proj`` fuse into ``transformer.{encoder,decoder}.layers.N.{self_attn,multihead_attn}``."""
 
-    reference_classes = frozenset(
-        {
-            "DetrModel",
-            "DetrForObjectDetection",
-            "DetrForSegmentation",
-        }
-    )
+    reference_classes = frozenset({"DetrModel", "DetrForObjectDetection", "DetrForSegmentation"})
     _FUSED = re.compile(
         r"(?:model\.)?(?:(?P<enc>encoder)\.layers\.(?P<en>\d+)\.(?P<eattn>self_attn)"
         r"|(?P<dec>decoder)\.layers\.(?P<dn>\d+)\.(?P<dattn>self_attn|encoder_attn))"
