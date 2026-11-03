@@ -116,7 +116,7 @@ first-class, none bolted on.
 
 ## 🦁 The Model Zoo
 
-Several hundred factories across fifty-odd families, each implemented from its paper rather
+Several hundred factories across seventy-odd families, each implemented from its paper rather
 than ported. Every factory declares its parameter count, and CI rebuilds each model to check
 the declaration against what the code actually constructs — so the numbers on the docs site
 are derived, never typed in.
@@ -149,12 +149,13 @@ factory to use instead of quietly handing back random weights. Needs the `[model
 
 | Domain | Families |
 |---|---|
-| Image classification | LeNet, AlexNet, ZFNet, VGG, GoogLeNet, Inception v3, Inception-ResNet, Xception, ResNet, ResNeXt, ResNeSt, SE-ResNet, SK-ResNet, DenseNet, MobileNet v1–v3, EfficientNet, ConvNeXt, CSPNet |
-| Vision transformers | ViT, Swin, PVT v2, CvT, CoAtNet, MaxViT, CrossViT, InceptionNeXt, EfficientFormer |
+| Image classification | LeNet, AlexNet, ZFNet, VGG, GoogLeNet, Inception v3–v4, Inception-ResNet, Xception, ResNet, ResNeXt, ResNeSt, SE-ResNet, SK-ResNet, DenseNet, MobileNet v1–v4, EfficientNet, ConvNeXt, CSPNet |
+| Vision & video | ViT, Swin, PVT v2, CvT, CoAtNet, MaxViT, CrossViT, InceptionNeXt, EfficientFormer, I-JEPA, V-JEPA, V-JEPA 2 |
 | Detection | YOLO v1–v4, R-CNN, Fast R-CNN, Faster R-CNN, EfficientDet, DETR |
 | Segmentation | U-Net, ResU-Net, Attention U-Net, FCN, MaskFormer, Mask2Former, Mask R-CNN |
-| Generative | DDPM, NCSN, RealNVP, NICE, VAE, Flow Matching, Rectified Flow, Neural ODE |
-| Language | BERT, RoFormer, GPT, GPT-2, T5, Transformer |
+| Generative & multimodal | DDPM, NCSN, Score-SDE, DiT, MeanFlow, Flow Matching, Rectified Flow, RealNVP, NICE, VAE, VQ-VAE, Neural ODE, Stable Diffusion, CLIP |
+| World models | Dreamer v1–v3, PlaNet, DIAMOND, Genie |
+| Language | BERT, RoFormer, GPT, GPT-2, T5, Transformer, TVM |
 
 ## 🏗️ Architecture
 
@@ -168,14 +169,17 @@ factory to use instead of quietly handing back random weights. Needs the `[model
 | **C++ · Ops** | 260+ kernels across every op family |
 | **C++ · CPU backend** | Apple Accelerate — BLAS / LAPACK / vDSP |
 | **C++ · GPU backend** | MLX + Metal |
+| **C++ · Compile** | C++ graph tracer, MPSGraph compiler (fused forward + backward + optimizer, `StaticCache` decoding) |
 | **C++ · Core ML** | MIL protobuf writer, weight blob, `.mlpackage` bundle, ObjC++ runtime |
 
 Dependencies run strictly downward, and CI validates the layer graph on every commit — a
 violation fails the build rather than becoming a convention nobody enforces.
 
-Autograd is reverse-mode over a dynamic graph, with higher-order differentiation available in
-`lucid.autograd`. On the CPU, view ops — `reshape`, `permute`, `transpose`, slicing, `expand` —
-are metadata-only and allocate nothing; Metal tensors keep copy semantics.
+Autograd is reverse-mode over a dynamic graph, with higher-order differentiation and functional
+transforms (`jvp`, `vjp`, `jacrev`, `jacfwd`, `hessian`, `vmap`, `functional_call`) in
+`lucid.autograd`, plus C++ inference-tensor tracking under `inference_mode`. View ops —
+`reshape`, `permute`, `transpose`, slicing, `expand` — share storage as metadata-only view
+families on both CPU and Metal.
 
 ## 🧩 Ecosystem
 
@@ -188,8 +192,12 @@ are metadata-only and allocate nothing; Metal tensors keep copy semantics.
 | `lucid.linalg` | 35+ | QR, SVD, Cholesky, Eigh, LU, solvers, `matrix_exp` |
 | `lucid.fft` | 20+ | full DFT surface, Hermitian forms, N-D variants |
 | `lucid.special` | 35+ | erf, Bessel, gamma, digamma, polygamma, Hurwitz ζ |
-| `lucid.distributions` | 30+ dists, 15+ transforms | constraints, KL registry, MC fallback |
-| `lucid.einops` | 4 | `rearrange`, `reduce`, `repeat`, `einsum` |
+| `lucid.distributions` | 39 dists, 20+ transforms | reparameterised `rsample`, constraints, KL registry |
+| `lucid.peft` | 24 tuners | LoRA, DoRA, PiSSA/OLoRA/EVA/LoRA-GA, AdaLoRA, VeRA, IA3, LoHa, LoKr, OFT/BOFT/HRA/FourierFT, Prompt/Prefix/P-Tuning, X-LoRA, Poly, TIES/DARE merges, reference adapter conversion |
+| `lucid.compile` | 12 | `compile`, `make_step`, `fused_step`, `compiled_decode_step` — MPSGraph compilation |
+| `lucid.quantization` | 35+ | PTQ, dynamic quantization, QAT, `int4` / `int8` MLX GEMM |
+| `lucid.diffeq` | 14 | `odeint`, `odeint_adjoint`, explicit & implicit solvers, events |
+| `lucid.einops` | 7 | `rearrange`, `reduce`, `repeat`, `einsum`, `pack`, `unpack`, `parse_shape` |
 | `lucid.metal` | — | `run_kernel` — write a Metal shader when the op set runs out |
 | `lucid.coreml` | 24 | `.mlpackage` export — Neural Engine, weight compression, flexible shapes, state |
 
