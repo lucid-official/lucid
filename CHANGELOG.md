@@ -73,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - merge float/double vDSP plans into one template
 - give fused-backward grad masks one owner (LCD-834)
 - stop depending on one-off weight converters
+- let the zoo stage define its own command-line options
 
 ---
 

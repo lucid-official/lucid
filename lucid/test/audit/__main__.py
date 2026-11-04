@@ -154,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     PACKAGES.add_flags(p)
-    _add_zoo_options(p)
+    _zoo.add_options(p)
 
     out = p.add_argument_group("output")
     out.add_argument("--json", type=Path, default=None, help="write the full report here")
@@ -209,39 +209,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="measure reach and depth against an independent walk (runs nothing)",
     )
     return p
-
-
-def _add_zoo_options(p: argparse.ArgumentParser) -> None:
-    zoo = p.add_argument_group(
-        "model zoo", "the zoo stage runs under --models, and by default; --no-models leaves it out"
-    )
-    zoo.add_argument(
-        "--family",
-        action="append",
-        default=[],
-        metavar="NAME",
-        help="only this family, or zoo-wide for the multi-family files; repeatable",
-    )
-    zoo.add_argument(
-        "--zoo-record",
-        type=Path,
-        default=None,
-        metavar="DIR",
-        help="write zoo-verify-<family>.md and the ledger here "
-        "(default: obsidian/zoo-verify when this checkout has it, else no notes)",
-    )
-    zoo.add_argument(
-        "--fresh",
-        action="store_true",
-        help="run every family again even if this commit already recorded it",
-    )
-    zoo.add_argument(
-        "--mem-limit-gb",
-        type=float,
-        default=None,
-        metavar="GB",
-        help="footprint that kills a zoo stage (default: derived from this machine's memory)",
-    )
 
 
 # ── information modes ────────────────────────────────────────────────────────
