@@ -113,6 +113,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `create_graph=True` through `embedding_bag` works on Metal.
 
+- post-commit's CHANGELOG amend no longer folds other staged files into a path-limited commit.
+
 ### Performance
 
 - `_C.engine` (`Linear`, `ConvNd`, `ConvTransposeNd`, `LayerNorm`, `RMSNorm`, `BatchNormNd`, `GroupNorm`, `BatchNormEval`, `GlobalResponseNorm`, `Bilinear`): thread `needs_input_grad` (`grad_mask`) and `kGradReads` through fused CPU/Metal backward kernels and `apply_for_graph`, skipping unneeded `dx`/`dW`/`db` GEMMs, convolutions, reductions, and buffer allocations (LCD-697).
@@ -133,6 +135,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `lucid-audit` is scoped by package (`--<package>`, `--no-<package>`, children included) and the model zoo is a package (`--models`, included by default, `--no-models` leaves it out). The zoo runs family by family on Metal by default (`--zoo-device cpu` to change), under a memory budget taken from the machine. Baselines are written only by a run that covers everything, and only `--tests-only` can fail the line coverage floor. `--subsystem` and `--list-subsystems` are removed (use `--list-packages`), `--no-metal` is now `--cpu-only`, and `lucid-audit --models` replaces `tools/verify_zoo.py`.
 - `F.sinusoidal_embedding`, `F.sinusoidal_embedding_2d`, `make_beta_schedule`, `make_sigma_schedule`, `diffusion_posterior_constants`, `flow_prior_sample`, `sample_point_coords` and `DDPMScheduler` default `device` to `None`, the current default device, instead of `"cpu"`. Behaviour under a CPU default is unchanged.
 - `shadow_alloc` refuses float64 and complex128 on Metal with the `NotImplementedError` a real allocation raises.
+- A push to main or a `v*` tag is now judged again by `.githooks/pre-push` (`python -m tools.rules push`), and a commit that skipped pre-commit carries a `Lucid-Bypass` trailer and a log line.
+- The pre-commit hook runs the rule registry's commit level on the staged blobs, so a `git add -p` of part of a file under `lucid/` is refused. `LUCID_SKIP_H4_GUARD` and `LUCID_SKIP_QUALITY_GATE` are gone: `--no-verify` is the only way past those checks, and it leaves the trailer.
 
 ---
 
