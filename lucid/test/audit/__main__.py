@@ -41,6 +41,7 @@ from lucid.test.audit._console import Console, Suppress, Timer, fmt_duration
 from lucid.test.audit._packages import MODELS, PACKAGES
 from lucid.test.audit._plan import PlanError, RunPlan
 from lucid.test.audit._result import STATUS_STYLE, Baseline, Finding, Report, Status
+from lucid.test.audit._zoo_stage import ZooCatalog
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -265,7 +266,7 @@ def _list_packages(console: Console) -> int:
         mine = [s for s in symbols if s.subsystem in keys]
         kind = package.summary()
         if package.key == MODELS:
-            kind += f", {len(_zoo.ZooCatalog(_ROOT).families())} families"
+            kind += f", {len(ZooCatalog(_ROOT).families())} families"
         rows.append(
             [
                 package.flag,

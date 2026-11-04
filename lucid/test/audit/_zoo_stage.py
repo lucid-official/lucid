@@ -17,7 +17,7 @@ import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 if TYPE_CHECKING:
     from lucid.test.audit._zoo_budget import MachineBudget
@@ -61,6 +61,7 @@ class CommandStage(Stage):
 
     command: tuple[str, ...]
 
+    @override
     def argv(self) -> tuple[str, ...]:
         return self.command
 
@@ -80,6 +81,7 @@ class PytestStage(Stage):
     keyword: str = ""
     heavy_off: bool = False
 
+    @override
     def argv(self) -> tuple[str, ...]:
         marker = self.marker
         if self.heavy_off:
@@ -103,6 +105,7 @@ class PytestStage(Stage):
             *self.files,
         )
 
+    @override
     def without_heavy(self, why: str) -> PytestStage | None:
         if self.heavy_off:
             return None

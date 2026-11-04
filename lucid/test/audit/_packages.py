@@ -35,7 +35,7 @@ import argparse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from lucid.test.audit import _suite, _surface
 
@@ -106,22 +106,28 @@ class SubsystemPackage(AuditPackage):
     """A ``SUBSYSTEMS`` entry: swept, tested by subtree, documented by module."""
 
     @property
+    @override
     def stages(self) -> tuple[str, ...]:
         return ("sweep", "suite", "doctests")
 
+    @override
     def summary(self) -> str:
         module, kind = _surface.SUBSYSTEMS[self.key]
         return f"{module} ({kind})"
 
+    @override
     def symbol_keys(self) -> tuple[str, ...]:
         return (self.key,)
 
+    @override
     def test_trees(self, root: Path) -> tuple[str, ...]:
         return tuple(_suite.subsystem_test_dirs(root, self.key))
 
+    @override
     def file_prefixes(self) -> tuple[str, ...]:
         return _suite.file_prefixes_for_subsystems(self.key) or ()
 
+    @override
     def module_prefix(self) -> str:
         return _surface.SUBSYSTEMS[self.key][0]
 
@@ -145,21 +151,27 @@ class ModelZooPackage(AuditPackage):
     _TREES = ("lucid/test/unit/models", "lucid/test/parity/models")
 
     @property
+    @override
     def stages(self) -> tuple[str, ...]:
         return ("zoo",)
 
+    @override
     def summary(self) -> str:
         return "lucid.models (the model zoo, verified family by family)"
 
+    @override
     def symbol_keys(self) -> tuple[str, ...]:
         return ()
 
+    @override
     def test_trees(self, root: Path) -> tuple[str, ...]:
         return tuple(rel for rel in self._TREES if (root / rel).exists())
 
+    @override
     def file_prefixes(self) -> tuple[str, ...]:
         return ("lucid/models/",)
 
+    @override
     def module_prefix(self) -> str:
         return "lucid.models"
 

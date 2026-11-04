@@ -157,7 +157,11 @@ class ZooRun:
         if self.settings.record_dir is not None:
             notebook = _zoo_record.Notebook(self.settings.record_dir, state, families, facts)
 
-        self.console.banner("Model zoo", f"{len(groups)} group(s) · {self.budget.describe()}")
+        self.console.banner(
+            "Model zoo", f"{len(groups)} group(s) · {self.budget.total_gb:.0f} GB machine"
+        )
+        for key, line in zip(("limits", "adapts"), self.budget.limits(), strict=True):
+            self.console.kv(key, line)
         if dirty:
             self.console.always(
                 self.console.paint("  uncommitted changes: no earlier record is reused", "yellow")

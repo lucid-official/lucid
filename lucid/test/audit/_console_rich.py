@@ -33,7 +33,7 @@ Install it with ``pip install lucid-dl[audit]``.
 
 import sys
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, override
 
 from lucid.test.audit._result import Status
 from lucid.test.audit._zoo_report import ZooReporter
@@ -315,18 +315,22 @@ class RichZooReporter(ZooReporter):
         )
         self._last_drawn = 0.0
 
+    @override
     def __enter__(self) -> RichZooReporter:
         self._live.__enter__()
         return self
 
+    @override
     def close(self) -> None:
         if self._live.is_started:
             self._live.__exit__(None, None, None)
 
+    @override
     def _emit(self, line: str) -> None:
         self.console.note(line)
         self._console.print(Text.from_ansi(line))
 
+    @override
     def _draw(self) -> None:
         now = time.monotonic()
         if now - self._last_drawn < _REFRESH_INTERVAL and self.stage_name:

@@ -25,7 +25,7 @@ from lucid.test.audit import _zoo_budget
 from lucid.test.audit._zoo_stage import StageResult, read_result
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
     from lucid.test.audit._zoo_budget import MachineBudget
     from lucid.test.audit._zoo_stage import Stage
@@ -100,10 +100,24 @@ class StageGuard:
             return "mem-guard"
         return "timeout" if elapsed > self._timeout_s else ""
 
-    def _exited(self, proc: subprocess.Popen[bytes]) -> bool:
-        """Wait up to one poll interval; whether the process ended in it."""
+    def _intervals(self) -> Iterator[float]:
+        """Poll quickly at first, then every ``poll_s``.
+
+        A stage that ends inside its first interval is never measured, and a
+        build that took a second reported a peak of 0.0 GB.  The first samples
+        come early (a quarter second, doubling) so a short stage still has a
+        footprint, and a long one costs the usual two seconds a look.
+        """
+        wait = min(0.25, self._poll_s)
+        while True:
+            yield wait
+            wait = min(wait * 2, self._poll_s)
+
+    @staticmethod
+    def _exited(proc: subprocess.Popen[bytes], timeout: float) -> bool:
+        """Wait up to ``timeout``; whether the process ended in it."""
         try:
-            proc.wait(timeout=self._poll_s)
+            proc.wait(timeout=timeout)
         except subprocess.TimeoutExpired:
             return False
         return True
@@ -124,11 +138,15 @@ class StageGuard:
                 start_new_session=True,
             )
             try:
-                while not verdict and not self._exited(proc):
+                for interval in self._intervals():
+                    if self._exited(proc, interval):
+                        break
                     footprint = _zoo_budget.footprint_gb(proc.pid)
                     peak = max(peak, footprint)
                     self._tick(time.monotonic() - started, footprint)
                     verdict = self._verdict(peak, time.monotonic() - started)
+                    if verdict:
+                        break
             finally:
                 # The child has its own session, so ^C on the parent does not
                 # reach it; without this an interrupted run leaves a stage

@@ -23,7 +23,7 @@ cleared around them so they scroll like any other output.
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from lucid.test.audit._console import fmt_duration
 
@@ -213,19 +213,23 @@ class LineReporter(ZooReporter):
         self._frames = 0
         self._last_beat = time.monotonic()
 
+    @override
     def _family_started(self) -> None:
         if not self.console.live:
             self.console.write(f"{self.position()} {self.family_name}")
 
+    @override
     def _stage_started(self) -> None:
         self._last_beat = time.monotonic()
         if not self.console.live:
             self.console.write(f"    {self.stage_name} ...")
 
+    @override
     def _emit(self, line: str) -> None:
         self.console.live_clear()
         self.console.write(line)
 
+    @override
     def _draw(self) -> None:
         console = self.console
         if console.live:

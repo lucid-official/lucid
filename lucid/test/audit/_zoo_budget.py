@@ -127,13 +127,17 @@ class MachineBudget:
         """Whether the largest ``heavy`` test fits under the footprint limit, with headroom."""
         return self.limit_gb >= HEAVY_PEAK_GB * HEAVY_HEADROOM
 
-    def describe(self) -> str:
+    def limits(self) -> tuple[str, str]:
+        """The budget as two short phrases: what kills a stage, and what is adapted."""
         return (
-            f"{self.total_gb:.0f} GB machine · footprint limit {self.limit_gb:g} GB · "
-            f"starts with {self.start_room_gb:g} GB free · floor {self.floor_gb:g} GB · "
+            f"footprint limit {self.limit_gb:g} GB · starts with {self.start_room_gb:g} GB "
+            f"free · floor {self.floor_gb:g} GB",
             f"builds up to {self.build_budget_gb:.1f} GB · "
-            f"heavy tests {'on' if self.admits_heavy else 'deselected'}"
+            f"heavy tests {'on' if self.admits_heavy else 'deselected'}",
         )
+
+    def describe(self) -> str:
+        return f"{self.total_gb:.0f} GB machine · " + " · ".join(self.limits())
 
 
 # ── reading the machine ──────────────────────────────────────────────────────
@@ -166,7 +170,7 @@ def footprint_gb(pid: int) -> float:
     info = _RusageInfo()
     if _libproc().proc_pid_rusage(pid, 2, ctypes.byref(info)) != 0:
         return 0.0
-    return info.phys_footprint / _GIB
+    return float(info.phys_footprint) / _GIB
 
 
 def available_gb() -> float:

@@ -61,7 +61,9 @@ def test_every_package_gets_a_flag_and_its_negation_with_dots_kept() -> None:
     assert "--no-nn.functional" in PACKAGES.flags()
 
 
-def test_a_new_subsystem_entry_gets_its_flags_without_another_edit(monkeypatch) -> None:
+def test_a_new_subsystem_entry_gets_its_flags_without_another_edit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setitem(_surface.SUBSYSTEMS, "brand_new", ("lucid.brand_new", "op"))
     registry = PackageRegistry.default()
     assert {"--brand_new", "--no-brand_new"} <= registry.flags()
@@ -155,12 +157,16 @@ def test_contradictions_are_selection_errors(argv: list[str]) -> None:
         ["--update-coverage", "--cpu-only"],
     ],
 )
-def test_a_contradictory_command_line_exits_2_and_says_why(argv: list[str], capsys) -> None:
+def test_a_contradictory_command_line_exits_2_and_says_why(
+    argv: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
     assert main([*argv, "--no-log"]) == 2
     assert capsys.readouterr().out.strip(), "exit 2 with no explanation"
 
 
-def test_an_unknown_family_exits_2_before_any_stage_runs(capsys) -> None:
+def test_an_unknown_family_exits_2_before_any_stage_runs(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     assert main(["--models", "--family", "no_such_family", "--no-log"]) == 2
     assert "no_such_family" in capsys.readouterr().out
 
@@ -326,7 +332,7 @@ def test_the_removed_flags_are_gone() -> None:
     assert "--list-packages" in parser._option_string_actions
 
 
-def test_list_packages_names_the_zoo(capsys) -> None:
+def test_list_packages_names_the_zoo(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--list-packages", "--no-log"]) == 0
     out = capsys.readouterr().out
     assert "--models" in out and "zoo" in out and "families" in out
@@ -384,7 +390,9 @@ def test_the_package_flags_alone_would_have_selected_the_zoo() -> None:
 # ── the verdict ──────────────────────────────────────────────────────────────
 
 
-def test_the_verdict_has_a_zoo_row_and_the_exit_code_follows_it(capsys) -> None:
+def test_the_verdict_has_a_zoo_row_and_the_exit_code_follows_it(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     console = Console(colour=False)
     assert _verdict(console, {"audit defects": 0, "model zoo failures": 0}) == 0
     assert "model zoo failures" in capsys.readouterr().out

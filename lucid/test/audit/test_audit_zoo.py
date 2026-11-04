@@ -11,6 +11,7 @@ import dataclasses
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import override
 
 import pytest
 
@@ -181,8 +182,8 @@ def _budget(limit_gb: float) -> MachineBudget:
     return MachineBudget(total_gb=64.0, limit_gb=limit_gb, start_room_gb=0.0, floor_gb=0.0)
 
 
-def _guard(tmp_path: Path, limit_gb: float, **options: float) -> StageGuard:
-    return StageGuard(tmp_path, _budget(limit_gb), poll_s=0.05, **options)
+def _guard(tmp_path: Path, limit_gb: float, timeout_s: float = 60.0) -> StageGuard:
+    return StageGuard(tmp_path, _budget(limit_gb), poll_s=0.05, timeout_s=timeout_s)
 
 
 def test_the_guard_kills_a_stage_that_passes_the_footprint_limit(tmp_path: Path) -> None:
@@ -201,6 +202,15 @@ def test_the_guard_reports_how_an_ordinary_process_ended(
 ) -> None:
     outcome = _guard(tmp_path, 8.0).run((sys.executable, "-c", code), tmp_path / "log")
     assert outcome.status == status
+
+
+def test_a_stage_shorter_than_the_poll_interval_still_has_a_footprint(tmp_path: Path) -> None:
+    """A one-second build used to report a peak of 0.0 GB: it ended before the first look."""
+    guard = StageGuard(tmp_path, _budget(8.0), poll_s=2.0)
+    outcome = guard.run(_allocate(120, seconds=1.0), tmp_path / "log")
+    assert outcome.status == "pass"
+    assert outcome.peak_gb > 0.05, "a stage that ends inside its first poll was never measured"
+    assert outcome.seconds < 2.0
 
 
 def test_the_guard_times_out_a_stage_that_never_ends(tmp_path: Path) -> None:
@@ -224,9 +234,11 @@ class _Heavy(Stage):
     heavy: bool = True
     retry_fits: bool = True
 
+    @override
     def argv(self) -> tuple[str, ...]:
         return _allocate(300) if self.heavy else _allocate(1, seconds=0.0)
 
+    @override
     def without_heavy(self, why: str) -> Stage | None:
         if not self.heavy:
             return None
@@ -289,6 +301,7 @@ class _FakeCatalog(ZooCatalog):
         self.counter = counter
         self.failing = failing
 
+    @override
     def families(self) -> dict[str, str]:
         return {"alpha": "vision", "beta": "text"}
 
@@ -301,9 +314,11 @@ class _FakeCatalog(ZooCatalog):
             code += ";print('FAILED t.py::test_x - boom');raise SystemExit(1)"
         return CommandStage(name=name, command=(sys.executable, "-c", code))
 
+    @override
     def family_stages(self, family: str, temp: Path, budget: MachineBudget) -> list[Stage]:
         return [self._stage("contract", family), self._stage("build", family)]
 
+    @override
     def wide_stages(self, temp: Path) -> list[Stage]:
         return [self._stage("tests/test_wide.py", ZOO_WIDE)]
 
@@ -320,7 +335,16 @@ class _Run:
     def runs(self) -> list[str]:
         return self.counter.read_text().split() if self.counter.exists() else []
 
-    def go(self, *, sha: str = SHA, dirty: bool = False, **changes: object) -> _zoo.ZooReport:
+    def go(
+        self,
+        *,
+        sha: str = SHA,
+        dirty: bool = False,
+        families: tuple[str, ...] = (),
+        limit: int = 0,
+        fresh: bool = False,
+        notes: bool = True,
+    ) -> _zoo.ZooReport:
         console = Console(colour=False)
         base = _zoo.ZooSettings(
             state_root=self.root / "state", poll_s=0.05, record_dir=self.root / "notes"
@@ -328,7 +352,13 @@ class _Run:
         run = _zoo.ZooRun(
             self.root,
             console,
-            dataclasses.replace(base, **changes),
+            dataclasses.replace(
+                base,
+                families=families,
+                limit=limit,
+                fresh=fresh,
+                record_dir=base.record_dir if notes else None,
+            ),
             budget=_budget(40.0),
             reporter=LineReporter(console, 40.0),
             catalog=_FakeCatalog(self.root, self.counter, self.failing),
@@ -473,7 +503,7 @@ def test_a_run_writes_a_note_per_family_and_the_ledger(tmp_path: Path) -> None:
 
 def test_without_a_vault_a_run_writes_no_notes(tmp_path: Path) -> None:
     runs = _Run(tmp_path)
-    runs.go(record_dir=None)
+    runs.go(notes=False)
     assert not (tmp_path / "notes").exists()
 
 
@@ -485,7 +515,13 @@ def test_the_notebook_creates_its_directory(tmp_path: Path) -> None:
 
 
 def _namespace(**given: object) -> argparse.Namespace:
-    base = {"family": [], "zoo_record": None, "fresh": False, "mem_limit_gb": None, "limit": 0}
+    base: dict[str, object] = {
+        "family": [],
+        "zoo_record": None,
+        "fresh": False,
+        "mem_limit_gb": None,
+        "limit": 0,
+    }
     return argparse.Namespace(**{**base, **given})
 
 
@@ -538,7 +574,9 @@ def test_the_catalog_finds_the_zoo_as_the_tree_has_it() -> None:
     assert wide and all(isinstance(s, PytestStage) and s.marker == "" for s in wide)
 
 
-def test_the_build_probe_skips_a_factory_past_the_budget_by_name(capsys) -> None:
+def test_the_build_probe_skips_a_factory_past_the_budget_by_name(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     from lucid.test.audit import _zoo_probes
 
     # alexnet declares its parameter counts (lenet does not, and is always built).
@@ -551,7 +589,9 @@ def test_the_build_probe_skips_a_factory_past_the_budget_by_name(capsys) -> None
 # ── the display ──────────────────────────────────────────────────────────────
 
 
-def test_the_plain_display_names_the_family_the_stage_and_the_tally(tmp_path: Path, capsys) -> None:
+def test_the_plain_display_names_the_family_the_stage_and_the_tally(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     _Run(tmp_path).go()
     out = capsys.readouterr().out
     assert "[1/3] alpha" in out and "[2/3] beta" in out and "[3/3] zoo-wide" in out
@@ -560,7 +600,9 @@ def test_the_plain_display_names_the_family_the_stage_and_the_tally(tmp_path: Pa
     assert "GB" in out and "min" in out
 
 
-def test_a_failing_stage_turns_the_tally_red_in_the_plain_display(tmp_path: Path, capsys) -> None:
+def test_a_failing_stage_turns_the_tally_red_in_the_plain_display(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     _Run(tmp_path, failing=("beta",)).go()
     out = capsys.readouterr().out
     assert "beta: fail" in out and "families ok 2 fail 1" in out and "stages ok 3 fail 2" in out
@@ -581,7 +623,9 @@ def test_the_live_frame_shows_family_stage_elapsed_footprint_and_tally() -> None
     assert "families ok 0 fail 0" in frame
 
 
-def test_a_stage_that_runs_long_says_it_is_still_alive(monkeypatch, capsys) -> None:
+def test_a_stage_that_runs_long_says_it_is_still_alive(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     monkeypatch.setattr(_zoo_report, "HEARTBEAT_S", 0.0)
     reporter = LineReporter(Console(colour=False), 28.0)
     reporter.start(2)
@@ -599,7 +643,7 @@ def test_the_reporter_picks_the_stdlib_display_without_a_terminal() -> None:
 # ── the stage inside the audit ───────────────────────────────────────────────
 
 
-def test_the_zoo_stage_failures_are_the_exit_code(monkeypatch) -> None:
+def test_the_zoo_stage_failures_are_the_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
     from lucid.test.audit.__main__ import main
 
     monkeypatch.setattr(_zoo, "run_zoo_stage", lambda *args: 0)
@@ -608,7 +652,9 @@ def test_the_zoo_stage_failures_are_the_exit_code(monkeypatch) -> None:
     assert main(["--models", "--no-log"]) == 1
 
 
-def test_a_zoo_stage_that_breaks_is_a_broken_harness_not_a_failed_framework(monkeypatch) -> None:
+def test_a_zoo_stage_that_breaks_is_a_broken_harness_not_a_failed_framework(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from lucid.test.audit.__main__ import main
 
     def broken(*args: object) -> int:
@@ -618,7 +664,9 @@ def test_a_zoo_stage_that_breaks_is_a_broken_harness_not_a_failed_framework(monk
     assert main(["--models", "--no-log"]) == 2
 
 
-def test_models_alone_runs_the_zoo_and_nothing_else(monkeypatch, capsys) -> None:
+def test_models_alone_runs_the_zoo_and_nothing_else(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     from lucid.test.audit.__main__ import main
 
     monkeypatch.setattr(_zoo, "run_zoo_stage", lambda *args: 0)
