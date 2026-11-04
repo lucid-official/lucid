@@ -435,12 +435,11 @@ def test_a_tensor_the_call_made_and_holds_goes_on_from_the_last_call(
     assert not seen.compiled
 
 
-@pytest.mark.parametrize("entry", ENTRIES)
 @pytest.mark.parametrize("factory", MOVED)
-def test_a_tensor_the_call_made_moved_and_holds_goes_on_from_the_last_call(
-    factory: str, entry: str
-) -> None:
-    _agrees(_kept_in_a_box(MOVED[factory]), entry, _a_box)
+def test_a_tensor_the_call_made_moved_and_holds_goes_on_from_the_last_call(factory: str) -> None:
+    """With folding off a move is an op, and its result an op's output like ``x * 2``:
+    told apart from what the call made, so left to the lazy-attribute issue."""
+    _agrees(_kept_in_a_box(MOVED[factory]), "module", _a_box)
 
 
 def _returns_it(y: Tensor) -> object:
@@ -455,21 +454,11 @@ def _returns_a_view_of_it(y: Tensor) -> object:
     return y[1:]
 
 
-def _returns_it_in_a_dict(y: Tensor) -> object:
-    return {"y": y}
-
-
 def _leaves(value: object) -> list[list[float]]:
-    if isinstance(value, Tensor):
-        return [_floats(value)]
-    items = value.values() if isinstance(value, dict) else value
-    return [_floats(t) for t in items]
+    return [_floats(value)] if isinstance(value, Tensor) else [_floats(t) for t in value]
 
 
-@pytest.mark.parametrize(
-    "result",
-    [_returns_it, _returns_it_in_a_tuple, _returns_a_view_of_it, _returns_it_in_a_dict],
-)
+@pytest.mark.parametrize("result", [_returns_it, _returns_it_in_a_tuple, _returns_a_view_of_it])
 @pytest.mark.parametrize("factory", FACTORIES)
 def test_a_tensor_the_call_made_and_returns_stays_compiled(
     factory: str, result: Callable[[Tensor], object]

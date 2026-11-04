@@ -866,6 +866,13 @@ LUCID_API void swap_executable_inplace_targets(const std::vector<TensorImplPtr>&
             target->bump_version();
             continue;
         }
+        // Over a Metal shared buffer, the values go into the buffer, or another
+        // tensor over it never sees them.
+        if (target->shared_buffer() != nullptr) {
+            target->copy_from(TensorImpl(Storage{std::move(fresh_outputs[j])}, target->shape(),
+                                         target->dtype(), Device::GPU, false));
+            continue;
+        }
         // The fresh array is the target's elements, dense.  A target whose
         // buffer is its elements takes it as its array; a Metal view of part
         // of a tensor has it written into its part of the family's root, as
