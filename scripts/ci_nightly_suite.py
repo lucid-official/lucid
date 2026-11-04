@@ -80,6 +80,14 @@ DESIGNED: dict[str, tuple[Designed, ...]] = {
     "lucid/test/parity/nn/test_interpolate_sample_positions_parity.py": (
         Designed(r"^Metal has no float64$", None, "every float64 case runs on the CPU only"),
     ),
+    "lucid/test/parity/test_distribution_constraints_parity.py": (
+        Designed(
+            r"^Bernoulli offers no interior support point$",
+            2,
+            "a Bernoulli's support is {0, 1}, so a gradient has no interior point to be "
+            "compared at, on either device",
+        ),
+    ),
     "lucid/test/unit/models/test_models_inplace_independence.py": (
         # None, deliberately, and so held one way only: a family that loses
         # its last inplace module starts skipping unseen.  A pinned count, or
