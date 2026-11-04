@@ -60,11 +60,6 @@ _READS_A_STORAGE = "not the kind this op reads"
 
 _METAL_DTYPE_REFUSAL = "is not supported on GPU"
 
-#: What builds float64 on a Metal default, and so refuses for real and in shadow
-#: alike, until LCD-849.  Whichever of LCD-849 and this lands second empties these.
-_MODULES_AWAITING_LCD_849: set[str] = set()
-_FAMILIES_AWAITING_LCD_849: set[str] = set()
-
 
 @dataclasses.dataclass
 class _Findings:
@@ -302,11 +297,6 @@ def _main(question: str) -> None:
     print(json.dumps(dataclasses.asdict(found)))
 
 
-def _refusing(found: _Findings) -> set[str]:
-    """Which builds Metal alone refuses; any other difference fails the caller."""
-    return {entry.partition(":")[0].partition("/")[0] for entry in found.builds_differ}
-
-
 def _sweep(question: str) -> _Findings:
     done = subprocess.run(
         [
@@ -342,7 +332,7 @@ def test_every_op_answers_the_same_on_both_devices(question: str) -> None:
 def test_every_module_class_builds_the_same_under_a_metal_default() -> None:
     found = _sweep("modules")
     assert found.swept >= 300, f"reached only {found.swept} classes"
-    assert _refusing(found) == _MODULES_AWAITING_LCD_849, found.builds_differ
+    assert found.builds_differ == []
     assert found.real_tensors == []
 
 
@@ -350,7 +340,7 @@ def test_every_module_class_builds_the_same_under_a_metal_default() -> None:
 def test_a_factory_of_every_family_builds_the_same_under_a_metal_default() -> None:
     found = _sweep("families")
     assert found.swept >= 50, f"reached only {found.swept} families"
-    assert _refusing(found) == _FAMILIES_AWAITING_LCD_849, found.builds_differ
+    assert found.builds_differ == []
     assert found.real_tensors == []
 
 

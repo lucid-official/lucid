@@ -11,12 +11,13 @@ the CPU:
   (``positional_encoding.pe`` in Transformer, ``sigmas`` in NCSN, the schedules
   of DiT and of learned-variance DDPM).
 
-No single kind of build sees both, so there are two sweeps.  A ``shadow_alloc``
-build covers every factory at its real size and reports placement, but it
-carries metadata only and accepts float64 on Metal.  A real build of each
-family's smallest factory, shrunk through its config, is refused float64 the way
-a user is.  Below them, the families that failed run for real, a table holds the
-same numbers whichever default it was built under, and no helper defaults its
+No single kind of build sees everything, so there are two sweeps.  A
+``shadow_alloc`` build covers every factory at its real size, reports placement
+and refuses float64 on Metal as a real build does, but it carries metadata only:
+no kernel runs and no host buffer is filled or uploaded.  A real build of each
+family's smallest factory, shrunk through its config, runs them the way a user's
+does.  Below them, the families that failed run for real, a table holds the same
+numbers whichever default it was built under, and no helper defaults its
 ``device`` to the CPU, which also covers the ones no constructor reaches.
 
 Every test leaves the default device as it found it.
@@ -78,28 +79,9 @@ def _off_metal(model: nn.Module) -> list[str]:
 
 # ── every factory, at real size ──────────────────────────────────────────────
 
-#: ``shadow_alloc`` cannot build an ``Embedding`` with ``padding_idx`` on Metal.
-_NEEDS_LCD_850 = frozenset({"bert", "roformer"})
-
-
-def _factory_params() -> list[Any]:
-    return [
-        (
-            pytest.param(
-                name,
-                marks=pytest.mark.xfail(
-                    strict=True, reason="LCD-850: shadow_alloc on Metal, padding_idx"
-                ),
-            )
-            if _REGISTRY[name].family in _NEEDS_LCD_850
-            else name
-        )
-        for name in list_models()
-    ]
-
 
 @pytest.mark.usefixtures("metal_default")
-@pytest.mark.parametrize("name", _factory_params())
+@pytest.mark.parametrize("name", list_models())
 def test_a_factory_builds_whole_on_metal(name: str) -> None:
     with shadow_alloc():
         model = models.create_model(name)
@@ -455,9 +437,9 @@ _PLACED: dict[str, Callable[..., Tensor]] = {
     "sinusoidal_embedding_2d": lambda **kw: F.sinusoidal_embedding_2d(2, 2, 4, **kw),
     "make_beta_schedule": lambda **kw: make_beta_schedule(5, **kw),
     "make_sigma_schedule": lambda **kw: make_sigma_schedule(4, sigma_max=1.0, sigma_min=0.1, **kw),
-    "posterior_constants": lambda **kw: diffusion_posterior_constants(
-        [0.1, 0.2], **kw
-    ).log_variance,
+    "posterior_constants": lambda **kw: (
+        diffusion_posterior_constants([0.1, 0.2], **kw).log_variance
+    ),
     "flow_prior_sample_gaussian": lambda **kw: flow_prior_sample("gaussian", (2, 2), **kw),
     "flow_prior_sample_logistic": lambda **kw: flow_prior_sample("logistic", (2, 2), **kw),
     "sample_point_coords": lambda **kw: sample_point_coords(3, **kw),
