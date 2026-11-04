@@ -1,4 +1,4 @@
-"""Exhaustive correctness sweep over Lucid, excluding the model zoo.
+"""Exhaustive correctness diagnosis of Lucid, the model zoo included.
 
 Why this exists
 ---------------
@@ -15,7 +15,9 @@ So this package does three things the hand-rolled version could not:
 
 1. **Enumerates the denominator.**  Every public symbol outside
    ``lucid.models`` is counted whether or not it can be probed, and the
-   summary always prints reached-over-total.
+   summary always prints reached-over-total.  The model zoo is not swept
+   symbol by symbol; it is a package of its own with a family-by-family
+   stage (:mod:`~lucid.test.audit._zoo`), so "the audit is clean" covers it.
 2. **Names what it could not reach.**  ``SKIP`` is a first-class outcome
    with a reason, and ``--list-uncovered`` prints the work queue for
    extending :mod:`~lucid.test.audit._specs`.
@@ -32,7 +34,8 @@ Usage
     python -m lucid.test.audit --help
     python -m lucid.test.audit --list-axes
     python -m lucid.test.audit --quick
-    python -m lucid.test.audit --axis grad --subsystem nn.functional
+    python -m lucid.test.audit --axis grad --nn.functional
+    python -m lucid.test.audit --models --family lenet
 
 Under pytest, :mod:`lucid.test.audit.test_audit_smoke` runs a small slice
 so the harness itself cannot rot; the full sweep is deliberately not a

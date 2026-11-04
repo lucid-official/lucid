@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING, Any
 import lucid
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
+    from collections.abc import Callable, Iterator
 
 #: Same exclusions as the sweep's surface walk, and for the same reasons:
 #: the zoo has its own suites, ``lucid.test`` is this tool, ``_C`` is the
@@ -66,16 +66,14 @@ class DoctestResult:
         self.ran = ran
 
 
-def _modules(prefixes: Sequence[str] | None = None) -> Iterator[Any]:
-    if prefixes is None or "lucid" in prefixes:
+def _modules(scope: Callable[[str], bool] | None = None) -> Iterator[Any]:
+    if scope is None or scope("lucid"):
         yield lucid
     for info in pkgutil.walk_packages(lucid.__path__, "lucid."):
         name = info.name
         if name.startswith(_SKIP):
             continue
-        if prefixes is not None and not any(
-            name == p or name.startswith(p + ".") for p in prefixes
-        ):
+        if scope is not None and not scope(name):
             continue
         # Private packages stay: ``lucid._ops`` and ``lucid._tensor`` hold
         # most of the tensor API's documentation, and a docstring is
@@ -128,11 +126,11 @@ def _run_installed(modules: list[Any], per_module: dict[str, int]) -> tuple[int,
     return failed, attempted
 
 
-def run(prefixes: Sequence[str] | None = None) -> DoctestResult:
-    """Every docstring example in the package (or ``prefixes``), once."""
+def run(scope: Callable[[str], bool] | None = None) -> DoctestResult:
+    """Every docstring example in the package (or the modules ``scope`` admits), once."""
     failed = attempted = 0
     per_module: dict[str, int] = {}
-    modules = list(_modules(prefixes))
+    modules = list(_modules(scope))
     for module in modules:
         buffer = io.StringIO()
         try:

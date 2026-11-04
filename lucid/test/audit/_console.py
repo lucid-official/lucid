@@ -292,6 +292,21 @@ class Console:
         """Leave the live region in place and stop tracking it."""
         self._live_lines = 0
 
+    def live_clear(self) -> None:
+        """Erase the live region, so a permanent line can be printed where it was.
+
+        ``live_done`` leaves the last frame on screen, which suits a stage
+        that ends in a summary of itself.  A region that is redrawn many times
+        and interleaved with result lines would leave a stale frame between
+        every pair of them.
+        """
+        if not self._live_lines:
+            return
+        n = self._live_lines
+        sys.stdout.write(f"\x1b[{n}A" + "\x1b[2K\n" * n + f"\x1b[{n}A")
+        sys.stdout.flush()
+        self._live_lines = 0
+
 
 def _strip(text: str) -> str:
     """Length of ``text`` as displayed, ignoring escape sequences."""

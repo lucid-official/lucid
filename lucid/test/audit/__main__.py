@@ -7,12 +7,16 @@ Examples
 --------
 ::
 
-    lucid-audit                          # everything
+    lucid-audit                          # every package, the model zoo included
+    lucid-audit --models                 # the model zoo, family by family, alone
+    lucid-audit --nn --linalg            # just those packages (and their children)
+    lucid-audit --no-models              # every package except the model zoo
     lucid-audit --coverage               # reach and depth, running nothing
     lucid-audit --quick                  # fewer domains, smaller probes
     lucid-audit --axis grad,nonfinite
-    lucid-audit --subsystem nn.functional --select 'conv|pool'
+    lucid-audit --nn.functional --select 'conv|pool'
     lucid-audit --json audit.json --known lucid/test/audit/known.json
+    lucid-audit --list-packages          # what the flags above select
     lucid-audit --list-uncovered         # what the harness cannot reach
 
 Exit status is ``0`` when no defect survived, ``1`` when one did, ``2``
@@ -32,8 +36,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from lucid.test.audit import _axes, _console_rich, _probe, _suite, _surface
+from lucid.test.audit import _axes, _console_rich, _probe, _suite, _surface, _zoo
 from lucid.test.audit._console import Console, Suppress, Timer, fmt_duration
+from lucid.test.audit._packages import MODELS, PACKAGES
+from lucid.test.audit._plan import PlanError, RunPlan
 from lucid.test.audit._result import STATUS_STYLE, Baseline, Finding, Report, Status
 
 if TYPE_CHECKING:
@@ -48,13 +54,18 @@ _DEFAULT_DOCTEST = Path(__file__).with_name("doctest.json")
 # run say" will look first.  Git-ignored: the gate is required to leave the
 # checkout as it found it, and this is the one file it deliberately writes.
 _DEFAULT_LOG = Path(__file__).resolve().parents[1] / "audit.log"
+_ROOT = Path(__file__).resolve().parents[3]
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="python -m lucid.test.audit",
-        description="Exhaustive correctness sweep over Lucid, excluding the model zoo.",
+        description="Exhaustive correctness diagnosis of Lucid: the symbol sweep, the "
+        "test suite, the docstring examples and the model zoo.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        # Package flags are generated, and an abbreviation of one of ~75 option
+        # strings is a guess about which the caller meant.
+        allow_abbrev=False,
         epilog=(
             "Statuses: PASS correct · FAIL a defect · TRNC the finite-difference probe "
             "was the limit, not the op · GAUG defined only up to a symmetry · "
@@ -64,13 +75,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sel = p.add_argument_group("selection")
     sel.add_argument("--axis", default="all", help="comma-separated axis names, or 'all'")
-    sel.add_argument("--subsystem", default="all", help="comma-separated subsystem keys, or 'all'")
     sel.add_argument("--select", default="", help="regular expression over symbol names")
-    sel.add_argument("--limit", type=int, default=0, help="stop after N symbols (smoke run)")
+    sel.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="stop after N symbols (smoke run); for the model zoo, after N families",
+    )
 
     run = p.add_argument_group("run")
     run.add_argument("--quick", action="store_true", help="fewer domains, looser sweep")
-    run.add_argument("--no-metal", action="store_true", help="skip every GPU comparison")
+    run.add_argument("--cpu-only", action="store_true", help="skip every GPU comparison")
     run.add_argument("--step", type=float, default=1e-5, help="finite-difference step")
     run.add_argument("--tolerance", type=float, default=2e-5, help="relative tolerance")
     run.add_argument("--fail-fast", action="store_true", help="stop at the first defect")
@@ -137,6 +152,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="record the current line coverage as the new floor",
     )
 
+    PACKAGES.add_flags(p)
+    _add_zoo_options(p)
+
     out = p.add_argument_group("output")
     out.add_argument("--json", type=Path, default=None, help="write the full report here")
     out.add_argument("--known", type=Path, default=_DEFAULT_KNOWN, help="baseline file")
@@ -175,7 +193,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     info = p.add_argument_group("information")
     info.add_argument("--list-axes", action="store_true")
-    info.add_argument("--list-subsystems", action="store_true")
+    info.add_argument(
+        "--list-packages", action="store_true", help="the packages the flags above select"
+    )
     info.add_argument("--list-uncovered", action="store_true", help="symbols no axis reached")
     info.add_argument(
         "--self-check",
@@ -188,6 +208,39 @@ def build_parser() -> argparse.ArgumentParser:
         help="measure reach and depth against an independent walk (runs nothing)",
     )
     return p
+
+
+def _add_zoo_options(p: argparse.ArgumentParser) -> None:
+    zoo = p.add_argument_group(
+        "model zoo", "the zoo stage runs under --models, and by default; --no-models leaves it out"
+    )
+    zoo.add_argument(
+        "--family",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="only this family, or zoo-wide for the multi-family files; repeatable",
+    )
+    zoo.add_argument(
+        "--zoo-record",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help="write zoo-verify-<family>.md and the ledger here "
+        "(default: obsidian/zoo-verify when this checkout has it, else no notes)",
+    )
+    zoo.add_argument(
+        "--fresh",
+        action="store_true",
+        help="run every family again even if this commit already recorded it",
+    )
+    zoo.add_argument(
+        "--mem-limit-gb",
+        type=float,
+        default=None,
+        metavar="GB",
+        help="footprint that kills a zoo stage (default: derived from this machine's memory)",
+    )
 
 
 # ── information modes ────────────────────────────────────────────────────────
@@ -203,18 +256,30 @@ def _list_axes(console: Console) -> int:
     return 0
 
 
-def _list_subsystems(console: Console) -> int:
-    console.banner("Subsystems", "the audit denominator")
+def _list_packages(console: Console) -> int:
+    console.banner("Packages", "what --<package> and --no-<package> select")
     symbols = _surface.enumerate_surface()
     rows = []
-    for key in _surface.SUBSYSTEMS:
-        of_key = [s for s in symbols if s.subsystem == key]
-        if not of_key:
-            continue
-        inert = sum(1 for s in of_key if s.inert)
-        rows.append([key, str(len(of_key)), str(len(of_key) - inert), _surface.SUBSYSTEMS[key][1]])
+    for package in PACKAGES:
+        keys = package.symbol_keys()
+        mine = [s for s in symbols if s.subsystem in keys]
+        kind = package.summary()
+        if package.key == MODELS:
+            kind += f", {len(_zoo.ZooCatalog(_ROOT).families())} families"
+        rows.append(
+            [
+                package.flag,
+                str(len(mine)) if keys else "-",
+                str(sum(1 for s in mine if not s.inert)) if keys else "-",
+                ", ".join(package.stages),
+                kind,
+            ]
+        )
     console.table(
-        ["subsystem", "symbols", "stateful", "kind"], rows, ["l", "r", "r", "l"], always=True
+        ["package", "symbols", "stateful", "stages", "kind"],
+        rows,
+        ["l", "r", "r", "l", "l"],
+        always=True,
     )
     console.always("")
     for name, why in _surface.EXCLUDED.items():
@@ -397,12 +462,7 @@ def _selected_axes(spec: str) -> list[_axes.Axis]:
 
 
 def _selected_symbols(args: argparse.Namespace) -> list[_surface.Symbol]:
-    subsystems = (
-        None
-        if args.subsystem.strip() in ("all", "")
-        else [s.strip() for s in args.subsystem.split(",") if s.strip()]
-    )
-    symbols = _surface.enumerate_surface(subsystems)
+    symbols = _surface.enumerate_surface(PACKAGES.select(args).sweep_keys())
     if args.select:
         pattern = re.compile(args.select)
         symbols = [s for s in symbols if pattern.search(s.qualname)]
@@ -435,15 +495,16 @@ def _tally(counts: dict[Status, int], console: Console) -> str:
 def run(args: argparse.Namespace, console: Console) -> Report:
     axes = _selected_axes(args.axis)
     symbols = _selected_symbols(args)
-    metal = (not args.no_metal) and _probe.metal_available()
+    metal = (not args.cpu_only) and _probe.metal_available()
     ctx = _axes.Context(quick=args.quick, metal=metal, step=args.step, tolerance=args.tolerance)
 
     report = Report()
     report.surface_total = len(symbols)
     report.axes_run = [a.name for a in axes]
+    selection = PACKAGES.select(args)
     report.config = {
         "axis": args.axis,
-        "subsystem": args.subsystem,
+        "packages": selection.describe(),
         "select": args.select,
         "quick": args.quick,
         "metal": metal,
@@ -455,7 +516,7 @@ def run(args: argparse.Namespace, console: Console) -> Report:
     console.banner(
         "Lucid — exhaustive audit",
         f"{len(axes)} axes · {len(symbols)} symbols · "
-        f"metal {'on' if metal else 'off'} · model zoo excluded",
+        f"metal {'on' if metal else 'off'} · {selection.describe()}",
     )
 
     total_work = sum(sum(1 for s in symbols if a.applies(s)) for a in axes)
@@ -715,7 +776,7 @@ def _scoped_coverage(recorded: dict[str, str], args: argparse.Namespace) -> dict
     selected cells that now skip or refuse their input.
     """
     axes = {axis.name for axis in _selected_axes(args.axis)}
-    scoped_symbols = args.subsystem.strip() not in ("all", "") or args.select or args.limit
+    scoped_symbols = PACKAGES.select(args).sweep_keys() is not None or args.select or args.limit
     symbols = {symbol.qualname for symbol in _selected_symbols(args)} if scoped_symbols else None
     return {
         key: value
@@ -939,16 +1000,21 @@ def _run_audit_stage(args: argparse.Namespace, console: Console) -> tuple[int, i
     return len(report.defects), regressions
 
 
-def _run_suite_stage(args: argparse.Namespace, console: Console) -> tuple[int, int]:
+def _run_suite_stage(args: argparse.Namespace, console: Console, plan: RunPlan) -> tuple[int, int]:
     """The test suite and its line-coverage floor.
 
     Returns ``(broken tests, line-coverage regressions)``.
     """
     console.banner("Suite", "the values, where the sweep checks the contracts")
-    root = Path(__file__).resolve().parents[3]
-    suite_paths = _suite.suite_paths_for_subsystems(root, args.subsystem, args.suite_path)
+    where = plan.selection.suite_plan(_ROOT, args.suite_path, zoo_stage=plan.zoo)
+    if not where.paths:
+        console.always(console.paint("  no test subtree is declared for these packages", "grey"))
+        return 0, 0
     result = _suite.run_suite(
-        console, suite_paths, with_coverage=not args.no_line_coverage, ignore=args.suite_ignore
+        console,
+        list(where.paths),
+        with_coverage=not args.no_line_coverage,
+        ignore=[*where.ignore, *args.suite_ignore],
     )
     _suite.report_suite(result, console)
 
@@ -981,13 +1047,13 @@ def _run_suite_stage(args: argparse.Namespace, console: Console) -> tuple[int, i
             )
         else:
             regressions = _suite.report_line_coverage_diff(
-                result, floor, console, prefixes=_suite.file_prefixes_for_subsystems(args.subsystem)
+                result, floor, console, in_scope=where.in_scope
             )
 
     return result.broken, regressions
 
 
-def _run_doctest_stage(args: argparse.Namespace, console: Console) -> int:
+def _run_doctest_stage(args: argparse.Namespace, console: Console, plan: RunPlan) -> int:
     """The documentation, against the code it documents.
 
     Returns the number of modules whose docstrings got *worse*.  The
@@ -998,14 +1064,7 @@ def _run_doctest_stage(args: argparse.Namespace, console: Console) -> int:
     from lucid.test.audit import _doctests
 
     console.banner("Docstrings", "every documented example, run as written")
-    mod_prefixes: list[str] | None = None
-    if args.subsystem.strip() not in ("", "all"):
-        mod_prefixes = [
-            _surface.SUBSYSTEMS[k][0]
-            for k in (s.strip() for s in args.subsystem.split(","))
-            if k in _surface.SUBSYSTEMS
-        ]
-    result = _doctests.run(mod_prefixes)
+    result = _doctests.run(plan.selection.module_scope)
     if not result.ran or not result.attempted:
         console.always(console.paint("  no docstring examples found", "grey"))
         return 0
@@ -1111,9 +1170,53 @@ def _verdict(console: Console, tallies: dict[str, int]) -> int:
     return 1 if total else 0
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+def _run_stages(
+    plan: RunPlan, args: argparse.Namespace, console: Console, command: str
+) -> dict[str, int]:
+    """Run the planned stages in order; ``label -> count`` for the verdict.
 
+    The self-check runs *first*, on a clean interpreter.  Ordering is
+    load-bearing, not cosmetic: run after the sweep, four mutants stopped being
+    caught — the sweep leaves device and module state behind, and the axes that
+    need Metal or a freshly built module then answered UNSUPPORTED instead of
+    FAIL.  An instrument check the run itself perturbs proves nothing.  The
+    model zoo runs last because it is by far the longest, and everything the
+    cheaper stages can say is worth having before it starts.
+    """
+    tallies: dict[str, int] = {}
+    if plan.self_check:
+        tallies["blind axes"] = _run_self_check_stage(console)
+    if plan.sweep:
+        defects, cell_regressions = _run_audit_stage(args, console)
+        tallies["audit defects"] = defects
+        tallies["audit coverage regressions"] = cell_regressions
+    if plan.suite:
+        broken, line_regressions = _run_suite_stage(args, console, plan)
+        tallies["suite failures"] = broken
+        tallies["line coverage regressions"] = line_regressions
+    if plan.doctests:
+        tallies["docstring regressions"] = _run_doctest_stage(args, console, plan)
+    if plan.zoo:
+        tallies["model zoo failures"] = _zoo.run_zoo_stage(args, console, _ROOT, command)
+    return tallies
+
+
+def _run_information_mode(args: argparse.Namespace, console: Console) -> int | None:
+    """The exit status of the information mode asked for, or ``None`` if none was."""
+    if args.list_axes:
+        return _list_axes(console)
+    if args.list_packages:
+        return _list_packages(console)
+    if args.self_check:
+        return _self_check(console)
+    if args.coverage:
+        return _report_coverage(console)
+    if args.list_uncovered:
+        return report_uncovered(console, args)
+    return None
+
+
+def _open_console(args: argparse.Namespace, argv: Sequence[str] | None) -> Console:
     # The informational modes answer a question about the harness rather
     # than running the gate.  They get no transcript: the log is truncated
     # on open, and losing the last real run to a ``--list-axes`` typed
@@ -1121,7 +1224,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # to preserve.
     informational = bool(
         args.list_axes
-        or args.list_subsystems
+        or args.list_packages
         or args.self_check
         or args.coverage
         or args.list_uncovered
@@ -1137,73 +1240,27 @@ def main(argv: Sequence[str] | None = None) -> int:
         stamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
         console.note(f"# lucid-audit  {stamp}")
         console.note("# " + " ".join([Path(sys.argv[0]).name, *(argv or sys.argv[1:])]))
+    return console
 
-    if args.list_axes:
-        return _list_axes(console)
-    if args.list_subsystems:
-        return _list_subsystems(console)
-    if args.self_check:
-        return _self_check(console)
-    if args.coverage:
-        return _report_coverage(console)
-    if args.list_uncovered:
-        return report_uncovered(console, args)
 
-    if sum((args.audit_only, args.tests_only, args.doctests_only)) > 1:
-        console.always(
-            console.paint(
-                "  --audit-only, --tests-only and --doctests-only exclude each "
-                "other; pass none to run everything",
-                "red",
-            )
-        )
-        return 2
-
-    if args.update_coverage and (
-        args.axis.strip() not in ("all", "")
-        or args.subsystem.strip() not in ("all", "")
-        or args.select
-        or args.limit
-        or args.fail_fast
-        or args.no_metal
-        or args.quick
-    ):
-        console.always("--update-coverage requires a complete, unfiltered sweep")
-        return 2
-
-    # Both stages by default.  A gate that has to be invoked twice is a
-    # gate that gets invoked once, and this session's defects split
-    # roughly evenly between what each stage can see.
-    do_audit = not (args.tests_only or args.doctests_only)
-    do_suite = not (args.audit_only or args.doctests_only)
-    # The doctest stage rides with the suite, and alone under
-    # --doctests-only.  CI's gate ran the sweep with --audit-only, which
-    # skipped the examples, and 63 of them shipped without ever running.
-    do_doctests = (do_suite or args.doctests_only) and not args.no_doctests
-
-    tallies: dict[str, int] = {}
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    console = _open_console(args, argv)
     try:
-        # The self-check runs *first*, on a clean interpreter.
-        #
-        # Ordering is load-bearing, not cosmetic.  Run after the sweep,
-        # four mutants stopped being caught — the sweep leaves device and
-        # module state behind, and the axes that need Metal or a freshly
-        # built module then answered UNSUPPORTED instead of FAIL.  An
-        # instrument check that the run itself perturbs proves nothing,
-        # and proving the instruments before using them is the order the
-        # argument needs anyway.
-        if do_audit and not args.no_self_check:
-            tallies["blind axes"] = _run_self_check_stage(console)
-        if do_audit:
-            defects, cell_regressions = _run_audit_stage(args, console)
-            tallies["audit defects"] = defects
-            tallies["audit coverage regressions"] = cell_regressions
-        if do_suite:
-            broken, line_regressions = _run_suite_stage(args, console)
-            tallies["suite failures"] = broken
-            tallies["line coverage regressions"] = line_regressions
-        if do_doctests:
-            tallies["docstring regressions"] = _run_doctest_stage(args, console)
+        plan = RunPlan.from_args(args)
+        if plan.zoo:
+            _zoo.validate_families(_ROOT, args.family)
+    except PlanError as exc:
+        console.always(console.paint(f"  {exc}", "red"))
+        return 2
+
+    informed = _run_information_mode(args, console)
+    if informed is not None:
+        return informed
+
+    command = " ".join(["lucid-audit", *(sys.argv[1:] if argv is None else argv)])
+    try:
+        tallies = _run_stages(plan, args, console, command)
     except KeyboardInterrupt:
         console.always("")
         console.always(console.paint("  interrupted — no report written", "yellow"))

@@ -36,6 +36,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from lucid.test.audit._result import Status
+from lucid.test.audit._zoo_report import ZooReporter
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -284,6 +285,70 @@ class RichReporter:
         return Group(*parts)
 
 
+class RichZooReporter(ZooReporter):
+    """The zoo stage's progress as a ``rich`` live region: one family bar and a status line.
+
+    Result lines are printed through the live region's own console, which is
+    the only way to put text above a ``Live`` without tearing it; they are
+    mirrored into the transcript by hand because that bypasses
+    :meth:`~lucid.test.audit._console.Console.write`.
+    """
+
+    def __init__(self, console: Console, limit_gb: float) -> None:
+        super().__init__(console, limit_gb)
+        self._console = RichConsole(file=sys.stdout)
+        self._bar = Progress(
+            SpinnerColumn(style="cyan"),
+            TextColumn("[bold]families"),
+            BarColumn(bar_width=34, complete_style="cyan", finished_style="green"),
+            MofNCompleteColumn(),
+            TimeElapsedColumn(),
+            expand=False,
+        )
+        self._task = self._bar.add_task("families", total=1)
+        self._footer = Text("")
+        self._live = Live(
+            Group(self._bar, self._footer),
+            console=self._console,
+            transient=True,
+            auto_refresh=False,
+        )
+        self._last_drawn = 0.0
+
+    def __enter__(self) -> RichZooReporter:
+        self._live.__enter__()
+        return self
+
+    def close(self) -> None:
+        if self._live.is_started:
+            self._live.__exit__(None, None, None)
+
+    def _emit(self, line: str) -> None:
+        self.console.note(line)
+        self._console.print(Text.from_ansi(line))
+
+    def _draw(self) -> None:
+        now = time.monotonic()
+        if now - self._last_drawn < _REFRESH_INTERVAL and self.stage_name:
+            return
+        self._last_drawn = now
+        self._bar.update(self._task, total=max(self.total, 1), completed=max(self.index - 1, 0))
+        footer = Text("  ")
+        footer.append(self.header(), style="bold cyan")
+        footer.append("   " + self.status(), style="dim")
+        footer.append("\n  ")
+        footer.append_text(Text.from_ansi(self.format_tally()))
+        self._footer = footer
+        self._live.update(Group(self._bar, self._footer), refresh=True)
+
+
+def build_zoo(console: Console, limit_gb: float) -> RichZooReporter | None:
+    """A live zoo reporter, or ``None`` to keep the stdlib display (same rule as :func:`build`)."""
+    if not _AVAILABLE or not console.live:
+        return None
+    return RichZooReporter(console, limit_gb)
+
+
 def build(console: Console, axes: Sequence[Axis], symbols: Sequence[Symbol]) -> RichReporter | None:
     """A live reporter, or ``None`` to keep the stdlib display.
 
@@ -296,4 +361,4 @@ def build(console: Console, axes: Sequence[Axis], symbols: Sequence[Symbol]) -> 
     return RichReporter(axes, symbols)
 
 
-__all__ = ["RichReporter", "available", "build"]
+__all__ = ["RichReporter", "RichZooReporter", "available", "build", "build_zoo"]

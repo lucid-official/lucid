@@ -1,10 +1,10 @@
 """Enumerating what there is to audit.
 
 Deliberately excludes ``lucid.models``: the zoo is 593 symbols of
-composition over the primitives audited here, it has its own contract
-test and its own device sweep, and folding it in would triple the run
-time while diluting the coverage number this tool exists to report
-honestly.
+composition over the primitives audited here, and folding it into the
+symbol sweep would triple the run time while diluting the coverage number
+this tool exists to report honestly.  It is not unaudited: it is the
+``models`` package, verified family by family by its own stage.
 
 Some callables cannot be surveyed because *calling them changes the
 process*.  A first version of this sweep walked names alphabetically,
@@ -76,7 +76,9 @@ SUBSYSTEMS: dict[str, tuple[str, str]] = {
 #: Excluded from the whole audit, by design.  Stated here rather than
 #: silently omitted so the coverage figure means what it says.
 EXCLUDED: dict[str, str] = {
-    "lucid.models": "the model zoo — 593 symbols with their own contract and device suites",
+    "lucid.models": (
+        "the model zoo — not swept symbol by symbol; the `models` package's own stage verifies it"
+    ),
     "lucid.benchmarks": "benchmark drivers, not API — they time the ops audited here",
     "lucid.test": "this tool and the suites it runs — the instrument, not the subject",
     "<re-exports>": (

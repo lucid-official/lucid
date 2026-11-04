@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from lucid.test.audit._console import Console
 
@@ -152,6 +152,13 @@ _SUBSYSTEM_TEST_DIRS: dict[str, tuple[str, ...]] = {
 }
 
 
+def subsystem_test_dirs(root: Path, key: str) -> list[str]:
+    """The test subtrees that exist for one ``SUBSYSTEMS`` key, unit tier first."""
+    names = _SUBSYSTEM_TEST_DIRS.get(key, (key.split(".")[0],))
+    candidates = [f"lucid/test/{tier}/{name}" for name in names for tier in ("unit", "parity")]
+    return [rel for rel in candidates if (root / rel).exists()]
+
+
 def suite_paths_for_subsystems(
     root: Path, subsystems: str, default: str = "lucid/test"
 ) -> list[str]:
@@ -161,14 +168,8 @@ def suite_paths_for_subsystems(
     out: list[str] = []
     for raw in subsystems.split(","):
         key = raw.strip()
-        if not key:
-            continue
-        dirs = _SUBSYSTEM_TEST_DIRS.get(key, (key.split(".")[0],))
-        for d in dirs:
-            for tier in ("unit", "parity"):
-                rel = f"lucid/test/{tier}/{d}"
-                if (root / rel).exists() and rel not in out:
-                    out.append(rel)
+        if key:
+            out.extend(rel for rel in subsystem_test_dirs(root, key) if rel not in out)
     return out or [default]
 
 
@@ -227,7 +228,8 @@ def chunks_for(root: Path, path: str, ignore: Sequence[str] = ()) -> list[str]:
         return [d for d in sorted(folder.iterdir()) if d.is_dir() and usable(d)]
 
     def files(folder: Path) -> list[str]:
-        return [str(f.relative_to(root)) for f in sorted(folder.glob("test_*.py"))]
+        found = [str(f.relative_to(root)) for f in sorted(folder.glob("test_*.py"))]
+        return [rel for rel in found if rel not in skip]
 
     # Chunks must partition the tree, never overlap: naming a directory
     # *and* one of its descendants would run the descendant twice and
@@ -560,7 +562,7 @@ def report_line_coverage_diff(
     floor: dict[str, object],
     console: Console,
     *,
-    prefixes: Sequence[str] | None = None,
+    in_scope: Callable[[str], bool] | None = None,
 ) -> int:
     """Compare against the floor and report what moved.
 
@@ -570,6 +572,10 @@ def report_line_coverage_diff(
     raises both.  A tolerance rather than equality, because a file that
     grows by a statement drops a fraction of a point honestly and a gate
     that fires on that gets muted.
+
+    ``in_scope`` names the source files this run was entitled to cover.  A
+    run narrowed to some packages cannot move the total or any file outside
+    them, so both are left alone; ``None`` is the complete run.
 
     Returns
     -------
@@ -585,7 +591,7 @@ def report_line_coverage_diff(
     lost: list[tuple[str, float, float]] = []
     if isinstance(recorded, dict):
         for name, entry in recorded.items():
-            if prefixes is not None and not name.startswith(tuple(prefixes)):
+            if in_scope is not None and not in_scope(name):
                 continue
             if not isinstance(entry, dict):
                 continue
@@ -603,14 +609,14 @@ def report_line_coverage_diff(
             if before - after > _FILE_TOLERANCE:
                 lost.append((name, before, after))
 
-    total_dropped = prefixes is None and now < was - _TOTAL_TOLERANCE
+    total_dropped = in_scope is None and now < was - _TOTAL_TOLERANCE
     if not lost and not total_dropped:
         console.always(
             console.paint(
                 f"  line coverage {now:.2f}% — at or above the recorded " f"{was:.2f}%", "green"
             )
         )
-        if prefixes is None and now > was + _TOTAL_TOLERANCE:
+        if in_scope is None and now > was + _TOTAL_TOLERANCE:
             console.always(
                 console.paint("  run with --update-suite to record the new floor", "grey")
             )
@@ -725,6 +731,7 @@ __all__ = [
     "SuiteResult",
     "file_prefixes_for_subsystems",
     "suite_paths_for_subsystems",
+    "subsystem_test_dirs",
     "load_floor",
     "report_line_coverage_diff",
     "report_suite",

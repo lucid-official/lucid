@@ -187,12 +187,16 @@ sys.exit(0 if ref_module() and zoo_module() else 1)
     # sweep is static contract probing rather than model work.  The suite is
     # covered by the tiers above; the doctest stage is not, and runs next.
     #
+    # ``--no-models`` on both calls: ``lucid-audit`` with no package flag now
+    # includes the model zoo, a family-by-family stage of hours.  CI keeps the
+    # scope and duration it had; the zoo has its own tiers below.
+    #
     # Exit is 0 only when every stage that ran is clean, so no output needs
     # reading.  2 means the harness broke, which is not the same as 1 — the
     # framework — and is worth saying out loud rather than folding together.
     echo "==> Symbol x axis audit"
     set +e
-    "$PYTHON_BIN" -m lucid.test.audit --audit-only --json "${LUCID_AUDIT_JSON:-build/audit-report.json}"
+    "$PYTHON_BIN" -m lucid.test.audit --no-models --audit-only --json "${LUCID_AUDIT_JSON:-build/audit-report.json}"
     audit_status=$?
     set -e
     if [ "$audit_status" -eq 2 ]; then
@@ -208,10 +212,10 @@ sys.exit(0 if ref_module() and zoo_module() else 1)
     # collect tests, not docstrings, and --audit-only skips this stage — which
     # is how lucid.coreml shipped 63 examples that had never run.  A module
     # whose count goes up fails the gate; the floor itself is rewritten
-    # locally with ``python -m lucid.test.audit --doctests-only --update-doctests``.
+    # locally with ``python -m lucid.test.audit --no-models --doctests-only --update-doctests``.
     echo "==> Docstring examples (against the doctest floor)"
     set +e
-    "$PYTHON_BIN" -m lucid.test.audit --doctests-only
+    "$PYTHON_BIN" -m lucid.test.audit --no-models --doctests-only
     doctest_status=$?
     set -e
     if [ "$doctest_status" -eq 2 ]; then

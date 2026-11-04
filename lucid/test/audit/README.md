@@ -1,6 +1,6 @@
 # `lucid-audit` — the whole diagnosis, one command
 
-Four stages, one verdict, one exit code.
+Five stages, one verdict, one exit code.
 
 | stage | asks | catches |
 |---|---|---|
@@ -8,6 +8,7 @@ Four stages, one verdict, one exit code.
 | **sweep** | does each reachable symbol keep its contract? | the runtime public-symbol census × all applicable axes |
 | **suite** | are the specific values the right values? | `pytest lucid/test` + a line-coverage floor |
 | **doctests** | does the documentation run? | executable examples + a per-module floor |
+| **model zoo** | does every family build at its real size, train compiled, and pass its own tests? | the contract, the real-size build, the compiled-training matrix and each family's unit and parity files, one process at a time |
 
 They fail independently, and none is a substitute for another.
 
@@ -30,7 +31,10 @@ was NaN, and the window that deleted its own frame. A gate that runs
 only one of them reports "clean" over half a framework.
 
 ```bash
-lucid-audit                 # every stage, one verdict     (~15 min)
+lucid-audit                 # every package, the model zoo included   (hours)
+lucid-audit --no-models     # every package except the zoo             (~15 min)
+lucid-audit --models        # the model zoo alone
+lucid-audit --nn --linalg   # just those packages
 lucid-audit --audit-only    # self-check + sweep
 lucid-audit --tests-only    # suite + line coverage + doctests
 lucid-audit --self-check    # the instruments alone, seconds
@@ -44,6 +48,7 @@ lucid-audit --self-check    # the instruments alone, seconds
   suite failures                  0
   line coverage regressions       0
   docstring regressions           0
+  model zoo failures              0
 
   clean on every stage that ran
 ```
@@ -147,13 +152,138 @@ lucid-audit --fail-fast          # stop at the first defect
 Scoping, when you are working on one area:
 
 ```bash
-lucid-audit --subsystem nn.functional
-lucid-audit --subsystem linalg,fft --axis grad,grad2
-lucid-audit --select 'conv|pool'
+lucid-audit --nn.functional
+lucid-audit --linalg --fft --axis grad,grad2
+lucid-audit --no-models --select 'conv|pool'
 ```
 
 Exit status is `0` when no defect survived, `1` when one did, `2` when
-the harness itself broke.
+the harness itself broke or the command line contradicted itself.
+
+### Packages
+
+What a run covers is one thing: a set of **packages**. `lucid-audit
+--list-packages` prints them — every `SUBSYSTEMS` key in `_surface.py`, plus
+`models`, the zoo — and the command line is generated from that registry
+(`_packages.py`), so a package added to `SUBSYSTEMS` has its flags the moment
+it is declared.
+
+| you write | the run covers |
+|---|---|
+| nothing | every package, the zoo included |
+| `--nn --linalg` | exactly those, and what they contain |
+| `--no-models` | every package except the zoo |
+| `--no-nn` | every package except `nn` and what it contains |
+| `--nn --no-nn.functional` | `nn` without `nn.functional` |
+
+A parent takes its children: `--nn` is `nn.functional`, `nn.init`, `nn.utils`
+and the rest, because a `.` in a key is a containment claim. Asking for a
+package and leaving out it, or something that contains it
+(`--nn.functional --no-nn`), is a contradiction and exits `2`; so is leaving
+out everything. An unknown name fails as any unknown option does.
+
+What a package means for a stage is the registry's to say, not the flags': the
+sweep walks its symbols, the suite runs its test subtrees (`unit/<key>`,
+`parity/<key>`, a few mapped by hand in `_suite.py`) and compares line coverage
+of the source files it owns, the doctests run the examples under its module.
+The zoo takes part in none of those. Its stage is described below.
+
+`--subsystem` and `--list-subsystems` no longer exist, and `--no-metal` is
+`--cpu-only` — `metal` is a package now, and a generated `--no-metal` would
+have shadowed it.
+
+**Stage flags are separate and exclude the zoo.** `--audit-only`,
+`--tests-only` and `--doctests-only` choose *stages*; they do not run the model
+zoo stage, because that is the slowest thing the audit does and should be on
+the command line when it runs. `--models` with any of them exits `2`.
+`--update-coverage` still needs a complete sweep: `--no-models` is not a
+filter for it, because the sweep never contained the zoo.
+
+CI passes `--no-models` on every call, so its scope and duration are what
+they were (a test, `test_audit_packages.py`, reads the command lines out of
+`scripts/ci_full.sh` and proves it).
+
+### The model zoo
+
+`lucid-audit --models` runs the zoo stage: for every family directory under
+`lucid/models/`, one process at a time, with the network off and nothing kept,
+
+1. `tools.validate_model_zoo --family F --runtime`, the contract;
+2. a real-size build of every factory of the family;
+3. the compiled-training matrix for the family;
+4. the family's own unit and parity test files, markers cleared (`heavy` and
+   `control` included);
+5. the zoo-wide tests filtered to the family, `control` excluded.
+
+A last `zoo-wide` group runs every multi-family file once, `control` benchmarks
+included. A failing stage never stops the run. The suite stage does not also
+run the zoo's own test trees (`unit/models`, `parity/models`) when this stage
+will — the files are the same, the markers are not.
+
+```bash
+lucid-audit --models                                 # all of it
+lucid-audit --models --family lenet --family alexnet # these, then stop
+lucid-audit --models --limit 5                       # the first five groups
+lucid-audit --models --fresh                         # ignore recorded results
+lucid-audit --models --zoo-record DIR                # where the notes are written
+```
+
+**It fits the machine.** The old script carried four constants tuned on a
+36 GB Mac Studio. They are now `MachineBudget` (`_zoo_budget.py`), derived from
+`hw.memsize` in the proportions they had there, so the Studio gets exactly its
+old numbers and a smaller machine the same margins:
+
+| | 16 GB | 32 GB | 36 GB | 128 GB |
+|---|---|---|---|---|
+| a stage is killed at (footprint) | 12.5 | 25 | 28 | 99.5 |
+| a stage waits to start for (free) | 6.5 | 12.5 | 14 | 50 |
+| a stage is killed below (machine free) | 1 | 2 | 2.5 | 9 |
+| one build may allocate | 10 | 20 | 22.4 | 79.6 |
+
+`--mem-limit-gb` overrides the first row and the rest follow it. Whatever this
+costs a small machine is **reported, never silent**:
+
+* a factory whose declared parameters, as float32, pass the build budget is
+  skipped by name;
+* `heavy` tests are deselected up front when the footprint limit is under
+  1.5 x the largest `heavy` test's measured peak (5.5 GB, ViT-H/14 on the
+  Studio, `HEAVY_PEAK_GB`) — an 8 GB machine drops them, a 16 GB machine
+  keeps them;
+* a stage the memory guard kills is run **once more** with `heavy` deselected,
+  and its record says so. If the retry passes the stage passes; if the machine
+  is still short, it is a failure.
+
+The verdict lists everything skipped or adapted and why, and each family's note
+repeats its own, under "이 머신에서 정한 것".
+
+**It resumes.** Results go to `~/Library/Caches/lucid/audit-zoo/<sha>/`; a
+family recorded for the same commit is skipped, so an interrupted run
+continues. `--fresh` ignores the records. A tree with uncommitted changes never
+reuses one, and files its results under `<sha>-dirty`.
+
+**The notes** — `zoo-verify-<family>.md` and `zoo-verify-ledger.md`, in the
+format the vault already has, plus the command that produced them and the
+budget it ran under — are written to `--zoo-record DIR`, or to
+`obsidian/zoo-verify` when the checkout has that directory. A scratch clone has
+no vault, so it writes none unless it is told where.
+
+**The display** is the same `Console` / `rich` pair the sweep uses: family
+`n/N`, the stage in flight, its elapsed time and footprint against the limit, a
+running tally. With no terminal (a detached run) it degrades to plain lines — a
+line when a stage starts, a line when it ends, and a "still running" line every
+five minutes, because a silent log looks the same as a hung one.
+
+```
+── Model zoo ────────────────────────────────────────────
+  lenet / contract ...
+    contract                pass          9s    1.1 GB  1 passed
+  lenet / build ...
+    build                   pass         12s    1.3 GB  1 built, 0 past budget, 0 failed
+  lenet: pass  0.6 min  peak 2.0 GB  [families ok 1 fail 0 · stages ok 5 fail 0]
+```
+
+The exit code follows the rule above: `model zoo failures` counts failed
+stages, and a killed stage counts unless its retry passed.
 
 ### The transcript
 
@@ -445,5 +575,14 @@ without restoring the optimizer it drives.
 | `_console_rich.py` | the `rich` display, when installed |
 | `_mutants.py` | the deliberate defects, one per axis, and `--self-check` |
 | `_doctests.py` | the documentation stage and its per-module floor |
+| `_packages.py` | the package registry: what each package means for each stage, and the flags generated from it |
+| `_plan.py` | which stages a command line runs, and the exit-2 contradictions |
+| `_zoo.py` | the model-zoo stage: families, resume, the verdict |
+| `_zoo_stage.py` | one zoo process (a `Stage`), its result, and the catalog of families and test files |
+| `_zoo_budget.py` | `MachineBudget` and the memory probes |
+| `_zoo_guard.py` | the memory guard around a stage, and the one retry |
+| `_zoo_record.py` | per-commit state, the family notes and the ledger |
+| `_zoo_report.py` | the display (plain lines and the stdlib live block); the `rich` one is in `_console_rich.py` |
+| `_zoo_probes.py` | the real-size build and compiled-training probes, run as child processes |
 | `_result.py` | `Status`, `Finding`, `Report`, `Baseline` |
 | `known.json` | accepted defects, reported as `KNWN` rather than `FAIL` |
