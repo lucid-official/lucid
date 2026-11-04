@@ -355,6 +355,7 @@ class _Run:
         limit: int = 0,
         fresh: bool = False,
         notes: bool = True,
+        device: str = "metal",
     ) -> _zoo.ZooReport:
         console = Console(colour=False)
         base = _zoo.ZooSettings(
@@ -369,6 +370,7 @@ class _Run:
                 limit=limit,
                 fresh=fresh,
                 record_dir=base.record_dir if notes else None,
+                device=device,
             ),
             budget=_budget(40.0),
             reporter=LineReporter(console, 40.0),
@@ -436,13 +438,20 @@ def test_a_dirty_tree_never_reuses_a_record_and_keeps_its_own(tmp_path: Path) ->
 def test_the_state_is_per_commit_and_per_family(tmp_path: Path) -> None:
     state = ZooState(tmp_path, SHA, dirty=False, resume=True)
     results = [StageResult("build", "pass", 1.0, 2.0, notes=["n"])]
-    state.save("alpha", results, _budget(40.0))
-    assert state.load("alpha", _budget(40.0)) == results
-    assert state.load("beta", _budget(40.0)) is None
-    assert ZooState(tmp_path, SHA, dirty=False, resume=False).load("alpha", _budget(40.0)) is None
-    assert ZooState(tmp_path, SHA, dirty=True, resume=True).load("alpha", _budget(40.0)) is None
+    state.save("alpha", results, _budget(40.0), "cpu")
+    assert state.load("alpha", _budget(40.0), "cpu") == results
+    assert state.load("beta", _budget(40.0), "cpu") is None
+    assert (
+        ZooState(tmp_path, SHA, dirty=False, resume=False).load("alpha", _budget(40.0), "cpu")
+        is None
+    )
+    assert (
+        ZooState(tmp_path, SHA, dirty=True, resume=True).load("alpha", _budget(40.0), "cpu") is None
+    )
     (tmp_path / SHA / "alpha.json").write_text("{ not json")
-    assert state.load("alpha", _budget(40.0)) is None, "a record this version cannot read is rerun"
+    assert (
+        state.load("alpha", _budget(40.0), "cpu") is None
+    ), "a record this version cannot read is rerun"
 
 
 def test_a_full_run_leaves_a_done_marker_and_a_narrowed_one_does_not(tmp_path: Path) -> None:
@@ -492,9 +501,9 @@ def test_a_note_keeps_its_format_and_names_the_command_and_the_budget() -> None:
 
 def test_the_ledger_lists_every_family_recorded_or_waiting(tmp_path: Path) -> None:
     state = ZooState(tmp_path, SHA, dirty=False, resume=True)
-    state.save("alpha", [StageResult("build", "fail", 60.0, 3.0)], _budget(40.0))
+    state.save("alpha", [StageResult("build", "fail", 60.0, 3.0)], _budget(40.0), "cpu")
     ledger = render_ledger(_facts(), state, {"alpha": "vision", "beta": "text"})
-    assert "| alpha | vision | fail | 1.0 | 3.0 | [[zoo-verify-alpha]] |" in ledger
+    assert "| alpha | vision | fail | 1.0 | 3.0 | cpu | [[zoo-verify-alpha]] |" in ledger
     assert "| beta | text | 대기 |" in ledger
     assert f"`{SHA}`" in ledger and "진행: 1 / 3" in ledger
 
@@ -532,6 +541,7 @@ def _namespace(**given: object) -> argparse.Namespace:
         "fresh": False,
         "mem_limit_gb": None,
         "limit": 0,
+        "zoo_device": "metal",
     }
     return argparse.Namespace(**{**base, **given})
 

@@ -17,8 +17,13 @@ import gc
 import sys
 import time
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
+from lucid.test._fixtures.devices import apply_default_device
 from lucid.test.audit._zoo_budget import fits_build, weights_gb
+
+if TYPE_CHECKING:
+    from lucid.nn import Module
 
 
 @dataclass
@@ -43,6 +48,19 @@ def factories_by_family() -> dict[str, Factories]:
         slot.names.append(name)
         slot.labels.add(entry.family)
     return grouped
+
+
+def force_allocation(model: Module) -> None:
+    """Make a freshly built model really hold its weights.
+
+    MLX is lazy: ``create_model`` on Metal returns parameters that are still a
+    plan to allocate, so a "real-size build" that stops there measures nothing
+    and the memory guard sees nothing.  Reading one value out of each parameter
+    makes the device compute and keep it, and an allocation that does not fit
+    fails here, in the build that asked for it, as a ``FAILED`` line.
+    """
+    for param in model.parameters():
+        param.sum().item()
 
 
 def build_family(family: str, budget_gb: float) -> int:
@@ -74,6 +92,7 @@ def build_family(family: str, budget_gb: float) -> int:
         began = time.monotonic()
         try:
             model = create_model(name)
+            force_allocation(model)
         except Exception as exc:  # noqa: BLE001 - reported per factory; the rest still build
             failed += 1
             print(f"FAILED {name} - {type(exc).__name__}: {str(exc)[:200]}", flush=True)
@@ -131,6 +150,7 @@ def matrix_family(family: str) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    apply_default_device()
     parser = argparse.ArgumentParser(prog="python -m lucid.test.audit._zoo_probes")
     sub = parser.add_subparsers(dest="probe", required=True)
     build = sub.add_parser("build", help="build every factory of a family at its real size")

@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from lucid.test._fixtures.devices import metal_available
 from lucid.test.audit import _zoo_record, _zoo_report
 from lucid.test.audit._console import fmt_duration
 from lucid.test.audit._plan import PlanError
@@ -66,6 +67,13 @@ def add_options(p: argparse.ArgumentParser) -> None:
         help="run every family again even if this commit already recorded it",
     )
     zoo.add_argument(
+        "--zoo-device",
+        choices=("metal", "cpu"),
+        default="metal",
+        help="the device every stage runs on (default metal: models train there). "
+        "A machine without Metal is an error, not a CPU run",
+    )
+    zoo.add_argument(
         "--mem-limit-gb",
         type=float,
         default=None,
@@ -86,6 +94,7 @@ class ZooSettings:
     command: str = "lucid-audit --models"
     state_root: Path = _zoo_record.STATE_ROOT
     poll_s: float = POLL_S
+    device: str = "metal"
 
     @classmethod
     def from_args(cls, args: argparse.Namespace, root: Path, command: str) -> ZooSettings:
@@ -98,6 +107,7 @@ class ZooSettings:
             record_dir=record,
             mem_limit_gb=args.mem_limit_gb,
             command=command,
+            device=args.zoo_device,
         )
 
 
@@ -141,6 +151,11 @@ def validate_options(root: Path, args: argparse.Namespace) -> None:
     moment a run has the most to lose.
     """
     validate_families(root, args.family)
+    if args.zoo_device == "metal" and not metal_available():
+        raise PlanError(
+            "--zoo-device metal: this machine has no usable Metal device. "
+            "Pass --zoo-device cpu to verify the zoo on CPU on purpose"
+        )
     if args.mem_limit_gb is not None and not args.mem_limit_gb > 0:
         raise PlanError(f"--mem-limit-gb must be positive, got {args.mem_limit_gb:g}")
     if args.zoo_record is not None:
@@ -233,7 +248,8 @@ class ZooRun:
         catalog = self._catalog
         families = catalog.families()
         groups = self._groups(families)
-        facts = _zoo_record.RunFacts(sha, self.settings.command, self.budget, dirty)
+        device = self.settings.device
+        facts = _zoo_record.RunFacts(sha, self.settings.command, self.budget, dirty, device)
         notebook = None
         if self.settings.record_dir is not None:
             notebook = _zoo_record.Notebook(self.settings.record_dir, state, families, facts)
@@ -241,6 +257,7 @@ class ZooRun:
         self.console.banner(
             "Model zoo", f"{len(groups)} group(s) · {self.budget.total_gb:.0f} GB machine"
         )
+        self.console.kv("device", device)
         for key, line in zip(("limits", "adapts"), self.budget.limits(), strict=True):
             self.console.kv(key, line)
         if dirty:
@@ -258,17 +275,18 @@ class ZooRun:
                 on_tick=reporter.tick,
                 on_wait=reporter.wait,
                 poll_s=self.settings.poll_s,
+                device=device,
             )
             runner = StageRunner(guard, state.logs, state.temp)
             for index, group in enumerate(groups, start=1):
                 self._still_at(sha, dirty)
                 reporter.family(index, group)
-                results = state.load(group, self.budget)
+                results = state.load(group, self.budget, device)
                 resumed = results is not None
                 if results is None:
                     results = self._run_group(group, catalog, state, runner, reporter)
                     self._still_at(sha, dirty)
-                    state.save(group, results, self.budget)
+                    state.save(group, results, self.budget, device)
                     if notebook is not None:
                         notebook.write(group, results)
                         report.notes_written += 1

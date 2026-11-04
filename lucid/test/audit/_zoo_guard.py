@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from lucid.test.audit import _zoo_budget
+from lucid.test._fixtures.devices import DEFAULT_DEVICE_ENV
 from lucid.test.audit._console import fmt_duration
 from lucid.test.audit._zoo_stage import StageResult, read_result
 
@@ -62,11 +63,17 @@ class Outcome:
     wait_note: str = ""
 
 
-def child_env(root: Path) -> dict[str, str]:
-    """The children's environment: this tree, no network, bytecode out of the tree."""
+def child_env(root: Path, device: str = "cpu") -> dict[str, str]:
+    """The children's environment: this tree, no network, bytecode out of the tree.
+
+    ``device`` is stated, never inherited: whatever the caller's shell had in
+    ``LUCID_TEST_DEFAULT_DEVICE`` is replaced, so the record's device is the
+    device the stage ran on.
+    """
     env = dict(os.environ)
     env.pop("LUCID_TEST_NETWORK", None)
     env.update(
+        {DEFAULT_DEVICE_ENV: device},
         PYTHONPATH=str(root),
         HF_HUB_OFFLINE="1",
         TRANSFORMERS_OFFLINE="1",
@@ -115,9 +122,11 @@ class StageGuard:
         timeout_s: float = STAGE_TIMEOUT_S,
         room_wait_s: float = ROOM_WAIT_S,
         room_poll_s: float = ROOM_POLL_S,
+        device: str = "cpu",
     ) -> None:
         self.root = root
         self.budget = budget
+        self.device = device
         self._on_tick = on_tick
         self._on_wait = on_wait
         self._poll_s = poll_s
@@ -197,7 +206,7 @@ class StageGuard:
             proc = subprocess.Popen(
                 argv,
                 cwd=self.root,
-                env=child_env(self.root),
+                env=child_env(self.root, self.device),
                 stdout=out,
                 stderr=subprocess.STDOUT,
                 start_new_session=True,

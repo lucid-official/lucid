@@ -33,6 +33,7 @@ from lucid.test import _memory
 # re-exported for the same reason: pytest only registers hooks it finds
 # in a conftest (or a plugin).
 from lucid.test._fixtures.devices import (  # noqa: F401
+    apply_default_device,
     device,
     device_cpu_only,
     device_gpu_only,
@@ -47,6 +48,10 @@ from lucid.test._fixtures.dtypes import float_dtype, float_dtype_extended, int_d
 from lucid.test._fixtures.ref_framework import ref  # noqa: F401
 from lucid.test._fixtures.tensors import tensor_factory  # noqa: F401
 from lucid.test._fixtures.perf import bench  # noqa: F401
+
+# ``lucid-audit --models`` runs the zoo's tests on the device it was asked for
+# (Metal by default) by exporting it; a process nobody asked anything of is untouched.
+apply_default_device()
 
 _GOVERNOR = _memory.Governor()
 

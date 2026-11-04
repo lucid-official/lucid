@@ -252,7 +252,19 @@ lucid-audit --models --family lenet --family alexnet # these, then stop
 lucid-audit --models --limit 5                       # the first five groups
 lucid-audit --models --fresh                         # ignore recorded results
 lucid-audit --models --zoo-record DIR                # where the notes are written
+lucid-audit --models --zoo-device cpu                # on the CPU, on purpose
 ```
+
+**It runs on Metal.** Models train on Metal, so `--zoo-device` defaults to
+`metal`: every stage (the tests, the real-size build, the probes) is started
+with `LUCID_TEST_DEFAULT_DEVICE` set, `lucid/test/conftest.py` makes it the
+default device (`devices.apply_default_device`), and the build reads one value
+out of every parameter, because MLX is lazy and a build that stops at
+`create_model` has allocated nothing. A machine with no Metal is exit `2` up
+front, not a quiet CPU run reported as the Metal verification; `--zoo-device
+cpu` is how to ask for the CPU. The device is in every family note, the ledger
+(a column, and the run's device in its header) and the resume record: a family
+verified on one device is **not** an answer for a run on the other.
 
 **It fits the machine.** The old script carried four constants tuned on a
 36 GB Mac Studio. They are now `MachineBudget` (`_zoo_budget.py`), derived from
@@ -338,6 +350,7 @@ $ lucid-audit --models --family lenet --family alexnet     # no terminal: plain 
 │ Model zoo                                                                                        │
 │ 2 group(s) · 36 GB machine                                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  device                metal
   limits                footprint limit 28 GB · starts with 14 GB free · floor 2.5 GB
   adapts                builds up to 22.4 GB · heavy tests on
 [1/2] lenet

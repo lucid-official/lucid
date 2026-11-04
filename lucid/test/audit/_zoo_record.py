@@ -87,9 +87,13 @@ class FamilyRecord:
 
     results: list[StageResult]
     limit_gb: float
+    #: The device the stages ran on.  A zoo verified on CPU says nothing about
+    #: Metal (different kernels, different dtype rules, MLX's laziness), so a
+    #: record is the answer only for a run on the same device.
+    device: str
 
-    def reusable_under(self, budget: MachineBudget) -> bool:
-        """Whether a run with ``budget`` may take these results as its own.
+    def reusable_under(self, budget: MachineBudget, device: str) -> bool:
+        """Whether a run with ``budget`` on ``device`` may take these results as its own.
 
         What a machine's limit changed — heavy tests dropped, a build skipped,
         a stage killed at the limit — was a decision about *that* machine.  A
@@ -97,7 +101,7 @@ class FamilyRecord:
         recorder's may rely on the record.  A stage the machine itself ran out
         of memory under proved nothing about the stage, and is never reused.
         """
-        if any(result.status == "machine-short" for result in self.results):
+        if self.device != device or any(r.status == "machine-short" for r in self.results):
             return False
         limited = any(r.notes or r.status == "mem-guard" for r in self.results)
         return not limited or self.limit_gb >= budget.limit_gb
@@ -145,17 +149,23 @@ class ZooState:
         try:
             payload = json.loads(path.read_text())
             results = [StageResult(**item) for item in payload["results"]]
-            return FamilyRecord(results, float(payload["limit_gb"]))
+            return FamilyRecord(results, float(payload["limit_gb"]), str(payload["device"]))
         except (OSError, ValueError, TypeError, KeyError):
             return None  # a record this version cannot read is a record to redo
 
-    def load(self, name: str, budget: MachineBudget) -> list[StageResult] | None:
-        """The recorded results of ``name``, if a run with ``budget`` may reuse them."""
+    def load(self, name: str, budget: MachineBudget, device: str) -> list[StageResult] | None:
+        """The recorded results of ``name``, if a run with ``budget`` on ``device`` may reuse them."""
         record = self.recorded(name) if self.resume else None
-        return record.results if record and record.reusable_under(budget) else None
+        return record.results if record and record.reusable_under(budget, device) else None
 
-    def save(self, name: str, results: Sequence[StageResult], budget: MachineBudget) -> None:
-        payload = {"limit_gb": budget.limit_gb, "results": [dataclasses.asdict(r) for r in results]}
+    def save(
+        self, name: str, results: Sequence[StageResult], budget: MachineBudget, device: str
+    ) -> None:
+        payload = {
+            "limit_gb": budget.limit_gb,
+            "device": device,
+            "results": [dataclasses.asdict(r) for r in results],
+        }
         write_atomic(self._path(name), json.dumps(payload))
 
 
@@ -167,6 +177,7 @@ class RunFacts:
     command: str
     budget: MachineBudget
     dirty: bool = False
+    device: str = "cpu"
 
 
 def render_note(name: str, domain: str, results: Sequence[StageResult], facts: RunFacts) -> str:
@@ -179,7 +190,7 @@ def render_note(name: str, domain: str, results: Sequence[StageResult], facts: R
         "",
         f"> **{overall(results)}** · `{commit}` · {datetime.now():%Y-%m-%d %H:%M} · "
         f"{domain} · {seconds / 60:.1f} 분 · 최대 {peak:.1f} GB",
-        f"> 명령: `{facts.command}` · 머신: {facts.budget.describe()}",
+        f"> 명령: `{facts.command}` · 장치: {facts.device} · 머신: {facts.budget.describe()}",
         f"> {_RESULT_RULE}",
         "",
         "| 단계 | 결과 | 시간 (s) | 최대 (GB) | 요약 |",
@@ -226,13 +237,20 @@ _LEDGER_HEAD = """# model zoo 전수 검증 장부
 
 def render_ledger(facts: RunFacts, state: ZooState, families: dict[str, str]) -> str:
     """The table of every family's latest result for this commit."""
-    lines = [_LEDGER_HEAD, f"**대상 커밋**: `{facts.sha}`{' (dirty)' if facts.dirty else ''}", ""]
-    lines += ["| family | 분야 | 결과 | 분 | 최대 GB | 기록 |", "|---|---|---|---|---|---|"]
+    lines = [
+        _LEDGER_HEAD,
+        f"**대상 커밋**: `{facts.sha}`{' (dirty)' if facts.dirty else ''} · **이번 실행 장치**: {facts.device}",
+        "",
+    ]
+    lines += [
+        "| family | 분야 | 결과 | 분 | 최대 GB | 장치 | 기록 |",
+        "|---|---|---|---|---|---|---|",
+    ]
     done = 0
     for name, domain in [*families.items(), (ZOO_WIDE, "공통")]:
         recorded = state.recorded(name)
         if recorded is None:
-            lines.append(f"| {name} | {domain} | 대기 | | | |")
+            lines.append(f"| {name} | {domain} | 대기 | | | | |")
             continue
         done += 1
         record = recorded.results
@@ -240,7 +258,7 @@ def render_ledger(facts: RunFacts, state: ZooState, families: dict[str, str]) ->
         peak = max((item.peak_gb for item in record), default=0.0)
         lines.append(
             f"| {name} | {domain} | {overall(record)} | {minutes:.1f} | {peak:.1f} "
-            f"| [[zoo-verify-{name}]] |"
+            f"| {recorded.device} | [[zoo-verify-{name}]] |"
         )
     lines += ["", f"진행: {done} / {len(families) + 1}", ""]
     return "\n".join(lines)

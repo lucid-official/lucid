@@ -16,6 +16,7 @@ dtypes is asserted once, in
 
 import functools
 import itertools
+import os
 from collections.abc import Iterable, Iterator, Sequence
 from typing import TYPE_CHECKING
 
@@ -39,6 +40,37 @@ def metal_available() -> bool:
     except Exception:
         return False
     return True
+
+
+#: The environment variable ``lucid-audit --models`` sets for every process it
+#: starts, and the one place a test process learns what device to default to.
+DEFAULT_DEVICE_ENV = "LUCID_TEST_DEFAULT_DEVICE"
+
+_DEFAULT_DEVICES = ("cpu", "metal")
+
+
+def apply_default_device(name: str | None = None) -> str | None:
+    """Make ``name`` — or, with none, ``$LUCID_TEST_DEFAULT_DEVICE`` — the default device.
+
+    Models train on Metal, so the zoo is verified on Metal unless it is told
+    otherwise.  Asking for a device the machine does not have is an error, not a
+    fallback: running the zoo on CPU because Metal was missing would report a
+    verification of something other than what was asked for.  Returns the device
+    applied, or ``None`` when nothing was asked.
+    """
+    device = name if name is not None else os.environ.get(DEFAULT_DEVICE_ENV)
+    if not device:
+        return None
+    if device not in _DEFAULT_DEVICES:
+        raise ValueError(f"unknown default device {device!r}; expected one of {_DEFAULT_DEVICES}")
+    if device == "metal" and not metal_available():
+        raise RuntimeError(
+            f"the default device is metal ({DEFAULT_DEVICE_ENV}, or lucid-audit --zoo-device), "
+            "but this machine has no usable Metal device; pass --zoo-device cpu to verify "
+            "on CPU on purpose"
+        )
+    lucid.set_default_device(device)
+    return device
 
 
 def _device_params() -> list[str]:

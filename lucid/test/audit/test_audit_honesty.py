@@ -281,11 +281,16 @@ def test_a_record_that_left_nothing_out_is_good_for_any_machine(tmp_path: Path) 
 
 
 def test_a_machine_short_record_is_never_reused() -> None:
-    record = FamilyRecord([StageResult("build", "machine-short", 1.0, 1.0)], limit_gb=40.0)
-    assert not record.reusable_under(_budget(40.0))
-    assert FamilyRecord([StageResult("build", "pass", 1.0, 1.0)], 6.0).reusable_under(_budget(40.0))
-    killed = FamilyRecord([StageResult("t", "mem-guard", 1.0, 7.0)], limit_gb=6.0)
-    assert not killed.reusable_under(_budget(28.0)) and killed.reusable_under(_budget(6.0))
+    record = FamilyRecord(
+        [StageResult("build", "machine-short", 1.0, 1.0)], limit_gb=40.0, device="cpu"
+    )
+    assert not record.reusable_under(_budget(40.0), "cpu")
+    assert FamilyRecord([StageResult("build", "pass", 1.0, 1.0)], 6.0, "cpu").reusable_under(
+        _budget(40.0), "cpu"
+    )
+    killed = FamilyRecord([StageResult("t", "mem-guard", 1.0, 7.0)], limit_gb=6.0, device="cpu")
+    assert not killed.reusable_under(_budget(28.0), "cpu")
+    assert killed.reusable_under(_budget(6.0), "cpu")
 
 
 # ── reduced is not pass ──────────────────────────────────────────────────────
@@ -731,7 +736,7 @@ def test_notes_and_state_are_written_whole_or_not_at_all(tmp_path: Path) -> None
     assert target.read_text() == "two"
     assert [p.name for p in tmp_path.iterdir()] == ["note.md"], "no scratch file is left behind"
     state = ZooState(tmp_path / "s", SHA, dirty=False, resume=True)
-    state.save("alpha", [_r()], _budget(8.0))
+    state.save("alpha", [_r()], _budget(8.0), "cpu")
     assert json.loads((state.root / "alpha.json").read_text())["limit_gb"] == 8.0
     assert not list(state.root.glob("*.tmp"))
     book = Notebook(tmp_path / "n", state, {"alpha": "vision"}, RunFacts(SHA, "c", _budget(8.0)))
