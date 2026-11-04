@@ -1,89 +1,93 @@
-"""``lucid/models/MODELS.tree`` stays exactly true to the registry, and the check can go red."""
+"""``lucid/models/MODELS.tree`` is the registry, drawn, and the check can go red."""
 
 import pytest
 
-from tools.model_tree import (
-    TREE_PATH,
-    check,
-    check_tree,
-    parse,
-    redrawn,
-    registered_by_family,
-    render,
-)
+import lucid.models as models
+from tools.model_tree import TREE_PATH, Entry, check, check_tree, draw, parse, registered
 
 
 def _text() -> str:
     return TREE_PATH.read_text(encoding="utf-8")
 
 
-def test_the_committed_tree_matches_the_registry() -> None:
+def _placed_task(entries: list[Entry], name: str) -> str:
+    return next(e.task for e in parse(draw(entries)) if e.name == name)
+
+
+def test_the_committed_tree_is_the_registry_drawn() -> None:
     assert check_tree() == []
+    assert _text() == draw(registered())
 
 
-def test_every_registered_factory_is_drawn_by_its_full_name() -> None:
-    lines = {line.rsplit(" ", 1)[-1] for line in _text().splitlines()}
-    for names in registered_by_family().values():
-        assert set(names) <= lines
+def test_every_factory_is_drawn_exactly_once() -> None:
+    names = [entry.name for entry in parse(_text())]
+    assert sorted(names) == sorted(models.list_models())
 
 
-def test_drawing_what_was_read_reproduces_the_file() -> None:
-    assert render(parse(_text())) == _text()
+def test_a_task_branch_shows_what_the_public_query_returns() -> None:
+    for entry in registered():
+        if entry.task == "base":
+            continue
+        drawn = {
+            e.name for e in parse(_text()) if e.task == entry.task and e.family == entry.family
+        }
+        assert set(models.list_models(task=entry.task, family=entry.family)) <= drawn
+
+
+def test_a_base_factory_follows_its_family_primary_task() -> None:
+    entries = [
+        Entry("text", "bert", "base", "bert_base"),
+        Entry("text", "bert", "sequence-classification", "bert_base_cls"),
+        Entry("text", "bert", "sequence-classification", "bert_base_qa"),
+        Entry("text", "bert", "language-modeling", "bert_base_mlm"),
+    ]
+    assert _placed_task(entries, "bert_base") == "sequence-classification"
+    assert _placed_task(entries, "bert_base_mlm") == "language-modeling"
+
+
+def test_a_tie_for_primary_goes_to_the_alphabetically_first_task() -> None:
+    entries = [
+        Entry("text", "gpt", "base", "gpt"),
+        Entry("text", "gpt", "sequence-classification", "gpt_cls"),
+        Entry("text", "gpt", "language-modeling", "gpt_lm"),
+    ]
+    assert _placed_task(entries, "gpt") == "language-modeling"
+
+
+def test_a_family_with_only_base_factories_stays_under_base() -> None:
+    assert _placed_task([Entry("vision", "plain", "base", "plain")], "plain") == "base"
+
+
+def test_factories_sort_numerically() -> None:
+    entries = [Entry("vision", "resnet", "base", f"resnet_{size}") for size in (101, 18, 50)]
+    assert [e.name for e in parse(draw(entries))] == ["resnet_18", "resnet_50", "resnet_101"]
 
 
 @pytest.mark.parametrize(
     ("old", "new", "complaint"),
     [
-        ("└── lenet_5_cls", "└── lenet_7_cls", "'lenet_5_cls' is registered but not listed"),
-        ("└── lenet_5_cls", "└── lenet_7_cls", "'lenet_7_cls' is listed but not registered"),
-        ("└── lenet_5_cls", "└── lenet_5", "'lenet_5' is listed twice"),
-        ("── lenet/", "── not_a_family/", "'not_a_family' is listed but registers nothing"),
-        ("── lenet/", "── not_a_family/", "'lenet' is registered but not listed"),
-        ("── alexnet/", "── lenet/", "family 'lenet' is listed twice"),
-        ("494 models", "495 models", "not canonical"),
-        ("├── alexnet/", "├── lenet_also/", "'lenet_also' is listed"),
+        ("└── lenet_5_cls", "└── lenet_7_cls", "'lenet_5_cls' is registered"),
+        ("└── lenet_5_cls", "└── lenet_7_cls", "'lenet_7_cls' is drawn"),
+        ("└── lenet_5_cls", "└── lenet_5", "'lenet_5' is drawn 2 times"),
+        ("── lenet/", "── not_a_family/", "family 'not_a_family'"),
+        ("── image-classification/", "── image-generation/", "is registered as multimodal/image-c"),
+        ("── vision/", "── visual/", "is registered as vision/"),
+        ("494 models", "495 models", "out of order"),
     ],
 )
 def test_each_way_the_tree_can_drift_is_caught(old: str, new: str, complaint: str) -> None:
     text = _text()
     assert old in text
-    problems = check(text.replace(old, new, 1), registered_by_family())
+    problems = check(text.replace(old, new, 1), registered())
     assert any(complaint in problem for problem in problems), problems
 
 
-def test_factories_out_of_order_are_caught() -> None:
-    text = _text()
-    swapped = text.replace("├── lenet_5\n", "├── @\n", 1).replace(
-        "└── lenet_5_cls\n", "└── lenet_5\n", 1
-    )
-    swapped = swapped.replace("├── @\n", "├── lenet_5_cls\n", 1)
-    assert swapped != text
-    assert any("not canonical" in p for p in check(swapped, registered_by_family()))
+def test_a_factory_missing_from_the_tree_is_caught() -> None:
+    entries = [*registered(), Entry("vision", "a_new_family", "base", "a_new_family_base")]
+    assert any("'a_new_family_base' is registered" in p for p in check(_text(), entries))
 
 
-def test_a_family_under_the_wrong_domain_is_caught() -> None:
-    problems = check(_text(), registered_by_family(), {"lenet": "text"})
-    assert problems == ["family 'lenet' is under 'vision', but lives in 'text'"]
-
-
-def test_a_family_missing_from_the_tree_is_caught() -> None:
-    registered = registered_by_family()
-    registered["a_new_family"] = ["a_new_family_base"]
-    assert "family 'a_new_family' is registered but not listed" in check(_text(), registered)
-
-
-def test_a_new_factory_is_drawn_in_numeric_order() -> None:
-    registered = registered_by_family()
-    registered["resnet"] = [*registered["resnet"], "resnet_60"]
-    drawn = render(redrawn(parse(_text()), registered))
-    assert (
-        drawn.index("── resnet_50_cls\n")
-        < drawn.index("── resnet_60\n")
-        < drawn.index("── resnet_101\n")
-    )
-    assert drawn.endswith("4 domains, 74 families, 495 models\n")
-
-
-def test_a_line_it_cannot_read_is_an_error() -> None:
-    with pytest.raises(ValueError, match="cannot read"):
-        parse("lucid/models/\nnot a tree line\n")
+@pytest.mark.parametrize("text", ["somewhere/\n", "lucid/models/\nnot a tree line\n"])
+def test_text_it_cannot_read_is_an_error(text: str) -> None:
+    with pytest.raises(ValueError, match="MODELS.tree"):
+        parse(text)
