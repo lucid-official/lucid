@@ -125,7 +125,7 @@ class SubsystemPackage(AuditPackage):
 
     @override
     def file_prefixes(self) -> tuple[str, ...]:
-        return _suite.file_prefixes_for_subsystems(self.key) or ()
+        return _suite.subsystem_file_prefixes(self.key)
 
     @override
     def module_prefix(self) -> str:
@@ -184,6 +184,19 @@ class SuitePlan:
     ignore: tuple[str, ...]
     #: The source files the line floor may be compared on; ``None`` is all.
     in_scope: Callable[[str], bool] | None
+
+    @property
+    def advisory(self) -> bool:
+        """Whether the line-coverage comparison can only inform, never fail the run.
+
+        The floor was measured over the whole tree.  A run that did not run the
+        whole tree — some packages, or the zoo's trees left to the zoo stage —
+        measures a different denominator, and a file's percentage moves with
+        which tests ran.  ``--autograd`` alone "lost" ``_functional.py`` from
+        90.9% to 82.7% for exactly that reason.  Such a run reports what it sees
+        and leaves the verdict to the run that is entitled to give one.
+        """
+        return self.in_scope is not None
 
 
 class PackageRegistry:
@@ -398,7 +411,11 @@ class Selection:
         kept = {t for p in self.registry if p.key in carried for t in p.test_trees(root)}
         left = (t for p in self.registry if p.key not in carried for t in p.test_trees(root))
         ignore = tuple(dict.fromkeys(t for t in left if t not in kept))
-        return SuitePlan((default,), ignore, scope)
+        # Trees left out are tests that did not run, and the floor counts what
+        # they cover: the zoo's files (31.8% of the statements) read 0% instead of
+        # their floor, and so does everything only they exercise.  Such a run is
+        # compared on the files it owns, as a narrowed one is, and only advises.
+        return SuitePlan((default,), ignore, scope or (self.owns_file if ignore else None))
 
 
 #: The registry every command line and every run is built from.

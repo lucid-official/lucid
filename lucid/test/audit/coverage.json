@@ -9,7 +9,7 @@
     "is compared against, so 'did my change break something' has an",
     "answer that does not depend on remembering yesterday's numbers.",
     "",
-    "Regenerate with:  lucid-audit --update-coverage",
+    "Regenerate with:  lucid-audit --audit-only --update-coverage",
     "Do that only when the new state is the intended one."
   ],
   "cells": 11817,

@@ -29,6 +29,7 @@ _GIB = 1024**3
 # free before it starts, and is killed if the machine itself falls under 2.5 GB.
 _LIMIT_SHARE = 28.0 / 36.0
 _START_SHARE_OF_LIMIT = 0.5
+_START_SHARE_OF_TOTAL = 14.0 / 36.0
 _FLOOR_SHARE = 2.5 / 36.0
 
 #: How much of the footprint limit a single model build may claim.
@@ -58,6 +59,16 @@ HEAVY_PEAK_TEST = "lucid/test/parity/models/vision/test_vit.py::test_self_consis
 #: which are the two sizes the choice matters for.  A wrong guess costs one
 #: retry, not a wrong answer: a stage the guard kills is rerun without ``heavy``.
 HEAVY_HEADROOM = 1.5
+
+
+def weights_gb(params: int) -> float:
+    """The size of ``params`` float32 weights."""
+    return params * _BYTES_PER_PARAM / _GIB
+
+
+def fits_build(params: int, budget_gb: float) -> bool:
+    """Whether ``params`` float32 weights fit ``budget_gb``: the one rule builds are skipped by."""
+    return weights_gb(params) <= budget_gb
 
 
 def _round_step(value: float) -> float:
@@ -93,15 +104,21 @@ class MachineBudget:
         """The budget of a machine with ``total_gb`` of memory.
 
         ``limit_gb`` overrides the footprint limit; the room to start follows it
-        (half of it, as it always has), and the floor follows the machine.
+        (half of it, as it always has) but never asks the machine for more than
+        the share of it that the Studio's 14 GB is — a limit larger than the
+        machine would otherwise make every stage wait for memory that does not
+        exist.  The floor follows the machine.
         """
         if total_gb <= 0 or (limit_gb is not None and limit_gb <= 0):
             raise ValueError(f"memory sizes must be positive, got {total_gb=} {limit_gb=}")
         limit = limit_gb if limit_gb is not None else _round_step(total_gb * _LIMIT_SHARE)
+        start = _round_step(limit * _START_SHARE_OF_LIMIT)
+        if limit_gb is not None:
+            start = min(start, _round_step(total_gb * _START_SHARE_OF_TOTAL))
         return cls(
             total_gb=total_gb,
             limit_gb=limit,
-            start_room_gb=_round_step(limit * _START_SHARE_OF_LIMIT),
+            start_room_gb=start,
             floor_gb=max(_round_step(total_gb * _FLOOR_SHARE), _MIN_FLOOR_GB),
         )
 
@@ -116,11 +133,11 @@ class MachineBudget:
     @property
     def build_budget_gb(self) -> float:
         """The most a single real-size model build may allocate."""
-        return self.limit_gb * _BUILD_SHARE
+        return min(self.limit_gb, self.total_gb) * _BUILD_SHARE
 
     def fits_build(self, params: int) -> bool:
         """Whether ``params`` float32 weights fit the build budget."""
-        return params * _BYTES_PER_PARAM <= self.build_budget_gb * _GIB
+        return fits_build(params, self.build_budget_gb)
 
     @property
     def admits_heavy(self) -> bool:
@@ -173,6 +190,28 @@ def footprint_gb(pid: int) -> float:
     return float(info.phys_footprint) / _GIB
 
 
+_MAX_GROUP = 4096
+
+
+def group_pids(pgid: int) -> list[int]:
+    """Every live process in process group ``pgid``, the leader included."""
+    found = (ctypes.c_int * _MAX_GROUP)()
+    count = _libproc().proc_listpgrppids(pgid, found, ctypes.sizeof(found))
+    return list(found[: min(max(count, 0), _MAX_GROUP)])
+
+
+def group_footprint_gb(pgid: int) -> float:
+    """The footprint of a whole process group.
+
+    A stage's real work is often not in the process the guard started:
+    ``pytest`` runs tests in it, but the compiled-training probe runs each pair
+    in a child interpreter, and a test may spawn workers.  Reading only the
+    leader let a child allocate 600 MB under a 150 MB limit and report ``pass,
+    peak 0.017``.
+    """
+    return sum(footprint_gb(pid) for pid in group_pids(pgid))
+
+
 def available_gb() -> float:
     """Memory the machine could hand out now: free, inactive, speculative, purgeable pages."""
     out = subprocess.run(["vm_stat"], capture_output=True, text=True, check=True).stdout
@@ -191,5 +230,9 @@ __all__ = [
     "HEAVY_PEAK_TEST",
     "MachineBudget",
     "available_gb",
+    "fits_build",
     "footprint_gb",
+    "group_footprint_gb",
+    "group_pids",
+    "weights_gb",
 ]

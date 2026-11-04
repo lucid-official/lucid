@@ -53,7 +53,7 @@ def test_no_subsystem_is_declared_and_then_silently_empty() -> None:
     """``lucid.signal`` was in the subsystem table and contributed nothing.
 
     Everything it exports is a sub-module, the enumeration skipped those,
-    and the result was a subsystem that appeared in ``--list-subsystems``
+    and the result was a subsystem that appeared in ``--list-packages``
     with zero symbols under it — printed in the output for weeks without
     being read as a bug.  Twelve window functions were outside the audit.
 

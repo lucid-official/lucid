@@ -8,6 +8,7 @@ families are the Studio's job.
 
 import argparse
 import dataclasses
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -96,9 +97,9 @@ def test_heavy_tests_are_offered_only_to_machines_with_room_for_them() -> None:
 
 
 def test_the_machine_can_be_read() -> None:
-    assert MachineBudget.detect().total_gb >= 8
+    assert MachineBudget.detect().total_gb > 0
     assert available_gb() > 0
-    assert footprint_gb(1) >= 0.0
+    assert footprint_gb(os.getpid()) > 0.01, "a process can read its own footprint"
 
 
 # ── a stage and its result ───────────────────────────────────────────────────
@@ -164,13 +165,19 @@ def test_a_pytest_stage_clears_the_default_markers_and_can_drop_heavy(tmp_path: 
     assert light.without_heavy("again") is None, "one retry, not a loop"
 
     zoo = PytestStage(
-        name="zoo-tests", files=("m.py",), basetemp=tmp_path, marker="not control", keyword="vit"
+        name="zoo-tests",
+        files=("m.py",),
+        basetemp=tmp_path,
+        marker="not control",
+        names=("vit_base_16", "vit_large_16"),
+        labels=("vit",),
     )
     dropped = zoo.without_heavy("why")
     assert dropped is not None
     argv = dropped.argv()
     assert _marker(argv) == "(not control) and not heavy"
-    assert argv[argv.index("-k") + 1] == "vit"
+    assert "--zoo-names=vit_base_16,vit_large_16" in argv and "--zoo-labels=vit" in argv
+    assert argv[argv.index("lucid.test.audit._zoo_select") - 1] == "-p"
     assert CommandStage(name="build", command=("x",)).without_heavy("why") is None
 
 
@@ -367,7 +374,7 @@ class _Run:
             budget=_budget(40.0),
             reporter=LineReporter(console, 40.0),
             catalog=_FakeCatalog(self.root, self.counter, self.failing),
-            revision=(sha, dirty),
+            revision=lambda: (sha, dirty),
         )
         return run.run()
 
@@ -430,13 +437,13 @@ def test_a_dirty_tree_never_reuses_a_record_and_keeps_its_own(tmp_path: Path) ->
 def test_the_state_is_per_commit_and_per_family(tmp_path: Path) -> None:
     state = ZooState(tmp_path, SHA, dirty=False, resume=True)
     results = [StageResult("build", "pass", 1.0, 2.0, notes=["n"])]
-    state.save("alpha", results)
-    assert state.load("alpha") == results
-    assert state.load("beta") is None
-    assert ZooState(tmp_path, SHA, dirty=False, resume=False).load("alpha") is None
-    assert ZooState(tmp_path, SHA, dirty=True, resume=True).load("alpha") is None
+    state.save("alpha", results, _budget(40.0))
+    assert state.load("alpha", _budget(40.0)) == results
+    assert state.load("beta", _budget(40.0)) is None
+    assert ZooState(tmp_path, SHA, dirty=False, resume=False).load("alpha", _budget(40.0)) is None
+    assert ZooState(tmp_path, SHA, dirty=True, resume=True).load("alpha", _budget(40.0)) is None
     (tmp_path / SHA / "alpha.json").write_text("{ not json")
-    assert state.load("alpha") is None, "a record this version cannot read is rerun"
+    assert state.load("alpha", _budget(40.0)) is None, "a record this version cannot read is rerun"
 
 
 def test_a_full_run_leaves_a_done_marker_and_a_narrowed_one_does_not(tmp_path: Path) -> None:
@@ -486,7 +493,7 @@ def test_a_note_keeps_its_format_and_names_the_command_and_the_budget() -> None:
 
 def test_the_ledger_lists_every_family_recorded_or_waiting(tmp_path: Path) -> None:
     state = ZooState(tmp_path, SHA, dirty=False, resume=True)
-    state.save("alpha", [StageResult("build", "fail", 60.0, 3.0)])
+    state.save("alpha", [StageResult("build", "fail", 60.0, 3.0)], _budget(40.0))
     ledger = render_ledger(_facts(), state, {"alpha": "vision", "beta": "text"})
     assert "| alpha | vision | fail | 1.0 | 3.0 | [[zoo-verify-alpha]] |" in ledger
     assert "| beta | text | 대기 |" in ledger
@@ -585,7 +592,9 @@ def test_the_build_probe_skips_a_factory_past_the_budget_by_name(
     from lucid.test.audit import _zoo_probes
 
     # alexnet declares its parameter counts (lenet does not, and is always built).
-    assert _zoo_probes.build_family("alexnet", budget_gb=0.00001) == 0
+    assert (
+        _zoo_probes.build_family("alexnet", budget_gb=0.00001) == 5
+    ), "nothing built is not a pass"
     out = capsys.readouterr().out
     assert "ADAPTIVE alexnet/alexnet:" in out and "past this machine's build budget" in out
     assert "0 built, 2 past budget" in out

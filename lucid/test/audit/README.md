@@ -82,6 +82,26 @@ deliberately:
 lucid-audit --tests-only --update-suite
 ```
 
+**Only a run of the whole suite can fail on the floor.** The floor is a
+percentage over every test, and a file's percentage moves with which tests
+ran. A run narrowed to some packages — or one that leaves the zoo's trees
+to the zoo stage, which is bare `lucid-audit` and `--no-models` — compares
+only the files its packages own and prints what it sees as *advisory*: it
+cannot fail the run, because `--autograd` "lost" `_functional.py` from 90.9%
+to 82.7% on fewer tests, and the zoo's files (a third of the statements)
+read 0% when their tests did not run. `lucid-audit --tests-only` is the run
+that carries every tree and can fail.
+
+**Baselines are written only by the run that is the whole of them.**
+`--update-coverage`, `--update-suite` and `--update-doctests` exit `2` unless
+the run covers every package, and `--update-suite` also refuses a run that
+leaves a test tree out (`--no-models`, bare `lucid-audit`, `--suite-ignore`,
+`--suite-path`): a floor recorded from a filtered tree loosens the gate
+without anyone deciding to. The three official commands are
+`lucid-audit --audit-only --update-coverage`,
+`lucid-audit --doctests-only --update-doctests` and
+`lucid-audit --tests-only --update-suite`.
+
 ---
 
 ## Setup on a fresh machine
@@ -197,7 +217,10 @@ have shadowed it.
 zoo stage, because that is the slowest thing the audit does and should be on
 the command line when it runs. `--models` with any of them exits `2`.
 `--update-coverage` still needs a complete sweep: `--no-models` is not a
-filter for it, because the sweep never contained the zoo.
+filter for it, because the sweep never contained the zoo. On a zoo-only run
+(`--models` alone) an option for a stage that does not run — `--cpu-only`,
+`--json`, `--select`, `--quick`, `--fail-fast`, `--update-*` and the rest —
+exits `2` rather than being accepted and ignored.
 
 CI passes `--no-models` on every call, so its scope and duration are what
 they were (a test, `test_audit_packages.py`, reads the command lines out of
@@ -253,13 +276,45 @@ costs a small machine is **reported, never silent**:
   and its record says so. If the retry passes the stage passes; if the machine
   is still short, it is a failure.
 
+The guard tells two kills apart. `mem-guard` is the stage passing *its own*
+limit — the only case where running less of it is an answer. `machine-short` is
+the *machine* running low, which another process may have caused (an engine
+build on the same box): running less would only hide that, so the stage waits
+for room (`start with N GB free`, shown as a wait, never as a stage at 0.0 GB)
+and is run again **unreduced**, once. If the machine is short again it fails,
+and that record is never reused. The footprint is the whole process group's,
+not just the process the guard started: the compiled-training probe runs each
+pair in a child interpreter. A wait for memory that runs out is written on the
+record, not only in the log.
+
 The verdict lists everything skipped or adapted and why, and each family's note
 repeats its own, under "이 머신에서 정한 것".
 
+**`pass`, `reduced`, or a failure.** A family that passed everything it was
+asked, but was asked for less than the zoo's full verification, reads
+`reduced`, not `pass`: the machine left `heavy` tests or a build out (or a
+stage was retried with less), or a stage ran nothing and gave no reason. A skip
+with a reason on record — a test that needs the network, a matrix pair with a
+stated gap — is designed and does not reduce. The rule is printed in every
+family note. `reduced` is not a failure (exit status is unchanged), but the
+summary names the groups so a 6 GB machine's `lenet` is never filed as a 28 GB
+machine's.
+
 **It resumes.** Results go to `~/Library/Caches/lucid/audit-zoo/<sha>/`; a
 family recorded for the same commit is skipped, so an interrupted run
-continues. `--fresh` ignores the records. A tree with uncommitted changes never
-reuses one, and files its results under `<sha>-dirty`.
+continues — **by a machine at least as large as the one that recorded it**,
+because a record that left things out for a small machine, or was killed at its
+limit, is not an answer for a bigger one (each record stores its limit). A
+record from a stage the machine itself ran short under is never reused.
+`--fresh` ignores the records. A tree with uncommitted changes (untracked files
+included — the catalog reads the filesystem) never reuses one, and files its
+results under `<sha>-dirty`. A tree whose HEAD or working copy **changes
+during a run** stops it: results are only ever filed under the commit the tree
+was at when the family finished. So run it from a **scratch clone** that nobody
+edits, not from a checkout in use. Logs are kept per group
+(`logs/<family>/<stage>.log`), two runs on one commit refuse to share a state
+directory (a lock), and `kill`, a closed terminal or `^C` end the stage's
+process group with the run.
 
 **The notes** — `zoo-verify-<family>.md` and `zoo-verify-ledger.md`, in the
 format the vault already has, plus the command that produced them and the
@@ -519,7 +574,7 @@ Newly answered cells are reported too, as progress rather than failure.
 When the new state is the intended one:
 
 ```bash
-lucid-audit --update-coverage
+lucid-audit --audit-only --update-coverage
 ```
 
 Do that deliberately. Re-recording to make a red run go green silences
@@ -599,5 +654,6 @@ without restoring the optimizer it drives.
 | `_zoo_record.py` | per-commit state, the family notes and the ledger |
 | `_zoo_report.py` | the display (plain lines and the stdlib live block); the `rich` one is in `_console_rich.py` |
 | `_zoo_probes.py` | the real-size build and compiled-training probes, run as child processes |
+| `_zoo_select.py` | a pytest plugin: a family's tests chosen by its factory names, word-safely (not `-k`) |
 | `_result.py` | `Status`, `Finding`, `Report`, `Baseline` |
 | `known.json` | accepted defects, reported as `KNWN` rather than `FAIL` |

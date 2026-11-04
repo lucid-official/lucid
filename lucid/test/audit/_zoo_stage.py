@@ -26,10 +26,18 @@ DOMAINS = ("vision", "text", "generative", "multimodal")
 ZOO_WIDE = "zoo-wide"
 
 #: Statuses that make a stage a failure.  ``none`` (pytest exit 5, nothing
-#: collected) is not one: a family with no tests of its own has not failed.
-FAILED_STATUSES = frozenset({"fail", "timeout", "mem-guard"})
+#: collected) is not one: a family with no tests of its own has not failed —
+#: though a stage that ran nothing *and says nothing about why* is reduced.
+#: ``mem-guard`` is the stage passing its own footprint limit; ``machine-short``
+#: is the machine running out of memory under it, which is not the stage's doing
+#: and so is never answered by running less of it.
+FAILED_STATUSES = frozenset({"fail", "timeout", "mem-guard", "machine-short"})
 
-_KILLED = {"mem-guard": "killed by the memory guard", "timeout": "timed out"}
+_KILLED = {
+    "mem-guard": "killed by the memory guard",
+    "machine-short": "killed because the machine ran short of memory",
+    "timeout": "timed out",
+}
 
 _SUMMARY = re.compile(r"^(?:=+ )?(\d+ .*?) in [0-9.]+s")
 _FAILED = re.compile(r"^(?:FAILED|ERROR) (.+)$")
@@ -80,7 +88,9 @@ class PytestStage(Stage):
     files: tuple[str, ...]
     basetemp: Path
     marker: str = ""
-    keyword: str = ""
+    #: A family's factory names and labels; ``()`` runs every test in ``files``.
+    names: tuple[str, ...] = ()
+    labels: tuple[str, ...] = ()
     heavy_off: bool = False
 
     @override
@@ -88,7 +98,16 @@ class PytestStage(Stage):
         marker = self.marker
         if self.heavy_off:
             marker = f"({marker}) and not heavy" if marker else "not heavy"
-        keyword = ("-k", self.keyword) if self.keyword else ()
+        select = (
+            (
+                "-p",
+                "lucid.test.audit._zoo_select",
+                f"--zoo-names={','.join(self.names)}",
+                f"--zoo-labels={','.join(self.labels)}",
+            )
+            if self.names or self.labels
+            else ()
+        )
         return (
             sys.executable,
             "-m",
@@ -103,7 +122,7 @@ class PytestStage(Stage):
             "faulthandler_timeout=900",
             "-m",
             marker,
-            *keyword,
+            *select,
             *self.files,
         )
 
@@ -126,12 +145,28 @@ class StageResult:
     failures: list[str] = field(default_factory=list)
     skips: list[str] = field(default_factory=list)
     checks: list[str] = field(default_factory=list)
-    #: What this machine decided: tests dropped, builds skipped, a retry.
+    #: What this machine decided *to leave out*: tests dropped, builds skipped,
+    #: a retry with less.  A stage with any of these verified less than it was
+    #: asked to, which is what ``reduced`` means.
     notes: list[str] = field(default_factory=list)
+    #: What happened to the stage without making it verify less: a wait for
+    #: memory that ran out, a rerun after the machine ran short.
+    events: list[str] = field(default_factory=list)
 
     @property
     def failed(self) -> bool:
         return self.status in FAILED_STATUSES
+
+    @property
+    def reduced(self) -> bool:
+        """Whether the stage verified less than it was asked to.
+
+        Leaving something out because of the machine is reduced; so is a stage
+        that ran nothing and does not say why.  A skip with a reason on record
+        (a test that needs the network, a matrix pair with a stated gap) is a
+        designed skip, not a reduction.
+        """
+        return bool(self.notes) or (self.status == "none" and not self.skips)
 
 
 def read_result(
@@ -202,10 +237,20 @@ class ZooCatalog:
 
     @staticmethod
     def _pytest(
-        name: str, temp: Path, files: list[Path], marker: str = "", keyword: str = ""
+        name: str,
+        temp: Path,
+        files: list[Path],
+        marker: str = "",
+        names: tuple[str, ...] = (),
+        labels: tuple[str, ...] = (),
     ) -> PytestStage:
         return PytestStage(
-            name=name, files=tuple(map(str, files)), basetemp=temp, marker=marker, keyword=keyword
+            name=name,
+            files=tuple(map(str, files)),
+            basetemp=temp,
+            marker=marker,
+            names=names,
+            labels=labels,
         )
 
     def family_stages(self, family: str, temp: Path, budget: MachineBudget) -> list[Stage]:
@@ -227,8 +272,22 @@ class ZooCatalog:
             stages.append(self._pytest("own-tests", temp, own, marker=""))
         # Control benchmarks take tens of minutes and run once, in the zoo-wide group.
         models = [p for p in self.wide_files() if p.parent == self._unit / "models"]
-        stages.append(self._pytest("zoo-tests", temp, models, marker="not control", keyword=family))
+        names, labels = self.selection_for(family)
+        stages.append(
+            self._pytest(
+                "zoo-tests", temp, models, marker="not control", names=names, labels=labels
+            )
+        )
         return stages
+
+    def selection_for(self, family: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """The factory names and labels that identify ``family``'s tests in shared files."""
+        from lucid.test.audit._zoo_probes import factories_by_family
+
+        found = factories_by_family().get(family)
+        names = tuple(found.names) if found else ()
+        labels = tuple(sorted({family, *(found.labels if found else ())}))
+        return names, labels
 
     def wide_stages(self, temp: Path) -> list[Stage]:
         """The zoo-wide group: every multi-family file once, ``control`` benchmarks included."""

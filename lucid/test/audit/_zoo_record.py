@@ -4,18 +4,24 @@ Two records, deliberately separate:
 
 * **state** — one JSON per family under
   ``~/Library/Caches/lucid/audit-zoo/<sha>/``.  It exists so an interrupted run
-  resumes: a family recorded for this commit is not run again.  It lives in the
-  cache directory, not the checkout, because the stage must leave the tree as it
-  found it.  A tree with uncommitted changes never reuses a record — the commit
-  it would be filed under no longer describes what is on disk.
+  resumes: a family recorded for this commit is not run again — *by a machine at
+  least as large as the one that recorded it*, because a record that left things
+  out for a small machine is not an answer for a big one.  It lives in the cache
+  directory, not the checkout, because the stage must leave the tree as it found
+  it.  A tree with uncommitted changes never reuses a record — the commit it
+  would be filed under no longer describes what is on disk — and a tree that
+  changes *during* a run is an error, not a result filed under the old commit.
 * **notes** — ``zoo-verify-<family>.md`` plus ``zoo-verify-ledger.md``, written
   only where the operator points (``--zoo-record``) or the repository has its
   vault.  They are for people: the ledger is read *before* a run to avoid
   repeating one.
 """
 
+import contextlib
 import dataclasses
+import fcntl
 import json
+import os
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
@@ -25,35 +31,76 @@ from typing import TYPE_CHECKING
 from lucid.test.audit._zoo_stage import ZOO_WIDE, StageResult
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterator, Sequence
 
     from lucid.test.audit._zoo_budget import MachineBudget
 
 STATE_ROOT = Path.home() / "Library" / "Caches" / "lucid" / "audit-zoo"
 
 
+class ZooBusy(RuntimeError):
+    """Another run is using this commit's state directory."""
+
+
 def overall(results: Sequence[StageResult]) -> str:
-    """The worst status among ``results``, or ``pass``."""
+    """The worst status among ``results``: a failure, else ``reduced``, else ``pass``.
+
+    ``reduced`` is a family that passed everything it was asked and was asked
+    for less than the zoo's full verification — a machine left heavy tests or a
+    build out, or a stage ran nothing and gave no reason.  It is not a failure,
+    and it is not ``pass``: reading it as one is how a 6 GB machine's ``lenet``
+    came to look like a 28 GB machine's.
+    """
     statuses = {result.status for result in results}
-    for worst in ("fail", "timeout", "mem-guard"):
+    for worst in ("fail", "timeout", "mem-guard", "machine-short"):
         if worst in statuses:
             return worst
-    return "pass"
+    return "reduced" if any(result.reduced for result in results) else "pass"
 
 
 def repo_state(root: Path) -> tuple[str, bool]:
-    """``(HEAD sha, whether tracked files differ from it)``."""
+    """``(HEAD sha, whether the tree differs from it)``.
+
+    Untracked files count: the catalog reads the filesystem, so a test file that
+    is not yet committed is part of what a run verifies.  Ignored files (build
+    products, the engine) do not.
+    """
     sha = subprocess.run(
         ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, check=True
     ).stdout.strip()
     status = subprocess.run(
-        ["git", "status", "--porcelain", "--untracked-files=no"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=True,
+        ["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True, check=True
     ).stdout
     return sha, bool(status.strip())
+
+
+def write_atomic(path: Path, text: str) -> None:
+    """Write ``text`` so a reader — or ``sync`` — never sees half of it."""
+    scratch = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    scratch.write_text(text)
+    os.replace(scratch, path)
+
+
+@dataclass
+class FamilyRecord:
+    """A family's results and the machine that produced them."""
+
+    results: list[StageResult]
+    limit_gb: float
+
+    def reusable_under(self, budget: MachineBudget) -> bool:
+        """Whether a run with ``budget`` may take these results as its own.
+
+        What a machine's limit changed — heavy tests dropped, a build skipped,
+        a stage killed at the limit — was a decision about *that* machine.  A
+        larger one would have run it, so only a machine no larger than the
+        recorder's may rely on the record.  A stage the machine itself ran out
+        of memory under proved nothing about the stage, and is never reused.
+        """
+        if any(result.status == "machine-short" for result in self.results):
+            return False
+        limited = any(r.notes or r.status == "mem-guard" for r in self.results)
+        return not limited or self.limit_gb >= budget.limit_gb
 
 
 class ZooState:
@@ -73,22 +120,43 @@ class ZooState:
     def _path(self, name: str) -> Path:
         return self.root / f"{name}.json"
 
-    def recorded(self, name: str) -> list[StageResult] | None:
+    @contextlib.contextmanager
+    def lock(self) -> Iterator[None]:
+        """Hold this commit's state directory; two runs would share ``tmp/`` and each other's logs."""
+        fd = os.open(self.root / "lock", os.O_CREAT | os.O_RDWR)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            os.close(fd)
+            raise ZooBusy(
+                f"another zoo run is using {self.root}; wait for it, or run from another clone"
+            ) from exc
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+
+    def recorded(self, name: str) -> FamilyRecord | None:
         """What is on disk for ``name``, whether or not a run may reuse it."""
         path = self._path(name)
         if not path.exists():
             return None
         try:
-            return [StageResult(**item) for item in json.loads(path.read_text())]
-        except (OSError, ValueError, TypeError):
+            payload = json.loads(path.read_text())
+            results = [StageResult(**item) for item in payload["results"]]
+            return FamilyRecord(results, float(payload["limit_gb"]))
+        except (OSError, ValueError, TypeError, KeyError):
             return None  # a record this version cannot read is a record to redo
 
-    def load(self, name: str) -> list[StageResult] | None:
-        """The recorded results of ``name`` for this commit, if a run may reuse them."""
-        return self.recorded(name) if self.resume else None
+    def load(self, name: str, budget: MachineBudget) -> list[StageResult] | None:
+        """The recorded results of ``name``, if a run with ``budget`` may reuse them."""
+        record = self.recorded(name) if self.resume else None
+        return record.results if record and record.reusable_under(budget) else None
 
-    def save(self, name: str, results: Sequence[StageResult]) -> None:
-        self._path(name).write_text(json.dumps([dataclasses.asdict(r) for r in results]))
+    def save(self, name: str, results: Sequence[StageResult], budget: MachineBudget) -> None:
+        payload = {"limit_gb": budget.limit_gb, "results": [dataclasses.asdict(r) for r in results]}
+        write_atomic(self._path(name), json.dumps(payload))
 
 
 @dataclass(frozen=True)
@@ -112,6 +180,7 @@ def render_note(name: str, domain: str, results: Sequence[StageResult], facts: R
         f"> **{overall(results)}** · `{commit}` · {datetime.now():%Y-%m-%d %H:%M} · "
         f"{domain} · {seconds / 60:.1f} 분 · 최대 {peak:.1f} GB",
         f"> 명령: `{facts.command}` · 머신: {facts.budget.describe()}",
+        f"> {_RESULT_RULE}",
         "",
         "| 단계 | 결과 | 시간 (s) | 최대 (GB) | 요약 |",
         "|---|---|---|---|---|",
@@ -128,12 +197,22 @@ def render_note(name: str, domain: str, results: Sequence[StageResult], facts: R
         ("건너뛴 것", "skips"),
         ("이 머신에서 정한 것", "notes"),
     ):
-        items = [f"- `{r.name}`: {item}" for r in results for item in getattr(r, field_name)]
+        items = [
+            f"- `{r.name}`: {item}"
+            for r in results
+            for item in (r.notes + r.events if field_name == "notes" else getattr(r, field_name))
+        ]
         if items:
             lines += ["", f"## {title}", "", *items]
     lines += ["", "장부: [[zoo-verify-ledger]] · 계약: [[arch-models-family-contract]]", ""]
     return "\n".join(lines)
 
+
+_RESULT_RULE = (
+    "결과: pass = 모든 단계가 요청한 만큼 돌았다 · reduced = 통과했지만 이 머신이 일부를 뺐거나 "
+    "(heavy 제외, 예산 초과 build, 줄여서 재시도) 이유 없이 아무것도 돌지 않은 단계가 있다 "
+    "— 이유가 기록된 설계된 skip 은 reduced 가 아니다 · fail/timeout/mem-guard/machine-short = 실패"
+)
 
 _LEDGER_HEAD = """# model zoo 전수 검증 장부
 
@@ -151,11 +230,12 @@ def render_ledger(facts: RunFacts, state: ZooState, families: dict[str, str]) ->
     lines += ["| family | 분야 | 결과 | 분 | 최대 GB | 기록 |", "|---|---|---|---|---|---|"]
     done = 0
     for name, domain in [*families.items(), (ZOO_WIDE, "공통")]:
-        record = state.recorded(name)
-        if record is None:
+        recorded = state.recorded(name)
+        if recorded is None:
             lines.append(f"| {name} | {domain} | 대기 | | | |")
             continue
         done += 1
+        record = recorded.results
         minutes = sum(item.seconds for item in record) / 60
         peak = max((item.peak_gb for item in record), default=0.0)
         lines.append(
@@ -167,7 +247,7 @@ def render_ledger(facts: RunFacts, state: ZooState, families: dict[str, str]) ->
 
 
 class Notebook:
-    """Writes a family's note and the ledger after the family finishes."""
+    """Writes a family's note, and the ledger over all of them."""
 
     def __init__(
         self, directory: Path, state: ZooState, families: dict[str, str], facts: RunFacts
@@ -178,23 +258,34 @@ class Notebook:
         self._facts = facts
         directory.mkdir(parents=True, exist_ok=True)
 
-    def write(self, name: str, results: Sequence[StageResult]) -> None:
+    def note_path(self, name: str) -> Path:
+        return self._directory / f"zoo-verify-{name}.md"
+
+    def write_note(self, name: str, results: Sequence[StageResult]) -> None:
         domain = self._families.get(name, "공통")
-        (self._directory / f"zoo-verify-{name}.md").write_text(
-            render_note(name, domain, results, self._facts)
+        write_atomic(self.note_path(name), render_note(name, domain, results, self._facts))
+
+    def write_ledger(self) -> None:
+        write_atomic(
+            self._directory / "zoo-verify-ledger.md",
+            render_ledger(self._facts, self._state, self._families),
         )
-        (self._directory / "zoo-verify-ledger.md").write_text(
-            render_ledger(self._facts, self._state, self._families)
-        )
+
+    def write(self, name: str, results: Sequence[StageResult]) -> None:
+        self.write_note(name, results)
+        self.write_ledger()
 
 
 __all__ = [
     "STATE_ROOT",
+    "FamilyRecord",
     "Notebook",
     "RunFacts",
+    "ZooBusy",
     "ZooState",
     "overall",
     "render_ledger",
     "render_note",
     "repo_state",
+    "write_atomic",
 ]

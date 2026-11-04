@@ -270,9 +270,19 @@ def test_an_explicit_suite_path_wins() -> None:
     assert plan.paths == ("lucid/test/unit/ops",) and plan.ignore == ()
 
 
-def test_a_complete_run_compares_the_whole_line_floor() -> None:
-    assert _plan().selection.suite_plan(ROOT).in_scope is None
-    assert _plan("--no-models").selection.suite_plan(ROOT).in_scope is None
+def test_only_a_whole_suite_may_fail_on_the_line_floor() -> None:
+    """The floor was measured over every test; a run that ran fewer can only inform."""
+    whole = _plan("--tests-only").selection.suite_plan(ROOT)
+    assert whole.in_scope is None and not whole.advisory and not whole.ignore
+    # The zoo's trees go to the zoo stage, so bare `lucid-audit` and `--no-models` did not
+    # run them: compared against the whole floor, their files would read as lost.
+    for argv in ([], ["--no-models"]):
+        plan = _plan(*argv).selection.suite_plan(ROOT, zoo_stage=not argv)
+        assert plan.ignore and plan.advisory
+        assert plan.in_scope is not None
+        assert not plan.in_scope("lucid/models/vision/lenet/_model.py")
+        assert plan.in_scope("lucid/nn/modules/linear.py")
+    assert _plan("--nn").selection.suite_plan(ROOT).advisory
 
 
 def test_line_coverage_is_judged_only_for_the_selected_packages_files() -> None:
@@ -415,11 +425,18 @@ def test_the_command_scanner_finds_the_ci_calls() -> None:
 def test_no_ci_or_script_command_line_selects_the_model_zoo() -> None:
     checked = 0
     for path in _CI_FILES:
+        # The baseline hints are commands a person runs to rewrite a file: they name
+        # their stage, which keeps the zoo stage out, and the suite one must stay the
+        # bare form (`--no-models` would record a floor from a filtered tree).
+        hint = path.name == "check_audit_baselines.py"
         for tokens in _audit_commands(path):
             plan = RunPlan.from_args(build_parser().parse_args(tokens))
             where = f"{path.relative_to(ROOT)}: lucid-audit {' '.join(tokens)}"
-            assert not plan.selection.runs_zoo, f"{where} would include the model zoo"
             assert not plan.zoo, f"{where} would run the zoo stage"
+            if not hint:
+                assert not plan.selection.runs_zoo, f"{where} would include the model zoo"
+            else:
+                assert "--no-models" not in tokens, f"{where} filters the tree it rewrites from"
             checked += 1
     assert checked >= 5
 

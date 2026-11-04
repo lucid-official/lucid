@@ -7,7 +7,7 @@
     "commit that adds it; the standing failures are a backlog, recorded",
     "here so they cannot grow quietly.",
     "",
-    "Regenerate with:  lucid-audit --update-doctests"
+    "Regenerate with:  lucid-audit --doctests-only --update-doctests"
   ],
   "failed": 0,
   "attempted": 6932,

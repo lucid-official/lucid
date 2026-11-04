@@ -26,6 +26,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, override
 
 from lucid.test.audit._console import fmt_duration
+from lucid.test.audit._zoo_record import overall
+from lucid.test.audit._zoo_stage import FAILED_STATUSES
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -37,7 +39,17 @@ if TYPE_CHECKING:
 #: Seconds between "still running" lines when there is no live region.
 HEARTBEAT_S = 300.0
 
-_COLOUR = {"pass": "green", "none": "grey", "fail": "red", "timeout": "red", "mem-guard": "red"}
+_FAILURES = FAILED_STATUSES
+
+_COLOUR = {
+    "pass": "green",
+    "reduced": "yellow",
+    "none": "grey",
+    "fail": "red",
+    "timeout": "red",
+    "mem-guard": "red",
+    "machine-short": "red",
+}
 
 
 @dataclass
@@ -45,6 +57,7 @@ class ZooTally:
     """The running counts the display and the verdict both read."""
 
     families_ok: int = 0
+    families_reduced: int = 0
     families_failed: int = 0
     stages_ok: int = 0
     stages_failed: int = 0
@@ -70,6 +83,8 @@ class ZooReporter(ABC):
         self.footprint_gb = 0.0
         self.stage_peak_gb = 0.0
         self.run_peak_gb = 0.0
+        #: ``(waited s, free GB, needed GB)`` while a stage is held back for memory.
+        self.waiting: tuple[float, float, float] | None = None
         self._began = time.monotonic()
 
     # ── what the run calls ───────────────────────────────────────────────────
@@ -93,7 +108,14 @@ class ZooReporter(ABC):
         self._stage_started()
         self._draw()
 
+    def wait(self, waited_s: float, free_gb: float, needed_gb: float) -> None:
+        """A stage is held back until the machine has ``needed_gb`` free."""
+        self.waiting = (waited_s, free_gb, needed_gb)
+        self.stage_seconds = waited_s
+        self._draw()
+
     def tick(self, elapsed_s: float, footprint_gb: float) -> None:
+        self.waiting = None
         self.stage_seconds = elapsed_s
         self.footprint_gb = footprint_gb
         self.stage_peak_gb = max(self.stage_peak_gb, footprint_gb)
@@ -111,16 +133,18 @@ class ZooReporter(ABC):
         self._draw()
 
     def family_done(self, name: str, results: Sequence[StageResult], *, resumed: bool) -> None:
-        bad = any(result.failed for result in results)
-        if bad:
+        status = overall(results)
+        if status in _FAILURES:
             self.tally.families_failed += 1
+        elif status == "reduced":
+            self.tally.families_reduced += 1
         else:
             self.tally.families_ok += 1
         if resumed:
             for result in results:
                 self.tally.stages_failed += result.failed
                 self.tally.stages_ok += not result.failed
-        self._emit(self.format_family(name, results, resumed))
+        self._emit(self.format_family(name, results, resumed, status))
         self._draw()
 
     def close(self) -> None:
@@ -165,21 +189,22 @@ class ZooReporter(ABC):
             + result.summary[:60]
         )
 
-    def format_family(self, name: str, results: Sequence[StageResult], resumed: bool) -> str:
+    def format_family(
+        self, name: str, results: Sequence[StageResult], resumed: bool, status: str
+    ) -> str:
         paint = self.console.paint
-        bad = any(result.failed for result in results)
-        status = "fail" if bad else "pass"
         minutes = sum(result.seconds for result in results) / 60
         peak = max((result.peak_gb for result in results), default=0.0)
-        label = f"{self.position()} {name}: " + paint(status, _COLOUR[status], "bold")
+        label = f"{self.position()} {name}: " + paint(status, _COLOUR.get(status, "red"), "bold")
         extra = "  (recorded for this commit)" if resumed else ""
         return f"{label}  {minutes:.1f} min  peak {peak:.1f} GB{extra}  " + self.format_tally()
 
     def format_tally(self) -> str:
         t = self.tally
         paint = self.console.paint
+        reduced = f" reduced {t.families_reduced}" if t.families_reduced else ""
         return paint(
-            f"[families ok {t.families_ok} fail {t.families_failed} · "
+            f"[families ok {t.families_ok}{reduced} fail {t.families_failed} · "
             f"stages ok {t.stages_ok} fail {t.stages_failed}]",
             "red" if t.stages_failed else "grey",
         )
@@ -194,6 +219,12 @@ class ZooReporter(ABC):
     def status(self) -> str:
         if not self.stage_name:
             return "between stages"
+        if self.waiting is not None:
+            waited, free, needed = self.waiting
+            return (
+                f"{self.stage_name}  waiting for memory: {free:.1f} GB free, "
+                f"{needed:g} GB needed  ({fmt_duration(waited)})"
+            )
         return (
             f"{self.stage_name}  {fmt_duration(self.stage_seconds)}  "
             f"footprint {self.footprint_gb:.1f} GB "

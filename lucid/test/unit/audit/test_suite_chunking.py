@@ -17,13 +17,8 @@ reading it, which is what these tests are for.
 from pathlib import Path
 
 from lucid.test.audit._console import Console
-from lucid.test.audit._suite import (
-    SuiteResult,
-    chunks_for,
-    file_prefixes_for_subsystems,
-    run_suite,
-    suite_paths_for_subsystems,
-)
+from lucid.test.audit.__main__ import build_parser
+from lucid.test.audit._suite import SuiteResult, chunks_for, run_suite
 
 
 def _tree(root: Path) -> None:
@@ -109,19 +104,22 @@ def test_skipped_chunks_make_the_stage_red() -> None:
     assert result.broken == 1
 
 
-def test_subsystem_narrows_suite_paths_and_file_prefixes() -> None:
-    """LCD-733: --subsystem narrows the suite stage to the subsystem's test subtrees."""
+def test_a_package_selection_narrows_the_suite_paths_and_file_prefixes() -> None:
+    """LCD-733: the suite stage runs the test subtrees of the packages selected."""
+    from lucid.test.audit._packages import PACKAGES
+
     root = Path(__file__).resolve().parents[4]
-    paths = suite_paths_for_subsystems(root, "peft,peft.tuners.lora")
-    assert paths == ["lucid/test/unit/peft"]
-    assert suite_paths_for_subsystems(root, "all") == ["lucid/test"]
-    assert suite_paths_for_subsystems(root, "peft", default="lucid/test/unit/nn") == [
-        "lucid/test/unit/nn"
-    ]
-    assert file_prefixes_for_subsystems("peft,peft.tuners.lora") == (
-        "lucid/peft/",
-        "lucid/peft.py",
+
+    def paths(*flags: str) -> tuple[str, ...]:
+        args = build_parser().parse_args(list(flags))
+        return PACKAGES.select(args).suite_plan(root).paths
+
+    assert paths("--peft") == ("lucid/test/unit/peft",)
+    assert paths() == ("lucid/test",)
+    selection = PACKAGES.select(build_parser().parse_args(["--peft"]))
+    assert selection.suite_plan(root, "lucid/test/unit/nn").paths == ("lucid/test/unit/nn",)
+    assert PACKAGES["peft.tuners.lora"].file_prefixes() == (
         "lucid/peft/tuners/lora/",
         "lucid/peft/tuners/lora.py",
     )
-    assert file_prefixes_for_subsystems("all") is None
+    assert PACKAGES["peft"].file_prefixes() == ("lucid/peft/", "lucid/peft.py")

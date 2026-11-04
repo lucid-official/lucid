@@ -159,37 +159,14 @@ def subsystem_test_dirs(root: Path, key: str) -> list[str]:
     return [rel for rel in candidates if (root / rel).exists()]
 
 
-def suite_paths_for_subsystems(
-    root: Path, subsystems: str, default: str = "lucid/test"
-) -> list[str]:
-    """Narrow the suite to the test subtrees of ``subsystems`` when ``default`` is unfiltered."""
-    if default != "lucid/test" or subsystems.strip() in ("", "all"):
-        return [default]
-    out: list[str] = []
-    for raw in subsystems.split(","):
-        key = raw.strip()
-        if key:
-            out.extend(rel for rel in subsystem_test_dirs(root, key) if rel not in out)
-    return out or [default]
-
-
-def file_prefixes_for_subsystems(subsystems: str) -> tuple[str, ...] | None:
-    """Source-file prefixes corresponding to ``subsystems``, or ``None`` when unfiltered."""
-    if subsystems.strip() in ("", "all"):
-        return None
-    prefixes: list[str] = []
-    for raw in subsystems.split(","):
-        key = raw.strip()
-        if not key:
-            continue
-        if key == "lucid":
-            prefixes.extend(("lucid/_ops/", "lucid/_tensor/"))
-        elif key == "tensor":
-            prefixes.append("lucid/_tensor/")
-        else:
-            top = key.replace(".", "/")
-            prefixes.extend((f"lucid/{top}/", f"lucid/{top}.py"))
-    return tuple(dict.fromkeys(prefixes)) or None
+def subsystem_file_prefixes(key: str) -> tuple[str, ...]:
+    """The source paths whose line coverage belongs to ``SUBSYSTEMS`` key ``key``."""
+    if key == "lucid":
+        return ("lucid/_ops/", "lucid/_tensor/")
+    if key == "tensor":
+        return ("lucid/_tensor/",)
+    top = key.replace(".", "/")
+    return (f"lucid/{top}/", f"lucid/{top}.py")
 
 
 def chunks_for(root: Path, path: str, ignore: Sequence[str] = ()) -> list[str]:
@@ -563,6 +540,7 @@ def report_line_coverage_diff(
     console: Console,
     *,
     in_scope: Callable[[str], bool] | None = None,
+    advisory: bool = False,
 ) -> int:
     """Compare against the floor and report what moved.
 
@@ -575,7 +553,11 @@ def report_line_coverage_diff(
 
     ``in_scope`` names the source files this run was entitled to cover.  A
     run narrowed to some packages cannot move the total or any file outside
-    them, so both are left alone; ``None`` is the complete run.
+    them, so both are left alone; ``None`` is the complete run.  ``advisory``
+    says the run did not run the whole suite: what it finds is printed as
+    information and the count returned is ``0``, because the floor was measured
+    over a different denominator and a percentage that moves with which tests
+    ran is not a regression.
 
     Returns
     -------
@@ -629,7 +611,8 @@ def report_line_coverage_diff(
             )
         return 0
 
-    console.rule(f"line coverage regressions · {len(lost) or 1}", "red")
+    heading = "line coverage (advisory)" if advisory else "line coverage regressions"
+    console.rule(f"{heading} · {len(lost) or 1}", "grey" if advisory else "red")
     if total_dropped:
         console.always(console.paint(f"  TOTAL  {was:.2f}% → {now:.2f}%", "red"))
     for name, before, after in sorted(lost, key=lambda r: r[1] - r[2], reverse=True):
@@ -641,6 +624,15 @@ def report_line_coverage_diff(
             "grey",
         )
     )
+    if advisory:
+        console.always(
+            console.paint(
+                "  advisory only: this run did not run the whole suite, so it cannot fail on "
+                "these — `lucid-audit --tests-only` is the run that can",
+                "grey",
+            )
+        )
+        return 0
     console.always(console.paint("  run with --update-suite to accept the new floor", "grey"))
     return len(lost) or 1
 
@@ -736,8 +728,7 @@ def report_suite(result: SuiteResult, console: Console) -> None:
 
 __all__ = [
     "SuiteResult",
-    "file_prefixes_for_subsystems",
-    "suite_paths_for_subsystems",
+    "subsystem_file_prefixes",
     "subsystem_test_dirs",
     "load_floor",
     "report_line_coverage_diff",

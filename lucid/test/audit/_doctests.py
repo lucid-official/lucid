@@ -16,7 +16,7 @@ than making the new gate red on arrival. The stage fails when it goes
 adds it.
 
     lucid-audit                        # the doctest stage runs with the rest
-    lucid-audit --update-doctests      # record the current count as the floor
+    lucid-audit --doctests-only --update-doctests   # record the current count as the floor
     lucid-audit --no-doctests          # skip it
 """
 
@@ -173,7 +173,7 @@ def save_floor(path: Path, result: DoctestResult) -> None:
             "commit that adds it; the standing failures are a backlog, recorded",
             "here so they cannot grow quietly.",
             "",
-            "Regenerate with:  lucid-audit --update-doctests",
+            "Regenerate with:  lucid-audit --doctests-only --update-doctests",
         ],
         "failed": result.failed,
         "attempted": result.attempted,

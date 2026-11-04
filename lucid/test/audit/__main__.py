@@ -725,7 +725,7 @@ def save_coverage(path: Path, report: Report) -> int:
             "is compared against, so 'did my change break something' has an",
             "answer that does not depend on remembering yesterday's numbers.",
             "",
-            "Regenerate with:  lucid-audit --update-coverage",
+            "Regenerate with:  lucid-audit --audit-only --update-coverage",
             "Do that only when the new state is the intended one.",
         ],
         "cells": len(answered),
@@ -839,7 +839,9 @@ def report_coverage_diff(report: Report, recorded: dict[str, str], console: Cons
         _capped(console, "NEW  ", "green", gained)
     if removed or gained:
         console.always(
-            console.paint("  run with --update-coverage to record the new floor", "grey")
+            console.paint(
+                "  run `lucid-audit --audit-only --update-coverage` to record the new floor", "grey"
+            )
         )
     return len(lost) + len(worsened)
 
@@ -950,7 +952,8 @@ def _run_audit_stage(args: argparse.Namespace, console: Console) -> tuple[int, i
             console.always("")
             console.always(
                 console.paint(
-                    "  no coverage baseline yet — run --update-coverage to record one", "grey"
+                    "  no coverage baseline yet — run `lucid-audit --audit-only --update-coverage`",
+                    "grey",
                 )
             )
         else:
@@ -1010,12 +1013,13 @@ def _run_suite_stage(args: argparse.Namespace, console: Console, plan: RunPlan) 
             console.always("")
             console.always(
                 console.paint(
-                    "  no line-coverage floor yet — run --update-suite to record one", "grey"
+                    "  no line-coverage floor yet — run `lucid-audit --tests-only --update-suite`",
+                    "grey",
                 )
             )
         else:
             regressions = _suite.report_line_coverage_diff(
-                result, floor, console, in_scope=where.in_scope
+                result, floor, console, in_scope=where.in_scope, advisory=where.advisory
             )
 
     return result.broken, regressions
@@ -1063,7 +1067,10 @@ def _run_doctest_stage(args: argparse.Namespace, console: Console, plan: RunPlan
     if floor is None:
         console.always("")
         console.always(
-            console.paint("  no doctest floor yet — run --update-doctests to record one", "grey")
+            console.paint(
+                "  no doctest floor yet — run `lucid-audit --doctests-only --update-doctests`",
+                "grey",
+            )
         )
         return 0
     worse = _doctests.regressions(result, floor)
@@ -1217,7 +1224,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         plan = RunPlan.from_args(args)
         if plan.zoo:
-            _zoo.validate_families(_ROOT, args.family)
+            _zoo.validate_options(_ROOT, args)
     except PlanError as exc:
         console.always(console.paint(f"  {exc}", "red"))
         return 2

@@ -346,7 +346,7 @@ def _walkable_modules() -> list[str]:
     the API was reachable through a hundred and thirty.  ``lucid.signal``
     was in that list and contributed nothing, because everything it
     exports is a sub-module and the enumeration skipped those — so the
-    subsystem showed up in ``--list-subsystems`` with no symbols under it
+    subsystem showed up in ``--list-packages`` with no symbols under it
     and nobody noticed.  Discovering modules instead of declaring them is
     what stops that recurring the next time a namespace is added.
 
