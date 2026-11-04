@@ -117,6 +117,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - keep svd's U orthonormal, eigh finite at the limit
 
+- Compiled `linalg.svd` returns an orthonormal `U` (and `Vh` on wide input) for rank-deficient and zero matrices, where it left zero or non-orthogonal columns.
+
+- Compiled `linalg.pinv` with a small `rtol` keeps a column under 1e-12 of the largest entry; `diag(1, -1e-13)` came back 13 orders short.
+
+- Compiled `linalg.eigh` and `eigvalsh` no longer return inf or NaN on entries past 1.7e38, and they read back an eigenvalue beside one up to 38 orders larger when the eigenvectors don't mix them.
+
 ### Performance
 
 - `_C.engine` (`Linear`, `ConvNd`, `ConvTransposeNd`, `LayerNorm`, `RMSNorm`, `BatchNormNd`, `GroupNorm`, `BatchNormEval`, `GlobalResponseNorm`, `Bilinear`): thread `needs_input_grad` (`grad_mask`) and `kGradReads` through fused CPU/Metal backward kernels and `apply_for_graph`, skipping unneeded `dx`/`dW`/`db` GEMMs, convolutions, reductions, and buffer allocations (LCD-697).
