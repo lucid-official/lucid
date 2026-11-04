@@ -94,6 +94,8 @@ AGENTS.md
 # run can be read while it is still going, and shared afterwards; it is a
 # record of one machine's run, never a source artefact.
 /lucid/test/audit.log
+/lucid/test/audit-*.log
+/lucid/test/audit-zoo/
 
 # Pinned MLX runtime copied next to the engine by a wheel build (setup.py);
 # never committed: ~210 MB, staged from [tool.lucid.mlx] by tools/fetch_mlx.py.
