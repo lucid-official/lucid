@@ -30,8 +30,6 @@
 
 #include <mlx/ops.h>
 
-#include "../autograd/Node.h"
-#include "../autograd/TensorHooks.h"
 #include "../backend/gpu/MlxBridge.h"
 #include "../backend/gpu/SharedBufferWrites.h"
 #include "../compile/Tracer.h"
@@ -2578,12 +2576,6 @@ void merge_grad_impl(std::shared_ptr<TensorImpl>& cur, const std::shared_ptr<Ten
 }
 
 }  // namespace
-
-void TensorImpl::set_grad_fn(std::shared_ptr<Node> fn) {
-    ensure_autograd()->grad_fn = fn;
-    if (fn)
-        fn->pack_saved(shared_from_this());
-}
 
 std::shared_ptr<TensorImpl> TensorImpl::data_alias() {
     auto self = shared_from_this();

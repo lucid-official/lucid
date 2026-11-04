@@ -199,13 +199,6 @@ void register_hook_bindings(py::module_& m) {
         "first time.");
 
     m.def(
-        "_has_post_accumulate_grad_hooks",
-        [](const std::shared_ptr<TensorImpl>& t) {
-            return t && lucid::has_post_accumulate_grad_hooks(*t);
-        },
-        py::arg("tensor"), "Whether a post-accumulate-grad hook runner is installed on `tensor`.");
-
-    m.def(
         "_run_post_accumulate_grad_hooks",
         [](const std::shared_ptr<TensorImpl>& t, bool graph) {
             if (t)

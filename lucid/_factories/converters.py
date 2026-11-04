@@ -13,6 +13,7 @@ graph — only ``lucid.tensor(np_array)`` and explicit ``from_numpy``
 keep the numpy bridge.
 """
 
+from types import ModuleType
 from typing import TYPE_CHECKING, TypeGuard
 
 from lucid._C import engine as _C_engine
@@ -152,11 +153,11 @@ def _ndarray_impl(arr: np.ndarray, device_eng: _C_engine.Device) -> _C_engine.Te
     """
     if not arr.flags["C_CONTIGUOUS"]:
         np = _require_numpy("lucid.tensor() ndarray ingest")
-        arr = np.asarray(arr, order="C")  # type: ignore[attr-defined]
+        arr = np.asarray(arr, order="C")
     return _C_engine.TensorImpl(arr, device_eng, False)
 
 
-def _require_numpy(operation: str) -> object:
+def _require_numpy(operation: str) -> ModuleType:
     """Lazy-import numpy with a clean error message when it isn't installed.
 
     Lucid runs without numpy by default; the bridge methods listed in H4
@@ -267,14 +268,14 @@ def _numpy_impl(
     # Numpy is the sanctioned conversion library here, imported lazily so
     # ``import lucid`` doesn't need it; ``_require_numpy`` explains a miss.
     np = _require_numpy("lucid.tensor() with non-Tensor input")
-    arr = data if isinstance(data, np.ndarray) else np.array(data)  # type: ignore[attr-defined]
+    arr = data if isinstance(data, np.ndarray) else np.array(data)
     if dtype_eng is None:
         if arr.dtype.kind == "u":
             arr = _widen_unsigned(arr)
         dtype_eng = _np_dtype_to_engine(arr.dtype)
     else:
         arr = arr.astype(_engine_dtype_to_np(dtype_eng), copy=False)
-    with np.errstate(invalid="ignore", over="ignore"):  # type: ignore[attr-defined]
+    with np.errstate(invalid="ignore", over="ignore"):
         if dtype_eng == _C_engine.Dtype.BF16:
             c_arr = np.asarray(arr, dtype="float32", order="C")
             bits = c_arr.view("uint32")
@@ -509,8 +510,8 @@ def _widen_unsigned(arr: np.ndarray) -> np.ndarray:
     """
     np = _require_numpy("lucid.tensor() unsigned input")
     size = arr.dtype.itemsize
-    target = {1: np.int16, 2: np.int32}.get(size, np.int64)  # type: ignore[attr-defined]
-    if size == 8 and arr.size and int(arr.max()) > np.iinfo(np.int64).max:  # type: ignore[attr-defined]
+    target = {1: np.int16, 2: np.int32}.get(size, np.int64)
+    if size == 8 and arr.size and int(arr.max()) > np.iinfo(np.int64).max:
         raise OverflowError(
             "lucid.tensor: a uint64 array holds values past int64's range, "
             "and Lucid has no unsigned dtype to keep them"
@@ -683,7 +684,7 @@ def from_dlpack(
     if device is not None and copy is False and _parse_device(device) != _C_engine.Device.CPU:
         raise BufferError("from_dlpack: cannot move across devices when copy=False")
     np = _require_numpy("lucid.from_dlpack")
-    arr = np.from_dlpack(ext_tensor)  # type: ignore[attr-defined]
+    arr = np.from_dlpack(ext_tensor)
     if copy is False:
         raise BufferError("from_dlpack: cannot avoid a copy when importing an external host buffer")
     return tensor(arr, device="cpu" if device is None else device)

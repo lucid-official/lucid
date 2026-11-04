@@ -272,9 +272,8 @@ TensorImplPtr run_node_pre_hooks_for_graph(Node& node, TensorImplPtr grad_out) {
 
 namespace {
 
-TensorImplPtr wrap_eager_grad_input(const Node& node,
-                                    const std::vector<Storage>& grad_inputs,
-                                    std::size_t i) {
+TensorImplPtr
+wrap_eager_grad_input(const Node& node, const std::vector<Storage>& grad_inputs, std::size_t i) {
     const auto& edges = node.next_edges();
     const Shape in_shape_hint = node.input_grad_shape(i);
     const bool absent = !edges[i].is_valid() || i >= grad_inputs.size() ||
@@ -460,13 +459,6 @@ py::object tensor_post_accumulate_grad_hook_runner(const TensorImplPtr& t, const
         own->shape = t->shape();
     }
     return own->post_runner;
-}
-
-bool has_post_accumulate_grad_hooks(const TensorImpl& t) {
-    if (!t.is_leaf())
-        return false;
-    const auto& slot = t.leaf_hooks();
-    return slot && static_cast<bool>(slot->post_runner);
 }
 
 py::object node_prehook_runner(Node& node, const py::object& make) {
@@ -1034,6 +1026,14 @@ void enable_function_ctx_gc(PyHeapTypeObject* heap_type) {
 
 void enable_module_hook_state_gc(PyHeapTypeObject* heap_type) {
     install_gc_hooks(heap_type, module_hook_state_tp_traverse, module_hook_state_tp_clear);
+}
+
+// Defined here, not in core/TensorImpl.cpp: it needs the complete ``Node``, and
+// core may not include autograd (tools/check_cpp_layers.py).
+void TensorImpl::set_grad_fn(std::shared_ptr<Node> fn) {
+    ensure_autograd()->grad_fn = fn;
+    if (fn)
+        fn->pack_saved(shared_from_this());
 }
 
 }  // namespace lucid

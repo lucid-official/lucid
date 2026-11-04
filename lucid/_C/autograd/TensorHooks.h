@@ -233,9 +233,6 @@ LUCID_API bool has_tensor_hooks(const TensorImpl& t);
 LUCID_API py::object tensor_post_accumulate_grad_hook_runner(const TensorImplPtr& t,
                                                              const py::object& make);
 
-// Whether ``t`` has a post-accumulate-grad hook runner installed.
-LUCID_API bool has_post_accumulate_grad_hooks(const TensorImpl& t);
-
 // The runner of ``node``'s prehooks or post-hooks, installed from ``make()``
 // the first time.
 LUCID_API py::object node_prehook_runner(Node& node, const py::object& make);
