@@ -74,6 +74,8 @@ _AS_I0_LARGE: tuple[float, ...] = (
     -0.01647633,
     0.00392377,
 )
+_AS_I0_SMALL_REV: tuple[float, ...] = _AS_I0_SMALL[::-1]
+_AS_I0_LARGE_REV: tuple[float, ...] = _AS_I0_LARGE[::-1]
 
 # Squares of the first two zeros of J0 and of J1.
 _J0_DR1 = 5.78318596294678452118e00
@@ -84,8 +86,10 @@ _J1_Z2 = 4.92184563216946036703e01
 
 def _polevl(z: Tensor, coeffs: tuple[float, ...]) -> Tensor:
     """``c[0] z^n + … + c[n]`` by Horner's rule."""
-    acc = lucid.full_like(z, coeffs[0])
-    for c in coeffs[1:]:
+    if len(coeffs) == 1:
+        return lucid.full_like(z, coeffs[0])
+    acc = z * coeffs[0] + coeffs[1]
+    for c in coeffs[2:]:
         acc = acc * z + c
     return acc
 
@@ -262,17 +266,40 @@ def _i0(x: Tensor) -> Tensor:
 def _i0_as_fit(input: Tensor) -> Tensor:
     ax = lucid.abs(input)
     ax_safe = _above(ax, 3.75)
-    t_small = (lucid.clip(input, -3.75, 3.75) * (1.0 / 3.75)) ** 2
-    val_small, t_pow = lucid.full_like(input, _AS_I0_SMALL[0]), lucid.ones_like(input)
-    for c in _AS_I0_SMALL[1:]:
-        t_pow = t_pow * t_small
-        val_small = val_small + c * t_pow
-    y_large = 3.75 / ax_safe
-    val_large, y_pow = lucid.full_like(input, _AS_I0_LARGE[0]), lucid.ones_like(input)
-    for c in _AS_I0_LARGE[1:]:
-        y_pow = y_pow * y_large
-        val_large = val_large + c * y_pow
+    s = lucid.clip(input, -3.75, 3.75) * (1.0 / 3.75)
+    val_small = _polevl(s * s, _AS_I0_SMALL_REV)
+    val_large = _polevl(3.75 / ax_safe, _AS_I0_LARGE_REV)
     return lucid.where(ax <= 3.75, val_small, val_large * lucid.exp(ax_safe) / lucid.sqrt(ax_safe))
+
+
+def _i0_scalar(x: float, dtype: object) -> float:
+    """Scalar ``I0(x)`` matching :func:`_i0_value` at ``dtype``."""
+    ax = abs(float(x))
+    if dtype == lucid.float64:
+        if ax <= 8.0:
+            z = ax * ax * 0.25
+            acc = _I0_SERIES[0]
+            for c in _I0_SERIES[1:]:
+                acc = acc * z + c
+            return math.exp(ax) * (math.exp(-ax) * acc)
+        y = 32.0 / ax - 2.0
+        b0, b1, b2 = _I0E_B[0], 0.0, 0.0
+        for c in _I0E_B[1:]:
+            b2 = b1
+            b1 = b0
+            b0 = y * b1 - b2 + c
+        return math.exp(ax) * (0.5 * (b0 - b2) / math.sqrt(ax))
+    if ax <= 3.75:
+        t = (ax * (1.0 / 3.75)) ** 2
+        acc = _AS_I0_SMALL_REV[0]
+        for c in _AS_I0_SMALL_REV[1:]:
+            acc = acc * t + c
+        return acc
+    y = 3.75 / ax
+    acc = _AS_I0_LARGE_REV[0]
+    for c in _AS_I0_LARGE_REV[1:]:
+        acc = acc * y + c
+    return acc * math.exp(ax) / math.sqrt(ax)
 
 
 def _i1e(x: Tensor) -> Tensor:

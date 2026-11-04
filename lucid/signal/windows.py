@@ -27,6 +27,7 @@ import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _REAL_FLOATS
 from lucid._dtype import to_engine_dtype
+from lucid._ops.composite._bessel import _i0_scalar
 from lucid._types import DeviceLike, DTypeLike
 
 if TYPE_CHECKING:
@@ -960,17 +961,15 @@ def kaiser(
         return degenerate
     N = _length_for_sym(M, sym)
     n = _ramp(N, dtype=dtype, device=device)
-    arg = 2.0 * n / float(N - 1) - 1.0
+    arg = n * (2.0 / float(N - 1)) - 1.0
     radical = lucid.sqrt(lucid.clip(1.0 - arg * arg, 0.0, 1.0))
-    num = lucid.i0(float(beta) * radical)
-    # The denominator is ``i0`` at the same dtype and on the same device as
-    # the numerator, so a float64 window is float64 throughout — a host-side
-    # float32-grade ``I0(beta)`` capped it at ~1e-8 relative accuracy — and
-    # the peak is 1 to the window dtype's rounding (a float32 peak used to be
-    # 1.0000002; a float64 one can be 1 - 1 ulp, the vectorized and scalar
-    # ``i0`` evaluations differing in the last bit).
-    denom = lucid.i0(lucid.full_like(num[:1], float(beta)))
-    w = num / denom
+    beta_f = float(beta)
+    if beta_f == 0.0:
+        w = lucid.ones_like(radical)
+        return _trim(w, M, sym, requires_grad)
+    num = lucid.i0(beta_f * radical)
+    denom = _i0_scalar(beta_f, n.dtype)
+    w = num * (1.0 / denom)
     return _trim(w, M, sym, requires_grad)
 
 

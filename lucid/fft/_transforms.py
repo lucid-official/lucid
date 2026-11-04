@@ -248,6 +248,16 @@ def _transform(
     ``extra`` is the class's last argument: the direction of the complex
     pair, or the transform sizes of a real one.
     """
+    if not (x._impl.requires_grad and _C_engine.grad_enabled()) and not _C_engine.amp_is_active(
+        x._impl.device
+    ):
+        if fn is _FftnAutograd:
+            raw = _engine_ifftn if extra else _engine_fftn
+            scale_fn = _scale_after_ifft if extra else _scale_after_fft
+            return _scale(raw(x, s, axes), scale_fn(N, norm))
+        if fn is _RfftnAutograd:
+            return _scale(_engine_rfftn(x, s, axes), _scale_after_fft(N, norm))
+        return _scale(_engine_irfftn(x, s, axes), _scale_after_ifft(N, norm))
     if fn is _FftnAutograd:
         op_name = "ifftn" if extra else "fftn"
     elif fn is _RfftnAutograd:

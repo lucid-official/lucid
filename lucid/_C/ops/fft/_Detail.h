@@ -27,7 +27,11 @@
 #include <complex>
 #include <cstdint>
 #include <cstring>
+#include <dispatch/dispatch.h>
 #include <limits>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
 #include <vector>
 
 #include <Accelerate/Accelerate.h>
@@ -43,6 +47,7 @@
 #include "../../core/Dtype.h"
 #include "../../core/Error.h"
 #include "../../core/ErrorBuilder.h"
+#include "../../core/Half.h"
 #include "../../core/Helpers.h"
 #include "../../core/PhantomMode.h"
 #include "../../core/Profiler.h"
@@ -298,6 +303,24 @@ inline ::mlx::core::Shape mlx_n_from_lucid(const std::vector<std::int64_t>& n,
     return out;
 }
 
+inline FFTSetup cached_fft_setup_f(vDSP_Length log2n) {
+    static std::mutex mu;
+    static FFTSetup setups[32] = {};
+    static vDSP_Length max_log2n = 0;
+    std::lock_guard<std::mutex> lock(mu);
+    if (log2n == 0)
+        return nullptr;
+    if (setups[log2n] == nullptr) {
+        if (log2n > max_log2n) {
+            setups[log2n] = vDSP_create_fftsetup(log2n, kFFTRadix2);
+            max_log2n = log2n;
+        } else {
+            setups[log2n] = setups[max_log2n];
+        }
+    }
+    return setups[log2n];
+}
+
 inline FFTSetupD cached_fft_setup_d(vDSP_Length log2n) {
     static std::mutex mu;
     static FFTSetupD setups[32] = {};
@@ -307,16 +330,265 @@ inline FFTSetupD cached_fft_setup_d(vDSP_Length log2n) {
         return nullptr;
     if (setups[log2n] == nullptr) {
         if (log2n > max_log2n) {
-            FFTSetupD prev = max_log2n > 0 ? setups[max_log2n] : nullptr;
             setups[log2n] = vDSP_create_fftsetupD(log2n, kFFTRadix2);
-            if (prev == nullptr)
-                max_log2n = log2n;
+            max_log2n = log2n;
         } else {
             setups[log2n] = setups[max_log2n];
         }
     }
     return setups[log2n];
 }
+
+struct Fft1DPlanF {
+    std::int64_t n = 0;
+    bool inverse = false;
+    bool is_pow2 = false;
+    vDSP_Length log2n = 0;
+    vDSP_Length log2m = 0;
+    std::int64_t m = 0;
+    FFTSetup setup = nullptr;
+    std::vector<float> chirp_re;
+    std::vector<float> chirp_im;
+    std::vector<float> b_hat_re;
+    std::vector<float> b_hat_im;
+
+    Fft1DPlanF(std::int64_t length, bool inv) : n(length), inverse(inv) {
+        if (n <= 1) {
+            is_pow2 = true;
+            return;
+        }
+        if ((n & (n - 1)) == 0) {
+            is_pow2 = true;
+            while ((std::int64_t{1} << log2n) < n)
+                ++log2n;
+            setup = cached_fft_setup_f(log2n);
+            return;
+        }
+        is_pow2 = false;
+        m = 1;
+        log2m = 0;
+        while (m < 2 * n - 1) {
+            m <<= 1;
+            ++log2m;
+        }
+        setup = cached_fft_setup_f(log2m);
+        chirp_re.resize(static_cast<std::size_t>(n));
+        chirp_im.resize(static_cast<std::size_t>(n));
+        b_hat_re.assign(static_cast<std::size_t>(m), 0.0f);
+        b_hat_im.assign(static_cast<std::size_t>(m), 0.0f);
+
+        const double sign = inverse ? 1.0 : -1.0;
+        const double pi_over_n = 3.141592653589793238462643383279502884 / static_cast<double>(n);
+        const std::uint64_t two_n = static_cast<std::uint64_t>(n) * 2ULL;
+        for (std::int64_t j = 0; j < n; ++j) {
+            const std::uint64_t j_mod = static_cast<std::uint64_t>(j) % two_n;
+            const std::uint64_t j2_mod = (j_mod * j_mod) % two_n;
+            const double angle = sign * pi_over_n * static_cast<double>(j2_mod);
+            const float c = static_cast<float>(std::cos(angle));
+            const float s = static_cast<float>(std::sin(angle));
+            const auto uj = static_cast<std::size_t>(j);
+            chirp_re[uj] = c;
+            chirp_im[uj] = s;
+            b_hat_re[uj] = c;
+            b_hat_im[uj] = -s;
+            if (j > 0) {
+                const auto wrap = static_cast<std::size_t>(m - j);
+                b_hat_re[wrap] = c;
+                b_hat_im[wrap] = -s;
+            }
+        }
+        DSPSplitComplex b_split{b_hat_re.data(), b_hat_im.data()};
+        vDSP_fft_zip(setup, &b_split, 1, log2m, kFFTDirection_Forward);
+    }
+
+    void execute(const std::complex<float>* in,
+                 std::int64_t in_len,
+                 std::int64_t in_stride,
+                 std::complex<float>* out,
+                 std::int64_t out_stride,
+                 std::vector<float>& work_re,
+                 std::vector<float>& work_im) const {
+        const std::int64_t copy_len = std::min(in_len, n);
+        if (n == 1) {
+            out[0] = copy_len > 0 ? in[0] : std::complex<float>(0.0f, 0.0f);
+            return;
+        }
+        if (is_pow2) {
+            if (in_stride == 1) {
+                for (std::int64_t j = 0; j < copy_len; ++j) {
+                    const auto v = in[j];
+                    work_re[static_cast<std::size_t>(j)] = v.real();
+                    work_im[static_cast<std::size_t>(j)] = v.imag();
+                }
+            } else {
+                for (std::int64_t j = 0; j < copy_len; ++j) {
+                    const auto v = in[j * in_stride];
+                    work_re[static_cast<std::size_t>(j)] = v.real();
+                    work_im[static_cast<std::size_t>(j)] = v.imag();
+                }
+            }
+            if (copy_len < n) {
+                std::memset(work_re.data() + copy_len, 0,
+                            static_cast<std::size_t>(n - copy_len) * sizeof(float));
+                std::memset(work_im.data() + copy_len, 0,
+                            static_cast<std::size_t>(n - copy_len) * sizeof(float));
+            }
+            DSPSplitComplex split{work_re.data(), work_im.data()};
+            vDSP_fft_zip(setup, &split, 1, log2n,
+                         inverse ? kFFTDirection_Inverse : kFFTDirection_Forward);
+            if (!inverse && out_stride == 1) {
+                for (std::int64_t k = 0; k < n; ++k) {
+                    out[k] = std::complex<float>(work_re[static_cast<std::size_t>(k)],
+                                                 work_im[static_cast<std::size_t>(k)]);
+                }
+            } else if (out_stride == 1) {
+                const float scale = 1.0f / static_cast<float>(n);
+                for (std::int64_t k = 0; k < n; ++k) {
+                    out[k] = std::complex<float>(work_re[static_cast<std::size_t>(k)] * scale,
+                                                 work_im[static_cast<std::size_t>(k)] * scale);
+                }
+            } else {
+                const float scale = inverse ? (1.0f / static_cast<float>(n)) : 1.0f;
+                for (std::int64_t k = 0; k < n; ++k) {
+                    out[k * out_stride] =
+                        std::complex<float>(work_re[static_cast<std::size_t>(k)] * scale,
+                                            work_im[static_cast<std::size_t>(k)] * scale);
+                }
+            }
+            return;
+        }
+
+        for (std::int64_t j = 0; j < copy_len; ++j) {
+            const auto v = in[j * in_stride];
+            const auto uj = static_cast<std::size_t>(j);
+            const float cr = chirp_re[uj];
+            const float ci = chirp_im[uj];
+            work_re[uj] = v.real() * cr - v.imag() * ci;
+            work_im[uj] = v.real() * ci + v.imag() * cr;
+        }
+        if (copy_len < m) {
+            std::memset(work_re.data() + copy_len, 0,
+                        static_cast<std::size_t>(m - copy_len) * sizeof(float));
+            std::memset(work_im.data() + copy_len, 0,
+                        static_cast<std::size_t>(m - copy_len) * sizeof(float));
+        }
+
+        DSPSplitComplex a_split{work_re.data(), work_im.data()};
+        vDSP_fft_zip(setup, &a_split, 1, log2m, kFFTDirection_Forward);
+
+        for (std::int64_t k = 0; k < m; ++k) {
+            const auto uk = static_cast<std::size_t>(k);
+            const float ar = work_re[uk];
+            const float ai = work_im[uk];
+            const float br = b_hat_re[uk];
+            const float bi = b_hat_im[uk];
+            work_re[uk] = ar * br - ai * bi;
+            work_im[uk] = ar * bi + ai * br;
+        }
+        vDSP_fft_zip(setup, &a_split, 1, log2m, kFFTDirection_Inverse);
+
+        const float scale = inverse ? (1.0f / (static_cast<float>(m) * static_cast<float>(n)))
+                                    : (1.0f / static_cast<float>(m));
+        for (std::int64_t k = 0; k < n; ++k) {
+            const auto uk = static_cast<std::size_t>(k);
+            const float cr = work_re[uk] * scale;
+            const float ci = work_im[uk] * scale;
+            const float wr = chirp_re[uk];
+            const float wi = chirp_im[uk];
+            out[k * out_stride] = std::complex<float>(cr * wr - ci * wi, cr * wi + ci * wr);
+        }
+    }
+
+    void execute_real(const float* in,
+                      std::int64_t in_len,
+                      std::int64_t in_stride,
+                      std::complex<float>* out,
+                      std::int64_t out_stride,
+                      std::int64_t out_bins,
+                      std::vector<float>& work_re,
+                      std::vector<float>& work_im) const {
+        const std::int64_t copy_len = std::min(in_len, n);
+        if (n == 1) {
+            if (out_bins > 0)
+                out[0] = std::complex<float>(copy_len > 0 ? in[0] : 0.0f, 0.0f);
+            return;
+        }
+        if (is_pow2) {
+            if (in_stride == 1 && copy_len > 0) {
+                std::memcpy(work_re.data(), in, static_cast<std::size_t>(copy_len) * sizeof(float));
+            } else {
+                for (std::int64_t j = 0; j < copy_len; ++j)
+                    work_re[static_cast<std::size_t>(j)] = in[j * in_stride];
+            }
+            if (copy_len < n) {
+                std::memset(work_re.data() + copy_len, 0,
+                            static_cast<std::size_t>(n - copy_len) * sizeof(float));
+            }
+            std::memset(work_im.data(), 0, static_cast<std::size_t>(n) * sizeof(float));
+            DSPSplitComplex split{work_re.data(), work_im.data()};
+            vDSP_fft_zip(setup, &split, 1, log2n,
+                         inverse ? kFFTDirection_Inverse : kFFTDirection_Forward);
+            if (!inverse && out_stride == 1) {
+                for (std::int64_t k = 0; k < out_bins; ++k) {
+                    out[k] = std::complex<float>(work_re[static_cast<std::size_t>(k)],
+                                                 work_im[static_cast<std::size_t>(k)]);
+                }
+            } else if (out_stride == 1) {
+                const float scale = 1.0f / static_cast<float>(n);
+                for (std::int64_t k = 0; k < out_bins; ++k) {
+                    out[k] = std::complex<float>(work_re[static_cast<std::size_t>(k)] * scale,
+                                                 work_im[static_cast<std::size_t>(k)] * scale);
+                }
+            } else {
+                const float scale = inverse ? (1.0f / static_cast<float>(n)) : 1.0f;
+                for (std::int64_t k = 0; k < out_bins; ++k) {
+                    out[k * out_stride] =
+                        std::complex<float>(work_re[static_cast<std::size_t>(k)] * scale,
+                                            work_im[static_cast<std::size_t>(k)] * scale);
+                }
+            }
+            return;
+        }
+
+        for (std::int64_t j = 0; j < copy_len; ++j) {
+            const float vr = in[j * in_stride];
+            const auto uj = static_cast<std::size_t>(j);
+            work_re[uj] = vr * chirp_re[uj];
+            work_im[uj] = vr * chirp_im[uj];
+        }
+        if (copy_len < m) {
+            std::memset(work_re.data() + copy_len, 0,
+                        static_cast<std::size_t>(m - copy_len) * sizeof(float));
+            std::memset(work_im.data() + copy_len, 0,
+                        static_cast<std::size_t>(m - copy_len) * sizeof(float));
+        }
+
+        DSPSplitComplex a_split{work_re.data(), work_im.data()};
+        vDSP_fft_zip(setup, &a_split, 1, log2m, kFFTDirection_Forward);
+
+        for (std::int64_t k = 0; k < m; ++k) {
+            const auto uk = static_cast<std::size_t>(k);
+            const float ar = work_re[uk];
+            const float ai = work_im[uk];
+            const float br = b_hat_re[uk];
+            const float bi = b_hat_im[uk];
+            work_re[uk] = ar * br - ai * bi;
+            work_im[uk] = ar * bi + ai * br;
+        }
+        vDSP_fft_zip(setup, &a_split, 1, log2m, kFFTDirection_Inverse);
+
+        const float scale = inverse ? (1.0f / (static_cast<float>(m) * static_cast<float>(n)))
+                                    : (1.0f / static_cast<float>(m));
+        for (std::int64_t k = 0; k < out_bins; ++k) {
+            const auto uk = static_cast<std::size_t>(k);
+            const float cr = work_re[uk] * scale;
+            const float ci = work_im[uk] * scale;
+            const float wr = chirp_re[uk];
+            const float wi = chirp_im[uk];
+            out[k * out_stride] = std::complex<float>(cr * wr - ci * wi, cr * wi + ci * wr);
+        }
+    }
+};
 
 struct Fft1DPlanD {
     std::int64_t n = 0;
@@ -393,23 +665,40 @@ struct Fft1DPlanD {
             return;
         }
         if (is_pow2) {
-            for (std::int64_t j = 0; j < copy_len; ++j) {
-                const auto v = in[j * in_stride];
-                work_re[static_cast<std::size_t>(j)] = v.real();
-                work_im[static_cast<std::size_t>(j)] = v.imag();
+            if (in_stride == 1) {
+                for (std::int64_t j = 0; j < copy_len; ++j) {
+                    const auto v = in[j];
+                    work_re[static_cast<std::size_t>(j)] = v.real();
+                    work_im[static_cast<std::size_t>(j)] = v.imag();
+                }
+            } else {
+                for (std::int64_t j = 0; j < copy_len; ++j) {
+                    const auto v = in[j * in_stride];
+                    work_re[static_cast<std::size_t>(j)] = v.real();
+                    work_im[static_cast<std::size_t>(j)] = v.imag();
+                }
             }
-            for (std::int64_t j = copy_len; j < n; ++j) {
-                work_re[static_cast<std::size_t>(j)] = 0.0;
-                work_im[static_cast<std::size_t>(j)] = 0.0;
+            if (copy_len < n) {
+                std::memset(work_re.data() + copy_len, 0,
+                            static_cast<std::size_t>(n - copy_len) * sizeof(double));
+                std::memset(work_im.data() + copy_len, 0,
+                            static_cast<std::size_t>(n - copy_len) * sizeof(double));
             }
             DSPDoubleSplitComplex split{work_re.data(), work_im.data()};
             vDSP_fft_zipD(setup, &split, 1, log2n,
                           inverse ? kFFTDirection_Inverse : kFFTDirection_Forward);
             const double scale = inverse ? (1.0 / static_cast<double>(n)) : 1.0;
-            for (std::int64_t k = 0; k < n; ++k) {
-                out[k * out_stride] =
-                    std::complex<double>(work_re[static_cast<std::size_t>(k)] * scale,
-                                         work_im[static_cast<std::size_t>(k)] * scale);
+            if (out_stride == 1) {
+                for (std::int64_t k = 0; k < n; ++k) {
+                    out[k] = std::complex<double>(work_re[static_cast<std::size_t>(k)] * scale,
+                                                  work_im[static_cast<std::size_t>(k)] * scale);
+                }
+            } else {
+                for (std::int64_t k = 0; k < n; ++k) {
+                    out[k * out_stride] =
+                        std::complex<double>(work_re[static_cast<std::size_t>(k)] * scale,
+                                             work_im[static_cast<std::size_t>(k)] * scale);
+                }
             }
             return;
         }
@@ -452,6 +741,155 @@ struct Fft1DPlanD {
     }
 };
 
+inline const Fft1DPlanF& get_fft_plan_f(std::int64_t length, bool inverse) {
+    thread_local std::unordered_map<std::uint64_t, std::unique_ptr<Fft1DPlanF>> cache;
+    const std::uint64_t key = (static_cast<std::uint64_t>(length) << 1) | (inverse ? 1ULL : 0ULL);
+    auto it = cache.find(key);
+    if (it != cache.end())
+        return *it->second;
+    auto plan = std::make_unique<Fft1DPlanF>(length, inverse);
+    const Fft1DPlanF& ref = *plan;
+    cache.emplace(key, std::move(plan));
+    return ref;
+}
+
+inline const Fft1DPlanD& get_fft_plan_d(std::int64_t length, bool inverse) {
+    thread_local std::unordered_map<std::uint64_t, std::unique_ptr<Fft1DPlanD>> cache;
+    const std::uint64_t key = (static_cast<std::uint64_t>(length) << 1) | (inverse ? 1ULL : 0ULL);
+    auto it = cache.find(key);
+    if (it != cache.end())
+        return *it->second;
+    auto plan = std::make_unique<Fft1DPlanD>(length, inverse);
+    const Fft1DPlanD& ref = *plan;
+    cache.emplace(key, std::move(plan));
+    return ref;
+}
+
+inline std::pair<std::vector<float>&, std::vector<float>&> tls_fft_scratch_f(std::size_t len) {
+    thread_local std::vector<float> work_re;
+    thread_local std::vector<float> work_im;
+    if (work_re.size() < len) {
+        work_re.resize(len);
+        work_im.resize(len);
+    }
+    return {work_re, work_im};
+}
+
+inline std::pair<std::vector<double>&, std::vector<double>&> tls_fft_scratch_d(std::size_t len) {
+    thread_local std::vector<double> work_re;
+    thread_local std::vector<double> work_im;
+    if (work_re.size() < len) {
+        work_re.resize(len);
+        work_im.resize(len);
+    }
+    return {work_re, work_im};
+}
+
+inline void fft_1d_axis_c64(const std::complex<float>* in_ptr,
+                            const Shape& in_shape,
+                            std::complex<float>* out_ptr,
+                            const Shape& out_shape,
+                            int axis,
+                            bool inverse) {
+    const auto ax = static_cast<std::size_t>(axis);
+    const std::int64_t in_len = in_shape[ax];
+    const std::int64_t out_len = out_shape[ax];
+    std::int64_t outer = 1;
+    for (std::size_t i = 0; i < ax; ++i)
+        outer *= in_shape[i];
+    std::int64_t inner = 1;
+    for (std::size_t i = ax + 1; i < in_shape.size(); ++i)
+        inner *= in_shape[i];
+
+    const Fft1DPlanF& plan = get_fft_plan_f(out_len, inverse);
+    const std::size_t scratch_len = static_cast<std::size_t>(plan.is_pow2 ? out_len : plan.m);
+    const std::int64_t total_lines = outer * inner;
+
+    if (total_lines >= 4 && total_lines * std::max(in_len, out_len) >= 32768) {
+        const std::int64_t num_tasks = std::min<std::int64_t>(8, total_lines);
+        const std::int64_t chunk = (total_lines + num_tasks - 1) / num_tasks;
+        const Fft1DPlanF* plan_ptr = &plan;
+        dispatch_apply(static_cast<std::size_t>(num_tasks),
+                       dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^(std::size_t t) {
+                         const std::int64_t start = static_cast<std::int64_t>(t) * chunk;
+                         const std::int64_t end = std::min(total_lines, start + chunk);
+                         if (start >= end)
+                             return;
+                         auto [work_re, work_im] = tls_fft_scratch_f(scratch_len);
+                         for (std::int64_t idx = start; idx < end; ++idx) {
+                             const std::int64_t o = idx / inner;
+                             const std::int64_t i = idx % inner;
+                             plan_ptr->execute(in_ptr + o * in_len * inner + i, in_len, inner,
+                                               out_ptr + o * out_len * inner + i, inner, work_re,
+                                               work_im);
+                         }
+                       });
+        return;
+    }
+
+    auto [work_re, work_im] = tls_fft_scratch_f(scratch_len);
+    for (std::int64_t o = 0; o < outer; ++o) {
+        const std::complex<float>* in_outer = in_ptr + o * in_len * inner;
+        std::complex<float>* out_outer = out_ptr + o * out_len * inner;
+        for (std::int64_t i = 0; i < inner; ++i) {
+            plan.execute(in_outer + i, in_len, inner, out_outer + i, inner, work_re, work_im);
+        }
+    }
+}
+
+inline void fft_1d_axis_f32_to_c64(const float* in_ptr,
+                                   const Shape& in_shape,
+                                   std::complex<float>* out_ptr,
+                                   std::int64_t full_out_len,
+                                   std::int64_t out_bins,
+                                   int axis,
+                                   bool inverse) {
+    const auto ax = static_cast<std::size_t>(axis);
+    const std::int64_t in_len = in_shape[ax];
+    std::int64_t outer = 1;
+    for (std::size_t i = 0; i < ax; ++i)
+        outer *= in_shape[i];
+    std::int64_t inner = 1;
+    for (std::size_t i = ax + 1; i < in_shape.size(); ++i)
+        inner *= in_shape[i];
+
+    const Fft1DPlanF& plan = get_fft_plan_f(full_out_len, inverse);
+    const std::size_t scratch_len = static_cast<std::size_t>(plan.is_pow2 ? full_out_len : plan.m);
+    const std::int64_t total_lines = outer * inner;
+
+    if (total_lines >= 4 && total_lines * std::max(in_len, full_out_len) >= 32768) {
+        const std::int64_t num_tasks = std::min<std::int64_t>(8, total_lines);
+        const std::int64_t chunk = (total_lines + num_tasks - 1) / num_tasks;
+        const Fft1DPlanF* plan_ptr = &plan;
+        dispatch_apply(static_cast<std::size_t>(num_tasks),
+                       dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^(std::size_t t) {
+                         const std::int64_t start = static_cast<std::int64_t>(t) * chunk;
+                         const std::int64_t end = std::min(total_lines, start + chunk);
+                         if (start >= end)
+                             return;
+                         auto [work_re, work_im] = tls_fft_scratch_f(scratch_len);
+                         for (std::int64_t idx = start; idx < end; ++idx) {
+                             const std::int64_t o = idx / inner;
+                             const std::int64_t i = idx % inner;
+                             plan_ptr->execute_real(in_ptr + o * in_len * inner + i, in_len, inner,
+                                                    out_ptr + o * out_bins * inner + i, inner,
+                                                    out_bins, work_re, work_im);
+                         }
+                       });
+        return;
+    }
+
+    auto [work_re, work_im] = tls_fft_scratch_f(scratch_len);
+    for (std::int64_t o = 0; o < outer; ++o) {
+        const float* in_outer = in_ptr + o * in_len * inner;
+        std::complex<float>* out_outer = out_ptr + o * out_bins * inner;
+        for (std::int64_t i = 0; i < inner; ++i) {
+            plan.execute_real(in_outer + i, in_len, inner, out_outer + i, inner, out_bins, work_re,
+                              work_im);
+        }
+    }
+}
+
 inline void fft_1d_axis_c128(const std::complex<double>* in_ptr,
                              const Shape& in_shape,
                              std::complex<double>* out_ptr,
@@ -468,11 +906,33 @@ inline void fft_1d_axis_c128(const std::complex<double>* in_ptr,
     for (std::size_t i = ax + 1; i < in_shape.size(); ++i)
         inner *= in_shape[i];
 
-    Fft1DPlanD plan(out_len, inverse);
+    const Fft1DPlanD& plan = get_fft_plan_d(out_len, inverse);
     const std::size_t scratch_len = static_cast<std::size_t>(plan.is_pow2 ? out_len : plan.m);
-    std::vector<double> work_re(scratch_len);
-    std::vector<double> work_im(scratch_len);
+    const std::int64_t total_lines = outer * inner;
 
+    if (total_lines >= 4 && total_lines * std::max(in_len, out_len) >= 32768) {
+        const std::int64_t num_tasks = std::min<std::int64_t>(8, total_lines);
+        const std::int64_t chunk = (total_lines + num_tasks - 1) / num_tasks;
+        const Fft1DPlanD* plan_ptr = &plan;
+        dispatch_apply(static_cast<std::size_t>(num_tasks),
+                       dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^(std::size_t t) {
+                         const std::int64_t start = static_cast<std::int64_t>(t) * chunk;
+                         const std::int64_t end = std::min(total_lines, start + chunk);
+                         if (start >= end)
+                             return;
+                         auto [work_re, work_im] = tls_fft_scratch_d(scratch_len);
+                         for (std::int64_t idx = start; idx < end; ++idx) {
+                             const std::int64_t o = idx / inner;
+                             const std::int64_t i = idx % inner;
+                             plan_ptr->execute(in_ptr + o * in_len * inner + i, in_len, inner,
+                                               out_ptr + o * out_len * inner + i, inner, work_re,
+                                               work_im);
+                         }
+                       });
+        return;
+    }
+
+    auto [work_re, work_im] = tls_fft_scratch_d(scratch_len);
     for (std::int64_t o = 0; o < outer; ++o) {
         const std::complex<double>* in_outer = in_ptr + o * in_len * inner;
         std::complex<double>* out_outer = out_ptr + o * out_len * inner;
@@ -480,6 +940,213 @@ inline void fft_1d_axis_c128(const std::complex<double>* in_ptr,
             plan.execute(in_outer + i, in_len, inner, out_outer + i, inner, work_re, work_im);
         }
     }
+}
+
+inline std::vector<std::complex<float>> copy_f16_f32_or_c64_input(const TensorImplPtr& a,
+                                                                  const char* op) {
+    const auto& cur_cs = std::get<::lucid::CpuStorage>(a->storage());
+    const std::size_t cur_n = shape_numel(a->shape());
+    std::vector<std::complex<float>> buf(cur_n);
+    const Dtype dt = a->dtype();
+    if (dt == Dtype::F32) {
+        const auto* src = reinterpret_cast<const float*>(cur_cs.ptr.get());
+        for (std::size_t i = 0; i < cur_n; ++i)
+            buf[i] = std::complex<float>(src[i], 0.0f);
+    } else if (dt == Dtype::F16) {
+        const auto* src = reinterpret_cast<const std::uint16_t*>(cur_cs.ptr.get());
+        for (std::size_t i = 0; i < cur_n; ++i)
+            buf[i] =
+                std::complex<float>(::lucid::backend::detail::half_bits_to_float(src[i]), 0.0f);
+    } else if (dt == Dtype::C64) {
+        const auto* src = reinterpret_cast<const std::complex<float>*>(cur_cs.ptr.get());
+        if (cur_n > 0)
+            std::copy(src, src + cur_n, buf.begin());
+    } else {
+        ErrorBuilder(op).not_implemented(
+            "CPU single-precision FFT requires float16, float32, or complex64");
+    }
+    return buf;
+}
+
+inline void run_fft_axes_c64(std::vector<std::complex<float>>& buf_a,
+                             Shape& cur_shape,
+                             const std::vector<std::int64_t>& lengths,
+                             const std::vector<int>& axes,
+                             std::size_t num_axes,
+                             bool inverse) {
+    std::vector<std::complex<float>> buf_b;
+    for (std::size_t idx = 0; idx < num_axes; ++idx) {
+        const int ax = axes[idx];
+        Shape next_shape = cur_shape;
+        next_shape[static_cast<std::size_t>(ax)] = lengths[idx];
+        buf_b.resize(shape_numel(next_shape));
+        if (!buf_a.empty() && !buf_b.empty()) {
+            fft_1d_axis_c64(buf_a.data(), cur_shape, buf_b.data(), next_shape, ax, inverse);
+        } else {
+            std::fill(buf_b.begin(), buf_b.end(), std::complex<float>(0.0f, 0.0f));
+        }
+        buf_a.swap(buf_b);
+        cur_shape = std::move(next_shape);
+    }
+}
+
+inline Storage cpu_complex_fftn_f32(const TensorImplPtr& a,
+                                    const std::vector<std::int64_t>& n,
+                                    const std::vector<int>& axes,
+                                    const Shape& out_shape,
+                                    bool inverse) {
+    const char* op = inverse ? "ifftn" : "fftn";
+    const auto lengths = resolve_fft_lengths(a->shape(), n, axes, false, op);
+    auto out_cs = ::lucid::helpers::allocate_cpu(out_shape, Dtype::C64);
+    auto* out_ptr = reinterpret_cast<std::complex<float>*>(out_cs.ptr.get());
+    const std::size_t in_numel = shape_numel(a->shape());
+    const std::size_t out_numel = shape_numel(out_shape);
+    if (out_numel == 0)
+        return Storage{std::move(out_cs)};
+    if (in_numel == 0) {
+        std::fill(out_ptr, out_ptr + out_numel, std::complex<float>(0.0f, 0.0f));
+        return Storage{std::move(out_cs)};
+    }
+
+    const auto& in_cs = std::get<::lucid::CpuStorage>(a->storage());
+    if (axes.size() == 1 && a->dtype() == Dtype::F32) {
+        const auto* in_ptr = reinterpret_cast<const float*>(in_cs.ptr.get());
+        fft_1d_axis_f32_to_c64(in_ptr, a->shape(), out_ptr, lengths[0], lengths[0], axes[0],
+                               inverse);
+        return Storage{std::move(out_cs)};
+    }
+    if (axes.size() == 1 && a->dtype() == Dtype::C64) {
+        const auto* in_ptr = reinterpret_cast<const std::complex<float>*>(in_cs.ptr.get());
+        fft_1d_axis_c64(in_ptr, a->shape(), out_ptr, out_shape, axes[0], inverse);
+        return Storage{std::move(out_cs)};
+    }
+
+    auto buf_a = copy_f16_f32_or_c64_input(a, op);
+    Shape cur_shape = a->shape();
+    run_fft_axes_c64(buf_a, cur_shape, lengths, axes, axes.size() - 1, inverse);
+    fft_1d_axis_c64(buf_a.data(), cur_shape, out_ptr, out_shape, axes.back(), inverse);
+    return Storage{std::move(out_cs)};
+}
+
+inline Storage cpu_rfftn_f32(const TensorImplPtr& a,
+                             const std::vector<std::int64_t>& n,
+                             const std::vector<int>& axes,
+                             const Shape& out_shape) {
+    const auto lengths = resolve_fft_lengths(a->shape(), n, axes, false, "rfftn");
+    if (axes.size() == 1 && a->dtype() == Dtype::F32) {
+        auto out_cs = ::lucid::helpers::allocate_cpu(out_shape, Dtype::C64);
+        auto* out_ptr = reinterpret_cast<std::complex<float>*>(out_cs.ptr.get());
+        const std::size_t out_numel = shape_numel(out_shape);
+        if (out_numel == 0)
+            return Storage{std::move(out_cs)};
+        if (shape_numel(a->shape()) == 0) {
+            std::fill(out_ptr, out_ptr + out_numel, std::complex<float>(0.0f, 0.0f));
+            return Storage{std::move(out_cs)};
+        }
+        const auto& in_cs = std::get<::lucid::CpuStorage>(a->storage());
+        const auto* in_ptr = reinterpret_cast<const float*>(in_cs.ptr.get());
+        const auto last_ax = static_cast<std::size_t>(axes[0]);
+        fft_1d_axis_f32_to_c64(in_ptr, a->shape(), out_ptr, lengths[0], out_shape[last_ax], axes[0],
+                               /*inverse=*/false);
+        return Storage{std::move(out_cs)};
+    }
+
+    Shape full_shape = a->shape();
+    for (std::size_t i = 0; i < axes.size(); ++i)
+        full_shape[static_cast<std::size_t>(axes[i])] = lengths[i];
+
+    Storage full_st = cpu_complex_fftn_f32(a, lengths, axes, full_shape, /*inverse=*/false);
+    const auto& full_cs = std::get<::lucid::CpuStorage>(full_st);
+    const auto* full_ptr = reinterpret_cast<const std::complex<float>*>(full_cs.ptr.get());
+
+    const auto last_ax = static_cast<std::size_t>(axes.back());
+    const std::int64_t full_last = full_shape[last_ax];
+    const std::int64_t half_last = out_shape[last_ax];
+    std::int64_t outer = 1;
+    for (std::size_t i = 0; i < last_ax; ++i)
+        outer *= out_shape[i];
+    std::int64_t inner = 1;
+    for (std::size_t i = last_ax + 1; i < out_shape.size(); ++i)
+        inner *= out_shape[i];
+
+    auto out_cs = ::lucid::helpers::allocate_cpu(out_shape, Dtype::C64);
+    auto* out_ptr = reinterpret_cast<std::complex<float>*>(out_cs.ptr.get());
+    if (out_ptr != nullptr && full_ptr != nullptr) {
+        for (std::int64_t o = 0; o < outer; ++o) {
+            const auto* src_o = full_ptr + o * full_last * inner;
+            auto* dst_o = out_ptr + o * half_last * inner;
+            std::copy(src_o, src_o + half_last * inner, dst_o);
+        }
+    }
+    return Storage{std::move(out_cs)};
+}
+
+inline void expand_hermitian_slice_c64(const std::complex<float>* src_o,
+                                       std::complex<float>* dst_o,
+                                       std::int64_t n_last,
+                                       std::int64_t copy_bins,
+                                       std::int64_t inner) {
+    for (std::int64_t k = 0; k < copy_bins; ++k) {
+        std::copy(src_o + k * inner, src_o + (k + 1) * inner, dst_o + k * inner);
+    }
+    if (copy_bins > 0) {
+        for (std::int64_t i = 0; i < inner; ++i)
+            dst_o[i] = std::complex<float>(dst_o[i].real(), 0.0f);
+    }
+    if (n_last % 2 == 0 && (n_last / 2) < copy_bins) {
+        const std::int64_t nyq = n_last / 2;
+        for (std::int64_t i = 0; i < inner; ++i)
+            dst_o[nyq * inner + i] = std::complex<float>(dst_o[nyq * inner + i].real(), 0.0f);
+    }
+    const std::int64_t mirror_bins = std::min(copy_bins, (n_last + 1) / 2);
+    for (std::int64_t k = 1; k < mirror_bins; ++k) {
+        const std::int64_t dst_k = n_last - k;
+        for (std::int64_t i = 0; i < inner; ++i)
+            dst_o[dst_k * inner + i] = std::conj(dst_o[k * inner + i]);
+    }
+}
+
+inline Storage cpu_irfftn_c64(const TensorImplPtr& a,
+                              const std::vector<std::int64_t>& n,
+                              const std::vector<int>& axes,
+                              const Shape& out_shape) {
+    const auto lengths = resolve_fft_lengths(a->shape(), n, axes, true, "irfftn");
+    auto buf_a = copy_f16_f32_or_c64_input(a, "irfftn");
+    Shape cur_shape = a->shape();
+    run_fft_axes_c64(buf_a, cur_shape, lengths, axes, axes.size() - 1, /*inverse=*/true);
+
+    const int last_ax_int = axes.back();
+    const auto last_ax = static_cast<std::size_t>(last_ax_int);
+    const std::int64_t n_last = lengths.back();
+    const std::int64_t in_last = cur_shape[last_ax];
+    const std::int64_t copy_bins = std::min(in_last, n_last / 2 + 1);
+    std::int64_t outer = 1;
+    for (std::size_t i = 0; i < last_ax; ++i)
+        outer *= cur_shape[i];
+    std::int64_t inner = 1;
+    for (std::size_t i = last_ax + 1; i < cur_shape.size(); ++i)
+        inner *= cur_shape[i];
+
+    Shape full_last_shape = cur_shape;
+    full_last_shape[last_ax] = n_last;
+    std::vector<std::complex<float>> buf_b(shape_numel(full_last_shape),
+                                           std::complex<float>(0.0f, 0.0f));
+    for (std::int64_t o = 0; o < outer; ++o) {
+        expand_hermitian_slice_c64(buf_a.data() + o * in_last * inner,
+                                   buf_b.data() + o * n_last * inner, n_last, copy_bins, inner);
+    }
+
+    buf_a.resize(shape_numel(out_shape));
+    if (!buf_b.empty() && !buf_a.empty()) {
+        fft_1d_axis_c64(buf_b.data(), full_last_shape, buf_a.data(), out_shape, last_ax_int,
+                        /*inverse=*/true);
+    }
+
+    auto out_cs = ::lucid::helpers::allocate_cpu(out_shape, Dtype::F32);
+    auto* out_ptr = reinterpret_cast<float*>(out_cs.ptr.get());
+    for (std::size_t i = 0; i < buf_a.size(); ++i)
+        out_ptr[i] = buf_a[i].real();
+    return Storage{std::move(out_cs)};
 }
 
 inline std::vector<std::complex<double>> copy_f64_or_c128_input(const TensorImplPtr& a,
@@ -702,16 +1369,32 @@ inline ::mlx::core::array as_mlx_input(const TensorImplPtr& a) {
     return *gs.arr;
 }
 
-template <typename DtypeFn, typename ShapeFn, typename DoubleFn, typename MlxFn>
+inline bool all_pow2_fft_lengths(const Shape& in_shape,
+                                 const std::vector<std::int64_t>& n,
+                                 const std::vector<int>& axes,
+                                 bool is_irfft) {
+    if (!n.empty() && n.size() != axes.size())
+        return false;
+    for (std::size_t i = 0; i < axes.size(); ++i) {
+        const auto ax = static_cast<std::size_t>(axes[i]);
+        std::int64_t len = n.empty() ? in_shape[ax] : n[i];
+        if (n.empty() && is_irfft && i + 1 == axes.size())
+            len = (in_shape[ax] - 1) * 2;
+        if (len <= 0 || (len & (len - 1)) != 0)
+            return false;
+    }
+    return true;
+}
+
+template <typename DtypeFn, typename ShapeFn, typename CpuFn, typename MlxFn>
 inline TensorImplPtr run_nd_fft(const char* op_name,
                                 const char* input_label,
                                 const TensorImplPtr& a_in,
                                 const std::vector<std::int64_t>& n,
                                 const std::vector<int>& axes_in,
-                                Dtype double_out_dtype,
                                 DtypeFn&& resolve_dtype,
                                 ShapeFn&& resolve_shape,
-                                DoubleFn&& run_double_cpu,
+                                CpuFn&& run_cpu,
                                 MlxFn&& run_mlx) {
     Validator::input(a_in, input_label).non_null();
     const AmpScope amp{op_name, a_in->device()};
@@ -728,13 +1411,16 @@ inline TensorImplPtr run_nd_fft(const char* op_name,
     normalise_axes(axes, rank, op_name);
 
     const Shape out_shape = resolve_shape(a->shape(), n, axes, op_name);
+    const bool is_double_out = (out_dtype == Dtype::C128 || out_dtype == Dtype::F64);
+    const bool is_irfft = (std::strcmp(op_name, "irfftn") == 0);
 
     Storage out;
     if (PhantomMode::is_enabled()) {
         out = Storage{
             PhantomStorage{shape_numel(out_shape) * dtype_size(out_dtype), out_dtype, a->device()}};
-    } else if (out_dtype == double_out_dtype) {
-        out = run_double_cpu(a, axes, out_shape);
+    } else if (is_double_out || (a->device() == Device::CPU &&
+                                 all_pow2_fft_lengths(a->shape(), n, axes, is_irfft))) {
+        out = run_cpu(a, axes, out_shape, out_dtype);
     } else {
         auto in_arr = as_mlx_input(a);
         ::mlx::core::array out_arr = run_mlx(in_arr, axes);

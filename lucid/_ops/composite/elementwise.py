@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, cast
 
 import lucid
 from lucid import _promotion
+from lucid._C import engine as _C_engine
 from lucid._dispatch import _float_input
 from lucid._ops.composite import _bessel
 from lucid._ops.composite._expm1 import _erfc_double, _erfc_single, _expm1, _logaddexp2, _sgn
@@ -1409,7 +1410,10 @@ def i0(input: Tensor) -> Tensor:
     Tensor
         :math:`I_0(x)` element-wise; always positive.
     """
-    out = _bessel._I0.apply(_real(input))
+    x = _real(input)
+    if not (x._impl.requires_grad and _C_engine.grad_enabled()):
+        return _bessel._i0_value(x)
+    out = _bessel._I0.apply(x)
     assert isinstance(out, Tensor)
     return out
 

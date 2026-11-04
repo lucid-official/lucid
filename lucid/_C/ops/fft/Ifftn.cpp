@@ -13,10 +13,13 @@ TensorImplPtr ifftn_op(const TensorImplPtr& a,
                        const std::vector<int>& axes_in) {
     using ::mlx::core::fft::FFTNorm;
     return fft_detail::run_nd_fft(
-        "ifftn", "ifftn.a", a, n, axes_in, Dtype::C128, fft_detail::dtype_for_complex_fft,
+        "ifftn", "ifftn.a", a, n, axes_in, fft_detail::dtype_for_complex_fft,
         fft_detail::complex_fft_out_shape,
-        [&](const TensorImplPtr& x, const std::vector<int>& axes, const Shape& out_shape) {
-            return fft_detail::cpu_complex_fftn_f64(x, n, axes, out_shape, /*inverse=*/true);
+        [&](const TensorImplPtr& x, const std::vector<int>& axes, const Shape& out_shape,
+            Dtype out_dtype) {
+            return out_dtype == Dtype::C128
+                       ? fft_detail::cpu_complex_fftn_f64(x, n, axes, out_shape, /*inverse=*/true)
+                       : fft_detail::cpu_complex_fftn_f32(x, n, axes, out_shape, /*inverse=*/true);
         },
         [&](const ::mlx::core::array& in_arr, const std::vector<int>& axes) {
             return n.empty()
