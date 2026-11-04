@@ -904,7 +904,7 @@ class _FusedStep:
             _tls.active = False
 
         write_ids, written = require_outside_writes(
-            tracer, {id(_unwrap_hot(a)) for a in args}, "fused_step"
+            tracer, [_unwrap_hot(a) for a in args], "fused_step"
         )
 
         return _FusedTrace(

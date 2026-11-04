@@ -1192,8 +1192,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         ext = tracer.external_feeds
         # The trace-time call applied its in-place buffer writes; put the
         # buffers back so the executable (or an eager fallback) applies them.
-        arguments = {id(_unwrap(t)) for t in leaf_tensors(args, kwargs)}
-        writes = outside_writes(tracer, arguments)
+        writes = outside_writes(tracer, [_unwrap(t) for t in leaf_tensors(args, kwargs)])
         if isinstance(writes, str):
             _fallback_notice("argument-write", writes)
             return None

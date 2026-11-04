@@ -347,8 +347,7 @@ def _compile_step_entry(
     maybe_probe_for_graph(graph)
 
     ext = tracer.external_feeds
-    arguments = {id(_unwrap(t)) for t in leaf_tensors(x_args, {})}
-    writes = outside_writes(tracer, arguments)
+    writes = outside_writes(tracer, [_unwrap(t) for t in leaf_tensors(x_args, {})])
     if isinstance(writes, str):
         _fallback_notice("argument-write", writes)
         return None

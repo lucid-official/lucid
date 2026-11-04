@@ -41,10 +41,10 @@ namespace {
 // Every binding below that hands Python a tensor's values calls
 // ``note_host_read``; every one that returns a new TensorImpl made from an
 // existing one returns it through ``traced_derive``, and one that builds a
-// fresh tensor from host data calls ``traced_factory`` (see Tracer.h).
+// fresh tensor from nothing calls ``traced_literal`` (see Tracer.h).
 using lucid::compile::note_host_read;
 using lucid::compile::traced_derive;
-using lucid::compile::traced_factory;
+using lucid::compile::traced_literal;
 
 // Run a GPU tensor's pending work without holding the GIL.  The wait is the
 // GPU's; holding the GIL through it stalled every other Python thread in the
@@ -142,7 +142,7 @@ std::uintptr_t data_address(const lucid::TensorImpl& t) {
 // A zero-filled CPU tensor in MTLResourceStorageModeShared memory — under
 // phantom mode, a factory like any other: a phantom, and no Metal buffer.
 std::shared_ptr<lucid::TensorImpl>
-make_shared_tensor(const std::vector<std::int64_t>& shape, lucid::Dtype dtype, bool requires_grad) {
+new_shared_tensor(const std::vector<std::int64_t>& shape, lucid::Dtype dtype, bool requires_grad) {
     if (lucid::PhantomMode::is_enabled())
         return std::make_shared<lucid::TensorImpl>(
             lucid::phantom_storage(lucid::Shape(shape), dtype, lucid::Device::CPU),
@@ -172,6 +172,13 @@ make_shared_tensor(const std::vector<std::int64_t>& shape, lucid::Dtype dtype, b
     ss.owner = std::move(owned.owner);
     return std::make_shared<lucid::TensorImpl>(lucid::Storage{std::move(ss)}, lucid::Shape(shape),
                                                dtype, lucid::Device::CPU, requires_grad);
+}
+
+std::shared_ptr<lucid::TensorImpl>
+make_shared_tensor(const std::vector<std::int64_t>& shape, lucid::Dtype dtype, bool requires_grad) {
+    auto out = new_shared_tensor(shape, dtype, requires_grad);
+    traced_literal(out);
+    return out;
 }
 
 // Puts g's buffer in self's gradient slot, replacing any gradient there;
@@ -334,7 +341,7 @@ void register_tensor_impl(py::module_& m) {
         m, "TensorImpl", py::custom_type_setup(enable_tensor_autograd_gc))
         .def(py::init([](py::array arr, Device device, bool requires_grad) {
                  auto out = TensorImpl::from_numpy(std::move(arr), device, requires_grad);
-                 traced_factory(out);
+                 traced_literal(out);
                  return out;
              }),
              py::arg("data"), py::arg("device") = Device::CPU, py::arg("requires_grad") = false)
@@ -414,7 +421,7 @@ void register_tensor_impl(py::module_& m) {
                bool requires_grad) {
                 auto out =
                     TensorImpl::from_bytes(std::move(data), shape, dtype, device, requires_grad);
-                traced_factory(out);
+                traced_literal(out);
                 return out;
             },
             py::arg("data"), py::arg("shape"), py::arg("dtype"), py::arg("device") = Device::CPU,

@@ -20,11 +20,13 @@ of every outside tensor from before its first one.  After the trace:
 * its final id is asked of the executable as an extra output;
 * after every run that output is copied into the tensor.
 
-A write to one of the call's own arguments is not written back — the next
-call's arguments are other tensors — and makes the call run eager, as does
-any entry point that does not write back (:func:`refuse`).
+A write that lands in one of the call's own arguments, directly or through a
+view of it, is not written back — the next call's arguments are other tensors
+— and makes the call run eager, as does any entry point that does not write
+back (:func:`refuse`).
 """
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, cast
 
 from lucid._C import engine as _C_engine
@@ -47,44 +49,55 @@ def _written(tracer: Tracer) -> list[tuple[int, _C_engine.TensorImpl]]:
     return [(int(tid), impl) for tid, impl in tracer.outside_writes()]
 
 
+def _lands_in_argument(
+    impl: _C_engine.TensorImpl, arguments: Sequence[_C_engine.TensorImpl]
+) -> bool:
+    """Whether a write to ``impl`` lands in a tensor the call was given: a view
+    of an argument is the argument's bytes, whichever of them the call wrote."""
+    family = impl.family_id()
+    return any(a is impl or (family != 0 and a.family_id() == family) for a in arguments)
+
+
 def require_outside_writes(
-    tracer: Tracer, arguments: set[int], caller: str
+    tracer: Tracer, arguments: Sequence[_C_engine.TensorImpl], caller: str
 ) -> tuple[list[int], list[_C_engine.TensorImpl]]:
     """Put the written tensors back; return their ids and impls or raise ``RuntimeError``."""
     tracer.restore_outside_writes()
     ids: list[int] = []
     targets: list[_C_engine.TensorImpl] = []
     for latest, impl in _written(tracer):
-        if id(impl) in arguments:
+        if _lands_in_argument(impl, arguments):
             raise RuntimeError(f"{caller}: {_ARGUMENT}")
         ids.append(latest)
         targets.append(impl)
     return ids, targets
 
 
-def outside_writes(tracer: Tracer, arguments: set[int]) -> tuple[list[int], list[object]] | str:
+def outside_writes(
+    tracer: Tracer, arguments: Sequence[_C_engine.TensorImpl]
+) -> tuple[list[int], list[object]] | str:
     """Put the written tensors back; return what the executable must carry.
 
     Parameters
     ----------
     tracer : Tracer
         The finished trace.
-    arguments : set of int
-        ``id`` of every tensor impl the traced call was given.
+    arguments : sequence of TensorImpl
+        Every tensor impl the traced call was given.
 
     Returns
     -------
     tuple of (list of int, list of TensorImpl), or str
         The trace id holding each written tensor's final value, and the
         tensors in the same order — every one of them already put back to
-        its value from before the trace.  A string instead when the call
-        wrote to one of its own arguments: the reason it has to run eager.
+        its value from before the trace.  A string instead when a write
+        landed in one of its own arguments: the reason it has to run eager.
     """
     tracer.restore_outside_writes()
     ids: list[int] = []
     targets: list[object] = []
     for latest, impl in _written(tracer):
-        if id(impl) in arguments:
+        if _lands_in_argument(impl, arguments):
             return _ARGUMENT
         ids.append(latest)
         targets.append(impl)

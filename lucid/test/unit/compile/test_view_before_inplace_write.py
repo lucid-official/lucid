@@ -677,18 +677,12 @@ def test_a_compiled_optimizer_refuses_an_update_that_is_a_stale_view(
 
 
 # ---------------------------------------------------------------------------
-# Open: the same family of bug, found while reviewing this fix and not part of
-# it.  Each is pinned to its issue; whoever fixes one removes its mark (strict,
-# so an unexpected pass fails the suite).
+# The same family of bug, found while reviewing this fix.  The class is covered
+# in ``test_where_a_write_lands.py``; these are the cases it was filed with.
 # ---------------------------------------------------------------------------
 
 
 @needs_metal
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-853: a tensor the call builds from Python numbers is mutated by the trace and "
-    "bound as a feed, so every later call starts from the first call's result",
-)
 def test_a_tensor_built_from_numbers_and_written_in_place_starts_over_each_call() -> None:
     def fn(x: lucid.Tensor) -> lucid.Tensor:
         y = lucid.tensor([[1.0, 2.0, 3.0, 4.0]] * 3, device=COMPILE_DEVICE)
@@ -736,11 +730,6 @@ def _buffers_after_three_calls(
 
 
 @needs_metal
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-854: a write through a view of a buffer that is itself a view (or the real part "
-    "of a complex buffer) is not carried back by the compiled call",
-)
 @pytest.mark.parametrize("kind", [_ViewBuffer, _ComplexPartBuffer], ids=["view", "real-part"])
 def test_a_write_to_a_buffer_that_is_a_view_is_carried_back(kind: type[nn.Module]) -> None:
     name = "vec" if kind is _ViewBuffer else "z"
@@ -749,11 +738,6 @@ def test_a_write_to_a_buffer_that_is_a_view_is_carried_back(kind: type[nn.Module
     assert got == want
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-854: the trace's write through a view of an input is not put back, so exporting "
-    "changes the caller's example",
-)
 @pytest.mark.skipif(
     not hasattr(_C_engine, "coreml"), reason="the engine was built without the Core ML writer"
 )
@@ -779,11 +763,6 @@ class _SharedAlias(nn.Module):
 
 
 @needs_metal
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-855: a view of a Metal shared buffer under another name is read as the feed it "
-    "was, one call behind the write",
-)
 def test_an_alias_of_a_shared_buffer_reads_what_the_call_wrote() -> None:
     x = lucid.ones(*SHAPE, device=COMPILE_DEVICE)
 

@@ -44,6 +44,7 @@
 #include <optional>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "../api.h"
@@ -226,15 +227,26 @@ public:
     bool fold_constants() const { return fold_constants_; }
     void set_fold_constants(bool on) { fold_constants_ = on; }
 
-    // ``out`` was made from nothing by the op now recording — a factory
+    // ``out`` was made from nothing by the op now open — a factory
     // (``zeros`` / ``arange`` / ``eye`` …), never a random draw.  With
     // folding on and ``out`` off Metal, the op is left out and ``out`` is a
-    // constant; on Metal the compiled graph makes it itself, and otherwise
-    // nothing changes.
+    // constant; on Metal the compiled graph makes it itself where it has an
+    // emitter (and otherwise reads it as a feed); and with folding off the
+    // recording does not change.  Either way the call made ``out``
+    // (:meth:`made_here`).
     void on_factory(const TensorImplPtr& out);
 
-    // Whether ``impl`` is a constant the trace made itself — a factory's
-    // output, or a left-out op's — which no tensor outside the trace shares.
+    // ``out`` was made from nothing by a binding that opens no op: it holds
+    // host data (``lucid.tensor([...])``, an ndarray) or is a new buffer
+    // (``shared_tensor``).  There is no op to leave out, and :meth:`on_factory`
+    // would take whichever op ran before for it.
+    void on_literal(const TensorImplPtr& out);
+
+    // Whether the call itself made ``impl``, from nothing or from such tensors
+    // alone, on any device and whether or not folding is on: a factory's
+    // output, a literal, a left-out op's.  No tensor outside the trace shares
+    // it and the next call makes another, so a write to it is not carried
+    // back, and a feed reading it keeps its value from before the write.
     bool made_here(const TensorImpl* impl) const {
         return made_.count(const_cast<TensorImpl*>(impl)) != 0;
     }
@@ -280,6 +292,12 @@ public:
     // (``lucid/compile/_core/buffer_writes.py``); one the trace has not read
     // yet becomes a feed first.  A value the trace has not seen becomes a
     // feed of its own.
+    //
+    // Where the write lands decides what happens to it, not what ``target``
+    // is: a view the call took of a buffer from outside writes that buffer
+    // (:meth:`lands_outside`), so the call owes the write like any other, and
+    // carrying it back through ``target`` reaches every tensor reading those
+    // bytes.
     void on_inplace_write(const TensorImplPtr& target, const TensorImplPtr& value);
 
     // ``view`` reads the buffer :meth:`on_inplace_write` was just told of,
@@ -313,11 +331,14 @@ public:
     // twice.  Call once the trace has finished.
     void restore_outside_writes();
 
-    // ``(current id, tensor)`` for every tensor from outside the trace that
-    // the trace wrote in place, in first-write order — what a compiled call
-    // has to carry back.  Batch norm's running statistics are not among
-    // them: its kernel leaves the buffers alone and hands the new values out
-    // itself (:meth:`on_buffer_update`).
+    // ``(current id, tensor)`` for every write that landed outside the trace,
+    // in first-write order — what a compiled call has to carry back.  The
+    // tensor is the one written, which may be a view the call took of the
+    // buffer; a view whose family also has a written tensor that is the whole
+    // buffer is left out, as that tensor's value already holds its write.
+    // Batch norm's running statistics are not among them: its kernel leaves
+    // the buffers alone and hands the new values out itself
+    // (:meth:`on_buffer_update`).
     std::vector<std::pair<TensorId, TensorImplPtr>> outside_writes() const;
 
     // Returns a read-only reference to the recorded graph.
@@ -353,27 +374,15 @@ public:
     // produced.
     //
     // A buffer written in place carries the id it had when the mapping
-    // was last updated, which is the post-mutation state; a caller that
+    // was last updated, which is the post-mutation state, also once
+    // :meth:`restore_outside_writes` has put the tensor back; a caller that
     // needs the earlier value must not use this.
     //
     // Returns
     // -------
     // std::unordered_map<TensorId, TensorImplPtr>
     //     Built fresh on each call.
-    std::unordered_map<TensorId, TensorImplPtr> retained_values() const {
-        std::unordered_map<TensorId, TensorImplPtr> out;
-        out.reserve(live_refs_.size());
-        for (const auto& impl : live_refs_) {
-            // A stale view holds the values after the write under the id of
-            // the ones before it.
-            if (!impl || stale_.count(impl.get()) != 0)
-                continue;
-            const auto it = impl_to_id_.find(impl.get());
-            if (it != impl_to_id_.end())
-                out.emplace(it->second, buffer_value(impl));
-        }
-        return out;
-    }
+    std::unordered_map<TensorId, TensorImplPtr> retained_values() const;
 
     // Reverse lookup: find the :type:`TensorId` for ``impl`` if it was
     // observed during the trace (either as an external feed or as the
@@ -430,10 +439,31 @@ private:
     // With folding on, whether this ``on_op_io`` call is absorbed: every
     // input is a constant made inside this trace, so the op is held out.
     bool fold(const std::vector<TensorImplPtr>& inputs, const TensorImplPtr& output);
+    // Gives ``output``, first seen as something the trace produced, its id.
+    void claim(const TensorImplPtr& output, TensorId id);
     // Notes what a held-out op made.
     void keep(const TensorImplPtr& output);
+    // Notes that the call made ``out`` from nothing, and whether folding may
+    // absorb what reads it.
+    void note_made(const TensorImplPtr& out);
     // ``on_inplace_write`` for a target the trace made itself.
     void write_made(const TensorImplPtr& target, const TensorImplPtr& value);
+    // Whether ``impl`` reached the trace from outside it: neither made by the
+    // call nor first seen as an op's output.  Asked of a tensor, not of its
+    // current id, which a write moves.
+    bool from_outside(const TensorImpl* impl) const;
+    // Whether a write to ``target`` lands in bytes a tensor from outside the
+    // trace reads: ``target`` is one, or a view of the same buffer is.  A view
+    // made in the trace of an outside buffer holds no bytes of its own.
+    bool lands_outside(const TensorImplPtr& target) const;
+    // Whether the compiled call owes ``target``'s write itself: no written
+    // tensor that is ``target``'s whole buffer holds it already.
+    bool carried(const TensorImplPtr& target) const;
+    // Whether ``impl`` is a Metal shared buffer under a name other than the
+    // last one the trace wrote it through.  Two such tensors share no view
+    // family, so a write to one hands no stale view to the tracer, and the
+    // bytes read at the next run are from before the write.
+    bool reads_a_shared_write(const TensorImpl* impl) const;
     // ``impl``'s id, minting a feed for it when the trace has not seen it.
     TensorId feed_id(const TensorImplPtr& impl);
     // The id an in-place write's ``value`` goes by from now on.
@@ -478,8 +508,17 @@ private:
     // input (an op that re-records its full input list), and is dropped at
     // the next op.
     std::optional<OpNode> held_;
-    // Owning: every constant the trace made itself (see ``made_here``).
+    // Owning: every tensor the call made itself (see ``made_here``).
     std::unordered_map<TensorImpl*, TensorImplPtr> made_;
+    // The part of ``made_`` folding may absorb an op reading (``fold_constants``).
+    // ``made_`` owns them.
+    std::unordered_set<TensorImpl*> foldable_;
+    // Every tensor first seen as an op's output, or as a draw; ``live_refs_``
+    // owns them.  The complement of this and ``made_`` is what came from outside.
+    std::unordered_set<TensorImpl*> produced_;
+    // For each Metal shared buffer the trace wrote, the tensor it last wrote it
+    // through (see ``reads_a_shared_write``).  Only compared, never read through.
+    std::unordered_map<const void*, const TensorImpl*> shared_writers_;
     // Owning: the views of a tensor written in place whose recorded value is
     // from before the write (see ``on_stale_view``).  Owning so a freed view's
     // address cannot be taken for a stale one.
@@ -555,11 +594,17 @@ traced_derive(std::string_view name, const TensorImplPtr& src, TensorImplPtr out
 }
 
 // The hook every factory owes the active tracer, if one is installed:
-// ``out`` was made from nothing.  A random draw is not a factory — its value
-// differs per call — and does not call this.
+// ``out`` was made from nothing, by the op whose scope is open.  A random draw
+// is not a factory — its value differs per call — and does not call this.
 inline void traced_factory(const TensorImplPtr& out) {
     if (auto* trc = current_tracer())
         trc->on_factory(out);
+}
+
+// The same for a binding that makes a tensor from nothing and opens no op.
+inline void traced_literal(const TensorImplPtr& out) {
+    if (auto* trc = current_tracer())
+        trc->on_literal(out);
 }
 
 }  // namespace lucid::compile

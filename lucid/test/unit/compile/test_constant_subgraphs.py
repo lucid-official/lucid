@@ -490,9 +490,9 @@ def _recorded(x: lucid.Tensor) -> lucid.Tensor:
 @pytest.mark.parametrize("device", ["cpu", COMPILE_DEVICE])
 @pytest.mark.parametrize("mode", ["coreml", "optimizer"])
 def test_a_tracer_without_folding_records_what_main_did(device: str, mode: str) -> None:
-    """The factory hook is a no-op with folding off: the recording is the one
-    the engine made before it existed (``_fold_off_recordings.json``, taken at
-    a571a6c20), op by op, id by id."""
+    """With folding off the factory hook leaves the recording alone: it is the
+    one the engine made before the hook existed (``_fold_off_recordings.json``,
+    taken at a571a6c20), op by op, id by id."""
     x = lucid.ones(4, device=device)
     with _tracing(watch=[x] if mode == "coreml" else ()) as tracer:
         if mode == "coreml":

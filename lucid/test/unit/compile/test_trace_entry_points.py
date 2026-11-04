@@ -173,6 +173,20 @@ def test_a_binding_exposing_values_notes_the_read() -> None:
     )
 
 
+def test_a_binding_making_a_tensor_from_nothing_says_so() -> None:
+    """A tensor the call makes starts over on every call; one the tracer was not
+    told of looks like one from outside, and is carried from call to call
+    (LCD-853).  It opens no op, so ``traced_factory`` would take the op before it
+    for its own and leave that out of the recording.  ``make_shared_tensor``
+    says so in the function it binds, which ``test_where_a_write_lands.py`` tests
+    by behaviour."""
+    codes = {(file, name): src for file, name, src in _bindings()}
+    for binding in ("from_bytes", "__init__"):
+        assert "traced_literal(" in codes["bind_tensor.cpp", binding], binding
+    calling_factory = [where for where, src in codes.items() if "traced_factory(" in src]
+    assert not calling_factory, calling_factory
+
+
 def test_a_binding_by_member_pointer_is_reviewed() -> None:
     missing = unreviewed()
     assert not missing, (
