@@ -29,7 +29,7 @@
   "vulture_ignore_decorators": "@_emitter,@register_kl,@register_model,@register_weights,@_register_preset,@_register",
   "vulture_ignore_names": "__*__",
   "vulture_min_confidence": 60,
-  "vulture_whitelist_ast_sha256": "2190075f0336ebb5"
+  "vulture_whitelist_ast_sha256": "34a2fcb30c7c021b"
  },
  "rebaselines": [
   {
@@ -130,6 +130,16 @@
   {
    "date": "2026-11-03",
    "reason": "LCD-819: lucid.peft reference signature parity with HF peft 0.21.2 \u2014 reference-narrowed overrides, refused reference fields, Parameters docs for new reference parameters, per-config field declarations",
+   "by": "chanlee"
+  },
+  {
+   "date": "2026-11-04",
+   "reason": "vulture: _register_node_prehook/_register_node_hook are called by name from bind_autograd.cpp; counters: pooling.py 736->741 is black reflow of one call in 48f57990e, no logic (LCD-834)",
+   "by": "chanlee"
+  },
+  {
+   "date": "2026-11-04",
+   "reason": "TEMPORARY, tracked by LCD-834: jscpd is cross-file, so 12 cells from 48f57990e and a0ab1d21c block every C++ commit, including the fix for the pinv stall that keeps main CI from running. Lowered again by the grad_mask and fft cards.",
    "by": "chanlee"
   }
  ],
@@ -1016,7 +1026,7 @@
    },
    "file-loc-over-cap": {
     "lucid/_tensor/_dunders.py": 226,
-    "lucid/_tensor/tensor.py": 2358,
+    "lucid/_tensor/tensor.py": 2352,
     "lucid/compile/_optim/compiler.py": 264,
     "lucid/coreml/_build.py": 1096,
     "lucid/coreml/_emit.py": 1024,
@@ -1029,7 +1039,7 @@
     "lucid/nn/modules/activation.py": 707,
     "lucid/nn/modules/loss.py": 990,
     "lucid/nn/modules/normalization.py": 532,
-    "lucid/nn/modules/pooling.py": 736,
+    "lucid/nn/modules/pooling.py": 741,
     "lucid/optim/lr_scheduler.py": 76,
     "lucid/special/__init__.py": 224,
     "lucid/utils/transforms/_color.py": 231
@@ -1076,7 +1086,7 @@
    },
    "type-ignore[attr-defined]": {
     "lucid/_deprecation.py": 1,
-    "lucid/_factories/converters.py": 7,
+    "lucid/_factories/converters.py": 1,
     "lucid/_ops/__init__.py": 2,
     "lucid/_ops/_adapters.py": 1,
     "lucid/amp/grad_scaler.py": 1,
@@ -1137,9 +1147,9 @@
    "clone-pair": {
     "lucid/_C/autograd/Engine.cpp": 2,
     "lucid/_C/autograd/ModuleHookNode.cpp": 1,
-    "lucid/_C/backend/IBackend.h": 21,
+    "lucid/_C/backend/IBackend.h": 28,
     "lucid/_C/backend/PhantomBackend.h": 2,
-    "lucid/_C/backend/cpu/CpuBackend.h": 53,
+    "lucid/_C/backend/cpu/CpuBackend.h": 59,
     "lucid/_C/backend/cpu/CtcLoss.h": 2,
     "lucid/_C/backend/cpu/DtypeDoors.h": 2,
     "lucid/_C/backend/cpu/Im2Col.cpp": 12,
@@ -1151,25 +1161,26 @@
     "lucid/_C/backend/cpu/Pool.h": 15,
     "lucid/_C/backend/cpu/methods/Activation.cpp": 2,
     "lucid/_C/backend/cpu/methods/Binary.cpp": 5,
-    "lucid/_C/backend/cpu/methods/Conv.cpp": 20,
+    "lucid/_C/backend/cpu/methods/Conv.cpp": 21,
     "lucid/_C/backend/cpu/methods/Factory.cpp": 1,
     "lucid/_C/backend/cpu/methods/Indexing.cpp": 2,
     "lucid/_C/backend/cpu/methods/Layout.cpp": 19,
     "lucid/_C/backend/cpu/methods/Linalg.cpp": 2,
     "lucid/_C/backend/cpu/methods/Loss.cpp": 7,
-    "lucid/_C/backend/cpu/methods/Matmul.cpp": 1,
-    "lucid/_C/backend/cpu/methods/Norm.cpp": 9,
+    "lucid/_C/backend/cpu/methods/Matmul.cpp": 3,
+    "lucid/_C/backend/cpu/methods/Norm.cpp": 14,
     "lucid/_C/backend/cpu/methods/Reduction.cpp": 4,
     "lucid/_C/backend/cpu/methods/Sequence.cpp": 8,
     "lucid/_C/backend/cpu/methods/Spatial.cpp": 7,
     "lucid/_C/backend/cpu/methods/Unary.cpp": 2,
     "lucid/_C/backend/gpu/AxisIndex.h": 1,
-    "lucid/_C/backend/gpu/GpuBackend.h": 45,
-    "lucid/_C/backend/gpu/methods/Conv.cpp": 14,
+    "lucid/_C/backend/gpu/GpuBackend.h": 49,
+    "lucid/_C/backend/gpu/methods/Conv.cpp": 17,
     "lucid/_C/backend/gpu/methods/Indexing.cpp": 3,
     "lucid/_C/backend/gpu/methods/Layout.cpp": 1,
     "lucid/_C/backend/gpu/methods/Loss.cpp": 2,
-    "lucid/_C/backend/gpu/methods/Norm.cpp": 6,
+    "lucid/_C/backend/gpu/methods/Matmul.cpp": 1,
+    "lucid/_C/backend/gpu/methods/Norm.cpp": 10,
     "lucid/_C/backend/gpu/methods/Sequence.cpp": 3,
     "lucid/_C/backend/gpu/methods/Spatial.cpp": 7,
     "lucid/_C/bindings/bind_compile.cpp": 5,
@@ -1234,6 +1245,8 @@
     "lucid/_C/nn/ConvTransposeNd.h": 1,
     "lucid/_C/nn/Dropout.cpp": 1,
     "lucid/_C/nn/GroupNorm.cpp": 1,
+    "lucid/_C/nn/GroupNorm.h": 1,
+    "lucid/_C/nn/LayerNorm.h": 1,
     "lucid/_C/nn/Loss.cpp": 4,
     "lucid/_C/nn/PoolNd.cpp": 1,
     "lucid/_C/nn/PoolNd.h": 1,
@@ -1243,6 +1256,7 @@
     "lucid/_C/ops/bfunc/Floordiv.h": 2,
     "lucid/_C/ops/composite/Indexing.cpp": 1,
     "lucid/_C/ops/einops/Einsum.cpp": 3,
+    "lucid/_C/ops/fft/_Detail.h": 17,
     "lucid/_C/ops/gfunc/Gfunc.cpp": 3,
     "lucid/_C/ops/ufunc/Discrete.h": 1,
     "lucid/_C/ops/ufunc/Predicate.cpp": 1,

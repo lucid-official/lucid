@@ -26,6 +26,8 @@ _ = Mock()
 
 # ── C++ engine attributes and stdlib hooks ────────────────────────────────
 _.once_differentiable  # read by C++ PythonNode in lucid/_C/autograd/CustomFunction.cpp
+_._register_node_prehook  # called by name from lucid/_C/bindings/bind_autograd.cpp
+_._register_node_hook  # called by name from lucid/_C/bindings/bind_autograd.cpp
 _.redraw_rng  # read by C++ Tracer in lucid/_C/compile/Tracer.h
 _.persistent_id  # pickle.Pickler.persistent_id hook in lucid/serialization/__init__.py
 _._on_queue_feeder_error  # multiprocessing.queues.Queue hook in lucid/utils/data/dataloader.py
