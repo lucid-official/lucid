@@ -44,6 +44,7 @@ _FAILED = re.compile(r"^(?:FAILED|ERROR) (.+)$")
 _SKIPPED = re.compile(r"^SKIPPED \[(\d+)\] (.+)$")
 _CHECK = re.compile(r"^CHECK (.+)$")
 _ADAPTIVE = re.compile(r"^ADAPTIVE (.+)$")
+_DEVICE = re.compile(r"^DEVICE (.+)$")
 _MEMBER = re.compile(r"create_model\(")
 
 
@@ -88,9 +89,11 @@ class PytestStage(Stage):
     files: tuple[str, ...]
     basetemp: Path
     marker: str = ""
-    #: A family's factory names and labels; ``()`` runs every test in ``files``.
+    #: A family's factory names, labels and class names; all empty runs every
+    #: test in ``files``.
     names: tuple[str, ...] = ()
     labels: tuple[str, ...] = ()
+    classes: tuple[str, ...] = ()
     heavy_off: bool = False
 
     @override
@@ -104,8 +107,9 @@ class PytestStage(Stage):
                 "lucid.test.audit._zoo_select",
                 f"--zoo-names={','.join(self.names)}",
                 f"--zoo-labels={','.join(self.labels)}",
+                f"--zoo-classes={','.join(self.classes)}",
             )
-            if self.names or self.labels
+            if self.names or self.labels or self.classes
             else ()
         )
         return (
@@ -152,6 +156,9 @@ class StageResult:
     #: What happened to the stage without making it verify less: a wait for
     #: memory that ran out, a rerun after the machine ran short.
     events: list[str] = field(default_factory=list)
+    #: The device this stage reports it ran on, when that is its own choice and
+    #: not the run's (compiled training is always Metal); ``""`` otherwise.
+    device: str = ""
 
     @property
     def failed(self) -> bool:
@@ -185,6 +192,8 @@ def read_result(
             result.checks.append(check.group(1)[:300])
         elif adaptive := _ADAPTIVE.match(line):
             result.notes.append(adaptive.group(1)[:300])
+        elif device := _DEVICE.match(line):
+            result.device = device.group(1).strip()[:40]
         elif summary := _SUMMARY.match(line):
             result.summary = summary.group(1)
     if status in _KILLED:
@@ -243,6 +252,7 @@ class ZooCatalog:
         marker: str = "",
         names: tuple[str, ...] = (),
         labels: tuple[str, ...] = (),
+        classes: tuple[str, ...] = (),
     ) -> PytestStage:
         return PytestStage(
             name=name,
@@ -251,6 +261,7 @@ class ZooCatalog:
             marker=marker,
             names=names,
             labels=labels,
+            classes=classes,
         )
 
     def family_stages(self, family: str, temp: Path, budget: MachineBudget) -> list[Stage]:
@@ -272,22 +283,29 @@ class ZooCatalog:
             stages.append(self._pytest("own-tests", temp, own, marker=""))
         # Control benchmarks take tens of minutes and run once, in the zoo-wide group.
         models = [p for p in self.wide_files() if p.parent == self._unit / "models"]
-        names, labels = self.selection_for(family)
+        names, labels, classes = self.selection_for(family)
         stages.append(
             self._pytest(
-                "zoo-tests", temp, models, marker="not control", names=names, labels=labels
+                "zoo-tests",
+                temp,
+                models,
+                marker="not control",
+                names=names,
+                labels=labels,
+                classes=classes,
             )
         )
         return stages
 
-    def selection_for(self, family: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
-        """The factory names and labels that identify ``family``'s tests in shared files."""
+    def selection_for(self, family: str) -> tuple[tuple[str, ...], ...]:
+        """``family``'s factory names, labels and class names: what its shared tests are written with."""
         from lucid.test.audit._zoo_probes import factories_by_family
 
         found = factories_by_family().get(family)
         names = tuple(found.names) if found else ()
         labels = tuple(sorted({family, *(found.labels if found else ())}))
-        return names, labels
+        classes = tuple(sorted(found.classes)) if found else ()
+        return names, labels, classes
 
     def wide_stages(self, temp: Path) -> list[Stage]:
         """The zoo-wide group: every multi-family file once, ``control`` benchmarks included."""

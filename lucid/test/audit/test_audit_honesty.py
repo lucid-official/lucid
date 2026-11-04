@@ -596,19 +596,19 @@ def test_a_family_is_selected_by_its_factory_names_and_word_safely() -> None:
 
 
 def test_the_real_registry_gives_senet_its_se_resnets_and_not_densenets() -> None:
-    names, labels = ZooCatalog(ROOT).selection_for("senet")
+    names, labels, classes = ZooCatalog(ROOT).selection_for("senet")
     assert "se_resnet_50" in names and labels == ("senet",)
-    selector = FamilySelector(names, labels)
+    selector = FamilySelector(names, labels, classes)
     assert selector.matches("t.py::test[se_resnet_50]")
     assert not selector.matches("t.py::test[densenet_121]")
     for family in ("sknet", "cspnet"):
-        found, kept = ZooCatalog(ROOT).selection_for(family)
+        found, kept, _ = ZooCatalog(ROOT).selection_for(family)
         assert found and family in kept
 
 
 def test_a_family_with_no_registered_factory_still_selects_by_its_directory_name() -> None:
-    names, labels = ZooCatalog(ROOT).selection_for("no_such_family")
-    assert names == () and labels == ("no_such_family",)
+    names, labels, classes = ZooCatalog(ROOT).selection_for("no_such_family")
+    assert (names, labels, classes) == ((), ("no_such_family",), ())
 
 
 def test_the_select_plugin_deselects_everything_else(tmp_path: Path) -> None:

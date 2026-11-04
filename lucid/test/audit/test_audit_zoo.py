@@ -680,9 +680,10 @@ def test_the_reporter_picks_the_stdlib_display_without_a_terminal() -> None:
 def test_the_zoo_stage_failures_are_the_exit_code(monkeypatch: pytest.MonkeyPatch) -> None:
     from lucid.test.audit.__main__ import main
 
-    monkeypatch.setattr(_zoo, "run_zoo_stage", lambda *args: 0)
+    monkeypatch.setattr(_zoo, "run_zoo_stage", lambda *args: _zoo.ZooReport())
     assert main(["--models", "--no-log"]) == 0
-    monkeypatch.setattr(_zoo, "run_zoo_stage", lambda *args: 3)
+    three = [("alpha", StageResult("s", "fail", 1.0, 1.0))] * 3
+    monkeypatch.setattr(_zoo, "run_zoo_stage", lambda *args: _zoo.ZooReport(failed=three))
     assert main(["--models", "--no-log"]) == 1
 
 
@@ -703,8 +704,8 @@ def test_models_alone_runs_the_zoo_and_nothing_else(
 ) -> None:
     from lucid.test.audit.__main__ import main
 
-    monkeypatch.setattr(_zoo, "run_zoo_stage", lambda *args: 0)
+    monkeypatch.setattr(_zoo, "run_zoo_stage", lambda *args: _zoo.ZooReport())
     assert main(["--models", "--no-log"]) == 0
     out = capsys.readouterr().out
-    assert "model zoo failures" in out
+    assert "model zoo failing stages" in out
     assert "audit defects" not in out and "suite failures" not in out

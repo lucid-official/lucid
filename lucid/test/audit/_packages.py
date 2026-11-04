@@ -40,7 +40,7 @@ from typing import TYPE_CHECKING, override
 from lucid.test.audit import _suite, _surface
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Iterator
+    from collections.abc import Callable, Iterable, Iterator, Sequence
 
 #: The key of the one package the family-by-family zoo stage verifies.
 MODELS = "models"
@@ -390,7 +390,12 @@ class Selection:
         return None if self.complete else self.owns_module
 
     def suite_plan(
-        self, root: Path, default: str = DEFAULT_SUITE_PATH, *, zoo_stage: bool = False
+        self,
+        root: Path,
+        default: str = DEFAULT_SUITE_PATH,
+        *,
+        zoo_stage: bool = False,
+        extra_ignore: Sequence[str] = (),
     ) -> SuitePlan:
         """What the suite stage runs.
 
@@ -400,17 +405,19 @@ class Selection:
         has neither, so it carries them as it always did.
         """
         scope = self.file_scope
+        extra = tuple(extra_ignore)
         if default != DEFAULT_SUITE_PATH:
-            return SuitePlan((default,), (), scope)
+            # A path the caller chose is a tree the floor was not measured over.
+            return SuitePlan((default,), extra, scope or self.owns_file)
         if self.explicit and not self.complete:
             trees = (
                 t for p in self.registry if p.key in self.code_keys for t in p.test_trees(root)
             )
-            return SuitePlan(tuple(dict.fromkeys(trees)), (), scope)
+            return SuitePlan(tuple(dict.fromkeys(trees)), extra, scope)
         carried = self.code_keys | (self.keys & {MODELS} if not zoo_stage else set())
         kept = {t for p in self.registry if p.key in carried for t in p.test_trees(root)}
         left = (t for p in self.registry if p.key not in carried for t in p.test_trees(root))
-        ignore = tuple(dict.fromkeys(t for t in left if t not in kept))
+        ignore = tuple(dict.fromkeys([*(t for t in left if t not in kept), *extra]))
         # Trees left out are tests that did not run, and the floor counts what
         # they cover.  Measured on the Studio, `--no-models --tests-only` (104,360
         # tests, zoo trees ignored) still covered 67.6% of the zoo's own files

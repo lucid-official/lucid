@@ -454,9 +454,9 @@ def test_the_verdict_has_a_zoo_row_and_the_exit_code_follows_it(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     console = Console(colour=False)
-    assert _verdict(console, {"audit defects": 0, "model zoo failures": 0}) == 0
-    assert "model zoo failures" in capsys.readouterr().out
-    assert _verdict(console, {"audit defects": 0, "model zoo failures": 2}) == 1
+    assert _verdict(console, {"audit defects": 0, "model zoo failing stages": 0}) == 0
+    assert "model zoo failing stages" in capsys.readouterr().out
+    assert _verdict(console, {"audit defects": 0, "model zoo failing stages": 2}) == 1
 
 
 def test_a_subsystem_package_describes_itself_from_the_surface_table() -> None:

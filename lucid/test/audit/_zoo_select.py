@@ -10,13 +10,23 @@ and it is wrong both ways at once:
   name.  ``senet``'s are ``se_resnet_*``, ``sknet``'s ``sk_resnet_*``, ``cspnet``'s
   ``csp_*`` — 45, 48 and 27 tests that no family's slice ever ran.
 
-So a family is selected by the names its factories are registered under, and
-the match is word-safe: a name matches only where it is not part of a longer
-name.  ``resnet`` is not found inside ``se_resnet_50`` — ``_`` counts as part of
-a word, as it does in an identifier.
+So a family is selected by the names its tests are written with, and the match
+is word-safe: a name matches only where it is not part of a longer name.
 
-Loaded with ``-p lucid.test.audit._zoo_select``; a run with neither option is
-unaffected.
+Tests are written three ways, and each is matched the way it is spelled:
+
+* **a factory name or label in a parameter id** (``[se_resnet_50]``): found as a
+  whole word, where ``_`` is part of the word — ``resnet`` is not inside
+  ``se_resnet_50``;
+* **a model class in a parameter id** (``[AlexNetForImageClassification]``): the
+  registry's model and config class names, found the same way;
+* **the family or a class in a test's own name** (``TestGPT2Cache``,
+  ``test_alexnet_forward``): split into words on ``_`` and on CamelCase, and a
+  name matches where a run of whole words spells it — ``Alex`` + ``Net`` is
+  ``alexnet``, ``Dense`` + ``Net`` is ``densenet`` and is not ``senet``.
+
+Loaded with ``-p lucid.test.audit._zoo_select``; a run with none of the options
+is unaffected.
 """
 
 import re
@@ -31,51 +41,96 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
 _WORD = r"A-Za-z0-9_"
+_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+_NOT_ALNUM = re.compile(r"[^A-Za-z0-9]+")
+_IDENTIFIER = re.compile(rf"[{_WORD}]+")
 
 
-def _alternation(names: Iterable[str], word: str) -> re.Pattern[str] | None:
-    """``names`` as a pattern that only matches where none of them is inside a longer word."""
-    found = sorted({name for name in names if name}, key=len, reverse=True)
-    if not found:
-        return None
-    body = "|".join(re.escape(name) for name in found)
-    return re.compile(rf"(?<![{word}])(?:{body})(?![{word}])", re.IGNORECASE)
+def _alternation(names: Iterable[str]) -> str:
+    return "|".join(re.escape(n) for n in sorted({n for n in names if n}, key=len, reverse=True))
+
+
+def _words(text: str) -> list[str]:
+    """``TestGPT2Cache::test_alex_net`` as ``test gpt2 cache test alex net``."""
+    return [w.lower() for w in _NOT_ALNUM.split(_CAMEL.sub("_", text)) if w]
+
+
+def _spelled(name: str) -> str:
+    return name.replace("_", "").lower()
 
 
 class FamilySelector:
     """Which test node ids belong to one family.
 
-    ``names`` are the family's factory names; they are matched in a test's
-    parameter id, where a factory is spelled out, and ``_`` is part of a name
-    there.  ``labels`` are the family's directory and registry labels; they are
-    matched there too and also in the test's file and function name, where
-    ``_`` separates words (``test_alexnet_forward`` belongs to ``alexnet``).
+    ``names`` are its factory names, ``labels`` its directory and registry
+    labels, ``classes`` the registry's model and config class names.
     """
 
-    def __init__(self, names: Iterable[str], labels: Iterable[str]) -> None:
-        everything = [*names, *labels]
-        self._param = _alternation(everything, _WORD)
-        self._head = _alternation(labels, "A-Za-z0-9")
+    def __init__(
+        self, names: Iterable[str], labels: Iterable[str], classes: Iterable[str] = ()
+    ) -> None:
+        names, labels, classes = list(names), list(labels), list(classes)
+        exact, label = _alternation([*names, *classes]), _alternation(labels)
+        alternatives = [f"(?:{exact})"] if exact else []
+        # A label also names a test pytest numbered because two params looked alike
+        # (``bert0``, ``gpt2_0``); a factory name never carries such a suffix.
+        alternatives += [f"(?:{label})(?:_?[0-9]+)?"] if label else []
+        self._param = (
+            re.compile(rf"(?<![{_WORD}])(?:{'|'.join(alternatives)})(?![{_WORD}])", re.IGNORECASE)
+            if alternatives
+            else None
+        )
+        self._spelled = {_spelled(n) for n in (*names, *labels, *classes) if n}
+        self._longest = max((len(s) for s in self._spelled), default=0)
+
+    def _spells(self, text: str) -> bool:
+        """Whether a run of whole words in ``text`` spells a name, a label or a class."""
+        words = _words(text)
+        for start in range(len(words)):
+            run = ""
+            for word in words[start:]:
+                run += word
+                if len(run) > self._longest:
+                    break
+                if run in self._spelled:
+                    return True
+        return False
 
     def matches(self, nodeid: str) -> bool:
         head, bracket, params = nodeid.partition("[")
-        if self._head is not None and self._head.search(head):
+        if self._spells(head):
             return True
-        return bool(bracket and self._param is not None and self._param.search(params))
+        if not bracket:
+            return False
+        if self._param is not None and self._param.search(params):
+            return True
+        # A CamelCase identifier in a parameter id is a class (``GPT2DoubleHeadsModel``),
+        # which may be a family's without the registry knowing it: spell it by words.
+        return any(
+            self._spells(token)
+            for token in _IDENTIFIER.findall(params)
+            if token != token.lower() and token != token.upper()
+        )
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
     group = parser.getgroup("zoo")
     group.addoption("--zoo-names", default="", help="comma-separated factory names of a family")
     group.addoption("--zoo-labels", default="", help="comma-separated labels of a family")
+    group.addoption("--zoo-classes", default="", help="comma-separated class names of a family")
+
+
+def _listed(config: pytest.Config, option: str) -> list[str]:
+    return [n for n in str(config.getoption(option)).split(",") if n]
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    names = [n for n in str(config.getoption("--zoo-names")).split(",") if n]
-    labels = [n for n in str(config.getoption("--zoo-labels")).split(",") if n]
-    if not (names or labels):
+    names = _listed(config, "--zoo-names")
+    labels = _listed(config, "--zoo-labels")
+    classes = _listed(config, "--zoo-classes")
+    if not (names or labels or classes):
         return
-    selector = FamilySelector(names, labels)
+    selector = FamilySelector(names, labels, classes)
     kept: list[pytest.Item] = []
     dropped: list[pytest.Item] = []
     for item in items:

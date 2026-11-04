@@ -198,6 +198,8 @@ def render_note(name: str, domain: str, results: Sequence[StageResult], facts: R
     ]
     for result in results:
         summary = result.summary.replace("|", "/")
+        if result.device and result.device != facts.device:
+            summary += f" · 장치: {result.device} (--zoo-device 와 무관한 단계)"
         lines.append(
             f"| {result.name} | {result.status} | {result.seconds:.0f} "
             f"| {result.peak_gb:.1f} | {summary} |"

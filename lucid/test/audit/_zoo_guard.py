@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from lucid.test.audit import _zoo_budget
-from lucid.test._fixtures.devices import DEFAULT_DEVICE_ENV
+from lucid.test._default_device import DEFAULT_DEVICE_ENV
 from lucid.test.audit._console import fmt_duration
 from lucid.test.audit._zoo_stage import StageResult, read_result
 
@@ -91,6 +91,11 @@ def exit_on_terminate() -> Iterator[None]:
     running the ``finally`` that kills the child.  ``^C`` was handled and
     ``kill`` and a closed terminal were not, which left a stage holding tens of
     gigabytes behind a dead run.
+
+    ``SIGHUP`` is left alone when it is *ignored*.  ``nohup`` ignores it on
+    purpose, so that a run started for the night survives its terminal closing;
+    installing a handler over that ignore turned the closed terminal back into
+    the death ``nohup`` exists to prevent.
     """
 
     def leave(signum: int, frame: FrameType | None) -> None:
@@ -100,7 +105,10 @@ def exit_on_terminate() -> Iterator[None]:
     if threading.current_thread() is not threading.main_thread():
         yield  # only the main thread may install handlers
         return
-    previous = {sig: signal.signal(sig, leave) for sig in (signal.SIGTERM, signal.SIGHUP)}
+    wanted = [signal.SIGTERM]
+    if signal.getsignal(signal.SIGHUP) is not signal.SIG_IGN:
+        wanted.append(signal.SIGHUP)
+    previous = {sig: signal.signal(sig, leave) for sig in wanted}
     try:
         yield
     finally:

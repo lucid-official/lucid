@@ -27,13 +27,13 @@ import pytest
 
 import lucid
 from lucid.test import _memory
+from lucid.test._default_device import apply_default_device
 
 # Re-export every fixture from the per-area modules so test files just
 # need to declare the fixture name in their argument list.  The hook is
 # re-exported for the same reason: pytest only registers hooks it finds
 # in a conftest (or a plugin).
 from lucid.test._fixtures.devices import (  # noqa: F401
-    apply_default_device,
     device,
     device_cpu_only,
     device_gpu_only,

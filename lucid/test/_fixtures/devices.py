@@ -14,63 +14,18 @@ dtypes is asserted once, in
 ``lucid/test/unit/device/test_metal_dtype_support.py``.
 """
 
-import functools
 import itertools
-import os
 from collections.abc import Iterable, Iterator, Sequence
 from typing import TYPE_CHECKING
 
 import pytest
 
 import lucid
+from lucid.test._default_device import metal_available
 from lucid.test._fixtures.dtypes import _FLOAT_DTYPES, _FLOAT_DTYPES_EXTENDED, _INT_DTYPES
 
 if TYPE_CHECKING:
     from _pytest.mark import ParameterSet
-
-
-@functools.lru_cache(maxsize=1)
-def metal_available() -> bool:
-    """Return True if Apple Metal is usable — try a tiny allocation
-    and let any failure bubble up as ``False``."""
-    try:
-        from lucid._C import engine as _C_engine
-
-        _ = _C_engine.zeros([1], _C_engine.F32, _C_engine.GPU)
-    except Exception:
-        return False
-    return True
-
-
-#: The environment variable ``lucid-audit --models`` sets for every process it
-#: starts, and the one place a test process learns what device to default to.
-DEFAULT_DEVICE_ENV = "LUCID_TEST_DEFAULT_DEVICE"
-
-_DEFAULT_DEVICES = ("cpu", "metal")
-
-
-def apply_default_device(name: str | None = None) -> str | None:
-    """Make ``name`` — or, with none, ``$LUCID_TEST_DEFAULT_DEVICE`` — the default device.
-
-    Models train on Metal, so the zoo is verified on Metal unless it is told
-    otherwise.  Asking for a device the machine does not have is an error, not a
-    fallback: running the zoo on CPU because Metal was missing would report a
-    verification of something other than what was asked for.  Returns the device
-    applied, or ``None`` when nothing was asked.
-    """
-    device = name if name is not None else os.environ.get(DEFAULT_DEVICE_ENV)
-    if not device:
-        return None
-    if device not in _DEFAULT_DEVICES:
-        raise ValueError(f"unknown default device {device!r}; expected one of {_DEFAULT_DEVICES}")
-    if device == "metal" and not metal_available():
-        raise RuntimeError(
-            f"the default device is metal ({DEFAULT_DEVICE_ENV}, or lucid-audit --zoo-device), "
-            "but this machine has no usable Metal device; pass --zoo-device cpu to verify "
-            "on CPU on purpose"
-        )
-    lucid.set_default_device(device)
-    return device
 
 
 def _device_params() -> list[str]:

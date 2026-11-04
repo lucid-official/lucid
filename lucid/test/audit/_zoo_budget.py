@@ -44,10 +44,18 @@ _MIN_FLOOR_GB = 1.0
 #: The peak physical footprint of the largest ``heavy``-marked test.  Measured,
 #: not estimated: each of the 24 heavy tests was run in its own process on the
 #: 36 GB Mac Studio under ``/usr/bin/time -l`` (the "peak memory footprint"
-#: line, interpreter and ``import lucid`` included), 2026-11-05.  They peaked
-#: between 1.1 and 5.5 GB; the largest was ``HEAVY_PEAK_TEST``, which builds the
-#: 632M-parameter ViT-H/14 (2.5 GB of weights) and runs it.  The VGG-16 trunk
-#: (138M parameters) that gave the marker its name peaks at 1.7-3.1 GB.
+#: line, interpreter and ``import lucid`` included), 2026-11-05, on both devices.
+#:
+#: * CPU: 1.1 to 5.46 GB; the largest is ``HEAVY_PEAK_TEST``, which builds the
+#:   632M-parameter ViT-H/14 (2.5 GB of weights) and runs it.
+#: * Metal (the zoo's default device since LCD-840): 0.1 to 5.15 GB; the largest
+#:   is the ConvNeXt-XL parity test.  MLX's buffers count in the footprint, so the
+#:   figure is comparable.  The overnight Metal run of the whole zoo agrees: no
+#:   test stage of any family peaked above 4.49 GB.
+#:
+#: The CPU figure is the larger, so the constant is unchanged by the Metal
+#: default; the VGG-16 trunk (138M parameters) that gave the marker its name peaks
+#: at 1.7-3.1 GB on CPU and 2.2-2.6 GB on Metal.
 HEAVY_PEAK_GB = 5.5
 HEAVY_PEAK_TEST = "lucid/test/parity/models/vision/test_vit.py::test_self_consistency[vit_huge_14]"
 

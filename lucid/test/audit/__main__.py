@@ -977,7 +977,9 @@ def _run_suite_stage(args: argparse.Namespace, console: Console, plan: RunPlan) 
     Returns ``(broken tests, line-coverage regressions)``.
     """
     console.banner("Suite", "the values, where the sweep checks the contracts")
-    where = plan.selection.suite_plan(_ROOT, args.suite_path, zoo_stage=plan.zoo)
+    where = plan.selection.suite_plan(
+        _ROOT, args.suite_path, zoo_stage=plan.zoo, extra_ignore=args.suite_ignore
+    )
     if not where.paths:
         console.always(console.paint("  no test subtree is declared for these packages", "grey"))
         return 0, 0
@@ -985,7 +987,7 @@ def _run_suite_stage(args: argparse.Namespace, console: Console, plan: RunPlan) 
         console,
         list(where.paths),
         with_coverage=not args.no_line_coverage,
-        ignore=[*where.ignore, *args.suite_ignore],
+        ignore=list(where.ignore),
     )
     _suite.report_suite(result, console)
 
@@ -1122,13 +1124,21 @@ def _run_self_check_stage(console: Console) -> int:
     return len(missed)
 
 
-def _verdict(console: Console, tallies: dict[str, int]) -> int:
+def _verdict(
+    console: Console, tallies: dict[str, int], reduced: dict[str, int] | None = None
+) -> int:
     """One line per stage, then the answer.
 
     The whole point of folding the two stages together is that a single
     exit code means something.  Printing the parts as well means a red
     run says *which* half went red without anyone re-reading the scroll.
+
+    ``reduced`` counts what passed but was asked for less than the full
+    verification.  It is not a problem and does not move the exit code, but
+    "clean on every stage that ran" over a run that left things out is the
+    sentence the record notes were written to avoid, so it is said here too.
     """
+    reduced = {label: count for label, count in (reduced or {}).items() if count}
     console.always("")
     console.rule("verdict", "red" if any(tallies.values()) else "green")
     for label, count in tallies.items():
@@ -1136,10 +1146,24 @@ def _verdict(console: Console, tallies: dict[str, int]) -> int:
             console.paint(f"  {label}".ljust(34), "grey")
             + console.paint(str(count), "red" if count else "green")
         )
+    for label, count in reduced.items():
+        console.always(
+            console.paint(f"  {label}".ljust(34), "grey") + console.paint(str(count), "yellow")
+        )
     total = sum(tallies.values())
     console.always("")
     if total:
         console.always(console.paint(f"  {total} problem(s) — see above", "red", "bold"))
+    elif reduced:
+        console.always(
+            console.paint(
+                "  clean on every stage that ran, but "
+                + ", ".join(f"{count} {label}" for label, count in reduced.items())
+                + " (see above)",
+                "yellow",
+                "bold",
+            )
+        )
     else:
         console.always(console.paint("  clean on every stage that ran", "green", "bold"))
     return 1 if total else 0
@@ -1147,8 +1171,8 @@ def _verdict(console: Console, tallies: dict[str, int]) -> int:
 
 def _run_stages(
     plan: RunPlan, args: argparse.Namespace, console: Console, command: str
-) -> dict[str, int]:
-    """Run the planned stages in order; ``label -> count`` for the verdict.
+) -> tuple[dict[str, int], dict[str, int]]:
+    """Run the planned stages in order; ``(problems, reduced)``, each ``label -> count``.
 
     The self-check runs *first*, on a clean interpreter.  Ordering is
     load-bearing, not cosmetic: run after the sweep, four mutants stopped being
@@ -1159,6 +1183,7 @@ def _run_stages(
     cheaper stages can say is worth having before it starts.
     """
     tallies: dict[str, int] = {}
+    reduced: dict[str, int] = {}
     if plan.self_check:
         tallies["blind axes"] = _run_self_check_stage(console)
     if plan.sweep:
@@ -1172,8 +1197,10 @@ def _run_stages(
     if plan.doctests:
         tallies["docstring regressions"] = _run_doctest_stage(args, console, plan)
     if plan.zoo:
-        tallies["model zoo failures"] = _zoo.run_zoo_stage(args, console, _ROOT, command)
-    return tallies
+        report = _zoo.run_zoo_stage(args, console, _ROOT, command)
+        tallies["model zoo failing stages"] = report.failures
+        reduced["zoo group(s) passed reduced"] = len(report.reduced)
+    return tallies, reduced
 
 
 def _run_information_mode(args: argparse.Namespace, console: Console) -> int | None:
@@ -1235,7 +1262,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     command = " ".join(["lucid-audit", *(sys.argv[1:] if argv is None else argv)])
     try:
-        tallies = _run_stages(plan, args, console, command)
+        tallies, reduced = _run_stages(plan, args, console, command)
     except KeyboardInterrupt:
         console.always("")
         console.always(console.paint("  interrupted — no report written", "yellow"))
@@ -1247,7 +1274,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         console.always(console.paint(f"  the audit harness failed: {exc!r}", "red", "bold"))
         return 2
 
-    return _verdict(console, tallies)
+    return _verdict(console, tallies, reduced)
 
 
 if __name__ == "__main__":

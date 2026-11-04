@@ -18,8 +18,8 @@ from types import SimpleNamespace
 import pytest
 
 import lucid
-from lucid.test._fixtures import devices
-from lucid.test._fixtures.devices import DEFAULT_DEVICE_ENV, apply_default_device, metal_available
+from lucid.test import _default_device
+from lucid.test._default_device import DEFAULT_DEVICE_ENV, apply_default_device, metal_available
 from lucid.test.audit import _zoo, _zoo_probes
 from lucid.test.audit._plan import PlanError
 from lucid.test.audit._zoo_budget import MachineBudget
@@ -36,9 +36,17 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_the_zoo_runs_on_metal_unless_told_otherwise() -> None:
-    assert build_parser().parse_args(["--models"]).zoo_device == "metal"
+    """The option has no default of its own, so a run with no zoo stage can tell it was given."""
+    assert build_parser().parse_args(["--models"]).zoo_device is None
     assert build_parser().parse_args(["--models", "--zoo-device", "cpu"]).zoo_device == "cpu"
     assert _zoo.ZooSettings().device == "metal"
+    root = Path(__file__).resolve().parents[3]
+    unset = _zoo.ZooSettings.from_args(build_parser().parse_args(["--models"]), root, "c")
+    assert unset.device == "metal"
+    cpu = _zoo.ZooSettings.from_args(
+        build_parser().parse_args(["--models", "--zoo-device", "cpu"]), root, "c"
+    )
+    assert cpu.device == "cpu"
 
 
 def test_an_unknown_device_is_an_argument_error() -> None:
@@ -94,7 +102,7 @@ def test_the_default_device_is_applied_from_the_environment_and_nowhere_else(
 ) -> None:
     applied: list[str] = []
     monkeypatch.setattr(lucid, "set_default_device", applied.append)
-    monkeypatch.setattr(devices, "metal_available", lambda: True)
+    monkeypatch.setattr(_default_device, "metal_available", lambda: True)
     monkeypatch.delenv(DEFAULT_DEVICE_ENV, raising=False)
     assert apply_default_device() is None and applied == [], "nobody asked, nothing changes"
     monkeypatch.setenv(DEFAULT_DEVICE_ENV, "metal")
@@ -107,7 +115,7 @@ def test_asking_the_tests_for_metal_on_a_machine_without_it_fails_loudly(
 ) -> None:
     applied: list[str] = []
     monkeypatch.setattr(lucid, "set_default_device", applied.append)
-    monkeypatch.setattr(devices, "metal_available", lambda: False)
+    monkeypatch.setattr(_default_device, "metal_available", lambda: False)
     with pytest.raises(RuntimeError, match="no usable Metal device"):
         apply_default_device("metal")
     assert applied == [], "it did not fall back to anything"

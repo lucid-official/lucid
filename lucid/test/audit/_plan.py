@@ -125,13 +125,10 @@ def _require_whole_run(args: argparse.Namespace, plan: RunPlan) -> None:
             "record its smaller count over the whole floor"
         )
     if args.update_suite:
-        where = selection.suite_plan(_ROOT, args.suite_path, zoo_stage=plan.zoo)
-        whole = (
-            selection.complete
-            and where.paths == (DEFAULT_SUITE_PATH,)
-            and not where.ignore
-            and not args.suite_ignore
+        where = selection.suite_plan(
+            _ROOT, args.suite_path, zoo_stage=plan.zoo, extra_ignore=args.suite_ignore
         )
+        whole = selection.complete and where.paths == (DEFAULT_SUITE_PATH,) and not where.ignore
         if not whole:
             raise PlanError(
                 "--update-suite requires the whole suite, the model zoo's tests included "
@@ -149,6 +146,7 @@ def _reject_stray_zoo_options(args: argparse.Namespace, plan: RunPlan) -> None:
             ("--zoo-record", args.zoo_record),
             ("--fresh", args.fresh),
             ("--mem-limit-gb", args.mem_limit_gb),
+            ("--zoo-device", args.zoo_device),
         )
         if given
     ]

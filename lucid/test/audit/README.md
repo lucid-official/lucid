@@ -36,7 +36,7 @@ lucid-audit --no-models     # every package except the zoo             (~15 min)
 lucid-audit --models        # the model zoo alone
 lucid-audit --nn --linalg   # just those packages
 lucid-audit --audit-only    # self-check + sweep
-lucid-audit --tests-only    # suite + line coverage + doctests
+lucid-audit --tests-only    # suite + line coverage + doctests (the only run that can fail the line floor)
 lucid-audit --self-check    # the instruments alone, seconds
 ```
 
@@ -48,7 +48,7 @@ lucid-audit --self-check    # the instruments alone, seconds
   suite failures                  0
   line coverage regressions       0
   docstring regressions           0
-  model zoo failures              0
+  model zoo failing stages        0
 
   clean on every stage that ran
 ```
@@ -256,15 +256,24 @@ lucid-audit --models --zoo-device cpu                # on the CPU, on purpose
 ```
 
 **It runs on Metal.** Models train on Metal, so `--zoo-device` defaults to
-`metal`: every stage (the tests, the real-size build, the probes) is started
+`metal`: the tests, the real-size build and the build/matrix probes are started
 with `LUCID_TEST_DEFAULT_DEVICE` set, `lucid/test/conftest.py` makes it the
-default device (`devices.apply_default_device`), and the build reads one value
-out of every parameter, because MLX is lazy and a build that stops at
-`create_model` has allocated nothing. A machine with no Metal is exit `2` up
-front, not a quiet CPU run reported as the Metal verification; `--zoo-device
-cpu` is how to ask for the CPU. The device is in every family note, the ledger
-(a column, and the run's device in its header) and the resume record: a family
-verified on one device is **not** an answer for a run on the other.
+default device (`_default_device.apply_default_device`, a module that imports
+nothing from pytest), and the build reads one value out of every parameter,
+because MLX is lazy and a build that stops at `create_model` has allocated
+nothing. A machine with no Metal is exit `2` up front, not a quiet CPU run
+reported as the Metal verification; `--zoo-device cpu` is how to ask for the
+CPU, and giving the option to a run with no zoo stage (`--no-models`,
+`--audit-only`, ...) is exit `2` as well. The device is in every family note, the
+ledger (a column, and the run's device in its header) and the resume record: a
+family verified on one device is **not** an answer for a run on the other.
+
+**One stage does not follow it: compiled training.** The compiled-training
+matrix runs each pair in a child interpreter that uses `COMPILE_DEVICE`
+(`lucid/test/unit/compile/_helpers.py`, `"metal"`), so under `--zoo-device cpu`
+that stage still runs on Metal. The probe reports the device it ran on and the
+family note says so on that stage's row (`장치: metal (--zoo-device 와 무관한
+단계)`); the note's header device is the device of everything else.
 
 **It fits the machine.** The old script carried four constants tuned on a
 36 GB Mac Studio. They are now `MachineBudget` (`_zoo_budget.py`), derived from
@@ -369,8 +378,16 @@ $ lucid-audit --models --family lenet --family alexnet     # no terminal: plain 
     ...
 ```
 
-The exit code follows the rule above: `model zoo failures` counts failed
-stages, and a killed stage counts unless its retry passed.
+The exit code follows the rule above: the verdict's `model zoo failing stages`
+counts **stages** (a stage is one process: a family's tests, a probe, the
+contract), not families and not tests, and a killed stage counts unless its
+retry passed. The zoo summary says the same thing in words (`failing stages 119
+in 63 of 71 group(s)`), prints the first eight failing groups, and names the file
+with the complete lists (`summary.txt` in the commit's state directory, beside
+`logs/<family>/<stage>.log` for the failing tests of each); a run that passed
+every stage but left things out adds `N zoo group(s) passed reduced` to the
+verdict, which does not move the exit code but replaces "clean on every stage
+that ran" with a sentence that says so.
 
 ### The transcript
 
@@ -672,5 +689,7 @@ without restoring the optimizer it drives.
 | `_zoo_report.py` | the display (plain lines and the stdlib live block); the `rich` one is in `_console_rich.py` |
 | `_zoo_probes.py` | the real-size build and compiled-training probes, run as child processes |
 | `_zoo_select.py` | a pytest plugin: a family's tests chosen by its factory names, word-safely (not `-k`) |
+| `_zoo_summary.py` | the zoo stage's report: labelled counts and the first rows on screen, the complete lists in `summary.txt` |
+| `../_default_device.py` | the default device a test process applies, and `metal_available`; imports nothing from pytest |
 | `_result.py` | `Status`, `Finding`, `Report`, `Baseline` |
 | `known.json` | accepted defects, reported as `KNWN` rather than `FAIL` |
