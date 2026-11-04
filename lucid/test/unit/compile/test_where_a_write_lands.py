@@ -218,6 +218,7 @@ FACTORIES: dict[str, Make] = {
     "arange": lambda: lucid.arange(12.0, device=COMPILE_DEVICE).reshape(*SHAPE),
     "eye": lambda: lucid.eye(*SHAPE, device=COMPILE_DEVICE),
     "linspace": lambda: lucid.linspace(0.0, 1.0, 12, device=COMPILE_DEVICE).reshape(*SHAPE),
+    "logspace": lambda: lucid.logspace(0.0, 1.0, 12, device=COMPILE_DEVICE).reshape(*SHAPE),
     "empty": lambda: lucid.empty(*SHAPE, device=COMPILE_DEVICE),
     "zeros": lambda: lucid.zeros(*SHAPE, device=COMPILE_DEVICE),
     "ones": lambda: lucid.ones(*SHAPE, device=COMPILE_DEVICE),
@@ -271,8 +272,8 @@ def test_a_tensor_the_call_made_starts_over_on_every_call(
     factory: str, write: str, entry: str
 ) -> None:
     seen = _agrees(_writes_what_it_made(FACTORIES[factory], MADE_WRITES[write]), entry)
-    # The backward's lowering refuses ``empty`` wherever it appears, read or written.
-    if not (factory == "empty" and entry != "module"):
+    # The backward's lowering refuses these two wherever they appear, read or written.
+    if not (factory in ("empty", "logspace") and entry != "module"):
         assert seen.compiled, f"{factory} / {write} no longer compiles under {entry}"
 
 
