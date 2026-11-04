@@ -9,8 +9,12 @@ kept the trace's write, so exporting changed the caller's data.
 
 The input is now bound to the value it arrived with, so the package
 computes the write from whatever it is handed, as eager does; and whatever
-the trace wrote — inputs and buffers alike — is put back afterwards,
-whether the export succeeded or not.
+the trace wrote to those tensors — inputs and buffers alike — is put back
+afterwards, whether the export succeeded or not.
+
+Still open (LCD-854): a write through a *view* of an input, ``x[:1].add_(1.0)``,
+is not put back, so the example comes out changed; the case is pinned in
+``lucid/test/unit/compile/test_view_before_inplace_write.py``.
 """
 
 import pytest
