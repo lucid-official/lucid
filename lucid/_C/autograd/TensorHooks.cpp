@@ -609,7 +609,9 @@ void check_grad_kind(const ErrorBuilder& err,
 }
 
 Storage grad_slot_buffer(const ErrorBuilder& err, const TensorImpl& g) {
-    if (!storage_is_cpu(g.raw_storage()) && g.family_key() == nullptr &&
+    // A phantom view has no family (make_view) and no array whose geometry the
+    // slot could lose; it answers as the family member it stands in for.
+    if (!storage_is_cpu(g.raw_storage()) && !g.is_phantom() && g.family_key() == nullptr &&
         (g.storage_offset() != 0 || !g.is_contiguous()))
         err.not_implemented("a Metal gradient that is a strided view of another tensor's array — "
                             "pass a contiguous copy");

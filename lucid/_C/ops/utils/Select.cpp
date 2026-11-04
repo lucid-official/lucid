@@ -30,14 +30,11 @@
 #include <cstring>
 #include <variant>
 
-#include <mlx/ops.h>
-
 #include "../../autograd/AutogradNode.h"
 #include "../../autograd/FuncOp.h"
 #include "../../autograd/Helpers.h"
 #include "../../autograd/Node.h"
 #include "../../backend/Dispatcher.h"
-#include "../../backend/gpu/MlxBridge.h"
 #include "../../compile/Tracer.h"
 #include "../../core/Allocator.h"
 #include "../../core/Error.h"
@@ -68,7 +65,6 @@ namespace {
 
 using utils_detail::allocate_cpu;
 using utils_detail::fresh;
-using utils_detail::mlx_shape_to_lucid;
 using utils_detail::numel;
 using utils_detail::wrap_axis;
 
@@ -485,8 +481,9 @@ align_where_devices(const TensorImplPtr& cond, const TensorImplPtr& x, const Ten
 // Select elements from `x` (where cond is true) or `y` (where cond is false).
 // Validates that x and y share dtype and device, and that cond is on the same
 // device.  On the CPU backend, all three tensors must have identical shapes;
-// on the GPU backend the MLX backend handles implicit broadcasting, and the
-// actual output shape is read back from the MLX array after execution.
+// on the GPU backend the MLX backend handles implicit broadcasting.  Either
+// way the result takes the broadcast shape worked out here, never one read
+// off the backend's answer, which under phantom mode has no array to ask.
 // Attaches WhereBackward only when x or y requires a gradient.
 TensorImplPtr
 where_op(const TensorImplPtr& cond_in, const TensorImplPtr& x_in, const TensorImplPtr& y_in) {
@@ -528,15 +525,7 @@ where_op(const TensorImplPtr& cond_in, const TensorImplPtr& x_in, const TensorIm
     OpScopeFull scope{"where", device, dt, out_shape};
     auto out_storage = backend::Dispatcher::for_device(device).where_op(
         cond_b->storage(), x_b->storage(), y_b->storage(), x_b->shape(), dt);
-    Shape result_shape;
-    if (device == Device::GPU) {
-        // Read the actual output shape from the MLX array (may have been broadcast).
-        const auto& gs = storage_gpu(out_storage);
-        result_shape = mlx_shape_to_lucid(gs.arr->shape());
-    } else {
-        result_shape = out_shape;
-    }
-    auto result = fresh(std::move(out_storage), std::move(result_shape), dt, device);
+    auto result = fresh(std::move(out_storage), std::move(out_shape), dt, device);
     if (auto* trc = ::lucid::compile::current_tracer()) {
         trc->on_op_io({cond_b, x_b, y_b}, result);
     }

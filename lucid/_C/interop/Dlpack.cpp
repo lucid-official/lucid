@@ -16,6 +16,7 @@
 
 #include "../backend/gpu/MlxBridge.h"
 #include "../backend/gpu/mps/MpsBridge.h"
+#include "../core/PhantomMode.h"
 #include "../core/Storage.h"
 #include "../core/TensorImpl.h"
 
@@ -136,6 +137,8 @@ DLManagedTensor* metal_to_dlpack(const TensorImplPtr& impl) {
         throw std::invalid_argument(
             "metal_to_dlpack: tensor is on the CPU — the host path goes through "
             "NumPy's DLPack, not this one");
+    if (impl->is_phantom())
+        refuse_phantom_read("to_dlpack");
 
     const auto& gs = std::get<GpuStorage>(impl->storage());
     if (!gs.arr)

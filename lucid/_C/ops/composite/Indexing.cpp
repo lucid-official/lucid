@@ -7,15 +7,12 @@
 
 #include "Indexing.h"
 
-#include <cstring>
 #include <string>
-#include <variant>
 #include <vector>
 
 #include "../../autograd/Node.h"
 #include "../../backend/Dispatcher.h"
 #include "../../compile/Tracer.h"
-#include "../../core/Allocator.h"
 #include "../../core/ErrorBuilder.h"
 #include "../../core/GradMode.h"
 #include "../../core/Scope.h"
@@ -255,25 +252,8 @@ TensorImplPtr kthvalue_op(const TensorImplPtr& a, std::int64_t k, int dim, bool 
     // would carry a redundant graph dependency on ``a``.
     Shape idx_shape = a->shape();
     idx_shape[static_cast<std::size_t>(d)] = 1;
-    Storage idx_storage = backend::Dispatcher::for_device(a->device()).zeros(idx_shape, Dtype::I64);
-
-    std::size_t numel = 1;
-    for (auto s : idx_shape)
-        numel *= static_cast<std::size_t>(s);
-    std::vector<std::int64_t> host(numel, k - 1);
-    if (a->device() == Device::CPU) {
-        auto& cs = std::get<CpuStorage>(idx_storage);
-        std::memcpy(cs.ptr.get(), host.data(), numel * sizeof(std::int64_t));
-    } else {
-        // GPU path: build a CPU buffer then upload via the backend.
-        CpuStorage stage;
-        stage.dtype = Dtype::I64;
-        stage.nbytes = numel * sizeof(std::int64_t);
-        stage.ptr = allocate_aligned_bytes(stage.nbytes);
-        std::memcpy(stage.ptr.get(), host.data(), stage.nbytes);
-        idx_storage =
-            backend::Dispatcher::for_device(Device::GPU).from_cpu(std::move(stage), idx_shape);
-    }
+    Storage idx_storage = backend::Dispatcher::for_device(a->device())
+                              .full(idx_shape, Dtype::I64, static_cast<double>(k - 1));
     auto idx_tensor = std::make_shared<TensorImpl>(std::move(idx_storage), idx_shape, Dtype::I64,
                                                    a->device(), false);
 

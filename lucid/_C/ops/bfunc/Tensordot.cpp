@@ -16,12 +16,12 @@
 #include <variant>
 
 #include "../../backend/Dispatcher.h"
-#include "../../backend/gpu/MlxBridge.h"
 #include "../../compile/Tracer.h"
 #include "../../core/Allocator.h"
 #include "../../core/Error.h"
 #include "../../core/ErrorBuilder.h"
 #include "../../core/GradMode.h"
+#include "../../core/PhantomMode.h"
 #include "../../core/Profiler.h"
 #include "../../core/Scope.h"
 #include "../../core/TensorImpl.h"
@@ -119,21 +119,29 @@ void validate_tensordot_axes(const Shape& sa,
     }
 }
 
-std::tuple<CpuStorage, std::vector<std::int64_t>, std::int64_t> contract_tensordot_operand(
+// The dimensions of ``shape`` a contraction over ``axes_contract`` leaves.
+std::vector<std::int64_t> free_dims(const Shape& shape, const std::vector<int>& axes_contract) {
+    std::vector<bool> is_c(shape.size(), false);
+    for (int ax : axes_contract)
+        is_c[static_cast<std::size_t>(ax)] = true;
+    std::vector<std::int64_t> kept;
+    for (std::size_t d = 0; d < shape.size(); ++d) {
+        if (!is_c[d])
+            kept.push_back(shape[d]);
+    }
+    return kept;
+}
+
+std::pair<CpuStorage, std::int64_t> contract_tensordot_operand(
     const TensorImplPtr& t, const std::vector<int>& axes_contract, bool put_first, Dtype dt) {
     const std::size_t nd = t->shape().size();
     std::vector<bool> is_c(nd, false);
     for (int ax : axes_contract)
         is_c[static_cast<std::size_t>(ax)] = true;
     std::vector<int> perm;
-    std::vector<std::int64_t> kept;
     std::int64_t contract_size = 1;
     for (int ax : axes_contract)
         contract_size *= t->shape()[static_cast<std::size_t>(ax)];
-    for (std::size_t d = 0; d < nd; ++d) {
-        if (!is_c[d])
-            kept.push_back(t->shape()[d]);
-    }
     if (put_first) {
         perm.insert(perm.end(), axes_contract.begin(), axes_contract.end());
         for (std::size_t d = 0; d < nd; ++d)
@@ -147,7 +155,7 @@ std::tuple<CpuStorage, std::vector<std::int64_t>, std::int64_t> contract_tensord
     }
     CpuStorage dst = backend::Dispatcher::for_device(Device::CPU)
                          .permute_cpu(storage_cpu(t->storage()), t->shape(), perm, dt);
-    return {std::move(dst), std::move(kept), contract_size};
+    return {std::move(dst), contract_size};
 }
 
 template <typename T>
@@ -234,19 +242,24 @@ TensorImplPtr contraction(const TensorImplPtr& a,
         scope.set_attr("axes_b", std::move(ax_b));
     }
 
-    if (device == Device::GPU) {
+    const std::vector<std::int64_t> a_kept = free_dims(a->shape(), axes_a);
+    const std::vector<std::int64_t> b_kept = free_dims(b->shape(), axes_b);
+    Shape out_shape(a_kept.begin(), a_kept.end());
+    out_shape.insert(out_shape.end(), b_kept.begin(), b_kept.end());
+
+    // The CPU's GEMM below reads host buffers, so a phantom goes to the
+    // backend as Metal's arrays do, and gets a phantom back.
+    if (device == Device::GPU || PhantomMode::is_enabled()) {
         auto out_storage = backend::Dispatcher::for_device(device).tensordot(
-            a->storage(), b->storage(), a->shape(), b->shape(), Shape{}, axes_a, axes_b, dt);
-        const auto& gs = storage_gpu(out_storage);
-        Shape out_shape(gs.arr->shape().begin(), gs.arr->shape().end());
+            a->storage(), b->storage(), a->shape(), b->shape(), out_shape, axes_a, axes_b, dt);
         auto result = fresh(std::move(out_storage), std::move(out_shape), dt, device);
         if (auto* trc = ::lucid::compile::current_tracer())
             trc->on_op_io({a, b}, result);
         return result;
     }
 
-    auto [a_cpu, a_kept, a_contract] = contract_tensordot_operand(a, axes_a, false, dt);
-    auto [b_cpu, b_kept, b_contract] = contract_tensordot_operand(b, axes_b, true, dt);
+    auto [a_cpu, a_contract] = contract_tensordot_operand(a, axes_a, false, dt);
+    auto [b_cpu, b_contract] = contract_tensordot_operand(b, axes_b, true, dt);
     (void)b_contract;
 
     const std::int64_t M =
@@ -254,8 +267,6 @@ TensorImplPtr contraction(const TensorImplPtr& a,
     const std::int64_t N =
         std::accumulate(b_kept.begin(), b_kept.end(), (std::int64_t)1, std::multiplies<>());
 
-    Shape out_shape(a_kept.begin(), a_kept.end());
-    out_shape.insert(out_shape.end(), b_kept.begin(), b_kept.end());
     auto out_cpu = allocate_cpu(out_shape, dt);
     run_cpu_tensordot_gemm(out_cpu, a_cpu, b_cpu, M, a_contract, N, dt);
 

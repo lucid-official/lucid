@@ -11,7 +11,6 @@
 #include <variant>
 
 #include "../../backend/Dispatcher.h"
-#include "../../backend/gpu/MlxBridge.h"
 #include "../../compile/Tracer.h"
 #include "../../core/Allocator.h"
 #include "../../core/Error.h"
@@ -110,28 +109,16 @@ TensorImplPtr inner_op(const TensorImplPtr& a, const TensorImplPtr& b) {
     // op with no trace I/O, which ``lucid.compile`` refuses.
     OpScopeFull scope{"inner", device, dt, Shape{}};
 
-    if (device == Device::GPU) {
-        auto out_storage = backend::Dispatcher::for_device(device).inner(a->storage(), b->storage(),
-                                                                         sa, sb, out_shape, dt);
-        // MLX may adjust the output shape slightly (e.g. scalar squeeze), so
-        // read the actual shape back from the returned GpuStorage.
-        const auto& gs = storage_gpu(out_storage);
-        Shape actual_shape;
-        for (auto d : gs.arr->shape())
-            actual_shape.push_back(static_cast<std::int64_t>(d));
-        auto result = fresh(std::move(out_storage), std::move(actual_shape), dt, device);
-        // The grad path above goes through ``einsum_op`` and traces
-        // itself; this one bypasses ``wire_autograd``, which is also what
-        // records a traced op's operands.  Without this ``lucid.compile``
-        // sees ``inner`` with no inputs and refuses the whole graph.
-        if (auto* trc = ::lucid::compile::current_tracer())
-            trc->on_op_io({a, b}, result);
-        return result;
-    }
-
+    // A 0-D operand left above, so both backends contract the last axes and
+    // give ``out_shape``.  The MLX array is not asked: under phantom mode the
+    // answer has none.
     auto out_storage = backend::Dispatcher::for_device(device).inner(a->storage(), b->storage(), sa,
                                                                      sb, out_shape, dt);
-    auto result = fresh(std::move(out_storage), out_shape, dt, device);
+    auto result = fresh(std::move(out_storage), std::move(out_shape), dt, device);
+    // The grad path above goes through ``einsum_op`` and traces itself; this
+    // one bypasses ``wire_autograd``, which is also what records a traced op's
+    // operands.  Without this ``lucid.compile`` sees ``inner`` with no inputs
+    // and refuses the whole graph.
     if (auto* trc = ::lucid::compile::current_tracer())
         trc->on_op_io({a, b}, result);
     return result;
