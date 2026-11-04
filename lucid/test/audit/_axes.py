@@ -1873,6 +1873,11 @@ class NonFiniteAxis(Axis):
                     f"refuses a NaN outside its domain {list(call.domain)}: "
                     f"{type(exc).__name__}",
                 )
+            if isinstance(exc, lucid.linalg.LinAlgError):
+                # A factorization has no answer over a NaN, and ``LinAlgError``
+                # is its documented way of saying so (LCD-674) — the question
+                # asked here is answered, not unreachable.
+                return self._finding(symbol, Status.PASS, f"refuses a NaN: {type(exc).__name__}")
             return self._refusal(symbol, f"{type(exc).__name__}: {str(exc)[:60]}", call)
 
         # An op that ignores its input cannot propagate anything through it.

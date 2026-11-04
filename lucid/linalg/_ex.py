@@ -1170,6 +1170,13 @@ def _lstsq_rank_and_residuals(
     return residuals, rank, sv
 
 
+def _non_finite_batches(a: Tensor) -> Tensor:
+    """Which matrices of the batch ``a`` hold a NaN or an infinity."""
+    if a.numel() == 0:
+        return lucid.zeros(a.shape[:-2], dtype=lucid.bool, device=a.device)
+    return ~lucid.isfinite(a).all(dim=(-2, -1))
+
+
 def _lstsq_solution(
     A: Tensor,
     B: Tensor,
@@ -1191,31 +1198,30 @@ def _lstsq_solution(
     n = a_shape[-1]
     b_mat = B.unsqueeze(-1) if vec_rhs else B
     k = int(b_mat.shape[-1])
+    a_det = A.detach()
+    bad = _non_finite_batches(a_det)
+    any_bad = bool(bad.any().item())
+    bad_mat = bad.unsqueeze(-1).unsqueeze(-1)
+    # ``pinv`` refuses a non-finite matrix (LCD-674), but a least-squares solve
+    # over one is NaN, so only that batch element is masked around the factorization.
+    fact_a = lucid.where(bad_mat, lucid.zeros_like(A), A) if any_bad else A
     pinv_a = (
-        lucid.linalg.pinv(A)
+        lucid.linalg.pinv(fact_a)
         if rcond is None
-        else _pinv_with_tol(A, atol=None, rtol=rcond, hermitian=False)
+        else _pinv_with_tol(fact_a, atol=None, rtol=rcond, hermitian=False)
     )
     sol_mat = lucid.matmul(pinv_a, b_mat)
+    if any_bad:
+        sol_mat = lucid.where(bad_mat, lucid.full_like(sol_mat, float("nan")), sol_mat)
     target_shape = (*batch, n, k)
     if tuple(int(s) for s in sol_mat.shape) != target_shape:
         sol_mat = sol_mat.expand(*target_shape).contiguous()
     with lucid.no_grad():
-        a_det = A.detach()
-        bad = (
-            ~lucid.isfinite(a_det).all(dim=(-2, -1))
-            if a_det.numel() > 0
-            else lucid.zeros(a_shape[:-2], dtype=lucid.bool, device=A.device)
-        )
-        safe_a = (
-            lucid.where(bad.unsqueeze(-1).unsqueeze(-1), lucid.zeros_like(a_det), a_det)
-            if bool(bad.any().item())
-            else a_det
-        )
+        safe_a = lucid.where(bad_mat, lucid.zeros_like(a_det), a_det) if any_bad else a_det
         sv = lucid.linalg.svdvals(safe_a)
         cutoff = _sv_cutoff(safe_a, sv, atol=None, rtol=rcond, op="lstsq")
         rank = (sv > cutoff).to(lucid.int64).sum(dim=-1)
-        if bool(bad.any().item()):
+        if any_bad:
             rank = lucid.where(bad, lucid.zeros_like(rank), rank)
             sv = lucid.where(bad.unsqueeze(-1), lucid.full_like(sv, float("nan")), sv)
         residuals, rank_out, sv_out = _lstsq_rank_and_residuals(

@@ -857,10 +857,12 @@ void CpuBackend::set_matrix_identity(T* out, int n) {
 template <typename T>
 void CpuBackend::pinv_one(const T* a, int m, int n, T* aplus) {
     const int k = std::min(m, n);
+    // Past k = 2, gesdd never returns on an infinity (LCD-833), so a non-finite
+    // matrix is refused before it gets there, as linalg_svd refuses it.
+    if (k >= 3 && !all_finite(a, static_cast<std::size_t>(m) * n))
+        check_lapack_info(2, "pinv");
     // A NaN makes gesdd report an illegal argument; infinities go through.
     if (std::any_of(a, a + static_cast<std::size_t>(m) * n, [](T v) { return std::isnan(v); })) {
-        if (k >= 3)
-            check_lapack_info(2, "pinv");
         fill_nan(aplus, static_cast<std::size_t>(n) * m);
         return;
     }

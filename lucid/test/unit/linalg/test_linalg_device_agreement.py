@@ -281,3 +281,17 @@ def test_rank3_nonfinite_svd_pinv_eigh_raise_linalg_error(
         LA.pinv(t)
     with pytest.raises(LA.LinAlgError):
         LA.eigh(t)
+
+
+@pytest.mark.parametrize("device", ["cpu", "metal"])
+@pytest.mark.parametrize("rcond", [None, 1e-6])
+def test_lstsq_is_nan_for_exactly_the_non_finite_batch_element(
+    device: str, rcond: float | None
+) -> None:
+    a = np.stack([np.eye(3), np.full((3, 3), np.nan)]).astype(np.float32)
+    b = np.ones((2, 3, 1), dtype=np.float32)
+    sol = lucid.linalg.lstsq(
+        lucid.tensor(a, device=device), lucid.tensor(b, device=device), rcond=rcond
+    ).solution.numpy()
+    np.testing.assert_allclose(sol[0], np.ones((3, 1)), atol=1e-5)
+    assert np.isnan(sol[1]).all()

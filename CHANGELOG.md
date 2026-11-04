@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `linalg.pinv` raises `LinAlgError` on an infinite matrix with `min(m, n) >= 3` instead of never returning, and `linalg.lstsq` returns a NaN solution for a non-finite batch element, as the reference does, instead of raising (LCD-833).
 - `ErrorBuilder` / `LapackInfo` / `Indexing`: prefix C++ errors with the public operation name (`take`, `index_select`, `transpose`, `unfold`, `scatter`, `frombuffer`, `clamp`, `fft`, `tril`/`triu`, `linalg.*`), omit `[trace=...]` unless `LUCID_ERROR_TRACE` is set, format index-out-of-bounds messages with the offending index, dimension, and extent, report human-readable LAPACK convergence/factorization failures, and raise `ValueError` instead of `RuntimeError` on invalid scalar/shape arguments across 19 ops (LCD-673, LCD-675).
 - `linalg.eigh`, `linalg.svd`, and `linalg.pinv`: raise `LinAlgError` on non-finite inputs across CPU and Metal when `min(m, n) >= 3` (`svd`/`pinv`) or when any referenced triangle entry is non-finite (`eigh`), and report the failing batch index on batched `eigh` (LCD-674).
 - `compile` / `coreml`: clamp bitwise shift counts (`bitwise_left_shift`, `bitwise_right_shift`) in MPSGraph to $[0, W-1]$ (masking shifts $\ge W$ to `0` on unsigned and `<<`, and to `W - 1` on arithmetic signed `>>`), support signed integer `pow` (`int8`/`int16`/`int32`/`int64`) in MPSGraph with negative-exponent error parity, and cast `int64` `pow` operands to `int32` in Core ML MIL export (LCD-727).
