@@ -31,6 +31,7 @@ from lucid.test.audit._packages import (
     SubsystemPackage,
 )
 from lucid.test.audit._plan import PlanError, RunPlan
+from lucid.test.audit._suite import SuiteResult, report_line_coverage_diff
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -293,6 +294,48 @@ def test_the_doctests_follow_the_longest_module_prefix() -> None:
     without = _plan("--no-nn").selection
     assert not without.owns_module("lucid.nn.modules.linear")
     assert without.owns_module("lucid._dispatch")
+
+
+def _floor() -> dict[str, object]:
+    files = {
+        "lucid/nn/a.py": {"covered": 90, "total": 100},
+        "lucid/optim/b.py": {"covered": 90, "total": 100},
+    }
+    return {"percent": 90.0, "files": files}
+
+
+def _result(nn: int, optim: int) -> SuiteResult:
+    return SuiteResult(
+        ran=True,
+        line_covered=nn + optim,
+        line_total=200,
+        per_file={"lucid/nn/a.py": (nn, 100), "lucid/optim/b.py": (optim, 100)},
+    )
+
+
+def test_a_narrowed_run_judges_only_the_files_of_its_packages(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    only_nn = _plan("--nn").selection.file_scope
+    console = Console(colour=False)
+    # optim fell to 10%, but this run did not run optim's tests and may not judge it.
+    assert report_line_coverage_diff(_result(90, 10), _floor(), console, in_scope=only_nn) == 0
+    said = capsys.readouterr().out
+    assert "1 file(s) of the selected packages held" in said and "not compared" in said
+    # nn itself falling is the regression this exists to catch.
+    assert report_line_coverage_diff(_result(10, 90), _floor(), console, in_scope=only_nn) == 1
+    assert "LOST   lucid/nn/a.py" in capsys.readouterr().out
+
+
+def test_a_complete_run_still_compares_the_total_and_every_file(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    console = Console(colour=False)
+    assert report_line_coverage_diff(_result(90, 90), _floor(), console) == 0
+    assert "at or above the recorded 90.00%" in capsys.readouterr().out
+    assert report_line_coverage_diff(_result(10, 90), _floor(), console) == 1
+    said = capsys.readouterr().out
+    assert "TOTAL  90.00% → 50.00%" in said and "LOST   lucid/nn/a.py" in said
 
 
 # ── no generated flag shadows a declared one ─────────────────────────────────

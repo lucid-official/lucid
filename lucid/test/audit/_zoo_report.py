@@ -225,6 +225,11 @@ class LineReporter(ZooReporter):
             self.console.write(f"    {self.stage_name} ...")
 
     @override
+    def close(self) -> None:
+        # The last frame says "between stages" for a run that is over.
+        self.console.live_clear()
+
+    @override
     def _emit(self, line: str) -> None:
         self.console.live_clear()
         self.console.write(line)

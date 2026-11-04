@@ -623,6 +623,17 @@ def test_the_live_frame_shows_family_stage_elapsed_footprint_and_tally() -> None
     assert "families ok 0 fail 0" in frame
 
 
+def test_closing_the_live_display_leaves_no_stale_frame(capsys: pytest.CaptureFixture[str]) -> None:
+    console = Console(colour=False)
+    console.live = True
+    with LineReporter(console, 28.0) as reporter:
+        reporter.start(2)
+        reporter.family(1, "alpha")
+        assert console._live_lines == 3
+    assert console._live_lines == 0
+    assert "\x1b[3A" in capsys.readouterr().out, "the region was erased, not left behind"
+
+
 def test_a_stage_that_runs_long_says_it_is_still_alive(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

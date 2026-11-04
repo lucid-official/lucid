@@ -274,12 +274,27 @@ line when a stage starts, a line when it ends, and a "still running" line every
 five minutes, because a silent log looks the same as a hung one.
 
 ```
-── Model zoo ────────────────────────────────────────────
-  lenet / contract ...
-    contract                pass          9s    1.1 GB  1 passed
-  lenet / build ...
-    build                   pass         12s    1.3 GB  1 built, 0 past budget, 0 failed
-  lenet: pass  0.6 min  peak 2.0 GB  [families ok 1 fail 0 · stages ok 5 fail 0]
+$ lucid-audit --models --family lenet --family alexnet     # no terminal: plain lines
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Model zoo                                                                                        │
+│ 2 group(s) · 36 GB machine                                                                       │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  limits                footprint limit 28 GB · starts with 14 GB free · floor 2.5 GB
+  adapts                builds up to 22.4 GB · heavy tests on
+[1/2] lenet
+    contract ...
+    contract                pass           0s    0.1 GB
+    build ...
+    build                   pass           0s    0.1 GB  2 built, 0 past budget, 0 failed
+    compiled-training ...
+    compiled-training       pass           1s    0.1 GB  1 pairs, 0 failing
+    own-tests ...
+    own-tests               pass           2s    0.4 GB  28 passed
+    zoo-tests ...
+    zoo-tests               pass          19s    0.9 GB  235 passed, 3 skipped, 4764 deselected
+[1/2] lenet: pass  0.4 min  peak 0.9 GB  [families ok 1 fail 0 · stages ok 5 fail 0]
+[2/2] alexnet
+    ...
 ```
 
 The exit code follows the rule above: `model zoo failures` counts failed

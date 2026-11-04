@@ -589,6 +589,7 @@ def report_line_coverage_diff(
 
     recorded = floor.get("files")
     lost: list[tuple[str, float, float]] = []
+    compared = 0
     if isinstance(recorded, dict):
         for name, entry in recorded.items():
             if in_scope is not None and not in_scope(name):
@@ -606,16 +607,22 @@ def report_line_coverage_diff(
                 continue  # moved or deleted — not a coverage regression
             covered, total = current
             after = 100.0 * covered / total if total else 100.0
+            compared += 1
             if before - after > _FILE_TOLERANCE:
                 lost.append((name, before, after))
 
     total_dropped = in_scope is None and now < was - _TOTAL_TOLERANCE
     if not lost and not total_dropped:
-        console.always(
-            console.paint(
-                f"  line coverage {now:.2f}% — at or above the recorded " f"{was:.2f}%", "green"
-            )
+        # A narrowed run measured only the tests of its packages, so its total
+        # says nothing about the recorded one; what it can say is that none of
+        # the files it was entitled to judge got worse.
+        said = (
+            f"  line coverage {now:.2f}% — at or above the recorded {was:.2f}%"
+            if in_scope is None
+            else f"  line coverage: {compared} file(s) of the selected packages held "
+            "against the recorded floor (the total is not compared on a narrowed run)"
         )
+        console.always(console.paint(said, "green"))
         if in_scope is None and now > was + _TOTAL_TOLERANCE:
             console.always(
                 console.paint("  run with --update-suite to record the new floor", "grey")
