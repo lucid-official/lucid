@@ -306,9 +306,8 @@ constexpr Dtype real_lane_of(Dtype dt) {
 // Predicate: can the GPU stream hold this dtype?
 //
 // MLX has no double precision, so the two dtypes with 64-bit lanes stay on the
-// CPU.  The one list of them: ``to_mlx_dtype`` refuses what this says no to, and
-// so does a phantom, which stands in for a tensor the device could hold
-// (``core/PhantomMode.h``).
+// CPU.  ``to_mlx_dtype`` refuses what this says no to, and so does a phantom
+// (``core/PhantomMode.h``); an op that keeps a double on the host asks here too.
 constexpr bool metal_holds(Dtype dt) {
     return dt != Dtype::F64 && dt != Dtype::C128;
 }

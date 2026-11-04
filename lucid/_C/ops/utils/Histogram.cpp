@@ -44,7 +44,7 @@ CpuStorage to_cpu(const TensorImplPtr& a) {
 // Move a CPU buffer to `target_device`, unless the dtype is F64 (which MLX
 // does not support) in which case the storage remains on CPU.
 Storage to_device_storage(CpuStorage&& cpu, Device target_device, const Shape& shape) {
-    if (target_device == Device::GPU && cpu.dtype != Dtype::F64) {
+    if (target_device == Device::GPU && metal_holds(cpu.dtype)) {
         return backend::Dispatcher::for_device(Device::GPU).from_cpu(cpu, shape);
     }
     return Storage{std::move(cpu)};
@@ -53,7 +53,7 @@ Storage to_device_storage(CpuStorage&& cpu, Device target_device, const Shape& s
 // Determine the actual output device.  F64 outputs must stay on CPU because
 // MLX (the GPU backend) does not support 64-bit floating-point buffers.
 Device pick_out_device(Device requested, Dtype dt) {
-    if (requested == Device::GPU && dt == Dtype::F64)
+    if (requested == Device::GPU && !metal_holds(dt))
         return Device::CPU;
     return requested;
 }

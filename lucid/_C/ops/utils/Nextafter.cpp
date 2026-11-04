@@ -50,7 +50,7 @@ CpuStorage to_cpu(const TensorImplPtr& a) {
 }
 
 Storage to_device_storage(CpuStorage&& cpu, Device target_device, const Shape& shape) {
-    if (target_device == Device::GPU && cpu.dtype != Dtype::F64) {
+    if (target_device == Device::GPU && metal_holds(cpu.dtype)) {
         return backend::Dispatcher::for_device(Device::GPU).from_cpu(cpu, shape);
     }
     return Storage{std::move(cpu)};
@@ -398,7 +398,7 @@ fma_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in, const TensorImplPtr
     Storage out_storage;
     if (PhantomMode::is_enabled()) [[unlikely]] {
         out_storage = phantom_storage(out_shape, dt, dev);
-    } else if (dev == Device::GPU && dt != Dtype::F64) {
+    } else if (dev == Device::GPU && metal_holds(dt)) {
         out_storage =
             Storage{fma_gpu(std::get<GpuStorage>(a->storage()), std::get<GpuStorage>(b->storage()),
                             std::get<GpuStorage>(c->storage()), out_shape, dt)};

@@ -72,9 +72,7 @@ OUTPUT_COUNTS: dict[str, str] = {
     "group_norm_forward": "3",
     "group_norm_backward": "3",
     "linalg_svd": "compute_uv ? 3 : 1",
-    "linalg_lu_factor": "3",
     "linalg_lstsq": "1",
-    "linalg_ldl_factor": "3",
     "bce_loss_backward": "3",
     "bce_with_logits_backward": "4",
     "sdpa_forward": "2",
@@ -82,7 +80,6 @@ OUTPUT_COUNTS: dict[str, str] = {
     "conv_transpose_nd_backward": "3",
     "conv_nd_backward": "3",
     "rope_forward": "3",
-    "max_pool_nd_forward": "2",
     "batch_norm_eval_forward": "2",
     "batch_norm_eval_backward": "5",
     "lp_normalize_forward": "2",
@@ -104,6 +101,24 @@ REFUSE = {"masked_select_count"}
 # preference.  The dtype only matters for a storage no tensor adopts (a
 # gradient in flight); the TensorImpl that adopts one sets it from its own.
 DTYPE_PARAMS = ("dst_dt", "out_dtype", "output_dtype", "dt", "dtype")
+
+# Stands for the DTYPE_PARAMS dtype in OUTPUT_DTYPES.
+VALUE_DTYPE = "value"
+
+# Methods with an integer output, by output: their ``dt`` says what the input
+# holds, and an index is an integer whatever it indexes.  A node can keep such a
+# storage with no tensor to adopt it (``sort_select``'s indices, read back by
+# ``storage_dtype`` under create_graph), so the phantom has to say so itself.
+# Each entry is what the CPU and Metal backends return.
+OUTPUT_DTYPES: dict[str, tuple[str, ...]] = {
+    "argsort": ("Dtype::I64",),
+    "arg_reduce_index": ("Dtype::I64",),
+    "sort_select": (VALUE_DTYPE, "Dtype::I64"),
+    "max_pool_nd_forward": (VALUE_DTYPE, "Dtype::I32"),
+    # The factors, then pivots and info as LAPACK writes them.
+    "linalg_lu_factor": (VALUE_DTYPE, "Dtype::I32", "Dtype::I32"),
+    "linalg_ldl_factor": (VALUE_DTYPE, "Dtype::I32", "Dtype::I32"),
+}
 
 PAIR_TYPES = {"std::pair<Storage, Storage>", "StoragePair"}
 REFUSED_TYPES = {"CpuStorage", "ClassLossForwardResult"}
@@ -222,6 +237,11 @@ def _body(method: Method) -> str:
     if method.name in REFUSE or method.ret in REFUSED_TYPES:
         return f'refuse_phantom_read("{method.name}");'
     dt = _dtype_expr(method)
+    fixed = OUTPUT_DTYPES.get(method.name)
+    if fixed is not None:
+        outputs = [dt if output == VALUE_DTYPE else output for output in fixed]
+        calls = ", ".join(f"phantom({output})" for output in outputs)
+        return f"return phantom({outputs[0]});" if len(outputs) == 1 else f"return {{{calls}}};"
     if method.ret == "Storage":
         if method.name == "diag":
             return f"out_shape = diag_shape(v_shape, k);\nreturn phantom({dt});"
@@ -287,7 +307,7 @@ private:
     // gives it its size, and a gradient handed out as a bare Storage still
     // says where it lives (storage_device).
     Storage phantom(Dtype dt) const {
-        refuse_what_device_cannot_hold(dt, device_);
+        refuse_dtype_device_cannot_hold(dt, device_);
         PhantomStorage p;
         p.dtype = dt;
         p.device = device_;

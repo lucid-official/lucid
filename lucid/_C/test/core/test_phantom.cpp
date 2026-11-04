@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include "../../backend/Dispatcher.h"
 #include "../../core/Error.h"
 #include "../../core/MemoryStats.h"
 #include "../../core/PhantomMode.h"
@@ -67,16 +68,52 @@ TEST(PhantomMode, OtherThreadsUnaffected) {
 }
 
 TEST(PhantomStorageTest, VariantIndexAndSize) {
-    const Storage s = phantom_storage({2, 3}, Dtype::F64, Device::GPU);
+    const Storage s = phantom_storage({2, 3}, Dtype::F32, Device::GPU);
     EXPECT_TRUE(storage_is_phantom(s));
     EXPECT_FALSE(storage_is_cpu(s));
     EXPECT_EQ(s.index(), 3u);
-    EXPECT_EQ(storage_nbytes(s), 6u * 8u);
-    EXPECT_EQ(storage_dtype(s), Dtype::F64);
+    EXPECT_EQ(storage_nbytes(s), 6u * 4u);
+    EXPECT_EQ(storage_dtype(s), Dtype::F32);
     // A phantom has no kind to tell its device by: it records one.
     EXPECT_EQ(storage_device(s), Device::GPU);
     EXPECT_EQ(storage_device(phantom_storage({1}, Dtype::F32, Device::CPU)), Device::CPU);
     EXPECT_EQ(storage_device(Storage{CpuStorage{}}), Device::CPU);
+}
+
+TEST(PhantomStorageTest, RefusesADtypeItsDeviceCannotHold) {
+    EXPECT_THROW(phantom_storage({2, 3}, Dtype::F64, Device::GPU), NotImplementedError);
+    EXPECT_THROW(phantom_storage({2, 3}, Dtype::C128, Device::GPU), NotImplementedError);
+    EXPECT_EQ(storage_dtype(phantom_storage({2, 3}, Dtype::F64, Device::CPU)), Dtype::F64);
+    EXPECT_EQ(storage_dtype(phantom_storage({2, 3}, Dtype::C128, Device::CPU)), Dtype::C128);
+    PhantomModeGuard on(true);
+    EXPECT_THROW(backend::Dispatcher::for_device(Device::GPU).zeros({2, 3}, Dtype::F64),
+                 NotImplementedError);
+    EXPECT_THROW(backend::Dispatcher::for_device(Device::GPU).zeros({2, 3}, Dtype::C128),
+                 NotImplementedError);
+}
+
+// A node can keep one of these with no tensor to adopt it, so the phantom has to
+// say that an index is an integer: sort's backward reads the dtype back.
+TEST(PhantomBackendTest, AnIndexIsAnIntegerWhateverItIndexes) {
+    PhantomModeGuard on(true);
+    const Shape shape{2, 3};
+    const Storage x = phantom_storage(shape, Dtype::F32, Device::CPU);
+    auto& be = backend::Dispatcher::for_device(Device::CPU);
+    EXPECT_EQ(storage_dtype(be.argsort(x, shape, 0, Dtype::F32)), Dtype::I64);
+    EXPECT_EQ(storage_dtype(be.arg_reduce_index(x, shape, 0, false, Dtype::F32, false)),
+              Dtype::I64);
+    const auto [values, indices] = be.sort_select(x, shape, shape, 0, Dtype::F32, false);
+    EXPECT_EQ(storage_dtype(values), Dtype::F32);
+    EXPECT_EQ(storage_dtype(indices), Dtype::I64);
+    const auto pooled = be.max_pool_nd_forward(x, shape, shape, {}, Dtype::F32);
+    EXPECT_EQ(storage_dtype(pooled[0]), Dtype::F32);
+    EXPECT_EQ(storage_dtype(pooled[1]), Dtype::I32);
+    for (const auto& factors :
+         {be.linalg_lu_factor(x, shape, Dtype::F32), be.linalg_ldl_factor(x, shape, Dtype::F32)}) {
+        EXPECT_EQ(storage_dtype(factors[0]), Dtype::F32);
+        EXPECT_EQ(storage_dtype(factors[1]), Dtype::I32);
+        EXPECT_EQ(storage_dtype(factors[2]), Dtype::I32);
+    }
 }
 
 TEST(PhantomFactories, ShapeDtypeNoAllocation) {

@@ -259,11 +259,13 @@ public:
     }
     std::pair<Storage, Storage>
     sort_select(const Storage&, const Shape&, const Shape&, int, Dtype dt, bool) override {
-        return {phantom(dt), phantom(dt)};
+        return {phantom(dt), phantom(Dtype::I64)};
     }
-    Storage argsort(const Storage&, const Shape&, int, Dtype dt) override { return phantom(dt); }
-    Storage arg_reduce_index(const Storage&, const Shape&, int, bool, Dtype dt, bool) override {
-        return phantom(dt);
+    Storage argsort(const Storage&, const Shape&, int, Dtype) override {
+        return phantom(Dtype::I64);
+    }
+    Storage arg_reduce_index(const Storage&, const Shape&, int, bool, Dtype, bool) override {
+        return phantom(Dtype::I64);
     }
     Storage scatter_add_axis(
         const Storage&, const Storage&, const Shape&, const Shape&, int, Dtype dt) override {
@@ -479,7 +481,7 @@ public:
         return phantoms(compute_uv ? 3 : 1, dt);
     }
     std::vector<Storage> linalg_lu_factor(const Storage&, const Shape&, Dtype dt) override {
-        return phantoms(3, dt);
+        return {phantom(dt), phantom(Dtype::I32), phantom(Dtype::I32)};
     }
     Storage linalg_solve_triangular(
         const Storage&, const Storage&, const Shape&, const Shape&, bool, bool, Dtype dt) override {
@@ -502,7 +504,7 @@ public:
         return phantom(dt);
     }
     std::vector<Storage> linalg_ldl_factor(const Storage&, const Shape&, Dtype dt) override {
-        return phantoms(3, dt);
+        return {phantom(dt), phantom(Dtype::I32), phantom(Dtype::I32)};
     }
     Storage broadcast(const Storage&, const Shape&, const Shape&, Dtype dt) override {
         return phantom(dt);
@@ -855,7 +857,7 @@ public:
     }
     std::vector<Storage> max_pool_nd_forward(
         const Storage&, const Shape&, const Shape&, const PoolOpts&, Dtype dt) override {
-        return phantoms(2, dt);
+        return {phantom(dt), phantom(Dtype::I32)};
     }
     Storage max_pool_nd_backward(const Storage&,
                                  const Storage&,
@@ -1166,7 +1168,7 @@ private:
     // gives it its size, and a gradient handed out as a bare Storage still
     // says where it lives (storage_device).
     Storage phantom(Dtype dt) const {
-        refuse_what_device_cannot_hold(dt, device_);
+        refuse_dtype_device_cannot_hold(dt, device_);
         PhantomStorage p;
         p.dtype = dt;
         p.device = device_;

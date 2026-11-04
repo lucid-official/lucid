@@ -603,8 +603,7 @@ void pin_shared_storage(SharedStorage& sh, const Shape& shape) {
     // float64 and complex128 have no MLX dtype, so no GPU alias of them can
     // exist to be donated — and building one would refuse a tensor that only
     // ever lives on the CPU side.
-    if (sh.gpu_alias || !sh.cpu_ptr || sh.nbytes == 0 || sh.dtype == Dtype::F64 ||
-        sh.dtype == Dtype::C128)
+    if (sh.gpu_alias || !sh.cpu_ptr || sh.nbytes == 0 || !metal_holds(sh.dtype))
         return;
     g_pinned_count.fetch_add(1, std::memory_order_relaxed);
     sh.gpu_alias = std::shared_ptr<::mlx::core::array>(

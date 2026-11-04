@@ -71,7 +71,9 @@ Storage make_ones_storage(const Shape& shape, Dtype dtype, Device device);
 // A constant for a graph-mode backward, from a host buffer of doubles.
 //
 // Narrowed to ``dtype`` on the host before it moves: Metal cannot hold the
-// doubles, even for as long as a cast there would take.
+// doubles, even for as long as a cast there would take.  Not under phantom mode,
+// whose host answers with no buffer to move: a caller returns before it fills
+// ``doubles``, as both graph-mode backwards that use this do.
 std::shared_ptr<TensorImpl>
 constant_from_doubles(CpuStorage doubles, const Shape& shape, Dtype dtype, Device device);
 
