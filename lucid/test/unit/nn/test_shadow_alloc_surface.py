@@ -4,9 +4,9 @@ The defect these guard against is a class, not an op: a path that reads a
 phantom's storage instead of answering with the shape it already computed.
 Where a path exists on only one device, the other device's tests stay green.
 ``where`` read its Metal result's shape off an MLX array the phantom backend's
-answer does not have (LCD-850), and that one read failed 163 public symbols on
-Metal alone: ``clamp``, ``lgamma``, ``cross_entropy``, every ``Embedding`` with
-a ``padding_idx``.
+answer does not have (LCD-850), and with ``inner`` and a gradient seed that failed
+163 public symbols on Metal alone: ``clamp``, ``lgamma``, ``cross_entropy``, every
+``Embedding`` with a ``padding_idx``.
 
 So instead of a list of ops, the sweep asks the audit for a working call of every
 public op and runs it four ways, eager and phantom on each device.  The rules:
@@ -209,8 +209,8 @@ def _sweep_ops(question: str) -> _Findings:
         metal_shapes = [t[:2] for t in on_metal["answer"] or []]
         if cpu_shapes != metal_shapes:
             found.phantoms_differ.append(f"{name}: {cpu_shapes} on the CPU, {metal_shapes}")
-        # A second gradient is not compared with the eager one: Metal's frexp
-        # records no graph for its first gradient, whatever the mode.
+        # A second gradient is not compared with the eager one: Metal's eager
+        # frexp records no graph for its first gradient, and its phantom does.
         if question == "second":
             continue
         for device, phantom in (("cpu", on_cpu), ("metal", on_metal)):
