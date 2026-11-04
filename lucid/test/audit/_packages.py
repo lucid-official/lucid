@@ -412,9 +412,14 @@ class Selection:
         left = (t for p in self.registry if p.key not in carried for t in p.test_trees(root))
         ignore = tuple(dict.fromkeys(t for t in left if t not in kept))
         # Trees left out are tests that did not run, and the floor counts what
-        # they cover: the zoo's files (31.8% of the statements) read 0% instead of
-        # their floor, and so does everything only they exercise.  Such a run is
-        # compared on the files it owns, as a narrowed one is, and only advises.
+        # they cover.  Measured on the Studio, `--no-models --tests-only` (104,360
+        # tests, zoo trees ignored) still covered 67.6% of the zoo's own files
+        # through the peft/coreml/compile tests that build models, so the total
+        # held (86.95% against 85.92%); but three floor files fell more than two
+        # points only because the zoo's tests did not run (_factories/random.py
+        # 95.8 -> 92.5, compile/_optim/spec.py 78.1 -> 75.0, nn/functional/conv.py
+        # 100 -> 97.7).  Such a run is compared on the files it owns, as a
+        # narrowed one is, and only advises.
         return SuitePlan((default,), ignore, scope or (self.owns_file if ignore else None))
 
 

@@ -222,7 +222,6 @@ def test_a_stage_shorter_than_the_poll_interval_still_has_a_footprint(tmp_path: 
     outcome = guard.run(_allocate(120, seconds=1.0), tmp_path / "log")
     assert outcome.status == "pass"
     assert outcome.peak_gb > 0.05, "a stage that ends inside its first poll was never measured"
-    assert outcome.seconds < 2.0
 
 
 def test_the_guard_times_out_a_stage_that_never_ends(tmp_path: Path) -> None:

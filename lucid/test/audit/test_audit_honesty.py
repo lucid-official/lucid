@@ -151,7 +151,7 @@ def test_a_run_that_did_not_run_the_whole_suite_cannot_fail_on_the_floor(
 
 
 def test_the_zoo_files_are_neither_compared_nor_missed_when_their_tests_are_not_run() -> None:
-    """Their statements are 31.8% of the total; unexecuted, they read 0% against the floor."""
+    """Measured: with their trees ignored, three floor files fell >2 points on fewer tests."""
     for argv, zoo_stage in (([], True), (["--no-models"], False)):
         plan = _plan(*argv).selection.suite_plan(ROOT, zoo_stage=zoo_stage)
         assert plan.advisory and plan.in_scope is not None

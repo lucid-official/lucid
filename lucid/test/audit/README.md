@@ -88,9 +88,12 @@ ran. A run narrowed to some packages — or one that leaves the zoo's trees
 to the zoo stage, which is bare `lucid-audit` and `--no-models` — compares
 only the files its packages own and prints what it sees as *advisory*: it
 cannot fail the run, because `--autograd` "lost" `_functional.py` from 90.9%
-to 82.7% on fewer tests, and the zoo's files (a third of the statements)
-read 0% when their tests did not run. `lucid-audit --tests-only` is the run
-that carries every tree and can fail.
+to 82.7% on fewer tests, and a real `--no-models --tests-only` on the Studio
+(104,360 tests, the zoo's trees ignored) lost three floor files more than two
+points (`_factories/random.py` 95.8 to 92.5, `compile/_optim/spec.py` 78.1 to
+75.0, `nn/functional/conv.py` 100 to 97.7) that only the zoo's tests reach,
+while its total (86.95%) held. `lucid-audit --tests-only` is the run that
+carries every tree and can fail.
 
 **Baselines are written only by the run that is the whole of them.**
 `--update-coverage`, `--update-suite` and `--update-doctests` exit `2` unless
@@ -308,10 +311,11 @@ limit, is not an answer for a bigger one (each record stores its limit). A
 record from a stage the machine itself ran short under is never reused.
 `--fresh` ignores the records. A tree with uncommitted changes (untracked files
 included — the catalog reads the filesystem) never reuses one, and files its
-results under `<sha>-dirty`. A tree whose HEAD or working copy **changes
-during a run** stops it: results are only ever filed under the commit the tree
-was at when the family finished. So run it from a **scratch clone** that nobody
-edits, not from a checkout in use. Logs are kept per group
+results under `<sha>-dirty`. A tree whose HEAD moves, or that goes from clean
+to dirty, **during a run** stops it: results are only ever filed under the
+commit the tree was at when the family finished (a tree that started dirty is
+never reused, so edits to it cannot be told apart and do not need to be). So run
+it from a **scratch clone** that nobody edits, not from a checkout in use. Logs are kept per group
 (`logs/<family>/<stage>.log`), two runs on one commit refuse to share a state
 directory (a lock), and `kill`, a closed terminal or `^C` end the stage's
 process group with the run.
