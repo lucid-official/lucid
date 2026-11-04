@@ -57,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--fast", action="store_true", help="changed files, cheap collectors")
     mode.add_argument("--full", action="store_true", help="whole tree, every collector")
+    p.add_argument("--since", metavar="REF", help="with --fast: what differs from REF, not HEAD")
     p.add_argument("--diff", metavar="REF", help="print the SLOP DELTA against REF")
     p.add_argument("--report", action="store_true", help="totals per defect class")
     p.add_argument("--update", action="store_true", help="lower the baseline (never raises)")
@@ -81,6 +82,8 @@ def main(argv: list[str] | None = None) -> int:
         p.error("--rebaseline measures the whole tree; drop --fast")
     if args.diff and args.fast:
         p.error("--diff runs every collector --full runs (it is land's gate); drop --fast")
+    if args.since and (not args.fast or args.report or args.update or args.rebaseline):
+        p.error("--since only judges a --fast check: it records nothing")
 
     workdir = Path(tempfile.mkdtemp(prefix="quality-gate-"))
     try:
@@ -94,7 +97,8 @@ def main(argv: list[str] | None = None) -> int:
 
 def _run(args: argparse.Namespace, root: Path, workdir: Path) -> int:
     collectors = _pick(args.collectors, fast=args.fast)
-    files = changed_files(root, "HEAD") if args.fast else None
+    since = args.since or "HEAD"
+    files = changed_files(root, since) if args.fast else None
     if args.diff:
         return gate.diff(root, collectors, args.diff, workdir)
     if args.report:
@@ -104,7 +108,7 @@ def _run(args: argparse.Namespace, root: Path, workdir: Path) -> int:
     if args.rebaseline:
         print("⚠️  --rebaseline may RAISE counts: orchestrator only.", file=sys.stderr)
         return gate.rebaseline(root, collectors, args.reason, workdir)
-    return gate.check(root, collectors, files, workdir, allow_slack=args.allow_slack)
+    return gate.check(root, collectors, files, workdir, allow_slack=args.allow_slack, since=since)
 
 
 if __name__ == "__main__":

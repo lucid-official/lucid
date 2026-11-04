@@ -155,15 +155,20 @@ def check(
     files: list[str] | None,
     workdir: Path,
     allow_slack: bool = False,
+    since: str = "HEAD",
 ) -> int:
-    """Fail when a count rose; also when one fell unrecorded, unless *allow_slack*."""
+    """Fail when a count rose; also when one fell unrecorded, unless *allow_slack*.
+
+    A baseline raised anywhere since *since* needs its rebaselines entry: a bypassed
+    commit can raise a count and the baseline together, which HEAD alone cannot see.
+    """
     baseline_path = root / config.BASELINE_PATH
     baseline = load_baseline(baseline_path)
     _warn_versions(baseline, collectors)
     if drift := contract_drift(baseline, collectors):
         _print_drift(drift)
         return 1
-    if raises := baseline_raises(root, baseline):
+    if raises := baseline_raises(root, baseline, since):
         _print_unrecorded_raises(raises)
         return 1
     run = measure(root, collectors, files, workdir)
