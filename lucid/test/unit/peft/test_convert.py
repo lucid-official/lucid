@@ -957,14 +957,3 @@ def test_vit_dora_needs_the_fused_layer_to_be_a_linear() -> None:
     )
     with pytest.raises(TypeError, match="not the zoo's fused nn.Linear"):
         ViTConverter(ConversionContext(model_type="vit", model=Odd())).convert(adapter)
-
-
-def test_the_weight_tool_and_the_adapter_converter_share_one_t5_map() -> None:
-    from tools.convert_weights.t5 import t5_key
-
-    assert t5_key("decoder.block.2.layer.1.EncDecAttention.v.weight") == (
-        "decoder.blocks.2.cross_attention.v.weight"
-    )
-    assert t5_key("encoder.embed_tokens.weight") is None
-    with pytest.raises(KeyError):
-        t5_key("encoder.block.0.layer.5.SelfAttention.q.weight")

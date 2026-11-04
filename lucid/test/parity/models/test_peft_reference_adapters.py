@@ -25,6 +25,7 @@ import lucid
 import lucid.nn as nn
 from lucid.models import create_model
 from lucid.peft import PeftModel
+from lucid.peft._convert import t5_reference_name
 from lucid.test.unit.peft._reference_files import (
     MODEL_PREFIX,
     lora_tensors,
@@ -189,14 +190,14 @@ def _t5_reference(transformers: Any) -> Any:
 
 
 def _t5_transfer(state: State) -> State:
-    from tools.convert_weights.t5 import t5_key
-
     out: State = {}
     for key, value in state.items():
-        if key == "lm_head.weight":
-            out[key] = value
-        elif (mapped := t5_key(key)) is not None:
-            out[f"t5.{mapped}"] = value
+        if key.endswith(".embed_tokens.weight"):  # aliases of the shared table
+            continue
+        mapped = t5_reference_name(key, trunked=True)
+        if mapped is None:
+            raise KeyError(key)
+        out[mapped] = value
     return out
 
 

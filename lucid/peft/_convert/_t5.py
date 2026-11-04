@@ -20,10 +20,6 @@ The text-to-text model nests the trunk under ``t5.`` in the zoo
 (``t5.encoder.blocks…``) where the reference's ``ForConditionalGeneration`` does not;
 the trunk-only model has no prefix on either side.  Tensors are not
 touched — ``nn.Linear`` on both sides, no transposes.
-
-The map is the one the weight converter (``tools/convert_weights/t5.py``)
-renames a released checkpoint by; it lives here so that the tool and an
-adapter converter cannot disagree.
 """
 
 import re

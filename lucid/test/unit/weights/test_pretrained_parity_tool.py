@@ -3,10 +3,12 @@
 import numpy as np
 import pytest
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from contextlib import nullcontext
 
+from tools import _darknet_release
 from tools import check_pretrained_parity as parity
 
 
@@ -347,12 +349,9 @@ def test_original_diamond_modules_are_isolated_and_removed_on_failure(monkeypatc
 
 def test_darknet_download_has_a_read_timeout_and_verifies_bytes(monkeypatch, tmp_path) -> None:
     import hashlib
-    import importlib
     import io
 
-    # The YOLO converter imports only Lucid, NumPy and the standard library,
-    # so fetching and verifying bytes needs no oracle and runs in every tier.
-    converter = importlib.import_module("tools.convert_weights.yolo")
+    # Fetching and verifying bytes needs no oracle, so it runs in every tier.
     data = b"checkpoint bytes"
 
     def fetch(request, *, timeout):
@@ -360,14 +359,23 @@ def test_darknet_download_has_a_read_timeout_and_verifies_bytes(monkeypatch, tmp
         return io.BytesIO(data)
 
     monkeypatch.setenv("LUCID_HOME", str(tmp_path))
-    monkeypatch.setattr(converter.urllib.request, "urlopen", fetch)
-    path = converter._fetch(
+    monkeypatch.setattr(_darknet_release.urllib.request, "urlopen", fetch)
+    path = _darknet_release.fetch(
         "https://example.invalid/model.weights", hashlib.sha256(data).hexdigest()
     )
     assert path.read_bytes() == data
     with pytest.raises(RuntimeError, match="digest"):
-        converter._fetch("https://example.invalid/wrong.weights", "0" * 64)
+        _darknet_release.fetch("https://example.invalid/wrong.weights", "0" * 64)
     assert not (tmp_path / "darknet-src" / "wrong.weights").exists()
+
+
+def test_darknet_comparison_reads_its_release_table_past_the_oracle_check(monkeypatch) -> None:
+    # CI installs no darknet-capable OpenCV, so a stand-in carries the call past
+    # the oracle check: what follows it would otherwise break unnoticed.
+    oracle = SimpleNamespace(dnn=SimpleNamespace(readNetFromDarknet=lambda *args: None))
+    monkeypatch.setitem(sys.modules, "cv2", oracle)
+    assert "unsupported" in parity._compare_darknet("not_a_release", (1, 3, 8, 8))
+    assert set(_darknet_release.RELEASES) == {"yolo_v2", "yolo_v3", "yolo_v3_tiny", "yolo_v4"}
 
 
 def test_dit_original_frequency_contract_applies_to_every_block() -> None:

@@ -1,17 +1,16 @@
 """Compare Lucid's TVM with the authors' implementation on random weights.
 
 The model zoo has no other comparison of this family against its source:
-the released checkpoints have not been converted yet (H12 step 11, the
-published-weights check, is pending on the first real run of
-``tools/convert_weights/tvm.py``), and the user's rule keeps
-family-specific tests out of ``lucid/test``.  This script is that
-comparison, pinned from the 2026-10-25 audit's probes.
+no TVM weights are converted or published (the released checkpoints are
+not being ported), and the user's rule keeps family-specific tests out of
+``lucid/test``.  This script is that comparison, pinned from the
+2026-10-25 audit's probes.
 
 It needs a checkout of the authors' repository (``lumalabs/tvm``; the
 audit used commit ``331c01d5``) and the reference framework, and it
 **skips** — exit status 0, with the reason printed — when either cannot
 be imported.  It builds a small TVM in both, gives Lucid random weights,
-moves them into the authors' network through the converter's key map, and
+moves them into the authors' network through :func:`_lucid_key`, and
 compares, for the scaled and the unscaled parameterisation:
 
 * the network's output, conditional and unconditional;
@@ -80,6 +79,65 @@ _TOLERANCE = 5e-5
 
 _Array = npt.NDArray[np.float64]
 
+# The authors' names for the wrapper's network, and Lucid's.
+_NETWORK_KEYS = {
+    "x_embedder.proj.": "patch_embed.",
+    "t_embedder.mlp.0.": "time_embed.fc1.",
+    "t_embedder.mlp.2.": "time_embed.fc2.",
+    "s_embedder.mlp.0.": "interval_embed.fc1.",
+    "s_embedder.mlp.2.": "interval_embed.fc2.",
+    "guidance_embedder.mlp.0.": "guidance_embed.fc1.",
+    "guidance_embedder.mlp.2.": "guidance_embed.fc2.",
+    "y_embedder.embedding_table.": "label_embed.",
+    "final_layer.linear.": "final.proj.",
+    "final_layer.adaLN_modulation.1.": "final.ada_ln.1.",
+}
+_BLOCK_KEYS = {
+    "attn.qkv.": "attn.qkv.",
+    "attn.q_norm.": "attn.q_norm.",
+    "attn.k_norm.": "attn.k_norm.",
+    "attn.proj.": "attn.proj.",
+    "mlp.fc1.": "mlp.fc1.",
+    "mlp.fc2.": "mlp.fc2.",
+    "adaLN_modulation.1.": "ada_ln.1.",
+}
+
+
+def _lucid_key(src_key: str) -> str | None:
+    """Lucid's name for one key of the authors' wrapper.
+
+    Parameters
+    ----------
+    src_key : str
+        The authors' name, ``model.``-prefixed as the wrapper stores it.
+
+    Returns
+    -------
+    str or None
+        The Lucid name, or ``None`` for the frozen positional table, which
+        Lucid rebuilds from its config rather than storing.
+
+    Raises
+    ------
+    KeyError
+        For any other key: a name outside this map is a layout the
+        comparison was not written for, not a tensor to leave behind.
+    """
+    if src_key == "model.pos_embed":
+        return None
+    key = src_key.removeprefix("model.")
+    leaf = key.rsplit(".", 1)[-1]
+    if key != src_key:
+        for upstream, lucid_prefix in _NETWORK_KEYS.items():
+            if key == upstream + leaf:
+                return lucid_prefix + leaf
+        parts = key.split(".", 2)
+        if len(parts) == 3 and parts[0] == "blocks" and parts[1].isdigit():
+            for upstream, lucid_prefix in _BLOCK_KEYS.items():
+                if parts[2] == upstream + leaf:
+                    return f"blocks.{parts[1]}.{lucid_prefix}{leaf}"
+    raise KeyError(src_key)
+
 
 @dataclasses.dataclass(frozen=True)
 class _Gap:
@@ -137,10 +195,6 @@ def _compare(
     float32_jvp: bool,
 ) -> list[_Gap]:
     """Every compared quantity for one parameterisation."""
-    # Imported here: the converter imports the reference framework at
-    # module level, and the script must still skip cleanly without it.
-    from tools.convert_weights.tvm import TVMArch
-
     torch = framework
     jvp_precision = (
         mock.patch.object(torch, "is_autocast_enabled", lambda *a, **k: True)
@@ -184,12 +238,11 @@ def _compare(
             **_NETWORK,
         ),
     )
-    arch = TVMArch("tvm_imagenet256", "IMAGENET1K_256_W2")
     lucid_state = {k: v.to("cpu").numpy() for k, v in model.tvm.state_dict().items()}
     filled: set[str] = set()
     with torch.no_grad():
         for key, value in upstream.state_dict().items():
-            target = arch.map_key(key)
+            target = _lucid_key(key)
             if target is None:
                 continue
             value.copy_(torch.from_numpy(lucid_state[target].copy()))
@@ -306,7 +359,7 @@ def _compare(
     grads = {n: host(p.grad) for n, p in model.tvm.named_parameters() if p.grad is not None}
     compared: set[str] = set()
     for key, value in upstream.named_parameters():
-        target = arch.map_key(key)
+        target = _lucid_key(key)
         if target is None or value.grad is None:
             continue
         gaps.append(_gap(f"grad {target}", grads[target], value.grad.numpy()))

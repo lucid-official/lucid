@@ -94,6 +94,7 @@ from lucid.weights import WeightsEnum
 from lucid.weights._hub import _cache_dir as _lucid_weight_cache
 from lucid.weights._registry import _WEIGHTS_BY_MODEL
 from lucid.test._fixtures.ref_framework import ref_module, ref_vision_module, zoo_module
+from tools import _darknet_release
 
 #: Outputs agreeing to this are the same computation in a different order.
 _ATOL = 1e-4
@@ -986,20 +987,18 @@ def _compare_darknet(model_name: str, shape: tuple[int, ...]) -> dict[str, objec
         return {
             "unreachable": "this OpenCV build has no darknet reader; use the optional 4.x oracle"
         }
-    converter = importlib.import_module("tools.convert_weights.yolo")
-
-    if model_name not in converter._SOURCES:
+    if model_name not in _darknet_release.RELEASES:
         return {"unsupported": f"unknown darknet release {model_name}"}
-    spec = converter._SOURCES[model_name]
+    release = _darknet_release.RELEASES[model_name]
     if model_name == "yolo_v4":
         repo, revision = "AlexeyAB/darknet", "59596d7880f6504768df41d6daa586f5cb2b932f"
     else:
         repo, revision = "pjreddie/darknet", "f6afaabcdf85f77e7aff2ec55c020c0e297c77f9"
-    cfg_name = Path(spec.url).stem + ".cfg"
+    cfg_name = Path(release.url).stem + ".cfg"
     try:
-        weights_path = converter._fetch(spec.url, spec.sha256)
+        weights_path = _darknet_release.fetch(release.url, release.sha256)
         ours = create_model(model_name, pretrained=True).eval()
-        order = converter._darknet_order(ours, model_name)
+        order = _darknet_release.darknet_order(ours, model_name)
         modules = dict(ours.named_modules())
         convolution_shapes = [
             (
