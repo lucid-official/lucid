@@ -4,6 +4,13 @@ Developer and CI tooling for Lucid. Nothing here is imported by `lucid/`.
 Most scripts carry their own usage in their module docstring; this file
 documents the ones whose rules other people's work depends on.
 
+## Model zoo verification
+
+`python tools/verify_zoo.py --vault DIR --state DIR` runs everything the zoo has, one process at a
+time, on the Mac Studio, and writes a vault note after each family. **Read
+`obsidian/zoo-verify/zoo-verify-ledger.md` before running it again.** See the module docstring and
+`obsidian/zoo-verify/README.md`.
+
 ## Quality gate
 
 `tools/quality_gate/` plus the committed `tools/quality_baseline.json`: a
