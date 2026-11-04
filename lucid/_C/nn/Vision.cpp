@@ -208,9 +208,11 @@ std::vector<TensorImplPtr> BilinearLayerBackward::apply_for_graph(const TensorIm
     const auto& x1 = saved_impl_inputs_[0];
     const auto& x2 = saved_impl_inputs_[1];
     const auto& W = saved_impl_inputs_[2];
-    const bool need_x1 = needs_input_grad(1) || needs_input_grad(2);
-    const bool need_x2 = needs_input_grad(0) || needs_input_grad(2);
-    const bool need_W = needs_input_grad(0) || needs_input_grad(1);
+    const backend::GradMask4 need{needs_input_grad(0), needs_input_grad(1), needs_input_grad(2),
+                                  needs_input_grad(3)};
+    const bool need_x1 = need.want_any(1, 2);
+    const bool need_x2 = need.want_any(0, 2);
+    const bool need_W = need.want_any(0, 1);
     if ((need_x1 && !x1) || (need_x2 && !x2) || (need_W && !W))
         ErrorBuilder("bilinear_layer").fail("graph-mode backward is missing a saved input");
     const Shape& ws = input_shapes_[2];
@@ -222,18 +224,16 @@ std::vector<TensorImplPtr> BilinearLayerBackward::apply_for_graph(const TensorIm
     TensorImplPtr b = need_x2 ? reshape_op(x2, {n, j, 1}) : nullptr;
     TensorImplPtr gw =
         need_W ? reshape_op(matmul_op(g, reshape_op(W, {o, i * j})), {n, i, j}) : nullptr;
-    TensorImplPtr dx1 = needs_input_grad(0) ? reshape_op(matmul_op(gw, b), orig_x1_shape_) : nullptr;
-    TensorImplPtr dx2 =
-        needs_input_grad(1) ? reshape_op(matmul_op(permute_op(gw, {0, 2, 1}), a), orig_x2_shape_)
-                            : nullptr;
-    TensorImplPtr dW;
-    if (needs_input_grad(2)) {
-        auto outer = reshape_op(matmul_op(a, permute_op(b, {0, 2, 1})), {n, i * j});
-        dW = reshape_op(matmul_op(permute_op(g, {1, 0}), outer), {o, i, j});
-    }
-    TensorImplPtr db =
-        needs_input_grad(3) ? sum_op(g, std::vector<int>{0}, /*keepdims=*/false) : nullptr;
-    return {dx1, dx2, dW, db};
+    return {
+        need.make(0, [&] { return reshape_op(matmul_op(gw, b), orig_x1_shape_); }),
+        need.make(
+            1, [&] { return reshape_op(matmul_op(permute_op(gw, {0, 2, 1}), a), orig_x2_shape_); }),
+        need.make(2,
+                  [&] {
+                      auto outer = reshape_op(matmul_op(a, permute_op(b, {0, 2, 1})), {n, i * j});
+                      return reshape_op(matmul_op(permute_op(g, {1, 0}), outer), {o, i, j});
+                  }),
+        need.make(3, [&] { return sum_op(g, std::vector<int>{0}, /*keepdims=*/false); })};
 }
 
 TensorImplPtr bilinear_layer_op(const TensorImplPtr& x1,

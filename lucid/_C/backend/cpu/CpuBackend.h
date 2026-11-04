@@ -97,6 +97,7 @@
 #include "../IBackend.h"
 #include "../LapackInfo.h"
 #include "BatchNormEval.h"
+#include "BilinearLayer.h"
 #include "Blas.h"
 #include "CtcLoss.h"
 #include "DivMod.h"
@@ -104,6 +105,7 @@
 #include "ErfPoly.h"
 #include "GeluGrad.h"
 #include "GlobalResponseNorm.h"
+#include "GradBuffers.h"
 #include "GridSample.h"
 #include "Im2Col.h"
 #include "IndexBounds.h"
@@ -700,8 +702,7 @@ public:
                                          const Shape& weight_shape,
                                          const Shape& bias_shape,
                                          Dtype dt,
-                                         std::array<bool, 3> grad_mask = {
-                                             true, true, true}) override;
+                                         GradMask3 grad_mask) override;
 
     StoragePair rms_norm_forward(const Storage& x,
                                  const Storage& gamma,
@@ -720,7 +721,7 @@ public:
                                   const Shape& p6_,
                                   const Shape& p7_,
                                   Dtype dt,
-                                  std::array<bool, 2> grad_mask = {true, true}) override;
+                                  GradMask2 grad_mask) override;
 
     std::vector<Storage> layer_norm_forward(const Storage& x,
                                             const Storage& gamma,
@@ -742,8 +743,7 @@ public:
                                              const Shape& p8_,
                                              const Shape& p9_,
                                              Dtype dt,
-                                             std::array<bool, 3> grad_mask = {
-                                                 true, true, true}) override;
+                                             GradMask3 grad_mask) override;
 
     std::vector<Storage> batch_norm_forward(const Storage& x,
                                             const Storage& gamma,
@@ -769,8 +769,7 @@ public:
                                              const Shape& p10_,
                                              Dtype dt,
                                              double eps_unused,
-                                             std::array<bool, 3> grad_mask = {
-                                                 true, true, true}) override;
+                                             GradMask3 grad_mask) override;
 
     std::vector<Storage> group_norm_forward(const Storage& x,
                                             const Storage& gamma,
@@ -796,8 +795,7 @@ public:
                                              const std::vector<int>& p9_,
                                              const Shape& p10_,
                                              Dtype dt,
-                                             std::array<bool, 3> grad_mask = {
-                                                 true, true, true}) override;
+                                             GradMask3 grad_mask) override;
 
     Storage linalg_norm(const Storage& a,
                         const Shape& shape,
@@ -1183,8 +1181,7 @@ public:
                                                     const int* O,
                                                     const IBackend::ConvTransposeNdOpts& opts,
                                                     Dtype dt,
-                                                    std::array<bool, 3> grad_mask = {
-                                                        true, true, true}) override;
+                                                    GradMask3 grad_mask) override;
 
     Storage conv_nd_forward(const Storage& x,
                             const Storage& W,
@@ -1214,8 +1211,7 @@ public:
                                           const int* O,
                                           const IBackend::ConvNdOpts& opts,
                                           Dtype dt,
-                                          std::array<bool, 3> grad_mask = {
-                                              true, true, true}) override;
+                                          GradMask3 grad_mask) override;
 
     Storage unfold_forward(const Storage& x,
                            int B,
@@ -1322,8 +1318,7 @@ public:
                                                   int C,
                                                   int spatial,
                                                   Dtype dt,
-                                                  std::array<bool, 5> grad_mask = {
-                                                      true, true, true, true, true}) override;
+                                                  GradMask5 grad_mask) override;
 
     std::vector<Storage> lp_normalize_forward(const Storage& x,
                                               const Shape& x_shape,
@@ -1355,8 +1350,7 @@ public:
                                                        const Shape& x_shape,
                                                        double eps,
                                                        Dtype dt,
-                                                       std::array<bool, 3> grad_mask = {
-                                                           true, true, true}) override;
+                                                       GradMask3 grad_mask) override;
 
     Storage interpolate_nearest_2d_forward(
         const Storage& input, const Shape& in_shape, int H_out, int W_out, Dtype dt) override;
@@ -1452,8 +1446,7 @@ public:
                                                  const Shape& w_shape,
                                                  bool has_bias,
                                                  Dtype dt,
-                                                 std::array<bool, 4> grad_mask = {
-                                                     true, true, true, true}) override;
+                                                 GradMask4 grad_mask) override;
 
     Storage one_hot_forward(const Storage& indices,
                             const Shape& indices_shape,

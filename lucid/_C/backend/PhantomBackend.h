@@ -336,7 +336,7 @@ public:
                                          const Shape&,
                                          const Shape&,
                                          Dtype dt,
-                                         std::array<bool, 3>) override {
+                                         GradMask3) override {
         return phantoms(3, dt);
     }
     StoragePair rms_norm_forward(const Storage&,
@@ -357,7 +357,7 @@ public:
                                   const Shape&,
                                   const Shape&,
                                   Dtype dt,
-                                  std::array<bool, 2>) override {
+                                  GradMask2) override {
         return {phantom(dt), phantom(dt)};
     }
     std::vector<Storage> layer_norm_forward(const Storage&,
@@ -381,7 +381,7 @@ public:
                                              const Shape&,
                                              const Shape&,
                                              Dtype dt,
-                                             std::array<bool, 3>) override {
+                                             GradMask3) override {
         return phantoms(3, dt);
     }
     std::vector<Storage> batch_norm_forward(const Storage&,
@@ -409,7 +409,7 @@ public:
                                              const Shape&,
                                              Dtype dt,
                                              double,
-                                             std::array<bool, 3>) override {
+                                             GradMask3) override {
         return phantoms(3, dt);
     }
     std::vector<Storage> group_norm_forward(const Storage&,
@@ -437,7 +437,7 @@ public:
                                              const std::vector<int>&,
                                              const Shape&,
                                              Dtype dt,
-                                             std::array<bool, 3>) override {
+                                             GradMask3) override {
         return phantoms(3, dt);
     }
     Storage linalg_norm(
@@ -694,7 +694,7 @@ public:
                                                     const int*,
                                                     const ConvTransposeNdOpts&,
                                                     Dtype dt,
-                                                    std::array<bool, 3>) override {
+                                                    GradMask3) override {
         return phantoms(3, dt);
     }
     Storage conv_nd_forward(const Storage&,
@@ -726,7 +726,7 @@ public:
                                           const int*,
                                           const ConvNdOpts&,
                                           Dtype dt,
-                                          std::array<bool, 3>) override {
+                                          GradMask3) override {
         return phantoms(3, dt);
     }
     Storage unfold_forward(const Storage&,
@@ -894,7 +894,7 @@ public:
                                                   int,
                                                   int,
                                                   Dtype dt,
-                                                  std::array<bool, 5>) override {
+                                                  GradMask5) override {
         return phantoms(5, dt);
     }
     std::vector<Storage>
@@ -922,7 +922,7 @@ public:
                                                        const Shape&,
                                                        double,
                                                        Dtype dt,
-                                                       std::array<bool, 3>) override {
+                                                       GradMask3) override {
         return phantoms(3, dt);
     }
     Storage
@@ -1004,7 +1004,7 @@ public:
                                                  const Shape&,
                                                  bool,
                                                  Dtype dt,
-                                                 std::array<bool, 4>) override {
+                                                 GradMask4) override {
         return phantoms(4, dt);
     }
     Storage one_hot_forward(const Storage&, const Shape&, int, Dtype out_dtype) override {

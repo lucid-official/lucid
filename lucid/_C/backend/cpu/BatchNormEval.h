@@ -15,6 +15,8 @@
 #include <cmath>
 #include <cstddef>
 
+#include "../GradMask.h"
+
 namespace lucid::backend::cpu {
 
 // ``rstd = 1 / sqrt(var + eps)`` and ``y = gamma * (x - mean) * rstd + beta``.
@@ -60,9 +62,9 @@ void batch_norm_eval_backward_typed(const T* x,
                                     int batch,
                                     int channels,
                                     int spatial) {
-    const bool need_xm = (dgamma != nullptr || dvar != nullptr);
-    const bool need_g_sum = (dbeta != nullptr || dmean != nullptr);
-    const bool need_gamma = (dx != nullptr || dmean != nullptr || dvar != nullptr);
+    const bool need_xm = any_set(dgamma, dvar);
+    const bool need_g_sum = any_set(dbeta, dmean);
+    const bool need_gamma = any_set(dx, dmean, dvar);
     for (int c = 0; c < channels; ++c) {
         const T r = rstd[c];
         const T g = need_gamma ? gamma[c] : T{0};

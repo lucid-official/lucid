@@ -973,8 +973,7 @@ public:
                                          const Shape& weight_shape,
                                          const Shape& bias_shape,
                                          Dtype dt,
-                                         std::array<bool, 3> grad_mask = {
-                                             true, true, true}) override;
+                                         GradMask3 grad_mask) override;
 
     StoragePair rms_norm_forward(const Storage& x,
                                  const Storage& gamma,
@@ -993,7 +992,7 @@ public:
                                   const Shape& x_shape,
                                   const Shape& gamma_shape,
                                   Dtype dt,
-                                  std::array<bool, 2> grad_mask = {true, true}) override;
+                                  GradMask2 grad_mask) override;
 
     // ── Normalisation ─────────────────────────────────────────────────────
     // LayerNorm forward via MLX's fused ``fast::layer_norm`` kernel.
@@ -1042,8 +1041,7 @@ public:
                                              const Shape& gamma_shape,
                                              const Shape& beta_shape,
                                              Dtype dt,
-                                             std::array<bool, 3> grad_mask = {
-                                                 true, true, true}) override;
+                                             GradMask3 grad_mask) override;
 
     // BatchNorm forward (training mode).
     //
@@ -1092,8 +1090,7 @@ public:
                                              const Shape& x_shape_param,
                                              Dtype dt,
                                              double eps,
-                                             std::array<bool, 3> grad_mask = {
-                                                 true, true, true}) override;
+                                             GradMask3 grad_mask) override;
 
     std::vector<Storage> group_norm_forward(const Storage& x,
                                             const Storage& gamma,
@@ -1119,8 +1116,7 @@ public:
                                              const std::vector<int>& spatial_dims,
                                              const Shape& x_shape,
                                              Dtype dt,
-                                             std::array<bool, 3> grad_mask = {
-                                                 true, true, true}) override;
+                                             GradMask3 grad_mask) override;
 
     // Matrix / vector norm.  Routed to MLX's CPU linalg stream per H3.
     //
@@ -1616,8 +1612,7 @@ public:
                                                     const int* O,
                                                     const IBackend::ConvTransposeNdOpts& opts,
                                                     Dtype dt,
-                                                    std::array<bool, 3> grad_mask = {
-                                                        true, true, true}) override;
+                                                    GradMask3 grad_mask) override;
 
     std::pair<Storage, Storage> expand_and_multiply(const Storage& mask,
                                                     const Storage& x,
@@ -1743,8 +1738,7 @@ public:
                                           const int* O,
                                           const ConvNdOpts& opts,
                                           Dtype dt,
-                                          std::array<bool, 3> grad_mask = {
-                                              true, true, true}) override;
+                                          GradMask3 grad_mask) override;
 
     Storage unfold_forward(const Storage& x,
                            int B,
@@ -1906,12 +1900,81 @@ private:
     static ::mlx::core::array gpu_conv_bias_only(const ::mlx::core::array& b,
                                                  const Shape& out_shape);
 
-    // ``{dx, dW, db}`` of an empty convolution: zeros shaped like the input
-    // and the weight, and ``db`` as already reduced from the gradient.
-    static std::vector<Storage> gpu_conv_empty_grads(const ::mlx::core::array& x,
-                                                     const ::mlx::core::array& w,
-                                                     ::mlx::core::array db,
+    // The geometry both gradients of a convolution read: per-axis extents,
+    // strides, padding and dilation, and the group split.  Built once from
+    // the backward's arguments, so a gradient that has to run on the MLX
+    // arrays needs neither the ``Storage`` operands nor ``int*`` bags.
+    struct ConvGradGeometry {
+        int N;
+        int G;
+        int B;
+        int Cin_g;
+        int Cout_g;
+        std::vector<int> S;
+        std::vector<int> K;
+        std::vector<int> O;
+        std::vector<int> stride;
+        std::vector<int> pad;
+        std::vector<int> dilation;
+    };
+
+    static ConvGradGeometry gpu_conv_grad_geometry(int N,
+                                                   int G,
+                                                   int B,
+                                                   int Cin_g,
+                                                   int Cout_g,
+                                                   const int* S,
+                                                   const int* K,
+                                                   const int* O,
+                                                   const int* stride,
+                                                   const int* pad,
+                                                   const int* dilation);
+
+    // ``(d0, d1, extents...)`` as an MLX shape: a convolution's input
+    // ``(B, Cin, S...)`` or weight ``(Cout, Cin / G, K...)``.
+    static ::mlx::core::Shape gpu_conv_shape(int d0, int d1, const int* extents, int N);
+
+    // True when a convolution's backward has nothing to convolve: a zero
+    // batch, channel or spatial extent, or an empty incoming gradient.  Read
+    // from the arguments, not from the operands, which the backward is not
+    // given when the gradient they feed is not wanted.
+    static bool gpu_conv_backward_is_empty(int B,
+                                           int Cin,
+                                           int Cout,
+                                           std::size_t grad_numel,
+                                           const int* S,
+                                           const int* K,
+                                           const int* O,
+                                           int N);
+
+    // True for the stride-1, pad-0, dilation-1, one-group, 1-tap convolution
+    // that is a per-position channel matmul.
+    static bool gpu_conv_is_pointwise(
+        const int* K, const int* stride, const int* pad, const int* dilation, int groups, int N);
+
+    // ``{dx, dW, db}`` of an empty convolution: zeros of the wanted
+    // gradients' shapes, and ``db`` as already reduced from the gradient.
+    static std::vector<Storage> gpu_conv_empty_grads(GradMask3 grad_mask,
+                                                     const ::mlx::core::Shape& x_shape,
+                                                     const ::mlx::core::Shape& w_shape,
+                                                     Storage db,
                                                      Dtype dt);
+
+    // dx and dW of a convolution, and of a transposed convolution, on NCHW
+    // arrays; each slices and concatenates per group where MLX's own grouping
+    // cannot reach.
+    static ::mlx::core::array gpu_conv_input_grad(const ::mlx::core::array& grad,
+                                                  const ::mlx::core::array& W,
+                                                  const ConvGradGeometry& geo);
+    static ::mlx::core::array gpu_conv_weight_grad(const ::mlx::core::array& x,
+                                                   const ::mlx::core::array& grad,
+                                                   const ConvGradGeometry& geo);
+    static ::mlx::core::array gpu_conv_transpose_input_grad(const ::mlx::core::array& grad,
+                                                            const ::mlx::core::array& W,
+                                                            const ConvGradGeometry& geo);
+    static ::mlx::core::array gpu_conv_transpose_weight_grad(const ::mlx::core::array& x,
+                                                             const ::mlx::core::array& grad,
+                                                             const ConvGradGeometry& geo);
 
     // ``mlx::core::conv_general`` over channel-aligned operands (see
     // ``gpu_align_conv_channels``).  Every convolution this backend runs —
@@ -2182,8 +2245,7 @@ private:
                                                   int C,
                                                   int,
                                                   Dtype dt,
-                                                  std::array<bool, 5> grad_mask = {
-                                                      true, true, true, true, true}) override;
+                                                  GradMask5 grad_mask) override;
 
     std::vector<Storage> lp_normalize_forward(const Storage& x,
                                               const Shape& x_shape,
@@ -2215,8 +2277,7 @@ private:
                                                        const Shape& x_shape,
                                                        double eps,
                                                        Dtype dt,
-                                                       std::array<bool, 3> grad_mask = {
-                                                           true, true, true}) override;
+                                                       GradMask3 grad_mask) override;
 
     // ── interpolate — the graphs live in ``gpu/Interpolate.h`` ─────────────
     Storage interpolate_nearest_2d_forward(
@@ -2313,8 +2374,7 @@ private:
                                                  const Shape& w_shape,
                                                  bool has_bias,
                                                  Dtype dt,
-                                                 std::array<bool, 4> grad_mask = {
-                                                     true, true, true, true}) override;
+                                                 GradMask4 grad_mask) override;
 
     // Built by comparing each index with every class, so no index value is
     // ever used as an offset.  One outside [0, num_classes), negative ones

@@ -13,6 +13,7 @@
 
 #include <arm_neon.h>
 
+#include "../GradMask.h"
 #include "Parallel.h"
 
 namespace lucid::backend::cpu {
@@ -132,6 +133,10 @@ void layer_norm_forward(const T* x,
     });
 }
 
+// The row only owes the bias gradient: no x, no gamma, no dx are read.
+template <bool NeedDx, bool NeedDg, bool NeedDb>
+inline constexpr bool kBiasGradOnly = !NeedDx && !NeedDg && NeedDb;
+
 template <typename T, bool NeedDx, bool NeedDg, bool NeedDb>
 inline void layer_norm_bwd_row(const T* __restrict xb,
                                const T* __restrict gb,
@@ -145,7 +150,7 @@ inline void layer_norm_bwd_row(const T* __restrict xb,
                                std::size_t N) noexcept {
     using S = NormSimd<T>;
     constexpr std::size_t W = S::kWidth;
-    if constexpr (!NeedDx && !NeedDg && NeedDb) {
+    if constexpr (kBiasGradOnly<NeedDx, NeedDg, NeedDb>) {
         std::size_t i = 0;
         for (; i + W <= N; i += W)
             S::store(db + i, S::add(S::load(db + i), S::load(gb + i)));
@@ -173,8 +178,9 @@ inline void layer_norm_bwd_row(const T* __restrict xb,
         if constexpr (NeedDb)
             S::store(db + i, S::add(S::load(db + i), vg));
     }
-    T sum_dxn = NeedDx ? S::hsum(v_sdxn) : T{0};
-    T sum_dxn_xn = NeedDx ? S::hsum(v_sdxn_xn) : T{0};
+    // Both accumulators are still zero when dx is not wanted.
+    T sum_dxn = S::hsum(v_sdxn);
+    T sum_dxn_xn = S::hsum(v_sdxn_xn);
     for (; i < N; ++i) {
         const T xn_i = (xb[i] - m) * r;
         const T g_i = gb[i];
@@ -236,10 +242,10 @@ void layer_norm_backward(const T* x,
                          T* dbeta,
                          std::size_t outer,
                          std::size_t N) {
-    if (N == 0 || (!dx && !dgamma && !dbeta))
+    if (N == 0 || none_set(dx, dgamma, dbeta))
         return;
     const T inv_N = T{1} / static_cast<T>(N);
-    if (dx && !dgamma && !dbeta) {
+    if (dx && none_set(dgamma, dbeta)) {
         if (outer == 0)
             return;
         parallel_for(outer, norm_grain(outer, N), [&](std::size_t lo, std::size_t hi) {

@@ -16,6 +16,8 @@
 #include <cstddef>
 #include <vector>
 
+#include "../GradMask.h"
+
 namespace lucid::backend::cpu {
 
 // G of every plane into ``norms`` (batch * channels) and its channel mean
@@ -70,35 +72,20 @@ void global_response_norm_forward_typed(const T* x,
     }
 }
 
-// dG is the gradient reaching each plane's norm G, through both Nx = G / d
-// and the channel mean inside d; dx then adds the path through G = |x|.
+// Per (batch, channel) plane: ``sgx = sum(grad * x)``, which is the whole
+// of dgamma (times Nx), of dbeta, and of the term ``a`` the dx path starts
+// from.  ``a``, ``dgamma`` and ``dbeta`` are each null when not wanted.
 template <typename T>
-void global_response_norm_backward_typed(const T* x,
-                                         const T* gamma,
-                                         const T* beta,
-                                         const T* nx,
-                                         const T* grad,
-                                         T* dx,
-                                         T* dgamma,
-                                         T* dbeta,
-                                         int batch,
-                                         int channels,
-                                         int spatial,
-                                         double eps) {
-    if (!dx && !dgamma && !dbeta)
-        return;
-    std::vector<T> norms, means;
-    if (dx)
-        grn_global_norms(x, batch, channels, spatial, norms, means);
-    if (dgamma) {
-        for (int c = 0; c < channels; ++c)
-            dgamma[c] = T{0};
-    }
-    if (dbeta) {
-        for (int c = 0; c < channels; ++c)
-            dbeta[c] = T{0};
-    }
-    std::vector<T> a(dx ? norms.size() : 0, T{0});
+void grn_backward_planes(const T* x,
+                         const T* gamma,
+                         const T* nx,
+                         const T* grad,
+                         T* a,
+                         T* dgamma,
+                         T* dbeta,
+                         int batch,
+                         int channels,
+                         int spatial) {
     for (int b = 0; b < batch; ++b)
         for (int c = 0; c < channels; ++c) {
             const std::size_t bc = static_cast<std::size_t>(b) * channels + c;
@@ -107,15 +94,31 @@ void global_response_norm_backward_typed(const T* x,
             T sgx = T{0};
             for (int s = 0; s < spatial; ++s)
                 sgx += gr[s] * xr[s];
-            if (dx)
+            if (a)
                 a[bc] = sgx * gamma[c];
             if (dgamma)
                 dgamma[c] += sgx * nx[bc];
             if (dbeta)
                 dbeta[c] += sgx;
         }
-    if (!dx)
-        return;
+}
+
+// dG is the gradient reaching each plane's norm G, through both Nx = G / d
+// and the channel mean inside d; dx then adds the path through G = |x|.
+template <typename T>
+void grn_backward_dx(const T* x,
+                     const T* gamma,
+                     const T* beta,
+                     const T* nx,
+                     const T* grad,
+                     const std::vector<T>& a,
+                     const std::vector<T>& norms,
+                     const std::vector<T>& means,
+                     T* dx,
+                     int batch,
+                     int channels,
+                     int spatial,
+                     double eps) {
     for (int b = 0; b < batch; ++b) {
         const std::size_t row = static_cast<std::size_t>(b) * channels;
         const T denom = means[b] + static_cast<T>(eps);
@@ -134,6 +137,34 @@ void global_response_norm_backward_typed(const T* x,
                 dxr[s] = gamma[c] * nx[bc] * gr[s] + beta[c] * gr[s] + dg * xr[s] * inv_norm;
         }
     }
+}
+
+template <typename T>
+void global_response_norm_backward_typed(const T* x,
+                                         const T* gamma,
+                                         const T* beta,
+                                         const T* nx,
+                                         const T* grad,
+                                         T* dx,
+                                         T* dgamma,
+                                         T* dbeta,
+                                         int batch,
+                                         int channels,
+                                         int spatial,
+                                         double eps) {
+    if (none_set(dx, dgamma, dbeta))
+        return;
+    std::vector<T> norms, means;
+    if (dx)
+        grn_global_norms(x, batch, channels, spatial, norms, means);
+    zero_fill(dgamma, static_cast<std::size_t>(channels));
+    zero_fill(dbeta, static_cast<std::size_t>(channels));
+    std::vector<T> a(dx ? norms.size() : 0, T{0});
+    grn_backward_planes(x, gamma, nx, grad, dx ? a.data() : nullptr, dgamma, dbeta, batch, channels,
+                        spatial);
+    if (dx)
+        grn_backward_dx(x, gamma, beta, nx, grad, a, norms, means, dx, batch, channels, spatial,
+                        eps);
 }
 
 }  // namespace lucid::backend::cpu

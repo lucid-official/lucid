@@ -28,6 +28,7 @@
 #include "../core/OpSchema.h"
 #include "../core/Storage.h"
 #include "../core/fwd.h"
+#include "NormGradReads.h"
 
 namespace lucid {
 
@@ -95,10 +96,7 @@ namespace lucid {
 class LUCID_API GroupNormBackward : public FuncOp<GroupNormBackward, 3> {
 public:
     static constexpr bool kKeepsOwnValues = true;
-    // dx reads x and gamma; dgamma reads x; dbeta reads only grad_out.
-    static constexpr GradReads<3> kGradReads = {{{true, true, false},
-                                                 {true, false, false},
-                                                 {false, false, false}}};
+    static constexpr GradReads<3> kGradReads = kAffineNormGradReads;
     // Registered op schema (see class docstring).
     static const OpSchema schema_v1;
     // Per-``(batch, group)`` mean $\mu_{b,g}$, shape ``(B*G,)``.

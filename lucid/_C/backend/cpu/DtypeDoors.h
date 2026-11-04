@@ -380,6 +380,13 @@ inline const Storage* as_f32(const Storage* s, std::optional<Storage>& hold) {
     return &*hold;
 }
 
+// ``as_f32(s)`` for an operand some wanted gradient reads, an empty storage
+// (nothing widened, nothing copied) for one none does.  ``needed`` is
+// ``mask.want_any(...)`` over the gradients that read ``s``.
+inline Storage as_f32_if(bool needed, const Storage& s) {
+    return needed ? as_f32(s) : Storage{};
+}
+
 // The inverse, equally dtype-driven: a float result rounds back to half, and
 // a result that is a mask (bool) or an index (int64) is returned as it is.
 inline Storage back_to_f16(const Storage& s, Dtype to) {

@@ -143,8 +143,9 @@ std::vector<TensorImplPtr> BatchNormEvalBackward::apply_for_graph(const TensorIm
     // is zero; the reference still keeps dx (and dbeta) in the graph — its
     // backward is an op of x — so both carry a zero derivative.
     const auto& edges = this->next_edges();
-    auto needs = [&](std::size_t i) { return i < edges.size() && edges[i].is_valid(); };
-    if (needs(2))
+    const auto has_edge = [&](std::size_t i) { return i < edges.size() && edges[i].is_valid(); };
+    const backend::GradMask5 need{has_edge(0), has_edge(1), has_edge(2), has_edge(3), has_edge(4)};
+    if (need.want(2))
         ErrorBuilder("batch_norm_eval")
             .not_implemented("create_graph=True through a running_var that requires grad: the "
                              "node keeps only rstd, and the reference does not differentiate "
@@ -152,7 +153,7 @@ std::vector<TensorImplPtr> BatchNormEvalBackward::apply_for_graph(const TensorIm
     const auto& x = this->saved_impl_inputs_[0];
     const auto& mean = this->saved_impl_inputs_[1];
     const auto& gamma = this->saved_impl_inputs_[3];
-    if ((needs(3) && (!x || !mean)) || ((needs(0) || needs(1)) && !gamma))
+    if ((need.want(3) && backend::any_null(x, mean)) || (need.want_any(0, 1) && !gamma))
         ErrorBuilder("batch_norm_eval").fail("graph-mode backward is missing a saved input");
 
     const Shape& xs = this->input_shapes_[0];
@@ -165,23 +166,23 @@ std::vector<TensorImplPtr> BatchNormEvalBackward::apply_for_graph(const TensorIm
 
     auto rstd =
         std::make_shared<TensorImpl>(this->rstd_, Shape{xs[1]}, this->dtype_, this->device_, false);
-    TensorImplPtr scale = (needs(0) || needs(1)) ? mul_op(gamma, rstd) : nullptr;
-    TensorImplPtr sum_g = (needs(1) || needs(4)) ? sum_op(grad_out, axes, false) : nullptr;
-    std::vector<TensorImplPtr> grads(5);
-    if (needs(0))
-        grads[0] =
-            zero_derivative_through(mul_op(grad_out, reshape_op(scale, per_channel)), edges[0]);
-    if (needs(1))
-        grads[1] = neg_op(mul_op(scale, sum_g));
-    if (needs(3)) {
-        auto centered = sub_op(x, reshape_op(mean, per_channel));
-        grads[3] = mul_op(sum_op(mul_op(grad_out, centered), axes, false), rstd);
-    }
-    // The zero derivative goes back along beta's own edge: it has to have
-    // the gradient's shape, and x's is (N, C, *) where dbeta is (C,).
-    if (needs(4))
-        grads[4] = zero_derivative_through(sum_g, edges[4]);
-    return grads;
+    TensorImplPtr scale = need.want_any(0, 1) ? mul_op(gamma, rstd) : nullptr;
+    TensorImplPtr sum_g = need.want_any(1, 4) ? sum_op(grad_out, axes, false) : nullptr;
+    // Slots: x, mean, var (refused above), gamma, beta.
+    return {need.make(0,
+                      [&] {
+                          return zero_derivative_through(
+                              mul_op(grad_out, reshape_op(scale, per_channel)), edges[0]);
+                      }),
+            need.make(1, [&] { return neg_op(mul_op(scale, sum_g)); }), nullptr,
+            need.make(3,
+                      [&] {
+                          auto centered = sub_op(x, reshape_op(mean, per_channel));
+                          return mul_op(sum_op(mul_op(grad_out, centered), axes, false), rstd);
+                      }),
+            // The zero derivative goes back along beta's own edge: it has to have
+            // the gradient's shape, and x's is (N, C, *) where dbeta is (C,).
+            need.make(4, [&] { return zero_derivative_through(sum_g, edges[4]); })};
 }
 
 TensorImplPtr batch_norm_eval_op(const TensorImplPtr& x,
