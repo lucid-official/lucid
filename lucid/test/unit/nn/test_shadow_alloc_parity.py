@@ -11,6 +11,11 @@ Verifies that under ``shadow_alloc()``, phantom tensors report the exact same
   ``.pow``, ``.matmul``, layout/reduction methods)
 across same-dtype pairs, cross-dtype tensor pairs, ``int64`` + float scalar
 promotion, broadcast shapes, and reversed scalar operands (LCD-346 / #419).
+
+Every comparison runs on the CPU and on Metal, and adds ``.device``: the Metal
+path used to read its own result's shape off an MLX array the phantom does not
+have (LCD-850).  ``test_shadow_alloc_surface.py`` sweeps the rest of the op
+surface the same way.
 """
 
 from collections.abc import Callable
@@ -20,6 +25,15 @@ import lucid
 from lucid._dtype import dtype as DType
 from lucid._tensor.tensor import Tensor
 from lucid.nn._shadow import is_shadow, shadow_alloc
+from lucid.test._fixtures.devices import device_supports, devices_supporting
+
+
+def _assert_same_answer(phantom: Tensor, eager: Tensor) -> None:
+    assert is_shadow(phantom)
+    assert phantom.shape == eager.shape
+    assert phantom.dtype == eager.dtype
+    assert phantom.device == eager.device
+
 
 # ── Binary operators, free functions, and Tensor methods (tensor × tensor) ────
 
@@ -64,6 +78,14 @@ _TENSOR_DTYPE_PAIRS: list[tuple[DType, DType]] = [
     (lucid.float32, lucid.float64),
 ]
 
+# Metal holds no float64, and eagerly refuses it, so the pair runs on the CPU.
+_DEVICE_DTYPE_PAIRS = [
+    pytest.param(device, a, b, id=f"{device}-{a}-{b}")
+    for a, b in _TENSOR_DTYPE_PAIRS
+    for device in devices_supporting(a)
+    if device_supports(device, b)
+]
+
 _BROADCAST_SHAPE_PAIRS: list[tuple[tuple[int, ...], tuple[int, ...]]] = [
     ((3, 4), (3, 4)),
     ((3, 1), (1, 4)),
@@ -77,9 +99,7 @@ _FLOAT_DTYPES = (lucid.float16, lucid.bfloat16, lucid.float32, lucid.float64)
 
 
 @pytest.mark.parametrize("name,op", _BINARY_SPECS, ids=[s[0] for s in _BINARY_SPECS])
-@pytest.mark.parametrize(
-    "dt_a,dt_b", _TENSOR_DTYPE_PAIRS, ids=[f"{a}-{b}" for a, b in _TENSOR_DTYPE_PAIRS]
-)
+@pytest.mark.parametrize("on,dt_a,dt_b", _DEVICE_DTYPE_PAIRS)
 @pytest.mark.parametrize(
     "shape_a,shape_b",
     _BROADCAST_SHAPE_PAIRS,
@@ -88,6 +108,7 @@ _FLOAT_DTYPES = (lucid.float16, lucid.bfloat16, lucid.float32, lucid.float64)
 def test_binary_tensor_pair_shape_and_dtype_parity(
     name: str,
     op: Callable[[Tensor, Tensor], Tensor],
+    on: str,
     dt_a: DType,
     dt_b: DType,
     shape_a: tuple[int, ...],
@@ -95,18 +116,16 @@ def test_binary_tensor_pair_shape_and_dtype_parity(
 ) -> None:
     if name == "fn_hypot" and dt_a not in _FLOAT_DTYPES and dt_b not in _FLOAT_DTYPES:
         pytest.skip("hypot requires at least one floating-point operand in eager mode")
-    eager_a = lucid.ones(shape_a, dtype=dt_a)
-    eager_b = lucid.ones(shape_b, dtype=dt_b)
+    eager_a = lucid.ones(shape_a, dtype=dt_a, device=on)
+    eager_b = lucid.ones(shape_b, dtype=dt_b, device=on)
     eager_out = op(eager_a, eager_b)
 
     with shadow_alloc():
-        ph_a = lucid.ones(shape_a, dtype=dt_a)
-        ph_b = lucid.ones(shape_b, dtype=dt_b)
+        ph_a = lucid.ones(shape_a, dtype=dt_a, device=on)
+        ph_b = lucid.ones(shape_b, dtype=dt_b, device=on)
         ph_out = op(ph_a, ph_b)
 
-    assert is_shadow(ph_out)
-    assert ph_out.shape == eager_out.shape
-    assert ph_out.dtype == eager_out.dtype
+    _assert_same_answer(ph_out, eager_out)
 
 
 # ── Binary ops with Python scalars (forward and reflected) ───────────────────
@@ -157,18 +176,17 @@ def test_binary_scalar_shape_and_dtype_parity(
     dt: DType,
     scalar: int | float,
     shape: tuple[int, ...],
+    device: str,
 ) -> None:
     del name
-    eager_a = lucid.ones(shape, dtype=dt)
+    eager_a = lucid.ones(shape, dtype=dt, device=device)
     eager_out = op(eager_a, scalar)
 
     with shadow_alloc():
-        ph_a = lucid.ones(shape, dtype=dt)
+        ph_a = lucid.ones(shape, dtype=dt, device=device)
         ph_out = op(ph_a, scalar)
 
-    assert is_shadow(ph_out)
-    assert ph_out.shape == eager_out.shape
-    assert ph_out.dtype == eager_out.dtype
+    _assert_same_answer(ph_out, eager_out)
 
 
 # ── Matrix multiplication (@, lucid.matmul, Tensor.matmul, mm, bmm) ──────────
@@ -211,20 +229,19 @@ def test_matmul_shape_and_dtype_parity(
     shape_b: tuple[int, ...],
     dt_a: DType,
     dt_b: DType,
+    device: str,
 ) -> None:
     del caller_name
-    eager_a = lucid.zeros(shape_a, dtype=dt_a)
-    eager_b = lucid.zeros(shape_b, dtype=dt_b)
+    eager_a = lucid.zeros(shape_a, dtype=dt_a, device=device)
+    eager_b = lucid.zeros(shape_b, dtype=dt_b, device=device)
     eager_out = caller(eager_a, eager_b)
 
     with shadow_alloc():
-        ph_a = lucid.zeros(shape_a, dtype=dt_a)
-        ph_b = lucid.zeros(shape_b, dtype=dt_b)
+        ph_a = lucid.zeros(shape_a, dtype=dt_a, device=device)
+        ph_b = lucid.zeros(shape_b, dtype=dt_b, device=device)
         ph_out = caller(ph_a, ph_b)
 
-    assert is_shadow(ph_out)
-    assert ph_out.shape == eager_out.shape
-    assert ph_out.dtype == eager_out.dtype
+    _assert_same_answer(ph_out, eager_out)
 
 
 # ── Unary, reduction, and layout ops parity ──────────────────────────────────
@@ -250,21 +267,21 @@ def test_matmul_shape_and_dtype_parity(
     ],
 )
 @pytest.mark.parametrize("dt", [lucid.bool_, lucid.int64, lucid.float16, lucid.float32])
-def test_unary_free_fn_and_method_parity(fn: Callable[[Tensor], Tensor], dt: DType) -> None:
+def test_unary_free_fn_and_method_parity(
+    fn: Callable[[Tensor], Tensor], dt: DType, device: str
+) -> None:
     if fn is lucid.neg and dt == lucid.bool_:
         pytest.skip("neg is not supported on bool tensors in eager mode")
-    eager_x = lucid.ones((2, 3), dtype=dt)
+    eager_x = lucid.ones((2, 3), dtype=dt, device=device)
     eager_out = fn(eager_x)
 
     with shadow_alloc():
-        ph_x = lucid.ones((2, 3), dtype=dt)
+        ph_x = lucid.ones((2, 3), dtype=dt, device=device)
         ph_out = fn(ph_x)
         method_out = getattr(ph_x, fn.__name__)() if hasattr(ph_x, fn.__name__) else ph_out
 
-    assert ph_out.shape == eager_out.shape
-    assert ph_out.dtype == eager_out.dtype
-    assert method_out.shape == eager_out.shape
-    assert method_out.dtype == eager_out.dtype
+    _assert_same_answer(ph_out, eager_out)
+    _assert_same_answer(method_out, eager_out)
 
 
 @pytest.mark.parametrize(
@@ -288,14 +305,14 @@ def test_unary_free_fn_and_method_parity(fn: Callable[[Tensor], Tensor], dt: DTy
 @pytest.mark.parametrize("dim", [None, 1, -1])
 @pytest.mark.parametrize("keepdim", [False, True])
 def test_reduction_free_fn_and_method_parity(
-    op_name: str, dt: DType, dim: int | None, keepdim: bool
+    op_name: str, dt: DType, dim: int | None, keepdim: bool, device: str
 ) -> None:
     fn = getattr(lucid, op_name)
-    eager_x = lucid.ones((2, 3, 4), dtype=dt)
+    eager_x = lucid.ones((2, 3, 4), dtype=dt, device=device)
     eager_out = fn(eager_x, dim=dim, keepdim=keepdim)
 
     with shadow_alloc():
-        ph_x = lucid.ones((2, 3, 4), dtype=dt)
+        ph_x = lucid.ones((2, 3, 4), dtype=dt, device=device)
         ph_out = fn(ph_x, dim=dim, keepdim=keepdim)
         method_out = getattr(ph_x, op_name)(dim=dim, keepdim=keepdim)
 
@@ -303,20 +320,17 @@ def test_reduction_free_fn_and_method_parity(
         for got in (ph_out, method_out):
             assert isinstance(got, tuple) and len(got) == len(eager_out)
             for g, e in zip(got, eager_out, strict=True):
-                assert g.shape == e.shape
-                assert g.dtype == e.dtype
+                _assert_same_answer(g, e)
     else:
-        assert ph_out.shape == eager_out.shape
-        assert ph_out.dtype == eager_out.dtype
-        assert method_out.shape == eager_out.shape
-        assert method_out.dtype == eager_out.dtype
+        _assert_same_answer(ph_out, eager_out)
+        _assert_same_answer(method_out, eager_out)
 
 
-def test_direct_reproducers_from_issue_419() -> None:
+def test_direct_reproducers_from_issue_419(device: str) -> None:
     """Explicit guard for the three reproducers reported in LCD-346 / #419."""
     with shadow_alloc():
-        a = lucid.arange(4)  # int64, shape (4,)
-        b = lucid.zeros((3, 4), dtype=lucid.float32)
+        a = lucid.arange(4, device=device)  # int64, shape (4,)
+        b = lucid.zeros((3, 4), dtype=lucid.float32, device=device)
 
         # 1. lucid.add(phantom, phantom) works and broadcasts + promotes
         added = lucid.add(a, b)

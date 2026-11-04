@@ -68,24 +68,26 @@ def test_nesting_leaves_it_active_until_the_outermost_exit():
 # ── what a shadow-built module knows about itself ─────────────────────────────
 
 
-def test_a_layer_built_in_shadow_reports_its_shapes():
+def test_a_layer_built_in_shadow_reports_its_shapes(device):
     with shadow_alloc():
-        layer = nn.Linear(128, 64)
+        layer = nn.Linear(128, 64, device=device)
     assert tuple(layer.weight.shape) == (64, 128)
     assert tuple(layer.bias.shape) == (64,)
 
 
-def test_named_parameters_still_walks_the_tree():
+def test_named_parameters_still_walks_the_tree(device):
     with shadow_alloc():
-        model = nn.Sequential(nn.Linear(8, 4), nn.ReLU(), nn.Linear(4, 2))
+        model = nn.Sequential(
+            nn.Linear(8, 4, device=device), nn.ReLU(), nn.Linear(4, 2, device=device)
+        )
     names = [name for name, _ in model.named_parameters()]
     assert "0.weight" in names and "2.weight" in names
 
 
-def test_the_parameter_count_is_readable_without_allocating():
+def test_the_parameter_count_is_readable_without_allocating(device):
     """The number the docs pipeline exists to produce."""
     with shadow_alloc():
-        model = nn.Linear(1000, 1000)
+        model = nn.Linear(1000, 1000, device=device)
     total = sum(int(np.prod([int(d) for d in p.shape])) for _, p in model.named_parameters())
     assert total == 1000 * 1000 + 1000
 
@@ -93,65 +95,78 @@ def test_the_parameter_count_is_readable_without_allocating():
 @pytest.mark.parametrize(
     "build,expected",
     [
-        (lambda: nn.Conv2d(3, 16, kernel_size=3), (16, 3, 3, 3)),
-        (lambda: nn.Embedding(1000, 64), (1000, 64)),
-        (lambda: nn.LayerNorm(32), (32,)),
+        (lambda d: nn.Conv2d(3, 16, kernel_size=3, device=d), (16, 3, 3, 3)),
+        (lambda d: nn.Embedding(1000, 64, device=d), (1000, 64)),
+        (lambda d: nn.LayerNorm(32, device=d), (32,)),
     ],
 )
-def test_other_layer_kinds_report_their_shapes(build, expected):
+def test_other_layer_kinds_report_their_shapes(build, expected, device):
     with shadow_alloc():
-        layer = build()
+        layer = build(device)
     first = next(iter(layer.parameters()))
     assert tuple(first.shape) == expected
+    assert first.device == lucid.device(device)
 
 
-def test_a_phantom_carries_dtype_and_device():
+def test_an_embedding_with_a_padding_index_is_a_phantom_on_any_device(device):
+    """Zeroing the padding row runs ``index_fill``, then ``where``, under the
+    mode; on Metal ``where`` read its result's shape off an MLX array the phantom
+    backend's answer does not have, and raised bad_variant_access (LCD-850)."""
     with shadow_alloc():
-        layer = nn.Linear(4, 4)
-    assert layer.weight.dtype is not None
-    assert layer.weight.device is not None
+        layer = nn.Embedding(4, 2, padding_idx=0, device=device)
+    assert is_shadow(layer.weight)
+    assert tuple(layer.weight.shape) == (4, 2)
+    assert layer.weight.dtype == lucid.float32
+    assert layer.weight.device == lucid.device(device)
 
 
-def test_the_impl_really_is_a_phantom():
+def test_a_phantom_carries_dtype_and_device(device):
     with shadow_alloc():
-        layer = nn.Linear(4, 4)
+        layer = nn.Linear(4, 4, device=device)
+    assert layer.weight.dtype == lucid.float32
+    assert layer.weight.device == lucid.device(device)
+
+
+def test_the_impl_really_is_a_phantom(device):
+    with shadow_alloc():
+        layer = nn.Linear(4, 4, device=device)
     assert is_shadow(layer.weight)
 
 
 # ── and it does not leak into ordinary use ────────────────────────────────────
 
 
-def test_a_module_built_outside_is_ordinary():
-    layer = nn.Linear(4, 4)
+def test_a_module_built_outside_is_ordinary(device):
+    layer = nn.Linear(4, 4, device=device)
     assert not is_shadow(layer.weight)
-    out = layer(lucid.tensor(np.ones((2, 4), dtype=np.float32)))
+    out = layer(lucid.tensor(np.ones((2, 4), dtype=np.float32), device=device))
     assert np.isfinite(np.asarray(out.numpy())).all()
 
 
-def test_a_module_built_after_a_shadow_block_is_ordinary():
+def test_a_module_built_after_a_shadow_block_is_ordinary(device):
     with shadow_alloc():
-        nn.Linear(64, 64)
-    layer = nn.Linear(4, 4)
+        nn.Linear(64, 64, device=device)
+    layer = nn.Linear(4, 4, device=device)
     assert not is_shadow(layer.weight)
-    layer(lucid.tensor(np.ones((2, 4), dtype=np.float32))).sum().backward()
+    layer(lucid.tensor(np.ones((2, 4), dtype=np.float32), device=device)).sum().backward()
     assert layer.weight.grad is not None
 
 
 @pytest.mark.parametrize(
     "build",
     [
-        lambda: lucid.zeros(4),
-        lambda: lucid.ones(4),
-        lambda: lucid.full((2, 2), 3.0),
-        lambda: lucid.eye(3),
-        lambda: lucid.arange(0, 4, 1),
-        lambda: lucid.randn(2, 2),
+        lambda d: lucid.zeros(4, device=d),
+        lambda d: lucid.ones(4, device=d),
+        lambda d: lucid.full((2, 2), 3.0, device=d),
+        lambda d: lucid.eye(3, device=d),
+        lambda d: lucid.arange(0, 4, 1, device=d),
+        lambda d: lucid.randn(2, 2, device=d),
     ],
 )
-def test_every_patched_factory_is_restored(build):
+def test_every_patched_factory_is_restored(build, device):
     """Each entry point the context replaces has to come back."""
     with shadow_alloc():
-        build()
-    out = np.asarray(build().numpy())
+        build(device)
+    out = np.asarray(build(device).numpy())
     assert out.dtype != object
     assert out.size > 0
