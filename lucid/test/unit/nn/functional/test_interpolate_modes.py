@@ -17,6 +17,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid.autograd import grad
+from lucid.nn._shadow import shadow_alloc
 from lucid.nn.functional import _interpolate
 from lucid.test._helpers.resample_paths import PATHS, forced_path
 
@@ -284,3 +285,16 @@ class TestUpsampleForwardsEveryOption:
             float((up(x) - F.interpolate(x, scale_factor=1.7, mode="bilinear")).abs().max().item())
             > 1e-3
         )
+
+
+def test_a_shadow_resize_leaves_no_phantom_in_the_matrix_cache() -> None:
+    x = lucid.ones(1, 2, 4, 4)
+    _interpolate._dense_matrix.cache_clear()
+    with shadow_alloc():
+        assert F.interpolate(x, scale_factor=2, mode="bicubic").shape == (1, 2, 8, 8)
+    real = F.interpolate(x, scale_factor=2, mode="bicubic")
+    assert real.shape == (1, 2, 8, 8)
+    assert _interpolate._dense_matrix.cache_info().currsize > 0
+    # And a real entry already in the cache serves a shadow call.
+    with shadow_alloc():
+        assert F.interpolate(x, scale_factor=2, mode="bicubic").shape == (1, 2, 8, 8)

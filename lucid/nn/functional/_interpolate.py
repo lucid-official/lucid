@@ -331,7 +331,9 @@ def _dense_matrix(plan: _AxisPlan, in_size: int, device: str, dtype: _lucid.dtyp
 
 
 def _apply_dense(x: Tensor, axis: int, plan: _AxisPlan) -> Tensor:
-    matrix = _dense_matrix(plan, int(x.shape[axis]), x.device.type, x.dtype)
+    # Under shadow_alloc the matrix is a phantom, which a later real call can't read.
+    build = _dense_matrix.__wrapped__ if _C_engine.phantom_mode() else _dense_matrix
+    matrix = build(plan, int(x.shape[axis]), x.device.type, x.dtype)
     # The two trailing axes multiply in place; any other is moved there.
     if axis == x.ndim - 1:
         return x @ matrix.mT
