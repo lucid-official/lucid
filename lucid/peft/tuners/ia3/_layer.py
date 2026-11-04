@@ -212,7 +212,7 @@ class IA3Layer(_BaseTunerLayer):
     def _merge_targets(self) -> dict[str, Parameter]:
         targets = {_WEIGHT: self.weight}
         bias = self.bias
-        if bias is not None and not self.is_feedforward:
+        if isinstance(bias, Parameter) and not self.is_feedforward:
             targets[_BIAS] = bias
         return targets
 

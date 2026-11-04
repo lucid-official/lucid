@@ -167,6 +167,9 @@ HELD: dict[str, str] = {
     "CtcLossBackward::saved_input_lengths_": _BY_VALUE,
     "CtcLossBackward::saved_target_lengths_": _BY_VALUE,
     "ScaledDotProductAttentionBackward::saved_mask_": _BY_VALUE,
+    "QuantizedMatmulBackward::saved_w_": _BY_VALUE,
+    "QuantizedMatmulBackward::saved_scales_": _BY_VALUE,
+    "QuantizedMatmulBackward::saved_biases_": _BY_VALUE,
 }
 
 

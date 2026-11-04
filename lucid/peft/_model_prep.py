@@ -5,24 +5,57 @@ from typing import Final
 import lucid
 import lucid.metal
 import lucid.nn as nn
+import lucid.nn.quantized as nnq
+import lucid.nn.quantized.dynamic as nnqd
 from lucid._tensor.tensor import Tensor
 
-#: Attribute of a model that names how it was quantized, and the values that mean it was.
-_QUANTIZATION_METHODS: Final = frozenset({"gptq", "aqlm", "eetq", "hqq"})
+#: Attribute of a model that names an external quantization method lucid.peft does not support.
+_UNSUPPORTED_QUANTIZATION_METHODS: Final = frozenset({"gptq", "aqlm", "eetq", "hqq"})
+_QUANTIZED_MODULE_TYPES: Final = (nnq.QuantizedLinearMLX, nnq.Linear, nnqd.Linear)
 _HALF_PRECISION: Final = (lucid.float16, lucid.bfloat16)
 
 
-def _quantization_of(model: nn.Module) -> str | None:
-    """How ``model`` reports being quantized (``"loaded in 4-bit"``, ``"hqq"``), or ``None``."""
-    for flag, label in (("is_loaded_in_8bit", "8-bit"), ("is_loaded_in_4bit", "4-bit")):
-        if getattr(model, flag, False):
-            return f"loaded in {label}"
+def _unsupported_quantization_of(model: nn.Module) -> str | None:
+    """Which unsupported third-party quantization ``model`` reports (``"gptq"``, ``"hqq"``), or ``None``."""
     method = getattr(model, "quantization_method", None)
-    if method in _QUANTIZATION_METHODS:
+    if method in _UNSUPPORTED_QUANTIZATION_METHODS:
         return str(method)
     if getattr(model, "hqq_quantized", False):
         return "hqq"
     return None
+
+
+def _is_quantized_model(model: nn.Module) -> bool:
+    """Whether ``model`` is quantized via Lucid's quantized layers or ``is_loaded_in_4bit`` / ``is_loaded_in_8bit``."""
+    if getattr(model, "is_loaded_in_8bit", False) or getattr(model, "is_loaded_in_4bit", False):
+        return True
+    return any(isinstance(m, _QUANTIZED_MODULE_TYPES) for m in model.modules())
+
+
+def _enable_input_require_grads(model: nn.Module) -> None:
+    """Ensure the model's embedding output (or first floating-point input) requires gradients for checkpointing."""
+    enable = getattr(model, "enable_input_require_grads", None)
+    if callable(enable):
+        enable()
+        return
+    get_emb = getattr(model, "get_input_embeddings", None)
+    emb = get_emb() if callable(get_emb) else None
+    if isinstance(emb, nn.Module):
+
+        def _make_inputs_require_grad(
+            _module: object, _args: tuple[Tensor, ...], output: Tensor | tuple[Tensor, ...]
+        ) -> None:
+            if isinstance(output, Tensor) and output.is_floating_point():
+                output.requires_grad_(True)
+
+        emb.register_forward_hook(_make_inputs_require_grad)
+        return
+
+    def _require_grad_pre_hook(_module: object, args: tuple[Tensor, ...]) -> None:
+        if args and args[0].is_floating_point():
+            args[0].requires_grad_(True)
+
+    model.register_forward_pre_hook(_require_grad_pre_hook)
 
 
 def cast_mixed_precision_params(model: nn.Module, dtype: lucid.dtype) -> None:
@@ -117,27 +150,29 @@ def prepare_model_for_kbit_training(
     gradient_checkpointing_kwargs: dict[str, object] | None = None,
     auto_clear_cache: bool = True,
 ) -> nn.Module:
-    r"""Freeze the base model and upcast its half-precision parameters to float32.
+    r"""Freeze the base model, upcast its half-precision parameters to float32, and prepare quantized models for QLoRA.
 
-    The preparation step the reference runs before training an adapter on a base model
-    loaded for low-memory training: every parameter stops requiring a gradient (the adapter
+    The preparation step run before training an adapter on a base model loaded for
+    low-memory or k-bit training: every parameter stops requiring a gradient (the adapter
     adds its own), and each ``float16`` or ``bfloat16`` parameter becomes ``float32``, so
-    that the layer norms and the output head compute at full precision.  The model is
+    that the layer norms, embeddings, and output head compute at full precision.  When the
+    model is quantized (:class:`~lucid.nn.quantized.QuantizedLinearMLX`,
+    :class:`~lucid.nn.quantized.Linear`, :class:`~lucid.nn.quantized.dynamic.Linear`, or
+    ``is_loaded_in_4bit`` / ``is_loaded_in_8bit``) and ``use_gradient_checkpointing`` is
+    ``True``, input embeddings are configured to require gradients and
+    ``gradient_checkpointing_enable`` is invoked if the model provides it.  The model is
     changed in place and returned.
-
-    Quantized base models do not exist in this library yet, so a model that reports
-    being quantized (``is_loaded_in_8bit``, ``is_loaded_in_4bit``, ``quantization_method``)
-    is refused.  For the models it does take, the reference's two gradient-checkpointing
-    options have nothing to do — it applies them to quantized models alone.
 
     Parameters
     ----------
     model : nn.Module
         The base model.
     use_gradient_checkpointing : bool, default=True
-        Accepted for the reference's signature; it concerns quantized models only.
+        When ``True`` on a quantized model, enable gradients on the input embeddings and
+        call ``model.gradient_checkpointing_enable`` if present.
     gradient_checkpointing_kwargs : dict, optional
-        Accepted for the reference's signature, for the same reason.
+        Keyword arguments forwarded to ``model.gradient_checkpointing_enable``; defaults to
+        ``{"use_reentrant": False}`` when ``None``.
     auto_clear_cache : bool, default=True
         Release the Metal allocator's cached buffers after the casts, which return the
         memory the half-precision copies held.
@@ -150,7 +185,8 @@ def prepare_model_for_kbit_training(
     Raises
     ------
     NotImplementedError
-        ``model`` reports being quantized.
+        ``model`` reports an external quantization scheme (``gptq``, ``aqlm``, ``eetq``, ``hqq``)
+        that ``lucid.peft`` does not support.
 
     Examples
     --------
@@ -162,18 +198,27 @@ def prepare_model_for_kbit_training(
     >>> net[0].weight.dtype, net[0].weight.requires_grad
     (lucid.float32, False)
     """
-    quantized = _quantization_of(model)
-    if quantized is not None:
+    unsupported = _unsupported_quantization_of(model)
+    if unsupported is not None:
         raise NotImplementedError(
-            f"prepare_model_for_kbit_training: the model reports {quantized}; lucid.peft has no "
-            "quantized layers to prepare"
+            f"prepare_model_for_kbit_training: the model reports {unsupported}; lucid.peft does "
+            "not support this quantization method"
         )
-    # The reference enables checkpointing only on a quantized model, which was refused above.
-    del use_gradient_checkpointing, gradient_checkpointing_kwargs
+    is_quantized = _is_quantized_model(model)
     model.requires_grad_(False)
     for param in model.parameters():
         if param.dtype in _HALF_PRECISION:
             param.data = param.data.to(lucid.float32)
+    if is_quantized and use_gradient_checkpointing:
+        _enable_input_require_grads(model)
+        enable_gc = getattr(model, "gradient_checkpointing_enable", None)
+        if callable(enable_gc):
+            gc_kwargs = (
+                {"use_reentrant": False}
+                if gradient_checkpointing_kwargs is None
+                else gradient_checkpointing_kwargs
+            )
+            enable_gc(gradient_checkpointing_kwargs=gc_kwargs)
     if auto_clear_cache:
         lucid.metal.empty_cache()
     return model

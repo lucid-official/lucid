@@ -13,6 +13,8 @@ import re
 from collections.abc import Callable, Iterable, Mapping
 
 import lucid.nn as nn
+import lucid.nn.quantized as nnq
+import lucid.nn.quantized.dynamic as nnqd
 from lucid.peft._config import (
     PeftConfig,
     PromptLearningConfig,
@@ -25,6 +27,7 @@ from lucid.peft._heads import CLASSIFIER_HEADS
 from lucid.peft._slots import _outside_slots
 
 _ALL_LINEAR = "all-linear"
+_LINEAR_TYPES = (nn.Linear, nnq.QuantizedLinearMLX, nnq.Linear, nnqd.Linear)
 
 
 def _suffix_match(key: str, names: Iterable[str]) -> bool:
@@ -141,17 +144,17 @@ def _head_names(model: nn.Module, task_type: TaskType | str | None) -> set[str]:
 def _resolve_all_linear(
     config: _TargetedConfig,
     model: nn.Module,
-    adapted_linear: Callable[[nn.Module], nn.Linear | None] | None = None,
+    adapted_linear: Callable[[nn.Module], nn.Module | None] | None = None,
 ) -> set[str] | None:
     """The module names ``"all-linear"`` stands for in ``model``; ``None`` if not used.
 
-    Every ``nn.Linear`` — and every layer ``adapted_linear`` maps to the
-    ``nn.Linear`` it wraps, which already holds an adapter and takes one
-    more — except the output head, any layer whose weight another module
-    shares (a tied head is the same matrix as the input table, and adapting
-    it would adapt the table too) and any the config excludes
-    (``exclude_modules``, ``modules_to_save``), so the names stored are
-    exactly the names adapted.  The insides of an adapter slot
+    Every ``nn.Linear`` (or quantized linear module) — and every layer
+    ``adapted_linear`` maps to the linear module it wraps, which already
+    holds an adapter and takes one more — except the output head, any layer
+    whose weight another module shares (a tied head is the same matrix as
+    the input table, and adapting it would adapt the table too) and any the
+    config excludes (``exclude_modules``, ``modules_to_save``), so the names
+    stored are exactly the names adapted.  The insides of an adapter slot
     (``q.base_layer``, ``q.lora_A.default``) are never candidates.
     """
     targets = config.target_modules
@@ -160,11 +163,13 @@ def _resolve_all_linear(
     paths = _parameter_paths(model)
     linear: set[str] = set()
     for name, module in _outside_slots(model):
-        base = module if isinstance(module, nn.Linear) else None
+        base: nn.Module | None = module if isinstance(module, _LINEAR_TYPES) else None
         if base is None and adapted_linear is not None:
             base = adapted_linear(module)
-        if name and base is not None and len(paths[id(base.weight)]) == 1:
-            linear.add(name)
+        if name and base is not None:
+            weight = getattr(base, "weight", None)
+            if weight is None or len(paths.get(id(weight), (name,))) == 1:
+                linear.add(name)
     return {
         name
         for name in linear - _head_names(model, config.task_type)

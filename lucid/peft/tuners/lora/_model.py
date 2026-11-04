@@ -25,7 +25,12 @@ from lucid.peft.tuners._plan import _named, _Target
 from lucid.peft.tuners._tuner import _BaseTuner
 from lucid.peft.tuners.lora._config import LoraConfig
 from lucid.peft.tuners.lora._inits import _Init
-from lucid.peft.tuners.lora._layer import Linear, LoraLayer
+from lucid.peft.tuners.lora._layer import (
+    _QUANTIZED_LINEAR_TYPES,
+    Linear,
+    LoraLayer,
+    QuantizedLinear,
+)
 from lucid.peft.tuners.lora._mixed import _MixedBatch
 from lucid.peft.tuners.lora._merging import _Combination, _CombinationType, _MergeOptions
 from lucid.peft.tuners.lora._parameter import ParamWrapper
@@ -203,6 +208,21 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
             )
             stored.fan_in_fan_out = False
         return stored
+
+    @override
+    @classmethod
+    def _target_layer(cls, key: str, module: nn.Module) -> type[_BaseTunerLayer]:
+        if isinstance(module, _QUANTIZED_LINEAR_TYPES):
+            return QuantizedLinear
+        return super()._target_layer(key, module)
+
+    @override
+    @classmethod
+    def _adapted_linear(cls, module: nn.Module) -> nn.Module | None:
+        if isinstance(module, tuple(cls._layer_types.values())):
+            base = module.get_base_layer()
+            return base if isinstance(base, (nn.Linear, *_QUANTIZED_LINEAR_TYPES)) else None
+        return None
 
     @override
     def _check_new_adapter_config(self, config: PeftConfig) -> None:

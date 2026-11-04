@@ -29,12 +29,13 @@ from lucid.peft.tuners.lora._conv import (
     ConvTranspose3d,
 )
 from lucid.peft.tuners.lora._embedding import Embedding
-from lucid.peft.tuners.lora._layer import Linear, LoraLayer
+from lucid.peft.tuners.lora._layer import Linear, LoraLayer, QuantizedLinear
 from lucid.peft.tuners.lora._parameter import ParamWrapper
 
 __all__ = [
     "LoraLayer",
     "Linear",
+    "QuantizedLinear",
     "Embedding",
     "Conv1d",
     "Conv2d",

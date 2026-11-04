@@ -187,5 +187,6 @@ class TestBackendsToggle:
         assert y_cpu.shape == (2, 32)
 
         x_grad = lucid.randn(2, 64, device="metal", requires_grad=True)
-        with pytest.warns(UserWarning, match="inference-only kernel"):
-            _ = q(x_grad)
+        out_grad = q(x_grad)
+        out_grad.sum().backward()
+        assert x_grad.grad is not None and x_grad.grad.shape == (2, 64)

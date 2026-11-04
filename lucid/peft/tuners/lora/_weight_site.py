@@ -17,9 +17,17 @@ from typing import ClassVar, Final, override
 
 import lucid
 import lucid.nn as nn
+import lucid.nn.quantized as nnq
+import lucid.nn.quantized.dynamic as nnqd
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
 from lucid.nn.utils.weight_norm import WeightNorm, _compute_weight, _norm_along_dim
+from lucid.quantization._functional import dequantize as _dequantize_int8
+from lucid.quantization._functional import quantize as _quantize_int8
+from lucid.quantization._qgemm import dequantize as _dequantize_mlx
+from lucid.quantization._qgemm import quantize as _quantize_mlx
+from lucid.quantization._qscheme import per_channel_symmetric, qint8
+from lucid.quantization.observer import PerChannelMinMaxObserver
 
 _WEIGHT: Final = "weight"
 _MAGNITUDE: Final = "weight_g"
@@ -149,3 +157,87 @@ class _Normalised(_WeightSite, site=True):
         magnitude.copy_(norm)
         # The hook that recomputes the weight runs only on a forward: refresh what a read sees.
         object.__setattr__(self.module, _WEIGHT, self.read())
+
+
+class _QuantizedMLX(_WeightSite, site=True):
+    """A weight stored in MLX's group-wise packed int4 / int8 format (:class:`QuantizedLinearMLX`)."""
+
+    __slots__ = ()
+
+    @classmethod
+    @override
+    def holds(cls, module: nn.Module) -> bool:
+        return isinstance(module, nnq.QuantizedLinearMLX)
+
+    def _linear(self) -> nnq.QuantizedLinearMLX:
+        module = self.module
+        assert isinstance(module, nnq.QuantizedLinearMLX)
+        return module
+
+    @override
+    def parameters(self) -> dict[str, Parameter]:
+        return {}
+
+    @override
+    def read(self) -> Tensor:
+        lin = self._linear()
+        pw = lin.packed_weight if lin.packed_weight.is_metal else lin.packed_weight.to("metal")
+        sc = lin.scales if lin.scales.is_metal else lin.scales.to("metal")
+        bi = lin.biases if lin.biases.is_metal else lin.biases.to("metal")
+        return _dequantize_mlx(pw, sc, bi, group_size=lin.group_size, bits=lin.bits)
+
+    @override
+    def write(self, value: Tensor) -> None:
+        lin = self._linear()
+        target_dev = lin.packed_weight.device
+        w_metal = value if value.is_metal else value.to("metal")
+        if w_metal.dtype != lucid.float32:
+            w_metal = w_metal.to(lucid.float32)
+        packed, scales, biases = _quantize_mlx(w_metal, group_size=lin.group_size, bits=lin.bits)
+        lin.register_buffer("packed_weight", packed.to(target_dev))
+        lin.register_buffer("scales", scales.to(target_dev))
+        lin.register_buffer("biases", biases.to(target_dev))
+
+
+class _QuantizedInt8(_WeightSite, site=True):
+    """A weight stored as per-channel int8 codes (:class:`nn.quantized.Linear` / ``dynamic.Linear``)."""
+
+    __slots__ = ()
+
+    @classmethod
+    @override
+    def holds(cls, module: nn.Module) -> bool:
+        return isinstance(module, (nnq.Linear, nnqd.Linear))
+
+    def _linear(self) -> nnq.Linear | nnqd.Linear:
+        module = self.module
+        assert isinstance(module, (nnq.Linear, nnqd.Linear))
+        return module
+
+    @override
+    def parameters(self) -> dict[str, Parameter]:
+        return {}
+
+    @override
+    def read(self) -> Tensor:
+        lin = self._linear()
+        return _dequantize_int8(
+            lin.weight_int8, lin.weight_scale, lin.weight_zero_point, ch_axis=lin.weight_ch_axis
+        )
+
+    @override
+    def write(self, value: Tensor) -> None:
+        lin = self._linear()
+        dev = lin.weight_int8.device
+        w_f32 = value.to(device=dev, dtype=lucid.float32)
+        obs = PerChannelMinMaxObserver(
+            ch_axis=lin.weight_ch_axis, qscheme=per_channel_symmetric, qdtype=qint8
+        )
+        obs(w_f32)
+        scale, zero_point = obs.calculate_qparams()
+        scale = scale.to(dev)
+        zero_point = zero_point.to(dev)
+        codes = _quantize_int8(w_f32, scale, zero_point, qint8, ch_axis=lin.weight_ch_axis)
+        lin.register_buffer("weight_int8", codes)
+        lin.register_buffer("weight_scale", scale)
+        lin.register_buffer("weight_zero_point", zero_point)

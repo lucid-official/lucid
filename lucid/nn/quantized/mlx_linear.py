@@ -7,7 +7,6 @@ compute + memory win.  It is Metal-only (the kernel is GPU-only) and is built
 from a float ``Linear`` via :meth:`from_float`, choosing ``bits`` (4 or 8).
 """
 
-import warnings
 from typing import TYPE_CHECKING, cast, override
 
 import lucid
@@ -122,9 +121,10 @@ class QuantizedLinearMLX(nn.Module):
       :func:`lucid.quantization._qgemm.is_available` before relying on this fast
       path. :func:`lucid.quantization.convert` routes the Linear family here only
       when the MLX backend is active.
-    - **Inference-only.** The packed kernel does not define a backward pass:
-      when called with a ``requires_grad=True`` input under grad mode, a
-      ``UserWarning`` is emitted and the returned tensor is detached.
+    - **Activation gradients for QLoRA.** While the packed integer weight and
+      per-group scales/biases are frozen buffers, ``quantized_matmul`` defines a
+      backward pass with respect to the floating input activation ``x``, so
+      upstream parameters and parallel LoRA branches receive gradients.
 
     Examples
     --------
@@ -205,14 +205,6 @@ class QuantizedLinearMLX(nn.Module):
         otherwise-CPU model without forcing the whole model (or residual skip
         branches) onto Metal.
         """
-        if x.requires_grad and lucid.is_grad_enabled():
-            warnings.warn(
-                "QuantizedLinearMLX is an inference-only kernel and does not "
-                "propagate gradients to its input; upstream parameters will "
-                "receive no gradient.",
-                UserWarning,
-                stacklevel=2,
-            )
         in_dtype = x.dtype
         on_metal = x.is_metal
         if not on_metal:

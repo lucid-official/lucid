@@ -153,7 +153,7 @@ def _stored_config[C: _TargetedConfig](
     default_targets: Mapping[str, frozenset[str]],
     default_parameters: Mapping[str, frozenset[str]],
     adapts_parameters: Callable[[C], bool],
-    adapted_linear: Callable[[nn.Module], nn.Linear | None],
+    adapted_linear: Callable[[nn.Module], nn.Module | None],
 ) -> C:
     """The config to store: a copy, its default targets and ``"all-linear"`` spelled out.
 

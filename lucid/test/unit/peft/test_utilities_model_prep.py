@@ -153,14 +153,12 @@ class TestPrepareModelForKbitTraining:
     @pytest.mark.parametrize(
         ("attribute", "value", "reported"),
         [
-            ("is_loaded_in_8bit", True, "8-bit"),
-            ("is_loaded_in_4bit", True, "4-bit"),
             ("quantization_method", "gptq", "gptq"),
             ("quantization_method", "hqq", "hqq"),
             ("hqq_quantized", True, "hqq"),
         ],
     )
-    def test_a_model_that_reports_quantization_is_refused_and_left_alone(
+    def test_a_model_that_reports_unsupported_quantization_is_refused_and_left_alone(
         self, attribute: str, value: object, reported: str
     ) -> None:
         net = nn.Sequential(nn.Linear(2, 2))
@@ -168,6 +166,24 @@ class TestPrepareModelForKbitTraining:
         with pytest.raises(NotImplementedError, match=reported):
             prepare_model_for_kbit_training(net)
         assert all(p.requires_grad for p in net.parameters())
+
+    @pytest.mark.parametrize("attribute", ["is_loaded_in_8bit", "is_loaded_in_4bit"])
+    def test_a_kbit_quantized_model_enables_input_grads_and_checkpointing(
+        self, attribute: str
+    ) -> None:
+        net = nn.Sequential(nn.Linear(2, 2)).to(lucid.float16)
+        setattr(net, attribute, True)
+        called: list[object] = []
+        net.gradient_checkpointing_enable = (  # type: ignore[attr-defined]
+            lambda gradient_checkpointing_kwargs=None: called.append(gradient_checkpointing_kwargs)
+        )
+        prepare_model_for_kbit_training(net)
+        assert not any(p.requires_grad for p in net.parameters())
+        assert {p.dtype for p in net.parameters()} == {lucid.float32}
+        assert called == [{"use_reentrant": False}]
+        x = lucid.randn(1, 2)
+        _ = net(x)
+        assert x.requires_grad
 
     def test_an_unknown_quantization_method_is_not_a_quantized_model(self) -> None:
         net = nn.Sequential(nn.Linear(2, 2))

@@ -315,6 +315,9 @@ BUILDERS: dict[type, Callable[[], Any]] = {
         PromptEncoderConfig(num_virtual_tokens=2, encoder_hidden_size=4, **_PROMPT_SIZES)
     ),
     lora.ParamWrapper: lambda: lora.ParamWrapper(_Gate(), "default", "w", r=2),
+    lora.QuantizedLinear: lambda: lora.QuantizedLinear(
+        nn.quantized.dynamic.Linear.from_float(nn.Linear(4, 3)), "default", r=2
+    ),
     ModulesToSaveWrapper: lambda: ModulesToSaveWrapper(nn.Linear(4, 4), "default"),
 }
 

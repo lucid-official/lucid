@@ -236,8 +236,8 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
         )
 
     @classmethod
-    def _adapted_linear(cls, module: nn.Module) -> nn.Linear | None:
-        """The ``nn.Linear`` ``module`` wraps, if it is one of this method's layers around one."""
+    def _adapted_linear(cls, module: nn.Module) -> nn.Module | None:
+        """The linear module ``module`` wraps, if it is one of this method's layers around one."""
         if isinstance(module, tuple(cls._layer_types.values())):
             base = module.get_base_layer()
             return base if isinstance(base, nn.Linear) else None

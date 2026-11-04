@@ -100,8 +100,8 @@ class _BaseTunerLayer(nn.Module, ABC):
     adapter_layer_names: ClassVar[tuple[str, ...]] = ()
     #: Wrapped module type → layer class, one table per family.
     _layer_types: ClassVar[dict[type[nn.Module], type[_BaseTunerLayer]]] = {}
-    #: The module type this layer wraps, from ``base_type=``.
-    _base_type: ClassVar[type[nn.Module]] = nn.Module
+    #: The module type (or tuple of module types) this layer wraps, from ``base_type=``.
+    _base_type: ClassVar[type[nn.Module] | tuple[type[nn.Module], ...]] = nn.Module
 
     @override
     def __init_subclass__(
@@ -119,8 +119,13 @@ class _BaseTunerLayer(nn.Module, ABC):
     def __init__(self, base_layer: nn.Module) -> None:
         kind = type(self)._base_type
         if not isinstance(base_layer, kind):
+            shown = (
+                ", ".join(f"nn.{k.__name__}" for k in kind)
+                if isinstance(kind, tuple)
+                else f"nn.{kind.__name__}"
+            )
             raise TypeError(
-                f"{type(self).__name__} adapts nn.{kind.__name__} in lucid.peft, "
+                f"{type(self).__name__} adapts {shown} in lucid.peft, "
                 f"got {type(base_layer).__name__}"
             )
         if base_layer.has_uninitialized_parameters():
@@ -156,10 +161,10 @@ class _BaseTunerLayer(nn.Module, ABC):
         raise AttributeError(f"{type(self.get_base_layer()).__name__} has no weight parameter")
 
     @property
-    def bias(self) -> Parameter | None:
-        """The base layer's bias, or ``None``."""
+    def bias(self) -> Tensor | None:
+        """The base layer's bias (a buffer on a quantized base), or ``None``."""
         bias = getattr(self.get_base_layer(), "bias", None)
-        return bias if isinstance(bias, Parameter) else None
+        return bias if isinstance(bias, (Parameter, Tensor)) else None
 
     def enable_adapters(self, enabled: bool) -> None:
         """Apply the adapter in the forward pass (``True``) or run the base alone (``False``).

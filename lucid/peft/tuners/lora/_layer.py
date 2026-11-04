@@ -25,6 +25,8 @@ from typing import ClassVar, Final, NamedTuple, override
 import lucid
 import lucid.nn as nn
 import lucid.nn.init as init
+import lucid.nn.quantized as nnq
+import lucid.nn.quantized.dynamic as nnqd
 from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike
 from lucid.nn.parameter import Parameter
@@ -593,11 +595,11 @@ class _Residual(LoraLayer):
     def _merge_targets(self) -> dict[str, Parameter]:
         targets = {f"base_layer.{name}": p for name, p in self._site().parameters().items()}
         bias = self.bias
-        if bias is not None and any(spec.lora_bias for spec in self._specs.values()):
+        if isinstance(bias, Parameter) and any(spec.lora_bias for spec in self._specs.values()):
             targets[_BIAS] = bias
         return targets
 
-    def _bias_target(self) -> Parameter:
+    def _bias_target(self) -> Tensor:
         bias = self.bias
         if bias is None:
             raise RuntimeError("the base layer has no bias to merge into")
@@ -759,7 +761,7 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
     """
 
     _dense_weight = True
-    base_layer: nn.Linear
+    base_layer: nn.Module
 
     def __init__(
         self,
@@ -803,14 +805,18 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
 
     @override
     def _setup(self) -> None:
-        self.in_features = self.base_layer.in_features
-        self.out_features = self.base_layer.out_features
+        base = self.base_layer
+        assert isinstance(base, (nn.Linear, *_QUANTIZED_LINEAR_TYPES))
+        self.in_features = base.in_features
+        self.out_features = base.out_features
         self.lora_A = nn.ModuleDict()
         self.lora_B = nn.ModuleDict()
 
     @override
     def _anchor(self) -> Tensor:
-        return self.base_layer.weight
+        weight = self.base_layer.weight
+        assert isinstance(weight, Tensor)
+        return weight
 
     @override
     def _build_factors(self, r: int, place: _Place) -> _Factors:
@@ -841,3 +847,64 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
         """
         scaling = self._specs[adapter].scaling
         return (self.lora_B[adapter].weight @ self.lora_A[adapter].weight) * scaling
+
+
+_QUANTIZED_LINEAR_TYPES: Final = (nnq.QuantizedLinearMLX, nnq.Linear, nnqd.Linear)
+type _QuantizedBase = nnq.QuantizedLinearMLX | nnq.Linear | nnqd.Linear
+
+
+class QuantizedLinear(Linear):
+    r"""A quantized linear module (``QuantizedLinearMLX``, ``nn.quantized.Linear``, or ``dynamic.Linear``) with a float LoRA update (QLoRA).
+
+    The base layer keeps its quantized integer buffers frozen and executes its
+    low-precision or dequantized forward pass; the low-rank factors ``lora_A``
+    and ``lora_B`` are allocated in ``float32`` on the base buffers' device so
+    gradients flow through both the parallel LoRA branch and the base layer's
+    activation backward pass.
+
+    ``merge`` dequantizes the base weight, adds :math:`s\,B A`, and re-quantizes
+    in place while snapshotting the pre-merge quantized buffers so ``unmerge``
+    restores the exact original packed state without double-quantization drift.
+    """
+
+    _base_type = _QUANTIZED_LINEAR_TYPES
+    _dense_weight = False
+    base_layer: _QuantizedBase
+
+    @override
+    def _setup(self) -> None:
+        super()._setup()
+        self._saved_quantized_buffers: dict[str, Tensor] | None = None
+
+    @override
+    def _anchor(self) -> Tensor:
+        base = self.base_layer
+        if isinstance(base, nnq.QuantizedLinearMLX):
+            return base.scales
+        return base.weight_scale
+
+    @override
+    def _fold(self, adapter: str) -> None:
+        if not self.merged_adapters:
+            self._saved_quantized_buffers = {
+                name: buf.clone()
+                for name, buf in self.base_layer.named_buffers(recurse=False)
+                if name != "bias"
+            }
+        super()._fold(adapter)
+
+    @override
+    def _unfold(self) -> None:
+        saved = self._saved_quantized_buffers
+        if saved is not None:
+            for adapter in self.merged_adapters:
+                bias = self._bias_delta(adapter)
+                if bias is not None:
+                    target = self._bias_target()
+                    target.copy_(_added(target, -bias))
+                self._variant(adapter).remember(self, adapter, None)
+            for name, buf in saved.items():
+                self.base_layer.register_buffer(name, buf)
+            self._saved_quantized_buffers = None
+            return
+        super()._unfold()
