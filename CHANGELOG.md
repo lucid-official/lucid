@@ -56,6 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `lucid-audit`: `--subsystem` now narrows the test-suite and doctest stages and per-file coverage checks to the selected subsystems (LCD-733).
 
+### Changed
+
+- merge float/double vDSP plans into one template
+
 ---
 
 ## [3.16.3] — 2026-11-04
