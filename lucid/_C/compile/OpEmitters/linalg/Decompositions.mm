@@ -34,6 +34,12 @@ constexpr std::int64_t kMaxJacobiDim = 16;
 // Float32's machine epsilon: columns whose cosine is under this are orthogonal
 // as far as their inner product can tell.
 constexpr double kJacobiCosineTol = 1.1920929e-7;
+// Relative to the largest entry.  A column's squared length starts to underflow
+// just under this, and then its length no longer describes it.
+constexpr double kShortestColumn = 1e-18;
+// How far a column of U may lean into the ones before it and still be kept as
+// computed.  Eager's own drift is about this much.
+constexpr double kColumnDriftLimit = 4 * kJacobiCosineTol;
 
 MPSGraphTensor* to_f32(MPSGraph* g, MPSGraphTensor* t) {
     return t.dataType == MPSDataTypeFloat32 ? t
@@ -482,14 +488,14 @@ sort_values_and_cols(MPSGraph* g, MPSGraphTensor* vals, MPSGraphTensor* mat, boo
 
 // ── eigh ─────────────────────────────────────────────────────────────
 
+// Mirrors the strict triangle alone.  Mirroring the diagonal too and subtracting
+// it afterwards doubles it on the way, which is inf past 1.7e38 (LCD-848).
 MPSGraphTensor* symmetrize_from_triangle(MPSGraph* g, MPSGraphTensor* a, bool upper) {
     MPSGraphTensor* tri = [g bandPartWithTensor:a
                                        numLower:(upper ? 0 : -1)numUpper:(upper ? -1 : 0)name:nil];
     MPSGraphTensor* diag = [g bandPartWithTensor:a numLower:0 numUpper:0 name:nil];
-    MPSGraphTensor* sum = [g additionWithPrimaryTensor:tri
-                                       secondaryTensor:swap_last_two(g, tri)
-                                                  name:nil];
-    return [g subtractionWithPrimaryTensor:sum secondaryTensor:diag name:nil];
+    MPSGraphTensor* strict = [g subtractionWithPrimaryTensor:tri secondaryTensor:diag name:nil];
+    return [g additionWithPrimaryTensor:tri secondaryTensor:swap_last_two(g, strict) name:nil];
 }
 
 std::pair<MPSGraphTensor*, MPSGraphTensor*>
@@ -497,7 +503,8 @@ emit_eigh_factors(MPSGraph* g, MPSGraphTensor* a, std::int64_t n, bool upper) {
     const NSInteger rank = (NSInteger)a.shape.count;
     const NSInteger r_dim = rank - 2;
     const NSInteger c_dim = rank - 1;
-    auto [unit, scale] = scale_to_unit(g, symmetrize_from_triangle(g, a, upper));
+    MPSGraphTensor* symmetric = symmetrize_from_triangle(g, a, upper);
+    auto [unit, scale] = scale_to_unit(g, symmetric);
     // One-sided Jacobi diagonalizes BᵀB, whose eigenvectors are B's only when
     // B is positive definite, so shift by twice the Gershgorin radius: every
     // eigenvalue lands in [r, 3r], which also keeps the small ones from being
@@ -525,8 +532,19 @@ emit_eigh_factors(MPSGraph* g, MPSGraphTensor* a, std::int64_t n, bool upper) {
     // Read the eigenvalues back through the unshifted matrix, which carries none
     // of the shift's rounding.  Dividing out the vectors' length makes the
     // quotient second-order in their error; without it, length drift reaches
-    // the eigenvalues at first order.
-    MPSGraphTensor* a_v = [g matrixMultiplicationWithPrimaryTensor:unit
+    // the eigenvalues at first order.  ``unit`` is the wrong copy to read: a 1
+    // beside a 3e38 is under float32's smallest normal there and Metal flushes it
+    // (LCD-848).  The quotient is at most n times the largest entry, so dividing
+    // by kMaxJacobiDim is enough to keep it finite, and a small matrix still gets
+    // the lift of dividing by its own scale.
+    MPSGraphTensor* read_scale =
+        [g minimumWithPrimaryTensor:scale
+                    secondaryTensor:[g constantWithScalar:(double)kMaxJacobiDim dataType:a.dataType]
+                               name:nil];
+    MPSGraphTensor* readable = [g divisionWithPrimaryTensor:symmetric
+                                            secondaryTensor:read_scale
+                                                       name:nil];
+    MPSGraphTensor* a_v = [g matrixMultiplicationWithPrimaryTensor:readable
                                                    secondaryTensor:v_mat
                                                               name:nil];
     MPSGraphTensor* numer = [g reductionSumWithTensor:[g multiplicationWithPrimaryTensor:v_mat
@@ -543,7 +561,7 @@ emit_eigh_factors(MPSGraph* g, MPSGraphTensor* a, std::int64_t n, bool upper) {
         [w_sh addObject:a.shape[(NSUInteger)d]];
     [w_sh addObject:@(n)];
     MPSGraphTensor* w = [g reshapeTensor:[g multiplicationWithPrimaryTensor:w_keep
-                                                            secondaryTensor:scale
+                                                            secondaryTensor:read_scale
                                                                        name:nil]
                                withShape:w_sh
                                     name:nil];
@@ -554,21 +572,112 @@ emit_eigh_factors(MPSGraph* g, MPSGraphTensor* a, std::int64_t n, bool upper) {
 
 // ── svd & pinv (One-sided Hestenes-Jacobi) ───────────────────────────
 
+MPSGraphTensor* column_lengths(MPSGraph* g, MPSGraphTensor* cols) {
+    const NSInteger r_dim = (NSInteger)cols.shape.count - 2;
+    return [g squareRootWithTensor:[g reductionSumWithTensor:[g squareWithTensor:cols name:nil]
+                                                        axes:@[ @(r_dim) ]
+                                                        name:nil]
+                              name:nil];
+}
+
+MPSGraphTensor* remove_span(MPSGraph* g, MPSGraphTensor* basis, MPSGraphTensor* x) {
+    if (basis == nil)
+        return x;
+    MPSGraphTensor* coords = [g matrixMultiplicationWithPrimaryTensor:swap_last_two(g, basis)
+                                                      secondaryTensor:x
+                                                                 name:nil];
+    MPSGraphTensor* inside = [g matrixMultiplicationWithPrimaryTensor:basis
+                                                      secondaryTensor:coords
+                                                                 name:nil];
+    return [g subtractionWithPrimaryTensor:x secondaryTensor:inside name:nil];
+}
+
+// A column of U is a column of W over its length, and once that length is all
+// rounding the result says nothing: a zero column stays zero, and a noise column
+// points anywhere, up to 0.85 of the way along its neighbour at 2x2 (LCD-845).
+// Eager returns an orthonormal basis regardless, and anything projecting with U
+// relies on it.
+//
+// So take the columns largest first and let each through untouched if it is
+// unit length off the span of those before it.  Otherwise remove that span, and
+// if too little is left, use the identity column furthest from the span, which
+// leaves at least sqrt((m - j) / m) of its length: the squared rows of an
+// orthonormal basis sum to j, so one of m rows holds at most j / m.  Replacing a
+// column moves the product by its singular value, which is rounding.
+//
+// Everything is per batch member.  This costs a few matmuls per column, against
+// n^2 * sweeps rotations; a completion through eigh, as full_matrices does in
+// Python, would add a second kernel, 13 s to 42 s at 16x16.
+MPSGraphTensor* orthonormal_columns(MPSGraph* g, MPSGraphTensor* u, std::int64_t n) {
+    const NSInteger r_dim = (NSInteger)u.shape.count - 2;
+    const NSInteger c_dim = r_dim + 1;
+    const std::int64_t m = u.shape[(NSUInteger)r_dim].longLongValue;
+    MPSGraphTensor* half = [g constantWithScalar:0.5 dataType:u.dataType];
+    MPSGraphTensor* drift_limit = [g constantWithScalar:kColumnDriftLimit dataType:u.dataType];
+    MPSShape* column_shape = make_batch_shape(u, m, 1);
+    MPSGraphTensor* row_weight = batch_const(g, u, 0.0, m, 1);
+    std::vector<MPSGraphTensor*> done;
+    done.reserve((std::size_t)n);
+    for (std::int64_t j = 0; j < n; ++j) {
+        MPSGraphTensor* basis = j > 0 ? concat_along(g, done, c_dim) : nil;
+        MPSGraphTensor* raw = [g sliceTensor:u dimension:c_dim start:j length:1 name:nil];
+        MPSGraphTensor* off = remove_span(g, basis, raw);
+        MPSGraphTensor* usable = [g greaterThanOrEqualToWithPrimaryTensor:column_lengths(g, off)
+                                                          secondaryTensor:half
+                                                                     name:nil];
+        MPSGraphTensor* lightest = graph_first_extreme(g, row_weight, r_dim, false);
+        MPSGraphTensor* spare = [g reshapeTensor:[g oneHotWithIndicesTensor:lightest
+                                                                      depth:(NSUInteger)m
+                                                                       axis:(NSUInteger)r_dim
+                                                                   dataType:u.dataType
+                                                                    onValue:1.0
+                                                                   offValue:0.0
+                                                                       name:nil]
+                                       withShape:column_shape
+                                            name:nil];
+        MPSGraphTensor* chosen = [g selectWithPredicateTensor:usable
+                                          truePredicateTensor:off
+                                         falsePredicateTensor:spare
+                                                         name:nil];
+        // The second pass is what makes the result orthogonal to working
+        // precision: the first one's rounding is relative to a column that has
+        // just lost most of its length.
+        MPSGraphTensor* cleaned = remove_span(g, basis, chosen);
+        MPSGraphTensor* unit_cleaned = [g divisionWithPrimaryTensor:cleaned
+                                                    secondaryTensor:column_lengths(g, cleaned)
+                                                               name:nil];
+        MPSGraphTensor* inside = [g subtractionWithPrimaryTensor:raw secondaryTensor:off name:nil];
+        MPSGraphTensor* lean = [g reductionMaximumWithTensor:[g absoluteWithTensor:inside name:nil]
+                                                        axes:@[ @(r_dim) ]
+                                                        name:nil];
+        MPSGraphTensor* settled =
+            [g logicalANDWithPrimaryTensor:usable
+                           secondaryTensor:[g lessThanOrEqualToWithPrimaryTensor:lean
+                                                                 secondaryTensor:drift_limit
+                                                                            name:nil]
+                                      name:nil];
+        MPSGraphTensor* col = [g selectWithPredicateTensor:settled
+                                       truePredicateTensor:raw
+                                      falsePredicateTensor:unit_cleaned
+                                                      name:nil];
+        done.push_back(col);
+        row_weight = [g additionWithPrimaryTensor:row_weight
+                                  secondaryTensor:[g squareWithTensor:col name:nil]
+                                             name:nil];
+    }
+    return concat_along(g, done, c_dim);
+}
+
 std::tuple<MPSGraphTensor*, MPSGraphTensor*, MPSGraphTensor*>
 emit_svd_tall(MPSGraph* g, MPSGraphTensor* a, std::int64_t m, std::int64_t n) {
     const NSInteger rank = (NSInteger)a.shape.count;
-    const NSInteger r_dim = rank - 2;
     auto [unit, scale] = scale_to_unit(g, a);
     auto [w_mat, v_mat] = one_sided_jacobi(g, unit, scale, n);
-    MPSGraphTensor* s_keep =
-        [g squareRootWithTensor:[g reductionSumWithTensor:[g squareWithTensor:w_mat name:nil]
-                                                     axes:@[ @(r_dim) ]
-                                                     name:nil]
-                           name:nil];
-    MPSGraphTensor* eps = [g constantWithScalar:1e-12 dataType:a.dataType];
+    MPSGraphTensor* s_keep = column_lengths(g, w_mat);
+    MPSGraphTensor* shortest = [g constantWithScalar:kShortestColumn dataType:a.dataType];
     MPSGraphTensor* one = [g constantWithScalar:1.0 dataType:a.dataType];
     MPSGraphTensor* safe_s = [g selectWithPredicateTensor:[g greaterThanWithPrimaryTensor:s_keep
-                                                                          secondaryTensor:eps
+                                                                          secondaryTensor:shortest
                                                                                      name:nil]
                                       truePredicateTensor:s_keep
                                      falsePredicateTensor:one
@@ -578,11 +687,9 @@ emit_svd_tall(MPSGraph* g, MPSGraphTensor* a, std::int64_t m, std::int64_t n) {
     for (NSInteger d = 0; d < rank - 2; ++d)
         [s_sh addObject:a.shape[(NSUInteger)d]];
     [s_sh addObject:@(n)];
-    MPSGraphTensor* s_vec = [g reshapeTensor:[g multiplicationWithPrimaryTensor:s_keep
-                                                                secondaryTensor:scale
-                                                                           name:nil]
-                                   withShape:s_sh
-                                        name:nil];
+    MPSGraphTensor* s_vec = [g reshapeTensor:s_keep withShape:s_sh name:nil];
+    // Sorted before scaling, which can flush or overflow values into a tie, and
+    // orthonormal_columns needs the columns largest first.
     if (n > 1) {
         auto [s_sorted, u_sorted] = sort_values_and_cols(g, s_vec, u_mat, true);
         auto [_, v_sorted] = sort_values_and_cols(g, s_vec, v_mat, true);
@@ -590,6 +697,15 @@ emit_svd_tall(MPSGraph* g, MPSGraphTensor* a, std::int64_t m, std::int64_t n) {
         u_mat = u_sorted;
         v_mat = v_sorted;
     }
+    // A poisoned member has no columns to keep, so it would come out as identity
+    // columns, an answer that looks clean.
+    u_mat = [g selectWithPredicateTensor:[g isFiniteWithTensor:scale name:nil]
+                     truePredicateTensor:orthonormal_columns(g, u_mat, n)
+                    falsePredicateTensor:[g constantWithScalar:std::nan("") dataType:a.dataType]
+                                    name:nil];
+    s_vec = [g multiplicationWithPrimaryTensor:s_vec
+                               secondaryTensor:[g squeezeTensor:scale axis:rank - 1 name:nil]
+                                          name:nil];
     return {u_mat, s_vec, swap_last_two(g, v_mat)};
 }
 

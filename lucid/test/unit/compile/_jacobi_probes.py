@@ -23,6 +23,8 @@ _DTYPE = lucid.float32
 _EPS = 1.1920929e-7
 #: Relative to the input's largest entry.  The worst measured is 3e-6 to 8x8.
 _TOL = 100 * _EPS
+#: Relative to eager's largest entry.  The worst measured is 2.1e-5, to 8x8.
+_SVD_GRAD_LIMIT = 1e-4
 #: Exit status of a probe that returned a wrong answer, as against one that broke.
 WRONG_ANSWER = 3
 
@@ -130,23 +132,35 @@ def _check_eigh_lower(a: Tensor, out: tuple[Tensor, Tensor]) -> None:
     _check_eigh(_lower_triangle_matrix(a), out)
 
 
-def _check_svd(a: Tensor, out: tuple[Tensor, Tensor, Tensor]) -> None:
+def _check_svd_factors(a: Tensor, out: tuple[Tensor, Tensor, Tensor]) -> None:
     u, s, vh = out
-    m, n = a.shape
-    k = min(m, n)
-    assert u.shape == (m, m) and vh.shape == (n, n), f"{u.shape} {vh.shape} for {m}x{n}"
+    k = min(a.shape)
     _assert_close(s, _LA.svdvals(a), _max_abs(a), "singular values")
     _assert_orthonormal(u, "U")
     _assert_orthonormal(vh.mT, "Vh")
     _assert_close((u[:, :k] * s[None, :]) @ vh[:k, :], a, _max_abs(a), "U S Vh - A")
 
 
-def _check_svd_vectors_of_deficient(a: Tensor, out: tuple[Tensor, Tensor, Tensor]) -> None:
-    """Exact deficiency is LCD-845.  This one has noise to normalize, and the old drift to beat."""
+def _check_svd(a: Tensor, out: tuple[Tensor, Tensor, Tensor]) -> None:
+    u, _, vh = out
+    m, n = a.shape
+    assert u.shape == (m, m) and vh.shape == (n, n), f"{u.shape} {vh.shape} for {m}x{n}"
+    _check_svd_factors(a, out)
+
+
+def _check_thin_svd(a: Tensor, out: tuple[Tensor, Tensor, Tensor]) -> None:
+    u, _, vh = out
+    m, n = a.shape
+    k = min(m, n)
+    assert u.shape == (m, k) and vh.shape == (k, n), f"{u.shape} {vh.shape} for {m}x{n}"
+    _check_svd_factors(a, out)
+
+
+def _check_thin_svd_members(a: Tensor, out: tuple[Tensor, Tensor, Tensor]) -> None:
+    """Each batch member is held to its own scale."""
     u, s, vh = out
-    _assert_close(s, _LA.svdvals(a), _max_abs(a), "singular values")
-    _assert_orthonormal(u, "U", tol=4e-5)
-    _assert_orthonormal(vh.mT, "Vh", tol=4e-5)
+    for i in range(a.shape[0]):
+        _check_thin_svd(a[i], (u[i], s[i], vh[i]))
 
 
 def _check_svdvals(a: Tensor, s: Tensor) -> None:
@@ -203,6 +217,64 @@ def _check_near_parallel_pinv(a: Tensor, p: Tensor) -> None:
     assert abs(got - want) <= 1e-3 * want, f"pinv[1, 1] = {got:.6g}, truth {want:.6g}"
 
 
+def _low_rank(m: int, n: int, rank: int, seed: int) -> Tensor:
+    return _rand(m, rank, seed) @ _rand(rank, n, seed + 100)
+
+
+def _rank_cases(m: int, n: int) -> dict[str, Tensor]:
+    """U's columns for singular values that are zero or nothing but rounding.
+
+    ``last_row`` puts U's first column on an identity column: completing from
+    that one instead of the one furthest from the span leaves nothing to normalize.
+    ``ones`` cancels exactly, so every later column comes from the spare identity
+    columns.  ``near`` is the graded case: at 2x2 one sweep leaves its second
+    column up to 0.85 of the way along the first.
+    """
+    last_row = lucid.zeros(m, n, device="metal", dtype=_DTYPE)
+    last_row[m - 1, 0] = 1.0
+    rank_one = _low_rank(m, n, 1, 2)
+    cases = {
+        "first": _rand(m, n, 0),
+        "second": _rand(m, n, 1),
+        "zero": lucid.zeros(m, n, device="metal", dtype=_DTYPE),
+        "ones": lucid.ones(m, n, device="metal", dtype=_DTYPE),
+        "rank_one": rank_one,
+        "last_row": last_row,
+        "tiny_rank_one": rank_one * 1e-30,
+        "huge_rank_one": rank_one * 1e30,
+    }
+    below_full = _low_rank(m, n, max(min(m, n) - 1, 1), 3)
+    noise = _rand(m, n, 4)
+    for delta in (1e-9, 1e-7, 1e-6, 1e-5):
+        cases[f"near {delta:g}"] = below_full + delta * noise
+    cases["rank k - 1"] = below_full
+    cases["tiny rank k - 1"] = below_full * 1e-30
+    cases["huge rank k - 1"] = below_full * 1e30
+    return cases
+
+
+def _thin_svd(a: Tensor) -> tuple[Tensor, ...]:
+    return tuple(_LA.svd(a, full_matrices=False))
+
+
+def _check_keeps_small_column(a: Tensor, p: Tensor) -> None:
+    """Under the old 1e-12 cut, U stayed at length 1e-13 and pinv came back 13 orders short."""
+    want = _LA.pinv(a, rtol=1e-20)
+    _assert_close(p, want, _max_abs(want), "pinv of a small column")
+
+
+def _check_each_eigenvalue(a: Tensor, w: Tensor) -> None:
+    """To eager, each against its own size: a 1 beside a 3e38 has to come back a 1."""
+    want = _LA.eigvalsh(a)
+    worst = _max_abs((w.to(_DTYPE) - want) / want)
+    assert worst <= _TOL, f"eigenvalues {w.tolist()}, eager {want.tolist()}"
+
+
+def _check_eigh_near_limit(a: Tensor, out: tuple[Tensor, Tensor]) -> None:
+    _check_each_eigenvalue(a, out[0])
+    _assert_orthonormal(out[1], "V")
+
+
 def _tight_diamonds(x: Tensor, depth: int) -> Tensor:
     """Both arms one op long, the shape the clone walk doubles on; the value stays ``x``."""
     for _ in range(depth):
@@ -237,8 +309,8 @@ class _Probe:
     check: Callable[..., None]
 
 
-def _first(out: Tensor | tuple[Tensor, ...]) -> Tensor:
-    return out if isinstance(out, Tensor) else out[0]
+def _outputs(out: Tensor | tuple[Tensor, ...]) -> tuple[Tensor, ...]:
+    return (out,) if isinstance(out, Tensor) else out
 
 
 def _run(probe: _Probe) -> None:
@@ -250,8 +322,11 @@ def _run(probe: _Probe) -> None:
             probe.check(a, out)
         except AssertionError as failure:
             raise AssertionError(f"{probe.name} on {label}: {failure}") from failure
-        answers.append(_first(out).to(_DTYPE))
-    assert _max_abs(answers[0] - answers[1]) > 0.0, f"{probe.name}: the answer did not follow"
+        answers.append(_outputs(out))
+    moved = (
+        _max_abs(x.to(_DTYPE) - y.to(_DTYPE)) for x, y in zip(answers[0], answers[1], strict=True)
+    )
+    assert max(moved) > 0.0, f"{probe.name}: the answer did not follow"
     print("ok", probe.name, flush=True)
 
 
@@ -290,6 +365,18 @@ def _triangle_group() -> list[_Probe]:
     return probes
 
 
+def _mixed_members(m: int, n: int, seed: int) -> Tensor:
+    return lucid.stack(
+        [
+            _rand(m, n, seed),
+            _low_rank(m, n, 1, seed + 1),
+            lucid.zeros(m, n, device="metal", dtype=_DTYPE),
+            1e20 * _rand(m, n, seed + 2),
+            1e-20 * _low_rank(m, n, 2, seed + 3),
+        ]
+    )
+
+
 def _batch_group() -> list[_Probe]:
     def members(seed: int) -> Tensor:
         return lucid.stack(
@@ -302,7 +389,7 @@ def _batch_group() -> list[_Probe]:
             ]
         )
 
-    return [
+    probes = [
         _Probe(
             "eigh_member_scales",
             lambda a: tuple(_LA.eigh(a)),
@@ -310,14 +397,37 @@ def _batch_group() -> list[_Probe]:
             _check_eigh_members,
         )
     ]
+    for m, n in ((5, 3), (3, 5)):
+        inputs = {"first": _mixed_members(m, n, 0), "second": _mixed_members(m, n, 10)}
+        probes.append(
+            _Probe(f"svd_mixed_members:{m}x{n}", _thin_svd, inputs, _check_thin_svd_members)
+        )
+    return probes
 
 
 def _scale_group() -> list[_Probe]:
     """The rotations decide from inner products, the square of the input's scale."""
     inputs = {f"{scale:g}": _spd(4, 0) * scale for scale in (1e-7, 1e-20, 1e-30, 1e18, 1e30)}
+    # LCD-848: a representable matrix whose diagonal doubles past float32's limit.
+    near_limit = {
+        "diagonal": _tensor([[3e38, 0.0], [0.0, 1.0]]),
+        "negative": _tensor([[-3e38, 0.0], [0.0, 1.0]]),
+        "coupled": _tensor([[3e38, 1e37], [1e37, 1e38]]),
+        "off_diagonal": _tensor([[1.0, 3e38], [3e38, 1.0]]),
+    }
     return [
         _Probe("svdvals_scales", lambda a: _LA.svdvals(a), inputs, _check_svdvals),
         _Probe("eigh_scales", lambda a: tuple(_LA.eigh(a)), inputs, _check_eigh),
+        _Probe(
+            "eigvalsh_near_limit", lambda a: _LA.eigvalsh(a), near_limit, _check_each_eigenvalue
+        ),
+        _Probe("eigh_near_limit", lambda a: tuple(_LA.eigh(a)), near_limit, _check_eigh_near_limit),
+        _Probe(
+            "eigvalsh_U_near_limit",
+            lambda a: _LA.eigvalsh(a, "U"),
+            near_limit,
+            _check_each_eigenvalue,
+        ),
     ]
 
 
@@ -351,18 +461,35 @@ def _deficient_group() -> list[_Probe]:
     """Rank the threshold must find; the near-parallel block is what an absolute cut misses."""
     deficient = _deficient_inputs()
     parallel = {"10": _near_parallel(10.0), "1000": _near_parallel(1000.0)}
-    return [
+    small_column = {
+        f"{small:g}": _tensor([[1.0, 0.0], [0.0, -small]]) for small in (1e-8, 1e-13, 1e-16)
+    }
+    probes = [
         _Probe("rank_deficient", lambda a: _LA.matrix_rank(a), deficient, _check_rank),
         _Probe("pinv_deficient", lambda a: _LA.pinv(a), deficient, _check_pinv),
         _Probe("svdvals_deficient", lambda a: _LA.svdvals(a), deficient, _check_svdvals),
         _Probe("near_parallel_pinv", lambda a: _LA.pinv(a), parallel, _check_near_parallel_pinv),
         _Probe(
+            "pinv_small_column",
+            lambda a: _LA.pinv(a, rtol=1e-20),
+            small_column,
+            _check_keeps_small_column,
+        ),
+        _Probe(
             "svd_rank_2_of_3",
             lambda a: tuple(_LA.svd(a)),
-            {f"seed {seed}": _rand(3, 2, seed) @ _rand(2, 3, seed + 100) for seed in range(8)},
-            _check_svd_vectors_of_deficient,
+            {f"seed {seed}": _low_rank(3, 3, 2, seed) for seed in range(8)},
+            _check_svd,
         ),
     ]
+    for m, n in ((2, 2), (3, 3), (5, 3), (3, 5), (4, 1), (1, 4)):
+        probes.append(_Probe(f"svd_thin:{m}x{n}", _thin_svd, _rank_cases(m, n), _check_thin_svd))
+    # The Python completion projects through U; a wide matrix gets it on Vh.
+    for m, n in ((5, 3), (3, 5)):
+        probes.append(
+            _Probe(f"svd_full:{m}x{n}", lambda a: tuple(_LA.svd(a)), _rank_cases(m, n), _check_svd)
+        )
+    return probes
 
 
 def _chain_group() -> list[_Probe]:
@@ -398,6 +525,50 @@ def _run_training_step() -> None:
     F.mse_loss(eager(x), t).backward()
     _assert_close(compiled_grad, eager.w.grad.to("cpu"), _max_abs(eager.w.grad), "gradient")
     print("ok make_step:tight_diamonds:24", flush=True)
+
+
+class _SvdLoss(nn.Module):
+    """Squared entries of U and Vh, so a column's sign cannot tell two runs apart."""
+
+    def __init__(self, a: Tensor) -> None:
+        super().__init__()
+        m, n = a.shape
+        k = min(m, n)
+        self.a = nn.Parameter(a.clone())
+        self.register_buffer("weight_s", _rand(k, 1, 1).reshape(k))
+        self.register_buffer("weight_u", _rand(m, k, 2))
+        self.register_buffer("weight_vh", _rand(k, n, 3))
+
+    def forward(self, x: Tensor) -> Tensor:
+        u, s, vh = _thin_svd(self.a)
+        total = (s * self.weight_s).sum()
+        total = total + (u * u * self.weight_u).sum() + (vh * vh * self.weight_vh).sum()
+        return total * x
+
+
+def _svd_loss_gap(out: Tensor, target: Tensor) -> Tensor:
+    return (out - target).sum()
+
+
+def _run_svd_step() -> None:
+    """The compiled VJP reads the emitter's U, S and Vh, so a change to U reaches it directly."""
+    x = lucid.ones(1, device="metal", dtype=_DTYPE)
+    t = lucid.zeros(1, device="metal", dtype=_DTYPE)
+    worst = 0.0
+    for m, n in ((3, 3), (5, 3), (3, 5)):
+        a = _rand(m, n, 0)
+        model = _SvdLoss(a).to("metal")
+        step = make_step(model, _svd_loss_gap)
+        for _ in range(2):
+            model.a.grad = None
+            step(x, t).backward()
+        assert not step.eager_only, "the step fell back to eager"
+        eager = _SvdLoss(a).to("metal")
+        _svd_loss_gap(eager(x), t).backward()
+        want = eager.a.grad.detach().to("cpu")
+        worst = max(worst, _max_abs(model.a.grad.detach().to("cpu") - want) / _max_abs(want))
+    assert worst <= _SVD_GRAD_LIMIT, f"gradient off by {worst:.3g}, limit {_SVD_GRAD_LIMIT:.3g}"
+    print(f"ok make_step:svd, worst {worst:.3g}", flush=True)
 
 
 def _poison(a: Tensor, value: float) -> Tensor:
@@ -442,6 +613,19 @@ def _run_poisoned_inputs() -> None:
             for tensor in (w[i], v[i], u[i], s[i], vh[i]):
                 _assert_none_finite(tensor, f"batch member {i}")
         print("ok poisoned batch members", flush=True)
+
+
+def _run_batch_isolation() -> None:
+    """A full-rank member's answer owes nothing to its neighbours, down to the bit."""
+    with lucid.no_grad():
+        kept = _rand(5, 3, 0)
+        full = lucid.stack([kept, _rand(5, 3, 1), _rand(5, 3, 2)])
+        mixed = lucid.stack([kept, _low_rank(5, 3, 1, 3), lucid.zeros_like(kept)])
+        fn = lucid.compile(_thin_svd)
+        fn(full)
+        for got, want in zip(fn(mixed), fn(full), strict=True):
+            assert _max_abs(got[0] - want[0]) == 0.0, "a neighbour moved member 0"
+    print("ok batch isolation", flush=True)
 
 
 def _run_quotient_accuracy() -> None:
@@ -508,13 +692,15 @@ _GROUPS: dict[str, Callable[[], list[_Probe]]] = {
 
 _SCRIPTS: dict[str, Callable[[], None]] = {
     "step": _run_training_step,
+    "svd_step": _run_svd_step,
     "poison": _run_poisoned_inputs,
+    "batch_isolation": _run_batch_isolation,
     "quotient": _run_quotient_accuracy,
     "small_beside_large": _run_small_beside_large,
     "rotation_chain": _run_rotation_chain,
 }
 
-GROUP_NAMES = (*_GROUPS, "step", "poison", "quotient")
+GROUP_NAMES = (*_GROUPS, "step", "svd_step", "poison", "batch_isolation", "quotient")
 
 
 def main(group: str) -> None:
