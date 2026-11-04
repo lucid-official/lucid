@@ -211,6 +211,11 @@ memory-related omissions explicitly:
   --suite-path lucid/test/unit/models --no-line-coverage --no-doctests
 ```
 
+To verify the model zoo family by family, each in its own process under a memory
+budget taken from the machine, run `lucid-audit --models`. It defaults to Metal
+and skips what the machine can't hold, saying so. Add `--family <name>` for one
+family. Use a scratch clone: a moved HEAD stops the run.
+
 Sanitizer builds for memory/UB checking:
 
 ```bash

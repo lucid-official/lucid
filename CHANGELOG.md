@@ -84,6 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - give fused-backward grad masks one owner (LCD-834)
 - stop depending on one-off weight converters
 - let the zoo stage define its own command-line options
+- `lucid-audit` is scoped by package (`--<package>`, `--no-<package>`, children included) and the model zoo is a package (`--models`, included by default, `--no-models` leaves it out). The zoo runs family by family on Metal by default (`--zoo-device cpu` to change), under a memory budget taken from the machine. Baselines are written only by a run that covers everything, and only `--tests-only` can fail the line coverage floor. `--subsystem` and `--list-subsystems` are removed (use `--list-packages`), `--no-metal` is now `--cpu-only`, and `lucid-audit --models` replaces `tools/verify_zoo.py`.
 
 ---
 
