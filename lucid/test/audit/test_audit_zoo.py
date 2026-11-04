@@ -136,7 +136,12 @@ def test_a_stage_that_died_without_saying_why_still_has_a_failure(tmp_path: Path
     log = tmp_path / "stage.log"
     log.write_text("one\ntwo\nthree\nfour\n")
     result = read_result(CommandStage(name="x", command=("x",)), log, "mem-guard", 1.0, 30.0)
-    assert result.failed and result.failures == ["two / three / four"]
+    assert result.failed
+    assert result.failures == [
+        "killed by the memory guard at 30.0 GB after 1s; the log ends: two / three / four"
+    ]
+    plain = read_result(CommandStage(name="x", command=("x",)), log, "fail", 1.0, 0.1)
+    assert plain.failures == ["two / three / four"]
 
 
 def test_a_stage_with_no_tests_is_not_a_failure(tmp_path: Path) -> None:

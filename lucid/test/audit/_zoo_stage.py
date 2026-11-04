@@ -29,6 +29,8 @@ ZOO_WIDE = "zoo-wide"
 #: collected) is not one: a family with no tests of its own has not failed.
 FAILED_STATUSES = frozenset({"fail", "timeout", "mem-guard"})
 
+_KILLED = {"mem-guard": "killed by the memory guard", "timeout": "timed out"}
+
 _SUMMARY = re.compile(r"^(?:=+ )?(\d+ .*?) in [0-9.]+s")
 _FAILED = re.compile(r"^(?:FAILED|ERROR) (.+)$")
 _SKIPPED = re.compile(r"^SKIPPED \[(\d+)\] (.+)$")
@@ -150,7 +152,12 @@ def read_result(
             result.notes.append(adaptive.group(1)[:300])
         elif summary := _SUMMARY.match(line):
             result.summary = summary.group(1)
-    if result.failed and not result.failures:
+    if status in _KILLED:
+        # The process never got to say why; the guard did, so that comes first.
+        tail = " / ".join(lines[-3:])
+        reason = f"{_KILLED[status]} at {peak_gb:.1f} GB after {seconds:.0f}s; the log ends: {tail}"
+        result.failures.insert(0, reason[:300])
+    elif result.failed and not result.failures:
         result.failures.append(" / ".join(lines[-3:])[:300])
     return result
 
