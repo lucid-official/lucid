@@ -513,7 +513,6 @@ class Tensor:
         """
         return Tensor.__new_from_impl__(_C_engine.mT(self._impl))
 
-
     @property
     def real(self) -> Tensor:
         r"""The real part of ``self``: a view of a complex tensor, or ``self``.

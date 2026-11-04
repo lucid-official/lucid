@@ -28,7 +28,7 @@ TensorImplPtr mm_op(const TensorImplPtr& a, const TensorImplPtr& b) {
     if (!a || !b)
         ErrorBuilder("mm").fail("null input");
     if (a->shape().size() != 2 || b->shape().size() != 2)
-        ErrorBuilder("mm").fail("both operands must be 2-D");
+        ErrorBuilder("mm").invalid_argument("both operands must be 2-D");
     const AmpScope amp{"mm", a->device()};
     return matmul_op(amp.cast(a), amp.cast(b));
 }
@@ -37,9 +37,9 @@ TensorImplPtr bmm_op(const TensorImplPtr& a, const TensorImplPtr& b) {
     if (!a || !b)
         ErrorBuilder("bmm").fail("null input");
     if (a->shape().size() != 3 || b->shape().size() != 3)
-        ErrorBuilder("bmm").fail("both operands must be 3-D");
+        ErrorBuilder("bmm").invalid_argument("both operands must be 3-D");
     if (a->shape()[0] != b->shape()[0])
-        ErrorBuilder("bmm").fail("batch dimensions must match");
+        ErrorBuilder("bmm").invalid_argument("batch dimensions must match");
     const AmpScope amp{"bmm", a->device()};
     return matmul_op(amp.cast(a), amp.cast(b));
 }

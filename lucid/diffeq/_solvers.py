@@ -271,10 +271,7 @@ def _unpack(stacked: Tensor, shapes: list[tuple[int, ...]] | None) -> State:
     return tuple(_flatten.unflatten_rows(stacked, shapes))
 
 
-_TIME_DTYPE = {
-    _C_engine.Dtype.C64: _C_engine.Dtype.F32,
-    _C_engine.Dtype.C128: _C_engine.Dtype.F64,
-}
+_TIME_DTYPE = {_C_engine.Dtype.C64: _C_engine.Dtype.F32, _C_engine.Dtype.C128: _C_engine.Dtype.F64}
 
 
 def _require_integrable(y0: Tensor) -> None:

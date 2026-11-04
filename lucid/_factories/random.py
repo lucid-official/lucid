@@ -1373,9 +1373,7 @@ def _require_real_float(
     return list(impl.shape), impl.dtype, impl.device
 
 
-def _exponential_like(
-    input: Tensor, lambd: float, generator: _C_engine.Generator | None
-) -> Tensor:
+def _exponential_like(input: Tensor, lambd: float, generator: _C_engine.Generator | None) -> Tensor:
     """Samples of Exp(lambd) shaped like `input`."""
     if not lambd > 0.0:
         raise _C_engine.InvalidArgument(
@@ -1412,9 +1410,7 @@ def _log_normal_like(
     return lucid.exp(_wrap(_C_engine.normal(shape, mean, std, dt, dev, generator)))
 
 
-def _geometric_like(
-    input: Tensor, p: float, generator: _C_engine.Generator | None
-) -> Tensor:
+def _geometric_like(input: Tensor, p: float, generator: _C_engine.Generator | None) -> Tensor:
     """Samples of Geometric(p) in {1, 2, ...} shaped like `input`."""
     _check_random()
     impl = input._impl
@@ -1435,10 +1431,7 @@ def _geometric_like(
 
 
 def _random_like(
-    input: Tensor,
-    from_: int | None,
-    to: int | None,
-    generator: _C_engine.Generator | None,
+    input: Tensor, from_: int | None, to: int | None, generator: _C_engine.Generator | None
 ) -> Tensor:
     """Discrete uniform integer samples shaped like `input` for `Tensor.random_`."""
     _check_random()

@@ -77,7 +77,7 @@ Shape resolve_reshape_shape(const Shape& in_shape, const std::vector<std::int64_
     }
     if (wildcard_pos != -1) {
         if (known_product == 0) {
-            ErrorBuilder("reshape").fail("cannot infer -1 from a product of zero");
+            ErrorBuilder("reshape").invalid_argument("cannot infer -1 from a product of zero");
         }
         if (in_numel % static_cast<std::size_t>(known_product) != 0) {
             throw ShapeMismatch(in_shape, resolved,
@@ -281,7 +281,7 @@ TensorImplPtr view_op(const TensorImplPtr& a, const std::vector<std::int64_t>& n
     Validator::input(a, "view.a").non_null();
     Shape resolved = resolve_reshape_shape(a->shape(), new_shape);
     if (Stride unused; !view_strides(*a, resolved, unused, UnitAxes::kChunk))
-        ErrorBuilder("view").fail(
+        ErrorBuilder("view").invalid_argument(
             "view size is not compatible with input tensor's size and stride (at least one "
             "dimension spans across two contiguous subspaces) — use .reshape(...) instead");
     // Traced as the reshape it is: compile and Core ML know it by that name.
@@ -299,7 +299,7 @@ TensorImplPtr squeeze_op(const TensorImplPtr& a, int dim) {
     if (ndim == 0)
         return build_view_output(a, Shape{}, "squeeze", UnitAxes::kSqueeze);
     if (a->shape()[static_cast<std::size_t>(wrapped)] != 1) {
-        ErrorBuilder("squeeze").fail("target dim must be size 1");
+        ErrorBuilder("squeeze").invalid_argument("target dim must be size 1");
     }
     Shape new_shape;
     new_shape.reserve(static_cast<std::size_t>(ndim) - 1);
@@ -435,7 +435,7 @@ void validate_as_strided_window(const Shape& size,
                                 std::int64_t offset,
                                 std::int64_t capacity) {
     if (size.size() != stride.size())
-        ErrorBuilder("as_strided").fail("size and stride need the same length");
+        ErrorBuilder("as_strided").invalid_argument("size and stride need the same length");
     // The furthest element, ``offset + sum((size - 1) * stride)``, is formed
     // with overflow checks: wrapped, a huge stride made it small enough to
     // pass, and the view read far outside the storage.
@@ -454,7 +454,7 @@ void validate_as_strided_window(const Shape& size,
         past |= __builtin_add_overflow(last, reach, &last);
     }
     if (!empty && (past || last >= capacity))
-        ErrorBuilder("as_strided").fail("the view reaches past the end of the storage");
+        ErrorBuilder("as_strided").invalid_argument("the view reaches past the end of the storage");
     // Byte strides and the byte offset are these times the element size, so
     // they are held to the element-count limit, which keeps them in 64 bits
     // at every dtype.  A stride over a length-1 axis moves nothing but is

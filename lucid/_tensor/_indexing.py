@@ -456,14 +456,26 @@ def _fancy_select(
 
     if dim == 0:
         # Fast path: index_select directly on dim 0.
-        selected = _C_engine.index_select(impl, 0, idx_flat)  # (M, *rest)
+        try:
+            selected = _C_engine.index_select(impl, 0, idx_flat)  # (M, *rest)
+        except IndexError as exc:
+            msg = str(exc).removeprefix("index_select: index out of range for the gathered axis: ")
+            raise IndexError(msg) from None
         out_shape = list(idx_impl.shape) + rest
         return _C_engine.reshape(selected, out_shape)
 
     # General case: fold dims before `dim` into the first axis.
     outer = _prod(impl.shape[:dim])
     t2d = _C_engine.reshape(impl, [outer, dim_size] + rest)  # (outer, dim_size, *rest)
-    selected = _C_engine.index_select(t2d, 1, idx_flat)  # (outer, M, *rest)
+    try:
+        selected = _C_engine.index_select(t2d, 1, idx_flat)  # (outer, M, *rest)
+    except IndexError as exc:
+        msg = (
+            str(exc)
+            .removeprefix("index_select: index out of range for the gathered axis: ")
+            .replace("for dimension 1 ", f"for dimension {dim} ")
+        )
+        raise IndexError(msg) from None
     out_shape = list(impl.shape[:dim]) + list(idx_impl.shape) + rest
     return _C_engine.reshape(selected, out_shape)
 

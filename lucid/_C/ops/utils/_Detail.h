@@ -83,7 +83,7 @@ inline std::size_t numel(const Shape& s) {
 // axis-specific shape contract (see e.g. :func:`concatenate_op`).
 inline void check_dtype_device_match(const std::vector<TensorImplPtr>& xs, const char* op) {
     if (xs.empty())
-        ErrorBuilder(op).fail("empty input");
+        ErrorBuilder(op).invalid_argument("empty input");
     Validator::input(xs[0], std::string(op) + ".t").non_null();
     Dtype dt = xs[0]->dtype();
     Device device = xs[0]->device();

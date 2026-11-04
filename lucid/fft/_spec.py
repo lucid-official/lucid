@@ -159,6 +159,11 @@ def _wrap_axes(op: str, rank: int, axes: list[int]) -> list[int]:
     return _wrap_dims(axes, rank, op)
 
 
+def _inferred_points(x: Tensor, axis: int, is_last: bool, half_output: bool) -> int:
+    in_size = int(x.shape[axis])
+    return 2 * (in_size - 1) if half_output and is_last else in_size
+
+
 def _spec(
     op: str,
     family: _Family,
@@ -183,14 +188,19 @@ def _spec(
         raise ValueError(f"{op}(): len(s)={len(sizes)} must match len(dim)={len(resolved)}")
     if not resolved and not family.empty_is_identity:
         raise _C_engine.InvalidArgument(f"{op}(): must transform at least one axis")
+    n_axes = len(resolved)
     final: list[int] = []
-    for i, size in enumerate(sizes):  # the lengths agree, checked above
-        if size == -1 and keep_minus_one:
-            last = i == len(resolved) - 1
-            in_size = int(x.shape[resolved[i]])
-            final.append(2 * (in_size - 1) if family.half_output and last else in_size)
-        else:
-            final.append(_check_points(size, op))
+    if sizes:
+        for i, size in enumerate(sizes):
+            pts = (
+                _inferred_points(x, resolved[i], i == n_axes - 1, family.half_output)
+                if size == -1 and keep_minus_one
+                else size
+            )
+            final.append(_check_points(pts, op))
+    else:
+        for i, ax in enumerate(resolved):
+            _check_points(_inferred_points(x, ax, i == n_axes - 1, family.half_output), op)
     return _Spec(op, family, x, resolved, final, norm_v)
 
 

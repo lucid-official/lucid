@@ -744,7 +744,9 @@ def _indexing(name: str, domain: str) -> Iterator[Call]:
     elif name in ("narrow",):
         yield Call([x, 1, 1, 2], {}, 0, "narrow(x, dim, start, length)")
     elif name in ("slice_scatter",):
-        yield Call([x, _f((2, 5), domain), 0, 1, 3], {}, 0, "slice_scatter(x, src, dim, start, end)")
+        yield Call(
+            [x, _f((2, 5), domain), 0, 1, 3], {}, 0, "slice_scatter(x, src, dim, start, end)"
+        )
     elif name in ("where",):
         cond = lucid.tensor((_probe.rng(6).random((4, 5)) > 0.5))
         yield Call([cond, x, src], {}, 1, "where(cond, a, b)")

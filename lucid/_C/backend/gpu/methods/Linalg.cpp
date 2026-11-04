@@ -189,27 +189,41 @@ GpuBackend::linalg_eig(const Storage& a, const Shape&, const Shape&, const Shape
 }
 
 StoragePair GpuBackend::linalg_eigh(
-    const Storage& a, const Shape&, const Shape&, const Shape&, Dtype dt, bool upper) {
+    const Storage& a, const Shape& shape, const Shape&, const Shape&, Dtype dt, bool upper) {
     const auto& ga = std::get<GpuStorage>(a);
+    const int n = static_cast<int>(shape[shape.size() - 1]);
+    if (n >= 3) {
+        auto tri = upper ? ::mlx::core::triu(*ga.arr, 0, k_linalg_stream)
+                         : ::mlx::core::tril(*ga.arr, 0, k_linalg_stream);
+        auto bad = gpu_nonfinite_matrices(tri);
+        auto any_bad = ::mlx::core::any(bad, false, k_linalg_stream);
+        any_bad.eval();
+        MemoryTracker::track_host_sync(any_bad.nbytes());
+        if (any_bad.item<bool>())
+            check_lapack_info(2, "eigh");
+    }
     auto [w, v] = ::mlx::core::linalg::eigh(*ga.arr, gpu::mlx_eigh_uplo(upper), k_linalg_stream);
     return {Storage{gpu::wrap_mlx_array(::mlx::core::contiguous(w), dt)},
             Storage{gpu::wrap_mlx_array(::mlx::core::contiguous(v), dt)}};
 }
 
 std::vector<Storage> GpuBackend::linalg_svd(const Storage& a,
-                                            const Shape&,
+                                            const Shape& shape,
                                             bool compute_uv,
                                             const Shape& u_shape,
                                             const Shape&,
                                             const Shape& vt_shape,
                                             Dtype dt) {
     const auto& ga = std::get<GpuStorage>(a);
-    // A matrix holding a NaN makes LAPACK's gesvdx report an illegal
-    // argument, which MLX throws from its worker thread — the process
-    // aborts.  Such a matrix is decomposed as zeros and its factors are
-    // then replaced with NaN, the reference result (an infinity behaves
-    // the same, so it is treated the same).  No host round trip.
     auto bad = gpu_nonfinite_matrices(*ga.arr);
+    const int k = static_cast<int>(std::min(shape[shape.size() - 2], shape[shape.size() - 1]));
+    if (compute_uv && k >= 3) {
+        auto any_bad = ::mlx::core::any(bad, false, k_linalg_stream);
+        any_bad.eval();
+        MemoryTracker::track_host_sync(any_bad.nbytes());
+        if (any_bad.item<bool>())
+            check_lapack_info(2, "svd");
+    }
     auto pieces =
         ::mlx::core::linalg::svd(gpu_zero_where(bad, *ga.arr), compute_uv, k_linalg_stream);
     std::vector<Storage> out;
@@ -350,7 +364,7 @@ void GpuBackend::gpu_require_finite(const ::mlx::core::array& a, const char* op)
     finite.eval();
     MemoryTracker::track_host_sync(finite.nbytes());
     if (!finite.item<bool>())
-        ErrorBuilder(op).fail("input should not contain infs or NaNs");
+        ErrorBuilder(op).invalid_argument("input should not contain infs or NaNs");
 }
 
 ::mlx::core::array GpuBackend::gpu_lu_inverse(const ::mlx::core::array& a, const char* op) {

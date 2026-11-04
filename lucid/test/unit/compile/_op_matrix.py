@@ -709,7 +709,9 @@ EAGER_REJECTS: dict[tuple[str, str], Refusal] = {
     ("trace", "bool"): _both(_NOT_IMPL, "no trace of a bool matrix"),
     ("topk_values", "bool"): _both(_NOT_IMPL, "topk does not order bools"),
     ("kthvalue", "bool"): _both(_NOT_IMPL, "kthvalue does not order bools"),
+    ("dot", "bool"): _both(_NOT_IMPL, "no dot product of bools"),
     ("inner", "bool"): _both(_NOT_IMPL, "no inner product of bools"),
+    ("matrix_power", "bool"): _both(_NOT_IMPL, "no matrix product of bools"),
     **_each("hypot", _NON_FLOAT, _both(_NOT_IMPL, "hypot takes floating tensors")),
     **_each("logaddexp", _NON_FLOAT, _both(_NOT_IMPL, "logaddexp takes floating tensors")),
     # A norm has no integer form; the reference refuses every order (LCD-384).

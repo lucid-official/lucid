@@ -53,11 +53,7 @@ def _length_for_sym(M: int, sym: bool) -> int:
 
 
 def _degenerate(
-    M: int,
-    dtype: DTypeLike,
-    device: DeviceLike,
-    requires_grad: bool = False,
-    layout: object = None,
+    M: int, dtype: DTypeLike, device: DeviceLike, requires_grad: bool = False, layout: object = None
 ) -> Tensor | None:
     """Check the request; return the window for ``M <= 1``, or ``None`` when
     there is shape to compute.
@@ -234,13 +230,15 @@ def cosine(
     return _trim(w, M, sym, requires_grad)
 
 
-def hann(M: int,
+def hann(
+    M: int,
     *,
     sym: bool = True,
     dtype: DTypeLike = None,
     layout: object = None,
     device: DeviceLike = None,
-    requires_grad: bool = False,) -> Tensor:
+    requires_grad: bool = False,
+) -> Tensor:
     r"""Hann (raised-cosine) window.
 
     The Hann window is a single full cycle of a raised cosine.  Its
@@ -292,7 +290,13 @@ def hann(M: int,
     True
     """
     return general_hamming(
-        M, alpha=0.5, sym=sym, dtype=dtype, layout=layout, device=device, requires_grad=requires_grad
+        M,
+        alpha=0.5,
+        sym=sym,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        requires_grad=requires_grad,
     )
 
 
@@ -352,7 +356,13 @@ def hamming(
     tensor([0.08, 0.54, 1., 0.54, 0.08])
     """
     return general_hamming(
-        M, alpha=0.54, sym=sym, dtype=dtype, layout=layout, device=device, requires_grad=requires_grad
+        M,
+        alpha=0.54,
+        sym=sym,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        requires_grad=requires_grad,
     )
 
 
@@ -567,7 +577,13 @@ def blackman(
     True
     """
     return general_cosine(
-        M, [0.42, 0.50, 0.08], sym=sym, dtype=dtype, layout=layout, device=device, requires_grad=requires_grad
+        M,
+        [0.42, 0.50, 0.08],
+        sym=sym,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        requires_grad=requires_grad,
     )
 
 
@@ -629,7 +645,13 @@ def nuttall(
     tensor([0.0003628, 0.227, 1., 0.227, 0.0003628])
     """
     return general_cosine(
-        M, [0.3635819, 0.4891775, 0.1365995, 0.0106411], sym=sym, dtype=dtype, layout=layout, device=device, requires_grad=requires_grad
+        M,
+        [0.3635819, 0.4891775, 0.1365995, 0.0106411],
+        sym=sym,
+        dtype=dtype,
+        layout=layout,
+        device=device,
+        requires_grad=requires_grad,
     )
 
 

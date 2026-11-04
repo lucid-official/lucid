@@ -1858,7 +1858,8 @@ static py::object decode_scalar(const char* raw, Dtype dt) {
 
 py::object TensorImpl::item() const {
     if (numel() != 1) {
-        ErrorBuilder("item").fail("item() can only be called on a tensor with one element");
+        ErrorBuilder("item").invalid_argument(
+            "item() can only be called on a tensor with one element");
     }
 
     // 3.2.0 fast path: read the single element directly from the storage

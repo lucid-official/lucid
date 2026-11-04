@@ -72,7 +72,7 @@ Storage CpuBackend::gather(const Storage& a,
                     for (std::size_t i = 0; i < rows->inner; ++i) {
                         const std::int64_t k =
                             cpu::checked_axis("gather", load_idx(row + i), axis_extent,
-                                              "index out of range for the gathered axis");
+                                              "index out of range for the gathered axis", axis);
                         dst[row + i] =
                             src[(o * rows->extent + static_cast<std::size_t>(k)) * rows->inner + i];
                     }
@@ -107,7 +107,7 @@ Storage CpuBackend::gather(const Storage& a,
     std::vector<std::int64_t> coord(ndim, 0);
     for (std::size_t out_flat = 0; out_flat < total; ++out_flat) {
         const std::int64_t k = cpu::checked_axis("gather", load_idx(out_flat), axis_extent,
-                                                 "index out of range for the gathered axis");
+                                                 "index out of range for the gathered axis", axis);
         std::size_t a_flat = 0;
         for (std::size_t d = 0; d < ndim; ++d) {
             std::int64_t c = (static_cast<int>(d) == axis) ? k : coord[d];
@@ -187,7 +187,7 @@ Storage CpuBackend::gather_backward(const Storage& grad,
                     for (std::size_t i = 0; i < rows->inner; ++i) {
                         const std::int64_t k = cpu::checked_axis(
                             "cpu_backend::gather_backward", load_idx(row + i), axis_extent,
-                            "index out of range for the gathered axis");
+                            "index out of range for the gathered axis", axis);
                         dst[(o * rows->extent + static_cast<std::size_t>(k)) * rows->inner + i] +=
                             gp[row + i];
                     }
@@ -208,7 +208,7 @@ Storage CpuBackend::gather_backward(const Storage& grad,
         for (std::size_t out_flat = 0; out_flat < total; ++out_flat) {
             const std::int64_t k =
                 cpu::checked_axis("cpu_backend::gather_backward", load_idx(out_flat), axis_extent,
-                                  "index out of range for the gathered axis");
+                                  "index out of range for the gathered axis", axis);
             std::size_t input_flat = 0;
             for (std::size_t d = 0; d < ndim; ++d) {
                 const std::int64_t c = (static_cast<int>(d) == axis) ? k : coord[d];
@@ -386,7 +386,7 @@ Storage CpuBackend::scatter_add(const Storage& base,
                     const std::size_t src_flat = (o * idx_dim + k) * inner + j;
                     const std::int64_t tgt =
                         cpu::checked_axis("scatter_add", load_index(src_flat), len,
-                                          "index out of range for the scattered axis");
+                                          "index out of range for the scattered axis", dim);
                     const std::size_t dst_flat =
                         outer_off[o] + static_cast<std::size_t>(tgt) * dim_stride + inner_off[j];
                     dst[dst_flat] += sp[src_flat];
@@ -445,6 +445,7 @@ CpuBackend::axis_scatter_walk(const Shape& base_shape, const Shape& idx_shape, i
     w.idx_dim = ext(idx_shape, dim);
     w.base_dim = ext(base_shape, dim);
     w.dim_stride = base_stride[static_cast<std::size_t>(dim)];
+    w.dim = dim;
     return w;
 }
 
@@ -460,8 +461,9 @@ void CpuBackend::scatter_set_lines(std::byte* dst,
         for (std::size_t k = 0; k < w.idx_dim; ++k) {
             const std::size_t row = (o * w.idx_dim + k) * inner;
             for (std::size_t j = 0; j < inner; ++j) {
-                const std::int64_t tgt = cpu::checked_axis(
-                    "scatter", read_idx(row + j), len, "index out of range for the scattered axis");
+                const std::int64_t tgt =
+                    cpu::checked_axis("scatter", read_idx(row + j), len,
+                                      "index out of range for the scattered axis", w.dim);
                 const std::size_t at =
                     w.outer_off[o] + static_cast<std::size_t>(tgt) * w.dim_stride + w.inner_off[j];
                 std::memcpy(dst + at * W, src + (row + j) * W, W);
@@ -516,8 +518,9 @@ Storage CpuBackend::scatter_reduce_loop(const Storage& base,
             for (std::size_t k = 0; k < w.idx_dim; ++k) {
                 const std::size_t row = (o * w.idx_dim + k) * inner;
                 for (std::size_t j = 0; j < inner; ++j) {
-                    const std::int64_t tgt = cpu::checked_axis(
-                        name, read_idx(row + j), len, "index out of range for the scattered axis");
+                    const std::int64_t tgt =
+                        cpu::checked_axis(name, read_idx(row + j), len,
+                                          "index out of range for the scattered axis", dim);
                     const std::size_t at = w.outer_off[o] +
                                            static_cast<std::size_t>(tgt) * w.dim_stride +
                                            w.inner_off[j];

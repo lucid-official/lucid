@@ -44,7 +44,7 @@ namespace {
 // Throws a descriptive error for invalid inputs.
 std::vector<int> validate_perm(const std::vector<int>& perm, int ndim) {
     if (static_cast<int>(perm.size()) != ndim) {
-        ErrorBuilder("permute").fail("perm length must equal tensor ndim");
+        ErrorBuilder("permute").invalid_argument("perm length must equal tensor ndim");
     }
     std::vector<int> normalized;
     normalized.reserve(ndim);
@@ -57,7 +57,7 @@ std::vector<int> validate_perm(const std::vector<int>& perm, int ndim) {
     std::sort(sorted.begin(), sorted.end());
     for (int i = 0; i < ndim; ++i) {
         if (sorted[i] != i) {
-            ErrorBuilder("permute").fail("perm must be a permutation of 0..ndim-1");
+            ErrorBuilder("permute").invalid_argument("perm must be a permutation of 0..ndim-1");
         }
     }
     return normalized;
@@ -164,7 +164,7 @@ TensorImplPtr mT_op(const TensorImplPtr& a) {
     Validator::input(a, "mT.a").non_null();
     const int ndim = static_cast<int>(a->shape().size());
     if (ndim < 2)
-        ErrorBuilder("mT").fail("requires ndim >= 2");
+        ErrorBuilder("mT").invalid_argument("requires ndim >= 2");
     std::vector<int> perm(ndim);
     for (int i = 0; i < ndim; ++i)
         perm[i] = i;

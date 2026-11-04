@@ -54,6 +54,7 @@ void require_index_dtype(const TensorImplPtr& idx, const char* op) {
 }  // namespace
 
 TensorImplPtr take_op(const TensorImplPtr& a, const TensorImplPtr& indices) {
+    ErrorContextGuard ctx{"take"};
     if (!a || !indices)
         ErrorBuilder("take").fail("null input");
     require_index_dtype(indices, "take");
@@ -63,15 +64,11 @@ TensorImplPtr take_op(const TensorImplPtr& a, const TensorImplPtr& indices) {
     // jointly carry the gradient back to the original shape.
     const std::int64_t total = static_cast<std::int64_t>(a->numel());
     auto flat = reshape_op(a, Shape{total});
-    try {
-        return gather_op(flat, indices, 0);
-    } catch (LucidError& e) {
-        e.prefix_message("take: ");
-        throw;
-    }
+    return gather_op(flat, indices, 0);
 }
 
 TensorImplPtr index_select_op(const TensorImplPtr& a, int dim, const TensorImplPtr& indices) {
+    ErrorContextGuard ctx{"index_select"};
     if (!a || !indices)
         ErrorBuilder("index_select").fail("null input");
     Validator::pair(a, indices, "index_select").same_device();
@@ -107,12 +104,7 @@ TensorImplPtr index_select_op(const TensorImplPtr& a, int dim, const TensorImplP
     Shape idx_target = a->shape();
     idx_target[static_cast<std::size_t>(d)] = k;
     auto idx_full = broadcast_to_op(idx_r, idx_target);
-    try {
-        return gather_op(a, idx_full, d);
-    } catch (LucidError& e) {
-        e.prefix_message("index_select: ");
-        throw;
-    }
+    return gather_op(a, idx_full, d);
 }
 
 TensorImplPtr narrow_op(const TensorImplPtr& a, int dim, std::int64_t start, std::int64_t length) {

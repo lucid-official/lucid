@@ -920,10 +920,10 @@ void clamp_half_uniform(Storage& out, std::size_t n, double lo, double hi, Dtype
     if (!(lo_h < hi_h))
         return;
     const std::uint16_t hi_bits = narrow(static_cast<float>(hi));
-    const std::uint16_t max_bits =
-        (hi_h > 0.0f) ? static_cast<std::uint16_t>(hi_bits - 1u)
-                      : (hi_h == 0.0f ? (is_bf16 ? 0x8080u : 0x8001u)
-                                      : static_cast<std::uint16_t>(hi_bits + 1u));
+    const std::uint16_t max_bits = (hi_h > 0.0f)
+                                       ? static_cast<std::uint16_t>(hi_bits - 1u)
+                                       : (hi_h == 0.0f ? (is_bf16 ? 0x8080u : 0x8001u)
+                                                       : static_cast<std::uint16_t>(hi_bits + 1u));
     auto* p = reinterpret_cast<std::uint16_t*>(std::get<CpuStorage>(out).ptr.get());
     for (std::size_t i = 0; i < n; ++i) {
         if (widen(p[i]) >= hi_h)

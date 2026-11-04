@@ -85,7 +85,7 @@ const OpSchema TraceBackward::schema_v1{"trace", 1, AmpPolicy::KeepInput, true};
 TensorImplPtr trace_op(const TensorImplPtr& a_in) {
     Validator::input(a_in, "trace.a").non_null();
     if (a_in->shape().size() < 2)
-        ErrorBuilder("trace").fail("input must have ndim >= 2");
+        ErrorBuilder("trace").invalid_argument("input must have ndim >= 2");
     // The narrow integers add up in int64, as ``sum`` does.  Bool stays as it
     // is: the backend refuses it, as the reference refuses ``trace`` of a bool.
     const TensorImplPtr wide = a_in->dtype() == Dtype::Bool ? a_in : promote_int_for_reduce(a_in);

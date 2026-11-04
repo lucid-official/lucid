@@ -504,14 +504,70 @@ inline MPSGraphTensor* exact_exp2_f32(MPSGraph* g, MPSGraphTensor* y) {
                                    name:nil];
 }
 
+// Match ``gpu_pow_detail::int_pow_steps`` in ``lucid/_C/backend/gpu/Pow.h``:
+// widen ``int8`` to ``int32`` (MPSGraph's ``power`` on ``int8`` returns wrong
+// values even for positive exponents) and handle negative exponents without
+// undefined shift/division behaviour (``1**b = 1``, ``(-1)**b = ±1``, else 0).
+inline MPSGraphTensor*
+emit_int_pow_tensor(MPSGraph* g, MPSGraphTensor* a_in, MPSGraphTensor* b_in) {
+    const MPSDataType orig_dt = a_in.dataType;
+    if (orig_dt != MPSDataTypeInt8 && orig_dt != MPSDataTypeInt16 && orig_dt != MPSDataTypeInt32 &&
+        orig_dt != MPSDataTypeInt64) {
+        return [g powerWithPrimaryTensor:a_in secondaryTensor:b_in name:@"pow"];
+    }
+    const MPSDataType dt = (orig_dt == MPSDataTypeInt8) ? MPSDataTypeInt32 : orig_dt;
+    MPSGraphTensor* a0 = (orig_dt == dt) ? a_in : [g castTensor:a_in toType:dt name:nil];
+    MPSGraphTensor* b0 = (b_in.dataType == dt) ? b_in : [g castTensor:b_in toType:dt name:nil];
+    MPSGraphTensor* zero = [g constantWithScalar:0.0 dataType:dt];
+    MPSGraphTensor* one = [g constantWithScalar:1.0 dataType:dt];
+    MPSGraphTensor* neg_one = [g constantWithScalar:-1.0 dataType:dt];
+    MPSGraphTensor* zero_ab = [g multiplicationWithPrimaryTensor:[g additionWithPrimaryTensor:a0
+                                                                              secondaryTensor:b0
+                                                                                         name:nil]
+                                                 secondaryTensor:zero
+                                                            name:nil];
+    MPSGraphTensor* a = [g additionWithPrimaryTensor:a0 secondaryTensor:zero_ab name:nil];
+    MPSGraphTensor* b = [g additionWithPrimaryTensor:b0 secondaryTensor:zero_ab name:nil];
+    MPSGraphTensor* pos_b = [g maximumWithPrimaryTensor:b secondaryTensor:zero name:nil];
+    MPSGraphTensor* pos_pow = [g powerWithPrimaryTensor:a secondaryTensor:pos_b name:nil];
+    MPSGraphTensor* odd_b = [g notEqualWithPrimaryTensor:[g bitwiseANDWithPrimaryTensor:b
+                                                                        secondaryTensor:one
+                                                                                   name:nil]
+                                         secondaryTensor:zero
+                                                    name:nil];
+    MPSGraphTensor* neg_one_pow = [g selectWithPredicateTensor:odd_b
+                                           truePredicateTensor:neg_one
+                                          falsePredicateTensor:one
+                                                          name:nil];
+    MPSGraphTensor* from_neg_one = [g selectWithPredicateTensor:[g equalWithPrimaryTensor:a
+                                                                          secondaryTensor:neg_one
+                                                                                     name:nil]
+                                            truePredicateTensor:neg_one_pow
+                                           falsePredicateTensor:zero
+                                                           name:nil];
+    MPSGraphTensor* neg_pow = [g selectWithPredicateTensor:[g equalWithPrimaryTensor:a
+                                                                     secondaryTensor:one
+                                                                                name:nil]
+                                       truePredicateTensor:one
+                                      falsePredicateTensor:from_neg_one
+                                                      name:nil];
+    MPSGraphTensor* res = [g selectWithPredicateTensor:[g lessThanWithPrimaryTensor:b
+                                                                    secondaryTensor:zero
+                                                                               name:nil]
+                                   truePredicateTensor:neg_pow
+                                  falsePredicateTensor:pos_pow
+                                                  name:@"pow"];
+    return (orig_dt == dt) ? res : [g castTensor:res toType:orig_dt name:@"pow_cast"];
+}
+
 // Match ``gpu_pow(a, b)`` in ``lucid/_C/backend/gpu/Pow.h``: float32,
 // float16, and bfloat16 evaluate the special-exponent table element-by-element
-// in float32, while integer and complex dtypes use ``powerWithPrimaryTensor``.
+// in float32, while signed integers use ``emit_int_pow_tensor``.
 inline MPSGraphTensor* emit_pow_tensor(MPSGraph* g, MPSGraphTensor* a, MPSGraphTensor* b) {
     const MPSDataType orig_dt = a.dataType;
     if (orig_dt != MPSDataTypeFloat32 && orig_dt != MPSDataTypeFloat16 &&
         orig_dt != MPSDataTypeBFloat16) {
-        return [g powerWithPrimaryTensor:a secondaryTensor:b name:@"pow"];
+        return emit_int_pow_tensor(g, a, b);
     }
     MPSGraphTensor* xf =
         (orig_dt == MPSDataTypeFloat32) ? a : [g castTensor:a toType:MPSDataTypeFloat32 name:nil];
@@ -905,7 +961,8 @@ public:
             y = emit_pow_special_scalar(graph, x_t, er);
         } else {
             MPSGraphTensor* e = [graph constantWithScalar:static_cast<double>(er) dataType:dt];
-            y = [graph powerWithPrimaryTensor:x_t secondaryTensor:e name:@"pow_scalar"];
+            y = is_float ? [graph powerWithPrimaryTensor:x_t secondaryTensor:e name:@"pow_scalar"]
+                         : emit_int_pow_tensor(graph, x_t, e);
         }
         ctx.bind(node.outputs[0].id, (__bridge void*)y);
         return true;

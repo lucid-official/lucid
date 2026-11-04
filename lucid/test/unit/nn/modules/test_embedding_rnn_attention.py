@@ -302,7 +302,6 @@ class TestEmbeddingScaleGradByFreq:
             assert np.allclose(got, np.ones(3) * (count / count), atol=1e-6), count
 
 
-
 class TestModuleAttributeParity:
     """Reference attribute parity across recurrent, attention, transformer, and pooling modules."""
 

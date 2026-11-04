@@ -2823,9 +2823,6 @@ class TestDiffeqKernelDtypesAndHalfPrecision:
         assert traj.dtype == lucid.complex64
         assert traj.device == device
         final = traj[-1].tolist()
-        expected = [
-            (1.0 + 0.5j) * cmath.exp(1j * omega),
-            (-0.5 + 1.0j) * cmath.exp(1j * omega),
-        ]
+        expected = [(1.0 + 0.5j) * cmath.exp(1j * omega), (-0.5 + 1.0j) * cmath.exp(1j * omega)]
         for got, want in zip(final, expected, strict=True):
             assert abs(got - want) < 1e-4

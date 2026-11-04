@@ -1477,7 +1477,11 @@ __all__ = [
     "lgamma",
     "digamma",
     "i0",
-    "deg2rad", "rad2deg", "logaddexp2", "sgn", "fix",
+    "deg2rad",
+    "rad2deg",
+    "logaddexp2",
+    "sgn",
+    "fix",
 ]
 
 

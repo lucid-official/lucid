@@ -263,3 +263,21 @@ def test_pinv_all_inf_is_nan_while_single_inf_is_zero(device: str, dtype: lucid.
     out = LA.pinv(batch).to("cpu").numpy()
     assert np.isnan(out[0]).all()
     np.testing.assert_array_equal(out[1], np.zeros((2, 2), dtype=out.dtype))
+
+
+@pytest.mark.parametrize(("device", "dtype"), device_dtype_params([lucid.float32, lucid.float64]))
+@pytest.mark.parametrize("bad", [_NAN, _INF], ids=["nan", "inf"])
+def test_rank3_nonfinite_svd_pinv_eigh_raise_linalg_error(
+    device: str, dtype: lucid.dtype, bad: float
+) -> None:
+    """For ``min(m, n) >= 3``, non-finite inputs to ``svd``, ``pinv``, and ``eigh``
+    raise ``LinAlgError`` on both CPU and Metal (LCD-674)."""
+    mat = np.eye(3, dtype=np.float64)
+    mat[0, 0] = bad
+    t = lucid.tensor(mat, dtype=dtype, device=device)
+    with pytest.raises(LA.LinAlgError):
+        LA.svd(t)
+    with pytest.raises(LA.LinAlgError):
+        LA.pinv(t)
+    with pytest.raises(LA.LinAlgError):
+        LA.eigh(t)

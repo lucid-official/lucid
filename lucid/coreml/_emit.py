@@ -333,10 +333,7 @@ def _ints(value: object) -> list[int]:
 
 def _pad_pairs(padding: object) -> list[int]:
     """Lucid's one pad per axis as MIL's ``[before, after]`` per axis."""
-    pairs: list[int] = []
-    for pad in _ints(padding):
-        pairs += [pad, pad]
-    return pairs
+    return [p for pad in _ints(padding) for p in (pad, pad)]
 
 
 def _register_conv(lucid_name: str) -> None:
@@ -373,12 +370,8 @@ def _register_pool(lucid_name: str, mil_name: str, counts_pad: bool) -> None:
             ("ceil_mode", b.const_bool(_flag(attrs.get("ceil_mode")))),
         ]
         if counts_pad:
-            bindings.append(
-                (
-                    "exclude_padding_from_average",
-                    b.const_bool(not _flag(attrs.get("count_include_pad"), True)),
-                )
-            )
+            excl = b.const_bool(not _flag(attrs.get("count_include_pad"), True))
+            bindings.append(("exclude_padding_from_average", excl))
         return mil_name, bindings
 
     EMITTERS[lucid_name] = emit
@@ -447,8 +440,10 @@ def _runtime_base(b: Builder, op: TracedOp, base: str, exponent: str) -> str:
     """
     shape = b.shape_of(exponent)
     dims = b.emit("shape", [("x", exponent)], [len(shape)], dtype=_MIL_INT32)
-    ones = b.emit("fill", [("shape", dims), ("value", b.const_float(1.0))], shape)
-    return b.emit("mul", [("x", ones), ("y", base)], b.result_dims(op))
+    dt = b.dtype_of(base)
+    one = b.const_int(1) if dt == _MIL_INT32 else b.const_float(1.0)
+    ones = b.emit("fill", [("shape", dims), ("value", one)], shape, dtype=dt)
+    return b.emit("mul", [("x", ones), ("y", base)], b.result_dims(op), dtype=dt)
 
 
 def _register_binary(lucid_name: str, mil_name: str) -> None:
@@ -1089,6 +1084,12 @@ def _pow_scalar(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
     the caller chose; MIL's ``pow`` takes both operands as tensors, so
     the constant becomes one.
     """
+    target = b.result_mil_dtype(op)
+    if target == _MIL_INT32:
+        exp_int = b.const_int(_as_int(_attr(op, "exp")))
+        opmath = emit_opmath_binary(b, op, "pow", "pow", ins[0], exp_int, _MIL_INT32)
+        assert opmath is not None
+        return opmath
     return "pow", [("x", ins[0]), ("y", b.const_float32(_as_float(_attr(op, "exp"))))]
 
 
@@ -1102,13 +1103,10 @@ def _unfold_dim(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
     ``sliding_windows`` does the sliding itself, so this does not become
     the slice-and-concatenate chain the MPSGraph emitter needs.
     """
-    shape = b.shape_of(ins[0])
-    rank = len(shape)
+    shape, rank = b.shape_of(ins[0]), len(b.shape_of(ins[0]))
     axis = _as_int(_attr(op, "dim"))
-    if axis < 0:
-        axis += rank
-    size = _as_int(_attr(op, "size"))
-    step = _as_int(_attr(op, "step"))
+    axis = axis + rank if axis < 0 else axis
+    size, step = _as_int(_attr(op, "size")), _as_int(_attr(op, "step"))
 
     windowed = shape.declared()
     windowed[axis] = (shape[axis] - size) // step + 1
@@ -1124,8 +1122,10 @@ def _unfold_dim(b: Builder, op: TracedOp, ins: list[str]) -> EmitResult:
         windowed,
     )
     # Move the window axis from just after the slid one to the end.
-    perm = [i for i in range(rank + 1) if i != axis + 1] + [axis + 1]
-    return "transpose", [("x", slid), ("perm", b.const_ints(perm))]
+    return "transpose", [
+        ("x", slid),
+        ("perm", b.const_ints([i for i in range(rank + 1) if i != axis + 1] + [axis + 1])),
+    ]
 
 
 @_emitter("scatter_add")

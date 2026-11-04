@@ -7,7 +7,13 @@ from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
 from lucid._ops._dims import _wrap_dim
-from lucid._ops._reduce import _MinMax, _ValuesIndices, _reduction_axes, _run_with_dtype, _truth_count
+from lucid._ops._reduce import (
+    _MinMax,
+    _ValuesIndices,
+    _reduction_axes,
+    _run_with_dtype,
+    _truth_count,
+)
 from lucid._types import DTypeLike
 
 if TYPE_CHECKING:
@@ -812,9 +818,7 @@ def _gradient_1d_uniform(x: Tensor, h: float, d: int, edge_order: int) -> Tensor
     else:
         left = (-1.5 * x.narrow(d, 0, 1) + 2.0 * x.narrow(d, 1, 1) - 0.5 * x.narrow(d, 2, 1)) / h
         right = (
-            0.5 * x.narrow(d, n - 3, 1)
-            - 2.0 * x.narrow(d, n - 2, 1)
-            + 1.5 * x.narrow(d, n - 1, 1)
+            0.5 * x.narrow(d, n - 3, 1) - 2.0 * x.narrow(d, n - 2, 1) + 1.5 * x.narrow(d, n - 1, 1)
         ) / h
     if n == 2:
         return lucid.cat([left, right], dim=d)
@@ -890,7 +894,9 @@ def gradient(
     axes = (
         list(range(input.ndim))
         if dim is None
-        else [_wrap_dim(a, input.ndim, "gradient") for a in ([dim] if isinstance(dim, int) else dim)]
+        else [
+            _wrap_dim(a, input.ndim, "gradient") for a in ([dim] if isinstance(dim, int) else dim)
+        ]
     )
     x = input.to(lucid.get_default_dtype()) if _promotion.is_integral(input._impl.dtype) else input
     spacings = _parse_gradient_spacings(spacing, len(axes))

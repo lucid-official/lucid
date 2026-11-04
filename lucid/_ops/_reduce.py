@@ -659,9 +659,7 @@ def _to_truth_operand(x: _Impl | Scalar) -> _Impl | bool:
     return bool(_promotion.as_number(x))
 
 
-def _make_logical_adapter(
-    engine_fn: Callable[[_Impl, _Impl], _Impl],
-) -> Callable[..., _Impl]:
+def _make_logical_adapter(engine_fn: Callable[[_Impl, _Impl], _Impl]) -> Callable[..., _Impl]:
     """Wrap a binary logical engine op with subnormal-preserving truth masks."""
     from lucid._dispatch import _binary_operands
     from lucid._ops._adapters import _BINARY_SIGNATURE

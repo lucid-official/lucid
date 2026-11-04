@@ -1159,8 +1159,6 @@ def _uniform_(
     return _fill_drawn(self, "uniform_", lambda base: _uniform_like(base, from_, to, generator))
 
 
-
-
 from lucid._tensor._free_fn_methods import (
     _cauchy_,
     _exponential_,
@@ -1179,7 +1177,6 @@ from lucid._tensor._free_fn_methods import (
     _transpose_,
     _unsqueeze_,
 )
-
 
 _GENERATED_INPLACE_TWINS: tuple[tuple[str, Callable[..., Tensor]], ...] = (
     *((n, _make_unary_inplace(n)) for n in _UNARY_INPLACE_TWINS),

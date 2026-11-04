@@ -1340,16 +1340,12 @@ def diagflat(input: Tensor, offset: int = 0) -> Tensor:
     return diag_embed(input.reshape(-1), offset=offset)
 
 
-def concatenate(
-    tensors: Sequence[Tensor], dim: int = 0, *, axis: int | None = None
-) -> Tensor:
+def concatenate(tensors: Sequence[Tensor], dim: int = 0, *, axis: int | None = None) -> Tensor:
     """Concatenate a sequence of tensors along an existing dimension (alias of :func:`lucid.cat`)."""
     return lucid.cat(list(tensors), dim=dim if axis is None else axis)
 
 
-def split_with_sizes(
-    input: Tensor, split_sizes: Sequence[int], dim: int = 0
-) -> tuple[Tensor, ...]:
+def split_with_sizes(input: Tensor, split_sizes: Sequence[int], dim: int = 0) -> tuple[Tensor, ...]:
     """Split ``input`` into a tuple of views with the exact section lengths ``split_sizes`` along ``dim``."""
     return tuple(lucid.split(input, list(split_sizes), dim=dim))
 

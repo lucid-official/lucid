@@ -35,11 +35,36 @@ inline std::string lapack_failure_reason(std::string_view op, int k) {
         return "The factorization could not be completed because the input is not "
                "positive-definite (the leading minor of order " +
                at + " is not positive-definite).";
-    if (op == "inv" || op == "solve" || op == "matrix_power")
-        return "The diagonal element " + at + " is zero, the " +
-               std::string(op == "solve" ? "solve" : "inversion") +
-               " could not be completed because the input matrix is singular.";
-    return "LAPACK numerical failure (info=" + at + ")";
+    if (op == "solve")
+        return "The diagonal element " + at +
+               " is zero, the solve could not be completed because the input matrix is singular.";
+    if (op == "inv" || op == "matrix_power")
+        return "The diagonal element " + at +
+               " is zero, the inversion could not be completed because the input matrix is "
+               "singular.";
+    static constexpr std::pair<std::string_view, std::string_view> kSingularOps[] = {
+        {"solve_triangular", ""}, {"lu_solve", ""}, {"lu_factor", ""},
+        {"ldl_factor", ""},       {"det", ""},
+    };
+    for (const auto& [name, _] : kSingularOps) {
+        if (op == name)
+            return "The diagonal element " + at +
+                   " is zero, the factorization could not be completed because the input matrix is "
+                   "singular.";
+    }
+    static constexpr std::pair<std::string_view, std::string_view> kConvergeOps[] = {
+        {"eigh", "eigenvalues"},     {"eigvalsh", "eigenvalues"},  {"svd", "singular values"},
+        {"pinv", "singular values"}, {"lstsq", "singular values"},
+    };
+    for (const auto& [name, what] : kConvergeOps) {
+        if (op == name)
+            return "The algorithm failed to converge because the input matrix is ill-conditioned "
+                   "or has too many repeated " +
+                   std::string(what) + " (error code: " + at + ").";
+    }
+    if (op == "eig" || op == "eigvals")
+        return "The QR algorithm failed to compute all eigenvalues (error code: " + at + ").";
+    return "The algorithm failed to converge (error code: " + at + ").";
 }
 
 // Raise for a non-zero LAPACK ``info`` of matrix ``index`` among ``batch``.
@@ -73,6 +98,19 @@ inline void check_step_flags(const bool* flags, std::size_t count, std::size_t n
         return;
     check_lapack_info(static_cast<int>(first % n) + 1, op, static_cast<std::int64_t>(first / n),
                       static_cast<std::int64_t>(count / n));
+}
+
+// Raise for the first non-finite entry in the active triangle of ``mat``
+// when ``n >= 3`` (matching the reference's ``eigh`` / ``eigvalsh`` check).
+template <typename T>
+inline void
+check_eigh_triangle_finite(const T* mat, int n, bool upper, std::int64_t b, std::int64_t batch) {
+    if (n < 3)
+        return;
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+            if ((upper ? (i <= j) : (i >= j)) && !(mat[i * n + j] - mat[i * n + j] == T{0}))
+                check_lapack_info(2, "eigh", b, batch);
 }
 
 }  // namespace lucid::backend

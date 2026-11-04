@@ -234,7 +234,7 @@ inline std::vector<std::int64_t> resolve_fft_lengths(const Shape& in_shape,
         std::int64_t len = n.empty() ? in_shape[ax] : n[i];
         if (n.empty() && is_irfft && i + 1 == axes.size())
             len = (in_shape[ax] - 1) * 2;
-        if ((!n.empty() || is_irfft) && len <= 0) {
+        if (len <= 0) {
             ErrorBuilder(op).invalid_argument("Invalid number of data points (" +
                                               std::to_string(len) + ") specified");
         }

@@ -228,7 +228,7 @@ sequence_to_device(CpuStorage cpu, const Shape& shape, Dtype fill, Dtype dt, Dev
 // is undefined, and an infinite ``stop`` came out as INT64_MAX elements.
 std::int64_t arange_length(double start, double stop, double step) {
     if (step == 0.0 || std::isnan(step))
-        ErrorBuilder("arange").fail("step must be non-zero and not NaN");
+        ErrorBuilder("arange").invalid_argument("step must be non-zero and not NaN");
     const auto text = [](double v) {
         std::ostringstream os;
         os << v;
@@ -1162,7 +1162,7 @@ TensorImplPtr unfold_dim_op(const TensorImplPtr& a, int dim, int size, int step)
         return reshape_op(unfold_dim_op(reshape_op(a, {1}), 0, size, step), {size});
     const int dim_size = static_cast<int>(in_shape[static_cast<std::size_t>(d)]);
     if (size > dim_size)
-        ErrorBuilder("unfold_dim").fail("size > dimension size");
+        ErrorBuilder("unfold_dim").invalid_argument("size > dimension size");
 
     const int L = (dim_size - size) / step + 1;
     Shape out_shape;

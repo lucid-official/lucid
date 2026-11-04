@@ -477,7 +477,7 @@ TensorImplPtr stack_op(const std::vector<TensorImplPtr>& xs, int axis) {
 // NumPy/reference semantics.
 TensorImplPtr hstack_op(const std::vector<TensorImplPtr>& xs) {
     if (xs.empty())
-        ErrorBuilder("hstack").fail("empty input");
+        ErrorBuilder("hstack").invalid_argument("empty input");
     std::vector<TensorImplPtr> promoted;
     promoted.reserve(xs.size());
     for (const auto& t : xs) {
@@ -493,7 +493,7 @@ TensorImplPtr hstack_op(const std::vector<TensorImplPtr>& xs) {
 // semantics.
 TensorImplPtr vstack_op(const std::vector<TensorImplPtr>& xs) {
     if (xs.empty())
-        ErrorBuilder("vstack").fail("empty input");
+        ErrorBuilder("vstack").invalid_argument("empty input");
     std::vector<TensorImplPtr> promoted;
     promoted.reserve(xs.size());
     for (const auto& t : xs) {
@@ -522,7 +522,7 @@ std::vector<TensorImplPtr> split_op(const TensorImplPtr& a, std::int64_t num_spl
     if (num_splits <= 0)
         ErrorBuilder("split").invalid_argument("num_splits must be positive");
     if (a->shape()[ax] % num_splits != 0)
-        ErrorBuilder("split").fail("dimension not divisible by num_splits");
+        ErrorBuilder("split").invalid_argument("dimension not divisible by num_splits");
     const std::int64_t piece = a->shape()[ax] / num_splits;
     Shape piece_shape = a->shape();
     piece_shape[ax] = piece;
@@ -588,9 +588,10 @@ split_at_op(const TensorImplPtr& a, std::vector<std::int64_t> indices, int axis)
     std::int64_t previous = 0;
     for (std::int64_t at : indices) {
         if (at < 0 || at > extent)
-            ErrorBuilder("split_at").fail("cut point lies outside the axis being split");
+            ErrorBuilder("split_at")
+                .invalid_argument("cut point lies outside the axis being split");
         if (at < previous)
-            ErrorBuilder("split_at").fail("cut points must be non-decreasing");
+            ErrorBuilder("split_at").invalid_argument("cut points must be non-decreasing");
         previous = at;
     }
     // Carry axis + cut-point indices into the trace so the compile-path

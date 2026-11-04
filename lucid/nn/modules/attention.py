@@ -127,8 +127,6 @@ def _kv_head_count(embed_dim: int, num_heads: int, num_kv_heads: int | None) -> 
     return kv_heads
 
 
-
-
 class _OutProjView(Linear):
     """Linear view over :class:`MultiheadAttention`'s flat output projection parameters."""
 
@@ -536,10 +534,7 @@ class MultiheadAttention(Module):
         return super().get_submodule(target)
 
     def merge_masks(
-        self,
-        attn_mask: Tensor | None,
-        key_padding_mask: Tensor | None,
-        query: Tensor,
+        self, attn_mask: Tensor | None, key_padding_mask: Tensor | None, query: Tensor
     ) -> tuple[Tensor | None, int | None]:
         r"""Determine mask type and combine ``attn_mask`` and ``key_padding_mask`` if needed.
 

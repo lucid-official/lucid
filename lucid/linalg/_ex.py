@@ -1340,10 +1340,7 @@ def cholesky_inverse(L: Tensor, upper: bool = False) -> Tensor:
 
 
 def lu_unpack(
-    LU_data: Tensor,
-    LU_pivots: Tensor,
-    unpack_data: bool = True,
-    unpack_pivots: bool = True,
+    LU_data: Tensor, LU_pivots: Tensor, unpack_data: bool = True, unpack_pivots: bool = True
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Unpack the packed LU factorization `(LU_data, LU_pivots)` into `(P, L, U)`.
 

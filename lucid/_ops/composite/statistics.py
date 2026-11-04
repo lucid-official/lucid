@@ -539,8 +539,7 @@ def cdist(
         if p == 0.0:
             # Count the non-zero differences; NaN is not one.
             counted = _C_engine.logical_and(
-                _truth_mask(diff),
-                _C_engine.logical_not(_C_engine.isnan(diff)),
+                _truth_mask(diff), _C_engine.logical_not(_C_engine.isnan(diff))
             )
             return _wrap(_C_engine.astype(_C_engine.sum(counted, last, False), diff.dtype))
         # Every other order — 1, inf, and the general p whose root used to give

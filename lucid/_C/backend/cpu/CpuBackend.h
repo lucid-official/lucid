@@ -594,6 +594,7 @@ private:
         std::size_t idx_dim = 0;             // index extent along ``dim``
         std::size_t base_dim = 0;            // base extent along ``dim``
         std::size_t dim_stride = 0;          // base stride of ``dim``, in elements
+        int dim = 0;                         // wrapped axis index
     };
 
     static AxisScatterWalk

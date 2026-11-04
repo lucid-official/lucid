@@ -221,13 +221,7 @@ class QuantizedLinearMLX(nn.Module):
         sc = self.scales if self.scales.is_metal else self.scales.to("metal")
         bi = self.biases if self.biases.is_metal else self.biases.to("metal")
         y = quantized_matmul(
-            x,
-            pw,
-            sc,
-            bi,
-            transpose=True,
-            group_size=self.group_size,
-            bits=self.bits,
+            x, pw, sc, bi, transpose=True, group_size=self.group_size, bits=self.bits
         )
         if self.bias is not None:
             b = self.bias if self.bias.is_metal else self.bias.to("metal")

@@ -94,11 +94,14 @@ inline std::int64_t checked_row(const char* op, std::int64_t id, std::int64_t ro
 // Wrap a signed index against ``extent`` and refuse anything still outside
 // ``[0, extent)``.
 inline std::int64_t
-checked_axis(const char* op, std::int64_t id, std::int64_t extent, const char* msg) {
+checked_axis(const char* op, std::int64_t id, std::int64_t extent, const char* msg, int axis = 0) {
+    const std::int64_t raw = id;
     if (id < 0)
         id += extent;
     if (id < 0 || id >= extent)
-        ErrorBuilder(op).index_error(msg);
+        ErrorBuilder(op).index_error(std::string(msg) + ": index " + std::to_string(raw) +
+                                     " is out of bounds for dimension " + std::to_string(axis) +
+                                     " with size " + std::to_string(extent));
     return id;
 }
 

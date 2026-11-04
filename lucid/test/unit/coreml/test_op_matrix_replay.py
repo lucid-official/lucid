@@ -179,3 +179,42 @@ def test_right_associated_self_matmul_loads_and_matches_eager(tmp_path: object) 
         finally:
             pkg3d.close()
         assert lucid.allclose(want3d, got3d, rtol=1e-4, atol=1e-4)
+
+
+def test_integer_pow_compiled_and_coreml_matches_eager(tmp_path: object) -> None:
+    """Signed integer ``pow`` and out-of-range shifts match eager in compile and Core ML (LCD-727)."""
+    base = lucid.tensor([-3, -2, -1, 0, 1, 2, 3], dtype=lucid.int32, device="metal")
+    exp = lucid.tensor([2, 3, -1, 0, -2, -3, 4], dtype=lucid.int32, device="metal")
+    fn_pow = lambda a, b: a**b  # noqa: E731
+    compiled_pow = lucid.compile(fn_pow)
+    with no_grad():
+        got_pow = compiled_pow(base, exp)
+        want_pow = fn_pow(base, exp)
+    np.testing.assert_array_equal(got_pow.cpu().numpy(), want_pow.cpu().numpy())
+
+    shift_vals = lucid.tensor([-8, 8], dtype=lucid.int8, device="metal")
+    shift_counts = lucid.tensor([-1, 8], dtype=lucid.int8, device="metal")
+    for fn_shift in (lambda a, b: a << b, lambda a, b: a >> b):
+        compiled_shift = lucid.compile(fn_shift)
+        with no_grad():
+            got_s = compiled_shift(shift_vals, shift_counts)
+            want_s = fn_shift(shift_vals, shift_counts)
+        np.testing.assert_array_equal(got_s.cpu().numpy(), want_s.cpu().numpy())
+
+    class _IntPowMod(nn.Module):
+        def forward(self, x: lucid.Tensor) -> lucid.Tensor:
+            ai = x.to(lucid.int32)
+            ei = lucid.tensor([2, 3, -1, 0, -2, -3, 4], dtype=lucid.int32)
+            return (ai**ei).to(lucid.float32)
+
+    with M.on_device("cpu"):
+        mod = _IntPowMod().eval()
+        ex = lucid.tensor([1.0, 2.0, 1.0, 0.0, -1.0, 2.0, 3.0], dtype=lucid.float32)
+        asked = lucid.tensor([-3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0], dtype=lucid.float32)
+        want_cml = mod(asked)
+        pkg = cml.export(mod, ex, f"{tmp_path}/int_pow.mlpackage")
+        try:
+            got_cml = pkg.predict(asked)
+        finally:
+            pkg.close()
+        np.testing.assert_array_equal(got_cml.numpy(), want_cml.numpy())

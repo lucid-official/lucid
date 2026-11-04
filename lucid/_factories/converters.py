@@ -276,22 +276,16 @@ def _numpy_impl(
         arr = arr.astype(_engine_dtype_to_np(dtype_eng), copy=False)
     with np.errstate(invalid="ignore", over="ignore"):  # type: ignore[attr-defined]
         if dtype_eng == _C_engine.Dtype.BF16:
-            impl = _ndarray_impl(arr, _C_engine.Device.CPU)
-        else:
-            impl = _ndarray_impl(arr, device_eng)
-    # bfloat16 has no NumPy counterpart, so the array above is float32 and
-    # the engine narrows afterwards.  Doing it this way round rather than
-    # picking the nearest NumPy dtype matters: float16 is *not* a
-    # substitute — a bfloat16 value can exceed float16's maximum, and
-    # routing through it would turn a representable number into infinity
-    # before the engine ever saw it.  The narrowing runs on the CPU so
-    # subnormals survive on Metal architectures whose GPU F32->BF16 cast
-    # flushes them to zero.
-    if dtype_eng == _C_engine.Dtype.BF16 and impl.dtype != _C_engine.Dtype.BF16:
-        impl = _C_engine.astype(impl, _C_engine.Dtype.BF16)
-        if device_eng != _C_engine.Device.CPU:
-            impl = _C_engine.to_device(impl, device_eng)
-    return impl
+            c_arr = np.asarray(arr, dtype="float32", order="C")
+            bits = c_arr.view("uint32")
+            nan_mask = (bits & 0x7FFFFFFF) > 0x7F800000
+            rounded = ((bits + 0x7FFF + ((bits >> 16) & 1)) >> 16).astype("uint16")
+            nan_bits = ((bits >> 16) | 0x0040).astype("uint16")
+            bf16_bits = np.where(nan_mask, nan_bits, rounded)
+            return _C_engine.TensorImpl.from_bytes(
+                bf16_bits.tobytes(), list(c_arr.shape), _C_engine.Dtype.BF16, device_eng, False
+            )
+        return _ndarray_impl(arr, device_eng)
 
 
 def _engine_dtype_to_np(d: _C_engine.Dtype) -> str:
@@ -713,7 +707,6 @@ def to_dlpack(tensor: Tensor) -> object:
     return tensor.numpy().__dlpack__()
 
 
-
 def _asarray_tensor(
     obj: Tensor, dtype: DTypeLike, device: DeviceLike, copy: bool | None, rg: bool
 ) -> Tensor:
@@ -726,14 +719,17 @@ def _asarray_tensor(
             _copy_tensor(obj, dtype=dtype, device=device, requires_grad=rg)
         )
     dt, dev, _ = normalize_factory_kwargs(
-        dtype if dtype is not None else obj.dtype,
-        device if device is not None else obj.device,
+        dtype if dtype is not None else obj.dtype, device if device is not None else obj.device
     )
     if obj._impl.dtype != dt or obj._impl.device != dev:
         if copy is False:
             raise ValueError("asarray: cannot alias tensor across differing dtype or device")
         out = obj.to(device=dev, dtype=dt)
-        return out.detach() if (not rg and out.requires_grad) else (out.requires_grad_(True) if rg else out)
+        return (
+            out.detach()
+            if (not rg and out.requires_grad)
+            else (out.requires_grad_(True) if rg else out)
+        )
     if rg == obj.requires_grad:
         return obj
     if not rg:

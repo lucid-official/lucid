@@ -9,6 +9,8 @@
 
 #include "ErrorBuilder.h"
 
+#include <cstdlib>
+#include <string_view>
 #include <vector>
 
 namespace lucid {
@@ -17,6 +19,41 @@ namespace {
 
 // Thread-local call stack of operation names.
 thread_local std::vector<std::string> tl_stack_;
+
+bool trace_enabled() {
+    static const bool enabled = [] {
+        const char* v = std::getenv("LUCID_ERROR_TRACE");
+        return v != nullptr && v[0] != '\0' && v[0] != '0';
+    }();
+    return enabled;
+}
+
+std::string canonical_op_name(std::string_view name) {
+    if (const auto pos = name.rfind("::"); pos != std::string_view::npos)
+        name = name.substr(pos + 2);
+    if (name.starts_with("linalg_"))
+        name = name.substr(7);
+    if (name == "unfold_dim")
+        return "unfold";
+    if (name == "transpose_dim")
+        return "transpose";
+    if (name == "scatter_set")
+        return "scatter";
+    if (name == "from_string")
+        return "device";
+    return std::string(name);
+}
+
+std::string resolve_op_name(const std::string& op) {
+    if (!tl_stack_.empty() &&
+        (op.find("::") != std::string::npos || op == "unfold_dim" || op == "transpose_dim" ||
+         op == "scatter_set" || op == "from_string" ||
+         (op == "gather" &&
+          (tl_stack_.front() == "take" || tl_stack_.front() == "index_select")))) {
+        return canonical_op_name(tl_stack_.front());
+    }
+    return canonical_op_name(op);
+}
 
 }  // namespace
 
@@ -95,18 +132,19 @@ ErrorContextGuard::~ErrorContextGuard() {
     ErrorContext::pop();
 }
 
-// Produces a string of the form "op_name: msg [trace=A > B > C]".
-// The trace annotation is omitted when the stack is empty to keep messages
-// concise in the common single-op case.
+// Produces a string of the form "op_name: msg" (plus " [trace=A > B > C]" when
+// LUCID_ERROR_TRACE is enabled).
 std::string ErrorBuilder::format_with_context(const std::string& msg) const {
-    std::string out = op_;
+    std::string out = resolve_op_name(op_);
     out += ": ";
     out += msg;
-    const std::string trace = ErrorContext::trace();
-    if (!trace.empty()) {
-        out += " [trace=";
-        out += trace;
-        out += "]";
+    if (trace_enabled()) {
+        const std::string trace = ErrorContext::trace();
+        if (!trace.empty()) {
+            out += " [trace=";
+            out += trace;
+            out += "]";
+        }
     }
     return out;
 }
@@ -133,51 +171,57 @@ void ErrorBuilder::linalg_error(const std::string& msg) const {
 
 // For typed mismatch throws, the context string is built separately so the
 // ShapeMismatch / DtypeMismatch / DeviceMismatch constructors receive a fully
-// qualified context (op + detail + trace) as their context argument.
+// qualified context (op + detail + optional trace) as their context argument.
 void ErrorBuilder::shape_mismatch(const Shape& expected,
                                   const Shape& got,
                                   const std::string& detail) const {
-    std::string ctx = op_;
+    std::string ctx = resolve_op_name(op_);
     if (!detail.empty()) {
         ctx += ": ";
         ctx += detail;
     }
-    const std::string trace = ErrorContext::trace();
-    if (!trace.empty()) {
-        ctx += " [trace=";
-        ctx += trace;
-        ctx += "]";
+    if (trace_enabled()) {
+        const std::string trace = ErrorContext::trace();
+        if (!trace.empty()) {
+            ctx += " [trace=";
+            ctx += trace;
+            ctx += "]";
+        }
     }
     throw ShapeMismatch(expected, got, std::move(ctx));
 }
 
 void ErrorBuilder::dtype_mismatch(Dtype expected, Dtype got, const std::string& detail) const {
-    std::string ctx = op_;
+    std::string ctx = resolve_op_name(op_);
     if (!detail.empty()) {
         ctx += ": ";
         ctx += detail;
     }
-    const std::string trace = ErrorContext::trace();
-    if (!trace.empty()) {
-        ctx += " [trace=";
-        ctx += trace;
-        ctx += "]";
+    if (trace_enabled()) {
+        const std::string trace = ErrorContext::trace();
+        if (!trace.empty()) {
+            ctx += " [trace=";
+            ctx += trace;
+            ctx += "]";
+        }
     }
     throw DtypeMismatch(std::string(dtype_name(expected)), std::string(dtype_name(got)),
                         std::move(ctx));
 }
 
 void ErrorBuilder::device_mismatch(Device expected, Device got, const std::string& detail) const {
-    std::string ctx = op_;
+    std::string ctx = resolve_op_name(op_);
     if (!detail.empty()) {
         ctx += ": ";
         ctx += detail;
     }
-    const std::string trace = ErrorContext::trace();
-    if (!trace.empty()) {
-        ctx += " [trace=";
-        ctx += trace;
-        ctx += "]";
+    if (trace_enabled()) {
+        const std::string trace = ErrorContext::trace();
+        if (!trace.empty()) {
+            ctx += " [trace=";
+            ctx += trace;
+            ctx += "]";
+        }
     }
     throw DeviceMismatch(std::string(device_name(expected)), std::string(device_name(got)),
                          std::move(ctx));

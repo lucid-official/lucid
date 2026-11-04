@@ -148,7 +148,6 @@ def test_a_write_to_an_argument_runs_eager_once_per_call() -> None:
     assert compiled.cache_info()["eager_only"]
 
 
-
 def test_fused_step_compiles_qat_model() -> None:
     import lucid.nn.functional as F
     import lucid.optim as optim

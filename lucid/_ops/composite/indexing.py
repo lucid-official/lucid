@@ -1130,10 +1130,7 @@ def select_scatter(input: Tensor, src: Tensor, dim: int, index: int) -> Tensor:
             f"select_scatter: expected src shape {expected}, got {src.shape}"
         )
     idx_t = lucid.full(
-        (*input.shape[:d], 1, *input.shape[d + 1 :]),
-        idx,
-        dtype=lucid.int64,
-        device=input.device,
+        (*input.shape[:d], 1, *input.shape[d + 1 :]), idx, dtype=lucid.int64, device=input.device
     )
     return lucid.scatter(input, d, idx_t, src.to(input.dtype).unsqueeze(d))
 
@@ -1168,11 +1165,7 @@ def slice_scatter(
 
 
 def diagonal_scatter(
-    input: Tensor,
-    src: Tensor,
-    offset: int = 0,
-    dim1: int = 0,
-    dim2: int = 1,
+    input: Tensor, src: Tensor, offset: int = 0, dim1: int = 0, dim2: int = 1
 ) -> Tensor:
     """Embed the values of ``src`` into ``input`` along the ``offset`` diagonal of ``(dim1, dim2)``."""
     if input.ndim < 2:
@@ -1200,8 +1193,8 @@ def diagonal_scatter(
     c_start = max(0, offset)
     r_idx = lucid.arange(r_start, r_start + diag_len, dtype=lucid.int64, device=input.device)
     c_idx = lucid.arange(c_start, c_start + diag_len, dtype=lucid.int64, device=input.device)
-    flat_idx = (r_idx * c_size + c_idx).reshape([1] * len(batch) + [diag_len]).expand(
-        *batch, diag_len
+    flat_idx = (
+        (r_idx * c_size + c_idx).reshape([1] * len(batch) + [diag_len]).expand(*batch, diag_len)
     )
     scattered = lucid.scatter(
         moved.reshape(*batch, r_size * c_size), -1, flat_idx, src.to(input.dtype)
@@ -1225,4 +1218,3 @@ __all__ = [
 ]
 
 from lucid._tensor.tensor import Tensor
-

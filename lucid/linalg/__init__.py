@@ -3198,29 +3198,21 @@ def matrix_exp(input: Tensor) -> Tensor:
     A_sc: Tensor = A * (2.0 ** (-s))
 
     # -- Matrix powers ---------------------------------------------------------
-    A2: Tensor = A_sc @ A_sc
-    A4: Tensor = A2 @ A2
+    A2, A4 = A_sc @ A_sc, (A_sc @ A_sc) @ (A_sc @ A_sc)
     A6: Tensor = A2 @ A4
 
     # -- Identity (broadcasts over any batch dims) -----------------------------
     eye_2d: Tensor = lucid.eye(n, dtype=A.dtype, device=A.device)
-    if len(sh) > 2:
-        # Use arithmetic broadcast: eye_2d + zeros of batch shape keeps autograd.
-        I: Tensor = eye_2d + lucid.zeros(*sh[:-2], n, n, dtype=A.dtype, device=A.device)
-    else:
-        I = eye_2d
+    I: Tensor = (
+        eye_2d + lucid.zeros(*sh[:-2], n, n, dtype=A.dtype, device=A.device)
+        if len(sh) > 2
+        else eye_2d
+    )
 
     # -- Padé polynomials (even/odd split for efficiency) ----------------------
-    # Even — c0*I + c2*A2 + c4*A4 + c6*A6
     Even: Tensor = _c0 * I + _c2 * A2 + _c4 * A4 + _c6 * A6
-    # Odd  — A * (c1*I + c3*A2 + c5*A4)
     Odd: Tensor = A_sc @ (_c1 * I + _c3 * A2 + _c5 * A4)
-
-    # N = Even + Odd,  D = Even - Odd
-    N: Tensor = Even + Odd
-    D: Tensor = Even - Odd
-
-    # -- Solve D @ R = N  →  R = D^{-1} @ N -----------------------------------
+    N, D = Even + Odd, Even - Odd
     R: Tensor = inv(D) @ N
 
     # -- Squaring step ---------------------------------------------------------
@@ -3307,7 +3299,9 @@ from lucid.linalg._ex import (
     inv_ex,
     ldl_factor,
     ldl_factor_ex,
-    lu_factor_ex, lu_unpack, solve_ex,
+    lu_factor_ex,
+    lu_unpack,
+    solve_ex,
     tensorinv,
     tensorsolve,
 )
@@ -3350,7 +3344,9 @@ __all__ = [
     "ldl_factor_ex",
     "ldl_solve",
     "lu",
-    "cholesky_ex", "cholesky_inverse", "lu_unpack",
+    "cholesky_ex",
+    "cholesky_inverse",
+    "lu_unpack",
     "inv_ex",
     "solve_ex",
     "tensorinv",

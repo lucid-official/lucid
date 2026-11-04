@@ -73,7 +73,9 @@ def _modules(prefixes: Sequence[str] | None = None) -> Iterator[Any]:
         name = info.name
         if name.startswith(_SKIP):
             continue
-        if prefixes is not None and not any(name == p or name.startswith(p + ".") for p in prefixes):
+        if prefixes is not None and not any(
+            name == p or name.startswith(p + ".") for p in prefixes
+        ):
             continue
         # Private packages stay: ``lucid._ops`` and ``lucid._tensor`` hold
         # most of the tensor API's documentation, and a docstring is

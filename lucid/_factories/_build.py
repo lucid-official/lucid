@@ -236,16 +236,29 @@ def _pack(flat: Sequence[object], dtype: _C_engine.Dtype) -> bytes:
         return struct.pack(f"={len(narrowed)}{code}", *narrowed)
 
 
+def _pack_bf16(flat: Sequence[object]) -> bytes:
+    f32_bytes = _pack(flat, _D.F32)
+    if not f32_bytes:
+        return b""
+    n = len(f32_bytes) // 4
+    bits = struct.unpack(f"={n}I", f32_bytes)
+    bf16_bits = [
+        (
+            ((b >> 16) | 0x0040)
+            if (b & 0x7FFFFFFF) > 0x7F800000
+            else ((b + 0x7FFF + ((b >> 16) & 1)) >> 16) & 0xFFFF
+        )
+        for b in bits
+    ]
+    return struct.pack(f"={n}H", *bf16_bits)
+
+
 def _from_values(
     flat: Sequence[object], shape: list[int], dtype: _C_engine.Dtype, device: _C_engine.Device
 ) -> _C_engine.TensorImpl:
     r"""A tensor (not yet a leaf of the caller's choosing) holding ``flat``."""
     if dtype == _D.BF16:
-        f32 = _C_engine.TensorImpl.from_bytes(
-            _pack(flat, _D.F32), shape, _D.F32, _C_engine.Device.CPU, False
-        )
-        bf16 = _C_engine.astype(f32, _D.BF16)
-        return bf16 if device == _C_engine.Device.CPU else _C_engine.to_device(bf16, device)
+        return _C_engine.TensorImpl.from_bytes(_pack_bf16(flat), shape, _D.BF16, device, False)
     return _C_engine.TensorImpl.from_bytes(_pack(flat, dtype), shape, dtype, device, False)
 
 

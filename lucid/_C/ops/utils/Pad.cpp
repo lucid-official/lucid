@@ -118,7 +118,7 @@ TensorImplPtr pad_op(const TensorImplPtr& a,
     const Device device = a->device();
     OpScopeFull scope{"pad", device, dt, a->shape()};
     if (pad_width.size() != a->shape().size())
-        ErrorBuilder("pad").fail("pad_width length must equal ndim");
+        ErrorBuilder("pad").invalid_argument("pad_width length must equal ndim");
     const std::size_t ndim = a->shape().size();
     Shape out_shape(ndim);
     for (std::size_t d = 0; d < ndim; ++d) {

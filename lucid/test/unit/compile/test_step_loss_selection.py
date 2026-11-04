@@ -73,7 +73,6 @@ def test_compiled_step_uses_the_returned_loss() -> None:
         assert np.allclose(p.grad.numpy(), w, rtol=1e-4, atol=1e-5)
 
 
-
 def test_compiled_step_unused_param_and_loss_guards() -> None:
     class _WithUnused(nn.Module):
         def __init__(self) -> None:

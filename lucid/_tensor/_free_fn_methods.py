@@ -136,8 +136,6 @@ def _as_method(name: str, fn: Callable[..., object]) -> Callable[..., object]:
     return method
 
 
-
-
 def _prop_mH(self: Tensor) -> Tensor:
     """Conjugate (Hermitian) transpose of the last two dimensions (`self.adjoint()`)."""
     if self.ndim < 2:
@@ -175,7 +173,12 @@ def inject_free_fn_methods(tensor_cls: type) -> None:
 
     for name in FREE_FN_METHODS:
         setattr(tensor_cls, name, _as_method(name, getattr(lucid, name)))
-    for pname, pfn in (("mH", _prop_mH), ("is_cpu", _prop_is_cpu), ("is_meta", _prop_is_meta), ("layout", _prop_layout)):
+    for pname, pfn in (
+        ("mH", _prop_mH),
+        ("is_cpu", _prop_is_cpu),
+        ("is_meta", _prop_is_meta),
+        ("layout", _prop_layout),
+    ):
         type.__setattr__(tensor_cls, pname, property(pfn))
 
 
@@ -206,9 +209,7 @@ def _parse_sum_to_size_target(
     )
     lead = len(src) - len(target)
     if lead < 0 or any(ts != ss and ts != 1 for ts, ss in zip(target, src[lead:], strict=True)):
-        raise _C_engine.ShapeMismatch(
-            f"size {list(target)} is not expandable to size {list(src)}."
-        )
+        raise _C_engine.ShapeMismatch(f"size {list(target)} is not expandable to size {list(src)}.")
     return target
 
 
@@ -230,7 +231,9 @@ def _sum_to_size(self: Tensor, *size: int | Sequence[int]) -> Tensor:
     return out if tuple(int(d) for d in out.shape) == target else out.reshape(target)
 
 
-def _fill_diagonal_(self: Tensor, fill_value: float | int | bool | complex, wrap: bool = False) -> Tensor:
+def _fill_diagonal_(
+    self: Tensor, fill_value: float | int | bool | complex, wrap: bool = False
+) -> Tensor:
     """Fill the main diagonal of a tensor with at least 2 dimensions in place."""
     import lucid
 
@@ -248,7 +251,9 @@ def _fill_diagonal_(self: Tensor, fill_value: float | int | bool | complex, wrap
             rows, cols = sh
             step = cols + 1
             if wrap:
-                indices = [r * cols + (r % cols) for r in range(rows) if (r % cols) == (r % (cols + 1))]
+                indices = [
+                    r * cols + (r % cols) for r in range(rows) if (r % cols) == (r % (cols + 1))
+                ]
                 # In reference wrap=True on 2D (rows, cols) steps by cols + 1 across flat index up to rows * cols
                 indices = list(range(0, rows * cols, step))
             else:
@@ -306,7 +311,9 @@ def _squeeze_(self: Tensor, dim: int | Sequence[int] | None = None) -> Tensor:
     return _rebind_view_inplace(
         self,
         "squeeze_",
-        lambda x: x.squeeze() if dim is None else x.squeeze(dim if isinstance(dim, int) else list(dim)),
+        lambda x: (
+            x.squeeze() if dim is None else x.squeeze(dim if isinstance(dim, int) else list(dim))
+        ),
     )
 
 
@@ -338,9 +345,7 @@ def _cauchy_(
 
     from lucid._tensor._methods import _fill_drawn
 
-    return _fill_drawn(
-        self, "cauchy_", lambda base: _cauchy_like(base, median, sigma, generator)
-    )
+    return _fill_drawn(self, "cauchy_", lambda base: _cauchy_like(base, median, sigma, generator))
 
 
 def _log_normal_(
@@ -360,9 +365,7 @@ def _log_normal_(
     )
 
 
-def _geometric_(
-    self: Tensor, p: float, *, generator: _C_engine.Generator | None = None
-) -> Tensor:
+def _geometric_(self: Tensor, p: float, *, generator: _C_engine.Generator | None = None) -> Tensor:
     """Fill `self` with samples from `Geometric(p)` in `{1, 2, ...}`."""
     from lucid._factories.random import _geometric_like
 
@@ -384,4 +387,3 @@ def _random_(
     from lucid._tensor._methods import _fill_drawn
 
     return _fill_drawn(self, "random_", lambda base: _random_like(base, from_, to, generator))
-

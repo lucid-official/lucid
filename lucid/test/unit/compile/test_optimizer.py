@@ -366,7 +366,6 @@ def test_fused_step_repeated_calls_reuse_executable() -> None:
         assert L == L, f"NaN loss in step: {losses}"  # NaN != NaN
 
 
-
 @pytest.mark.parametrize(
     "make_opt",
     [

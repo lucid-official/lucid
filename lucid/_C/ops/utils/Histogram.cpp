@@ -269,11 +269,11 @@ std::vector<TensorImplPtr> histogramdd_op(const TensorImplPtr& a,
                                           bool density) {
     Validator::input(a, "histogramdd.a").non_null();
     if (a->shape().size() != 2)
-        ErrorBuilder("histogramdd").fail("input must be 2-D (N, D)");
+        ErrorBuilder("histogramdd").invalid_argument("input must be 2-D (N, D)");
     const std::int64_t N = a->shape()[0];
     const std::int64_t D = a->shape()[1];
     if ((std::int64_t)bins.size() != D || (std::int64_t)ranges.size() != D)
-        ErrorBuilder("histogramdd").fail("bins/ranges length must equal D");
+        ErrorBuilder("histogramdd").invalid_argument("bins/ranges length must equal D");
     OpScopeFull scope{"histogramdd", a->device(), a->dtype(), a->shape()};
 
     const auto ca = to_cpu(a);

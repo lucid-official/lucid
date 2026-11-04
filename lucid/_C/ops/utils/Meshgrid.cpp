@@ -129,7 +129,7 @@ std::vector<TensorImplPtr> meshgrid_op(const std::vector<TensorImplPtr>& xs, boo
     std::vector<std::int64_t> dims(N);
     for (std::size_t i = 0; i < N; ++i) {
         if (xs[i]->shape().size() > 1)
-            ErrorBuilder("meshgrid").fail("each input must be 1-D");
+            ErrorBuilder("meshgrid").invalid_argument("each input must be 1-D");
         dims[i] = xs[i]->shape().empty() ? 1 : xs[i]->shape()[0];
     }
     // For "xy" indexing swap the first two output dimensions so that the x

@@ -25,7 +25,7 @@ TensorImplPtr movedim_op(const TensorImplPtr& a,
         ErrorBuilder("movedim").fail("null input");
     const int ndim = static_cast<int>(a->shape().size());
     if (source.size() != destination.size())
-        ErrorBuilder("movedim").fail("source and destination size mismatch");
+        ErrorBuilder("movedim").invalid_argument("source and destination size mismatch");
 
     auto wrap = [&](int v) { return wrap_dim(v, ndim, "movedim"); };
     std::vector<int> src;
@@ -41,11 +41,11 @@ TensorImplPtr movedim_op(const TensorImplPtr& a,
     std::vector<int> sorted_src = src;
     std::sort(sorted_src.begin(), sorted_src.end());
     if (std::adjacent_find(sorted_src.begin(), sorted_src.end()) != sorted_src.end())
-        ErrorBuilder("movedim").fail("source dims must be unique");
+        ErrorBuilder("movedim").invalid_argument("source dims must be unique");
     std::vector<int> sorted_dst = dst;
     std::sort(sorted_dst.begin(), sorted_dst.end());
     if (std::adjacent_find(sorted_dst.begin(), sorted_dst.end()) != sorted_dst.end())
-        ErrorBuilder("movedim").fail("destination dims must be unique");
+        ErrorBuilder("movedim").invalid_argument("destination dims must be unique");
 
     // A 0-d tensor moves its notional axis onto itself: the empty permutation.
     if (ndim == 0)
@@ -104,10 +104,10 @@ TensorImplPtr unflatten_op(const TensorImplPtr& a, int dim, const Shape& sizes) 
     }
     if (wildcard_pos != -1) {
         if (known_product == 0 || dim_len % known_product != 0)
-            ErrorBuilder("unflatten").fail("sizes do not multiply to dim length");
+            ErrorBuilder("unflatten").invalid_argument("sizes do not multiply to dim length");
         resolved[static_cast<std::size_t>(wildcard_pos)] = dim_len / known_product;
     } else if (known_product != dim_len) {
-        ErrorBuilder("unflatten").fail("sizes do not multiply to dim length");
+        ErrorBuilder("unflatten").invalid_argument("sizes do not multiply to dim length");
     }
 
     Shape new_shape;

@@ -193,7 +193,6 @@ def _make_arith_adapter(
     return _adapter
 
 
-
 _keep_engine_signature(_logical_not_adapter, _C_engine.logical_not)
 
 
@@ -586,7 +585,10 @@ def _transpose_adapter(x_impl: _Impl, dim0: int | None = None, dim1: int | None 
         return _C_engine.transpose(x_impl)
     if dim0 is None or dim1 is None:
         raise TypeError("transpose takes no axes, or two: transpose(dim0, dim1)")
-    return _C_engine.swapaxes(x_impl, int(dim0), int(dim1))
+    try:
+        return _C_engine.swapaxes(x_impl, int(dim0), int(dim1))
+    except IndexError as exc:
+        raise IndexError(str(exc).replace("swapaxes:", "transpose:", 1)) from None
 
 
 def _permute_adapter(x_impl: _Impl, dims: int | Sequence[int]) -> _Impl:
@@ -1060,7 +1062,7 @@ def _clip_dtype(
     ``x`` cannot hold where this one returns it.
     """
     if min is None and max is None:
-        raise ValueError("clip: at least one of min or max must be given")
+        raise ValueError("clamp: at least one of min or max must be given")
     bounds: list[_promotion.Operand] = [
         (bn if isinstance(bn := _promotion.as_number(b), _promotion.NUMBER) else _unwrap(bn))
         for b in (min, max)
@@ -1488,5 +1490,3 @@ def _isclose_adapter(
         both_nan = _C_engine.bitwise_and(nan_a, nan_b)
         return _C_engine.bitwise_or(out, both_nan)
     return _C_engine.isclose(a_impl, b_impl, float(rtol), float(atol))
-
-

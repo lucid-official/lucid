@@ -403,8 +403,12 @@ StoragePair CpuBackend::linalg_eigh(const Storage& a,
         const auto* in = reinterpret_cast<const T*>(cs.ptr.get());
         auto* wp = reinterpret_cast<T*>(w_cpu.ptr.get());
         auto* vp = reinterpret_cast<T*>(v_cpu.ptr.get());
-        for (std::int64_t b = 0; b < batch; ++b)
-            fn(in + b * per_mat, n, wp + b * per_w, vp + b * per_mat, &info, uplo);
+        for (std::int64_t b = 0; b < batch; ++b) {
+            const T* mat = in + b * per_mat;
+            check_eigh_triangle_finite(mat, n, upper, b, batch);
+            fn(mat, n, wp + b * per_w, vp + b * per_mat, &info, uplo);
+            check_lapack_info(info, "eigh", b, batch);
+        }
     };
     if (dt == Dtype::F32)
         run_eigh(float{}, cpu::lapack_eigh_f32);
@@ -412,7 +416,6 @@ StoragePair CpuBackend::linalg_eigh(const Storage& a,
         run_eigh(double{}, cpu::lapack_eigh_f64);
     else
         ErrorBuilder("cpu_backend::linalg_eigh").not_implemented("dtype not supported");
-    check_lapack_info(info, "eigh");
     return {Storage{std::move(w_cpu)}, Storage{std::move(v_cpu)}};
 }
 
@@ -435,42 +438,28 @@ std::vector<Storage> CpuBackend::linalg_svd(const Storage& a,
     auto s_ptr = allocate_aligned_bytes(s_nbytes, Device::CPU);
     const auto& cs = std::get<CpuStorage>(a);
 
-    // A matrix holding a NaN or an infinity has an all-NaN decomposition
-    // (the reference result, and the Metal stream's).  It is not handed
-    // to LAPACK, whose gesdd rejects a NaN as an illegal argument — that
-    // used to surface as "LAPACK invalid argument", which blames the
-    // caller's argument marshalling for the caller's data.
     if (!compute_uv) {
         int info = 0;
-        if (dt == Dtype::F32) {
-            std::vector<float> u(u_per), vt(vt_per);
-            const auto* in_p = reinterpret_cast<const float*>(cs.ptr.get());
-            auto* s_p = reinterpret_cast<float*>(s_ptr.get());
+        auto run_vals = [&](auto tag, auto fn) {
+            using T = decltype(tag);
+            std::vector<T> u(u_per), vt(vt_per);
+            const auto* in_p = reinterpret_cast<const T*>(cs.ptr.get());
+            auto* s_p = reinterpret_cast<T*>(s_ptr.get());
             for (std::int64_t b = 0; b < batch; ++b) {
                 if (!all_finite(in_p + b * in_per, in_per)) {
                     fill_nan(s_p + b * s_per, s_per);
                     continue;
                 }
-                cpu::lapack_svd_f32(in_p + b * in_per, m, n, false, u.data(), s_p + b * s_per,
-                                    vt.data(), &info);
-                check_lapack_info(info, "svd");
+                fn(in_p + b * in_per, m, n, false, u.data(), s_p + b * s_per, vt.data(), &info);
+                check_lapack_info(info, "svd", b, batch);
             }
-        } else if (dt == Dtype::F64) {
-            std::vector<double> u(u_per), vt(vt_per);
-            const auto* in_p = reinterpret_cast<const double*>(cs.ptr.get());
-            auto* s_p = reinterpret_cast<double*>(s_ptr.get());
-            for (std::int64_t b = 0; b < batch; ++b) {
-                if (!all_finite(in_p + b * in_per, in_per)) {
-                    fill_nan(s_p + b * s_per, s_per);
-                    continue;
-                }
-                cpu::lapack_svd_f64(in_p + b * in_per, m, n, false, u.data(), s_p + b * s_per,
-                                    vt.data(), &info);
-                check_lapack_info(info, "svd");
-            }
-        } else {
+        };
+        if (dt == Dtype::F32)
+            run_vals(float{}, cpu::lapack_svd_f32);
+        else if (dt == Dtype::F64)
+            run_vals(double{}, cpu::lapack_svd_f64);
+        else
             ErrorBuilder("cpu_backend::linalg_svd").not_implemented("dtype not supported");
-        }
         return {Storage{CpuStorage{s_ptr, s_nbytes, dt}}};
     }
 
@@ -479,41 +468,32 @@ std::vector<Storage> CpuBackend::linalg_svd(const Storage& a,
     auto u_ptr = allocate_aligned_bytes(u_nbytes, Device::CPU);
     auto vt_ptr = allocate_aligned_bytes(vt_nbytes, Device::CPU);
     int info = 0;
-    if (dt == Dtype::F32) {
-        const auto* in_p = reinterpret_cast<const float*>(cs.ptr.get());
-        auto* u_p = reinterpret_cast<float*>(u_ptr.get());
-        auto* s_p = reinterpret_cast<float*>(s_ptr.get());
-        auto* vt_p = reinterpret_cast<float*>(vt_ptr.get());
+    auto run_uv = [&](auto tag, auto fn) {
+        using T = decltype(tag);
+        const auto* in_p = reinterpret_cast<const T*>(cs.ptr.get());
+        auto* u_p = reinterpret_cast<T*>(u_ptr.get());
+        auto* s_p = reinterpret_cast<T*>(s_ptr.get());
+        auto* vt_p = reinterpret_cast<T*>(vt_ptr.get());
         for (std::int64_t b = 0; b < batch; ++b) {
             if (!all_finite(in_p + b * in_per, in_per)) {
+                if (k >= 3)
+                    check_lapack_info(2, "svd", b, batch);
                 fill_nan(u_p + b * u_per, u_per);
                 fill_nan(s_p + b * s_per, s_per);
                 fill_nan(vt_p + b * vt_per, vt_per);
                 continue;
             }
-            cpu::lapack_svd_f32(in_p + b * in_per, m, n, false, u_p + b * u_per, s_p + b * s_per,
-                                vt_p + b * vt_per, &info);
-            check_lapack_info(info, "svd");
+            fn(in_p + b * in_per, m, n, false, u_p + b * u_per, s_p + b * s_per, vt_p + b * vt_per,
+               &info);
+            check_lapack_info(info, "svd", b, batch);
         }
-    } else if (dt == Dtype::F64) {
-        const auto* in_p = reinterpret_cast<const double*>(cs.ptr.get());
-        auto* u_p = reinterpret_cast<double*>(u_ptr.get());
-        auto* s_p = reinterpret_cast<double*>(s_ptr.get());
-        auto* vt_p = reinterpret_cast<double*>(vt_ptr.get());
-        for (std::int64_t b = 0; b < batch; ++b) {
-            if (!all_finite(in_p + b * in_per, in_per)) {
-                fill_nan(u_p + b * u_per, u_per);
-                fill_nan(s_p + b * s_per, s_per);
-                fill_nan(vt_p + b * vt_per, vt_per);
-                continue;
-            }
-            cpu::lapack_svd_f64(in_p + b * in_per, m, n, false, u_p + b * u_per, s_p + b * s_per,
-                                vt_p + b * vt_per, &info);
-            check_lapack_info(info, "svd");
-        }
-    } else {
+    };
+    if (dt == Dtype::F32)
+        run_uv(float{}, cpu::lapack_svd_f32);
+    else if (dt == Dtype::F64)
+        run_uv(double{}, cpu::lapack_svd_f64);
+    else
         ErrorBuilder("cpu_backend::linalg_svd").not_implemented("dtype not supported");
-    }
     return {Storage{CpuStorage{u_ptr, u_nbytes, dt}}, Storage{CpuStorage{s_ptr, s_nbytes, dt}},
             Storage{CpuStorage{vt_ptr, vt_nbytes, dt}}};
 }
@@ -863,7 +843,7 @@ void CpuBackend::fill_nan(T* p, std::size_t n) {
 template <typename T>
 void CpuBackend::require_finite_eig(const T* p, std::size_t n) {
     if (!all_finite(p, n))
-        ErrorBuilder("eig").fail("input should not contain infs or NaNs");
+        ErrorBuilder("eig").invalid_argument("input should not contain infs or NaNs");
 }
 
 template <typename T>
@@ -876,12 +856,14 @@ void CpuBackend::set_matrix_identity(T* out, int n) {
 
 template <typename T>
 void CpuBackend::pinv_one(const T* a, int m, int n, T* aplus) {
+    const int k = std::min(m, n);
     // A NaN makes gesdd report an illegal argument; infinities go through.
     if (std::any_of(a, a + static_cast<std::size_t>(m) * n, [](T v) { return std::isnan(v); })) {
+        if (k >= 3)
+            check_lapack_info(2, "pinv");
         fill_nan(aplus, static_cast<std::size_t>(n) * m);
         return;
     }
-    const int k = std::min(m, n);
     std::vector<T> u(static_cast<std::size_t>(m) * k);
     std::vector<T> s(k);
     std::vector<T> vt(static_cast<std::size_t>(k) * n);

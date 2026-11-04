@@ -382,13 +382,47 @@ def _emit_int_divmod(b: Builder, op: TracedOp, lhs: str, rhs: str) -> EmitResult
     return "select", [("cond", adjust), ("a", r_plus_y), ("b", r)]
 
 
+def _emit_int_pow(b: Builder, op: TracedOp, lhs: str, rhs: str) -> EmitResult:
+    """Emit integer ``pow(lhs, rhs)`` in int32 with defined negative-exponent semantics."""
+    x, y = b.agree_on_dtype([lhs, rhs], _MIL_INT32)
+    dims = b.result_dims(op)
+    if b.is_const(x) and not b.is_const(y):
+        y_shape = b.shape_of(y)
+        y_dims = b.emit("shape", [("x", y)], [len(y_shape)], dtype=_MIL_INT32)
+        ones = b.emit(
+            "fill", [("shape", y_dims), ("value", b.const_int(1))], y_shape, dtype=_MIL_INT32
+        )
+        x = b.emit("mul", [("x", ones), ("y", x)], dims, dtype=_MIL_INT32)
+    c0 = b.const_int(0)
+    c1 = b.const_int(1)
+    cm1 = b.const_int(-1)
+    c2 = b.const_int(2)
+    pos_y = b.emit("maximum", [("x", y), ("y", c0)], b.shape_of(y), dtype=_MIL_INT32)
+    pos_pow = b.emit("pow", [("x", x), ("y", pos_y)], dims, dtype=_MIL_INT32)
+    y_mod2 = b.emit("mod", [("x", y), ("y", c2)], b.shape_of(y), dtype=_MIL_INT32)
+    y_odd = b.emit("not_equal", [("x", y_mod2), ("y", c0)], b.shape_of(y), dtype=_MIL_BOOL)
+    neg_one_pow = b.emit(
+        "select", [("cond", y_odd), ("a", cm1), ("b", c1)], b.shape_of(y), dtype=_MIL_INT32
+    )
+    x_is_m1 = b.emit("equal", [("x", x), ("y", cm1)], b.shape_of(x), dtype=_MIL_BOOL)
+    x_is_1 = b.emit("equal", [("x", x), ("y", c1)], b.shape_of(x), dtype=_MIL_BOOL)
+    from_m1 = b.emit(
+        "select", [("cond", x_is_m1), ("a", neg_one_pow), ("b", c0)], dims, dtype=_MIL_INT32
+    )
+    neg_pow = b.emit(
+        "select", [("cond", x_is_1), ("a", c1), ("b", from_m1)], dims, dtype=_MIL_INT32
+    )
+    y_neg = b.emit("less", [("x", y), ("y", c0)], b.shape_of(y), dtype=_MIL_BOOL)
+    return "select", [("cond", y_neg), ("a", neg_pow), ("b", pos_pow)]
+
+
 def emit_opmath_binary(
     b: Builder, op: TracedOp, lucid_name: str, mil_name: str, lhs: str, rhs: str, target: int | None
 ) -> EmitResult | None:
-    """Emit exact ``floordiv``/``remainder``/``fmod`` or half op-math ``mul``/``div``.
+    """Emit exact ``floordiv``/``remainder``/``fmod``/``pow`` or half op-math ``mul``/``div``.
 
-    Matches eager ``DivMod.h`` and ``_Opmath.h`` rules across integer and
-    floating-point operands, casting half-precision results back to fp16.
+    Matches eager ``DivMod.h``, ``IntPow.h``, and ``_Opmath.h`` rules across integer
+    and floating-point operands, casting half-precision results back to fp16.
 
     Parameters
     ----------
@@ -412,6 +446,8 @@ def emit_opmath_binary(
     EmitResult or None
         Emitted MIL operation and bindings if handled here, else ``None``.
     """
+    if lucid_name == "pow" and target == _MIL_INT32:
+        return _emit_int_pow(b, op, lhs, rhs)
     if lucid_name in ("floordiv", "remainder", "fmod"):
         if target == _MIL_INT32:
             return _emit_int_divmod(b, op, lhs, rhs)

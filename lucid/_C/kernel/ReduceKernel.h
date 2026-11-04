@@ -420,8 +420,9 @@ std::shared_ptr<TensorImpl> ReduceKernel<Derived>::forward(const std::shared_ptr
                 continue;
             if (axes_user.empty())
                 ErrorBuilder(Derived::schema_v1.name)
-                    .fail("Expected reduction dim to be specified for input.numel() == 0. "
-                          "Specify the reduction dim with the 'dim' argument.");
+                    .invalid_argument(
+                        "Expected reduction dim to be specified for input.numel() == 0. "
+                        "Specify the reduction dim with the 'dim' argument.");
             ErrorBuilder(Derived::schema_v1.name)
                 .index_error("Expected reduction dim " + std::to_string(ax) +
                              " to have non-zero size.");

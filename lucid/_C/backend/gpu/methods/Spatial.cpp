@@ -87,7 +87,8 @@ std::vector<Storage> GpuBackend::max_pool_nd_forward(const Storage& x,
         am_shape.push_back(C);
         for (int i = 0; i < N; ++i)
             am_shape.push_back(O[i]);
-        argmax = pool_window_argmax_small(wins_flat, win_in_bounds, am_shape, N, K_total, amax_axis);
+        argmax =
+            pool_window_argmax_small(wins_flat, win_in_bounds, am_shape, N, K_total, amax_axis);
     } else if (win_in_bounds && wins_flat.size() > 0) {
         auto y_exp = ::mlx::core::expand_dims(y, amax_axis);
         auto is_max = ::mlx::core::logical_or(::mlx::core::equal(wins_flat, y_exp),

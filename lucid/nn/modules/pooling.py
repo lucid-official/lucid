@@ -420,12 +420,7 @@ class AvgPool1d(Module):
             Pooled output tensor.
         """
         return avg_pool1d(
-            input,
-            self.kernel_size,
-            self.stride,
-            self.padding,
-            self.ceil_mode,
-            self.count_include_pad,
+            input, self.kernel_size, self.stride, self.padding, self.ceil_mode, self.count_include_pad
         )
 
     @override
@@ -1437,10 +1432,12 @@ class LPPool1d(Module):
     ) -> None:
         """Initialise the LPPool1d module. See the class docstring for parameter semantics."""
         super().__init__()
-        self.norm_type = norm_type
-        self.kernel_size = kernel_size
-        self.stride = stride if stride is not None else kernel_size
-        self.ceil_mode = ceil_mode
+        self.norm_type, self.ceil_mode, self.kernel_size, self.stride = (
+            norm_type,
+            ceil_mode,
+            kernel_size,
+            stride if stride is not None else kernel_size,
+        )
 
     @override
     def forward(self, input: Tensor) -> Tensor:
@@ -1553,7 +1550,9 @@ class LPPool2d(Module):
         self.norm_type, self.ceil_mode = norm_type, ceil_mode
         self.kernel_size, self.stride = kernel_size, stride
         self.kh, self.kw = _ntuple(kernel_size, 2, "LPPool2d", "kernel_size")
-        self.sh, self.sw = _ntuple(kernel_size if stride is None else stride, 2, "LPPool2d", "stride")
+        self.sh, self.sw = _ntuple(
+            kernel_size if stride is None else stride, 2, "LPPool2d", "stride"
+        )
 
     @override
     def forward(self, input: Tensor) -> Tensor:
@@ -1663,10 +1662,12 @@ class LPPool3d(Module):
     ) -> None:
         """Initialise the LPPool3d module. See the class docstring for parameter semantics."""
         super().__init__()
-        self.norm_type = norm_type
-        self.kernel_size = kernel_size
-        self.stride = stride if stride is not None else kernel_size
-        self.ceil_mode = ceil_mode
+        self.norm_type, self.ceil_mode, self.kernel_size, self.stride = (
+            norm_type,
+            ceil_mode,
+            kernel_size,
+            stride if stride is not None else kernel_size,
+        )
 
     @override
     def forward(self, input: Tensor) -> Tensor:
@@ -2216,9 +2217,8 @@ class FractionalMaxPool3d(Module):
     ) -> None:
         """Initialise the FractionalMaxPool3d module. See the class docstring for parameter semantics."""
         super().__init__()
-        self.kernel_size = kernel_size
+        self.kernel_size, self.return_indices = kernel_size, return_indices
         self.output_size, self.output_ratio = _check_fractional_spec(output_size, output_ratio, 3)
-        self.return_indices = return_indices
 
     @override
     def forward(self, input: Tensor) -> Tensor | tuple[Tensor, Tensor]:

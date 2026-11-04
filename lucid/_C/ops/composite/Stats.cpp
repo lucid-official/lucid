@@ -97,12 +97,12 @@ TensorImplPtr histc_op(const TensorImplPtr& a, std::int64_t bins, double lo, dou
 
 TensorImplPtr cartesian_prod_op(const std::vector<TensorImplPtr>& tensors) {
     if (tensors.empty())
-        ErrorBuilder("cartesian_prod").fail("requires at least one input");
+        ErrorBuilder("cartesian_prod").invalid_argument("requires at least one input");
     for (const auto& t : tensors) {
         if (!t)
             ErrorBuilder("cartesian_prod").fail("null input");
         if (t->shape().size() != 1)
-            ErrorBuilder("cartesian_prod").fail("inputs must be 1-D");
+            ErrorBuilder("cartesian_prod").invalid_argument("inputs must be 1-D");
     }
     if (tensors.size() == 1)
         return reshape_op(tensors[0], tensors[0]->shape());

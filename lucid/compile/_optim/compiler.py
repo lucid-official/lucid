@@ -552,11 +552,7 @@ class _CompiledStepBase:
     @override
     def __getstate__(self) -> dict[str, object]:
         """Pickle without the executables — they are rebuilt on the next step."""
-        state = dict(self.__dict__)
-        state["_plans"] = {}
-        state["_exact_plans_built"] = 0
-        state["_zero_grads"] = {}
-        return state
+        return {**self.__dict__, "_plans": {}, "_exact_plans_built": 0, "_zero_grads": {}}
 
     def __setstate__(self, state: dict[str, object]) -> None:
         """Restore a pickled wrapper; executables are rebuilt lazily."""
@@ -614,15 +610,22 @@ class _CompiledStepBase:
 
         self._sync_params()
         id_map = {id(p): k for k, p in enumerate(self._params)}
-        groups_out: list[dict[str, object]] = []
-        for group in self._opt.param_groups:
-            g: dict[str, object] = {k: v for k, v in group.items() if k != "params"}
-            g["params"] = [id_map[id(p)] for p in _group_params(group)]
-            groups_out.append(g)
+        groups_out: list[dict[str, object]] = [
+            {
+                **{k: v for k, v in group.items() if k != "params"},
+                "params": [id_map[id(p)] for p in _group_params(group)],
+            }
+            for group in self._opt.param_groups
+        ]
 
-        return {"state": self._collect_entries(lambda t: t.detach().numpy().copy()), "param_groups": groups_out}
+        return {
+            "state": self._collect_entries(lambda t: t.detach().numpy().copy()),
+            "param_groups": groups_out,
+        }
 
-    def _collect_entries(self, convert: Callable[[Tensor], object] | None = None) -> dict[int, dict[str, object]]:
+    def _collect_entries(
+        self, convert: Callable[[Tensor], object] | None = None
+    ) -> dict[int, dict[str, object]]:
         """Per-parameter state by flat index: converted host buffers or live Tensors."""
         self._sync_params()
         self._flags_now()
@@ -1685,12 +1688,9 @@ class _CompiledASGD(_CompiledStepBase):
 
     @override
     def _advance(self, i: int, step: int, gv: dict[str, float]) -> None:
-        dt = self._params[i]._impl.dtype
-        lr = gv["lr"]
-        t = float(step)
-        self._pstate[i]["eta"] = _round_state_scalar(
-            lr / ((1.0 + gv["lambd"] * lr * t) ** gv["alpha"]), dt
-        )
+        dt, lr, t = self._params[i]._impl.dtype, gv["lr"], float(step)
+        eta = lr / ((1.0 + gv["lambd"] * lr * t) ** gv["alpha"])
+        self._pstate[i]["eta"] = _round_state_scalar(eta, dt)
         self._pstate[i]["mu"] = _round_state_scalar(1.0 / max(1.0, t - gv["t0"]), dt)
 
     @override
@@ -1755,8 +1755,7 @@ class _CompiledRprop(_CompiledStepBase):
 
         ss = state["step_size"]
         agree = g * state["prev"]
-        grow = agree > 0.0
-        flip = agree < 0.0
+        grow, flip = agree > 0.0, agree < 0.0
         new_ss = _lucid.where(grow, gs("eta_plus") * ss, ss)
         new_ss = _lucid.where(flip, gs("eta_minus") * new_ss, new_ss)
         new_ss = _lucid.minimum(_lucid.maximum(new_ss, gs("step_min")), gs("step_max"))

@@ -104,9 +104,7 @@ public:
     std::string_view op_name() const override { return "less_equal"; }
     bool emit(BuilderContext& ctx, const OpNode& node) override {
         return emit_cmp(ctx, node, [](MPSGraph* g, MPSGraphTensor* a, MPSGraphTensor* b) {
-            return [g lessThanOrEqualToWithPrimaryTensor:a
-                                         secondaryTensor:b
-                                                    name:@"less_equal"];
+            return [g lessThanOrEqualToWithPrimaryTensor:a secondaryTensor:b name:@"less_equal"];
         });
     }
 };
@@ -134,6 +132,49 @@ public:
         return true;
     }
 };
+
+inline int mps_shift_bit_width(MPSDataType dt) {
+    if (dt == MPSDataTypeInt8 || dt == MPSDataTypeUInt8)
+        return 8;
+    if (dt == MPSDataTypeInt16 || dt == MPSDataTypeUInt16)
+        return 16;
+    if (dt == MPSDataTypeInt64 || dt == MPSDataTypeUInt64)
+        return 64;
+    return 32;
+}
+
+inline MPSGraphTensor*
+emit_clamped_shift(MPSGraph* g, MPSGraphTensor* a, MPSGraphTensor* b, bool is_left) {
+    const MPSDataType dt = a.dataType;
+    const int width = mps_shift_bit_width(dt);
+    MPSGraphTensor* zero = [g constantWithScalar:0.0 dataType:dt];
+    MPSGraphTensor* w_const = [g constantWithScalar:static_cast<double>(width) dataType:dt];
+    MPSGraphTensor* w_minus_1 = [g constantWithScalar:static_cast<double>(width - 1) dataType:dt];
+    MPSGraphTensor* in_range = [g
+        logicalANDWithPrimaryTensor:[g greaterThanOrEqualToWithPrimaryTensor:b
+                                                             secondaryTensor:zero
+                                                                        name:nil]
+                    secondaryTensor:[g lessThanWithPrimaryTensor:b secondaryTensor:w_const name:nil]
+                               name:nil];
+    if (is_left) {
+        MPSGraphTensor* safe_b = [g selectWithPredicateTensor:in_range
+                                          truePredicateTensor:b
+                                         falsePredicateTensor:zero
+                                                         name:nil];
+        MPSGraphTensor* shifted = [g bitwiseLeftShiftWithPrimaryTensor:a
+                                                       secondaryTensor:safe_b
+                                                                  name:nil];
+        return [g selectWithPredicateTensor:in_range
+                        truePredicateTensor:shifted
+                       falsePredicateTensor:zero
+                                       name:nil];
+    }
+    MPSGraphTensor* safe_b = [g selectWithPredicateTensor:in_range
+                                      truePredicateTensor:b
+                                     falsePredicateTensor:w_minus_1
+                                                     name:nil];
+    return [g bitwiseRightShiftWithPrimaryTensor:a secondaryTensor:safe_b name:nil];
+}
 
 // ── bitwise_and / or / xor / shifts.  ``Bitwise.cpp`` records the operands
 // by hand (no gradient, so no ``wire_autograd``) but nothing emitted them, so
@@ -173,14 +214,10 @@ public:
                         : [g bitwiseXORWithPrimaryTensor:a secondaryTensor:b name:nil];
             break;
         case 3:
-            if (is_bool)
-                return false;
-            y = [g bitwiseLeftShiftWithPrimaryTensor:a secondaryTensor:b name:nil];
-            break;
         case 4:
             if (is_bool)
                 return false;
-            y = [g bitwiseRightShiftWithPrimaryTensor:a secondaryTensor:b name:nil];
+            y = emit_clamped_shift(g, a, b, OP == 3);
             break;
         default:
             return false;

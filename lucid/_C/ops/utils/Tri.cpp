@@ -104,6 +104,8 @@ attach_tri_grad(const TensorImplPtr& a, TensorImplPtr out, int k, bool upper, co
 // `name`  — used in error messages and profiler scopes.
 TensorImplPtr tri_dispatch(const TensorImplPtr& a, int k, bool upper, const char* name) {
     Validator::input(a, std::string(name) + ".a").non_null();
+    if (a->shape().size() < 2)
+        ErrorBuilder(name).invalid_argument("input must have ndim >= 2");
     const Dtype dt = a->dtype();
     const Device device = a->device();
     OpScopeFull scope{name, device, dt, a->shape()};

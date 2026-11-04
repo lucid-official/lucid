@@ -4,7 +4,7 @@ import math
 
 import lucid
 from lucid._C import engine as _C_engine
-from lucid._dispatch import _REAL_FLOATS, _binary_operands, _wrap
+from lucid._dispatch import _REAL_FLOATS, _binary_operands, _float_operand, _unwrap, _wrap
 from lucid._tensor.tensor import Tensor
 from lucid._types import TensorOrScalar
 
@@ -14,6 +14,8 @@ def _expm1(input: Tensor) -> Tensor:
 
     The value is Kahan's form; the gradient is ``exp(x)``'s.
     """
+    if not input.is_floating_point() and not input.is_complex():
+        input = _wrap(_float_operand(_unwrap(input)))
     # Kahan's form: with u = exp(x), (u - 1) * x / log(u) cancels the rounding
     # of u against the same rounding in log(u), so it keeps full relative
     # precision near 0.  The ratio x / log(u) is grouped first: it is ~1 at

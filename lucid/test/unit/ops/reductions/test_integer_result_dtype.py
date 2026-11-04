@@ -295,9 +295,7 @@ def test_bool_matmul_and_dot_are_refused(device: str) -> None:
 
 @pytest.mark.parametrize("device", ["cpu", "metal"])
 @pytest.mark.parametrize("dtype", [lucid.float16, lucid.bfloat16])
-def test_cummax_and_cummin_backward_support_half_floats(
-    device: str, dtype: lucid.dtype
-) -> None:
+def test_cummax_and_cummin_backward_support_half_floats(device: str, dtype: lucid.dtype) -> None:
     """cummax and cummin backward support float16 and bfloat16 on CPU and Metal (LCD-682)."""
     if device == "metal" and not metal_available():
         pytest.skip("Metal unavailable")

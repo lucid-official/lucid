@@ -145,7 +145,6 @@ class SuiteResult:
         )
 
 
-
 _SUBSYSTEM_TEST_DIRS: dict[str, tuple[str, ...]] = {
     "lucid": ("ops", "factories", "dtype", "device", "random", "rng"),
     "utils.data": ("utils_data",),

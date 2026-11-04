@@ -712,7 +712,7 @@ Storage CpuBackend::diag(
 Storage CpuBackend::tri(const Storage& input, const Shape& shape, Dtype dt, int k, bool upper) {
     const auto& ca = std::get<CpuStorage>(input);
     if (shape.size() < 2)
-        ErrorBuilder("cpu_backend::tri").fail("input must have ndim >= 2");
+        ErrorBuilder("cpu_backend::tri").invalid_argument("input must have ndim >= 2");
     std::size_t n = shape_numel(shape);
     std::size_t nb = n * dtype_size(dt);
     auto ptr = allocate_aligned_bytes(nb, Device::CPU);

@@ -419,9 +419,9 @@ std::vector<TensorImplPtr> topk_op(const TensorImplPtr& a, std::int64_t k, int a
     // reference's choice, since a 0-d result cannot hold zero elements.
     if (a->shape().empty()) {
         if (k < 0 || k > 1)
-            ErrorBuilder("topk").fail("selected index k out of range: k must be in [0, 1] for a "
-                                      "0-d input, got " +
-                                      std::to_string(k));
+            ErrorBuilder("topk").invalid_argument(
+                "selected index k out of range: k must be in [0, 1] for a 0-d input, got " +
+                std::to_string(k));
         return on_scalar_axis(a, axis, "topk",
                               [](const TensorImplPtr& v, int ax) { return topk_op(v, 1, ax); });
     }
@@ -431,8 +431,8 @@ std::vector<TensorImplPtr> topk_op(const TensorImplPtr& a, std::int64_t k, int a
     // grad_fn, whose backward is a zero gradient.
     const std::int64_t size = a->shape()[static_cast<std::size_t>(ax)];
     if (k < 0 || k > size)
-        ErrorBuilder("topk").fail("selected index k out of range: k must be in [0, " +
-                                  std::to_string(size) + "], got " + std::to_string(k));
+        ErrorBuilder("topk").invalid_argument("selected index k out of range: k must be in [0, " +
+                                              std::to_string(size) + "], got " + std::to_string(k));
     // Carry axis + k into the trace for the compile-path TopKEmitter.
     scope.set_attr("axis", static_cast<std::int64_t>(ax));
     scope.set_attr("k", k);

@@ -109,7 +109,6 @@ def test_skipped_chunks_make_the_stage_red() -> None:
     assert result.broken == 1
 
 
-
 def test_subsystem_narrows_suite_paths_and_file_prefixes() -> None:
     """LCD-733: --subsystem narrows the suite stage to the subsystem's test subtrees."""
     root = Path(__file__).resolve().parents[4]

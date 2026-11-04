@@ -382,7 +382,9 @@ def test_lcd685_tensor_methods_and_signal_windows_kwargs(ref: Any, device: str) 
     assert t.ndimension() == 2 and t.nelement() == 6
     assert t.mH.shape == (3, 2)
     assert t.sum_to_size(1, 3).shape == (1, 3)
-    np.testing.assert_allclose(t.polygamma(1).cpu().numpy(), ref.ones(2, 3).polygamma(1).numpy(), rtol=1e-5)
+    np.testing.assert_allclose(
+        t.polygamma(1).cpu().numpy(), ref.ones(2, 3).polygamma(1).numpy(), rtol=1e-5
+    )
 
     d = lucid.zeros(3, 3, device=device)
     d.fill_diagonal_(4.0)

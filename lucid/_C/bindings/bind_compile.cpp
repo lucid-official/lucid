@@ -24,10 +24,9 @@
 #include <unordered_map>
 #include <vector>
 
-#include <sys/stat.h>
-
 #include <mlx/ops.h>
 #include <mlx/transforms.h>
+#include <sys/stat.h>
 
 #include "../backend/gpu/mps/MpsBridge.h"
 #include "../compile/CompiledExecutable.h"
@@ -120,12 +119,10 @@ void ready_buffers(const std::vector<lucid::TensorImplPtr>& tensors) {
         return;
     run_then_wait(std::move(pending));
     rewrite_and_wait(
-        holders,
-        [](const mlx::core::array& a) { return !a.flags().row_contiguous; },
+        holders, [](const mlx::core::array& a) { return !a.flags().row_contiguous; },
         [](const mlx::core::array& a) { return mlx::core::contiguous(a); });
     rewrite_and_wait(
-        holders,
-        [](const mlx::core::array& a) { return a.offset() != 0; },
+        holders, [](const mlx::core::array& a) { return a.offset() != 0; },
         [](const mlx::core::array& a) {
             return mlx::core::multiply(a, mlx::core::array(1, a.dtype()));
         });
