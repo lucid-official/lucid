@@ -8,12 +8,16 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
+#include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "../backend/gpu/mps/MpsBridge.h"
@@ -420,6 +424,116 @@ bool carries_half_precision(const Graph& graph) {
                 if (meta.dtype == Dtype::F16 || meta.dtype == Dtype::BF16)
                     return true;
     return false;
+}
+
+// ── The clone walk's budget ──────────────────────────────────────────────────
+//
+// ``compileWithDevice:`` clones the graph through a FIFO worklist seeded with
+// the target operations, then the target tensors' operations.  It marks an op
+// visited when it pops it and queues the op's unvisited inputs without looking
+// at the queue, so an op waiting there is queued again and expanded again: one
+// pop per path that stays ahead of the visits.  Along a chain of diamonds that
+// is exponential, and nothing can interrupt it: a ``x = x * a + x * b`` loop
+// took 34 s at 24 rounds and doubled with every round after (LCD-838).
+//
+// Seeded inputs-first, the same walk finds every input already visited and pops
+// each op once.  A graph over the budget compiles with its ops as target
+// operations in that order; a graph under it compiles as it always did.
+
+//! About a second of the real walk on an M4 Max, at 0.4 us a pop.
+constexpr std::size_t kCloneWalkBudget = 2'000'000;
+
+struct CloneWalkGraph {
+    std::vector<MPSGraphOperation*> ops;
+    std::vector<std::vector<std::uint32_t>> inputs;
+    std::vector<std::uint32_t> seeds;
+};
+
+CloneWalkGraph reachable_ops(NSArray<MPSGraphTensor*>* targets,
+                             NSArray<MPSGraphOperation*>* target_ops) {
+    CloneWalkGraph walk;
+    std::unordered_map<void*, std::uint32_t> ids;
+    const auto id_of = [&](MPSGraphOperation* op) {
+        const auto [it, fresh] =
+            ids.try_emplace((__bridge void*)op, static_cast<std::uint32_t>(walk.ops.size()));
+        if (fresh) {
+            walk.ops.push_back(op);
+            walk.inputs.emplace_back();
+        }
+        return it->second;
+    };
+    for (MPSGraphOperation* op in target_ops)
+        walk.seeds.push_back(id_of(op));
+    for (MPSGraphTensor* t in targets)
+        walk.seeds.push_back(id_of(t.operation));
+    // ``ops`` grows as the loop reaches new inputs.
+    for (std::size_t i = 0; i < walk.ops.size(); ++i) {
+        std::vector<std::uint32_t> inputs;
+        for (MPSGraphTensor* t in walk.ops[i].inputTensors)
+            inputs.push_back(id_of(t.operation));
+        for (MPSGraphOperation* dep in walk.ops[i].controlDependencies)
+            inputs.push_back(id_of(dep));
+        walk.inputs[i] = std::move(inputs);
+    }
+    return walk;
+}
+
+bool clone_walk_over_budget(const CloneWalkGraph& walk) {
+    std::deque<std::uint32_t> queue(walk.seeds.begin(), walk.seeds.end());
+    std::vector<char> visited(walk.ops.size(), 0);
+    for (std::size_t pops = 0; !queue.empty(); ++pops) {
+        if (pops == kCloneWalkBudget)
+            return true;
+        const std::uint32_t op = queue.front();
+        queue.pop_front();
+        visited[op] = 1;
+        for (const std::uint32_t input : walk.inputs[op])
+            if (visited[input] == 0)
+                queue.push_back(input);
+    }
+    return false;
+}
+
+NSArray<MPSGraphOperation*>* ops_inputs_first(const CloneWalkGraph& walk) {
+    NSMutableArray<MPSGraphOperation*>* order = [NSMutableArray arrayWithCapacity:walk.ops.size()];
+    std::vector<char> entered(walk.ops.size(), 0);
+    std::vector<std::pair<std::uint32_t, std::size_t>> stack;
+    for (const std::uint32_t seed : walk.seeds) {
+        if (entered[seed] != 0)
+            continue;
+        entered[seed] = 1;
+        stack.emplace_back(seed, 0);
+        while (!stack.empty()) {
+            const std::uint32_t op = stack.back().first;
+            if (stack.back().second == walk.inputs[op].size()) {
+                [order addObject:walk.ops[op]];
+                stack.pop_back();
+                continue;
+            }
+            const std::uint32_t input = walk.inputs[op][stack.back().second++];
+            if (entered[input] == 0) {
+                entered[input] = 1;
+                stack.emplace_back(input, 0);
+            }
+        }
+    }
+    return order;
+}
+
+MPSGraphExecutable* compile_graph(MPSGraph* graph,
+                                  NSDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feeds,
+                                  NSArray<MPSGraphTensor*>* targets,
+                                  NSArray<MPSGraphOperation*>* target_ops,
+                                  bool half_precision) {
+    const CloneWalkGraph walk = reachable_ops(targets, target_ops);
+    if (clone_walk_over_budget(walk))
+        target_ops = ops_inputs_first(walk);
+    id<MTLDevice> device = (__bridge id<MTLDevice>)lucid::gpu::mps::shared_mtl_device();
+    return [graph compileWithDevice:[MPSGraphDevice deviceWithMTLDevice:device]
+                              feeds:feeds
+                      targetTensors:targets
+                   targetOperations:target_ops
+              compilationDescriptor:make_compile_descriptor(half_precision)];
 }
 
 // Collect the trace ids that carry attention weights — a ``softmax`` output,
@@ -904,14 +1018,8 @@ CompiledExecutable* MpsBuilder::compile_trace(bool dynamic_batch,
         for (MPSGraphTensor* t : target_tensors)
             [target_arr addObject:t];
 
-        id<MTLDevice> mtl_device = (__bridge id<MTLDevice>)lucid::gpu::mps::shared_mtl_device();
-        MPSGraphDevice* mps_device = [MPSGraphDevice deviceWithMTLDevice:mtl_device];
         MPSGraphExecutable* compiled =
-            [graph_obj compileWithDevice:mps_device
-                                   feeds:feed_dict
-                           targetTensors:target_arr
-                        targetOperations:nil
-                   compilationDescriptor:make_compile_descriptor(carries_half_precision(graph))];
+            compile_graph(graph_obj, feed_dict, target_arr, nil, carries_half_precision(graph));
         if (compiled == nil)
             return fail("compile_trace: MPSGraph compilation returned nil");
 
@@ -1276,14 +1384,8 @@ MpsBuilder::compile_trace_with_backward(TensorId loss_id,
                                                                           dataType:ns_dt];
         }
 
-        id<MTLDevice> mtl_device = (__bridge id<MTLDevice>)lucid::gpu::mps::shared_mtl_device();
-        MPSGraphDevice* mps_device = [MPSGraphDevice deviceWithMTLDevice:mtl_device];
         MPSGraphExecutable* compiled =
-            [graph_obj compileWithDevice:mps_device
-                                   feeds:feed_dict
-                           targetTensors:target_arr
-                        targetOperations:nil
-                   compilationDescriptor:make_compile_descriptor(carries_half_precision(graph))];
+            compile_graph(graph_obj, feed_dict, target_arr, nil, carries_half_precision(graph));
         if (compiled == nil)
             return fail("compile_trace_with_backward: MPSGraph compilation returned nil");
 
@@ -1740,14 +1842,8 @@ CompiledExecutable* MpsBuilder::compile_fused_training_step(
                                                                           dataType:ns_dt];
         }
 
-        id<MTLDevice> mtl_device = (__bridge id<MTLDevice>)lucid::gpu::mps::shared_mtl_device();
-        MPSGraphDevice* mps_device = [MPSGraphDevice deviceWithMTLDevice:mtl_device];
         MPSGraphExecutable* compiled =
-            [graph_obj compileWithDevice:mps_device
-                                   feeds:feed_dict
-                           targetTensors:target_arr
-                        targetOperations:nil
-                   compilationDescriptor:make_compile_descriptor(carries_half_precision(graph))];
+            compile_graph(graph_obj, feed_dict, target_arr, nil, carries_half_precision(graph));
         if (compiled == nil)
             return fail("compile_fused_training_step: MPSGraph compile "
                         "returned nil");
@@ -2129,14 +2225,8 @@ MpsBuilder::compile_generic_fused_step(TensorId loss_id,
                                                                           dataType:ns_dt];
         }
 
-        id<MTLDevice> mtl_device = (__bridge id<MTLDevice>)lucid::gpu::mps::shared_mtl_device();
-        MPSGraphDevice* mps_device = [MPSGraphDevice deviceWithMTLDevice:mtl_device];
         MPSGraphExecutable* compiled =
-            [graph_obj compileWithDevice:mps_device
-                                   feeds:feed_dict
-                           targetTensors:target_arr
-                        targetOperations:nil
-                   compilationDescriptor:make_compile_descriptor(carries_half_precision(graph))];
+            compile_graph(graph_obj, feed_dict, target_arr, nil, carries_half_precision(graph));
         if (compiled == nil)
             return fail("compile_generic_fused_step: MPSGraph compile returned nil");
 
@@ -2568,14 +2658,9 @@ CompiledExecutable* MpsBuilder::compile_generic_fused_step_with_vars(
                                                                           dataType:ns_dt];
         }
 
-        id<MTLDevice> mtl_device = (__bridge id<MTLDevice>)lucid::gpu::mps::shared_mtl_device();
-        MPSGraphDevice* mps_device = [MPSGraphDevice deviceWithMTLDevice:mtl_device];
-        MPSGraphExecutable* compiled =
-            [graph_obj compileWithDevice:mps_device
-                                   feeds:feed_dict
-                           targetTensors:target_arr
-                        targetOperations:[target_ops_arr count] > 0 ? target_ops_arr : nil
-                   compilationDescriptor:make_compile_descriptor(carries_half_precision(graph))];
+        MPSGraphExecutable* compiled = compile_graph(
+            graph_obj, feed_dict, target_arr, [target_ops_arr count] > 0 ? target_ops_arr : nil,
+            carries_half_precision(graph));
         if (compiled == nil)
             return fail("compile_generic_fused_step_with_vars: MPSGraph compile returned nil");
 
