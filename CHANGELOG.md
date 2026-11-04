@@ -61,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `tools/convert_weights/`: the one-off weight conversion scripts are removed; only `__init__.py` remains, and earlier converters stay in git at `e1858082c`. The YOLO parity check reads its darknet releases from `tools/_darknet_release.py`, and `tools/check_tvm_upstream_parity.py` carries its own key map. TVM weights are not being converted.
 - merge float/double vDSP plans into one template
 - give fused-backward grad masks one owner (LCD-834)
 - stop depending on one-off weight converters
