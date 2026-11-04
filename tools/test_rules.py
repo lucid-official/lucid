@@ -14,6 +14,7 @@ exposes it to CI.  On request::
 
 import contextlib
 import functools
+import importlib.util
 import json
 import os
 import pty
@@ -36,6 +37,13 @@ from tools.rules.model import Exit, Level, RuleError, Verdict
 from tools.rules.registry import Registry
 
 REPO = Path(__file__).resolve().parents[1]
+
+# These run the real quality gate, which answers "cannot measure" without its
+# `quality` dependency group.  CI's core job doesn't install it.
+_needs_the_gate = pytest.mark.skipif(
+    importlib.util.find_spec("ruff") is None and shutil.which("ruff") is None,
+    reason="the quality gate needs ruff: pip install --group quality",
+)
 
 TOOL = """\
 import pathlib, sys
@@ -1156,6 +1164,7 @@ _RISE = "y: int = 'a'  # type: ignore[assignment]\n"
 _RANGE_FLAGS = ("--fast", "--since", "HEAD~1", "--allow-slack")
 
 
+@_needs_the_gate
 def test_push_gate_since_sees_a_rise_already_committed(scratch: Scratch) -> None:
     gate = _gate_repo(scratch)
     scratch.write("lucid/mod.py", f"x = 1\n{_RISE}")
@@ -1166,6 +1175,7 @@ def test_push_gate_since_sees_a_rise_already_committed(scratch: Scratch) -> None
     assert gate("--diff", "HEAD~1").returncode == 1
 
 
+@_needs_the_gate
 def test_push_gate_since_sees_a_baseline_raised_with_the_count(scratch: Scratch) -> None:
     gate = _gate_repo(scratch)
     baseline = scratch.root / "tools/quality_baseline.json"
@@ -1184,6 +1194,7 @@ def test_push_gate_since_sees_a_baseline_raised_with_the_count(scratch: Scratch)
     assert gate("--fast", "--since", "HEAD~2", "--allow-slack").returncode == 0
 
 
+@_needs_the_gate
 def test_push_gate_since_only_judges(scratch: Scratch) -> None:
     gate = _gate_repo(scratch)
     for mode in (("--update", "--fast"), ("--full",), ("--report", "--fast")):
@@ -1510,6 +1521,7 @@ def _real_repository(root: Path, remote: Path) -> Iterator[Scratch]:
 _SLOP = "lucid/_seeded_slop.py"
 
 
+@_needs_the_gate
 def test_push_gate_refuses_a_rise_through_real_git(real_copy: Path, tmp_path: Path) -> None:
     with _real_repository(real_copy, tmp_path / "remote.git") as repo:
         out_there = repo.sha()
@@ -1568,6 +1580,7 @@ def test_push_gate_refuses_a_rise_through_real_git(real_copy: Path, tmp_path: Pa
         assert on_the_remote() == repo.sha()
 
 
+@_needs_the_gate
 def test_a_real_commit_cannot_carry_a_blob_its_working_copy_hides(
     real_copy: Path, tmp_path: Path
 ) -> None:
