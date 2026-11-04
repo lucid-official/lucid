@@ -3,14 +3,14 @@
 import re
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import ClassVar, Final, override
 
-from tools.rules.checks import WORKERS, Check, CommandCheck, HookCheck, Workspace, run_nodes
-from tools.rules.model import Exit, need
+from tools.rules.checks import WORKERS, Check, CommandCheck, NodeRun, Result, Workspace, run_nodes
+from tools.rules.model import Exit, RuleError, inside, need
 
 _TAIL: Final = 400
 
@@ -23,7 +23,7 @@ class Proof:
 
 @dataclass(frozen=True, kw_only=True)
 class Control(ABC):
-    check: str
+    check: tuple[str, ...]
 
     kinds: ClassVar[dict[str, type[Control]]] = {}
 
@@ -49,15 +49,24 @@ class Control(ABC):
 class SeedControl(Control, kind="seed"):
     """Proves a tool on the least tree it needs: its ``Path(__file__)`` root is the scratch.
 
-    The same path, empty, must pass; with the seed it must fail with ``expect`` in
-    the output.  The clean run is what catches a tool that cannot run at all, which
-    otherwise looks either clean or like every file failing.
+    ``clean`` is a near miss at ``path`` and must pass; ``text`` there must fail with
+    ``expect`` in the output.  The clean run catches a tool that cannot run at all and
+    one that flags everything.  A check reading the index is shown the index: the seed
+    is staged in a scratch repository.
     """
 
     path: str
+    clean: str
     text: str
     expect: str
     tree: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        inside((self.path, *self.tree), f"seed for {self.check}")
+        try:
+            re.compile(self.expect)
+        except re.error as exc:
+            raise RuleError(f"seed for {self.check}: expect {self.expect!r}: {exc}") from exc
 
     @override
     def fits(self, check: Check) -> bool:
@@ -65,6 +74,8 @@ class SeedControl(Control, kind="seed"):
 
     @override
     def prove(self, ws: Workspace, check: Check) -> Proof:
+        if not check.relevant([self.path]):
+            return Proof(Exit.VIOLATION, f"its trigger leaves out {self.path}: runs would skip it")
         with tempfile.TemporaryDirectory(prefix="lucid-rules-") as tmp:
             scratch = replace(ws, root=Path(tmp).resolve(), isolated=True)
             for relative in (check.tool, *self.tree):
@@ -73,18 +84,24 @@ class SeedControl(Control, kind="seed"):
                 copied = scratch.spawn(["cp", "-cR", str(ws.root / relative), str(target)])
                 if copied.returncode != 0:
                     return Proof(Exit.UNMEASURED, f"could not copy {relative}: {copied.stderr}")
+            if check.reads_index:
+                scratch.spawn(["git", "init", "-q"])
             return self._judge(scratch, check)
 
-    def _judge(self, scratch: Workspace, check: Check) -> Proof:
+    def _planted(self, scratch: Workspace, check: Check, text: str) -> Result:
         seed = scratch.root / self.path
         seed.parent.mkdir(parents=True, exist_ok=True)
-        seed.touch()
-        clean = check.execute(scratch, [self.path])
+        seed.write_text(text)
+        if check.reads_index:
+            scratch.spawn(["git", "add", "--", self.path])
+        return check.execute(scratch, [self.path])
+
+    def _judge(self, scratch: Workspace, check: Check) -> Proof:
+        clean = self._planted(scratch, check, self.clean)
         if clean.outcome is not Exit.PASS:
-            detail = f"not green on a clean tree: {clean.output[-_TAIL:]}"
+            detail = f"not green on the near miss: {clean.output[-_TAIL:]}"
             return Proof(Exit.UNMEASURED, detail)
-        seed.write_text(self.text)
-        red = check.execute(scratch, [self.path])
+        red = self._planted(scratch, check, self.text)
         if red.outcome is Exit.PASS:
             return Proof(Exit.VIOLATION, f"stayed green with {self.path} seeded")
         if red.outcome is Exit.UNMEASURED:
@@ -97,7 +114,7 @@ class SeedControl(Control, kind="seed"):
 
 @dataclass(frozen=True, kw_only=True)
 class PytestControl(Control, kind="pytest"):
-    """Named nodes that already assert the failure, all in one process."""
+    """Named nodes, all in one process.  Each must run and pass; an empty body cannot be told."""
 
     nodes: tuple[str, ...]
 
@@ -108,13 +125,13 @@ class PytestControl(Control, kind="pytest"):
     def prove(self, ws: Workspace, check: Check) -> Proof:
         return self.prove_all(ws, [(self, check)])[0]
 
-    def _judge(self, outcomes: Mapping[str, Exit], output: str) -> Proof:
-        worst = max(outcomes[node] for node in self.nodes)
+    def _judge(self, ran: NodeRun) -> Proof:
+        worst = max(ran.outcomes[node] for node in self.nodes)
         if worst is Exit.PASS:
-            return Proof(Exit.PASS, f"{len(self.nodes)} test(s) saw it fail")
-        off = [node for node in self.nodes if outcomes[node] is not Exit.PASS]
-        word = "failed: the check did not go red" if worst is Exit.VIOLATION else "did not run"
-        return Proof(worst, f"{', '.join(off)} {word}\n{output[-_TAIL:]}")
+            return Proof(Exit.PASS, f"{len(self.nodes)} test(s) ran and passed")
+        off = [node for node in self.nodes if ran.outcomes[node] is not Exit.PASS]
+        word = "failed" if worst is Exit.VIOLATION else "did not run"
+        return Proof(worst, f"{', '.join(off)} {word}\n{ran.outputs[off[0]][-_TAIL:]}")
 
     @classmethod
     @override
@@ -122,34 +139,4 @@ class PytestControl(Control, kind="pytest"):
         controls = [control for control, _ in items if isinstance(control, PytestControl)]
         nodes = dict.fromkeys(node for control in controls for node in control.nodes)
         ran = run_nodes(ws, list(nodes))
-        return [control._judge(ran.outcomes, ran.output) for control in controls]
-
-
-@dataclass(frozen=True, kw_only=True)
-class HookControl(Control, kind="hook"):
-    """Feeds a tool call to the hook, as a subagent and as the main session."""
-
-    tool: str
-    input: str
-    expect: str
-    main: str | None = None
-
-    @override
-    def fits(self, check: Check) -> bool:
-        return isinstance(check, HookCheck)
-
-    @override
-    def prove(self, ws: Workspace, check: Check) -> Proof:
-        assert isinstance(check, HookCheck)  # the registry refuses any other pairing
-        call = {"tool_name": self.tool, "tool_input": {"command": self.input}, "cwd": str(ws.root)}
-        asked = (
-            ("subagent", self.expect, {**call, "agent_id": "control"}),
-            ("main session", self.main or self.expect, call),
-        )
-        for who, expected, payload in asked:
-            answer = check.decide(ws, payload)
-            if answer is None:
-                return Proof(Exit.UNMEASURED, f"the hook gave {who} no answer")
-            if answer != expected:
-                return Proof(Exit.VIOLATION, f"answered {who} {answer}, not {expected}")
-        return Proof(Exit.PASS, f"{self.tool}: {self.input}")
+        return [control._judge(ran) for control in controls]

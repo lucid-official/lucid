@@ -4,6 +4,11 @@
 run = ["{py}", "tools/check_numpy_h4.py"]
 trigger = ["lucid/**/*.py", "tools/check_numpy_h4.py"]
 
+[check.test-mlx-instance]
+kind = "pytest"
+nodes = ["lucid/test/unit/test_mlx_instance_rule.py::test_only_interop_tests_load_the_mlx_package"]
+trigger = ["lucid/**/*.py"]
+
 [check.cpp-layers]
 run = ["{py}", "tools/check_cpp_layers.py"]
 trigger = ["lucid/_C/**", "tools/check_cpp_layers.py"]
@@ -13,27 +18,46 @@ kind = "pytest"
 nodes = ["lucid/test/unit/test_check_cpp_layers.py::test_real_engine_tree_passes"]
 trigger = ["lucid/_C/**", "tools/check_cpp_layers.py"]
 
+# test_numpy_independence is not claimed: it is a behaviour smoke over a fixed list of calls,
+# and no seed can show it would notice an import, so R5 should not bring it back as a level.
 [[rule]]
 id = "H4"
 statement = """
 No external library in lucid/ compute paths: the C++ engine and the standard library only,
-through the bridges tools/check_numpy_h4.py lists."""
+through the six bridges."""
 why = "A compute path that needs a package breaks the bare install and hides a second backend."
 scope = ["lucid/**"]
 doc = "python"
-gap = "Numpy only: any other package passes, and tensor.py's method limit is left to review. LCD-841-B2 generalises it."
+gap = """
+numpy and mlx only: any other package passes. numpy-h4 sees import statements and .numpy() calls, \
+so importlib.import_module("numpy") and __import__("numpy") pass (test-mlx-instance does see those \
+forms, for mlx). tensor.py, optim/optimizer.py and optim/lbfgs.py are allowed per file with no \
+method limit. The tool's SANCTIONED list is the real bridge list, and it adds \
+compile/_optim/compiler.py to the six. The tool skips lucid/test and lucid/benchmarks although the \
+scope says lucid/**. LCD-841-B2 generalises it."""
 enforce = [
     { level = "commit", check = "numpy-h4" },
     { level = "push", check = "numpy-h4", pending = "LCD-841-R2" },
     { level = "ci", check = "numpy-h4" },
+    { level = "test", check = "test-mlx-instance" },
 ]
+allowlist = { source = "tools.check_numpy_h4:SANCTIONED", ceiling = 8 }
 
 [[rule.control]]
 kind = "seed"
-check = "numpy-h4"
-path = "lucid/_seed.py"
+check = ["numpy-h4"]
+path = "lucid/nn/_seed.py"
+clean = "import math\n"
 text = "import numpy\n"
 expect = '_seed\.py:1:\d+\s+import numpy'
+
+[[rule.control]]
+kind = "pytest"
+check = ["test-mlx-instance"]
+nodes = [
+    "lucid/test/unit/test_mlx_instance_rule.py::test_the_rule_fires_where_mlx_is_loaded_on_purpose",
+    "lucid/test/unit/test_mlx_instance_rule.py::test_every_loading_form_is_seen",
+]
 
 [[rule]]
 id = "H13"
@@ -46,21 +70,32 @@ enforce = [
     { level = "push", check = "cpp-layers", pending = "LCD-841-R2" },
     { level = "test", check = "test-cpp-layers" },
 ]
-allowlist = { source = "tools.check_cpp_layers:_ALLOWLIST", ceiling = 23 }
+# The tool's _ALLOWLIST is other rules' debt (E-LAYERS, R5). None of it may be a goto.
+allowlist = { source = "tools.check_cpp_layers:_ALLOWLIST", match = "goto", ceiling = 0 }
 
 # The whole engine, because the tool holds its real allowlist to the tree: a
 # smaller one would read as every entry gone stale.
 [[rule.control]]
 kind = "seed"
-check = "cpp-layers"
+check = ["cpp-layers"]
 tree = ["lucid/_C"]
 path = "lucid/_C/ops/_Seed.cpp"
+clean = "void f() { /* goto */ }\n"
 text = "void f() { goto done; done: return; }\n"
 expect = '_Seed\.cpp:1: \[goto\]'
 
 [[rule.control]]
+kind = "seed"
+check = ["cpp-layers"]
+tree = ["lucid/_C"]
+path = "lucid/_C/ops/_Seed.mm"
+clean = "void f() { /* goto */ }\n"
+text = "void f() { goto done; done: return; }\n"
+expect = '_Seed\.mm:1: \[goto\]'
+
+[[rule.control]]
 kind = "pytest"
-check = "test-cpp-layers"
+check = ["test-cpp-layers"]
 nodes = [
     "lucid/test/unit/test_check_cpp_layers.py::test_injected_violation_is_reported",
     "lucid/test/unit/test_check_cpp_layers.py::test_allowlist_ratchet_detects_stale_and_duplicate_entries",

@@ -5,19 +5,14 @@ unit = "bytes"
 ceiling = 61440
 paths = ["tools/rules/registry/*.toml"]
 
+# Non-blank, non-comment lines.
 [budget.code-lines]
 unit = "lines"
 ceiling = 900
-paths = ["tools/rules/*.py"]
+paths = ["tools/rules/**/*.py"]
 
-# Absent until LCD-841-R6 generates it.
-[budget.agents-md-bytes]
-unit = "bytes"
-ceiling = 12288
-paths = ["AGENTS.md"]
-absent_ok = true
-
-# The inventory import (LCD-841-R5) sets this to its count; after that it only falls.
-[budget.pending-rules]
-unit = "pending-rules"
-ceiling = 0
+# Rules and levels recorded as owed.  It equals the count, so it can only fall with it;
+# R5 raises it once, by the size of the inventory.
+[budget.pending]
+unit = "pending"
+ceiling = 7

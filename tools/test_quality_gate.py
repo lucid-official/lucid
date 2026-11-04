@@ -191,6 +191,11 @@ SEEDS = {
     + "    n += 1\n" * 200
     + "    return n\n",
     "any": "\nfrom typing import Any\n\nv: Any = 1\n",
+    # One statement, so only lizard's length limit sees it (ruff's PLR0915 counts
+    # statements), and no repeated line for jscpd.  tools/rules names this seed.
+    "long-single-statement": "\n\ndef long() -> list[int]:\n    return [\n"
+    + "".join(f"        {n},\n" for n in range(200))
+    + "    ]\n",
 }
 
 

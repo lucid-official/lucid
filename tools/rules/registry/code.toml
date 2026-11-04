@@ -1,23 +1,48 @@
 # Rules on Python source, and the ratchet on measured debt.
 
+# What pre-commit calls: the staged blobs, on the commit's own index.
+[check.source-rules-staged]
+run = ["{py}", "tools/check_source_rules.py", "--staged"]
+trigger = ["lucid/**", "tools/**"]
+
 [check.source-rules]
 run = ["{py}", "tools/check_source_rules.py", "{changed}"]
 trigger = ["lucid/**", "tools/**"]
 
-[check.test-source-rules]
+[check.test-h1]
+kind = "pytest"
+nodes = ["lucid/test/unit/test_source_rules.py::test_h1_no_future_annotations_import"]
+trigger = ["lucid/**", "tools/**"]
+
+[check.test-h5]
 kind = "pytest"
 nodes = [
-    "lucid/test/unit/test_source_rules.py::test_h1_no_future_annotations_import",
     "lucid/test/unit/test_source_rules.py::test_h5_only_the_fixture_imports_the_reference_framework",
     "lucid/test/unit/test_source_rules.py::test_h5_the_reference_framework_is_named_in_one_file",
-    "lucid/test/unit/test_source_rules.py::test_h7_no_annotation_is_a_string",
 ]
+trigger = ["lucid/**", "tools/**"]
+
+[check.test-h7]
+kind = "pytest"
+nodes = ["lucid/test/unit/test_source_rules.py::test_h7_no_annotation_is_a_string"]
+trigger = ["lucid/**", "tools/**"]
+
+# Goes red if the whole-tree read comes back empty, which would leave test-h1, test-h5
+# and test-h7 passing on nothing.
+[check.test-source-tree]
+kind = "pytest"
+nodes = ["lucid/test/unit/test_source_rules.py::test_every_excuse_is_still_needed"]
 trigger = ["lucid/**", "tools/**"]
 
 [check.quality-gate]
 run = ["{py}", "-m", "tools.quality_gate", "--fast"]
 trigger = ["lucid/**", "tools/quality_gate/**", "tools/quality_baseline.json"]
 
+[check.quality-gate-full]
+run = ["{py}", "-m", "tools.quality_gate", "--full", "--allow-slack"]
+trigger = ["lucid/**", "tools/quality_gate/**", "tools/quality_baseline.json"]
+
+# web/scripts/{build-api-data,build-cpp-data,build-usedby}.py hold the import: outside this scope.
 [[rule]]
 id = "H1"
 statement = "No `from __future__ import annotations`."
@@ -25,25 +50,33 @@ why = "Python 3.14 evaluates annotations lazily (PEP 649); the import turns them
 scope = ["lucid/**", "tools/**"]
 doc = "python"
 enforce = [
-    { level = "commit", check = "source-rules" },
+    { level = "commit", check = "source-rules-staged" },
     { level = "push", check = "source-rules", pending = "LCD-841-R2" },
-    { level = "test", check = "test-source-rules" },
+    { level = "test", check = "test-h1" },
+    { level = "test", check = "test-source-tree" },
 ]
 
 [[rule.control]]
 kind = "seed"
-check = "source-rules"
+check = ["source-rules-staged", "source-rules"]
 tree = ["lucid/test/_fixtures/ref_framework.py"]
-path = "lucid/_seed.py"
+path = "lucid/nn/_seed.py"
+clean = "from __future__ import division\n"
 text = "from __future__ import annotations\n"
 expect = '\[future-annotations\]'
 
 [[rule.control]]
 kind = "pytest"
-check = "test-source-rules"
+check = ["test-h1"]
 nodes = [
     "lucid/test/unit/test_source_rules.py::test_each_rule_reports_its_violation[future-annotations]",
+    "lucid/test/unit/test_source_rules.py::test_tools_are_held_to_h1_only",
 ]
+
+[[rule.control]]
+kind = "pytest"
+check = ["test-source-tree"]
+nodes = ["lucid/test/unit/test_source_rules.py::test_a_dead_path_in_prose_is_reported"]
 
 [[rule]]
 id = "H5"
@@ -54,34 +87,47 @@ why = "Lucid stands on its own; a named dependency in its source is one a user c
 scope = ["lucid/**"]
 doc = "python"
 enforce = [
-    { level = "commit", check = "source-rules" },
+    { level = "commit", check = "source-rules-staged" },
     { level = "push", check = "source-rules", pending = "LCD-841-R2" },
-    { level = "test", check = "test-source-rules" },
+    { level = "test", check = "test-h5" },
+    { level = "test", check = "test-source-tree" },
 ]
 
 [[rule.control]]
 kind = "seed"
-check = "source-rules"
+check = ["source-rules-staged", "source-rules"]
 tree = ["lucid/test/_fixtures/ref_framework.py"]
-path = "lucid/_seed.py"
+path = "lucid/nn/_seed.py"
+clean = "import math\n"
 text = ["import to", "rch\n"]  # in parts: this file is held to the rule it seeds
 expect = '\[ref-import\]'
 
 [[rule.control]]
 kind = "seed"
-check = "source-rules"
+check = ["source-rules-staged", "source-rules"]
 tree = ["lucid/test/_fixtures/ref_framework.py"]
-path = "lucid/_seed.py"
+path = "lucid/nn/_seed.py"
+clean = "# rounds as the reference framework does\n"
 text = ["# rounds as To", "rch does\n"]
 expect = '\[ref-name\]'
 
 [[rule.control]]
 kind = "pytest"
-check = "test-source-rules"
+check = ["test-h5"]
 nodes = [
     "lucid/test/unit/test_source_rules.py::test_each_rule_reports_its_violation[ref-import0]",
+    "lucid/test/unit/test_source_rules.py::test_each_rule_reports_its_violation[ref-import1]",
+    "lucid/test/unit/test_source_rules.py::test_each_rule_reports_its_violation[ref-import2]",
+    "lucid/test/unit/test_source_rules.py::test_each_rule_reports_its_violation[ref-import3]",
+    "lucid/test/unit/test_source_rules.py::test_each_rule_reports_its_violation[ref-import4]",
+    "lucid/test/unit/test_source_rules.py::test_each_rule_reports_its_violation[ref-import5]",
     "lucid/test/unit/test_source_rules.py::test_each_rule_reports_its_violation[ref-name]",
 ]
+
+[[rule.control]]
+kind = "pytest"
+check = ["test-source-tree"]
+nodes = ["lucid/test/unit/test_source_rules.py::test_a_dead_path_in_prose_is_reported"]
 
 [[rule]]
 id = "H7"
@@ -90,25 +136,32 @@ why = "PEP 649 makes the quotes unnecessary, and a string hides the name from ev
 scope = ["lucid/**"]
 doc = "python"
 enforce = [
-    { level = "commit", check = "source-rules" },
+    { level = "commit", check = "source-rules-staged" },
     { level = "push", check = "source-rules", pending = "LCD-841-R2" },
-    { level = "test", check = "test-source-rules" },
+    { level = "test", check = "test-h7" },
+    { level = "test", check = "test-source-tree" },
 ]
 
 [[rule.control]]
 kind = "seed"
-check = "source-rules"
+check = ["source-rules-staged", "source-rules"]
 tree = ["lucid/test/_fixtures/ref_framework.py"]
-path = "lucid/_seed.py"
+path = "lucid/nn/_seed.py"
+clean = "x: Annotated[int, 'metadata'] = 1\n"
 text = "def f(x: 'Tensor') -> None: ...\n"
 expect = '\[string-annotation\]'
 
 [[rule.control]]
 kind = "pytest"
-check = "test-source-rules"
+check = ["test-h7"]
 nodes = [
     "lucid/test/unit/test_source_rules.py::test_each_rule_reports_its_violation[string-annotation]",
 ]
+
+[[rule.control]]
+kind = "pytest"
+check = ["test-source-tree"]
+nodes = ["lucid/test/unit/test_source_rules.py::test_a_dead_path_in_prose_is_reported"]
 
 [[rule]]
 id = "S22"
@@ -119,15 +172,22 @@ doc = "global"
 enforce = [
     { level = "commit", check = "quality-gate" },
     { level = "push", check = "quality-gate", pending = "LCD-841-R2" },
-    { level = "ci", check = "quality-gate" },
+    { level = "ci", check = "quality-gate-full" },
 ]
 
-# One seed per collector --fast runs.  Nothing else runs this test file.
+# One seed for each collector --fast must not lose: ruff, counters, lizard.  Each trips
+# only that one, so taking a collector away turns its case green.  Nothing else runs these.
 [[rule.control]]
 kind = "pytest"
-check = "quality-gate"
+check = ["quality-gate"]
 nodes = [
     "tools/test_quality_gate.py::test_fast_check_fails_on_seeded_slop[except-pass]",
     "tools/test_quality_gate.py::test_fast_check_fails_on_seeded_slop[type-ignore]",
-    "tools/test_quality_gate.py::test_fast_check_fails_on_seeded_slop[long-function]",
+    "tools/test_quality_gate.py::test_fast_check_fails_on_seeded_slop[long-single-statement]",
 ]
+
+# CI calls --full; a seed through --fast would not show that mode can fail.
+[[rule.control]]
+kind = "pytest"
+check = ["quality-gate-full"]
+nodes = ["tools/test_quality_gate.py::test_mypy_counts_an_error_in_a_tools_module_lucid_imports"]

@@ -20,7 +20,7 @@ def _levels(rule: Rule) -> str:
 
 
 def _list(registry: Registry, args: argparse.Namespace) -> Exit:
-    rules = registry.for_path(args.path) if args.path else list(registry.rules.values())
+    rules = list(registry.rules.values())
     for rule in rules:
         columns = f"{rule.verdict:<10s}{_levels(rule):<26s}" if args.verdict else ""
         print(f"{rule.id:<14s}{columns}{rule.statement.strip().splitlines()[0]}")
@@ -45,7 +45,7 @@ def _show(registry: Registry, args: argparse.Namespace) -> Exit:
 def _run(registry: Registry, args: argparse.Namespace) -> Exit:
     ws = registry.workspace
     try:
-        changed = changed_files(ws, args.range, args.staged)
+        changes = changed_files(ws, args.range, args.staged)
     except CannotMeasure as exc:
         print(f"[rules] cannot measure: {exc}", file=sys.stderr)
         return Exit.UNMEASURED
@@ -53,9 +53,9 @@ def _run(registry: Registry, args: argparse.Namespace) -> Exit:
     if not named:
         print(f"[rules] nothing claims level {args.level}; running nothing proves nothing")
         return Exit.UNMEASURED
-    what = "the whole tree" if changed is None else f"{len(changed)} changed file(s)"
+    what = "the whole tree" if changes is None else f"{len(changes.paths)} changed file(s)"
     print(f"level {args.level}: {len(named)} check(s) over {what}")
-    results = run_all([registry.checks[name] for name in named], ws, changed)
+    results = run_all([registry.checks[name] for name in named], ws, changes)
     for result, rules in zip(results, named.values(), strict=True):
         word = "SKIP" if result.skipped else result.outcome.name
         note = result.skipped or f"{result.seconds:.1f}s"
@@ -66,11 +66,11 @@ def _run(registry: Registry, args: argparse.Namespace) -> Exit:
 
 
 def _audit(registry: Registry, args: argparse.Namespace) -> Exit:
-    unknown = set(args.rule) - registry.rules.keys()
+    unknown = (set(args.rule) - registry.rules.keys()) | (set(args.check) - registry.checks.keys())
     if unknown:
-        print(f"[rules] no rule(s) {sorted(unknown)}", file=sys.stderr)
+        print(f"[rules] no such rule or check: {sorted(unknown)}", file=sys.stderr)
         return Exit.UNMEASURED
-    report = Audit(registry, only=frozenset(args.rule)).run()
+    report = Audit(registry, frozenset(args.rule), frozenset(args.check)).run()
     print(report)
     return report.outcome
 
@@ -81,19 +81,19 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     listing = commands.add_parser("list", help="the rules")
     listing.add_argument("--verdict", action="store_true", help="and how far each is enforced")
-    listing.add_argument("--path", help="only the rules whose scope holds this file")
     listing.set_defaults(handler=_list)
     show = commands.add_parser("show", help="one rule, why included")
     show.add_argument("id")
     show.set_defaults(handler=_show)
     run = commands.add_parser("run", help="the checks one level runs; exit is the worst")
-    run.add_argument("--level", required=True, choices=[v for v in Level if v is not Level.HOOK])
+    run.add_argument("--level", required=True, choices=list(Level))
     scope = run.add_mutually_exclusive_group()
     scope.add_argument("--range", help="A..B: only what those commits changed")
     scope.add_argument("--staged", action="store_true", help="only what the index changes")
     run.set_defaults(handler=_run)
     audit = commands.add_parser("audit", help="is each claim true, and can each check fail")
     audit.add_argument("--rule", action="append", default=[], help="only these rules' controls")
+    audit.add_argument("--check", action="append", default=[], help="only these checks' controls")
     audit.set_defaults(handler=_audit)
     args = parser.parse_args(argv)
     try:

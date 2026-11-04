@@ -1,23 +1,24 @@
-"""What a record may say.  Stdlib only: the hook and push paths read it on a bare interpreter."""
+"""What a record may say.  Stdlib only, on Python 3.14: hook and push paths have no packages."""
 
 import re
 from dataclasses import MISSING, dataclass, fields
-from datetime import date
 from enum import IntEnum, StrEnum
+from pathlib import PurePosixPath
 from types import UnionType
 from typing import TYPE_CHECKING, Final, get_args, get_origin
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
 
     from _typeshed import DataclassInstance
 
     from tools.rules.controls import Control
 
 _RULE_ID: Final = re.compile(r"[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*")
-_ISSUE: Final = re.compile(r"LCD-\d+(?:-[A-Z][A-Z0-9]*)?")
+# The tracker is out of reach here, so this says the shape of an issue, not that it exists.
+_ISSUE: Final = re.compile(r"LCD-\d{1,4}(?:-[A-Z][A-Z0-9]*)?")
 _DOCS: Final = frozenset({"global", "python", "engine", "models", "tests", "web", "ci"})
-_UNITS: Final = frozenset({"bytes", "lines", "pending-rules"})
+_UNITS: Final = frozenset({"bytes", "lines", "pending"})
 
 
 class RuleError(ValueError):
@@ -29,8 +30,16 @@ def need(holds: bool, problem: str) -> None:
         raise RuleError(problem)
 
 
+def inside(paths: Iterable[str], owner: str) -> None:
+    """A path or glob in a record is relative to the tree it describes, and stays in it."""
+    for path in paths:
+        pure = PurePosixPath(path)
+        need(
+            not pure.is_absolute() and ".." not in pure.parts, f"{owner}: {path!r} leaves the tree"
+        )
+
+
 class Level(StrEnum):
-    HOOK = "hook"
     COMMIT = "commit"
     PUSH = "push"
     CI = "ci"
@@ -64,8 +73,7 @@ def _coerce(value: object, hint: object, where: str) -> object:
         need(value in list(hint), f"{where}: unknown {hint.__name__} {value!r}")
         return hint(str(value))
     fits = isinstance(hint, type) and isinstance(value, hint)
-    fits = fits and (hint is bool or not isinstance(value, bool))
-    need(fits, f"{where}: {value!r} is not {hint}")
+    need(fits and not isinstance(value, bool), f"{where}: {value!r} is not {hint}")
     return value
 
 
@@ -109,24 +117,12 @@ class Enforcement:
 
 
 @dataclass(frozen=True)
-class Exemption:
-    match: str
-    since: date
-    reason: str
-    issue: str
-    expires: date | None = None
-
-    def __post_init__(self) -> None:
-        need(_is_issue(self.issue), f"{self.match}: {self.issue!r} is not an LCD issue")
-        need(bool(self.reason.strip()), f"{self.match}: an exemption states its reason")
-
-
-@dataclass(frozen=True)
 class Allowlist:
-    """A list living in a tool (``module:NAME``); the record holds its size, which only falls."""
+    """A table in a tool (``module:NAME``); the record holds how many entries contain ``match``."""
 
     source: str
     ceiling: int
+    match: str = ""
 
 
 @dataclass(frozen=True)
@@ -135,10 +131,10 @@ class Budget:
     unit: str
     ceiling: int
     paths: tuple[str, ...] = ()
-    absent_ok: bool = False
 
     def __post_init__(self) -> None:
         need(self.unit in _UNITS, f"budget {self.name}: unknown unit {self.unit!r}")
+        inside(self.paths, f"budget {self.name}")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -156,13 +152,14 @@ class Rule:
     pending: str | None = None
     gap: str | None = None
     allowlist: Allowlist | None = None
-    exempt: tuple[Exemption, ...] = ()
 
     def __post_init__(self) -> None:
         need(_RULE_ID.fullmatch(self.id) is not None, f"bad rule id {self.id!r}")
         need(self.statement.strip().count("\n") < 2, f"{self.id}: statement over two lines")
-        need("\n" not in self.why.strip(), f"{self.id}: why over one line")
+        need(bool(self.statement.strip()), f"{self.id}: statement is blank")
+        need(bool(self.why.strip()) and "\n" not in self.why.strip(), f"{self.id}: why is one line")
         need(bool(self.scope), f"{self.id}: scope is empty")
+        inside(self.scope, self.id)
         need(self.doc in _DOCS, f"{self.id}: unknown doc {self.doc!r}")
         forms = (bool(self.enforce or self.control), self.advisory is not None, bool(self.pending))
         need(sum(forms) == 1, f"{self.id}: needs one of enforce + control, advisory, pending")
@@ -170,7 +167,7 @@ class Rule:
         need(_is_issue(self.pending), f"{self.id}: pending {self.pending!r} is not an LCD issue")
         need(self.gap is None or bool(self.enforce), f"{self.id}: a gap is in an enforcement")
         claimed = {e.check for e in self.enforce}
-        proven = {c.check for c in self.control}
+        proven = {name for control in self.control for name in control.check}
         need(claimed <= proven, f"{self.id}: no control proves {sorted(claimed - proven)}")
         need(proven <= claimed, f"{self.id}: controls prove {sorted(proven - claimed)}, unclaimed")
 

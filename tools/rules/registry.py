@@ -3,7 +3,7 @@
 import tomllib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Final, Self
 
 from tools.rules.checks import Check, Workspace
@@ -12,7 +12,6 @@ from tools.rules.model import (
     Allowlist,
     Budget,
     Enforcement,
-    Exemption,
     Level,
     Rule,
     RuleError,
@@ -54,7 +53,6 @@ def _rule(table: Mapping[str, object], where: str) -> Rule:
         where,
         enforce=_tables(left, "enforce", where, lambda t, w: read(Enforcement, t, w)),
         control=_tables(left, "control", where, lambda t, w: read_kind(Control.kinds, t, w)),
-        exempt=_tables(left, "exempt", where, lambda t, w: read(Exemption, t, w)),
         allowlist=allowlist[0] if allowlist else None,
     )
 
@@ -78,8 +76,8 @@ class Registry:
                 fits = check is not None and enforcement.level in check.levels
                 need(fits, f"{rule.id}: {enforcement.check!r} cannot run at {enforcement.level}")
             for control in rule.control:
-                fits = control.fits(self.checks[control.check])
-                need(fits, f"{rule.id}: a {type(control).__name__} cannot prove {control.check!r}")
+                unfit = [name for name in control.check if not control.fits(self.checks[name])]
+                need(not unfit, f"{rule.id}: a {type(control).__name__} cannot prove {unfit}")
         unclaimed = self.checks.keys() - {e.check for r in self.rules.values() for e in r.enforce}
         need(not unclaimed, f"no rule claims check(s) {sorted(unclaimed)}")
 
@@ -119,7 +117,3 @@ class Registry:
             for name in dict.fromkeys(e.check for e in rule.enforce if e.level is level):
                 found[name] = (*found.get(name, ()), rule)
         return found
-
-    def for_path(self, path: str) -> list[Rule]:
-        pure = PurePosixPath(path)
-        return [r for r in self.rules.values() if any(pure.full_match(g) for g in r.scope)]

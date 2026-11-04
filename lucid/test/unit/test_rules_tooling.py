@@ -10,5 +10,5 @@ _MOD = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MOD)
 
 for _name in dir(_MOD):
-    if _name == "scratch" or _name.startswith("test_"):
+    if _name in ("scratch", "real_copy") or _name.startswith("test_"):
         globals()[_name] = getattr(_MOD, _name)
