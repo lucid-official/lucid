@@ -16,9 +16,12 @@ Whether an op compiles or falls back is not the point — either is
 honest. Answering the previous question is not.
 """
 
+from collections.abc import Callable
+
 import pytest
 
 import lucid
+import lucid.linalg as la
 import lucid.nn as nn
 from lucid._C import engine as _C_engine
 
@@ -125,3 +128,131 @@ def test_a_histogram_compiles_into_the_graph():
     compiled(first.to("metal"))
     got_second = compiled(second.to("metal")).to("cpu")
     assert float((got_second - want_second).abs().max().item()) <= 1e-6
+
+
+# ── Engine ops that handed back their result without recording the trace
+# I/O (LCD-836): ``masked_select``, the LU and LDL factorisations, and
+# ``householder_product``. They had no ``OpScopeFull`` and no ``on_op_io``, so
+# not even a node was left behind for the builder to refuse; the result was an
+# anonymous tensor, and whatever consumed it bound it as a feed at trace time.
+#
+# The property is the one above, held at the three places an op can stand in a
+# function: first, after another op, and before another op. The position
+# matters because the result reaches the builder by different paths: as the
+# function's own output, or through a consumer that binds it as a feed. A
+# function whose only op is the unrecorded one is refused for another reason
+# ("recorded no operations"), which hides the defect. Every output of a
+# multi-output op has to be recorded, so each output is probed on its own,
+# ``info`` included. The checked forms (``lu_factor``, ``lu``, ``ldl_factor``)
+# are pinned too: they fell back only because they read ``info`` on the host,
+# which says nothing about the op.
+
+Fn = Callable[[lucid.Tensor], lucid.Tensor]
+Pair = tuple[lucid.Tensor, lucid.Tensor]
+
+
+def _random_pair(*shape: int) -> Pair:
+    lucid.manual_seed(0)
+    return lucid.randn(*shape), lucid.randn(*shape) * 7 + 3
+
+
+def _square() -> Pair:
+    return _random_pair(4, 4)
+
+
+def _tall() -> Pair:
+    return _random_pair(5, 3)
+
+
+def _symmetric_positive_definite() -> Pair:
+    a, b = _random_pair(4, 4)
+    eye = lucid.eye(4)
+    return a @ a.mT + 4 * eye, b @ b.mT + 4 * eye
+
+
+def _lu_pivots_differ() -> Pair:
+    # The largest entry of the first column is the first pivot; it is in the
+    # last row of one matrix and the first row of the other.
+    rows = [[1.0, 2.0, 3.0, 4.0], [2.0, 5.0, 1.0, 3.0], [3.0, 1.0, 4.0, 2.0], [4.0, 3.0, 2.0, 5.0]]
+    return lucid.tensor(rows), lucid.tensor(rows[::-1])
+
+
+def _ldl_pivots_differ() -> Pair:
+    # Only 1x1 blocks against only 2x2 blocks: Bunch-Kaufman pivots of
+    # opposite sign.
+    swaps = [[0.0, 1.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 0.0]]
+    return lucid.diag(lucid.tensor([1.0, 2.0, 3.0, 4.0])), lucid.tensor(swaps)
+
+
+def _lu_info_differs() -> Pair:
+    # ``getrf`` reports a zero pivot in ``info`` and still factors.
+    return lucid.tensor([[1.0, 2.0], [2.0, 4.0]]), lucid.tensor([[1.0, 2.0], [3.0, 4.0]])
+
+
+def _ldl_info_differs() -> Pair:
+    return lucid.zeros(3, 3), lucid.eye(3) * 2
+
+
+def _every_other(x: lucid.Tensor) -> lucid.Tensor:
+    """A mask the trace makes itself, so only the data it selects from is live."""
+    return lucid.arange(int(x.numel()), device=x.device).reshape(x.shape) % 2 == 0
+
+
+def _reflectors(h: lucid.Tensor) -> lucid.Tensor:
+    return lucid.tensor([0.5, 1.2, 0.8], device=h.device)
+
+
+# (name, the op as a function of one tensor, the two inputs it is probed with)
+_OPS: list[tuple[str, Fn, Callable[[], Pair]]] = [
+    ("masked_select-const-mask", lambda x: lucid.masked_select(x, _every_other(x)), _square),
+    ("masked_select-live-mask", lambda x: lucid.masked_select(x, x.abs() >= 0), _square),
+    ("lu_factor_ex-LU", lambda x: la.lu_factor_ex(x).LU, _square),
+    ("lu_factor_ex-pivots", lambda x: la.lu_factor_ex(x).pivots, _lu_pivots_differ),
+    ("lu_factor_ex-info", lambda x: la.lu_factor_ex(x).info, _lu_info_differs),
+    ("lu_factor-LU", lambda x: la.lu_factor(x).LU, _square),
+    ("lu_factor-pivots", lambda x: la.lu_factor(x).pivots, _lu_pivots_differ),
+    ("lu-U", lambda x: la.lu(x).U, _square),
+    ("lu-P", lambda x: la.lu(x).P, _lu_pivots_differ),
+    ("ldl_factor_ex-LD", lambda x: la.ldl_factor_ex(x).LD, _symmetric_positive_definite),
+    ("ldl_factor_ex-pivots", lambda x: la.ldl_factor_ex(x).pivots, _ldl_pivots_differ),
+    ("ldl_factor_ex-info", lambda x: la.ldl_factor_ex(x).info, _ldl_info_differs),
+    ("ldl_factor-LD", lambda x: la.ldl_factor(x).LD, _symmetric_positive_definite),
+    ("ldl_factor-pivots", lambda x: la.ldl_factor(x).pivots, _ldl_pivots_differ),
+    ("householder_product", lambda h: la.householder_product(h, _reflectors(h)), _tall),
+    ("householder_product-live-tau", lambda h: la.householder_product(h, h.abs().sum(0)), _tall),
+]
+
+_POSITIONS: dict[str, Callable[[Fn], Fn]] = {
+    "first": lambda op: op,
+    "after": lambda op: lambda x: op(x * 2),
+    "before": lambda op: lambda x: op(x) * 2,
+}
+
+_CASES = [
+    pytest.param(place(op), pair, id=f"{name}-{where}")
+    for name, op, pair in _OPS
+    for where, place in _POSITIONS.items()
+]
+
+
+def _gap(a: lucid.Tensor, b: lucid.Tensor) -> float:
+    return float((a - b).abs().max().item())
+
+
+@pytest.mark.parametrize(("fn", "pair"), _CASES)
+def test_an_unemitted_op_answers_the_second_input(fn: Fn, pair: Callable[[], Pair]) -> None:
+    first, second = (t.to("metal") for t in pair())
+    with lucid.no_grad():
+        want_first, want_second = fn(first), fn(second)
+        assert _gap(want_first, want_second) > 1e-6, "the probe is blind: eager gives one answer"
+
+        _C_engine.compile.session_cache_clear()
+        compiled = lucid.compile(fn)
+        got_first = compiled(first)
+        got_second = compiled(second)
+
+    assert _gap(got_first, got_second) > 1e-6, (
+        "the compiled function returned the same values for two different inputs: "
+        "its result was frozen into the graph at trace time"
+    )
+    assert _gap(got_second, want_second) <= 1e-5 * max(float(want_second.abs().max().item()), 1.0)
