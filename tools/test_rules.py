@@ -12,13 +12,16 @@ exposes it to CI.  On request::
     .venv/bin/python3 -m pytest tools/test_rules.py
 """
 
+import contextlib
 import functools
+import json
 import os
+import pty
 import re
 import shutil
 import subprocess
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -27,7 +30,7 @@ import pytest
 from tools import check_source_rules
 from tools.rules.__main__ import main
 from tools.rules.audit import Audit
-from tools.rules.checks import CommandCheck, PytestCheck, Workspace, run_nodes
+from tools.rules.checks import EMPTY_TREE, CommandCheck, PytestCheck, Workspace, run_nodes
 from tools.rules.controls import SeedControl
 from tools.rules.model import Exit, Level, RuleError, Verdict
 from tools.rules.registry import Registry
@@ -70,6 +73,8 @@ SEED = (
     'clean = "ok\\n"\ntext = "bad\\n"\nexpect = "bad-word"\n'
 )
 RULE = f"{CHECK}[[rule]]\n{HEAD}{COMMIT}{SEED}"
+# What a claim's level has to run: the python a hook trial stubs, then the tool.
+RUNS_X = ".venv/bin/python3 tools/x.py\n"
 INDEX_RULE = (
     '[check.y]\nrun = ["{py}", "-S", "tools/y.py", "--staged"]\ntrigger = ["src/**"]\n\n'
     + f"[[rule]]\n{HEAD.replace('R1', 'R2')}"
@@ -98,6 +103,8 @@ PYPROJECT = (
 )
 AUDIT = ("audit",)
 RUN = ("run", "--level", "commit")
+PUSH = ("push", "--range", "base..main")
+PUSH_TIP = ("push", "--range", "main..refs/heads/main~0")
 
 
 @dataclass
@@ -110,12 +117,37 @@ class Scratch:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
 
+    def hook(self, name: str, body: str) -> None:
+        self.write(f".githooks/{name}", f"#!/bin/sh\n{body}")
+        (self.root / ".githooks" / name).chmod(0o755)
+
     def records(self, text: str, name: str = "x") -> None:
         self.write(f"tools/rules/registry/{name}.toml", text)
 
-    def rules(self, *args: str, home: Path = REPO) -> subprocess.CompletedProcess[str]:
+    def rules(
+        self, *args: str, home: Path = REPO, stdin: str = ""
+    ) -> subprocess.CompletedProcess[str]:
         argv = [sys.executable, "-S", "-m", "tools.rules", "--root", str(self.root), *args]
-        return subprocess.run(argv, cwd=home, env=self.env, capture_output=True, text=True)
+        return subprocess.run(
+            argv, cwd=home, env=self.env, input=stdin, capture_output=True, text=True
+        )
+
+    def attempt(self, *args: str, **env: str) -> subprocess.CompletedProcess[str]:
+        """Git as a person runs it, hooks and all; a refusal is an answer, not an error."""
+        return subprocess.run(
+            ["git", *args], cwd=self.root, env={**self.env, **env}, capture_output=True, text=True
+        )
+
+    def sha(self, rev: str = "HEAD") -> str:
+        return self.attempt("rev-parse", rev).stdout.strip()
+
+    def message(self, rev: str = "HEAD") -> str:
+        return self.attempt("log", "-1", "--format=%B", rev).stdout
+
+    @property
+    def bypass_log(self) -> str:
+        log = self.root / ".git/lucid-bypass.log"
+        return log.read_text() if log.exists() else ""
 
     def git(self, *args: str) -> None:
         subprocess.run(["git", *args], cwd=self.root, env=self.env, check=True, capture_output=True)
@@ -143,7 +175,7 @@ def scratch(tmp_path: Path) -> Scratch:
     env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
     made = Scratch(tmp_path, env)
     made.write("pyproject.toml", PYPROJECT)
-    made.write(".githooks/pre-commit", '"${PY}" tools/x.py\n')
+    made.hook("pre-commit", RUNS_X)
     made.write("tools/x.py", TOOL)
     made.write("src/a.txt", "ok\n")
     made.records(RULE)
@@ -236,8 +268,8 @@ def _record(text: str) -> Callable[[Scratch], None]:
     return lambda s: s.records(text)
 
 
-def _hook(text: str) -> Callable[[Scratch], None]:
-    return lambda s: s.write(".githooks/pre-commit", text)
+def _hook(body: str, name: str = "pre-commit") -> Callable[[Scratch], None]:
+    return lambda s: s.hook(name, body)
 
 
 def _no_tool(s: Scratch) -> None:
@@ -247,7 +279,7 @@ def _no_tool(s: Scratch) -> None:
 def _index_rule(body: str = BLOB_TOOL) -> Callable[[Scratch], None]:
     def setup(s: Scratch) -> None:
         s.write("tools/y.py", body)
-        s.write(".githooks/pre-commit", '"${PY}" tools/x.py\n"${PY}" tools/y.py --staged\n')
+        s.hook("pre-commit", f"{RUNS_X}.venv/bin/python3 tools/y.py --staged\n")
         s.records(INDEX_RULE, "y")
 
     return setup
@@ -272,7 +304,7 @@ def _pending(*wired: str) -> Callable[[Scratch], None]:
         claim = '{ level = "push", check = "x", pending = "LCD-841-R2" }, '
         s.records(RULE.replace("enforce = [", f"enforce = [{claim}"))
         for line in wired:
-            s.write(".githooks/pre-push", line)
+            s.hook("pre-push", line)
 
     return setup
 
@@ -281,6 +313,14 @@ def _ci(file: str, text: str) -> Callable[[Scratch], None]:
     def setup(s: Scratch) -> None:
         s.records(RULE.replace('level = "commit"', 'level = "ci"'))
         s.write(file, text)
+
+    return setup
+
+
+def _push_rule(body: str) -> Callable[[Scratch], None]:
+    def setup(s: Scratch) -> None:
+        s.records(RULE.replace('level = "commit"', 'level = "push"'))
+        s.hook("pre-push", body)
 
     return setup
 
@@ -333,6 +373,26 @@ def _staged_differs(s: Scratch) -> None:
     s.write("src/n.txt", "ok\n")
 
 
+def _seed_outside_trigger(s: Scratch) -> None:
+    s.write("other/a.txt", "ok\n")
+    s.records(RULE.replace('trigger = ["src/**"]', 'trigger = ["other/**"]'))
+
+
+def _pushable(bad: str = "", dirty: bool = False, tip: str = "") -> Callable[[Scratch], None]:
+    def setup(s: Scratch) -> None:
+        s.records(RULE.replace('level = "commit"', 'level = "push"'))
+        s.commit_all("base")
+        s.git("tag", "base")
+        s.write("src/n.txt", f"{bad}\\n")
+        s.commit_all("tip")
+        if dirty:
+            s.write("tools/x.py", TOOL + "\\n")
+        if tip:
+            s.git("checkout", "-q", tip)
+
+    return setup
+
+
 def _staged_outside_trigger(s: Scratch) -> None:
     s.commit_all()
     s.write("web/n.txt", "bad\n")
@@ -356,13 +416,7 @@ _SCENARIOS = {
     ),
     # triggers and scope
     "seed-outside-trigger": Scenario(
-        lambda s: (
-            (
-                s.write("other/a.txt", "ok\n"),
-                s.records(RULE.replace('trigger = ["src/**"]', 'trigger = ["other/**"]')),
-            )
-            and None
-        ),
+        _seed_outside_trigger,
         AUDIT,
         1,
         "its trigger leaves out src/deep/_seed.txt",
@@ -387,42 +441,114 @@ _SCENARIOS = {
         _pytest_rule("test_marked", "test_ok"), AUDIT, 2, "test_marked did not run"
     ),
     "own-node-absent": Scenario(_pytest_rule("test_gone", "test_ok"), AUDIT, 2, "did not run"),
-    # wiring: a level names the tool
-    "named": Scenario(_nothing, AUDIT, 0, "1/1 claimed levels name their tool"),
-    "named-only-in-a-comment": Scenario(
-        _hook("# tools/x.py is what this hook would run\nexit 0\n"),
+    # wiring: a real commit or push runs the tool, and stops when it fails
+    "runs": Scenario(_nothing, AUDIT, 0, "1/1 claimed levels"),
+    "run-only-in-a-comment": Scenario(
+        _hook("# .venv/bin/python3 tools/x.py\n"),
         AUDIT,
         1,
-        "R1: level=commit check=x: .githooks/pre-commit does not name tools/x.py",
+        "R1: level=commit check=x: a real commit in the main checkout did not run tools/x.py",
     ),
-    "named-in-a-trailing-comment": Scenario(
-        _hook("exit 0  # tools/x.py\n"), AUDIT, 1, "does not name"
+    "exit-0-above-the-line": Scenario(_hook(f"exit 0\n{RUNS_X}"), AUDIT, 1, "did not run"),
+    "if-false": Scenario(_hook(f"if false; then {RUNS_X}fi\n"), AUDIT, 1, "did not run"),
+    "name-in-an-echo": Scenario(_hook("echo tools/x.py\n"), AUDIT, 1, "did not run"),
+    "name-with-a-suffix": Scenario(
+        _hook(".venv/bin/python3 tools/x.py.disabled\n"), AUDIT, 1, "did not run"
     ),
-    "named-after-a-semicolon": Scenario(_hook("true;#tools/x.py\n"), AUDIT, 1, "does not name"),
-    "named-with-a-suffix": Scenario(_hook("X=tools/x.py.disabled\n"), AUDIT, 1, "does not name"),
-    "named-with-a-prefix": Scenario(_hook("X=retools/x.py\n"), AUDIT, 1, "does not name"),
-    "named-by-the-runner": Scenario(
-        _hook('"${PY}" -m tools.rules run --level commit --staged\n'), AUDIT, 0, "1/1 claimed"
+    "guard-never-fires": Scenario(
+        _hook(f"if git diff --cached --name-only | grep -q ^nowhere/; then {RUNS_X}fi\n"),
+        AUDIT,
+        1,
+        "did not run",
     ),
-    "named-by-the-wrong-runner": Scenario(
-        _hook('"${PY}" -m tools.rules run --level push\n'), AUDIT, 1, "does not name"
+    "guard-fires-on-the-trigger": Scenario(
+        _hook(f"git diff --cached --name-only | grep -q ^src/ || exit 0\n{RUNS_X}"),
+        AUDIT,
+        0,
+        "1/1 claimed",
+    ),
+    "exit-dropped": Scenario(
+        _hook(".venv/bin/python3 tools/x.py || true\n"),
+        AUDIT,
+        1,
+        "a real commit in the main checkout went through with tools/x.py failing",
+    ),
+    "only-past-a-worktree-exit": Scenario(
+        _hook(f"[ -f .git ] && exit 0\n{RUNS_X}"),
+        AUDIT,
+        1,
+        "a real commit in a linked worktree did not run tools/x.py",
+    ),
+    "not-executable": Scenario(
+        lambda s: (s.root / ".githooks/pre-commit").chmod(0o644), AUDIT, 1, "did not run"
+    ),
+    "tool-fails-for-all": Scenario(
+        _hook(f"exit 1\n{RUNS_X}"), AUDIT, 1, "failed with its tool passing"
+    ),
+    "run-by-the-runner": Scenario(
+        _hook(".venv/bin/python3 -m tools.rules run --level commit --staged\n"),
+        AUDIT,
+        0,
+        "1/1 claimed",
+    ),
+    "runner-off-the-index": Scenario(
+        _hook(".venv/bin/python3 -m tools.rules run --level commit\n"), AUDIT, 1, "did not run"
+    ),
+    "the-wrong-runner": Scenario(
+        _hook(".venv/bin/python3 -m tools.rules run --level push\n"), AUDIT, 1, "did not run"
     ),
     "ci-script": Scenario(_ci("scripts/ci_full.sh", '"$PY" tools/x.py\n'), AUDIT, 0, "1/1 claimed"),
     "ci-workflow": Scenario(
         _ci(".github/workflows/x.yml", "run: python tools/x.py\n"), AUDIT, 0, "1/1 claimed"
     ),
     "ci-other-script": Scenario(
-        _ci("scripts/o.sh", "python tools/x.py\n"), AUDIT, 1, "does not name"
+        _ci("scripts/o.sh", "python tools/x.py\n"), AUDIT, 1, "no tools/x.py"
+    ),
+    "ci-only-in-a-comment": Scenario(
+        _ci("scripts/ci_full.sh", "# tools/x.py is what this would run\n"),
+        AUDIT,
+        1,
+        "R1: level=ci check=x: scripts/ci_full.sh or .github/workflows/*.yml: no tools/x.py",
+    ),
+    "ci-in-a-trailing-comment": Scenario(
+        _ci("scripts/ci_full.sh", "exit 0  # tools/x.py\n"), AUDIT, 1, "no tools/x.py"
+    ),
+    "ci-after-a-semicolon": Scenario(
+        _ci("scripts/ci_full.sh", "true;#tools/x.py\n"), AUDIT, 1, "no tools/x.py"
+    ),
+    "ci-with-a-suffix": Scenario(
+        _ci("scripts/ci_full.sh", "X=tools/x.py.disabled\n"), AUDIT, 1, "no tools/x.py"
+    ),
+    "ci-with-a-prefix": Scenario(
+        _ci("scripts/ci_full.sh", "X=retools/x.py\n"), AUDIT, 1, "no tools/x.py"
     ),
     "pending-counted": Scenario(_pending(), AUDIT, 0, "1 pending on LCD-841-R2"),
     "pending-gone-stale": Scenario(
-        _pending('"${PY}" -m tools.rules push\n'), AUDIT, 1, "is named now: drop pending"
+        _pending('.venv/bin/python3 -m tools.rules push "$@"\n'),
+        AUDIT,
+        1,
+        "is wired now: drop pending",
     ),
     "push-with-no-hook": Scenario(
         _record(RULE.replace('level = "commit"', 'level = "push"')),
         AUDIT,
         1,
-        ".githooks/pre-push does not name",
+        "a real push in the main checkout did not run tools/x.py",
+    ),
+    "push-run-by-the-gate": Scenario(
+        _push_rule('.venv/bin/python3 -m tools.rules push "$@"\n'), AUDIT, 0, "1/1 claimed"
+    ),
+    "push-gate-off-the-refs": Scenario(
+        _push_rule('.venv/bin/python3 -m tools.rules push "$@" </dev/null\n'),
+        AUDIT,
+        1,
+        "did not run tools/x.py",
+    ),
+    "push-exit-dropped": Scenario(
+        _push_rule(f"{RUNS_X.strip()} || true\n"),
+        AUDIT,
+        1,
+        "push in the main checkout went through",
     ),
     # ceilings
     "budget-at": Scenario(_budget("bytes", 9), AUDIT, 0, "b 9/9"),
@@ -456,6 +582,13 @@ _SCENARIOS = {
     ),
     "staged-outside-trigger": Scenario(
         _staged_outside_trigger, (*RUN, "--staged"), 0, "no changed file matches"
+    ),
+    # the push gate, on a range
+    "push-judged": Scenario(_pushable(), PUSH, 0, "push passes"),
+    "push-a-violation": Scenario(_pushable("bad"), PUSH, 1, "is refused"),
+    "push-a-dirty-tree": Scenario(_pushable(dirty=True), PUSH, 2, "M tools/x.py"),
+    "push-a-tip-not-checked-out": Scenario(
+        _pushable(tip="base"), PUSH_TIP, 2, "check out what you are pushing"
     ),
     # load, through the command line
     "no-form": Scenario(
@@ -503,11 +636,32 @@ _PACKAGE_MUTANTS = [
         "checks.py",
         '_COMMENT.sub("", f.read_text(errors="replace"))',
         'f.read_text(errors="replace")',
-        "named-only-in-a-comment",
+        "ci-only-in-a-comment",
     ),
-    ("checks.py", r"(?:^|[\s;])#", r"(?:^|\s)#", "named-after-a-semicolon"),
-    ("checks.py", r"(?![\w./-])", "", "named-with-a-suffix"),
-    ("checks.py", r"(?<![\w.-])", "", "named-with-a-prefix"),
+    ("checks.py", r"(?:^|[\s;])#", r"(?:^|\s)#", "ci-after-a-semicolon"),
+    ("checks.py", r"(?![\w./-])", "", "ci-with-a-suffix"),
+    ("checks.py", r"(?<![\w.-])", "", "ci-with-a-prefix"),
+    ("checks.py", "re.search(self.wanted, log.read_text()) is None", "False", "the-wrong-runner"),
+    (
+        "checks.py",
+        'if self._attempt(tree, "failing").returncode == 0:',
+        "if False:",
+        "exit-dropped",
+    ),
+    (
+        "checks.py",
+        """return self._tried(base, repo, "the main checkout") or self._tried(
+                base, linked, "a linked worktree"
+            )""",
+        'return self._tried(base, repo, "the main checkout")',
+        "only-past-a-worktree-exit",
+    ),
+    (
+        "checks.py",
+        "if passing.returncode != 0:",
+        "if False:",
+        "tool-fails-for-all",
+    ),
     (
         "checks.py",
         'crashed = done.returncode == 1 and "Traceback (most recent call last)" in done.stderr',
@@ -532,6 +686,20 @@ _PACKAGE_MUTANTS = [
         "if not self.trigger:\n            return list(changed)",
         "if True:\n            return list(changed)",
         "staged-outside-trigger",
+    ),
+    ("push.py", "if tip != head:", "if False:", "push-a-tip-not-checked-out"),
+    ("push.py", "if dirty:", "if False:", "push-a-dirty-tree"),
+    (
+        "push.py",
+        "return max((self._judge(push) for push in pushes), default=Exit.PASS)",
+        "return Exit.PASS",
+        "push-a-violation",
+    ),
+    (
+        "push.py",
+        "return max(result.outcome for result in results)",
+        "return Exit.PASS",
+        "push-a-violation",
     ),
     ("controls.py", "if clean.outcome is not Exit.PASS:", "if False:", "red-forever"),
     ("controls.py", "if re.search(self.expect, red.output) is None:", "if False:", "off-message"),
@@ -803,12 +971,628 @@ def test_a_control_does_not_see_the_committing_tree_through_git_variables(
 def test_the_name_a_level_must_use_is_the_tool_not_its_first_word(scratch: Scratch) -> None:
     generate = CommandCheck(name="g", run=("{py}", "-m", "tools.rules", "generate", "--check"))
     assert generate.tool == "tools.rules generate"
-    scratch.write(".githooks/pre-commit", '"${PY}" -m tools.rules list\n')
+    scratch.hook("pre-commit", ".venv/bin/python3 -m tools.rules list\n")
     assert generate.unwired(Level.COMMIT, scratch.root) is not None
-    scratch.write(".githooks/pre-commit", '"${PY}" -m tools.rules generate --check\n')
+    scratch.hook("pre-commit", ".venv/bin/python3 -m tools.rules generate --check\n")
     assert generate.unwired(Level.COMMIT, scratch.root) is None
     assert CommandCheck(name="q", run=("{py}", "-m", "tools.x", "--fast")).tool == "tools.x"
     assert CommandCheck(name="s", run=("{py}", "tools/x.py", "{changed}")).tool == "tools/x.py"
+
+
+# ── the push gate: what it takes from git, on a small repository ─────────────
+
+_ZERO = "0" * 40
+_MAIN = "refs/heads/main"
+
+
+def _update(local: str, remote: str, ref: str = _MAIN) -> str:
+    return f"{_MAIN} {local} {ref} {remote}\n"
+
+
+@dataclass(frozen=True)
+class Pushed:
+    """Two commits, as far as a gate can see them; ``tracking``: the remote's main, if known."""
+
+    stdin: Callable[[str, str], str]
+    code: int
+    said: str
+    tracking: str = ""
+
+
+_PUSHES = {
+    "main": Pushed(lambda b, t: _update(t, b), 0, "1 commit(s), 1 file(s)"),
+    "nothing-to-push": Pushed(lambda b, t: "", 0, ""),
+    "another-branch": Pushed(lambda b, t: _update(t, b, "refs/heads/side"), 0, ""),
+    "another-tag": Pushed(lambda b, t: _update(t, _ZERO, "refs/tags/nightly"), 0, ""),
+    "new-to-the-remote": Pushed(lambda b, t: _update(t, _ZERO), 0, "2 commit(s), 6 file(s)"),
+    "main-deleted": Pushed(lambda b, t: _update(_ZERO, b), 2, f"this deletes {_MAIN}"),
+    "tag-deleted": Pushed(lambda b, t: _update(_ZERO, t, "refs/tags/v1.0.0"), 0, ""),
+    "tag-the-remote-holds": Pushed(lambda b, t: _update(b, _ZERO, "refs/tags/v1.0.0"), 0, "", "t"),
+    "tag-with-commits-of-its-own": Pushed(
+        lambda b, t: _update(t, _ZERO, "refs/tags/v1.0.0"), 0, "1 commit(s), 1 file(s)", "b"
+    ),
+    "tag-elsewhere-with-commits": Pushed(
+        lambda b, t: _update(b, _ZERO, "refs/tags/v1.0.0"), 2, "check out what you are pushing"
+    ),
+    "tip-other-than-head": Pushed(lambda b, t: _update(b, t), 2, "check out what you are pushing"),
+    "unknown-base": Pushed(lambda b, t: _update(t, "1" * 40), 2, "cannot measure"),
+    "not-a-ref-update": Pushed(lambda b, t: "garbage\n", 2, "not a ref update"),
+}
+
+
+@pytest.mark.parametrize("name", _PUSHES)
+def test_push_gate_reads_what_git_writes_to_the_hook(scratch: Scratch, name: str) -> None:
+    case = _PUSHES[name]
+    scratch.records(RULE.replace('level = "commit"', 'level = "push"'))
+    scratch.commit_all("base")
+    base = scratch.sha()
+    scratch.write("src/n.txt", "ok\n")
+    scratch.commit_all("tip")
+    tip = scratch.sha()
+    if case.tracking:
+        tracked = base if case.tracking == "b" else tip
+        scratch.git("update-ref", "refs/remotes/origin/main", tracked)
+    done = scratch.rules("push", "origin", "url", stdin=case.stdin(base, tip))
+    out = done.stdout + done.stderr
+    assert done.returncode == case.code and case.said in out, out
+    if not case.said:
+        assert out == ""
+
+
+def test_push_gate_judges_each_range_once_and_all_of_them(scratch: Scratch) -> None:
+    scratch.records(RULE.replace('level = "commit"', 'level = "push"'))
+    scratch.commit_all("base")
+    base = scratch.sha()
+    scratch.write("src/bad.txt", "bad\n")
+    scratch.commit_all("tip")
+    tip = scratch.sha()
+    scratch.git("update-ref", "refs/remotes/origin/main", base)
+    done = scratch.rules(
+        "push", "origin", stdin=_update(tip, base) + _update(tip, _ZERO, "refs/tags/v1.0.0")
+    )
+    assert done.returncode == 1 and "src/bad.txt:1: [bad-word]" in done.stdout, done.stdout
+    assert done.stdout.count("level push:") == 1
+    assert "is refused" in done.stdout
+    # A branch alongside changes nothing, and neither does the order.
+    done = scratch.rules(
+        "push", "origin", stdin=_update(tip, base, "refs/heads/s") + _update(tip, base)
+    )
+    assert done.returncode == 1 and done.stdout.count("level push:") == 1
+
+
+@pytest.mark.parametrize(
+    ("path", "code", "said"),
+    [
+        ("tools/x.py", 2, "tools/x.py"),
+        ("tools/new.py", 2, "tools/new.py"),
+        ("pyproject.toml", 2, "pyproject.toml"),
+        (".githooks/pre-commit", 2, ".githooks/pre-commit"),
+        ("src/a.txt", 0, "1 commit(s)"),
+        ("web/untouched.txt", 0, "1 commit(s)"),
+    ],
+)
+def test_push_gate_refuses_a_working_copy_that_is_not_what_leaves(
+    scratch: Scratch, path: str, code: int, said: str
+) -> None:
+    scratch.records(RULE.replace('level = "commit"', 'level = "push"'))
+    scratch.commit_all("base")
+    base = scratch.sha()
+    scratch.write("src/n.txt", "ok\n")
+    scratch.commit_all("tip")
+    existing = scratch.root / path
+    scratch.write(path, (existing.read_text() if existing.exists() else "") + "\n")
+    done = scratch.rules("push", "--range", f"{base}..HEAD")
+    assert done.returncode == code and said in done.stdout + done.stderr, done.stdout + done.stderr
+    ran = "level push:" in done.stdout
+    assert ran is (code == 0)
+
+
+def test_push_gate_prints_the_bypasses_in_the_range(scratch: Scratch) -> None:
+    scratch.records(RULE.replace('level = "commit"', 'level = "push"'))
+    scratch.commit_all("base")
+    base = scratch.sha()
+    scratch.write("src/n.txt", "ok\n")
+    scratch.commit_all("chore: skipped\n\nLucid-Bypass: no-verify")
+    scratch.write("src/m.txt", "ok\n")
+    scratch.commit_all("chore: cleared")
+    done = scratch.rules("push", "--range", f"{base}..HEAD")
+    assert done.returncode == 0 and "2 commit(s)" in done.stdout
+    assert "bypassed at commit (no-verify)" in done.stdout and "chore: skipped" in done.stdout
+    assert "chore: cleared" not in done.stdout
+
+
+def test_push_gate_refuses_what_is_no_range_and_a_terminal(scratch: Scratch) -> None:
+    scratch.records(RULE.replace('level = "commit"', 'level = "push"'))
+    assert scratch.rules("push", "--range", "HEAD").returncode == 2
+    _, terminal = pty.openpty()
+    argv = [sys.executable, "-S", "-m", "tools.rules", "--root", str(scratch.root), "push"]
+    done = subprocess.run(
+        argv, cwd=REPO, env=scratch.env, stdin=terminal, capture_output=True, text=True
+    )
+    assert done.returncode == 2 and "no ref updates" in done.stderr, done.stderr
+
+
+def test_push_gate_fills_since_from_the_range_the_index_or_nothing(scratch: Scratch) -> None:
+    scratch.write("tools/x.py", 'import sys\nprint(sys.argv[1], end="", file=open("since", "w"))\n')
+    scratch.records(
+        RULE.replace('"tools/x.py", "{changed}"', '"tools/x.py", "{since}"').replace(
+            SEED, SEED.replace("bad-word", "x")
+        )
+    )
+    scratch.commit_all("base")
+    base = scratch.sha()
+    scratch.write("src/n.txt", "ok\n")
+    scratch.commit_all("tip")
+    assert scratch.rules(*RUN, "--range", f"{base}..HEAD").returncode == 0
+    assert (scratch.root / "since").read_text() == base
+    assert scratch.rules(*RUN).returncode == 0
+    assert (scratch.root / "since").read_text() == EMPTY_TREE
+    scratch.write("src/m.txt", "ok\n")
+    scratch.git("add", "src/m.txt")
+    assert scratch.rules(*RUN, "--staged").returncode == 0
+    assert (scratch.root / "since").read_text() == "HEAD"
+
+
+# ── the ratchet from a ref: the two ways a committed rise could pass ─────────
+
+
+def _gate_repo(s: Scratch) -> Callable[..., subprocess.CompletedProcess[str]]:
+    def gate(*args: str) -> subprocess.CompletedProcess[str]:
+        argv = [sys.executable, "-m", "tools.quality_gate", "--root", str(s.root), *args]
+        collectors = ("--collectors", "ruff,counters,lizard")
+        return subprocess.run(
+            [*argv, *collectors], cwd=REPO, env=s.env, capture_output=True, text=True
+        )
+
+    s.write("lucid/mod.py", "x = 1\n")
+    s.commit_all("first")
+    done = gate("--rebaseline", "--reason", "test")
+    assert done.returncode == 0, done.stdout + done.stderr
+    s.commit_all("base")
+    return gate
+
+
+_RISE = "y: int = 'a'  # type: ignore[assignment]\n"
+_RANGE_FLAGS = ("--fast", "--since", "HEAD~1", "--allow-slack")
+
+
+def test_push_gate_since_sees_a_rise_already_committed(scratch: Scratch) -> None:
+    gate = _gate_repo(scratch)
+    scratch.write("lucid/mod.py", f"x = 1\n{_RISE}")
+    scratch.commit_all("a rise")
+    assert gate("--fast").returncode == 0  # nothing differs from HEAD: the vacuous pass
+    done = gate(*_RANGE_FLAGS)
+    assert done.returncode == 1 and "rose above the baseline" in done.stdout, done.stdout
+    assert gate("--diff", "HEAD~1").returncode == 1
+
+
+def test_push_gate_since_sees_a_baseline_raised_with_the_count(scratch: Scratch) -> None:
+    gate = _gate_repo(scratch)
+    baseline = scratch.root / "tools/quality_baseline.json"
+    data = json.loads(baseline.read_text())
+    data["counts"].setdefault("counters", {})["type-ignore[assignment]"] = {"lucid/mod.py": 1}
+    baseline.write_text(json.dumps(data))
+    scratch.write("lucid/mod.py", f"x = 1\n{_RISE}")
+    scratch.commit_all("a rise, and the baseline to match")
+    assert gate("--fast").returncode == 0  # HEAD's baseline agrees with itself
+    done = gate(*_RANGE_FLAGS)
+    assert done.returncode == 1 and "without a rebaselines entry" in done.stdout, done.stdout
+    # The recorded way to raise one is not refused, and the record is what shows.
+    data["rebaselines"].append({"date": "2026-11-05", "reason": "test", "by": "test"})
+    baseline.write_text(json.dumps(data))
+    scratch.commit_all("the rebaseline entry")
+    assert gate("--fast", "--since", "HEAD~2", "--allow-slack").returncode == 0
+
+
+def test_push_gate_since_only_judges(scratch: Scratch) -> None:
+    gate = _gate_repo(scratch)
+    for mode in (("--update", "--fast"), ("--full",), ("--report", "--fast")):
+        done = gate(*mode, "--since", "HEAD")
+        assert done.returncode == 2 and "--since only judges" in done.stderr, done.stderr
+    assert gate("--fast", "--since", "nowhere").returncode == 2
+
+
+# ── the bypass record: real hooks, real commits, a stub for every tool ───────
+
+
+def _stub_python(tree: Path, body: str = "exit 0\n") -> None:
+    python = tree / ".venv/bin/python3"
+    python.parent.mkdir(parents=True, exist_ok=True)
+    python.write_text(f"#!/bin/sh\n{body}")
+    python.chmod(0o755)
+
+
+def _real_hooks(s: Scratch, hooks: Path = REPO / ".githooks", python: bool = True) -> None:
+    """Commits in ``s`` go through ``hooks``; the scripts they look for are there, and pass."""
+    text = (hooks / "pre-commit").read_text().replace("${RULES_MAIN}", "tools/rules/__main__.py")
+    for script in re.findall(r"\btools/[\w/]+\.py", text):
+        s.write(script, "")
+    s.write(".gitignore", ".venv\n")
+    s.write("README.md", "x\n")
+    if python:
+        _stub_python(s.root)
+    s.commit_all("chore: base")
+    s.git("config", "core.hooksPath", str(hooks))
+
+
+def _commit(s: Scratch, *args: str, text: str = "x\n", **env: str) -> None:
+    s.write("src/a.txt", text)
+    done = s.attempt("commit", "-qam", "chore: work\n\nThe body.", *args, **env)
+    assert done.returncode == 0, done.stderr
+
+
+def test_bypass_a_cleared_commit_leaves_nothing(scratch: Scratch) -> None:
+    _real_hooks(scratch)
+    _commit(scratch)
+    assert "Lucid-Bypass" not in scratch.message() and scratch.bypass_log == ""
+    assert "The body." in scratch.message()
+    assert not (scratch.root / ".git/lucid-hook-ran").exists()
+
+
+def test_bypass_no_verify_leaves_a_trailer_and_a_log_line(scratch: Scratch) -> None:
+    _real_hooks(scratch)
+    _commit(scratch, "--no-verify")
+    message = scratch.message()
+    assert "Lucid-Bypass: no-verify" in message and "The body." in message
+    assert re.search(rf"{scratch.sha()[:7]}\w* no-verify: chore: work\n$", scratch.bypass_log)
+    _commit(scratch, text="y\n")
+    assert "Lucid-Bypass" not in scratch.message(), "the next cleared commit is clean"
+    assert scratch.bypass_log.count("\n") == 1
+
+
+def test_bypass_the_amend_takes_only_what_the_commit_took(scratch: Scratch) -> None:
+    """A path-limited commit leaves other staged files in the index, for the next commit."""
+    _real_hooks(scratch)
+    scratch.write("src/staged.txt", "s\n")
+    scratch.git("add", "src/staged.txt")
+    scratch.write("src/a.txt", "x\n")
+    done = scratch.attempt("commit", "-qm", "chore: path", "--no-verify", "--", "src/a.txt")
+    assert done.returncode == 0, done.stderr
+    assert "Lucid-Bypass: no-verify" in scratch.message()
+    shown = scratch.attempt("show", "--name-only", "--format=", "HEAD").stdout.split()
+    assert shown == ["src/a.txt"]
+    assert scratch.attempt("diff", "--cached", "--name-only").stdout.split() == ["src/staged.txt"]
+
+
+def test_bypass_a_receipt_from_an_aborted_commit_does_not_pass(scratch: Scratch) -> None:
+    _real_hooks(scratch)
+    scratch.write("src/a.txt", "x\n")
+    assert scratch.attempt("commit", "-qam", "").returncode != 0
+    assert (scratch.root / ".git/lucid-hook-ran").read_text().endswith("done\n")
+    _commit(scratch, "--no-verify")
+    assert "Lucid-Bypass: no-verify" in scratch.message()
+
+
+def test_bypass_an_exit_above_the_last_check_shows(scratch: Scratch, tmp_path: Path) -> None:
+    hooks = tmp_path / "hooks"
+    shutil.copytree(REPO / ".githooks", hooks)
+    text = (hooks / "pre-commit").read_text()
+    assert 'echo done >> "${RECEIPT}"' in text
+    (hooks / "pre-commit").write_text(text.replace('echo done >> "${RECEIPT}"', "exit 0"))
+    _real_hooks(scratch, hooks)
+    _commit(scratch)
+    assert "Lucid-Bypass: pre-commit-unfinished" in scratch.message()
+
+
+def test_bypass_each_gate_variable_is_named(scratch: Scratch) -> None:
+    _real_hooks(scratch)
+    gates = ("LUCID_SKIP_CLAIMS", "LUCID_SKIP_DOCSTRING", "LUCID_SKIP_XREFS")
+    for number, gate in enumerate((*gates, "LUCID_SKIP_COMMIT_CONVENTION")):
+        _commit(scratch, text=f"{number}\n", **{gate: "1"})
+        assert f"Lucid-Bypass: {gate}" in scratch.message()
+    _commit(scratch, text="cost\n", LUCID_SKIP_LOC_BADGE="1", LUCID_SKIP_API_DATA="1")
+    assert "Lucid-Bypass" not in scratch.message(), "a cost variable is not a gate"
+
+
+def test_bypass_a_script_the_tree_lacks_is_named(scratch: Scratch) -> None:
+    _real_hooks(scratch)
+    (scratch.root / "tools/check_stubs.py").unlink()
+    _commit(scratch)
+    assert "Lucid-Bypass: missing:check_stubs.py" in scratch.message()
+
+
+def test_bypass_a_tree_without_the_rules_says_so_and_a_stale_branch_is_refused(
+    scratch: Scratch,
+) -> None:
+    rules = "tools/rules/__main__.py"
+    _real_hooks(scratch)
+    linked = scratch.root.with_name(f"{scratch.root.name}-linked")
+    scratch.git("worktree", "add", "-q", "-b", "side", str(linked))
+    (linked / rules).unlink()
+    there = ("-C", str(linked), "commit", "-qam")
+    refused = scratch.attempt(*there, "chore: a branch that predates the rules")
+    assert refused.returncode != 0 and "predates tools/rules" in refused.stderr, refused.stderr
+
+    # With no main checkout's copy either, nothing could judge it, and the commit says that.
+    (scratch.root / rules).unlink()
+    _commit(scratch)
+    assert "Lucid-Bypass: missing:rules/__main__.py" in scratch.message()
+
+
+def test_bypass_a_replay_is_none_and_is_not_rewritten(scratch: Scratch) -> None:
+    _real_hooks(scratch)
+    scratch.git("checkout", "-qb", "side")
+    _commit(scratch)
+    scratch.write("src/b.txt", "b\n")
+    scratch.git("add", "src/b.txt")
+    assert scratch.attempt("commit", "-qm", "chore: second").returncode == 0
+    side = scratch.sha()
+    scratch.git("checkout", "-q", "main")
+    scratch.write("src/m.txt", "m\n")
+    scratch.git("add", "src/m.txt")
+    assert scratch.attempt("commit", "-qm", "chore: on main").returncode == 0
+
+    picked = scratch.attempt("cherry-pick", side)
+    assert picked.returncode == 0, picked.stderr
+    assert "Lucid-Bypass" not in scratch.message() and scratch.bypass_log == ""
+    scratch.git("reset", "-q", "--hard", "HEAD~1")
+
+    rebased = scratch.attempt("rebase", "main", "side")
+    assert rebased.returncode == 0, rebased.stderr
+    assert "Lucid-Bypass" not in scratch.attempt("log", "--format=%B", "main..HEAD").stdout
+    assert scratch.bypass_log == ""
+    assert scratch.attempt("rev-list", "--count", "main..HEAD").stdout.strip() == "2"
+
+
+def test_bypass_lands_own_amend_is_none(scratch: Scratch) -> None:
+    """``agent_ws land`` folds CHANGELOG in with this exact command."""
+    _real_hooks(scratch)
+    _commit(scratch)
+    scratch.write("src/b.txt", "b\n")
+    scratch.git("add", "src/b.txt")
+    done = scratch.attempt(
+        "commit", "--amend", "--no-edit", "--no-verify", LUCID_CHANGELOG_AMEND_IN_PROGRESS="1"
+    )
+    assert done.returncode == 0 and "Lucid-Bypass" not in scratch.message()
+
+
+def test_bypass_the_changelog_fold_takes_only_the_changelog(scratch: Scratch) -> None:
+    """The same amend, the same hazard: what else is staged waits for the next commit."""
+    _real_hooks(scratch)
+    scratch.write("tools/changelog.py", "open('CHANGELOG.md', 'a').write('an entry\\n')\n")
+    scratch.write("CHANGELOG.md", "# log\n")
+    scratch.git("add", "-A")
+    assert scratch.attempt("commit", "-qm", "chore: tools").returncode == 0
+    scratch.write("src/staged.txt", "s\n")
+    scratch.git("add", "src/staged.txt")
+    scratch.write("src/a.txt", "x\n")
+    done = scratch.attempt("commit", "-qm", "fix: a path", "--", "src/a.txt")
+    assert done.returncode == 0, done.stderr
+    shown = scratch.attempt("show", "--name-only", "--format=", "HEAD").stdout.split()
+    assert shown == ["CHANGELOG.md", "src/a.txt"]
+    assert scratch.attempt("diff", "--cached", "--name-only").stdout.split() == ["src/staged.txt"]
+
+
+def test_bypass_in_a_worktree_with_the_main_checkouts_python(scratch: Scratch) -> None:
+    _real_hooks(scratch)
+    linked = scratch.root.with_name(f"{scratch.root.name}-linked")
+    scratch.git("worktree", "add", "-q", "-b", "side", str(linked))
+    (linked / "src/a.txt").write_text("x\n")
+    there = ("-C", str(linked), "commit", "-qam")
+    cleared = scratch.attempt(*there, "chore: cleared")
+    assert cleared.returncode == 0, cleared.stderr
+    assert "Lucid-Bypass" not in scratch.attempt("log", "-1", "--format=%B", "side").stdout
+    (linked / "src/a.txt").write_text("y\n")
+    skipped = scratch.attempt(*there, "chore: skipped", "--no-verify")
+    assert skipped.returncode == 0, skipped.stderr
+    assert "Lucid-Bypass: no-verify" in scratch.attempt("log", "-1", "--format=%B", "side").stdout
+    assert "chore: skipped" in scratch.bypass_log, "the log is the repository's, not the worktree's"
+
+
+@pytest.mark.parametrize("python", ["missing", "the-wrong-version"])
+def test_push_and_commit_refuse_without_the_pinned_interpreter(
+    scratch: Scratch, python: str
+) -> None:
+    _real_hooks(scratch, python=False)
+    remote = scratch.root.with_name(f"{scratch.root.name}-remote.git")
+    scratch.attempt("init", "-q", "--bare", str(remote))
+    scratch.git("remote", "add", "origin", str(remote))
+    if python == "the-wrong-version":
+        _stub_python(scratch.root, 'case "$1" in -c) exit 1 ;; esac\nexit 0\n')
+    scratch.write("src/a.txt", "x\n")
+    head = scratch.sha()
+    commit = scratch.attempt("commit", "-qam", "chore: no")
+    assert commit.returncode != 0 and "no Python 3.14" in commit.stderr, commit.stderr
+    assert scratch.sha() == head
+    push = scratch.attempt("push", "origin", "main")
+    assert push.returncode != 0 and "no Python 3.14" in push.stderr, push.stderr
+    assert scratch.attempt("--git-dir", str(remote), "rev-parse", "main").returncode != 0
+
+
+# ── a real hook, broken: the audit's trial is what has to say so ─────────────
+
+_RUN_LINE = (
+    'if have "${REPO_ROOT}/${RULES_MAIN}" && ! (cd "${REPO_ROOT}" && '
+    '"${PY}" -m tools.rules run --level commit --staged >&2); then'
+)
+_RUN_ONLY = '"${PY}" -m tools.rules run --level commit --staged'
+_PUSH_LINE = 'cd "${REPO_ROOT}" && exec "${PY}" -m tools.rules push "$@"'
+
+
+def _swap(old: str, new: str) -> Callable[[str], str]:
+    def apply(text: str) -> str:
+        assert old in text, old
+        return text.replace(old, new, 1)
+
+    return apply
+
+
+_BROKEN_HOOKS = {
+    "commit-exit-0-at-the-top": (
+        "pre-commit",
+        _swap("set -uo pipefail\n", "set -uo pipefail\nexit 0\n"),
+        "did not run",
+    ),
+    "commit-line-gone": ("pre-commit", _swap(_RUN_LINE, "if false; then"), "did not run"),
+    "commit-line-in-an-echo": (
+        "pre-commit",
+        _swap(_RUN_LINE, f'echo "{_RUN_ONLY}"\nif false; then'),
+        "did not run",
+    ),
+    "commit-exit-dropped": (
+        "pre-commit",
+        _swap(_RUN_LINE, f"{_RUN_ONLY}\nif false; then"),
+        "went through",
+    ),
+    "commit-off-the-index": ("pre-commit", _swap("--staged >&2", ">&2"), "did not run"),
+    "commit-line-below-the-worktree-exit": (
+        "pre-commit",
+        lambda text: _swap(_RUN_LINE, "if false; then")(text) + f"\n{_RUN_ONLY} || exit 1\n",
+        "did not run",
+    ),
+    "push-exit-0-at-the-top": (
+        "pre-push",
+        _swap("set -uo pipefail\n", "set -uo pipefail\nexit 0\n"),
+        "did not run",
+    ),
+    "push-line-gone": ("pre-push", _swap(_PUSH_LINE, "true"), "did not run"),
+    "push-off-the-refs": ("pre-push", _swap(_PUSH_LINE, f"{_PUSH_LINE} </dev/null"), "did not run"),
+    "push-exit-dropped": (
+        "pre-push",
+        _swap(_PUSH_LINE, 'cd "${REPO_ROOT}" && "${PY}" -m tools.rules push "$@" || true'),
+        "went through",
+    ),
+}
+
+
+@pytest.mark.parametrize("name", _BROKEN_HOOKS)
+def test_a_real_hook_broken_is_seen(tmp_path: Path, name: str) -> None:
+    hook, broken, said = _BROKEN_HOOKS[name]
+    shutil.copytree(REPO / ".githooks", tmp_path / ".githooks")
+    level = Level.COMMIT if hook == "pre-commit" else Level.PUSH
+    check = _real().checks["numpy-h4"]
+    assert check.unwired(level, tmp_path) is None
+    path = tmp_path / ".githooks" / hook
+    path.write_text(broken(path.read_text()))
+    problem = check.unwired(level, tmp_path)
+    assert problem is not None and said in problem, problem
+
+
+def test_a_real_hook_that_is_not_executable_is_seen(tmp_path: Path) -> None:
+    shutil.copytree(REPO / ".githooks", tmp_path / ".githooks")
+    (tmp_path / ".githooks/pre-push").chmod(0o644)
+    problem = _real().checks["numpy-h4"].unwired(Level.PUSH, tmp_path)
+    assert problem is not None and "did not run" in problem, problem
+
+
+# ── real tools, real git: the incidents themselves ───────────────────────────
+
+
+@contextlib.contextmanager
+def _real_repository(root: Path, remote: Path) -> Iterator[Scratch]:
+    """``root`` under git with the real hooks and a bare remote holding its one commit."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_") and k != "PYTHONPATH"}
+    env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+    repo = Scratch(root, env)
+    repo.git("init", "-q", "-b", "main")
+    repo.git("config", "user.name", "t")
+    repo.git("config", "user.email", "t@example.invalid")
+    repo.git("add", "-A")
+    repo.git("commit", "-qm", "chore: base")
+    repo.attempt("init", "-q", "--bare", str(remote))
+    repo.git("remote", "add", "origin", str(remote))
+    repo.git("push", "-q", "origin", "main")
+    repo.git("config", "core.hooksPath", str(root / ".githooks"))
+    try:
+        yield repo
+    finally:
+        repo.git("config", "--unset", "core.hooksPath")
+        repo.git(
+            "reset",
+            "-q",
+            "--hard",
+            repo.attempt("rev-list", "--max-parents=0", "HEAD").stdout.strip(),
+        )
+        repo.git("clean", "-fdq")
+        shutil.rmtree(root / ".git")
+
+
+_SLOP = "lucid/_seeded_slop.py"
+
+
+def test_push_gate_refuses_a_rise_through_real_git(real_copy: Path, tmp_path: Path) -> None:
+    with _real_repository(real_copy, tmp_path / "remote.git") as repo:
+        out_there = repo.sha()
+        repo.write(_SLOP, f'"""Seeded."""\n\n{_RISE}')
+        repo.git("add", _SLOP)
+        skipped = repo.attempt("commit", "-qm", "chore: three rises", "--no-verify")
+        assert skipped.returncode == 0, skipped.stderr
+        assert "Lucid-Bypass: no-verify" in repo.message()
+
+        def on_the_remote() -> str:
+            return repo.attempt("ls-remote", "origin", "refs/heads/main").stdout.split()[0]
+
+        push = repo.attempt("push", "origin", "main")
+        said = push.stdout + push.stderr
+        assert push.returncode != 0, said
+        assert re.search(r"VIOLATION\s+quality-gate-range", said), said
+        assert "bypassed at commit (no-verify)" in said and "is refused" in said
+        assert on_the_remote() == out_there
+
+        # The R1 hole: the same range through the runner, and the gate against a ref, agree.
+        def tool(*args: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                [sys.executable, "-S", "-m", *args],
+                cwd=real_copy,
+                env=repo.env,
+                capture_output=True,
+                text=True,
+            )
+
+        ranged = tool("tools.rules", "run", "--level", "push", "--range", "HEAD~1..HEAD")
+        assert ranged.returncode == 1 and "quality-gate-range" in ranged.stdout, ranged.stdout
+        collectors = ("--collectors", "ruff,counters,lizard")
+        python = real_copy / ".venv/bin/python3"
+        diff = subprocess.run(
+            [python, "-m", "tools.quality_gate", "--diff", "HEAD~1", *collectors],
+            cwd=real_copy,
+            env=repo.env,
+            capture_output=True,
+            text=True,
+        )
+        assert diff.returncode == 1, diff.stdout + diff.stderr
+
+        # A branch is none of the gate's business, whatever it holds.
+        branch = repo.attempt("push", "origin", "HEAD:refs/heads/side")
+        assert branch.returncode == 0, branch.stderr
+        assert on_the_remote() == out_there
+
+        # And the same push with the rise gone goes through, judged.
+        repo.git("reset", "-q", "--hard", "HEAD~1")
+        repo.write(_SLOP, '"""Seeded."""\n')
+        repo.git("add", _SLOP)
+        assert repo.attempt("commit", "-qm", "chore: no rise", "--no-verify").returncode == 0
+        clean = repo.attempt("push", "origin", "main")
+        assert clean.returncode == 0, clean.stdout + clean.stderr
+        assert "push passes" in clean.stdout + clean.stderr
+        assert on_the_remote() == repo.sha()
+
+
+def test_a_real_commit_cannot_carry_a_blob_its_working_copy_hides(
+    real_copy: Path, tmp_path: Path
+) -> None:
+    seed = "lucid/_seeded_blob.py"
+    with _real_repository(real_copy, tmp_path / "remote.git") as repo:
+        head = repo.sha()
+        repo.write(seed, '"""Seeded."""\n\nimport numpy\n')
+        repo.git("add", seed)
+        repo.write(seed, '"""Seeded."""\n')
+        refused = repo.attempt("commit", "-qm", "chore: hides a blob")
+        said = refused.stdout + refused.stderr
+        assert refused.returncode != 0 and f"not what is staged: {seed}" in said, said
+        assert repo.sha() == head
+
+        # The workers' normal form: named paths, staged as they are on disk.
+        repo.git("reset", "-q")
+        other = "lucid/_seeded_note.txt"
+        repo.write(other, "a note\n")
+        repo.git("add", "-N", other)
+        kept = repo.attempt(
+            "commit", "-qm", "chore: one path", "--", other, LUCID_SKIP_LOC_BADGE="1"
+        )
+        assert kept.returncode == 0, kept.stdout + kept.stderr
+        assert "Lucid-Bypass" not in repo.message()
+        assert repo.attempt("show", "--name-only", "--format=", "HEAD").stdout.split() == [other]
 
 
 # ── the real registry ────────────────────────────────────────────────────────
@@ -830,11 +1614,17 @@ def real_copy(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """This repository's rule-bearing files, shared by the mutant cases, which restore them."""
     root = tmp_path_factory.mktemp("real").resolve()
     _clone(root, "tools", ".githooks", "scripts", ".github", "pyproject.toml", "lucid")
+    _clone(root, ".gitignore")
     finder = REPO / ".venv/lib/python3.14/site-packages/_lucid_worktree_finder.py"
     if finder.exists():  # a worktree's light venv pins lucid and tools to the worktree
         _clone(root, ".venv")
         copy = root / finder.relative_to(REPO)
         copy.write_text(copy.read_text().replace(str(REPO), str(root)))
+    else:  # the hooks ask for this path and take no other
+        python = root / ".venv/bin/python3"
+        python.parent.mkdir(parents=True)
+        python.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
+        python.chmod(0o755)
     return root
 
 
@@ -960,8 +1750,8 @@ _REAL_MUTANTS = [
     (
         "P1-pending-on-no-issue",
         _CODE,
-        'pending = "LCD-841-R2"',
-        'pending = "LCD-999999"',
+        '{ level = "push", check = "source-rules" }',
+        '{ level = "push", check = "source-rules", pending = "LCD-999999" }',
         "numpy-h4",
         "not an LCD issue",
     ),
@@ -976,10 +1766,10 @@ _REAL_MUTANTS = [
     (
         "Q1-ceiling-quietly-raised-pending",
         _META,
-        "ceiling = 7",
-        "ceiling = 8",
+        "ceiling = 0",
+        "ceiling = 1",
         "numpy-h4",
-        "fell to 7",
+        "fell to 0",
     ),
 ]
 
@@ -1033,7 +1823,7 @@ def test_each_real_seed_goes_red_and_a_tool_gone_green_would_show(tmp_path: Path
     proofs = SeedControl.prove_all(ws, seeds)
     assert [p.detail for p in proofs if p.outcome is not Exit.PASS] == []
     by_tool = {check.tool: (control, check) for control, check in seeds}
-    assert set(by_tool) == {_SRC, _NUM, _CPP}
+    assert set(by_tool) == {_SRC, _NUM, _CPP}, "a new seed needs a case here"
     for number, (control, check) in enumerate(by_tool.values()):
         assert isinstance(control, SeedControl)
         root = (tmp_path / str(number)).resolve()

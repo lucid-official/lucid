@@ -1,19 +1,21 @@
 """Turns "the config says so" into a checked statement, as far as a static reading can.
 
-Exit 1 is a finding: a control that stayed green, a level that does not name its tool,
+Exit 1 is a finding: a control that stayed green, a level that does not run its tool,
 a ceiling broken.  Exit 2 means something could not be measured, which is not the same
-thing.  Wiring proves that a level names the tool, not that it runs it: that takes a
-real hook run.  A test node is proven to run and pass, not to contain an assertion.
+thing.  A hook level is proven by a real commit or push with a stub for the tool; a CI
+level only by the name in its files, as LCD-841 still owes more.  A test node is proven
+to run and pass, not to contain an assertion.
 """
 
 from collections import Counter
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 from typing import Final, override
 
-from tools.rules.checks import Check, PytestCheck
+from tools.rules.checks import WORKERS, Check, PytestCheck
 from tools.rules.controls import Control, PytestControl
-from tools.rules.model import Allowlist, Budget, Exit, Rule, Verdict
+from tools.rules.model import Allowlist, Budget, Exit, Level, Rule, Verdict
 from tools.rules.registry import Registry
 
 _TABLE_SIZE: Final = """\
@@ -107,27 +109,36 @@ class Audit:
         summary = f"{total - len(findings)}/{total} proven: seeded red, near miss green, tests ran"
         return Section("controls", summary, tuple(findings))
 
+    def _unwired(self) -> Mapping[tuple[str, Level], str | None]:
+        """Each claim once: a hook trial is real git, and several rules share a check."""
+        claims = list(dict.fromkeys((e.check, e.level) for r in self._rules for e in r.enforce))
+        root, checks = self.registry.root, self.registry.checks
+        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+            found = pool.map(lambda claim: checks[claim[0]].unwired(claim[1], root), claims)
+            return dict(zip(claims, found, strict=True))
+
     def wiring(self) -> Section:
-        named = 0
+        wired = 0
         pending: Counter[str] = Counter()
         findings = list(self._dead_globs())
-        unnamed = 0
+        unwired = 0
+        problems = self._unwired()
         for rule in self._rules:
             for e in rule.enforce:
                 claim = f"level={e.level} check={e.check}"
-                problem = self.registry.checks[e.check].unwired(e.level, self.registry.root)
+                problem = problems[e.check, e.level]
                 if e.pending and problem is None:
-                    message = f"{claim} is named now: drop pending = {e.pending!r}"
+                    message = f"{claim} is wired now: drop pending = {e.pending!r}"
                     findings.append(Finding(rule.id, Exit.VIOLATION, message))
                 elif e.pending:
                     pending[e.pending] += 1
                 elif problem is None:
-                    named += 1
+                    wired += 1
                 else:
-                    unnamed += 1
+                    unwired += 1
                     findings.append(Finding(rule.id, Exit.VIOLATION, f"{claim}: {problem}"))
         waits = "".join(f"; {n} pending on {issue}" for issue, n in sorted(pending.items()))
-        summary = f"{named}/{named + unnamed} claimed levels name their tool{waits}"
+        summary = f"{wired}/{wired + unwired} claimed levels: hooks run them, CI names them{waits}"
         return Section("wiring", summary, tuple(findings))
 
     def _dead_globs(self) -> Iterator[Finding]:

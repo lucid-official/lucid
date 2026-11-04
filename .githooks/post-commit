@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# .githooks/post-commit — Lucid auto-CHANGELOG amend.
+# .githooks/post-commit — the bypass record, then the auto-CHANGELOG amend.
+#
+# Git runs this hook even under ``--no-verify``, which skips pre-commit and commit-msg.
+# So a commit this hook sees without pre-commit's receipt gets a permanent
+# ``Lucid-Bypass:`` trailer and a line in ``.git/lucid-bypass.log``.  It asks for no
+# reason: the record is the point, and pre-push judges the outcome regardless.
 #
 # Fires AFTER a successful commit.  If the just-landed commit uses a
 # user-facing conventional-commit prefix (feat / fix / perf / refactor /
@@ -25,21 +30,54 @@
 # history with zero human intervention.  Manual ``tools/changelog.py
 # add`` is reserved for entries that don't map 1-to-1 to a commit
 # subject.
-#
-# Opt-out for a single commit:
-#     LUCID_SKIP_CHANGELOG_CHECK=1 git commit ...
 
 set -uo pipefail
-
-# Honor opt-out.
-if [[ "${LUCID_SKIP_CHANGELOG_CHECK:-0}" == "1" ]]; then
-    exit 0
-fi
 
 # Guard against recursion: when we ``git commit --amend`` below, this
 # hook fires again.  The amend includes CHANGELOG.md so the second
 # invocation falls through to the "already updated" branch and exits.
 if [[ "${LUCID_CHANGELOG_AMEND_IN_PROGRESS:-0}" == "1" ]]; then
+    exit 0
+fi
+
+# ── Bypass record ───────────────────────────────────────────────────────────
+# Before every exit below: a worktree and the CHANGELOG opt-out leave early.
+note_bypass() { BYPASS="${BYPASS:+${BYPASS} }$1"; }
+
+RECEIPT="$(git rev-parse --git-path lucid-hook-ran)"
+BYPASS=""
+case "$(git reflog -1 --format=%gs 2>/dev/null)" in
+    # A replay runs this hook and never pre-commit, and is no bypass.  Amending
+    # here would also rewrite the commit under the rebase.
+    rebase* | pull* | cherry-pick* | revert*) ;;
+    *)
+        if [[ ! -f "${RECEIPT}" || "$(head -n 1 "${RECEIPT}")" != "${PPID}" ]]; then
+            note_bypass "no-verify"
+        else
+            [[ "$(tail -n 1 "${RECEIPT}")" == "done" ]] || note_bypass "pre-commit-unfinished"
+            while read -r LINE; do
+                [[ "${LINE}" == "done" ]] || note_bypass "${LINE}"
+            done < <(tail -n +2 "${RECEIPT}")
+        fi
+        for GATE in LUCID_SKIP_CLAIMS LUCID_SKIP_DOCSTRING LUCID_SKIP_XREFS LUCID_SKIP_COMMIT_CONVENTION; do
+            [[ "${!GATE:-0}" == "1" ]] && note_bypass "${GATE}"
+        done
+        ;;
+esac
+rm -f "${RECEIPT}"
+if [[ -n "${BYPASS}" ]]; then
+    # --only, or an amend would fold in whatever else is staged: a path-limited
+    # commit leaves other staged files in the index, for the next commit.
+    LUCID_CHANGELOG_AMEND_IN_PROGRESS=1 git commit --amend --only --no-edit --no-verify \
+        --trailer "Lucid-Bypass: ${BYPASS}" >/dev/null 2>&1 \
+        || note_bypass "(no trailer: the amend failed)"
+    printf '%s %s %s: %s\n' "$(date -u +%FT%TZ)" "$(git rev-parse --short HEAD)" "${BYPASS}" \
+        "$(git log -1 --format=%s)" >> "$(git rev-parse --git-common-dir)/lucid-bypass.log"
+    echo "  ⚠️   Pre-commit did not clear this commit (${BYPASS}).  Its message says so, and pre-push will judge it." >&2
+fi
+
+# Honor the CHANGELOG opt-out.
+if [[ "${LUCID_SKIP_CHANGELOG_CHECK:-0}" == "1" ]]; then
     exit 0
 fi
 
@@ -79,8 +117,6 @@ if [[ ! -f "${CHANGELOG_TOOL}" ]]; then
       updated and tools/changelog.py is missing.  Add an entry manually
       and amend.
 
-      (Set LUCID_SKIP_CHANGELOG_CHECK=1 to silence.)
-
 EOF
     exit 0
 fi
@@ -104,7 +140,7 @@ fi
 # recursive post-commit invocation skips itself.
 git add "${REPO_ROOT}/CHANGELOG.md"
 LUCID_CHANGELOG_AMEND_IN_PROGRESS=1 \
-    git commit --amend --no-edit --no-verify >/dev/null
+    git commit --amend --no-edit --no-verify --only -- "${REPO_ROOT}/CHANGELOG.md" >/dev/null
 
 echo "  📝  CHANGELOG.md auto-injected and folded into HEAD via amend ✓" >&2
 exit 0

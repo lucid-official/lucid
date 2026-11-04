@@ -8,11 +8,11 @@ paths = ["tools/rules/registry/*.toml"]
 # Non-blank, non-comment lines.
 [budget.code-lines]
 unit = "lines"
-ceiling = 900
+ceiling = 1048
 paths = ["tools/rules/**/*.py"]
 
 # Rules and levels recorded as owed.  It equals the count, so it can only fall with it;
 # R5 raises it once, by the size of the inventory.
 [budget.pending]
 unit = "pending"
-ceiling = 7
+ceiling = 0

@@ -15,6 +15,7 @@ TOML because the hook and push paths must not fail on a missing package.
     python -m tools.rules run --level push       # the checks one level runs, whole tree
     python -m tools.rules run --level push --range A..B    # what those commits changed
     python -m tools.rules run --level commit --staged      # what the index changes
+    python -m tools.rules push --range A..B      # what pre-push does with those commits
     python -m tools.rules audit                  # is each claim true, can each check fail
     python -m tools.rules audit --check numpy-h4 --rule H4 # only these controls
 
@@ -26,6 +27,16 @@ With `--staged`, a check with `--staged` in its `run` reads the blobs itself. An
 other check reads the working copy, so it exits 2, naming the path, when that
 copy is not what is staged. A check with `--staged` has nothing to say without it.
 
+With `--range A..B` a check reads the working copy too, so the run refuses unless
+that copy is `B`: exit 2 when `B` is not `HEAD`, or when `lucid/ tools/ scripts/
+.githooks/ pyproject.toml` hold anything uncommitted. `{since}` in a `run` is `A`
+there, `HEAD` under `--staged`, and the empty tree otherwise.
+
+`.githooks/pre-push` runs `python -m tools.rules push`, which takes those ranges
+from the refs git writes to it. Only `refs/heads/main` and `v*` tags are judged. A new
+tag is judged only for what the remote's main does not hold. Every exit but 0 refuses
+the push. See `.githooks/README.md` for what a bypass leaves behind.
+
 A `[[rule]]` holds exactly one of `enforce` with a `control`, `advisory = "<why
 no check can exist>"`, or `pending = "LCD-n"`; anything else fails load. A rule
 with `gap` is enforced only partly.
@@ -33,16 +44,19 @@ with `gap` is enforced only partly.
 | `audit` section | exit 1 | exit 2 |
 |---|---|---|
 | controls | a check stayed green on its seed, went red for another reason, or left the seed outside its trigger; a test node failed | a control could not run; a check is red on the near miss; a test node did not run |
-| wiring | a claimed level does not name the tool, a `pending` level now does, a trigger or scope glob matches no file | |
+| wiring | a hook level's real commit or push did not run the tool, or went through with it failing; a CI level does not name the tool; a `pending` level is wired now; a trigger or scope glob matches no file | |
 | allowlists | a table's size differs from its `ceiling` | a table could not be read |
 | budgets | a ceiling is passed; the `pending` count fell and its ceiling did not | a budget's paths match nothing |
 
 **What a green audit does not prove.**
 
-- Wiring proves that a hook, script or workflow *names* the tool outside a comment
-  (or names `tools.rules run --level <level>`), not that it runs it. `exit 0` above
-  the line or a job with `if: false` still passes. `.pre-commit-config.yaml` counts
-  for nothing: it never runs.
+- A hook level is proven by the real hook in a scratch repository, whose python is a
+  stub, in a main checkout and in a linked worktree: git must run the tool, and must
+  stop when it fails. What the stub cannot show is whether the runner runs each check
+  it claims, which the controls and `tools/test_rules.py` answer.
+- A CI level is proven only by its name in `scripts/ci_full.sh` or a workflow, outside
+  a comment (or by `tools.rules run --level ci`). A job with `if: false` still passes;
+  LCD-841 owes the rest. `.pre-commit-config.yaml` counts for nothing: it never runs.
 - A test node is proven to run and pass, not to contain an assertion. An empty body
   passes.
 - `pending = "LCD-n"` is checked for shape; the tracker is out of reach.
@@ -96,6 +110,7 @@ because a different version counts differently.
 
 ```
 python -m tools.quality_gate --fast        # pre-commit: files changed since HEAD; ruff, counters, lizard + jscpd (~3 s)
+python -m tools.quality_gate --fast --since REF   # pre-push: the same, from REF; also sees a baseline raised since REF
 python -m tools.quality_gate --full        # CI: whole tree, every collector (~40 s cold on an M1 Pro)
 python -m tools.quality_gate --diff main   # SLOP DELTA for a worker report and for land: every --full collector, both trees (~1–2 min)
 python -m tools.quality_gate --report      # totals per defect class (deslop SWEEP)
@@ -160,7 +175,8 @@ gate could not measure. A tool that crashes is never read as "no findings".
 
 | layer | command | blocks |
 |---|---|---|
-| pre-commit (`.githooks/pre-commit` §1b, `.pre-commit-config.yaml`) | `--fast` when `lucid/` or the baseline is staged | the commit (`LUCID_SKIP_QUALITY_GATE=1` skips; CI and land still check) |
+| pre-commit (`tools.rules run --level commit --staged`) | `--fast --since HEAD` when `lucid/`, the gate or the baseline is staged | the commit (`--no-verify` skips it, and leaves a `Lucid-Bypass` trailer: see `.githooks/README.md`) |
+| pre-push (`tools.rules push`) | `--fast --since <remote> --allow-slack` over the range | the push to `main` or a `v*` tag, whatever happened at commit |
 | CI (`ci.yml` job `quality-gate`) | `--full --allow-slack` | the push |
 | `agent_ws.py land` | `--diff main` on the rebased branch; `land --check` diffs against the fork point | the land (exit 6). `--allow-slop "<reason>"` overrides, and every use is appended to `~/Library/Caches/lucid-agents/slop-overrides.log` |
 

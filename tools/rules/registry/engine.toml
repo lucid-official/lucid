@@ -37,7 +37,7 @@ compile/_optim/compiler.py to the six. The tool skips lucid/test and lucid/bench
 scope says lucid/**. LCD-841-B2 generalises it."""
 enforce = [
     { level = "commit", check = "numpy-h4" },
-    { level = "push", check = "numpy-h4", pending = "LCD-841-R2" },
+    { level = "push", check = "numpy-h4" },
     { level = "ci", check = "numpy-h4" },
     { level = "test", check = "test-mlx-instance" },
 ]
@@ -66,8 +66,8 @@ why = "RAII and an early return state the cleanup; a jump around it does not."
 scope = ["lucid/_C/**"]
 doc = "engine"
 enforce = [
-    { level = "commit", check = "cpp-layers", pending = "LCD-841-R2" },
-    { level = "push", check = "cpp-layers", pending = "LCD-841-R2" },
+    { level = "commit", check = "cpp-layers" },
+    { level = "push", check = "cpp-layers" },
     { level = "test", check = "test-cpp-layers" },
 ]
 # The tool's _ALLOWLIST is other rules' debt (E-LAYERS, R5). None of it may be a goto.

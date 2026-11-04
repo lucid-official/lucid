@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
 # .githooks/pre-commit — Lucid pre-commit gate.
 #
-# Three checks, the first two blocking (hard-fail) and the third
-# a soft-fail badge refresh:
+# A receipt first, then the checks, all blocking but the last, a badge refresh:
 #
-#   1. H4 numpy guard.  ``tools/check_numpy_h4.py`` walks lucid/ and
-#      flags any ``import numpy`` outside the six sanctioned bridge
-#      files (CLAUDE.md §6.1 H4).  The 3.0.1 → 3.0.2 hotfix sequence
-#      surfaced four unsanctioned leaks that had crept in silently;
-#      this guard makes the same regression visible at commit time
-#      rather than after a release ships.  Step 1a does the same for
-#      H1 / H5 / H6 / H7 and dead ``lucid.`` paths in prose on the staged
-#      files (``check_source_rules.py``).
+#   1. The registry's commit level.  ``tools.rules run --level commit --staged``
+#      runs what ``tools/rules/registry`` claims here: H1 / H5 / H6 / H7 and dead
+#      ``lucid.`` paths on the staged blobs, the H4 guard, the C++ layer rules
+#      with H13, and the quality ratchet.  Steps 1a to 1f are not records yet.
 #
 #   2. Docstring coverage.  ``tools/check_docstring_coverage.py``
 #      catches the five blind-spot categories that silently degrade the
@@ -26,15 +21,25 @@
 #      source.  Re-stages README.md.  Soft-fails (warning only) when
 #      cloc isn't installed.
 #
-# Skip individual checks:
-#     LUCID_SKIP_H4_GUARD=1     skip the H4 scan
-#     LUCID_SKIP_DOCSTRING=1    skip the docstring coverage gate
-#     LUCID_SKIP_XREFS=1        skip the cross-reference resolver (soft-fail)
-#     LUCID_SKIP_API_DATA=1     skip the api-data rebuild (see §2c for why
-#                               this one is used in practice)
-#     LUCID_SKIP_LOC_BADGE=1    skip the LOC badge refresh
+# What skips part of this, and what that leaves behind: .githooks/README.md.
 
 set -uo pipefail
+
+# ── Receipt ─────────────────────────────────────────────────────────────────
+# Post-commit reads it, and a commit it cannot tie to a finished run here gets a
+# ``Lucid-Bypass`` trailer.  The first line is git's pid: both hooks are children of
+# one ``git commit``, so a receipt left by an attempt that later aborted (a bad
+# message, say) does not pass for this one.  ``done`` is written after the last check,
+# not on exit, so that an early ``exit 0`` above it shows too.
+RECEIPT="$(git rev-parse --git-path lucid-hook-ran)"
+echo "${PPID}" > "${RECEIPT}"
+
+# A check whose script this tree lacks cannot judge: the commit goes on and says so.
+have() {
+    [[ -f "$1" ]] && return 0
+    echo "missing:${1##*/tools/}" >> "${RECEIPT}"
+    return 1
+}
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
@@ -53,43 +58,24 @@ if [[ -f "${REPO_ROOT}/.git" ]]; then
     LUCID_SKIP_LOC_BADGE=1
 fi
 
-# ── Python guard ────────────────────────────────────────────────────────────
-# Prefer the repository's virtualenv over whatever ``python3`` resolves to
-# on PATH.  These gates import the project's own dependencies — Griffe for
-# the api-data build, and whatever ``tools/`` grows next — so which
-# interpreter runs them should not depend on whether the committing shell
-# happened to activate the venv, or on how git assembled the hook's PATH.
-#
-# Prompted by a commit that failed with "ERROR: griffe not installed" from
-# the api-data build.  That was **not** reproducible afterwards: the same
-# command, same PYTHONPATH, same system interpreter imports Griffe fine,
-# and the machine was 11 GB into swap at the time.  The cause is unknown,
-# so this is hardening rather than a fix for it — an absolute path removes
-# one variable from the next occurrence.
-#
-# Some CI containers (Vercel build, minimal git-on-Windows shells) launch
-# hooks without Python at all — detected here so the Python-based gates
-# skip with a warning and the commit still goes through.  The hooks are
-# advisory at that point; CI's full lint catches what the local skip missed.
+# ── Python ──────────────────────────────────────────────────────────────────
+# Pinned to a virtualenv, never taken from PATH.  These gates import the
+# project's own dependencies, and tools/rules is Python 3.14 only:
+# ``/usr/bin/python3`` is 3.9, where it is a SyntaxError.  With none of them the
+# rules cannot be judged, so the commit does not go on.
 #
 # A worktree normally has its own light .venv (agent_ws.py bootstrap) that
 # resolves ``lucid`` to the worktree.  Without one, fall back to the main
 # checkout's venv with this worktree first on PYTHONPATH — the main venv's
 # editable install would otherwise check the main checkout's code instead.
-PY=""
-if [[ -x "${REPO_ROOT}/.venv/bin/python3" ]]; then
-    PY="${REPO_ROOT}/.venv/bin/python3"
-elif [[ -x "${MAIN_ROOT}/.venv/bin/python3" ]]; then
+PY="${REPO_ROOT}/.venv/bin/python3"
+if [[ ! -x "${PY}" ]]; then
     PY="${MAIN_ROOT}/.venv/bin/python3"
     export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
-elif command -v python3 &>/dev/null; then
-    PY="python3"
 fi
-if [[ -z "${PY}" ]]; then
-    echo "  ⚠️  no python3 (checked .venv/bin and PATH) — skipping Python gates" >&2
-    LUCID_SKIP_H4_GUARD=1
-    LUCID_SKIP_DOCSTRING=1
-    LUCID_SKIP_API_DATA=1
+if ! "${PY}" -c 'import sys; sys.exit(sys.version_info < (3, 14))' 2>/dev/null; then
+    echo "  ❌  Pre-commit blocked: no Python 3.14 at ${REPO_ROOT}/.venv/bin/python3 or in the main checkout." >&2
+    exit 1
 fi
 
 # ── 0. Parallel-agent claim gate ────────────────────────────────────────────
@@ -97,59 +83,35 @@ fi
 # main checkout's uncommitted work) has also changed — the one condition under
 # which a later land could conflict.  Free when no linked worktree exists.
 # The script is the main checkout's copy, so every worktree runs the latest.
-# Override (breaks the no-conflict guarantee for that file):
-#     LUCID_SKIP_CLAIMS=1 git commit ...
 CLAIMS_SCRIPT="${MAIN_ROOT}/tools/agent_ws.py"
-if [[ -n "${PY}" && -f "${CLAIMS_SCRIPT}" ]]; then
+if have "${CLAIMS_SCRIPT}"; then
     if ! "${PY}" "${CLAIMS_SCRIPT}" check-commit; then
         exit 1
     fi
 fi
 
-# ── 1. H4 numpy guard ───────────────────────────────────────────────────────
-# Hard-fail.  Run before LOC refresh so a violation aborts the commit
-# without leaving a half-applied badge stage.  Skipped silently if the
-# script is missing (e.g. checkout from a branch where tools/ didn't
-# exist yet) so a misplaced rebase doesn't leave the user unable to
-# commit.
-H4_SCRIPT="${REPO_ROOT}/tools/check_numpy_h4.py"
-if [[ "${LUCID_SKIP_H4_GUARD:-0}" != "1" && -f "${H4_SCRIPT}" ]]; then
-    if ! "${PY}" "${H4_SCRIPT}" --quiet; then
-        echo "" >&2
-        # Re-run non-quiet to show the violations for the developer.
-        "${PY}" "${H4_SCRIPT}" >&2 || true
-        echo "" >&2
-        echo "  ❌  Pre-commit blocked.  Fix H4 violation above and re-stage." >&2
-        echo "      Override (discouraged):  LUCID_SKIP_H4_GUARD=1 git commit ..." >&2
-        exit 1
-    fi
+# ── 1. The registry's commit level ──────────────────────────────────────────
+# Hard-fail, seconds, in parallel: whatever a record in ``tools/rules/registry``
+# claims at level=commit, each only when a staged path matches its trigger.  It
+# comes before every ``exit 0`` below, which a worktree always takes.
+#
+# ``source-rules-staged`` reads the blobs.  ``numpy-h4``, ``cpp-layers`` and the
+# ratchet read the working copy.  The first two could read a copy of the index, but
+# the ratchet diffs against HEAD and needs the real repository, and it covers all of
+# lucid/, so copying would rescue no commit.  A path staged differently from its
+# working copy stops the run with exit 2, naming the path, rather than judge one
+# text and commit another.  ``git commit -- path`` is unaffected: there the two agree.
+RULES_MAIN="tools/rules/__main__.py"
+if [[ ! -f "${REPO_ROOT}/${RULES_MAIN}" && -f "${MAIN_ROOT}/${RULES_MAIN}" ]]; then
+    echo "  ❌  Pre-commit blocked: this branch predates tools/rules, so nothing here can judge it.  Rebase onto main." >&2
+    exit 1
+fi
+if have "${REPO_ROOT}/${RULES_MAIN}" && ! (cd "${REPO_ROOT}" && "${PY}" -m tools.rules run --level commit --staged >&2); then
+    echo "  ❌  Pre-commit blocked by a rule (see above)." >&2
+    exit 1
 fi
 
-# ── 1a. Source rules (H1, H5, H6, H7, dead paths) ───────────────────────────
-# Hard-fail, a fraction of a second.  ``tools/check_source_rules.py --staged``
-# reads the staged blob of every lucid/ and tools/ file in the commit and
-# refuses ``from __future__ import annotations`` in both, and in lucid/ an
-# import or a mention of the reference framework outside
-# ``lucid/test/_fixtures/ref_framework.py``, the other vendor's GPU name,
-# string annotations, and prose naming a ``lucid.`` path that no longer
-# resolves (LCD-587).  The unit test
-# ``test_source_rules.py`` checks the whole tree, but nothing ran it before a
-# commit, and tests importing the reference framework directly landed past
-# it.  Only the staged files: a commit that touches a file must leave it
-# clean, and one that does not is not held up by it.  No override.  A
-# worktree that predates the script borrows the main checkout's copy.
-RULES_SCRIPT="${REPO_ROOT}/tools/check_source_rules.py"
-[[ -f "${RULES_SCRIPT}" ]] || RULES_SCRIPT="${MAIN_ROOT}/tools/check_source_rules.py"
-if [[ -n "${PY}" && -f "${RULES_SCRIPT}" ]]; then
-    if git diff --cached --name-only --diff-filter=ACMR | grep -qE '^(lucid|tools)/'; then
-        if ! (cd "${REPO_ROOT}" && "${PY}" "${RULES_SCRIPT}" --staged); then
-            echo "  ❌  Pre-commit blocked: a source rule is broken in a staged file (see above)." >&2
-            exit 1
-        fi
-    fi
-fi
-
-# ── 1a'. Annotation table is fresh ──────────────────────────────────────────
+# ── 1a. Annotation table is fresh ───────────────────────────────────────────
 # Hard-fail, under a second.  ``lucid/_annotations.py`` lists every name a
 # module imports under ``TYPE_CHECKING``; a commit that adds one without
 # regenerating the table leaves ``inspect.signature`` raising ``NameError``
@@ -157,31 +119,10 @@ fi
 # day (``_metal_views``, ``serialization._storage_plan``).  Only when a lucid/
 # Python file is staged.  The fix is the generator, never a hand edit.
 ANN_SCRIPT="${REPO_ROOT}/tools/gen_annotation_names.py"
-if [[ -n "${PY}" && -f "${ANN_SCRIPT}" ]]; then
+if have "${ANN_SCRIPT}"; then
     if git diff --cached --name-only --diff-filter=ACMRD | grep -qE '^lucid/.*\.py$'; then
         if ! (cd "${REPO_ROOT}" && "${PY}" -m tools.gen_annotation_names --check >&2); then
             echo "  ❌  Pre-commit blocked: run python -m tools.gen_annotation_names and stage lucid/_annotations.py." >&2
-            exit 1
-        fi
-    fi
-fi
-
-# ── 1b. Quality ratchet ─────────────────────────────────────────────────────
-# Hard-fail.  ``tools/quality_gate --fast`` measures the files changed since
-# HEAD with the cheap collectors (ruff deslop rules, suppression / cast / LOC
-# counters, lizard) and refuses any (tool, rule, file) count above
-# ``tools/quality_baseline.json`` — new slop — and a baseline left higher
-# than the code (a fix not recorded with ``--update --fast``).  Seconds, not
-# minutes; the cross-file collectors run in CI and at land.  Only when lucid/
-# or the baseline is staged.  tools/README.md "Quality gate".
-QG_DIR="${REPO_ROOT}/tools/quality_gate"
-if [[ "${LUCID_SKIP_QUALITY_GATE:-0}" != "1" && -n "${PY}" && -d "${QG_DIR}" ]]; then
-    if git diff --cached --name-only --diff-filter=ACMRD \
-        | grep -qE '^(lucid/|tools/quality_baseline\.json$)'; then
-        if ! (cd "${REPO_ROOT}" && "${PY}" -m tools.quality_gate --fast >&2); then
-            echo "" >&2
-            echo "  ❌  Pre-commit blocked by the quality ratchet (see above)." >&2
-            echo "      Override (CI and land still check):  LUCID_SKIP_QUALITY_GATE=1 git commit ..." >&2
             exit 1
         fi
     fi
@@ -198,7 +139,7 @@ fi
 # main has none.
 BASELINE_SCRIPT="${MAIN_ROOT}/tools/check_audit_baselines.py"
 [[ -f "${BASELINE_SCRIPT}" ]] || BASELINE_SCRIPT="${REPO_ROOT}/tools/check_audit_baselines.py"
-if [[ -n "${PY}" && -f "${BASELINE_SCRIPT}" ]]; then
+if have "${BASELINE_SCRIPT}"; then
     if git diff --cached --name-only --diff-filter=ACMR \
         | grep -qE '^lucid/test/audit/(coverage|doctest|suite)\.json$'; then
         if ! (cd "${REPO_ROOT}" && "${PY}" "${BASELINE_SCRIPT}" --staged --root "${REPO_ROOT}"); then
@@ -218,7 +159,7 @@ fi
 # CI runs the same script through lucid/test/stubs; land runs it too.  Only
 # when Python or engine source, a stub, or the generator is staged.
 STUBS_SCRIPT="${REPO_ROOT}/tools/check_stubs.py"
-if [[ -n "${PY}" && -f "${STUBS_SCRIPT}" ]]; then
+if have "${STUBS_SCRIPT}"; then
     if git diff --cached --name-only --diff-filter=ACMRD \
         | grep -qE '^(lucid/.*\.(py|pyi|cpp|h|mm)|tools/(gen_pyi|check_stubs|stub_namespaces)\.py)$'; then
         if ! (cd "${REPO_ROOT}" && "${PY}" "${STUBS_SCRIPT}" >&2); then
@@ -237,7 +178,7 @@ fi
 # gate's checks part.  Only when IBackend.h, the generated header or the
 # generator is staged.
 PHANTOM_SCRIPT="${REPO_ROOT}/tools/gen_phantom_backend.py"
-if [[ -n "${PY}" && -f "${PHANTOM_SCRIPT}" ]]; then
+if have "${PHANTOM_SCRIPT}"; then
     if git diff --cached --name-only --diff-filter=ACMRD \
         | grep -qE '^lucid/_C/backend/(IBackend|PhantomBackend)\.h$|^tools/gen_phantom_backend\.py$'; then
         if ! (cd "${REPO_ROOT}" && "${PY}" "${PHANTOM_SCRIPT}" --check >&2); then
@@ -254,7 +195,7 @@ fi
 # ran nowhere (LCD-326); CI runs it in scripts/ci_full.sh.  Only when engine
 # C++ or the checker itself is staged.
 DTYPE_SCRIPT="${REPO_ROOT}/tools/check_dtype_dispatch.py"
-if [[ -n "${PY}" && -f "${DTYPE_SCRIPT}" ]]; then
+if have "${DTYPE_SCRIPT}"; then
     if git diff --cached --name-only --diff-filter=ACMR \
         | grep -qE '^(lucid/_C/.*\.(cpp|cc|h|hpp|mm)|tools/check_dtype_dispatch\.py)$'; then
         if ! (cd "${REPO_ROOT}" && "${PY}" "${DTYPE_SCRIPT}" >&2); then
@@ -270,7 +211,7 @@ fi
 # lines) and that backend/{cpu,gpu}/methods/*.cpp are git-tracked and contain
 # only out-of-line <Backend>:: member definitions.
 LAYOUT_SCRIPT="${REPO_ROOT}/tools/check_backend_layout.py"
-if [[ -n "${PY}" && -f "${LAYOUT_SCRIPT}" ]]; then
+if have "${LAYOUT_SCRIPT}"; then
     if git diff --cached --name-only --diff-filter=ACMRD \
         | grep -qE '^(lucid/_C/backend/(cpu|gpu)/.*\.(cpp|h)|tools/(check_backend_layout|backend_split)\.py)$'; then
         if ! (cd "${REPO_ROOT}" && "${PY}" "${LAYOUT_SCRIPT}" --quiet >&2); then
@@ -289,14 +230,13 @@ fi
 # Only run when the commit actually touches Python files under lucid/ —
 # README / vault-only commits don't need to pay the AST walk.
 DOCSTRING_SCRIPT="${REPO_ROOT}/tools/check_docstring_coverage.py"
-if [[ "${LUCID_SKIP_DOCSTRING:-0}" != "1" && -f "${DOCSTRING_SCRIPT}" ]]; then
+if [[ "${LUCID_SKIP_DOCSTRING:-0}" != "1" ]] && have "${DOCSTRING_SCRIPT}"; then
     if git diff --cached --name-only --diff-filter=ACMR | grep -qE '^lucid/.*\.py$'; then
         if ! "${PY}" "${DOCSTRING_SCRIPT}"; then
             echo "" >&2
             echo "  ❌  Pre-commit blocked: thin / unstructured docstrings detected." >&2
             echo "      Re-run with --list to see every offender:" >&2
             echo "          python3 tools/check_docstring_coverage.py --list" >&2
-            echo "      Override (discouraged):  LUCID_SKIP_DOCSTRING=1 git commit ..." >&2
             exit 1
         fi
     fi
@@ -314,16 +254,14 @@ fi
 # an engine class emitted under its C++ name.  The resolver learned both
 # and every one of 8663 symbols resolves, so a failure here now means a
 # reference that really does not, and a broken link in the docs is worth
-# a commit being stopped over.  ``LUCID_SKIP_XREFS=1`` is the way past it
-# for a commit that has a reason.
+# a commit being stopped over.
 XREF_SCRIPT="${REPO_ROOT}/tools/check_docstring_xrefs.py"
-if [[ "${LUCID_SKIP_XREFS:-0}" != "1" && -f "${XREF_SCRIPT}" ]]; then
+if [[ "${LUCID_SKIP_XREFS:-0}" != "1" ]] && have "${XREF_SCRIPT}"; then
     if git diff --cached --name-only --diff-filter=ACMR | grep -qE '^lucid/.*\.py$'; then
         if [[ -d "${REPO_ROOT}/web/public/api-data" ]]; then
             if ! "${PY}" "${XREF_SCRIPT}" --list >&2; then
                 echo "" >&2
                 echo "  ❌  Unresolved docstring cross-references (see above)." >&2
-                echo "      Bypass for this commit:  LUCID_SKIP_XREFS=1 git commit ..." >&2
                 exit 1
             fi
         fi
@@ -374,11 +312,13 @@ if [[ "${LUCID_SKIP_API_DATA:-0}" != "1" ]]; then
                 -- web/public/api-data | wc -l | tr -d ' ') JSON file(s)"
         else
             echo "  ❌  api-data build failed — see /tmp/lucid-api-data.log" >&2
-            echo "      (set LUCID_SKIP_API_DATA=1 to bypass for this commit)" >&2
             exit 1
         fi
     fi
 fi
+
+# Every check above has passed; what follows only refreshes a badge.
+echo done >> "${RECEIPT}"
 
 # ── 3. LOC badge refresh ────────────────────────────────────────────────────
 if [[ "${LUCID_SKIP_LOC_BADGE:-0}" == "1" ]]; then

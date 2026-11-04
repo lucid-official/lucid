@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# .githooks/pre-push — the last stop before main.
+#
+# ``python -m tools.rules push`` reads the refs git writes to this hook and judges again
+# what is leaving for main or a v* tag, whatever happened at commit.  Three commits on
+# 2026-11-04 skipped pre-commit and reached origin within 21 s, one with a 37-cell rise,
+# so this stop has to be fast and has to be here.  Other refs pass untouched.
+#
+# It fails closed: no interpreter, a crash and "cannot measure" all refuse.  tools/rules is
+# Python 3.14 only (``/usr/bin/python3`` is 3.9, where it is a SyntaxError), so the
+# interpreter is pinned to a checkout's virtualenv, never taken from PATH.
+
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)" || exit 1
+MAIN_ROOT="$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)" || exit 1
+
+PY="${REPO_ROOT}/.venv/bin/python3"
+[[ -x "${PY}" ]] || PY="${MAIN_ROOT}/.venv/bin/python3"
+if ! "${PY}" -c 'import sys; sys.exit(sys.version_info < (3, 14))' 2>/dev/null; then
+    echo "  ❌  Push refused: no Python 3.14 at ${REPO_ROOT}/.venv/bin/python3 or in the main checkout." >&2
+    exit 1
+fi
+
+cd "${REPO_ROOT}" && exec "${PY}" -m tools.rules push "$@"

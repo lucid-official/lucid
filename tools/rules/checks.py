@@ -20,19 +20,29 @@ from tools.rules.model import Exit, Level, inside, need
 
 WORKERS: Final = 4
 _TIMEOUT: Final = 600
-# Where a level has to name a check.  ``.pre-commit-config.yaml`` is not here: it
+# ``git hash-object -t tree /dev/null``: what a tree is measured from when all of it counts.
+EMPTY_TREE: Final = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+# Where a CI claim has to name a check.  ``.pre-commit-config.yaml`` is not here: it
 # named mypy and ruff at commit for years and never ran.  Naming is all this proves.
-_WIRED_IN: Final[Mapping[Level, tuple[str, ...]]] = {
-    Level.COMMIT: (".githooks/pre-commit",),
-    Level.PUSH: (".githooks/pre-push",),
-    Level.CI: ("scripts/ci_full.sh", ".github/workflows/*.yml"),
-}
-_RUNNERS: Final[Mapping[Level, tuple[str, ...]]] = {
-    Level.COMMIT: ("tools.rules run --level commit",),
-    Level.PUSH: ("tools.rules run --level push", "tools.rules push"),
-    Level.CI: ("tools.rules run --level ci",),
+_CI_FILES: Final = ("scripts/ci_full.sh", ".github/workflows/*.yml")
+# What stands for every check of a level.  ``--staged``, because without it a blob reader
+# skips; the refs, because without them the push gate has nothing to judge and passes.
+_RUNNERS: Final[Mapping[Level, str]] = {
+    Level.COMMIT: r"tools\.rules run --level commit --staged",
+    Level.PUSH: r"tools\.rules push \S+ \S+ \S+ \S+ refs/heads/main ",
+    Level.CI: r"tools\.rules run --level ci",
 }
 _COMMENT: Final = re.compile(r"(?:^|[\s;])#.*$", re.MULTILINE)
+# A stub python: it says what it was asked, and fails when told to.  The interpreter
+# question a hook asks first must still be answered, or the failure proves nothing.
+_STUB: Final = """\
+#!/bin/sh
+asked="$*"
+case "$asked" in *tools.rules\\ push*) asked="$asked $(cat)" ;; esac
+printf '%s\\n' "$asked" >> "{log}"
+case "$asked" in -c\\ *) exit 0 ;; esac
+test ! -e "{fail}"
+"""
 
 
 class CannotMeasure(RuntimeError):
@@ -44,6 +54,7 @@ class Workspace:
     root: Path
     python: str
     isolated: bool = False
+    since: str = EMPTY_TREE  # where a check that measures changes starts
 
     @classmethod
     def of(cls, root: Path) -> Self:
@@ -74,6 +85,7 @@ class Changes:
     """What a range or the index changed.  ``differ``: paths whose working copy is not staged."""
 
     paths: tuple[str, ...]
+    since: str = "HEAD"
     staged: bool = False
     differ: frozenset[str] = frozenset()
 
@@ -116,7 +128,8 @@ class Check(ABC):
         return "--staged" in self.run
 
     def argv(self, ws: Workspace, changed: Sequence[str] = ()) -> list[str]:
-        words = (changed if w == "{changed}" else [w.replace("{py}", ws.python)] for w in self.run)
+        filled = {"{py}": ws.python, "{since}": ws.since}
+        words = (changed if w == "{changed}" else [filled.get(w, w)] for w in self.run)
         return [word for group in words for word in group]
 
     def relevant(self, changed: Sequence[str]) -> list[str]:
@@ -126,14 +139,13 @@ class Check(ABC):
         return [p for p in changed if any(PurePosixPath(p).full_match(g) for g in self.trigger)]
 
     def unwired(self, level: Level, root: Path) -> str | None:
-        """Why ``level`` does not name this check's tool, or None when it does."""
-        places = _WIRED_IN[level]
-        files = [file for place in places for file in root.glob(place) if file.is_file()]
+        """Why ``level`` does not run this check, or None: a hook runs it, CI still only names it."""
+        wanted = rf"(?<![\w.-]){re.escape(self.tool)}(?![\w./-])|{_RUNNERS[level]}"
+        if level is not Level.CI:
+            return HookTrial(level, root / ".githooks", wanted, self.tool, self.trigger).problem()
+        files = [file for place in _CI_FILES for file in root.glob(place) if file.is_file()]
         text = "\n".join(_COMMENT.sub("", f.read_text(errors="replace")) for f in files)
-        named = rf"(?<![\w.-]){re.escape(self.tool)}(?![\w./-])"
-        if re.search(named, text) or any(runner in text for runner in _RUNNERS[level]):
-            return None
-        return f"{' or '.join(places)} does not name {self.tool}"
+        return None if re.search(wanted, text) else f"{' or '.join(_CI_FILES)}: no {self.tool}"
 
     @abstractmethod
     def execute(self, ws: Workspace, changed: Sequence[str] = ()) -> Result:
@@ -231,26 +243,105 @@ class PytestCheck(Check, kind="pytest"):
         return None
 
 
-def _git_names(ws: Workspace, *which: str) -> tuple[str, ...]:
+@dataclass(frozen=True)
+class HookTrial:
+    """Does a real commit or push run ``wanted`` and stop when it fails?
+
+    Git runs the real hook in a scratch repository whose python is a stub, in a main
+    checkout and in a linked worktree.  So an ``exit 0`` above the line, an ``if false``,
+    a name in an ``echo`` and a dropped exit status all fail here, as text cannot show.
+    """
+
+    level: Level
+    hooks: Path
+    wanted: str
+    tool: str
+    trigger: tuple[str, ...]
+
+    def problem(self) -> str | None:
+        with tempfile.TemporaryDirectory(prefix="lucid-rules-") as tmp:
+            base = Path(tmp).resolve()
+            repo, linked = base / "repo", base / "linked"
+            self._repository(base, repo, linked)
+            return self._tried(base, repo, "the main checkout") or self._tried(
+                base, linked, "a linked worktree"
+            )
+
+    def _repository(self, base: Path, repo: Path, linked: Path) -> None:
+        off = ("-c", "core.hooksPath=/dev/null")
+        _git(base, "init", "-q", "--bare", "remote.git")
+        _git(base, "init", "-q", "-b", "main", "repo")
+        (repo / ".gitignore").write_text(".venv\n")
+        (repo / "README.md").write_text("trial\n")
+        (repo / "tools/rules").mkdir(parents=True)  # a hook asks for it before running it
+        (repo / "tools/rules/__main__.py").write_text("")
+        for key, value in (
+            ("user.name", "trial"),
+            ("user.email", "trial@example.invalid"),
+            ("commit.gpgsign", "false"),
+            ("core.hooksPath", str(self.hooks)),
+            ("remote.origin.url", str(base / "remote.git")),
+        ):
+            _git(repo, "config", key, value)
+        _git(repo, "add", "-A")
+        _git(repo, *off, "commit", "-qm", "chore: base")
+        _git(repo, *off, "push", "-q", "origin", "main")
+        _git(repo, "worktree", "add", "-q", "-b", "side", str(linked))
+
+    def _attempt(self, tree: Path, mark: str) -> subprocess.CompletedProcess[str]:
+        # Named for its tree: within a second, two trees would make one commit, and a
+        # push of it would be up to date, with no refs for the hook.
+        subject = f"chore: {mark} in {tree.name}"
+        # A path each trigger matches, so that a hook's own path guard fires.
+        for glob in self.trigger:
+            path = tree / re.sub(r"\*+", "f", glob.replace("**/", "d/"))
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(subject)
+        _git(tree, "add", "-A")
+        commit = ("commit", "--allow-empty", "-qm", subject)
+        if self.level is Level.COMMIT:
+            return _git(tree, *commit)
+        _git(tree, "-c", "core.hooksPath=/dev/null", *commit)
+        return _git(tree, "push", "-q", "-f", "origin", "HEAD:main")
+
+    def _tried(self, base: Path, tree: Path, where: str) -> str | None:
+        log, fail = base / "log", base / "fail"
+        stub = tree / ".venv/bin/python3"
+        stub.parent.mkdir(parents=True)
+        stub.write_text(_STUB.format(log=log, fail=fail))
+        stub.chmod(0o755)
+        log.unlink(missing_ok=True)
+        fail.unlink(missing_ok=True)
+        verb = f"a real {'commit' if self.level is Level.COMMIT else 'push'} in {where}"
+        passing = self._attempt(tree, "passing")
+        if passing.returncode != 0:
+            return f"{verb} failed with its tool passing: {passing.stderr.strip()[-200:]}"
+        if not log.is_file() or re.search(self.wanted, log.read_text()) is None:
+            return f"{verb} did not run {self.tool}"
+        fail.touch()
+        if self._attempt(tree, "failing").returncode == 0:
+            return f"{verb} went through with {self.tool} failing"
+        return None
+
+
+def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return Workspace(cwd, "", isolated=True).spawn(["git", *args])
+
+
+def git_names(ws: Workspace, *which: str) -> tuple[str, ...]:
     done = ws.spawn(["git", "diff", "--name-only", "--no-renames", "-z", *which])
     if done.returncode != 0:
         raise CannotMeasure(done.stderr.strip())
     return tuple(filter(None, done.stdout.split("\0")))
 
 
-def changed_files(ws: Workspace, commits: str | None, staged: bool) -> Changes | None:
-    """What a range or the index changed; None when neither was asked for: the whole tree."""
-    if staged:
-        return Changes(_git_names(ws, "--cached"), True, frozenset(_git_names(ws)))
-    if commits is None:
-        return None
-    if ".." not in commits:
-        raise CannotMeasure(f"{commits!r} is not a range: A..B")
-    return Changes(_git_names(ws, "--end-of-options", commits))
+def staged_changes(ws: Workspace) -> Changes:
+    return Changes(git_names(ws, "--cached"), staged=True, differ=frozenset(git_names(ws)))
 
 
 def _run_one(check: Check, ws: Workspace, changes: Changes | None) -> Result:
     start = time.monotonic()
+    ws = replace(ws, since=EMPTY_TREE if changes is None else changes.since)
     if check.reads_index and (changes is None or not changes.staged):
         return Result(check.name, Exit.PASS, skipped="it reads the index: only --staged can say")
     named: Sequence[str] = ()
@@ -260,7 +351,10 @@ def _run_one(check: Check, ws: Workspace, changes: Changes | None) -> Result:
             return Result(check.name, Exit.PASS, skipped="no changed file matches its trigger")
         differ = [] if check.reads_index else sorted(changes.differ.intersection(relevant))
         if differ:
-            message = f"it reads the working copy, which is not what is staged: {', '.join(differ)}"
+            message = (
+                f"it reads the working copy, which is not what is staged: {', '.join(differ)}. "
+                "Stage all of each file, or set the rest aside."
+            )
             return Result(check.name, Exit.UNMEASURED, message)
         named = [path for path in relevant if (ws.root / path).is_file()]
         if not named and "{changed}" in check.run:

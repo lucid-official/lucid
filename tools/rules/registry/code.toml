@@ -34,8 +34,16 @@ kind = "pytest"
 nodes = ["lucid/test/unit/test_source_rules.py::test_every_excuse_is_still_needed"]
 trigger = ["lucid/**", "tools/**"]
 
+# {since} is HEAD at commit and the range's base otherwise: --fast alone measures only
+# what differs from HEAD, so a range already committed would pass on nothing.
 [check.quality-gate]
-run = ["{py}", "-m", "tools.quality_gate", "--fast"]
+run = ["{py}", "-m", "tools.quality_gate", "--fast", "--since", "{since}"]
+trigger = ["lucid/**", "tools/quality_gate/**", "tools/quality_baseline.json"]
+
+# A rise only: a baseline left high is commit's question, and --update --fast could not
+# answer it here, with nothing changed since HEAD.
+[check.quality-gate-range]
+run = ["{py}", "-m", "tools.quality_gate", "--fast", "--since", "{since}", "--allow-slack"]
 trigger = ["lucid/**", "tools/quality_gate/**", "tools/quality_baseline.json"]
 
 [check.quality-gate-full]
@@ -51,7 +59,7 @@ scope = ["lucid/**", "tools/**"]
 doc = "python"
 enforce = [
     { level = "commit", check = "source-rules-staged" },
-    { level = "push", check = "source-rules", pending = "LCD-841-R2" },
+    { level = "push", check = "source-rules" },
     { level = "test", check = "test-h1" },
     { level = "test", check = "test-source-tree" },
 ]
@@ -88,7 +96,7 @@ scope = ["lucid/**"]
 doc = "python"
 enforce = [
     { level = "commit", check = "source-rules-staged" },
-    { level = "push", check = "source-rules", pending = "LCD-841-R2" },
+    { level = "push", check = "source-rules" },
     { level = "test", check = "test-h5" },
     { level = "test", check = "test-source-tree" },
 ]
@@ -137,7 +145,7 @@ scope = ["lucid/**"]
 doc = "python"
 enforce = [
     { level = "commit", check = "source-rules-staged" },
-    { level = "push", check = "source-rules", pending = "LCD-841-R2" },
+    { level = "push", check = "source-rules" },
     { level = "test", check = "test-h7" },
     { level = "test", check = "test-source-tree" },
 ]
@@ -171,7 +179,7 @@ scope = ["lucid/**"]
 doc = "global"
 enforce = [
     { level = "commit", check = "quality-gate" },
-    { level = "push", check = "quality-gate", pending = "LCD-841-R2" },
+    { level = "push", check = "quality-gate-range" },
     { level = "ci", check = "quality-gate-full" },
 ]
 
@@ -184,6 +192,18 @@ nodes = [
     "tools/test_quality_gate.py::test_fast_check_fails_on_seeded_slop[except-pass]",
     "tools/test_quality_gate.py::test_fast_check_fails_on_seeded_slop[type-ignore]",
     "tools/test_quality_gate.py::test_fast_check_fails_on_seeded_slop[long-single-statement]",
+    "tools/test_rules.py::test_push_gate_since_sees_a_rise_already_committed",
+]
+
+[[rule.control]]
+kind = "pytest"
+check = ["quality-gate-range"]
+nodes = [
+    "tools/test_rules.py::test_push_gate_since_sees_a_rise_already_committed",
+    "tools/test_rules.py::test_push_gate_since_sees_a_baseline_raised_with_the_count",
+    # The gate itself: every push level rests on a violation refusing the push.
+    "tools/test_rules.py::test_push_gate_judges_each_range_once_and_all_of_them",
+    "tools/test_rules.py::test_push_gate_refuses_a_working_copy_that_is_not_what_leaves",
 ]
 
 # CI calls --full; a seed through --fast would not show that mode can fail.
