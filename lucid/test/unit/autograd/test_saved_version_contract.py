@@ -469,10 +469,7 @@ CONV_CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any
             _const(
                 lib,
                 x1,
-                [
-                    [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
-                    [[-1.0, 0.5], [2.0, -1.5], [0.25, 1.0]],
-                ],
+                [[[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], [[-1.0, 0.5], [2.0, -1.5], [0.25, 1.0]]],
             ),
             _const(lib, x1, [0.1, -0.2]),
         ),
@@ -485,10 +482,7 @@ CONV_CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any
             _const(
                 lib,
                 x2,
-                [
-                    [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
-                    [[-1.0, 0.5], [2.0, -1.5], [0.25, 1.0]],
-                ],
+                [[[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]], [[-1.0, 0.5], [2.0, -1.5], [0.25, 1.0]]],
             ),
             _const(lib, x2, [0.1, -0.2]),
         ),
@@ -835,9 +829,7 @@ def test_the_check_refuses_each_way_a_node_can_escape_the_guard(tmp_path: Path) 
     ],
 )
 @pytest.mark.parametrize("active", ["input_only", "weight_only"])
-def test_fused_backward_skips_unneeded_input_gradients(
-    op: str, active: str, device: str
-) -> None:
+def test_fused_backward_skips_unneeded_input_gradients(op: str, active: str, device: str) -> None:
     here = _C_engine.Device.CPU if device == "cpu" else _C_engine.Device.GPU
 
     def run_step(all_grad: bool) -> tuple[int, np.ndarray]:
@@ -914,10 +906,11 @@ def test_fused_backward_skips_unneeded_input_gradients(
         loss.backward()
         after = _C_engine.memory_stats(here)
         assert target.grad is not None
-        return after.alloc_count - before.alloc_count, np.asarray(target.grad.detach().cpu().numpy())
+        return after.alloc_count - before.alloc_count, np.asarray(
+            target.grad.detach().cpu().numpy()
+        )
 
     alloc_all, grad_all = run_step(True)
     alloc_partial, grad_partial = run_step(False)
     np.testing.assert_allclose(grad_partial, grad_all, rtol=1e-5, atol=1e-6)
     assert alloc_partial < alloc_all, f"{op} ({active}, {device}): {alloc_partial} >= {alloc_all}"
-

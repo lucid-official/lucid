@@ -157,7 +157,8 @@ std::vector<TensorImplPtr> GroupNormBackward::apply_for_graph(const TensorImplPt
 
             auto gg = reshape_op(mul_op(grad_out, gamma_b), grouped);
             auto term = sub_op(gg, mean_op(gg, dims, /*keepdims=*/true));
-            term = sub_op(term, mul_op(xhat_g, mean_op(mul_op(gg, xhat_g), dims, /*keepdims=*/true)));
+            term =
+                sub_op(term, mul_op(xhat_g, mean_op(mul_op(gg, xhat_g), dims, /*keepdims=*/true)));
             dx = reshape_op(mul_op(rstd, term), original);
         }
         if (needs_input_grad(1))

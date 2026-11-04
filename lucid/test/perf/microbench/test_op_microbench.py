@@ -123,17 +123,13 @@ class TestSortMicrobench:
 @pytest.mark.perf
 class TestFftAndSignalMicrobench:
     def test_roll_256x4096(self, bench, device: str) -> None:
-        a = lucid.tensor(
-            np.random.standard_normal((256, 4096)).astype(np.float32), device=device
-        )
+        a = lucid.tensor(np.random.standard_normal((256, 4096)).astype(np.float32), device=device)
         bench(lambda: lucid.roll(a, shifts=(100, 1000), dims=(0, 1)))
         if hasattr(bench, "last_elapsed"):
             assert_no_regression(f"roll_256x4096_{device}", bench.last_elapsed, _THRESHOLDS)
 
     def test_fftshift_256x4096(self, bench, device: str) -> None:
-        a = lucid.tensor(
-            np.random.standard_normal((256, 4096)).astype(np.float32), device=device
-        )
+        a = lucid.tensor(np.random.standard_normal((256, 4096)).astype(np.float32), device=device)
         bench(lambda: lucid.fft.fftshift(a))
         if hasattr(bench, "last_elapsed"):
             assert_no_regression(f"fftshift_256x4096_{device}", bench.last_elapsed, _THRESHOLDS)
@@ -145,18 +141,14 @@ class TestFftAndSignalMicrobench:
             assert_no_regression(f"fft_64_{device}", bench.last_elapsed, _THRESHOLDS)
 
     def test_fft_256x4096(self, bench, device: str) -> None:
-        a = lucid.tensor(
-            np.random.standard_normal((256, 4096)).astype(np.float32), device=device
-        )
+        a = lucid.tensor(np.random.standard_normal((256, 4096)).astype(np.float32), device=device)
         bench(lambda: lucid.fft.fft(a))
         if hasattr(bench, "last_elapsed"):
             assert_no_regression(f"fft_256x4096_{device}", bench.last_elapsed, _THRESHOLDS)
 
     def test_ifft_256x4096(self, bench, device: str) -> None:
         a = lucid.fft.fft(
-            lucid.tensor(
-                np.random.standard_normal((256, 4096)).astype(np.float32), device=device
-            )
+            lucid.tensor(np.random.standard_normal((256, 4096)).astype(np.float32), device=device)
         )
         bench(lambda: lucid.fft.ifft(a))
         if hasattr(bench, "last_elapsed"):

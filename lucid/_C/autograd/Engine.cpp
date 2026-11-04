@@ -743,8 +743,8 @@ std::vector<Storage> run_node(Node& node, Storage grad_in, SlotGrads<Storage> sl
         const RepackSavedGuard repack{node};
         const BackwardEvent event(node, grad_in, slots.empty() ? nullptr : &slots.front().second);
         if (!node.is_barrier()) {
-            grads = node.apply(has_node_post_hooks(node) ? own_grad_copy(grad_in)
-                                                         : std::move(grad_in));
+            grads =
+                node.apply(has_node_post_hooks(node) ? own_grad_copy(grad_in) : std::move(grad_in));
         } else {
             for (auto& [slot, grad] : slots)
                 node.accumulate_barrier_grad(slot, std::move(grad));

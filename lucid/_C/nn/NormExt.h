@@ -371,9 +371,8 @@ public:
     static constexpr bool kKeepsOwnValues = true;
     // dx reads x, gamma, and beta (y = gamma * (x * Nx) + beta * x);
     // dgamma and dbeta read x.
-    static constexpr GradReads<3> kGradReads = {{{true, true, true},
-                                                 {true, false, false},
-                                                 {true, false, false}}};
+    static constexpr GradReads<3> kGradReads = {
+        {{true, true, true}, {true, false, false}, {true, false, false}}};
     // Registered op schema (see class docstring).
     static const OpSchema schema_v1;
     // Numerical-stability constant.
