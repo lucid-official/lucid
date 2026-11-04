@@ -233,6 +233,26 @@ class TestAWriteThroughAView:
         assert closure.tolist() == want
         assert example.tolist() == want
 
+    @pytest.mark.parametrize(
+        "view",
+        [lambda t: t[0:1].expand(4), lambda t: t.unfold(0, 2, 1)],
+        ids=["expand", "unfold"],
+    )
+    def test_with_overlapping_elements_is_refused_and_put_back(
+        self, view: Callable[[lucid.Tensor], lucid.Tensor]
+    ) -> None:
+        """Nothing can be copied into such a view, so the tensor it came from is
+        what goes back, and the export says why it stopped."""
+        held = lucid.zeros(4)
+
+        def fn(x: lucid.Tensor) -> lucid.Tensor:
+            view(held).fill_(2.0)
+            return x * 1.0
+
+        with pytest.raises(ValueError, match="elements overlap"):
+            cml_build.trace(_Apply(fn).eval(), lucid.ones(1, 4))
+        assert held.tolist() == [0.0, 0.0, 0.0, 0.0]
+
     def test_a_tensor_written_whole_after_a_view_of_it_is_put_back_too(self) -> None:
         def fn(x: lucid.Tensor) -> lucid.Tensor:
             x[:, :2].add_(1.0)

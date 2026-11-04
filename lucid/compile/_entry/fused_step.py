@@ -903,6 +903,9 @@ class _FusedStep:
         finally:
             _tls.active = False
 
+        # ``require_outside_writes`` asks what else still holds a tensor the call
+        # made: the forward's result does not, it is made anew on every run.
+        del out
         write_ids, written = require_outside_writes(
             tracer, [_unwrap_hot(a) for a in args], "fused_step"
         )

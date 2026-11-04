@@ -61,11 +61,17 @@ def _lands_in_argument(
     return any(a is impl or (family != 0 and a.family_id() == family) for a in arguments)
 
 
+def _put_back(tracer: Tracer) -> None:
+    """Undo the trace-time call's writes that whatever runs next applies itself."""
+    tracer.refuse_kept_writes()
+    tracer.restore_outside_writes()
+
+
 def require_outside_writes(
     tracer: Tracer, arguments: Sequence[_C_engine.TensorImpl], caller: str
 ) -> tuple[list[int], list[_C_engine.TensorImpl]]:
     """Put the written tensors back; return their ids and impls or raise ``RuntimeError``."""
-    tracer.restore_outside_writes()
+    _put_back(tracer)
     ids: list[int] = []
     targets: list[_C_engine.TensorImpl] = []
     for latest, impl in _written(tracer):
@@ -80,6 +86,10 @@ def outside_writes(
     tracer: Tracer, arguments: Sequence[_C_engine.TensorImpl]
 ) -> tuple[list[int], list[object]] | str:
     """Put the written tensors back; return what the executable must carry.
+
+    Call with the traced call's result dropped: a tensor the call made and wrote
+    that Python still holds marks the trace unsupported, and a result it is about
+    to hand back on every run is not holding it over.
 
     Parameters
     ----------
@@ -96,7 +106,7 @@ def outside_writes(
         its value from before the trace.  A string instead when a write
         landed in one of its own arguments: the reason it has to run eager.
     """
-    tracer.restore_outside_writes()
+    _put_back(tracer)
     ids: list[int] = []
     targets: list[object] = []
     for latest, impl in _written(tracer):
@@ -136,6 +146,6 @@ def refuse(tracer: Tracer) -> None:
     tracer : Tracer
         The finished trace.
     """
-    tracer.restore_outside_writes()
+    _put_back(tracer)
     if _written(tracer):
         tracer.mark_unsupported(_OUTSIDE)

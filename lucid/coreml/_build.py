@@ -493,6 +493,7 @@ def trace(model: Module, example: object, *, output_field: str | None = None) ->
             before = _buffer_marks(model)
             with _compile._tracing(watch=[t for _n, t in examples]) as tracer:
                 tracer.redraw_rng = False
+                tracer.keep_written_values = True  # the package folds them
                 with lucid.no_grad():
                     result = (
                         model(**dict(examples))
@@ -502,8 +503,7 @@ def trace(model: Module, example: object, *, output_field: str | None = None) ->
                 selected = _select_outputs(result, output_field)
             after = _buffer_marks(model)
 
-        writes = list(tracer.outside_writes())
-        written = {id(impl) for _tid, impl in writes}
+        written = {id(impl) for _tid, impl in tracer.outside_writes()}
         answered = {
             name: tensor.clone() for name, tensor in selected if id(_unwrap(tensor)) in written
         }

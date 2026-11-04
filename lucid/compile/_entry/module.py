@@ -1117,8 +1117,20 @@ class CompiledModule[**P, R](_ModuleWrapper):
 
     def _trace_forward(
         self, args: tuple[object, ...], kwargs: dict[str, object]
-    ) -> tuple[Tracer, object] | None:
-        """Trace ``self._model(*args, **kwargs)`` in the caller's grad mode."""
+    ) -> tuple[Tracer, object, list[int]] | None:
+        """Trace ``self._model(*args, **kwargs)`` in the caller's grad mode.
+
+        Returns the tracer and what the call's result becomes, not the result:
+        what asks afterwards who still holds a tensor the call made
+        (``outside_writes``) must not find this.
+
+        Extracts the user's return value structure into a ``return_spec``, a tree
+        that mirrors it with every Tensor swapped for a slot index, and the ordered
+        trace ids the executable must expose so the slot indices line up.  Falling
+        back to eager is safer than guessing if it contains an un-traceable type,
+        but the helper tolerates arbitrary scalars / strings / Nones via the
+        "scalar" leaf.
+        """
         from lucid._tensor.tensor import Tensor
         from lucid.compile._core.trace_context import notice_if_tensor_hook_error, recording
 
@@ -1132,7 +1144,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         if not tracer.graph.ops:
             _fallback_notice("empty-trace", "traced call recorded no operations")
             return None
-        return tracer, return_value
+        return (tracer, *_extract_return_impls(return_value, tracer))
 
     def _compile_for(
         self, args: tuple[object, ...], kwargs: dict[str, object]
@@ -1180,7 +1192,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         traced = self._trace_forward(args, kwargs)
         if traced is None:
             return None
-        tracer, return_value = traced
+        tracer, return_spec, explicit_outputs = traced
         graph = tracer.graph
 
         # If this graph has attention, make sure the fused-attention workaround
@@ -1189,7 +1201,6 @@ class CompiledModule[**P, R](_ModuleWrapper):
 
         maybe_probe_for_graph(graph)
 
-        ext = tracer.external_feeds
         # The trace-time call applied its in-place buffer writes; put the
         # buffers back so the executable (or an eager fallback) applies them.
         writes = outside_writes(tracer, [_unwrap(t) for t in leaf_tensors(args, kwargs)])
@@ -1197,6 +1208,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
             _fallback_notice("argument-write", writes)
             return None
         write_ids, written = writes
+        ext = tracer.external_feeds
 
         # Long attention is faster eagerly (CHA-14); the signature is then
         # remembered as eager-only, so only this first call paid the trace.
@@ -1207,15 +1219,6 @@ class CompiledModule[**P, R](_ModuleWrapper):
             _fallback_notice("long-attention", slow_attention)
             return None
 
-        # Extract the user's return value structure into:
-        #   * return_spec: a tree that mirrors ``return_value`` but
-        #     with every Tensor swapped for a slot index;
-        #   * explicit_outputs: ordered list of trace ids the executable
-        #     must expose so the slot indices line up.
-        # Falling back to eager is safer than guessing if return_value
-        # contains an un-traceable type, but the helper tolerates
-        # arbitrary scalars / strings / Nones via the "scalar" leaf.
-        return_spec, explicit_outputs = _extract_return_impls(return_value, tracer)
         explicit_outputs = explicit_outputs + write_ids
 
         # ── Symbolic-batch resolution (per-instance, decided on first trace) ──

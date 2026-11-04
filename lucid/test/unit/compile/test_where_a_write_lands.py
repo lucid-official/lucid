@@ -51,7 +51,7 @@ pytestmark = pytest.mark.skipif(not _metal_ok(), reason="Metal unavailable")
 
 SHAPE = (3, 4)
 ROWS = [[1.0, 2.0, 3.0, 4.0]] * 3
-SCALES = (1.0, 5.0, -2.0)
+SCALES = (1.0, 5.0, -2.0, 3.0)
 
 Tensor = lucid.Tensor
 Body = Callable[[nn.Module, Tensor], Tensor]
@@ -369,6 +369,267 @@ def test_a_draw_written_in_place_is_drawn_again_each_call() -> None:
         first, second = compiled(x).tolist(), compiled(x).tolist()
     assert first != second
     assert abs(sum(second) / len(second)) < 10.0  # not accumulating the writes
+
+
+# -- the call made it, and something goes on holding it -------------------------
+
+
+def _a_box(model: nn.Module) -> None:
+    model.box = {}
+
+
+def _kept_in_a_box(make: Make) -> Body:
+    def body(model: nn.Module, x: Tensor) -> Tensor:
+        if "h" not in model.box:
+            model.box["h"] = make()
+        model.box["h"].add_(x.mean())
+        return x * model.box["h"].sum()
+
+    return body
+
+
+def _a_view_kept_in_a_box(make: Make) -> Body:
+    def body(model: nn.Module, x: Tensor) -> Tensor:
+        if "h" not in model.box:
+            model.box["h"] = make()[1:]
+        model.box["h"].add_(x.mean())
+        return x * model.box["h"].sum()
+
+    return body
+
+
+def _an_empty_buffer(model: nn.Module) -> None:
+    model.register_buffer("h", None)
+
+
+def _kept_as_a_buffer(make: Make) -> Body:
+    def body(model: nn.Module, x: Tensor) -> Tensor:
+        if model.h is None:
+            model.h = make()
+        model.h.add_(x.mean())
+        return x * model.h.sum()
+
+    return body
+
+
+#: Each makes the tensor once, on the first call, and goes on from it: eager
+#: accumulates, and a compiled call that started it over would not.
+KEPT: dict[str, tuple[Callable[[Make], Body], Setup]] = {
+    "in-a-box": (_kept_in_a_box, _a_box),
+    "view-in-a-box": (_a_view_kept_in_a_box, _a_box),
+    "as-a-buffer": (_kept_as_a_buffer, _an_empty_buffer),
+}
+
+
+@pytest.mark.parametrize("entry", ENTRIES)
+@pytest.mark.parametrize("kept", KEPT)
+@pytest.mark.parametrize("factory", [*FACTORIES])
+def test_a_tensor_the_call_made_and_holds_goes_on_from_the_last_call(
+    factory: str, kept: str, entry: str
+) -> None:
+    """The tensor looks like the call's own, but nothing about it says the next
+    call starts over: Python holds it past the call.  So the call runs eager, and
+    eager is the first to write it, so the trace's write has to be gone."""
+    wrap, setup = KEPT[kept]
+    seen = _agrees(wrap(FACTORIES[factory]), entry, setup)
+    assert not seen.compiled
+
+
+@pytest.mark.parametrize("entry", ENTRIES)
+@pytest.mark.parametrize("factory", MOVED)
+def test_a_tensor_the_call_made_moved_and_holds_goes_on_from_the_last_call(
+    factory: str, entry: str
+) -> None:
+    _agrees(_kept_in_a_box(MOVED[factory]), entry, _a_box)
+
+
+def _returns_it(y: Tensor) -> object:
+    return y
+
+
+def _returns_it_in_a_tuple(y: Tensor) -> object:
+    return (y, y * 2.0)
+
+
+def _returns_a_view_of_it(y: Tensor) -> object:
+    return y[1:]
+
+
+def _returns_it_in_a_dict(y: Tensor) -> object:
+    return {"y": y}
+
+
+def _leaves(value: object) -> list[list[float]]:
+    if isinstance(value, Tensor):
+        return [_floats(value)]
+    items = value.values() if isinstance(value, dict) else value
+    return [_floats(t) for t in items]
+
+
+@pytest.mark.parametrize(
+    "result",
+    [_returns_it, _returns_it_in_a_tuple, _returns_a_view_of_it, _returns_it_in_a_dict],
+)
+@pytest.mark.parametrize("factory", FACTORIES)
+def test_a_tensor_the_call_made_and_returns_stays_compiled(
+    factory: str, result: Callable[[Tensor], object]
+) -> None:
+    """The result is on the caller's hands by the time anything could write it
+    again, and the next call hands back another."""
+    make = FACTORIES[factory]
+
+    def fn(x: Tensor) -> object:
+        y = make()
+        y.add_(x)
+        return result(y)
+
+    compiled = lucid.compile(fn)
+    with lucid.no_grad():
+        for x in _inputs():
+            got, want = _leaves(compiled(x)), _leaves(fn(x))
+            assert all(_close(g, w) for g, w in zip(got, want, strict=True)), f"{got} vs {want}"
+    info = compiled.cache_info()
+    assert info["entries"] == 1 and not info["eager_only"]
+
+
+class _WritesAParameterIntoALiteral(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.w = nn.Parameter(lucid.ones(*SHAPE))
+
+    def forward(self, x: Tensor) -> Tensor:
+        y = lucid.tensor(ROWS, device=COMPILE_DEVICE)
+        y.add_(self.w * x)
+        return y
+
+
+def test_a_made_tensor_in_the_graph_is_not_held_by_the_graph() -> None:
+    """Autograd nodes hold what they saved; that is not a holder anyone can read."""
+
+    def build() -> nn.Module:
+        lucid.manual_seed(0)
+        return _WritesAParameterIntoALiteral().to(COMPILE_DEVICE)
+
+    model, ref = build(), build()
+    step = lucid.compile.make_step(model, _loss)
+    for x in _inputs():
+        got = step(x)
+        got.backward()
+        want = _loss(ref(x))
+        want.backward()
+        assert _close([float(got.item()), *_floats(model.w.grad)], [
+            float(want.item()),
+            *_floats(ref.w.grad),
+        ])
+    assert len(step.cache) == 1 and not step.eager_only.snapshot()
+
+
+# -- a write through a view whose elements overlap ------------------------------
+
+
+def _a_vector(model: nn.Module) -> None:
+    model.register_buffer("vec", lucid.zeros(4, device=COMPILE_DEVICE))
+
+
+def _part_of_a_vector(model: nn.Module) -> None:
+    model.register_buffer("vec", lucid.zeros(5, device=COMPILE_DEVICE)[1:])
+
+
+OVERLAPPING: dict[str, Callable[[Tensor], Tensor]] = {
+    "expand": lambda v: v[0:1].expand(4),
+    "unfold": lambda v: v.unfold(0, 2, 1),
+}
+
+
+@pytest.mark.parametrize("entry", ENTRIES)
+@pytest.mark.parametrize("view", OVERLAPPING)
+@pytest.mark.parametrize("buffer", [_a_vector, _part_of_a_vector], ids=["whole", "part"])
+def test_a_write_through_overlapping_elements_ends_as_eager_ends(
+    buffer: Setup, view: str, entry: str
+) -> None:
+    """``copy_from`` refuses such a view, so it can neither be carried back nor
+    put back.  The buffer it reads can."""
+    make = OVERLAPPING[view]
+
+    def body(model: nn.Module, x: Tensor) -> Tensor:
+        a = x * model.vec.sum()
+        make(model.vec).fill_(2.0)
+        return a
+
+    _agrees(body, entry, buffer)
+
+
+# -- what one write costs each call ----------------------------------------------
+
+
+def _a_big_buffer(model: nn.Module) -> None:
+    model.register_buffer("big", lucid.zeros(64, 4, device=COMPILE_DEVICE))
+
+
+def _one_setitem(model: nn.Module, m: Tensor) -> None:
+    model.big[0] = m
+
+
+def _three_setitems(model: nn.Module, m: Tensor) -> None:
+    for i in range(3):
+        model.big[i] = m
+
+
+def _slice_iadd(model: nn.Module, m: Tensor) -> None:
+    model.big[0:10] += m
+
+
+def _whole_slice_add(model: nn.Module, m: Tensor) -> None:
+    for _ in range(8):
+        model.big[:].add_(m)
+
+
+def _many_setitems(model: nn.Module, m: Tensor) -> None:
+    for i in range(300):
+        model.big[i % 64] = m
+
+
+TEMPORARIES: dict[str, Callable[[nn.Module, Tensor], None]] = {
+    "one-setitem": _one_setitem,
+    "three-setitems": _three_setitems,
+    "slice-iadd": _slice_iadd,
+    "whole-slice-add": _whole_slice_add,
+    "many-setitems": _many_setitems,
+}
+
+
+@pytest.mark.parametrize("write", TEMPORARIES)
+def test_a_buffer_costs_one_copy_and_one_output_however_many_temporaries_reach_it(
+    write: str,
+) -> None:
+    """Every ``buf[i] = v`` goes through a view and a whole-buffer reshape.  Each
+    would be a copy at the trace and an output and a full copy on every run: the
+    cost suite cannot see that, as it counts the eager path."""
+    body = TEMPORARIES[write]
+
+    def forward(model: nn.Module, x: Tensor) -> Tensor:
+        body(model, x.mean())
+        return x * 1.0
+
+    model = _twin(forward, _a_big_buffer)
+    x = lucid.ones(*SHAPE, device=COMPILE_DEVICE)
+    with lucid.no_grad(), _tracing(watch=[x], module=model) as tracer:
+        forward(model, x)
+    assert tracer.outside_write_count() == 1
+    assert [impl for _tid, impl in tracer.outside_writes()] == [model.big._impl]
+    tracer.restore_outside_writes()
+    assert _agrees(forward, "module", _a_big_buffer).compiled
+
+
+def test_the_compiled_paths_keep_no_copy_of_what_the_trace_wrote() -> None:
+    model = _twin(lambda m, x: _write_and_keep(m, x), _plain)
+    x = lucid.ones(*SHAPE, device=COMPILE_DEVICE)
+    with lucid.no_grad(), _tracing(watch=[x], module=model) as tracer:
+        model(x)
+    assert not tracer.keep_written_values
+    tracer.restore_outside_writes()
+    held = {id(impl) for impl in tracer.retained_values.values()}
+    assert id(model.b._impl) in held  # the tensor itself, not a copy of its value
 
 
 # -- a write through a view reaches the buffer ---------------------------------
@@ -766,6 +1027,92 @@ def test_a_shared_buffer_under_another_name_reads_what_the_call_wrote(
     got = history(model, compiled)
     assert got == want
     assert (not compiled.cache_info()["eager_only"]) is compiles
+
+
+def _shared_names(model: nn.Module) -> None:
+    model.register_buffer("m", lucid.metal.shared_tensor(SHAPE).to(COMPILE_DEVICE))
+    model.alias = model.m.to("cpu").to(COMPILE_DEVICE)
+    model.row = model.alias[1]
+    model.part = model.m[1]
+
+
+def _shared_add(model: nn.Module, x: Tensor) -> None:
+    model.m.add_(x.mean())
+
+
+def _shared_copy(model: nn.Module, x: Tensor) -> None:
+    model.m.copy_(x)
+
+
+def _shared_setitem(model: nn.Module, x: Tensor) -> None:
+    model.m[:] = x
+
+
+def _shared_through_a_view(model: nn.Module, x: Tensor) -> None:
+    model.part.add_(x.mean())
+
+
+SHARED_WRITES: dict[str, Callable[[nn.Module, Tensor], None]] = {
+    "add_": _shared_add,
+    "copy_": _shared_copy,
+    "setitem": _shared_setitem,
+    "through-a-view": _shared_through_a_view,
+}
+
+SHARED_READS: dict[str, Callable[[nn.Module], Tensor]] = {
+    "alias": lambda model: model.alias * 1.0,
+    "view-of-the-alias": lambda model: model.row * 1.0,
+}
+
+
+def test_the_names_are_one_buffer() -> None:
+    """Without this, the cases below would be blind."""
+    model = _twin(lambda m, x: x, _shared_names)
+    model.m.fill_(3.0)
+    assert model.alias.tolist()[1][0] == 3.0
+    assert model.row.tolist()[0] == 3.0
+
+
+@pytest.mark.parametrize("entry", ENTRIES)
+@pytest.mark.parametrize("read", SHARED_READS)
+@pytest.mark.parametrize("write", SHARED_WRITES)
+def test_a_shared_buffer_under_any_name_reads_what_the_call_wrote(
+    write: str, read: str, entry: str
+) -> None:
+    """A view holds the buffer as much as the tensor it came from does, in a
+    family of its own: the write reaches it, and no stale view says so."""
+    writes, reads = SHARED_WRITES[write], SHARED_READS[read]
+
+    def body(model: nn.Module, x: Tensor) -> Tensor:
+        writes(model, x)
+        return reads(model)
+
+    assert not _agrees(body, entry, _shared_names).compiled
+
+
+def _writer_outliving_its_base(model: nn.Module) -> None:
+    base = lucid.metal.shared_tensor(SHAPE).to(COMPILE_DEVICE)
+    model.alias = base.to("cpu").to(COMPILE_DEVICE)
+    model.part = base[1]
+
+
+@pytest.mark.parametrize("entry", ENTRIES)
+def test_a_write_through_a_view_whose_base_is_gone_is_seen_by_the_alias(entry: str) -> None:
+    def body(model: nn.Module, x: Tensor) -> Tensor:
+        model.part.add_(x.mean())
+        return model.alias * 1.0
+
+    _agrees(body, entry, _writer_outliving_its_base)
+
+
+@pytest.mark.parametrize("entry", ENTRIES)
+def test_a_name_read_only_before_the_write_stays_compiled(entry: str) -> None:
+    def body(model: nn.Module, x: Tensor) -> Tensor:
+        before = model.row * 1.0
+        model.m.add_(x.mean())
+        return before
+
+    assert _agrees(body, entry, _shared_names).compiled
 
 
 # -- the loss sees a tensor the call made, too -----------------------------------

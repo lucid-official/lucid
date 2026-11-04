@@ -465,6 +465,11 @@ public:
     //     The descriptor, or ``nullptr``.
     const SharedStorage* metal_shared() const;
 
+    // The Metal shared buffer this tensor reads through, whichever part of it:
+    // unlike :func:`metal_shared`, a view of the buffer answers too.  ``nullptr``
+    // for a tensor over no such buffer, or one whose storage an op replaced.
+    const SharedStorage* shared_buffer() const noexcept { return shared_ ? &*shared_ : nullptr; }
+
     // Take ``out``'s contents after an in-place op.
     //
     // Ordinarily a swap of the storage *slot* — see

@@ -41,6 +41,7 @@
 
 #pragma once
 
+#include <functional>
 #include <optional>
 #include <string_view>
 #include <unordered_map>
@@ -331,6 +332,21 @@ public:
     // twice.  Call once the trace has finished.
     void restore_outside_writes();
 
+    // Marks the trace unsupported if a tensor the call made and wrote in place,
+    // or a view of it, is still ``held`` by something outside the trace, and
+    // puts each such tensor back for the eager call that follows.  The trace
+    // took it for the call's own, starting over every time; whoever holds it
+    // (``self.h = lucid.tensor(...)``, once) expects each call to go on from the
+    // last.  Call once the trace has finished and the call's result is dropped:
+    // a result is handed back on every run and holds nothing over.
+    void refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held);
+
+    // Whether :meth:`restore_outside_writes` keeps the written values for
+    // :meth:`retained_values`, for a caller that reads a traced value's contents
+    // (Core ML, which folds them).  Off, the compiled paths pay for no copy.
+    bool keep_written_values() const { return keep_written_values_; }
+    void set_keep_written_values(bool on) { keep_written_values_ = on; }
+
     // ``(current id, tensor)`` for every write that landed outside the trace,
     // in first-write order — what a compiled call has to carry back.  The
     // tensor is the one written, which may be a view the call took of the
@@ -456,6 +472,16 @@ private:
     // trace reads: ``target`` is one, or a view of the same buffer is.  A view
     // made in the trace of an outside buffer holds no bytes of its own.
     bool lands_outside(const TensorImplPtr& target) const;
+    // Whether ``target`` is a view of a tensor the call made.
+    bool lands_in_made(const TensorImplPtr& target) const;
+    // ``on_inplace_write`` for a write that :meth:`lands_outside`: keeps the
+    // value of what can put it back.
+    void keep_outside(const TensorImplPtr& target);
+    // The ``wanted`` member of ``target``'s Metal family (``target`` itself
+    // first) that is the whole buffer and that a write through ``target``
+    // re-derives; ``nullptr`` when there is none.
+    TensorImplPtr whole_member(const TensorImplPtr& target,
+                               const std::function<bool(const TensorImpl*)>& wanted) const;
     // Whether the compiled call owes ``target``'s write itself: no written
     // tensor that is ``target``'s whole buffer holds it already.
     bool carried(const TensorImplPtr& target) const;
@@ -499,6 +525,9 @@ private:
     // (tensor from outside the trace, a copy of it from before its first
     // in-place write), in write order — see :meth:`restore_outside_writes`.
     std::vector<std::pair<TensorImplPtr, TensorImplPtr>> outside_originals_;
+    // The same for what the call made — see :meth:`refuse_kept_writes`.
+    std::vector<std::pair<TensorImplPtr, TensorImplPtr>> made_originals_;
+    bool keep_written_values_ = false;
     // Owning: the call's arguments (``watch``), keyed by raw pointer.
     std::unordered_map<TensorImpl*, TensorImplPtr> watched_;
     bool redraw_rng_ = true;

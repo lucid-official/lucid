@@ -346,14 +346,18 @@ def _compile_step_entry(
     graph = tracer.graph
     maybe_probe_for_graph(graph)
 
-    ext = tracer.external_feeds
+    found = tracer.read_id(_unwrap(loss_t)) if isinstance(loss_t, Tensor) else None
+    # Before ``outside_writes``, which asks what else still holds a tensor the
+    # call made: the loss does not, it is made anew on every run.
+    del traced, loss_t
+
     writes = outside_writes(tracer, [_unwrap(t) for t in leaf_tensors(x_args, {})])
     if isinstance(writes, str):
         _fallback_notice("argument-write", writes)
         return None
     write_ids, written = writes
+    ext = tracer.external_feeds
 
-    found = tracer.read_id(_unwrap(loss_t)) if isinstance(loss_t, Tensor) else None
     if found is None or model_has_cumulative_bn(model):
         return None
     loss_id = int(found)

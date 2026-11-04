@@ -270,11 +270,48 @@ py::object id_or_none(lucid::compile::TensorId id) {
     return py::cast(id);
 }
 
+// What a finished trace does about the in-place writes it saw.
+void bind_tracer_writes(py::class_<lucid::compile::Tracer>& tracer) {
+    using lucid::compile::Tracer;
+
+    tracer
+        .def_property("keep_written_values", &Tracer::keep_written_values,
+                      &Tracer::set_keep_written_values,
+                      "Whether restore_outside_writes keeps what the trace wrote for "
+                      "retained_values, for a caller that reads a traced value's contents "
+                      "(Core ML).")
+        .def(
+            "refuse_kept_writes",
+            [](Tracer& t) {
+                const auto* type = py::detail::get_type_info(typeid(lucid::TensorImpl));
+                t.refuse_kept_writes([type](const lucid::TensorImpl* impl) {
+                    return static_cast<bool>(py::detail::get_object_handle(impl, type));
+                });
+            },
+            "Mark the recording unsupported if Python still holds a tensor the call "
+            "made and wrote in place, or a view of it, and put each such tensor back. "
+            "Call once the call's result has been dropped.")
+        .def(
+            "outside_writes",
+            [](const Tracer& t) {
+                py::list out;
+                for (const auto& [tid, impl] : t.outside_writes())
+                    out.append(py::make_tuple(tid, impl));
+                return out;
+            },
+            "(current id, TensorImpl) for every write that landed outside the trace "
+            "and that a compiled call has to carry back, in first-write order.")
+        .def("restore_outside_writes", &Tracer::restore_outside_writes,
+             "Put every tensor from outside the trace that it wrote in place "
+             "back to its value from before the trace.");
+}
+
 void bind_tracer_class(py::module_& m) {
     using lucid::compile::Tracer;
 
-    py::class_<Tracer>(m, "Tracer")
-        .def(py::init<>())
+    py::class_<Tracer> tracer(m, "Tracer");
+    bind_tracer_writes(tracer);
+    tracer.def(py::init<>())
         .def_property_readonly("graph", &Tracer::graph, py::return_value_policy::reference_internal)
         .def_property("redraw_rng", &Tracer::redraw_rng, &Tracer::set_redraw_rng,
                       "Whether default-generator draws become feeds drawn again on "
@@ -291,19 +328,6 @@ void bind_tracer_class(py::module_& m) {
             py::arg("impl"),
             "Whether ``impl`` is a constant the trace made itself, shared with "
             "nothing outside it.")
-        .def(
-            "outside_writes",
-            [](const Tracer& t) {
-                py::list out;
-                for (const auto& [tid, impl] : t.outside_writes())
-                    out.append(py::make_tuple(tid, impl));
-                return out;
-            },
-            "(current id, TensorImpl) for every tensor from outside the trace "
-            "that the trace wrote in place, in first-write order.")
-        .def("restore_outside_writes", &Tracer::restore_outside_writes,
-             "Put every tensor from outside the trace that it wrote in place "
-             "back to its value from before the trace.")
         .def("watch", &Tracer::watch, py::arg("impl"),
              "Declare an argument of the traced call: a host read of it marks the "
              "recording unsupported even before an op has consumed it.")

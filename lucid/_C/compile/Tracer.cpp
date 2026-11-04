@@ -18,6 +18,7 @@
 #include <algorithm>
 
 #include "../backend/Dispatcher.h"
+#include "../core/StridedCopy.h"
 #include "../core/TensorImpl.h"
 
 namespace lucid::compile {
@@ -39,6 +40,24 @@ TensorImplPtr snapshot(const TensorImplPtr& impl) {
 // other view of the buffer changes, ``t``'s value includes.
 bool whole_buffer(const TensorImpl& t) {
     return t.allocation_offset() == 0 && t.is_contiguous() && t.nbytes() == t.allocation_nbytes();
+}
+
+// Whether two of ``t``'s elements are one byte (``expand``, ``unfold``): only
+// ``fill_`` writes through such a view, and ``copy_from`` refuses it.
+bool repeats_elements(const TensorImpl& t) {
+    return !t.is_contiguous() && strided::overlaps_itself(t.shape(), t.stride());
+}
+
+// Keeps ``target``'s current value in ``originals`` unless it is there already;
+// answers the copy when it made one.
+TensorImplPtr keep_original(std::vector<std::pair<TensorImplPtr, TensorImplPtr>>& originals,
+                            const TensorImplPtr& target) {
+    if (std::any_of(originals.begin(), originals.end(),
+                    [&](const auto& kv) { return kv.first.get() == target.get(); }))
+        return nullptr;
+    TensorImplPtr before = snapshot(target);
+    originals.emplace_back(target, before);
+    return before;
 }
 }  // namespace
 
@@ -261,20 +280,80 @@ void Tracer::on_inplace_write(const TensorImplPtr& target, const TensorImplPtr& 
     constant_write_ = made_here(value.get()) && !sees(value.get());
     // ``target`` holds ``value`` now, whatever it held before.
     stale_.erase(target.get());
-    if (const SharedStorage* buffer = target->metal_shared())
+    if (const SharedStorage* buffer = target->shared_buffer())
         shared_writers_[buffer->cpu_ptr] = target;
     if (made_here(target.get())) {
         write_made(target, value);
         return;
     }
-    // Landing in bytes a tensor from outside reads, and not written yet in
-    // this trace: keep its current value to put back later.
-    const bool first = std::none_of(outside_originals_.begin(), outside_originals_.end(),
-                                    [&](const auto& kv) { return kv.first.get() == target.get(); });
-    if (first && lands_outside(target))
-        outside_originals_.emplace_back(target, snapshot(target));
+    // Landing in bytes a tensor from outside reads: keep what puts them back.
+    const auto made = [&](const TensorImpl* impl) { return made_here(impl); };
+    if (lands_outside(target))
+        keep_outside(target);
+    else if (lands_in_made(target) && !whole_member(target, made))
+        keep_original(made_originals_, target);
     feed_id(target);
     impl_to_id_[target.get()] = written_id(value);
+}
+
+TensorImplPtr Tracer::whole_member(const TensorImplPtr& target,
+                                   const std::function<bool(const TensorImpl*)>& wanted) const {
+    if (target->family_key() == nullptr)
+        return nullptr;
+    if (wanted(target.get()) && whole_buffer(*target))
+        return target;
+    for (const auto& member : target->live_views()) {
+        if (wanted(member.get()) && whole_buffer(*member) && member->dtype() == target->dtype())
+            return member;
+    }
+    return nullptr;
+}
+
+void Tracer::keep_outside(const TensorImplPtr& target) {
+    const auto outside = [&](const TensorImpl* impl) { return from_outside(impl); };
+    // A write through a Metal view re-derives the member that is the whole
+    // buffer (``trace_gpu_member_write``): its value holds the write and its
+    // copy puts it back, however many temporaries reach it.  Every ``buf[i] =
+    // v`` makes two, and each would be a copy of its own and an output on
+    // every run.
+    if (const TensorImplPtr carrier = whole_member(target, outside)) {
+        keep_original(outside_originals_, carrier);
+        return;
+    }
+    if (!repeats_elements(*target)) {
+        keep_original(outside_originals_, target);
+        return;
+    }
+    // The compiled call has no way to copy a value into such a view, and neither
+    // does the restore: the tensors it was taken from put its write back.
+    mark_unsupported("an in-place write through a view whose elements overlap (expand, unfold) "
+                     "has no one value to carry back to the next call");
+    for (const auto& member : target->live_views()) {
+        if (from_outside(member.get()) && !repeats_elements(*member))
+            keep_original(outside_originals_, member);
+    }
+}
+
+bool Tracer::lands_in_made(const TensorImplPtr& target) const {
+    const auto members = target->live_views();
+    return std::any_of(members.begin(), members.end(),
+                       [&](const TensorImplPtr& member) { return made_here(member.get()); });
+}
+
+void Tracer::refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held) {
+    for (auto it = made_originals_.rbegin(); it != made_originals_.rend(); ++it) {
+        const auto members = it->first->live_views();
+        if (!held(it->first.get()) &&
+            std::none_of(members.begin(), members.end(),
+                         [&](const TensorImplPtr& member) { return held(member.get()); }))
+            continue;
+        mark_unsupported("a tensor the call made is still held after the call and was written "
+                         "in place, so a compiled call would start it over every time");
+        // Whatever runs next is the first write it sees.  ``fill_`` is the only
+        // write through repeated elements, and running it again overwrites them.
+        if (!repeats_elements(*it->first))
+            it->first->copy_from(*it->second);
+    }
 }
 
 bool Tracer::from_outside(const TensorImpl* impl) const {
@@ -326,7 +405,9 @@ TensorId Tracer::feed_id(const TensorImplPtr& impl) {
 void Tracer::write_made(const TensorImplPtr& target, const TensorImplPtr& value) {
     // Nothing outside the trace shares ``target``, so the write is not one a
     // compiled call carries back: it is the next value of a constant when
-    // ``value`` was also made here.
+    // ``value`` was also made here.  Unless something outside turns out to hold
+    // it after all (``refuse_kept_writes``), which is why the value goes on file.
+    const TensorImplPtr before = keep_original(made_originals_, target);
     const auto it = impl_to_id_.find(target.get());
     if (it == impl_to_id_.end() && made_here(value.get()) && !sees(value.get()))
         return;
@@ -335,7 +416,7 @@ void Tracer::write_made(const TensorImplPtr& target, const TensorImplPtr& value)
         // keep the value from before it, which the buffer is about to lose.
         const auto feed = external_feeds_.find(it->second);
         if (feed != external_feeds_.end() && feed->second.get() == target.get())
-            feed->second = snapshot(target);
+            feed->second = before ? before : snapshot(target);
     }
     impl_to_id_[target.get()] = written_id(value);
 }
@@ -363,7 +444,7 @@ void Tracer::on_stale_view(const TensorImplPtr& view) {
 bool Tracer::reads_a_shared_write(const TensorImpl* impl) const {
     if (shared_writers_.empty())
         return false;
-    const SharedStorage* buffer = impl->metal_shared();
+    const SharedStorage* buffer = impl->shared_buffer();
     if (buffer == nullptr)
         return false;
     const auto writer = shared_writers_.find(buffer->cpu_ptr);
@@ -396,12 +477,14 @@ void Tracer::restore_outside_writes() {
         if (carried(target))
             refuse_stale(target.get());
     }
-    // What the trace wrote stays readable under the id it wrote, for a caller
+    // What the trace wrote stays readable under the id it wrote, for the caller
     // that takes a traced value's contents (retained_values): the tensor is
     // about to stop holding it.
-    for (const auto& [target, before] : outside_originals_) {
-        if (buffer_values_.count(target.get()) == 0)
-            buffer_values_[target.get()] = snapshot(target);
+    if (keep_written_values_) {
+        for (const auto& [target, before] : outside_originals_) {
+            if (buffer_values_.count(target.get()) == 0)
+                buffer_values_[target.get()] = snapshot(target);
+        }
     }
     // Latest first: each tensor has one entry, its value from before the
     // trace's first write to it, and a tensor that overlaps an earlier one
