@@ -459,10 +459,10 @@ private:
     // Whether the compiled call owes ``target``'s write itself: no written
     // tensor that is ``target``'s whole buffer holds it already.
     bool carried(const TensorImplPtr& target) const;
-    // Whether ``impl`` is a Metal shared buffer under a name other than the
-    // last one the trace wrote it through.  Two such tensors share no view
-    // family, so a write to one hands no stale view to the tracer, and the
-    // bytes read at the next run are from before the write.
+    // Whether ``impl`` is a Metal shared buffer under a name outside the view
+    // family the trace last wrote it through.  Two such tensors share nothing
+    // but the bytes, so a write to one hands no stale view to the tracer, and
+    // the bytes a run reads are from before the write.
     bool reads_a_shared_write(const TensorImpl* impl) const;
     // ``impl``'s id, minting a feed for it when the trace has not seen it.
     TensorId feed_id(const TensorImplPtr& impl);
@@ -517,8 +517,8 @@ private:
     // owns them.  The complement of this and ``made_`` is what came from outside.
     std::unordered_set<TensorImpl*> produced_;
     // For each Metal shared buffer the trace wrote, the tensor it last wrote it
-    // through (see ``reads_a_shared_write``).  Only compared, never read through.
-    std::unordered_map<const void*, const TensorImpl*> shared_writers_;
+    // through (see ``reads_a_shared_write``).
+    std::unordered_map<const void*, TensorImplPtr> shared_writers_;
     // Owning: the views of a tensor written in place whose recorded value is
     // from before the write (see ``on_stale_view``).  Owning so a freed view's
     // address cannot be taken for a stale one.

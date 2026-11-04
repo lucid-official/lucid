@@ -262,7 +262,7 @@ void Tracer::on_inplace_write(const TensorImplPtr& target, const TensorImplPtr& 
     // ``target`` holds ``value`` now, whatever it held before.
     stale_.erase(target.get());
     if (const SharedStorage* buffer = target->metal_shared())
-        shared_writers_[buffer->cpu_ptr] = target.get();
+        shared_writers_[buffer->cpu_ptr] = target;
     if (made_here(target.get())) {
         write_made(target, value);
         return;
@@ -367,7 +367,11 @@ bool Tracer::reads_a_shared_write(const TensorImpl* impl) const {
     if (buffer == nullptr)
         return false;
     const auto writer = shared_writers_.find(buffer->cpu_ptr);
-    return writer != shared_writers_.end() && writer->second != impl;
+    if (writer == shared_writers_.end() || writer->second.get() == impl)
+        return false;
+    // Within one family the stale views say which members a write left behind.
+    const auto family = impl->family_id();
+    return family == 0 || family != writer->second->family_id();
 }
 
 void Tracer::refuse_stale(const TensorImpl* impl) {
