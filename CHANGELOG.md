@@ -73,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - build tables for the default device (LCD-849)
 
+- `create_model` under `lucid.set_default_device("metal")` gives a model whole on Metal. I-JEPA, V-JEPA and Stable Diffusion no longer raise on float64 at build, and Transformer, NCSN, DiT and learned-variance DDPM no longer leave a table on the CPU.
+
 ### Performance
 
 - `_C.engine` (`Linear`, `ConvNd`, `ConvTransposeNd`, `LayerNorm`, `RMSNorm`, `BatchNormNd`, `GroupNorm`, `BatchNormEval`, `GlobalResponseNorm`, `Bilinear`): thread `needs_input_grad` (`grad_mask`) and `kGradReads` through fused CPU/Metal backward kernels and `apply_for_graph`, skipping unneeded `dx`/`dW`/`db` GEMMs, convolutions, reductions, and buffer allocations (LCD-697).
@@ -91,6 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - stop depending on one-off weight converters
 - let the zoo stage define its own command-line options
 - `lucid-audit` is scoped by package (`--<package>`, `--no-<package>`, children included) and the model zoo is a package (`--models`, included by default, `--no-models` leaves it out). The zoo runs family by family on Metal by default (`--zoo-device cpu` to change), under a memory budget taken from the machine. Baselines are written only by a run that covers everything, and only `--tests-only` can fail the line coverage floor. `--subsystem` and `--list-subsystems` are removed (use `--list-packages`), `--no-metal` is now `--cpu-only`, and `lucid-audit --models` replaces `tools/verify_zoo.py`.
+- `F.sinusoidal_embedding`, `F.sinusoidal_embedding_2d`, `make_beta_schedule`, `make_sigma_schedule`, `diffusion_posterior_constants`, `flow_prior_sample`, `sample_point_coords` and `DDPMScheduler` default `device` to `None`, the current default device, instead of `"cpu"`. Behaviour under a CPU default is unchanged.
 
 ---
 
