@@ -4,6 +4,61 @@ Developer and CI tooling for Lucid. Nothing here is imported by `lucid/`.
 Most scripts carry their own usage in their module docstring; this file
 documents the ones whose rules other people's work depends on.
 
+## Rule registry
+
+`tools/rules/` holds rules as records in `registry/*.toml`, one file per domain,
+and answers what prose could not: is this rule enforced, and can its check fail.
+TOML because the hook and push paths must not fail on a missing package.
+
+    python -m tools.rules list --verdict         # every rule, how far it is enforced
+    python -m tools.rules show H1                # one rule, with why
+    python -m tools.rules run --level push       # the checks one level runs, whole tree
+    python -m tools.rules run --level push --range A..B    # what those commits changed
+    python -m tools.rules run --level commit --staged      # what the index changes
+    python -m tools.rules audit                  # is each claim true, can each check fail
+    python -m tools.rules audit --check numpy-h4 --rule H4 # only these controls
+
+Every check exits **0 passes, 1 violation, 2 cannot measure**; the run returns
+the worst, and 2 is never read as a pass. A crash, a killed process and a test
+that was skipped, deselected or not collected are all 2.
+
+With `--staged`, a check with `--staged` in its `run` reads the blobs itself. Any
+other check reads the working copy, so it exits 2, naming the path, when that
+copy is not what is staged. A check with `--staged` has nothing to say without it.
+
+A `[[rule]]` holds exactly one of `enforce` with a `control`, `advisory = "<why
+no check can exist>"`, or `pending = "LCD-n"`; anything else fails load. A rule
+with `gap` is enforced only partly.
+
+| `audit` section | exit 1 | exit 2 |
+|---|---|---|
+| controls | a check stayed green on its seed, went red for another reason, or left the seed outside its trigger; a test node failed | a control could not run; a check is red on the near miss; a test node did not run |
+| wiring | a claimed level does not name the tool, a `pending` level now does, a trigger or scope glob matches no file | |
+| allowlists | a table's size differs from its `ceiling` | a table could not be read |
+| budgets | a ceiling is passed; the `pending` count fell and its ceiling did not | a budget's paths match nothing |
+
+**What a green audit does not prove.**
+
+- Wiring proves that a hook, script or workflow *names* the tool outside a comment
+  (or names `tools.rules run --level <level>`), not that it runs it. `exit 0` above
+  the line or a job with `if: false` still passes. `.pre-commit-config.yaml` counts
+  for nothing: it never runs.
+- A test node is proven to run and pass, not to contain an assertion. An empty body
+  passes.
+- `pending = "LCD-n"` is checked for shape; the tracker is out of reach.
+
+**Adding a rule.** Write the record. Each check it claims needs a control: `seed`
+(the tool and `tree` in a scratch directory; the `clean` near miss at `path` must
+pass, `text` there must fail with `expect` in the output) or `pytest` (nodes that
+assert the failure). A claimed `test` level's own nodes run with the controls. A
+seed that may not be written down in the file, because the file is held to the
+rule, is a list of parts. Seed the mode the level really calls, and below the top
+of the tree. A new kind of check or control is a subclass.
+
+Tests: `.venv/bin/python3 -m pytest tools/test_rules.py`, exposed to CI by
+`lucid/test/unit/test_rules_tooling.py`. Its mutant cases fail when a broken line
+goes unseen; add one when you add a way for a claim to be false.
+
 ## Quality gate
 
 `tools/quality_gate/` plus the committed `tools/quality_baseline.json`: a
