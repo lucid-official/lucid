@@ -243,6 +243,26 @@ CASES: list[Any] = [
         {"sample_size": 8, "hidden_size": 32, "depth": 1, "num_heads": 4, "num_classes": _CLASSES},
         _images(8, channels=4),
     ),
+    # One positive per label; the generator draws ``gen_per_label`` of its
+    # own and drifts them in the raw space (no feature encoder to build).
+    (
+        "drifting",
+        "drifting_base_2_gen",
+        {
+            "sample_size": 8,
+            "hidden_size": 32,
+            "cond_dim": 32,
+            "depth": 1,
+            "num_heads": 4,
+            "num_classes": _CLASSES,
+            "noise_classes": 4,
+            "noise_coords": 2,
+            "n_cls_tokens": 2,
+            "gen_per_label": 4,
+            "use_mae": False,
+        },
+        _images(8, channels=4),
+    ),
 ]
 
 

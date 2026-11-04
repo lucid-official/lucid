@@ -179,6 +179,15 @@ def _flat(cfg: Any, seed: int) -> tuple[tuple[Any, ...], dict[str, Any]]:
     return (lucid.randn(BATCH, int(cfg.input_dim)).to(DEV),), {}
 
 
+def _class_conditional(cfg: Any, seed: int) -> tuple[tuple[Any, ...], dict[str, Any]]:
+    """A noise / positive batch and its labels — Drifting has no null class."""
+    lucid.manual_seed(seed)
+    side = int(cfg.sample_size)
+    x = lucid.randn(BATCH, int(cfg.in_channels), side, side)
+    labels = lucid.randint(0, int(cfg.num_classes), (BATCH,))
+    return (x.to(DEV),), {"labels": labels.to(DEV)}
+
+
 def _regions(cfg: Any, seed: int) -> tuple[tuple[Any, ...], dict[str, Any]]:
     """R-CNN: images, their proposals, and the boxes the proposals are scored on.
 
@@ -285,6 +294,20 @@ SPECS: dict[str, Spec] = {
             "num_frames": 4,
         },
         inputs=_action_video,
+    ),
+    # Raw-space drifting: the default latent-MAE-640 encoder dwarfs the
+    # generator, and the loss is exercised without it.
+    "drifting": Spec(
+        {
+            "cond_dim": 32,
+            "noise_classes": 4,
+            "noise_coords": 2,
+            "n_cls_tokens": 2,
+            "gen_per_label": 4,
+            "use_mae": False,
+            "use_convnext": False,
+        },
+        inputs=_class_conditional,
     ),
     "stable_diffusion": Spec(skip=_ROLLOUT + " — 50 denoising steps from a text context"),
     "diamond": Spec(skip=_ROLLOUT + " — imagines a horizon from real frames"),

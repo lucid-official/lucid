@@ -271,6 +271,19 @@ _GENERATIVE: Final[list[ZooRow]] = [
         _call(_randn(2, 3, 16, 16)),
     ),
     _row("mean_flow_base_2_gen", _LATENT, _call(_randn(2, 4, 8, 8), _labels(0, 1))),
+    _row(
+        "drifting_base_2_gen",
+        {
+            **_LATENT,
+            "cond_dim": 32,
+            "noise_classes": 4,
+            "noise_coords": 2,
+            "n_cls_tokens": 2,
+            "gen_per_label": 4,
+            "use_mae": False,
+        },
+        _call(_randn(2, 4, 8, 8), _labels(0, 1)),
+    ),
     _row("dit_small_2_gen", _LATENT, _call(_randn(2, 4, 8, 8), _labels(0, 1))),
     _row(
         "vqvae_gen",
