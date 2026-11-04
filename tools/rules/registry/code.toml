@@ -1,0 +1,133 @@
+# Rules on Python source, and the ratchet on measured debt.
+
+[check.source-rules]
+run = ["{py}", "tools/check_source_rules.py", "{changed}"]
+trigger = ["lucid/**", "tools/**"]
+
+[check.test-source-rules]
+kind = "pytest"
+nodes = [
+    "lucid/test/unit/test_source_rules.py::test_h1_no_future_annotations_import",
+    "lucid/test/unit/test_source_rules.py::test_h5_only_the_fixture_imports_the_reference_framework",
+    "lucid/test/unit/test_source_rules.py::test_h5_the_reference_framework_is_named_in_one_file",
+    "lucid/test/unit/test_source_rules.py::test_h7_no_annotation_is_a_string",
+]
+trigger = ["lucid/**", "tools/**"]
+
+[check.quality-gate]
+run = ["{py}", "-m", "tools.quality_gate", "--fast"]
+trigger = ["lucid/**", "tools/quality_gate/**", "tools/quality_baseline.json"]
+
+[[rule]]
+id = "H1"
+statement = "No `from __future__ import annotations`."
+why = "Python 3.14 evaluates annotations lazily (PEP 649); the import turns them back into strings."
+scope = ["lucid/**", "tools/**"]
+doc = "python"
+enforce = [
+    { level = "commit", check = "source-rules" },
+    { level = "push", check = "source-rules", pending = "LCD-841-R2" },
+    { level = "test", check = "test-source-rules" },
+]
+
+[[rule.control]]
+kind = "seed"
+check = "source-rules"
+tree = ["lucid/test/_fixtures/ref_framework.py"]
+path = "lucid/_seed.py"
+text = "from __future__ import annotations\n"
+expect = '\[future-annotations\]'
+
+[[rule.control]]
+kind = "pytest"
+check = "test-source-rules"
+nodes = [
+    "lucid/test/unit/test_source_rules.py::test_each_rule_reports_its_violation[future-annotations]",
+]
+
+[[rule]]
+id = "H5"
+statement = """
+The reference framework's name appears in no source, comment, docstring or message outside
+lucid/test/_fixtures/ref_framework.py; other tests take the `ref` fixture."""
+why = "Lucid stands on its own; a named dependency in its source is one a user can trip over."
+scope = ["lucid/**"]
+doc = "python"
+enforce = [
+    { level = "commit", check = "source-rules" },
+    { level = "push", check = "source-rules", pending = "LCD-841-R2" },
+    { level = "test", check = "test-source-rules" },
+]
+
+[[rule.control]]
+kind = "seed"
+check = "source-rules"
+tree = ["lucid/test/_fixtures/ref_framework.py"]
+path = "lucid/_seed.py"
+text = ["import to", "rch\n"]  # in parts: this file is held to the rule it seeds
+expect = '\[ref-import\]'
+
+[[rule.control]]
+kind = "seed"
+check = "source-rules"
+tree = ["lucid/test/_fixtures/ref_framework.py"]
+path = "lucid/_seed.py"
+text = ["# rounds as To", "rch does\n"]
+expect = '\[ref-name\]'
+
+[[rule.control]]
+kind = "pytest"
+check = "test-source-rules"
+nodes = [
+    "lucid/test/unit/test_source_rules.py::test_each_rule_reports_its_violation[ref-import0]",
+    "lucid/test/unit/test_source_rules.py::test_each_rule_reports_its_violation[ref-name]",
+]
+
+[[rule]]
+id = "H7"
+statement = "No string annotations; a name used only for typing goes under TYPE_CHECKING."
+why = "PEP 649 makes the quotes unnecessary, and a string hides the name from every checker."
+scope = ["lucid/**"]
+doc = "python"
+enforce = [
+    { level = "commit", check = "source-rules" },
+    { level = "push", check = "source-rules", pending = "LCD-841-R2" },
+    { level = "test", check = "test-source-rules" },
+]
+
+[[rule.control]]
+kind = "seed"
+check = "source-rules"
+tree = ["lucid/test/_fixtures/ref_framework.py"]
+path = "lucid/_seed.py"
+text = "def f(x: 'Tensor') -> None: ...\n"
+expect = '\[string-annotation\]'
+
+[[rule.control]]
+kind = "pytest"
+check = "test-source-rules"
+nodes = [
+    "lucid/test/unit/test_source_rules.py::test_each_rule_reports_its_violation[string-annotation]",
+]
+
+[[rule]]
+id = "S22"
+statement = "Measured debt cannot rise."
+why = "Debt that can rise unnoticed always does; the ratchet holds it to what is recorded."
+scope = ["lucid/**"]
+doc = "global"
+enforce = [
+    { level = "commit", check = "quality-gate" },
+    { level = "push", check = "quality-gate", pending = "LCD-841-R2" },
+    { level = "ci", check = "quality-gate" },
+]
+
+# One seed per collector --fast runs.  Nothing else runs this test file.
+[[rule.control]]
+kind = "pytest"
+check = "quality-gate"
+nodes = [
+    "tools/test_quality_gate.py::test_fast_check_fails_on_seeded_slop[except-pass]",
+    "tools/test_quality_gate.py::test_fast_check_fails_on_seeded_slop[type-ignore]",
+    "tools/test_quality_gate.py::test_fast_check_fails_on_seeded_slop[long-function]",
+]

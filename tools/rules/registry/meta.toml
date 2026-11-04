@@ -1,0 +1,23 @@
+# Ceilings on the ruleset itself.  Each can only be raised here, in the diff.
+
+[budget.registry-bytes]
+unit = "bytes"
+ceiling = 61440
+paths = ["tools/rules/registry/*.toml"]
+
+[budget.code-lines]
+unit = "lines"
+ceiling = 900
+paths = ["tools/rules/*.py"]
+
+# Absent until LCD-841-R6 generates it.
+[budget.agents-md-bytes]
+unit = "bytes"
+ceiling = 12288
+paths = ["AGENTS.md"]
+absent_ok = true
+
+# The inventory import (LCD-841-R5) sets this to its count; after that it only falls.
+[budget.pending-rules]
+unit = "pending-rules"
+ceiling = 0
