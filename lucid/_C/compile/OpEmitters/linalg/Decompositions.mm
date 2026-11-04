@@ -5,7 +5,7 @@
 //   - ``solve_triangular`` — unrolled row-by-row forward / back substitution
 //   - ``cholesky``         — unrolled column-by-column Cholesky-Banachiewicz
 //   - ``qr``               — unrolled Householder QR (LAPACK slarfg reflector sign)
-//   - ``eigh``             — cyclic Jacobi symmetric eigendecomposition
+//   - ``eigh``             — one-sided Jacobi on the matrix shifted to positive definite
 //   - ``svd``              — one-sided Hestenes-Jacobi singular value decomposition
 //   - ``pinv``             — Moore-Penrose pseudoinverse via one-sided Jacobi SVD
 
@@ -31,6 +31,9 @@ namespace {
 
 constexpr std::int64_t kMaxDirectDim = 32;
 constexpr std::int64_t kMaxJacobiDim = 16;
+// Float32's machine epsilon: columns whose cosine is under this are orthogonal
+// as far as their inner product can tell.
+constexpr double kJacobiCosineTol = 1.1920929e-7;
 
 MPSGraphTensor* to_f32(MPSGraph* g, MPSGraphTensor* t) {
     return t.dataType == MPSDataTypeFloat32 ? t
@@ -301,13 +304,24 @@ int jacobi_sweeps(std::int64_t n) {
 
 std::pair<MPSGraphTensor*, MPSGraphTensor*>
 jacobi_cs(MPSGraph* g, MPSGraphTensor* app, MPSGraphTensor* aqq, MPSGraphTensor* apq) {
-    MPSGraphTensor* eps = [g constantWithScalar:1e-12 dataType:apq.dataType];
+    MPSGraphTensor* eps = [g constantWithScalar:kJacobiCosineTol dataType:apq.dataType];
     MPSGraphTensor* zero = [g constantWithScalar:0.0 dataType:apq.dataType];
     MPSGraphTensor* one = [g constantWithScalar:1.0 dataType:apq.dataType];
     MPSGraphTensor* neg_one = [g constantWithScalar:-1.0 dataType:apq.dataType];
     MPSGraphTensor* two = [g constantWithScalar:2.0 dataType:apq.dataType];
+    // Relative to the columns' own lengths.  An absolute cut leaves near-parallel
+    // columns unrotated once they are small beside the matrix's largest entry,
+    // which reports a rank-deficient matrix as full rank.
+    MPSGraphTensor* cut =
+        [g multiplicationWithPrimaryTensor:eps
+                           secondaryTensor:
+                               [g squareRootWithTensor:[g multiplicationWithPrimaryTensor:app
+                                                                          secondaryTensor:aqq
+                                                                                     name:nil]
+                                                  name:nil]
+                                      name:nil];
     MPSGraphTensor* active = [g greaterThanWithPrimaryTensor:[g absoluteWithTensor:apq name:nil]
-                                             secondaryTensor:eps
+                                             secondaryTensor:cut
                                                         name:nil];
     MPSGraphTensor* two_apq = [g multiplicationWithPrimaryTensor:two secondaryTensor:apq name:nil];
     MPSGraphTensor* safe_denom = [g selectWithPredicateTensor:active
@@ -370,24 +384,89 @@ std::pair<MPSGraphTensor*, MPSGraphTensor*> rotate_pair(
     return {np, nq};
 }
 
-MPSGraphTensor* replace_two_slices(MPSGraph* g,
-                                   MPSGraphTensor* t,
-                                   NSInteger dim,
-                                   std::int64_t n,
-                                   std::int64_t p,
-                                   std::int64_t q,
-                                   MPSGraphTensor* sp,
-                                   MPSGraphTensor* sq) {
-    std::vector<MPSGraphTensor*> parts;
-    if (p > 0)
-        parts.push_back([g sliceTensor:t dimension:dim start:0 length:p name:nil]);
-    parts.push_back(sp);
-    if (q > p + 1)
-        parts.push_back([g sliceTensor:t dimension:dim start:p + 1 length:q - p - 1 name:nil]);
-    parts.push_back(sq);
-    if (n > q + 1)
-        parts.push_back([g sliceTensor:t dimension:dim start:q + 1 length:n - q - 1 name:nil]);
-    return concat_along(g, parts, dim);
+void svd_one_sided_step(MPSGraph* g,
+                        std::vector<MPSGraphTensor*>& w_cols,
+                        std::vector<MPSGraphTensor*>& v_cols,
+                        std::int64_t p,
+                        std::int64_t q,
+                        NSInteger r_dim) {
+    MPSGraphTensor* wp = w_cols[p];
+    MPSGraphTensor* wq = w_cols[q];
+    MPSGraphTensor* app = [g reductionSumWithTensor:[g squareWithTensor:wp name:nil]
+                                               axes:@[ @(r_dim) ]
+                                               name:nil];
+    MPSGraphTensor* aqq = [g reductionSumWithTensor:[g squareWithTensor:wq name:nil]
+                                               axes:@[ @(r_dim) ]
+                                               name:nil];
+    MPSGraphTensor* apq = [g reductionSumWithTensor:[g multiplicationWithPrimaryTensor:wp
+                                                                       secondaryTensor:wq
+                                                                                  name:nil]
+                                               axes:@[ @(r_dim) ]
+                                               name:nil];
+    auto [c, s] = jacobi_cs(g, app, aqq, apq);
+    std::tie(w_cols[p], w_cols[q]) = rotate_pair(g, w_cols[p], w_cols[q], c, s);
+    std::tie(v_cols[p], v_cols[q]) = rotate_pair(g, v_cols[p], v_cols[q], c, s);
+}
+
+// The kernels divide by the largest entry first.  The rotations decide from
+// inner products, the square of the input's scale, which float32 loses to
+// underflow near 1e-23 and to overflow near 1e19.  A batch member holding a NaN
+// or an inf comes back all NaN: eager raises on one, and a compiled call cannot.
+std::pair<MPSGraphTensor*, MPSGraphTensor*> scale_to_unit(MPSGraph* g, MPSGraphTensor* a) {
+    const NSInteger rank = (NSInteger)a.shape.count;
+    MPSGraphTensor* largest =
+        [g reductionMaximumPropagateNaNWithTensor:[g absoluteWithTensor:a name:nil]
+                                             axes:@[ @(rank - 2), @(rank - 1) ]
+                                             name:nil];
+    MPSGraphTensor* nonzero =
+        [g selectWithPredicateTensor:[g equalWithPrimaryTensor:largest
+                                               secondaryTensor:[g constantWithScalar:0.0
+                                                                            dataType:a.dataType]
+                                                          name:nil]
+                 truePredicateTensor:[g constantWithScalar:1.0 dataType:a.dataType]
+                falsePredicateTensor:largest
+                                name:nil];
+    MPSGraphTensor* scale = [g selectWithPredicateTensor:[g isFiniteWithTensor:largest name:nil]
+                                     truePredicateTensor:nonzero
+                                    falsePredicateTensor:[g constantWithScalar:std::nan("")
+                                                                      dataType:a.dataType]
+                                                    name:nil];
+    return {[g divisionWithPrimaryTensor:a secondaryTensor:scale name:nil], scale};
+}
+
+// The one Jacobi graph: rotations read and write single columns.  Rotating a
+// whole matrix through slice and concat instead (two-sided Jacobi) read each
+// intermediate matrix up to five times per rotation, and two MPSGraph passes
+// walk that fan-out path by path with no visited set: a 6x6 never finished its
+// first run (LCD-838).  First compile here is still superlinear in the kernels
+// sharing a graph (16x16 with 1, 2, 3 kernels: 13 s, 42 s, 93 s on an M4 Max),
+// but has no cliff up to kMaxJacobiDim, so eigh, svd and pinv all use this.
+//
+// Returns the rotated columns and V, given ``a`` from ``scale_to_unit`` and its
+// scale.  Nothing rotates on a NaN, so a poisoned member's V is set by hand; it
+// would otherwise stay the identity, an answer that looks clean.
+std::pair<MPSGraphTensor*, MPSGraphTensor*>
+one_sided_jacobi(MPSGraph* g, MPSGraphTensor* a, MPSGraphTensor* scale, std::int64_t n) {
+    const NSInteger r_dim = (NSInteger)a.shape.count - 2;
+    const NSInteger c_dim = (NSInteger)a.shape.count - 1;
+    std::vector<MPSGraphTensor*> w_cols;
+    w_cols.reserve((std::size_t)n);
+    for (std::int64_t j = 0; j < n; ++j)
+        w_cols.push_back([g sliceTensor:a dimension:c_dim start:j length:1 name:nil]);
+    auto v_cols = make_identity_cols(g, a, n, n);
+    const int sweeps = jacobi_sweeps(n);
+    for (int sw = 0; sw < sweeps && n > 1; ++sw) {
+        for (std::int64_t p = 0; p < n - 1; ++p) {
+            for (std::int64_t q = p + 1; q < n; ++q)
+                svd_one_sided_step(g, w_cols, v_cols, p, q, r_dim);
+        }
+    }
+    MPSGraphTensor* v_mat = [g selectWithPredicateTensor:[g isFiniteWithTensor:scale name:nil]
+                                     truePredicateTensor:concat_along(g, v_cols, c_dim)
+                                    falsePredicateTensor:[g constantWithScalar:std::nan("")
+                                                                      dataType:a.dataType]
+                                                    name:nil];
+    return {concat_along(g, w_cols, c_dim), v_mat};
 }
 
 std::pair<MPSGraphTensor*, MPSGraphTensor*>
@@ -413,50 +492,61 @@ MPSGraphTensor* symmetrize_from_triangle(MPSGraph* g, MPSGraphTensor* a, bool up
     return [g subtractionWithPrimaryTensor:sum secondaryTensor:diag name:nil];
 }
 
-MPSGraphTensor* eigh_jacobi_step(MPSGraph* g,
-                                 MPSGraphTensor* s_mat,
-                                 std::vector<MPSGraphTensor*>& v_cols,
-                                 std::int64_t n,
-                                 std::int64_t p,
-                                 std::int64_t q) {
-    const NSInteger r_dim = (NSInteger)s_mat.shape.count - 2;
-    const NSInteger c_dim = (NSInteger)s_mat.shape.count - 1;
-    MPSGraphTensor* rp = [g sliceTensor:s_mat dimension:r_dim start:p length:1 name:nil];
-    MPSGraphTensor* rq = [g sliceTensor:s_mat dimension:r_dim start:q length:1 name:nil];
-    MPSGraphTensor* app = [g sliceTensor:rp dimension:c_dim start:p length:1 name:nil];
-    MPSGraphTensor* apq = [g sliceTensor:rp dimension:c_dim start:q length:1 name:nil];
-    MPSGraphTensor* aqq = [g sliceTensor:rq dimension:c_dim start:q length:1 name:nil];
-    auto [c, s] = jacobi_cs(g, app, aqq, apq);
-    std::tie(rp, rq) = rotate_pair(g, rp, rq, c, s);
-    s_mat = replace_two_slices(g, s_mat, r_dim, n, p, q, rp, rq);
-    MPSGraphTensor* cp = [g sliceTensor:s_mat dimension:c_dim start:p length:1 name:nil];
-    MPSGraphTensor* cq = [g sliceTensor:s_mat dimension:c_dim start:q length:1 name:nil];
-    std::tie(cp, cq) = rotate_pair(g, cp, cq, c, s);
-    s_mat = replace_two_slices(g, s_mat, c_dim, n, p, q, cp, cq);
-    std::tie(v_cols[p], v_cols[q]) = rotate_pair(g, v_cols[p], v_cols[q], c, s);
-    return s_mat;
-}
-
 std::pair<MPSGraphTensor*, MPSGraphTensor*>
 emit_eigh_factors(MPSGraph* g, MPSGraphTensor* a, std::int64_t n, bool upper) {
     const NSInteger rank = (NSInteger)a.shape.count;
-    MPSGraphTensor* s_mat = symmetrize_from_triangle(g, a, upper);
-    auto v_cols = make_identity_cols(g, a, n, n);
-    const int sweeps = jacobi_sweeps(n);
-    for (int sw = 0; sw < sweeps && n > 1; ++sw) {
-        for (std::int64_t p = 0; p < n - 1; ++p) {
-            for (std::int64_t q = p + 1; q < n; ++q)
-                s_mat = eigh_jacobi_step(g, s_mat, v_cols, n, p, q);
-        }
-    }
-    MPSGraphTensor* diag = [g bandPartWithTensor:s_mat numLower:0 numUpper:0 name:nil];
-    MPSGraphTensor* w_keep = [g reductionSumWithTensor:diag axes:@[ @(rank - 1) ] name:nil];
+    const NSInteger r_dim = rank - 2;
+    const NSInteger c_dim = rank - 1;
+    auto [unit, scale] = scale_to_unit(g, symmetrize_from_triangle(g, a, upper));
+    // One-sided Jacobi diagonalizes BᵀB, whose eigenvectors are B's only when
+    // B is positive definite, so shift by twice the Gershgorin radius: every
+    // eigenvalue lands in [r, 3r], which also keeps the small ones from being
+    // lost to the squaring.  The price is relative accuracy.  The result is
+    // accurate to eps * ||A||, what a backward-stable solver promises, not to
+    // eps * |lambda|: an eigenpair under eps * ||A|| beside a far larger entry
+    // is rounded away by the shift (LCD-846).
+    MPSGraphTensor* radius =
+        [g reductionMaximumWithTensor:[g reductionSumWithTensor:[g absoluteWithTensor:unit name:nil]
+                                                           axes:@[ @(c_dim) ]
+                                                           name:nil]
+                                 axes:@[ @(r_dim) ]
+                                 name:nil];
+    MPSGraphTensor* shift = [g multiplicationWithPrimaryTensor:[g constantWithScalar:2.0
+                                                                            dataType:a.dataType]
+                                               secondaryTensor:radius
+                                                          name:nil];
+    MPSGraphTensor* eye = concat_along(g, make_identity_cols(g, a, n, n), c_dim);
+    MPSGraphTensor* shifted = [g additionWithPrimaryTensor:unit
+                                           secondaryTensor:[g multiplicationWithPrimaryTensor:shift
+                                                                              secondaryTensor:eye
+                                                                                         name:nil]
+                                                      name:nil];
+    MPSGraphTensor* v_mat = one_sided_jacobi(g, shifted, scale, n).second;
+    // Read the eigenvalues back through the unshifted matrix, which carries none
+    // of the shift's rounding.  Dividing out the vectors' length makes the
+    // quotient second-order in their error; without it, length drift reaches
+    // the eigenvalues at first order.
+    MPSGraphTensor* a_v = [g matrixMultiplicationWithPrimaryTensor:unit
+                                                   secondaryTensor:v_mat
+                                                              name:nil];
+    MPSGraphTensor* numer = [g reductionSumWithTensor:[g multiplicationWithPrimaryTensor:v_mat
+                                                                         secondaryTensor:a_v
+                                                                                    name:nil]
+                                                 axes:@[ @(r_dim) ]
+                                                 name:nil];
+    MPSGraphTensor* denom = [g reductionSumWithTensor:[g squareWithTensor:v_mat name:nil]
+                                                 axes:@[ @(r_dim) ]
+                                                 name:nil];
+    MPSGraphTensor* w_keep = [g divisionWithPrimaryTensor:numer secondaryTensor:denom name:nil];
     NSMutableArray<NSNumber*>* w_sh = [NSMutableArray arrayWithCapacity:(NSUInteger)(rank - 1)];
     for (NSInteger d = 0; d < rank - 2; ++d)
         [w_sh addObject:a.shape[(NSUInteger)d]];
     [w_sh addObject:@(n)];
-    MPSGraphTensor* w = [g reshapeTensor:w_keep withShape:w_sh name:nil];
-    MPSGraphTensor* v_mat = concat_along(g, v_cols, rank - 1);
+    MPSGraphTensor* w = [g reshapeTensor:[g multiplicationWithPrimaryTensor:w_keep
+                                                            secondaryTensor:scale
+                                                                       name:nil]
+                               withShape:w_sh
+                                    name:nil];
     if (n <= 1)
         return {w, v_mat};
     return sort_values_and_cols(g, w, v_mat, false);
@@ -464,49 +554,12 @@ emit_eigh_factors(MPSGraph* g, MPSGraphTensor* a, std::int64_t n, bool upper) {
 
 // ── svd & pinv (One-sided Hestenes-Jacobi) ───────────────────────────
 
-void svd_one_sided_step(MPSGraph* g,
-                        std::vector<MPSGraphTensor*>& w_cols,
-                        std::vector<MPSGraphTensor*>& v_cols,
-                        std::int64_t p,
-                        std::int64_t q,
-                        NSInteger r_dim) {
-    MPSGraphTensor* wp = w_cols[p];
-    MPSGraphTensor* wq = w_cols[q];
-    MPSGraphTensor* app = [g reductionSumWithTensor:[g squareWithTensor:wp name:nil]
-                                               axes:@[ @(r_dim) ]
-                                               name:nil];
-    MPSGraphTensor* aqq = [g reductionSumWithTensor:[g squareWithTensor:wq name:nil]
-                                               axes:@[ @(r_dim) ]
-                                               name:nil];
-    MPSGraphTensor* apq = [g reductionSumWithTensor:[g multiplicationWithPrimaryTensor:wp
-                                                                       secondaryTensor:wq
-                                                                                  name:nil]
-                                               axes:@[ @(r_dim) ]
-                                               name:nil];
-    auto [c, s] = jacobi_cs(g, app, aqq, apq);
-    std::tie(w_cols[p], w_cols[q]) = rotate_pair(g, w_cols[p], w_cols[q], c, s);
-    std::tie(v_cols[p], v_cols[q]) = rotate_pair(g, v_cols[p], v_cols[q], c, s);
-}
-
 std::tuple<MPSGraphTensor*, MPSGraphTensor*, MPSGraphTensor*>
 emit_svd_tall(MPSGraph* g, MPSGraphTensor* a, std::int64_t m, std::int64_t n) {
     const NSInteger rank = (NSInteger)a.shape.count;
     const NSInteger r_dim = rank - 2;
-    const NSInteger c_dim = rank - 1;
-    std::vector<MPSGraphTensor*> w_cols;
-    w_cols.reserve((std::size_t)n);
-    for (std::int64_t j = 0; j < n; ++j)
-        w_cols.push_back([g sliceTensor:a dimension:c_dim start:j length:1 name:nil]);
-    auto v_cols = make_identity_cols(g, a, n, n);
-    const int sweeps = jacobi_sweeps(n);
-    for (int sw = 0; sw < sweeps && n > 1; ++sw) {
-        for (std::int64_t p = 0; p < n - 1; ++p) {
-            for (std::int64_t q = p + 1; q < n; ++q)
-                svd_one_sided_step(g, w_cols, v_cols, p, q, r_dim);
-        }
-    }
-    MPSGraphTensor* w_mat = concat_along(g, w_cols, c_dim);
-    MPSGraphTensor* v_mat = concat_along(g, v_cols, c_dim);
+    auto [unit, scale] = scale_to_unit(g, a);
+    auto [w_mat, v_mat] = one_sided_jacobi(g, unit, scale, n);
     MPSGraphTensor* s_keep =
         [g squareRootWithTensor:[g reductionSumWithTensor:[g squareWithTensor:w_mat name:nil]
                                                      axes:@[ @(r_dim) ]
@@ -525,7 +578,11 @@ emit_svd_tall(MPSGraph* g, MPSGraphTensor* a, std::int64_t m, std::int64_t n) {
     for (NSInteger d = 0; d < rank - 2; ++d)
         [s_sh addObject:a.shape[(NSUInteger)d]];
     [s_sh addObject:@(n)];
-    MPSGraphTensor* s_vec = [g reshapeTensor:s_keep withShape:s_sh name:nil];
+    MPSGraphTensor* s_vec = [g reshapeTensor:[g multiplicationWithPrimaryTensor:s_keep
+                                                                secondaryTensor:scale
+                                                                           name:nil]
+                                   withShape:s_sh
+                                        name:nil];
     if (n > 1) {
         auto [s_sorted, u_sorted] = sort_values_and_cols(g, s_vec, u_mat, true);
         auto [_, v_sorted] = sort_values_and_cols(g, s_vec, v_mat, true);
