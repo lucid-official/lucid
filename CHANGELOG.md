@@ -83,6 +83,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - replay MPSGraph's clone walk before compiling (LCD-838)
 
+- `lucid.compile` no longer hangs on `eigvalsh` and `eigh` of 4x4 and larger, or on full-matrices `svd`. `eigh` shares the one-sided Jacobi graph with `svd` and `pinv`, and returns up to the 16x16 limit.
+
+- Compiled graphs with deep equal-arm diamonds (`x = x * a + x * b` in a loop) no longer stall in MPSGraph's clone walk.
+
+- Compiled `svd`, `svdvals`, `pinv`, `cond` and `matrix_rank` no longer return wrong values for inputs with entries around 1e-7 or smaller.
+
+- A compiled `eigh` or `svd` call on NaN or inf input returns all NaN for that batch member, V included, and leaves the other members untouched.
+
 ### Performance
 
 - `_C.engine` (`Linear`, `ConvNd`, `ConvTransposeNd`, `LayerNorm`, `RMSNorm`, `BatchNormNd`, `GroupNorm`, `BatchNormEval`, `GlobalResponseNorm`, `Bilinear`): thread `needs_input_grad` (`grad_mask`) and `kGradReads` through fused CPU/Metal backward kernels and `apply_for_graph`, skipping unneeded `dx`/`dW`/`db` GEMMs, convolutions, reductions, and buffer allocations (LCD-697).
