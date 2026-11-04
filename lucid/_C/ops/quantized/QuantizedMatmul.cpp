@@ -152,6 +152,22 @@ TensorImplPtr quantized_matmul_op(const TensorImplPtr& x,
         ::mlx::core::quantized_matmul(xa, wa, sa, ba, transpose, group_size, bits);
     TensorImplPtr result = wrap(std::move(out), x->dtype());
 
+    // 3.5 lucid.compile(): make this fused low-precision GEMM visible to the
+    // active tracer.  It has no MPSGraph emitter AND its result depends on the
+    // *live activation* x — so a compiled graph that silently baked it as a
+    // trace-time constant would ignore new inputs (compiled(x2) == compiled(x1),
+    // a silently-wrong output).  Recording it with a non-empty input list makes
+    // the MpsBuilder find no emitter and abort the build, so the whole signature
+    // falls back cleanly to eager (see MpsBuilder.mm's find_emitter gate).
+    // dequantize is deliberately NOT recorded: its inputs are constant weights,
+    // so baking its result is harmless and keeps that path compilable.
+    //
+    // The node must exist before wire_autograd, whose own on_op_io would
+    // otherwise attach this op's I/O to the previous op's node.
+    auto* tracer = ::lucid::compile::current_tracer();
+    if (tracer)
+        tracer->on_op_enter("quantized_matmul", Device::GPU, x->dtype(), result->shape());
+
     if (GradMode::is_enabled() && x->requires_grad()) {
         w->check_not_inference_saved("quantized_matmul");
         scales->check_not_inference_saved("quantized_matmul");
@@ -173,18 +189,9 @@ TensorImplPtr quantized_matmul_op(const TensorImplPtr& x,
     kernel::NaryKernel<QuantizedMatmulBackward, 1>::wire_autograd(std::move(bwd), {x}, result,
                                                                   false);
 
-    // 3.5 lucid.compile(): make this fused low-precision GEMM visible to the
-    // active tracer.  It has no MPSGraph emitter AND its result depends on the
-    // *live activation* x — so a compiled graph that silently baked it as a
-    // trace-time constant would ignore new inputs (compiled(x2) == compiled(x1),
-    // a silently-wrong output).  Recording it with a non-empty input list makes
-    // the MpsBuilder find no emitter and abort the build, so the whole signature
-    // falls back cleanly to eager (see MpsBuilder.mm's find_emitter gate).
-    // dequantize is deliberately NOT recorded: its inputs are constant weights,
-    // so baking its result is harmless and keeps that path compilable.
-    if (auto* t = ::lucid::compile::current_tracer()) {
-        t->on_op_io({x, w, scales, biases}, result);
-    }
+    // Last write wins: the frozen buffers join the input list wire_autograd recorded.
+    if (tracer)
+        tracer->on_op_io({x, w, scales, biases}, result);
     return result;
 }
 
