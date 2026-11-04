@@ -45,7 +45,12 @@ from lucid.test.audit import _probe, _specs, _surface
 
 needs_metal = pytest.mark.skipif(not metal_available(), reason="compares the CPU with Metal")
 
-#: Ops whose CPU path reads a value in Python where the Metal one does not.
+#: Ops whose CPU path reads the tensor on the host where the Metal one does not, so
+#: only the CPU refuses a phantom.  By design: ``binary_cross_entropy`` and
+#: ``gaussian_nll_loss`` check values on the CPU alone, because a host read in every
+#: loss call stalls every step (the docstring of ``_check_unit_interval``, in
+#: ``lucid/nn/functional/_loss_checks.py``).  ``is_set_to`` compares buffer addresses
+#: on the CPU and view families on Metal.
 _CPU_READS_VALUES: dict[str, frozenset[str]] = {
     "forward": frozenset({"Tensor.is_set_to", "F.binary_cross_entropy", "F.gaussian_nll_loss"}),
     "backward": frozenset({"F.binary_cross_entropy", "F.gaussian_nll_loss"}),
@@ -54,7 +59,10 @@ _CPU_READS_VALUES: dict[str, frozenset[str]] = {
 
 #: The fewest ops each question must have reached.  A sweep that stopped finding
 #: working calls would otherwise pass by looking at nothing.
-_FLOOR = {"forward": 1000, "backward": 500, "second": 250}
+_FLOOR = {"forward": 1000, "backward": 500, "second": 700}
+
+#: Seconds a sweep may take: one process per question, on the slowest machine.
+_SWEEP_TIMEOUT = 600
 
 _READS_A_STORAGE = "not the kind this op reads"
 
@@ -140,8 +148,10 @@ def _second_gradient(x: Tensor, out: object) -> object:
     first = next((t for t in _tensors_in(out) if t.requires_grad), None)
     if first is None:
         return None
-    scalar = (first.abs() if first.is_complex() else first).sum()
-    grad = lucid.autograd.grad(scalar, x, create_graph=True, allow_unused=True)[0]
+    # Squared: under a plain sum a piecewise-linear op's gradient has no graph, so
+    # the sweep would skip it, though its graph-mode backward has run.
+    real = first.abs() if first.is_complex() else first
+    grad = lucid.autograd.grad((real * real).sum(), x, create_graph=True, allow_unused=True)[0]
     if grad is None or not grad.requires_grad:
         return None
     return [grad, lucid.autograd.grad(grad.sum(), x, allow_unused=True)[0]]
@@ -310,6 +320,7 @@ def _sweep(question: str) -> _Findings:
         capture_output=True,
         text=True,
         check=False,
+        timeout=_SWEEP_TIMEOUT,
     )
     assert done.returncode == 0, done.stderr[-2000:]
     return _Findings(**json.loads(done.stdout.splitlines()[-1]))
@@ -344,18 +355,42 @@ def test_a_factory_of_every_family_builds_the_same_under_a_metal_default() -> No
     assert found.real_tensors == []
 
 
+#: ``PhantomStorage{...}``, ``PhantomStorage()``, and ``PhantomStorage p`` however it
+#: is initialised or passed by value.  The definition in ``Storage.h`` is not one.
+_BUILDS_A_PHANTOM = re.compile(
+    r"(?<!struct )\bPhantomStorage\s*[({]|\bPhantomStorage\s+\w+\s*[;={(,)]"
+)
+
+#: What a ``.dtype`` edit has to start from: an extracted one, or a mutable reference
+#: in a visitor.
+_REACHES_INTO_A_PHANTOM = re.compile(r"\bget(_if)?<PhantomStorage>|(?<!const )\bPhantomStorage\s*&")
+
+
 def test_every_phantom_is_made_where_the_dtype_rule_is() -> None:
-    """A storage built by hand would stand in for a tensor Metal cannot hold."""
+    """A storage built or re-tagged by hand would stand in for a tensor Metal cannot hold.
+
+    ``TensorImpl`` is the one place that reaches in: it sizes and tags what it adopts,
+    and a dtype view of one.
+    """
     engine = Path(lucid.__file__).parent / "_C"
-    files = [p for p in engine.rglob("*") if p.suffix in (".h", ".cpp", ".mm")]
+    files = [
+        p
+        for p in engine.rglob("*")
+        if p.suffix in (".h", ".cpp", ".mm") and "test" not in p.relative_to(engine).parts
+    ]
     if not any(p.suffix == ".h" for p in files):
         pytest.skip("engine sources are not shipped with this install")
-    makers = {
-        p.relative_to(engine).as_posix()
+    code = {
+        p.relative_to(engine).as_posix(): re.sub(r"//[^\n]*", "", p.read_text(errors="ignore"))
         for p in files
-        if re.search(r"\bPhantomStorage(\{|\s+\w+\s*;)", p.read_text(errors="ignore"))
     }
-    assert makers == {"core/PhantomMode.h", "backend/PhantomBackend.h"}
+    assert {name for name, text in code.items() if _BUILDS_A_PHANTOM.search(text)} == {
+        "core/PhantomMode.h",
+        "backend/PhantomBackend.h",
+    }
+    assert {name for name, text in code.items() if _REACHES_INTO_A_PHANTOM.search(text)} == {
+        "core/TensorImpl.cpp"
+    }
 
 
 # ── the paths the sweep's single call per op does not take ───────────────────
@@ -509,8 +544,8 @@ def test_a_phantom_gradient_comes_back_across_a_device_move(src, dst) -> None:
 
 @pytest.mark.parametrize(
     "mode, shape",
-    [("bilinear", (1, 2, 4, 4)), ("trilinear", (1, 1, 2, 2, 2))],
-    ids=["bilinear", "trilinear"],
+    [("bilinear", (1, 2, 4, 4)), ("bicubic", (1, 2, 4, 4)), ("trilinear", (1, 1, 2, 2, 2))],
+    ids=["bilinear", "bicubic", "trilinear"],
 )
 def test_a_resample_answers_a_second_gradient(mode, shape, device) -> None:
     with shadow_alloc():
