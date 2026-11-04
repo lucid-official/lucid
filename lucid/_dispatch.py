@@ -560,6 +560,56 @@ def _set_grad(owner: _C_engine.TensorImpl, v: Tensor | None) -> None:
         owner.set_grad(_unwrap(v))
 
 
+def _set_requires_grad(t: Tensor, requires_grad: bool, *, setter: bool) -> None:
+    """Change ``t``'s ``requires_grad`` flag in place, by the leaf rules.
+
+    The flag flips on the tensor's own ``TensorImpl``.  This used to swap in
+    a ``clone_with_grad`` alias, and every holder of the old impl was left
+    behind: an engine optimizer built before the swap kept stepping a tensor
+    that no longer received gradients, so a parameter frozen and unfrozen
+    after the first ``step()`` (a GAN discriminator, a backbone) silently
+    stopped training.  The gradient already accumulated stayed on the old
+    impl too; in place, ``.grad`` survives a toggle.
+
+    Only a leaf's flag is the user's to change.  A computed tensor's flag
+    follows its graph: clearing it would not detach the tensor, so that is
+    refused, as is the property setter on any computed tensor.
+    ``requires_grad_(True)`` on one is a no-op, since it already requires
+    grad.
+
+    Parameters
+    ----------
+    t : Tensor
+        Tensor whose flag changes.
+    requires_grad : bool
+        New flag value.
+    setter : bool
+        ``True`` for the property setter, which refuses any computed
+        tensor; ``False`` for :meth:`Tensor.requires_grad_`.
+
+    Raises
+    ------
+    RuntimeError
+        If ``t`` was computed by an operation and the change is refused, or
+        if ``requires_grad`` is set on a bool or integer tensor.
+    """
+    impl = t._impl
+    if not isinstance(impl, _C_engine.TensorImpl):
+        t._impl = _impl_with_grad(impl, requires_grad)
+        return
+    _check_grad_dtype(impl.dtype, requires_grad)
+    if not impl.is_leaf:
+        if requires_grad and not setter:
+            return
+        hint = (
+            ""
+            if requires_grad
+            else "; to use a computed tensor without gradient tracking, " "take x.detach()"
+        )
+        raise RuntimeError(f"requires_grad can only be changed on a leaf tensor{hint}.")
+    impl._set_requires_grad(requires_grad)
+
+
 def _swap_data(old: _C_engine.TensorImpl, value: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
     """The impl a tensor holding ``old`` takes for ``.data = value``.
 

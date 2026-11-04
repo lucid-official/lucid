@@ -38,6 +38,7 @@
 #include "../autograd/AccumulateGrad.h"
 #include "../autograd/Helpers.h"
 #include "../autograd/Node.h"
+#include "../autograd/TensorHooks.h"
 #include "../compile/Tracer.h"  // 3.5 Phase 1.1: trace I/O wiring at wire_autograd
 #include "../core/Device.h"
 #include "../core/Dtype.h"
@@ -139,8 +140,66 @@ public:
             if (Derived::kKeepsOwnValues)
                 return SavedKind::kEagerValues;
         }
-        const bool holds = !saved_inputs_v_.empty();
+        const bool holds =
+            !saved_inputs_v_.empty() || (tensor_hooks() && tensor_hooks()->saved_packed);
         return holds ? SavedKind::kEagerValues : SavedKind::kNothing;
+    }
+
+    Shape output_grad_shape(std::uint32_t /*slot*/) const override { return out_shape_; }
+
+    Shape input_grad_shape(std::size_t i) const override {
+        return i < input_shapes_v_.size() ? input_shapes_v_[i] : Shape{};
+    }
+
+    void pack_saved(const TensorImplPtr& /*out*/) override {
+        if (forward_settled_)
+            return;
+        forward_settled_ = true;
+        if (!has_saved_tensors_hooks() || saved_inputs_v_.empty())
+            return;
+        NodeHooks& hooks = ensure_tensor_hooks();
+        const std::size_t n = saved_inputs_v_.size();
+        hooks.packed_inputs.resize(n, py::none());
+        hooks.packed_output = py::none();
+        for (std::size_t i = 0; i < n; ++i) {
+            if (!::lucid::holds_saved_values(saved_inputs_v_[i]))
+                continue;
+            TensorImplPtr t = i < input_tensors_v_.size() ? input_tensors_v_[i].lock() : nullptr;
+            if (!t) {
+                const Shape sh = i < input_shapes_v_.size() ? input_shapes_v_[i] : Shape{};
+                t = std::make_shared<TensorImpl>(saved_inputs_v_[i], sh, dtype_, device_, false);
+            }
+            hooks.packed_inputs[i] = pack_saved_tensor(t);
+            saved_inputs_v_[i] = Storage{CpuStorage{}};
+        }
+        hooks.saved_packed = true;
+    }
+
+    void unpack_saved(bool /*for_graph*/) override {
+        NodeHooks* hooks = tensor_hooks();
+        if (hooks == nullptr || !hooks->saved_packed)
+            return;
+        const std::size_t n = hooks->packed_inputs.size();
+        if (saved_inputs_v_.size() < n)
+            saved_inputs_v_.resize(n, Storage{CpuStorage{}});
+        for (std::size_t i = 0; i < n; ++i) {
+            if (!hooks->packed_inputs[i] || hooks->packed_inputs[i].is_none())
+                continue;
+            TensorImplPtr t = unpack_saved_tensor(hooks->packed_inputs[i]);
+            if (t)
+                saved_inputs_v_[i] = t->storage();
+        }
+    }
+
+    void repack_saved() override {
+        NodeHooks* hooks = tensor_hooks();
+        if (hooks == nullptr || !hooks->saved_packed)
+            return;
+        for (std::size_t i = 0; i < saved_inputs_v_.size() && i < hooks->packed_inputs.size();
+             ++i) {
+            if (hooks->packed_inputs[i] && !hooks->packed_inputs[i].is_none())
+                saved_inputs_v_[i] = Storage{CpuStorage{}};
+        }
     }
 
     // Weak references to original input tensors; used for version checks.
@@ -155,6 +214,7 @@ public:
     Device device_ = Device::CPU;
     // Snapshots of each input's Storage at forward time, used by apply().
     std::vector<Storage> saved_inputs_v_;
+    bool forward_settled_ = false;
 
     // Attach an existing backward node to the autograd graph.
     //

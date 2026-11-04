@@ -63,6 +63,35 @@ void register_nodes(py::module_& m) {
     py::class_<Node, std::shared_ptr<Node>>(m, "Node",
                                             py::custom_type_setup(enable_node_autograd_gc))
         .def_property_readonly("sequence_nr", &Node::sequence_nr)
+        .def_property_readonly(
+            "next_functions",
+            [](const Node& n) {
+                const auto& edges = n.next_edges();
+                py::tuple out(edges.size());
+                for (std::size_t i = 0; i < edges.size(); ++i) {
+                    const auto& e = edges[i];
+                    out[i] = py::make_tuple(e.node ? py::cast(e.node) : py::none(),
+                                            py::int_(e.input_nr));
+                }
+                return out;
+            },
+            "Tuple of ``(grad_fn, output_nr)`` pairs for the upstream autograd nodes.")
+        .def(
+            "register_prehook",
+            [](const std::shared_ptr<Node>& n, py::object hook) {
+                return py::module_::import("lucid.autograd._hooks")
+                    .attr("_register_node_prehook")(n, std::move(hook));
+            },
+            py::arg("hook"),
+            "Register a backward prehook on this node. Called with ``(grad_outputs,)``.")
+        .def(
+            "register_hook",
+            [](const std::shared_ptr<Node>& n, py::object hook) {
+                return py::module_::import("lucid.autograd._hooks")
+                    .attr("_register_node_hook")(n, std::move(hook));
+            },
+            py::arg("hook"),
+            "Register a backward hook on this node. Called with ``(grad_inputs, grad_outputs)``.")
         .def("name", &Node::node_name,
              "The operation this node differentiates, e.g. ``\"MulBackward\"``.")
         .def(
@@ -80,7 +109,16 @@ void register_nodes(py::module_& m) {
     // AccumulateGrad is the leaf-variable sink node; Python code can detect it
     // via isinstance(tensor.grad_fn, engine.AccumulateGrad).
     py::class_<AccumulateGrad, Node, std::shared_ptr<AccumulateGrad>>(
-        m, "AccumulateGrad", py::custom_type_setup(enable_node_autograd_gc));
+        m, "AccumulateGrad", py::custom_type_setup(enable_node_autograd_gc))
+        .def_property_readonly(
+            "variable",
+            [](const AccumulateGrad& acc) -> py::object {
+                const auto leaf = acc.leaf().lock();
+                if (!leaf)
+                    return py::none();
+                return py::module_::import("lucid._dispatch").attr("_wrap")(py::cast(leaf));
+            },
+            "The leaf Tensor whose gradient this node accumulates, or None if collected.");
 }
 
 // The engine's two passes, each from a list of roots and their seeds.
@@ -128,26 +166,7 @@ void register_passes(py::module_& m) {
         "that input lies outside the graph.");
 }
 
-}  // namespace
-
-// Registers the backward engine, autograd node types, and the custom-function
-// registration helper.
-void register_autograd(py::module_& m) {
-    register_nodes(m);
-    register_passes(m);
-
-    m.def(
-        "_accumulate_grad",
-        [](const std::shared_ptr<TensorImpl>& leaf, const std::shared_ptr<TensorImpl>& grad) {
-            if (!leaf)
-                ErrorBuilder("_accumulate_grad").fail("leaf is null");
-            if (!grad)
-                ErrorBuilder("_accumulate_grad").fail("grad is null");
-            leaf->accumulate_grad_impl(grad);
-        },
-        py::arg("leaf"), py::arg("grad"),
-        "Accumulate a gradient TensorImpl into `leaf`'s graph-mode .grad slot.");
-
+void register_hook_bindings(py::module_& m) {
     // The engine half of ``Tensor.register_hook``.  A tensor's hooks run where
     // its gradient is complete — its producer's output slot, or a leaf's
     // accumulation — through one Python runner per slot, which Python
@@ -169,6 +188,79 @@ void register_autograd(py::module_& m) {
         "_has_tensor_hooks",
         [](const std::shared_ptr<TensorImpl>& t) { return t && lucid::has_tensor_hooks(*t); },
         py::arg("tensor"), "Whether a hook runner is installed on `tensor`'s gradient slot.");
+
+    m.def(
+        "_tensor_post_accumulate_grad_hook_runner",
+        [](const std::shared_ptr<TensorImpl>& t, const py::object& make) {
+            return lucid::tensor_post_accumulate_grad_hook_runner(t, make);
+        },
+        py::arg("tensor"), py::arg("make"),
+        "The runner of `tensor`'s post-accumulate-grad hooks, installed from `make()` the "
+        "first time.");
+
+    m.def(
+        "_has_post_accumulate_grad_hooks",
+        [](const std::shared_ptr<TensorImpl>& t) {
+            return t && lucid::has_post_accumulate_grad_hooks(*t);
+        },
+        py::arg("tensor"), "Whether a post-accumulate-grad hook runner is installed on `tensor`.");
+
+    m.def(
+        "_run_post_accumulate_grad_hooks",
+        [](const std::shared_ptr<TensorImpl>& t, bool graph) {
+            if (t)
+                lucid::run_leaf_post_hooks(*t, graph);
+        },
+        py::arg("tensor"), py::arg("graph") = false,
+        "Run `tensor`'s registered post-accumulate-grad hooks.");
+
+    m.def(
+        "_node_prehook_runner",
+        [](const std::shared_ptr<Node>& n, const py::object& make) {
+            if (!n)
+                ErrorBuilder("Node.register_prehook").invalid_argument("expected a node");
+            return lucid::node_prehook_runner(*n, make);
+        },
+        py::arg("node"), py::arg("make"),
+        "The runner of `node`'s backward prehooks, installed from `make()` the first time.");
+
+    m.def(
+        "_node_hook_runner",
+        [](const std::shared_ptr<Node>& n, const py::object& make) {
+            if (!n)
+                ErrorBuilder("Node.register_hook").invalid_argument("expected a node");
+            return lucid::node_hook_runner(*n, make);
+        },
+        py::arg("node"), py::arg("make"),
+        "The runner of `node`'s backward hooks, installed from `make()` the first time.");
+
+    m.def("_push_saved_tensors_hooks", &lucid::push_saved_tensors_hooks, py::arg("pack_hook"),
+          py::arg("unpack_hook"), "Push a (pack_hook, unpack_hook) pair for built-in ops.");
+    m.def("_pop_saved_tensors_hooks", &lucid::pop_saved_tensors_hooks,
+          "Pop the active (pack_hook, unpack_hook) pair for built-in ops.");
+}
+
+}  // namespace
+
+// Registers the backward engine, autograd node types, and the custom-function
+// registration helper.
+void register_autograd(py::module_& m) {
+    register_nodes(m);
+    register_passes(m);
+
+    m.def(
+        "_accumulate_grad",
+        [](const std::shared_ptr<TensorImpl>& leaf, const std::shared_ptr<TensorImpl>& grad) {
+            if (!leaf)
+                ErrorBuilder("_accumulate_grad").fail("leaf is null");
+            if (!grad)
+                ErrorBuilder("_accumulate_grad").fail("grad is null");
+            leaf->accumulate_grad_impl(grad);
+        },
+        py::arg("leaf"), py::arg("grad"),
+        "Accumulate a gradient TensorImpl into `leaf`'s graph-mode .grad slot.");
+
+    register_hook_bindings(m);
 
     // register_custom_function installs the Python-side CustomFunction class
     // and the _register_python_backward_node() hook used by lucid.autograd.Function.

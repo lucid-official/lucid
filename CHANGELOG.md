@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `lucid` / `Tensor` / `linalg` / `signal.windows`: add `asarray`, `scalar_tensor`, `layout`, `strided`, `deg2rad`, `rad2deg`, `logaddexp2`, `sgn`, `fix`, `diag`, `diagflat`, `concatenate`, `split_with_sizes`, `unsafe_chunk`, `unsafe_split`, `constant_pad_nd`, `unravel_index`, `select_scatter`, `slice_scatter`, `diagonal_scatter`, `dist`, `gradient`, `linalg.cholesky_inverse`, `linalg.lu_unpack`, `Tensor.{mH,is_cpu,is_meta,layout,ndimension,nelement,sum_to_size,fill_diagonal_,polygamma,t_,transpose_,swapaxes_,swapdims_,squeeze_,unsqueeze_,exponential_,cauchy_,geometric_,log_normal_,random_}`, and `layout=`/`requires_grad=` keyword arguments on all 12 `signal.windows` functions (LCD-685).
 - `lucid.peft`: `SwinConverter`, `CLIPConverter`, and `DETRConverter` adapter-file converters supporting both release-4 and release-5 reference module layouts, fusing separate `query`/`key`/`value` (`q_proj`/`k_proj`/`v_proj`) and `out_proj` (`o_proj`) projections into the zoo's `qkv` `nn.Linear` and `nn.MultiheadAttention` modules (LCD-830).
 
+- add post-accumulate hooks, node hooks/next_functions, and C++ saved_tensors_hooks
+
 ### Fixed
 
 - `ErrorBuilder` / `LapackInfo` / `Indexing`: prefix C++ errors with the public operation name (`take`, `index_select`, `transpose`, `unfold`, `scatter`, `frombuffer`, `clamp`, `fft`, `tril`/`triu`, `linalg.*`), omit `[trace=...]` unless `LUCID_ERROR_TRACE` is set, format index-out-of-bounds messages with the offending index, dimension, and extent, report human-readable LAPACK convergence/factorization failures, and raise `ValueError` instead of `RuntimeError` on invalid scalar/shape arguments across 19 ops (LCD-673, LCD-675).

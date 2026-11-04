@@ -217,6 +217,9 @@ class Tensor:
     def register_hook(
         self, hook: Callable[[Tensor], Tensor | None]
     ) -> _RemovableHandle: ...
+    def register_post_accumulate_grad_hook(
+        self, hook: Callable[[Tensor], None]
+    ) -> _RemovableHandle: ...
     @property
     def itemsize(self) -> int: ...
     @overload

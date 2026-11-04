@@ -22,7 +22,7 @@ AccumulateGrad::AccumulateGrad(std::weak_ptr<TensorImpl> leaf) : leaf_(std::move
 // outgoing edges.
 std::vector<Storage> AccumulateGrad::apply(Storage grad_out) {
     if (auto t = leaf_.lock())
-        accumulate_leaf(*t, std::move(grad_out));
+        commit_leaf_grad(*t, std::move(grad_out));
     return {};
 }
 
@@ -31,27 +31,17 @@ std::vector<Storage> AccumulateGrad::apply(Storage grad_out) {
 // This path is taken when Engine::backward is called with create_graph=true.
 std::vector<TensorImplPtr> AccumulateGrad::apply_for_graph(const TensorImplPtr& grad_out) {
     if (auto t = leaf_.lock())
-        accumulate_leaf_for_graph(t, grad_out);
+        commit_leaf_grad_for_graph(t, grad_out);
     return {};
 }
 
-// Three cases:
-//   1. The leaf no longer requires a gradient (e.g. the user called
-//      requires_grad_(False) after the forward pass) — discard.
-//   2. Its hooks run on the gradient, cast to its dtype, and may replace it.
-//   3. If the leaf has no gradient yet, move the gradient in as-is;
-//      otherwise call accumulate_into() which does an in-place += using the
-//      appropriate backend (CPU element-wise loop or MLX add for GPU).  A
-//      gradient a hook saw is a copy of its own (run_leaf_hooks), so the +=
-//      of a later pass never reaches a tensor the hook kept.
-void accumulate_leaf(TensorImpl& leaf, Storage grad_out) {
-    if (!leaf.requires_grad()) {
-        return;
-    }
+bool prepare_leaf_grad(TensorImpl& leaf, Storage& grad_out) {
+    if (!leaf.requires_grad())
+        return false;
     // The phantom write rule, held before a hook or a cast runs: a real
     // leaf refuses a phantom gradient, its first included.
     if (leaf.absorbs_phantom_gradient(grad_out))
-        return;
+        return false;
 
     // 3.3 AMP fix: under autocast, the same leaf parameter can be reached
     // via two different effective dtypes — e.g. a Conv with eff_dt=F16
@@ -66,17 +56,6 @@ void accumulate_leaf(TensorImpl& leaf, Storage grad_out) {
     if (src_dt != target_dt) {
         auto& be = backend::Dispatcher::for_device(leaf.device());
         if (is_complex(src_dt) && !is_complex(target_dt)) {
-            // A complex gradient arriving at a real leaf keeps its real
-            // part.  That is a projection, not a cast, and it is the
-            // convention the reference uses: ``fft`` of a real input is
-            // complex, so the gradient coming back is too, while
-            // ``d/dx`` of a real parameter has to be real.
-            //
-            // Reached only once the complex projections had backwards —
-            // before that no complex gradient ever flowed — and it
-            // arrived here as ``astype: complex64 -> float32``, an
-            // unimplemented cast standing in for a well-defined
-            // operation.
             grad_out = be.complex_real(grad_out, leaf.shape());
             const Dtype lane = real_lane_of(src_dt);
             if (lane != target_dt)
@@ -87,11 +66,20 @@ void accumulate_leaf(TensorImpl& leaf, Storage grad_out) {
     }
 
     grad_out = run_leaf_hooks(leaf, std::move(grad_out));
+    return true;
+}
+
+void commit_leaf_grad(TensorImpl& leaf, Storage grad_out) {
+    if (!leaf.requires_grad())
+        return;
+    if (leaf.absorbs_phantom_gradient(grad_out))
+        return;
 
     if (leaf.grad_as_impl()) {
         auto g_impl = std::make_shared<TensorImpl>(own_grad_copy(grad_out), leaf.shape(),
                                                    leaf.dtype(), leaf.device(), false);
         leaf.accumulate_grad_impl(std::move(g_impl));
+        run_leaf_post_hooks(leaf, /*graph=*/false);
         return;
     }
 
@@ -106,15 +94,37 @@ void accumulate_leaf(TensorImpl& leaf, Storage grad_out) {
         // Subsequent gradient: add in-place into the existing accumulator.
         accumulate_into(*grad, grad_out);
     }
+    run_leaf_post_hooks(leaf, /*graph=*/false);
+}
+
+void accumulate_leaf(TensorImpl& leaf, Storage grad_out) {
+    if (!prepare_leaf_grad(leaf, grad_out))
+        return;
+    commit_leaf_grad(leaf, std::move(grad_out));
+}
+
+TensorImplPtr prepare_leaf_grad_for_graph(const TensorImplPtr& leaf, const TensorImplPtr& grad) {
+    if (!leaf || !leaf->requires_grad())
+        return nullptr;
+    if (grad && leaf->absorbs_phantom_gradient(grad->raw_storage()))
+        return nullptr;
+    return run_leaf_hooks_for_graph(*leaf, gradient_in_dtype_of(grad, leaf));
+}
+
+void commit_leaf_grad_for_graph(const TensorImplPtr& leaf, const TensorImplPtr& grad) {
+    if (!leaf || !leaf->requires_grad() || !grad)
+        return;
+    if (leaf->absorbs_phantom_gradient(grad->raw_storage()))
+        return;
+    leaf->accumulate_grad_impl(grad);
+    run_leaf_post_hooks(*leaf, /*graph=*/true);
 }
 
 void accumulate_leaf_for_graph(const TensorImplPtr& leaf, const TensorImplPtr& grad) {
-    if (!leaf || !leaf->requires_grad()) {
+    TensorImplPtr prepared = prepare_leaf_grad_for_graph(leaf, grad);
+    if (!prepared)
         return;
-    }
-    if (grad && leaf->absorbs_phantom_gradient(grad->raw_storage()))
-        return;
-    leaf->accumulate_grad_impl(run_leaf_hooks_for_graph(*leaf, gradient_in_dtype_of(grad, leaf)));
+    commit_leaf_grad_for_graph(leaf, prepared);
 }
 
 TensorImplPtr gradient_in_dtype_of(const TensorImplPtr& grad, const TensorImplPtr& like) {

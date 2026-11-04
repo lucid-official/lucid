@@ -24,8 +24,10 @@
 #include "../core/Shape.h"
 #include "../core/Storage.h"
 #include "../core/TensorImpl.h"
+#include "AccumulateGrad.h"
 #include "Helpers.h"
 #include "Node.h"
+#include "TensorHooks.h"
 
 namespace lucid {
 
@@ -435,6 +437,57 @@ public:
         }
     }
 
+    Shape output_grad_shape(std::uint32_t /*slot*/) const override { return out_shape_; }
+
+    Shape input_grad_shape(std::size_t i) const override {
+        return i < N_IN ? input_shapes_[i] : Shape{};
+    }
+
+    void pack_saved(const TensorImplPtr& out) override {
+        if (forward_settled_)
+            return;
+        forward_settled_ = true;
+        if (!has_saved_tensors_hooks())
+            return;
+        const bool out_needed = is_output_packable();
+        if (!has_packable_inputs() && !out_needed)
+            return;
+
+        NodeHooks& hooks = ensure_tensor_hooks();
+        hooks.packed_inputs.resize(N_IN, py::none());
+        hooks.packed_output = py::none();
+        for (std::size_t j = 0; j < N_IN; ++j)
+            pack_input_slot(j, hooks);
+        if (out_needed)
+            pack_output_slot(out, hooks);
+        hooks.saved_packed = true;
+    }
+
+    void unpack_saved(bool for_graph) override {
+        NodeHooks* hooks = tensor_hooks();
+        if (hooks == nullptr || !hooks->saved_packed)
+            return;
+        for (std::size_t j = 0; j < N_IN && j < hooks->packed_inputs.size(); ++j)
+            unpack_input_slot(j, for_graph, *hooks);
+        unpack_output_slot(for_graph, *hooks);
+    }
+
+    void repack_saved() override {
+        NodeHooks* hooks = tensor_hooks();
+        if (hooks == nullptr || !hooks->saved_packed)
+            return;
+        for (std::size_t j = 0; j < N_IN && j < hooks->packed_inputs.size(); ++j) {
+            if (hooks->packed_inputs[j] && !hooks->packed_inputs[j].is_none()) {
+                saved_inputs_[j] = Storage{CpuStorage{}};
+                saved_impl_inputs_[j].reset();
+            }
+        }
+        if (hooks->packed_output && !hooks->packed_output.is_none()) {
+            saved_output_ = Storage{CpuStorage{}};
+            saved_impl_output_.reset();
+        }
+    }
+
     std::array<std::weak_ptr<TensorImpl>, N_IN> input_tensors_;
     std::array<Shape, N_IN> input_shapes_;
     Shape out_shape_;
@@ -449,9 +502,92 @@ public:
     std::int64_t saved_output_version_ = 0;
 
 private:
+    bool is_input_packable(std::size_t j) const {
+        return (input_saved_[j] || ::lucid::holds_saved_values(saved_inputs_[j])) &&
+               read_by_a_needed_gradient(j);
+    }
+
+    bool has_packable_inputs() const {
+        for (std::size_t j = 0; j < N_IN; ++j) {
+            if (is_input_packable(j))
+                return true;
+        }
+        return false;
+    }
+
+    bool is_output_packable() const {
+        return (keeps_output_ || ::lucid::holds_saved_values(saved_output_)) &&
+               any_needed_gradient();
+    }
+
+    void pack_input_slot(std::size_t j, NodeHooks& hooks) {
+        if (!is_input_packable(j))
+            return;
+        TensorImplPtr t = saved_impl_inputs_[j] ? saved_impl_inputs_[j] : input_tensors_[j].lock();
+        if (!t) {
+            t = std::make_shared<TensorImpl>(saved_inputs_[j], input_shapes_[j], dtype_, device_,
+                                             false);
+        }
+        hooks.packed_inputs[j] = pack_saved_tensor(t);
+        saved_inputs_[j] = Storage{CpuStorage{}};
+        saved_impl_inputs_[j].reset();
+    }
+
+    void pack_output_slot(const TensorImplPtr& out, NodeHooks& hooks) {
+        if (out) {
+            out->set_leaf(false);
+            out->set_requires_grad(true);
+        }
+        TensorImplPtr t = out ? out : saved_impl_output_.lock();
+        if (!t)
+            t = std::make_shared<TensorImpl>(saved_output_, out_shape_, dtype_, device_, false);
+        hooks.packed_output = pack_saved_tensor(t);
+        saved_output_ = Storage{CpuStorage{}};
+        saved_impl_output_.reset();
+        saved_output_version_sink_.reset();
+    }
+
+    void unpack_input_slot(std::size_t j, bool for_graph, const NodeHooks& hooks) {
+        if (!hooks.packed_inputs[j] || hooks.packed_inputs[j].is_none() ||
+            !read_by_a_needed_gradient(j))
+            return;
+        TensorImplPtr t = unpack_saved_tensor(hooks.packed_inputs[j]);
+        if (!t)
+            return;
+        saved_inputs_[j] = t->storage();
+        input_saved_[j] = true;
+        if (!for_graph)
+            return;
+        const auto& edges = next_edges();
+        if (j < edges.size() && edges[j].is_valid() &&
+            (t->grad_fn() != edges[j].node || t->grad_output_nr() != edges[j].input_nr)) {
+            auto rebuilt = std::make_shared<TensorImpl>(t->storage(), t->shape(), t->dtype(),
+                                                        t->device(), true);
+            rebuilt->set_grad_fn(edges[j].node);
+            rebuilt->set_grad_output_nr(edges[j].input_nr);
+            rebuilt->set_leaf(dynamic_cast<const AccumulateGrad*>(edges[j].node.get()) != nullptr);
+            saved_impl_inputs_[j] = std::move(rebuilt);
+        } else {
+            saved_impl_inputs_[j] = std::move(t);
+        }
+    }
+
+    void unpack_output_slot(bool for_graph, const NodeHooks& hooks) {
+        if (!hooks.packed_output || hooks.packed_output.is_none() || !any_needed_gradient())
+            return;
+        TensorImplPtr t = unpack_saved_tensor(hooks.packed_output);
+        if (!t)
+            return;
+        saved_output_ = t->storage();
+        keeps_output_ = true;
+        if (for_graph)
+            saved_impl_output_.reset();
+    }
+
     // Whether :meth:`keep_input` or :meth:`keep_output` filled a slot.
     bool keeps_values_ = false;
     bool keeps_output_ = false;
+    bool forward_settled_ = false;
     std::array<bool, N_IN> input_saved_{};
 };
 

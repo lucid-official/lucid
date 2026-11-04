@@ -95,6 +95,21 @@ TensorHookSlot::~TensorHookSlot() {
 void TensorHookSlot::clear() noexcept {
     retain.reset();
     release_py_object(runner);
+    release_py_object(post_runner);
+}
+
+NodeHooks::~NodeHooks() {
+    clear();
+}
+
+void NodeHooks::clear() noexcept {
+    slots_.clear();
+    release_py_object(node_pre_runner);
+    release_py_object(node_post_runner);
+    for (auto& obj : packed_inputs)
+        release_py_object(obj);
+    packed_inputs.clear();
+    release_py_object(packed_output);
 }
 
 std::shared_ptr<TensorHookSlot> NodeHooks::find(std::uint32_t output_nr) const {
@@ -171,6 +186,220 @@ TensorImplPtr run_leaf_hooks_for_graph(const TensorImpl& leaf, TensorImplPtr gra
     return run_hooks_for_graph(*slot, std::move(grad));
 }
 
+void run_leaf_post_hooks(const TensorImpl& leaf, bool graph) {
+    const std::shared_ptr<TensorHookSlot> slot = leaf.leaf_hooks();
+    if (!slot || !slot->post_runner)
+        return;
+    py::gil_scoped_acquire gil;
+    const py::object runner = slot->post_runner;
+    const TensorImplPtr self = const_cast<TensorImpl&>(leaf).shared_from_this();
+    const GradModeGuard mode(graph);
+    runner(self);
+}
+
+namespace {
+
+Shape infer_output_grad_shape(const Node& node, const Storage& grad) {
+    Shape s = node.output_grad_shape(0);
+    if (!s.empty())
+        return s;
+    if (const NodeHooks* hooks = node.tensor_hooks()) {
+        if (auto slot = hooks->find(0); slot && !slot->shape.empty())
+            return slot->shape;
+    }
+    const Dtype dt = storage_dtype(grad);
+    const auto numel = static_cast<std::int64_t>(storage_nbytes(grad) / dtype_size(dt));
+    return numel > 1 ? Shape{numel} : Shape{};
+}
+
+bool grad_storage_is_empty(const Storage& s) {
+    if (const auto* c = std::get_if<CpuStorage>(&s))
+        return c->nbytes == 0 && c->ptr == nullptr;
+    if (const auto* g = std::get_if<GpuStorage>(&s))
+        return g->nbytes == 0 && g->arr == nullptr;
+    return false;
+}
+
+}  // namespace
+
+Storage run_node_pre_hooks(Node& node, Storage grad_out) {
+    const NodeHooks* hooks = node.tensor_hooks();
+    if (hooks == nullptr || !hooks->node_pre_runner)
+        return grad_out;
+    if (auto* cs = std::get_if<CpuStorage>(&grad_out); cs && cs->ptr.use_count() > 1)
+        grad_out = own_grad_copy(grad_out);
+    const Dtype dtype = storage_dtype(grad_out);
+    const Device device = storage_device(grad_out);
+    const Shape shape = infer_output_grad_shape(node, grad_out);
+    auto given = std::make_shared<TensorImpl>(std::move(grad_out), shape, dtype, device, false);
+    py::gil_scoped_acquire gil;
+    const py::object runner = hooks->node_pre_runner;
+    py::object result;
+    {
+        const GradModeGuard mode(false);
+        result = runner(given);
+    }
+    const TensorImplPtr returned = tensor_from_python(result, "a node prehook's result");
+    Storage out;
+    if (!returned || returned == given) {
+        out = given->storage();
+    } else {
+        const ErrorBuilder err("Node.register_prehook");
+        check_grad_kind(err, kHookResult, dtype, device, shape, *returned);
+        out = grad_slot_buffer(err, *returned);
+    }
+    return own_grad_copy(out);
+}
+
+TensorImplPtr run_node_pre_hooks_for_graph(Node& node, TensorImplPtr grad_out) {
+    const NodeHooks* hooks = node.tensor_hooks();
+    if (hooks == nullptr || !hooks->node_pre_runner || !grad_out)
+        return grad_out;
+    py::gil_scoped_acquire gil;
+    const py::object runner = hooks->node_pre_runner;
+    py::object result;
+    {
+        const GradModeGuard mode(true);
+        result = runner(grad_out);
+    }
+    const TensorImplPtr returned = tensor_from_python(result, "a node prehook's result");
+    if (!returned || returned == grad_out)
+        return grad_out;
+    check_grad_kind(ErrorBuilder("Node.register_prehook"), kHookResult, grad_out->dtype(),
+                    grad_out->device(), grad_out->shape(), *returned);
+    return returned;
+}
+
+namespace {
+
+TensorImplPtr wrap_eager_grad_input(const Node& node,
+                                    const std::vector<Storage>& grad_inputs,
+                                    std::size_t i) {
+    const auto& edges = node.next_edges();
+    const Shape in_shape_hint = node.input_grad_shape(i);
+    const bool absent = !edges[i].is_valid() || i >= grad_inputs.size() ||
+                        (grad_storage_is_empty(grad_inputs[i]) &&
+                         (node.empty_grad_is_none() || shape_numel(in_shape_hint) > 0));
+    if (absent)
+        return nullptr;
+    const Dtype dt = storage_dtype(grad_inputs[i]);
+    const Device dev = storage_device(grad_inputs[i]);
+    Shape in_shape = in_shape_hint;
+    if (in_shape.empty()) {
+        const auto numel =
+            static_cast<std::int64_t>(storage_nbytes(grad_inputs[i]) / dtype_size(dt));
+        if (numel > 1)
+            in_shape = Shape{numel};
+    }
+    return std::make_shared<TensorImpl>(own_grad_copy(grad_inputs[i]), std::move(in_shape), dt, dev,
+                                        false);
+}
+
+}  // namespace
+
+void run_node_post_hooks(Node& node, std::vector<Storage>& grad_inputs, const Storage& grad_out) {
+    const NodeHooks* hooks = node.tensor_hooks();
+    if (hooks == nullptr || !hooks->node_post_runner)
+        return;
+    const std::size_t n = node.next_edges().size();
+    const Dtype out_dt = storage_dtype(grad_out);
+    const Device out_dev = storage_device(grad_out);
+    const Shape out_shape = infer_output_grad_shape(node, grad_out);
+
+    py::gil_scoped_acquire gil;
+    const py::object runner = hooks->node_post_runner;
+    auto go_impl =
+        std::make_shared<TensorImpl>(own_grad_copy(grad_out), out_shape, out_dt, out_dev, false);
+
+    std::vector<TensorImplPtr> given_gi(n);
+    py::list gi_list(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        given_gi[i] = wrap_eager_grad_input(node, grad_inputs, i);
+        gi_list[i] = given_gi[i] ? py::cast(given_gi[i]) : py::none();
+    }
+
+    py::object result;
+    {
+        const GradModeGuard mode(false);
+        result = runner(gi_list, go_impl);
+    }
+
+    const ErrorBuilder err("Node.register_hook");
+    std::vector<Storage> updated(n, Storage{CpuStorage{}});
+    if (result.is_none()) {
+        for (std::size_t i = 0; i < n; ++i) {
+            if (given_gi[i])
+                updated[i] = present_gradient(own_grad_copy(given_gi[i]->storage()));
+        }
+        grad_inputs = std::move(updated);
+        return;
+    }
+
+    const auto seq = py::reinterpret_borrow<py::sequence>(result);
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::string what = "grad_input[" + std::to_string(i) + "] returned by a node hook";
+        const TensorImplPtr g = tensor_from_python(seq[i], what);
+        if (!g)
+            continue;
+        if (given_gi[i]) {
+            check_grad_kind(err, what, given_gi[i]->dtype(), given_gi[i]->device(),
+                            given_gi[i]->shape(), *g);
+        }
+        updated[i] = present_gradient(own_grad_copy(grad_slot_buffer(err, *g)));
+    }
+    grad_inputs = std::move(updated);
+}
+
+void run_node_post_hooks_for_graph(Node& node,
+                                   std::vector<TensorImplPtr>& grad_inputs,
+                                   const TensorImplPtr& grad_out) {
+    const NodeHooks* hooks = node.tensor_hooks();
+    if (hooks == nullptr || !hooks->node_post_runner)
+        return;
+    const auto& edges = node.next_edges();
+    const std::size_t n = edges.size();
+
+    py::gil_scoped_acquire gil;
+    const py::object runner = hooks->node_post_runner;
+    std::vector<TensorImplPtr> given_gi(n);
+    py::list gi_list(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        if (edges[i].is_valid() && i < grad_inputs.size() && grad_inputs[i]) {
+            given_gi[i] = grad_inputs[i];
+            gi_list[i] = py::cast(given_gi[i]);
+        } else {
+            gi_list[i] = py::none();
+        }
+    }
+
+    py::object result;
+    {
+        const GradModeGuard mode(true);
+        result = runner(gi_list, grad_out);
+    }
+
+    if (result.is_none()) {
+        grad_inputs = std::move(given_gi);
+        return;
+    }
+
+    const ErrorBuilder err("Node.register_hook");
+    const auto seq = py::reinterpret_borrow<py::sequence>(result);
+    std::vector<TensorImplPtr> updated(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::string what = "grad_input[" + std::to_string(i) + "] returned by a node hook";
+        TensorImplPtr g = tensor_from_python(seq[i], what);
+        if (!g)
+            continue;
+        if (given_gi[i]) {
+            check_grad_kind(err, what, given_gi[i]->dtype(), given_gi[i]->device(),
+                            given_gi[i]->shape(), *g);
+        }
+        updated[i] = std::move(g);
+    }
+    grad_inputs = std::move(updated);
+}
+
 // ── Registering ──────────────────────────────────────────────────────────────
 
 py::object tensor_hook_runner(const TensorImplPtr& t, const py::object& make) {
@@ -210,6 +439,140 @@ bool has_tensor_hooks(const TensorImpl& t) {
         return false;
     const auto slot = fn->tensor_hooks()->find(t.grad_output_nr());
     return slot && slot->runner;
+}
+
+py::object tensor_post_accumulate_grad_hook_runner(const TensorImplPtr& t, const py::object& make) {
+    const ErrorBuilder err("Tensor.register_post_accumulate_grad_hook");
+    if (!t)
+        err.invalid_argument("expected a tensor");
+    if (!t->requires_grad())
+        err.fail("cannot register a hook on a tensor that doesn't require gradient");
+    if (!t->is_leaf())
+        err.fail("post accumulate grad hooks cannot be registered on non-leaf tensors");
+    auto& own = t->mutable_leaf_hooks();
+    if (!own)
+        own = std::make_shared<TensorHookSlot>();
+    if (!own->post_runner) {
+        py::object runner = make();
+        if (runner.is_none())
+            err.invalid_argument("the runner factory returned None");
+        own->post_runner = std::move(runner);
+        own->shape = t->shape();
+    }
+    return own->post_runner;
+}
+
+bool has_post_accumulate_grad_hooks(const TensorImpl& t) {
+    if (!t.is_leaf())
+        return false;
+    const auto& slot = t.leaf_hooks();
+    return slot && static_cast<bool>(slot->post_runner);
+}
+
+py::object node_prehook_runner(Node& node, const py::object& make) {
+    const ErrorBuilder err("Node.register_prehook");
+    NodeHooks& hooks = node.ensure_tensor_hooks();
+    if (!hooks.node_pre_runner) {
+        py::object runner = make();
+        if (runner.is_none())
+            err.invalid_argument("the runner factory returned None");
+        hooks.node_pre_runner = std::move(runner);
+    }
+    return hooks.node_pre_runner;
+}
+
+py::object node_hook_runner(Node& node, const py::object& make) {
+    const ErrorBuilder err("Node.register_hook");
+    NodeHooks& hooks = node.ensure_tensor_hooks();
+    if (!hooks.node_post_runner) {
+        py::object runner = make();
+        if (runner.is_none())
+            err.invalid_argument("the runner factory returned None");
+        hooks.node_post_runner = std::move(runner);
+    }
+    return hooks.node_post_runner;
+}
+
+namespace {
+
+struct SavedHookPair {
+    py::object pack;
+    py::object unpack;
+};
+
+thread_local std::vector<SavedHookPair>* t_saved_hooks = nullptr;
+thread_local int t_saved_hooks_paused = 0;
+
+struct PauseSavedHooksGuard {
+    PauseSavedHooksGuard() noexcept { ++t_saved_hooks_paused; }
+    ~PauseSavedHooksGuard() { --t_saved_hooks_paused; }
+    PauseSavedHooksGuard(const PauseSavedHooksGuard&) = delete;
+    PauseSavedHooksGuard& operator=(const PauseSavedHooksGuard&) = delete;
+};
+
+}  // namespace
+
+void push_saved_tensors_hooks(py::object pack_hook, py::object unpack_hook) {
+    if (t_saved_hooks == nullptr)
+        t_saved_hooks = new std::vector<SavedHookPair>();
+    t_saved_hooks->push_back(SavedHookPair{std::move(pack_hook), std::move(unpack_hook)});
+}
+
+void pop_saved_tensors_hooks() noexcept {
+    if (t_saved_hooks == nullptr || t_saved_hooks->empty())
+        return;
+    SavedHookPair top = std::move(t_saved_hooks->back());
+    t_saved_hooks->pop_back();
+    if (t_saved_hooks->empty()) {
+        delete t_saved_hooks;
+        t_saved_hooks = nullptr;
+    }
+    release_py_object(top.pack);
+    release_py_object(top.unpack);
+}
+
+bool has_saved_tensors_hooks() noexcept {
+    return t_saved_hooks_paused == 0 && t_saved_hooks != nullptr && !t_saved_hooks->empty();
+}
+
+py::object pack_saved_tensor(const TensorImplPtr& t) {
+    if (!t || !has_saved_tensors_hooks())
+        return py::none();
+    py::gil_scoped_acquire gil;
+    const SavedHookPair pair = t_saved_hooks->back();
+    const PauseSavedHooksGuard pause;
+    const GradModeGuard no_grad(false);
+    py::object wrap = py::module_::import("lucid._dispatch").attr("_wrap");
+    py::object wrapped = wrap(py::cast(t));
+    py::object packed = pair.pack(wrapped);
+    return py::make_tuple(std::move(packed), pair.unpack);
+}
+
+TensorImplPtr unpack_saved_tensor(const py::object& entry) {
+    if (!entry || entry.is_none())
+        return nullptr;
+    py::gil_scoped_acquire gil;
+    const auto tup = entry.cast<py::tuple>();
+    const py::object packed = tup[0];
+    const py::object unpack = tup[1];
+    py::object res;
+    {
+        const PauseSavedHooksGuard pause;
+        const GradModeGuard no_grad(false);
+        res = unpack(packed);
+    }
+    if (res.is_none() || (!py::isinstance<TensorImpl>(res) && !py::hasattr(res, "impl"))) {
+        throw py::type_error("Output of saved tensor unpack_hook expected to be a Tensor but "
+                             "got result of type " +
+                             std::string(py::str(py::type::of(res).attr("__name__"))));
+    }
+    TensorImplPtr impl = tensor_from_python(res, "Output of saved tensor unpack_hook");
+    if (!impl) {
+        throw py::type_error("Output of saved tensor unpack_hook expected to be a Tensor but "
+                             "got result of type " +
+                             std::string(py::str(py::type::of(res).attr("__name__"))));
+    }
+    return impl;
 }
 
 void retain_grad(const TensorImplPtr& t) {
@@ -487,6 +850,16 @@ private:
             if (const NodeHooks* hooks = n->tensor_hooks()) {
                 for (const auto& slot : hooks->slots())
                     offer(slot);
+                if (int r = report(hooks->node_pre_runner))
+                    return r;
+                if (int r = report(hooks->node_post_runner))
+                    return r;
+                for (const auto& p : hooks->packed_inputs) {
+                    if (int r = report(p))
+                        return r;
+                }
+                if (int r = report(hooks->packed_output))
+                    return r;
             }
             if (const auto* out_hook = dynamic_cast<const ModuleOutputHookNode*>(n)) {
                 offer(out_hook->state());

@@ -259,6 +259,17 @@ public:
     std::vector<Shape> out_shapes;
     std::vector<Dtype> out_dtypes;
     std::vector<Device> out_devices;
+    std::vector<Shape> in_shapes;
+
+    Shape output_grad_shape(std::uint32_t slot) const override {
+        if (!out_shapes.empty())
+            return slot < out_shapes.size() ? out_shapes[slot] : Shape{};
+        return out_shape;
+    }
+
+    Shape input_grad_shape(std::size_t i) const override {
+        return i < in_shapes.size() ? in_shapes[i] : Shape{};
+    }
 
     // Human-readable node name for debugger / profiler output.
     //

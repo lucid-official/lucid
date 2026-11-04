@@ -336,6 +336,7 @@ def _backward_into(
             # holds sees the new total.
             with no_grad():
                 current.add_(g)
+        _C_engine._run_post_accumulate_grad_hooks(_unwrap(t), create_graph)
 
 
 def _raw_grad_list(

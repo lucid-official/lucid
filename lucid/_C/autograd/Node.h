@@ -25,6 +25,7 @@
 #include <cxxabi.h>
 
 #include "../api.h"
+#include "../core/Shape.h"
 #include "../core/Storage.h"
 
 namespace lucid {
@@ -519,6 +520,24 @@ public:
     // when an out-of-place op's result is rebound in-place onto a destination
     // tensor whose version counter moves to ``v``.
     virtual void advance_saved_output_version(std::int64_t /*v*/) noexcept {}
+
+    // Shape of output gradient slot ``slot`` for node-level hooks.
+    virtual Shape output_grad_shape(std::uint32_t /*slot*/) const { return {}; }
+
+    // Shape of input gradient slot ``i`` for node-level hooks.
+    virtual Shape input_grad_shape(std::size_t /*i*/) const { return {}; }
+
+    // Route tensors saved by this node through the active ``saved_tensors_hooks``
+    // pair at the end of forward when ``set_grad_fn`` attaches this node.
+    virtual void pack_saved(const TensorImplPtr& /*out*/) {}
+
+    // Unpack any tensors previously routed through ``saved_tensors_hooks``
+    // immediately before ``apply`` or ``apply_for_graph`` runs.
+    virtual void unpack_saved(bool /*for_graph*/) {}
+
+    // Clear unpacked temporary storage slots after ``apply`` returns so a
+    // retained graph keeps only the packed objects between passes.
+    virtual void repack_saved() {}
 
 protected:
     // Refuse when ``live`` has moved past the version recorded at ``k`` in

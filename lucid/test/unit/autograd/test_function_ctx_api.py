@@ -836,12 +836,14 @@ def test_save_on_cpu_gradient_matches_the_reference(ref: ModuleType, device: str
     assert run(lucid, device) == run(ref, "cpu")
 
 
-def test_the_built_in_ops_are_not_routed_through_the_hooks(device: str) -> None:
-    # Documented coverage limit: the engine keeps a built-in op's saved
-    # tensors itself, so only a custom ``Function`` reaches the hooks.
-    log: list[str] = []
-    x = lucid.tensor([1.0, 2.0], device=device, requires_grad=True)
-    with _tagging(lucid, log, "h"):
-        y = (x * x).exp()
-    y.sum().backward()
-    assert log == []
+@pytest.mark.parity
+def test_the_built_in_ops_are_routed_through_the_hooks(ref: ModuleType, device: str) -> None:
+    def run(lib: ModuleType, dev: str) -> tuple[list[str], object]:
+        log: list[str] = []
+        x = _vec(lib, dev, 1.0, 2.0)
+        with _tagging(lib, log, "h"):
+            y = (x * x).exp()
+        y.sum().backward()
+        return log, _kind(x.grad)
+
+    assert run(lucid, device) == run(ref, "cpu")

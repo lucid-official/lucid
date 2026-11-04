@@ -56,6 +56,7 @@ _PROP_TYPE_OVERRIDES: dict[tuple[str, str], str] = {
     ("TensorImpl", "shape"): "List[int]",
     ("TensorImpl", "stride"): "List[int]",
     ("TensorImpl", "grad_fn"): "Node | None",
+    ("Node", "next_functions"): "tuple[tuple[Node | None, int], ...]",
     ("FunctionCtx", "saved_tensors"): "tuple[TensorImpl, ...]",
     ("_PythonBackwardNode", "ctx"): "FunctionCtx",
     ("SpecialTokens", "extra"): "dict[str, str]",
@@ -82,6 +83,9 @@ _SIG_OVERRIDES: dict[str, str] = {
     "NoGradGuard.__exit__": "(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: object) -> None",
     "_run_metal_kernel": "(kernel_source: str, function_name: str, inputs: list[TensorImpl], output_shape: list[int], dtype: Dtype = ..., grid: list[int] = ..., threads: list[int] = ...) -> TensorImpl",
     "_tensor_hook_runner": "[R: Callable[[TensorImpl], object]](tensor: TensorImpl, make: Callable[[], R]) -> R",
+    "_tensor_post_accumulate_grad_hook_runner": "[R: Callable[[TensorImpl], object]](tensor: TensorImpl, make: Callable[[], R]) -> R",
+    "_node_prehook_runner": "[R: Callable[[TensorImpl], object]](node: Node, make: Callable[[], R]) -> R",
+    "_node_hook_runner": "[R: Callable[[list[TensorImpl | None], TensorImpl | None], object]](node: Node, make: Callable[[], R]) -> R",
     "coreml.finish_package": "(paths: PackagePaths, mlmodel_bytes: bytes) -> None",
     "coreml.serialize_functions": "(functions: Sequence[tuple[str, object]], default_name: str) -> bytes",
 }
@@ -762,6 +766,9 @@ class Tensor:
     def zero_(self) -> Self: ...
     def register_hook(
         self, hook: Callable[[Tensor], Tensor | None]
+    ) -> _RemovableHandle: ...
+    def register_post_accumulate_grad_hook(
+        self, hook: Callable[[Tensor], None]
     ) -> _RemovableHandle: ...
     @property
     def itemsize(self) -> int: ...

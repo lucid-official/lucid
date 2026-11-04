@@ -709,36 +709,82 @@ TensorImplPtr zero_derivative_through(TensorImplPtr grad, const TensorImplPtr& s
 
 namespace {
 
+// The leaf an AccumulateGrad stands for, when it is still alive and requires
+// grad.
+TensorImplPtr hooked_leaf(const Node& node) {
+    const auto* acc = dynamic_cast<const AccumulateGrad*>(&node);
+    if (acc == nullptr)
+        return nullptr;
+    TensorImplPtr leaf = acc->leaf().lock();
+    return leaf && leaf->requires_grad() ? leaf : nullptr;
+}
+
+struct RepackSavedGuard {
+    Node& node;
+    ~RepackSavedGuard() { node.repack_saved(); }
+};
+
 // Run ``node`` on its gradient once its hooks have.  The checks come after
 // the hooks, not before: a hook can run a backward of its own through this
 // node, which frees what it saved, or write into a tensor it saved — checked
 // first, the node then read freed storage and took the process down.
 std::vector<Storage> run_node(Node& node, Storage grad_in, SlotGrads<Storage> slots) {
+    if (const TensorImplPtr leaf = hooked_leaf(node)) {
+        if (!prepare_leaf_grad(*leaf, grad_in))
+            return {};
+    }
+    if (has_node_pre_hooks(node))
+        grad_in = run_node_pre_hooks(node, std::move(grad_in));
     refuse_released(node, /*graph=*/false);
     node.validate_versions();
-    const BackwardEvent event(node, grad_in, slots.empty() ? nullptr : &slots.front().second);
-    if (!node.is_barrier())
-        return node.apply(std::move(grad_in));
-    for (auto& [slot, grad] : slots)
-        node.accumulate_barrier_grad(slot, std::move(grad));
-    return node.apply_barrier();
+    node.unpack_saved(/*for_graph=*/false);
+    std::vector<Storage> grads;
+    {
+        const RepackSavedGuard repack{node};
+        const BackwardEvent event(node, grad_in, slots.empty() ? nullptr : &slots.front().second);
+        if (!node.is_barrier()) {
+            grads = node.apply(own_grad_copy(grad_in));
+        } else {
+            for (auto& [slot, grad] : slots)
+                node.accumulate_barrier_grad(slot, std::move(grad));
+            grads = node.apply_barrier();
+        }
+    }
+    if (has_node_post_hooks(node))
+        run_node_post_hooks(node, grads, grad_in);
+    return grads;
 }
 
 std::vector<TensorImplPtr>
 run_node_for_graph(Node& node, TensorImplPtr grad_in, SlotGrads<TensorImplPtr> slots) {
+    if (const TensorImplPtr leaf = hooked_leaf(node)) {
+        grad_in = prepare_leaf_grad_for_graph(leaf, grad_in);
+        if (!grad_in)
+            return {};
+    }
+    if (has_node_pre_hooks(node))
+        grad_in = run_node_pre_hooks_for_graph(node, std::move(grad_in));
     refuse_released(node, /*graph=*/true);
     node.validate_versions();
-    // What eager backward reads by value, graph mode reads through the
-    // tensors the node was handed — and an in-place write since forward
-    // may have rewritten one that validate_versions does not check: a
-    // saved output, or any input while the check is waived.
-    node.restore_saved_for_graph();
-    const BackwardEvent event(node, grad_in || slots.empty() ? grad_in : slots.front().second);
-    if (node.is_barrier())
-        deliver_held_for_graph(node, std::move(slots), grad_in);
-    // apply_for_graph throws NotImplementedError if the op doesn't support
-    // graph mode — gives the user a clear, actionable message.
-    return apply_node_for_graph(node, grad_in);
+    node.unpack_saved(/*for_graph=*/true);
+    std::vector<TensorImplPtr> grads;
+    {
+        const RepackSavedGuard repack{node};
+        // What eager backward reads by value, graph mode reads through the
+        // tensors the node was handed — and an in-place write since forward
+        // may have rewritten one that validate_versions does not check: a
+        // saved output, or any input while the check is waived.
+        node.restore_saved_for_graph();
+        const BackwardEvent event(node, grad_in || slots.empty() ? grad_in : slots.front().second);
+        if (node.is_barrier())
+            deliver_held_for_graph(node, std::move(slots), grad_in);
+        // apply_for_graph throws NotImplementedError if the op doesn't support
+        // graph mode — gives the user a clear, actionable message.
+        grads = apply_node_for_graph(node, grad_in);
+    }
+    if (has_node_post_hooks(node))
+        run_node_post_hooks_for_graph(node, grads, grad_in);
+    return grads;
 }
 
 // Validate size consistency: the number of returned gradients should equal
@@ -769,9 +815,10 @@ void seed_roots(const std::vector<BackwardRoot>& roots, std::vector<Seed>& seeds
 template <typename Route>
 void route_results(const Node& node, std::vector<Storage>& grads, Route route_one) {
     const auto& edges = node.next_edges();
+    const bool empty_is_none = node.empty_grad_is_none() || has_node_post_hooks(node);
     for (std::size_t i = 0; i < grads.size() && i < edges.size(); ++i) {
         Node* next = edges[i].node.get();
-        if (next == nullptr || (node.empty_grad_is_none() && storage_is_empty(grads[i])))
+        if (next == nullptr || (empty_is_none && storage_is_empty(grads[i])))
             continue;
         route_one(next, edges[i].input_nr, std::move(grads[i]));
     }
@@ -891,15 +938,15 @@ static void eager_backward(const std::vector<BackwardRoot>& roots,
 
         std::vector<Storage> input_grads = run_node(*node, std::move(grad_in), std::move(slots));
 
+        check_anomaly_grads(*node, input_grads);
+        check_result_count(*node, input_grads.size());
+        route_results(*node, input_grads, send);
+
         // Free saved forward tensors immediately unless the caller needs the
         // graph intact for a second backward call.
         if (!retain_graph)
             if (release(*node))
                 freed.push_back(node);
-
-        check_anomaly_grads(*node, input_grads);
-        check_result_count(*node, input_grads.size());
-        route_results(*node, input_grads, send);
     }
 
     if (!retain_graph)
@@ -1145,17 +1192,6 @@ bool propagates(const Node* node, const std::unordered_set<const Node*>& reachin
     return false;
 }
 
-// The leaf a captured AccumulateGrad stands for, when its hooks are to run
-// on what is captured for it — as AccumulateGrad would run them before
-// writing ``.grad``.
-TensorImplPtr hooked_leaf(const Node& node) {
-    const auto* acc = dynamic_cast<const AccumulateGrad*>(&node);
-    if (acc == nullptr)
-        return nullptr;
-    TensorImplPtr leaf = acc->leaf().lock();
-    return leaf && leaf->requires_grad() ? leaf : nullptr;
-}
-
 // Where the traversal of Engine::grad goes, decided once for every root.
 struct GradPlan {
     const std::vector<std::shared_ptr<TensorImpl>>& inputs;
@@ -1339,11 +1375,11 @@ void grad_eager(const std::vector<BackwardRoot>& roots,
             continue;
 
         std::vector<Storage> input_grads = run_node(*node, std::move(grad_in), std::move(slots));
+        check_anomaly_grads(*node, input_grads);
+        route_results(*node, input_grads, send);
         if (!retain_graph)
             if (release(*node))
                 freed.push_back(node);
-        check_anomaly_grads(*node, input_grads);
-        route_results(*node, input_grads, send);
     }
 
     if (!retain_graph)

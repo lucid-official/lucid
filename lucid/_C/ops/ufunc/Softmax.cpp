@@ -25,6 +25,7 @@
 #include "../bfunc/_BinaryOp.h"
 #include "../utils/Promote.h"
 #include "../utils/ScalarAxis.h"
+#include "Exponential.h"
 #include "Reductions.h"
 
 namespace lucid {
@@ -86,9 +87,16 @@ std::vector<TensorImplPtr> SoftmaxBackward::apply_for_graph(const TensorImplPtr&
     // dL/dx = p * (g - sum(g * p))  along axis_, with p recomputed so it
     // carries its own dependence on x.
     const auto& x = saved_impl_inputs_[0];
-    if (!x)
+    TensorImplPtr p;
+    if (x) {
+        p = softmax_op(x, axis_);
+    } else if (::lucid::holds_saved_values(saved_output_)) {
+        p = std::make_shared<TensorImpl>(saved_output_, out_shape_, dtype_, device_, true);
+        p->set_grad_fn(this->shared_from_this());
+        p->set_leaf(false);
+    } else {
         ErrorBuilder("softmax").fail("graph-mode backward is missing its saved input");
-    auto p = softmax_op(x, axis_);
+    }
     auto dot = sum_op(mul_op(grad_out, p), std::vector<int>{axis_}, /*keepdims=*/true);
     return {mul_op(p, sub_op(grad_out, dot))};
 }
@@ -147,9 +155,17 @@ TensorImplPtr log_softmax_op(const TensorImplPtr& a, int axis) {
 std::vector<TensorImplPtr> LogSoftmaxBackward::apply_for_graph(const TensorImplPtr& grad_out) {
     // dL/dx = g - softmax(x) * sum(g)  along axis_.
     const auto& x = saved_impl_inputs_[0];
-    if (!x)
+    TensorImplPtr p;
+    if (x) {
+        p = softmax_op(x, axis_);
+    } else if (::lucid::holds_saved_values(saved_output_)) {
+        auto y = std::make_shared<TensorImpl>(saved_output_, out_shape_, dtype_, device_, true);
+        y->set_grad_fn(this->shared_from_this());
+        y->set_leaf(false);
+        p = exp_op(y);
+    } else {
         ErrorBuilder("log_softmax").fail("graph-mode backward is missing its saved input");
-    auto p = softmax_op(x, axis_);
+    }
     auto total = sum_op(grad_out, std::vector<int>{axis_}, /*keepdims=*/true);
     return {sub_op(grad_out, mul_op(p, total))};
 }

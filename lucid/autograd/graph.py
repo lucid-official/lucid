@@ -10,14 +10,14 @@ Currently exposes:
     corrupt the gradient (rare, expert-only), this lets them proceed
     rather than raising ``VersionMismatch``.
 
-  * ``saved_tensors_hooks`` — context manager that routes every tensor a
-    custom :class:`~lucid.autograd.Function` saves for backward through a
-    ``pack_hook`` when it is saved and an ``unpack_hook`` when ``backward``
-    reads it back.  Tensors the built-in ops save are not routed through it.
+  * ``saved_tensors_hooks`` — context manager that routes every tensor saved
+    for backward (both built-in C++ ops and custom
+    :class:`~lucid.autograd.Function` subclasses) through a ``pack_hook``
+    when it is saved and an ``unpack_hook`` when ``backward`` reads it back.
 
-  * ``save_on_cpu`` — a ``saved_tensors_hooks`` that holds what a custom
-    ``Function`` saves in host memory while the graph lives, freeing the
-    accelerator's at the cost of a transfer each way.
+  * ``save_on_cpu`` — a ``saved_tensors_hooks`` that holds saved tensors in
+    host memory while the graph lives, freeing the accelerator's at the cost
+    of a transfer each way.
 """
 
 import threading
@@ -149,12 +149,11 @@ class saved_tensors_hooks:
     after ``forward`` — the hook, not the original, is what ``backward``
     reads.
 
-    Coverage: only the tensors saved by custom
-    :class:`~lucid.autograd.Function` calls made inside the block go through
-    the hooks.  The built-in ops keep what they save inside the engine and
-    are not routed through them.  A tensor ``forward`` returns and saves is
-    handed to ``pack_hook`` as ``forward`` returned it, without the call's
-    ``grad_fn``.
+    Coverage: both built-in ops and custom
+    :class:`~lucid.autograd.Function` calls made inside the block route the
+    tensors they save for backward through the hooks.  A tensor ``forward``
+    returns and saves is handed to ``pack_hook`` as ``forward`` returned it,
+    without the call's ``grad_fn``.
 
     Examples
     --------
@@ -195,9 +194,11 @@ class saved_tensors_hooks:
     def __enter__(self) -> None:
         """Make this the innermost hook pair on the calling thread."""
         _STACK.entered.append(self)
+        _C_engine._push_saved_tensors_hooks(self.pack_hook, self.unpack_hook)
 
     def __exit__(self, *exc_info: object) -> None:
         """Leave the block; the previously entered pair, if any, is innermost again."""
+        _C_engine._pop_saved_tensors_hooks()
         _STACK.entered.pop()
 
     def _pack(self, tensor: Tensor) -> _Packed:
@@ -222,9 +223,9 @@ class save_on_cpu(saved_tensors_hooks):
 
     Notes
     -----
-    Like every :class:`saved_tensors_hooks`, it covers the tensors saved by
-    custom :class:`~lucid.autograd.Function` calls only; the built-in ops'
-    saved tensors stay where the engine put them.
+    Like every :class:`saved_tensors_hooks`, it covers the tensors saved for
+    backward by both built-in ops and custom
+    :class:`~lucid.autograd.Function` calls.
 
     Examples
     --------

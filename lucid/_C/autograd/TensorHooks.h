@@ -70,6 +70,7 @@ namespace lucid {
 // slot — a node or a tensor can die on a thread that does not hold it.
 struct LUCID_API TensorHookSlot {
     py::object runner;
+    py::object post_runner;
     std::weak_ptr<TensorImpl> retain;
     Shape shape;
 
@@ -82,13 +83,20 @@ struct LUCID_API TensorHookSlot {
     void clear() noexcept;
 };
 
-// The hook slots of one node, by output slot.
+// The hook slots of one node, by output slot, plus node-level backward hooks
+// and packed saved tensors.
 //
 // Slots are held through ``shared_ptr`` so that the engine can keep the one it
 // is running alive: a hook may register another one (growing this list) or run
 // a backward pass of its own that releases this node's hooks.
 class LUCID_API NodeHooks {
 public:
+    NodeHooks() = default;
+    ~NodeHooks();
+
+    NodeHooks(const NodeHooks&) = delete;
+    NodeHooks& operator=(const NodeHooks&) = delete;
+
     // The slot of output ``output_nr``, or null when nothing was registered
     // there.
     std::shared_ptr<TensorHookSlot> find(std::uint32_t output_nr) const;
@@ -99,6 +107,14 @@ public:
     // Every registered slot, for CPython cyclic GC traversal.
     const std::vector<std::shared_ptr<TensorHookSlot>>& slots() const noexcept { return slots_; }
 
+    void clear() noexcept;
+
+    py::object node_pre_runner;
+    py::object node_post_runner;
+    std::vector<py::object> packed_inputs;
+    py::object packed_output;
+    bool saved_packed = false;
+
 private:
     std::vector<std::shared_ptr<TensorHookSlot>> slots_;
 };
@@ -108,6 +124,16 @@ private:
 inline bool has_slot_hooks(const Node& node, std::uint32_t output_nr) {
     const NodeHooks* hooks = node.tensor_hooks();
     return hooks != nullptr && hooks->find(output_nr) != nullptr;
+}
+
+inline bool has_node_pre_hooks(const Node& node) {
+    const NodeHooks* hooks = node.tensor_hooks();
+    return hooks != nullptr && static_cast<bool>(hooks->node_pre_runner);
+}
+
+inline bool has_node_post_hooks(const Node& node) {
+    const NodeHooks* hooks = node.tensor_hooks();
+    return hooks != nullptr && static_cast<bool>(hooks->node_post_runner);
 }
 
 // ── Running them ─────────────────────────────────────────────────────────────
@@ -150,6 +176,22 @@ LUCID_API Storage run_leaf_hooks(const TensorImpl& leaf, Storage grad);
 // :func:`run_leaf_hooks` for ``create_graph``.
 LUCID_API TensorImplPtr run_leaf_hooks_for_graph(const TensorImpl& leaf, TensorImplPtr grad);
 
+// Run a leaf's post-accumulate-grad hooks after its ``.grad`` has been updated.
+LUCID_API void run_leaf_post_hooks(const TensorImpl& leaf, bool graph);
+
+// Run a node's registered prehooks on its incoming output gradient before
+// ``apply`` runs.
+LUCID_API Storage run_node_pre_hooks(Node& node, Storage grad_out);
+LUCID_API TensorImplPtr run_node_pre_hooks_for_graph(Node& node, TensorImplPtr grad_out);
+
+// Run a node's registered post-hooks on ``(grad_inputs, grad_outputs)`` after
+// ``apply`` returns.
+LUCID_API void
+run_node_post_hooks(Node& node, std::vector<Storage>& grad_inputs, const Storage& grad_out);
+LUCID_API void run_node_post_hooks_for_graph(Node& node,
+                                             std::vector<TensorImplPtr>& grad_inputs,
+                                             const TensorImplPtr& grad_out);
+
 // ── Registering them ─────────────────────────────────────────────────────────
 
 // The runner of ``t``'s hooks, installed from ``make()`` the first time.
@@ -186,6 +228,26 @@ LUCID_API py::object tensor_hook_runner(const TensorImplPtr& t, const py::object
 
 // Whether ``t``'s slot has a runner installed.
 LUCID_API bool has_tensor_hooks(const TensorImpl& t);
+
+// The runner of ``t``'s post-accumulate-grad hooks (leaf tensors only).
+LUCID_API py::object tensor_post_accumulate_grad_hook_runner(const TensorImplPtr& t,
+                                                             const py::object& make);
+
+// Whether ``t`` has a post-accumulate-grad hook runner installed.
+LUCID_API bool has_post_accumulate_grad_hooks(const TensorImpl& t);
+
+// The runner of ``node``'s prehooks or post-hooks, installed from ``make()``
+// the first time.
+LUCID_API py::object node_prehook_runner(Node& node, const py::object& make);
+LUCID_API py::object node_hook_runner(Node& node, const py::object& make);
+
+// ── Saved-tensor hooks for built-in ops ──────────────────────────────────────
+
+LUCID_API void push_saved_tensors_hooks(py::object pack_hook, py::object unpack_hook);
+LUCID_API void pop_saved_tensors_hooks() noexcept;
+LUCID_API bool has_saved_tensors_hooks() noexcept;
+LUCID_API py::object pack_saved_tensor(const TensorImplPtr& t);
+LUCID_API TensorImplPtr unpack_saved_tensor(const py::object& entry);
 
 // Keep ``t``'s gradient in its ``.grad`` during backward, even though it is not
 // a leaf.  Sets the flag and, for a non-leaf, registers ``t`` at its producer's

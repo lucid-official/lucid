@@ -11,8 +11,9 @@ are — their list, their order, their removal, and the check that each one
 returned a tensor or ``None``.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
+import weakref
 
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
@@ -194,3 +195,159 @@ def _has_active_tensor_hooks(tensor: Tensor) -> bool:
         return False
     runner = _C_engine._tensor_hook_runner(impl, _HookRunner)
     return bool(getattr(runner, "hooks", True))
+
+
+class _PostAccumulateGradHookRunner:
+    """The post-accumulate-grad hooks of a leaf tensor, run in registration order."""
+
+    __slots__ = ("hooks", "tensor_ref")
+
+    def __init__(self) -> None:
+        self.hooks: list[Callable[..., object]] = []
+        self.tensor_ref: weakref.ReferenceType[Tensor] | None = None
+
+    def __call__(self, tensor_impl: _C_engine.TensorImpl) -> None:
+        t = self.tensor_ref() if self.tensor_ref is not None else None
+        if t is None or _unwrap(t) is not tensor_impl:
+            t = _wrap(tensor_impl)
+        for hook in tuple(self.hooks):
+            res = hook(t)
+            if res is not None:
+                raise RuntimeError("post accumulate grad hooks should return None.")
+
+
+def _register_post_accumulate_grad_hook(
+    tensor: Tensor, hook: Callable[[Tensor], None]
+) -> RemovableHandle:
+    """Add *hook* to *tensor*'s post-accumulate-grad hook list."""
+    global _HOOK_VERSION
+    runner = _C_engine._tensor_post_accumulate_grad_hook_runner(
+        _unwrap(tensor), _PostAccumulateGradHookRunner
+    )
+    runner.tensor_ref = weakref.ref(tensor)
+    runner.hooks.append(hook)
+    _HOOK_VERSION += 1
+    return RemovableHandle(runner.hooks, hook)
+
+
+class _NodePreHookRunner:
+    """The backward prehooks of a graph node, run in registration order."""
+
+    __slots__ = ("hooks",)
+
+    def __init__(self) -> None:
+        self.hooks: list[Callable[..., object]] = []
+
+    def __call__(self, grad_out: _C_engine.TensorImpl) -> _C_engine.TensorImpl | None:
+        from lucid._tensor.tensor import Tensor
+
+        go_tuple: tuple[Tensor | None, ...] = (_wrap(grad_out),)
+        replaced = False
+        for hook in tuple(self.hooks):
+            res = hook(go_tuple)
+            if res is None:
+                continue
+            if isinstance(res, Tensor):
+                go_tuple = (res,)
+                replaced = True
+                continue
+            if not isinstance(res, (tuple, list)) or len(res) != 1:
+                raise TypeError(
+                    "Node prehook must return None or a sequence of length 1 containing "
+                    f"a Tensor or None, got {type(res).__name__}"
+                )
+            item = res[0]
+            if item is not None and not isinstance(item, Tensor):
+                raise TypeError(
+                    f"Node prehook output element 0 must be a Tensor or None, "
+                    f"got {type(item).__name__}"
+                )
+            if item is not None:
+                go_tuple = (item,)
+                replaced = True
+        if not replaced or go_tuple[0] is None:
+            return None
+        return _unwrap(go_tuple[0])
+
+
+def _coerce_node_hook_return(res: object, n: int) -> tuple[Tensor | None, ...]:
+    """Validate and normalize the return value of a node post-hook."""
+    from lucid._tensor.tensor import Tensor
+
+    if isinstance(res, Tensor) and n == 1:
+        return (res,)
+    if not isinstance(res, (tuple, list)):
+        raise TypeError(
+            f"Node hook must return None, a tuple, or a list of gradients, got {type(res).__name__}"
+        )
+    if len(res) != n:
+        raise RuntimeError(f"Node hook returned {len(res)} grad_inputs, but node has {n} inputs")
+    new_gi: list[Tensor | None] = []
+    for idx, item in enumerate(res):
+        if item is not None and not isinstance(item, Tensor):
+            raise TypeError(
+                f"Node hook grad_input[{idx}] must be a Tensor or None, got {type(item).__name__}"
+            )
+        new_gi.append(item)
+    return tuple(new_gi)
+
+
+class _NodeHookRunner:
+    """The backward post-hooks of a graph node, run in registration order."""
+
+    __slots__ = ("hooks",)
+
+    def __init__(self) -> None:
+        self.hooks: list[Callable[..., object]] = []
+
+    def __call__(
+        self,
+        grad_inputs: list[_C_engine.TensorImpl | None],
+        grad_out: _C_engine.TensorImpl | None,
+    ) -> list[_C_engine.TensorImpl | None] | None:
+        gi_tuple: tuple[Tensor | None, ...] = tuple(
+            None if g is None else _wrap(g) for g in grad_inputs
+        )
+        go_tuple: tuple[Tensor | None, ...] = (None if grad_out is None else _wrap(grad_out),)
+        replaced = False
+        n = len(gi_tuple)
+        for hook in tuple(self.hooks):
+            res = hook(gi_tuple, go_tuple)
+            if res is None:
+                continue
+            gi_tuple = _coerce_node_hook_return(res, n)
+            replaced = True
+        if not replaced:
+            return None
+        return [None if g is None else _unwrap(g) for g in gi_tuple]
+
+
+def _register_node_prehook(
+    node: _C_engine.Node,
+    hook: Callable[[tuple[Tensor | None, ...]], Sequence[Tensor | None] | Tensor | None],
+) -> RemovableHandle:
+    """Register a backward prehook on *node*."""
+    if not callable(hook):
+        raise TypeError(f"register_prehook expected a callable, got {type(hook).__name__}")
+    global _HOOK_VERSION
+    runner = _C_engine._node_prehook_runner(node, _NodePreHookRunner)
+    runner.hooks.append(hook)
+    _HOOK_VERSION += 1
+    return RemovableHandle(runner.hooks, hook)
+
+
+def _register_node_hook(
+    node: _C_engine.Node,
+    hook: Callable[
+        [tuple[Tensor | None, ...], tuple[Tensor | None, ...]],
+        Sequence[Tensor | None] | Tensor | None,
+    ],
+) -> RemovableHandle:
+    """Register a backward post-hook on *node*."""
+    if not callable(hook):
+        raise TypeError(f"register_hook expected a callable, got {type(hook).__name__}")
+    global _HOOK_VERSION
+    runner = _C_engine._node_hook_runner(node, _NodeHookRunner)
+    runner.hooks.append(hook)
+    _HOOK_VERSION += 1
+    return RemovableHandle(runner.hooks, hook)

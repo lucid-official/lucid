@@ -414,8 +414,11 @@ void record_python_input_edges(const std::vector<std::shared_ptr<TensorImpl>>& i
     edges.reserve(inputs.size());
     std::vector<std::int64_t> versions;
     versions.reserve(inputs.size());
+    node.in_shapes.clear();
+    node.in_shapes.reserve(inputs.size());
 
     for (const auto& inp : inputs) {
+        node.in_shapes.push_back(inp ? inp->shape() : Shape{});
         if (!inp || !inp->requires_grad()) {
             edges.emplace_back(nullptr, 0);
             versions.push_back(0);

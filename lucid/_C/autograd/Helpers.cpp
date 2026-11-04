@@ -30,6 +30,7 @@
 #include "../core/TensorImpl.h"
 #include "AccumulateGrad.h"
 #include "Node.h"
+#include "TensorHooks.h"
 
 namespace lucid {
 
@@ -469,8 +470,9 @@ bool storage_has_nan(const Storage& s) {
 void check_anomaly_grads(const Node& node, const std::vector<Storage>& grads) {
     if (!g_anomaly_enabled)
         return;
+    const bool empty_is_none = node.empty_grad_is_none() || has_node_post_hooks(node);
     for (std::size_t i = 0; i < grads.size(); ++i) {
-        if (node.empty_grad_is_none() && storage_nbytes(grads[i]) == 0)
+        if (empty_is_none && storage_nbytes(grads[i]) == 0)
             continue;
         if (storage_has_nan(grads[i])) {
             ErrorBuilder("detect_anomaly")

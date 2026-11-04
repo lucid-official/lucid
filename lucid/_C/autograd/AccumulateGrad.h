@@ -112,6 +112,12 @@ public:
     // holds nothing a pass frees.
     SavedKind saved_kind() const noexcept override { return SavedKind::kNothing; }
 
+    Shape output_grad_shape(std::uint32_t /*slot*/) const override {
+        if (auto t = leaf_.lock())
+            return t->shape();
+        return {};
+    }
+
     // Accessor for the leaf ``weak_ptr``.
     //
     // Returns
@@ -124,6 +130,17 @@ public:
 private:
     std::weak_ptr<TensorImpl> leaf_;
 };
+
+// Prepare ``grad`` for ``leaf`` by casting to ``leaf.dtype()`` and running
+// ``leaf``'s tensor hooks (``Tensor.register_hook``).
+LUCID_API bool prepare_leaf_grad(TensorImpl& leaf, Storage& grad);
+LUCID_API TensorImplPtr prepare_leaf_grad_for_graph(const TensorImplPtr& leaf,
+                                                    const TensorImplPtr& grad);
+
+// Commit a prepared gradient into ``leaf``'s ``.grad`` slot and run any
+// registered post-accumulate-grad hooks.
+LUCID_API void commit_leaf_grad(TensorImpl& leaf, Storage grad);
+LUCID_API void commit_leaf_grad_for_graph(const TensorImplPtr& leaf, const TensorImplPtr& grad);
 
 // Accumulate ``grad`` into ``leaf``'s ``.grad``: nothing unless the leaf
 // requires grad, then the cast to its dtype, its hooks, and the sum.

@@ -756,9 +756,7 @@ public:
     // ----------
     // fn : std::shared_ptr<Node>
     //     Backward node produced by the forward-time op kernel.
-    void set_grad_fn(std::shared_ptr<Node> fn) noexcept {
-        ensure_autograd()->grad_fn = std::move(fn);
-    }
+    void set_grad_fn(std::shared_ptr<Node> fn);
 
     // Sets the output index associated with :func:`grad_fn`.
     //
