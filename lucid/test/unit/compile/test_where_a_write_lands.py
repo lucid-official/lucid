@@ -583,14 +583,16 @@ def test_the_whole_tensor_written_after_a_view_of_it_ends_with_its_own_value(
     buffer: str, entry: str
 ) -> None:
     """The later copy of the buffer already holds the view's write: putting it
-    back has to leave the buffer from before both."""
+    back has to leave the buffer from before both.  A buffer that is part of its
+    bytes runs eager, as the copy leaves the view stale and nothing else holds
+    the view's write."""
 
     def body(model: nn.Module, x: Tensor) -> Tensor:
         model.b[1:].add_(x.mean())
         model.b.copy_(x * 2.0)
         return x * 1.0
 
-    assert _agrees(body, entry, BUFFERS[buffer]).compiled
+    assert _agrees(body, entry, BUFFERS[buffer]).compiled is (buffer == "plain")
 
 
 class _Segments(nn.Module):

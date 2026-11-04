@@ -225,8 +225,9 @@ class TestAWriteThroughAView:
         want = closure.tolist()
 
         def fn(x: lucid.Tensor) -> lucid.Tensor:
+            result = x * 1
             view(x if to == "input" else closure).add_(1.0)
-            return x * 1
+            return result
 
         cml_build.trace(_Apply(fn).eval(), example)
         assert closure.tolist() == want
