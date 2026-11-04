@@ -1356,13 +1356,13 @@ def unsafe_chunk(input: Tensor, chunks: int, dim: int = 0) -> tuple[Tensor, ...]
 
 
 def unsafe_split(
-    tensor: Tensor, split_size: int | Sequence[int], dim: int = 0
+    input: Tensor, split_size: int | Sequence[int], dim: int = 0
 ) -> tuple[Tensor, ...]:
-    """Split ``tensor`` into sections along ``dim`` (alias of :func:`lucid.split`).
+    """Split ``input`` into sections along ``dim`` (alias of :func:`lucid.split`).
 
     Parameters
     ----------
-    tensor : Tensor
+    input : Tensor
         Tensor to split.
     split_size : int or Sequence[int]
         Chunk size or section sizes.
@@ -1370,7 +1370,7 @@ def unsafe_split(
         Dimension along which to split.
     """
     sections = split_size if isinstance(split_size, int) else list(split_size)
-    return tuple(lucid.split(tensor, sections, dim=dim))
+    return tuple(lucid.split(input, sections, dim=dim))
 
 
 def constant_pad_nd(input: Tensor, pad: Sequence[int], value: Scalar = 0) -> Tensor:
