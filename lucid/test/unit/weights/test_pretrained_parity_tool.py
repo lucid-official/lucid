@@ -375,7 +375,17 @@ def test_darknet_comparison_reads_its_release_table_past_the_oracle_check(monkey
     oracle = SimpleNamespace(dnn=SimpleNamespace(readNetFromDarknet=lambda *args: None))
     monkeypatch.setitem(sys.modules, "cv2", oracle)
     assert "unsupported" in parity._compare_darknet("not_a_release", (1, 3, 8, 8))
-    assert set(_darknet_release.RELEASES) == {"yolo_v2", "yolo_v3", "yolo_v3_tiny", "yolo_v4"}
+
+
+def test_every_published_darknet_checkpoint_has_the_release_it_names() -> None:
+    sources = {
+        name: str(parity._factory_default(name).value.meta.get("source", ""))
+        for name in parity._WEIGHTS_BY_MODEL
+    }
+    prefix = "darknet/"
+    published = {n: s.removeprefix(prefix) for n, s in sources.items() if s.startswith(prefix)}
+    assert published
+    assert published == {n: Path(r.url).name for n, r in _darknet_release.RELEASES.items()}
 
 
 def test_dit_original_frequency_contract_applies_to_every_block() -> None:
