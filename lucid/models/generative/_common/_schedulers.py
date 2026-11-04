@@ -155,9 +155,9 @@ class DDPMScheduler(DiffusionScheduler):
             :func:`make_beta_schedule`.
         prediction_type: ``"epsilon"`` (the noise, default) or ``"sample"``
             (predict x_0 directly).  Both parameterisations are supported.
-        device: Where the schedule's tables are built; :meth:`to` moves
-            them later, and ``add_noise`` / ``step`` move them to their
-            sample's device on first use.
+        device: Where the schedule's tables are placed; ``None`` is the
+            default device.  :meth:`to` moves them later, and ``add_noise`` /
+            ``step`` move them to their sample's device on first use.
 
     Notes:
         The scheduler is *stateless w.r.t. weights* — it only owns the noise
@@ -200,7 +200,7 @@ class DDPMScheduler(DiffusionScheduler):
         beta_schedule: str = "linear",
         prediction_type: str = "epsilon",
         clip_denoised: bool = True,
-        device: DeviceLike = "cpu",
+        device: DeviceLike = None,
     ) -> None:
         if prediction_type not in ("epsilon", "sample"):
             raise ValueError(

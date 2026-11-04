@@ -27,6 +27,7 @@ import lucid.diffeq
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._dtype import _float32_or_wider
+from lucid._globals import get_default_device
 from lucid._tensor.tensor import Tensor
 from lucid._types import Reduction
 from lucid.models._utils._common import host_floats
@@ -100,7 +101,7 @@ def make_beta_schedule(
     *,
     beta_start: float = 1e-4,
     beta_end: float = 0.02,
-    device: str = "cpu",
+    device: str | None = None,
 ) -> Tensor:
     """Build the forward-process noise schedule ``β_1, …, β_T``.
 
@@ -111,7 +112,8 @@ def make_beta_schedule(
                     ``ᾱ_t = cos((t/T + s) / (1 + s) · π/2)² with s = 0.008``.
         beta_start: Start of the linear schedule (ignored for cosine).
         beta_end:   End of the linear schedule (ignored for cosine).
-        device:     Where to allocate the resulting buffer.
+        device:     Where to allocate the resulting buffer; ``None`` is the
+                    default device.
 
     Returns:
         ``(num_steps,)`` float tensor.
@@ -387,7 +389,7 @@ class DiffusionPosterior(NamedTuple):
 
 
 def diffusion_posterior_constants(
-    betas: Tensor | Sequence[float], *, device: str = "cpu"
+    betas: Tensor | Sequence[float], *, device: str | None = None
 ) -> DiffusionPosterior:
     r"""Precompute the closed-form posterior constants (Ho 2020 Eq. 6–7):
 
@@ -411,7 +413,8 @@ def diffusion_posterior_constants(
         betas:  ``(T,)`` forward-process variances, as a tensor or as host
             floats (see :func:`beta_schedule_floats`, the form a model can
             use while it is built without storage).
-        device: Where to allocate the resulting ``(T,)`` buffers.
+        device: Where to allocate the resulting ``(T,)`` buffers; ``None`` is
+            the default device.
 
     Returns:
         A :class:`DiffusionPosterior` of three ``(T,)`` tensors.
@@ -717,7 +720,11 @@ def flow_prior_log_prob(name: str, h: Tensor) -> Tensor:
 
 
 def flow_prior_sample(
-    name: str, shape: tuple[int, ...], *, device: str = "cpu", dtype: lucid.dtype | None = None
+    name: str,
+    shape: tuple[int, ...],
+    *,
+    device: str | None = None,
+    dtype: lucid.dtype | None = None,
 ) -> Tensor:
     r"""Draw i.i.d. samples from a flow's factorised prior :math:`p_H`.
 
@@ -731,8 +738,8 @@ def flow_prior_sample(
         :math:`h = \log u - \log(1 - u)`) or ``"gaussian"``.
     shape : tuple[int, ...]
         Shape of the requested sample block.
-    device : str, optional
-        Placement of the result.  Default ``"cpu"``.
+    device : str or None, optional
+        Placement of the result.  ``None`` (the default) is the default device.
     dtype : lucid.dtype or None, optional
         Dtype of the result — the flow's own, so a float16 flow decodes a
         float16 draw.  ``None`` is the default dtype.
@@ -817,7 +824,7 @@ def generative_activation(name: str, x: Tensor) -> Tensor:
 
 
 def make_sigma_schedule(
-    num_noise_levels: int, *, sigma_max: float, sigma_min: float, device: str = "cpu"
+    num_noise_levels: int, *, sigma_max: float, sigma_min: float, device: str | None = None
 ) -> Tensor:
     """Geometric noise schedule for score-based models (Song & Ermon, 2019).
 
@@ -833,7 +840,7 @@ def make_sigma_schedule(
             NCSNv2 found large L ∈ [200, 500] works better).
         sigma_max: Largest noise σ_1.
         sigma_min: Smallest noise σ_L.
-        device:    Where to allocate the buffer.
+        device:    Where to allocate the buffer; ``None`` is the default device.
 
     Returns:
         ``(num_noise_levels,)`` float tensor in *descending* order.
@@ -1055,7 +1062,8 @@ def resolve_generation_device(model: nn.Module, device: str | None) -> str:
     Parameters
     ----------
     model : nn.Module
-        Any module; its first parameter decides the device.
+        Any module; its first parameter decides the device, and one with no
+        parameters gets the default device.
     device : str or None
         Caller's explicit choice, or ``None`` to follow the model.
 
@@ -1073,7 +1081,7 @@ def resolve_generation_device(model: nn.Module, device: str | None) -> str:
         return device
     for param in model.parameters():
         return str(param.device.type)
-    return "cpu"
+    return get_default_device()
 
 
 def model_dtype(model: nn.Module) -> lucid.dtype:

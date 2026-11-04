@@ -59,8 +59,8 @@ def _sincos_2d(dim: int, grid: int) -> Tensor:
     """
     if dim % 4 != 0:
         raise ValueError(f"a two-dimensional sin-cos table needs dim % 4 == 0, got {dim}")
-    coords = lucid.arange(grid).to(lucid.float64)
-    zeros = lucid.zeros(grid, grid, dtype=lucid.float64)
+    coords = lucid.arange(grid, dtype=lucid.float64, device="cpu")
+    zeros = lucid.zeros(grid, grid, dtype=lucid.float64, device="cpu")
     rows = coords.reshape(grid, 1) + zeros
     cols = coords.reshape(1, grid) + zeros
     table = lucid.cat(
@@ -70,7 +70,7 @@ def _sincos_2d(dim: int, grid: int) -> Tensor:
         ],
         dim=1,
     )
-    return table.unsqueeze(dim=0)
+    return table.unsqueeze(dim=0).to(lucid.get_default_device())
 
 
 # ── patches ──────────────────────────────────────────────────────────────────

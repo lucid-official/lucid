@@ -38,7 +38,8 @@ def sincos_embedding(positions: Tensor, dim: int) -> Tensor:
     span four decades, so evaluating ``10000 ** k`` in float32 moves the
     angles by about 1e-4 — negligible on its own, but this table is the
     input to every block, and at float32 it sat a visible distance from
-    the released checkpoint's own table.
+    the released checkpoint's own table.  Double lives on the host, so the
+    arithmetic runs there whatever device ``positions`` is on.
 
     Parameters
     ----------
@@ -50,12 +51,13 @@ def sincos_embedding(positions: Tensor, dim: int) -> Tensor:
     Returns
     -------
     Tensor
-        ``(N, dim)``, in float32.
+        ``(N, dim)``, in float32, on the device of ``positions``.
     """
-    omega = 1.0 / (10000.0 ** (lucid.arange(dim // 2).to(lucid.float64) * (2.0 / dim)))
-    angles = positions.to(lucid.float64).reshape(-1, 1) * omega.reshape(1, -1)
+    exponents = lucid.arange(dim // 2, dtype=lucid.float64, device="cpu")
+    omega = 1.0 / (10000.0 ** (exponents * (2.0 / dim)))
+    angles = positions.to("cpu").to(lucid.float64).reshape(-1, 1) * omega.reshape(1, -1)
     table = lucid.cat([lucid.sin(angles), lucid.cos(angles)], dim=1)
-    return table.to(lucid.float32)
+    return table.to(lucid.float32).to(positions.device)
 
 
 def gather_tokens(tokens: Tensor, indices: Tensor) -> Tensor:

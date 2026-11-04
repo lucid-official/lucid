@@ -222,18 +222,21 @@ class RotaryEmbedding(Module):
         # inv_freq[i] = base ** (-2 i / d_head) for i = 0 .. d_head/2 - 1
         half = head_dim // 2
         inv_freq_vals: list[float] = [1.0 / (base ** (2.0 * i / head_dim)) for i in range(half)]
-        inv_freq = lucid.tensor(inv_freq_vals)
+        inv_freq = lucid.tensor(inv_freq_vals, device="cpu")
 
         # Outer product positions × inv_freq → (max_pos, head_dim / 2).
-        pos = lucid.arange(max_position_embeddings).float()
+        pos = lucid.arange(max_position_embeddings, device="cpu").float()
         freqs = pos.unsqueeze(1) * inv_freq.unsqueeze(0)
 
         # Duplicate to head_dim so cos / sin broadcast against (..., head_dim).
         # HF convention: concatenate along the last dim, not interleave.
         emb = lucid.cat([freqs, freqs], dim=-1)
 
-        self.register_buffer("cos_cached", lucid.cos(emb), persistent=False)
-        self.register_buffer("sin_cached", lucid.sin(emb), persistent=False)
+        # Computed on the host and placed here, so the tables hold the same
+        # numbers on every device: Metal's sine does not round as the CPU's does.
+        device = lucid.get_default_device()
+        self.register_buffer("cos_cached", lucid.cos(emb).to(device), persistent=False)
+        self.register_buffer("sin_cached", lucid.sin(emb).to(device), persistent=False)
 
     @override
     def forward(self) -> tuple[Tensor, Tensor]:

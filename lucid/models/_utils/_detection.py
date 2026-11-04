@@ -593,7 +593,7 @@ class AnchorGenerator(nn.Module):
         feature_map_size: tuple[int, int],
         stride: tuple[int, int],
         base_anchors: list[list[float]],
-        device: str = "cpu",
+        device: str | None = None,
     ) -> Tensor:
         """Tile base_anchors across a feature map grid.
 
@@ -601,7 +601,8 @@ class AnchorGenerator(nn.Module):
             feature_map_size: (H, W) of the feature map.
             stride:           (stride_h, stride_w) pixels per cell.
             base_anchors:     A rows of xyxy base anchors centred at origin.
-            device:           Device for the generated anchor tensor.
+            device:           Device for the generated anchor tensor; ``None``
+                              is the default device.
 
         Returns:
             (H × W × A, 4) anchors in xyxy image-pixel coordinates.
@@ -646,13 +647,12 @@ class AnchorGenerator(nn.Module):
         assert len(feature_maps) == len(self._cell_anchors)
         # Device and dtype follow the feature maps, so anchors stay co-located
         # with — and as wide as — the predictions they are matched against.
-        device = feature_maps[0].device.type if feature_maps else "cpu"
         all_anchors: list[Tensor] = []
         for feat, base, stride in zip(feature_maps, self._cell_anchors, strides, strict=True):
             fH = int(feat.shape[2])
             fW = int(feat.shape[3])
             all_anchors.append(
-                self._grid_anchors((fH, fW), stride, base, device=device).to(feat.dtype)
+                self._grid_anchors((fH, fW), stride, base, device=feat.device.type).to(feat.dtype)
             )
         return all_anchors
 

@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 
 
 def sinusoidal_embedding(
-    num_positions: int, embedding_dim: int, *, base: float = 10_000.0, device: str = "cpu"
+    num_positions: int, embedding_dim: int, *, base: float = 10_000.0, device: str | None = None
 ) -> Tensor:
     r"""Build the 1-D sinusoidal positional encoding table from "Attention Is All You Need".
 
@@ -52,6 +52,7 @@ def sinusoidal_embedding(
         finer per-step discrimination.
     device : str, optional
         Target device (``"cpu"`` or ``"metal"``) for the resulting buffer.
+        ``None`` (the default) is the current default device.
 
     Returns
     -------
@@ -109,7 +110,12 @@ def sinusoidal_embedding(
 
 
 def sinusoidal_embedding_2d(
-    height: int, width: int, embedding_dim: int, *, base: float = 10_000.0, device: str = "cpu"
+    height: int,
+    width: int,
+    embedding_dim: int,
+    *,
+    base: float = 10_000.0,
+    device: str | None = None,
 ) -> Tensor:
     r"""Build the 2-D sinusoidal positional encoding from DETR (Carion et al., 2020).
 
@@ -133,7 +139,8 @@ def sinusoidal_embedding_2d(
     base : float, optional
         Frequency base.  DETR uses ``10_000``.
     device : str, optional
-        Target device (``"cpu"`` or ``"metal"``).
+        Target device (``"cpu"`` or ``"metal"``).  ``None`` (the default) is
+        the current default device.
 
     Returns
     -------

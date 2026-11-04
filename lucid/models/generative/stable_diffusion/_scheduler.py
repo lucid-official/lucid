@@ -101,7 +101,7 @@ class DDIMScheduler:
         """Build the schedule. See the class docstring for parameters."""
         self.config = config
         steps = config.num_train_timesteps
-        ramp = lucid.linspace(0.0, 1.0, steps)
+        ramp = lucid.linspace(0.0, 1.0, steps, device="cpu")
         if config.beta_schedule == "scaled_linear":
             root = (1.0 - ramp) * (config.beta_start**0.5) + ramp * (config.beta_end**0.5)
             betas = root**2
@@ -113,10 +113,13 @@ class DDIMScheduler:
         # batch of timesteps is a gather on the device rather than a read
         # of each one.  Taken in double and rounded once: 1 - ᾱ_t is not
         # exact in float32 once ᾱ_t < 0.5, and double is what the scalar
-        # formula these replace computed in.
+        # formula these replace computed in.  Double lives on the host, so
+        # the schedule is computed there and only these two tables, which a
+        # batch reads on the device, go to the default device.
         wide = self.alphas_cumprod.to(lucid.float64)
-        self._signal_scale = wide.sqrt().to(lucid.float32)
-        self._noise_scale = (1.0 - wide).sqrt().to(lucid.float32)
+        device = lucid.get_default_device()
+        self._signal_scale = wide.sqrt().to(lucid.float32).to(device)
+        self._noise_scale = (1.0 - wide).sqrt().to(lucid.float32).to(device)
 
     def _apply(self, fn: Callable[[Tensor], Tensor]) -> None:
         """Map the noising tables through a model's device / dtype move.

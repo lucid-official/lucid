@@ -148,16 +148,19 @@ def sincos_position_embedding(dim: int, side: int) -> Tensor:
             f"cosine over each of two axes, got {dim}"
         )
     quarter = dim // 4
-    omega = 1.0 / (10000.0 ** (lucid.arange(quarter, dtype=lucid.float32) / quarter))
-    pos = lucid.arange(side, dtype=lucid.float32)
+    # Computed on the host and placed at the end, so the table holds the same
+    # numbers on every device: Metal's sine does not round as the CPU's does.
+    omega = 1.0 / (10000.0 ** (lucid.arange(quarter, dtype=lucid.float32, device="cpu") / quarter))
+    pos = lucid.arange(side, dtype=lucid.float32, device="cpu")
     out = pos.reshape(-1, 1) * omega.reshape(1, -1)
     axis = lucid.cat([lucid.sin(out), lucid.cos(out)], dim=1)
 
-    rows = axis.reshape(side, 1, -1) + lucid.zeros((side, side, 1))
-    cols = axis.reshape(1, side, -1) + lucid.zeros((side, side, 1))
+    rows = axis.reshape(side, 1, -1) + lucid.zeros((side, side, 1), device="cpu")
+    cols = axis.reshape(1, side, -1) + lucid.zeros((side, side, 1), device="cpu")
     # Columns lead — see the note above.  Row-major flattening makes this
     # the half that changes between adjacent tokens.
-    return lucid.cat([cols, rows], dim=-1).reshape(1, side * side, -1)
+    table = lucid.cat([cols, rows], dim=-1).reshape(1, side * side, -1)
+    return table.to(lucid.get_default_device())
 
 
 def check_latent_size(height: int, width: int, grid: int, patch: int, family: str) -> None:

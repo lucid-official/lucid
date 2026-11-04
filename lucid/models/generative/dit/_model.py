@@ -42,12 +42,17 @@ __all__ = ["DiTModel", "DiTForImageGeneration", "DiTOutput"]
 
 
 def _beta_schedule(config: DiTConfig) -> Tensor:
-    """The config's ``β`` schedule, on the CPU in the default dtype."""
+    """The config's ``β`` schedule, on the CPU in the default dtype.
+
+    On the CPU whatever the default device, so that :func:`_alpha_bar` rounds
+    the same way wherever the table ends up.
+    """
     return make_beta_schedule(
         config.num_train_timesteps,
         config.beta_schedule,
         beta_start=config.beta_start,
         beta_end=config.beta_end,
+        device="cpu",
     )
 
 
@@ -442,8 +447,9 @@ class DiTForImageGeneration(ImageGenerationModel):
         self.config: DiTConfig = config
         self.dit = DiTModel(config)
         betas = _beta_schedule(config)
-        self.register_buffer("betas", betas, persistent=False)
-        self.register_buffer("alphas_cumprod", _alpha_bar(betas), persistent=False)
+        device = lucid.get_default_device()
+        self.register_buffer("betas", betas.to(device), persistent=False)
+        self.register_buffer("alphas_cumprod", _alpha_bar(betas).to(device), persistent=False)
 
     def _alphas_cumprod_in(self, dtype: lucid.dtype, device: str) -> Tensor:
         r""":math:`\bar\alpha` in ``dtype`` on ``device``, as precise as built.

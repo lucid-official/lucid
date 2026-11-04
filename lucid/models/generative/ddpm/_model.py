@@ -747,8 +747,11 @@ class DDPMForImageGeneration(ImageGenerationModel, DiffusionMixin):
             )
             posterior = diffusion_posterior_constants(beta_values)
             sqrt_recip_ab, sqrt_recipm1_ab = _x0_recovery_constants(beta_values)
+            # Metal's log does not round as the CPU's does, and this table is
+            # the only one here that a tensor op computes.
+            log_betas = lucid.log(lucid.tensor(beta_values, device="cpu"))
             constants = {
-                "_log_betas": lucid.log(lucid.tensor(beta_values)),
+                "_log_betas": log_betas.to(lucid.get_default_device()),
                 "_sqrt_recip_ab": sqrt_recip_ab,
                 "_sqrt_recipm1_ab": sqrt_recipm1_ab,
                 "_posterior_mean_coef_start": posterior.mean_coef_start,

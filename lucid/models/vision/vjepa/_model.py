@@ -61,10 +61,10 @@ def _sincos_3d(dim: int, grid: tuple[int, int, int], uniform_power: bool) -> Ten
     else:
         widths = (dim // 2, dim // 4, dim // 4)
 
-    time = lucid.arange(duration).to(lucid.float64)
-    down = lucid.arange(rows).to(lucid.float64)
-    across = lucid.arange(cols).to(lucid.float64)
-    zeros = lucid.zeros(duration, rows, cols, dtype=lucid.float64)
+    time = lucid.arange(duration, dtype=lucid.float64, device="cpu")
+    down = lucid.arange(rows, dtype=lucid.float64, device="cpu")
+    across = lucid.arange(cols, dtype=lucid.float64, device="cpu")
+    zeros = lucid.zeros(duration, rows, cols, dtype=lucid.float64, device="cpu")
     coords = (
         time.reshape(duration, 1, 1) + zeros,
         down.reshape(1, rows, 1) + zeros,
@@ -77,7 +77,7 @@ def _sincos_3d(dim: int, grid: tuple[int, int, int], uniform_power: bool) -> Ten
         ],
         dim=1,
     )
-    return table[:, :dim].unsqueeze(dim=0)
+    return table[:, :dim].unsqueeze(dim=0).to(lucid.get_default_device())
 
 
 # ── tubelets ─────────────────────────────────────────────────────────────────
