@@ -312,7 +312,7 @@ def _compile_segment(seg: _Segment, x: Tensor, owner: Module) -> _SegCompiled | 
     t_fwd, y = traced_fwd
     ext_fwd = t_fwd.external_feeds
     # The segment's output, not whatever op it recorded last.
-    found = t_fwd.lookup_id(_unwrap(y))
+    found = t_fwd.read_id(_unwrap(y))
     if found is None:
         return None
     y_id = int(found)

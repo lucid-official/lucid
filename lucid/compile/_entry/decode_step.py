@@ -189,7 +189,7 @@ def _collect_cache_write_ids(
     """Collect the output and per-layer cache write trace IDs and buffer slot map."""
     from lucid._dispatch import _unwrap
 
-    out_id = tracer.lookup_id(_unwrap(out))
+    out_id = tracer.read_id(_unwrap(out))
     if out_id is None:
         return None
     write_ids: list[int] = [int(out_id)]
@@ -198,7 +198,7 @@ def _collect_cache_write_ids(
         for slot_kv, (buf_after, buf_before) in enumerate(
             ((static_cache.key_cache[i], orig_key[i]), (static_cache.value_cache[i], orig_val[i]))
         ):
-            wid = tracer.lookup_id(_unwrap(buf_after))
+            wid = tracer.read_id(_unwrap(buf_after))
             if wid is None:
                 return None
             write_ids.append(int(wid))

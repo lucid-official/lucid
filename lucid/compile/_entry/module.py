@@ -37,7 +37,7 @@ class _TracerLike(Protocol):
     external_feeds: dict[int, _C_engine.TensorImpl]
     retained_values: dict[int, _C_engine.TensorImpl]
 
-    def lookup_id(self, impl: object) -> int | None: ...
+    def read_id(self, impl: object) -> int | None: ...
 
     def made_here(self, impl: object) -> bool: ...
 
@@ -114,7 +114,7 @@ def _extract_return_impls(value: object, tracer: _TracerLike) -> tuple[object, l
         """
         if isinstance(v, Tensor):
             impl = _unwrap(v)
-            tid = tracer.lookup_id(impl)
+            tid = tracer.read_id(impl)
             if tid is None and tracer.made_here(impl):
                 # A constant the trace made and folded: eager answers a new
                 # tensor on every call, and so does the compiled call.

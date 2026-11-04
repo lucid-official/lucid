@@ -67,9 +67,16 @@ void Tracer::on_op_enter(std::string_view name, Device device, Dtype dtype, Shap
 }
 
 void Tracer::on_op_io(const std::vector<TensorImplPtr>& inputs, const TensorImplPtr& output) {
-    // First, since a held-out op has no node in ``graph_.ops``.
-    if (!fold_constants_ || !fold(inputs, output))
-        record_io(inputs, output);
+    // Before folding: a held-out op reads a stale view as the constant it
+    // holds now, which the next call would not recompute.
+    for (const auto& input : inputs)
+        refuse_stale(input.get());
+    // Then, since a held-out op has no node in ``graph_.ops``.
+    if (fold_constants_ && fold(inputs, output))
+        return;
+    if (output)
+        stale_.erase(output.get());  // an op defined it again: no longer from before a write
+    record_io(inputs, output);
 }
 
 void Tracer::record_io(const std::vector<TensorImplPtr>& inputs, const TensorImplPtr& output) {
@@ -214,6 +221,13 @@ void Tracer::on_buffer_update(const TensorImplPtr& buffer, const TensorImplPtr& 
     if (it != impl_to_id_.end()) {
         impl_to_id_[buffer.get()] = it->second;
         buffer_values_[buffer.get()] = value;
+        // The kernel leaves the buffer's bytes alone and hands the new values
+        // out, so no hook sees this write; eager has updated every view of it.
+        // The values come from the input: never the constant write an earlier
+        // in-place op may have left ``constant_write_`` saying.
+        constant_write_ = false;
+        for (const auto& view : buffer->live_views())
+            on_stale_view(view);
     }
 }
 
@@ -231,6 +245,11 @@ void Tracer::on_rng_feed(std::string_view name, const TensorImplPtr& output) {
 void Tracer::on_inplace_write(const TensorImplPtr& target, const TensorImplPtr& value) {
     if (!target || !value || target.get() == value.get())
         return;
+    // Copying ``value`` in reads it.
+    refuse_stale(value.get());
+    constant_write_ = made_here(value.get()) && !sees(value.get());
+    // ``target`` holds ``value`` now, whatever it held before.
+    stale_.erase(target.get());
     if (made_here(target.get())) {
         write_made(target, value);
         return;
@@ -289,11 +308,51 @@ void Tracer::write_made(const TensorImplPtr& target, const TensorImplPtr& value)
     impl_to_id_[target.get()] = written_id(value);
 }
 
+void Tracer::on_stale_view(const TensorImplPtr& view) {
+    if (!view)
+        return;
+    const auto seen = impl_to_id_.find(view.get());
+    if (seen == impl_to_id_.end()) {
+        // A constant no op has read yet holds, whenever it is read, what a
+        // constant write left in it.
+        if (constant_write_ && made_here(view.get()))
+            return;
+    } else if (made_here(view.get())) {
+        // Read as a feed by ops recorded before this write: they keep the
+        // value from before it, which the buffer is about to lose (see
+        // ``write_made``, which does the same for the target).
+        const auto feed = external_feeds_.find(seen->second);
+        if (feed != external_feeds_.end() && feed->second.get() == view.get())
+            feed->second = snapshot(view);
+    }
+    stale_.emplace(view.get(), view);
+}
+
+void Tracer::refuse_stale(const TensorImpl* impl) {
+    if (stale_.empty() || impl == nullptr || stale_.count(const_cast<TensorImpl*>(impl)) == 0)
+        return;
+    mark_unsupported("a view of a tensor was read after an in-place write to that tensor, "
+                     "which the recording gives the value from before the write");
+}
+
+TensorId Tracer::read_id(const TensorImpl* impl) {
+    refuse_stale(impl);
+    return lookup_id(impl);
+}
+
 void Tracer::restore_outside_writes() {
-    // Latest first is not needed: each tensor has one entry, its value from
-    // before the trace's first write to it.
+    // Before the copies below: ``copy_from`` is a write like any other, and
+    // clears the tensor it writes from the stale views.  A tensor written
+    // twice, the second time through an overlapping view, carries back the
+    // value of the first write only.
     for (const auto& [target, before] : outside_originals_)
-        target->copy_from(*before);
+        refuse_stale(target.get());
+    // Latest first: each tensor has one entry, its value from before the
+    // trace's first write to it, and a tensor that overlaps an earlier one
+    // kept that one's write in its copy.  The earlier copy goes last, so
+    // every byte ends as it was before the trace.
+    for (auto it = outside_originals_.rbegin(); it != outside_originals_.rend(); ++it)
+        it->first->copy_from(*it->second);
 }
 
 std::vector<std::pair<TensorId, TensorImplPtr>> Tracer::outside_writes() const {
@@ -314,6 +373,8 @@ void Tracer::on_host_read(const TensorImpl* impl) {
         mark_unsupported("a traced value was read on the host (item / tolist / numpy / "
                          "bytes / pickle / dlpack), so each call would reuse the first "
                          "call's value");
+    else
+        refuse_stale(impl);
 }
 
 void Tracer::watch(const TensorImplPtr& impl) {
@@ -326,6 +387,8 @@ void Tracer::on_derived(std::string_view name,
                         const TensorImplPtr& out) {
     if (!out)
         return;
+    for (const auto& src : srcs)
+        refuse_stale(src.get());
     const auto is = [&](const TensorImplPtr& src) { return src.get() == out.get(); };
     const auto seen = [&](const TensorImplPtr& src) { return sees(src.get()); };
     if (std::any_of(srcs.begin(), srcs.end(), is))
@@ -407,6 +470,7 @@ void Tracer::keep(const TensorImplPtr& output) {
 TensorId Tracer::ensure_id(const TensorImplPtr& impl) {
     if (!impl)
         return TraceId::external_feed();
+    refuse_stale(impl.get());
     return feed_id(impl);
 }
 

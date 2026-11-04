@@ -893,7 +893,7 @@ class _CompiledStepBase:
         ext = tracer.external_feeds
         explicit_outputs: list[int] = []
         for out_t in outputs:
-            tid = tracer.lookup_id(_unwrap(out_t))
+            tid = tracer.read_id(_unwrap(out_t))
             if tid is None:
                 raise RuntimeError(
                     "compile_optimizer: trace output tensor has no id — "

@@ -264,6 +264,12 @@ void commit_tracer_vjp_region(lucid::compile::Tracer& t,
                         std::move(cotangent_ids), std::move(input_grad_ids), bwd_begin);
 }
 
+py::object id_or_none(lucid::compile::TensorId id) {
+    if (id < 0)
+        return py::none();
+    return py::cast(id);
+}
+
 void bind_tracer_class(py::module_& m) {
     using lucid::compile::Tracer;
 
@@ -326,15 +332,21 @@ void bind_tracer_class(py::module_& m) {
             "holds, for a consumer that needs contents and not only shape.")
         .def(
             "lookup_id",
-            [](const Tracer& t, const lucid::TensorImplPtr& impl) -> py::object {
-                const lucid::compile::TensorId id = t.lookup_id(impl.get());
-                if (id < 0)
-                    return py::none();
-                return py::cast(id);
+            [](const Tracer& t, const lucid::TensorImplPtr& impl) {
+                return id_or_none(t.lookup_id(impl.get()));
             },
             py::arg("impl"),
             "Reverse-lookup the trace TensorId for an observed TensorImpl. "
             "Returns None if ``impl`` is not in the trace.")
+        .def(
+            "read_id",
+            [](Tracer& t, const lucid::TensorImplPtr& impl) {
+                return id_or_none(t.read_id(impl.get()));
+            },
+            py::arg("impl"),
+            "lookup_id for a value the traced call returns or keeps. Reading a "
+            "view that an in-place write has left stale marks the trace "
+            "unsupported; binding an argument to its id is not a read.")
         .def("op_count", &Tracer::op_count)
         .def("outside_write_count", &Tracer::outside_write_count)
         .def("ensure_id", &Tracer::ensure_id, py::arg("impl"))

@@ -436,7 +436,7 @@ def _bind_traced_outputs(
     """Bind each selected output to its trace value id."""
     outputs: list[tuple[str, int, Tensor]] = []
     for name, tensor in selected:
-        value_id = tracer.lookup_id(_unwrap(tensor))
+        value_id = tracer.read_id(_unwrap(tensor))
         if value_id is None:
             raise ValueError(
                 f"lucid.coreml: output {name!r} did not come out of the traced "
@@ -517,11 +517,11 @@ def trace(model: Module, example: object, *, output_field: str | None = None) ->
         _refuse_replaced(*replaced[0])
     if tracer.graph.unsupported:
         raise ValueError(f"lucid.coreml: {tracer.graph.unsupported}. {_HOST_READS}")
-
-    feeds = tracer.external_feeds
-    inputs = _bind_traced_inputs(examples, held, written, feeds, tracer)
+    inputs = _bind_traced_inputs(examples, held, written, tracer.external_feeds, tracer)
     outputs = _bind_traced_outputs(selected, answered, tracer)
-    return tracer.graph, feeds, inputs, outputs, tracer.retained_values
+    if tracer.graph.unsupported:  # binding an output read a view a write left stale
+        raise ValueError(f"lucid.coreml: {tracer.graph.unsupported}.")
+    return tracer.graph, tracer.external_feeds, inputs, outputs, tracer.retained_values
 
 
 def _refuse_replaced(name: str, grad: bool) -> NoReturn:

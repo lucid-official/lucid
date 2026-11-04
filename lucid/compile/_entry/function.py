@@ -204,7 +204,7 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
         if not g.ops:
             raise RuntimeError("compiled_step: empty trace (model produced no ops)")
         maybe_probe_for_graph(g)
-        found = tracer.lookup_id(_unwrap(loss_t))
+        found = tracer.read_id(_unwrap(loss_t))
         if found is None:
             raise RuntimeError("compiled_step: loss_fn's result is not a traced tensor")
         loss_id = int(found)

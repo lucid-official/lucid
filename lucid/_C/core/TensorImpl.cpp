@@ -22,6 +22,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -280,6 +281,45 @@ void copy_into_shared(const SharedStorage& sh, const ::mlx::core::array& arr) {
         std::memcpy(dst, from, sh.nbytes);
 }
 
+// The bytes of the allocation that a tensor's elements lie within, as
+// [lo, hi).  A stride that is not a plain forward step gets the whole
+// allocation, so two tensors are only ever called disjoint on exact
+// arithmetic; a tensor with no elements lies nowhere.
+struct ByteSpan {
+    std::size_t lo = 0;
+    std::size_t hi = 0;
+    bool meets(const ByteSpan& other) const { return lo < other.hi && other.lo < hi; }
+};
+
+ByteSpan element_span(const TensorImpl& t) {
+    const auto& shape = t.shape();
+    const auto& stride = t.stride();
+    std::size_t reach = 0;
+    for (std::size_t i = 0; i < shape.size(); ++i) {
+        if (shape[i] == 0)
+            return {};
+        if (stride[i] < 0)
+            return {0, std::numeric_limits<std::size_t>::max()};
+        reach += static_cast<std::size_t>(shape[i] - 1) * static_cast<std::size_t>(stride[i]);
+    }
+    const std::size_t lo = t.allocation_offset();
+    return {lo, lo + reach + dtype_size(t.dtype())};
+}
+
+// A write moves the elements of every view that shares the buffer.  Eager
+// reads them back through the buffer; the trace cannot, so it is handed each
+// view the write touches as stale: a read of one later falls back to eager,
+// while a view the write misses, or one nobody reads again, costs nothing.
+void mark_stale_views(const TensorImpl& dst) {
+    auto* trc = compile::current_tracer();
+    if (trc == nullptr)
+        return;
+    const ByteSpan written = element_span(dst);
+    for (const auto& view : dst.live_views())
+        if (written.meets(element_span(*view)))
+            trc->on_stale_view(view);
+}
+
 }  // namespace
 
 bool TensorImpl::write_into_shared(const TensorImpl& src) {
@@ -287,6 +327,9 @@ bool TensorImpl::write_into_shared(const TensorImpl& src) {
     if (!sh || src.dtype() != meta_.dtype || src.shape() != meta_.shape ||
         src.device() != meta_.device)
         return false;
+    // A write that bypasses write_gpu_member leaves the views of a Metal
+    // family to the tracer as stale; before it changes the bytes they read.
+    mark_stale_views(*this);
     // GPU work built before this write, run or not, reads the old bytes:
     // each branch settles it before laying the new ones in.
     auto* dst = static_cast<std::byte*>(sh->cpu_ptr);
@@ -322,15 +365,20 @@ namespace {
 
 // An in-place op computes its result out of place and splices it into the
 // target; an active compile trace has to learn that the target now holds the
-// result, or every later read of the target resolves to its old value.
+// result, or every later read of the target resolves to its old value.  The
+// views of a Metal family are left to trace_gpu_member_write, which re-derives
+// those it can and hands over the rest.
 void note_inplace_write(TensorImpl& dst, const TensorImpl& src) {
     auto* trc = compile::current_tracer();
     if (trc == nullptr)
         return;
     auto d = dst.weak_from_this().lock();
     auto from = std::const_pointer_cast<TensorImpl>(src.weak_from_this().lock());
-    if (d && from)
-        trc->on_inplace_write(d, from);
+    if (!d || !from)
+        return;
+    trc->on_inplace_write(d, from);
+    if (dst.family_key() == nullptr)
+        mark_stale_views(dst);
 }
 
 // Two of the target's elements are one byte: a value-dependent write has no
@@ -577,6 +625,25 @@ void trace_gpu_member_scatter(compile::Tracer& trc,
     trc.on_inplace_write(m, next_m);
 }
 
+// The members of ``dst``'s family that a write re-derives in the trace -- the
+// ones that are the whole root -- and, as it goes, the others the write
+// touches handed to the tracer as stale (see mark_stale_views).  Handed over
+// before any is re-derived: re-deriving a member is a write the tracer follows
+// in its own right.
+std::vector<TensorImplPtr>
+split_family(compile::Tracer& trc, const TensorImpl& dst, bool traceable, std::size_t root_nbytes) {
+    const ByteSpan written = element_span(dst);
+    std::vector<TensorImplPtr> whole_root;
+    for (const auto& m : dst.live_views()) {
+        if (traceable && m->dtype() == dst.dtype() && m->storage_offset() == 0 &&
+            m->is_contiguous() && m->nbytes() == root_nbytes)
+            whole_root.push_back(m);
+        else if (written.meets(element_span(*m)))
+            trc.on_stale_view(m);
+    }
+    return whole_root;
+}
+
 void trace_gpu_member_write(const TensorImpl& dst,
                             const TensorImpl& src,
                             const ::mlx::core::array& root_arr,
@@ -584,17 +651,15 @@ void trace_gpu_member_write(const TensorImpl& dst,
                             const ::mlx::core::array& next,
                             const gpu_strided::Geometry& g) {
     auto* trc = compile::current_tracer();
-    if (!trc || root_arr.dtype() != val_arr.dtype())
+    if (!trc)
         return;
     auto from = std::const_pointer_cast<TensorImpl>(src.weak_from_this().lock());
-    if (!from)
-        return;
+    // The trace can carry a write into a member only from a source it holds,
+    // in the root's dtype.
+    const bool traceable = from && root_arr.dtype() == val_arr.dtype();
     const auto root_numel = static_cast<std::int64_t>(root_arr.size());
     const Dtype dt = dst.dtype();
-    for (const auto& m : dst.live_views()) {
-        if (m->dtype() != dt || m->storage_offset() != 0 || !m->is_contiguous() ||
-            m->nbytes() != root_arr.nbytes())
-            continue;
+    for (const auto& m : split_family(*trc, dst, traceable, root_arr.nbytes())) {
         if (g.covers(root_numel)) {
             TensorImplPtr next_m =
                 m->shape() == from->shape()

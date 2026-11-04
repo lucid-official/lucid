@@ -354,7 +354,7 @@ def _compile_step_entry(
         return None
     write_ids, written = writes
 
-    found = tracer.lookup_id(_unwrap(loss_t)) if isinstance(loss_t, Tensor) else None
+    found = tracer.read_id(_unwrap(loss_t)) if isinstance(loss_t, Tensor) else None
     if found is None or model_has_cumulative_bn(model):
         return None
     loss_id = int(found)

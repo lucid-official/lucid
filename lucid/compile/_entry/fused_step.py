@@ -394,7 +394,7 @@ def _verify_target_shapes(
 
 def _require_tid(tracer: Tracer, t: Tensor, msg: str) -> int:
     """Return the trace ID for ``t``, raising ``RuntimeError(msg)`` if absent."""
-    tid = tracer.lookup_id(_unwrap_hot(t))
+    tid = tracer.read_id(_unwrap_hot(t))
     if tid is None:
         raise RuntimeError(msg)
     return int(tid)
@@ -792,7 +792,7 @@ class _FusedStep:
         from lucid._dispatch import _unwrap
 
         params = self._copt._params
-        loss_tid = tracer.lookup_id(_unwrap(loss_for_bwd))
+        loss_tid = tracer.read_id(_unwrap(loss_for_bwd))
         if loss_tid is None:
             raise RuntimeError("fused_step: loss missing from trace")
         ancestors = _loss_ancestors(tracer.graph, int(loss_tid))

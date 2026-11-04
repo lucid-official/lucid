@@ -282,6 +282,29 @@ public:
     // feed of its own.
     void on_inplace_write(const TensorImplPtr& target, const TensorImplPtr& value);
 
+    // ``view`` reads the buffer :meth:`on_inplace_write` was just told of,
+    // and the recording does not carry the write to it: eager reads the new
+    // values through the shared buffer, while the id the trace holds for
+    // ``view`` names the ones from before.  Most such views are temporaries
+    // nobody reads again (``self.buf[i] = self.buf[i] + m`` leaves two), so
+    // nothing is recorded yet; a later read of ``view`` — an op's input, the
+    // value an in-place write copies in, the source of a derived tensor, a
+    // host read, a value the call returns (:meth:`read_id`) — marks the trace
+    // unsupported and the call runs eager.  A view that is written itself
+    // (``on_inplace_write`` on it, as for a Metal view that covers its whole
+    // buffer) is current again.  Call before the write changes the buffer:
+    // a constant of the trace that an earlier op read as a feed keeps a copy
+    // of the values from before it.
+    void on_stale_view(const TensorImplPtr& view);
+
+    // :meth:`lookup_id` for a value the traced call hands back or keeps (a
+    // result, a loss): reading a stale view marks the trace unsupported
+    // first, instead of answering the id of its value from before the write
+    // (which a caller takes for a value that flows out untouched).  Binding
+    // an argument to its id is not a read of its value, and stays
+    // ``lookup_id``.
+    TensorId read_id(const TensorImpl* impl);
+
     // Puts every tensor from outside the trace that the trace wrote in place
     // back to its value from before the trace, from the copy
     // :meth:`on_inplace_write` kept at the first write.  The trace-time call
@@ -341,7 +364,9 @@ public:
         std::unordered_map<TensorId, TensorImplPtr> out;
         out.reserve(live_refs_.size());
         for (const auto& impl : live_refs_) {
-            if (!impl)
+            // A stale view holds the values after the write under the id of
+            // the ones before it.
+            if (!impl || stale_.count(impl.get()) != 0)
                 continue;
             const auto it = impl_to_id_.find(impl.get());
             if (it != impl_to_id_.end())
@@ -413,6 +438,8 @@ private:
     TensorId feed_id(const TensorImplPtr& impl);
     // The id an in-place write's ``value`` goes by from now on.
     TensorId written_id(const TensorImplPtr& value);
+    // Marks the trace unsupported when ``impl`` is a stale view.
+    void refuse_stale(const TensorImpl* impl);
 
     TraceGraph graph_;
     // Maps the raw :class:`TensorImpl` pointer of every traced tensor
@@ -453,6 +480,16 @@ private:
     std::optional<OpNode> held_;
     // Owning: every constant the trace made itself (see ``made_here``).
     std::unordered_map<TensorImpl*, TensorImplPtr> made_;
+    // Owning: the views of a tensor written in place whose recorded value is
+    // from before the write (see ``on_stale_view``).  Owning so a freed view's
+    // address cannot be taken for a stale one.
+    std::unordered_map<TensorImpl*, TensorImplPtr> stale_;
+    // Whether the in-place write being followed puts a constant of the trace
+    // into its target: a view of a constant that no op has read yet then holds
+    // that constant, and is not stale.  Only a value the trace folded counts;
+    // one an op recorded (a scalar operand is a ``full`` op on Metal) does not,
+    // and its views are marked: a fallback at worst, never a wrong answer.
+    bool constant_write_ = false;
 };
 
 // Returns the :class:`Tracer` currently installed on the calling
