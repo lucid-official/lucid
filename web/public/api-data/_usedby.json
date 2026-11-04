@@ -104,6 +104,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid._ops.composite.elementwise"
+    },
+    {
+      "kind": "module",
       "module": "lucid._ops.composite.indexing"
     },
     {
@@ -17176,6 +17180,22 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft._model_prep"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft._targeting"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._weight_site"
+    },
+    {
+      "kind": "module",
       "module": "lucid.quantization._quantize"
     },
     {
@@ -17268,6 +17288,22 @@
     }
   ],
   "lucid.nn.quantized.dynamic": [
+    {
+      "kind": "module",
+      "module": "lucid.peft._model_prep"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft._targeting"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._layer"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._weight_site"
+    },
     {
       "kind": "module",
       "module": "lucid.quantization._quantize"
@@ -19341,6 +19377,16 @@
       "module": "lucid.peft.tuners.lora._weight_space"
     }
   ],
+  "lucid.peft.tuners.lora._layer.QuantizedLinear": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._model"
+    }
+  ],
   "lucid.peft.tuners.lora._loraga.preprocess_loraga": [
     {
       "kind": "module",
@@ -20052,6 +20098,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners.lora._weight_site"
+    },
+    {
+      "kind": "module",
       "module": "lucid.quantization"
     }
   ],
@@ -20109,6 +20159,10 @@
     {
       "kind": "module",
       "module": "lucid.nn.quantized.sparse"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._weight_site"
     },
     {
       "kind": "module",
@@ -20345,6 +20399,10 @@
     {
       "kind": "module",
       "module": "lucid.nn.quantized.sparse"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners.lora._weight_site"
     },
     {
       "kind": "module",
