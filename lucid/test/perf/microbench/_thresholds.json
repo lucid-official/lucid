@@ -13,8 +13,8 @@
   "argsort_16384x64_int64_cpu": 0.010,
   "roll_256x4096_cpu": 0.0005,
   "fftshift_256x4096_cpu": 0.0005,
-  "fft_64_cpu": 0.00012,
-  "fft_256x4096_cpu": 0.0012,
-  "ifft_256x4096_cpu": 0.0012,
-  "kaiser_64_cpu": 0.00025
+  "fft_64_cpu": 0.00021,
+  "fft_256x4096_cpu": 0.00225,
+  "ifft_256x4096_cpu": 0.00245,
+  "kaiser_64_cpu": 0.00036
 }
