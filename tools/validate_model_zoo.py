@@ -613,6 +613,15 @@ def _check_protocols(fam: Path, issues: list[Issue]) -> None:
         )
 
 
+def _check_tree(family: str | None, issues: list[Issue]) -> None:
+    """Hold ``MODELS.tree`` to the registry; a filtered run reports only its own family."""
+    from tools.model_tree import TREE_PATH, check_tree
+
+    for problem in check_tree():
+        if family is None or repr(family) in problem:
+            issues.append(Issue("error", "MZ103", TREE_PATH, 0, problem))
+
+
 def validate(domain: str | None, family: str | None, strict: bool, runtime: bool = False) -> int:
     issues: list[Issue] = []
     n_families = 0
@@ -624,6 +633,8 @@ def validate(domain: str | None, family: str | None, strict: bool, runtime: bool
         _check_pretrained(fam, issues)
         if runtime:
             _check_protocols(fam, issues)
+    if runtime:
+        _check_tree(family, issues)
 
     errors = [i for i in issues if i.severity == "error"]
     warnings = [i for i in issues if i.severity == "warning"]

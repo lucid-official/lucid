@@ -1,0 +1,131 @@
+# Lucid model zoo: every registered model, from domain down to variant.
+#
+# How to read it
+#   Domain > task or lineage > architecture > variants. The groups between the domain and the
+#   architecture are a reading aid chosen by lineage; the code only has lucid/models/<domain>/<family>/.
+#   Name [family] (N)   an architecture: [family] is its directory, N its registered model count.
+#   a · b · c           the variants; prefix them with the family's name to get the factory.
+#   b0 ~ b7             a range, ends included.
+#   a × b               every combination of the two lists.
+#   +cls, +gen, ...     each variant on that line also has that task wrapper (resnet_18_cls).
+#   (note)              a remark, not a variant.
+#
+# Keeping it current (rule H12)
+#   Adding, removing or renaming a family or a factory changes this file in the same commit.
+#   `python -m tools.validate_model_zoo --runtime` fails if it disagrees with the registry:
+#   every family must appear once, each count must match, each variant must exist, and each
+#   group's total must add up. The registry stays the source of truth.
+
+lucid.models — 74 families · 494 models
+├─ Vision — 46 families · 303 models
+│  ├─ Recognition — 34 families · 267 models
+│  │  ├─ Classic CNN (22)
+│  │  │  ├─ LeNet [lenet] (2)                       lenet_5  +cls
+│  │  │  ├─ AlexNet [alexnet] (2)                   alexnet  +cls
+│  │  │  ├─ ZFNet [zfnet] (2)                       zfnet  +cls
+│  │  │  └─ VGG [vgg] (16)                          11 · 13 · 16 · 19  (each with and without) bn  +cls
+│  │  ├─ Inception line (10)
+│  │  │  ├─ GoogLeNet [googlenet] (2)               googlenet  +cls
+│  │  │  ├─ Inception v3 [inception] (2)            inception_v3  +cls
+│  │  │  ├─ Inception v4 [inception_v4] (2)         inception_v4  +cls
+│  │  │  ├─ Inception-ResNet [inception_resnet] (2) inception_resnet_v2  +cls
+│  │  │  └─ Xception [xception] (2)                 xception  +cls
+│  │  ├─ ResNet line (74)
+│  │  │  ├─ ResNet [resnet] (18)                    18 · 34 · 50 · 101 · 152 · 200 · 269  +cls
+│  │  │  │                                          wide_resnet_50 · wide_resnet_101  +cls
+│  │  │  ├─ ResNeXt [resnext] (8)                   50_32x4d · 101_32x4d · 101_32x8d · 101_64x4d  +cls
+│  │  │  ├─ SENet [senet] (10)                      se_resnet_18 · 34 · 50 · 101 · 152  +cls
+│  │  │  ├─ SKNet [sknet] (10)                      sk_resnet_18 · 34 · 50 · 101  +cls
+│  │  │  │                                          sk_resnext_50_32x4d  +cls
+│  │  │  ├─ ResNeSt [resnest] (12)                  14 · 26 · 50 · 101 · 200 · 269  +cls
+│  │  │  ├─ DenseNet [densenet] (10)                121 · 161 · 169 · 201 · 264  +cls
+│  │  │  └─ CSPNet [cspnet] (6)                     cspresnet_50 · cspresnext_50 · cspdarknet_53  +cls
+│  │  ├─ Mobile and efficient CNN (42)
+│  │  │  ├─ MobileNet v1 [mobilenet] (8)            mobilenet · 075 · 050 · 025  +cls
+│  │  │  ├─ MobileNet v2 [mobilenet_v2] (4)         mobilenet_v2 · 075  +cls
+│  │  │  ├─ MobileNet v3 [mobilenet_v3] (4)         small · large  +cls
+│  │  │  ├─ MobileNet v4 [mobilenet_v4] (10)        conv_small · conv_medium · conv_large  +cls
+│  │  │  │                                          hybrid_medium · hybrid_large  +cls
+│  │  │  └─ EfficientNet [efficientnet] (16)        b0 ~ b7  +cls
+│  │  ├─ Modern CNN (16)
+│  │  │  ├─ ConvNeXt [convnext] (10)                tiny · small · base · large · xlarge  +cls
+│  │  │  └─ InceptionNeXt [inception_next] (6)      tiny · small · base  +cls
+│  │  ├─ Vision Transformer (49)
+│  │  │  ├─ ViT [vit] (10)                          base_16 · base_32 · large_16 · large_32 · huge_14  +cls
+│  │  │  ├─ Swin [swin] (8)                         tiny · small · base · large  +cls
+│  │  │  ├─ PVT v2 [pvt] (13)                       b0 ~ b5  +cls
+│  │  │  │                                          b2_li  (no wrapper)
+│  │  │  ├─ CvT [cvt] (6)                           13 · 21 · w24  +cls
+│  │  │  └─ CrossViT [crossvit] (12)                tiny · small · base · 9 · 15 · 18  +cls
+│  │  ├─ CNN-Transformer hybrid (32)
+│  │  │  ├─ CoAtNet [coatnet] (16)                  0 ~ 7  +cls
+│  │  │  ├─ MaxViT [maxvit] (10)                    tiny · small · base · large · xlarge  +cls
+│  │  │  └─ EfficientFormer [efficientformer] (6)   l1 · l3 · l7  +cls
+│  │  └─ Self-supervised JEPA (22)
+│  │     ├─ I-JEPA [ijepa] (8)                      base_16 · large_16 · huge_14 · huge_16_448  +cls
+│  │     ├─ V-JEPA [vjepa] (6)                      large_16 · huge_16 · huge_16_384  +cls
+│  │     └─ V-JEPA 2 [vjepa2] (8)                   vit_large · vit_huge · vit_giant · vit_giant_384  +cls
+│  ├─ Object detection — 6 families · 20 models
+│  │  ├─ Two-stage (4)
+│  │  │  ├─ R-CNN [rcnn] (1)                        rcnn
+│  │  │  ├─ Fast R-CNN [fast_rcnn] (1)              fast_rcnn
+│  │  │  └─ Faster R-CNN [faster_rcnn] (2)          faster_rcnn · resnet50_fpn
+│  │  ├─ One-stage (14)
+│  │  │  ├─ YOLO [yolo] (6)                         yolo · tiny · v2 · v3 · v3_tiny · v4
+│  │  │  └─ EfficientDet [efficientdet] (8)         d0 ~ d7
+│  │  └─ Transformer (2)
+│  │     └─ DETR [detr] (2)                         resnet50 · resnet101
+│  └─ Segmentation — 6 families · 16 models
+│     ├─ Instance (2)
+│     │  └─ Mask R-CNN [mask_rcnn] (2)              mask_rcnn · resnet50_fpn
+│     ├─ Semantic (8)
+│     │  ├─ FCN [fcn] (2)                           resnet50 · resnet101
+│     │  ├─ U-Net [unet] (4)                        unet · unet_3d · res_unet_2d · res_unet_3d
+│     │  └─ Attention U-Net [attention_unet] (2)    attention_unet · attention_unet_3d
+│     └─ Mask classification (6)
+│        ├─ MaskFormer [maskformer] (2)             resnet50 · resnet101
+│        └─ Mask2Former [mask2former] (4)           swin_tiny · swin_small · swin_base · swin_large
+├─ Generative — 21 families · 133 models
+│  ├─ Latent variable (6)
+│  │  ├─ VAE [vae] (4)                              vae · hvae  +gen
+│  │  └─ VQ-VAE [vqvae] (2)                         vqvae  +gen
+│  ├─ Normalizing flow (20)
+│  │  ├─ NICE [nice] (8)                            mnist · cifar · svhn · tfd  +gen
+│  │  ├─ RealNVP [realnvp] (10)                     cifar · celeba · imagenet32 · imagenet64 · lsun  +gen
+│  │  └─ Neural ODE [neural_ode] (2)                neural_ode  +gen
+│  ├─ Diffusion and score (42)
+│  │  ├─ DDPM [ddpm] (6)                            cifar · imagenet64 · lsun  +gen
+│  │  ├─ NCSN [ncsn] (4)                            cifar · celeba  +gen
+│  │  ├─ Score SDE [score_sde] (6)                  ve · vp · subvp  +gen
+│  │  ├─ DiT [dit] (24)                             small · base · large · xlarge × 2 · 4 · 8  (patch size)  +gen
+│  │  └─ Stable Diffusion [stable_diffusion] (2)    stable_diffusion  +gen
+│  ├─ Flow matching line (32)
+│  │  ├─ Flow Matching [flow_matching] (8)          cifar · imagenet32 · imagenet64 · imagenet128  +gen
+│  │  ├─ Rectified Flow [rectified_flow] (10)       cifar · celeba_hq · bedroom · church · afhq_cat  +gen
+│  │  ├─ MeanFlow [mean_flow] (10)                  base_2 · base_4 · medium_2 · large_2 · xlarge_2  +gen
+│  │  └─ TVM [tvm] (4)                              imagenet256 · imagenet512  +gen
+│  └─ World model (33)
+│     ├─ PlaNet [planet] (2)                        planet  +world_model
+│     ├─ Dreamer v1 [dreamer] (4)                   dreamer · discrete  +world_model
+│     ├─ Dreamer v2 [dreamer_v2] (6)                dreamer_v2 · atari · dmc  +world_model
+│     ├─ Dreamer v3 [dreamer_v3] (12)               12m · 25m · 50m · 100m · 200m · 400m  +world_model
+│     ├─ DIAMOND [diamond] (3)                      diamond · diamond_csgo · diamond_world_model
+│     ├─ Genie [genie] (4)                          genie · coinrun  +world_model
+│     └─ V-JEPA 2-AC [vjepa2_ac] (2)                vit_giant  +world_model
+├─ Text — 6 families · 50 models
+│  ├─ Encoder (22)
+│  │  ├─ BERT [bert] (16)                           tiny · mini · small · medium · base · large
+│  │  │                                             (base also) cls · mlm · qa · token_cls · nsp · pretrain · causal_lm
+│  │  │                                             (large also) cls · mlm · qa
+│  │  └─ RoFormer [roformer] (6)                    roformer  (also) cls · mlm · qa · token_cls · multiple_choice
+│  ├─ Seq2Seq (16)
+│  │  ├─ Transformer [transformer] (6)              base  (also) cls · seq2seq · token_cls
+│  │  │                                             large  (also) seq2seq
+│  │  └─ T5 [t5] (10)                               small · base · large · 3b · 11b  +seq2seq
+│  └─ Decoder and language model (12)
+│     ├─ GPT [gpt] (3)                              gpt  (also) cls · lm
+│     └─ GPT-2 [gpt2] (9)                           small · medium · large · xlarge  +lm
+│                                                   small  (also) cls
+└─ Multimodal — 1 family · 8 models
+   └─ Text-image (8)
+      └─ CLIP [clip] (8)                            vit_base_16 · vit_base_32 · vit_large_14 · vit_large_14_336  +zero_shot
