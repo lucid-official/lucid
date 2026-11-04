@@ -112,8 +112,10 @@ def test_small_eigenpairs_beside_a_large_entry(device_gpu_only: str) -> None:
     _run_group("small_beside_large")
 
 
+# Not strict: the hang depends on the machine's MPSGraph.  It never returns on an M4 Max
+# and returned inside the ceiling on CI's macos-26 runner.
 @pytest.mark.xfail(
-    strict=True,
+    strict=False,
     raises=_NoReturn,
     reason="LCD-847: MemrefDeallocationPass enumerates paths in the optimized module, which "
     "the clone walk's budget cannot see",
