@@ -69,6 +69,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - follow a write into the views that share its buffer
 
+- compile: a view taken before an in-place write to its base no longer keeps the value from before the write. A compiled call that reads such a view, as an op input, as a value copied into another tensor or as its return value, now runs eagerly and matches eager. Core ML export of a function returning such a view raises ValueError instead of exporting the pre-write value. Views of batch norm running statistics and overlapping buffers written in one call also follow eager.
+
 ### Performance
 
 - `_C.engine` (`Linear`, `ConvNd`, `ConvTransposeNd`, `LayerNorm`, `RMSNorm`, `BatchNormNd`, `GroupNorm`, `BatchNormEval`, `GlobalResponseNorm`, `Bilinear`): thread `needs_input_grad` (`grad_mask`) and `kGradReads` through fused CPU/Metal backward kernels and `apply_for_graph`, skipping unneeded `dx`/`dW`/`db` GEMMs, convolutions, reductions, and buffer allocations (LCD-697).
