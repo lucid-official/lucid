@@ -69,7 +69,7 @@ _FACTORIES = [
     (
         "arange_nan_step",
         "out = lucid.arange(0.0, 1.0, float('nan'), device=D)",
-        ("LucidError", "NaN"),
+        ("InvalidArgument", "NaN"),
     ),
     ("expand", "out = R(1).expand(2**40, 2**40)", OVERFLOW),
     # A zero extent makes the count 0, however large the others.
@@ -145,7 +145,7 @@ _DERIVED_EXTENTS = [
     (
         "as_strided_reach_wraps",
         "out = lucid.as_strided(R(4), (3,), (2**62,))",
-        ("LucidError", "past the end"),
+        ("InvalidArgument", "past the end"),
     ),
     (
         "as_strided_unused_stride",

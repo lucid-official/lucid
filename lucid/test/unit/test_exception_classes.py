@@ -117,7 +117,6 @@ _MLX_INVALID_ARGUMENT_REPROS: dict[str, Callable[[], object]] = {
         lucid.ones(2, dtype=lucid.int64, device="metal"),
         reduce="amax",
     ).tolist(),
-    "fftn": lambda: lucid.fft.fftn(lucid.zeros(0, device="metal")),
 }
 
 
@@ -130,6 +129,14 @@ def test_mlx_invalid_argument_is_translated_to_lucid_invalid_argument(prefix: st
     assert isinstance(exc_info.value, _C_engine.LucidError)
     assert isinstance(exc_info.value, ValueError)
     assert isinstance(exc_info.value, RuntimeError)
+
+
+@pytest.mark.parametrize("device", ["cpu", "metal"])
+def test_an_empty_fft_is_refused_before_it_reaches_the_kernel(device: str) -> None:
+    if device == "metal" and not metal_available():
+        pytest.skip("metal unavailable")
+    with pytest.raises(_C_engine.InvalidArgument, match="invalid number of data points"):
+        lucid.fft.fftn(lucid.zeros(0, device=device))
 
 
 def test_pybind_builtin_exception_stays_unwrapped() -> None:
