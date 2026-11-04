@@ -194,9 +194,10 @@ std::vector<Storage> BilinearLayerBackward::apply(Storage grad_out) {
     const bool has_bias = !input_shapes_[3].empty();
 
     auto& be = backend::Dispatcher::for_device(device_);
-    return be.bilinear_layer_backward(grad_out, saved_inputs_[0], saved_inputs_[1],
-                                      saved_inputs_[2], orig_x1_shape_, orig_x2_shape_,
-                                      input_shapes_[2], has_bias, dtype_);
+    return be.bilinear_layer_backward(
+        grad_out, saved_inputs_[0], saved_inputs_[1], saved_inputs_[2], orig_x1_shape_,
+        orig_x2_shape_, input_shapes_[2], has_bias, dtype_,
+        {needs_input_grad(0), needs_input_grad(1), needs_input_grad(2), needs_input_grad(3)});
 }
 
 std::vector<TensorImplPtr> BilinearLayerBackward::apply_for_graph(const TensorImplPtr& grad_out) {
@@ -207,21 +208,31 @@ std::vector<TensorImplPtr> BilinearLayerBackward::apply_for_graph(const TensorIm
     const auto& x1 = saved_impl_inputs_[0];
     const auto& x2 = saved_impl_inputs_[1];
     const auto& W = saved_impl_inputs_[2];
-    if (!x1 || !x2 || !W)
+    const bool need_x1 = needs_input_grad(1) || needs_input_grad(2);
+    const bool need_x2 = needs_input_grad(0) || needs_input_grad(2);
+    const bool need_W = needs_input_grad(0) || needs_input_grad(1);
+    if ((need_x1 && !x1) || (need_x2 && !x2) || (need_W && !W))
         ErrorBuilder("bilinear_layer").fail("graph-mode backward is missing a saved input");
     const Shape& ws = input_shapes_[2];
     const std::int64_t o = ws[0], i = ws[1], j = ws[2];
-    const std::int64_t n = x1->numel() / i;
+    const std::int64_t n = static_cast<std::int64_t>(shape_numel(orig_x1_shape_)) / i;
 
     auto g = reshape_op(grad_out, {n, o});
-    auto a = reshape_op(x1, {n, i, 1});
-    auto b = reshape_op(x2, {n, j, 1});
-    auto gw = reshape_op(matmul_op(g, reshape_op(W, {o, i * j})), {n, i, j});
-    auto dx1 = reshape_op(matmul_op(gw, b), orig_x1_shape_);
-    auto dx2 = reshape_op(matmul_op(permute_op(gw, {0, 2, 1}), a), orig_x2_shape_);
-    auto outer = reshape_op(matmul_op(a, permute_op(b, {0, 2, 1})), {n, i * j});
-    auto dW = reshape_op(matmul_op(permute_op(g, {1, 0}), outer), {o, i, j});
-    auto db = sum_op(g, std::vector<int>{0}, /*keepdims=*/false);
+    TensorImplPtr a = need_x1 ? reshape_op(x1, {n, i, 1}) : nullptr;
+    TensorImplPtr b = need_x2 ? reshape_op(x2, {n, j, 1}) : nullptr;
+    TensorImplPtr gw =
+        need_W ? reshape_op(matmul_op(g, reshape_op(W, {o, i * j})), {n, i, j}) : nullptr;
+    TensorImplPtr dx1 = needs_input_grad(0) ? reshape_op(matmul_op(gw, b), orig_x1_shape_) : nullptr;
+    TensorImplPtr dx2 =
+        needs_input_grad(1) ? reshape_op(matmul_op(permute_op(gw, {0, 2, 1}), a), orig_x2_shape_)
+                            : nullptr;
+    TensorImplPtr dW;
+    if (needs_input_grad(2)) {
+        auto outer = reshape_op(matmul_op(a, permute_op(b, {0, 2, 1})), {n, i * j});
+        dW = reshape_op(matmul_op(permute_op(g, {1, 0}), outer), {o, i, j});
+    }
+    TensorImplPtr db =
+        needs_input_grad(3) ? sum_op(g, std::vector<int>{0}, /*keepdims=*/false) : nullptr;
     return {dx1, dx2, dW, db};
 }
 

@@ -60,21 +60,33 @@ void batch_norm_eval_backward_typed(const T* x,
                                     int batch,
                                     int channels,
                                     int spatial) {
+    const bool need_xm = (dgamma != nullptr || dvar != nullptr);
+    const bool need_g_sum = (dbeta != nullptr || dmean != nullptr);
+    const bool need_gamma = (dx != nullptr || dmean != nullptr || dvar != nullptr);
     for (int c = 0; c < channels; ++c) {
-        const T r = rstd[c], g = gamma[c], m = mean[c];
+        const T r = rstd[c];
+        const T g = need_gamma ? gamma[c] : T{0};
+        const T m = need_xm ? mean[c] : T{0};
         T sum_g = T{0}, sum_xm_g = T{0};
         for (int b = 0; b < batch; ++b) {
             const std::size_t row = (static_cast<std::size_t>(b) * channels + c) * spatial;
             for (int s = 0; s < spatial; ++s) {
-                dx[row + s] = g * r * grad[row + s];
-                sum_g += grad[row + s];
-                sum_xm_g += (x[row + s] - m) * grad[row + s];
+                if (dx)
+                    dx[row + s] = g * r * grad[row + s];
+                if (need_g_sum)
+                    sum_g += grad[row + s];
+                if (need_xm)
+                    sum_xm_g += (x[row + s] - m) * grad[row + s];
             }
         }
-        dgamma[c] = sum_xm_g * r;
-        dbeta[c] = sum_g;
-        dmean[c] = -g * r * sum_g;
-        dvar[c] = static_cast<T>(-0.5) * g * r * r * r * sum_xm_g;
+        if (dgamma)
+            dgamma[c] = sum_xm_g * r;
+        if (dbeta)
+            dbeta[c] = sum_g;
+        if (dmean)
+            dmean[c] = -g * r * sum_g;
+        if (dvar)
+            dvar[c] = static_cast<T>(-0.5) * g * r * r * r * sum_xm_g;
     }
 }
 

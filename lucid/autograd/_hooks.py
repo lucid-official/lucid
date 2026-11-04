@@ -301,9 +301,7 @@ class _NodeHookRunner:
         self.hooks: list[Callable[..., object]] = []
 
     def __call__(
-        self,
-        grad_inputs: list[_C_engine.TensorImpl | None],
-        grad_out: _C_engine.TensorImpl | None,
+        self, grad_inputs: list[_C_engine.TensorImpl | None], grad_out: _C_engine.TensorImpl | None
     ) -> list[_C_engine.TensorImpl | None] | None:
         gi_tuple: tuple[Tensor | None, ...] = tuple(
             None if g is None else _wrap(g) for g in grad_inputs

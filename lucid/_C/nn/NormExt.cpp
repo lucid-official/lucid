@@ -130,9 +130,11 @@ std::vector<Storage> BatchNormEvalBackward::apply(Storage grad_out) {
         spatial *= static_cast<int>(xs[i]);
     auto& be = backend::Dispatcher::for_device(this->device_);
     // saved_inputs_[3] is gamma (index 3 of the five saved tensors).
-    return be.batch_norm_eval_backward(this->saved_inputs_[0], this->saved_inputs_[1],
-                                       this->saved_inputs_[3], this->rstd_, grad_out, xs, C,
-                                       spatial, this->dtype_);
+    return be.batch_norm_eval_backward(
+        this->saved_inputs_[0], this->saved_inputs_[1], this->saved_inputs_[3], this->rstd_,
+        grad_out, xs, C, spatial, this->dtype_,
+        {this->needs_input_grad(0), this->needs_input_grad(1), this->needs_input_grad(2),
+         this->needs_input_grad(3), this->needs_input_grad(4)});
 }
 
 std::vector<TensorImplPtr> BatchNormEvalBackward::apply_for_graph(const TensorImplPtr& grad_out) {
@@ -150,7 +152,7 @@ std::vector<TensorImplPtr> BatchNormEvalBackward::apply_for_graph(const TensorIm
     const auto& x = this->saved_impl_inputs_[0];
     const auto& mean = this->saved_impl_inputs_[1];
     const auto& gamma = this->saved_impl_inputs_[3];
-    if (!x || !mean || !gamma)
+    if ((needs(3) && (!x || !mean)) || ((needs(0) || needs(1)) && !gamma))
         ErrorBuilder("batch_norm_eval").fail("graph-mode backward is missing a saved input");
 
     const Shape& xs = this->input_shapes_[0];
@@ -163,8 +165,8 @@ std::vector<TensorImplPtr> BatchNormEvalBackward::apply_for_graph(const TensorIm
 
     auto rstd =
         std::make_shared<TensorImpl>(this->rstd_, Shape{xs[1]}, this->dtype_, this->device_, false);
-    auto scale = mul_op(gamma, rstd);
-    auto sum_g = sum_op(grad_out, axes, false);
+    TensorImplPtr scale = (needs(0) || needs(1)) ? mul_op(gamma, rstd) : nullptr;
+    TensorImplPtr sum_g = (needs(1) || needs(4)) ? sum_op(grad_out, axes, false) : nullptr;
     std::vector<TensorImplPtr> grads(5);
     if (needs(0))
         grads[0] =
@@ -376,9 +378,10 @@ TensorImplPtr GlobalResponseNormBackward::forward(const TensorImplPtr& x,
 std::vector<Storage> GlobalResponseNormBackward::apply(Storage grad_out) {
     auto& be = backend::Dispatcher::for_device(this->device_);
     // Returns [dx, d_gamma, d_beta].
-    return be.global_response_norm_backward(this->saved_inputs_[0], this->saved_inputs_[1],
-                                            this->saved_inputs_[2], this->saved_Nx_, grad_out,
-                                            this->input_shapes_[0], eps_, this->dtype_);
+    return be.global_response_norm_backward(
+        this->saved_inputs_[0], this->saved_inputs_[1], this->saved_inputs_[2], this->saved_Nx_,
+        grad_out, this->input_shapes_[0], eps_, this->dtype_,
+        {this->needs_input_grad(0), this->needs_input_grad(1), this->needs_input_grad(2)});
 }
 
 TensorImplPtr global_response_norm_op(const TensorImplPtr& x,

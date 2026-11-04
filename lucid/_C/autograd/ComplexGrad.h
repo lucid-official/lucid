@@ -48,6 +48,8 @@ enum class ComplexGrad : std::uint8_t { Conjugate, AsWritten };
 inline Storage conj_if_complex(const Storage& s, const Shape& shape, Dtype dt, Device device) {
     if (!is_complex(dt))
         return s;
+    if (const auto* c = std::get_if<CpuStorage>(&s); c != nullptr && !c->ptr)
+        return s;
     return backend::Dispatcher::for_device(device).complex_conj(s, shape, dt);
 }
 

@@ -32,6 +32,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <optional>
 #include <string>
@@ -972,7 +973,9 @@ public:
                                                  const Shape& x_shape,
                                                  const Shape& weight_shape,
                                                  const Shape& bias_shape,
-                                                 Dtype dt) = 0;
+                                                 Dtype dt,
+                                                 std::array<bool, 3> grad_mask = {
+                                                     true, true, true}) = 0;
     // RMSNorm forward pass.  outer = product of batch/sequence dims; normalized_size
     // is the last (feature) dimension.  Returns (output, saved_rstd); saved_rstd
     // holds per-row reciprocal standard deviations needed by the backward pass.
@@ -993,7 +996,8 @@ public:
                                           std::size_t normalized_size,
                                           const Shape& x_shape,
                                           const Shape& gamma_shape,
-                                          Dtype dt) = 0;
+                                          Dtype dt,
+                                          std::array<bool, 2> grad_mask = {true, true}) = 0;
 
     // LayerNorm forward.  Returns [output, saved_mean, saved_rstd].
     virtual std::vector<Storage> layer_norm_forward(const Storage& x,
@@ -1016,7 +1020,9 @@ public:
                                                      const Shape& x_shape,
                                                      const Shape& gamma_shape,
                                                      const Shape& beta_shape,
-                                                     Dtype dt) = 0;
+                                                     Dtype dt,
+                                                     std::array<bool, 3> grad_mask = {
+                                                         true, true, true}) = 0;
     // BatchNorm training forward.  ndim distinguishes 1-D, 2-D, and 3-D spatial
     // tensors.  Returns [output, saved_mean, saved_rstd, saved_xnorm].  The
     // 4th element (xnorm = (x - mean) * rstd) is the normalised input that
@@ -1060,7 +1066,9 @@ public:
                                                      int ndim,
                                                      const Shape& x_shape,
                                                      Dtype dt,
-                                                     double eps) = 0;
+                                                     double eps,
+                                                     std::array<bool, 3> grad_mask = {
+                                                         true, true, true}) = 0;
 
     // GroupNorm forward; groups partitions channels into equal groups before
     // normalizing each group independently.  Returns [output, saved_mean, saved_rstd].
@@ -1088,7 +1096,9 @@ public:
                                                      int groups,
                                                      const std::vector<int>& spatial_dims,
                                                      const Shape& x_shape,
-                                                     Dtype dt) = 0;
+                                                     Dtype dt,
+                                                     std::array<bool, 3> grad_mask = {
+                                                         true, true, true}) = 0;
     // Linear algebra ops.  All accept batched inputs where the last two dims
     // form the matrix.  CPU implementations delegate to LAPACK (via Accelerate);
     // GPU implementations delegate to MLX linalg.
@@ -1470,7 +1480,9 @@ public:
                                                             const int* K,
                                                             const int* O,
                                                             const ConvTransposeNdOpts& opts,
-                                                            Dtype dt) = 0;
+                                                            Dtype dt,
+                                                            std::array<bool, 3> grad_mask = {
+                                                                true, true, true}) = 0;
 
     // Compact parameter bag for N-D standard convolution.
     //
@@ -1524,7 +1536,9 @@ public:
                                                   const int* K,
                                                   const int* O,
                                                   const ConvNdOpts& opts,
-                                                  Dtype dt) = 0;
+                                                  Dtype dt,
+                                                  std::array<bool, 3> grad_mask = {
+                                                      true, true, true}) = 0;
 
     virtual Storage unfold_forward(const Storage& x,
                                    int B,
@@ -1763,7 +1777,7 @@ public:
                                                          double eps,
                                                          Dtype dt) = 0;
 
-    // BatchNorm inference-mode backward; returns [grad_x, grad_gamma, grad_beta].
+    // BatchNorm inference-mode backward; returns [grad_x, grad_mean, grad_var, grad_gamma, grad_beta].
     virtual std::vector<Storage> batch_norm_eval_backward(const Storage& x,
                                                           const Storage& mean,
                                                           const Storage& gamma,
@@ -1772,7 +1786,9 @@ public:
                                                           const Shape& x_shape,
                                                           int C,
                                                           int spatial,
-                                                          Dtype dt) = 0;
+                                                          Dtype dt,
+                                                          std::array<bool, 5> grad_mask = {
+                                                              true, true, true, true, true}) = 0;
 
     // Lp-normalizes `x` along `axis` using the given norm order `ord`.
     // Returns [output, saved_norm] so the backward can reuse the computed norm.
@@ -1805,7 +1821,9 @@ public:
                                                                const Storage& grad_out,
                                                                const Shape& x_shape,
                                                                double eps,
-                                                               Dtype dt) = 0;
+                                                               Dtype dt,
+                                                               std::array<bool, 3> grad_mask = {
+                                                                   true, true, true}) = 0;
 
     // Nearest-neighbor upsampling for 2-D and 3-D feature maps.
     virtual Storage interpolate_nearest_2d_forward(
@@ -1911,7 +1929,9 @@ public:
                                                          const Shape& x2_shape,
                                                          const Shape& w_shape,
                                                          bool has_bias,
-                                                         Dtype dt) = 0;
+                                                         Dtype dt,
+                                                         std::array<bool, 4> grad_mask = {
+                                                             true, true, true, true}) = 0;
 
     // One-hot encoding: produces a (num_classes,)-wide indicator tensor for
     // each index in `indices`.  Output dtype is typically F32 or I32.

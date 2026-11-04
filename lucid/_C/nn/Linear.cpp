@@ -134,11 +134,15 @@ std::vector<Storage> LinearBackward::apply(Storage grad_out) {
     // On a complex dtype the fused real-dtype formula runs between two
     // conjugations (autograd/ComplexGrad.h): dx = g conj(W), dW = g^H x.
     grad_out = conj_if_complex(grad_out, out_shape_, dtype_, device_);
+    const std::array<bool, 3> grad_mask{needs_input_grad(0), needs_input_grad(1),
+                                        needs_input_grad(2)};
     std::vector<Storage> grads = backend::Dispatcher::for_device(device_).linear_backward(
-        grad_out, saved_or_zeros(0, grad_out), saved_or_zeros(1, grad_out), input_shapes_[0],
-        input_shapes_[1], input_shapes_[2], dtype_);
-    for (std::size_t k = 0; k < grads.size(); ++k)
-        grads[k] = conj_if_complex(grads[k], input_shapes_[k], dtype_, device_);
+        grad_out, saved_inputs_[0], saved_inputs_[1], input_shapes_[0], input_shapes_[1],
+        input_shapes_[2], dtype_, grad_mask);
+    for (std::size_t k = 0; k < grads.size(); ++k) {
+        if (grad_mask[k])
+            grads[k] = conj_if_complex(grads[k], input_shapes_[k], dtype_, device_);
+    }
     return grads;
 }
 

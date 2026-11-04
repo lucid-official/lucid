@@ -165,7 +165,7 @@ def parse(src: str) -> list[Method]:
     body = _strip_comments(src)
     methods: list[Method] = []
     destructors = 0
-    for m in re.finditer(r"\bvirtual\s+([^;{]*?\))\s*([^;{()]*?)\s*(=\s*0\s*;|\{)", body, re.S):
+    for m in re.finditer(r"\bvirtual\s+([^;]*?\))\s*([^;{()]*?)\s*(=\s*0\s*;|\{)", body, re.S):
         decl = " ".join(m.group(1).split())
         if decl.startswith("~"):
             destructors += 1

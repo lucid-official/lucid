@@ -743,7 +743,8 @@ std::vector<Storage> run_node(Node& node, Storage grad_in, SlotGrads<Storage> sl
         const RepackSavedGuard repack{node};
         const BackwardEvent event(node, grad_in, slots.empty() ? nullptr : &slots.front().second);
         if (!node.is_barrier()) {
-            grads = node.apply(own_grad_copy(grad_in));
+            grads = node.apply(has_node_post_hooks(node) ? own_grad_copy(grad_in)
+                                                         : std::move(grad_in));
         } else {
             for (auto& [slot, grad] : slots)
                 node.accumulate_barrier_grad(slot, std::move(grad));
@@ -813,9 +814,11 @@ void seed_roots(const std::vector<BackwardRoot>& roots, std::vector<Seed>& seeds
 // on, it became the leaf's ``.grad`` — the leaf's shape over no memory, read
 // back as whatever the allocator had last left there.
 template <typename Route>
-void route_results(const Node& node, std::vector<Storage>& grads, Route route_one) {
+void route_results(const Node& node,
+                   std::vector<Storage>& grads,
+                   Route route_one,
+                   bool empty_is_none) {
     const auto& edges = node.next_edges();
-    const bool empty_is_none = node.empty_grad_is_none() || has_node_post_hooks(node);
     for (std::size_t i = 0; i < grads.size() && i < edges.size(); ++i) {
         Node* next = edges[i].node.get();
         if (next == nullptr || (empty_is_none && storage_is_empty(grads[i])))
@@ -937,16 +940,17 @@ static void eager_backward(const std::vector<BackwardRoot>& roots,
             grad_in = run_slot_hooks(*node, 0, std::move(grad_in));
 
         std::vector<Storage> input_grads = run_node(*node, std::move(grad_in), std::move(slots));
-
-        check_anomaly_grads(*node, input_grads);
-        check_result_count(*node, input_grads.size());
-        route_results(*node, input_grads, send);
+        const bool empty_is_none = node->empty_grad_is_none() || has_node_post_hooks(*node);
 
         // Free saved forward tensors immediately unless the caller needs the
         // graph intact for a second backward call.
         if (!retain_graph)
             if (release(*node))
                 freed.push_back(node);
+
+        check_anomaly_grads(*node, input_grads);
+        check_result_count(*node, input_grads.size());
+        route_results(*node, input_grads, send, empty_is_none);
     }
 
     if (!retain_graph)
@@ -1375,11 +1379,12 @@ void grad_eager(const std::vector<BackwardRoot>& roots,
             continue;
 
         std::vector<Storage> input_grads = run_node(*node, std::move(grad_in), std::move(slots));
-        check_anomaly_grads(*node, input_grads);
-        route_results(*node, input_grads, send);
+        const bool empty_is_none = node->empty_grad_is_none() || has_node_post_hooks(*node);
         if (!retain_graph)
             if (release(*node))
                 freed.push_back(node);
+        check_anomaly_grads(*node, input_grads);
+        route_results(*node, input_grads, send, empty_is_none);
     }
 
     if (!retain_graph)

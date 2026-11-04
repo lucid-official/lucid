@@ -56,7 +56,8 @@ StoragePair CpuBackend::rms_norm_backward(const Storage& x,
                                           std::size_t normalized_size,
                                           const Shape& p6_,
                                           const Shape& p7_,
-                                          Dtype dt) {
+                                          Dtype dt,
+                                          std::array<bool, 2> grad_mask) {
     // Accelerate has no half kernels, so the whole family widens at the door,
     // reuses the float path and rounds once on the way out.  as_f32 /
     // back_to_f16 key off each storage's own dtype, so index and mask
@@ -64,14 +65,15 @@ StoragePair CpuBackend::rms_norm_backward(const Storage& x,
     if (detail::is_half_like(dt))
         return detail::back_to_f16(
             rms_norm_backward(detail::as_f32(x), detail::as_f32(gamma), detail::as_f32(saved_rstd),
-                              detail::as_f32(grad), outer, normalized_size, p6_, p7_, Dtype::F32),
+                              detail::as_f32(grad), outer, normalized_size, p6_, p7_, Dtype::F32,
+                              grad_mask),
             dt);
-    const std::size_t dx_nbytes = outer * normalized_size * dtype_size(dt);
-    const std::size_t dgamma_nbytes = normalized_size * dtype_size(dt);
-    auto dx_ptr = allocate_aligned_bytes(dx_nbytes, Device::CPU);
-    auto dgamma_ptr = allocate_aligned_bytes(dgamma_nbytes, Device::CPU);
+    const std::size_t dx_nbytes = grad_mask[0] ? outer * normalized_size * dtype_size(dt) : 0;
+    const std::size_t dgamma_nbytes = grad_mask[1] ? normalized_size * dtype_size(dt) : 0;
+    auto dx_ptr = grad_mask[0] ? allocate_aligned_bytes(dx_nbytes, Device::CPU) : nullptr;
+    auto dgamma_ptr = grad_mask[1] ? allocate_aligned_bytes(dgamma_nbytes, Device::CPU) : nullptr;
 
-    if (outer * normalized_size > 0) {
+    if ((grad_mask[0] || grad_mask[1]) && outer * normalized_size > 0) {
         const auto& x_cpu = std::get<CpuStorage>(x);
         const auto& gamma_cpu = std::get<CpuStorage>(gamma);
         const auto& rstd_cpu = std::get<CpuStorage>(saved_rstd);
@@ -101,8 +103,8 @@ StoragePair CpuBackend::rms_norm_backward(const Storage& x,
         if (dgamma_nbytes)
             std::memset(dgamma_ptr.get(), 0, dgamma_nbytes);
     }
-    return {Storage{CpuStorage{dx_ptr, dx_nbytes, dt}},
-            Storage{CpuStorage{dgamma_ptr, dgamma_nbytes, dt}}};
+    return {grad_mask[0] ? Storage{CpuStorage{dx_ptr, dx_nbytes, dt}} : Storage{},
+            grad_mask[1] ? Storage{CpuStorage{dgamma_ptr, dgamma_nbytes, dt}} : Storage{}};
 }
 
 std::vector<Storage> CpuBackend::layer_norm_forward(const Storage& x,
@@ -165,25 +167,28 @@ std::vector<Storage> CpuBackend::layer_norm_backward(const Storage& x,
                                                      const Shape& p7_,
                                                      const Shape& p8_,
                                                      const Shape& p9_,
-                                                     Dtype dt) {
+                                                     Dtype dt,
+                                                     std::array<bool, 3> grad_mask) {
     // Accelerate has no half kernels, so the whole family widens at the door,
     // reuses the float path and rounds once on the way out.  as_f32 /
     // back_to_f16 key off each storage's own dtype, so index and mask
     // operands travel through untouched.  See detail::widen_half.
     if (detail::is_half_like(dt))
-        return detail::back_to_f16(layer_norm_backward(detail::as_f32(x), detail::as_f32(gamma),
-                                                       detail::as_f32(saved_mean),
-                                                       detail::as_f32(saved_rstd),
-                                                       detail::as_f32(grad), outer, normalized_size,
-                                                       p7_, p8_, p9_, Dtype::F32),
-                                   dt);
-    const std::size_t dx_nbytes = outer * normalized_size * dtype_size(dt);
+        return detail::back_to_f16(
+            layer_norm_backward(detail::as_f32(x), detail::as_f32(gamma),
+                                detail::as_f32(saved_mean), detail::as_f32(saved_rstd),
+                                detail::as_f32(grad), outer, normalized_size, p7_, p8_, p9_,
+                                Dtype::F32, grad_mask),
+            dt);
+    const std::size_t dx_nbytes = grad_mask[0] ? outer * normalized_size * dtype_size(dt) : 0;
     const std::size_t param_nbytes = normalized_size * dtype_size(dt);
-    auto dx_ptr = allocate_aligned_bytes(dx_nbytes, Device::CPU);
-    auto dgamma_ptr = allocate_aligned_bytes(param_nbytes, Device::CPU);
-    auto dbeta_ptr = allocate_aligned_bytes(param_nbytes, Device::CPU);
+    const std::size_t dg_nbytes = grad_mask[1] ? param_nbytes : 0;
+    const std::size_t db_nbytes = grad_mask[2] ? param_nbytes : 0;
+    auto dx_ptr = grad_mask[0] ? allocate_aligned_bytes(dx_nbytes, Device::CPU) : nullptr;
+    auto dgamma_ptr = grad_mask[1] ? allocate_aligned_bytes(dg_nbytes, Device::CPU) : nullptr;
+    auto dbeta_ptr = grad_mask[2] ? allocate_aligned_bytes(db_nbytes, Device::CPU) : nullptr;
 
-    if (outer * normalized_size > 0) {
+    if ((grad_mask[0] || grad_mask[1] || grad_mask[2]) && outer * normalized_size > 0) {
         const auto& x_cpu = std::get<CpuStorage>(x);
         const auto& gamma_cpu = std::get<CpuStorage>(gamma);
         const auto& mean_cpu = std::get<CpuStorage>(saved_mean);
@@ -214,14 +219,14 @@ std::vector<Storage> CpuBackend::layer_norm_backward(const Storage& x,
     } else {
         if (dx_nbytes)
             std::memset(dx_ptr.get(), 0, dx_nbytes);
-        if (param_nbytes) {
-            std::memset(dgamma_ptr.get(), 0, param_nbytes);
-            std::memset(dbeta_ptr.get(), 0, param_nbytes);
-        }
+        if (dg_nbytes)
+            std::memset(dgamma_ptr.get(), 0, dg_nbytes);
+        if (db_nbytes)
+            std::memset(dbeta_ptr.get(), 0, db_nbytes);
     }
-    return {Storage{CpuStorage{dx_ptr, dx_nbytes, dt}},
-            Storage{CpuStorage{dgamma_ptr, param_nbytes, dt}},
-            Storage{CpuStorage{dbeta_ptr, param_nbytes, dt}}};
+    return {grad_mask[0] ? Storage{CpuStorage{dx_ptr, dx_nbytes, dt}} : Storage{},
+            grad_mask[1] ? Storage{CpuStorage{dgamma_ptr, dg_nbytes, dt}} : Storage{},
+            grad_mask[2] ? Storage{CpuStorage{dbeta_ptr, db_nbytes, dt}} : Storage{}};
 }
 
 std::vector<Storage> CpuBackend::batch_norm_forward(const Storage& x,
@@ -292,7 +297,8 @@ std::vector<Storage> CpuBackend::batch_norm_backward(const Storage& x,
                                                      int p9_,
                                                      const Shape& p10_,
                                                      Dtype dt,
-                                                     double eps_unused) {
+                                                     double eps_unused,
+                                                     std::array<bool, 3> grad_mask) {
     // Accelerate has no half kernels, so the whole family widens at the door,
     // reuses the float path and rounds once on the way out.  as_f32 /
     // back_to_f16 key off each storage's own dtype, so index and mask
@@ -302,7 +308,7 @@ std::vector<Storage> CpuBackend::batch_norm_backward(const Storage& x,
             batch_norm_backward(detail::as_f32(x), detail::as_f32(gamma),
                                 detail::as_f32(saved_mean), detail::as_f32(saved_rstd),
                                 detail::as_f32(saved_xnorm), detail::as_f32(grad), batch, channels,
-                                spatial, p9_, p10_, Dtype::F32, eps_unused),
+                                spatial, p9_, p10_, Dtype::F32, eps_unused, grad_mask),
             dt);
     // CPU backward uses saved_rstd directly via the chain-rule formula;
     // no need for eps reconstruction.  The signature carries eps for
@@ -312,11 +318,14 @@ std::vector<Storage> CpuBackend::batch_norm_backward(const Storage& x,
     (void)eps_unused;
     (void)saved_xnorm;
     const std::size_t total = static_cast<std::size_t>(batch) * channels * spatial;
+    const std::size_t dx_nbytes = grad_mask[0] ? total * dtype_size(dt) : 0;
     const std::size_t param_nbytes = static_cast<std::size_t>(channels) * dtype_size(dt);
-    auto dx_ptr = allocate_aligned_bytes(total * dtype_size(dt), Device::CPU);
-    auto dgamma_ptr = allocate_aligned_bytes(param_nbytes, Device::CPU);
-    auto dbeta_ptr = allocate_aligned_bytes(param_nbytes, Device::CPU);
-    if (dx_ptr && total > 0) {
+    const std::size_t dg_nbytes = grad_mask[1] ? param_nbytes : 0;
+    const std::size_t db_nbytes = grad_mask[2] ? param_nbytes : 0;
+    auto dx_ptr = grad_mask[0] ? allocate_aligned_bytes(dx_nbytes, Device::CPU) : nullptr;
+    auto dgamma_ptr = grad_mask[1] ? allocate_aligned_bytes(dg_nbytes, Device::CPU) : nullptr;
+    auto dbeta_ptr = grad_mask[2] ? allocate_aligned_bytes(db_nbytes, Device::CPU) : nullptr;
+    if ((grad_mask[0] || grad_mask[1] || grad_mask[2]) && total > 0) {
         const auto& x_cpu = std::get<CpuStorage>(x);
         const auto& gamma_cpu = std::get<CpuStorage>(gamma);
         const auto& mean_cpu = std::get<CpuStorage>(saved_mean);
@@ -345,16 +354,16 @@ std::vector<Storage> CpuBackend::batch_norm_backward(const Storage& x,
             ErrorBuilder("cpu_backend::batch_norm_backward").not_implemented("dtype not supported");
         }
     } else {
-        if (total)
-            std::memset(dx_ptr.get(), 0, total * dtype_size(dt));
-        if (param_nbytes) {
-            std::memset(dgamma_ptr.get(), 0, param_nbytes);
-            std::memset(dbeta_ptr.get(), 0, param_nbytes);
-        }
+        if (dx_nbytes)
+            std::memset(dx_ptr.get(), 0, dx_nbytes);
+        if (dg_nbytes)
+            std::memset(dgamma_ptr.get(), 0, dg_nbytes);
+        if (db_nbytes)
+            std::memset(dbeta_ptr.get(), 0, db_nbytes);
     }
-    return {Storage{CpuStorage{dx_ptr, total * dtype_size(dt), dt}},
-            Storage{CpuStorage{dgamma_ptr, param_nbytes, dt}},
-            Storage{CpuStorage{dbeta_ptr, param_nbytes, dt}}};
+    return {grad_mask[0] ? Storage{CpuStorage{dx_ptr, dx_nbytes, dt}} : Storage{},
+            grad_mask[1] ? Storage{CpuStorage{dgamma_ptr, dg_nbytes, dt}} : Storage{},
+            grad_mask[2] ? Storage{CpuStorage{dbeta_ptr, db_nbytes, dt}} : Storage{}};
 }
 
 std::vector<Storage> CpuBackend::group_norm_forward(const Storage& x,
@@ -420,24 +429,28 @@ std::vector<Storage> CpuBackend::group_norm_backward(const Storage& x,
                                                      int groups,
                                                      const std::vector<int>& p9_,
                                                      const Shape& p10_,
-                                                     Dtype dt) {
+                                                     Dtype dt,
+                                                     std::array<bool, 3> grad_mask) {
     // Accelerate has no half kernels, so the whole family widens at the door,
     // reuses the float path and rounds once on the way out.  as_f32 /
     // back_to_f16 key off each storage's own dtype, so index and mask
     // operands travel through untouched.  See detail::widen_half.
     if (detail::is_half_like(dt))
-        return detail::back_to_f16(group_norm_backward(detail::as_f32(x), detail::as_f32(gamma),
-                                                       detail::as_f32(saved_mean),
-                                                       detail::as_f32(saved_rstd),
-                                                       detail::as_f32(grad), batch, channels,
-                                                       spatial, groups, p9_, p10_, Dtype::F32),
-                                   dt);
+        return detail::back_to_f16(
+            group_norm_backward(detail::as_f32(x), detail::as_f32(gamma),
+                                detail::as_f32(saved_mean), detail::as_f32(saved_rstd),
+                                detail::as_f32(grad), batch, channels, spatial, groups, p9_, p10_,
+                                Dtype::F32, grad_mask),
+            dt);
     const std::size_t total = static_cast<std::size_t>(batch) * channels * spatial;
+    const std::size_t dx_nbytes = grad_mask[0] ? total * dtype_size(dt) : 0;
     const std::size_t param_nbytes = static_cast<std::size_t>(channels) * dtype_size(dt);
-    auto dx_ptr = allocate_aligned_bytes(total * dtype_size(dt), Device::CPU);
-    auto dgamma_ptr = allocate_aligned_bytes(param_nbytes, Device::CPU);
-    auto dbeta_ptr = allocate_aligned_bytes(param_nbytes, Device::CPU);
-    if (dx_ptr && total > 0) {
+    const std::size_t dg_nbytes = grad_mask[1] ? param_nbytes : 0;
+    const std::size_t db_nbytes = grad_mask[2] ? param_nbytes : 0;
+    auto dx_ptr = grad_mask[0] ? allocate_aligned_bytes(dx_nbytes, Device::CPU) : nullptr;
+    auto dgamma_ptr = grad_mask[1] ? allocate_aligned_bytes(dg_nbytes, Device::CPU) : nullptr;
+    auto dbeta_ptr = grad_mask[2] ? allocate_aligned_bytes(db_nbytes, Device::CPU) : nullptr;
+    if ((grad_mask[0] || grad_mask[1] || grad_mask[2]) && total > 0) {
         const auto& x_cpu = std::get<CpuStorage>(x);
         const auto& gamma_cpu = std::get<CpuStorage>(gamma);
         const auto& mean_cpu = std::get<CpuStorage>(saved_mean);
@@ -465,13 +478,15 @@ std::vector<Storage> CpuBackend::group_norm_backward(const Storage& x,
         } else {
             ErrorBuilder("cpu_backend::group_norm_backward").not_implemented("dtype not supported");
         }
-    } else if (param_nbytes) {
-        std::memset(dgamma_ptr.get(), 0, param_nbytes);
-        std::memset(dbeta_ptr.get(), 0, param_nbytes);
+    } else {
+        if (dg_nbytes)
+            std::memset(dgamma_ptr.get(), 0, dg_nbytes);
+        if (db_nbytes)
+            std::memset(dbeta_ptr.get(), 0, db_nbytes);
     }
-    return {Storage{CpuStorage{dx_ptr, total * dtype_size(dt), dt}},
-            Storage{CpuStorage{dgamma_ptr, param_nbytes, dt}},
-            Storage{CpuStorage{dbeta_ptr, param_nbytes, dt}}};
+    return {grad_mask[0] ? Storage{CpuStorage{dx_ptr, dx_nbytes, dt}} : Storage{},
+            grad_mask[1] ? Storage{CpuStorage{dgamma_ptr, dg_nbytes, dt}} : Storage{},
+            grad_mask[2] ? Storage{CpuStorage{dbeta_ptr, db_nbytes, dt}} : Storage{}};
 }
 
 std::vector<Storage> CpuBackend::batch_norm_eval_forward(const Storage& x,
@@ -519,19 +534,20 @@ std::vector<Storage> CpuBackend::batch_norm_eval_backward(const Storage& x,
                                                           const Shape& x_shape,
                                                           int C,
                                                           int spatial,
-                                                          Dtype dt) {
+                                                          Dtype dt,
+                                                          std::array<bool, 5> grad_mask) {
     if (detail::is_half_like(dt))
         return detail::back_to_f16(
             batch_norm_eval_backward(detail::as_f32(x), detail::as_f32(mean), detail::as_f32(gamma),
                                      detail::as_f32(rstd), detail::as_f32(grad_out), x_shape, C,
-                                     spatial, Dtype::F32),
+                                     spatial, Dtype::F32, grad_mask),
             dt);
     const int B = static_cast<int>(x_shape[0]);
-    auto dx = alloc_cpu(static_cast<std::size_t>(B) * C * spatial, dt);
-    auto dm = alloc_cpu(static_cast<std::size_t>(C), dt);
-    auto dv = alloc_cpu(static_cast<std::size_t>(C), dt);
-    auto dg = alloc_cpu(static_cast<std::size_t>(C), dt);
-    auto db = alloc_cpu(static_cast<std::size_t>(C), dt);
+    auto dx = grad_mask[0] ? alloc_cpu(static_cast<std::size_t>(B) * C * spatial, dt) : CpuStorage{};
+    auto dm = grad_mask[1] ? alloc_cpu(static_cast<std::size_t>(C), dt) : CpuStorage{};
+    auto dv = grad_mask[2] ? alloc_cpu(static_cast<std::size_t>(C), dt) : CpuStorage{};
+    auto dg = grad_mask[3] ? alloc_cpu(static_cast<std::size_t>(C), dt) : CpuStorage{};
+    auto db = grad_mask[4] ? alloc_cpu(static_cast<std::size_t>(C), dt) : CpuStorage{};
     auto run = [&](auto tag) {
         using T = decltype(tag);
         auto in = [](const Storage& s) {
@@ -548,8 +564,11 @@ std::vector<Storage> CpuBackend::batch_norm_eval_backward(const Storage& x,
         run(double{});
     else
         ErrorBuilder("batch_norm_eval_backward").not_implemented("dtype");
-    return {Storage{std::move(dx)}, Storage{std::move(dm)}, Storage{std::move(dv)},
-            Storage{std::move(dg)}, Storage{std::move(db)}};
+    return {grad_mask[0] ? Storage{std::move(dx)} : Storage{},
+            grad_mask[1] ? Storage{std::move(dm)} : Storage{},
+            grad_mask[2] ? Storage{std::move(dv)} : Storage{},
+            grad_mask[3] ? Storage{std::move(dg)} : Storage{},
+            grad_mask[4] ? Storage{std::move(db)} : Storage{}};
 }
 
 std::vector<Storage> CpuBackend::lp_normalize_forward(
@@ -713,19 +732,22 @@ std::vector<Storage> CpuBackend::global_response_norm_backward(const Storage& x,
                                                                const Storage& grad_out,
                                                                const Shape& x_shape,
                                                                double eps,
-                                                               Dtype dt) {
+                                                               Dtype dt,
+                                                               std::array<bool, 3> grad_mask) {
     if (detail::is_half_like(dt))
         return detail::back_to_f16(
             global_response_norm_backward(detail::as_f32(x), detail::as_f32(gamma),
                                           detail::as_f32(beta), detail::as_f32(saved_Nx),
-                                          detail::as_f32(grad_out), x_shape, eps, Dtype::F32),
+                                          detail::as_f32(grad_out), x_shape, eps, Dtype::F32,
+                                          grad_mask),
             dt);
     const int B = static_cast<int>(x_shape[0]);
     const int C = static_cast<int>(x_shape[1]);
     const int spatial = static_cast<int>(x_shape[2] * x_shape[3]);
-    auto dx = alloc_cpu(static_cast<std::size_t>(B) * C * spatial, dt);
-    auto dg = alloc_cpu(static_cast<std::size_t>(C), dt);
-    auto db = alloc_cpu(static_cast<std::size_t>(C), dt);
+    CpuStorage dx = grad_mask[0] ? alloc_cpu(static_cast<std::size_t>(B) * C * spatial, dt)
+                                 : CpuStorage{};
+    CpuStorage dg = grad_mask[1] ? alloc_cpu(static_cast<std::size_t>(C), dt) : CpuStorage{};
+    CpuStorage db = grad_mask[2] ? alloc_cpu(static_cast<std::size_t>(C), dt) : CpuStorage{};
     auto run = [&](auto tag) {
         using T = decltype(tag);
         auto in = [](const Storage& s) {
@@ -851,42 +873,54 @@ void CpuBackend::batch_norm_backward_typed(const T* x,
     using Acc = NormAcc<T>;
     const std::size_t M = static_cast<std::size_t>(batch) * spatial;
     const Acc inv_M = Acc{1} / static_cast<Acc>(M);
+    const bool need_x = (dx != nullptr) || (dgamma != nullptr);
+    const bool need_gamma = (dx != nullptr);
     for (int c = 0; c < channels; ++c) {
-        const T m = mean[c];
-        const T r = rstd[c];
-        const T gc = gamma[c];
+        const T m = need_x ? mean[c] : T{};
+        const T r = need_x ? rstd[c] : T{};
+        const T gc = need_gamma ? gamma[c] : T{};
         Acc sum_dxn = Acc{};
         Acc sum_dxn_xn = Acc{};
         Acc sum_g = Acc{};
         Acc sum_g_xn = Acc{};
         for (int b = 0; b < batch; ++b) {
-            const T* xb = x + (static_cast<std::size_t>(b) * channels + c) * spatial;
+            const T* xb = need_x ? x + (static_cast<std::size_t>(b) * channels + c) * spatial : nullptr;
             const T* gb = g + (static_cast<std::size_t>(b) * channels + c) * spatial;
             for (int i = 0; i < spatial; ++i) {
-                const Acc xn_i = static_cast<Acc>((xb[i] - m) * r);
-                const Acc dxn_i = static_cast<Acc>(gc * gb[i]);
-                sum_dxn += dxn_i;
-                sum_dxn_xn += dxn_i * xn_i;
-                sum_g += static_cast<Acc>(gb[i]);
-                sum_g_xn += static_cast<Acc>(gb[i]) * xn_i;
+                if (dbeta)
+                    sum_g += static_cast<Acc>(gb[i]);
+                if (need_x) {
+                    const Acc xn_i = static_cast<Acc>((xb[i] - m) * r);
+                    if (dgamma)
+                        sum_g_xn += static_cast<Acc>(gb[i]) * xn_i;
+                    if (dx) {
+                        const Acc dxn_i = static_cast<Acc>(gc * gb[i]);
+                        sum_dxn += dxn_i;
+                        sum_dxn_xn += dxn_i * xn_i;
+                    }
+                }
             }
         }
-        const T sum_dxn_t = static_cast<T>(sum_dxn);
-        const T sum_dxn_xn_t = static_cast<T>(sum_dxn_xn);
-        const T inv_M_t = static_cast<T>(inv_M);
-        for (int b = 0; b < batch; ++b) {
-            const T* xb = x + (static_cast<std::size_t>(b) * channels + c) * spatial;
-            const T* gb = g + (static_cast<std::size_t>(b) * channels + c) * spatial;
-            T* dxb = dx + (static_cast<std::size_t>(b) * channels + c) * spatial;
-            for (int i = 0; i < spatial; ++i) {
-                const T xn_i = (xb[i] - m) * r;
-                const T dxn_i = gc * gb[i];
-                dxb[i] =
-                    inv_M_t * r * (static_cast<T>(M) * dxn_i - sum_dxn_t - xn_i * sum_dxn_xn_t);
+        if (dx) {
+            const T sum_dxn_t = static_cast<T>(sum_dxn);
+            const T sum_dxn_xn_t = static_cast<T>(sum_dxn_xn);
+            const T inv_M_t = static_cast<T>(inv_M);
+            for (int b = 0; b < batch; ++b) {
+                const T* xb = x + (static_cast<std::size_t>(b) * channels + c) * spatial;
+                const T* gb = g + (static_cast<std::size_t>(b) * channels + c) * spatial;
+                T* dxb = dx + (static_cast<std::size_t>(b) * channels + c) * spatial;
+                for (int i = 0; i < spatial; ++i) {
+                    const T xn_i = (xb[i] - m) * r;
+                    const T dxn_i = gc * gb[i];
+                    dxb[i] =
+                        inv_M_t * r * (static_cast<T>(M) * dxn_i - sum_dxn_t - xn_i * sum_dxn_xn_t);
+                }
             }
         }
-        dgamma[c] = static_cast<T>(sum_g_xn);
-        dbeta[c] = static_cast<T>(sum_g);
+        if (dgamma)
+            dgamma[c] = static_cast<T>(sum_g_xn);
+        if (dbeta)
+            dbeta[c] = static_cast<T>(sum_g);
     }
 }
 
@@ -960,52 +994,66 @@ void CpuBackend::group_norm_backward_typed(const T* x,
     const int Cg = channels / groups;
     const std::size_t per_group = static_cast<std::size_t>(Cg) * spatial;
     const Acc inv_pg = Acc{1} / static_cast<Acc>(per_group);
+    const bool need_x = (dx != nullptr) || (dgamma != nullptr);
+    const bool need_gamma = (dx != nullptr);
     // dgamma / dbeta run over batch * spatial per channel, which is the
     // same length of sum the forward widened; they are accumulated apart
     // and rounded once on the way out.
-    std::vector<Acc> dgamma_acc(static_cast<std::size_t>(channels), Acc{});
-    std::vector<Acc> dbeta_acc(static_cast<std::size_t>(channels), Acc{});
+    std::vector<Acc> dgamma_acc(dgamma ? static_cast<std::size_t>(channels) : 0, Acc{});
+    std::vector<Acc> dbeta_acc(dbeta ? static_cast<std::size_t>(channels) : 0, Acc{});
     for (int b = 0; b < batch; ++b) {
         for (int gi = 0; gi < groups; ++gi) {
-            const T m = mean_bg[b * groups + gi];
-            const T r = rstd_bg[b * groups + gi];
+            const T m = need_x ? mean_bg[b * groups + gi] : T{};
+            const T r = need_x ? rstd_bg[b * groups + gi] : T{};
             Acc sum_dxn = Acc{};
             Acc sum_dxn_xn = Acc{};
             for (int cc = 0; cc < Cg; ++cc) {
                 const int c = gi * Cg + cc;
-                const T gc = gamma[c];
-                const T* xb = x + (static_cast<std::size_t>(b) * channels + c) * spatial;
+                const T gc = need_gamma ? gamma[c] : T{};
+                const T* xb = need_x ? x + (static_cast<std::size_t>(b) * channels + c) * spatial : nullptr;
                 const T* gb = g + (static_cast<std::size_t>(b) * channels + c) * spatial;
                 for (int i = 0; i < spatial; ++i) {
-                    const Acc xn_i = static_cast<Acc>((xb[i] - m) * r);
-                    const Acc dxn_i = static_cast<Acc>(gc * gb[i]);
-                    sum_dxn += dxn_i;
-                    sum_dxn_xn += dxn_i * xn_i;
-                    dgamma_acc[c] += static_cast<Acc>(gb[i]) * xn_i;
-                    dbeta_acc[c] += static_cast<Acc>(gb[i]);
+                    if (dbeta)
+                        dbeta_acc[c] += static_cast<Acc>(gb[i]);
+                    if (need_x) {
+                        const Acc xn_i = static_cast<Acc>((xb[i] - m) * r);
+                        if (dgamma)
+                            dgamma_acc[c] += static_cast<Acc>(gb[i]) * xn_i;
+                        if (dx) {
+                            const Acc dxn_i = static_cast<Acc>(gc * gb[i]);
+                            sum_dxn += dxn_i;
+                            sum_dxn_xn += dxn_i * xn_i;
+                        }
+                    }
                 }
             }
-            const T sum_dxn_t = static_cast<T>(sum_dxn);
-            const T sum_dxn_xn_t = static_cast<T>(sum_dxn_xn);
-            const T inv_pg_t = static_cast<T>(inv_pg);
-            for (int cc = 0; cc < Cg; ++cc) {
-                const int c = gi * Cg + cc;
-                const T gc = gamma[c];
-                const T* xb = x + (static_cast<std::size_t>(b) * channels + c) * spatial;
-                const T* gb = g + (static_cast<std::size_t>(b) * channels + c) * spatial;
-                T* dxb = dx + (static_cast<std::size_t>(b) * channels + c) * spatial;
-                for (int i = 0; i < spatial; ++i) {
-                    const T xn_i = (xb[i] - m) * r;
-                    const T dxn_i = gc * gb[i];
-                    dxb[i] = inv_pg_t * r *
-                             (static_cast<T>(per_group) * dxn_i - sum_dxn_t - xn_i * sum_dxn_xn_t);
+            if (dx) {
+                const T sum_dxn_t = static_cast<T>(sum_dxn);
+                const T sum_dxn_xn_t = static_cast<T>(sum_dxn_xn);
+                const T inv_pg_t = static_cast<T>(inv_pg);
+                for (int cc = 0; cc < Cg; ++cc) {
+                    const int c = gi * Cg + cc;
+                    const T gc = gamma[c];
+                    const T* xb = x + (static_cast<std::size_t>(b) * channels + c) * spatial;
+                    const T* gb = g + (static_cast<std::size_t>(b) * channels + c) * spatial;
+                    T* dxb = dx + (static_cast<std::size_t>(b) * channels + c) * spatial;
+                    for (int i = 0; i < spatial; ++i) {
+                        const T xn_i = (xb[i] - m) * r;
+                        const T dxn_i = gc * gb[i];
+                        dxb[i] = inv_pg_t * r *
+                                 (static_cast<T>(per_group) * dxn_i - sum_dxn_t - xn_i * sum_dxn_xn_t);
+                    }
                 }
             }
         }
     }
-    for (int co = 0; co < channels; ++co) {
-        dgamma[co] = static_cast<T>(dgamma_acc[co]);
-        dbeta[co] = static_cast<T>(dbeta_acc[co]);
+    if (dgamma) {
+        for (int co = 0; co < channels; ++co)
+            dgamma[co] = static_cast<T>(dgamma_acc[co]);
+    }
+    if (dbeta) {
+        for (int co = 0; co < channels; ++co)
+            dbeta[co] = static_cast<T>(dbeta_acc[co]);
     }
 }
 

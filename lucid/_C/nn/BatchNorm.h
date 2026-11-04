@@ -122,6 +122,10 @@ template <int N>
 class LUCID_API BatchNormNdBackward : public FuncOp<BatchNormNdBackward<N>, 3> {
 public:
     static constexpr bool kKeepsOwnValues = true;
+    // dx reads x and gamma; dgamma reads x; dbeta reads only grad_out.
+    static constexpr GradReads<3> kGradReads = {{{true, true, false},
+                                                 {true, false, false},
+                                                 {false, false, false}}};
     // Registered op schema (see class docstring for fields).
     static const OpSchema schema_v1;
     // Per-channel mean $\mu_c$, shape ``(C,)``.

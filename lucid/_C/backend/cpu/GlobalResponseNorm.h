@@ -85,11 +85,20 @@ void global_response_norm_backward_typed(const T* x,
                                          int channels,
                                          int spatial,
                                          double eps) {
+    if (!dx && !dgamma && !dbeta)
+        return;
     std::vector<T> norms, means;
-    grn_global_norms(x, batch, channels, spatial, norms, means);
-    for (int c = 0; c < channels; ++c)
-        dgamma[c] = dbeta[c] = T{0};
-    std::vector<T> a(norms.size(), T{0});
+    if (dx)
+        grn_global_norms(x, batch, channels, spatial, norms, means);
+    if (dgamma) {
+        for (int c = 0; c < channels; ++c)
+            dgamma[c] = T{0};
+    }
+    if (dbeta) {
+        for (int c = 0; c < channels; ++c)
+            dbeta[c] = T{0};
+    }
+    std::vector<T> a(dx ? norms.size() : 0, T{0});
     for (int b = 0; b < batch; ++b)
         for (int c = 0; c < channels; ++c) {
             const std::size_t bc = static_cast<std::size_t>(b) * channels + c;
@@ -98,10 +107,15 @@ void global_response_norm_backward_typed(const T* x,
             T sgx = T{0};
             for (int s = 0; s < spatial; ++s)
                 sgx += gr[s] * xr[s];
-            a[bc] = sgx * gamma[c];
-            dgamma[c] += sgx * nx[bc];
-            dbeta[c] += sgx;
+            if (dx)
+                a[bc] = sgx * gamma[c];
+            if (dgamma)
+                dgamma[c] += sgx * nx[bc];
+            if (dbeta)
+                dbeta[c] += sgx;
         }
+    if (!dx)
+        return;
     for (int b = 0; b < batch; ++b) {
         const std::size_t row = static_cast<std::size_t>(b) * channels;
         const T denom = means[b] + static_cast<T>(eps);

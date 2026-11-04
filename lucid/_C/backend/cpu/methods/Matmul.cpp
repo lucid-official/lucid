@@ -128,48 +128,70 @@ std::vector<Storage> CpuBackend::linear_backward(const Storage& grad,
                                                  const Shape& x_shape,
                                                  const Shape& weight_shape,
                                                  const Shape& bias_shape,
-                                                 Dtype dt) {
+                                                 Dtype dt,
+                                                 std::array<bool, 3> grad_mask) {
     // Accelerate has no half kernels, so the whole family widens at the door,
     // reuses the float path and rounds once on the way out.  as_f32 /
     // back_to_f16 key off each storage's own dtype, so index and mask
     // operands travel through untouched.  See detail::widen_half.
     if (detail::is_half_like(dt))
-        return detail::back_to_f16(linear_backward(detail::as_f32(grad), detail::as_f32(x),
-                                                   detail::as_f32(weight), x_shape, weight_shape,
-                                                   bias_shape, Dtype::F32),
+        return detail::back_to_f16(linear_backward(detail::as_f32(grad),
+                                                   grad_mask[1] ? detail::as_f32(x) : Storage{},
+                                                   grad_mask[0] ? detail::as_f32(weight) : Storage{},
+                                                   x_shape, weight_shape, bias_shape, Dtype::F32,
+                                                   grad_mask),
                                    dt);
     const auto [M, K] = flatten_linear_x(x_shape);
     const std::size_t N = static_cast<std::size_t>(weight_shape[0]);
     const std::size_t elem = dtype_size(dt);
-    CpuStorage dx{allocate_aligned_bytes(M * K * elem, Device::CPU), M * K * elem, dt};
-    CpuStorage dW{allocate_aligned_bytes(N * K * elem, Device::CPU), N * K * elem, dt};
-    CpuStorage db{allocate_aligned_bytes(shape_numel(bias_shape) * elem, Device::CPU),
-                  shape_numel(bias_shape) * elem, dt};
+    CpuStorage dx{};
+    CpuStorage dW{};
+    CpuStorage db{};
 
     if (M > 0 && N > 0 && K > 0) {
-        MatmulOpts dx_opts;
-        dx_opts.M = static_cast<int>(M);
-        dx_opts.K = static_cast<int>(N);
-        dx_opts.N = static_cast<int>(K);
-        dx_opts.batch = 1;
-        dx = std::get<CpuStorage>(matmul(grad, weight, dx_opts, dt));
+        if (grad_mask[0]) {
+            MatmulOpts dx_opts;
+            dx_opts.M = static_cast<int>(M);
+            dx_opts.K = static_cast<int>(N);
+            dx_opts.N = static_cast<int>(K);
+            dx_opts.batch = 1;
+            dx = std::get<CpuStorage>(matmul(grad, weight, dx_opts, dt));
+        }
 
-        MatmulOpts dW_opts;
-        dW_opts.transA = true;
-        dW_opts.M = static_cast<int>(N);
-        dW_opts.K = static_cast<int>(M);
-        dW_opts.N = static_cast<int>(K);
-        dW_opts.batch = 1;
-        dW = std::get<CpuStorage>(matmul(grad, x, dW_opts, dt));
+        if (grad_mask[1]) {
+            MatmulOpts dW_opts;
+            dW_opts.transA = true;
+            dW_opts.M = static_cast<int>(N);
+            dW_opts.K = static_cast<int>(M);
+            dW_opts.N = static_cast<int>(K);
+            dW_opts.batch = 1;
+            dW = std::get<CpuStorage>(matmul(grad, x, dW_opts, dt));
+        }
 
-        sum_linear_rows(std::get<CpuStorage>(grad), db, M, N, dt);
+        if (grad_mask[2]) {
+            const std::size_t db_bytes = shape_numel(bias_shape) * elem;
+            db = CpuStorage{allocate_aligned_bytes(db_bytes, Device::CPU), db_bytes, dt};
+            sum_linear_rows(std::get<CpuStorage>(grad), db, M, N, dt);
+        }
     } else {
-        if (dx.nbytes)
-            std::memset(dx.ptr.get(), 0, dx.nbytes);
-        if (dW.nbytes)
-            std::memset(dW.ptr.get(), 0, dW.nbytes);
-        if (db.nbytes)
-            std::memset(db.ptr.get(), 0, db.nbytes);
+        if (grad_mask[0]) {
+            const std::size_t dx_bytes = M * K * elem;
+            dx = CpuStorage{allocate_aligned_bytes(dx_bytes, Device::CPU), dx_bytes, dt};
+            if (dx.nbytes)
+                std::memset(dx.ptr.get(), 0, dx.nbytes);
+        }
+        if (grad_mask[1]) {
+            const std::size_t dW_bytes = N * K * elem;
+            dW = CpuStorage{allocate_aligned_bytes(dW_bytes, Device::CPU), dW_bytes, dt};
+            if (dW.nbytes)
+                std::memset(dW.ptr.get(), 0, dW.nbytes);
+        }
+        if (grad_mask[2]) {
+            const std::size_t db_bytes = shape_numel(bias_shape) * elem;
+            db = CpuStorage{allocate_aligned_bytes(db_bytes, Device::CPU), db_bytes, dt};
+            if (db.nbytes)
+                std::memset(db.ptr.get(), 0, db.nbytes);
+        }
     }
     return {Storage{std::move(dx)}, Storage{std::move(dW)}, Storage{std::move(db)}};
 }
@@ -241,62 +263,75 @@ std::vector<Storage> CpuBackend::bilinear_layer_backward(const Storage& grad_out
                                                          const Shape& x2_shape,
                                                          const Shape& w_shape,
                                                          bool has_bias,
-                                                         Dtype dt) {
+                                                         Dtype dt,
+                                                         std::array<bool, 4> grad_mask) {
     if (detail::is_half_like(dt))
-        return detail::back_to_f16(bilinear_layer_backward(detail::as_f32(grad_out),
-                                                           detail::as_f32(x1), detail::as_f32(x2),
-                                                           detail::as_f32(weight), x1_shape,
-                                                           x2_shape, w_shape, has_bias, Dtype::F32),
-                                   dt);
+        return detail::back_to_f16(
+            bilinear_layer_backward(detail::as_f32(grad_out),
+                                    (grad_mask[1] || grad_mask[2]) ? detail::as_f32(x1) : Storage{},
+                                    (grad_mask[0] || grad_mask[2]) ? detail::as_f32(x2) : Storage{},
+                                    (grad_mask[0] || grad_mask[1]) ? detail::as_f32(weight)
+                                                                   : Storage{},
+                                    x1_shape, x2_shape, w_shape, has_bias, Dtype::F32, grad_mask),
+            dt);
     std::size_t B = 1;
     for (std::size_t i = 0; i + 1 < x1_shape.size(); ++i)
         B *= static_cast<std::size_t>(x1_shape[i]);
     const std::size_t D1 = static_cast<std::size_t>(x1_shape.back());
     const std::size_t D2 = static_cast<std::size_t>(x2_shape.back());
     const std::size_t Dout = static_cast<std::size_t>(w_shape[0]);
-    const auto& xs1 = std::get<CpuStorage>(x1);
-    const auto& xs2 = std::get<CpuStorage>(x2);
-    const auto& ws = std::get<CpuStorage>(weight);
+    const CpuStorage* xs1 = (grad_mask[1] || grad_mask[2]) ? &std::get<CpuStorage>(x1) : nullptr;
+    const CpuStorage* xs2 = (grad_mask[0] || grad_mask[2]) ? &std::get<CpuStorage>(x2) : nullptr;
+    const CpuStorage* ws = (grad_mask[0] || grad_mask[1]) ? &std::get<CpuStorage>(weight) : nullptr;
     const auto& gys = std::get<CpuStorage>(grad_out);
-    auto dx1_cpu = alloc_cpu(B * D1, dt);
-    auto dx2_cpu = alloc_cpu(B * D2, dt);
-    auto dW_cpu = alloc_cpu(Dout * D1 * D2, dt);
-    auto db_cpu = has_bias ? alloc_cpu(Dout, dt) : CpuStorage{};
+    auto dx1_cpu = grad_mask[0] ? alloc_cpu(B * D1, dt) : CpuStorage{};
+    auto dx2_cpu = grad_mask[1] ? alloc_cpu(B * D2, dt) : CpuStorage{};
+    auto dW_cpu = grad_mask[2] ? alloc_cpu(Dout * D1 * D2, dt) : CpuStorage{};
+    auto db_cpu = (has_bias && grad_mask[3]) ? alloc_cpu(Dout, dt) : CpuStorage{};
     auto run = [&](auto tag) {
         using T = decltype(tag);
-        const T* x1p = reinterpret_cast<const T*>(xs1.ptr.get());
-        const T* x2p = reinterpret_cast<const T*>(xs2.ptr.get());
-        const T* wp = reinterpret_cast<const T*>(ws.ptr.get());
+        const T* x1p = xs1 ? reinterpret_cast<const T*>(xs1->ptr.get()) : nullptr;
+        const T* x2p = xs2 ? reinterpret_cast<const T*>(xs2->ptr.get()) : nullptr;
+        const T* wp = ws ? reinterpret_cast<const T*>(ws->ptr.get()) : nullptr;
         const T* gyp = reinterpret_cast<const T*>(gys.ptr.get());
-        T* dx1p = reinterpret_cast<T*>(dx1_cpu.ptr.get());
-        T* dx2p = reinterpret_cast<T*>(dx2_cpu.ptr.get());
-        T* dwp = reinterpret_cast<T*>(dW_cpu.ptr.get());
-        T* dbp = has_bias ? reinterpret_cast<T*>(db_cpu.ptr.get()) : nullptr;
-        std::memset(dx1p, 0, sizeof(T) * B * D1);
-        std::memset(dx2p, 0, sizeof(T) * B * D2);
-        std::memset(dwp, 0, sizeof(T) * Dout * D1 * D2);
+        T* dx1p = grad_mask[0] ? reinterpret_cast<T*>(dx1_cpu.ptr.get()) : nullptr;
+        T* dx2p = grad_mask[1] ? reinterpret_cast<T*>(dx2_cpu.ptr.get()) : nullptr;
+        T* dwp = grad_mask[2] ? reinterpret_cast<T*>(dW_cpu.ptr.get()) : nullptr;
+        T* dbp = (has_bias && grad_mask[3]) ? reinterpret_cast<T*>(db_cpu.ptr.get()) : nullptr;
+        if (dx1p)
+            std::memset(dx1p, 0, sizeof(T) * B * D1);
+        if (dx2p)
+            std::memset(dx2p, 0, sizeof(T) * B * D2);
+        if (dwp)
+            std::memset(dwp, 0, sizeof(T) * Dout * D1 * D2);
         if (dbp)
             std::memset(dbp, 0, sizeof(T) * Dout);
         for (std::size_t bi = 0; bi < B; ++bi) {
-            const T* x1b = x1p + bi * D1;
-            const T* x2b = x2p + bi * D2;
+            const T* x1b = x1p ? x1p + bi * D1 : nullptr;
+            const T* x2b = x2p ? x2p + bi * D2 : nullptr;
             const T* gb = gyp + bi * Dout;
-            T* dx1b = dx1p + bi * D1;
-            T* dx2b = dx2p + bi * D2;
+            T* dx1b = dx1p ? dx1p + bi * D1 : nullptr;
+            T* dx2b = dx2p ? dx2p + bi * D2 : nullptr;
             for (std::size_t k = 0; k < Dout; ++k) {
                 const T g = gb[k];
                 if (dbp)
                     dbp[k] += g;
-                const T* Wk = wp + k * D1 * D2;
-                T* dWk = dwp + k * D1 * D2;
+                if (!dx1b && !dx2b && !dwp)
+                    continue;
+                const T* Wk = wp ? wp + k * D1 * D2 : nullptr;
+                T* dWk = dwp ? dwp + k * D1 * D2 : nullptr;
                 for (std::size_t i = 0; i < D1; ++i) {
                     T row = T{0};
                     for (std::size_t j = 0; j < D2; ++j) {
-                        row += Wk[i * D2 + j] * x2b[j];
-                        dx2b[j] += g * x1b[i] * Wk[i * D2 + j];
-                        dWk[i * D2 + j] += g * x1b[i] * x2b[j];
+                        if (dx1b)
+                            row += Wk[i * D2 + j] * x2b[j];
+                        if (dx2b)
+                            dx2b[j] += g * x1b[i] * Wk[i * D2 + j];
+                        if (dWk)
+                            dWk[i * D2 + j] += g * x1b[i] * x2b[j];
                     }
-                    dx1b[i] += g * row;
+                    if (dx1b)
+                        dx1b[i] += g * row;
                 }
             }
         }
@@ -311,14 +346,7 @@ std::vector<Storage> CpuBackend::bilinear_layer_backward(const Storage& grad_out
     out.push_back(Storage{std::move(dx1_cpu)});
     out.push_back(Storage{std::move(dx2_cpu)});
     out.push_back(Storage{std::move(dW_cpu)});
-    if (has_bias)
-        out.push_back(Storage{std::move(db_cpu)});
-    else {
-        CpuStorage empty;
-        empty.dtype = dt;
-        empty.nbytes = 0;
-        out.push_back(Storage{std::move(empty)});
-    }
+    out.push_back(Storage{std::move(db_cpu)});
     return out;
 }
 

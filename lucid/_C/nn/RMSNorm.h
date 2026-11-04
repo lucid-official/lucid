@@ -82,6 +82,8 @@ namespace lucid {
 class LUCID_API RMSNormBackward : public FuncOp<RMSNormBackward, 2> {
 public:
     static constexpr bool kKeepsOwnValues = true;
+    // dx reads x and gamma; dgamma reads x.
+    static constexpr GradReads<2> kGradReads = {{{true, true}, {true, false}}};
     // Registered op schema (see class docstring).
     static const OpSchema schema_v1;
     // Per-slice reciprocal RMS, shape ``(outer_,)``.

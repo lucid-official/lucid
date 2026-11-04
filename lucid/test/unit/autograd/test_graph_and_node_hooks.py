@@ -288,9 +288,15 @@ def test_save_on_cpu_built_in_mlp_offloads_to_host_and_matches_reference(
 
     ctx.pack_hook, ctx.unpack_hook = spy_pack, spy_unpack
 
-    x = lucid.tensor([[1.0, -2.0], [0.5, 1.5]], dtype=lucid.float32, device=device, requires_grad=True)
-    w1 = lucid.tensor([[0.2, -0.3], [0.4, 0.1]], dtype=lucid.float32, device=device, requires_grad=True)
-    w2 = lucid.tensor([[-0.5, 0.7], [0.3, -0.2]], dtype=lucid.float32, device=device, requires_grad=True)
+    x = lucid.tensor(
+        [[1.0, -2.0], [0.5, 1.5]], dtype=lucid.float32, device=device, requires_grad=True
+    )
+    w1 = lucid.tensor(
+        [[0.2, -0.3], [0.4, 0.1]], dtype=lucid.float32, device=device, requires_grad=True
+    )
+    w2 = lucid.tensor(
+        [[-0.5, 0.7], [0.3, -0.2]], dtype=lucid.float32, device=device, requires_grad=True
+    )
 
     with ctx:
         h = (x @ w1).sin()
@@ -303,7 +309,9 @@ def test_save_on_cpu_built_in_mlp_offloads_to_host_and_matches_reference(
 
     rx = ref.tensor([[1.0, -2.0], [0.5, 1.5]], dtype=ref.float32, device="cpu", requires_grad=True)
     rw1 = ref.tensor([[0.2, -0.3], [0.4, 0.1]], dtype=ref.float32, device="cpu", requires_grad=True)
-    rw2 = ref.tensor([[-0.5, 0.7], [0.3, -0.2]], dtype=ref.float32, device="cpu", requires_grad=True)
+    rw2 = ref.tensor(
+        [[-0.5, 0.7], [0.3, -0.2]], dtype=ref.float32, device="cpu", requires_grad=True
+    )
     with ref.autograd.graph.save_on_cpu():
         rh = (rx @ rw1).sin()
         rout = (rh @ rw2).exp()

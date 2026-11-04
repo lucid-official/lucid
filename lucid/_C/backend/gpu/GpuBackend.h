@@ -972,7 +972,9 @@ public:
                                          const Shape& x_shape,
                                          const Shape& weight_shape,
                                          const Shape& bias_shape,
-                                         Dtype dt) override;
+                                         Dtype dt,
+                                         std::array<bool, 3> grad_mask = {
+                                             true, true, true}) override;
 
     StoragePair rms_norm_forward(const Storage& x,
                                  const Storage& gamma,
@@ -990,7 +992,8 @@ public:
                                   std::size_t normalized_size,
                                   const Shape& x_shape,
                                   const Shape& gamma_shape,
-                                  Dtype dt) override;
+                                  Dtype dt,
+                                  std::array<bool, 2> grad_mask = {true, true}) override;
 
     // ── Normalisation ─────────────────────────────────────────────────────
     // LayerNorm forward via MLX's fused ``fast::layer_norm`` kernel.
@@ -1038,7 +1041,9 @@ public:
                                              const Shape& x_shape,
                                              const Shape& gamma_shape,
                                              const Shape& beta_shape,
-                                             Dtype dt) override;
+                                             Dtype dt,
+                                             std::array<bool, 3> grad_mask = {
+                                                 true, true, true}) override;
 
     // BatchNorm forward (training mode).
     //
@@ -1086,7 +1091,9 @@ public:
                                              int ndim,
                                              const Shape& x_shape_param,
                                              Dtype dt,
-                                             double eps) override;
+                                             double eps,
+                                             std::array<bool, 3> grad_mask = {
+                                                 true, true, true}) override;
 
     std::vector<Storage> group_norm_forward(const Storage& x,
                                             const Storage& gamma,
@@ -1111,7 +1118,9 @@ public:
                                              int groups,
                                              const std::vector<int>& spatial_dims,
                                              const Shape& x_shape,
-                                             Dtype dt) override;
+                                             Dtype dt,
+                                             std::array<bool, 3> grad_mask = {
+                                                 true, true, true}) override;
 
     // Matrix / vector norm.  Routed to MLX's CPU linalg stream per H3.
     //
@@ -1606,7 +1615,9 @@ public:
                                                     const int* K,
                                                     const int* O,
                                                     const IBackend::ConvTransposeNdOpts& opts,
-                                                    Dtype dt) override;
+                                                    Dtype dt,
+                                                    std::array<bool, 3> grad_mask = {
+                                                        true, true, true}) override;
 
     std::pair<Storage, Storage> expand_and_multiply(const Storage& mask,
                                                     const Storage& x,
@@ -1731,7 +1742,9 @@ public:
                                           const int* K,
                                           const int* O,
                                           const ConvNdOpts& opts,
-                                          Dtype dt) override;
+                                          Dtype dt,
+                                          std::array<bool, 3> grad_mask = {
+                                              true, true, true}) override;
 
     Storage unfold_forward(const Storage& x,
                            int B,
@@ -2168,7 +2181,9 @@ private:
                                                   const Shape& x_shape,
                                                   int C,
                                                   int,
-                                                  Dtype dt) override;
+                                                  Dtype dt,
+                                                  std::array<bool, 5> grad_mask = {
+                                                      true, true, true, true, true}) override;
 
     std::vector<Storage> lp_normalize_forward(const Storage& x,
                                               const Shape& x_shape,
@@ -2199,7 +2214,9 @@ private:
                                                        const Storage& grad_out,
                                                        const Shape& x_shape,
                                                        double eps,
-                                                       Dtype dt) override;
+                                                       Dtype dt,
+                                                       std::array<bool, 3> grad_mask = {
+                                                           true, true, true}) override;
 
     // ── interpolate — the graphs live in ``gpu/Interpolate.h`` ─────────────
     Storage interpolate_nearest_2d_forward(
@@ -2295,7 +2312,9 @@ private:
                                                  const Shape& x2_shape,
                                                  const Shape& w_shape,
                                                  bool has_bias,
-                                                 Dtype dt) override;
+                                                 Dtype dt,
+                                                 std::array<bool, 4> grad_mask = {
+                                                     true, true, true, true}) override;
 
     // Built by comparing each index with every class, so no index value is
     // ever used as an offset.  One outside [0, num_classes), negative ones

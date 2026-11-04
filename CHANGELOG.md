@@ -46,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Performance
 
+- `_C.engine` (`Linear`, `ConvNd`, `ConvTransposeNd`, `LayerNorm`, `RMSNorm`, `BatchNormNd`, `GroupNorm`, `BatchNormEval`, `GlobalResponseNorm`, `Bilinear`): thread `needs_input_grad` (`grad_mask`) and `kGradReads` through fused CPU/Metal backward kernels and `apply_for_graph`, skipping unneeded `dx`/`dW`/`db` GEMMs, convolutions, reductions, and buffer allocations (LCD-697).
 - `CpuBackend::roll`: replace the per-element modulo and single-element `memcpy` loop on 1-D shifts with a row-wise two-slice `std::memcpy` rotation (LCD-769).
 - `lucid.special.log_ndtr`: replace `log1p` on the upper-tail `erfcx` correction ($|q| \le 2.34 	imes 10^{-3}$) with a short Horner Mercator series, cutting Metal first-compile time from 4.4 s to 1.6 s while preserving full `float32` / `float64` accuracy (LCD-795).
 

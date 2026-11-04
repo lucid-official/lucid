@@ -214,9 +214,10 @@ std::vector<Storage> ConvTransposeNdBackward<N>::apply(Storage grad_out) {
 
     // Returns [dx, dW, db].
     return backend::Dispatcher::for_device(this->device_)
-        .conv_transpose_nd_backward(grad_out, this->saved_or_zeros(0, grad_out),
-                                    this->saved_or_zeros(1, grad_out), B, Cin, Cout, S, K, O, opts,
-                                    this->dtype_);
+        .conv_transpose_nd_backward(
+            grad_out, this->saved_inputs_[0], this->saved_inputs_[1], B, Cin, Cout, S, K, O, opts,
+            this->dtype_,
+            {this->needs_input_grad(0), this->needs_input_grad(1), this->needs_input_grad(2)});
 }
 
 template <int N>

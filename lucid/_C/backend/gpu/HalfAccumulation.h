@@ -863,62 +863,96 @@ inline ::mlx::core::array extract_bn_stats_f32(const Storage& saved_xnorm,
                      0);
 }
 
-inline std::vector<Storage> bn_backward_gpu(const ::mlx::core::array& x,
-                                            const ::mlx::core::array& gamma,
+inline std::vector<Storage> bn_backward_gpu(const Storage& x_s,
+                                            const Storage& gamma_s,
                                             const ::mlx::core::array& saved_mean,
                                             const ::mlx::core::array& saved_rstd,
                                             const Storage& saved_xnorm,
                                             const ::mlx::core::array& grad,
                                             int channels,
                                             int ndim,
-                                            Dtype dt) {
+                                            Dtype dt,
+                                            std::array<bool, 3> grad_mask) {
     namespace mx = ::mlx::core;
-    const int B = static_cast<int>(x.shape(0));
-    const int S = spatial_extent(x, ndim);
-    if (x.size() > 0 && grad.dtype() == x.dtype()) {
+    if (!grad_mask[0] && !grad_mask[1] && !grad_mask[2])
+        return {Storage{}, Storage{}, Storage{}};
+    const int B = static_cast<int>(grad.shape(0));
+    const int S = spatial_extent(grad, ndim);
+    const auto g_dt = grad.dtype();
+    if (!grad_mask[0] && !grad_mask[1]) {
+        std::vector<int> axes{0};
+        for (int i = 0; i < ndim; ++i)
+            axes.push_back(2 + i);
+        auto dbeta = sum_widened(grad, axes, false);
+        return {Storage{}, Storage{}, Storage{gpu::wrap_mlx_array(std::move(dbeta), dt)}};
+    }
+    const auto& x = *std::get<GpuStorage>(x_s).arr;
+    if (x.size() > 0 && g_dt == x.dtype()) {
         auto stats_f32 = extract_bn_stats_f32(saved_xnorm, saved_mean, saved_rstd, channels);
         auto g3 = reshape_contig(grad, {B, channels, S});
         auto x3 = reshape_contig(x, {B, channels, S});
-        auto gam1 = reshape_contig(gamma, {channels});
         const int G = pick_omi_groups(B, channels, S);
         auto p = bn_bwd_s1_kernel()({g3, x3, stats_f32}, {{channels, G, 2}}, {mx::float32},
                                     {G * 256, channels, 1}, {256, 1, 1}, {{"T", x.dtype()}},
                                     std::nullopt, false, {})[0];
+        auto gam1 = grad_mask[0] ? reshape_contig(*std::get<GpuStorage>(gamma_s).arr, {channels})
+                                 : reshape_contig(saved_rstd, {channels});
         auto s2 = bn_bwd_s2_kernel()(
             {p, g3, gam1, stats_f32}, {{channels}, {channels}, {3, channels}},
-            {gamma.dtype(), grad.dtype(), mx::float32}, {256, channels, 1}, {256, 1, 1},
-            {{"T", x.dtype()}, {"OutT", grad.dtype()}, {"TGamma", gamma.dtype()}}, std::nullopt,
+            {gam1.dtype(), grad.dtype(), mx::float32}, {256, channels, 1}, {256, 1, 1},
+            {{"T", x.dtype()}, {"OutT", grad.dtype()}, {"TGamma", gam1.dtype()}}, std::nullopt,
             false, {});
-        const int s_grid = (((S + 3) / 4 + 255) / 256) * 256;
-        auto dx3 = bn_dx_kernel()({g3, x3, stats_f32, s2[2]}, {{B, channels, S}}, {grad.dtype()},
-                                  {s_grid, channels, B}, {256, 1, 1}, {{"T", grad.dtype()}},
-                                  std::nullopt, false, {})[0];
-        return {Storage{gpu::wrap_mlx_array(mx::reshape(dx3, x.shape()), dt)},
-                Storage{gpu::wrap_mlx_array(std::move(s2[0]), dt)},
-                Storage{gpu::wrap_mlx_array(std::move(s2[1]), dt)}};
+        Storage dx_out;
+        if (grad_mask[0]) {
+            const int s_grid = (((S + 3) / 4 + 255) / 256) * 256;
+            auto dx3 =
+                bn_dx_kernel()({g3, x3, stats_f32, s2[2]}, {{B, channels, S}}, {grad.dtype()},
+                               {s_grid, channels, B}, {256, 1, 1}, {{"T", grad.dtype()}},
+                               std::nullopt, false, {})[0];
+            dx_out = Storage{gpu::wrap_mlx_array(mx::reshape(dx3, x.shape()), dt)};
+        }
+        return {std::move(dx_out),
+                grad_mask[1] ? Storage{gpu::wrap_mlx_array(std::move(s2[0]), dt)} : Storage{},
+                grad_mask[2] ? Storage{gpu::wrap_mlx_array(std::move(s2[1]), dt)} : Storage{}};
     }
     mx::Shape br_c(static_cast<std::size_t>(ndim) + 2, 1);
     br_c[1] = static_cast<mx::ShapeElem>(channels);
-    auto gamma_view = mx::reshape(gamma, br_c);
     auto xnorm = mx::multiply(mx::subtract(x, saved_mean), saved_rstd);
     std::vector<int> axes{0};
     for (int i = 0; i < ndim; ++i)
         axes.push_back(2 + i);
-    const auto g_dt = grad.dtype();
     const auto acc_dt = accumulation_dtype(g_dt);
-    auto sum_grad_kept = mx::sum(widen_half(grad), axes, true);
-    auto sum_grad_xn_kept = mx::sum(product_widened(grad, xnorm), axes, true);
-    const mx::array inv_N(1.0 / static_cast<double>(static_cast<std::int64_t>(B) * S), acc_dt);
-    auto mean_g = mx::multiply(sum_grad_kept, inv_N);
-    auto mean_g_xn = mx::multiply(sum_grad_xn_kept, inv_N);
-    auto scale = mx::multiply(widen_half(gamma_view), widen_half(saved_rstd));
-    auto dx = normalized_input_grad(grad, xnorm, mean_g, mean_g_xn, scale);
+    const bool need_sum_g = grad_mask[0] || grad_mask[2];
+    const bool need_sum_g_xn = grad_mask[0] || grad_mask[1];
+    std::optional<mx::array> sum_grad_kept;
+    if (need_sum_g)
+        sum_grad_kept = mx::sum(widen_half(grad), axes, true);
+    std::optional<mx::array> sum_grad_xn_kept;
+    if (need_sum_g_xn)
+        sum_grad_xn_kept = mx::sum(product_widened(grad, xnorm), axes, true);
+    Storage dx_out;
+    if (grad_mask[0]) {
+        const auto& gamma = *std::get<GpuStorage>(gamma_s).arr;
+        auto gamma_view = mx::reshape(gamma, br_c);
+        const mx::array inv_N(1.0 / static_cast<double>(static_cast<std::int64_t>(B) * S), acc_dt);
+        auto mean_g = mx::multiply(*sum_grad_kept, inv_N);
+        auto mean_g_xn = mx::multiply(*sum_grad_xn_kept, inv_N);
+        auto scale = mx::multiply(widen_half(gamma_view), widen_half(saved_rstd));
+        auto dx = normalized_input_grad(grad, xnorm, mean_g, mean_g_xn, scale);
+        dx_out = Storage{gpu::wrap_mlx_array(std::move(dx), dt)};
+    }
     mx::Shape c_only{static_cast<mx::ShapeElem>(channels)};
-    auto dgamma = narrow_to(mx::reshape(sum_grad_xn_kept, c_only), g_dt);
-    auto dbeta = narrow_to(mx::reshape(sum_grad_kept, c_only), g_dt);
-    return {Storage{gpu::wrap_mlx_array(std::move(dx), dt)},
-            Storage{gpu::wrap_mlx_array(std::move(dgamma), dt)},
-            Storage{gpu::wrap_mlx_array(std::move(dbeta), dt)}};
+    Storage dgamma_out;
+    if (grad_mask[1]) {
+        auto dgamma = narrow_to(mx::reshape(*sum_grad_xn_kept, c_only), g_dt);
+        dgamma_out = Storage{gpu::wrap_mlx_array(std::move(dgamma), dt)};
+    }
+    Storage dbeta_out;
+    if (grad_mask[2]) {
+        auto dbeta = narrow_to(mx::reshape(*sum_grad_kept, c_only), g_dt);
+        dbeta_out = Storage{gpu::wrap_mlx_array(std::move(dbeta), dt)};
+    }
+    return {std::move(dx_out), std::move(dgamma_out), std::move(dbeta_out)};
 }
 
 // ``scatter_add_axis`` accumulated in float32 for a half input, returned in

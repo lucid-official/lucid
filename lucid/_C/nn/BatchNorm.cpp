@@ -422,16 +422,19 @@ std::vector<Storage> BatchNormNdBackward<N>::apply(Storage grad_out) {
 
     // Returns [dx, d_gamma, d_beta].
     return backend::Dispatcher::for_device(this->device_)
-        .batch_norm_backward(this->saved_inputs_[0], this->saved_inputs_[1], this->saved_mean_,
-                             this->saved_rstd_, this->saved_xnorm_, grad_out, this->B_, this->C_,
-                             spatial_total, N, this->input_shapes_[0], this->dtype_, this->eps_);
+        .batch_norm_backward(
+            this->saved_inputs_[0], this->saved_inputs_[1], this->saved_mean_, this->saved_rstd_,
+            this->saved_xnorm_, grad_out, this->B_, this->C_, spatial_total, N,
+            this->input_shapes_[0], this->dtype_, this->eps_,
+            {this->needs_input_grad(0), this->needs_input_grad(1), this->needs_input_grad(2)});
 }
 
 template <int N>
 std::vector<TensorImplPtr> BatchNormNdBackward<N>::apply_for_graph(const TensorImplPtr& grad_out) {
     const auto& x = this->saved_impl_inputs_[0];
     const auto& gamma = this->saved_impl_inputs_[1];
-    if (!x || !gamma)
+    if (((this->needs_input_grad(0) || this->needs_input_grad(1)) && !x) ||
+        (this->needs_input_grad(0) && !gamma))
         ErrorBuilder("batch_norm").fail("graph-mode backward is missing a saved input");
 
     // Batch normalisation reduces over everything except the channel axis,
@@ -442,23 +445,29 @@ std::vector<TensorImplPtr> BatchNormNdBackward<N>::apply_for_graph(const TensorI
         if (i != 1)
             dims.push_back(static_cast<int>(i));
 
-    auto mu = mean_op(x, dims, /*keepdims=*/true);
-    auto xc = sub_op(x, mu);
-    auto var = mean_op(mul_op(xc, xc), dims, /*keepdims=*/true);
-    auto rstd = rsqrt_op(add_op(var, full_like_op(var, this->eps_)));
-    auto xhat = mul_op(xc, rstd);
+    TensorImplPtr dx, d_gamma, d_beta;
+    if (this->needs_input_grad(0) || this->needs_input_grad(1)) {
+        auto mu = mean_op(x, dims, /*keepdims=*/true);
+        auto xc = sub_op(x, mu);
+        auto var = mean_op(mul_op(xc, xc), dims, /*keepdims=*/true);
+        auto rstd = rsqrt_op(add_op(var, full_like_op(var, this->eps_)));
+        auto xhat = mul_op(xc, rstd);
 
-    std::vector<std::int64_t> chan(xs.size(), 1);
-    chan[1] = static_cast<std::int64_t>(this->C_);
-    auto gamma_b = reshape_op(gamma, chan);
+        if (this->needs_input_grad(0)) {
+            std::vector<std::int64_t> chan(xs.size(), 1);
+            chan[1] = static_cast<std::int64_t>(this->C_);
+            auto gamma_b = reshape_op(gamma, chan);
 
-    auto gg = mul_op(grad_out, gamma_b);
-    auto term = sub_op(gg, mean_op(gg, dims, /*keepdims=*/true));
-    term = sub_op(term, mul_op(xhat, mean_op(mul_op(gg, xhat), dims, /*keepdims=*/true)));
-    auto dx = mul_op(rstd, term);
-
-    auto d_gamma = sum_op(mul_op(grad_out, xhat), dims, /*keepdims=*/false);
-    auto d_beta = sum_op(grad_out, dims, /*keepdims=*/false);
+            auto gg = mul_op(grad_out, gamma_b);
+            auto term = sub_op(gg, mean_op(gg, dims, /*keepdims=*/true));
+            term = sub_op(term, mul_op(xhat, mean_op(mul_op(gg, xhat), dims, /*keepdims=*/true)));
+            dx = mul_op(rstd, term);
+        }
+        if (this->needs_input_grad(1))
+            d_gamma = sum_op(mul_op(grad_out, xhat), dims, /*keepdims=*/false);
+    }
+    if (this->needs_input_grad(2))
+        d_beta = sum_op(grad_out, dims, /*keepdims=*/false);
     return {dx, d_gamma, d_beta};
 }
 

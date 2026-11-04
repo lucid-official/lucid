@@ -390,6 +390,118 @@ CONV_CONSTANT_OPERAND: dict[str, tuple[tuple[int, ...], Callable[[Any, Any], Any
             _const(lib, w, [[[[1.0, 2.0], [3.0, 4.0]]]]), w
         ),
     ),
+    "layer_norm weight": (
+        (3,),
+        lambda lib, w: _fn(lib, "layer_norm")(
+            _const(lib, w, [[1.0, 2.0, 4.0], [-1.0, 0.5, 2.0]]),
+            (3,),
+            w,
+            _const(lib, w, [0.1, -0.2, 0.3]),
+        ),
+    ),
+    "rms_norm weight": (
+        (3,),
+        lambda lib, w: _fn(lib, "rms_norm")(
+            _const(lib, w, [[1.0, 2.0, 4.0], [-1.0, 0.5, 2.0]]), (3,), w
+        ),
+    ),
+    "batch_norm weight": (
+        (2,),
+        lambda lib, w: _fn(lib, "batch_norm")(
+            _const(
+                lib,
+                w,
+                [
+                    [[[1.0, 2.0], [3.0, 4.0]], [[-1.0, 0.5], [2.0, -0.5]]],
+                    [[[0.5, -1.0], [1.5, 2.5]], [[3.0, 1.0], [-2.0, 0.0]]],
+                ],
+            ),
+            None,
+            None,
+            w,
+            _const(lib, w, [0.1, -0.2]),
+            training=True,
+        ),
+    ),
+    "group_norm weight": (
+        (2,),
+        lambda lib, w: _fn(lib, "group_norm")(
+            _const(
+                lib,
+                w,
+                [
+                    [[[1.0, 2.0], [3.0, 4.0]], [[-1.0, 0.5], [2.0, -0.5]]],
+                    [[[0.5, -1.0], [1.5, 2.5]], [[3.0, 1.0], [-2.0, 0.0]]],
+                ],
+            ),
+            1,
+            w,
+            _const(lib, w, [0.1, -0.2]),
+        ),
+    ),
+    "batch_norm_eval input": (
+        (1, 2, 2, 2),
+        lambda lib, x: _fn(lib, "batch_norm")(
+            x,
+            _const(lib, x, [0.5, -0.5]),
+            _const(lib, x, [1.2, 0.8]),
+            _const(lib, x, [1.5, -0.5]),
+            _const(lib, x, [0.1, -0.2]),
+            training=False,
+        ),
+    ),
+    "batch_norm_eval weight": (
+        (2,),
+        lambda lib, w: _fn(lib, "batch_norm")(
+            _const(lib, w, [[[[1.0, 2.0], [3.0, 4.0]], [[-1.0, 0.5], [2.0, -0.5]]]]),
+            _const(lib, w, [0.5, -0.5]),
+            _const(lib, w, [1.2, 0.8]),
+            w,
+            _const(lib, w, [0.1, -0.2]),
+            training=False,
+        ),
+    ),
+    "bilinear x1": (
+        (2, 3),
+        lambda lib, x1: _fn(lib, "bilinear")(
+            x1,
+            _const(lib, x1, [[1.0, -0.5], [0.25, 2.0]]),
+            _const(
+                lib,
+                x1,
+                [
+                    [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
+                    [[-1.0, 0.5], [2.0, -1.5], [0.25, 1.0]],
+                ],
+            ),
+            _const(lib, x1, [0.1, -0.2]),
+        ),
+    ),
+    "bilinear x2": (
+        (2, 2),
+        lambda lib, x2: _fn(lib, "bilinear")(
+            _const(lib, x2, [[1.0, 2.0, 3.0], [-1.0, 0.5, 2.0]]),
+            x2,
+            _const(
+                lib,
+                x2,
+                [
+                    [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
+                    [[-1.0, 0.5], [2.0, -1.5], [0.25, 1.0]],
+                ],
+            ),
+            _const(lib, x2, [0.1, -0.2]),
+        ),
+    ),
+    "bilinear weight": (
+        (2, 3, 2),
+        lambda lib, w: _fn(lib, "bilinear")(
+            _const(lib, w, [[1.0, 2.0, 3.0], [-1.0, 0.5, 2.0]]),
+            _const(lib, w, [[1.0, -0.5], [0.25, 2.0]]),
+            w,
+            _const(lib, w, [0.1, -0.2]),
+        ),
+    ),
 }
 
 
@@ -705,3 +817,107 @@ def test_the_check_refuses_each_way_a_node_can_escape_the_guard(tmp_path: Path) 
     assert "HELD lists Gone::x_" in text
     assert "ops/Foo.cpp:16: writes a saved slot directly" in text
     assert len(problems) == 8
+
+
+@pytest.mark.parametrize(
+    "op",
+    [
+        "linear",
+        "conv2d",
+        "conv_transpose2d",
+        "layer_norm",
+        "rms_norm",
+        "batch_norm",
+        "group_norm",
+        "batch_norm_eval",
+        "global_response_norm",
+        "bilinear",
+    ],
+)
+@pytest.mark.parametrize("active", ["input_only", "weight_only"])
+def test_fused_backward_skips_unneeded_input_gradients(
+    op: str, active: str, device: str
+) -> None:
+    here = _C_engine.Device.CPU if device == "cpu" else _C_engine.Device.GPU
+
+    def run_step(all_grad: bool) -> tuple[int, np.ndarray]:
+        lucid.manual_seed(7)
+        req_x = True if all_grad else (active == "input_only")
+        req_w = True if all_grad else (active == "weight_only")
+        if op == "linear":
+            x = lucid.randn(4, 6, device=device, requires_grad=req_x)
+            w = lucid.randn(5, 6, device=device, requires_grad=req_w)
+            b = lucid.randn(5, device=device, requires_grad=all_grad)
+            fn = lambda: F.linear(x, w, b)
+            target = x if active == "input_only" else w
+        elif op == "conv2d":
+            x = lucid.randn(2, 3, 6, 6, device=device, requires_grad=req_x)
+            w = lucid.randn(4, 3, 3, 3, device=device, requires_grad=req_w)
+            b = lucid.randn(4, device=device, requires_grad=all_grad)
+            fn = lambda: F.conv2d(x, w, b, padding=1)
+            target = x if active == "input_only" else w
+        elif op == "conv_transpose2d":
+            x = lucid.randn(2, 3, 4, 4, device=device, requires_grad=req_x)
+            w = lucid.randn(3, 4, 3, 3, device=device, requires_grad=req_w)
+            b = lucid.randn(4, device=device, requires_grad=all_grad)
+            fn = lambda: F.conv_transpose2d(x, w, b, padding=1)
+            target = x if active == "input_only" else w
+        elif op == "layer_norm":
+            x = lucid.randn(4, 6, device=device, requires_grad=req_x)
+            w = lucid.randn(6, device=device, requires_grad=req_w)
+            b = lucid.randn(6, device=device, requires_grad=all_grad)
+            fn = lambda: F.layer_norm(x, (6,), w, b)
+            target = x if active == "input_only" else w
+        elif op == "rms_norm":
+            x = lucid.randn(4, 6, device=device, requires_grad=req_x)
+            w = lucid.randn(6, device=device, requires_grad=req_w)
+            fn = lambda: F.rms_norm(x, (6,), w)
+            target = x if active == "input_only" else w
+        elif op == "batch_norm":
+            x = lucid.randn(2, 4, 4, 4, device=device, requires_grad=req_x)
+            w = lucid.randn(4, device=device, requires_grad=req_w)
+            b = lucid.randn(4, device=device, requires_grad=all_grad)
+            fn = lambda: F.batch_norm(x, None, None, w, b, training=True)
+            target = x if active == "input_only" else w
+        elif op == "group_norm":
+            x = lucid.randn(2, 4, 4, 4, device=device, requires_grad=req_x)
+            w = lucid.randn(4, device=device, requires_grad=req_w)
+            b = lucid.randn(4, device=device, requires_grad=all_grad)
+            fn = lambda: F.group_norm(x, 2, w, b)
+            target = x if active == "input_only" else w
+        elif op == "batch_norm_eval":
+            x = lucid.randn(2, 4, 4, 4, device=device, requires_grad=req_x)
+            rm = lucid.randn(4, device=device, requires_grad=all_grad)
+            rv = lucid.rand(4, device=device, requires_grad=all_grad) + 0.5
+            w = lucid.randn(4, device=device, requires_grad=req_w)
+            b = lucid.randn(4, device=device, requires_grad=all_grad)
+            fn = lambda: F.batch_norm(x, rm, rv, w, b, training=False)
+            target = x if active == "input_only" else w
+        elif op == "global_response_norm":
+            x = lucid.randn(2, 4, 4, 4, device=device, requires_grad=req_x)
+            w = lucid.randn(4, device=device, requires_grad=req_w)
+            b = lucid.randn(4, device=device, requires_grad=all_grad)
+            fn = lambda: _wrap(
+                _C_engine.nn.global_response_norm(_unwrap(x), _unwrap(w), _unwrap(b))
+            )
+            target = x if active == "input_only" else w
+        else:
+            x = lucid.randn(4, 5, device=device, requires_grad=req_x)
+            x2 = lucid.randn(4, 3, device=device, requires_grad=all_grad)
+            w = lucid.randn(6, 5, 3, device=device, requires_grad=req_w)
+            b = lucid.randn(6, device=device, requires_grad=all_grad)
+            fn = lambda: F.bilinear(x, x2, w, b)
+            target = x if active == "input_only" else w
+
+        loss = (fn() * 1.5).sum()
+        before = _C_engine.memory_stats(here)
+        loss.backward()
+        after = _C_engine.memory_stats(here)
+        assert target.grad is not None
+        return after.alloc_count - before.alloc_count, np.asarray(target.grad.detach().cpu().numpy())
+
+    alloc_all, grad_all = run_step(True)
+    alloc_partial, grad_partial = run_step(False)
+    np.testing.assert_allclose(grad_partial, grad_all, rtol=1e-5, atol=1e-6)
+    assert alloc_partial < alloc_all, f"{op} ({active}, {device}): {alloc_partial} >= {alloc_all}"
+

@@ -62,6 +62,12 @@ namespace lucid {
 class LUCID_API BilinearLayerBackward : public FuncOp<BilinearLayerBackward, 4> {
 public:
     static const OpSchema schema_v1;
+    // dx1 reads x2 and weight; dx2 reads x1 and weight; dW reads x1 and x2;
+    // db reads only grad_out.
+    static constexpr GradReads<4> kGradReads = {{{false, true, true, false},
+                                                 {true, false, true, false},
+                                                 {true, true, false, false},
+                                                 {false, false, false, false}}};
     Shape orig_x1_shape_;  // Saved for backward shape reconstruction.
     Shape orig_x2_shape_;
 

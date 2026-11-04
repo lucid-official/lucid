@@ -186,15 +186,18 @@ CpuBackend::conv_transpose_nd_backward(const Storage& grad_out,
                                        const int* K,
                                        const int* O,
                                        const IBackend::ConvTransposeNdOpts& opts,
-                                       Dtype dt) {
+                                       Dtype dt,
+                                       std::array<bool, 3> grad_mask) {
     // Accelerate has no half kernels, so the whole family widens at the door,
     // reuses the float path and rounds once on the way out.  as_f32 /
     // back_to_f16 key off each storage's own dtype, so index and mask
     // operands travel through untouched.  See detail::widen_half.
     if (detail::is_half_like(dt))
         return detail::back_to_f16(
-            conv_transpose_nd_backward(detail::as_f32(grad_out), detail::as_f32(x),
-                                       detail::as_f32(W), B, Cin, Cout, S, K, O, opts, Dtype::F32),
+            conv_transpose_nd_backward(detail::as_f32(grad_out),
+                                       grad_mask[1] ? detail::as_f32(x) : Storage{},
+                                       grad_mask[0] ? detail::as_f32(W) : Storage{}, B, Cin, Cout,
+                                       S, K, O, opts, Dtype::F32, grad_mask),
             dt);
     const int N = opts.N;
     const int G = opts.groups;
@@ -208,10 +211,14 @@ CpuBackend::conv_transpose_nd_backward(const Storage& grad_out,
     const int Cout_g = Cout / G;
     const int K_flat_g = Cout_g * K_total;
 
-    CpuStorage dx_cpu = alloc_cpu(static_cast<std::size_t>(B) * Cin * S_total, dt);
-    CpuStorage dW_cpu = alloc_cpu(static_cast<std::size_t>(Cin) * K_flat_g, dt);
-    CpuStorage db_cpu = alloc_cpu(static_cast<std::size_t>(Cout), dt);
-    CpuStorage cols_cpu = alloc_cpu(static_cast<std::size_t>(K_flat_g) * S_total, dt);
+    CpuStorage dx_cpu =
+        grad_mask[0] ? alloc_cpu(static_cast<std::size_t>(B) * Cin * S_total, dt) : CpuStorage{};
+    CpuStorage dW_cpu =
+        grad_mask[1] ? alloc_cpu(static_cast<std::size_t>(Cin) * K_flat_g, dt) : CpuStorage{};
+    CpuStorage db_cpu = grad_mask[2] ? alloc_cpu(static_cast<std::size_t>(Cout), dt) : CpuStorage{};
+    CpuStorage cols_cpu = (grad_mask[0] || grad_mask[1])
+                              ? alloc_cpu(static_cast<std::size_t>(K_flat_g) * S_total, dt)
+                              : CpuStorage{};
     if (dx_cpu.nbytes)
         std::memset(dx_cpu.ptr.get(), 0, dx_cpu.nbytes);
     if (dW_cpu.nbytes)
@@ -219,43 +226,50 @@ CpuBackend::conv_transpose_nd_backward(const Storage& grad_out,
     if (db_cpu.nbytes)
         std::memset(db_cpu.ptr.get(), 0, db_cpu.nbytes);
 
-    const auto& x_cpu = std::get<CpuStorage>(x);
-    const auto& W_cpu = std::get<CpuStorage>(W);
+    const CpuStorage* x_cpu = grad_mask[1] ? &std::get<CpuStorage>(x) : nullptr;
+    const CpuStorage* W_cpu = grad_mask[0] ? &std::get<CpuStorage>(W) : nullptr;
     const auto& g_cpu = std::get<CpuStorage>(grad_out);
 
     const auto run = [&](auto tag) {
         using T = decltype(tag);
-        const T* xp0 = reinterpret_cast<const T*>(x_cpu.ptr.get());
-        const T* Wp0 = reinterpret_cast<const T*>(W_cpu.ptr.get());
+        const T* xp0 = x_cpu ? reinterpret_cast<const T*>(x_cpu->ptr.get()) : nullptr;
+        const T* Wp0 = W_cpu ? reinterpret_cast<const T*>(W_cpu->ptr.get()) : nullptr;
         const T* gp0 = reinterpret_cast<const T*>(g_cpu.ptr.get());
-        T* dxp0 = reinterpret_cast<T*>(dx_cpu.ptr.get());
-        T* dWp0 = reinterpret_cast<T*>(dW_cpu.ptr.get());
-        T* dbp = reinterpret_cast<T*>(db_cpu.ptr.get());
-        T* cp = reinterpret_cast<T*>(cols_cpu.ptr.get());
+        T* dxp0 = grad_mask[0] ? reinterpret_cast<T*>(dx_cpu.ptr.get()) : nullptr;
+        T* dWp0 = grad_mask[1] ? reinterpret_cast<T*>(dW_cpu.ptr.get()) : nullptr;
+        T* dbp = grad_mask[2] ? reinterpret_cast<T*>(db_cpu.ptr.get()) : nullptr;
+        T* cp = (grad_mask[0] || grad_mask[1]) ? reinterpret_cast<T*>(cols_cpu.ptr.get()) : nullptr;
 
         for (int bi = 0; bi < B; ++bi) {
-            const T* xp = xp0 + static_cast<std::size_t>(bi) * Cin * S_total;
+            const T* xp = xp0 ? xp0 + static_cast<std::size_t>(bi) * Cin * S_total : nullptr;
             const T* gp = gp0 + static_cast<std::size_t>(bi) * Cout * O_total;
-            T* dxp = dxp0 + static_cast<std::size_t>(bi) * Cin * S_total;
-            for (int g = 0; g < G; ++g) {
-                const T* Wg = Wp0 + static_cast<std::size_t>(g) * Cin_g * K_flat_g;
-                const T* xg = xp + static_cast<std::size_t>(g) * Cin_g * S_total;
-                const T* gg = gp + static_cast<std::size_t>(g) * Cout_g * O_total;
-                T* dxg = dxp + static_cast<std::size_t>(g) * Cin_g * S_total;
-                T* dWg = dWp0 + static_cast<std::size_t>(g) * Cin_g * K_flat_g;
-
-                ctnd_im2col(gg, cp, Cout_g, O, K, S, opts.stride, opts.pad, opts.dilation, N);
-                ctnd_gemm(false, false, Cin_g, S_total, K_flat_g, T(1), Wg, K_flat_g, cp, S_total,
-                          T(0), dxg, S_total);
-                ctnd_gemm(false, true, Cin_g, K_flat_g, S_total, T(1), xg, S_total, cp, S_total,
-                          T(1), dWg, K_flat_g);
+            T* dxp = dxp0 ? dxp0 + static_cast<std::size_t>(bi) * Cin * S_total : nullptr;
+            if (grad_mask[0] || grad_mask[1]) {
+                for (int g = 0; g < G; ++g) {
+                    const T* gg = gp + static_cast<std::size_t>(g) * Cout_g * O_total;
+                    ctnd_im2col(gg, cp, Cout_g, O, K, S, opts.stride, opts.pad, opts.dilation, N);
+                    if (grad_mask[0]) {
+                        const T* Wg = Wp0 + static_cast<std::size_t>(g) * Cin_g * K_flat_g;
+                        T* dxg = dxp + static_cast<std::size_t>(g) * Cin_g * S_total;
+                        ctnd_gemm(false, false, Cin_g, S_total, K_flat_g, T(1), Wg, K_flat_g, cp,
+                                  S_total, T(0), dxg, S_total);
+                    }
+                    if (grad_mask[1]) {
+                        const T* xg = xp + static_cast<std::size_t>(g) * Cin_g * S_total;
+                        T* dWg = dWp0 + static_cast<std::size_t>(g) * Cin_g * K_flat_g;
+                        ctnd_gemm(false, true, Cin_g, K_flat_g, S_total, T(1), xg, S_total, cp,
+                                  S_total, T(1), dWg, K_flat_g);
+                    }
+                }
             }
-            for (int co = 0; co < Cout; ++co) {
-                const T* row = gp + static_cast<std::size_t>(co) * O_total;
-                T s = T(0);
-                for (int j = 0; j < O_total; ++j)
-                    s += row[j];
-                dbp[co] += s;
+            if (grad_mask[2]) {
+                for (int co = 0; co < Cout; ++co) {
+                    const T* row = gp + static_cast<std::size_t>(co) * O_total;
+                    T s = T(0);
+                    for (int j = 0; j < O_total; ++j)
+                        s += row[j];
+                    dbp[co] += s;
+                }
             }
         }
     };
@@ -400,16 +414,19 @@ std::vector<Storage> CpuBackend::conv_nd_backward(const Storage& grad_out,
                                                   const int* K,
                                                   const int* O,
                                                   const IBackend::ConvNdOpts& opts,
-                                                  Dtype dt) {
+                                                  Dtype dt,
+                                                  std::array<bool, 3> grad_mask) {
     // Accelerate has no half kernels, so the whole family widens at the door,
     // reuses the float path and rounds once on the way out.  as_f32 /
     // back_to_f16 key off each storage's own dtype, so index and mask
     // operands travel through untouched.  See detail::widen_half.
     if (detail::is_half_like(dt))
-        return detail::back_to_f16(conv_nd_backward(detail::as_f32(grad_out), detail::as_f32(x),
-                                                    detail::as_f32(W), B, Cin, Cout, Cin_g, Cout_g,
-                                                    S, K, O, opts, Dtype::F32),
-                                   dt);
+        return detail::back_to_f16(
+            conv_nd_backward(detail::as_f32(grad_out),
+                             grad_mask[1] ? detail::as_f32(x) : Storage{},
+                             grad_mask[0] ? detail::as_f32(W) : Storage{}, B, Cin, Cout, Cin_g,
+                             Cout_g, S, K, O, opts, Dtype::F32, grad_mask),
+            dt);
     const int N = opts.N;
     const int G = opts.groups;
     const int O_total = checked_extent(O, N, "output positions");
@@ -420,9 +437,11 @@ std::vector<Storage> CpuBackend::conv_nd_backward(const Storage& grad_out,
     const int M_out = O_total;
     const int W_per_group = Cout_g * K_flat;
 
-    CpuStorage dx_cpu = alloc_cpu(static_cast<std::size_t>(B) * Cin * S_total, dt);
-    CpuStorage dW_cpu = alloc_cpu(static_cast<std::size_t>(Cout) * K_flat, dt);
-    CpuStorage db_cpu = alloc_cpu(static_cast<std::size_t>(Cout), dt);
+    CpuStorage dx_cpu =
+        grad_mask[0] ? alloc_cpu(static_cast<std::size_t>(B) * Cin * S_total, dt) : CpuStorage{};
+    CpuStorage dW_cpu =
+        grad_mask[1] ? alloc_cpu(static_cast<std::size_t>(Cout) * K_flat, dt) : CpuStorage{};
+    CpuStorage db_cpu = grad_mask[2] ? alloc_cpu(static_cast<std::size_t>(Cout), dt) : CpuStorage{};
     if (dx_cpu.nbytes)
         std::memset(dx_cpu.ptr.get(), 0, dx_cpu.nbytes);
     if (dW_cpu.nbytes)
@@ -430,94 +449,126 @@ std::vector<Storage> CpuBackend::conv_nd_backward(const Storage& grad_out,
     if (db_cpu.nbytes)
         std::memset(db_cpu.ptr.get(), 0, db_cpu.nbytes);
     const int slab = column_slab(O, N, K_flat);
-    CpuStorage cols_cpu = alloc_cpu(column_slab_elements(O, N, K_flat, slab), dt);
-    CpuStorage col_grad_cpu = alloc_cpu(column_slab_elements(O, N, K_flat, slab), dt);
+    CpuStorage cols_cpu =
+        grad_mask[1] ? alloc_cpu(column_slab_elements(O, N, K_flat, slab), dt) : CpuStorage{};
+    CpuStorage col_grad_cpu =
+        grad_mask[0] ? alloc_cpu(column_slab_elements(O, N, K_flat, slab), dt) : CpuStorage{};
 
-    const auto& x_cpu = std::get<CpuStorage>(x);
-    const auto& W_cpu = std::get<CpuStorage>(W);
+    const CpuStorage* x_cpu = grad_mask[1] ? &std::get<CpuStorage>(x) : nullptr;
+    const CpuStorage* W_cpu = grad_mask[0] ? &std::get<CpuStorage>(W) : nullptr;
     const auto& g_cpu = std::get<CpuStorage>(grad_out);
 
     for (int bi = 0; bi < B; ++bi) {
         for (int g = 0; g < G; ++g) {
             if (dt == Dtype::F32) {
                 const float* xp =
-                    reinterpret_cast<const float*>(x_cpu.ptr.get()) +
-                    (static_cast<std::size_t>(bi) * Cin + static_cast<std::size_t>(g) * Cin_g) *
-                        S_total;
+                    x_cpu ? reinterpret_cast<const float*>(x_cpu->ptr.get()) +
+                                (static_cast<std::size_t>(bi) * Cin +
+                                 static_cast<std::size_t>(g) * Cin_g) *
+                                    S_total
+                          : nullptr;
                 const float* gp =
                     reinterpret_cast<const float*>(g_cpu.ptr.get()) +
                     (static_cast<std::size_t>(bi) * Cout + static_cast<std::size_t>(g) * Cout_g) *
                         O_total;
                 float* dxp =
-                    reinterpret_cast<float*>(dx_cpu.ptr.get()) +
-                    (static_cast<std::size_t>(bi) * Cin + static_cast<std::size_t>(g) * Cin_g) *
-                        S_total;
-                const float* wp = reinterpret_cast<const float*>(W_cpu.ptr.get()) +
-                                  static_cast<std::size_t>(g) * W_per_group;
-                float* dwp = reinterpret_cast<float*>(dW_cpu.ptr.get()) +
-                             static_cast<std::size_t>(g) * W_per_group;
-                float* cp = reinterpret_cast<float*>(cols_cpu.ptr.get());
-                float* cgp = reinterpret_cast<float*>(col_grad_cpu.ptr.get());
-                for_each_column_slab(
-                    O, opts, N, slab,
-                    [&](const int* Os, const int* pads, std::size_t begin, int ms) {
-                        conv_nd_im2col_f32(xp, cp, Cin_g, S, K, Os, opts.stride, pads,
-                                           opts.dilation, N);
-                        cpu::sgemm(false, true, Cout_g, K_flat, ms, 1.0f, gp + begin, M_out, cp, ms,
-                                   1.0f, dwp, K_flat);
-                        cpu::sgemm(true, false, K_flat, ms, Cout_g, 1.0f, wp, K_flat, gp + begin,
-                                   M_out, 0.0f, cgp, ms);
-                        conv_nd_col2im_f32(cgp, dxp, Cin_g, S, K, Os, opts.stride, pads,
-                                           opts.dilation, N);
-                    });
-                float* dbp = reinterpret_cast<float*>(db_cpu.ptr.get()) +
-                             static_cast<std::size_t>(g) * Cout_g;
-                for (int co = 0; co < Cout_g; ++co) {
-                    const float* row = gp + static_cast<std::size_t>(co) * O_total;
-                    float s = 0.f;
-                    for (int j = 0; j < O_total; ++j)
-                        s += row[j];
-                    dbp[co] += s;
+                    grad_mask[0] ? reinterpret_cast<float*>(dx_cpu.ptr.get()) +
+                                       (static_cast<std::size_t>(bi) * Cin +
+                                        static_cast<std::size_t>(g) * Cin_g) *
+                                           S_total
+                                 : nullptr;
+                const float* wp = W_cpu ? reinterpret_cast<const float*>(W_cpu->ptr.get()) +
+                                              static_cast<std::size_t>(g) * W_per_group
+                                        : nullptr;
+                float* dwp = grad_mask[1] ? reinterpret_cast<float*>(dW_cpu.ptr.get()) +
+                                                static_cast<std::size_t>(g) * W_per_group
+                                          : nullptr;
+                float* cp = grad_mask[1] ? reinterpret_cast<float*>(cols_cpu.ptr.get()) : nullptr;
+                float* cgp =
+                    grad_mask[0] ? reinterpret_cast<float*>(col_grad_cpu.ptr.get()) : nullptr;
+                if (grad_mask[0] || grad_mask[1]) {
+                    for_each_column_slab(
+                        O, opts, N, slab,
+                        [&](const int* Os, const int* pads, std::size_t begin, int ms) {
+                            if (grad_mask[1]) {
+                                conv_nd_im2col_f32(xp, cp, Cin_g, S, K, Os, opts.stride, pads,
+                                                   opts.dilation, N);
+                                cpu::sgemm(false, true, Cout_g, K_flat, ms, 1.0f, gp + begin, M_out,
+                                           cp, ms, 1.0f, dwp, K_flat);
+                            }
+                            if (grad_mask[0]) {
+                                cpu::sgemm(true, false, K_flat, ms, Cout_g, 1.0f, wp, K_flat,
+                                           gp + begin, M_out, 0.0f, cgp, ms);
+                                conv_nd_col2im_f32(cgp, dxp, Cin_g, S, K, Os, opts.stride, pads,
+                                                   opts.dilation, N);
+                            }
+                        });
+                }
+                if (grad_mask[2]) {
+                    float* dbp = reinterpret_cast<float*>(db_cpu.ptr.get()) +
+                                 static_cast<std::size_t>(g) * Cout_g;
+                    for (int co = 0; co < Cout_g; ++co) {
+                        const float* row = gp + static_cast<std::size_t>(co) * O_total;
+                        float s = 0.f;
+                        for (int j = 0; j < O_total; ++j)
+                            s += row[j];
+                        dbp[co] += s;
+                    }
                 }
             } else if (dt == Dtype::F64) {
                 const double* xp =
-                    reinterpret_cast<const double*>(x_cpu.ptr.get()) +
-                    (static_cast<std::size_t>(bi) * Cin + static_cast<std::size_t>(g) * Cin_g) *
-                        S_total;
+                    x_cpu ? reinterpret_cast<const double*>(x_cpu->ptr.get()) +
+                                (static_cast<std::size_t>(bi) * Cin +
+                                 static_cast<std::size_t>(g) * Cin_g) *
+                                    S_total
+                          : nullptr;
                 const double* gp =
                     reinterpret_cast<const double*>(g_cpu.ptr.get()) +
                     (static_cast<std::size_t>(bi) * Cout + static_cast<std::size_t>(g) * Cout_g) *
                         O_total;
                 double* dxp =
-                    reinterpret_cast<double*>(dx_cpu.ptr.get()) +
-                    (static_cast<std::size_t>(bi) * Cin + static_cast<std::size_t>(g) * Cin_g) *
-                        S_total;
-                const double* wp = reinterpret_cast<const double*>(W_cpu.ptr.get()) +
-                                   static_cast<std::size_t>(g) * W_per_group;
-                double* dwp = reinterpret_cast<double*>(dW_cpu.ptr.get()) +
-                              static_cast<std::size_t>(g) * W_per_group;
-                double* cp = reinterpret_cast<double*>(cols_cpu.ptr.get());
-                double* cgp = reinterpret_cast<double*>(col_grad_cpu.ptr.get());
-                for_each_column_slab(
-                    O, opts, N, slab,
-                    [&](const int* Os, const int* pads, std::size_t begin, int ms) {
-                        conv_nd_im2col_f64(xp, cp, Cin_g, S, K, Os, opts.stride, pads,
-                                           opts.dilation, N);
-                        cpu::dgemm(false, true, Cout_g, K_flat, ms, 1.0, gp + begin, M_out, cp, ms,
-                                   1.0, dwp, K_flat);
-                        cpu::dgemm(true, false, K_flat, ms, Cout_g, 1.0, wp, K_flat, gp + begin,
-                                   M_out, 0.0, cgp, ms);
-                        conv_nd_col2im_f64(cgp, dxp, Cin_g, S, K, Os, opts.stride, pads,
-                                           opts.dilation, N);
-                    });
-                double* dbp = reinterpret_cast<double*>(db_cpu.ptr.get()) +
-                              static_cast<std::size_t>(g) * Cout_g;
-                for (int co = 0; co < Cout_g; ++co) {
-                    const double* row = gp + static_cast<std::size_t>(co) * O_total;
-                    double s = 0.0;
-                    for (int j = 0; j < O_total; ++j)
-                        s += row[j];
-                    dbp[co] += s;
+                    grad_mask[0] ? reinterpret_cast<double*>(dx_cpu.ptr.get()) +
+                                       (static_cast<std::size_t>(bi) * Cin +
+                                        static_cast<std::size_t>(g) * Cin_g) *
+                                           S_total
+                                 : nullptr;
+                const double* wp = W_cpu ? reinterpret_cast<const double*>(W_cpu->ptr.get()) +
+                                               static_cast<std::size_t>(g) * W_per_group
+                                         : nullptr;
+                double* dwp = grad_mask[1] ? reinterpret_cast<double*>(dW_cpu.ptr.get()) +
+                                                 static_cast<std::size_t>(g) * W_per_group
+                                           : nullptr;
+                double* cp = grad_mask[1] ? reinterpret_cast<double*>(cols_cpu.ptr.get()) : nullptr;
+                double* cgp =
+                    grad_mask[0] ? reinterpret_cast<double*>(col_grad_cpu.ptr.get()) : nullptr;
+                if (grad_mask[0] || grad_mask[1]) {
+                    for_each_column_slab(
+                        O, opts, N, slab,
+                        [&](const int* Os, const int* pads, std::size_t begin, int ms) {
+                            if (grad_mask[1]) {
+                                conv_nd_im2col_f64(xp, cp, Cin_g, S, K, Os, opts.stride, pads,
+                                                   opts.dilation, N);
+                                cpu::dgemm(false, true, Cout_g, K_flat, ms, 1.0, gp + begin, M_out,
+                                           cp, ms, 1.0, dwp, K_flat);
+                            }
+                            if (grad_mask[0]) {
+                                cpu::dgemm(true, false, K_flat, ms, Cout_g, 1.0, wp, K_flat,
+                                           gp + begin, M_out, 0.0, cgp, ms);
+                                conv_nd_col2im_f64(cgp, dxp, Cin_g, S, K, Os, opts.stride, pads,
+                                                   opts.dilation, N);
+                            }
+                        });
+                }
+                if (grad_mask[2]) {
+                    double* dbp = reinterpret_cast<double*>(db_cpu.ptr.get()) +
+                                  static_cast<std::size_t>(g) * Cout_g;
+                    for (int co = 0; co < Cout_g; ++co) {
+                        const double* row = gp + static_cast<std::size_t>(co) * O_total;
+                        double s = 0.0;
+                        for (int j = 0; j < O_total; ++j)
+                            s += row[j];
+                        dbp[co] += s;
+                    }
                 }
             } else {
                 ErrorBuilder("cpu_backend::conv_nd_backward")

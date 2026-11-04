@@ -699,7 +699,9 @@ public:
                                          const Shape& x_shape,
                                          const Shape& weight_shape,
                                          const Shape& bias_shape,
-                                         Dtype dt) override;
+                                         Dtype dt,
+                                         std::array<bool, 3> grad_mask = {
+                                             true, true, true}) override;
 
     StoragePair rms_norm_forward(const Storage& x,
                                  const Storage& gamma,
@@ -717,7 +719,8 @@ public:
                                   std::size_t normalized_size,
                                   const Shape& p6_,
                                   const Shape& p7_,
-                                  Dtype dt) override;
+                                  Dtype dt,
+                                  std::array<bool, 2> grad_mask = {true, true}) override;
 
     std::vector<Storage> layer_norm_forward(const Storage& x,
                                             const Storage& gamma,
@@ -738,7 +741,9 @@ public:
                                              const Shape& p7_,
                                              const Shape& p8_,
                                              const Shape& p9_,
-                                             Dtype dt) override;
+                                             Dtype dt,
+                                             std::array<bool, 3> grad_mask = {
+                                                 true, true, true}) override;
 
     std::vector<Storage> batch_norm_forward(const Storage& x,
                                             const Storage& gamma,
@@ -763,7 +768,9 @@ public:
                                              int p9_,
                                              const Shape& p10_,
                                              Dtype dt,
-                                             double eps_unused) override;
+                                             double eps_unused,
+                                             std::array<bool, 3> grad_mask = {
+                                                 true, true, true}) override;
 
     std::vector<Storage> group_norm_forward(const Storage& x,
                                             const Storage& gamma,
@@ -788,7 +795,9 @@ public:
                                              int groups,
                                              const std::vector<int>& p9_,
                                              const Shape& p10_,
-                                             Dtype dt) override;
+                                             Dtype dt,
+                                             std::array<bool, 3> grad_mask = {
+                                                 true, true, true}) override;
 
     Storage linalg_norm(const Storage& a,
                         const Shape& shape,
@@ -1173,7 +1182,9 @@ public:
                                                     const int* K,
                                                     const int* O,
                                                     const IBackend::ConvTransposeNdOpts& opts,
-                                                    Dtype dt) override;
+                                                    Dtype dt,
+                                                    std::array<bool, 3> grad_mask = {
+                                                        true, true, true}) override;
 
     Storage conv_nd_forward(const Storage& x,
                             const Storage& W,
@@ -1202,7 +1213,9 @@ public:
                                           const int* K,
                                           const int* O,
                                           const IBackend::ConvNdOpts& opts,
-                                          Dtype dt) override;
+                                          Dtype dt,
+                                          std::array<bool, 3> grad_mask = {
+                                              true, true, true}) override;
 
     Storage unfold_forward(const Storage& x,
                            int B,
@@ -1308,7 +1321,9 @@ public:
                                                   const Shape& x_shape,
                                                   int C,
                                                   int spatial,
-                                                  Dtype dt) override;
+                                                  Dtype dt,
+                                                  std::array<bool, 5> grad_mask = {
+                                                      true, true, true, true, true}) override;
 
     std::vector<Storage> lp_normalize_forward(const Storage& x,
                                               const Shape& x_shape,
@@ -1339,7 +1354,9 @@ public:
                                                        const Storage& grad_out,
                                                        const Shape& x_shape,
                                                        double eps,
-                                                       Dtype dt) override;
+                                                       Dtype dt,
+                                                       std::array<bool, 3> grad_mask = {
+                                                           true, true, true}) override;
 
     Storage interpolate_nearest_2d_forward(
         const Storage& input, const Shape& in_shape, int H_out, int W_out, Dtype dt) override;
@@ -1434,7 +1451,9 @@ public:
                                                  const Shape& x2_shape,
                                                  const Shape& w_shape,
                                                  bool has_bias,
-                                                 Dtype dt) override;
+                                                 Dtype dt,
+                                                 std::array<bool, 4> grad_mask = {
+                                                     true, true, true, true}) override;
 
     Storage one_hot_forward(const Storage& indices,
                             const Shape& indices_shape,

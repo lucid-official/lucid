@@ -335,7 +335,8 @@ public:
                                          const Shape&,
                                          const Shape&,
                                          const Shape&,
-                                         Dtype dt) override {
+                                         Dtype dt,
+                                         std::array<bool, 3>) override {
         return phantoms(3, dt);
     }
     StoragePair rms_norm_forward(const Storage&,
@@ -355,7 +356,8 @@ public:
                                   std::size_t,
                                   const Shape&,
                                   const Shape&,
-                                  Dtype dt) override {
+                                  Dtype dt,
+                                  std::array<bool, 2>) override {
         return {phantom(dt), phantom(dt)};
     }
     std::vector<Storage> layer_norm_forward(const Storage&,
@@ -378,7 +380,8 @@ public:
                                              const Shape&,
                                              const Shape&,
                                              const Shape&,
-                                             Dtype dt) override {
+                                             Dtype dt,
+                                             std::array<bool, 3>) override {
         return phantoms(3, dt);
     }
     std::vector<Storage> batch_norm_forward(const Storage&,
@@ -405,7 +408,8 @@ public:
                                              int,
                                              const Shape&,
                                              Dtype dt,
-                                             double) override {
+                                             double,
+                                             std::array<bool, 3>) override {
         return phantoms(3, dt);
     }
     std::vector<Storage> group_norm_forward(const Storage&,
@@ -432,7 +436,8 @@ public:
                                              int,
                                              const std::vector<int>&,
                                              const Shape&,
-                                             Dtype dt) override {
+                                             Dtype dt,
+                                             std::array<bool, 3>) override {
         return phantoms(3, dt);
     }
     Storage linalg_norm(
@@ -688,7 +693,8 @@ public:
                                                     const int*,
                                                     const int*,
                                                     const ConvTransposeNdOpts&,
-                                                    Dtype dt) override {
+                                                    Dtype dt,
+                                                    std::array<bool, 3>) override {
         return phantoms(3, dt);
     }
     Storage conv_nd_forward(const Storage&,
@@ -719,7 +725,8 @@ public:
                                           const int*,
                                           const int*,
                                           const ConvNdOpts&,
-                                          Dtype dt) override {
+                                          Dtype dt,
+                                          std::array<bool, 3>) override {
         return phantoms(3, dt);
     }
     Storage unfold_forward(const Storage&,
@@ -886,7 +893,8 @@ public:
                                                   const Shape&,
                                                   int,
                                                   int,
-                                                  Dtype dt) override {
+                                                  Dtype dt,
+                                                  std::array<bool, 5>) override {
         return phantoms(5, dt);
     }
     std::vector<Storage>
@@ -913,7 +921,8 @@ public:
                                                        const Storage&,
                                                        const Shape&,
                                                        double,
-                                                       Dtype dt) override {
+                                                       Dtype dt,
+                                                       std::array<bool, 3>) override {
         return phantoms(3, dt);
     }
     Storage
@@ -994,7 +1003,8 @@ public:
                                                  const Shape&,
                                                  const Shape&,
                                                  bool,
-                                                 Dtype dt) override {
+                                                 Dtype dt,
+                                                 std::array<bool, 4>) override {
         return phantoms(4, dt);
     }
     Storage one_hot_forward(const Storage&, const Shape&, int, Dtype out_dtype) override {

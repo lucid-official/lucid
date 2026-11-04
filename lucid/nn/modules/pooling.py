@@ -420,7 +420,12 @@ class AvgPool1d(Module):
             Pooled output tensor.
         """
         return avg_pool1d(
-            input, self.kernel_size, self.stride, self.padding, self.ceil_mode, self.count_include_pad
+            input,
+            self.kernel_size,
+            self.stride,
+            self.padding,
+            self.ceil_mode,
+            self.count_include_pad,
         )
 
     @override

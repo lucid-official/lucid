@@ -240,7 +240,7 @@ inline void for_each_int_masked(Dtype dt,
 // and indices travel through unchanged.
 inline Storage as_i64(const Storage& s) {
     const auto* c = std::get_if<CpuStorage>(&s);
-    if (c == nullptr || !is_narrow_int(c->dtype))
+    if (c == nullptr || !c->ptr || !is_narrow_int(c->dtype))
         return s;
     return Storage{widen_int(*c, c->nbytes / dtype_size(c->dtype), c->dtype)};
 }
@@ -250,7 +250,7 @@ inline Storage as_i64(const Storage& s) {
 // the same I64 — so the caller names it.
 inline Storage back_to_int(const Storage& wide, Dtype to) {
     const auto* c = std::get_if<CpuStorage>(&wide);
-    if (c == nullptr || c->dtype != Dtype::I64 || !is_narrow_int(to))
+    if (c == nullptr || !c->ptr || c->dtype != Dtype::I64 || !is_narrow_int(to))
         return wide;
     return narrow_int(wide, c->nbytes / sizeof(std::int64_t), to);
 }
@@ -259,7 +259,7 @@ inline Storage back_to_int(const Storage& wide, Dtype to) {
 // Used where the only kernel is a BLAS one — see matmul.
 inline Storage as_f64(const Storage& s) {
     const auto* c = std::get_if<CpuStorage>(&s);
-    if (c == nullptr || !is_int_like(c->dtype))
+    if (c == nullptr || !c->ptr || !is_int_like(c->dtype))
         return s;
     const std::size_t n = c->nbytes / dtype_size(c->dtype);
     auto p = allocate_aligned_bytes(n * sizeof(double), Device::CPU);
@@ -344,7 +344,7 @@ f64_to_int(const Storage& wide, std::size_t n, Dtype to, IntRounding how = IntRo
 // the storage rather than the position.
 inline Storage f64_back_to_int(const Storage& s, Dtype to, IntRounding how = IntRounding::Nearest) {
     const auto* c = std::get_if<CpuStorage>(&s);
-    if (c == nullptr || c->dtype != Dtype::F64 || !is_int_like(to))
+    if (c == nullptr || !c->ptr || c->dtype != Dtype::F64 || !is_int_like(to))
         return s;
     return f64_to_int(s, c->nbytes / sizeof(double), to, how);
 }
@@ -365,7 +365,7 @@ f64_back_to_int(const std::vector<Storage>& v, Dtype to, IntRounding how = IntRo
 // float one" to get wrong.
 inline Storage as_f32(const Storage& s) {
     const auto* c = std::get_if<CpuStorage>(&s);
-    if (c == nullptr || !is_half_like(c->dtype))
+    if (c == nullptr || !c->ptr || !is_half_like(c->dtype))
         return s;
     return Storage{widen_half(*c, c->nbytes / sizeof(std::uint16_t))};
 }
@@ -384,7 +384,7 @@ inline const Storage* as_f32(const Storage* s, std::optional<Storage>& hold) {
 // a result that is a mask (bool) or an index (int64) is returned as it is.
 inline Storage back_to_f16(const Storage& s, Dtype to) {
     const auto* c = std::get_if<CpuStorage>(&s);
-    if (c == nullptr || c->dtype != Dtype::F32)
+    if (c == nullptr || !c->ptr || c->dtype != Dtype::F32)
         return s;
     return narrow_half(s, c->nbytes / sizeof(float), to);
 }

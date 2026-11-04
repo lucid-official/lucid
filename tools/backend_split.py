@@ -434,7 +434,7 @@ def parse_header(src: str, class_name: str) -> ParsedHeader:
                 brace_depth += 1
             elif c == "}":
                 brace_depth -= 1
-                if brace_depth == 0 and seen_params:
+                if brace_depth == 0 and paren_depth == 0 and seen_params:
                     members.append(
                         _build_member(
                             src,

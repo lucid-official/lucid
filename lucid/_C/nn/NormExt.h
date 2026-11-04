@@ -79,6 +79,14 @@ namespace lucid {
 class LUCID_API BatchNormEvalBackward : public FuncOp<BatchNormEvalBackward, 5> {
 public:
     static constexpr bool kKeepsOwnValues = true;
+    // Inputs: 0:x, 1:mean, 2:var, 3:gamma, 4:beta.
+    // dx and dmean read gamma; dvar reads x, mean, gamma; dgamma reads x, mean;
+    // dbeta reads only grad_out.
+    static constexpr GradReads<5> kGradReads = {{{false, false, false, true, false},
+                                                 {false, false, false, true, false},
+                                                 {true, true, false, true, false},
+                                                 {true, true, false, false, false},
+                                                 {false, false, false, false, false}}};
     // Registered op schema (see class docstring).
     static const OpSchema schema_v1;
     // Forward eps, retained for the backward derivation.
@@ -361,6 +369,11 @@ LUCID_API TensorImplPtr lp_normalize_op(const TensorImplPtr& x, double ord, int 
 class LUCID_API GlobalResponseNormBackward : public FuncOp<GlobalResponseNormBackward, 3> {
 public:
     static constexpr bool kKeepsOwnValues = true;
+    // dx reads x, gamma, and beta (y = gamma * (x * Nx) + beta * x);
+    // dgamma and dbeta read x.
+    static constexpr GradReads<3> kGradReads = {{{true, true, true},
+                                                 {true, false, false},
+                                                 {true, false, false}}};
     // Registered op schema (see class docstring).
     static const OpSchema schema_v1;
     // Numerical-stability constant.

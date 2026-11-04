@@ -48,41 +48,47 @@ StoragePair GpuBackend::rms_norm_backward(const Storage& x,
                                           std::size_t normalized_size,
                                           const Shape& x_shape,
                                           const Shape& gamma_shape,
-                                          Dtype dt) {
+                                          Dtype dt,
+                                          std::array<bool, 2> grad_mask) {
+    if (!grad_mask[0] && !grad_mask[1])
+        return {Storage{}, Storage{}};
     const auto& gx = std::get<GpuStorage>(x);
-    const auto& gg = std::get<GpuStorage>(gamma);
     const auto& gr = std::get<GpuStorage>(saved_rstd);
     const auto& ggrad = std::get<GpuStorage>(grad);
     ::mlx::core::Shape flat_x{static_cast<int>(outer), static_cast<int>(normalized_size)};
-    ::mlx::core::Shape flat_g{1, static_cast<int>(normalized_size)};
     auto x_2d = ::mlx::core::reshape(*gx.arr, flat_x);
     auto grad_2d = ::mlx::core::reshape(*ggrad.arr, flat_x);
-    auto gamma_2d = ::mlx::core::reshape(*gg.arr, flat_g);
     auto xnorm = ::mlx::core::multiply(x_2d, *gr.arr);
     // Both sums accumulate in float32 for a half gradient (see
     // ``widen_half``); the dx chain runs fused in that dtype.
     const auto g_dt = grad_2d.dtype();
     const auto acc_dt = accumulation_dtype(g_dt);
-    auto dgamma_2d = narrow_to(
-        ::mlx::core::sum(product_widened(grad_2d, xnorm), std::vector<int>{0}, false), g_dt);
-    auto gx_scaled = ::mlx::core::multiply(grad_2d, gamma_2d);
-    // 3.4+ Phase A.7: mean → sum × 1/N (same as Phase A.2 for BN).
-    // Helps Llama-style RMSNorm-using transformer workloads.
-    const ::mlx::core::array inv_N(1.0 / static_cast<double>(normalized_size), acc_dt);
-    auto sum_gx_xn_kept =
-        ::mlx::core::sum(product_widened(gx_scaled, xnorm), std::vector<int>{1}, true);
-    auto m = ::mlx::core::multiply(sum_gx_xn_kept, inv_N);
-    // dx = rstd * (gx_scaled - xnorm * m): RMSNorm subtracts no mean.
-    auto dx_2d =
-        normalized_input_grad(gx_scaled, xnorm, ::mlx::core::zeros({}, acc_dt), m, *gr.arr);
-    auto dx = ::mlx::core::reshape(dx_2d, gpu::to_mlx_shape(x_shape));
-    auto dgamma = ::mlx::core::reshape(dgamma_2d, gpu::to_mlx_shape(gamma_shape));
-    // 3.4 backward sweep: ``multiply`` / ``sum`` produce contiguous
-    // tensors and ``reshape`` preserves contiguity, so the trailing
-    // ``contiguous(...)`` wrap is a redundant materialisation that
-    // breaks lazy fusion at the autograd boundary.
-    return {Storage{gpu::wrap_mlx_array(std::move(dx), dt)},
-            Storage{gpu::wrap_mlx_array(std::move(dgamma), dt)}};
+    Storage dgamma_out;
+    if (grad_mask[1]) {
+        auto dgamma_2d = narrow_to(
+            ::mlx::core::sum(product_widened(grad_2d, xnorm), std::vector<int>{0}, false), g_dt);
+        auto dgamma = ::mlx::core::reshape(dgamma_2d, gpu::to_mlx_shape(gamma_shape));
+        dgamma_out = Storage{gpu::wrap_mlx_array(std::move(dgamma), dt)};
+    }
+    Storage dx_out;
+    if (grad_mask[0]) {
+        const auto& gg = std::get<GpuStorage>(gamma);
+        ::mlx::core::Shape flat_g{1, static_cast<int>(normalized_size)};
+        auto gamma_2d = ::mlx::core::reshape(*gg.arr, flat_g);
+        auto gx_scaled = ::mlx::core::multiply(grad_2d, gamma_2d);
+        // 3.4+ Phase A.7: mean → sum × 1/N (same as Phase A.2 for BN).
+        // Helps Llama-style RMSNorm-using transformer workloads.
+        const ::mlx::core::array inv_N(1.0 / static_cast<double>(normalized_size), acc_dt);
+        auto sum_gx_xn_kept =
+            ::mlx::core::sum(product_widened(gx_scaled, xnorm), std::vector<int>{1}, true);
+        auto m = ::mlx::core::multiply(sum_gx_xn_kept, inv_N);
+        // dx = rstd * (gx_scaled - xnorm * m): RMSNorm subtracts no mean.
+        auto dx_2d =
+            normalized_input_grad(gx_scaled, xnorm, ::mlx::core::zeros({}, acc_dt), m, *gr.arr);
+        auto dx = ::mlx::core::reshape(dx_2d, gpu::to_mlx_shape(x_shape));
+        dx_out = Storage{gpu::wrap_mlx_array(std::move(dx), dt)};
+    }
+    return {std::move(dx_out), std::move(dgamma_out)};
 }
 
 std::vector<Storage> GpuBackend::layer_norm_forward(const Storage& x,
@@ -147,53 +153,56 @@ std::vector<Storage> GpuBackend::layer_norm_backward(const Storage& x,
                                                      const Shape& x_shape,
                                                      const Shape& gamma_shape,
                                                      const Shape& beta_shape,
-                                                     Dtype dt) {
-    (void)x_shape;
-    (void)gamma_shape;
-    (void)beta_shape;
-    const auto& gx = std::get<GpuStorage>(x);
-    const auto& gg = std::get<GpuStorage>(gamma);
-    const auto& gm = std::get<GpuStorage>(saved_mean);
-    const auto& gr = std::get<GpuStorage>(saved_rstd);
+                                                     Dtype dt,
+                                                     std::array<bool, 3> grad_mask) {
+    if (!grad_mask[0] && !grad_mask[1] && !grad_mask[2])
+        return {Storage{}, Storage{}, Storage{}};
     const auto& ggrad = std::get<GpuStorage>(grad);
     ::mlx::core::Shape flat_x{static_cast<int>(outer), static_cast<int>(normalized_size)};
-    ::mlx::core::Shape flat_g{1, static_cast<int>(normalized_size)};
-    auto x_2d = ::mlx::core::reshape(*gx.arr, flat_x);
     auto grad_2d = ::mlx::core::reshape(*ggrad.arr, flat_x);
-    auto gamma_2d = ::mlx::core::reshape(*gg.arr, flat_g);
-    auto centered = ::mlx::core::subtract(x_2d, *gm.arr);
-    auto xnorm = ::mlx::core::multiply(centered, *gr.arr);
-    // Every sum below accumulates in float32 for a half gradient (see
-    // ``widen_half``); the dx chain runs fused in that dtype.
     const auto g_dt = grad_2d.dtype();
     const auto acc_dt = accumulation_dtype(g_dt);
-    auto dbeta_2d = sum_widened(grad_2d, std::vector<int>{0}, false);
-    auto dgamma_2d = narrow_to(
-        ::mlx::core::sum(product_widened(grad_2d, xnorm), std::vector<int>{0}, false), g_dt);
-    auto gx_scaled = ::mlx::core::multiply(grad_2d, gamma_2d);
 
-    // 3.4+ Phase A.7: same restructure as Phase A.2 (BN backward) — replace
-    // ``mean(...)`` with ``sum(..., keepdims=true) × 1/N`` so MLX dispatches
-    // a sum kernel + scalar broadcast multiply instead of the dedicated
-    // mean primitive.  Helps every transformer / NLP workload using
-    // LayerNorm: the per-op cost-per-bwd-call drops a small amount, and
-    // because the backward chain doesn't MLX-fuse (multi-output structural
-    // blocker), the savings translate directly to wall time.
-    const ::mlx::core::array inv_N(1.0 / static_cast<double>(normalized_size), acc_dt);
-    auto sum_gx_kept = ::mlx::core::sum(widen_half(gx_scaled), std::vector<int>{1}, true);
-    auto sum_gx_xn_kept =
-        ::mlx::core::sum(product_widened(gx_scaled, xnorm), std::vector<int>{1}, true);
-    auto mean1 = ::mlx::core::multiply(sum_gx_kept, inv_N);
-    auto mean2 = ::mlx::core::multiply(sum_gx_xn_kept, inv_N);
-    auto dx_2d = normalized_input_grad(gx_scaled, xnorm, mean1, mean2, *gr.arr);
-    auto dx = ::mlx::core::reshape(dx_2d, gpu::to_mlx_shape(x_shape));
-    auto dgamma = ::mlx::core::reshape(dgamma_2d, gpu::to_mlx_shape(gamma_shape));
-    auto dbeta = ::mlx::core::reshape(dbeta_2d, gpu::to_mlx_shape(beta_shape));
-    // 3.4 backward sweep: reduction outputs are contiguous and
-    // ``reshape`` preserves contiguity.  See BatchNorm backward.
-    return {Storage{gpu::wrap_mlx_array(std::move(dx), dt)},
-            Storage{gpu::wrap_mlx_array(std::move(dgamma), dt)},
-            Storage{gpu::wrap_mlx_array(std::move(dbeta), dt)}};
+    Storage dbeta_out;
+    if (grad_mask[2]) {
+        auto dbeta_2d = sum_widened(grad_2d, std::vector<int>{0}, false);
+        auto dbeta = ::mlx::core::reshape(dbeta_2d, gpu::to_mlx_shape(beta_shape));
+        dbeta_out = Storage{gpu::wrap_mlx_array(std::move(dbeta), dt)};
+    }
+    if (!grad_mask[0] && !grad_mask[1])
+        return {Storage{}, Storage{}, std::move(dbeta_out)};
+
+    const auto& gx = std::get<GpuStorage>(x);
+    const auto& gm = std::get<GpuStorage>(saved_mean);
+    const auto& gr = std::get<GpuStorage>(saved_rstd);
+    auto x_2d = ::mlx::core::reshape(*gx.arr, flat_x);
+    auto centered = ::mlx::core::subtract(x_2d, *gm.arr);
+    auto xnorm = ::mlx::core::multiply(centered, *gr.arr);
+
+    Storage dgamma_out;
+    if (grad_mask[1]) {
+        auto dgamma_2d = narrow_to(
+            ::mlx::core::sum(product_widened(grad_2d, xnorm), std::vector<int>{0}, false), g_dt);
+        auto dgamma = ::mlx::core::reshape(dgamma_2d, gpu::to_mlx_shape(gamma_shape));
+        dgamma_out = Storage{gpu::wrap_mlx_array(std::move(dgamma), dt)};
+    }
+    Storage dx_out;
+    if (grad_mask[0]) {
+        const auto& gg = std::get<GpuStorage>(gamma);
+        ::mlx::core::Shape flat_g{1, static_cast<int>(normalized_size)};
+        auto gamma_2d = ::mlx::core::reshape(*gg.arr, flat_g);
+        auto gx_scaled = ::mlx::core::multiply(grad_2d, gamma_2d);
+        const ::mlx::core::array inv_N(1.0 / static_cast<double>(normalized_size), acc_dt);
+        auto sum_gx_kept = ::mlx::core::sum(widen_half(gx_scaled), std::vector<int>{1}, true);
+        auto sum_gx_xn_kept =
+            ::mlx::core::sum(product_widened(gx_scaled, xnorm), std::vector<int>{1}, true);
+        auto mean1 = ::mlx::core::multiply(sum_gx_kept, inv_N);
+        auto mean2 = ::mlx::core::multiply(sum_gx_xn_kept, inv_N);
+        auto dx_2d = normalized_input_grad(gx_scaled, xnorm, mean1, mean2, *gr.arr);
+        auto dx = ::mlx::core::reshape(dx_2d, gpu::to_mlx_shape(x_shape));
+        dx_out = Storage{gpu::wrap_mlx_array(std::move(dx), dt)};
+    }
+    return {std::move(dx_out), std::move(dgamma_out), std::move(dbeta_out)};
 }
 
 std::vector<Storage> GpuBackend::batch_norm_forward(const Storage& x,
@@ -225,16 +234,15 @@ std::vector<Storage> GpuBackend::batch_norm_backward(const Storage& x,
                                                      int ndim,
                                                      const Shape& x_shape_param,
                                                      Dtype dt,
-                                                     double eps) {
+                                                     double eps,
+                                                     std::array<bool, 3> grad_mask) {
     (void)x_shape_param;
     (void)eps;
-    const auto& gx = std::get<GpuStorage>(x);
-    const auto& gg = std::get<GpuStorage>(gamma);
     const auto& gm = std::get<GpuStorage>(saved_mean);
     const auto& gr = std::get<GpuStorage>(saved_rstd);
     const auto& ggrad = std::get<GpuStorage>(grad);
-    return bn_backward_gpu(*gx.arr, *gg.arr, *gm.arr, *gr.arr, saved_xnorm, *ggrad.arr, channels,
-                           ndim, dt);
+    return bn_backward_gpu(x, gamma, *gm.arr, *gr.arr, saved_xnorm, *ggrad.arr, channels, ndim, dt,
+                           grad_mask);
 }
 
 std::vector<Storage> GpuBackend::group_norm_forward(const Storage& x,
@@ -308,15 +316,34 @@ std::vector<Storage> GpuBackend::group_norm_backward(const Storage& x,
                                                      int groups,
                                                      const std::vector<int>& spatial_dims,
                                                      const Shape& x_shape,
-                                                     Dtype dt) {
-    const auto& gx = std::get<GpuStorage>(x);
-    const auto& gg = std::get<GpuStorage>(gamma);
-    const auto& gm = std::get<GpuStorage>(saved_mean);
-    const auto& gr = std::get<GpuStorage>(saved_rstd);
+                                                     Dtype dt,
+                                                     std::array<bool, 3> grad_mask) {
+    if (!grad_mask[0] && !grad_mask[1] && !grad_mask[2])
+        return {Storage{}, Storage{}, Storage{}};
     const auto& ggrad = std::get<GpuStorage>(grad);
     const int ndim = static_cast<int>(spatial_dims.size());
     const int channels_per_group = channels / groups;
     using SE = ::mlx::core::ShapeElem;
+
+    std::vector<int> ch_axes;
+    ch_axes.reserve(static_cast<std::size_t>(ndim) + 1);
+    ch_axes.push_back(0);
+    for (int i = 0; i < ndim; ++i)
+        ch_axes.push_back(2 + i);
+    const auto g_dt = ggrad.arr->dtype();
+    const auto acc_dt = accumulation_dtype(g_dt);
+
+    Storage dbeta_out;
+    if (grad_mask[2]) {
+        auto dbeta = sum_widened(*ggrad.arr, ch_axes, false);
+        dbeta_out = Storage{gpu::wrap_mlx_array(std::move(dbeta), dt)};
+    }
+    if (!grad_mask[0] && !grad_mask[1])
+        return {Storage{}, Storage{}, std::move(dbeta_out)};
+
+    const auto& gx = std::get<GpuStorage>(x);
+    const auto& gm = std::get<GpuStorage>(saved_mean);
+    const auto& gr = std::get<GpuStorage>(saved_rstd);
     ::mlx::core::Shape grouped;
     grouped.reserve(static_cast<std::size_t>(ndim) + 3);
     grouped.push_back(static_cast<SE>(batch));
@@ -330,55 +357,48 @@ std::vector<Storage> GpuBackend::group_norm_backward(const Storage& x,
     mr_shape.push_back(static_cast<SE>(groups));
     for (int i = 0; i < ndim + 1; ++i)
         mr_shape.push_back(1);
-    ::mlx::core::Shape br_c(static_cast<std::size_t>(ndim) + 2, 1);
-    br_c[1] = static_cast<SE>(channels);
 
     auto x_g = ::mlx::core::reshape(*gx.arr, grouped);
     auto mean_g = ::mlx::core::reshape(*gm.arr, mr_shape);
     auto rstd_g = ::mlx::core::reshape(*gr.arr, mr_shape);
     auto centered = ::mlx::core::subtract(x_g, mean_g);
     auto xnorm_g = ::mlx::core::multiply(centered, rstd_g);
-    auto xnorm = ::mlx::core::reshape(xnorm_g, gpu::to_mlx_shape(x_shape));
 
-    std::vector<int> ch_axes;
-    ch_axes.reserve(static_cast<std::size_t>(ndim) + 1);
-    ch_axes.push_back(0);
-    for (int i = 0; i < ndim; ++i)
-        ch_axes.push_back(2 + i);
-    // Every sum below accumulates in float32 for a half gradient (see
-    // ``widen_half``); the dx chain runs fused in that dtype.
-    const auto g_dt = ggrad.arr->dtype();
-    const auto acc_dt = accumulation_dtype(g_dt);
-    auto dgamma =
-        narrow_to(::mlx::core::sum(product_widened(*ggrad.arr, xnorm), ch_axes, false), g_dt);
-    auto dbeta = sum_widened(*ggrad.arr, ch_axes, false);
+    Storage dgamma_out;
+    if (grad_mask[1]) {
+        auto xnorm = ::mlx::core::reshape(xnorm_g, gpu::to_mlx_shape(x_shape));
+        auto dgamma =
+            narrow_to(::mlx::core::sum(product_widened(*ggrad.arr, xnorm), ch_axes, false), g_dt);
+        dgamma_out = Storage{gpu::wrap_mlx_array(std::move(dgamma), dt)};
+    }
+    Storage dx_out;
+    if (grad_mask[0]) {
+        const auto& gg = std::get<GpuStorage>(gamma);
+        ::mlx::core::Shape br_c(static_cast<std::size_t>(ndim) + 2, 1);
+        br_c[1] = static_cast<SE>(channels);
+        std::vector<int> red_axes;
+        red_axes.reserve(static_cast<std::size_t>(ndim) + 1);
+        red_axes.push_back(2);
+        for (int i = 0; i < ndim; ++i)
+            red_axes.push_back(3 + i);
+        auto gamma_view = ::mlx::core::reshape(*gg.arr, br_c);
+        auto gx_scaled4 = ::mlx::core::multiply(gamma_view, *ggrad.arr);
+        auto gx_scaled_g = ::mlx::core::reshape(gx_scaled4, grouped);
 
-    std::vector<int> red_axes;
-    red_axes.reserve(static_cast<std::size_t>(ndim) + 1);
-    red_axes.push_back(2);
-    for (int i = 0; i < ndim; ++i)
-        red_axes.push_back(3 + i);
-    auto gamma_view = ::mlx::core::reshape(*gg.arr, br_c);
-    auto gx_scaled4 = ::mlx::core::multiply(gamma_view, *ggrad.arr);
-    auto gx_scaled_g = ::mlx::core::reshape(gx_scaled4, grouped);
-
-    // 3.4+ Phase A.7: mean → sum × 1/N (same as Phase A.2 for BN).
-    // N = channels_per_group × product(spatial_dims).  Helps segmentation
-    // models (U-Net) and ConvNeXt-family architectures using GroupNorm.
-    std::int64_t N_reduced = static_cast<std::int64_t>(channels_per_group);
-    for (int s : spatial_dims)
-        N_reduced *= static_cast<std::int64_t>(s);
-    const ::mlx::core::array inv_N(1.0 / static_cast<double>(N_reduced), acc_dt);
-    auto sum_gx_kept = ::mlx::core::sum(widen_half(gx_scaled_g), red_axes, true);
-    auto sum_gx_xn_kept = ::mlx::core::sum(product_widened(gx_scaled_g, xnorm_g), red_axes, true);
-    auto mean1 = ::mlx::core::multiply(sum_gx_kept, inv_N);
-    auto mean2 = ::mlx::core::multiply(sum_gx_xn_kept, inv_N);
-    auto dx_g = normalized_input_grad(gx_scaled_g, xnorm_g, mean1, mean2, rstd_g);
-    auto dx = ::mlx::core::reshape(dx_g, gpu::to_mlx_shape(x_shape));
-    // 3.4 backward sweep: same as BatchNorm / LayerNorm.
-    return {Storage{gpu::wrap_mlx_array(std::move(dx), dt)},
-            Storage{gpu::wrap_mlx_array(std::move(dgamma), dt)},
-            Storage{gpu::wrap_mlx_array(std::move(dbeta), dt)}};
+        std::int64_t N_reduced = static_cast<std::int64_t>(channels_per_group);
+        for (int s : spatial_dims)
+            N_reduced *= static_cast<std::int64_t>(s);
+        const ::mlx::core::array inv_N(1.0 / static_cast<double>(N_reduced), acc_dt);
+        auto sum_gx_kept = ::mlx::core::sum(widen_half(gx_scaled_g), red_axes, true);
+        auto sum_gx_xn_kept =
+            ::mlx::core::sum(product_widened(gx_scaled_g, xnorm_g), red_axes, true);
+        auto mean1 = ::mlx::core::multiply(sum_gx_kept, inv_N);
+        auto mean2 = ::mlx::core::multiply(sum_gx_xn_kept, inv_N);
+        auto dx_g = normalized_input_grad(gx_scaled_g, xnorm_g, mean1, mean2, rstd_g);
+        auto dx = ::mlx::core::reshape(dx_g, gpu::to_mlx_shape(x_shape));
+        dx_out = Storage{gpu::wrap_mlx_array(std::move(dx), dt)};
+    }
+    return {std::move(dx_out), std::move(dgamma_out), std::move(dbeta_out)};
 }
 
 std::vector<Storage> GpuBackend::batch_norm_eval_forward(const Storage& x,
@@ -416,30 +436,73 @@ std::vector<Storage> GpuBackend::batch_norm_eval_backward(const Storage& x,
                                                           const Shape& x_shape,
                                                           int C,
                                                           int,
-                                                          Dtype dt) {
-    const auto xw = widen_gpu(x), mw = widen_gpu(mean), gw = widen_gpu(gamma);
+                                                          Dtype dt,
+                                                          std::array<bool, 5> grad_mask) {
+    if (!grad_mask[0] && !grad_mask[1] && !grad_mask[2] && !grad_mask[3] && !grad_mask[4])
+        return {Storage{}, Storage{}, Storage{}, Storage{}, Storage{}};
     const auto rw = widen_gpu(rstd), gow = widen_gpu(grad_out);
     ::mlx::core::Shape b_shape(x_shape.size(), 1);
     b_shape[1] = C;
-    auto m_b = ::mlx::core::reshape(mw, b_shape);
     auto r_b = ::mlx::core::reshape(rw, b_shape);
-    auto g_b = ::mlx::core::reshape(gw, b_shape);
-    auto x_minus_m = ::mlx::core::subtract(xw, m_b);
-    auto dx = ::mlx::core::multiply(::mlx::core::multiply(g_b, r_b), gow);
     std::vector<int> reduce_axes;
     for (std::size_t i = 0; i < x_shape.size(); ++i)
         if (i != 1)
             reduce_axes.push_back(static_cast<int>(i));
-    auto sum_g = ::mlx::core::sum(gow, reduce_axes, false);
-    auto sum_xm_g = ::mlx::core::sum(::mlx::core::multiply(x_minus_m, gow), reduce_axes, false);
-    auto dg = ::mlx::core::multiply(sum_xm_g, rw);
-    auto dm = ::mlx::core::negative(::mlx::core::multiply(gw, ::mlx::core::multiply(rw, sum_g)));
-    auto half = gpu::mlx_scalar(-0.5, xw.dtype());
-    auto r3 = ::mlx::core::multiply(rw, ::mlx::core::multiply(rw, rw));
-    auto dv =
-        ::mlx::core::multiply(half, ::mlx::core::multiply(gw, ::mlx::core::multiply(r3, sum_xm_g)));
-    return {wrap_narrow(dx, dt), wrap_narrow(dm, dt), wrap_narrow(dv, dt), wrap_narrow(dg, dt),
-            wrap_narrow(sum_g, dt)};
+
+    const bool need_gamma = grad_mask[0] || grad_mask[1] || grad_mask[2];
+    const bool need_xm = grad_mask[2] || grad_mask[3];
+    const bool need_sum_g = grad_mask[1] || grad_mask[4];
+
+    std::optional<::mlx::core::array> gw;
+    if (need_gamma)
+        gw = widen_gpu(gamma);
+
+    Storage dx_out;
+    if (grad_mask[0]) {
+        auto g_b = ::mlx::core::reshape(*gw, b_shape);
+        auto dx = ::mlx::core::multiply(::mlx::core::multiply(g_b, r_b), gow);
+        dx_out = wrap_narrow(dx, dt);
+    }
+
+    std::optional<::mlx::core::array> sum_g;
+    if (need_sum_g)
+        sum_g = ::mlx::core::sum(gow, reduce_axes, false);
+
+    Storage dm_out;
+    if (grad_mask[1]) {
+        auto dm = ::mlx::core::negative(::mlx::core::multiply(*gw, ::mlx::core::multiply(rw, *sum_g)));
+        dm_out = wrap_narrow(dm, dt);
+    }
+
+    Storage db_out;
+    if (grad_mask[4])
+        db_out = wrap_narrow(*sum_g, dt);
+
+    std::optional<::mlx::core::array> sum_xm_g;
+    if (need_xm) {
+        const auto xw = widen_gpu(x), mw = widen_gpu(mean);
+        auto m_b = ::mlx::core::reshape(mw, b_shape);
+        auto x_minus_m = ::mlx::core::subtract(xw, m_b);
+        sum_xm_g = ::mlx::core::sum(::mlx::core::multiply(x_minus_m, gow), reduce_axes, false);
+    }
+
+    Storage dg_out;
+    if (grad_mask[3]) {
+        auto dg = ::mlx::core::multiply(*sum_xm_g, rw);
+        dg_out = wrap_narrow(dg, dt);
+    }
+
+    Storage dv_out;
+    if (grad_mask[2]) {
+        auto half = gpu::mlx_scalar(-0.5, gow.dtype());
+        auto r3 = ::mlx::core::multiply(rw, ::mlx::core::multiply(rw, rw));
+        auto dv = ::mlx::core::multiply(
+            half, ::mlx::core::multiply(*gw, ::mlx::core::multiply(r3, *sum_xm_g)));
+        dv_out = wrap_narrow(dv, dt);
+    }
+
+    return {std::move(dx_out), std::move(dm_out), std::move(dv_out), std::move(dg_out),
+            std::move(db_out)};
 }
 
 std::vector<Storage> GpuBackend::lp_normalize_forward(
@@ -511,37 +574,50 @@ std::vector<Storage> GpuBackend::global_response_norm_backward(const Storage& x,
                                                                const Storage& grad_out,
                                                                const Shape& x_shape,
                                                                double eps,
-                                                               Dtype dt) {
+                                                               Dtype dt,
+                                                               std::array<bool, 3> grad_mask) {
     const int B = static_cast<int>(x_shape[0]), C = static_cast<int>(x_shape[1]);
     const auto xw = widen_gpu(x), gw = widen_gpu(grad_out);
     const auto acc_dt = xw.dtype();
-    auto G =
-        ::mlx::core::sqrt(::mlx::core::sum(::mlx::core::square(xw), std::vector<int>{2, 3}, true));
-    auto m_b = ::mlx::core::mean(G, std::vector<int>{1}, true);
-    auto denom = ::mlx::core::add(m_b, gpu::mlx_scalar(eps, acc_dt));
-    auto Nx = ::mlx::core::reshape(widen_gpu(saved_Nx), {B, C, 1, 1});
-    auto g_b = ::mlx::core::reshape(widen_gpu(gamma), {1, C, 1, 1});
     auto gx_prod = ::mlx::core::multiply(gw, xw);
-    auto db = ::mlx::core::sum(gx_prod, std::vector<int>{0, 2, 3}, false);
-    auto gxN = ::mlx::core::multiply(gx_prod, Nx);
-    auto dg = ::mlx::core::sum(gxN, std::vector<int>{0, 2, 3}, false);
-    auto sum_gx = ::mlx::core::sum(gx_prod, std::vector<int>{2, 3}, true);
-    auto A = ::mlx::core::multiply(g_b, sum_gx);
-    auto AG = ::mlx::core::multiply(A, G);
-    auto inner_sum = ::mlx::core::sum(AG, std::vector<int>{1}, true);
-    auto C_arr = gpu::mlx_scalar(static_cast<double>(C), acc_dt);
-    auto denom_sq = ::mlx::core::multiply(denom, denom);
-    auto second = ::mlx::core::divide(inner_sum, ::mlx::core::multiply(denom_sq, C_arr));
-    auto dG = ::mlx::core::subtract(::mlx::core::divide(A, denom), second);
-    auto eps_g = gpu::mlx_scalar(1e-12, acc_dt);
-    auto G_safe = ::mlx::core::maximum(G, eps_g);
-    auto dG_term = ::mlx::core::divide(::mlx::core::multiply(dG, xw), G_safe);
-    auto bb_b = ::mlx::core::reshape(widen_gpu(beta), {1, C, 1, 1});
-    auto dx =
-        ::mlx::core::add(::mlx::core::add(::mlx::core::multiply(::mlx::core::multiply(g_b, Nx), gw),
-                                          ::mlx::core::multiply(bb_b, gw)),
-                         dG_term);
-    return {wrap_narrow(dx, dt), wrap_narrow(dg, dt), wrap_narrow(db, dt)};
+    Storage dx_s{}, dg_s{}, db_s{};
+    if (grad_mask[2]) {
+        auto db = ::mlx::core::sum(gx_prod, std::vector<int>{0, 2, 3}, false);
+        db_s = wrap_narrow(db, dt);
+    }
+    if (grad_mask[0] || grad_mask[1]) {
+        auto Nx = ::mlx::core::reshape(widen_gpu(saved_Nx), {B, C, 1, 1});
+        if (grad_mask[1]) {
+            auto gxN = ::mlx::core::multiply(gx_prod, Nx);
+            auto dg = ::mlx::core::sum(gxN, std::vector<int>{0, 2, 3}, false);
+            dg_s = wrap_narrow(dg, dt);
+        }
+        if (grad_mask[0]) {
+            auto G = ::mlx::core::sqrt(
+                ::mlx::core::sum(::mlx::core::square(xw), std::vector<int>{2, 3}, true));
+            auto m_b = ::mlx::core::mean(G, std::vector<int>{1}, true);
+            auto denom = ::mlx::core::add(m_b, gpu::mlx_scalar(eps, acc_dt));
+            auto g_b = ::mlx::core::reshape(widen_gpu(gamma), {1, C, 1, 1});
+            auto sum_gx = ::mlx::core::sum(gx_prod, std::vector<int>{2, 3}, true);
+            auto A = ::mlx::core::multiply(g_b, sum_gx);
+            auto AG = ::mlx::core::multiply(A, G);
+            auto inner_sum = ::mlx::core::sum(AG, std::vector<int>{1}, true);
+            auto C_arr = gpu::mlx_scalar(static_cast<double>(C), acc_dt);
+            auto denom_sq = ::mlx::core::multiply(denom, denom);
+            auto second = ::mlx::core::divide(inner_sum, ::mlx::core::multiply(denom_sq, C_arr));
+            auto dG = ::mlx::core::subtract(::mlx::core::divide(A, denom), second);
+            auto eps_g = gpu::mlx_scalar(1e-12, acc_dt);
+            auto G_safe = ::mlx::core::maximum(G, eps_g);
+            auto dG_term = ::mlx::core::divide(::mlx::core::multiply(dG, xw), G_safe);
+            auto bb_b = ::mlx::core::reshape(widen_gpu(beta), {1, C, 1, 1});
+            auto dx = ::mlx::core::add(
+                ::mlx::core::add(::mlx::core::multiply(::mlx::core::multiply(g_b, Nx), gw),
+                                 ::mlx::core::multiply(bb_b, gw)),
+                dG_term);
+            dx_s = wrap_narrow(dx, dt);
+        }
+    }
+    return {std::move(dx_s), std::move(dg_s), std::move(db_s)};
 }
 
 }  // namespace backend

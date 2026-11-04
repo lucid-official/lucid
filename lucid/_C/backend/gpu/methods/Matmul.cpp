@@ -66,35 +66,56 @@ std::vector<Storage> GpuBackend::linear_backward(const Storage& grad,
                                                  const Shape& x_shape,
                                                  const Shape& weight_shape,
                                                  const Shape& bias_shape,
-                                                 Dtype dt) {
+                                                 Dtype dt,
+                                                 std::array<bool, 3> grad_mask) {
+    if (!grad_mask[0] && !grad_mask[1] && !grad_mask[2])
+        return {Storage{}, Storage{}, Storage{}};
     const auto& gg = std::get<GpuStorage>(grad);
-    const auto& gx = std::get<GpuStorage>(x);
-    const auto& gw = std::get<GpuStorage>(weight);
     const std::size_t M = linear_batch(x_shape);
     const std::size_t K = static_cast<std::size_t>(x_shape.back());
     const std::size_t N = static_cast<std::size_t>(weight_shape[0]);
     if (M == 0 || N == 0 || K == 0) {
-        auto dx = ::mlx::core::zeros(gpu::to_mlx_shape(x_shape), gpu::to_mlx_dtype(dt));
-        auto dW = ::mlx::core::zeros(gpu::to_mlx_shape(weight_shape), gpu::to_mlx_dtype(dt));
-        auto db = ::mlx::core::zeros(gpu::to_mlx_shape(bias_shape), gpu::to_mlx_dtype(dt));
-        return {Storage{gpu::wrap_mlx_array(std::move(dx), dt)},
-                Storage{gpu::wrap_mlx_array(std::move(dW), dt)},
-                Storage{gpu::wrap_mlx_array(std::move(db), dt)}};
+        Storage dx_out =
+            grad_mask[0]
+                ? Storage{gpu::wrap_mlx_array(
+                      ::mlx::core::zeros(gpu::to_mlx_shape(x_shape), gpu::to_mlx_dtype(dt)), dt)}
+                : Storage{};
+        Storage dW_out =
+            grad_mask[1]
+                ? Storage{gpu::wrap_mlx_array(
+                      ::mlx::core::zeros(gpu::to_mlx_shape(weight_shape), gpu::to_mlx_dtype(dt)),
+                      dt)}
+                : Storage{};
+        Storage db_out =
+            grad_mask[2]
+                ? Storage{gpu::wrap_mlx_array(
+                      ::mlx::core::zeros(gpu::to_mlx_shape(bias_shape), gpu::to_mlx_dtype(dt)), dt)}
+                : Storage{};
+        return {std::move(dx_out), std::move(dW_out), std::move(db_out)};
     }
-    ::mlx::core::Shape flat_x{static_cast<int>(M), static_cast<int>(K)};
     ::mlx::core::Shape flat_g{static_cast<int>(M), static_cast<int>(N)};
     auto g_2d = ::mlx::core::reshape(*gg.arr, flat_g);
-    auto x_2d = ::mlx::core::reshape(*gx.arr, flat_x);
-    auto dx_flat = ::mlx::core::matmul(g_2d, *gw.arr);
-    auto dx = ::mlx::core::reshape(dx_flat, gpu::to_mlx_shape(x_shape));
-    auto dW = ::mlx::core::matmul(::mlx::core::transpose(g_2d), x_2d);
-    auto db = sum_widened(g_2d, std::vector<int>{0}, false);
-    // PERF: matmul / sum produce fresh contiguous buffers.  reshape on
-    // a contiguous matmul result is also contiguous.  Drop redundant
-    // contiguous() wraps so dx/dW/db can fuse into the autograd graph.
-    return {Storage{gpu::wrap_mlx_array(std::move(dx), dt)},
-            Storage{gpu::wrap_mlx_array(std::move(dW), dt)},
-            Storage{gpu::wrap_mlx_array(std::move(db), dt)}};
+    Storage dx_out{};
+    if (grad_mask[0]) {
+        const auto& gw = std::get<GpuStorage>(weight);
+        auto dx_flat = ::mlx::core::matmul(g_2d, *gw.arr);
+        auto dx = ::mlx::core::reshape(dx_flat, gpu::to_mlx_shape(x_shape));
+        dx_out = Storage{gpu::wrap_mlx_array(std::move(dx), dt)};
+    }
+    Storage dW_out{};
+    if (grad_mask[1]) {
+        const auto& gx = std::get<GpuStorage>(x);
+        ::mlx::core::Shape flat_x{static_cast<int>(M), static_cast<int>(K)};
+        auto x_2d = ::mlx::core::reshape(*gx.arr, flat_x);
+        auto dW = ::mlx::core::matmul(::mlx::core::transpose(g_2d), x_2d);
+        dW_out = Storage{gpu::wrap_mlx_array(std::move(dW), dt)};
+    }
+    Storage db_out{};
+    if (grad_mask[2]) {
+        auto db = sum_widened(g_2d, std::vector<int>{0}, false);
+        db_out = Storage{gpu::wrap_mlx_array(std::move(db), dt)};
+    }
+    return {std::move(dx_out), std::move(dW_out), std::move(db_out)};
 }
 
 std::size_t GpuBackend::linear_batch(const Shape& x_shape) {
@@ -154,62 +175,68 @@ std::vector<Storage> GpuBackend::bilinear_layer_backward(const Storage& grad_out
                                                          const Shape& x2_shape,
                                                          const Shape& w_shape,
                                                          bool has_bias,
-                                                         Dtype dt) {
-    const std::size_t B = 1;
+                                                         Dtype dt,
+                                                         std::array<bool, 4> grad_mask) {
     std::size_t b = 1;
     for (std::size_t i = 0; i + 1 < x1_shape.size(); ++i)
         b *= static_cast<std::size_t>(x1_shape[i]);
     const std::size_t D1 = static_cast<std::size_t>(x1_shape.back());
     const std::size_t D2 = static_cast<std::size_t>(x2_shape.back());
     const std::size_t Dout = static_cast<std::size_t>(w_shape[0]);
-    (void)B;
     const int iB = static_cast<int>(b);
     const int iD1 = static_cast<int>(D1), iD2 = static_cast<int>(D2),
               iDout = static_cast<int>(Dout);
-    const auto& gx1 = std::get<GpuStorage>(x1);
-    const auto& gx2 = std::get<GpuStorage>(x2);
-    const auto& gw = std::get<GpuStorage>(weight);
     const auto& gg = std::get<GpuStorage>(grad_out);
-    auto x1_f = ::mlx::core::reshape(*gx1.arr, {iB, iD1});
-    auto x2_f = ::mlx::core::reshape(*gx2.arr, {iB, iD2});
-    auto W = ::mlx::core::reshape(*gw.arr, {iDout, iD1, iD2});
     auto G = ::mlx::core::reshape(*gg.arr, {iB, iDout});
-    auto W_perm = ::mlx::core::transpose(W, {1, 0, 2});
-    auto W_flat = ::mlx::core::reshape(W_perm, {iD1, iDout * iD2});
-    auto Q_flat = ::mlx::core::matmul(x1_f, W_flat);
-    auto Q = ::mlx::core::reshape(Q_flat, {iB, iDout, iD2});
-    auto W_ki = ::mlx::core::reshape(W, {iDout * iD1, iD2});
-    auto x2_t = ::mlx::core::transpose(x2_f, {1, 0});
-    auto P_pre = ::mlx::core::matmul(W_ki, x2_t);
-    auto P_3 = ::mlx::core::reshape(P_pre, {iDout, iD1, iB});
-    auto P = ::mlx::core::transpose(P_3, {2, 0, 1});
-    auto G_b1 = ::mlx::core::reshape(G, {iB, 1, iDout});
-    auto dx1_3 = ::mlx::core::matmul(G_b1, P);
-    auto dx1r = ::mlx::core::reshape(dx1_3, gpu::to_mlx_shape(x1_shape));
-    auto dx2_3 = ::mlx::core::matmul(G_b1, Q);
-    auto dx2r = ::mlx::core::reshape(dx2_3, gpu::to_mlx_shape(x2_shape));
-    auto x1_b = ::mlx::core::reshape(x1_f, {iB, iD1, 1});
-    auto x2_b = ::mlx::core::reshape(x2_f, {iB, 1, iD2});
-    auto outer = ::mlx::core::multiply(::mlx::core::broadcast_to(x1_b, {iB, iD1, iD2}),
-                                       ::mlx::core::broadcast_to(x2_b, {iB, iD1, iD2}));
-    auto outer_flat = ::mlx::core::reshape(outer, {iB, iD1 * iD2});
-    auto G_t = ::mlx::core::transpose(G, {1, 0});
-    auto dW_flat = ::mlx::core::matmul(G_t, outer_flat);
-    auto dWr = ::mlx::core::reshape(dW_flat, gpu::to_mlx_shape(w_shape));
-    std::vector<Storage> out;
-    out.push_back(Storage{gpu::wrap_mlx_array(std::move(dx1r), dt)});
-    out.push_back(Storage{gpu::wrap_mlx_array(std::move(dx2r), dt)});
-    out.push_back(Storage{gpu::wrap_mlx_array(std::move(dWr), dt)});
-    if (has_bias) {
-        auto db = sum_widened(G, std::vector<int>{0}, false);
-        out.push_back(Storage{gpu::wrap_mlx_array(std::move(db), dt)});
-    } else {
-        CpuStorage empty;
-        empty.dtype = dt;
-        empty.nbytes = 0;
-        out.push_back(Storage{std::move(empty)});
+    std::optional<::mlx::core::array> x1_f, x2_f, W;
+    if (grad_mask[1] || grad_mask[2])
+        x1_f = ::mlx::core::reshape(*std::get<GpuStorage>(x1).arr, {iB, iD1});
+    if (grad_mask[0] || grad_mask[2])
+        x2_f = ::mlx::core::reshape(*std::get<GpuStorage>(x2).arr, {iB, iD2});
+    if (grad_mask[0] || grad_mask[1])
+        W = ::mlx::core::reshape(*std::get<GpuStorage>(weight).arr, {iDout, iD1, iD2});
+
+    Storage dx1_out{};
+    if (grad_mask[0]) {
+        auto W_ki = ::mlx::core::reshape(*W, {iDout * iD1, iD2});
+        auto x2_t = ::mlx::core::transpose(*x2_f, {1, 0});
+        auto P_pre = ::mlx::core::matmul(W_ki, x2_t);
+        auto P_3 = ::mlx::core::reshape(P_pre, {iDout, iD1, iB});
+        auto P = ::mlx::core::transpose(P_3, {2, 0, 1});
+        auto G_b1 = ::mlx::core::reshape(G, {iB, 1, iDout});
+        auto dx1_3 = ::mlx::core::matmul(G_b1, P);
+        auto dx1r = ::mlx::core::reshape(dx1_3, gpu::to_mlx_shape(x1_shape));
+        dx1_out = Storage{gpu::wrap_mlx_array(std::move(dx1r), dt)};
     }
-    return out;
+    Storage dx2_out{};
+    if (grad_mask[1]) {
+        auto W_perm = ::mlx::core::transpose(*W, {1, 0, 2});
+        auto W_flat = ::mlx::core::reshape(W_perm, {iD1, iDout * iD2});
+        auto Q_flat = ::mlx::core::matmul(*x1_f, W_flat);
+        auto Q = ::mlx::core::reshape(Q_flat, {iB, iDout, iD2});
+        auto G_b1 = ::mlx::core::reshape(G, {iB, 1, iDout});
+        auto dx2_3 = ::mlx::core::matmul(G_b1, Q);
+        auto dx2r = ::mlx::core::reshape(dx2_3, gpu::to_mlx_shape(x2_shape));
+        dx2_out = Storage{gpu::wrap_mlx_array(std::move(dx2r), dt)};
+    }
+    Storage dW_out{};
+    if (grad_mask[2]) {
+        auto x1_b = ::mlx::core::reshape(*x1_f, {iB, iD1, 1});
+        auto x2_b = ::mlx::core::reshape(*x2_f, {iB, 1, iD2});
+        auto outer = ::mlx::core::multiply(::mlx::core::broadcast_to(x1_b, {iB, iD1, iD2}),
+                                           ::mlx::core::broadcast_to(x2_b, {iB, iD1, iD2}));
+        auto outer_flat = ::mlx::core::reshape(outer, {iB, iD1 * iD2});
+        auto G_t = ::mlx::core::transpose(G, {1, 0});
+        auto dW_flat = ::mlx::core::matmul(G_t, outer_flat);
+        auto dWr = ::mlx::core::reshape(dW_flat, gpu::to_mlx_shape(w_shape));
+        dW_out = Storage{gpu::wrap_mlx_array(std::move(dWr), dt)};
+    }
+    Storage db_out{};
+    if (has_bias && grad_mask[3]) {
+        auto db = sum_widened(G, std::vector<int>{0}, false);
+        db_out = Storage{gpu::wrap_mlx_array(std::move(db), dt)};
+    }
+    return {std::move(dx1_out), std::move(dx2_out), std::move(dW_out), std::move(db_out)};
 }
 
 Storage GpuBackend::inner(

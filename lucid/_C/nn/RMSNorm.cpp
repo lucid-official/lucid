@@ -92,7 +92,7 @@ std::vector<Storage> RMSNormBackward::apply(Storage grad_out) {
     // rms_norm_backward returns {dx, d_gamma} as a pair.
     auto grads = backend::Dispatcher::for_device(device_).rms_norm_backward(
         saved_inputs_[0], saved_inputs_[1], saved_rstd_, grad_out, outer_, N_, input_shapes_[0],
-        input_shapes_[1], dtype_);
+        input_shapes_[1], dtype_, {needs_input_grad(0), needs_input_grad(1)});
     return {std::move(grads.first), std::move(grads.second)};
 }
 
@@ -103,22 +103,29 @@ std::vector<TensorImplPtr> RMSNormBackward::apply_for_graph(const TensorImplPtr&
     //   dgamma = sum over the leading axes of g * xhat
     const auto& x = saved_impl_inputs_[0];
     const auto& gamma = saved_impl_inputs_[1];
-    if (!x || !gamma)
+    if (((needs_input_grad(0) || needs_input_grad(1)) && !x) || (needs_input_grad(0) && !gamma))
         ErrorBuilder("rms_norm").fail("graph-mode backward is missing its saved inputs");
-    const int nd = static_cast<int>(x->shape().size());
-    const int dn = static_cast<int>(gamma->shape().size());
+    const int nd = static_cast<int>(input_shapes_[0].size());
+    const int dn = static_cast<int>(input_shapes_[1].size());
     std::vector<int> normed, leading;
     for (int d = 0; d < nd; ++d)
         (d < nd - dn ? leading : normed).push_back(d);
 
-    auto mean_sq = mean_op(mul_op(x, x), normed, true);
-    auto rstd = rsqrt_op(add_op(mean_sq, full_like_op(mean_sq, eps_)));
-    auto xhat = mul_op(x, rstd);
-    auto gg = mul_op(grad_out, gamma);
-    auto dx = mul_op(rstd, sub_op(gg, mul_op(xhat, mean_op(mul_op(gg, xhat), normed, true))));
-    TensorImplPtr dgamma = mul_op(grad_out, xhat);
-    if (!leading.empty())
-        dgamma = sum_op(dgamma, leading, false);
+    TensorImplPtr dx, dgamma;
+    if (needs_input_grad(0) || needs_input_grad(1)) {
+        auto mean_sq = mean_op(mul_op(x, x), normed, true);
+        auto rstd = rsqrt_op(add_op(mean_sq, full_like_op(mean_sq, eps_)));
+        auto xhat = mul_op(x, rstd);
+        if (needs_input_grad(0)) {
+            auto gg = mul_op(grad_out, gamma);
+            dx = mul_op(rstd, sub_op(gg, mul_op(xhat, mean_op(mul_op(gg, xhat), normed, true))));
+        }
+        if (needs_input_grad(1)) {
+            dgamma = mul_op(grad_out, xhat);
+            if (!leading.empty())
+                dgamma = sum_op(dgamma, leading, false);
+        }
+    }
     return {dx, dgamma};
 }
 
