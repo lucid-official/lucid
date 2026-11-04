@@ -35,6 +35,7 @@
 #include "../../core/Helpers.h"
 #include "../../core/MemoryStats.h"
 #include "../../core/OpSchema.h"
+#include "../../core/PhantomMode.h"
 #include "../../core/Profiler.h"
 #include "../../core/SchemaGuard.h"
 #include "../../core/Scope.h"
@@ -399,52 +400,24 @@ void scan_ext_backward_loop(const T* dy, const T* y, T* dx, const Shape& shape, 
     }
 }
 
-Storage cummax_backward_cpu(
-    const Storage& grad, const Storage& out, const Shape& shape, int axis, Dtype dt) {
+template <bool IsMax>
+Storage scan_ext_backward_cpu(const Storage& grad,
+                              const Storage& out,
+                              const Shape& shape,
+                              int axis,
+                              Dtype dt,
+                              const char* op_name) {
     const auto& g_cs = std::get<CpuStorage>(grad);
     const auto& o_cs = std::get<CpuStorage>(out);
     std::size_t nb = g_cs.nbytes;
     auto ptr = allocate_aligned_bytes(nb, Device::CPU);
 
     if (dt == Dtype::F32) {
-        scan_ext_backward_loop<true>(reinterpret_cast<const float*>(g_cs.ptr.get()),
-                                     reinterpret_cast<const float*>(o_cs.ptr.get()),
-                                     reinterpret_cast<float*>(ptr.get()), shape, axis);
-    } else if (dt == Dtype::F64) {
-        scan_ext_backward_loop<true>(reinterpret_cast<const double*>(g_cs.ptr.get()),
-                                     reinterpret_cast<const double*>(o_cs.ptr.get()),
-                                     reinterpret_cast<double*>(ptr.get()), shape, axis);
-    } else if (is_half_float(dt)) {
-        const std::size_t n = shape_numel(shape);
-        const bool is_bf16 = (dt == Dtype::BF16);
-        std::vector<float> g_f32(n), o_f32(n), dx_f32(n, 0.0f);
-        backend::detail::half_or_bfloat16_to_float_bulk(
-            reinterpret_cast<const std::uint16_t*>(g_cs.ptr.get()), g_f32.data(), n, is_bf16);
-        backend::detail::half_or_bfloat16_to_float_bulk(
-            reinterpret_cast<const std::uint16_t*>(o_cs.ptr.get()), o_f32.data(), n, is_bf16);
-        scan_ext_backward_loop<true>(g_f32.data(), o_f32.data(), dx_f32.data(), shape, axis);
-        backend::detail::float_to_half_or_bfloat16_bulk(
-            dx_f32.data(), reinterpret_cast<std::uint16_t*>(ptr.get()), n, is_bf16);
-    } else {
-        ErrorBuilder("cummax_backward").not_implemented("dtype not supported");
-    }
-
-    return Storage{CpuStorage{ptr, nb, dt}};
-}
-
-Storage cummin_backward_cpu(
-    const Storage& grad, const Storage& out, const Shape& shape, int axis, Dtype dt) {
-    const auto& g_cs = std::get<CpuStorage>(grad);
-    const auto& o_cs = std::get<CpuStorage>(out);
-    std::size_t nb = g_cs.nbytes;
-    auto ptr = allocate_aligned_bytes(nb, Device::CPU);
-
-    if (dt == Dtype::F32) {
-        scan_ext_backward_loop<false>(reinterpret_cast<const float*>(g_cs.ptr.get()),
+        scan_ext_backward_loop<IsMax>(reinterpret_cast<const float*>(g_cs.ptr.get()),
                                       reinterpret_cast<const float*>(o_cs.ptr.get()),
                                       reinterpret_cast<float*>(ptr.get()), shape, axis);
     } else if (dt == Dtype::F64) {
-        scan_ext_backward_loop<false>(reinterpret_cast<const double*>(g_cs.ptr.get()),
+        scan_ext_backward_loop<IsMax>(reinterpret_cast<const double*>(g_cs.ptr.get()),
                                       reinterpret_cast<const double*>(o_cs.ptr.get()),
                                       reinterpret_cast<double*>(ptr.get()), shape, axis);
     } else if (is_half_float(dt)) {
@@ -455,11 +428,11 @@ Storage cummin_backward_cpu(
             reinterpret_cast<const std::uint16_t*>(g_cs.ptr.get()), g_f32.data(), n, is_bf16);
         backend::detail::half_or_bfloat16_to_float_bulk(
             reinterpret_cast<const std::uint16_t*>(o_cs.ptr.get()), o_f32.data(), n, is_bf16);
-        scan_ext_backward_loop<false>(g_f32.data(), o_f32.data(), dx_f32.data(), shape, axis);
+        scan_ext_backward_loop<IsMax>(g_f32.data(), o_f32.data(), dx_f32.data(), shape, axis);
         backend::detail::float_to_half_or_bfloat16_bulk(
             dx_f32.data(), reinterpret_cast<std::uint16_t*>(ptr.get()), n, is_bf16);
     } else {
-        ErrorBuilder("cummin_backward").not_implemented("dtype not supported");
+        ErrorBuilder(op_name).not_implemented("dtype not supported");
     }
 
     return Storage{CpuStorage{ptr, nb, dt}};
@@ -506,6 +479,10 @@ TensorImplPtr scan_ext_graph_backward(const TensorImplPtr& grad_out,
                                       Dtype dt,
                                       Device device,
                                       const char* name) {
+    // A phantom has no running extremes to read; the index needs only its shape.
+    if (PhantomMode::is_enabled())
+        return scatter_add_op(zeros_op(shape, dt, device), zeros_op(shape, Dtype::I32, device),
+                              grad_out, axis);
     CpuStorage sources = helpers::allocate_cpu(shape, Dtype::I32);
     auto* src = reinterpret_cast<std::int32_t*>(sources.ptr.get());
     const auto fill = [&](const auto* y) { scan_ext_sources<IsMax>(y, src, shape, axis); };
@@ -595,6 +572,23 @@ Storage scan_ext_backward_gpu(const Storage& grad_out,
     return {};
 }
 
+// The gradient of a running extreme, read from the saved output on whichever
+// device holds it.  A phantom has none to read, so it gets a phantom back.
+template <bool IsMax>
+Storage scan_ext_backward(const Storage& grad_out,
+                          const Storage& saved_output,
+                          const Shape& input_shape,
+                          int axis,
+                          Dtype dt,
+                          Device device,
+                          const char* op_name) {
+    if (PhantomMode::is_enabled())
+        return phantom_storage(input_shape, dt, device);
+    if (device == Device::GPU)
+        return scan_ext_backward_gpu<IsMax>(grad_out, saved_output, input_shape, axis, dt, op_name);
+    return scan_ext_backward_cpu<IsMax>(grad_out, saved_output, input_shape, axis, dt, op_name);
+}
+
 class CummaxBackward : public AutogradNode<CummaxBackward, 1> {
 public:
     static const OpSchema schema_v1;
@@ -603,11 +597,8 @@ public:
     int axis_;
 
     std::vector<Storage> apply(Storage grad_out) override {
-        if (device_ == Device::GPU) {
-            return {scan_ext_backward_gpu<true>(grad_out, saved_output_, input_shape_, axis_,
-                                                dtype_, "cummax_backward")};
-        }
-        return {cummax_backward_cpu(grad_out, saved_output_, input_shape_, axis_, dtype_)};
+        return {scan_ext_backward<true>(grad_out, saved_output_, input_shape_, axis_, dtype_,
+                                        device_, "cummax_backward")};
     }
 
     std::vector<TensorImplPtr> apply_for_graph(const TensorImplPtr& grad_out) override {
@@ -625,11 +616,8 @@ public:
     int axis_;
 
     std::vector<Storage> apply(Storage grad_out) override {
-        if (device_ == Device::GPU) {
-            return {scan_ext_backward_gpu<false>(grad_out, saved_output_, input_shape_, axis_,
-                                                 dtype_, "cummin_backward")};
-        }
-        return {cummin_backward_cpu(grad_out, saved_output_, input_shape_, axis_, dtype_)};
+        return {scan_ext_backward<false>(grad_out, saved_output_, input_shape_, axis_, dtype_,
+                                         device_, "cummin_backward")};
     }
 
     std::vector<TensorImplPtr> apply_for_graph(const TensorImplPtr& grad_out) override {

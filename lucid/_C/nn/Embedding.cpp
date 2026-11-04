@@ -29,6 +29,7 @@
 #include "../core/GradMode.h"
 #include "../core/Helpers.h"
 #include "../core/OpRegistry.h"
+#include "../core/PhantomMode.h"
 #include "../core/Profiler.h"
 #include "../core/Scope.h"
 #include "../core/TensorImpl.h"
@@ -364,9 +365,26 @@ std::int64_t read_index(const CpuStorage& s, std::size_t k) {
                                  : reinterpret_cast<const std::int32_t*>(s.ptr.get())[k];
 }
 
+// One element of a saved weight, as the value the forward's ``>`` compared.
+double read_weight(const CpuStorage& weight, std::size_t at) {
+    switch (weight.dtype) {
+    case Dtype::F64:
+        return reinterpret_cast<const double*>(weight.ptr.get())[at];
+    case Dtype::F32:
+        return reinterpret_cast<const float*>(weight.ptr.get())[at];
+    default:
+        ErrorBuilder("embedding_bag").not_implemented("create_graph=True for this dtype");
+        return 0.0;
+    }
+}
+
 }  // namespace
 
 std::vector<TensorImplPtr> EmbeddingBagBackward::apply_for_graph(const TensorImplPtr& grad_out) {
+    // A phantom has no rows or bags to read; the op keeps its shapes.
+    if (PhantomMode::is_enabled())
+        return {scatter_add_op(zeros_op(weight_shape_, dtype_, device_),
+                               zeros_op(grad_out->shape(), Dtype::I32, device_), grad_out, 0)};
     // The same rows, bags and weights the eager backward uses, as data; the
     // scatter-add that lands the bag gradients on the rows is the op.
     const std::int64_t num_emb = weight_shape_[0];
@@ -412,18 +430,6 @@ std::vector<TensorImplPtr> EmbeddingBagBackward::apply_for_graph(const TensorImp
         CpuStorage keep = helpers::allocate_cpu(grid, Dtype::F64);
         auto* row = reinterpret_cast<std::int32_t*>(rows.ptr.get());
         auto* kept = reinterpret_cast<double*>(keep.ptr.get());
-        const auto value = [&](std::int64_t emb, std::int64_t d) -> double {
-            const std::size_t at = static_cast<std::size_t>(emb * dim + d);
-            switch (weight.dtype) {
-            case Dtype::F64:
-                return reinterpret_cast<const double*>(weight.ptr.get())[at];
-            case Dtype::F32:
-                return reinterpret_cast<const float*>(weight.ptr.get())[at];
-            default:
-                ErrorBuilder("embedding_bag").not_implemented("create_graph=True for this dtype");
-                return 0.0;
-            }
-        };
         for (std::size_t b = 0; b < n_bags; ++b)
             for (std::int64_t d = 0; d < dim; ++d) {
                 std::int64_t best = -1;
@@ -432,7 +438,7 @@ std::vector<TensorImplPtr> EmbeddingBagBackward::apply_for_graph(const TensorImp
                     const std::int64_t emb = read_index(indices, k);
                     if (!usable(emb))
                         continue;
-                    const double v = value(emb, d);
+                    const double v = read_weight(weight, static_cast<std::size_t>(emb * dim + d));
                     if (best < 0 || v > best_val) {
                         best = emb;
                         best_val = v;

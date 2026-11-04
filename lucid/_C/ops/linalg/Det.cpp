@@ -32,6 +32,7 @@
 #include "../../core/GradMode.h"
 #include "../../core/Helpers.h"
 #include "../../core/OpRegistry.h"
+#include "../../core/PhantomMode.h"
 #include "../../core/Scope.h"
 #include "../../core/TensorImpl.h"
 #include "../../core/Validate.h"
@@ -77,6 +78,9 @@ TensorImplPtr spread_over_matrix(const TensorImplPtr& t, const Shape& like) {
 // host.  ``det`` accepts only F32/F64 (``float_only``), so those two
 // epsilons are the only ones that can apply.
 bool any_near_singular(const TensorImplPtr& det) {
+    // A phantom has no determinant to test, and both formulas have one shape.
+    if (PhantomMode::is_enabled())
+        return false;
     NoGradGuard ng;
     const double eps = det->dtype() == Dtype::F64 ? std::numeric_limits<double>::epsilon()
                                                   : std::numeric_limits<float>::epsilon();

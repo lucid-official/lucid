@@ -7,6 +7,7 @@
 #include "../../compile/Tracer.h"
 #include "../../core/GradMode.h"
 #include "../../core/OpRegistry.h"
+#include "../../core/PhantomMode.h"
 #include "../../core/Storage.h"
 #include "../../core/TensorImpl.h"
 #include "../../core/Validate.h"
@@ -21,6 +22,8 @@ const OpSchema ToDeviceBackward::schema_v1{"to_device", 1, AmpPolicy::KeepInput,
 std::vector<Storage> ToDeviceBackward::apply(Storage grad_out) {
     if (src_device_ == device_)
         return {std::move(grad_out)};
+    if (storage_is_phantom(grad_out))
+        return {phantom_storage(out_shape_, dtype_, src_device_)};
     if (src_device_ == Device::GPU)
         return {Storage{gpu::upload_cpu_to_gpu(storage_cpu(grad_out), out_shape_)}};
     return {Storage{gpu::download_gpu_to_cpu(storage_gpu(grad_out), out_shape_)}};

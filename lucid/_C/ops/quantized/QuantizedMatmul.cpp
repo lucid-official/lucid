@@ -22,6 +22,7 @@
 #include "../../core/GradMode.h"
 #include "../../core/Helpers.h"
 #include "../../core/OpRegistry.h"
+#include "../../core/PhantomMode.h"
 #include "../../core/Storage.h"
 #include "../../core/TensorImpl.h"
 #include "../../kernel/NaryKernel.h"
@@ -33,17 +34,25 @@ namespace lucid {
 namespace {
 
 // Extract the backing ``mlx::core::array`` from a GPU tensor (guarded).
+//
+// A phantom has none, so an unevaluated array of its shape stands in: MLX
+// answers the packed layout's shapes while it builds the graph, which nothing
+// then evaluates (wrap), and the layout rule stays written only in MLX.
 ::mlx::core::array gpu_array(const TensorImplPtr& t, const char* who) {
     if (!t)
         ErrorBuilder(who).fail("null input tensor");
     if (t->device() != Device::GPU)
         ErrorBuilder(who).fail("quantized ops require GPU (Metal) tensors");
+    if (t->is_phantom())
+        return ::mlx::core::zeros(gpu::to_mlx_shape(t->shape()), gpu::to_mlx_dtype(t->dtype()));
     return *std::get<GpuStorage>(t->storage()).arr;
 }
 
 // Wrap an MLX result into a fresh GPU TensorImpl tagged with ``dt``.
 TensorImplPtr wrap(::mlx::core::array&& a, Dtype dt) {
     Shape sh = gpu::mlx_shape_to_lucid(a.shape());
+    if (PhantomMode::is_enabled())
+        return ::lucid::helpers::fresh(phantom_storage(sh, dt, Device::GPU), sh, dt, Device::GPU);
     Storage st{gpu::wrap_mlx_array(std::move(a), dt)};
     return ::lucid::helpers::fresh(std::move(st), sh, dt, Device::GPU);
 }
@@ -62,6 +71,8 @@ const OpSchema QuantizedMatmulBackward::schema_v1{"quantized_matmul", 1, AmpPoli
                                                   true};
 
 std::vector<Storage> QuantizedMatmulBackward::apply(Storage grad_out) {
+    if (PhantomMode::is_enabled())
+        return {phantom_storage(input_shapes_[0], dtype_, device_)};
     const ::mlx::core::array& ga = *std::get<GpuStorage>(grad_out).arr;
     ::mlx::core::array wa = as_packed_u32(*std::get<GpuStorage>(saved_w_).arr);
     const ::mlx::core::array& sa = *std::get<GpuStorage>(saved_scales_).arr;

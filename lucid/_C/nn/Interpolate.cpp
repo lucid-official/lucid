@@ -29,6 +29,7 @@
 #include "../core/GradMode.h"
 #include "../core/Helpers.h"
 #include "../core/OpRegistry.h"
+#include "../core/PhantomMode.h"
 #include "../core/Profiler.h"
 #include "../core/Scope.h"
 #include "../core/TensorImpl.h"
@@ -131,6 +132,9 @@ void fill_resample(double* m, int in_dim, int out_dim, bool align, bool transpos
 TensorImplPtr
 resample_matrix(int in_dim, int out_dim, bool align, bool transposed, Dtype dt, Device device) {
     const Shape shape = transposed ? Shape{in_dim, out_dim} : Shape{out_dim, in_dim};
+    if (PhantomMode::is_enabled())
+        return std::make_shared<TensorImpl>(phantom_storage(shape, dt, device), shape, dt, device,
+                                            false);
     CpuStorage cpu = helpers::allocate_cpu(shape, Dtype::F64);
     auto* m = reinterpret_cast<double*>(cpu.ptr.get());
     if (dt == Dtype::F64)
