@@ -11,6 +11,7 @@
 #include "../../core/ErrorBuilder.h"
 #include "../../core/GradMode.h"
 #include "../../core/Helpers.h"
+#include "../../core/Scope.h"
 #include "../../core/TensorImpl.h"
 #include "../../core/Validate.h"
 #include "../gfunc/Gfunc.h"
@@ -51,12 +52,22 @@ std::vector<TensorImplPtr> lu_factor_op(const TensorImplPtr& a) {
                 zeros_op(pivot_shape, Dtype::I32, a->device()),
                 zeros_op(info_shape, Dtype::I32, a->device())};
 
+    OpScopeFull scope{"lu_factor", a->device(), a->dtype(), sh};
     auto out =
         backend::Dispatcher::for_device(a->device()).linalg_lu_factor(a->storage(), sh, a->dtype());
 
     auto lu = fresh(std::move(out[0]), sh, a->dtype(), a->device());
     auto pivots = fresh(std::move(out[1]), pivot_shape, Dtype::I32, a->device());
     auto info = fresh(std::move(out[2]), info_shape, Dtype::I32, a->device());
+    // No emitter builds a factorisation, but an unrecorded one is worse than
+    // an unbuildable one: its three outputs would reach the consumer as
+    // external feeds, bound at trace time, and every later call would answer
+    // the first.  Recorded with its input, the signature falls back to eager.
+    if (auto* trc = compile::current_tracer()) {
+        trc->on_op_io({a}, lu);
+        trc->on_op_io({}, pivots);
+        trc->on_op_io({}, info);
+    }
     return {lu, pivots, info};
 }
 

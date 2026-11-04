@@ -46,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `lucid.diffeq.odeint` and `odeint_dense`: support complex initial states `y0` (`complex64` / `complex128`) across fixed-step and adaptive Runge–Kutta solvers (`rk4`, `dopri5`), and `lucid.finfo` now accepts complex dtypes and returns the underlying real component limits (LCD-817).
 - `lucid.nn`: `F.one_hot` rejects non-integer index tensors, `F.batch_norm(..., training=False)` requires `running_mean` and `running_var` to be defined, `F.conv{1,2,3}d` / `F.conv_transpose{1,2,3}d` reject weights with zero channel dimensions, and `ReflectionPad{1,2,3}d`, `ReplicationPad{1,2,3}d`, and `CircularPad{1,2,3}d` enforce batched or unbatched spatial input ranks (LCD-699).
 
+- record trace I/O for masked_select, LU, LDL, householder
+
 ### Performance
 
 - `_C.engine` (`Linear`, `ConvNd`, `ConvTransposeNd`, `LayerNorm`, `RMSNorm`, `BatchNormNd`, `GroupNorm`, `BatchNormEval`, `GlobalResponseNorm`, `Bilinear`): thread `needs_input_grad` (`grad_mask`) and `kGradReads` through fused CPU/Metal backward kernels and `apply_for_graph`, skipping unneeded `dx`/`dW`/`db` GEMMs, convolutions, reductions, and buffer allocations (LCD-697).

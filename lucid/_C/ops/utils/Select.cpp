@@ -841,6 +841,7 @@ TensorImplPtr flip_op(const TensorImplPtr& a, std::vector<int> dims) {
 TensorImplPtr masked_select_op(const TensorImplPtr& a, const TensorImplPtr& mask) {
     Validator::input(a, "masked_select.a").non_null();
     Validator::input(mask, "masked_select.mask").non_null();
+    OpScopeFull scope{"masked_select", a->device(), a->dtype(), a->shape()};
 
     auto& be = backend::Dispatcher::for_device(a->device());
     Storage count_s = be.masked_select_count(mask->storage(), mask->shape(), mask->dtype());
@@ -852,7 +853,16 @@ TensorImplPtr masked_select_op(const TensorImplPtr& a, const TensorImplPtr& mask
     Shape out_shape{n};
     Storage out =
         be.masked_select(a->storage(), mask->storage(), a->shape(), mask->shape(), n, a->dtype());
-    return std::make_shared<TensorImpl>(std::move(out), out_shape, a->dtype(), a->device(), false);
+    auto result =
+        std::make_shared<TensorImpl>(std::move(out), out_shape, a->dtype(), a->device(), false);
+    // The output length is the mask's count of true entries, a value, so no
+    // emitter can build this op.  Recording it keeps the node, and its inputs,
+    // in the trace: unrecorded, the result is an anonymous tensor that the
+    // consumer meets as an external feed, bound once at trace time, and every
+    // later call returns the first call's selection.
+    if (auto* trc = ::lucid::compile::current_tracer())
+        trc->on_op_io({a, mask}, result);
+    return result;
 }
 
 LUCID_REGISTER_OP(FlipBackward)

@@ -3,6 +3,7 @@
 
 #include "../../backend/Dispatcher.h"
 #include "../../core/ErrorBuilder.h"
+#include "../../core/Scope.h"
 #include "../../core/TensorImpl.h"
 #include "../../core/Validate.h"
 #include "../gfunc/Gfunc.h"
@@ -34,10 +35,17 @@ TensorImplPtr householder_product_op(const TensorImplPtr& H_in, const TensorImpl
     if (empty_matrix(hs))
         return zeros_op(q_shape, H->dtype(), H->device());
 
+    OpScopeFull scope{"householder_product", H->device(), H->dtype(), q_shape};
     auto result = backend::Dispatcher::for_device(H->device())
                       .linalg_householder_product(H->storage(), tau->storage(), hs, H->dtype());
 
-    return fresh(std::move(result), q_shape, H->dtype(), H->device());
+    auto q = fresh(std::move(result), q_shape, H->dtype(), H->device());
+    // Unrecorded, Q reaches the consumer as an external feed, bound at trace
+    // time; recorded with both inputs, and with no emitter, the signature
+    // falls back to eager.  See ``lu_factor_op``.
+    if (auto* trc = compile::current_tracer())
+        trc->on_op_io({H, tau}, q);
+    return q;
 }
 
 }  // namespace lucid

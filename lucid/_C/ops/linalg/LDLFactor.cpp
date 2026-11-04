@@ -4,6 +4,7 @@
 #include "../../backend/Dispatcher.h"
 #include "../../core/ErrorBuilder.h"
 #include "../../core/Helpers.h"
+#include "../../core/Scope.h"
 #include "../../core/TensorImpl.h"
 #include "../../core/Validate.h"
 #include "../gfunc/Gfunc.h"
@@ -28,12 +29,21 @@ std::vector<TensorImplPtr> ldl_factor_op(const TensorImplPtr& a) {
         return {zeros_op(sh, a->dtype(), a->device()), zeros_op(empty_piv, Dtype::I32, a->device()),
                 zeros_op(info_shape, Dtype::I32, a->device())};
 
+    OpScopeFull scope{"ldl_factor", a->device(), a->dtype(), sh};
     auto out = backend::Dispatcher::for_device(a->device())
                    .linalg_ldl_factor(a->storage(), sh, a->dtype());
 
     auto ld = fresh(std::move(out[0]), sh, a->dtype(), a->device());
     auto piv = fresh(std::move(out[1]), empty_piv, Dtype::I32, a->device());
     auto info = fresh(std::move(out[2]), info_shape, Dtype::I32, a->device());
+    // Unrecorded, the three outputs reach the consumer as external feeds,
+    // bound at trace time; recorded with the input, and with no emitter, the
+    // signature falls back to eager.  See ``lu_factor_op``.
+    if (auto* trc = compile::current_tracer()) {
+        trc->on_op_io({a}, ld);
+        trc->on_op_io({}, piv);
+        trc->on_op_io({}, info);
+    }
     return {ld, piv, info};
 }
 
