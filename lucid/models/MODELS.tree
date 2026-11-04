@@ -1,131 +1,601 @@
-# Lucid model zoo: every registered model, from domain down to variant.
-#
-# How to read it
-#   Domain > task or lineage > architecture > variants. The groups between the domain and the
-#   architecture are a reading aid chosen by lineage; the code only has lucid/models/<domain>/<family>/.
-#   Name [family] (N)   an architecture: [family] is its directory, N its registered model count.
-#   a · b · c           the variants; prefix them with the family's name to get the factory.
-#   b0 ~ b7             a range, ends included.
-#   a × b               every combination of the two lists.
-#   +cls, +gen, ...     each variant on that line also has that task wrapper (resnet_18_cls).
-#   (note)              a remark, not a variant.
-#
-# Keeping it current (rule H12)
-#   Adding, removing or renaming a family or a factory changes this file in the same commit.
-#   `python -m tools.validate_model_zoo --runtime` fails if it disagrees with the registry:
-#   every family must appear once, each count must match, each variant must exist, and each
-#   group's total must add up. The registry stays the source of truth.
+lucid/models/
+├── vision/
+│   ├── Recognition/
+│   │   ├── Classic CNN/
+│   │   │   ├── lenet/
+│   │   │   │   ├── lenet_5
+│   │   │   │   └── lenet_5_cls
+│   │   │   ├── alexnet/
+│   │   │   │   ├── alexnet
+│   │   │   │   └── alexnet_cls
+│   │   │   ├── zfnet/
+│   │   │   │   ├── zfnet
+│   │   │   │   └── zfnet_cls
+│   │   │   └── vgg/
+│   │   │       ├── vgg_11
+│   │   │       ├── vgg_11_bn
+│   │   │       ├── vgg_11_bn_cls
+│   │   │       ├── vgg_11_cls
+│   │   │       ├── vgg_13
+│   │   │       ├── vgg_13_bn
+│   │   │       ├── vgg_13_bn_cls
+│   │   │       ├── vgg_13_cls
+│   │   │       ├── vgg_16
+│   │   │       ├── vgg_16_bn
+│   │   │       ├── vgg_16_bn_cls
+│   │   │       ├── vgg_16_cls
+│   │   │       ├── vgg_19
+│   │   │       ├── vgg_19_bn
+│   │   │       ├── vgg_19_bn_cls
+│   │   │       └── vgg_19_cls
+│   │   ├── Inception line/
+│   │   │   ├── googlenet/
+│   │   │   │   ├── googlenet
+│   │   │   │   └── googlenet_cls
+│   │   │   ├── inception/
+│   │   │   │   ├── inception_v3
+│   │   │   │   └── inception_v3_cls
+│   │   │   ├── inception_v4/
+│   │   │   │   ├── inception_v4
+│   │   │   │   └── inception_v4_cls
+│   │   │   ├── inception_resnet/
+│   │   │   │   ├── inception_resnet_v2
+│   │   │   │   └── inception_resnet_v2_cls
+│   │   │   └── xception/
+│   │   │       ├── xception
+│   │   │       └── xception_cls
+│   │   ├── ResNet line/
+│   │   │   ├── resnet/
+│   │   │   │   ├── resnet_18
+│   │   │   │   ├── resnet_18_cls
+│   │   │   │   ├── resnet_34
+│   │   │   │   ├── resnet_34_cls
+│   │   │   │   ├── resnet_50
+│   │   │   │   ├── resnet_50_cls
+│   │   │   │   ├── resnet_101
+│   │   │   │   ├── resnet_101_cls
+│   │   │   │   ├── resnet_152
+│   │   │   │   ├── resnet_152_cls
+│   │   │   │   ├── resnet_200
+│   │   │   │   ├── resnet_200_cls
+│   │   │   │   ├── resnet_269
+│   │   │   │   ├── resnet_269_cls
+│   │   │   │   ├── wide_resnet_50
+│   │   │   │   ├── wide_resnet_50_cls
+│   │   │   │   ├── wide_resnet_101
+│   │   │   │   └── wide_resnet_101_cls
+│   │   │   ├── resnext/
+│   │   │   │   ├── resnext_50_32x4d
+│   │   │   │   ├── resnext_50_32x4d_cls
+│   │   │   │   ├── resnext_101_32x4d
+│   │   │   │   ├── resnext_101_32x4d_cls
+│   │   │   │   ├── resnext_101_32x8d
+│   │   │   │   ├── resnext_101_32x8d_cls
+│   │   │   │   ├── resnext_101_64x4d
+│   │   │   │   └── resnext_101_64x4d_cls
+│   │   │   ├── senet/
+│   │   │   │   ├── se_resnet_18
+│   │   │   │   ├── se_resnet_18_cls
+│   │   │   │   ├── se_resnet_34
+│   │   │   │   ├── se_resnet_34_cls
+│   │   │   │   ├── se_resnet_50
+│   │   │   │   ├── se_resnet_50_cls
+│   │   │   │   ├── se_resnet_101
+│   │   │   │   ├── se_resnet_101_cls
+│   │   │   │   ├── se_resnet_152
+│   │   │   │   └── se_resnet_152_cls
+│   │   │   ├── sknet/
+│   │   │   │   ├── sk_resnet_18
+│   │   │   │   ├── sk_resnet_18_cls
+│   │   │   │   ├── sk_resnet_34
+│   │   │   │   ├── sk_resnet_34_cls
+│   │   │   │   ├── sk_resnet_50
+│   │   │   │   ├── sk_resnet_50_cls
+│   │   │   │   ├── sk_resnet_101
+│   │   │   │   ├── sk_resnet_101_cls
+│   │   │   │   ├── sk_resnext_50_32x4d
+│   │   │   │   └── sk_resnext_50_32x4d_cls
+│   │   │   ├── resnest/
+│   │   │   │   ├── resnest_14
+│   │   │   │   ├── resnest_14_cls
+│   │   │   │   ├── resnest_26
+│   │   │   │   ├── resnest_26_cls
+│   │   │   │   ├── resnest_50
+│   │   │   │   ├── resnest_50_cls
+│   │   │   │   ├── resnest_101
+│   │   │   │   ├── resnest_101_cls
+│   │   │   │   ├── resnest_200
+│   │   │   │   ├── resnest_200_cls
+│   │   │   │   ├── resnest_269
+│   │   │   │   └── resnest_269_cls
+│   │   │   ├── densenet/
+│   │   │   │   ├── densenet_121
+│   │   │   │   ├── densenet_121_cls
+│   │   │   │   ├── densenet_161
+│   │   │   │   ├── densenet_161_cls
+│   │   │   │   ├── densenet_169
+│   │   │   │   ├── densenet_169_cls
+│   │   │   │   ├── densenet_201
+│   │   │   │   ├── densenet_201_cls
+│   │   │   │   ├── densenet_264
+│   │   │   │   └── densenet_264_cls
+│   │   │   └── cspnet/
+│   │   │       ├── cspdarknet_53
+│   │   │       ├── cspdarknet_53_cls
+│   │   │       ├── cspresnet_50
+│   │   │       ├── cspresnet_50_cls
+│   │   │       ├── cspresnext_50
+│   │   │       └── cspresnext_50_cls
+│   │   ├── Mobile and efficient CNN/
+│   │   │   ├── mobilenet/
+│   │   │   │   ├── mobilenet
+│   │   │   │   ├── mobilenet_025
+│   │   │   │   ├── mobilenet_025_cls
+│   │   │   │   ├── mobilenet_050
+│   │   │   │   ├── mobilenet_050_cls
+│   │   │   │   ├── mobilenet_075
+│   │   │   │   ├── mobilenet_075_cls
+│   │   │   │   └── mobilenet_cls
+│   │   │   ├── mobilenet_v2/
+│   │   │   │   ├── mobilenet_v2
+│   │   │   │   ├── mobilenet_v2_075
+│   │   │   │   ├── mobilenet_v2_075_cls
+│   │   │   │   └── mobilenet_v2_cls
+│   │   │   ├── mobilenet_v3/
+│   │   │   │   ├── mobilenet_v3_large
+│   │   │   │   ├── mobilenet_v3_large_cls
+│   │   │   │   ├── mobilenet_v3_small
+│   │   │   │   └── mobilenet_v3_small_cls
+│   │   │   ├── mobilenet_v4/
+│   │   │   │   ├── mobilenet_v4_conv_large
+│   │   │   │   ├── mobilenet_v4_conv_large_cls
+│   │   │   │   ├── mobilenet_v4_conv_medium
+│   │   │   │   ├── mobilenet_v4_conv_medium_cls
+│   │   │   │   ├── mobilenet_v4_conv_small
+│   │   │   │   ├── mobilenet_v4_conv_small_cls
+│   │   │   │   ├── mobilenet_v4_hybrid_large
+│   │   │   │   ├── mobilenet_v4_hybrid_large_cls
+│   │   │   │   ├── mobilenet_v4_hybrid_medium
+│   │   │   │   └── mobilenet_v4_hybrid_medium_cls
+│   │   │   └── efficientnet/
+│   │   │       ├── efficientnet_b0
+│   │   │       ├── efficientnet_b0_cls
+│   │   │       ├── efficientnet_b1
+│   │   │       ├── efficientnet_b1_cls
+│   │   │       ├── efficientnet_b2
+│   │   │       ├── efficientnet_b2_cls
+│   │   │       ├── efficientnet_b3
+│   │   │       ├── efficientnet_b3_cls
+│   │   │       ├── efficientnet_b4
+│   │   │       ├── efficientnet_b4_cls
+│   │   │       ├── efficientnet_b5
+│   │   │       ├── efficientnet_b5_cls
+│   │   │       ├── efficientnet_b6
+│   │   │       ├── efficientnet_b6_cls
+│   │   │       ├── efficientnet_b7
+│   │   │       └── efficientnet_b7_cls
+│   │   ├── Modern CNN/
+│   │   │   ├── convnext/
+│   │   │   │   ├── convnext_base
+│   │   │   │   ├── convnext_base_cls
+│   │   │   │   ├── convnext_large
+│   │   │   │   ├── convnext_large_cls
+│   │   │   │   ├── convnext_small
+│   │   │   │   ├── convnext_small_cls
+│   │   │   │   ├── convnext_tiny
+│   │   │   │   ├── convnext_tiny_cls
+│   │   │   │   ├── convnext_xlarge
+│   │   │   │   └── convnext_xlarge_cls
+│   │   │   └── inception_next/
+│   │   │       ├── inception_next_base
+│   │   │       ├── inception_next_base_cls
+│   │   │       ├── inception_next_small
+│   │   │       ├── inception_next_small_cls
+│   │   │       ├── inception_next_tiny
+│   │   │       └── inception_next_tiny_cls
+│   │   ├── Vision Transformer/
+│   │   │   ├── vit/
+│   │   │   │   ├── vit_base_16
+│   │   │   │   ├── vit_base_16_cls
+│   │   │   │   ├── vit_base_32
+│   │   │   │   ├── vit_base_32_cls
+│   │   │   │   ├── vit_huge_14
+│   │   │   │   ├── vit_huge_14_cls
+│   │   │   │   ├── vit_large_16
+│   │   │   │   ├── vit_large_16_cls
+│   │   │   │   ├── vit_large_32
+│   │   │   │   └── vit_large_32_cls
+│   │   │   ├── swin/
+│   │   │   │   ├── swin_base
+│   │   │   │   ├── swin_base_cls
+│   │   │   │   ├── swin_large
+│   │   │   │   ├── swin_large_cls
+│   │   │   │   ├── swin_small
+│   │   │   │   ├── swin_small_cls
+│   │   │   │   ├── swin_tiny
+│   │   │   │   └── swin_tiny_cls
+│   │   │   ├── pvt/
+│   │   │   │   ├── pvt_v2_b0
+│   │   │   │   ├── pvt_v2_b0_cls
+│   │   │   │   ├── pvt_v2_b1
+│   │   │   │   ├── pvt_v2_b1_cls
+│   │   │   │   ├── pvt_v2_b2
+│   │   │   │   ├── pvt_v2_b2_cls
+│   │   │   │   ├── pvt_v2_b2_li
+│   │   │   │   ├── pvt_v2_b3
+│   │   │   │   ├── pvt_v2_b3_cls
+│   │   │   │   ├── pvt_v2_b4
+│   │   │   │   ├── pvt_v2_b4_cls
+│   │   │   │   ├── pvt_v2_b5
+│   │   │   │   └── pvt_v2_b5_cls
+│   │   │   ├── cvt/
+│   │   │   │   ├── cvt_13
+│   │   │   │   ├── cvt_13_cls
+│   │   │   │   ├── cvt_21
+│   │   │   │   ├── cvt_21_cls
+│   │   │   │   ├── cvt_w24
+│   │   │   │   └── cvt_w24_cls
+│   │   │   └── crossvit/
+│   │   │       ├── crossvit_9
+│   │   │       ├── crossvit_9_cls
+│   │   │       ├── crossvit_15
+│   │   │       ├── crossvit_15_cls
+│   │   │       ├── crossvit_18
+│   │   │       ├── crossvit_18_cls
+│   │   │       ├── crossvit_base
+│   │   │       ├── crossvit_base_cls
+│   │   │       ├── crossvit_small
+│   │   │       ├── crossvit_small_cls
+│   │   │       ├── crossvit_tiny
+│   │   │       └── crossvit_tiny_cls
+│   │   ├── CNN-Transformer hybrid/
+│   │   │   ├── coatnet/
+│   │   │   │   ├── coatnet_0
+│   │   │   │   ├── coatnet_0_cls
+│   │   │   │   ├── coatnet_1
+│   │   │   │   ├── coatnet_1_cls
+│   │   │   │   ├── coatnet_2
+│   │   │   │   ├── coatnet_2_cls
+│   │   │   │   ├── coatnet_3
+│   │   │   │   ├── coatnet_3_cls
+│   │   │   │   ├── coatnet_4
+│   │   │   │   ├── coatnet_4_cls
+│   │   │   │   ├── coatnet_5
+│   │   │   │   ├── coatnet_5_cls
+│   │   │   │   ├── coatnet_6
+│   │   │   │   ├── coatnet_6_cls
+│   │   │   │   ├── coatnet_7
+│   │   │   │   └── coatnet_7_cls
+│   │   │   ├── maxvit/
+│   │   │   │   ├── maxvit_base
+│   │   │   │   ├── maxvit_base_cls
+│   │   │   │   ├── maxvit_large
+│   │   │   │   ├── maxvit_large_cls
+│   │   │   │   ├── maxvit_small
+│   │   │   │   ├── maxvit_small_cls
+│   │   │   │   ├── maxvit_tiny
+│   │   │   │   ├── maxvit_tiny_cls
+│   │   │   │   ├── maxvit_xlarge
+│   │   │   │   └── maxvit_xlarge_cls
+│   │   │   └── efficientformer/
+│   │   │       ├── efficientformer_l1
+│   │   │       ├── efficientformer_l1_cls
+│   │   │       ├── efficientformer_l3
+│   │   │       ├── efficientformer_l3_cls
+│   │   │       ├── efficientformer_l7
+│   │   │       └── efficientformer_l7_cls
+│   │   └── Self-supervised JEPA/
+│   │       ├── ijepa/
+│   │       │   ├── ijepa_base_16
+│   │       │   ├── ijepa_base_16_cls
+│   │       │   ├── ijepa_huge_14
+│   │       │   ├── ijepa_huge_14_cls
+│   │       │   ├── ijepa_huge_16_448
+│   │       │   ├── ijepa_huge_16_448_cls
+│   │       │   ├── ijepa_large_16
+│   │       │   └── ijepa_large_16_cls
+│   │       ├── vjepa/
+│   │       │   ├── vjepa_huge_16
+│   │       │   ├── vjepa_huge_16_384
+│   │       │   ├── vjepa_huge_16_384_cls
+│   │       │   ├── vjepa_huge_16_cls
+│   │       │   ├── vjepa_large_16
+│   │       │   └── vjepa_large_16_cls
+│   │       └── vjepa2/
+│   │           ├── vjepa2_vit_giant
+│   │           ├── vjepa2_vit_giant_384
+│   │           ├── vjepa2_vit_giant_384_cls
+│   │           ├── vjepa2_vit_giant_cls
+│   │           ├── vjepa2_vit_huge
+│   │           ├── vjepa2_vit_huge_cls
+│   │           ├── vjepa2_vit_large
+│   │           └── vjepa2_vit_large_cls
+│   ├── Object detection/
+│   │   ├── Two-stage/
+│   │   │   ├── rcnn/
+│   │   │   │   └── rcnn
+│   │   │   ├── fast_rcnn/
+│   │   │   │   └── fast_rcnn
+│   │   │   └── faster_rcnn/
+│   │   │       ├── faster_rcnn
+│   │   │       └── faster_rcnn_resnet50_fpn
+│   │   ├── One-stage/
+│   │   │   ├── yolo/
+│   │   │   │   ├── yolo
+│   │   │   │   ├── yolo_tiny
+│   │   │   │   ├── yolo_v2
+│   │   │   │   ├── yolo_v3
+│   │   │   │   ├── yolo_v3_tiny
+│   │   │   │   └── yolo_v4
+│   │   │   └── efficientdet/
+│   │   │       ├── efficientdet_d0
+│   │   │       ├── efficientdet_d1
+│   │   │       ├── efficientdet_d2
+│   │   │       ├── efficientdet_d3
+│   │   │       ├── efficientdet_d4
+│   │   │       ├── efficientdet_d5
+│   │   │       ├── efficientdet_d6
+│   │   │       └── efficientdet_d7
+│   │   └── Transformer/
+│   │       └── detr/
+│   │           ├── detr_resnet50
+│   │           └── detr_resnet101
+│   └── Segmentation/
+│       ├── Instance/
+│       │   └── mask_rcnn/
+│       │       ├── mask_rcnn
+│       │       └── mask_rcnn_resnet50_fpn
+│       ├── Semantic/
+│       │   ├── fcn/
+│       │   │   ├── fcn_resnet50
+│       │   │   └── fcn_resnet101
+│       │   ├── unet/
+│       │   │   ├── res_unet_2d
+│       │   │   ├── res_unet_3d
+│       │   │   ├── unet
+│       │   │   └── unet_3d
+│       │   └── attention_unet/
+│       │       ├── attention_unet
+│       │       └── attention_unet_3d
+│       └── Mask classification/
+│           ├── maskformer/
+│           │   ├── maskformer_resnet50
+│           │   └── maskformer_resnet101
+│           └── mask2former/
+│               ├── mask2former_swin_base
+│               ├── mask2former_swin_large
+│               ├── mask2former_swin_small
+│               └── mask2former_swin_tiny
+├── generative/
+│   ├── Latent variable/
+│   │   ├── vae/
+│   │   │   ├── hvae
+│   │   │   ├── hvae_gen
+│   │   │   ├── vae
+│   │   │   └── vae_gen
+│   │   └── vqvae/
+│   │       ├── vqvae
+│   │       └── vqvae_gen
+│   ├── Normalizing flow/
+│   │   ├── nice/
+│   │   │   ├── nice_cifar
+│   │   │   ├── nice_cifar_gen
+│   │   │   ├── nice_mnist
+│   │   │   ├── nice_mnist_gen
+│   │   │   ├── nice_svhn
+│   │   │   ├── nice_svhn_gen
+│   │   │   ├── nice_tfd
+│   │   │   └── nice_tfd_gen
+│   │   ├── realnvp/
+│   │   │   ├── realnvp_celeba
+│   │   │   ├── realnvp_celeba_gen
+│   │   │   ├── realnvp_cifar
+│   │   │   ├── realnvp_cifar_gen
+│   │   │   ├── realnvp_imagenet32
+│   │   │   ├── realnvp_imagenet32_gen
+│   │   │   ├── realnvp_imagenet64
+│   │   │   ├── realnvp_imagenet64_gen
+│   │   │   ├── realnvp_lsun
+│   │   │   └── realnvp_lsun_gen
+│   │   └── neural_ode/
+│   │       ├── neural_ode
+│   │       └── neural_ode_gen
+│   ├── Diffusion and score/
+│   │   ├── ddpm/
+│   │   │   ├── ddpm_cifar
+│   │   │   ├── ddpm_cifar_gen
+│   │   │   ├── ddpm_imagenet64
+│   │   │   ├── ddpm_imagenet64_gen
+│   │   │   ├── ddpm_lsun
+│   │   │   └── ddpm_lsun_gen
+│   │   ├── ncsn/
+│   │   │   ├── ncsn_celeba
+│   │   │   ├── ncsn_celeba_gen
+│   │   │   ├── ncsn_cifar
+│   │   │   └── ncsn_cifar_gen
+│   │   ├── score_sde/
+│   │   │   ├── score_sde_subvp
+│   │   │   ├── score_sde_subvp_gen
+│   │   │   ├── score_sde_ve
+│   │   │   ├── score_sde_ve_gen
+│   │   │   ├── score_sde_vp
+│   │   │   └── score_sde_vp_gen
+│   │   ├── dit/
+│   │   │   ├── dit_base_2
+│   │   │   ├── dit_base_2_gen
+│   │   │   ├── dit_base_4
+│   │   │   ├── dit_base_4_gen
+│   │   │   ├── dit_base_8
+│   │   │   ├── dit_base_8_gen
+│   │   │   ├── dit_large_2
+│   │   │   ├── dit_large_2_gen
+│   │   │   ├── dit_large_4
+│   │   │   ├── dit_large_4_gen
+│   │   │   ├── dit_large_8
+│   │   │   ├── dit_large_8_gen
+│   │   │   ├── dit_small_2
+│   │   │   ├── dit_small_2_gen
+│   │   │   ├── dit_small_4
+│   │   │   ├── dit_small_4_gen
+│   │   │   ├── dit_small_8
+│   │   │   ├── dit_small_8_gen
+│   │   │   ├── dit_xlarge_2
+│   │   │   ├── dit_xlarge_2_gen
+│   │   │   ├── dit_xlarge_4
+│   │   │   ├── dit_xlarge_4_gen
+│   │   │   ├── dit_xlarge_8
+│   │   │   └── dit_xlarge_8_gen
+│   │   └── stable_diffusion/
+│   │       ├── stable_diffusion
+│   │       └── stable_diffusion_gen
+│   ├── Flow matching line/
+│   │   ├── flow_matching/
+│   │   │   ├── flow_matching_cifar
+│   │   │   ├── flow_matching_cifar_gen
+│   │   │   ├── flow_matching_imagenet32
+│   │   │   ├── flow_matching_imagenet32_gen
+│   │   │   ├── flow_matching_imagenet64
+│   │   │   ├── flow_matching_imagenet64_gen
+│   │   │   ├── flow_matching_imagenet128
+│   │   │   └── flow_matching_imagenet128_gen
+│   │   ├── rectified_flow/
+│   │   │   ├── rectified_flow_afhq_cat
+│   │   │   ├── rectified_flow_afhq_cat_gen
+│   │   │   ├── rectified_flow_bedroom
+│   │   │   ├── rectified_flow_bedroom_gen
+│   │   │   ├── rectified_flow_celeba_hq
+│   │   │   ├── rectified_flow_celeba_hq_gen
+│   │   │   ├── rectified_flow_church
+│   │   │   ├── rectified_flow_church_gen
+│   │   │   ├── rectified_flow_cifar
+│   │   │   └── rectified_flow_cifar_gen
+│   │   ├── mean_flow/
+│   │   │   ├── mean_flow_base_2
+│   │   │   ├── mean_flow_base_2_gen
+│   │   │   ├── mean_flow_base_4
+│   │   │   ├── mean_flow_base_4_gen
+│   │   │   ├── mean_flow_large_2
+│   │   │   ├── mean_flow_large_2_gen
+│   │   │   ├── mean_flow_medium_2
+│   │   │   ├── mean_flow_medium_2_gen
+│   │   │   ├── mean_flow_xlarge_2
+│   │   │   └── mean_flow_xlarge_2_gen
+│   │   └── tvm/
+│   │       ├── tvm_imagenet256
+│   │       ├── tvm_imagenet256_gen
+│   │       ├── tvm_imagenet512
+│   │       └── tvm_imagenet512_gen
+│   └── World model/
+│       ├── planet/
+│       │   ├── planet
+│       │   └── planet_world_model
+│       ├── dreamer/
+│       │   ├── dreamer
+│       │   ├── dreamer_discrete
+│       │   ├── dreamer_discrete_world_model
+│       │   └── dreamer_world_model
+│       ├── dreamer_v2/
+│       │   ├── dreamer_v2
+│       │   ├── dreamer_v2_atari
+│       │   ├── dreamer_v2_atari_world_model
+│       │   ├── dreamer_v2_dmc
+│       │   ├── dreamer_v2_dmc_world_model
+│       │   └── dreamer_v2_world_model
+│       ├── dreamer_v3/
+│       │   ├── dreamer_v3_12m
+│       │   ├── dreamer_v3_12m_world_model
+│       │   ├── dreamer_v3_25m
+│       │   ├── dreamer_v3_25m_world_model
+│       │   ├── dreamer_v3_50m
+│       │   ├── dreamer_v3_50m_world_model
+│       │   ├── dreamer_v3_100m
+│       │   ├── dreamer_v3_100m_world_model
+│       │   ├── dreamer_v3_200m
+│       │   ├── dreamer_v3_200m_world_model
+│       │   ├── dreamer_v3_400m
+│       │   └── dreamer_v3_400m_world_model
+│       ├── diamond/
+│       │   ├── diamond
+│       │   ├── diamond_csgo
+│       │   └── diamond_world_model
+│       ├── genie/
+│       │   ├── genie
+│       │   ├── genie_coinrun
+│       │   ├── genie_coinrun_world_model
+│       │   └── genie_world_model
+│       └── vjepa2_ac/
+│           ├── vjepa2_ac_vit_giant
+│           └── vjepa2_ac_vit_giant_world_model
+├── text/
+│   ├── Encoder/
+│   │   ├── bert/
+│   │   │   ├── bert_base
+│   │   │   ├── bert_base_causal_lm
+│   │   │   ├── bert_base_cls
+│   │   │   ├── bert_base_mlm
+│   │   │   ├── bert_base_nsp
+│   │   │   ├── bert_base_pretrain
+│   │   │   ├── bert_base_qa
+│   │   │   ├── bert_base_token_cls
+│   │   │   ├── bert_large
+│   │   │   ├── bert_large_cls
+│   │   │   ├── bert_large_mlm
+│   │   │   ├── bert_large_qa
+│   │   │   ├── bert_medium
+│   │   │   ├── bert_mini
+│   │   │   ├── bert_small
+│   │   │   └── bert_tiny
+│   │   └── roformer/
+│   │       ├── roformer
+│   │       ├── roformer_cls
+│   │       ├── roformer_mlm
+│   │       ├── roformer_multiple_choice
+│   │       ├── roformer_qa
+│   │       └── roformer_token_cls
+│   ├── Seq2Seq/
+│   │   ├── transformer/
+│   │   │   ├── transformer_base
+│   │   │   ├── transformer_base_cls
+│   │   │   ├── transformer_base_seq2seq
+│   │   │   ├── transformer_base_token_cls
+│   │   │   ├── transformer_large
+│   │   │   └── transformer_large_seq2seq
+│   │   └── t5/
+│   │       ├── t5_3b
+│   │       ├── t5_3b_seq2seq
+│   │       ├── t5_11b
+│   │       ├── t5_11b_seq2seq
+│   │       ├── t5_base
+│   │       ├── t5_base_seq2seq
+│   │       ├── t5_large
+│   │       ├── t5_large_seq2seq
+│   │       ├── t5_small
+│   │       └── t5_small_seq2seq
+│   └── Decoder and language model/
+│       ├── gpt/
+│       │   ├── gpt
+│       │   ├── gpt_cls
+│       │   └── gpt_lm
+│       └── gpt2/
+│           ├── gpt2_large
+│           ├── gpt2_large_lm
+│           ├── gpt2_medium
+│           ├── gpt2_medium_lm
+│           ├── gpt2_small
+│           ├── gpt2_small_cls
+│           ├── gpt2_small_lm
+│           ├── gpt2_xlarge
+│           └── gpt2_xlarge_lm
+└── multimodal/
+    └── Text-image/
+        └── clip/
+            ├── clip_vit_base_16
+            ├── clip_vit_base_16_zero_shot
+            ├── clip_vit_base_32
+            ├── clip_vit_base_32_zero_shot
+            ├── clip_vit_large_14
+            ├── clip_vit_large_14_336
+            ├── clip_vit_large_14_336_zero_shot
+            └── clip_vit_large_14_zero_shot
 
-lucid.models — 74 families · 494 models
-├─ Vision — 46 families · 303 models
-│  ├─ Recognition — 34 families · 267 models
-│  │  ├─ Classic CNN (22)
-│  │  │  ├─ LeNet [lenet] (2)                       lenet_5  +cls
-│  │  │  ├─ AlexNet [alexnet] (2)                   alexnet  +cls
-│  │  │  ├─ ZFNet [zfnet] (2)                       zfnet  +cls
-│  │  │  └─ VGG [vgg] (16)                          11 · 13 · 16 · 19  (each with and without) bn  +cls
-│  │  ├─ Inception line (10)
-│  │  │  ├─ GoogLeNet [googlenet] (2)               googlenet  +cls
-│  │  │  ├─ Inception v3 [inception] (2)            inception_v3  +cls
-│  │  │  ├─ Inception v4 [inception_v4] (2)         inception_v4  +cls
-│  │  │  ├─ Inception-ResNet [inception_resnet] (2) inception_resnet_v2  +cls
-│  │  │  └─ Xception [xception] (2)                 xception  +cls
-│  │  ├─ ResNet line (74)
-│  │  │  ├─ ResNet [resnet] (18)                    18 · 34 · 50 · 101 · 152 · 200 · 269  +cls
-│  │  │  │                                          wide_resnet_50 · wide_resnet_101  +cls
-│  │  │  ├─ ResNeXt [resnext] (8)                   50_32x4d · 101_32x4d · 101_32x8d · 101_64x4d  +cls
-│  │  │  ├─ SENet [senet] (10)                      se_resnet_18 · 34 · 50 · 101 · 152  +cls
-│  │  │  ├─ SKNet [sknet] (10)                      sk_resnet_18 · 34 · 50 · 101  +cls
-│  │  │  │                                          sk_resnext_50_32x4d  +cls
-│  │  │  ├─ ResNeSt [resnest] (12)                  14 · 26 · 50 · 101 · 200 · 269  +cls
-│  │  │  ├─ DenseNet [densenet] (10)                121 · 161 · 169 · 201 · 264  +cls
-│  │  │  └─ CSPNet [cspnet] (6)                     cspresnet_50 · cspresnext_50 · cspdarknet_53  +cls
-│  │  ├─ Mobile and efficient CNN (42)
-│  │  │  ├─ MobileNet v1 [mobilenet] (8)            mobilenet · 075 · 050 · 025  +cls
-│  │  │  ├─ MobileNet v2 [mobilenet_v2] (4)         mobilenet_v2 · 075  +cls
-│  │  │  ├─ MobileNet v3 [mobilenet_v3] (4)         small · large  +cls
-│  │  │  ├─ MobileNet v4 [mobilenet_v4] (10)        conv_small · conv_medium · conv_large  +cls
-│  │  │  │                                          hybrid_medium · hybrid_large  +cls
-│  │  │  └─ EfficientNet [efficientnet] (16)        b0 ~ b7  +cls
-│  │  ├─ Modern CNN (16)
-│  │  │  ├─ ConvNeXt [convnext] (10)                tiny · small · base · large · xlarge  +cls
-│  │  │  └─ InceptionNeXt [inception_next] (6)      tiny · small · base  +cls
-│  │  ├─ Vision Transformer (49)
-│  │  │  ├─ ViT [vit] (10)                          base_16 · base_32 · large_16 · large_32 · huge_14  +cls
-│  │  │  ├─ Swin [swin] (8)                         tiny · small · base · large  +cls
-│  │  │  ├─ PVT v2 [pvt] (13)                       b0 ~ b5  +cls
-│  │  │  │                                          b2_li  (no wrapper)
-│  │  │  ├─ CvT [cvt] (6)                           13 · 21 · w24  +cls
-│  │  │  └─ CrossViT [crossvit] (12)                tiny · small · base · 9 · 15 · 18  +cls
-│  │  ├─ CNN-Transformer hybrid (32)
-│  │  │  ├─ CoAtNet [coatnet] (16)                  0 ~ 7  +cls
-│  │  │  ├─ MaxViT [maxvit] (10)                    tiny · small · base · large · xlarge  +cls
-│  │  │  └─ EfficientFormer [efficientformer] (6)   l1 · l3 · l7  +cls
-│  │  └─ Self-supervised JEPA (22)
-│  │     ├─ I-JEPA [ijepa] (8)                      base_16 · large_16 · huge_14 · huge_16_448  +cls
-│  │     ├─ V-JEPA [vjepa] (6)                      large_16 · huge_16 · huge_16_384  +cls
-│  │     └─ V-JEPA 2 [vjepa2] (8)                   vit_large · vit_huge · vit_giant · vit_giant_384  +cls
-│  ├─ Object detection — 6 families · 20 models
-│  │  ├─ Two-stage (4)
-│  │  │  ├─ R-CNN [rcnn] (1)                        rcnn
-│  │  │  ├─ Fast R-CNN [fast_rcnn] (1)              fast_rcnn
-│  │  │  └─ Faster R-CNN [faster_rcnn] (2)          faster_rcnn · resnet50_fpn
-│  │  ├─ One-stage (14)
-│  │  │  ├─ YOLO [yolo] (6)                         yolo · tiny · v2 · v3 · v3_tiny · v4
-│  │  │  └─ EfficientDet [efficientdet] (8)         d0 ~ d7
-│  │  └─ Transformer (2)
-│  │     └─ DETR [detr] (2)                         resnet50 · resnet101
-│  └─ Segmentation — 6 families · 16 models
-│     ├─ Instance (2)
-│     │  └─ Mask R-CNN [mask_rcnn] (2)              mask_rcnn · resnet50_fpn
-│     ├─ Semantic (8)
-│     │  ├─ FCN [fcn] (2)                           resnet50 · resnet101
-│     │  ├─ U-Net [unet] (4)                        unet · unet_3d · res_unet_2d · res_unet_3d
-│     │  └─ Attention U-Net [attention_unet] (2)    attention_unet · attention_unet_3d
-│     └─ Mask classification (6)
-│        ├─ MaskFormer [maskformer] (2)             resnet50 · resnet101
-│        └─ Mask2Former [mask2former] (4)           swin_tiny · swin_small · swin_base · swin_large
-├─ Generative — 21 families · 133 models
-│  ├─ Latent variable (6)
-│  │  ├─ VAE [vae] (4)                              vae · hvae  +gen
-│  │  └─ VQ-VAE [vqvae] (2)                         vqvae  +gen
-│  ├─ Normalizing flow (20)
-│  │  ├─ NICE [nice] (8)                            mnist · cifar · svhn · tfd  +gen
-│  │  ├─ RealNVP [realnvp] (10)                     cifar · celeba · imagenet32 · imagenet64 · lsun  +gen
-│  │  └─ Neural ODE [neural_ode] (2)                neural_ode  +gen
-│  ├─ Diffusion and score (42)
-│  │  ├─ DDPM [ddpm] (6)                            cifar · imagenet64 · lsun  +gen
-│  │  ├─ NCSN [ncsn] (4)                            cifar · celeba  +gen
-│  │  ├─ Score SDE [score_sde] (6)                  ve · vp · subvp  +gen
-│  │  ├─ DiT [dit] (24)                             small · base · large · xlarge × 2 · 4 · 8  (patch size)  +gen
-│  │  └─ Stable Diffusion [stable_diffusion] (2)    stable_diffusion  +gen
-│  ├─ Flow matching line (32)
-│  │  ├─ Flow Matching [flow_matching] (8)          cifar · imagenet32 · imagenet64 · imagenet128  +gen
-│  │  ├─ Rectified Flow [rectified_flow] (10)       cifar · celeba_hq · bedroom · church · afhq_cat  +gen
-│  │  ├─ MeanFlow [mean_flow] (10)                  base_2 · base_4 · medium_2 · large_2 · xlarge_2  +gen
-│  │  └─ TVM [tvm] (4)                              imagenet256 · imagenet512  +gen
-│  └─ World model (33)
-│     ├─ PlaNet [planet] (2)                        planet  +world_model
-│     ├─ Dreamer v1 [dreamer] (4)                   dreamer · discrete  +world_model
-│     ├─ Dreamer v2 [dreamer_v2] (6)                dreamer_v2 · atari · dmc  +world_model
-│     ├─ Dreamer v3 [dreamer_v3] (12)               12m · 25m · 50m · 100m · 200m · 400m  +world_model
-│     ├─ DIAMOND [diamond] (3)                      diamond · diamond_csgo · diamond_world_model
-│     ├─ Genie [genie] (4)                          genie · coinrun  +world_model
-│     └─ V-JEPA 2-AC [vjepa2_ac] (2)                vit_giant  +world_model
-├─ Text — 6 families · 50 models
-│  ├─ Encoder (22)
-│  │  ├─ BERT [bert] (16)                           tiny · mini · small · medium · base · large
-│  │  │                                             (base also) cls · mlm · qa · token_cls · nsp · pretrain · causal_lm
-│  │  │                                             (large also) cls · mlm · qa
-│  │  └─ RoFormer [roformer] (6)                    roformer  (also) cls · mlm · qa · token_cls · multiple_choice
-│  ├─ Seq2Seq (16)
-│  │  ├─ Transformer [transformer] (6)              base  (also) cls · seq2seq · token_cls
-│  │  │                                             large  (also) seq2seq
-│  │  └─ T5 [t5] (10)                               small · base · large · 3b · 11b  +seq2seq
-│  └─ Decoder and language model (12)
-│     ├─ GPT [gpt] (3)                              gpt  (also) cls · lm
-│     └─ GPT-2 [gpt2] (9)                           small · medium · large · xlarge  +lm
-│                                                   small  (also) cls
-└─ Multimodal — 1 family · 8 models
-   └─ Text-image (8)
-      └─ CLIP [clip] (8)                            vit_base_16 · vit_base_32 · vit_large_14 · vit_large_14_336  +zero_shot
+4 domains, 74 families, 494 models
