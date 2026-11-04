@@ -15,17 +15,25 @@ promotion, broadcast shapes, and reversed scalar operands (LCD-346 / #419).
 Every comparison runs on the CPU and on Metal, and adds ``.device``: the Metal
 path used to read its own result's shape off an MLX array the phantom does not
 have (LCD-850).  ``test_shadow_alloc_surface.py`` sweeps the rest of the op
-surface the same way.
+surface the same way.  What Metal refuses for real it refuses as a phantom too:
+a phantom float64 Metal tensor would blind every shadow-built check to it.
 """
 
 from collections.abc import Callable
 import pytest
 
 import lucid
+import lucid.nn as nn
+from lucid._C import engine as _C_engine
 from lucid._dtype import dtype as DType
 from lucid._tensor.tensor import Tensor
 from lucid.nn._shadow import is_shadow, shadow_alloc
-from lucid.test._fixtures.devices import device_supports, devices_supporting
+from lucid.test._fixtures.devices import (
+    METAL_UNSUPPORTED_DTYPES,
+    device_supports,
+    devices_supporting,
+    metal_available,
+)
 
 
 def _assert_same_answer(phantom: Tensor, eager: Tensor) -> None:
@@ -349,3 +357,67 @@ def test_direct_reproducers_from_issue_419(device: str) -> None:
         rsub_int = 2 - a
         assert rsub_int.shape == (4,)
         assert rsub_int.dtype == lucid.int64
+
+
+# ── What Metal refuses for real, it refuses as a phantom ─────────────────────
+
+# Every way onto Metal: the factories, a cast of a Metal tensor, a move of a CPU
+# one, both at once, and a layer's own parameters.
+_WAYS_ONTO_METAL: dict[str, Callable[[DType], object]] = {
+    "zeros": lambda dt: lucid.zeros(2, dtype=dt, device="metal"),
+    "ones": lambda dt: lucid.ones(2, dtype=dt, device="metal"),
+    "empty": lambda dt: lucid.empty(2, dtype=dt, device="metal"),
+    "full": lambda dt: lucid.full((2,), 1.0, dtype=dt, device="metal"),
+    "eye": lambda dt: lucid.eye(2, dtype=dt, device="metal"),
+    "tensor": lambda dt: lucid.tensor([1.0, 2.0], dtype=dt, device="metal"),
+    "zeros_like": lambda dt: lucid.zeros_like(lucid.ones(2, device="metal"), dtype=dt),
+    "new_zeros": lambda dt: lucid.ones(2, device="metal").new_zeros(2, dtype=dt),
+    "cast": lambda dt: lucid.zeros(2, device="metal").to(dt),
+    "move": lambda dt: lucid.zeros(2, dtype=dt).to("metal"),
+    "move_and_cast": lambda dt: lucid.zeros(2).to("metal", dt),
+}
+
+_REAL_NUMBER_WAYS: dict[str, Callable[[DType], object]] = {
+    "arange": lambda dt: lucid.arange(0.0, 3.0, 1.0, dtype=dt, device="metal"),
+    "linspace": lambda dt: lucid.linspace(0.0, 1.0, 3, dtype=dt, device="metal"),
+    "logspace": lambda dt: lucid.logspace(0.0, 1.0, 3, dtype=dt, device="metal"),
+    "rand": lambda dt: lucid.rand(2, dtype=dt, device="metal"),
+    "randn": lambda dt: lucid.randn(2, dtype=dt, device="metal"),
+    "linear": lambda dt: nn.Linear(2, 2, dtype=dt, device="metal"),
+    "embedding": lambda dt: nn.Embedding(4, 2, padding_idx=0, dtype=dt, device="metal"),
+}
+
+_REFUSED_ON_METAL = [
+    *(
+        pytest.param(way, dt, id=f"{name}-{dt}")
+        for name, way in _WAYS_ONTO_METAL.items()
+        for dt in sorted(METAL_UNSUPPORTED_DTYPES, key=str)
+    ),
+    *(pytest.param(way, lucid.float64, id=name) for name, way in _REAL_NUMBER_WAYS.items()),
+]
+
+
+@pytest.mark.skipif(not metal_available(), reason="needs Metal")
+@pytest.mark.parametrize("way, dt", _REFUSED_ON_METAL)
+def test_a_dtype_metal_refuses_is_refused_as_a_phantom(
+    way: Callable[[DType], object], dt: DType
+) -> None:
+    with pytest.raises(_C_engine.NotImplementedError, match="is not supported on GPU") as eager:
+        way(dt)
+    with shadow_alloc(), pytest.raises(type(eager.value)) as ghost:
+        way(dt)
+    assert str(ghost.value) == str(eager.value)
+
+
+@pytest.mark.skipif(not metal_available(), reason="needs Metal")
+def test_moving_a_real_float64_tensor_to_metal_is_refused_under_the_mode() -> None:
+    real = lucid.zeros(2, dtype=lucid.float64)
+    with shadow_alloc(), pytest.raises(_C_engine.NotImplementedError, match="float64"):
+        real.to("metal")
+
+
+@pytest.mark.parametrize("dt", sorted(METAL_UNSUPPORTED_DTYPES, key=str))
+def test_the_cpu_still_holds_what_metal_refuses(dt: DType) -> None:
+    with shadow_alloc():
+        ghost = lucid.zeros(2, dtype=dt, device="cpu")
+    _assert_same_answer(ghost, lucid.zeros(2, dtype=dt, device="cpu"))

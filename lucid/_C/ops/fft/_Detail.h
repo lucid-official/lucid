@@ -1046,8 +1046,7 @@ inline TensorImplPtr run_nd_fft(const char* op_name,
 
     Storage out;
     if (PhantomMode::is_enabled()) {
-        out = Storage{
-            PhantomStorage{shape_numel(out_shape) * dtype_size(out_dtype), out_dtype, a->device()}};
+        out = phantom_storage(out_shape, out_dtype, a->device());
     } else if (is_double_out || (a->device() == Device::CPU &&
                                  all_pow2_fft_lengths(a->shape(), n, axes, is_irfft))) {
         out = run_cpu(a, axes, out_shape, out_dtype);

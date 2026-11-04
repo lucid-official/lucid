@@ -445,8 +445,7 @@ std::vector<TensorImplPtr> EmbeddingBagBackward::apply_for_graph(const TensorImp
                 row[at] = static_cast<std::int32_t>(best < 0 ? 0 : best);
                 kept[at] = best < 0 ? 0.0 : 1.0;
             }
-        auto keep_t = astype_op(upload(std::move(keep), grid, Dtype::F64), dtype_);
-        auto src = mul_op(grad_out, keep_t);
+        auto src = mul_op(grad_out, constant_from_doubles(std::move(keep), grid, dtype_, device_));
         return {scatter_add_op(base, upload(std::move(rows), grid, Dtype::I32), src, 0)};
     }
 
@@ -482,7 +481,7 @@ std::vector<TensorImplPtr> EmbeddingBagBackward::apply_for_graph(const TensorImp
             reinterpret_cast<double*>(scales.ptr.get())[at] = scale_of[k];
         }
     auto src = gather_op(grad_out, upload(std::move(bags), pick, Dtype::I32), 0);
-    src = mul_op(src, astype_op(upload(std::move(scales), pick, Dtype::F64), dtype_));
+    src = mul_op(src, constant_from_doubles(std::move(scales), pick, dtype_, device_));
     return {scatter_add_op(base, upload(std::move(rows), pick, Dtype::I32), src, 0)};
 }
 

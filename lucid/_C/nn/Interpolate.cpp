@@ -141,12 +141,7 @@ resample_matrix(int in_dim, int out_dim, bool align, bool transposed, Dtype dt, 
         fill_resample<double>(m, in_dim, out_dim, align, transposed);
     else
         fill_resample<float>(m, in_dim, out_dim, align, transposed);
-    Storage host{std::move(cpu)};
-    if (dt != Dtype::F64)
-        host = backend::Dispatcher::for_device(Device::CPU).astype(host, shape, Dtype::F64, dt);
-    Storage placed = backend::Dispatcher::for_device(device).from_cpu(
-        std::get<CpuStorage>(std::move(host)), shape);
-    return std::make_shared<TensorImpl>(std::move(placed), shape, dt, device, false);
+    return constant_from_doubles(std::move(cpu), shape, dt, device);
 }
 
 }  // namespace

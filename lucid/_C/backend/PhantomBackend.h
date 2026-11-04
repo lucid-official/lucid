@@ -1166,6 +1166,7 @@ private:
     // gives it its size, and a gradient handed out as a bare Storage still
     // says where it lives (storage_device).
     Storage phantom(Dtype dt) const {
+        refuse_what_device_cannot_hold(dt, device_);
         PhantomStorage p;
         p.dtype = dt;
         p.device = device_;

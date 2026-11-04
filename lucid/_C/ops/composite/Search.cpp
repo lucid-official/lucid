@@ -295,7 +295,7 @@ searchsorted_op(const TensorImplPtr& sorted_1d, const TensorImplPtr& values, boo
 
     Storage out_s =
         (seq->is_phantom() || val->is_phantom())
-            ? Storage{PhantomStorage{0, Dtype::I64, dv}}
+            ? phantom_storage(vs, Dtype::I64, dv)
             : (dv == Device::GPU ? Storage{searchsorted_gpu(std::get<GpuStorage>(seq->storage()),
                                                             std::get<GpuStorage>(val->storage()),
                                                             seq->shape(), vs, dt, seq_1d, right)}

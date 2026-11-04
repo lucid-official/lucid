@@ -216,7 +216,7 @@ TensorImplPtr bitcast_op(const TensorImplPtr& a, Dtype dtype) {
     OpScopeFull scope{"bitcast", a->device(), dtype, shape};
     TensorImplPtr out_impl;
     if (a->is_phantom()) {
-        out_impl = fresh(Storage{PhantomStorage{0, dtype, a->device()}}, shape, dtype, a->device());
+        out_impl = fresh(phantom_storage(shape, dtype, a->device()), shape, dtype, a->device());
     } else if (a->device() == Device::GPU) {
         const auto& ga = std::get<GpuStorage>(a->storage());
         auto out = ::mlx::core::view(*ga.arr, gpu::to_mlx_dtype(dtype));

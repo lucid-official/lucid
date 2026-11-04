@@ -80,8 +80,19 @@ private:
     bool prev_;
 };
 
+// A phantom stands in for a tensor its device could hold, so what the device
+// refuses for real it refuses here, with the same message.  Without this every
+// shadow-built check is blind to float64 on Metal: the phantom reads as a float64
+// Metal tensor, which no real run can make.  Every phantom is made through this,
+// by phantom_storage and by PhantomBackend's unsized ones.
+inline void refuse_what_device_cannot_hold(Dtype dt, Device device) {
+    if (device == Device::GPU && !metal_holds(dt)) [[unlikely]]
+        refuse_metal_dtype(dt);
+}
+
 // A phantom storage for ``shape`` elements of ``dt`` on ``device``, sized.
 inline Storage phantom_storage(const Shape& shape, Dtype dt, Device device) {
+    refuse_what_device_cannot_hold(dt, device);
     PhantomStorage p;
     p.nbytes = shape_numel(shape) * dtype_size(dt);
     p.dtype = dt;

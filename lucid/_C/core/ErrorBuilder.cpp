@@ -227,4 +227,15 @@ void ErrorBuilder::device_mismatch(Device expected, Device got, const std::strin
                          std::move(ctx));
 }
 
+void refuse_metal_dtype(Dtype dt) {
+    const ErrorBuilder err("to_mlx_dtype");
+    if (dt == Dtype::C128)
+        err.not_implemented("complex128 is not supported on GPU (MLX has no complex128). "
+                            "Cast to complex64 first, or keep the tensor on CPU. "
+                            "linalg.eig on an f64 matrix produces one — it is the only "
+                            "dtype wide enough to hold its eigenvalues.");
+    err.not_implemented("float64 is not supported on GPU (MLX-Metal limitation). "
+                        "Cast to float32 first, or keep the tensor on CPU.");
+}
+
 }  // namespace lucid

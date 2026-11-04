@@ -68,6 +68,13 @@ Storage make_zero_storage(const Shape& shape, Dtype dtype, Device device);
 //     Storage with every element equal to one.
 Storage make_ones_storage(const Shape& shape, Dtype dtype, Device device);
 
+// A constant for a graph-mode backward, from a host buffer of doubles.
+//
+// Narrowed to ``dtype`` on the host before it moves: Metal cannot hold the
+// doubles, even for as long as a cast there would take.
+std::shared_ptr<TensorImpl>
+constant_from_doubles(CpuStorage doubles, const Shape& shape, Dtype dtype, Device device);
+
 // Reduce ``grad`` back to ``target_shape`` by summing over broadcast axes.
 //
 // Used in the backward pass of any binary op that broadcast one operand

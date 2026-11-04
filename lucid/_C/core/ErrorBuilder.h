@@ -338,4 +338,14 @@ private:
     std::string format_with_context(const std::string& msg) const;
 };
 
+// The refusal of a dtype :func:`metal_holds` says no to, whichever way it tried
+// to reach Metal: a real tensor through ``to_mlx_dtype``, a phantom through
+// :func:`refuse_what_device_cannot_hold`.
+//
+// Raises
+// ------
+// NotImplementedError
+//     Always.  This function does not return.
+[[noreturn]] LUCID_API void refuse_metal_dtype(Dtype dt);
+
 }  // namespace lucid

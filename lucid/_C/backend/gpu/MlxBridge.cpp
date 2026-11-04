@@ -63,6 +63,8 @@
 namespace lucid::gpu {
 
 ::mlx::core::Dtype to_mlx_dtype(Dtype dt) {
+    if (!metal_holds(dt))
+        refuse_metal_dtype(dt);
     switch (dt) {
     case Dtype::Bool:
         return ::mlx::core::bool_;
@@ -78,17 +80,6 @@ namespace lucid::gpu {
         return ::mlx::core::float16;
     case Dtype::F32:
         return ::mlx::core::float32;
-    case Dtype::F64:
-
-        ErrorBuilder("to_mlx_dtype")
-            .not_implemented("float64 is not supported on GPU (MLX-Metal limitation). "
-                             "Cast to float32 first, or keep the tensor on CPU.");
-    case Dtype::C128:
-        ErrorBuilder("to_mlx_dtype")
-            .not_implemented("complex128 is not supported on GPU (MLX has no complex128). "
-                             "Cast to complex64 first, or keep the tensor on CPU. "
-                             "linalg.eig on an f64 matrix produces one — it is the only "
-                             "dtype wide enough to hold its eigenvalues.");
     case Dtype::C64:
         return ::mlx::core::complex64;
     case Dtype::BF16:
@@ -96,6 +87,9 @@ namespace lucid::gpu {
         // emulation — unlike the CPU, where Accelerate has no bf16 kernels
         // and every gate widens to float.
         return ::mlx::core::bfloat16;
+    case Dtype::F64:
+    case Dtype::C128:
+        break;  // refused above
     }
     ErrorBuilder("to_mlx_dtype").fail("unknown Dtype");
 }

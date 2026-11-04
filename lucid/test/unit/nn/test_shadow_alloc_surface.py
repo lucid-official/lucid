@@ -13,8 +13,10 @@ public op and runs it four ways, eager and phantom on each device.  The rules:
 
 * no answer is the engine's generic "storage is not the kind this op reads": a
   phantom's values are refused by name (``refuse_phantom_read``) or not read;
-* Metal answers whenever the CPU does, and the other way round but for
-  :data:`_CPU_READS_VALUES`;
+* Metal answers whenever the CPU does and a real Metal tensor would, and the
+  other way round but for :data:`_CPU_READS_VALUES`;
+* what real Metal refuses for its dtype, the phantom refuses too: a shadow-built
+  check is otherwise blind to float64 on Metal;
 * the two phantoms agree on shape and dtype, and a phantom agrees with the eager
   result on its own device on shape, dtype and device.
 
@@ -25,9 +27,11 @@ behind in the process should not reach the tests after it.
 import contextlib
 import dataclasses
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Callable, Iterator
+from pathlib import Path
 
 import pytest
 
@@ -54,6 +58,13 @@ _FLOOR = {"forward": 1000, "backward": 500, "second": 250}
 
 _READS_A_STORAGE = "not the kind this op reads"
 
+_METAL_DTYPE_REFUSAL = "is not supported on GPU"
+
+#: What builds float64 on a Metal default, and so refuses for real and in shadow
+#: alike, until LCD-849.  Whichever of LCD-849 and this lands second empties these.
+_MODULES_AWAITING_LCD_849: set[str] = set()
+_FAMILIES_AWAITING_LCD_849: set[str] = set()
+
 
 @dataclasses.dataclass
 class _Findings:
@@ -62,6 +73,7 @@ class _Findings:
     swept: int = 0
     reads_a_storage: list[str] = dataclasses.field(default_factory=list)
     metal_refuses: list[str] = dataclasses.field(default_factory=list)
+    blind_to_dtype: list[str] = dataclasses.field(default_factory=list)
     cpu_refuses: list[str] = dataclasses.field(default_factory=list)
     phantoms_differ: list[str] = dataclasses.field(default_factory=list)
     eager_differs: list[str] = dataclasses.field(default_factory=list)
@@ -197,10 +209,13 @@ def _sweep_ops(question: str) -> _Findings:
         name = symbol.qualname
         on_cpu = _ask(fn, call, "cpu", True, question)
         on_metal = _ask(fn, call, "metal", True, question)
+        real_metal = _ask(fn, call, "metal", False, question)
         if any(_READS_A_STORAGE in str(a.get("refused")) for a in (on_cpu, on_metal)):
             found.reads_a_storage.append(name)
+        if _METAL_DTYPE_REFUSAL in str(real_metal.get("refused")) and "answer" in on_metal:
+            found.blind_to_dtype.append(name)
         if "refused" in on_metal or "refused" in on_cpu:
-            if "refused" not in on_cpu:
+            if "refused" not in on_cpu and "answer" in real_metal:
                 found.metal_refuses.append(f"{name}: {on_metal['refused']}")
             elif "refused" not in on_metal:
                 found.cpu_refuses.append(name)
@@ -241,7 +256,9 @@ def _compared_builds(builds: dict[str, Callable[[], lucid.nn.Module]]) -> _Findi
     for name, build in builds.items():
         found.swept += 1
         on_cpu, on_metal = _built(build, "cpu"), _built(build, "metal")
-        if on_cpu != on_metal:
+        if "refused" in on_metal and "refused" not in on_cpu:
+            found.builds_differ.append(f"{name}: Metal {on_metal['refused']}")
+        elif on_cpu != on_metal:
             found.builds_differ.append(f"{name}: CPU {on_cpu}, Metal {on_metal}"[:400])
         if any(not entry[-1] for entry in on_metal.get("answer", [])):
             found.real_tensors.append(name)
@@ -285,6 +302,11 @@ def _main(question: str) -> None:
     print(json.dumps(dataclasses.asdict(found)))
 
 
+def _refusing(found: _Findings) -> set[str]:
+    """Which builds Metal alone refuses; any other difference fails the caller."""
+    return {entry.partition(":")[0].partition("/")[0] for entry in found.builds_differ}
+
+
 def _sweep(question: str) -> _Findings:
     done = subprocess.run(
         [
@@ -310,6 +332,7 @@ def test_every_op_answers_the_same_on_both_devices(question: str) -> None:
     assert found.swept >= _FLOOR[question], f"reached only {found.swept} ops"
     assert found.reads_a_storage == []
     assert found.metal_refuses == []
+    assert found.blind_to_dtype == []
     assert set(found.cpu_refuses) == _CPU_READS_VALUES[question]
     assert found.phantoms_differ == []
     assert found.eager_differs == []
@@ -319,7 +342,7 @@ def test_every_op_answers_the_same_on_both_devices(question: str) -> None:
 def test_every_module_class_builds_the_same_under_a_metal_default() -> None:
     found = _sweep("modules")
     assert found.swept >= 300, f"reached only {found.swept} classes"
-    assert found.builds_differ == []
+    assert _refusing(found) == _MODULES_AWAITING_LCD_849, found.builds_differ
     assert found.real_tensors == []
 
 
@@ -327,8 +350,22 @@ def test_every_module_class_builds_the_same_under_a_metal_default() -> None:
 def test_a_factory_of_every_family_builds_the_same_under_a_metal_default() -> None:
     found = _sweep("families")
     assert found.swept >= 50, f"reached only {found.swept} families"
-    assert found.builds_differ == []
+    assert _refusing(found) == _FAMILIES_AWAITING_LCD_849, found.builds_differ
     assert found.real_tensors == []
+
+
+def test_every_phantom_is_made_where_the_dtype_rule_is() -> None:
+    """A storage built by hand would stand in for a tensor Metal cannot hold."""
+    engine = Path(lucid.__file__).parent / "_C"
+    files = [p for p in engine.rglob("*") if p.suffix in (".h", ".cpp", ".mm")]
+    if not any(p.suffix == ".h" for p in files):
+        pytest.skip("engine sources are not shipped with this install")
+    makers = {
+        p.relative_to(engine).as_posix()
+        for p in files
+        if re.search(r"\bPhantomStorage(\{|\s+\w+\s*;)", p.read_text(errors="ignore"))
+    }
+    assert makers == {"core/PhantomMode.h", "backend/PhantomBackend.h"}
 
 
 # ── the paths the sweep's single call per op does not take ───────────────────
@@ -508,6 +545,26 @@ def test_an_embedding_bag_answers_a_second_gradient(mode, device) -> None:
     assert is_shadow(first) and is_shadow(second)
     assert tuple(first.shape) == tuple(second.shape) == (5, 3)
     assert second.device == lucid.device(device)
+
+
+@needs_metal
+@pytest.mark.parametrize("mode", ["sum", "mean", "max"])
+def test_an_embedding_bag_s_second_gradient_runs_on_metal_too(mode) -> None:
+    """Its weights were built in doubles and uploaded before the cast, which real
+    Metal refuses; the phantom never got that far, so a shadow build hid it."""
+
+    def run(device: str) -> tuple[list[float], list[float]]:
+        w = lucid.tensor([[1.0, 2.0], [3.0, 0.0], [0.0, 5.0]], device=device).requires_grad_()
+        indices = lucid.tensor([0, 1, 2, 1], dtype=lucid.int64, device=device)
+        offsets = lucid.tensor([0, 2], dtype=lucid.int64, device=device)
+        y = F.embedding_bag(indices, w, offsets, mode=mode)
+        first = lucid.autograd.grad((y * y).sum(), w, create_graph=True)[0]
+        second = lucid.autograd.grad(first.sum(), w)[0]
+        return first.reshape(-1).tolist(), second.reshape(-1).tolist()
+
+    on_cpu, on_metal = run("cpu"), run("metal")
+    assert on_metal[0] == pytest.approx(on_cpu[0])
+    assert on_metal[1] == pytest.approx(on_cpu[1])
 
 
 @needs_metal

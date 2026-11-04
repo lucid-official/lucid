@@ -151,6 +151,16 @@ Storage make_ones_storage(const Shape& shape, Dtype dtype, Device device) {
     return backend::Dispatcher::for_device(device).ones(shape, dtype);
 }
 
+std::shared_ptr<TensorImpl>
+constant_from_doubles(CpuStorage doubles, const Shape& shape, Dtype dtype, Device device) {
+    Storage host{std::move(doubles)};
+    if (dtype != Dtype::F64)
+        host = backend::Dispatcher::for_device(Device::CPU).astype(host, shape, Dtype::F64, dtype);
+    Storage placed = backend::Dispatcher::for_device(device).from_cpu(
+        std::get<CpuStorage>(std::move(host)), shape);
+    return std::make_shared<TensorImpl>(std::move(placed), shape, dtype, device, false);
+}
+
 Storage reduce_grad_to_shape(const Storage& grad,
                              const Shape& grad_shape,
                              const Shape& target_shape,
