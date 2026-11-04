@@ -16,8 +16,8 @@ large      24 + 24  1024    4096   16     64      737 668 096
 =========  =======  ======  =====  =====  ======  ===============
 
 Google released all five checkpoints; they have not been converted and
-hosted for Lucid yet (``tools/convert_weights/t5.py`` converts them), so
-``pretrained=True`` raises rather than return random weights.
+hosted for Lucid yet, so ``pretrained=True`` raises rather than return
+random weights.
 """
 
 from lucid.models._registry import register_model

@@ -44,8 +44,7 @@ no circular import.  Crucially, :class:`WeightEntry` carries no model
 config — named factories already pin their own.
 
 Checkpoints are hosted on the Hugging Face Hub under the ``lucid-dl``
-org, converted from reference_vision / timm / transformers sources by the
-offline ``tools/convert_weights`` pipeline.
+org, converted offline from reference_vision / timm / transformers sources.
 """
 
 from lucid.weights._base import WeightEntry, WeightsEnum

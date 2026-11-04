@@ -77,11 +77,9 @@ cmake_test_discovery_*.json
 .pytype/
 docs/_build/
 
-# Pretrained-weights conversion staging — `python -m tools.convert_weights`
-# writes per-tag dirs here (model.safetensors + config.json + README.md)
-# before upload to the lucid-dl HF Hub org.  Repo-relative ./_converted is
-# the default but should never be committed; prefer `--out /tmp/...` to
-# keep the conversion artifact outside the repo entirely.
+# Pretrained-weights conversion staging: a one-off conversion script's per-tag
+# output (model.safetensors + config.json + README.md) before upload to the
+# lucid-dl HF Hub org.  Never committed; prefer a directory outside the repo.
 _converted/
 
 # CLAUDE & CODEX

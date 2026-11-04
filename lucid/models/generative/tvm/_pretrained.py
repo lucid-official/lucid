@@ -66,10 +66,8 @@ def tvm_imagenet256(pretrained: bool = False, **overrides: object) -> TVMModel:
     Parameters
     ----------
     pretrained : bool, default=False
-        The authors' checkpoint has not been converted and hosted for
-        Lucid yet (``tools/convert_weights/tvm.py`` does the conversion),
-        so ``True`` raises rather than returning a randomly initialised
-        model.
+        No converted TVM weights are published, so ``True`` raises rather
+        than returning a randomly initialised model.
     **overrides : object
         Optional :class:`TVMConfig` field overrides.
 
@@ -113,7 +111,7 @@ def tvm_imagenet512(pretrained: bool = False, **overrides: object) -> TVMModel:
     ----------
     pretrained : bool, default=False
         ``True`` raises: the released ``im512_w2p5`` weights are not
-        hosted for Lucid yet.
+        converted or hosted for Lucid.
     **overrides : object
         :class:`TVMConfig` fields to change from the 512-pixel defaults.
 
@@ -159,9 +157,7 @@ def tvm_imagenet256_gen(pretrained: bool = False, **overrides: object) -> TVMFor
     Parameters
     ----------
     pretrained : bool, default=False
-        The authors' checkpoint has not been converted and hosted for
-        Lucid yet, so ``True`` raises rather than returning a randomly
-        initialised model.
+        ``True`` raises: no converted TVM weights are published.
     **overrides : object
         Optional :class:`TVMConfig` field overrides.
 
@@ -200,7 +196,7 @@ def tvm_imagenet512_gen(pretrained: bool = False, **overrides: object) -> TVMFor
     Parameters
     ----------
     pretrained : bool, default=False
-        ``True`` raises until the 512-pixel weights are hosted for Lucid.
+        ``True`` raises: the 512-pixel weights are not hosted for Lucid.
     **overrides : object
         :class:`TVMConfig` fields to change from the 512-pixel defaults.
 

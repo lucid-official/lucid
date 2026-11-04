@@ -7,8 +7,8 @@ than weights: each game exposes its own minimal action set, so the
 policy head's width changes with the tag.  The factory reads that from
 the entry rather than making the caller remember it.
 
-The weights are converted by :mod:`tools.convert_weights.diamond` from
-``eloialonso/diamond`` and re-hosted under the ``lucid-dl`` org.
+The weights are converted from ``eloialonso/diamond`` and re-hosted under
+the ``lucid-dl`` org.
 
 ⚠️ These are **agents**, not just world models.  Each file carries the
 denoiser, the reward/termination model and the actor-critic together,

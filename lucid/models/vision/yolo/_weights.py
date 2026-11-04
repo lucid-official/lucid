@@ -1,12 +1,10 @@
 """Pretrained-weight declarations for the YOLO family.
 
 Four COCO detectors converted straight from the original darknet
-``.weights`` releases by :mod:`tools.convert_weights.yolo` — no
-intermediate framework is involved, so these are the authors' own trained
-parameters rather than a reimplementation's.  Each checkpoint's tensor
-budget matches its darknet blob exactly (see the converter's module
-docstring for the arithmetic), and all four reproduce darknet's published
-detections on ``data/dog.jpg``.
+``.weights`` releases — no intermediate framework is involved, so these
+are the authors' own trained parameters rather than a reimplementation's.
+Each checkpoint's tensor budget matches its darknet blob exactly, and all
+four reproduce darknet's published detections on ``data/dog.jpg``.
 
 Preprocessing is darknet's, which is unusual for this zoo: letterbox to a
 square canvas and feed raw :math:`[0, 1]` pixels.  No dataset mean/std is

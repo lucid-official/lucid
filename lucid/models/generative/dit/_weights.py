@@ -8,8 +8,8 @@ published, which is why ``dit_xlarge_2`` (and its ``_gen`` wrapper) is
 the only factory here whose ``pretrained=True`` loads anything — the
 others refuse it rather than hand back an untrained model.
 
-The weights are converted by :mod:`tools.convert_weights.dit` from the
-``facebook/DiT-XL-2-*`` repos and re-hosted under the ``lucid-dl`` org.
+The weights are converted from the ``facebook/DiT-XL-2-*`` repos and
+re-hosted under the ``lucid-dl`` org.
 
 Two things a caller needs to know before using them.
 

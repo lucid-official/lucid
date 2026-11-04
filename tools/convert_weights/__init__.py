@@ -1,28 +1,16 @@
-"""Offline weight-conversion pipeline for the Lucid model zoo.
+"""One-off pretrained-weight conversion scripts.
 
-Loads pretrained checkpoints from upstream sources (torchvision / timm /
-transformers), remaps their ``state_dict`` keys to Lucid's module
-layout, and writes a Lucid-native ``model.safetensors`` + ``config.json``
-+ ``README.md`` ready to upload to the Hugging Face Hub under the
-``lucid-dl`` org.
+Conversion scripts are one-off.  A port's script is written here and deleted
+once its weights are published and ``tools.check_pretrained_parity`` agrees with
+the source.  Nothing outside this package may import one: it will be gone.
 
-This is **dev-only tooling** — it imports torch / torchvision and lives
-under ``tools/`` (outside ``lucid/``), so it is exempt from the runtime
-no-external-dependency rule.  The produced checkpoints are pure Lucid
-safetensors; nothing here ships in the installed package.
+A script may import the reference framework, because ``tools/`` sits outside the
+runtime's no-external-dependency rule.  What it produces is pure Lucid
+safetensors, and nothing here ships in the installed package.
 
-Usage
------
-::
+Earlier converters and the shared base they built on can be found in git at
+``e1858082ce92cf60debac4ff91811adf3debba06``::
 
-    python -m tools.convert_weights resnet_18 --tag IMAGENET1K_V1
-    python -m tools.convert_weights resnet_18 --tag IMAGENET1K_V1 --upload
-
-The first form writes to ``./_converted/<repo>/<tag>/`` for inspection;
-``--upload`` pushes the folder to the Hub (requires ``huggingface-cli
-login`` or ``HF_TOKEN``).
+    git ls-tree --name-only e1858082ce92cf60debac4ff91811adf3debba06 tools/convert_weights/
+    git show e1858082ce92cf60debac4ff91811adf3debba06:tools/convert_weights/_base.py
 """
-
-from tools.convert_weights._base import Architecture, ConversionSpec, convert, write
-
-__all__ = ["Architecture", "ConversionSpec", "convert", "write"]

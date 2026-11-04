@@ -17,8 +17,7 @@ resize with its own resize side length (the reference zoo tuned these
 per model), and the standard ImageNet mean / std.
 
 All four checkpoints are hosted under the ``lucid-dl`` Hugging Face
-org and load directly via ``swin_<size>_cls(pretrained=True)``.  See the
-family conversion recipe in ``tools.convert_weights.swin``.
+org and load directly via ``swin_<size>_cls(pretrained=True)``.
 """
 
 from lucid.utils.transforms import ImageClassification

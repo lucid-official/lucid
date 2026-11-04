@@ -2,9 +2,8 @@
 
 Wang et al., CVPRW 2020.  Three architectures ship: ``cspresnet_50``,
 ``cspresnext_50``, ``cspdarknet_53``.  Hyperparameters lifted from
-``timm.models.cspnet`` to keep state-dict compatibility (the converter
-in ``tools/convert_weights/cspnet.py`` is a single ``map_key`` for all
-three variants).
+``timm.models.cspnet`` to keep state-dict compatibility (one key map
+converts all three variants).
 """
 
 import lucid.weights as weights_mod

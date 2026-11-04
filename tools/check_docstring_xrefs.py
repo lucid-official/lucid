@@ -472,10 +472,10 @@ def _resolve(
     # Prose placeholders — not real references.
     if any(c in target for c in "…()[] "):
         return True
-    # ``tools.convert_weights.dit`` and its siblings are modules in this
-    # repository, and the index above walks ``lucid/`` only. Checked on
-    # disk rather than whitelisted, so a reference to a converter that
-    # was renamed or deleted still fails.
+    # ``tools.*`` targets are modules in this repository, and the index
+    # above walks ``lucid/`` only. Checked on disk rather than whitelisted,
+    # so a reference to a tool or one-off script that was renamed or
+    # deleted still fails.
     if target.startswith("tools."):
         return (ROOT / Path(*target.split("."))).with_suffix(".py").exists() or (
             ROOT / Path(*target.split("."))

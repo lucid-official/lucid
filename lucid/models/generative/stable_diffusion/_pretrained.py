@@ -19,11 +19,10 @@ text-to-image LDM, which is a different model from the released ones —
 quoting it here would attribute the paper's figure to Stability's
 network.  ``summary="auto"`` reports what is actually built.
 
-The weights are converted by
-:mod:`tools.convert_weights.stable_diffusion` and were verified against
-the reference activation by activation, not merely loaded — see
-:class:`StableDiffusionWeights` for the numbers and for the one
-residual that is the CPU kernel's rather than the conversion's.
+The converted weights were verified against the reference activation by
+activation, not merely loaded — see :class:`StableDiffusionWeights` for
+the numbers and for the one residual that is the CPU kernel's rather than
+the conversion's.
 """
 
 import lucid.weights as weights_mod

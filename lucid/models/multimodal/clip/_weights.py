@@ -1,9 +1,9 @@
 """Pretrained-weight declarations for CLIP.
 
-The four ViT releases OpenAI published, converted by
-:mod:`tools.convert_weights.clip` from the ``transformers``-layout
-re-hosting of the original checkpoints.  These are the authors' own
-trained parameters — no reimplementation was trained to produce them.
+The four ViT releases OpenAI published, converted from the
+``transformers``-layout re-hosting of the original checkpoints.  These are
+the authors' own trained parameters — no reimplementation was trained to
+produce them.
 
 Each was checked numerically against the reference before publication,
 not merely loaded: with the converted weights in place, Lucid's
