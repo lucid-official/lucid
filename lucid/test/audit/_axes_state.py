@@ -1172,6 +1172,17 @@ class WeightsAxis(Axis):
         return symbol.qualname.startswith("lucid.weights.") and (symbol.short in self._NAMES)
 
     def run(self, symbol: Symbol, ctx: Context) -> Finding:
+        from lucid.weights import _registry  # noqa: PLC0415 - optional subsystem
+
+        # The sweep can share a process with a test session, where a probe left
+        # in the registry reads as a published model with no factory.
+        try:
+            return self._probe(symbol)
+        finally:
+            _registry._WEIGHTS_BY_MODEL.pop("_audit_probe_net", None)
+            _registry._WEIGHTS_BY_ENUM.pop("_AuditProbeWeights", None)
+
+    def _probe(self, symbol: Symbol) -> Finding:
         import lucid.weights as weights  # noqa: PLC0415 - optional subsystem
 
         model_name = "_audit_probe_net"
