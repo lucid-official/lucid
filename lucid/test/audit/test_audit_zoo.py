@@ -144,12 +144,17 @@ def test_a_stage_with_no_tests_is_not_a_failure(tmp_path: Path) -> None:
     assert not read_result(CommandStage(name="x", command=("x",)), log, "none", 0.1, 0.1).failed
 
 
+def _marker(argv: tuple[str, ...]) -> str:
+    """The marker expression: the ``-m`` after ``python -m pytest``'s own."""
+    return argv[argv.index("-m", 3) + 1]
+
+
 def test_a_pytest_stage_clears_the_default_markers_and_can_drop_heavy(tmp_path: Path) -> None:
     stage = PytestStage(name="own-tests", files=("a.py",), basetemp=tmp_path, marker="")
-    assert stage.argv()[stage.argv().index("-m") + 1] == ""
+    assert _marker(stage.argv()) == ""
     light = stage.without_heavy("why")
     assert light is not None and light.notes == ("why",)
-    assert light.argv()[light.argv().index("-m") + 1] == "not heavy"
+    assert _marker(light.argv()) == "not heavy"
     assert light.without_heavy("again") is None, "one retry, not a loop"
 
     zoo = PytestStage(
@@ -158,7 +163,7 @@ def test_a_pytest_stage_clears_the_default_markers_and_can_drop_heavy(tmp_path: 
     dropped = zoo.without_heavy("why")
     assert dropped is not None
     argv = dropped.argv()
-    assert argv[argv.index("-m") + 1] == "(not control) and not heavy"
+    assert _marker(argv) == "(not control) and not heavy"
     assert argv[argv.index("-k") + 1] == "vit"
     assert CommandStage(name="build", command=("x",)).without_heavy("why") is None
 
@@ -536,10 +541,11 @@ def test_the_catalog_finds_the_zoo_as_the_tree_has_it() -> None:
 def test_the_build_probe_skips_a_factory_past_the_budget_by_name(capsys) -> None:
     from lucid.test.audit import _zoo_probes
 
-    assert _zoo_probes.build_family("lenet", budget_gb=0.00001) == 0
+    # alexnet declares its parameter counts (lenet does not, and is always built).
+    assert _zoo_probes.build_family("alexnet", budget_gb=0.00001) == 0
     out = capsys.readouterr().out
-    assert "ADAPTIVE lenet/" in out and "past this machine's build budget" in out
-    assert "0 built" in out
+    assert "ADAPTIVE alexnet/alexnet:" in out and "past this machine's build budget" in out
+    assert "0 built, 2 past budget" in out
 
 
 # ── the display ──────────────────────────────────────────────────────────────
