@@ -12,7 +12,10 @@ alone under a tracer and hands the new statistics to the executable as extra
 outputs (``bn_runstats``).  An in-place op cannot do that — by the time the
 tracer sees it the write has happened — so this path works after the fact.
 The tracer follows each write (``Tracer::on_inplace_write``) and keeps a copy
-of every outside tensor from before its first one.  After the trace:
+of every outside tensor from before its first one.  What counts as outside is
+the bytes a write lands in: a view the call takes of a buffer it did not create
+is written like the buffer, and carrying the value back through that view
+reaches everything reading those bytes.  After the trace:
 
 * every written tensor is put back to its value from before the trace, so
   whatever runs next — the executable, or an eager fallback — applies the

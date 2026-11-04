@@ -33,11 +33,10 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 import lucid.optim as optim
 from lucid._C import engine as _C_engine
+from lucid._dispatch import _wrap
 from lucid.compile import _tracing
 from lucid.compile._core import fallback
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
-
-np = pytest.importorskip("numpy")
 
 
 def _metal_ok() -> bool:
@@ -207,15 +206,15 @@ def _agrees(body: Body, entry: str, setup: Setup | None = None) -> _Seen:
 # -- the call made it: it starts over on every call --------------------------
 
 
-def _from_numpy_literal() -> Tensor:
-    return lucid.tensor(np.array(ROWS, dtype="float32"), device=COMPILE_DEVICE)
+def _ndarray() -> object:
+    return pytest.importorskip("numpy").array(ROWS, dtype="float32")
 
 
 #: Every way a call makes a tensor from nothing, on Metal.
 FACTORIES: dict[str, Make] = {
     "from_bytes": lambda: lucid.tensor(ROWS, device=COMPILE_DEVICE),
     "as_tensor": lambda: lucid.as_tensor(ROWS, device=COMPILE_DEVICE),
-    "numpy-ctor": _from_numpy_literal,
+    "numpy-ctor": lambda: lucid.tensor(_ndarray(), device=COMPILE_DEVICE),
     "arange": lambda: lucid.arange(12.0, device=COMPILE_DEVICE).reshape(*SHAPE),
     "eye": lambda: lucid.eye(*SHAPE, device=COMPILE_DEVICE),
     "linspace": lambda: lucid.linspace(0.0, 1.0, 12, device=COMPILE_DEVICE).reshape(*SHAPE),
@@ -229,7 +228,7 @@ FACTORIES: dict[str, Make] = {
 #: The same, made elsewhere and moved.
 MOVED: dict[str, Make] = {
     "literal": lambda: lucid.tensor(ROWS).to(COMPILE_DEVICE),
-    "from_numpy": lambda: lucid.from_numpy(np.array(ROWS, dtype="float32")).to(COMPILE_DEVICE),
+    "from_numpy": lambda: lucid.from_numpy(_ndarray()).to(COMPILE_DEVICE),
     "zeros": lambda: lucid.zeros(*SHAPE).to(COMPILE_DEVICE),
     "arange": lambda: lucid.arange(12.0).reshape(*SHAPE).to(COMPILE_DEVICE),
 }
@@ -303,7 +302,7 @@ def test_a_write_to_what_the_call_made_is_owed_to_nobody(factory: str, fold: boo
     assert all(f is not y._impl for f in feeds)
     for feed in feeds:
         # ``arange`` and ``linspace`` are read through a reshape, so flat.
-        assert lucid.Tensor.__new_from_impl__(feed).reshape(*SHAPE).tolist() == before
+        assert _wrap(feed).reshape(*SHAPE).tolist() == before
 
 
 def test_a_shared_tensor_written_through_an_alias_it_made_is_the_calls_own() -> None:
@@ -578,6 +577,60 @@ def _write_and_keep(model: nn.Module, x: Tensor) -> Tensor:
     return x * 1.0
 
 
+@pytest.mark.parametrize("entry", ENTRIES)
+@pytest.mark.parametrize("buffer", ["plain", "run-of-larger"])
+def test_the_whole_tensor_written_after_a_view_of_it_ends_with_its_own_value(
+    buffer: str, entry: str
+) -> None:
+    """The later copy of the buffer already holds the view's write: putting it
+    back has to leave the buffer from before both."""
+
+    def body(model: nn.Module, x: Tensor) -> Tensor:
+        model.b[1:].add_(x.mean())
+        model.b.copy_(x * 2.0)
+        return x * 1.0
+
+    assert _agrees(body, entry, BUFFERS[buffer]).compiled
+
+
+class _Segments(nn.Module):
+    """A first segment that writes through a view of a buffer."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("b", lucid.zeros(5, 4, device=COMPILE_DEVICE)[1:4])
+        self.lin = nn.Linear(SHAPE[-1], SHAPE[-1])
+
+    def forward(self, x: Tensor) -> Tensor:
+        self.b[1:].add_(x.mean())
+        return self.lin(x)
+
+
+def _two_segments() -> nn.Module:
+    lucid.manual_seed(0)
+    return nn.Sequential(_Segments(), nn.Linear(SHAPE[-1], 2)).to(COMPILE_DEVICE)
+
+
+def test_a_step_that_cannot_write_back_runs_eager_and_writes_once_per_call() -> None:
+    """Segments have no way to carry a write, so a view's counts like a direct one."""
+    model, ref = _two_segments(), _two_segments()
+    step = lucid.compile.make_step(model, _loss, segments=2)
+    for x in _inputs():
+        got = step(x)
+        got.backward()
+        want = _loss(ref(x))
+        want.backward()
+        assert _close([float(got.item())], [float(want.item())])
+        assert model[0].b.tolist() == ref[0].b.tolist()
+
+
+def test_a_step_with_no_eager_path_refuses_and_leaves_the_buffer_alone() -> None:
+    model = _two_segments()
+    with pytest.raises(RuntimeError, match="wrote in place"):
+        lucid.compile.compiled_step(model, _inputs()[0], _loss)
+    assert model[0].b.tolist() == [[0.0] * 4] * 3
+
+
 # -- what the call computed itself owes nobody ---------------------------------
 
 
@@ -601,27 +654,39 @@ def _through_a_view_of_the_argument(_model: nn.Module, x: Tensor) -> Tensor:
     return x * 2.0
 
 
+def _one_call(entry: str, model: _Model, *, compiled: bool) -> Callable[[Tensor], Tensor]:
+    """What ``entry`` runs per call, the same model's eager step when not ``compiled``."""
+    if entry == "module":
+        return lucid.compile(model) if compiled else model
+    opt = optim.SGD(model.parameters(), lr=1e-4)
+    if entry == "fused_step" and compiled:
+        return lucid.compile.fused_step(model, _loss, opt)
+    if entry == "make_step" and compiled:
+        return lucid.compile.make_step(model, _loss)
+
+    def eager(x: Tensor) -> Tensor:
+        opt.zero_grad()
+        loss = _loss(model(x))
+        loss.backward()
+        if entry == "fused_step":
+            opt.step()
+        return loss
+
+    return eager
+
+
 def _one_argument(entry: str, body: Body, x: Tensor, *, compiled: bool) -> list[list[float]]:
     """``body`` on ``x`` three times; what each call answered and left in ``x``."""
-    model = _twin(body, None)
+    call = _one_call(entry, _twin(body, None), compiled=compiled)
     seen: list[list[float]] = []
-    if entry == "module":
-        run = lucid.compile(model) if compiled else model
-        with lucid.no_grad():
-            for _ in range(3):
-                seen.append(_floats(run(x)))
-                seen.append(_floats(x))
-        return seen
-    if compiled:
-        run_step = lucid.compile.make_step(model, _loss)
-    for _ in range(3):
-        loss = run_step(x) if compiled else _loss(model(x))
-        seen.append([float(loss.item())])
-        seen.append(_floats(x))
+    with lucid.no_grad() if entry == "module" else lucid.enable_grad():
+        for _ in range(3):
+            seen.append(_floats(call(x)))
+            seen.append(_floats(x))
     return seen
 
 
-@pytest.mark.parametrize("entry", ["module", "make_step"])
+@pytest.mark.parametrize("entry", ENTRIES)
 @pytest.mark.parametrize("arg", ["whole", "part"])
 def test_a_write_through_a_view_of_an_argument_runs_eager(entry: str, arg: str) -> None:
     """The next call brings another tensor, so a compiled call cannot carry the

@@ -200,6 +200,49 @@ class TestAWriteThroughAView:
 
         assert _answer_after_export(fn, tmp_path) == [[6.0, 6.0, 6.0, 6.0]]
 
+    @pytest.mark.parametrize(
+        "view",
+        [
+            lambda t: t[:2],
+            lambda t: t[1],
+            lambda t: t[:, 1],
+            lambda t: t.mT,
+            lambda t: lucid.diagonal(t),
+            lambda t: t.real,
+            lambda t: t.imag,
+        ],
+        ids=["slice", "index", "column", "mT", "diagonal", "real", "imag"],
+    )
+    @pytest.mark.parametrize("to", ["input", "closure"])
+    def test_of_any_kind_is_put_back(
+        self, to: str, view: Callable[[lucid.Tensor], lucid.Tensor]
+    ) -> None:
+        """Every view a write can go through, on the trace's own (CPU) path."""
+        complex_part = view(lucid.zeros(3, 3, dtype=lucid.complex64)).dtype == lucid.float32
+        dtype = lucid.complex64 if complex_part else lucid.float32
+        closure = lucid.ones(3, 3, dtype=dtype)
+        example = lucid.ones(3, 3, dtype=dtype)
+        want = closure.tolist()
+
+        def fn(x: lucid.Tensor) -> lucid.Tensor:
+            view(x if to == "input" else closure).add_(1.0)
+            return x * 1
+
+        cml_build.trace(_Apply(fn).eval(), example)
+        assert closure.tolist() == want
+        assert example.tolist() == want
+
+    def test_a_tensor_written_whole_after_a_view_of_it_is_put_back_too(self) -> None:
+        def fn(x: lucid.Tensor) -> lucid.Tensor:
+            x[:, :2].add_(1.0)
+            x.copy_(x.detach() * 0.0 + 9.0)
+            return x * 1.0
+
+        example = lucid.ones(1, 4)
+        with pytest.raises(ValueError, match="after an in-place write"):
+            cml_build.trace(_Apply(fn).eval(), example)
+        assert example.tolist() == [[1.0, 1.0, 1.0, 1.0]]
+
     def test_of_a_tensor_it_closes_over_leaves_that_tensor_alone(self) -> None:
         held = lucid.zeros(4)
 
