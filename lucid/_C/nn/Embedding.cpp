@@ -365,17 +365,16 @@ std::int64_t read_index(const CpuStorage& s, std::size_t k) {
                                  : reinterpret_cast<const std::int32_t*>(s.ptr.get())[k];
 }
 
+// Whether row ``emb`` of a weight of ``num_emb`` rows joins a bag: the forward
+// skips the padding row and any index out of range.
+bool joins_a_bag(std::int64_t emb, std::int64_t padding_idx, std::int64_t num_emb) {
+    return emb != padding_idx && emb >= 0 && emb < num_emb;
+}
+
 // One element of a saved weight, as the value the forward's ``>`` compared.
 double read_weight(const CpuStorage& weight, std::size_t at) {
-    switch (weight.dtype) {
-    case Dtype::F64:
-        return reinterpret_cast<const double*>(weight.ptr.get())[at];
-    case Dtype::F32:
-        return reinterpret_cast<const float*>(weight.ptr.get())[at];
-    default:
-        ErrorBuilder("embedding_bag").not_implemented("create_graph=True for this dtype");
-        return 0.0;
-    }
+    return weight.dtype == Dtype::F64 ? reinterpret_cast<const double*>(weight.ptr.get())[at]
+                                      : reinterpret_cast<const float*>(weight.ptr.get())[at];
 }
 
 }  // namespace
@@ -393,9 +392,7 @@ std::vector<TensorImplPtr> EmbeddingBagBackward::apply_for_graph(const TensorImp
     for (auto d : indices_shape_)
         n_idx *= static_cast<std::size_t>(d);
     const CpuStorage indices = host_copy(saved_indices_, indices_shape_);
-    const std::size_t off_elem = std::holds_alternative<CpuStorage>(saved_offsets_)
-                                     ? dtype_size(std::get<CpuStorage>(saved_offsets_).dtype)
-                                     : dtype_size(std::get<GpuStorage>(saved_offsets_).dtype);
+    const std::size_t off_elem = dtype_size(storage_dtype(saved_offsets_));
     const std::size_t n_offsets = storage_nbytes(saved_offsets_) / off_elem;
     const CpuStorage offsets =
         host_copy(saved_offsets_, Shape{static_cast<std::int64_t>(n_offsets)});
@@ -409,9 +406,7 @@ std::vector<TensorImplPtr> EmbeddingBagBackward::apply_for_graph(const TensorImp
         starts[b] = static_cast<std::size_t>(read_index(offsets, b));
         ends[b] = b + 1 < n_offsets ? static_cast<std::size_t>(read_index(offsets, b + 1)) : n_idx;
     }
-    const auto usable = [&](std::int64_t emb) {
-        return emb != padding_idx_ && emb >= 0 && emb < num_emb;
-    };
+    const auto usable = [&](std::int64_t emb) { return joins_a_bag(emb, padding_idx_, num_emb); };
 
     const Shape weight_shape{num_emb, dim};
     auto base = zeros_op(weight_shape, dtype_, device_);
@@ -425,6 +420,8 @@ std::vector<TensorImplPtr> EmbeddingBagBackward::apply_for_graph(const TensorImp
         // max: each (bag, column) sends its gradient to the row that won it,
         // first on ties, as the forward's strict ``>`` decided.
         const CpuStorage weight = host_copy(saved_inputs_[0], weight_shape);
+        if (weight.dtype != Dtype::F64 && weight.dtype != Dtype::F32)
+            ErrorBuilder("embedding_bag").not_implemented("create_graph=True for this dtype");
         const Shape grid{static_cast<std::int64_t>(n_bags), dim};
         CpuStorage rows = helpers::allocate_cpu(grid, Dtype::I32);
         CpuStorage keep = helpers::allocate_cpu(grid, Dtype::F64);
