@@ -568,9 +568,12 @@ def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Call
             if key is not None:
                 key = fingerprint.rekey(key, x_args, {})
             if entry is None:
+                from lucid.compile._core.buffer_writes import eager_rerun
+
                 if key is not None:
                     eager_only.add(key)
-                return loss_fn(model(*x_args[:1]), *x_args[1:])
+                with eager_rerun():
+                    return loss_fn(model(*x_args[:1]), *x_args[1:])
             if key is not None:
                 cache[key] = entry
 

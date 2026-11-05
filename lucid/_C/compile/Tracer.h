@@ -347,7 +347,13 @@ public:
     // writes it again.  What the walk cannot decide counts as an input.  A table
     // added to on every call by a constant (``h.add_(1.0)``) stays frozen at its
     // trace-time value, as before (LCD-864).
-    void refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held);
+    //
+    // Answers ``(tensor, its value after the trace)`` for each tensor it put
+    // back: an eager call that finds such a tensor already built (a cache filled
+    // from the model's state) writes nothing to it, and the caller gives it the
+    // trace's values again (``lucid/compile/_core/buffer_writes.py``).
+    std::vector<std::pair<TensorImplPtr, TensorImplPtr>>
+    refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held);
 
     // Whether :meth:`restore_outside_writes` keeps the written values for
     // :meth:`retained_values`, for a caller that reads a traced value's contents

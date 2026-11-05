@@ -284,12 +284,13 @@ void bind_tracer_writes(py::class_<lucid::compile::Tracer>& tracer) {
             "refuse_kept_writes",
             [](Tracer& t) {
                 const auto* type = py::detail::get_type_info(typeid(lucid::TensorImpl));
-                t.refuse_kept_writes([type](const lucid::TensorImpl* impl) {
+                return t.refuse_kept_writes([type](const lucid::TensorImpl* impl) {
                     return static_cast<bool>(py::detail::get_object_handle(impl, type));
                 });
             },
             "Mark the recording unsupported if Python still holds a tensor the call "
-            "made and wrote in place, or a view of it, and put each such tensor back. "
+            "made and wrote in place from its inputs, or a view of it, and put each "
+            "such tensor back; answer (tensor, value after the trace) for each. "
             "Call once the call's result has been dropped.")
         .def(
             "outside_writes",

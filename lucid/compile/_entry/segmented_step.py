@@ -64,6 +64,7 @@ from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.compile._core.bn_runstats import BnWriteback
+from lucid.compile._core.buffer_writes import eager_rerun
 from lucid.compile._core.signature import CacheKey, outside_feeds, tree_tensors
 
 if TYPE_CHECKING:
@@ -619,8 +620,8 @@ def make_segmented_step(
     eager_only = {"flag": False}
 
     def _run_eager(x_args: tuple[Tensor, ...]) -> Tensor:
-        out = model(*x_args[:1])
-        return loss_fn(out, *x_args[1:])
+        with eager_rerun():
+            return loss_fn(model(*x_args[:1]), *x_args[1:])
 
     def step(*x_args: Tensor) -> Tensor:
         """Run one segmented compiled training step (or eager fallback)."""

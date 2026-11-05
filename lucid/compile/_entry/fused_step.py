@@ -684,12 +684,13 @@ class _FusedStep:
         """Run one training step eagerly when the fused plan declines or fails."""
         from lucid._tensor.tensor import Tensor
         from lucid.autograd._grad_mode import enable_grad
+        from lucid.compile._core.buffer_writes import eager_rerun
 
         # Whoever owns the optimizer state steps it: the compiled wrapper once
         # it has the state, else the optimizer itself.
         stepper = self._optimizer if self._compiled is None else self._compiled
         stepper.zero_grad()
-        with enable_grad():
+        with enable_grad(), eager_rerun():
             out = self._model(*args[:1])
             loss = self._loss_fn(out, *args[1:])
             if self._grad_scaler is not None and self._grad_scaler._enabled:

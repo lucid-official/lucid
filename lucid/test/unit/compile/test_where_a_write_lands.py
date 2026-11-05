@@ -514,6 +514,26 @@ def test_a_mask_built_once_and_kept_holds_its_values_on_every_call(entry: str) -
     assert not seen.eager and seen.entries == 2
 
 
+def _a_cache_slot(model: nn.Module) -> None:
+    model.register_buffer("scale", lucid.full((SHAPE[-1],), 2.0, device=COMPILE_DEVICE))
+    model.cache = None
+
+
+def _fills_a_cache_from_its_state(model: nn.Module, x: Tensor) -> Tensor:
+    if model.cache is None:
+        model.cache = lucid.zeros(SHAPE[-1], device=COMPILE_DEVICE)
+        model.cache.copy_(model.scale * 3.0)
+    return x * model.cache
+
+
+@pytest.mark.parametrize("entry", ENTRIES)
+def test_a_cache_filled_once_from_the_model_s_state_holds_its_values(entry: str) -> None:
+    """The write reads the model's state, so the trace cannot call it a constant
+    and puts it back for the eager call that follows.  That call finds the cache
+    built and writes nothing to it: it gets the trace's values back."""
+    _agrees(_fills_a_cache_from_its_state, entry, _a_cache_slot)
+
+
 def _rebuilds_its_total_every_call(model: nn.Module, x: Tensor) -> Tensor:
     model.total = lucid.zeros(SHAPE[-1], device=COMPILE_DEVICE)
     model.total.add_(x.mean())

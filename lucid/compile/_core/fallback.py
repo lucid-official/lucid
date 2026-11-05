@@ -186,9 +186,12 @@ def run_eager(model: Module, args: tuple[object, ...], kwargs: dict[str, object]
         outputs (lists, dicts, dataclasses).
     """
 
+    from lucid.compile._core.buffer_writes import eager_rerun
+
     # Module.__call__ wants Tensor positionals; the docstring promises
     # this entry accepts whatever the user passed (incl. non-Tensor).
-    return model(*(cast(Tensor, a) for a in args), **kwargs)
+    with eager_rerun():
+        return model(*(cast(Tensor, a) for a in args), **kwargs)
 
 
 class EagerFallbackSet:

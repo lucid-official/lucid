@@ -340,7 +340,9 @@ bool Tracer::lands_in_made(const TensorImplPtr& target) const {
                        [&](const TensorImplPtr& member) { return made_here(member.get()); });
 }
 
-void Tracer::refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held) {
+std::vector<std::pair<TensorImplPtr, TensorImplPtr>>
+Tracer::refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held) {
+    std::vector<std::pair<TensorImplPtr, TensorImplPtr>> put_back;
     ConstantWalk walk;
     for (auto it = made_originals_.rbegin(); it != made_originals_.rend(); ++it) {
         const auto members = it->first->live_views();
@@ -358,9 +360,12 @@ void Tracer::refuse_kept_writes(const std::function<bool(const TensorImpl*)>& he
                          "in place, so a compiled call would start it over every time");
         // Whatever runs next is the first write it sees.  ``fill_`` is the only
         // write through repeated elements, and running it again overwrites them.
-        if (!repeats_elements(*it->first))
-            it->first->copy_from(*it->second);
+        if (repeats_elements(*it->first))
+            continue;
+        put_back.emplace_back(it->first, snapshot(it->first));
+        it->first->copy_from(*it->second);
     }
+    return put_back;
 }
 
 namespace {

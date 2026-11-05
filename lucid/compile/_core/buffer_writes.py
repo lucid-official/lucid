@@ -29,7 +29,9 @@ view of it, is not written back — the next call's arguments are other tensors
 back (:func:`refuse`).
 """
 
-from collections.abc import Sequence
+import threading
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, cast
 
 from lucid._C import engine as _C_engine
@@ -61,10 +63,48 @@ def _lands_in_argument(
     return any(a is impl or (family != 0 and a.family_id() == family) for a in arguments)
 
 
+class _HeldPutBack(threading.local):
+    """What the last refused trace put back of the tensors it made that Python
+    still holds: ``(tensor, its value after the trace, its version once put
+    back)``, for the eager call that follows (:func:`eager_rerun`)."""
+
+    def __init__(self) -> None:
+        self.pending: list[tuple[_C_engine.TensorImpl, _C_engine.TensorImpl, int]] = []
+
+
+_HELD = _HeldPutBack()
+
+
 def _put_back(tracer: Tracer) -> None:
     """Undo the trace-time call's writes that whatever runs next applies itself."""
-    tracer.refuse_kept_writes()
+    _HELD.pending = [
+        (impl, after, int(impl.version)) for impl, after in tracer.refuse_kept_writes()
+    ]
     tracer.restore_outside_writes()
+
+
+@contextmanager
+def eager_rerun() -> Iterator[None]:
+    """Run the eager call that follows a refused trace.
+
+    A tensor the trace made, wrote from its inputs, and left held by Python was
+    put back so that the eager call writes it once.  An eager call that finds it
+    already built — a cache filled from the model's state on the first call —
+    writes nothing to it, and would leave it empty for good.  Each such tensor
+    the call did not write gets the trace's values back.
+
+    Yields
+    ------
+    None
+        While the eager call runs.
+    """
+    pending, _HELD.pending = _HELD.pending, []
+    try:
+        yield
+    finally:
+        for impl, after, version in pending:
+            if int(impl.version) == version:
+                impl.copy_from(after)
 
 
 def require_outside_writes(
