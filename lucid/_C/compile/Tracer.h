@@ -339,6 +339,14 @@ public:
     // (``self.h = lucid.tensor(...)``, once) expects each call to go on from the
     // last.  Call once the trace has finished and the call's result is dropped:
     // a result is handed back on every run and holds nothing over.
+    //
+    // A write whose value comes from the trace's constants alone
+    // (:meth:`from_constants`) is left as it is: a cached or lazily built table
+    // holds the same values whoever filled it, and putting it back would empty
+    // it for good, since the eager call that follows finds it built and never
+    // writes it again.  What the walk cannot decide counts as an input.  A table
+    // added to on every call by a constant (``h.add_(1.0)``) stays frozen at its
+    // trace-time value, as before (LCD-864).
     void refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held);
 
     // Whether :meth:`restore_outside_writes` keeps the written values for
@@ -474,6 +482,27 @@ private:
     bool lands_outside(const TensorImplPtr& target) const;
     // Whether ``target`` is a view of a tensor the call made.
     bool lands_in_made(const TensorImplPtr& target) const;
+    // What :meth:`from_constants` has worked out so far, and the op that made
+    // each id; one per :meth:`refuse_kept_writes`.
+    struct ConstantWalk {
+        std::unordered_map<TensorId, const OpNode*> producer;
+        std::unordered_map<TensorId, bool> known;
+    };
+    // Whether the value ``id`` names comes from the trace's constants alone: every
+    // op on the way is one :func:`pure_op` knows, and every feed reached is a
+    // tensor the call made (``constant_feed``).  An id nothing recorded (a write
+    // folded away) is a constant: folding only holds out an op whose every input
+    // the call made.  Anything else — an argument, a buffer, a draw, an op it
+    // does not know — answers no.
+    bool from_constants(TensorId id, ConstantWalk& walk) const;
+    // One step of that walk: settles ``id`` when what it reads is known, and
+    // otherwise pushes what is not and answers false.
+    bool decide(TensorId id, ConstantWalk& walk, std::vector<TensorId>& stack) const;
+    // Whether feed ``id`` holds a tensor the call made, or a copy of one, and no
+    // other tensor shares its bytes.
+    bool constant_feed(TensorId id) const;
+    // Notes that feed ``id`` now holds a copy of ``of``, which the call made.
+    void note_constant_feed(TensorId id, const TensorImpl& of);
     // ``on_inplace_write`` for a write that :meth:`lands_outside`: keeps the
     // value of what can put it back.
     void keep_outside(const TensorImplPtr& target);
@@ -527,6 +556,8 @@ private:
     std::vector<std::pair<TensorImplPtr, TensorImplPtr>> outside_originals_;
     // The same for what the call made — see :meth:`refuse_kept_writes`.
     std::vector<std::pair<TensorImplPtr, TensorImplPtr>> made_originals_;
+    // Feeds that hold a copy of a tensor the call made (see ``constant_feed``).
+    std::unordered_set<TensorId> constant_feeds_;
     bool keep_written_values_ = false;
     // Owning: the call's arguments (``watch``), keyed by raw pointer.
     std::unordered_map<TensorImpl*, TensorImplPtr> watched_;

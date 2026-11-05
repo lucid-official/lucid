@@ -341,11 +341,18 @@ bool Tracer::lands_in_made(const TensorImplPtr& target) const {
 }
 
 void Tracer::refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held) {
+    ConstantWalk walk;
     for (auto it = made_originals_.rbegin(); it != made_originals_.rend(); ++it) {
         const auto members = it->first->live_views();
         if (!held(it->first.get()) &&
             std::none_of(members.begin(), members.end(),
                          [&](const TensorImplPtr& member) { return held(member.get()); }))
+            continue;
+        // Written from the trace's constants alone, the tensor holds the same
+        // values whoever wrote it and however often: a cached or lazily built
+        // table.  The holder keeps them; putting them back for an eager call
+        // that never writes them again would empty the table for good.
+        if (from_constants(lookup_id(it->first.get()), walk))
             continue;
         mark_unsupported("a tensor the call made is still held after the call and was written "
                          "in place, so a compiled call would start it over every time");
@@ -354,6 +361,88 @@ void Tracer::refuse_kept_writes(const std::function<bool(const TensorImpl*)>& he
         if (!repeats_elements(*it->first))
             it->first->copy_from(*it->second);
     }
+}
+
+namespace {
+// Ops that answer from their inputs alone, by the same rule every time: what
+// they compute from constants is a constant.  Anything not listed counts as
+// reading something else (a draw, the host, state of its own).
+bool pure_op(std::string_view name, bool no_inputs) {
+    static const std::unordered_set<std::string_view> made_from_nothing{
+        "zeros", "ones", "full", "empty", "eye", "arange", "linspace", "logspace"};
+    static const std::unordered_set<std::string_view> pure{
+        "reshape",       "view",        "squeeze",      "unsqueeze",    "flatten",
+        "permute",       "transpose",   "broadcast_to", "expand",       "contiguous",
+        "split_at",      "split",       "narrow",       "slice",        "select",
+        "diagonal",      "triu",        "tril",         "concatenate",  "cat",
+        "stack",         "flip",        "detach",       "to_device",    "astype",
+        "clone",         "add",         "sub",          "mul",          "div",
+        "neg",           "abs",         "pow",          "sqrt",         "exp",
+        "log",           "maximum",     "minimum",      "clip",         "floor",
+        "ceil",          "round",       "equal",        "not_equal",    "greater",
+        "greater_equal", "less",        "less_equal",   "logical_and",  "logical_or",
+        "logical_not",   "bitwise_and", "bitwise_or",   "bitwise_not",  "where",
+        "masked_fill",   "gather",      "scatter_set",  "index_select", "nonzero",
+        "matmul",        "sum"};
+    return no_inputs ? made_from_nothing.count(name) != 0 : pure.count(name) != 0;
+}
+}  // namespace
+
+bool Tracer::from_constants(TensorId root, ConstantWalk& walk) const {
+    if (walk.producer.empty()) {
+        for (const auto& op : graph_.ops)
+            for (const auto& out : op.outputs)
+                walk.producer.emplace(out.id, &op);
+    }
+    // Depth first, without recursion: a chain of a few hundred writes is a
+    // chain of a few hundred ops.
+    std::vector<TensorId> stack{root};
+    while (!stack.empty()) {
+        const TensorId id = stack.back();
+        if (id >= 0 && walk.known.count(id) == 0 && !decide(id, walk, stack))
+            continue;
+        stack.pop_back();
+    }
+    return root < 0 || walk.known[root];
+}
+
+bool Tracer::decide(TensorId id, ConstantWalk& walk, std::vector<TensorId>& stack) const {
+    const auto p = walk.producer.find(id);
+    if (p == walk.producer.end()) {
+        walk.known[id] = constant_feed(id);
+        return true;
+    }
+    const OpNode& node = *p->second;
+    if (!pure_op(node.name, node.inputs.empty())) {
+        for (const auto& out : node.outputs)
+            walk.known[out.id] = false;
+        return true;
+    }
+    bool constant = true;
+    const std::size_t pushed = stack.size();
+    for (const TensorId in : node.inputs) {
+        const auto k = walk.known.find(in);
+        if (in < 0)
+            continue;
+        if (k == walk.known.end())
+            stack.push_back(in);
+        else
+            constant = constant && k->second;
+    }
+    if (stack.size() != pushed)
+        return false;
+    for (const auto& out : node.outputs)
+        walk.known[out.id] = constant;
+    return true;
+}
+
+bool Tracer::constant_feed(TensorId id) const {
+    if (constant_feeds_.count(id) != 0)
+        return true;
+    // A feed of a tensor the call made, unless other tensors share its bytes.
+    const auto feed = external_feeds_.find(id);
+    return feed != external_feeds_.end() && made_here(feed->second.get()) &&
+           feed->second->shared_buffer() == nullptr;
 }
 
 bool Tracer::from_outside(const TensorImpl* impl) const {
@@ -385,6 +474,7 @@ TensorId Tracer::written_id(const TensorImplPtr& value) {
         const TensorId fresh = graph_.next_id++;
         impl_to_id_[value.get()] = fresh;
         external_feeds_[fresh] = copy;
+        note_constant_feed(fresh, *value);
         live_refs_.push_back(copy);
         return fresh;
     }
@@ -415,8 +505,10 @@ void Tracer::write_made(const TensorImplPtr& target, const TensorImplPtr& value)
         // Already read as a feed, by ops recorded before this write: they
         // keep the value from before it, which the buffer is about to lose.
         const auto feed = external_feeds_.find(it->second);
-        if (feed != external_feeds_.end() && feed->second.get() == target.get())
+        if (feed != external_feeds_.end() && feed->second.get() == target.get()) {
             feed->second = before ? before : snapshot(target);
+            note_constant_feed(it->second, *target);
+        }
     }
     impl_to_id_[target.get()] = written_id(value);
 }
@@ -435,10 +527,18 @@ void Tracer::on_stale_view(const TensorImplPtr& view) {
         // value from before it, which the buffer is about to lose (see
         // ``write_made``, which does the same for the target).
         const auto feed = external_feeds_.find(seen->second);
-        if (feed != external_feeds_.end() && feed->second.get() == view.get())
+        if (feed != external_feeds_.end() && feed->second.get() == view.get()) {
             feed->second = snapshot(view);
+            note_constant_feed(seen->second, *view);
+        }
     }
     stale_.emplace(view.get(), view);
+}
+
+void Tracer::note_constant_feed(TensorId id, const TensorImpl& of) {
+    // A copy of a shared buffer stands for bytes another tensor may write.
+    if (of.shared_buffer() == nullptr)
+        constant_feeds_.insert(id);
 }
 
 bool Tracer::reads_a_shared_write(const TensorImpl* impl) const {

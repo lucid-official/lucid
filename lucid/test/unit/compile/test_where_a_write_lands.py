@@ -23,6 +23,7 @@ each one, against a twin model running eagerly.  A later call is what tells
 these bugs from a correct answer: the first call agrees either way.
 """
 
+import functools
 from collections.abc import Callable, Iterator
 from typing import NamedTuple
 
@@ -428,11 +429,28 @@ def test_a_tensor_the_call_made_and_holds_goes_on_from_the_last_call(
     factory: str, kept: str, entry: str
 ) -> None:
     """The tensor looks like the call's own, but nothing about it says the next
-    call starts over: Python holds it past the call.  So the call runs eager, and
-    eager is the first to write it, so the trace's write has to be gone."""
+    call starts over: Python holds it past the call, and the write reads the
+    input.  So the call runs eager, and eager is the first to write it, so the
+    trace's write has to be gone."""
     wrap, setup = KEPT[kept]
     seen = _agrees(wrap(FACTORIES[factory]), entry, setup)
     assert not seen.compiled
+
+
+def _adds_a_constant_to_what_it_keeps(model: nn.Module, x: Tensor) -> Tensor:
+    if "h" not in model.box:
+        model.box["h"] = lucid.zeros(SHAPE[-1], device=COMPILE_DEVICE)
+    model.box["h"].add_(1.0)
+    return x * model.box["h"]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="LCD-864: a constant added to a lazily kept tensor on every call reads as a "
+    "constant table, so the compiled call holds its trace-time value",
+)
+def test_a_constant_added_to_a_kept_tensor_goes_on_from_the_last_call() -> None:
+    _agrees(_adds_a_constant_to_what_it_keeps, "module", _a_box)
 
 
 @pytest.mark.parametrize("factory", MOVED)
@@ -440,6 +458,131 @@ def test_a_tensor_the_call_made_moved_and_holds_goes_on_from_the_last_call(facto
     """With folding off a move is an op, and its result an op's output like ``x * 2``:
     told apart from what the call made, so left to the lazy-attribute issue."""
     _agrees(_kept_in_a_box(MOVED[factory]), "module", _a_box)
+
+
+def _a_lazy_mask(model: nn.Module) -> None:
+    model.lazy = None
+
+
+def _builds_its_mask_once(model: nn.Module, x: Tensor) -> Tensor:
+    if model.lazy is None:
+        mask = lucid.zeros(*SHAPE, device=COMPILE_DEVICE)
+        mask[0, 0] = 1.0
+        mask[2] = 3.0
+        model.lazy = mask
+    return x * model.lazy
+
+
+@pytest.mark.parametrize("entry", ENTRIES)
+def test_a_mask_built_once_and_kept_holds_its_values_on_every_call(entry: str) -> None:
+    """Nothing writes the mask after the first call, so putting it back for the
+    next one to write would leave it empty for good.  Its writes are constants,
+    so the call stays compiled."""
+    assert _agrees(_builds_its_mask_once, entry, _a_lazy_mask).compiled
+
+
+def _rebuilds_its_total_every_call(model: nn.Module, x: Tensor) -> Tensor:
+    model.total = lucid.zeros(SHAPE[-1], device=COMPILE_DEVICE)
+    model.total.add_(x.mean())
+    return x * model.total.sum()
+
+
+@pytest.mark.parametrize("entry", ENTRIES)
+def test_a_tensor_made_anew_every_call_and_kept_starts_over_every_call(entry: str) -> None:
+    """Held after the call like a cached one, but every call makes another: taking
+    it for state that goes on from the last call would add up the calls.  From
+    inside one trace the two look the same, so the call runs eager."""
+    assert not _agrees(_rebuilds_its_total_every_call, entry, None).compiled
+
+
+def _fills_a_local(model: nn.Module, x: Tensor) -> Tensor:
+    y = lucid.zeros(*SHAPE, device=COMPILE_DEVICE)
+    y[1] = x[1] * 2.0
+    return x + y
+
+
+@pytest.mark.parametrize("entry", ENTRIES)
+def test_a_tensor_the_call_makes_fills_and_drops_stays_compiled(entry: str) -> None:
+    assert _agrees(_fills_a_local, entry, None).compiled
+
+
+def _a_dropout_into_what_it_keeps(model: nn.Module, x: Tensor) -> Tensor:
+    dropped = F.dropout(x, p=0.5, training=True)
+    if "h" not in model.box:
+        model.box["h"] = lucid.zeros(SHAPE[-1], device=COMPILE_DEVICE)
+    model.box["h"].add_(dropped.mean())
+    return dropped * model.box["h"].sum()
+
+
+def _draws(body: Body, run: Run) -> _Seen:
+    lucid.manual_seed(7)
+    model = _Model(body, _a_box).to(COMPILE_DEVICE)
+    return run(model)
+
+
+def test_the_draws_of_a_call_that_runs_eager_for_a_kept_write_are_eager_s() -> None:
+    """The trace draws, and the eager call that follows has to draw the same: the
+    compile attempt puts the streams back.  Every later call is eager too."""
+    got = _draws(_a_dropout_into_what_it_keeps, _run_module)
+    want = _draws(_a_dropout_into_what_it_keeps, _run_eager_module)
+    assert not got.compiled
+    for i, (g, w) in enumerate(zip(got.answers, want.answers, strict=True)):
+        assert _close(g, w), f"call {i}"
+
+
+_CACHE_ROW = [0.0, 2.0, 0.0, -1.0]
+
+
+@functools.lru_cache(maxsize=4)
+def _a_cached_table(n: int, device: str) -> Tensor:
+    table = lucid.zeros(n, device=device)
+    table[1] = _CACHE_ROW[1]
+    table[3] = _CACHE_ROW[3]
+    return table
+
+
+def _reads_a_cached_table(_model: nn.Module, x: Tensor) -> Tensor:
+    return x * _a_cached_table(SHAPE[-1], COMPILE_DEVICE)
+
+
+@pytest.mark.parametrize("entry", ENTRIES)
+def test_a_table_a_cache_keeps_from_a_trace_is_whole_for_every_later_call(entry: str) -> None:
+    """A module-level cache built inside the trace keeps the tensor for every
+    later call in the process, compiled or not.  Twins share the cache, so they
+    cannot tell a broken one; the table's values can."""
+    _a_cached_table.cache_clear()
+    assert _agrees(_reads_a_cached_table, entry, None).compiled
+    assert _a_cached_table(SHAPE[-1], COMPILE_DEVICE).tolist() == _CACHE_ROW
+    with lucid.no_grad():
+        x = lucid.ones(*SHAPE, device=COMPILE_DEVICE)
+        assert (x * _a_cached_table(SHAPE[-1], COMPILE_DEVICE)).tolist()[0] == _CACHE_ROW
+    _a_cached_table.cache_clear()
+
+
+def test_a_compiled_bicubic_resize_leaves_every_later_resize_right() -> None:
+    """``interpolate`` caches the matrix it builds inside the trace.  Put back for
+    an eager rerun that never rewrote it, every later bicubic resize in the
+    process answered zeros, eager included."""
+    from lucid.nn.functional import _interpolate
+
+    lucid.manual_seed(0)
+    x = lucid.randn(1, 2, 17, 13, device=COMPILE_DEVICE)
+    size = (68, 85)
+    _interpolate._dense_matrix.cache_clear()
+    with lucid.no_grad():
+        want = F.interpolate(x, size=size, mode="bicubic")
+        _interpolate._dense_matrix.cache_clear()
+        compiled = lucid.compile(lambda a: F.interpolate(a, size=size, mode="bicubic"))
+        got = compiled(x)
+        after = F.interpolate(x, size=size, mode="bicubic")
+        again = compiled(x * 2.0)
+    assert float(want.abs().mean().item()) > 0.1
+    assert _close(_floats(got), _floats(want))
+    assert _close(_floats(after), _floats(want))
+    assert _close(_floats(again), _floats(want * 2.0))
+    info = compiled.cache_info()
+    assert info["entries"] == 1 and not info["eager_only"]
+    _interpolate._dense_matrix.cache_clear()
 
 
 def _returns_it(y: Tensor) -> object:
