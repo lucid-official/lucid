@@ -165,7 +165,7 @@ class TestObjective:
         gap = float((both - (along_z + along_t)).abs().max().item())
         assert gap < 1e-5, f"d/dt u did not decompose: {gap}"
 
-    def test_the_target_carries_the_time_derivative(self) -> None:
+    def test_the_target_carries_the_time_derivative(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The model's own JVP call must use the tangent ``(v, 0, 1)``.
 
         The decomposition test above exercises ``lucid.func.jvp``; this
@@ -193,6 +193,17 @@ class TestObjective:
 
         model = MeanFlowForImageGeneration(config)
         model.mean_flow = _TimeRamp(config)
+
+        # Separated by construction.  Drawn times can land close: on Metal's
+        # stream one pair was 0.0023 apart, a term of 2.3 that the noise's
+        # own maximum outweighed, and the target came out positive there.
+        def separated(batch: int, device: str) -> tuple[lucid.Tensor, lucid.Tensor]:
+            return (
+                lucid.full((batch,), 0.2, device=device),
+                lucid.full((batch,), 0.8, device=device),
+            )
+
+        monkeypatch.setattr(model, "_sample_times", separated)
         out = model(lucid.zeros((8, 4, 8, 8)))
 
         # v is unit-scale standard normal noise; the second term is

@@ -38,6 +38,7 @@ def _generative_modules() -> list[str]:
 
 
 @pytest.mark.slow
+@pytest.mark.usefixtures("cpu_default")  # as a reader runs them: a fresh process, on the CPU
 @pytest.mark.parametrize("module_name", _generative_modules())
 def test_examples_run(module_name: str) -> None:
     module = importlib.import_module(module_name)

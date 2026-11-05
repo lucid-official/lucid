@@ -39,8 +39,8 @@ float32 constant a float64 run would and more:
   or wider instead.
 * **train** — every family of the training-step table, and the detection
   and segmentation losses that table leaves to other files, take their
-  step in float16 on the CPU (the losses in float64 too); the loss and
-  every gradient keep the model's dtype.
+  step in float16 on the default device (the losses in float64 too, on
+  the CPU); the loss and every gradient keep the model's dtype.
 * DETR and MaskFormer, the reported pair, are pinned through their public
   factories against the float32 model's numbers; Score-SDE and Fast
   R-CNN, whose float64 answers carried float32 values, likewise.
@@ -58,7 +58,8 @@ import lucid.models as models
 from lucid._dtype import _float32_or_wider
 from lucid.models._registry import _REGISTRY
 from lucid.models.generative.score_sde._sde import make_sde
-from lucid.test._fixtures.devices import metal_available
+from lucid.test._default_device import device_of
+from lucid.test._fixtures.devices import device_supports, metal_available
 from lucid.test.unit.compile import _zoo_matrix as zoo
 from lucid.test.unit.models.test_models_train_step import CASES, _family_of
 
@@ -74,21 +75,26 @@ def _need(device: str) -> None:
         pytest.skip("Metal unavailable")
 
 
-def _floating(value: Any, path: str = "output") -> list[tuple[str, lucid.Tensor]]:
-    """Every floating tensor in a forward's answer, named for the message."""
+def _tensors(value: Any, path: str = "output") -> list[tuple[str, lucid.Tensor]]:
+    """Every tensor in a forward's answer, however nested, named for the message."""
     if isinstance(value, lucid.Tensor):
-        return [(path, value)] if value.is_floating_point() else []
+        return [(path, value)]
     if isinstance(value, (tuple, list)):
-        return [t for i, v in enumerate(value) for t in _floating(v, f"{path}[{i}]")]
+        return [t for i, v in enumerate(value) for t in _tensors(v, f"{path}[{i}]")]
     if isinstance(value, dict):
-        return [t for k, v in value.items() for t in _floating(v, f"{path}.{k}")]
+        return [t for k, v in value.items() for t in _tensors(v, f"{path}.{k}")]
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
         return [
             t
             for f in dataclasses.fields(value)
-            for t in _floating(getattr(value, f.name, None), f"{path}.{f.name}")
+            for t in _tensors(getattr(value, f.name, None), f"{path}.{f.name}")
         ]
     return []
+
+
+def _floating(value: Any, path: str = "output") -> list[tuple[str, lucid.Tensor]]:
+    """Every floating tensor in a forward's answer, named for the message."""
+    return [(n, t) for n, t in _tensors(value, path) if t.is_floating_point()]
 
 
 def _cast(value: Any, device: str, dtype: lucid.dtype) -> Any:
@@ -107,9 +113,16 @@ def _wrong(answer: Any, dtype: lucid.dtype) -> list[str]:
     return [f"{n}: {_name(t.dtype)}" for n, t in _floating(answer) if t.dtype != dtype]
 
 
+def _holding(dtype: lucid.dtype) -> str:
+    """The default device, or the CPU for a dtype Metal cannot hold (float64)."""
+    device = lucid.get_default_device()
+    return device if device_supports(device, dtype) else "cpu"
+
+
 def _step_keeps(model: Any, args: Any, kwargs: Any, dtype: lucid.dtype) -> None:
     """Loss and every gradient of one training step are in ``dtype``."""
-    loss = model(*_cast(args, "cpu", dtype), **_cast(kwargs, "cpu", dtype)).loss
+    device = device_of(model)
+    loss = model(*_cast(args, device, dtype), **_cast(kwargs, device, dtype)).loss
     assert loss.dtype == dtype, f"a {_name(dtype)} model has a {loss.dtype} loss"
     loss.backward()
     grads = [(n, p.grad) for n, p in model.named_parameters() if p.grad is not None]
@@ -130,9 +143,14 @@ _PAIRS = [
 
 _DETECTOR = {"backbone_layers": (1, 1, 1, 1), "fpn_out_channels": 32}
 
-#: Cheaper than the matrix's own shrink where a dtype check loses nothing:
-#: the matrix sizes some families for a numerically stable train-mode step.
+#: Cheaper than the matrix's own shrink where a dtype or device check loses
+#: nothing: the matrix sizes some families for a numerically stable
+#: train-mode step, and leaves a ResNet-101 trunk at its depth.
 _SMALLER: dict[str, dict[str, object]] = {
+    "detr": {"backbone_layers": (1, 1, 1, 1)},
+    "maskformer": {"backbone_layers": (1, 1, 1, 1)},
+    "fcn": {"classifier_hidden_channels": 16, "aux_hidden_channels": 16},
+    "realnvp": {"sample_size": 8, "num_scales": 1, "residual_blocks": 1, "base_dim": 8},
     "faster_rcnn": {**_DETECTOR, "rpn_post_nms_top_n": 10},
     "mask_rcnn": {
         **_DETECTOR,
@@ -160,13 +178,14 @@ _HALF_DEVICE = "metal" if metal_available() else "cpu"
 _EVAL = [("cpu", _F64), (_HALF_DEVICE, _F16)]
 
 
-@pytest.mark.parametrize(("device", "dtype"), _EVAL, ids=[f"{d}-{_name(t)}" for d, t in _EVAL])
-@pytest.mark.parametrize(("family", "task"), _PAIRS, ids=[f for f, _ in _PAIRS])
-def test_a_forward_answers_in_the_dtype_it_is_given(
-    family: str, task: str, device: str, dtype: lucid.dtype, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _need(device)
-    monkeypatch.setattr(zoo, "DEV", device)
+def _matrix_case(
+    family: str, task: str, monkeypatch: pytest.MonkeyPatch
+) -> tuple[str, dict[str, Any], Any]:
+    """The matrix's factory for a pair, its overrides and the config they make.
+
+    Shrunk as the matrix shrinks it and then by :data:`_SMALLER`; the
+    matrix's inputs for the pair are drawn at :data:`_SIDE`.
+    """
     if family in _SIDE:
         spec = dataclasses.replace(zoo.SPECS[family], size=_SIDE[family])
         monkeypatch.setitem(zoo.SPECS, family, spec)
@@ -178,9 +197,19 @@ def test_a_forward_answers_in_the_dtype_it_is_given(
         **zoo.SPECS.get(family, zoo.Spec()).overrides,
         **_SMALLER.get(family, {}),
     }
+    return name, overrides, dataclasses.replace(cfg, **overrides)
+
+
+@pytest.mark.parametrize(("device", "dtype"), _EVAL, ids=[f"{d}-{_name(t)}" for d, t in _EVAL])
+@pytest.mark.parametrize(("family", "task"), _PAIRS, ids=[f for f, _ in _PAIRS])
+def test_a_forward_answers_in_the_dtype_it_is_given(
+    family: str, task: str, device: str, dtype: lucid.dtype, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _need(device)
+    monkeypatch.setattr(zoo, "DEV", device)
+    name, overrides, cfg = _matrix_case(family, task, monkeypatch)
     lucid.manual_seed(0)
     model = models.create_model(name, **overrides).to(device).to(dtype).eval()
-    cfg = dataclasses.replace(cfg, **overrides)
     args, kwargs = zoo.default_inputs(model, cfg, family, 1)
     with lucid.no_grad():
         answer = model(*_cast(args, device, dtype), **_cast(kwargs, device, dtype))
@@ -459,14 +488,20 @@ def _generate(family: str, model: Any, device: str, dtype: lucid.dtype) -> Any:
     return model.generate(1)
 
 
-def _generator(family: str, device: str, dtype: lucid.dtype, **extra: Any) -> Any:
-    """The family's sampler, shrunk, moved and cast."""
+def _sampler_case(family: str) -> tuple[str, dict[str, Any]]:
+    """The family's image-generation factory and the overrides it samples at."""
     name = zoo.representative(family, "image-generation")
     assert name is not None
-    overrides = _GENERATE_SMALLER.get(family, {})
+    overrides = dict(_GENERATE_SMALLER.get(family, {}))
     if family != "stable_diffusion":
         cfg = _REGISTRY[name].default_config
         overrides = {**zoo.shrink(cfg), **zoo.SPECS.get(family, zoo.Spec()).overrides, **overrides}
+    return name, overrides
+
+
+def _generator(family: str, device: str, dtype: lucid.dtype, **extra: Any) -> Any:
+    """The family's sampler, shrunk, moved and cast."""
+    name, overrides = _sampler_case(family)
     lucid.manual_seed(0)
     model = models.create_model(name, **{**overrides, **extra})
     return model.to(device).to(dtype).eval()
@@ -530,7 +565,7 @@ def test_every_sde_works_its_cancelling_coefficients_out_wide(sde_type: str) -> 
     }
     for what, (got, want) in pairs.items():
         assert got.dtype == _F16, what
-        a, b = got.to("cpu").to(_F64).numpy(), want.to(_F64).numpy()
+        a, b = got.to("cpu").to(_F64).numpy(), want.to("cpu").to(_F64).numpy()
         error = np.abs(a - b) / np.abs(b)
         assert (error < _TOL[_F16]).all(), f"{sde_type} {what}: {error.tolist()}"
 
@@ -582,6 +617,7 @@ def test_tvm_latent_whitening_keeps_the_latent_dtype(device: str, dtype: lucid.d
     assert model.to_vae_latent(whitened).dtype == dtype
 
 
+@pytest.mark.usefixtures("cpu_default")  # both models are the CPU's, so its draws are too
 def test_a_half_dit_training_step_noises_where_half_rounds_alpha_bar_to_one() -> None:
     """At t ∈ {0, 1} the float16 buffer's ``1 - ᾱ`` is 0, so x_t was x_0.
 
@@ -680,7 +716,7 @@ def test_a_scheduler_noises_a_sample_in_its_dtype(
         clean.to(device).to(dtype), noise.to(device).to(dtype), steps.to(device)
     )
     assert narrow.dtype == dtype
-    want = wide.to(_F64).numpy()
+    want = wide.to("cpu").to(_F64).numpy()
     got = narrow.to("cpu").to(_F64).numpy()
     assert float(np.abs(got - want).max()) < _TOL[dtype] * float(np.abs(want).max())
 
@@ -774,7 +810,7 @@ def test_a_detection_loss_keeps_the_model_dtype(
     dtype: lucid.dtype,
 ) -> None:
     lucid.manual_seed(0)
-    model = models.create_model(factory, **overrides).to(dtype).train()
+    model = models.create_model(factory, **overrides).to(_holding(dtype)).to(dtype).train()
     _step_keeps(model, (lucid.randn(1, 3, side, side),), {"targets": targets()}, dtype)
 
 
@@ -864,6 +900,7 @@ def _close(got: lucid.Tensor, want: lucid.Tensor, tol: float, what: str) -> None
     assert float(np.abs(a - b).max()) / scale < tol, what
 
 
+@pytest.mark.usefixtures("cpu_default")  # the float64 twin: Metal has no float64
 def test_score_sde_float64_draws_its_target_and_noise_scale_in_float64() -> None:
     """``target`` was a float32 draw and ``std`` a float32 schedule value."""
     narrow, wide = _float64_twin(*_shrunk("score_sde", "image-generation"))
@@ -882,6 +919,7 @@ def test_score_sde_float64_draws_its_target_and_noise_scale_in_float64() -> None
     _close(got.loss, want.loss, 1e-3, "loss")
 
 
+@pytest.mark.usefixtures("cpu_default")  # the float64 twin: Metal has no float64
 def test_fast_rcnn_float64_keeps_its_dtype_with_and_without_proposals() -> None:
     """With no proposals the empty stand-in was a float32 ``zeros``."""
     narrow, wide = _float64_twin(*_shrunk("fast_rcnn", "object-detection"))

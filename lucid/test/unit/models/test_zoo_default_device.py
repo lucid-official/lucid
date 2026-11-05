@@ -24,7 +24,7 @@ Every test leaves the default device as it found it.
 """
 
 import ast
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -60,16 +60,6 @@ from lucid.test._fixtures.devices import metal_available
 from lucid.test.unit.compile import _zoo_matrix as zoo
 
 pytestmark = pytest.mark.skipif(not metal_available(), reason="needs Metal")
-
-
-@pytest.fixture
-def metal_default() -> Iterator[None]:
-    previous = lucid.get_default_device()
-    lucid.set_default_device("metal")
-    try:
-        yield
-    finally:
-        lucid.set_default_device(previous)
 
 
 def _off_metal(model: nn.Module) -> list[str]:

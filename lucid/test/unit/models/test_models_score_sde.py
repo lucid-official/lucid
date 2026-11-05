@@ -89,7 +89,10 @@ class TestSDEs:
             x = x + sde.drift(x, t) * step + g * (step**0.5) * lucid.randn((count, 1))
             t = t + step
         mean, std = sde.marginal_prob(lucid.ones((count, 1)), lucid.ones((count,)) * end)
-        assert abs(float(x.mean().item()) - float(mean.mean().item())) < 0.05
+        # Four standard errors: a fixed 0.05 was under two of VE's, and
+        # Metal's random stream drew a mean 2.7 of them away.
+        error = 4.0 * float(std.mean().item()) / count**0.5
+        assert abs(float(x.mean().item()) - float(mean.mean().item())) < error
         assert abs(float(x.std().item()) / float(std.mean().item()) - 1.0) < 0.06
 
     def test_sub_vp_variance_is_bounded_by_vp(self) -> None:
@@ -146,7 +149,7 @@ class TestSamplersAgainstAnAnalyticScore:
         lucid.manual_seed(0)
         sde = make_sde(kind)
         steps = 300
-        x = sde.prior_sampling((self.COUNT, 1), "cpu")
+        x = sde.prior_sampling((self.COUNT, 1), lucid.get_default_device())
         times = lucid.linspace(1.0, sde.t_min, steps)
         step = (1.0 - sde.t_min) / (steps - 1)
         for i in range(steps):
@@ -169,7 +172,7 @@ class TestSamplersAgainstAnAnalyticScore:
             g = sde.diffusion(t).reshape(self.COUNT, 1)
             return (sde.drift(x, t) - 0.5 * g**2 * self._score(sde, x, t)).reshape(-1)
 
-        start = sde.prior_sampling((self.COUNT, 1), "cpu").reshape(-1)
+        start = sde.prior_sampling((self.COUNT, 1), lucid.get_default_device()).reshape(-1)
         path = odeint(rhs, start, lucid.linspace(1.0, sde.t_min, 150), method="rk4")
         x = path[-1]
         assert abs(float(x.mean().item()) - self.MU) < 0.12
@@ -185,7 +188,7 @@ class TestSamplersAgainstAnAnalyticScore:
         lucid.manual_seed(0)
         sde = make_sde("vp")
         steps = 300
-        x = sde.prior_sampling((self.COUNT, 1), "cpu")
+        x = sde.prior_sampling((self.COUNT, 1), lucid.get_default_device())
         times = lucid.linspace(1.0, sde.t_min, steps)
         step = (1.0 - sde.t_min) / (steps - 1)
         for i in range(steps):

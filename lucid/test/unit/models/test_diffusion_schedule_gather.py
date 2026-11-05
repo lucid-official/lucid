@@ -116,8 +116,10 @@ def test_extract_follows_the_timesteps_device() -> None:
 
 
 def test_extract_refuses_out_of_range_on_cpu() -> None:
+    # The CPU's gather checks its indices; Metal's cannot without a host read.
+    table, steps = lucid.rand((STEPS,), device="cpu"), lucid.tensor([STEPS], device="cpu")
     with pytest.raises(IndexError):
-        extract_into_tensor(lucid.rand((STEPS,)), lucid.tensor([STEPS]), (1, 1))
+        extract_into_tensor(table, steps, (1, 1))
 
 
 # ── Stable Diffusion: add_noise and the training forward ─────────────────────

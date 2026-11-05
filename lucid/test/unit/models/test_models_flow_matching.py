@@ -110,6 +110,7 @@ class TestFlowMatchingConfig:
 
 
 class TestProbabilityPaths:
+    @pytest.mark.usefixtures("cpu_default")  # float64, which Metal cannot hold
     @pytest.mark.parametrize("path", _PATHS)
     def test_derivatives_match_finite_differences(self, path: str) -> None:
         """The schedules' derivatives are the only hand-derived maths here.
@@ -129,6 +130,7 @@ class TestProbabilityPaths:
             assert abs(_flat(a_dot)[0] - (_flat(a_p)[0] - _flat(a_m)[0]) / (2 * step)) < 1e-7
             assert abs(_flat(sigma_dot)[0] - (_flat(s_p)[0] - _flat(s_m)[0]) / (2 * step)) < 1e-7
 
+    @pytest.mark.usefixtures("cpu_default")  # float64, which Metal cannot hold
     def test_optimal_transport_boundary_conditions_are_exact(self) -> None:
         kwargs = {"sigma_min": 1e-4, "beta_min": 0.1, "beta_max": 20.0}
         a0, s0, _, _ = _path_coefficients(
@@ -141,6 +143,7 @@ class TestProbabilityPaths:
         assert abs(_flat(a1)[0] - 1.0) < 1e-12
         assert abs(_flat(s1)[0] - 1e-4) < 1e-12
 
+    @pytest.mark.usefixtures("cpu_default")  # float64, which Metal cannot hold
     def test_diffusion_reaches_the_noise_end_only_approximately(self) -> None:
         """A documented difference between the two paths, not a defect.
 

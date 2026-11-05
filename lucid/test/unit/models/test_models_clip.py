@@ -465,7 +465,7 @@ class TestItRunsOnBothDevices:
     def test_a_forward_and_backward_survive(self, device: str) -> None:
         lucid.manual_seed(0)
         model = CLIPModel(_tiny())
-        model = model.metal() if device == "metal" else model
+        model = model.to(device)
         images = lucid.randn((3, 3, 32, 32), device=device)
         captions = _captions([1, 2, 3]).to(device)
 
@@ -483,7 +483,7 @@ class TestItRunsOnBothDevices:
     def test_the_zero_shot_wrapper_too(self, device: str) -> None:
         lucid.manual_seed(0)
         model = CLIPForZeroShotImageClassification(_tiny())
-        model = model.metal() if device == "metal" else model
+        model = model.to(device)
         out = model(lucid.randn((2, 3, 32, 32), device=device), _captions([1, 2, 3, 4]).to(device))
         assert out.logits.shape == (2, 4)
         assert str(out.logits.device) == f"device('{device}')"
@@ -519,15 +519,14 @@ class TestItLearnsToMatch:
             text_layers=2,
         )
         model = CLIPModel(config)
-        model = model.metal() if device == "metal" else model
+        model = model.to(device)
         images = lucid.stack(
             [lucid.full((3, 32, 32), (i + 1) / pairs) for i in range(pairs)], dim=0
         )
         captions = lucid.tensor(
             [[1, 2 + i, 31, 0, 0, 0, 0, 0] for i in range(pairs)], dtype=lucid.int64
         )
-        if device == "metal":
-            images, captions = images.metal(), captions.metal()
+        images, captions = images.to(device), captions.to(device)
         return model, images, captions, pairs
 
     @staticmethod

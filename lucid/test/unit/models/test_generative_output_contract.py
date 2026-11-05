@@ -259,7 +259,7 @@ def test_tvm_averages_restart_from_weights_loaded_into_the_network(through: str)
         for name, slow in network.named_parameters():
             assert _max_abs(slow - loaded[name]) == 0.0, f"{key}: {name}"
 
-    resumed = {k: lucid.randn(tuple(v.shape)) for k, v in loaded.items()}
+    resumed = {k: lucid.randn(tuple(v.shape), device=v.device.type) for k, v in loaded.items()}
     model.ema_network.load_state_dict(resumed)
     for name, slow in model.ema_network.named_parameters():
         assert _max_abs(slow - resumed[name]) == 0.0, f"eval: {name}"
@@ -288,7 +288,10 @@ def test_tvm_network_copies_and_pickles_without_the_wrapper() -> None:
 
     # The copy still counts its own loads, and the wrapper still sees its own.
     copied.load_state_dict(copied.state_dict())
-    loaded = {n: lucid.randn(tuple(p.shape)) for n, p in model.tvm.state_dict().items()}
+    loaded = {
+        n: lucid.randn(tuple(p.shape), device=p.device.type)
+        for n, p in model.tvm.state_dict().items()
+    }
     model.tvm.load_state_dict(loaded)
     for key, network in _tvm_averages(model):
         for name, slow in network.named_parameters():

@@ -372,7 +372,10 @@ class TestScheduleConstantsOnTheHost:
 
     def test_a_built_model_holds_the_tensor_path_constants(self) -> None:
         model = DDPMForImageGeneration(_tiny_cfg(learn_sigma=True, out_channels=6))
-        betas = make_beta_schedule(model.config.num_train_timesteps, model.config.beta_schedule)
+        # The tensor path is the CPU's: Metal's ``log`` can differ in the last place.
+        betas = make_beta_schedule(
+            model.config.num_train_timesteps, model.config.beta_schedule, device="cpu"
+        )
         legacy = diffusion_posterior_constants(betas)
         assert model._posterior_mean_coef_start.tolist() == legacy.mean_coef_start.tolist()
         assert model._posterior_mean_coef_t.tolist() == legacy.mean_coef_t.tolist()

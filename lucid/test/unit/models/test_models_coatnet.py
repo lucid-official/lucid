@@ -29,6 +29,7 @@ from lucid.models.vision.coatnet import (
 )
 from lucid.models.vision.coatnet._model import _MBConv, _TransformerStage
 from lucid.nn._shadow import is_shadow, shadow_alloc
+from lucid.test._default_device import device_of
 
 #: CoAtNet-0 shrunk through its own config (H11): one block per stage.
 _SMALL: dict[str, object] = {
@@ -467,13 +468,14 @@ def test_blocks_share_one_index_per_grid(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setattr(_coatnet, "_build_relative_index", counting)
     model = _deep_model()
+    here = device_of(model)
     with lucid.no_grad():
         for side in (64, 64, 96):
-            model.forward_features(lucid.randn(1, 3, side, side))
+            model.forward_features(lucid.randn(1, 3, side, side, device=here))
     # 64 px: S3 attends on 4×4, S4 on 2×2; 96 px: 6×6 and 3×3 — one table
     # each, however many blocks attend there and however often.
-    assert sorted(built) == sorted([(4, 4, "cpu"), (2, 2, "cpu"), (6, 6, "cpu"), (3, 3, "cpu")])
-    assert _coatnet._relative_index(4, 4, "cpu") is _coatnet._relative_index(4, 4, "cpu")
+    assert sorted(built) == sorted([(4, 4, here), (2, 2, here), (6, 6, here), (3, 3, here)])
+    assert _coatnet._relative_index(4, 4, here) is _coatnet._relative_index(4, 4, here)
 
 
 def test_the_index_cache_is_bounded_in_bytes() -> None:
@@ -532,6 +534,7 @@ def test_a_trace_holds_the_index_as_a_feed_cold_or_warm() -> None:
     assert "arange" not in cold
 
 
+@pytest.mark.usefixtures("cpu_default")  # the model starts on the CPU and is moved
 def test_a_model_moved_to_metal_reads_a_metal_index(device_gpu_only: str) -> None:
     model = _deep_model()
     x = lucid.randn(1, 3, 64, 64)

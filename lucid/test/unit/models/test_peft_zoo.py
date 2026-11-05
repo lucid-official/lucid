@@ -859,8 +859,8 @@ def test_a_gpt2_adapter_written_by_the_reference_loads_by_name_and_shape(tmp_pat
     written = {}
     for i in range(_DEPTH):
         prefix = f"base_model.model.transformer.h.{i}.attn.c_attn"
-        written[f"{prefix}.lora_A.weight"] = lucid.randn(r, width)
-        written[f"{prefix}.lora_B.weight"] = lucid.randn(3 * width, r)
+        written[f"{prefix}.lora_A.weight"] = lucid.randn(r, width, device="cpu")
+        written[f"{prefix}.lora_B.weight"] = lucid.randn(3 * width, r, device="cpu")
     save_safetensors(
         written, str(tmp_path / "adapter_model.safetensors"), metadata={"format": "pt"}
     )

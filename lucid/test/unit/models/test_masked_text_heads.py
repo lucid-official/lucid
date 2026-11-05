@@ -20,6 +20,7 @@ import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.models.text.gpt import GPTConfig, GPTDoubleHeadsModel
 from lucid.models.text.gpt2 import GPT2Config, GPT2DoubleHeadsModel
+from lucid.test._default_device import device_of
 from lucid.test._fixtures.devices import metal_available
 
 DEVICES = ["cpu", "metal"] if metal_available() else ["cpu"]
@@ -161,7 +162,7 @@ def test_a_training_step_reaches_the_trunk(name: str) -> None:
     """The gather keeps the pooled token on the graph: one optimiser step
     with a padded mask moves the trunk's embedding, not only the head."""
     model = M.create_model(name, **TINY).train()
-    ids, mask = _ids_and_mask(name, _masks()["fixed"], "cpu")
+    ids, mask = _ids_and_mask(name, _masks()["fixed"], device_of(model))
     labels = lucid.zeros(int(ids.shape[0])).long()
     table = next(m for m in model.modules() if isinstance(m, nn.Embedding)).weight
     before = table.detach().clone()

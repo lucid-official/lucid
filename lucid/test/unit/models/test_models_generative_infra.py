@@ -351,8 +351,9 @@ class TestDDPMSchedulerDevice:
         first = sched.add_noise(x0, lucid.zeros_like(x0), t)
         assert first.device.type == device
         assert self._tables(sched) == {device}
-        ref = DDPMScheduler(num_train_timesteps=20)
-        want = ref.add_noise(x0.to("cpu"), lucid.zeros((2, 1, 4, 4)), t.to("cpu"))
+        ref = DDPMScheduler(num_train_timesteps=20, device="cpu")
+        clean = x0.to("cpu")
+        want = ref.add_noise(clean, lucid.zeros_like(clean), t.to("cpu"))
         assert float((first.to("cpu") - want).abs().max().item()) < 1e-6
 
     @pytest.mark.parametrize("device", _METAL)

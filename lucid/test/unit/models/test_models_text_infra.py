@@ -161,7 +161,7 @@ class TestSamplingFilters:
     def test_multinomial_in_range_and_deterministic(self) -> None:
         from lucid.models._sampling import _multinomial_one
 
-        probs = lucid.tensor([[0.1, 0.2, 0.3, 0.4]])
+        probs = lucid.tensor([[0.1, 0.2, 0.3, 0.4]], device="cpu")
         lucid.manual_seed(0)
         a = _multinomial_one(probs, device="cpu")
         lucid.manual_seed(0)

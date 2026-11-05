@@ -22,6 +22,7 @@ import pytest
 import lucid
 from lucid._tensor.tensor import Tensor
 from lucid.models._output import InstanceSegmentationOutput, ObjectDetectionOutput
+from lucid.test._default_device import device_of
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tiny inputs to keep tests fast
@@ -628,7 +629,7 @@ class TestMaskRCNNPostprocessAndStrides:
     def test_boxes_are_clipped_to_image_sizes(self) -> None:
         model = self._model()
         with lucid.no_grad():
-            out = model(_img("cpu", 64, 64))
+            out = model(_img(device_of(model), 64, 64))
             loose = model.postprocess(out)[0]["boxes"]
             det = model.postprocess(out, image_sizes=[(48, 40)])[0]
         # Decoding clipped only to the 64-pixel canvas, so a box reaches into
@@ -647,8 +648,8 @@ class TestMaskRCNNPostprocessAndStrides:
         # reach the other empty branch.
         model = self._model(score_thresh=0.99)
         with lucid.no_grad():
-            out = model(_img("cpu", 64, 64))
-            no_props = model(_img("cpu", 64, 64), proposals=[lucid.zeros((0, 4))])
+            out = model(_img(device_of(model), 64, 64))
+            no_props = model(_img(device_of(model), 64, 64), proposals=[lucid.zeros((0, 4))])
             for o in (out, no_props):
                 pasted = model.postprocess(o, image_sizes=[(48, 40)])[0]
                 raw = model.postprocess(o)[0]
@@ -659,7 +660,7 @@ class TestMaskRCNNPostprocessAndStrides:
     def test_empty_roi_masks_follow_the_configured_size(self) -> None:
         model = self._model(score_thresh=0.99, roi_mask_size=7)
         with lucid.no_grad():
-            raw = model.postprocess(model(_img("cpu", 64, 64)))[0]
+            raw = model.postprocess(model(_img(device_of(model), 64, 64)))[0]
         assert tuple(raw["masks"].shape) == (0, 1, 14, 14)
 
     def test_anchor_strides_come_from_the_feature_maps(
@@ -677,9 +678,10 @@ class TestMaskRCNNPostprocessAndStrides:
 
         monkeypatch.setattr(model._anchor_gen, "forward", spy)
         with lucid.no_grad():
-            model(_img("cpu", 96, 96))
+            model(_img(device_of(model), 96, 96))
         assert seen == [[4, 8, 16, 32, 48]]
 
+    @pytest.mark.usefixtures("cpu_default")  # "identical" holds on the CPU; Metal varies
     def test_box_branch_matches_faster_rcnn_off_the_stride_grid(self) -> None:
         """At 100 x 100 no level divides evenly (strides 4, 7, 14, 25, 50).
         The RPN and box branch are Faster R-CNN's, so with the same weights
@@ -720,7 +722,7 @@ class TestMaskRCNNPostprocessAndStrides:
 
         monkeypatch.setattr(mask_module, "multiscale_roi_align", spy)
         with lucid.no_grad():
-            out = model(_img("cpu", 99, 99))
+            out = model(_img(device_of(model), 99, 99))
             det = model.postprocess(out)[0]
         assert out.input_size == (99, 99)
         assert int(det["boxes"].shape[0]) > 0  # so the re-alignment ran
@@ -843,7 +845,7 @@ class TestDetectionPresetCanvas:
 
         monkeypatch.setattr(faster._anchor_gen, "forward", spy)
         with lucid.no_grad():
-            faster(_img("cpu", 96, 96))
+            faster(_img(device_of(faster), 96, 96))
         assert seen == [[4, 8, 16, 32, 48]]
 
     @pytest.mark.slow

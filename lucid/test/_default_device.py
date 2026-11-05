@@ -10,10 +10,14 @@ must not need pytest to print ``--list-packages``.  The pytest fixtures
 (``_fixtures/devices.py``) import from here, not the other way round.
 """
 
+import contextlib
 import functools
+import itertools
 import os
+from collections.abc import Iterator
 
 import lucid
+import lucid.nn as nn
 
 #: The environment variable ``lucid-audit --models`` sets for every process it
 #: starts, and the one place a test process learns what device to default to.
@@ -60,3 +64,29 @@ def apply_default_device(name: str | None = None) -> str | None:
         )
     lucid.set_default_device(device)
     return device
+
+
+@contextlib.contextmanager
+def default_device(name: str) -> Iterator[str]:
+    """Make ``name`` the default device inside the block, then put the old one back.
+
+    For a test that needs one device whatever the process defaults to, so that
+    it says so where it does it and leaves no trace for the next test.
+    """
+    previous = lucid.get_default_device()
+    lucid.set_default_device(name)
+    try:
+        yield name
+    finally:
+        lucid.set_default_device(previous)
+
+
+def device_of(module: nn.Module) -> str:
+    """The device ``module`` holds its tensors on, or the default device if it holds none.
+
+    Inputs a test builds for a model go where the model is, not where the
+    process defaults to: a model moved to the CPU still answers there under a
+    Metal default.
+    """
+    held = next(itertools.chain(module.parameters(), module.buffers()), None)
+    return lucid.get_default_device() if held is None else held.device.type

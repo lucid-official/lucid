@@ -389,6 +389,20 @@ class TestReturnNormalisation:
 
 
 class TestSlowCritic:
+    @staticmethod
+    def _move(head: lucid.nn.Module) -> None:
+        """Shift every weight by its own amount.
+
+        A shift every bin shares cancels in the softmax, so it moved the
+        critic's answer by rounding alone: 1.07 on the CPU and exactly 0 on
+        Metal, whose softmax rounds differently.
+        """
+        lucid.manual_seed(1)
+        with lucid.no_grad():
+            for parameter in head.parameters():
+                shape, device = tuple(parameter.shape), parameter.device.type
+                parameter[:] = parameter + 3.0 * lucid.rand(shape, device=device)
+
     def test_the_returns_come_from_the_live_critic(self) -> None:
         """DreamerV2's arrangement inverted, and invisible in the loss."""
         lucid.manual_seed(0)
@@ -397,9 +411,7 @@ class TestSlowCritic:
         before = model(observations, actions, rewards).behavior
         assert isinstance(before, DreamerV3BehaviorOutput)
 
-        with lucid.no_grad():
-            for parameter in model.dreamer_v3.slow_value_head.parameters():
-                parameter[:] = parameter + 3.0
+        self._move(model.dreamer_v3.slow_value_head)
         after = model(observations, actions, rewards).behavior
         assert after is not None
         moved = float((after.lambda_return - before.lambda_return).abs().max().item())
@@ -412,9 +424,7 @@ class TestSlowCritic:
         observations, actions, rewards = _batch(t=3)
         before = model(observations, actions, rewards).behavior
         assert before is not None
-        with lucid.no_grad():
-            for parameter in model.dreamer_v3.value_head.parameters():
-                parameter[:] = parameter + 3.0
+        self._move(model.dreamer_v3.value_head)
         after = model(observations, actions, rewards).behavior
         assert after is not None
         assert float((after.lambda_return - before.lambda_return).abs().max().item()) > 0.1

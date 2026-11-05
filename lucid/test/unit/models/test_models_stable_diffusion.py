@@ -353,7 +353,10 @@ class TestGuidance:
         lucid.manual_seed(0)
         model = StableDiffusionForImageGeneration(_tiny()).eval()
         context, uncond = lucid.randn((1, 4, 16)), lucid.randn((1, 4, 16))
-        start = lucid.zeros((1, 4, 8, 8))
+        # A drawn latent.  From an all-zero one, whose group norms have no
+        # variance to divide by, rounding alone put the guided sample up to
+        # 2.6e-2 from the conditional one on Metal (1e-5 on the CPU).
+        start = lucid.randn((1, 4, 8, 8))
 
         guided = model.generate(context, uncond, 3, guidance_scale=1.0 + 1e-4, latent=start).samples
         conditional = model.generate(context, None, 3, latent=start).samples
@@ -469,7 +472,7 @@ class TestTheAssembledModel:
         is the check that would have caught either."""
         lucid.manual_seed(0)
         model = StableDiffusionModel(_tiny())
-        model = model.metal() if device == "metal" else model
+        model = model.to(device)
         out = model(
             lucid.randn((1, 3, 32, 32), device=device),
             lucid.randn((1, 4, 16), device=device),
@@ -910,7 +913,7 @@ class TestPNDMIsWhatTheReleaseShips:
         history is empty on the first step."""
         lucid.manual_seed(0)
         model = StableDiffusionForImageGeneration(_tiny()).eval()
-        model = model.metal() if device == "metal" else model
+        model = model.to(device)
 
         image = model.generate(
             lucid.randn((1, 4, 16), device=device),

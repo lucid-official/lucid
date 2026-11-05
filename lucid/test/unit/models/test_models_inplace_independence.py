@@ -18,16 +18,29 @@ model that needs a write to stay out of place says ``inplace=False``.
 A functional call written ``F.relu(t, inplace=True)`` inside a ``forward``
 is not reachable by the walk; the zoo has one (MobileNetV3's squeeze-excite,
 on a tensor it has just made).
+
+"Agree exactly" is a CPU statement.  Metal's reductions are not
+bit-reproducible: three pairs of runs of one Metal step per family, the
+flag unchanged, gave the same outputs but gradients up to 3.0e-06 of the
+largest gradient apart (FCN; Xception 1.6e-06), on an M4 Max on
+2026-11-05.  So on Metal the two runs agree to :data:`_METAL_RELATIVE` of
+the largest magnitude in what is compared, which the Xception defect —
+its gradients moved by 1.6e3 — exceeds by orders of magnitude.
 """
 
+from collections.abc import Iterable
 from typing import Any
 
 import pytest
 
 import lucid
 import lucid.models as models
+from lucid.test._default_device import device_of
 from lucid.test.unit.models.test_models_eval_determinism import _tensors_of
 from lucid.test.unit.models.test_models_train_step import CASES, _family_of
+
+#: Metal's run-to-run spread, measured at 3.0e-06 of the largest gradient, with room.
+_METAL_RELATIVE = 1e-4
 
 
 def _inplace_modules(model: lucid.nn.Module) -> list[lucid.nn.Module]:
@@ -51,6 +64,14 @@ def _step(
 
 def _worst(a: lucid.Tensor, b: lucid.Tensor) -> float:
     return float((a.float() - b.float()).abs().max().item()) if a.numel() else 0.0
+
+
+def _bound(device: str, tensors: Iterable[lucid.Tensor]) -> float:
+    """How far two runs of the same step may land apart: exact on the CPU."""
+    if device == "cpu":
+        return 0.0
+    top = max((float(t.float().abs().max().item()) for t in tensors if t.numel()), default=0.0)
+    return _METAL_RELATIVE * top
 
 
 @pytest.mark.parametrize(
@@ -77,15 +98,18 @@ def test_training_step_is_the_same_with_inplace_off(
     ignored = _step(model, args, kwargs)
 
     (outs_on, grads_on), (outs_off, grads_off) = honoured, ignored
+    device = device_of(model)
     assert [n for n, _ in outs_on] == [n for n, _ in outs_off]
+    out_bound = _bound(device, (t for _, t in outs_on))
     for (name, on), (_, off) in zip(outs_on, outs_off, strict=True):
-        assert _worst(on, off) == 0.0, (
+        assert _worst(on, off) <= out_bound, (
             f"{factory}.{name} depends on inplace=True being ignored — an "
             "activation writes a tensor the forward reads again; build that "
             "one with inplace=False"
         )
     assert grads_on.keys() == grads_off.keys()
-    differ = [n for n in grads_on if _worst(grads_on[n], grads_off[n]) != 0.0]
+    grad_bound = _bound(device, grads_on.values())
+    differ = [n for n in grads_on if _worst(grads_on[n], grads_off[n]) > grad_bound]
     assert not differ, f"{factory}: gradients depend on inplace=True: {differ[:6]}"
 
 
@@ -132,8 +156,11 @@ def test_detector_forward_is_the_same_with_inplace_off(family: str) -> None:
     for module in flagged:
         module.inplace = False
     off = step()
-    for got, want in zip([*on[0], *on[1]], [*off[0], *off[1]], strict=True):
-        assert _worst(got, want) == 0.0, f"{factory} depends on inplace=True"
+    device = device_of(model)
+    for got_part, want_part in zip(on, off, strict=True):  # the outputs, then the gradients
+        bound = _bound(device, got_part)
+        for got, want in zip(got_part, want_part, strict=True):
+            assert _worst(got, want) <= bound, f"{factory} depends on inplace=True"
 
 
 def test_the_walk_finds_the_flag() -> None:

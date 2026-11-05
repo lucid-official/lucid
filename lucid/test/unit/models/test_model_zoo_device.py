@@ -18,6 +18,7 @@ import pytest
 import lucid
 import lucid.models as M
 from lucid.models.generative._common._rssm import RSSMState
+from lucid.test._default_device import default_device
 
 DEVICES = ["cpu", "metal"]
 
@@ -108,13 +109,24 @@ def test_representative_families_train_one_step(name, size, device):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _paired(name, **overrides):
-    """The same model on both devices, weight-for-weight."""
-    lucid.manual_seed(0)
-    cpu = M.create_model(name, **overrides).eval()
-    metal = M.create_model(name, **overrides).eval()
-    metal.load_state_dict(cpu.state_dict())
-    return cpu, metal.to("metal")
+@pytest.fixture
+def paired():
+    """The same model on both devices, weight-for-weight, for a test that compares them.
+
+    The CPU side is the reference, so it and every input the test draws for
+    it are made on the CPU: the test runs with the CPU as its default device,
+    whatever the process defaults to, and moves the Metal side's inputs itself.
+    """
+
+    def pair(name, **overrides):
+        lucid.manual_seed(0)
+        cpu = M.create_model(name, **overrides).eval()
+        metal = M.create_model(name, **overrides).eval()
+        metal.load_state_dict(cpu.state_dict())
+        return cpu, metal.to("metal")
+
+    with default_device("cpu"):
+        yield pair
 
 
 def _agree(cpu_out, metal_out, tol, what):
@@ -131,9 +143,9 @@ def _agree(cpu_out, metal_out, tol, what):
     assert np.abs(a - b).max() / scale < tol, f"{what}: rel {np.abs(a - b).max() / scale}"
 
 
-def test_neural_ode_matches_across_devices():
+def test_neural_ode_matches_across_devices(paired):
     """Encode, decode and log-density must agree wherever they are solved."""
-    cpu, metal = _paired(
+    cpu, metal = paired(
         "neural_ode",
         sample_size=(1, 2),
         in_channels=1,
@@ -154,14 +166,14 @@ def test_neural_ode_matches_across_devices():
     _agree(cpu.log_prob(x), metal.log_prob(x_gpu), 1e-4, "neural_ode log_prob")
 
 
-def test_flow_matching_matches_across_devices():
+def test_flow_matching_matches_across_devices(paired):
     """Field, path, target and a fixed-noise solve.
 
     ``log_prob`` is left out on purpose: above two dimensions the trace is
     a Hutchinson estimate, and the two devices draw their own probes — the
     disagreement would be Monte-Carlo variance, not a device bug.
     """
-    cpu, metal = _paired(
+    cpu, metal = paired(
         "flow_matching_cifar",
         sample_size=8,
         base_channels=16,
@@ -220,7 +232,7 @@ def test_flow_matching_trains_one_step_on_device(device):
         assert str(g.device) == f"device('{device}')"
 
 
-def test_rectified_flow_matches_across_devices():
+def test_rectified_flow_matches_across_devices(paired):
     """Path, target, a fixed-noise solve, and the straightness measure.
 
     ``straightness`` is included because it is the only quantity here that
@@ -228,7 +240,7 @@ def test_rectified_flow_matches_across_devices():
     inside the loop would show up as a disagreement rather than as a
     crash.
     """
-    cpu, metal = _paired(
+    cpu, metal = paired(
         "rectified_flow_cifar",
         sample_size=8,
         base_channels=16,
@@ -317,9 +329,9 @@ def test_rectified_flow_trains_one_step_on_device(device):
         assert str(g.device) == f"device('{device}')"
 
 
-def test_rectified_flow_high_resolution_path_matches_across_devices():
+def test_rectified_flow_high_resolution_path_matches_across_devices(paired):
     """Filtered resampling and both pyramids — buffers must travel with ``.to()``."""
-    cpu, metal = _paired(
+    cpu, metal = paired(
         "rectified_flow_afhq_cat",
         sample_size=16,
         base_channels=8,
@@ -383,9 +395,9 @@ _VQVAE_SMALL = {
 }
 
 
-def test_vqvae_matches_across_devices():
+def test_vqvae_matches_across_devices(paired):
     """Encoder, quantiser and decoder must agree wherever they run."""
-    cpu, metal = _paired("vqvae", **_VQVAE_SMALL)
+    cpu, metal = paired("vqvae", **_VQVAE_SMALL)
     x = lucid.rand((2, 3, 16, 16))
     x_gpu = x.to("metal")
 
@@ -397,14 +409,14 @@ def test_vqvae_matches_across_devices():
     _agree(cpu.decode(q_cpu.quantized), metal.decode(q_metal.quantized), 1e-4, "vqvae decode")
 
 
-def test_vqvae_codebook_indices_match_across_devices():
+def test_vqvae_codebook_indices_match_across_devices(paired):
     """The discrete field is exact or it is wrong — no tolerance applies.
 
     One entry picking a different codebook row changes the reconstruction
     outright, and every float comparison in this file would still pass: the
     two rows are both plausible vectors of the same magnitude.
     """
-    cpu, metal = _paired("vqvae", **_VQVAE_SMALL)
+    cpu, metal = paired("vqvae", **_VQVAE_SMALL)
     x = lucid.rand((2, 3, 16, 16))
 
     idx_cpu = cpu.encode_indices(x)
@@ -418,9 +430,9 @@ def test_vqvae_codebook_indices_match_across_devices():
     assert (a == b).all(), f"{int((a != b).sum())} of {a.size} positions disagree"
 
 
-def test_vqvae_detokenises_from_device_indices():
+def test_vqvae_detokenises_from_device_indices(paired):
     """A gather driven by indices that were produced on the device."""
-    cpu, metal = _paired("vqvae", **_VQVAE_SMALL)
+    cpu, metal = paired("vqvae", **_VQVAE_SMALL)
     x = lucid.rand((2, 3, 16, 16))
 
     out_cpu = cpu.decode_indices(cpu.encode_indices(x))
@@ -496,16 +508,16 @@ _PLANET_SMALL = {
 }
 
 
-def test_planet_encoder_matches_across_devices():
+def test_planet_encoder_matches_across_devices(paired):
     """The convolutional embedding is sampling-free, so it must agree in full."""
-    cpu, metal = _paired("planet", **_PLANET_SMALL)
+    cpu, metal = paired("planet", **_PLANET_SMALL)
     obs = lucid.rand((2, 3, 3, 64, 64))
     _agree(cpu.encode(obs), metal.encode(obs.to("metal")), 1e-4, "planet encode")
 
 
-def test_planet_first_dynamics_step_matches_across_devices():
+def test_planet_first_dynamics_step_matches_across_devices(paired):
     """Step 0 is deterministic — nothing sampled has entered it yet."""
-    cpu, metal = _paired("planet", **_PLANET_SMALL)
+    cpu, metal = paired("planet", **_PLANET_SMALL)
     obs = lucid.rand((2, 1, 3, 64, 64))
     act = lucid.rand((2, 1, 2))
 
@@ -519,9 +531,9 @@ def test_planet_first_dynamics_step_matches_across_devices():
     _agree(q_cpu.std, q_metal.std, 1e-4, "planet posterior std")
 
 
-def test_planet_decoder_and_reward_match_across_devices():
+def test_planet_decoder_and_reward_match_across_devices(paired):
     """Both heads read a state; feed them the same one on each device."""
-    cpu, metal = _paired("planet", **_PLANET_SMALL)
+    cpu, metal = paired("planet", **_PLANET_SMALL)
     feature = lucid.rand((2, 3, cpu.config.latent_size))
     state = RSSMState(
         deter=feature[..., : cpu.config.deter_size],
@@ -595,9 +607,9 @@ _DREAMER_SMALL = {
 }
 
 
-def test_dreamer_value_and_actor_heads_match_across_devices():
+def test_dreamer_value_and_actor_heads_match_across_devices(paired):
     """Both new heads read a state; feed them the same one on each device."""
-    cpu, metal = _paired("dreamer", **_DREAMER_SMALL)
+    cpu, metal = paired("dreamer", **_DREAMER_SMALL)
     feature = lucid.rand((2, 3, cpu.config.latent_size))
     state = RSSMState(
         deter=feature[..., : cpu.config.deter_size],
@@ -744,9 +756,9 @@ _DREAMER_V2_SMALL = {
 }
 
 
-def test_dreamer_v2_encoder_matches_across_devices():
+def test_dreamer_v2_encoder_matches_across_devices(paired):
     """Sampling-free, so it must agree exactly."""
-    cpu, metal = _paired("dreamer_v2", **_DREAMER_V2_SMALL)
+    cpu, metal = paired("dreamer_v2", **_DREAMER_V2_SMALL)
     obs = lucid.rand((2, 3, 3, 64, 64))
     _agree(cpu.encode(obs), metal.encode(obs.to("metal")), 1e-4, "dreamer_v2 encode")
 
@@ -764,9 +776,9 @@ def test_dreamer_v2_categorical_latent_is_one_hot_on_device():
     assert np.allclose(grid.sum(axis=-1), 1.0, atol=1e-5)
 
 
-def test_dreamer_v2_policy_matches_across_devices():
+def test_dreamer_v2_policy_matches_across_devices(paired):
     """``erf`` and ``erfinv`` sit inside the truncated normal's mode."""
-    cpu, metal = _paired("dreamer_v2", **_DREAMER_V2_SMALL)
+    cpu, metal = paired("dreamer_v2", **_DREAMER_V2_SMALL)
     feature = lucid.rand((2, 3, cpu.config.latent_size))
     state = RSSMState(
         deter=feature[..., : cpu.config.deter_size],
@@ -879,9 +891,9 @@ _DREAMER_V3_SMALL = {
 }
 
 
-def test_dreamer_v3_block_recurrence_matches_across_devices():
+def test_dreamer_v3_block_recurrence_matches_across_devices(paired):
     """A rank-3 weight and a grouped reshape, compared elementwise."""
-    cpu, metal = _paired("dreamer_v3_12m", **_DREAMER_V3_SMALL)
+    cpu, metal = paired("dreamer_v3_12m", **_DREAMER_V3_SMALL)
     stoch = lucid.rand((2, 20))
     action = lucid.rand((2, 2))
     deter = lucid.rand((2, 8))
@@ -893,9 +905,9 @@ def test_dreamer_v3_block_recurrence_matches_across_devices():
     )
 
 
-def test_dreamer_v3_two_hot_head_matches_across_devices():
+def test_dreamer_v3_two_hot_head_matches_across_devices(paired):
     """Prediction and loss, over four orders of magnitude of target."""
-    cpu, metal = _paired("dreamer_v3_12m", **_DREAMER_V3_SMALL)
+    cpu, metal = paired("dreamer_v3_12m", **_DREAMER_V3_SMALL)
     feature = lucid.rand((2, 3, cpu.config.latent_size))
     target = lucid.tensor([[0.01, 1.0, 10000.0], [-5.0, 0.0, 250.0]])
     _agree(
@@ -1034,18 +1046,18 @@ _SCORE_SDE_SMALL = {
 }
 
 
-def test_score_sde_score_matches_across_devices():
+def test_score_sde_score_matches_across_devices(paired):
     """The network and the sigma it is divided by, compared elementwise."""
-    cpu, metal = _paired("score_sde_vp", **_SCORE_SDE_SMALL)
+    cpu, metal = paired("score_sde_vp", **_SCORE_SDE_SMALL)
     x = lucid.rand((2, 3, 8, 8))
     t = lucid.ones((2,)) * 0.5
     _agree(cpu.score(x, t), metal.score(x.to("metal"), t.to("metal")), 1e-4, "score_sde score")
 
 
 @pytest.mark.parametrize("kind", ["vp", "ve", "subvp"])
-def test_score_sde_marginal_prob_matches_across_devices(kind):
+def test_score_sde_marginal_prob_matches_across_devices(kind, paired):
     """The perturbation kernel is pure arithmetic — it must agree exactly."""
-    cpu, metal = _paired(f"score_sde_{kind}", **_SCORE_SDE_SMALL)
+    cpu, metal = paired(f"score_sde_{kind}", **_SCORE_SDE_SMALL)
     x = lucid.rand((4, 3, 8, 8))
     t = lucid.ones((4,)) * 0.3
     mean_c, std_c = cpu.sde.marginal_prob(x, t)
@@ -1178,7 +1190,7 @@ def test_set_prediction_family_trains_one_step_on_device(family, device):
 
 
 @pytest.mark.parametrize("family", sorted(_SET_PREDICTION))
-def test_set_prediction_loss_matches_across_devices(family):
+def test_set_prediction_loss_matches_across_devices(family, paired):
     """Same weights, inputs and targets: the loss and its gradients agree.
 
     Dropout is off — the two devices draw their own masks, and the
@@ -1187,7 +1199,7 @@ def test_set_prediction_loss_matches_across_devices(family):
     as ~1e-9 noise on both sides, so the bound has an absolute floor.
     """
     factory, overrides = _SET_PREDICTION[family]
-    cpu, metal = _paired(factory, **overrides, dropout=0.0)
+    cpu, metal = paired(factory, **overrides, dropout=0.0)
     x = _set_images()
 
     cpu.train()
@@ -1212,9 +1224,9 @@ def test_set_prediction_loss_matches_across_devices(family):
 
 
 @pytest.mark.parametrize("family", sorted(_SET_PREDICTION))
-def test_set_prediction_inference_matches_across_devices(family):
+def test_set_prediction_inference_matches_across_devices(family, paired):
     factory, overrides = _SET_PREDICTION[family]
-    cpu, metal = _paired(factory, **overrides)
+    cpu, metal = paired(factory, **overrides)
     x = _set_images()
     with lucid.no_grad():
         out_cpu = cpu(x)
@@ -1224,10 +1236,10 @@ def test_set_prediction_inference_matches_across_devices(family):
         _agree(out_cpu.pred_boxes, out_metal.pred_boxes, 1e-4, "detr boxes")
 
 
-def test_detr_postprocess_stays_on_device():
+def test_detr_postprocess_stays_on_device(paired):
     """Detections come back where the predictions are, not on the CPU."""
     factory, overrides = _SET_PREDICTION["detr"]
-    cpu, metal = _paired(factory, **overrides, score_thresh=0.0)
+    cpu, metal = paired(factory, **overrides, score_thresh=0.0)
     x = _set_images()
     with lucid.no_grad():
         res_cpu = cpu.postprocess(cpu(x), [(64, 64), (64, 64)])

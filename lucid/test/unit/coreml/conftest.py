@@ -49,6 +49,15 @@ the first load in the process — and Lucid's compile cache a directory of
 its own beside it (``LUCID_COREML_CACHE_DIR``), and every test removes the
 packages it wrote, the compiled models kept for them and the bundles they
 produced.  A failing test keeps all three, to be looked at.
+
+On the CPU
+----------
+Export reads the weights on the host and refuses a model whose parameters
+are on Metal, by design.  These tests build their models with the default
+device, so under ``lucid-audit --models`` (Metal by default) every one of
+them was refused before it exported anything.  The directory therefore runs
+with the CPU as its default and puts the process's default back after its
+last test.  A test about a Metal model moves it there itself.
 """
 
 import os
@@ -60,6 +69,7 @@ import pytest
 
 from lucid._C import engine as _C_engine
 from lucid.coreml import _cache
+from lucid.test._default_device import default_device
 from lucid.test.unit.coreml._helpers import bundles_under, under_hypervisor
 
 #: Set on an item whose setup, call or teardown failed.
@@ -68,6 +78,14 @@ _FAILED = pytest.StashKey[bool]()
 
 def _refuse(*args: object, **kwargs: object) -> object:
     pytest.skip("the Core ML runtime is not exercised inside a VM; runs on hardware")
+
+
+@pytest.fixture(autouse=True, scope="package")
+def _exports_from_the_cpu() -> Iterator[None]:
+    # Package scope: set up before any module- or class-scoped fixture of
+    # the directory builds its model, and undone before the next directory.
+    with default_device("cpu"):
+        yield
 
 
 @pytest.fixture(autouse=True, scope="session")
