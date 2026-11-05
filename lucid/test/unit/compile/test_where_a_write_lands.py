@@ -102,6 +102,9 @@ class _Seen(NamedTuple):
     answers: list[list[float]]
     states: list[dict[str, list[complex]]]
     compiled: bool
+    #: Executables, and whether any signature ran eager; for a compiled run.
+    entries: int = 0
+    eager: bool = False
 
 
 Run = Callable[[_Model], _Seen]
@@ -129,7 +132,8 @@ def _run_module(model: _Model) -> _Seen:
             answers.append(_floats(compiled(x)))
             states.append(_state(model))
     info = compiled.cache_info()
-    return _Seen(answers, states, info["entries"] == 1 and not info["eager_only"])
+    eager = bool(info["eager_only"])
+    return _Seen(answers, states, info["entries"] == 1 and not eager, info["entries"], eager)
 
 
 def _run_eager_step(model: _Model) -> _Seen:
@@ -151,7 +155,8 @@ def _run_step(model: _Model) -> _Seen:
         loss.backward()
         answers.append([float(loss.item()), *_floats(model.lin.weight.grad)])
         states.append(_state(model))
-    return _Seen(answers, states, len(step.cache) == 1 and not step.eager_only.snapshot())
+    eager = bool(step.eager_only.snapshot())
+    return _Seen(answers, states, len(step.cache) == 1 and not eager, len(step.cache), eager)
 
 
 def _run_eager_fused(model: _Model) -> _Seen:
@@ -175,7 +180,9 @@ def _run_fused(model: _Model) -> _Seen:
         loss = step(x)
         answers.append([float(loss.item()), *_floats(model.lin.weight)])
         states.append(_state(model))
-    return _Seen(answers, states, not step.cache_info()["eager_only"])
+    info = step.cache_info()
+    eager = bool(info["eager_only"])
+    return _Seen(answers, states, not eager, len(info["keys"]), eager)
 
 
 #: name -> (the compiled call, its eager twin).  ``module`` traces with folding
@@ -444,13 +451,37 @@ def _adds_a_constant_to_what_it_keeps(model: nn.Module, x: Tensor) -> Tensor:
     return x * model.box["h"]
 
 
+@pytest.mark.parametrize("entry", ENTRIES)
+def test_a_constant_added_to_a_tensor_the_model_keeps_goes_on_from_the_last_call(
+    entry: str,
+) -> None:
+    """The first call leaves the tensor as a constant table; the model now holds a
+    tensor it did not before, so the next call is traced again and finds it from
+    outside."""
+    _agrees(_adds_a_constant_to_what_it_keeps, entry, _a_box)
+
+
+def _adds_a_constant_to_what_a_closure_keeps() -> Body:
+    box: dict[str, Tensor] = {}
+
+    def body(_model: nn.Module, x: Tensor) -> Tensor:
+        if "h" not in box:
+            box["h"] = lucid.zeros(SHAPE[-1], device=COMPILE_DEVICE)
+        box["h"].add_(1.0)
+        return x * box["h"]
+
+    return body
+
+
 @pytest.mark.xfail(
     strict=True,
     reason="LCD-864: a constant added to a lazily kept tensor on every call reads as a "
     "constant table, so the compiled call holds its trace-time value",
 )
-def test_a_constant_added_to_a_kept_tensor_goes_on_from_the_last_call() -> None:
-    _agrees(_adds_a_constant_to_what_it_keeps, "module", _a_box)
+def test_a_constant_added_to_a_tensor_a_closure_keeps_goes_on_from_the_last_call() -> None:
+    got = _run_module(_twin(_adds_a_constant_to_what_a_closure_keeps(), None))
+    want = _run_eager_module(_twin(_adds_a_constant_to_what_a_closure_keeps(), None))
+    assert all(_close(g, w) for g, w in zip(got.answers, want.answers, strict=True))
 
 
 @pytest.mark.parametrize("factory", MOVED)
@@ -477,8 +508,10 @@ def _builds_its_mask_once(model: nn.Module, x: Tensor) -> Tensor:
 def test_a_mask_built_once_and_kept_holds_its_values_on_every_call(entry: str) -> None:
     """Nothing writes the mask after the first call, so putting it back for the
     next one to write would leave it empty for good.  Its writes are constants,
-    so the call stays compiled."""
-    assert _agrees(_builds_its_mask_once, entry, _a_lazy_mask).compiled
+    so the call stays compiled: one executable before the mask exists and one
+    after, as the model's tensor attributes are part of its key."""
+    seen = _agrees(_builds_its_mask_once, entry, _a_lazy_mask)
+    assert not seen.eager and seen.entries == 2
 
 
 def _rebuilds_its_total_every_call(model: nn.Module, x: Tensor) -> Tensor:
