@@ -161,11 +161,7 @@ _DIFFERENTIATE = {"backward": _gradient, "second": _second_gradient}
 
 
 def _ask(
-    fn: Callable[..., object],
-    call: _specs.Call,
-    device: str,
-    shadow: bool,
-    question: str,
+    fn: Callable[..., object], call: _specs.Call, device: str, shadow: bool, question: str
 ) -> dict[str, object]:
     """One way of running ``call``: what it answered, or what it refused."""
     make = _phantom_on(device) if shadow else _real_on(device)
