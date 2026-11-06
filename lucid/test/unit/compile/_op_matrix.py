@@ -630,11 +630,12 @@ CASE_BY_NAME = {c.name: c for c in CASES}
 #: not listed fails the matrix, so a new one is seen the day it appears.
 _INT_MATMUL = "MPSGraph's matmul aborts on integers, so the emitter declines"
 _BOOL_SUM = "MPSGraph cannot sum bool exactly (_DataMovement.h), so it declines"
-_NO_OPS = "a cast to the dtype the tensor already has records no op"
+_NO_OPS = "an op with nothing to do hands back its input and records no op"
 EXPECTED_EAGER: dict[tuple[str, str], str] = {
     ("astype_f32", "f32"): _NO_OPS,
     ("astype_i64", "i64"): _NO_OPS,
     ("astype_bool", "bool"): _NO_OPS,
+    ("dropout_eval", "f32"): _NO_OPS,
     ("scatter_add", "bool"): _BOOL_SUM,
     ("matmul", "i64"): _INT_MATMUL,
     ("matmul", "i32"): _INT_MATMUL,
