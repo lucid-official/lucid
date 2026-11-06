@@ -200,7 +200,7 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
 
         g = tracer.graph
         ext = tracer.external_feeds
-        refuse(tracer, rerun=False)
+        refuse(tracer)
         if not g.ops:
             raise RuntimeError("compiled_step: empty trace (model produced no ops)")
         maybe_probe_for_graph(g)

@@ -674,8 +674,6 @@ def _flat(value: object) -> list[float]:
 #: (norm, entry) pairs that end apart from eager on main too, the same model
 #: measured there: not this branch's, and each pinned until it is fixed.
 _MAIN_GETS_WRONG: dict[tuple[str, str], str] = {
-    ("functional", "module"): "LCD-875: under no_grad, lucid.compile leaves a functional "
-    "batch norm's running statistics where they were",
     ("instance", "compiled_step"): "LCD-877: compiled_step refuses an instance norm that "
     "tracks running statistics, loudly (it wrote in place to a tensor it did not create)",
 }

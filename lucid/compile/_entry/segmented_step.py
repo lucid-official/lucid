@@ -220,7 +220,7 @@ def _trace_segment_fn(
 ) -> tuple[Tracer, Tensor] | None:
     """Trace *fn* in the caller's grad mode, returning ``None`` on a tensor hook or empty graph."""
     from lucid.compile._core.attention_probe import maybe_probe_for_graph
-    from lucid.compile._core.buffer_writes import refuse
+    from lucid.compile._core.buffer_writes import held_writes, refuse
     from lucid.compile._core.trace_context import notice_if_tensor_hook_error, recording
 
     try:
@@ -233,7 +233,7 @@ def _trace_segment_fn(
     if not tracer.graph.ops:
         return None
     maybe_probe_for_graph(tracer.graph)
-    refuse(tracer)
+    refuse(tracer, held_writes(tracer, stands=False))
     return tracer, out
 
 

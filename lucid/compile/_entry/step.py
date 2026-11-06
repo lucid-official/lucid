@@ -46,8 +46,7 @@ from typing import (
 
 from lucid._C import engine as _C_engine
 from lucid.autograd.function import Function, FunctionCtx
-from lucid.compile._core.bn_runstats import BnWriteback
-from lucid.compile._core.buffer_writes import TraceAnswer
+from lucid.compile._core.buffer_writes import CarriedWrites, TraceAnswer
 
 
 class _ExecutableLike(Protocol):
@@ -84,14 +83,11 @@ class _StepEntry:
     n_hits: int = 0
     compile_ms: float = 0.0
     last_run_ms: float = 0.0
-    # 3.5 BatchNorm running-stats write-back: the statistics trail
-    # ``[loss, *grads]`` as extra outputs and are copied into the live buffers
-    # after each run, the counters advanced.  Empty when the model has no such BN.
-    bn: BnWriteback = field(default_factory=BnWriteback)
-    # Tensors from outside the trace that the step writes in place (a
-    # buffer's EMA, a counter), in the order their new values trail the BN
-    # statistics; copied back after each run.  See ``_core/buffer_writes``.
-    written: list[object] = field(default_factory=list)
+    # BatchNorm's running statistics and the tensors from outside the trace
+    # that the step writes in place (a buffer's EMA, a counter): their new
+    # values trail ``[loss, *grads]`` as extra outputs and are copied back
+    # after each run, the counters advanced.  See ``_core/buffer_writes``.
+    carried: CarriedWrites = field(default_factory=CarriedWrites)
     # Per parameter, in ``params`` order: did the trace reach it?  A
     # parameter the loss never touches (an auxiliary head unused in eval)
     # has no gradient, exactly as in eager; the executable produces grads
@@ -339,7 +335,7 @@ def _compile_step_entry(
     from lucid._tensor.tensor import Tensor
     from lucid.compile._core.attention_probe import maybe_probe_for_graph
     from lucid.compile._core.bn_runstats import model_has_cumulative_bn
-    from lucid.compile._core.buffer_writes import held_writes, outside_writes, stood_as_the_call
+    from lucid.compile._core.buffer_writes import carried_writes, held_writes, stood_as_the_call
     from lucid.compile._core.fallback import _fallback_notice
     from lucid.compile._core.signature import leaf_tensors, outside_feeds
     from lucid.compile._debug.trace_dump import trace_to_json
@@ -364,25 +360,22 @@ def _compile_step_entry(
     if held and stands:
         return stood_as_the_call(tracer, model, _wrap(tracer.take_answer()[0]))
 
-    writes = outside_writes(tracer, [_unwrap(t) for t in leaf_tensors(x_args, {})], held)
-    if isinstance(writes, str):
-        _fallback_notice("argument-write", writes)
+    carried = carried_writes(tracer, model, [_unwrap(t) for t in leaf_tensors(x_args, {})], held)
+    if isinstance(carried, str):
+        _fallback_notice("argument-write", carried)
         return None
-    write_ids, written = writes
     ext = tracer.external_feeds
 
     if found is None or model_has_cumulative_bn(model):
         return None
     loss_id = int(found)
 
-    bn = BnWriteback.of(model, graph, ext)
-
     targets = _grad_targets(tracer, params, x_args)
     if not targets.param_ids:
         return None
 
     exe_like = _lower_step_executable(
-        tracer, ext, loss_id, targets.ids, [*bn.out_ids, *write_ids], use_dynamic=use_dynamic
+        tracer, ext, loss_id, targets.ids, carried.out_ids, use_dynamic=use_dynamic
     )
     if exe_like is None:
         return None
@@ -406,8 +399,7 @@ def _compile_step_entry(
         watched=_watched_feeds(tracer, params, x_args),
         graph_json=trace_to_json(graph),
         compile_ms=(time.perf_counter() - t0) * 1000.0,
-        bn=bn,
-        written=written,
+        carried=carried,
         fed=outside_feeds(tracer),
     )
 
@@ -439,18 +431,6 @@ def _execute_entry(entry: _StepEntry, x_args: tuple[Tensor, ...]) -> list[_C_eng
     return list(outs)
 
 
-def _take_side_outputs(
-    entry: _StepEntry, outs: list[_C_engine.TensorImpl], n_loss_grad: int
-) -> None:
-    """Copy the BatchNorm statistics and in-place writes trailing the gradients back out."""
-    from lucid.compile._core.buffer_writes import write_back
-
-    n_writes = len(entry.written)
-    first = n_loss_grad + len(entry.bn.out_ids)
-    entry.bn.apply(outs[n_loss_grad:first])
-    write_back(entry.written, list(outs[first : first + n_writes]))
-
-
 def _scatter_grads(
     entry: _StepEntry, grads: list[_C_engine.TensorImpl], n_grads: int, n_call: int
 ) -> tuple[_Grads, _Grads, _Grads]:
@@ -480,15 +460,15 @@ def _run_step_entry(
     outs = _execute_entry(entry, x_args)
     n_grads = sum(entry.observed) if entry.observed else len(params)
     n_loss_grad = 1 + n_grads + len(entry.input_grads) + len(entry.loose)
-    n_side = len(entry.bn.out_ids) + len(entry.written)
+    n_side = len(entry.carried)
     if len(outs) != n_loss_grad + n_side:
         raise RuntimeError(
             f"make_step: run_executable returned {len(outs)} outputs, expected "
             f"{n_loss_grad + n_side} (1 loss + {n_grads} grads + {len(entry.input_grads)} "
-            f"input grads + {len(entry.loose)} loss-owned grads + {len(entry.bn.out_ids)} "
-            f"BN stats + {len(entry.written)} buffer writes)"
+            f"input grads + {len(entry.loose)} loss-owned grads + {n_side} "
+            f"BN stats and buffer writes)"
         )
-    _take_side_outputs(entry, outs, n_loss_grad)
+    entry.carried.apply(outs[n_loss_grad:])
     grads, inputs, loose = _scatter_grads(entry, outs[1:n_loss_grad], n_grads, len(x_args))
     return _StepResult(outs[0], grads, inputs, loose)
 

@@ -23,6 +23,9 @@ reaches everything reading those bytes.  After the trace:
 * its final id is asked of the executable as an extra output;
 * after every run that output is copied into the tensor.
 
+What a compiled run carries back is one plan (:class:`CarriedWrites`): those
+writes and the statistics a batch norm handed out.
+
 A write that lands in one of the call's own arguments, directly or through a
 view of it, is not written back — the next call's arguments are other tensors
 — and makes the call run eager, as does any entry point that does not write
@@ -32,10 +35,11 @@ back (:func:`refuse`).
 import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, cast
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, cast, final
 
 from lucid._C import engine as _C_engine
+from lucid.compile._core.bn_runstats import BnWriteback
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
@@ -63,6 +67,68 @@ def _lands_in_argument(
     of an argument is the argument's bytes, whichever of them the call wrote."""
     family = impl.family_id()
     return any(a is impl or (family != 0 and a.family_id() == family) for a in arguments)
+
+
+def _carried_in_place(
+    tracer: Tracer, arguments: Sequence[_C_engine.TensorImpl]
+) -> tuple[tuple[int, ...], tuple[_C_engine.TensorImpl, ...]] | None:
+    """The final ids and tensors of the outside writes, or ``None`` when one
+    lands in an argument."""
+    written = _written(tracer)
+    if any(_lands_in_argument(impl, arguments) for _latest, impl in written):
+        return None
+    return tuple(latest for latest, _impl in written), tuple(impl for _latest, impl in written)
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class CarriedWrites:
+    """What a compiled run writes back after it, in the order of :attr:`out_ids`.
+
+    The statistics a traced batch norm handed out instead of writing them, a
+    functional one's too, with the counters of the layers it ran; then each
+    tensor from outside the trace that the call wrote in place.  An entry point
+    asks its executable for :attr:`out_ids` as extra outputs and hands them to
+    :meth:`apply` after every run.  Built in one place (:func:`carried_writes`),
+    so an entry point cannot carry one kind and drop the other: ``lucid.compile``
+    carried the in-place writes, and under ``no_grad`` a functional batch norm's
+    statistics stayed where they were (LCD-875).
+
+    Attributes
+    ----------
+    bn : BnWriteback
+        The batch norm statistics and counters.
+    targets : tuple of TensorImpl
+        The tensors written in place, each already put back to its value from
+        before the trace.
+    ids : tuple of int
+        The trace id of each target's final value.
+    """
+
+    bn: BnWriteback = field(default_factory=BnWriteback)
+    targets: tuple[_C_engine.TensorImpl, ...] = ()
+    ids: tuple[int, ...] = ()
+
+    @property
+    def out_ids(self) -> list[int]:
+        """The trace ids to ask the executable for, in :meth:`apply`'s order."""
+        return [*self.bn.out_ids, *self.ids]
+
+    def __len__(self) -> int:
+        """How many extra outputs the executable returns for these."""
+        return len(self.bn.out_ids) + len(self.ids)
+
+    def apply(self, values: Sequence[_C_engine.TensorImpl]) -> None:
+        """Write a run's values for :attr:`out_ids` back, and advance the counters.
+
+        Parameters
+        ----------
+        values : sequence of TensorImpl
+            The executable's outputs for :attr:`out_ids`, in order.
+        """
+        stats = len(self.bn.out_ids)
+        self.bn.apply(values[:stats])
+        write_back(list(self.targets), list(values[stats:]))
 
 
 type _PutBack = list[tuple[_C_engine.TensorImpl, _C_engine.TensorImpl, int]]
@@ -115,7 +181,8 @@ def end_attempt(outer: _PutBack, *, finished: bool) -> None:
 
 
 #: ``(tensor, its value before the trace's write, its value after)``.
-type HeldWrites = list[tuple[_C_engine.TensorImpl, _C_engine.TensorImpl, _C_engine.TensorImpl]]
+type _HeldWrite = tuple[_C_engine.TensorImpl, _C_engine.TensorImpl, _C_engine.TensorImpl]
+type HeldWrites = list[_HeldWrite]
 
 
 @dataclass(frozen=True)
@@ -190,9 +257,10 @@ def held_writes(tracer: Tracer, *, stands: bool) -> HeldWrites:
         Whether the caller lets the trace-time call stand as the call when there
         are any (:func:`stood_as_the_call`): then every such write counts.
         Without that only one that reads the tensor's own earlier value does,
-        to be put back for an eager call.  An overwrite stays
-        compiled, which is wrong for one that runs only on the first call, a
-        buffer filled from the first batch (LCD-876).
+        to be put back for an eager call.  An overwrite stays compiled, which
+        is wrong for one that runs only on the first call, a buffer filled from
+        the first batch (LCD-876): so every entry point that has the call's
+        result stands, a segmented step's segment too.
 
     Returns
     -------
@@ -203,7 +271,7 @@ def held_writes(tracer: Tracer, *, stands: bool) -> HeldWrites:
     return [(impl, before, after) for impl, before, after in kept]
 
 
-def _put_back(tracer: Tracer, held: HeldWrites) -> None:
+def _put_back(tracer: Tracer, held: Sequence[_HeldWrite]) -> None:
     """Undo the trace-time call's writes that whatever runs next applies itself."""
     for impl, before, _after in held:
         impl.copy_from(before)
@@ -241,22 +309,45 @@ def require_outside_writes(
     caller: str,
     held: HeldWrites,
 ) -> tuple[list[int], list[_C_engine.TensorImpl]]:
-    """Put the written tensors back; return their ids and impls or raise ``RuntimeError``."""
+    """Put the written tensors back; return their ids and impls or raise ``RuntimeError``.
+
+    For ``fused_step``, whose executable writes batch norm's statistics in
+    place itself.
+
+    Parameters
+    ----------
+    tracer : Tracer
+        The finished trace.
+    arguments : sequence of TensorImpl
+        Every tensor impl the traced call was given.
+    caller : str
+        The entry point named in the error.
+    held : HeldWrites
+        What :func:`held_writes` answered: put back with the rest.
+
+    Returns
+    -------
+    tuple of (list of int, list of TensorImpl)
+        The trace id of each written tensor's final value, and the tensors in
+        the same order, every one already put back.
+
+    Raises
+    ------
+    RuntimeError
+        A write landed in one of the call's own arguments.
+    """
     _put_back(tracer, held)
-    ids: list[int] = []
-    targets: list[_C_engine.TensorImpl] = []
-    for latest, impl in _written(tracer):
-        if _lands_in_argument(impl, arguments):
-            raise RuntimeError(f"{caller}: {_ARGUMENT}")
-        ids.append(latest)
-        targets.append(impl)
-    return ids, targets
+    in_place = _carried_in_place(tracer, arguments)
+    if in_place is None:
+        raise RuntimeError(f"{caller}: {_ARGUMENT}")
+    ids, targets = in_place
+    return list(ids), list(targets)
 
 
-def outside_writes(
-    tracer: Tracer, arguments: Sequence[_C_engine.TensorImpl], held: HeldWrites
-) -> tuple[list[int], list[object]] | str:
-    """Put the written tensors back; return what the executable must carry.
+def carried_writes(
+    tracer: Tracer, model: Module, arguments: Sequence[_C_engine.TensorImpl], held: HeldWrites
+) -> CarriedWrites | str:
+    """Put the written tensors back; return everything the executable must carry.
 
     Call with the traced call's result dropped: a tensor the call made and wrote
     that Python still holds marks the trace unsupported, and a result it is about
@@ -266,6 +357,8 @@ def outside_writes(
     ----------
     tracer : Tracer
         The finished trace.
+    model : Module
+        The traced model, which owns the batch norm counters.
     arguments : sequence of TensorImpl
         Every tensor impl the traced call was given.
     held : HeldWrites
@@ -273,21 +366,18 @@ def outside_writes(
 
     Returns
     -------
-    tuple of (list of int, list of TensorImpl), or str
-        The trace id holding each written tensor's final value, and the
-        tensors in the same order — every one of them already put back to
-        its value from before the trace.  A string instead when a write
-        landed in one of its own arguments: the reason it has to run eager.
+    CarriedWrites or str
+        The batch norm statistics the trace handed out and the tensors it
+        wrote in place, every one of them already put back to its value from
+        before the trace.  A string instead when a write landed in one of its
+        own arguments: the reason it has to run eager.
     """
     _put_back(tracer, held)
-    ids: list[int] = []
-    targets: list[object] = []
-    for latest, impl in _written(tracer):
-        if _lands_in_argument(impl, arguments):
-            return _ARGUMENT
-        ids.append(latest)
-        targets.append(impl)
-    return ids, targets
+    in_place = _carried_in_place(tracer, arguments)
+    if in_place is None:
+        return _ARGUMENT
+    ids, targets = in_place
+    return CarriedWrites(BnWriteback.of(model, tracer.graph, tracer.external_feeds), targets, ids)
 
 
 def write_back(targets: list[object], values: list[object]) -> None:
@@ -296,7 +386,7 @@ def write_back(targets: list[object], values: list[object]) -> None:
     Parameters
     ----------
     targets : list of TensorImpl
-        What :func:`outside_writes` returned, in order.
+        The tensors to write, in order (:attr:`CarriedWrites.targets`).
     values : list of TensorImpl
         The matching executable outputs.
     """
@@ -308,7 +398,7 @@ def write_back(targets: list[object], values: list[object]) -> None:
         dst.copy_from(src)
 
 
-def refuse(tracer: Tracer, *, rerun: bool = True) -> None:
+def refuse(tracer: Tracer, held: Sequence[_HeldWrite] = ()) -> None:
     """Put the written tensors back and mark the trace unsupported if any were.
 
     For the entry points that do not write back: running eager is right, and
@@ -318,14 +408,14 @@ def refuse(tracer: Tracer, *, rerun: bool = True) -> None:
     ----------
     tracer : Tracer
         The finished trace.
-    rerun : bool, optional, keyword-only, default=True
-        Whether an eager call follows.  Without one (``compiled_step``, which
-        traces every call afresh) the trace's writes are the call's: a tensor
-        the call made and Python holds keeps them, whatever they read, and the
-        next call's trace finds it from outside.
+    held : sequence of (TensorImpl, TensorImpl, TensorImpl), optional
+        What :func:`held_writes` answered, put back for the eager call that
+        follows, when the trace did not stand as the call.  Empty without one
+        (``compiled_step``, which traces every call afresh): the trace's
+        writes are the call's, a tensor the call made and Python holds keeps
+        them, whatever they read, and the next call's trace finds it from
+        outside.
     """
-    # A segmented step cannot let the trace stand as the call: only a held
-    # tensor's read-modify-write refuses it (:func:`held_writes`).
-    _put_back(tracer, held_writes(tracer, stands=False) if rerun else [])
+    _put_back(tracer, held)
     if _written(tracer):
         tracer.mark_unsupported(_OUTSIDE)

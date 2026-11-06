@@ -52,7 +52,7 @@ class _ExecutableLike(Protocol):
 
 from lucid._C import engine as _C_engine
 
-from lucid.compile._core.buffer_writes import HeldWrites, TraceAnswer
+from lucid.compile._core.buffer_writes import CarriedWrites, HeldWrites, TraceAnswer
 from lucid.compile._core.fallback import EagerFallbackSet, _fallback_notice, _narrate, run_eager
 from lucid.compile._core.signature import (
     CacheKey,
@@ -247,10 +247,11 @@ class _CacheEntry:
     n_hits: int = 0
     compile_ms: float = 0.0
     last_run_ms: float = 0.0
-    # Tensors from outside the trace that the forward writes in place (a
-    # buffer's EMA, a counter).  Their new values trail the returned ones;
-    # each run copies them back.  See ``_core/buffer_writes``.
-    written: list[object] = field(default_factory=list)
+    # The statistics a functional batch norm hands out, and the tensors from
+    # outside the trace that the forward writes in place (a buffer's EMA, a
+    # counter).  Their new values trail the returned ones; each run copies
+    # them back.  See ``_core/buffer_writes``.
+    carried: CarriedWrites = field(default_factory=CarriedWrites)
     # What the executable reads besides the call's tensors — parameters,
     # buffers, a closure's or a global's tensors — and whether the call makes
     # a grad leaf itself.  Under grad mode one requiring grad makes it eager.
@@ -1203,16 +1204,16 @@ class CompiledModule[**P, R](_ModuleWrapper):
         # Local imports keep ``lucid.compile`` import-cheap.
         from lucid._dispatch import _unwrap
         from lucid.compile._core.bn_runstats import model_has_tracking_bn
-        from lucid.compile._core.buffer_writes import outside_writes
+        from lucid.compile._core.buffer_writes import carried_writes
 
-        # 3.5 BatchNorm running-stats: this is the forward-only compile path
-        # (no backward, hence no write-back hook).  In training mode a
-        # running-stats-tracking BN must advance its EMA every call, which the
-        # eager kernel now skips under a tracer — so fall back to eager to keep
-        # the stats correct (use make_step for compiled training).  In eval mode
-        # BN dispatches the distinct ``batch_norm_eval`` op (no running-stats
-        # update), so it compiles normally; track_running_stats=False BN keeps no
-        # stats and is likewise unaffected.
+        # A norm module tracking running statistics in training mode runs
+        # eagerly: its kernel skips the update under a tracer and hands the new
+        # values out.  The executable could carry them, as it does a functional
+        # batch norm's (``carried_writes``), but that is not proven for this
+        # entry: a forward that raises after the norm, a tracked instance norm,
+        # a cumulative average (LCD-882).  In eval mode the norm runs the
+        # distinct ``batch_norm_eval`` op, which updates nothing, and compiles;
+        # one that keeps no statistics is likewise unaffected.
         if model_has_tracking_bn(self._model) and any(
             getattr(m, "training", False) and getattr(m, "track_running_stats", False)
             for m in self._model.modules()
@@ -1239,11 +1240,11 @@ class CompiledModule[**P, R](_ModuleWrapper):
 
         # The trace-time call applied its in-place buffer writes; put the
         # buffers back so the executable (or an eager fallback) applies them.
-        writes = outside_writes(tracer, [_unwrap(t) for t in leaf_tensors(args, kwargs)], held)
-        if isinstance(writes, str):
-            _fallback_notice("argument-write", writes)
+        given = [_unwrap(t) for t in leaf_tensors(args, kwargs)]
+        carried = carried_writes(tracer, self._model, given, held)
+        if isinstance(carried, str):
+            _fallback_notice("argument-write", carried)
             return None
-        write_ids, written = writes
         ext = tracer.external_feeds
 
         # Long attention is faster eagerly (CHA-14); the signature is then
@@ -1255,7 +1256,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
             _fallback_notice("long-attention", slow_attention)
             return None
 
-        explicit_outputs = explicit_outputs + write_ids
+        explicit_outputs = explicit_outputs + carried.out_ids
 
         # ── Symbolic-batch resolution (per-instance, decided on first trace) ──
         # ``dynamic=True`` ATTEMPTS symbolic, but only for graphs the gate proves
@@ -1310,7 +1311,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
             return_spec=return_spec,
             graph_json=trace_to_json(graph),
             compile_ms=(time.perf_counter() - t_compile_start) * 1000.0,
-            written=written,
+            carried=carried,
             reads=TraceReads.of(tracer, exe.input_ids, input_source),
         )
 
@@ -1361,12 +1362,10 @@ class CompiledModule[**P, R](_ModuleWrapper):
         outs = _C_engine.compile.run_executable(entry.exe, feed_impls)
         entry.last_run_ms = (time.perf_counter() - t0) * 1000.0
         entry.n_hits += 1
-        if entry.written:
-            from lucid.compile._core.buffer_writes import write_back
-
-            n_writes = len(entry.written)
-            write_back(entry.written, list(outs[-n_writes:]))
-            outs = outs[:-n_writes]
+        if entry.carried:
+            n_carried = len(entry.carried)
+            entry.carried.apply(outs[-n_carried:])
+            outs = outs[:-n_carried]
 
         # If the trace recorded the user's return structure, re-pack the
         # flat outs list into that shape (single Tensor, tuple, dict,
