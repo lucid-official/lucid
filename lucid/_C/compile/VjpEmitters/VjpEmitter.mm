@@ -520,6 +520,11 @@ std::vector<bool> present_outputs(const VjpRegion& region) {
     return present;
 }
 
+bool every_output_present(const VjpRegion& region) {
+    return std::all_of(region.cotangent_ids.begin(), region.cotangent_ids.end(),
+                       [](TensorId cid) { return cid >= 0; });
+}
+
 std::string format_output_set(const std::vector<bool>& set) {
     std::ostringstream os;
     os << '{';
@@ -557,9 +562,7 @@ std::vector<const VjpRegion*> region_group(const std::vector<const VjpRegion*>& 
     std::vector<const VjpRegion*> group{at_end.back()};
     const std::size_t begin = at_end.back()->fwd_begin;
     for (auto it = std::next(at_end.rbegin()); it != at_end.rend(); ++it) {
-        const std::vector<bool> present = present_outputs(**it);
-        const bool full = std::find(present.begin(), present.end(), false) == present.end();
-        if ((*it)->fwd_begin != begin || full)
+        if ((*it)->fwd_begin != begin || every_output_present(**it))
             break;
         group.push_back(*it);
     }
@@ -570,19 +573,20 @@ std::vector<const VjpRegion*> region_group(const std::vector<const VjpRegion*>& 
 // Emits the region of ``group`` traced for the outputs that receive a
 // gradient — the call eager makes, which hands ``backward`` ``None`` for
 // the others.  No match is a failure, never a silent pick: a wrong variant
-// is a wrong gradient.
+// is a wrong gradient.  A lone region traced with every cotangent is the
+// one-region call, which binds zeros to an output no gradient reached.
 bool emit_vjp_region_group(MPSGraph* graph,
                            BackwardContext& bctx,
                            const std::vector<const VjpRegion*>& group,
                            const std::unordered_set<TensorId>& depends,
                            std::string* error_msg) {
-    const VjpRegion& full = *group.back();
-    if (group.size() == 1)
-        return emit_vjp_region(graph, bctx, full, depends, error_msg);
-    std::vector<bool> demand(full.output_metas.size());
+    const VjpRegion& last = *group.back();
+    if (group.size() == 1 && every_output_present(last))
+        return emit_vjp_region(graph, bctx, last, depends, error_msg);
+    std::vector<bool> demand(last.output_metas.size());
     bool any_demand = false;
     for (std::size_t j = 0; j < demand.size(); ++j) {
-        const TensorId id = full.output_metas[j].id;
+        const TensorId id = last.output_metas[j].id;
         demand[j] = bctx.resolve_grad(id) != nullptr;
         any_demand = any_demand || (demand[j] && depends.count(id) != 0);
     }
@@ -593,13 +597,13 @@ bool emit_vjp_region_group(MPSGraph* graph,
             return emit_vjp_region(graph, bctx, *region, depends, error_msg);
     }
     std::ostringstream os;
-    os << "manual_vjp: no traced VJP variant of the custom Function at ops [" << full.fwd_begin
-       << ", " << full.fwd_end << ") for the outputs that receive a gradient "
+    os << "manual_vjp: no traced VJP variant of the custom Function at ops [" << last.fwd_begin
+       << ", " << last.fwd_end << ") for the outputs that receive a gradient "
        << format_output_set(demand) << " (traced:";
     for (const VjpRegion* region : group)
         os << ' ' << format_output_set(present_outputs(*region));
     os << ')';
-    debug_log_failure(os.str(), format_region_outputs(full));
+    debug_log_failure(os.str(), format_region_outputs(last));
     if (error_msg)
         *error_msg = os.str();
     return false;
