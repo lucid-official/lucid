@@ -16,6 +16,11 @@ What the numbers count:
     each stage's own log has.
 ``failing families``
     groups with at least one failing stage.
+
+A run on both devices keeps each device's stages apart: a failing stage is
+labelled with the device it failed on, and with ``metal only`` / ``cpu only``
+when the other device ran the same stage and passed — so which device to look at
+is on the screen, not found by rerunning the failed node ids by hand.
 """
 
 from dataclasses import dataclass, field
@@ -24,6 +29,7 @@ from typing import TYPE_CHECKING
 
 from lucid.test.audit import _zoo_record
 from lucid.test.audit._console import fmt_duration
+from lucid.test.audit._zoo_device import where_failed
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -52,6 +58,10 @@ class ZooReport:
     notes_written: int = 0
     #: Where the complete lists were written, once the run has finished.
     summary_path: Path | None = None
+    #: Each group's results from every device it ran on, to say where a stage failed.
+    results: dict[str, list[StageResult]] = field(default_factory=dict)
+    #: The devices the run took, in order.
+    devices: tuple[str, ...] = ()
 
     @property
     def failures(self) -> int:
@@ -66,15 +76,32 @@ class ZooReport:
         return found
 
     def add(self, group: str, results: Sequence[StageResult], *, resumed: bool) -> None:
+        """Take in ``group``'s results, from every device it ran on, each stamped with its device."""
         self.groups += 1
         self.resumed += resumed
+        self.results[group] = list(results)
         if _zoo_record.overall(results) == "reduced":
             self.reduced.append(group)
         for result in results:
             self.peak_gb = max(self.peak_gb, result.peak_gb)
             if result.failed:
                 self.failed.append((group, result))
-            self.adapted.extend((group, result.name, note) for note in result.notes + result.events)
+            where = f"{result.name} ({result.device})" if result.device else result.name
+            self.adapted.extend((group, where, note) for note in result.notes + result.events)
+
+    def label(self, group: str, result: StageResult) -> str:
+        """``zoo-tests (fail, cpu only)``: the stage, its status and where it failed."""
+        where = where_failed(self.results.get(group, []), result.name) or result.device
+        return f"{result.name} ({result.status}{f', {where}' if where else ''})"
+
+    def failing_by_device(self) -> dict[str, int]:
+        """How many failing groups fail on one device only, on each, or on both."""
+        counts: dict[str, int] = {}
+        for group in self.failing_groups:
+            where = where_failed(self.results.get(group, []))
+            if where:
+                counts[where] = counts.get(where, 0) + 1
+        return counts
 
 
 def _first_failure(results: Sequence[StageResult]) -> str:
@@ -87,16 +114,19 @@ def _first_failure(results: Sequence[StageResult]) -> str:
 def render_summary(report: ZooReport) -> str:
     """The complete lists, as the file holds them."""
     groups = report.failing_groups
+    by_device = report.failing_by_device()
     lines = [
         f"failing stages {report.failures} in {len(groups)} of {report.groups} group(s)",
         "(a stage is one process: its tests, a probe, the contract; for the failing tests "
         "of a stage read logs/<group>/<stage>.log)",
+        f"devices {' → '.join(report.devices) or 'none'}"
+        + "".join(f" · {n} group(s) fail on {w}" for w, n in sorted(by_device.items())),
         "",
         f"== failing stages · {report.failures}",
     ]
     for group, result in report.failed:
         first = result.failures[0] if result.failures else ""
-        lines.append(f"{group}/{result.name}  ({result.status})  {first}")
+        lines.append(f"{group}/{report.label(group, result)}  {first}")
     lines += ["", f"== groups that passed in reduced form · {len(report.reduced)}"]
     lines += list(report.reduced)
     lines += ["", f"== skipped or adapted for this machine · {len(report.adapted)}"]
@@ -112,12 +142,16 @@ def summarise(
     console.always("")
     console.rule("model zoo", "red" if report.failures else "cyan")
     console.kv("groups", f"{report.groups} ({report.resumed} recorded for this commit)")
+    if report.devices:
+        console.kv("devices", " → ".join(report.devices))
     if report.failures:
         console.kv(
             "failing stages",
             f"{report.failures} in {len(groups)} of {report.groups} group(s)  "
             "(stages, not tests: a stage is a process)",
         )
+        for where, count in sorted(report.failing_by_device().items()):
+            console.kv("", f"{count} group(s) fail on {where}")
     console.kv("peak footprint", f"{report.peak_gb:.1f} GB of {budget.limit_gb:g} GB allowed")
     console.kv("elapsed", fmt_duration(report.seconds))
     if record_dir is None:
@@ -145,7 +179,7 @@ def summarise(
         console.always("")
         console.rule(f"failing groups · {len(groups)}", "red")
         for group, results in list(groups.items())[:SHOWN]:
-            stages = ", ".join(f"{r.name} ({r.status})" for r in results)
+            stages = ", ".join(report.label(group, r) for r in results)
             console.always(
                 "  "
                 + console.paint("FAIL", "red", "bold")

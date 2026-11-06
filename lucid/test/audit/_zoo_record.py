@@ -2,11 +2,12 @@
 
 Two records, deliberately separate:
 
-* **state** — one JSON per family under
+* **state** — one JSON per (family, device) under
   ``~/Library/Caches/lucid/audit-zoo/<sha>/``.  It exists so an interrupted run
-  resumes: a family recorded for this commit is not run again — *by a machine at
-  least as large as the one that recorded it*, because a record that left things
-  out for a small machine is not an answer for a big one.  It lives in the cache
+  resumes: a family recorded for this commit on a device is not run there again —
+  *by a machine at least as large as the one that recorded it*, because a record
+  that left things out for a small machine is not an answer for a big one — and
+  never stands in for the other device.  It lives in the cache
   directory, not the checkout, because the stage must leave the tree as it found
   it.  A tree with uncommitted changes never reuses a record — the commit it
   would be filed under no longer describes what is on disk — and a tree that
@@ -28,7 +29,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from lucid.test.audit._zoo_stage import ZOO_WIDE, StageResult
+from lucid.test.audit._zoo_device import (
+    DEFAULT_CHOICE,
+    EACH_DEVICE,
+    ORDER,
+    devices_for,
+    devices_run,
+    where_failed,
+)
+from lucid.test.audit._zoo_stage import SCOPED_STAGES, ZOO_WIDE, StageResult
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
@@ -56,6 +65,22 @@ def overall(results: Sequence[StageResult]) -> str:
         if worst in statuses:
             return worst
     return "reduced" if any(result.reduced for result in results) else "pass"
+
+
+def device_verdict(results: Sequence[StageResult]) -> str:
+    """Each device's result and the worse of them: ``metal pass · cpu fail (cpu only)``.
+
+    The worse of the two is what :func:`overall` gives over all of ``results``;
+    this is the same facts laid out per device, so a reader sees *which* device
+    carried it without opening the table.
+    """
+    ran = devices_run(results)
+    if not ran:
+        return "기록 없음"
+    parts = [f"{d} {overall([r for r in results if r.device == d])}" for d in ran]
+    parts += [f"{d} 기록 없음" for d in ORDER if d not in ran]
+    where = where_failed(results)
+    return " · ".join(parts) + (f" ({where})" if where else "")
 
 
 def repo_state(root: Path) -> tuple[str, bool]:
@@ -92,6 +117,10 @@ class FamilyRecord:
     #: record is the answer only for a run on the same device.
     device: str
 
+    def __post_init__(self) -> None:
+        for result in self.results:
+            result.device = self.device  # the record is the authority on where it ran
+
     def reusable_under(self, budget: MachineBudget, device: str) -> bool:
         """Whether a run with ``budget`` on ``device`` may take these results as its own.
 
@@ -121,8 +150,10 @@ class ZooState:
         self.temp = self.root / "tmp"
         self.logs.mkdir(parents=True, exist_ok=True)
 
-    def _path(self, name: str) -> Path:
-        return self.root / f"{name}.json"
+    def _path(self, name: str, device: str) -> Path:
+        # One file per device.  The unsuffixed ``<name>.json`` of the single-device
+        # runs is never read: it would claim a device it was not about.
+        return self.root / f"{name}.{device}.json"
 
     @contextlib.contextmanager
     def lock(self) -> Iterator[None]:
@@ -141,22 +172,32 @@ class ZooState:
             fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)
 
-    def recorded(self, name: str) -> FamilyRecord | None:
-        """What is on disk for ``name``, whether or not a run may reuse it."""
-        path = self._path(name)
+    def recorded(self, name: str, device: str) -> FamilyRecord | None:
+        """What is on disk for ``name`` on ``device``, whether or not a run may reuse it."""
+        path = self._path(name, device)
         if not path.exists():
             return None
         try:
             payload = json.loads(path.read_text())
+            if payload["device"] != device:
+                return None  # a file renamed onto another device's name is not its record
             results = [StageResult(**item) for item in payload["results"]]
-            return FamilyRecord(results, float(payload["limit_gb"]), str(payload["device"]))
+            return FamilyRecord(results, float(payload["limit_gb"]), device)
         except (OSError, ValueError, TypeError, KeyError):
             return None  # a record this version cannot read is a record to redo
 
     def load(self, name: str, budget: MachineBudget, device: str) -> list[StageResult] | None:
         """The recorded results of ``name``, if a run with ``budget`` on ``device`` may reuse them."""
-        record = self.recorded(name) if self.resume else None
+        record = self.recorded(name, device) if self.resume else None
         return record.results if record and record.reusable_under(budget, device) else None
+
+    def latest(self, name: str) -> list[StageResult]:
+        """``name``'s recorded results on every device, in the order a run takes them."""
+        found: list[StageResult] = []
+        for device in ORDER:
+            if record := self.recorded(name, device):
+                found += record.results
+        return found
 
     def save(
         self, name: str, results: Sequence[StageResult], budget: MachineBudget, device: str
@@ -166,7 +207,7 @@ class ZooState:
             "device": device,
             "results": [dataclasses.asdict(r) for r in results],
         }
-        write_atomic(self._path(name), json.dumps(payload))
+        write_atomic(self._path(name, device), json.dumps(payload))
 
 
 @dataclass(frozen=True)
@@ -177,11 +218,17 @@ class RunFacts:
     command: str
     budget: MachineBudget
     dirty: bool = False
-    device: str = "cpu"
+    #: What ``--zoo-device`` asked for (``both``, ``metal`` or ``cpu``).
+    zoo_device: str = DEFAULT_CHOICE
 
 
 def render_note(name: str, domain: str, results: Sequence[StageResult], facts: RunFacts) -> str:
-    """The Markdown note for one family, in the format the vault has always had."""
+    """The Markdown note for one family: one table, a row per stage per device.
+
+    ``results`` are the family's from every device it ran on, each stamped with
+    its device.  The status is the worse of them; the line under it gives each
+    device's own, so a reader sees which device carried it.
+    """
     seconds = sum(result.seconds for result in results)
     peak = max((result.peak_gb for result in results), default=0.0)
     commit = f"{facts.sha[:9]}{' (dirty)' if facts.dirty else ''}"
@@ -190,18 +237,17 @@ def render_note(name: str, domain: str, results: Sequence[StageResult], facts: R
         "",
         f"> **{overall(results)}** · `{commit}` · {datetime.now():%Y-%m-%d %H:%M} · "
         f"{domain} · {seconds / 60:.1f} 분 · 최대 {peak:.1f} GB",
-        f"> 명령: `{facts.command}` · 장치: {facts.device} · 머신: {facts.budget.describe()}",
+        f"> 장치별: {device_verdict(results)}",
+        f"> 명령: `{facts.command}` · 요청 장치: {facts.zoo_device} · 머신: {facts.budget.describe()}",
         f"> {_RESULT_RULE}",
         "",
-        "| 단계 | 결과 | 시간 (s) | 최대 (GB) | 요약 |",
-        "|---|---|---|---|---|",
+        "| 장치 | 단계 | 결과 | 시간 (s) | 최대 (GB) | 요약 |",
+        "|---|---|---|---|---|---|",
     ]
     for result in results:
         summary = result.summary.replace("|", "/")
-        if result.device and result.device != facts.device:
-            summary += f" · 장치: {result.device} (--zoo-device 와 무관한 단계)"
         lines.append(
-            f"| {result.name} | {result.status} | {result.seconds:.0f} "
+            f"| {result.device} | {result.name} | {result.status} | {result.seconds:.0f} "
             f"| {result.peak_gb:.1f} | {summary} |"
         )
     for title, field_name in (
@@ -211,14 +257,29 @@ def render_note(name: str, domain: str, results: Sequence[StageResult], facts: R
         ("이 머신에서 정한 것", "notes"),
     ):
         items = [
-            f"- `{r.name}`: {item}"
+            f"- `{r.name}` [{r.device}]: {item}"
             for r in results
             for item in (r.notes + r.events if field_name == "notes" else getattr(r, field_name))
         ]
         if items:
             lines += ["", f"## {title}", "", *items]
-    lines += ["", "장부: [[zoo-verify-ledger]] · 계약: [[arch-models-family-contract]]", ""]
+    lines += [
+        "",
+        _scope_legend(),
+        "",
+        "장부: [[zoo-verify-ledger]] · 계약: [[arch-models-family-contract]]",
+        "",
+    ]
     return "\n".join(lines)
+
+
+def _scope_legend() -> str:
+    """Which stages run where, from the scopes the stages declare."""
+    scoped = " · ".join(f"{name} = {scope.describe()}" for name, scope in SCOPED_STAGES.items())
+    return (
+        f"장치 범위: {scoped} · 나머지 단계 = {EACH_DEVICE.describe()}. "
+        "한쪽 장치에서만 실패하면 결과 옆에 `metal only` / `cpu only` 가 붙는다."
+    )
 
 
 _RESULT_RULE = (
@@ -238,29 +299,37 @@ _LEDGER_HEAD = """# model zoo 전수 검증 장부
 
 
 def render_ledger(facts: RunFacts, state: ZooState, families: dict[str, str]) -> str:
-    """The table of every family's latest result for this commit."""
+    """The table of every family's latest result for this commit, a column per device.
+
+    The result column is the worse of the devices, qualified (``fail (cpu only)``)
+    when only one of two failed; a device with no record yet reads ``대기``.
+    """
+    asked = devices_for(facts.zoo_device)
     lines = [
         _LEDGER_HEAD,
-        f"**대상 커밋**: `{facts.sha}`{' (dirty)' if facts.dirty else ''} · **이번 실행 장치**: {facts.device}",
+        f"**대상 커밋**: `{facts.sha}`{' (dirty)' if facts.dirty else ''} · "
+        f"**이번 실행 장치**: {facts.zoo_device} ({' → '.join(asked)})",
         "",
-    ]
-    lines += [
-        "| family | 분야 | 결과 | 분 | 최대 GB | 장치 | 기록 |",
-        "|---|---|---|---|---|---|---|",
+        f"| family | 분야 | 결과 | {' | '.join(ORDER)} | 분 | 최대 GB | 기록 |",
+        f"|---|---|---|{'---|' * len(ORDER)}---|---|---|",
     ]
     done = 0
     for name, domain in [*families.items(), (ZOO_WIDE, "공통")]:
-        recorded = state.recorded(name)
-        if recorded is None:
-            lines.append(f"| {name} | {domain} | 대기 | | | | |")
+        records = {device: state.recorded(name, device) for device in ORDER}
+        results = state.latest(name)
+        cells = [
+            overall(record.results) if (record := records[device]) else "대기" for device in ORDER
+        ]
+        done += all(records[device] for device in asked)
+        if not results:
+            lines.append(f"| {name} | {domain} | 대기 | {' | '.join(cells)} | | | |")
             continue
-        done += 1
-        record = recorded.results
-        minutes = sum(item.seconds for item in record) / 60
-        peak = max((item.peak_gb for item in record), default=0.0)
+        where = where_failed(results)
+        minutes = sum(item.seconds for item in results) / 60
+        peak = max((item.peak_gb for item in results), default=0.0)
         lines.append(
-            f"| {name} | {domain} | {overall(record)} | {minutes:.1f} | {peak:.1f} "
-            f"| {recorded.device} | [[zoo-verify-{name}]] |"
+            f"| {name} | {domain} | {overall(results)}{f' ({where})' if where else ''} "
+            f"| {' | '.join(cells)} | {minutes:.1f} | {peak:.1f} | [[zoo-verify-{name}]] |"
         )
     lines += ["", f"진행: {done} / {len(families) + 1}", ""]
     return "\n".join(lines)
@@ -281,8 +350,10 @@ class Notebook:
     def note_path(self, name: str) -> Path:
         return self._directory / f"zoo-verify-{name}.md"
 
-    def write_note(self, name: str, results: Sequence[StageResult]) -> None:
+    def write_note(self, name: str) -> None:
+        """``name``'s note, from what the state holds for it on every device."""
         domain = self._families.get(name, "공통")
+        results = self._state.latest(name)
         write_atomic(self.note_path(name), render_note(name, domain, results, self._facts))
 
     def write_ledger(self) -> None:
@@ -291,8 +362,8 @@ class Notebook:
             render_ledger(self._facts, self._state, self._families),
         )
 
-    def write(self, name: str, results: Sequence[StageResult]) -> None:
-        self.write_note(name, results)
+    def write(self, name: str) -> None:
+        self.write_note(name)
         self.write_ledger()
 
 
@@ -303,6 +374,7 @@ __all__ = [
     "RunFacts",
     "ZooBusy",
     "ZooState",
+    "device_verdict",
     "overall",
     "render_ledger",
     "render_note",

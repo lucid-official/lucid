@@ -5,8 +5,7 @@ memory guard can kill it and so that one family's allocations never outlive it.
 The output follows the line protocol :func:`~lucid.test.audit._zoo_stage.read_result`
 reads: ``FAILED`` for a failure, ``CHECK`` for something to look at, ``SKIPPED``
 for something the harness declares it cannot check (with the reason), ``ADAPTIVE``
-for something this machine's budget made it skip, ``DEVICE`` for a stage that ran
-on a device of its own.  Exit ``5`` means nothing was
+for something this machine's budget made it skip.  Exit ``5`` means nothing was
 checked, which is not the same as nothing failing.
 
     python -m lucid.test.audit._zoo_probes build FAMILY --budget-gb 22.4
@@ -145,9 +144,6 @@ def matrix_family(family: str) -> int:
     from lucid.test.unit.compile import _zoo_matrix as matrix
 
     started = time.monotonic()
-    # Compiled training picks its own device (``COMPILE_DEVICE``), whatever
-    # ``--zoo-device`` says; saying so here puts it on this stage's row in the note.
-    print(f"DEVICE {matrix.DEV}", flush=True)
     labels = factories_by_family().get(family, Factories()).labels | {family}
     ran = bad = skipped = 0
     for task in matrix.TASKS:

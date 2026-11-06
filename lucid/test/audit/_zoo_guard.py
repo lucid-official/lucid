@@ -258,7 +258,9 @@ class StageRunner:
         log = folder / f"{slug}.log"
         log.write_text("")
         outcome = self._guard.run(stage.argv(), log)
-        result = read_result(stage, log, outcome.status, outcome.seconds, outcome.peak_gb)
+        result = read_result(
+            stage, log, outcome.status, outcome.seconds, outcome.peak_gb, self._guard.device
+        )
         if outcome.wait_note:
             result.events.append(outcome.wait_note)
         return result
@@ -276,13 +278,14 @@ class StageRunner:
             result = self._attempt(stage, group, "-again")
             self._merge(first, result)
             result.events.append(
-                f"the machine ran short of memory during the first attempt "
+                f"the machine ran short of memory during the first attempt on {first.device} "
                 f"({first.peak_gb:.1f} GB footprint); waited for room and reran it "
                 f"unreduced: {result.status}"
             )
         elif result.status == "mem-guard":
             retry = stage.without_heavy(
-                f"the memory guard killed the first attempt at {result.peak_gb:.1f} GB; "
+                f"the memory guard killed the first attempt on {result.device} "
+                f"at {result.peak_gb:.1f} GB; "
                 "this is the retry with heavy tests deselected"
             )
             if retry is not None:

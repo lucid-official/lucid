@@ -10,7 +10,8 @@
 * ``--suite-path`` / ``--suite-ignore`` run a tree the floor was not measured
   over, and still got a verdict that could fail the run.
 * ``lucid-audit`` needed pytest to print ``--list-packages``.
-* Compiled training ignores ``--zoo-device`` and the note did not say so.
+* Compiled training ignored ``--zoo-device`` and the note had to say so; it is now a
+  stage that declares itself Metal only.
 * The verdict said "clean on every stage that ran" for a run that left things
   out, and its zoo number did not say what it counted.
 """
@@ -24,17 +25,18 @@ from pathlib import Path
 
 import pytest
 
-from lucid.test.audit import _zoo, _zoo_probes
+from lucid.test.audit import _zoo
 from lucid.test.audit._console import Console
 from lucid.test.audit._suite import report_line_coverage_diff
 from lucid.test.audit._zoo_budget import MachineBudget
+from lucid.test.audit._zoo_device import COMPILED_TRAINING_DEVICE, OnlyOn
 from lucid.test.audit._zoo_guard import exit_on_terminate
 from lucid.test.audit._zoo_record import RunFacts, render_note
 from lucid.test.audit._zoo_select import FamilySelector
-from lucid.test.audit._zoo_stage import CommandStage, StageResult, ZooCatalog, read_result
+from lucid.test.audit._zoo_stage import StageResult, ZooCatalog
 from lucid.test.audit.__main__ import _verdict, build_parser, main
-from lucid.test.audit.test_audit_honesty import _lost, _matrix, _plan, _r
-from lucid.test.audit.test_audit_zoo import _Run
+from lucid.test.audit.test_audit_honesty import _lost, _plan, _r
+from lucid.test.audit.test_audit_zoo import _budget, _Run
 
 ROOT = Path(__file__).resolve().parents[3]
 P = "lucid/test/unit/models/"
@@ -264,42 +266,30 @@ def test_lucid_audit_runs_with_pytest_unimportable() -> None:
     assert done.stdout.rstrip().endswith("ok"), done.stdout[-400:] + done.stderr[-400:]
 
 
-# ── compiled training does not follow --zoo-device, and the note says so ─────
+# ── compiled training is Metal only, and says so in its scope ────────────────
 
 
-def test_the_matrix_probe_reports_the_device_it_runs_on(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    _matrix(monkeypatch, [{"status": "ok"}])
-    assert _zoo_probes.matrix_family("genie") == 0
-    assert "DEVICE metal" in capsys.readouterr().out
+def test_compiled_training_is_scoped_to_the_device_its_matrix_runs_on() -> None:
+    """The scope names Metal; the matrix moves every model to ``COMPILE_DEVICE`` itself."""
+    from lucid.test.unit.compile._helpers import COMPILE_DEVICE
+
+    assert COMPILED_TRAINING_DEVICE == COMPILE_DEVICE
+    stages = {s.name: s for s in ZooCatalog(ROOT).family_stages("lenet", Path("/x"), _budget(40.0))}
+    assert stages["compiled-training"].scope == OnlyOn(COMPILE_DEVICE)
 
 
-def test_a_stage_on_a_device_of_its_own_says_so_on_its_row_in_the_note(tmp_path: Path) -> None:
-    log = tmp_path / "log"
-    log.write_text(
-        "DEVICE metal\nok world-modeling genie\n1 pairs run, 0 skipped, 0 failing in 1.0s\n"
-    )
-    matrix = read_result(CommandStage(name="compiled-training", command=("x",)), log, "pass", 1, 1)
-    assert matrix.device == "metal"
-    results = [matrix, StageResult("own-tests", "pass", 1.0, 1.0)]
-    cpu = render_note(
-        "alpha",
-        "vision",
-        results,
-        RunFacts("a" * 40, "c", MachineBudget.for_memory(36), device="cpu"),
-    )
-    rows = {line.split("|")[1].strip(): line for line in cpu.splitlines() if line.startswith("| ")}
-    assert "장치: metal (--zoo-device 와 무관한 단계)" in rows["compiled-training"]
-    assert "장치" not in rows["own-tests"]
-    assert "장치: cpu" in cpu.splitlines()[3]
-    on_metal = render_note(
-        "alpha",
-        "vision",
-        results,
-        RunFacts("a" * 40, "c", MachineBudget.for_memory(36), device="metal"),
-    )
-    assert "무관한 단계" not in on_metal, "when it is the run's device there is nothing to say"
+def test_the_note_names_the_device_of_each_row_and_the_scope_of_the_stages(tmp_path: Path) -> None:
+    metal = StageResult("compiled-training", "pass", 1.0, 1.0, device="metal")
+    results = [metal, StageResult("own-tests", "pass", 1.0, 1.0, device="metal")]
+    results.append(StageResult("own-tests", "pass", 1.0, 1.0, device="cpu"))
+    note = render_note("alpha", "vision", results, RunFacts("a" * 40, "c", _budget(36.0)))
+    rows = [line.split("|")[1:3] for line in note.splitlines() if line.startswith("| metal")]
+    assert [[c.strip() for c in row] for row in rows] == [
+        ["metal", "compiled-training"],
+        ["metal", "own-tests"],
+    ]
+    assert "| cpu | own-tests |" in note
+    assert "contract = 한 번 (장치와 무관)" in note and "compiled-training = metal 에서만" in note
 
 
 # ── the verdict says when a clean run left things out, and what it counts ────
@@ -383,5 +373,5 @@ def test_a_run_writes_its_complete_lists_beside_the_logs(tmp_path: Path) -> None
     assert report.summary_path is not None and report.summary_path.parent.name == "a" * 40
     text = report.summary_path.read_text()
     assert text.startswith("failing stages 2 in 1 of 3 group(s)")
-    assert "alpha/contract  (fail)" in text and "== failing stages · 2" in text
+    assert "alpha/contract (fail, metal)" in text and "== failing stages · 2" in text
     assert (report.summary_path.parent / "logs" / "alpha" / "build.log").exists()

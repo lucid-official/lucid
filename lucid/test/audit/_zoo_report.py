@@ -66,9 +66,10 @@ class ZooTally:
 class ZooReporter(ABC):
     """The zoo stage's progress, independent of how it is drawn.
 
-    The run calls the public methods in order — :meth:`start`, then per family
-    :meth:`family`, per stage :meth:`stage` / :meth:`tick` / :meth:`stage_done`,
-    then :meth:`family_done` — and a subclass only draws and emits.
+    The run calls the public methods in order — :meth:`start`, then per device
+    :meth:`begin_device`, per family :meth:`family`, per stage :meth:`stage` /
+    :meth:`tick` / :meth:`stage_done`, then :meth:`family_done` — and a subclass
+    only draws and emits.
     """
 
     def __init__(self, console: Console, limit_gb: float) -> None:
@@ -78,6 +79,8 @@ class ZooReporter(ABC):
         self.total = 0
         self.index = 0
         self.family_name = ""
+        #: The device the current pass runs on; ``""`` before the first pass.
+        self.device_name = ""
         self.stage_name = ""
         self.stage_seconds = 0.0
         self.footprint_gb = 0.0
@@ -92,6 +95,18 @@ class ZooReporter(ABC):
     def start(self, total: int) -> None:
         self.total = total
         self._began = time.monotonic()
+        self._draw()
+
+    def begin_device(self, device: str) -> None:
+        """A pass over the zoo on ``device`` begins: the counts start again, per device.
+
+        A family is counted once per device it is run on; a tally that carried
+        Metal's seventy-five into the CPU pass would read as a hundred and fifty.
+        """
+        self.device_name = device
+        self.index = 0
+        self.tally = ZooTally()
+        self._emit(self.console.paint(f"── {device} ── {self.total} group(s)", "bold"))
         self._draw()
 
     def family(self, index: int, name: str) -> None:
@@ -195,7 +210,9 @@ class ZooReporter(ABC):
         paint = self.console.paint
         minutes = sum(result.seconds for result in results) / 60
         peak = max((result.peak_gb for result in results), default=0.0)
-        label = f"{self.position()} {name}: " + paint(status, _COLOUR.get(status, "red"), "bold")
+        label = f"{self.position()} {self.on()}{name}: " + paint(
+            status, _COLOUR.get(status, "red"), "bold"
+        )
         extra = "  (recorded for this commit)" if resumed else ""
         return f"{label}  {minutes:.1f} min  peak {peak:.1f} GB{extra}  " + self.format_tally()
 
@@ -213,8 +230,12 @@ class ZooReporter(ABC):
         """``[ 3/75]``, padded so a column of them lines up."""
         return f"[{self.index:>{len(str(self.total))}}/{self.total}]"
 
+    def on(self) -> str:
+        """``metal `` before a name, so a line says which pass it belongs to."""
+        return f"{self.device_name} " if self.device_name else ""
+
     def header(self) -> str:
-        return f"family {self.index}/{self.total}  {self.family_name}"
+        return f"{self.on()}family {self.index}/{self.total}  {self.family_name}"
 
     def status(self) -> str:
         if not self.stage_name:
@@ -247,7 +268,7 @@ class LineReporter(ZooReporter):
     @override
     def _family_started(self) -> None:
         if not self.console.live:
-            self.console.write(f"{self.position()} {self.family_name}")
+            self.console.write(f"{self.position()} {self.on()}{self.family_name}")
 
     @override
     def _stage_started(self) -> None:

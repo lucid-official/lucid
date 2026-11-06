@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - judge the ABI bump and attest the C++ at push (LCD-841-R3)
 
+- verify the model zoo on Metal and CPU by design
+
 ### Fixed
 
 - `lucid.compile`: a compiled function using `masked_select`, `linalg.lu_factor_ex`, `linalg.ldl_factor_ex` or `linalg.householder_product` returned the first call's result for every later input with no error. These signatures now run eagerly and answer each input (LCD-836).

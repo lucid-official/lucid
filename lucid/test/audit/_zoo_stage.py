@@ -19,11 +19,26 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, override
 
+from lucid.test.audit._zoo_device import (
+    COMPILED_TRAINING_DEVICE,
+    EACH_DEVICE,
+    ONCE_ONLY,
+    DeviceScope,
+    OnlyOn,
+)
+
 if TYPE_CHECKING:
     from lucid.test.audit._zoo_budget import MachineBudget
 
 DOMAINS = ("vision", "text", "generative", "multimodal")
 ZOO_WIDE = "zoo-wide"
+
+#: The family stages whose answer is not per device, and the scope each declares.
+#: Every other stage (the real-size build, the tests) is :data:`EACH_DEVICE`.
+SCOPED_STAGES: dict[str, DeviceScope] = {
+    "contract": ONCE_ONLY,
+    "compiled-training": OnlyOn(COMPILED_TRAINING_DEVICE),
+}
 
 #: Statuses that make a stage a failure.  ``none`` (pytest exit 5, nothing
 #: collected) is not one: a family with no tests of its own has not failed —
@@ -44,7 +59,6 @@ _FAILED = re.compile(r"^(?:FAILED|ERROR) (.+)$")
 _SKIPPED = re.compile(r"^SKIPPED \[(\d+)\] (.+)$")
 _CHECK = re.compile(r"^CHECK (.+)$")
 _ADAPTIVE = re.compile(r"^ADAPTIVE (.+)$")
-_DEVICE = re.compile(r"^DEVICE (.+)$")
 _MEMBER = re.compile(r"create_model\(")
 
 
@@ -55,6 +69,9 @@ class Stage(ABC):
     name: str
     #: Decisions made before the process started (``heavy`` deselected up front).
     notes: tuple[str, ...] = ()
+    #: Which of the run's devices this stage is for; the run asks, it does not
+    #: branch on the stage's name.
+    scope: DeviceScope = EACH_DEVICE
 
     @abstractmethod
     def argv(self) -> tuple[str, ...]:
@@ -156,8 +173,8 @@ class StageResult:
     #: What happened to the stage without making it verify less: a wait for
     #: memory that ran out, a rerun after the machine ran short.
     events: list[str] = field(default_factory=list)
-    #: The device this stage reports it ran on, when that is its own choice and
-    #: not the run's (compiled training is always Metal); ``""`` otherwise.
+    #: The device the stage ran on.  Set by whoever ran it (and by the record
+    #: it was read back from), so a result never has to be guessed at.
     device: str = ""
 
     @property
@@ -177,10 +194,10 @@ class StageResult:
 
 
 def read_result(
-    stage: Stage, log: Path, status: str, seconds: float, peak_gb: float
+    stage: Stage, log: Path, status: str, seconds: float, peak_gb: float, device: str = ""
 ) -> StageResult:
-    """Fold a finished stage's log into a :class:`StageResult`."""
-    result = StageResult(stage.name, status, round(seconds, 1), round(peak_gb, 2))
+    """Fold a finished stage's log into a :class:`StageResult`, run on ``device``."""
+    result = StageResult(stage.name, status, round(seconds, 1), round(peak_gb, 2), device=device)
     result.notes.extend(stage.notes)
     lines = log.read_text(errors="replace").splitlines()
     for line in lines:
@@ -192,8 +209,6 @@ def read_result(
             result.checks.append(check.group(1)[:300])
         elif adaptive := _ADAPTIVE.match(line):
             result.notes.append(adaptive.group(1)[:300])
-        elif device := _DEVICE.match(line):
-            result.device = device.group(1).strip()[:40]
         elif summary := _SUMMARY.match(line):
             result.summary = summary.group(1)
     if status in _KILLED:
@@ -272,12 +287,17 @@ class ZooCatalog:
             CommandStage(
                 name="contract",
                 command=(py, "-m", "tools.validate_model_zoo", "--family", family, "--runtime"),
+                scope=SCOPED_STAGES["contract"],
             ),
             CommandStage(
                 name="build",
                 command=(*probe, "build", family, f"--budget-gb={budget.build_budget_gb}"),
             ),
-            CommandStage(name="compiled-training", command=(*probe, "matrix", family)),
+            CommandStage(
+                name="compiled-training",
+                command=(*probe, "matrix", family),
+                scope=SCOPED_STAGES["compiled-training"],
+            ),
         ]
         if own := self.own_files(family):
             stages.append(self._pytest("own-tests", temp, own, marker=""))
@@ -319,6 +339,7 @@ class ZooCatalog:
 __all__ = [
     "DOMAINS",
     "FAILED_STATUSES",
+    "SCOPED_STAGES",
     "ZOO_WIDE",
     "CommandStage",
     "PytestStage",

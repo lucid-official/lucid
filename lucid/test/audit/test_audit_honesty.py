@@ -658,8 +658,8 @@ def test_a_tree_that_moves_mid_run_stops_the_run_and_files_nothing_late(tmp_path
     with pytest.raises(_zoo.TreeMoved, match="scratch clone"):
         run.run()
     state = tmp_path / "state" / SHA
-    assert (state / "alpha.json").exists(), "what finished before the move stands"
-    assert not (state / "beta.json").exists(), "what finished after it is not filed under SHA"
+    assert (state / "alpha.metal.json").exists(), "what finished before the move stands"
+    assert not (state / "beta.metal.json").exists(), "what finished after it is not filed under SHA"
 
 
 def _git(cwd: Path, *args: str) -> None:
@@ -737,10 +737,10 @@ def test_notes_and_state_are_written_whole_or_not_at_all(tmp_path: Path) -> None
     assert [p.name for p in tmp_path.iterdir()] == ["note.md"], "no scratch file is left behind"
     state = ZooState(tmp_path / "s", SHA, dirty=False, resume=True)
     state.save("alpha", [_r()], _budget(8.0), "cpu")
-    assert json.loads((state.root / "alpha.json").read_text())["limit_gb"] == 8.0
+    assert json.loads((state.root / "alpha.cpu.json").read_text())["limit_gb"] == 8.0
     assert not list(state.root.glob("*.tmp"))
     book = Notebook(tmp_path / "n", state, {"alpha": "vision"}, RunFacts(SHA, "c", _budget(8.0)))
-    book.write("alpha", [_r()])
+    book.write("alpha")
     assert not list((tmp_path / "n").glob("*.tmp"))
 
 

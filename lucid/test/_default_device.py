@@ -1,8 +1,9 @@
 """The device a test process defaults to, and whether Metal is there at all.
 
-``lucid-audit --models`` verifies the zoo on Metal unless told otherwise, by
-exporting ``LUCID_TEST_DEFAULT_DEVICE`` to every process it starts; the test
-``conftest`` and the audit's probes apply it here.
+``lucid-audit --models`` verifies the zoo on Metal and then on the CPU, by
+exporting ``LUCID_TEST_DEFAULT_DEVICE`` to every process it starts (one device
+per pass; see ``lucid.test.audit._zoo_device``); the test ``conftest`` and the
+audit's probes apply it here.
 
 This module imports nothing from pytest on purpose.  ``lucid-audit`` reaches
 it from its own modules, and a tool whose suite stage degrades without pytest
@@ -25,7 +26,7 @@ DEFAULT_DEVICE_ENV = "LUCID_TEST_DEFAULT_DEVICE"
 
 DEFAULT_DEVICES = ("cpu", "metal")
 
-#: What the zoo is verified on when nobody says: models train on Metal.
+#: The device a test that is not told one falls back to: models train on Metal.
 DEFAULT_ZOO_DEVICE = "metal"
 
 

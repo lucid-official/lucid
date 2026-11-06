@@ -440,7 +440,8 @@ def test_the_state_is_per_commit_and_per_family(tmp_path: Path) -> None:
     state = ZooState(tmp_path, SHA, dirty=False, resume=True)
     results = [StageResult("build", "pass", 1.0, 2.0, notes=["n"])]
     state.save("alpha", results, _budget(40.0), "cpu")
-    assert state.load("alpha", _budget(40.0), "cpu") == results
+    on_cpu = [dataclasses.replace(r, device="cpu") for r in results]
+    assert state.load("alpha", _budget(40.0), "cpu") == on_cpu, "the record says where it ran"
     assert state.load("beta", _budget(40.0), "cpu") is None
     assert (
         ZooState(tmp_path, SHA, dirty=False, resume=False).load("alpha", _budget(40.0), "cpu")
@@ -449,7 +450,7 @@ def test_the_state_is_per_commit_and_per_family(tmp_path: Path) -> None:
     assert (
         ZooState(tmp_path, SHA, dirty=True, resume=True).load("alpha", _budget(40.0), "cpu") is None
     )
-    (tmp_path / SHA / "alpha.json").write_text("{ not json")
+    (tmp_path / SHA / "alpha.cpu.json").write_text("{ not json")
     assert (
         state.load("alpha", _budget(40.0), "cpu") is None
     ), "a record this version cannot read is rerun"
@@ -459,7 +460,9 @@ def test_a_full_run_leaves_a_done_marker_and_a_narrowed_one_does_not(tmp_path: P
     runs = _Run(tmp_path)
     runs.go(families=("alpha",))
     assert not (tmp_path / "state" / SHA / "DONE").exists()
-    runs.go()
+    runs.go(device="metal")
+    assert not (tmp_path / "state" / SHA / "DONE").exists(), "one device is not the whole zoo"
+    runs.go(device="both")
     assert (tmp_path / "state" / SHA / "DONE").read_text().strip() == SHA
 
 
@@ -494,7 +497,7 @@ def test_a_note_keeps_its_format_and_names_the_command_and_the_budget() -> None:
     assert f"`{SHA[:9]}`" in note and "vision" in note and "최대 9.5 GB" in note
     assert "명령: `lucid-audit --models --family alpha`" in note
     assert "36 GB machine" in note and "footprint limit 28 GB" in note
-    assert "| 단계 | 결과 | 시간 (s) | 최대 (GB) | 요약 |" in note
+    assert "| 장치 | 단계 | 결과 | 시간 (s) | 최대 (GB) | 요약 |" in note
     assert "## 건너뛴 것" in note and "## 이 머신에서 정한 것" in note
     assert "heavy tests deselected up front" in note
     assert note.rstrip().endswith("계약: [[arch-models-family-contract]]")
@@ -504,9 +507,10 @@ def test_the_ledger_lists_every_family_recorded_or_waiting(tmp_path: Path) -> No
     state = ZooState(tmp_path, SHA, dirty=False, resume=True)
     state.save("alpha", [StageResult("build", "fail", 60.0, 3.0)], _budget(40.0), "cpu")
     ledger = render_ledger(_facts(), state, {"alpha": "vision", "beta": "text"})
-    assert "| alpha | vision | fail | 1.0 | 3.0 | cpu | [[zoo-verify-alpha]] |" in ledger
-    assert "| beta | text | 대기 |" in ledger
-    assert f"`{SHA}`" in ledger and "진행: 1 / 3" in ledger
+    assert "| family | 분야 | 결과 | metal | cpu | 분 | 최대 GB | 기록 |" in ledger
+    assert "| alpha | vision | fail | 대기 | fail | 1.0 | 3.0 | [[zoo-verify-alpha]] |" in ledger
+    assert "| beta | text | 대기 | 대기 | 대기 | | | |" in ledger
+    assert f"`{SHA}`" in ledger and "진행: 0 / 3" in ledger, "metal is not recorded yet"
 
 
 def test_a_run_writes_a_note_per_family_and_the_ledger(tmp_path: Path) -> None:
@@ -531,7 +535,8 @@ def test_without_a_vault_a_run_writes_no_notes(tmp_path: Path) -> None:
 def test_the_notebook_creates_its_directory(tmp_path: Path) -> None:
     state = ZooState(tmp_path / "s", SHA, dirty=False, resume=True)
     book = Notebook(tmp_path / "deep" / "notes", state, {"alpha": "vision"}, _facts())
-    book.write("alpha", [StageResult("build", "pass", 1.0, 1.0)])
+    state.save("alpha", [StageResult("build", "pass", 1.0, 1.0)], _budget(40.0), "metal")
+    book.write("alpha")
     assert (tmp_path / "deep" / "notes" / "zoo-verify-alpha.md").exists()
 
 
@@ -572,15 +577,19 @@ def test_a_small_machine_deselects_heavy_up_front_and_says_so(tmp_path: Path) ->
     catalog = ZooCatalog(ROOT)
     console = Console(colour=False, quiet=True)
     small = _zoo.ZooRun(ROOT, console, _zoo.ZooSettings(), budget=MachineBudget.for_memory(8))
-    stages = small._stages("lenet", catalog, tmp_path)
+    stages = small._stages("lenet", catalog, tmp_path, "metal")
     pytest_stages = [s for s in stages if isinstance(s, PytestStage)]
     assert pytest_stages and all(s.heavy_off for s in pytest_stages)
-    assert all("heavy tests deselected up front" in s.notes[0] for s in pytest_stages)
+    assert all("heavy tests deselected up front on metal" in s.notes[0] for s in pytest_stages)
     assert [s.notes for s in stages if isinstance(s, CommandStage)] == [(), (), ()]
+    on_cpu = small._stages("lenet", catalog, tmp_path, "cpu")
+    assert all("up front on cpu" in s.notes[0] for s in on_cpu if isinstance(s, PytestStage))
 
     big = _zoo.ZooRun(ROOT, console, _zoo.ZooSettings(), budget=MachineBudget.for_memory(36))
     assert not any(
-        s.heavy_off for s in big._stages("lenet", catalog, tmp_path) if isinstance(s, PytestStage)
+        s.heavy_off
+        for s in big._stages("lenet", catalog, tmp_path, "metal")
+        if isinstance(s, PytestStage)
     )
 
 
@@ -618,7 +627,8 @@ def test_the_plain_display_names_the_family_the_stage_and_the_tally(
 ) -> None:
     _Run(tmp_path).go()
     out = capsys.readouterr().out
-    assert "[1/3] alpha" in out and "[2/3] beta" in out and "[3/3] zoo-wide" in out
+    assert "[1/3] metal alpha" in out and "[2/3] metal beta" in out
+    assert "[3/3] metal zoo-wide" in out
     assert "    contract ..." in out, "a stage that is about to run says so"
     assert "alpha: pass" in out and "families ok 3 fail 0" in out and "stages ok 5 fail 0" in out
     assert "GB" in out and "min" in out
