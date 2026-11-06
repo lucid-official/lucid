@@ -671,8 +671,8 @@ def _flat(value: object) -> list[float]:
     return [float(cast(float, value))]
 
 
-#: (norm, entry) pairs that end apart from eager on main too, kept tensor or not:
-#: their statistics are not this branch's, and each is pinned until it is fixed.
+#: (norm, entry) pairs whose statistics end apart from eager on main too, the same
+#: model measured there: not this branch's, and each pinned until it is fixed.
 _STATISTICS_MAIN_GETS_WRONG: dict[tuple[str, str], str] = {
     ("functional", "module"): "lucid.compile drops a functional batch norm's running "
     "statistics in training (to be filed)",
