@@ -224,7 +224,6 @@ def test_a_pair_answers_and_trains_a_step_on_metal(
 
     model.train()
     trainable = [(n, p) for n, p in model.named_parameters() if p.requires_grad]
-    before = {n: p.detach().clone() for n, p in trainable}
     out, loss = drive.step(model)
     _answered_on_metal(out, "a training forward")
     assert loss.ndim == 0, f"the loss has shape {tuple(loss.shape)}"
@@ -236,9 +235,13 @@ def test_a_pair_answers_and_trains_a_step_on_metal(
     assert grads, "no parameter received a gradient"
     off = [n for n, g in grads if g.device.type != _METAL]
     assert not off, f"gradients off Metal: {off[:6]}"
+    # The step must move the weight it pushes hardest.  One copy, not the
+    # model's: a second copy of every weight is what fills a hosted runner.
+    steep = max(grads, key=lambda named: float(named[1].abs().max().item()))[0]
+    held = dict(trainable)[steep]
+    before = held.detach().clone()
     optim.SGD([p for _, p in trainable], lr=1e-2).step()
-    moved = [n for n, p in trainable if float((p.detach() - before[n]).abs().max().item()) > 0]
-    assert moved, "the optimizer step moved no parameter"
+    assert float((held.detach() - before).abs().max().item()) > 0, f"the step left {steep}"
     assert not _off_metal(model), f"off Metal after the step: {_off_metal(model)[:6]}"
 
 
