@@ -33,6 +33,15 @@ lucid/models/
 │   │   │   ├── dit_xlarge_4_gen
 │   │   │   ├── dit_xlarge_8
 │   │   │   └── dit_xlarge_8_gen
+│   │   ├── drifting/
+│   │   │   ├── drifting_base_2
+│   │   │   ├── drifting_base_2_gen
+│   │   │   ├── drifting_base_16
+│   │   │   ├── drifting_base_16_gen
+│   │   │   ├── drifting_large_2
+│   │   │   ├── drifting_large_2_gen
+│   │   │   ├── drifting_large_16
+│   │   │   └── drifting_large_16_gen
 │   │   ├── flow_matching/
 │   │   │   ├── flow_matching_cifar
 │   │   │   ├── flow_matching_cifar_gen
@@ -589,4 +598,4 @@ lucid/models/
             ├── unet
             └── unet_3d
 
-4 domains, 8 tasks, 74 families, 494 models
+4 domains, 8 tasks, 75 families, 502 models
