@@ -385,7 +385,18 @@ def _trace_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _Tr
         tracer.fold_constants = False
         with _C_engine.NoGradGuard():
             input_grad_ids = _run_vjp_backward(spec, cotangents)
-    except (RuntimeError, ValueError, TypeError, LookupError, ArithmeticError, AttributeError):
+    # ``AssertionError`` too: a demand variant hands ``backward`` a ``None``
+    # the model may never give it, and an ``assert g is not None`` there must
+    # leave that variant out, not end the trace.
+    except (
+        RuntimeError,
+        ValueError,
+        TypeError,
+        LookupError,
+        ArithmeticError,
+        AttributeError,
+        AssertionError,
+    ):
         tracer.discard_ops_from(bwd_begin)
         return None
     finally:
@@ -434,6 +445,11 @@ def _trace_demand_variants(spec: _VjpTraceSpec, differentiable: list[int]) -> bo
     every input gradient the others do, and dependency and ancestor walks
     read it unchanged.
 
+    A subset ``backward`` cannot be traced for — one written for a demand the
+    model never makes, ``g_first * 2`` with ``g_first=None`` — or that
+    returns a gradient the full variant does not is left out: the walker
+    refuses that demand if it comes, and the step runs eagerly.
+
     ``differentiable`` holds the positions in ``spec.cotangents`` that have a
     cotangent.  ``False`` leaves the call untraced, so a step whose gradient
     goes through it runs eagerly — after commits have started too: the
@@ -453,10 +469,10 @@ def _trace_demand_variants(spec: _VjpTraceSpec, differentiable: list[int]) -> bo
                 given[pos] = None
         traced = _trace_backward(spec, given)
         if traced is None:
-            return False
+            continue
         if not traced.present_grads() <= full_grads:
             spec.tracer.discard_ops_from(traced.bwd_begin)
-            return False
+            continue
         cot_ids = [cid if j in subset else -1 for j, cid in enumerate(spec.cotangent_ids)]
         _commit(spec, traced, cot_ids)
     full = _trace_backward(spec, spec.cotangents)

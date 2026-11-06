@@ -268,6 +268,23 @@ class _FiveOutputs(Function):
     backward = staticmethod(_finite_while_only_the_first_is_reached)
 
 
+class _AssertsFirst(Function):
+    """Asserts on the gradient it is written for: the demand without it is not traced."""
+
+    _materialize_grads = False
+    _traced_backward = True
+
+    @staticmethod
+    def forward(ctx, a):
+        ctx.save_for_backward(a)
+        return a * 2.0, a * 3.0
+
+    @staticmethod
+    def backward(ctx, g_first, g_second):
+        assert g_first is not None
+        return _finite_while_only_the_first_is_reached(ctx, g_first, g_second)
+
+
 class _Materializing(Function):
     """Materializes grads: the unused output gets zeros, in eager and compiled alike."""
 
@@ -293,7 +310,9 @@ class _FirstOutputOnly(nn.Module):
         return self.fn.apply(self.p * x)[0]
 
 
-@pytest.mark.parametrize("fn", [_ClassFlag, _CtxFlagUnused, _CtxFlagMarked, _FourOutputs])
+@pytest.mark.parametrize(
+    "fn", [_ClassFlag, _CtxFlagUnused, _CtxFlagMarked, _FourOutputs, _AssertsFirst]
+)
 def test_unreached_output_of_a_non_materializing_function_gets_none(
     fn: type[Function], device_gpu_only: str
 ) -> None:
@@ -322,12 +341,15 @@ def _present_sets(call: Callable[[lucid.Tensor], object], device: str) -> list[t
         (_LA.svd, [(0,), (1,), (2,), (0, 1), (0, 2), (1, 2), (0, 1, 2)]),
         (_LA.qr, [(0,), (1,), (0, 1)]),
         (_LA.eigh, [(0,), (1,), (0, 1)]),
-        (_CtxFlagUnused.apply, [(0,), (1,), (0, 1)]),
+        # ``backward`` cannot take ``None`` for the first output: the demand
+        # without it is not traced, and the walker refuses it if it comes.
+        (_CtxFlagUnused.apply, [(0,), (0, 1)]),
+        (_AssertsFirst.apply, [(0,), (0, 1)]),
         # One differentiable output, or zeros for the rest: one region.
         (_CtxFlagMarked.apply, [(0,)]),
         (_Materializing.apply, [(0, 1)]),
     ],
-    ids=["svd", "qr", "eigh", "ctx_flag", "ctx_flag_marked", "materializing"],
+    ids=["svd", "qr", "eigh", "ctx_flag", "asserts", "ctx_flag_marked", "materializing"],
 )
 def test_a_call_commits_one_region_per_demand_the_full_set_last(
     call: Callable[[lucid.Tensor], object], present: list[tuple[int, ...]], device_gpu_only: str
