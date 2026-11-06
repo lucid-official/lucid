@@ -8,7 +8,7 @@ Examples
 ::
 
     lucid-audit                          # every package, the model zoo included
-    lucid-audit --models                 # the model zoo, family by family, alone
+    lucid-audit --models                 # the model zoo, family by family, on Metal then CPU
     lucid-audit --nn --linalg            # just those packages (and their children)
     lucid-audit --no-models              # every package except the model zoo
     lucid-audit --coverage               # reach and depth, running nothing

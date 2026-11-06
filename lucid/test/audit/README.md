@@ -252,28 +252,54 @@ lucid-audit --models --family lenet --family alexnet # these, then stop
 lucid-audit --models --limit 5                       # the first five groups
 lucid-audit --models --fresh                         # ignore recorded results
 lucid-audit --models --zoo-record DIR                # where the notes are written
-lucid-audit --models --zoo-device cpu                # on the CPU, on purpose
+lucid-audit --models --zoo-device metal              # one device, on purpose (or cpu)
 ```
 
-**It runs on Metal.** Models train on Metal, so `--zoo-device` defaults to
-`metal`: the tests, the real-size build and the build/matrix probes are started
-with `LUCID_TEST_DEFAULT_DEVICE` set, `lucid/test/conftest.py` makes it the
-default device (`_default_device.apply_default_device`, a module that imports
-nothing from pytest), and the build reads one value out of every parameter,
-because MLX is lazy and a build that stops at `create_model` has allocated
-nothing. A machine with no Metal is exit `2` up front, not a quiet CPU run
-reported as the Metal verification; `--zoo-device cpu` is how to ask for the
-CPU, and giving the option to a run with no zoo stage (`--no-models`,
-`--audit-only`, ...) is exit `2` as well. The device is in every family note, the
-ledger (a column, and the run's device in its header) and the resume record: a
-family verified on one device is **not** an answer for a run on the other.
+**It runs on both devices.** The zoo is a set of deep-learning models, so
+`--zoo-device` is `both` unless it is narrowed on purpose (`metal`, `cpu`). The
+run makes one pass over the zoo per device, **Metal first**: it is the quick
+pass (the whole zoo took about 25 minutes at `6a0a815c8`) and the device models
+train on, so its answer does not wait for the slow one. The CPU pass is slower, and
+how much depends on the family: on the Mac Studio (36 GB, load average 100-216
+from other jobs, 2026-11-07, `dd0d32619`) five small families took 63 s of
+build and test stages on Metal and 266 s on the CPU, 4.2 times as long --
+`lenet` 6 s and 8 s, `alexnet` 8 s and 29 s, `zfnet` 13 s and 18 s, `vgg` 20 s
+and 133 s, `resnet` 16 s and 78 s. That is five families, not the zoo: the
+whole-zoo CPU pass has not been timed, and the first full run is what will
+give its number.
 
-**One stage does not follow it: compiled training.** The compiled-training
-matrix runs each pair in a child interpreter that uses `COMPILE_DEVICE`
-(`lucid/test/unit/compile/_helpers.py`, `"metal"`), so under `--zoo-device cpu`
-that stage still runs on Metal. The probe reports the device it ran on and the
-family note says so on that stage's row (`장치: metal (--zoo-device 와 무관한
-단계)`); the note's header device is the device of everything else.
+Each pass starts its stages with `LUCID_TEST_DEFAULT_DEVICE` set to that
+device, `lucid/test/conftest.py` makes it the default device
+(`_default_device.apply_default_device`, a module that imports nothing from
+pytest), and the build reads one value out of every parameter, because MLX is
+lazy and a build that stops at `create_model` has allocated nothing. A machine
+with no Metal is exit `2` up front for `both` and `metal` -- not a quiet CPU run
+reported as a Metal verification -- and the message names `--zoo-device cpu`.
+Giving the option to a run with no zoo stage (`--no-models`, `--audit-only`,
+...) is exit `2` as well.
+
+**A stage says which devices it is for** (`_zoo_device.DeviceScope`, the
+`scope` of a `Stage`); the run asks the scope and never branches on a stage's
+name:
+
+| stage | scope | why |
+|---|---|---|
+| `contract` | once (the first pass) | the validator reads the registry; no device is involved |
+| `compiled-training` | Metal only | its matrix moves every model to `COMPILE_DEVICE` itself, so it has nothing to say about the CPU; a `--zoo-device cpu` run does not run it |
+| `build`, `own-tests`, `zoo-tests`, the zoo-wide files | each device | the answer depends on the device |
+
+**Results are per (family, device).** The state is `<family>.<device>.json`, the
+ledger has a column per device, a family note has one table with a device
+column and a `장치별:` line, and the family's verdict is **the worse of the
+two**. A failure on one device is named: `cpu only`, `metal only` or `both
+devices` (the other device ran the same stage and passed, failed, or both
+failed), on the screen, in `summary.txt`, in the ledger's result column and in
+the note, so triage needs no manual rerun of the failed node ids on the other
+device. A stage that is for one device, or a run narrowed to one, has nothing to
+compare and says only the device (`compiled-training (fail, metal)`). Skips and
+`mem-guard` kills carry their device too (`lenet/zoo-tests (cpu)  heavy tests
+deselected up front on cpu: ...`), and the screen prints a rule per pass with its
+own tally.
 
 **It fits the machine.** The old script carried four constants tuned on a
 36 GB Mac Studio. They are now `MachineBudget` (`_zoo_budget.py`), derived from
@@ -328,10 +354,13 @@ family note. `reduced` is not a failure (exit status is unchanged), but the
 summary names the groups so a 6 GB machine's `lenet` is never filed as a 28 GB
 machine's.
 
-**It resumes.** Results go to `~/Library/Caches/lucid/audit-zoo/<sha>/`; a
-family recorded for the same commit is skipped, so an interrupted run
-continues — **by a machine at least as large as the one that recorded it**,
-because a record that left things out for a small machine, or was killed at its
+**It resumes, per device.** Results go to `~/Library/Caches/lucid/audit-zoo/<sha>/`; a
+family recorded for the same commit on a device is skipped there, so an interrupted run
+continues -- finish Metal and die in the CPU pass, and the rerun does the CPU and nothing
+of Metal. A record is **never** reused for the other device, and the unsuffixed
+`<family>.json` that earlier single-device runs wrote is not read as either (it is
+simply rerun). A record is reused only **by a machine at least as large as the one
+that recorded it**, because a record that left things out for a small machine, or was killed at its
 limit, is not an answer for a bigger one (each record stores its limit). A
 record from a stage the machine itself ran short under is never reused.
 `--fresh` ignores the records. A tree with uncommitted changes (untracked files
@@ -685,7 +714,8 @@ without restoring the optimizer it drives.
 | `_doctests.py` | the documentation stage and its per-module floor |
 | `_packages.py` | the package registry: what each package means for each stage, and the flags generated from it |
 | `_plan.py` | which stages a command line runs, and the exit-2 contradictions |
-| `_zoo.py` | the model-zoo stage: families, resume, the verdict |
+| `_zoo.py` | the model-zoo stage: families, the pass per device, resume, the verdict |
+| `_zoo_device.py` | which devices `--zoo-device` means, the `DeviceScope` a stage declares, and where a failure happened (`metal only` / `cpu only`) |
 | `_zoo_stage.py` | one zoo process (a `Stage`), its result, and the catalog of families and test files |
 | `_zoo_budget.py` | `MachineBudget` and the memory probes |
 | `_zoo_guard.py` | the memory guard around a stage, and the one retry |
