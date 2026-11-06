@@ -324,6 +324,10 @@ def drifting_base_2_gen(
     -----
     Reference: Deng, Li, Li, Du, and He, arXiv:2602.04770, 2026, Table 8.
 
+    Training in the paper's feature space needs a trained encoder, and none is
+    published: :meth:`~DriftingForImageGeneration.load_feature_encoder` builds a
+    random one, which is not the paper's objective.
+
     Examples
     --------
     >>> from lucid.models import drifting_base_2_gen
@@ -366,6 +370,10 @@ def drifting_large_2_gen(
     -----
     Reference: Deng, Li, Li, Du, and He, arXiv:2602.04770, 2026, Table 8.
     The configuration behind the 1.54 one-step FID.
+
+    Training in the paper's feature space needs a trained encoder, and none is
+    published: :meth:`~DriftingForImageGeneration.load_feature_encoder` builds a
+    random one, which is not the paper's objective.
 
     Examples
     --------
@@ -410,6 +418,10 @@ def drifting_base_16_gen(
     Reference: Deng, Li, Li, Du, and He, arXiv:2602.04770, 2026, Tables 8
     and 10.  Its loss reads MAE-640 (pixel) and ConvNeXt-V2-Base features.
 
+    Training in the paper's feature space needs a trained encoder, and none is
+    published: :meth:`~DriftingForImageGeneration.load_feature_encoder` builds a
+    random one, which is not the paper's objective.
+
     Examples
     --------
     >>> from lucid.models import drifting_base_16_gen
@@ -452,6 +464,10 @@ def drifting_large_16_gen(
     -----
     Reference: Deng, Li, Li, Du, and He, arXiv:2602.04770, 2026, Tables 8
     and 10.
+
+    Training in the paper's feature space needs a trained encoder, and none is
+    published: :meth:`~DriftingForImageGeneration.load_feature_encoder` builds a
+    random one, which is not the paper's objective.
 
     Examples
     --------
