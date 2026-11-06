@@ -295,7 +295,8 @@ void bind_tracer_writes(py::class_<lucid::compile::Tracer>& tracer) {
             "made and wrote in place from its inputs, or a view of it: any such write "
             "when the trace can stand as the call (stands), else only one that reads "
             "the tensor's earlier value. Answer (tensor, value before, value after) "
-            "for each, changing none. Call once the call's result has been dropped.")
+            "for each, changing no values; without stands they leave the trace-time "
+            "graph. Call once the call's result has been dropped.")
         .def("keep_answer", &Tracer::keep_answer, py::arg("answer"),
              "Hold the call's result in C++ while refuse_kept_writes runs.")
         .def("take_answer", &Tracer::take_answer, "Hand the held result back.")

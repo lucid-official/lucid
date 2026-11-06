@@ -265,7 +265,9 @@ def complete_the_call(tracer: Tracer, model: Module) -> None:
 def held_writes(tracer: Tracer, *, stands: bool) -> HeldWrites:
     """The tensors the call made, wrote from its inputs and Python still holds.
 
-    Any of them marks the trace unsupported; none is changed.  Call once, with
+    Any of them marks the trace unsupported.  Their values are not changed, but
+    without ``stands`` they leave the trace-time graph here: whatever runs next
+    must not chain onto that call.  Call once, with
     the call's result dropped: a result is handed back on every run.
 
     Parameters

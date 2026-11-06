@@ -43,6 +43,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string_view>
 #include <tuple>
@@ -514,9 +515,15 @@ private:
     // Whatever made it told the tracer nothing, and a compiled call would answer
     // with this call's value.
     void refuse_computed_feed(const TensorImpl& feed);
-    // Keeps what :meth:`restore_outside_writes` puts ``target`` back to: its value
-    // and its place in the autograd graph, both about to move.
-    void keep_outside_original(const TensorImplPtr& target);
+    // Marks the trace unsupported when ``target`` or a view of it holds a gradient
+    // hook at the place in the graph the write about to land moves it from.
+    void refuse_hooked_write(const TensorImplPtr& target);
+    // Notes the place in the autograd graph of each tensor from outside the trace
+    // in ``target``'s family, for :meth:`restore_outside_writes`.
+    void keep_graph_positions(const TensorImplPtr& target);
+    // Puts those tensors back in their places, and takes what the trace made of
+    // a written family off the graph.
+    void put_back_graph_positions();
     // ``on_inplace_write`` for a target the trace made itself.
     void write_made(const TensorImplPtr& target, const TensorImplPtr& value);
     // Whether ``impl`` reached the trace from outside it: neither made by the
@@ -619,6 +626,16 @@ private:
     // (tensor from outside the trace, a copy of it from before its first
     // in-place write), in write order — see :meth:`restore_outside_writes`.
     std::vector<std::pair<TensorImplPtr, TensorImplPtr>> outside_originals_;
+    // A tensor's place in the autograd graph.
+    struct GraphPosition {
+        std::shared_ptr<Node> grad_fn;
+        std::uint32_t output_nr = 0;
+        bool leaf = true;
+        bool requires_grad = false;
+    };
+    // Owning: each tensor from outside the trace in a family the trace wrote, and
+    // where it sat before the first write (see :meth:`keep_graph_positions`).
+    std::unordered_map<TensorImpl*, std::pair<TensorImplPtr, GraphPosition>> outside_positions_;
     // The same for what the call made — see :meth:`refuse_kept_writes`.
     std::vector<std::pair<TensorImplPtr, TensorImplPtr>> made_originals_;
     // Feeds that hold a copy of a tensor the call made (see ``constant_feed``).
@@ -700,6 +717,19 @@ LUCID_API Tracer* current_tracer();
 // --------
 // :func:`current_tracer` — reader for the same TLS slot.
 LUCID_API void set_current_tracer(Tracer* t);
+
+// Detaches the calling thread's tracer for a scope: what runs in it is no op of
+// the recording.
+class TracerDetach {
+public:
+    TracerDetach() : saved_(current_tracer()) { set_current_tracer(nullptr); }
+    ~TracerDetach() { set_current_tracer(saved_); }
+    TracerDetach(const TracerDetach&) = delete;
+    TracerDetach& operator=(const TracerDetach&) = delete;
+
+private:
+    Tracer* saved_;
+};
 
 // The two hooks every entry point outside the op dispatcher owes the
 // active tracer, if one is installed.  A binding that hands Python a

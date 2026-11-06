@@ -59,20 +59,6 @@ TensorImplPtr draw(const RngRecipe& r) {
     return nullptr;
 }
 
-// Detaches the calling thread's tracer for the duration of the draws, so
-// a compiled call made while another trace records does not add them to
-// it.
-class TracerDetach {
-public:
-    TracerDetach() : saved_(current_tracer()) { set_current_tracer(nullptr); }
-    ~TracerDetach() { set_current_tracer(saved_); }
-    TracerDetach(const TracerDetach&) = delete;
-    TracerDetach& operator=(const TracerDetach&) = delete;
-
-private:
-    Tracer* saved_;
-};
-
 }  // namespace
 
 void note_rng_feed(const TensorImplPtr& out, RngRecipe recipe) {

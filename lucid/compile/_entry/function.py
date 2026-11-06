@@ -153,12 +153,12 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
     Parameters on the CPU have nothing to compile (Metal only): the step runs
     eagerly, with a one-time ``CompileFallbackWarning``.
 
+    A trace it cannot lower raises, there being no eager path, as does one reading
+    a value computed on another thread (the tracer is per thread).
+
     The trace is captured in the caller's grad mode and fresh on every call;
     cache integration (compile-or-cached) lives in Phase 1.4's
     ``CompiledModule``.
-
-    Phase 1.3 acceptance: ``ResNet-18 + CE + SGD, 5 steps``, param
-    drift < 5e-3 vs eager.
 
     Examples
     --------

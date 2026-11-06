@@ -19,6 +19,7 @@
 #include <set>
 
 #include "../autograd/Node.h"
+#include "../autograd/TensorHooks.h"
 #include "../backend/Dispatcher.h"
 #include "../core/StridedCopy.h"
 #include "../core/TensorImpl.h"
@@ -50,18 +51,9 @@ bool repeats_elements(const TensorImpl& t) {
     return !t.is_contiguous() && strided::overlaps_itself(t.shape(), t.stride());
 }
 
-// Gives ``to`` the place in the autograd graph ``from`` has.  A write recording a
-// graph gives its target its op's place, in the trace-time call's graph: a
-// tensor put back has to leave it, or whatever runs next chains onto that call.
-void move_graph_position(const TensorImpl& from, TensorImpl& to) {
-    if (!from.requires_grad() && !from.grad_fn() && !to.requires_grad() && !to.grad_fn())
-        return;
-    to.set_grad_fn(from.grad_fn());
-    to.set_grad_output_nr(from.grad_output_nr());
-    to.set_leaf(from.is_leaf());
-    to.set_requires_grad(from.requires_grad());
-}
-
+// Takes ``t`` off the autograd graph.  A write recording a graph gives a tensor
+// a place in the trace-time call's graph: one put back has to leave it, or
+// whatever runs next chains onto that call.
 void leave_graph(TensorImpl& t) {
     if (!t.requires_grad() && !t.grad_fn())
         return;
@@ -293,6 +285,7 @@ void Tracer::on_rng_feed(std::string_view name, const TensorImplPtr& output) {
 void Tracer::on_inplace_write(const TensorImplPtr& target, const TensorImplPtr& value) {
     if (!target || !value || target.get() == value.get())
         return;
+    refuse_hooked_write(target);
     // Copying ``value`` in reads it.
     refuse_stale(value.get());
     constant_write_ = made_here(value.get()) && !sees(value.get());
@@ -307,14 +300,28 @@ void Tracer::on_inplace_write(const TensorImplPtr& target, const TensorImplPtr& 
     // Landing in bytes a tensor from outside reads: keep what puts them back.
     const auto made = [&](const TensorImpl* impl) { return made_here(impl); };
     const bool in_made = !lands_outside(target) && lands_in_made(target);
-    if (!in_made && lands_outside(target))
+    if (!in_made && lands_outside(target)) {
+        keep_graph_positions(target);
         keep_outside(target);
-    else if (in_made && !whole_member(target, made))
+    } else if (in_made && !whole_member(target, made)) {
         keep_original(made_originals_, target);
+    }
     const TensorId was = feed_id(target);
     const TensorId now = written_id(value);
     note_prior(target, was, now, in_made);
     impl_to_id_[target.get()] = now;
+}
+
+void Tracer::refuse_hooked_write(const TensorImplPtr& target) {
+    // The hook stays on the slot ``target`` is about to leave, where the scan
+    // at the end of the recording, which asks each tensor about the slot it
+    // holds then, no longer finds it.  So does a view the write rebases.
+    const auto members = target->live_views();
+    if (has_tensor_hooks(*target) ||
+        std::any_of(members.begin(), members.end(),
+                    [](const TensorImplPtr& member) { return has_tensor_hooks(*member); }))
+        mark_unsupported("a gradient hook sits on a value an in-place write replaces, and a "
+                         "compiled backward runs no hook");
 }
 
 void Tracer::note_prior(const TensorImplPtr& target, TensorId was, TensorId now, bool in_made) {
@@ -346,11 +353,11 @@ void Tracer::keep_outside(const TensorImplPtr& target) {
     // v`` makes two, and each would be a copy of its own and an output on
     // every run.
     if (const TensorImplPtr carrier = whole_member(target, outside)) {
-        keep_outside_original(carrier);
+        keep_original(outside_originals_, carrier);
         return;
     }
     if (!repeats_elements(*target)) {
-        keep_outside_original(target);
+        keep_original(outside_originals_, target);
         return;
     }
     // The compiled call has no way to copy a value into such a view, and neither
@@ -359,13 +366,45 @@ void Tracer::keep_outside(const TensorImplPtr& target) {
                      "has no one value to carry back to the next call");
     for (const auto& member : target->live_views()) {
         if (from_outside(member.get()) && !repeats_elements(*member))
-            keep_outside_original(member);
+            keep_original(outside_originals_, member);
     }
 }
 
-void Tracer::keep_outside_original(const TensorImplPtr& target) {
-    if (const TensorImplPtr before = keep_original(outside_originals_, target))
-        move_graph_position(*target, *before);
+void Tracer::keep_graph_positions(const TensorImplPtr& target) {
+    // A tensor from outside was there before the trace: it is in the family at
+    // the family's first write, with the place it had then, and the first entry
+    // stands.  The write about to land moves every member (``rebase_views``).
+    const auto keep = [&](const TensorImplPtr& t) {
+        if (from_outside(t.get()))
+            outside_positions_.try_emplace(
+                t.get(), t,
+                GraphPosition{t->grad_fn(), t->grad_output_nr(), t->is_leaf(), t->requires_grad()});
+    };
+    keep(target);
+    for (const auto& member : target->live_views())
+        keep(member);
+}
+
+void Tracer::put_back_graph_positions() {
+    // What the trace took of a written family has no place from before it.
+    const auto leave = [&](const TensorImplPtr& t) {
+        if (!from_outside(t.get()))
+            leave_graph(*t);
+    };
+    for (const auto& [target, before] : outside_originals_) {
+        leave(target);
+        for (const auto& member : target->live_views())
+            leave(member);
+    }
+    for (const auto& [raw, kept] : outside_positions_) {
+        const auto& [t, position] = kept;
+        if (!position.requires_grad && !position.grad_fn && !t->requires_grad() && !t->grad_fn())
+            continue;
+        t->set_grad_fn(position.grad_fn);
+        t->set_grad_output_nr(position.output_nr);
+        t->set_leaf(position.leaf);
+        t->set_requires_grad(position.requires_grad);
+    }
 }
 
 bool Tracer::lands_in_made(const TensorImplPtr& target) const {
@@ -602,6 +641,8 @@ TensorId Tracer::feed_id(const TensorImplPtr& impl) {
 
 void Tracer::refuse_computed_feed(const TensorImpl& feed) {
     // A leaf's node (``AccumulateGrad``) is made when something first asks for it.
+    // The tracer is per thread, so a value another thread computes during the
+    // trace is refused too: compiled, it would be this call's value on every call.
     if (feed.is_leaf() || !feed.grad_fn() || feed.grad_fn()->sequence_nr() < first_node_)
         return;
     mark_unsupported("a value computed during the trace reached an op under a tensor the trace "
@@ -717,10 +758,9 @@ void Tracer::restore_outside_writes() {
     // trace's first write to it, and a tensor that overlaps an earlier one
     // kept that one's write in its copy.  The earlier copy goes last, so
     // every byte ends as it was before the trace.
-    for (auto it = outside_originals_.rbegin(); it != outside_originals_.rend(); ++it) {
+    for (auto it = outside_originals_.rbegin(); it != outside_originals_.rend(); ++it)
         it->first->copy_from(*it->second);
-        move_graph_position(*it->second, *it->first);
-    }
+    put_back_graph_positions();
 }
 
 std::vector<std::pair<TensorId, TensorImplPtr>> Tracer::outside_writes() const {

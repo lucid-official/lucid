@@ -16,8 +16,19 @@ eagerly and compares the loss and the gradient (the parameters, for
 either way.  Where the trace can read the value from the op that computed it, the
 case also asserts that the entry stayed compiled: refusing every in-place write
 would pass the comparison.
+
+Three things a write moves besides the values, each of which went wrong:
+
+* its node: ``rebase_views`` wires a member the write covered exactly, and under
+  a trace that member can be the intermediate ``y[1:2]`` of ``y[1]``, kept alive
+  by the tracer.  Told of it as an op, the tracer rewrote the op it recorded last
+  (``y[1].mul_(2.0)`` answered wrongly from call 0);
+* a gradient hook, which stays on the slot the tensor leaves, where the scan at
+  the end of a recording does not look;
+* the place in the graph of everything in a family put back after the trace.
 """
 
+import threading
 from collections.abc import Callable, Iterator
 
 import pytest
@@ -92,6 +103,13 @@ WRITES: dict[str, Write] = {
     "view_add": lambda y, x: (y[:, 1:3].add_(x[:, :2]), y)[1],
     "view_iadd": lambda y, x: (y[1:].__iadd__(x[1:]), y)[1],
     "relu_inplace": lambda y, x: F.relu(y, inplace=True),
+    # An integer index drops a dimension: ``y[1]`` reads ``y[1:2]``, same elements.
+    "row_mul": lambda y, x: (y[1].mul_(2.0), y)[1],
+    "row_fill": lambda y, x: (y[1].fill_(1.0), y)[1],
+    "row_add": lambda y, x: (y[1].add_(x[1]), y)[1],
+    "column_mul": lambda y, x: (y[:, 1].mul_(2.0), y)[1],
+    "column_add": lambda y, x: (y[:, 1].add_(x[:, 1]), y)[1],
+    "element_mul": lambda y, x: (y[1, 2].mul_(2.0), y)[1],
 }
 
 #: What the written tensor is: computed by an op, a copy, or a factory's.
@@ -139,6 +157,16 @@ class _ReadsAViewFromBefore(nn.Module):
         v = y[:2]
         y += x
         return v.sum() + y
+
+
+class _ReadsATwinOfTheViewWritten(nn.Module):
+    """Two views of the same elements: a write through one rebases the other."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        y = x * 2.0
+        v, twin = y[:2], y[:2]
+        v.mul_(2.0)
+        return twin.sum() + y
 
 
 class _WritesItsArgument(nn.Module):
@@ -200,6 +228,58 @@ class _WritesABufferFromTheGraph(nn.Module):
         return y + self.total
 
 
+def _doubled(g: Tensor) -> Tensor:
+    return g * 2.0
+
+
+class _HookedOnTheValue(nn.Module):
+    """The hook sits on the slot the write leaves, or on the one it arrives at."""
+
+    def __init__(self, write: Write, before: bool) -> None:
+        super().__init__()
+        self.write, self.before = write, before
+
+    def forward(self, x: Tensor) -> Tensor:
+        y = x * 2.0
+        if self.before:
+            y.register_hook(_doubled)
+        y = self.write(y, x)
+        if not self.before:
+            y.register_hook(_doubled)
+        return y * 2.0
+
+
+class _HookedOnAView(nn.Module):
+    """The hook sits on a view read before the write, and the write rebases it."""
+
+    def __init__(self, write: Write) -> None:
+        super().__init__()
+        self.write = write
+
+    def forward(self, x: Tensor) -> Tensor:
+        y = x * 2.0
+        v = y[:2]
+        v.register_hook(_doubled)
+        read = v.sum() * 3.0
+        y = self.write(y, x)
+        return y * 2.0 + read
+
+
+class _WritesABufferWithAHeldView(nn.Module):
+    """``head`` is from before the trace; a write through its base rebases it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.linear = nn.Linear(WIDTH, WIDTH)
+        self.register_buffer("total", lucid.zeros(WIDTH))
+        self.head: Tensor | None = None
+
+    def forward(self, x: Tensor) -> Tensor:
+        y = self.linear(x)
+        self.total.add_(y.mean(0))
+        return y + self.total
+
+
 def _sequential(middle: Callable[[], nn.Module]) -> nn.Module:
     lucid.manual_seed(0)
     return nn.Sequential(nn.Linear(WIDTH, WIDTH), middle(), nn.Linear(WIDTH, WIDTH)).to(
@@ -210,6 +290,12 @@ def _sequential(middle: Callable[[], nn.Module]) -> nn.Module:
 def _alone(model: Callable[[], nn.Module]) -> nn.Module:
     lucid.manual_seed(0)
     return model().to(COMPILE_DEVICE)
+
+
+def _with_held_view(model: Callable[[], nn.Module]) -> nn.Module:
+    built = _alone(model)
+    built.head = built.total[:2]
+    return built
 
 
 def _batches() -> list[Tensor]:
@@ -342,16 +428,21 @@ def _eager_call(model: nn.Module, x: Tensor, grad: bool) -> float:
     return value
 
 
+def _plain_sgd(model: nn.Module) -> optim.Optimizer:
+    return optim.SGD(model.parameters(), lr=0.01)
+
+
 def _run(
     middle: Callable[[], nn.Module],
     entry_name: str,
     build: Callable[[Callable[[], nn.Module]], nn.Module] = _sequential,
     calls: int = CALLS,
+    make_optimizer: Callable[[nn.Module], optim.Optimizer] = _plain_sgd,
 ) -> _Entry:
     """Run ``entry_name`` against an eager twin, comparing after each call."""
     model, twin = build(middle), build(middle)
-    optimizer = optim.SGD(model.parameters(), lr=0.01)
-    twin_optimizer = optim.SGD(twin.parameters(), lr=0.01)
+    optimizer = make_optimizer(model)
+    twin_optimizer = make_optimizer(twin)
     entry = ENTRIES[entry_name](model, optimizer)
     grad = entry_name != "module_no_grad"
     for i, batch in enumerate(_batches()[:calls]):
@@ -390,8 +481,8 @@ def test_a_write_on_a_copy_of_the_input(write: str, entry: str) -> None:
 
 _MASK_ONLY = pytest.mark.xfail(
     strict=True,
-    reason="a parameter only a mask reaches gets zeros from a segmented step, eager None; "
-    "the out-of-place masked_fill does the same (found in LCD-895)",
+    reason="LCD-899: a parameter only a mask reaches gets zeros from a segmented step, "
+    "eager None; the out-of-place masked_fill does the same",
 )
 
 
@@ -404,7 +495,8 @@ _MASK_ONLY = pytest.mark.xfail(
     ],
 )
 def test_a_write_on_a_factorys_tensor(write: str, entry: str) -> None:
-    _run(lambda: _Writes(WRITES[write], MADE["factory"]), entry)
+    ran = _run(lambda: _Writes(WRITES[write], MADE["factory"]), entry)
+    assert ran.stayed_compiled() in (True, None), "refusing the write would pass the comparison"
 
 
 @pytest.mark.parametrize("entry", list(ENTRIES))
@@ -418,14 +510,82 @@ def test_what_reads_around_the_write(middle: type[nn.Module], entry: str) -> Non
 
 
 @pytest.mark.parametrize("entry", [e for e in ENTRIES if e != "compiled_step"])
-def test_a_view_read_from_before_the_write_runs_eagerly(entry: str) -> None:
-    _run(_ReadsAViewFromBefore, entry)
+@pytest.mark.parametrize(
+    "middle", [_ReadsAViewFromBefore, _ReadsATwinOfTheViewWritten], ids=lambda c: c.__name__
+)
+def test_a_view_read_from_before_the_write_runs_eagerly(
+    middle: type[nn.Module], entry: str
+) -> None:
+    _run(middle, entry)
 
 
-def test_compiled_step_refuses_a_view_read_from_before_the_write() -> None:
+@pytest.mark.parametrize(
+    "middle", [_ReadsAViewFromBefore, _ReadsATwinOfTheViewWritten], ids=lambda c: c.__name__
+)
+def test_compiled_step_refuses_a_view_read_from_before_the_write(middle: type[nn.Module]) -> None:
     """It has no eager path: a trace it cannot lower raises."""
     with pytest.raises(RuntimeError, match="a view of a tensor was read"):
-        _run(_ReadsAViewFromBefore, "compiled_step")
+        _run(middle, "compiled_step")
+
+
+#: One of each way a write reaches a tensor.
+_WRITES_FOR_HOOKS = (
+    "iadd",
+    "mul_scalar",
+    "unary_clamp",
+    "copy",
+    "fill",
+    "slice_assign",
+    "view_mul",
+    "row_mul",
+)
+_REFUSING = ["make_step", "segmented", "fused_step", "module_grad"]
+
+
+@pytest.mark.parametrize("entry", _REFUSING)
+@pytest.mark.parametrize("before", [True, False], ids=["before_write", "after_write"])
+@pytest.mark.parametrize("write", _WRITES_FOR_HOOKS)
+def test_a_hook_on_the_value_runs_eagerly(write: str, before: bool, entry: str) -> None:
+    """A compiled backward runs no hook, wherever the write left it."""
+    _run(lambda: _HookedOnTheValue(WRITES[write], before), entry)
+
+
+@pytest.mark.parametrize("entry", _REFUSING)
+@pytest.mark.parametrize("write", _WRITES_FOR_HOOKS)
+def test_a_hook_on_a_view_the_write_rebases_runs_eagerly(write: str, entry: str) -> None:
+    _run(lambda: _HookedOnAView(WRITES[write]), entry)
+
+
+@pytest.mark.parametrize("before", [True, False], ids=["before_write", "after_write"])
+@pytest.mark.parametrize("write", _WRITES_FOR_HOOKS)
+def test_compiled_step_refuses_a_hook_on_the_value(write: str, before: bool) -> None:
+    with pytest.raises(RuntimeError, match="hook"):
+        _run(lambda: _HookedOnTheValue(WRITES[write], before), "compiled_step")
+
+
+@pytest.mark.parametrize("write", _WRITES_FOR_HOOKS)
+def test_compiled_step_refuses_a_hook_on_a_view_the_write_rebases(write: str) -> None:
+    with pytest.raises(RuntimeError, match="hook"):
+        _run(lambda: _HookedOnAView(WRITES[write]), "compiled_step")
+
+
+def _heavy_sgd(model: nn.Module) -> optim.Optimizer:
+    return optim.SGD(model.parameters(), lr=0.01, momentum=0.9, weight_decay=0.1)
+
+
+def _adamw(model: nn.Module) -> optim.Optimizer:
+    return optim.AdamW(model.parameters(), lr=0.01, weight_decay=0.1)
+
+
+@pytest.mark.parametrize("entry", ["make_step", "segmented", "compiled_step", "fused_step"])
+@pytest.mark.parametrize("make_optimizer", [_heavy_sgd, _adamw], ids=["momentum", "adamw"])
+@pytest.mark.parametrize("write", ["iadd", "fill", "zero", "masked_fill", "view_mul", "row_fill"])
+def test_an_optimizer_that_reads_a_zero_gradient(
+    write: str, make_optimizer: Callable[[nn.Module], optim.Optimizer], entry: str
+) -> None:
+    """A gradient of zeros and no gradient step differently under these two."""
+    ran = _run(lambda: _Writes(WRITES[write], MADE["op"]), entry, make_optimizer=make_optimizer)
+    assert ran.stayed_compiled() in (True, None)
 
 
 @pytest.mark.parametrize("entry", list(ENTRIES))
@@ -483,6 +643,24 @@ def test_a_buffer_written_from_the_graph(entry: str) -> None:
     assert _close(ran.model.total.detach(), twin.total.detach())
 
 
+@pytest.mark.parametrize("entry", ["make_step", "fused_step"])
+def test_a_held_view_leaves_the_trace_graph_with_its_base(entry: str) -> None:
+    """Put back, the family is off the trace's graph: a later backward counts nothing twice."""
+    ran = _run(_WritesABufferWithAHeldView, entry, build=_with_held_view, calls=1)
+    head = ran.model.head
+    assert not ran.model.total.requires_grad
+    assert not head.requires_grad and head.grad_fn is None
+    assert _close(head.detach(), ran.model.total[:2].detach())
+    for p in ran.model.parameters():
+        if p.grad is not None:
+            p.grad.zero_()
+    with pytest.raises(RuntimeError):
+        (head * 2.0).sum().backward()
+    assert all(
+        p.grad is None or float(p.grad.abs().max().item()) == 0.0 for p in ran.model.parameters()
+    )
+
+
 # -- a value the tracer was not told of ----------------------------------------
 
 
@@ -509,6 +687,28 @@ def test_a_computed_value_the_trace_cannot_name_runs_eagerly(entry: str) -> None
 def test_compiled_step_refuses_a_computed_value_the_trace_cannot_name() -> None:
     with pytest.raises(RuntimeError, match="computed during the trace"):
         _run(_ComputesUntraced, "compiled_step")
+
+
+class _ComputesOnAThread(nn.Module):
+    """The tracer is per thread: another thread's ops are never recorded."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        out: list[Tensor] = []
+        worker = threading.Thread(target=lambda: out.append(x * 2.0))
+        worker.start()
+        worker.join()
+        return out[0] * 3.0
+
+
+def test_a_value_computed_on_another_thread_runs_eagerly() -> None:
+    ran = _run(_ComputesOnAThread, "make_step")
+    assert ran.stayed_compiled() is False
+
+
+def test_compiled_step_refuses_a_value_computed_on_another_thread() -> None:
+    """Documented: compiled_step has no eager path, and it cannot tell this from a frozen value."""
+    with pytest.raises(RuntimeError, match="computed during the trace"):
+        _run(_ComputesOnAThread, "compiled_step")
 
 
 def test_a_leaf_of_the_model_is_no_computed_value() -> None:

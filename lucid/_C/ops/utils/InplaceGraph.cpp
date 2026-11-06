@@ -498,7 +498,12 @@ void finish_rebased_member(const TensorImplPtr& m,
         return;
     }
     if (same) {
-        // The same elements in the same order: a reshape of ``a``.
+        // The same elements in the same order: a reshape of ``a``.  No op ran,
+        // and the tracer takes this call for the open op's wiring: it would
+        // write the inputs of whatever op it recorded last.  Under a trace ``m``
+        // may be no more than an intermediate view the tracer keeps alive; the
+        // write already told it what ``m`` holds (``on_stale_view``).
+        const compile::TracerDetach not_an_op;
         kernel::NaryKernel<ViewBackward, 1>::wire_autograd({a}, m, false);
     } else {
         attach(m, a, covered, differentiable, std::move(node));
