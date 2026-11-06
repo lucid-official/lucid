@@ -195,9 +195,16 @@ struct LUCID_API OpNode {
 // ``output_metas`` from ``input_ids``.  During backward emission,
 // :class:`BackwardWalker` skips per-op VJP emission for
 // ``ops[fwd_begin .. fwd_end)`` and instead binds each output's resolved
-// upstream cotangent (or a zero tensor when unused) to ``cotangent_ids[j]``,
-// emits ``bwd_ops`` through the forward op emitters, and accumulates each
-// non-negative ``input_grad_ids[k]`` onto ``input_ids[k]``.
+// upstream cotangent to ``cotangent_ids[j]``, emits ``bwd_ops`` through the
+// forward op emitters, and accumulates each non-negative
+// ``input_grad_ids[k]`` onto ``input_ids[k]``.
+//
+// An output no gradient reached is bound a zero tensor when the ``Function``
+// materializes grads.  One that does not is handed ``None`` there in eager,
+// so its call commits one region per non-empty subset of its outputs, with
+// ``cotangent_ids[j] = -1`` for each output ``j`` outside the subset and the
+// full set committed last; the walker emits the region whose subset is the
+// outputs that received a gradient.
 struct LUCID_API VjpRegion {
     std::size_t fwd_begin = 0;
     std::size_t fwd_end = 0;

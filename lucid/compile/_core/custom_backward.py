@@ -30,7 +30,9 @@ mechanisms allow a ``Function`` to participate in compiled training steps:
    ``_FakeQuantizeAffine``, and user ``Function`` subclasses).  During backward
    emission the compiler skips automatic differentiation of the forward op range
    and emits the recorded ``VjpRegion`` directly into the single
-   :class:`MPSGraphExecutable`.
+   :class:`MPSGraphExecutable`.  A class that does not materialize grads gets
+   one region per subset of its outputs a gradient may reach, and the walker
+   emits the one for the subset that does (:func:`_trace_demand_variants`).
 
 ``apply`` reports every call made while a tracer is installed
 (:func:`note_applied`); each entry point that differentiates a recording calls
@@ -39,6 +41,7 @@ refused call makes the step run eagerly.  A forward-only compile and a Core ML
 export differentiate nothing and never ask.
 """
 
+import itertools
 import weakref
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, final
@@ -147,6 +150,25 @@ class _VjpTraceSpec:
     cotangents: list[Tensor | None]
     fwd_begin: int
     fwd_end: int
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class _TracedBackward:
+    """One recorded call of ``backward``: where its ops start, and its input grad ids."""
+
+    bwd_begin: int
+    input_grad_ids: list[int]
+
+    def present_grads(self) -> frozenset[int]:
+        """The input positions ``backward`` returned a gradient for."""
+        return frozenset(k for k, gid in enumerate(self.input_grad_ids) if gid >= 0)
+
+
+#: The most differentiable outputs a ``Function`` that does not materialize
+#: grads is traced for: one region per non-empty subset, 2**n - 1 of them
+#: (``_SVD`` has 3 outputs, ``_QR`` and ``_Eigh`` 2).
+_MAX_DEMAND_OUTPUTS = 4
 
 
 def _ensure_ctx_tensors(
@@ -264,10 +286,19 @@ def _prepare_vjp_spec(
     )
 
 
-def _run_vjp_backward(spec: _VjpTraceSpec) -> list[int] | None:
-    """Invoke ``spec.function.backward`` under ``no_grad`` and resolve input grad ids."""
-    cotangents: list[Tensor | None] = list(spec.cotangents)
-    if getattr(spec.function, "_materialize_grads", True):
+def _materializes(function: type[Function], ctx: FunctionCtx) -> bool:
+    """Whether eager hands ``backward`` zeros, not ``None``, for an output no gradient reached.
+
+    The rule ``Function.apply`` registers the eager node with: the class
+    attribute and ``ctx.set_materialize_grads`` must both allow it.
+    """
+    return bool(getattr(function, "_materialize_grads", True)) and ctx._materialize
+
+
+def _run_vjp_backward(spec: _VjpTraceSpec, given: list[Tensor | None]) -> list[int] | None:
+    """Invoke ``spec.function.backward`` on ``given`` and resolve input grad ids."""
+    cotangents = list(given)
+    if _materializes(spec.function, spec.ctx):
         for idx, (t, cot) in enumerate(zip(spec.tensor_outputs, cotangents, strict=True)):
             if cot is None:
                 cotangents[idx] = lucid.zeros(tuple(t.shape), dtype=t.dtype, device=t.device)
@@ -330,8 +361,8 @@ def _valid_vjp_ops(tracer: Tracer, bwd_begin: int, writes_before: int) -> bool:
     return True
 
 
-def _try_trace_custom_vjp(spec: _VjpTraceSpec) -> bool:
-    """Trace ``spec.function.backward`` into ``spec.tracer.graph.vjp_regions``."""
+def _trace_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _TracedBackward | None:
+    """Record one call of ``backward`` on ``cotangents``, or ``None`` with its ops discarded."""
     tracer = spec.tracer
     ctx = spec.ctx
     bwd_begin = int(tracer.op_count())
@@ -353,10 +384,10 @@ def _try_trace_custom_vjp(spec: _VjpTraceSpec) -> bool:
         ctx._carrier = None
         tracer.fold_constants = False
         with _C_engine.NoGradGuard():
-            input_grad_ids = _run_vjp_backward(spec)
+            input_grad_ids = _run_vjp_backward(spec, cotangents)
     except (RuntimeError, ValueError, TypeError, LookupError, ArithmeticError, AttributeError):
         tracer.discard_ops_from(bwd_begin)
-        return False
+        return None
     finally:
         (
             ctx.needs_input_grad,
@@ -368,18 +399,94 @@ def _try_trace_custom_vjp(spec: _VjpTraceSpec) -> bool:
 
     if input_grad_ids is None or not _valid_vjp_ops(tracer, bwd_begin, writes_before):
         tracer.discard_ops_from(bwd_begin)
-        return False
-    tracer.commit_vjp_region(
+        return None
+    return _TracedBackward(bwd_begin, input_grad_ids)
+
+
+def _commit(spec: _VjpTraceSpec, traced: _TracedBackward, cotangent_ids: list[int]) -> None:
+    """Move ``traced``'s ops into a :class:`VjpRegion` handed ``cotangent_ids``."""
+    spec.tracer.commit_vjp_region(
         spec.fwd_begin,
         spec.fwd_end,
         spec.input_ids,
         spec.diff_output_ids,
         spec.diff_output_impls,
-        spec.cotangent_ids,
-        input_grad_ids,
-        bwd_begin,
+        cotangent_ids,
+        traced.input_grad_ids,
+        traced.bwd_begin,
     )
+
+
+def _demand_subsets(n: int) -> list[tuple[int, ...]]:
+    """Every proper non-empty subset of ``range(n)``, by size, then lexicographically."""
+    return [s for size in range(1, n) for s in itertools.combinations(range(n), size)]
+
+
+def _trace_demand_variants(spec: _VjpTraceSpec, differentiable: list[int]) -> bool:
+    """Commit one region per non-empty subset of the differentiable outputs, the full set last.
+
+    Each region is the call eager makes when exactly that subset receives a
+    gradient: ``None`` for the rest, and ``cotangent_ids[j] = -1`` for them,
+    which every consumer of ``cotangent_ids`` skips.  The backward walker
+    (``VjpEmitter.mm``) emits the one that matches the demand it finds.
+    Every other reader of ``graph.vjp_regions`` keeps the last region
+    committed with a given end, so the full variant goes last: it carries
+    every input gradient the others do, and dependency and ancestor walks
+    read it unchanged.
+
+    ``differentiable`` holds the positions in ``spec.cotangents`` that have a
+    cotangent.  ``False`` leaves the call untraced, so a step whose gradient
+    goes through it runs eagerly — after commits have started too: the
+    regions already committed belong to a call :func:`refuse_custom_backward`
+    refuses, and off the gradient path nothing demands them.
+    """
+    full = _trace_backward(spec, spec.cotangents)
+    if full is None:
+        return False
+    # A validation run: a ``backward`` that cannot be traced commits nothing.
+    spec.tracer.discard_ops_from(full.bwd_begin)
+    full_grads = full.present_grads()
+    for subset in _demand_subsets(len(differentiable)):
+        given = list(spec.cotangents)
+        for j, pos in enumerate(differentiable):
+            if j not in subset:
+                given[pos] = None
+        traced = _trace_backward(spec, given)
+        if traced is None:
+            return False
+        if not traced.present_grads() <= full_grads:
+            spec.tracer.discard_ops_from(traced.bwd_begin)
+            return False
+        cot_ids = [cid if j in subset else -1 for j, cid in enumerate(spec.cotangent_ids)]
+        _commit(spec, traced, cot_ids)
+    full = _trace_backward(spec, spec.cotangents)
+    if full is None or full.present_grads() != full_grads:
+        return False
+    _commit(spec, full, spec.cotangent_ids)
     return True
+
+
+def _try_trace_custom_vjp(spec: _VjpTraceSpec) -> bool:
+    """Trace ``spec.function.backward`` into ``spec.tracer.graph.vjp_regions``.
+
+    A ``Function`` that materializes grads gets zeros for an output no
+    gradient reached, in eager and in the one region traced here alike.  One
+    that does not gets ``None``, and its ``backward`` may skip a term for it
+    that a zero would turn into ``0 * inf`` (``_SVD``'s ``1 / (s_j² - s_i²)``
+    on a repeated spectrum), so it is traced once per demand.  Past
+    :data:`_MAX_DEMAND_OUTPUTS` outputs that is too many variants: the call
+    is left untraced and a step it is on runs eagerly.
+    """
+    differentiable = [pos for pos, cot in enumerate(spec.cotangents) if cot is not None]
+    if _materializes(spec.function, spec.ctx) or len(differentiable) <= 1:
+        traced = _trace_backward(spec, spec.cotangents)
+        if traced is None:
+            return False
+        _commit(spec, traced, spec.cotangent_ids)
+        return True
+    if len(differentiable) > _MAX_DEMAND_OUTPUTS:
+        return False
+    return _trace_demand_variants(spec, differentiable)
 
 
 def note_applied(
@@ -437,7 +544,12 @@ def note_applied(
 
 
 def vjp_region_index(graph: TraceGraph) -> tuple[set[int], dict[int, VjpRegion]]:
-    """Return ``(in_region_op_indices, region_by_last_op_index)`` for traced VJP regions in ``graph``."""
+    """Return ``(in_region_op_indices, region_by_last_op_index)`` for traced VJP regions in ``graph``.
+
+    Of the regions that end at the same op, the last committed wins: the
+    outer of two nested calls, and of one call's demand variants the full
+    one, whose input gradients cover the others' (:func:`_trace_demand_variants`).
+    """
     in_region: set[int] = set()
     region_at_end: dict[int, VjpRegion] = {}
     for r in graph.vjp_regions:

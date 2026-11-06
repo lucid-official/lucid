@@ -7,12 +7,15 @@
 #import <Metal/Metal.h>
 #import <MetalPerformanceShadersGraph/MetalPerformanceShadersGraph.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
+#include <iterator>
 #include <mutex>
 #include <sstream>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include "../../core/Dtype.h"
 #include "../OpEmitters/_SignedZero.h"
@@ -509,6 +512,99 @@ bool emit_backward_node(MPSGraph* graph,
     return true;
 }
 
+// Which of ``region``'s outputs its ``backward`` was traced with a cotangent for.
+std::vector<bool> present_outputs(const VjpRegion& region) {
+    std::vector<bool> present(region.cotangent_ids.size());
+    for (std::size_t j = 0; j < present.size(); ++j)
+        present[j] = region.cotangent_ids[j] >= 0;
+    return present;
+}
+
+std::string format_output_set(const std::vector<bool>& set) {
+    std::ostringstream os;
+    os << '{';
+    const char* sep = "";
+    for (std::size_t j = 0; j < set.size(); ++j) {
+        if (set[j]) {
+            os << sep << j;
+            sep = ", ";
+        }
+    }
+    os << '}';
+    return os.str();
+}
+
+std::string format_region_outputs(const VjpRegion& region) {
+    std::ostringstream os;
+    os << "custom VJP region outputs=[";
+    for (std::size_t j = 0; j < region.output_metas.size(); ++j) {
+        const TensorMeta& om = region.output_metas[j];
+        os << (j == 0 ? "" : ", ") << format_shape(om.shape) << ':'
+           << std::string(dtype_name(om.dtype));
+    }
+    os << "]";
+    return os.str();
+}
+
+// The regions one custom Function call committed over the ops ending where
+// the last of ``at_end`` does, in commit order.  A call that does not
+// materialize grads commits one per subset of its outputs a gradient may
+// reach, the full set last (``custom_backward._trace_demand_variants``);
+// any other call, one.  Walking back from the last, the group stops at a
+// region with another begin or at another full one.  Either is a call nested
+// inside this one, whose ops this call's region already covers.
+std::vector<const VjpRegion*> region_group(const std::vector<const VjpRegion*>& at_end) {
+    std::vector<const VjpRegion*> group{at_end.back()};
+    const std::size_t begin = at_end.back()->fwd_begin;
+    for (auto it = std::next(at_end.rbegin()); it != at_end.rend(); ++it) {
+        const std::vector<bool> present = present_outputs(**it);
+        const bool full = std::find(present.begin(), present.end(), false) == present.end();
+        if ((*it)->fwd_begin != begin || full)
+            break;
+        group.push_back(*it);
+    }
+    std::reverse(group.begin(), group.end());
+    return group;
+}
+
+// Emits the region of ``group`` traced for the outputs that receive a
+// gradient — the call eager makes, which hands ``backward`` ``None`` for
+// the others.  No match is a failure, never a silent pick: a wrong variant
+// is a wrong gradient.
+bool emit_vjp_region_group(MPSGraph* graph,
+                           BackwardContext& bctx,
+                           const std::vector<const VjpRegion*>& group,
+                           const std::unordered_set<TensorId>& depends,
+                           std::string* error_msg) {
+    const VjpRegion& full = *group.back();
+    if (group.size() == 1)
+        return emit_vjp_region(graph, bctx, full, depends, error_msg);
+    std::vector<bool> demand(full.output_metas.size());
+    bool any_demand = false;
+    for (std::size_t j = 0; j < demand.size(); ++j) {
+        const TensorId id = full.output_metas[j].id;
+        demand[j] = bctx.resolve_grad(id) != nullptr;
+        any_demand = any_demand || (demand[j] && depends.count(id) != 0);
+    }
+    if (!any_demand)
+        return true;
+    for (const VjpRegion* region : group) {
+        if (present_outputs(*region) == demand)
+            return emit_vjp_region(graph, bctx, *region, depends, error_msg);
+    }
+    std::ostringstream os;
+    os << "manual_vjp: no traced VJP variant of the custom Function at ops [" << full.fwd_begin
+       << ", " << full.fwd_end << ") for the outputs that receive a gradient "
+       << format_output_set(demand) << " (traced:";
+    for (const VjpRegion* region : group)
+        os << ' ' << format_output_set(present_outputs(*region));
+    os << ')';
+    debug_log_failure(os.str(), format_region_outputs(full));
+    if (error_msg)
+        *error_msg = os.str();
+    return false;
+}
+
 }  // namespace
 
 BackwardWalker::BackwardWalker(void* graph_void, BuilderContext& fwd, const TraceGraph& trace)
@@ -539,20 +635,20 @@ bool BackwardWalker::compute_grads(TensorId loss_id,
     bctx_.accumulate_grad(loss_id, (__bridge void*)loss_grad);
 
     const auto& ops = trace_.ops;
-    std::unordered_map<std::size_t, const VjpRegion*> region_by_end;
+    std::unordered_map<std::size_t, std::vector<const VjpRegion*>> regions_by_end;
     for (const auto& r : trace_.vjp_regions) {
         if (r.fwd_end > r.fwd_begin)
-            region_by_end[r.fwd_end] = &r;
+            regions_by_end[r.fwd_end].push_back(&r);
     }
     const std::unordered_set<TensorId> depends = param_dependents(trace_, param_ids);
     std::size_t idx = ops.size();
     while (idx > 0) {
-        auto rit = region_by_end.find(idx);
-        if (rit != region_by_end.end()) {
-            const VjpRegion& region = *rit->second;
-            if (!emit_vjp_region(graph, bctx_, region, depends, error_msg))
+        auto rit = regions_by_end.find(idx);
+        if (rit != regions_by_end.end()) {
+            const std::vector<const VjpRegion*> group = region_group(rit->second);
+            if (!emit_vjp_region_group(graph, bctx_, group, depends, error_msg))
                 return false;
-            idx = region.fwd_begin;
+            idx = group.back()->fwd_begin;
             continue;
         }
         if (!emit_backward_node(graph, bctx_, trace_, ops[--idx], depends, error_msg))

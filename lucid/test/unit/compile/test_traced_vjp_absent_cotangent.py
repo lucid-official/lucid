@@ -2,21 +2,22 @@
 
 A ``Function`` that does not materialize grads (``_materialize_grads = False``,
 or ``ctx.set_materialize_grads(False)`` in ``forward``) receives ``None`` in
-eager for an output no gradient reached.  The compiled region instead traces
+eager for an output no gradient reached.  The compiled region used to trace
 ``backward`` once, at ``apply``, with a cotangent tensor for every
-differentiable output (``custom_backward._build_cotangents``), and the backward
-walker binds zeros to the ones the loss leaves out (``VjpEmitter.mm``
-``bind_vjp_region_cotangents``).  So a term eager skips runs on a zero
-cotangent.  ``_SVD`` divides by ``s_j² - s_i²`` and, off the square, by ``s``;
-``_Eigh`` by ``w_j - w_i``.  On a repeated or zero spectrum — an identity or
-orthogonal initial weight — ``0 · inf`` makes the whole compiled gradient NaN
-while eager's is finite.
+differentiable output, and the backward walker bound zeros to the ones the
+loss left out.  So a term eager skips ran on a zero cotangent.  ``_SVD``
+divides by ``s_j² - s_i²`` and, off the square, by ``s``; ``_Eigh`` by
+``w_j - w_i``.  On a repeated or zero spectrum — an identity or orthogonal
+initial weight — ``0 · inf`` made the whole compiled gradient NaN while
+eager's was finite.
 
-The affected cases are ``xfail(strict=True, raises=AssertionError)``: they
-fail on the NaN assertion, and anything else (an exception, a fallback to
-eager under ``CompileFallbackWarning``) fails the test.  The controls — a
+Such a call now commits one region per subset of its outputs a gradient may
+reach (``custom_backward._trace_demand_variants``), and the walker emits the
+one for the outputs that do (``VjpEmitter.mm`` ``emit_vjp_region_group``).
+Every case here must compile — a fallback to eager under
+``CompileFallbackWarning`` fails it — and match eager.  The controls — a
 distinct spectrum, and ``qr(mode="r")``, whose zero-cotangent term is
-``solve_triangular(R, 0) = 0`` for a nonsingular ``R`` — must stay right.
+``solve_triangular(R, 0) = 0`` for a nonsingular ``R`` — were right before.
 """
 
 import warnings
@@ -28,7 +29,9 @@ import lucid
 import lucid.nn as nn
 from lucid.autograd import Function
 from lucid.compile import make_step
-from lucid.compile._core.fallback import CompileFallbackWarning
+from lucid.compile._core import custom_backward
+from lucid.compile._core.fallback import _NOTICED, CompileFallbackWarning
+from lucid.compile._core.trace_context import recording
 
 _LA = lucid.linalg
 
@@ -53,27 +56,22 @@ _MATRICES: dict[str, list[list[float]]] = {
     "distinct": [[2.0, 0.0, 1.0], [0.0, 3.0, 0.0], [1.0, 0.0, 4.0]],
 }
 
-_REASON = (
-    "LCD-863: the compiled VJP region hands an output no gradient reached a zero "
-    "cotangent where eager hands None; 0 * inf in the skipped term makes it NaN"
-)
 # ``matrix_norm(a, 2)`` is a ``max`` over the singular values: on a tied
 # largest one the compiled ``max`` VJP sends the full gradient to every tie.
-_REASON_TIED_MAX = _REASON + "; then LCD-865: compiled max VJP on a tie"
+_TIED_MAX = pytest.mark.xfail(
+    strict=True, raises=AssertionError, reason="LCD-865: compiled max VJP on a tie"
+)
 
 _AFFECTED = [
-    pytest.param(op, mat, marks=pytest.mark.xfail(strict=True, raises=AssertionError, reason=why))
-    for op, mat, why in [
-        *(
-            (op, mat, _REASON)
-            for op in ("svd", "svdvals", "matrix_norm_nuc", "eigh_values", "eigvalsh")
-            for mat in ("eye", "diag_3_3_1", "zero")
-        ),
-        *(("matrix_norm_2", mat, _REASON_TIED_MAX) for mat in ("eye", "diag_3_3_1", "zero")),
-        ("matrix_norm_2", "diag_3_1_1", _REASON),
-        ("svdvals", "tall_rank_deficient", _REASON),
-        ("matrix_norm_nuc", "tall_rank_deficient", _REASON),
-    ]
+    *(
+        pytest.param(op, mat)
+        for op in ("svd", "svdvals", "matrix_norm_nuc", "eigh_values", "eigvalsh")
+        for mat in ("eye", "diag_3_3_1", "zero")
+    ),
+    *(pytest.param("matrix_norm_2", mat, marks=_TIED_MAX) for mat in ("eye", "diag_3_3_1", "zero")),
+    pytest.param("matrix_norm_2", "diag_3_1_1"),
+    pytest.param("svdvals", "tall_rank_deficient"),
+    pytest.param("matrix_norm_nuc", "tall_rank_deficient"),
 ]
 
 _CONTROLS = [
@@ -210,8 +208,8 @@ class _CtxFlagUnused(Function):
 class _CtxFlagMarked(Function):
     """Does not materialize grads by ``ctx``; the second output is non-differentiable.
 
-    ``_run_vjp_backward`` reads only the class attribute, so it turns the
-    marked output's ``None`` into zeros where eager keeps ``None``.
+    ``_run_vjp_backward`` used to read only the class attribute, so it turned
+    the marked output's ``None`` into zeros where eager keeps ``None``.
     """
 
     _traced_backward = True
@@ -233,6 +231,58 @@ class _CtxFlagMarked(Function):
         return grad
 
 
+def _finite_while_only_the_first_is_reached(ctx, *grads):
+    (a,) = ctx.saved_tensors
+    grad = grads[0] * 2.0
+    for g in grads[1:]:
+        if g is not None:
+            grad = grad + g / (a - a)
+    return grad
+
+
+class _FourOutputs(Function):
+    """As many differentiable outputs as a call is traced per demand for."""
+
+    _materialize_grads = False
+    _traced_backward = True
+
+    @staticmethod
+    def forward(ctx, a):
+        ctx.save_for_backward(a)
+        return a * 2.0, a * 3.0, a * 4.0, a * 5.0
+
+    backward = staticmethod(_finite_while_only_the_first_is_reached)
+
+
+class _FiveOutputs(Function):
+    """One output past the limit: 31 variants are not traced, the step runs eagerly."""
+
+    _materialize_grads = False
+    _traced_backward = True
+
+    @staticmethod
+    def forward(ctx, a):
+        ctx.save_for_backward(a)
+        return a * 2.0, a * 3.0, a * 4.0, a * 5.0, a * 6.0
+
+    backward = staticmethod(_finite_while_only_the_first_is_reached)
+
+
+class _Materializing(Function):
+    """Materializes grads: the unused output gets zeros, in eager and compiled alike."""
+
+    _traced_backward = True
+
+    @staticmethod
+    def forward(ctx, a):
+        ctx.save_for_backward(a)
+        return a * 2.0, a * 3.0
+
+    @staticmethod
+    def backward(ctx, g_first, g_second):
+        return g_first * 2.0 + g_second * 3.0
+
+
 class _FirstOutputOnly(nn.Module):
     def __init__(self, fn: type[Function], device: str) -> None:
         super().__init__()
@@ -240,12 +290,10 @@ class _FirstOutputOnly(nn.Module):
         self.fn = fn
 
     def forward(self, x: lucid.Tensor) -> lucid.Tensor:
-        first, _ = self.fn.apply(self.p * x)
-        return first
+        return self.fn.apply(self.p * x)[0]
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=_REASON)
-@pytest.mark.parametrize("fn", [_ClassFlag, _CtxFlagUnused, _CtxFlagMarked])
+@pytest.mark.parametrize("fn", [_ClassFlag, _CtxFlagUnused, _CtxFlagMarked, _FourOutputs])
 def test_unreached_output_of_a_non_materializing_function_gets_none(
     fn: type[Function], device_gpu_only: str
 ) -> None:
@@ -254,3 +302,80 @@ def test_unreached_output_of_a_non_materializing_function_gets_none(
     )
     assert bool(lucid.isfinite(want).all().item())
     _assert_matches_eager(got, want)
+
+
+def _present_sets(call: Callable[[lucid.Tensor], object], device: str) -> list[tuple[int, ...]]:
+    """Per region ``call`` commits, the outputs it was traced with a cotangent for."""
+    a = lucid.tensor(_MATRICES["distinct"], device=device, requires_grad=True)
+    with recording(watch=(a,)) as tracer:
+        call(a)
+    regions = tracer.graph.vjp_regions
+    assert len({(int(r.fwd_begin), int(r.fwd_end)) for r in regions}) == 1
+    # Every variant answers for the input: the full one, last, covers them all.
+    assert all(int(r.input_grad_ids[0]) >= 0 for r in regions)
+    return [tuple(j for j, cid in enumerate(r.cotangent_ids) if int(cid) >= 0) for r in regions]
+
+
+@pytest.mark.parametrize(
+    ("call", "present"),
+    [
+        (_LA.svd, [(0,), (1,), (2,), (0, 1), (0, 2), (1, 2), (0, 1, 2)]),
+        (_LA.qr, [(0,), (1,), (0, 1)]),
+        (_LA.eigh, [(0,), (1,), (0, 1)]),
+        (_CtxFlagUnused.apply, [(0,), (1,), (0, 1)]),
+        # One differentiable output, or zeros for the rest: one region.
+        (_CtxFlagMarked.apply, [(0,)]),
+        (_Materializing.apply, [(0, 1)]),
+    ],
+    ids=["svd", "qr", "eigh", "ctx_flag", "ctx_flag_marked", "materializing"],
+)
+def test_a_call_commits_one_region_per_demand_the_full_set_last(
+    call: Callable[[lucid.Tensor], object], present: list[tuple[int, ...]], device_gpu_only: str
+) -> None:
+    assert _present_sets(call, device_gpu_only) == present
+
+
+def test_a_function_with_too_many_outputs_to_trace_runs_eagerly(device_gpu_only: str) -> None:
+    x = lucid.ones(1, device=device_gpu_only)
+    t = lucid.ones(1, device=device_gpu_only)
+    model = _FirstOutputOnly(_FiveOutputs, device_gpu_only)
+    step = make_step(model, _loss)
+    _NOTICED.discard("custom-backward")
+    with pytest.warns(CompileFallbackWarning, match="_FiveOutputs"):
+        step(x, t).backward()
+    assert len(step.eager_only) == 1
+    eager = _FirstOutputOnly(_FiveOutputs, device_gpu_only)
+    _loss(eager(x), t).backward()
+    assert model.p.grad is not None and eager.p.grad is not None
+    _assert_matches_eager([model.p.grad.cpu()], eager.p.grad.cpu())
+
+
+def test_a_demand_no_region_was_traced_for_is_refused_loudly(
+    monkeypatch: pytest.MonkeyPatch, device_gpu_only: str
+) -> None:
+    """The walker never stands in another variant: it fails and the step runs eagerly."""
+    every = custom_backward._demand_subsets
+    monkeypatch.setattr(
+        custom_backward, "_demand_subsets", lambda n: [s for s in every(n) if s != (1,)]
+    )
+    x = lucid.ones(1, device=device_gpu_only)
+    t = lucid.ones(1, device=device_gpu_only)
+
+    def build() -> _OfMatrix:
+        return _OfMatrix(lucid.tensor(_MATRICES["eye"], device=device_gpu_only), _OPS["svdvals"])
+
+    model = build()
+    step = make_step(model, _loss)
+    _NOTICED.discard("lowering")
+    match = (
+        r"no traced VJP variant of the custom Function at ops \[\d+, \d+\) for the outputs "
+        r"that receive a gradient \{1\} \(traced: \{0\} \{2\} \{0, 1\} \{0, 2\} \{1, 2\} "
+        r"\{0, 1, 2\}\)"
+    )
+    with pytest.warns(CompileFallbackWarning, match=match):
+        step(x, t).backward()
+    assert len(step.eager_only) == 1
+    eager = build()
+    _loss(eager(x), t).backward()
+    assert model.a.grad is not None and eager.a.grad is not None
+    _assert_matches_eager([model.a.grad.cpu()], eager.a.grad.cpu())
