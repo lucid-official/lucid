@@ -1,11 +1,12 @@
 // lucid/_C/compile/OpEmitters/Reduction.mm
 //
-// Reduction emitters — sum / mean.
+// Reduction emitters — sum / mean / max / min.
 //
-// Both require the ``dims`` (vector<int64>) + ``keepdim`` (bool)
+// All require the ``dims`` (vector<int64>) + ``keepdim`` (bool)
 // attributes that :file:`kernel/ReduceKernel.h`'s forward path
 // reports via :func:`OpScopeFull::set_attr`.  Op names match the
-// engine schemas in :file:`ops/ufunc/Reductions.cpp` ("sum", "mean").
+// engine schemas in :file:`ops/ufunc/Reductions.cpp` ("sum", "mean",
+// "max", "min").
 //
 // MPSGraph builders used:
 //   - reductionSumWithTensor:axes:name:

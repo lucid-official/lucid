@@ -161,7 +161,9 @@ MPSGraphTensor* share_among_ties(MPSGraph* g, MPSGraphTensor* mask, NSArray<NSNu
 // max / min: a slice's gradient is shared evenly among the elements tied
 // for its extremum, ``mask / (ties + 1 - mask)`` with ``mask = (x == y)``
 // — eager's ``share_among_ties`` (ops/ufunc/Reductions.cpp), in the same
-// order of operations so a half-precision share rounds as eager's does.
+// order of operations so a half-precision share rounds as eager's does while
+// the tie count is exact in that dtype (bfloat16 up to 256, float16 up to
+// 2048); past that eager's ``ties + 1`` rounds and the two differ.
 // Where ``mask`` is 1 the denominator is the slice's tie count; where it
 // is 0 it is at least 1, so a slice nothing matches (a NaN extremum) gets
 // zeros.  Giving every tie the whole gradient made a step on a tie — a
