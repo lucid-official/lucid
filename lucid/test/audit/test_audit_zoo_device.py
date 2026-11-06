@@ -217,6 +217,9 @@ def test_an_allocation_that_fails_is_a_failure_of_that_factory(
         def item(self) -> float:
             raise RuntimeError("out of device memory")
 
+        def numel(self) -> int:
+            return 3
+
     class Model:
         def parameters(self) -> list[Param]:
             return [Param()]

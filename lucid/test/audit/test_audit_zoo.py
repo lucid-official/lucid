@@ -48,6 +48,7 @@ SHA = "a" * 40
 @pytest.mark.parametrize(
     ("gb", "limit", "start", "floor", "build"),
     [
+        (8, 6.0, 3.0, 1.0, 4.8),
         (16, 12.5, 6.5, 1.0, 10.0),
         (32, 25.0, 12.5, 2.0, 20.0),
         (36, 28.0, 14.0, 2.5, 22.4),  # the Studio: the values the script was tuned on
@@ -600,7 +601,7 @@ def test_the_build_probe_skips_a_factory_past_the_budget_by_name(
 ) -> None:
     from lucid.test.audit import _zoo_probes
 
-    # alexnet declares its parameter counts (lenet does not, and is always built).
+    # Whether a factory declares ``params`` is beside the point (test_audit_zoo_budget.py).
     assert (
         _zoo_probes.build_family("alexnet", budget_gb=0.00001) == 5
     ), "nothing built is not a pass"

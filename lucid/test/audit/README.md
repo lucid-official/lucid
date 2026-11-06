@@ -290,8 +290,12 @@ old numbers and a smaller machine the same margins:
 `--mem-limit-gb` overrides the first row and the rest follow it. Whatever this
 costs a small machine is **reported, never silent**:
 
-* a factory whose declared parameters, as float32, pass the build budget is
-  skipped by name;
+* a factory whose parameters, as float32, pass the build budget is skipped by
+  name. The count is measured, not read from the registry: the model is built
+  under `shadow_alloc` (no storage, milliseconds, on the CPU whatever
+  `--zoo-device` says), so a factory that declares no `params` is held to the
+  budget too. The registry's `params` is used only if that count raises, and a
+  factory with neither is built and flagged with a `CHECK`;
 * `heavy` tests are deselected up front when the footprint limit is under
   1.5 x the largest `heavy` test's measured peak (5.5 GB, ViT-H/14 on the
   Studio, `HEAVY_PEAK_GB`) — an 8 GB machine drops them, a 16 GB machine

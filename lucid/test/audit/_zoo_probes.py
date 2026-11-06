@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from lucid.test._default_device import apply_default_device
-from lucid.test.audit._zoo_budget import fits_build, weights_gb
+from lucid.test.audit._zoo_budget import build_size, fits_build, weights_gb
 
 if TYPE_CHECKING:
     from lucid.nn import Module
@@ -72,9 +72,12 @@ def force_allocation(model: Module) -> None:
 def build_family(family: str, budget_gb: float) -> int:
     """Build every factory of ``family`` at its real size; report what the build allocated.
 
-    A factory whose declared parameter count would not fit ``budget_gb`` as
-    float32 is skipped *by name*: the build is the one check that cannot be
-    shrunk, so a machine too small for it has to say which models it left out.
+    A factory whose parameter count would not fit ``budget_gb`` as float32 is
+    skipped *by name*: the build is the one check that cannot be shrunk, so a
+    machine too small for it has to say which models it left out.  The count is
+    :func:`~lucid.test.audit._zoo_budget.build_size`'s, which exists for every
+    factory, so none reaches the memory guard for want of a number.  One whose
+    count cannot be had is built, and says so with a ``CHECK``.
     """
     import lucid
     import lucid.metal
@@ -86,11 +89,19 @@ def build_family(family: str, budget_gb: float) -> int:
     built_count = past_budget = failed = 0
     for name in names:
         declared = _REGISTRY[name].params
-        if declared and not fits_build(declared, budget_gb):
-            past_budget += 1
-            need = weights_gb(declared)
+        size = build_size(name, declared)
+        if size.params is None:
             print(
-                f"ADAPTIVE {family}/{name}: {declared:,} params need {need:.1f} GB, "
+                f"CHECK {name}: no parameter count to hold the build to the budget "
+                f"({size.note}); built without one",
+                flush=True,
+            )
+        elif not fits_build(size.params, budget_gb):
+            past_budget += 1
+            how = "as declared" if size.source == "declared" else "counted without allocating"
+            print(
+                f"ADAPTIVE {family}/{name}: {size.params:,} params ({how}) need "
+                f"{weights_gb(size.params):.1f} GB, "
                 f"past this machine's build budget of {budget_gb:.1f} GB",
                 flush=True,
             )

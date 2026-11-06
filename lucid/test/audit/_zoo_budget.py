@@ -21,6 +21,7 @@ import math
 import re
 import subprocess
 from dataclasses import dataclass
+from typing import Literal
 
 _GIB = 1024**3
 
@@ -77,6 +78,74 @@ def weights_gb(params: int) -> float:
 def fits_build(params: int, budget_gb: float) -> bool:
     """Whether ``params`` float32 weights fit ``budget_gb``: the one rule builds are skipped by."""
     return weights_gb(params) <= budget_gb
+
+
+#: What a shadow construction may raise for an architecture it cannot trace:
+#: ``LucidError`` and the engine's ``NotImplementedError`` are both ``RuntimeError``.
+_UNCOUNTABLE = (RuntimeError, ValueError, TypeError)
+
+
+@dataclass(frozen=True)
+class BuildSize:
+    """How many parameters a real-size build of one factory allocates, and how that is known.
+
+    Attributes
+    ----------
+    params : int or None
+        The parameter count, or ``None`` when neither source could give one.
+    source : {"shadow", "declared", "none"}
+        ``shadow``: counted on a model built without storage.  ``declared``: the
+        registry's ``params``, used only because the count raised.  ``none``:
+        the build cannot be held to a budget.
+    note : str
+        What the shadow count raised, when it did.
+    """
+
+    params: int | None
+    source: Literal["shadow", "declared", "none"]
+    note: str = ""
+
+
+def shadow_params(name: str) -> int:
+    """Parameters of the factory ``name`` at its real size, counted without allocating any.
+
+    The model is built under :func:`~lucid.nn._shadow.shadow_alloc`: every
+    tensor is shape, dtype and device with no storage behind it, so a 20-billion
+    parameter model costs milliseconds and a few megabytes and the count cannot
+    itself trip the memory guard it exists to keep off.
+
+    It is taken on the CPU, whatever the run's default device is.  The count is
+    a property of the architecture, not of where it would live (every factory
+    gives the same number under either default, checked 2026-11-06), so the
+    only thing the device could change is whether counting works: a CPU default
+    needs no Metal device and cannot be broken by one.
+    """
+    from lucid.models import create_model
+    from lucid.nn._shadow import shadow_alloc
+    from lucid.test._default_device import default_device
+
+    with default_device("cpu"), shadow_alloc():
+        model = create_model(name)
+    return sum(int(param.numel()) for param in model.parameters())
+
+
+def build_size(name: str, declared: int | None = None) -> BuildSize:
+    """The size the build budget holds the factory ``name`` to.
+
+    The measured count comes first.  A factory's ``params`` is optional (a
+    budget that read only it could not skip the half of the zoo that declares
+    none, and ``genie`` was killed by the memory guard for that) and, where it
+    is given, is the paper's figure rather than what the factory builds: the
+    two differed by up to 43% (2026-11-06).  ``declared`` is used only when the
+    count raises.
+    """
+    try:
+        return BuildSize(shadow_params(name), "shadow")
+    except _UNCOUNTABLE as exc:
+        note = f"{type(exc).__name__}: {str(exc)[:120]}"
+    if declared:
+        return BuildSize(declared, "declared", note)
+    return BuildSize(None, "none", note)
 
 
 def _round_step(value: float) -> float:
@@ -236,11 +305,14 @@ __all__ = [
     "HEAVY_HEADROOM",
     "HEAVY_PEAK_GB",
     "HEAVY_PEAK_TEST",
+    "BuildSize",
     "MachineBudget",
     "available_gb",
+    "build_size",
     "fits_build",
     "footprint_gb",
     "group_footprint_gb",
     "group_pids",
+    "shadow_params",
     "weights_gb",
 ]
