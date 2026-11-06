@@ -1220,7 +1220,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         ):
             _fallback_notice(
                 "batch-norm-training",
-                "forward-only compile cannot advance BatchNorm running stats in training mode "
+                "a BatchNorm in training mode runs eagerly under lucid.compile "
                 "(use make_step or fused_step for compiled training)",
             )
             return None
@@ -1243,7 +1243,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         given = [_unwrap(t) for t in leaf_tensors(args, kwargs)]
         carried = carried_writes(tracer, self._model, given, held)
         if isinstance(carried, str):
-            _fallback_notice("argument-write", carried)
+            _fallback_notice("uncarried-write", carried)
             return None
         ext = tracer.external_feeds
 

@@ -29,7 +29,8 @@ writes and the statistics a batch norm handed out.
 A write that lands in one of the call's own arguments, directly or through a
 view of it, is not written back — the next call's arguments are other tensors
 — and makes the call run eager, as does any entry point that does not write
-back (:func:`refuse`).
+back (:func:`refuse`).  So does a batch norm's statistic with no tensor to go
+to: one kept in a view the call took, or in a tensor it made.
 """
 
 import threading
@@ -39,7 +40,11 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast, final
 
 from lucid._C import engine as _C_engine
-from lucid.compile._core.bn_runstats import BnWriteback
+from lucid.compile._core.bn_runstats import (
+    BnWriteback,
+    bn_statistics_lost,
+    bn_writeback_targets,
+)
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
@@ -50,9 +55,17 @@ _OUTSIDE = (
     "compiled, the write would happen once, at trace time"
 )
 _ARGUMENT = (
-    "the traced call wrote in place to one of its own arguments; "
+    "the traced call wrote to one of its own arguments; "
     "a compiled call cannot carry the write back to the next call's"
 )
+_LOST_STATISTICS = (
+    "the traced call gave a batch norm running statistics it made or took a view of; "
+    "a compiled call has no tensor to write the new values to"
+)
+
+
+class UncarriedWrite(RuntimeError):
+    """A traced call's write has nowhere to go in a compiled run (:func:`_why_uncarried`)."""
 
 
 def _written(tracer: Tracer) -> list[tuple[int, _C_engine.TensorImpl]]:
@@ -69,15 +82,20 @@ def _lands_in_argument(
     return any(a is impl or (family != 0 and a.family_id() == family) for a in arguments)
 
 
-def _carried_in_place(
-    tracer: Tracer, arguments: Sequence[_C_engine.TensorImpl]
-) -> tuple[tuple[int, ...], tuple[_C_engine.TensorImpl, ...]] | None:
-    """The final ids and tensors of the outside writes, or ``None`` when one
-    lands in an argument."""
+def _why_uncarried(tracer: Tracer, arguments: Sequence[_C_engine.TensorImpl]) -> str | None:
+    """Why a compiled run cannot carry this trace's writes, or ``None`` if it can.
+
+    A statistic counts as a write: a batch norm given its statistics as arguments
+    updates that call's, and a later run would write the first call's.
+    """
+    graph, ext = tracer.graph, tracer.external_feeds
+    stats = bn_writeback_targets(graph, ext)
     written = _written(tracer)
-    if any(_lands_in_argument(impl, arguments) for _latest, impl in written):
-        return None
-    return tuple(latest for latest, _impl in written), tuple(impl for _latest, impl in written)
+    landing = [*(impl for _latest, impl in written), *(impl for _feed, _out, impl in stats)]
+    if any(_lands_in_argument(impl, arguments) for impl in landing):
+        return _ARGUMENT
+    carried = {*(latest for latest, _impl in written), *(out for _feed, out, _impl in stats)}
+    return _LOST_STATISTICS if bn_statistics_lost(graph, carried) else None
 
 
 @final
@@ -89,10 +107,15 @@ class CarriedWrites:
     functional one's too, with the counters of the layers it ran; then each
     tensor from outside the trace that the call wrote in place.  An entry point
     asks its executable for :attr:`out_ids` as extra outputs and hands them to
-    :meth:`apply` after every run.  Built in one place (:func:`carried_writes`),
-    so an entry point cannot carry one kind and drop the other: ``lucid.compile``
-    carried the in-place writes, and under ``no_grad`` a functional batch norm's
-    statistics stayed where they were (LCD-875).
+    :meth:`apply` after every run.  Built in one place (:func:`carried_writes`):
+    ``lucid.compile`` carried the in-place writes, and under ``no_grad`` a
+    functional batch norm's statistics stayed where they were (LCD-875).
+
+    ``lucid.compile`` and the monolithic ``make_step`` carry this plan, and only
+    they.  A segmented step and ``compiled_step`` carry a :class:`BnWriteback` and
+    :func:`refuse` any in-place write; ``fused_step``'s executable writes the
+    statistics itself and carries the rest (:func:`require_outside_writes`).
+    ``compiled_decode_step`` has no part in it.
 
     Attributes
     ----------
@@ -240,7 +263,7 @@ def complete_the_call(tracer: Tracer, model: Module) -> None:
     from lucid.compile._core.bn_runstats import advance_bn_counters, bn_counter_targets
 
     tracer.apply_buffer_updates()
-    advance_bn_counters(bn_counter_targets(model, tracer.graph, tracer.external_feeds))
+    advance_bn_counters(bn_counter_targets(model, tracer))
 
 
 def held_writes(tracer: Tracer, *, stands: bool) -> HeldWrites:
@@ -309,7 +332,7 @@ def require_outside_writes(
     caller: str,
     held: HeldWrites,
 ) -> tuple[list[int], list[_C_engine.TensorImpl]]:
-    """Put the written tensors back; return their ids and impls or raise ``RuntimeError``.
+    """Put the written tensors back; return their ids and impls or raise.
 
     For ``fused_step``, whose executable writes batch norm's statistics in
     place itself.
@@ -333,15 +356,16 @@ def require_outside_writes(
 
     Raises
     ------
-    RuntimeError
-        A write landed in one of the call's own arguments.
+    UncarriedWrite
+        A write landed in one of the call's own arguments, or a batch norm's
+        statistic has no tensor to go to.
     """
     _put_back(tracer, held)
-    in_place = _carried_in_place(tracer, arguments)
-    if in_place is None:
-        raise RuntimeError(f"{caller}: {_ARGUMENT}")
-    ids, targets = in_place
-    return list(ids), list(targets)
+    why = _why_uncarried(tracer, arguments)
+    if why is not None:
+        raise UncarriedWrite(f"{caller}: {why}")
+    written = _written(tracer)
+    return [latest for latest, _impl in written], [impl for _latest, impl in written]
 
 
 def carried_writes(
@@ -370,14 +394,19 @@ def carried_writes(
         The batch norm statistics the trace handed out and the tensors it
         wrote in place, every one of them already put back to its value from
         before the trace.  A string instead when a write landed in one of its
-        own arguments: the reason it has to run eager.
+        own arguments or a statistic has no tensor to go to: the reason it has
+        to run eager.
     """
     _put_back(tracer, held)
-    in_place = _carried_in_place(tracer, arguments)
-    if in_place is None:
-        return _ARGUMENT
-    ids, targets = in_place
-    return CarriedWrites(BnWriteback.of(model, tracer.graph, tracer.external_feeds), targets, ids)
+    why = _why_uncarried(tracer, arguments)
+    if why is not None:
+        return why
+    written = _written(tracer)
+    return CarriedWrites(
+        BnWriteback.of(model, tracer),
+        tuple(impl for _latest, impl in written),
+        tuple(latest for latest, _impl in written),
+    )
 
 
 def write_back(targets: list[object], values: list[object]) -> None:
@@ -402,7 +431,8 @@ def refuse(tracer: Tracer, held: Sequence[_HeldWrite] = ()) -> None:
     """Put the written tensors back and mark the trace unsupported if any were.
 
     For the entry points that do not write back: running eager is right, and
-    compiled the write would be lost.
+    compiled the write would be lost.  A batch norm's statistic with no tensor
+    to go to marks it too: these carry the statistics of a feed, and only those.
 
     Parameters
     ----------
@@ -419,3 +449,5 @@ def refuse(tracer: Tracer, held: Sequence[_HeldWrite] = ()) -> None:
     _put_back(tracer, held)
     if _written(tracer):
         tracer.mark_unsupported(_OUTSIDE)
+    elif _why_uncarried(tracer, ()) is not None:
+        tracer.mark_unsupported(_LOST_STATISTICS)

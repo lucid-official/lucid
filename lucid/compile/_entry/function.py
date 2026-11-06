@@ -227,7 +227,7 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
                 "graph, and compiled_step has no eager fallback. Use "
                 "lucid.compile.make_step or a momentum-based BatchNorm."
             )
-        bn = BnWriteback.of(model, g, ext)
+        bn = BnWriteback.of(model, tracer)
 
         exe = _C_engine.compile.compile_trace_with_backward(
             g, ext, loss_id, grad_ids, extra_output_ids=list(bn.out_ids)

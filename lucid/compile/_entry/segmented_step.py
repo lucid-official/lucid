@@ -380,7 +380,7 @@ def _compile_segment(
     if fwd_param_ids is None:
         return None
 
-    bn = BnWriteback.of(owner, t_fwd.graph, dict(ext_fwd))
+    bn = BnWriteback.of(owner, t_fwd)
     fwd_exe = _lower_segment_forward(
         t_fwd, y_id, _grad_targets(x, x_id_fwd, fwd_param_ids), bn.out_ids
     )

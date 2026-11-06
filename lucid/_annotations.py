@@ -299,6 +299,8 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid.compile._core.bn_runstats": (
         ("Module", "lucid.nn.module", "Module"),
         ("TensorImpl", "lucid._C.engine", "TensorImpl"),
+        ("TraceGraph", "lucid._C.engine.compile", "TraceGraph"),
+        ("Tracer", "lucid._C.engine.compile", "Tracer"),
     ),
     "lucid.compile._core.buffer_writes": (
         ("Module", "lucid.nn.module", "Module"),

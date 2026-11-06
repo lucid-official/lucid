@@ -1,7 +1,6 @@
 """Compiled training must preserve the observable BatchNorm counter."""
 
 from typing import override
-from types import SimpleNamespace
 
 import pytest
 
@@ -75,14 +74,15 @@ def test_the_counter_advances_in_the_tensor_a_holder_already_has(entry: str, dev
 
 
 def test_counter_plan_counts_repeated_nodes_not_registered_layers() -> None:
-    from lucid._dispatch import _unwrap
     from lucid.compile._core.bn_runstats import bn_counter_targets, advance_bn_counters
+    from lucid.compile._core.trace_context import recording
 
-    model = _Model()
-    ext = {7: _unwrap(model.active.running_mean)}
-    node = SimpleNamespace(name="batch_norm1d", inputs=[1, 2, 3, 7, 8], outputs=[])
-    graph = SimpleNamespace(ops=[node, node])
-    targets = bn_counter_targets(model, graph, ext)
+    model = _Model().to("metal").train()
+    x = lucid.randn(8, 4, device="metal")
+    with lucid.no_grad():
+        with recording(watch=(x,), module=model) as tracer:
+            model.active(model.active(x))
+    targets = bn_counter_targets(model, tracer)
     assert targets == [(model.active, 2)]
     advance_bn_counters(targets)
     assert model.active.num_batches_tracked.item() == 2

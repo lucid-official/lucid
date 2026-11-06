@@ -75,6 +75,7 @@ from lucid._C import engine as _C_engine
 from lucid._device import device as _device_cls
 from lucid._dtype import dtype as _dtype_cls
 from lucid.compile._core.bn_runstats import advance_bn_counters, bn_counter_targets
+from lucid.compile._core.buffer_writes import UncarriedWrite
 from lucid.compile._core.custom_backward import (
     GRADIENT_DTYPES,
     CustomBackwardInTrace,
@@ -331,8 +332,8 @@ def _fallback_category(why: Exception) -> str:
         return "custom-backward"
     if isinstance(why, NotImplementedError):
         return "cumulative-bn"
-    if "wrote in place to one of its own arguments" in str(why):
-        return "argument-write"
+    if isinstance(why, UncarriedWrite):
+        return "uncarried-write"
     return "first-run" if "MPSGraph failed" in str(why) else "lowering"
 
 
@@ -1151,7 +1152,7 @@ class _FusedStep:
             self._fingerprint.settle((), before)
             raise
         self._fingerprint.settle(outside_feeds(traced.tracer), before)
-        bn_counters = bn_counter_targets(self._model, traced.graph, traced.ext)
+        bn_counters = bn_counter_targets(self._model, traced.tracer)
         if not traced.graph.ops:
             raise RuntimeError("fused_step: empty trace")
         maybe_probe_for_graph(traced.graph)

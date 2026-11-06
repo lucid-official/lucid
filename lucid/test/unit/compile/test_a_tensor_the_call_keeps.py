@@ -527,3 +527,31 @@ def test_a_compiled_step_ends_a_tensor_written_on_the_first_call_as_eager_ends(w
     """After the first call the tensor is the model's state, read and not written:
     a buffer filled from the first batch keeps that batch (no LCD-876 here)."""
     _ends_as_eager_ends(_compiled_step, write, "closure-cell")
+
+
+@pytest.mark.filterwarnings("ignore::lucid.nn.module.UninitializedParameterWarning")
+def test_a_segment_that_stands_keeps_its_draws() -> None:
+    """Its draws were the call's: put back, the segments after it and whatever
+    draws after the call would see them again.  A lazy layer's first call stands,
+    its initial weights and the dropout behind it drawn in the trace."""
+
+    def make() -> nn.Sequential:
+        lucid.manual_seed(0)
+        return nn.Sequential(
+            nn.LazyLinear(SHAPE[-1]),
+            nn.Dropout(0.3),
+            nn.Linear(SHAPE[-1], SHAPE[-1]),
+            nn.Dropout(0.3),
+        ).to(COMPILE_DEVICE)
+
+    model, twin = make(), make()
+    step = lucid.compile.make_step(model, _loss, segments=2)
+    x = _inputs()[0]
+    lucid.manual_seed(7)
+    got = float(step(x).item())
+    after = lucid.randn(1).item()
+    lucid.manual_seed(7)
+    want = float(_loss(twin(x)).item())
+    assert step.eager_only["flag"]
+    assert lucid.randn(1).item() == after
+    assert got == pytest.approx(want, rel=1e-5)

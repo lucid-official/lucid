@@ -362,7 +362,7 @@ def _compile_step_entry(
 
     carried = carried_writes(tracer, model, [_unwrap(t) for t in leaf_tensors(x_args, {})], held)
     if isinstance(carried, str):
-        _fallback_notice("argument-write", carried)
+        _fallback_notice("uncarried-write", carried)
         return None
     ext = tracer.external_feeds
 
