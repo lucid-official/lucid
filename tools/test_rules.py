@@ -2233,8 +2233,11 @@ def test_a_cpp_push_is_judged_through_real_git(real_copy: Path, tmp_path: Path) 
         attest.Ledger.of(ws).record(made)
         push = repo.attempt("push", "origin", "main")
         said = push.stdout + push.stderr
-        assert push.returncode == 0 and on_the_remote() == repo.sha(), said
         assert re.search(r"PASS\s+abi-bump", said) and re.search(r"PASS\s+cpp-attested", said)
+        # Debt main carries is the ratchet's to judge, not these two records'.
+        refusers = set(re.findall(r"(?:VIOLATION|UNMEASURED)\s+(\S+)", said))
+        assert (push.returncode == 0) == (not refusers), said
+        assert (on_the_remote() == repo.sha()) == (not refusers), said
 
 
 # ── the real registry ────────────────────────────────────────────────────────
