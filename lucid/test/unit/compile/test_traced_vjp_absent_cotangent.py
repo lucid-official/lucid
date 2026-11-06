@@ -345,6 +345,81 @@ class _EveryOutputOrRaise(Function):
         return g_first * 2.0 + g_second * 3.0
 
 
+def _off_metal(a, g):
+    return (g.cpu() * 2.0).to(a.device)
+
+
+class _NeverOnMetal(Function):
+    """Does not materialize grads; ``backward`` leaves Metal for every demand."""
+
+    _materialize_grads = False
+    _traced_backward = True
+
+    @staticmethod
+    def forward(ctx, a):
+        ctx.save_for_backward(a)
+        return a * 2.0, a * 3.0
+
+    @staticmethod
+    def backward(ctx, g_first, g_second):
+        (a,) = ctx.saved_tensors
+        return _off_metal(a, g_first if g_first is not None else g_second)
+
+
+class _MaterializingOffMetal(Function):
+    """Materializes grads; its one region leaves Metal."""
+
+    _traced_backward = True
+
+    @staticmethod
+    def forward(ctx, a):
+        ctx.save_for_backward(a)
+        return a * 2.0, a * 3.0
+
+    @staticmethod
+    def backward(ctx, g_first, g_second):
+        (a,) = ctx.saved_tensors
+        return _off_metal(a, g_first) + g_second * 0.0
+
+
+class _GradOnlyWithoutTheSecond(Function):
+    """Gives its input a gradient only when the second output gets none.
+
+    The full variant then gives none, and the walker's dependency walk,
+    which reads it, would never look at the group: no gradient, no error.
+    """
+
+    _materialize_grads = False
+    _traced_backward = True
+
+    @staticmethod
+    def forward(ctx, a):
+        return a * 2.0, a * 3.0
+
+    @staticmethod
+    def backward(ctx, g_first, g_second):
+        return g_first * 2.0 if g_second is None else None
+
+
+class _OffMetalOnlyWithoutTheSecond(Function):
+    """As above, but the demand that gives the gradient is the one that cannot trace."""
+
+    _materialize_grads = False
+    _traced_backward = True
+
+    @staticmethod
+    def forward(ctx, a):
+        ctx.save_for_backward(a)
+        return a * 2.0, a * 3.0
+
+    @staticmethod
+    def backward(ctx, g_first, g_second):
+        (a,) = ctx.saved_tensors
+        if g_first is not None and g_second is None:
+            return _off_metal(a, g_first)
+        return None
+
+
 class _FirstOutputOnly(nn.Module):
     def __init__(self, fn: type[Function], device: str) -> None:
         super().__init__()
@@ -417,38 +492,40 @@ def test_a_call_commits_one_region_per_demand_the_full_set_last(
 
 
 def test_a_function_with_too_many_outputs_to_trace_runs_eagerly(device_gpu_only: str) -> None:
-    x = lucid.ones(1, device=device_gpu_only)
-    t = lucid.ones(1, device=device_gpu_only)
-    model = _FirstOutputOnly(_FiveOutputs, device_gpu_only)
-    step = make_step(model, _loss)
-    _NOTICED.discard("custom-backward")
-    with pytest.warns(
-        CompileFallbackWarning,
-        match=r"_FiveOutputs's backward could not be traced .* has 5 differentiable outputs",
-    ):
-        step(x, t).backward()
-    assert len(step.eager_only) == 1
-    eager = _FirstOutputOnly(_FiveOutputs, device_gpu_only)
-    _loss(eager(x), t).backward()
-    assert model.p.grad is not None and eager.p.grad is not None
-    _assert_matches_eager([model.p.grad.cpu()], eager.p.grad.cpu())
+    """Past four outputs (31 variants and more) the call is not traced."""
+    _assert_runs_eagerly_as_eager(_FiveOutputs, "has 5 differentiable outputs", device_gpu_only)
 
 
-def test_a_function_traced_only_for_every_output_runs_eagerly(device_gpu_only: str) -> None:
-    """A lone full region would get zeros for the unreached output: ``0 / 0`` here."""
-    x = lucid.ones(1, device=device_gpu_only)
-    t = lucid.ones(1, device=device_gpu_only)
-    model = _FirstOutputOnly(_OffMetalUnlessEveryOutput, device_gpu_only)
+@pytest.mark.parametrize(
+    ("fn", "why"),
+    [
+        # A lone full region would get zeros for the unreached output: 0 / 0.
+        (_OffMetalUnlessEveryOutput, "only for a gradient on every output"),
+        (_NeverOnMetal, "tracing it for every output failed: it recorded an op"),
+        (_MaterializingOffMetal, "tracing it failed: it recorded an op"),
+        # The walker would not see the demand that gives the gradient.
+        (_GradOnlyWithoutTheSecond, "for a gradient on some of its outputs it gives an input"),
+        (_OffMetalOnlyWithoutTheSecond, "for a gradient on every output it gives an input none"),
+    ],
+    ids=["every_output_only", "never", "materializing", "grad_only_partial", "left_out_grad"],
+)
+def test_an_untraced_call_runs_eagerly_and_says_why(
+    fn: type[Function], why: str, device_gpu_only: str
+) -> None:
+    _assert_runs_eagerly_as_eager(fn, why, device_gpu_only)
+
+
+def _assert_runs_eagerly_as_eager(fn: type[Function], why: str, device: str) -> None:
+    x = lucid.ones(1, device=device)
+    t = lucid.ones(1, device=device)
+    model = _FirstOutputOnly(fn, device)
     step = make_step(model, _loss)
     _NOTICED.discard("custom-backward")
-    with pytest.warns(
-        CompileFallbackWarning,
-        match=r"_OffMetalUnlessEveryOutput's backward could not be traced .* only for a "
-        r"gradient on every output",
-    ):
+    match = rf"{fn.__name__}'s backward could not be traced into the compiled step: .*{why}"
+    with pytest.warns(CompileFallbackWarning, match=match):
         step(x, t).backward()
     assert len(step.eager_only) == 1
-    eager = _FirstOutputOnly(_OffMetalUnlessEveryOutput, device_gpu_only)
+    eager = _FirstOutputOnly(fn, device)
     _loss(eager(x), t).backward()
     assert model.p.grad is not None and eager.p.grad is not None
     assert bool(lucid.isfinite(eager.p.grad).all().item())

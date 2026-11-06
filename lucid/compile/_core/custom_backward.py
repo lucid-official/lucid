@@ -473,18 +473,21 @@ def _trace_demand_variants(spec: _VjpTraceSpec, differentiable: list[int]) -> st
     which every consumer of ``cotangent_ids`` skips.  The backward walker
     (``VjpEmitter.mm``) emits the one that matches the demand it finds.
     Every other reader of ``graph.vjp_regions`` keeps the last region
-    committed with a given end, so the full variant goes last: it carries
-    every input gradient the others do, and dependency and ancestor walks
-    read it unchanged.
+    committed with a given end, so the full variant goes last and stands
+    for the group — the walker's dependency walk among them, which decides
+    whether it looks at the group at all.  So the full variant must give a
+    gradient to every input any demand does, and a variant that gives one it
+    does not refuses the call.
 
     A subset ``backward`` cannot be traced for — one written for a demand the
-    model never makes, ``g_first * 2`` with ``g_first=None`` — or that
-    returns a gradient the full variant does not is left out, and the walker
-    refuses that demand if it comes: no other region of the group matches
-    it.  That needs a group, though.  When no proper subset is traced the
-    full region would stand alone, which the walker cannot tell from a call
-    that materializes grads — it would bind zeros where eager hands
-    ``None`` — so the call is not traced at all.
+    model never makes, ``g_first * 2`` with ``g_first=None`` — is left out,
+    and the walker refuses that demand if it comes: no other region of the
+    group matches it.  That needs a group, and a dependency walk that reaches
+    it: when no subset is traced, the full region would stand alone, which
+    the walker cannot tell from a call that materializes grads (it would
+    bind zeros where eager hands ``None``), and when the full variant leaves
+    a floating input without a gradient, the left-out demand may give it one
+    the walk never sees.  Either refuses the call.
 
     ``differentiable`` holds the positions in ``spec.cotangents`` that have a
     cotangent.  Returns ``None`` once the regions are committed, else why
@@ -499,7 +502,33 @@ def _trace_demand_variants(spec: _VjpTraceSpec, differentiable: list[int]) -> st
     # A validation run: a ``backward`` that cannot be traced commits nothing.
     spec.tracer.discard_ops_from(full.bwd_begin)
     full_grads = full.present_grads()
-    committed = 0
+    counts = _commit_subsets(spec, differentiable, full_grads)
+    if isinstance(counts, str):
+        return counts
+    committed, left_out = counts
+    if committed == 0:
+        return (
+            "it does not materialize grads, and it could be traced only for a "
+            "gradient on every output"
+        )
+    floating = {k for k, t in enumerate(spec.tensor_inputs) if t._impl.dtype in GRADIENT_DTYPES}
+    if left_out and not floating <= full_grads:
+        return (
+            "it could not be traced for every demand, and for a gradient on every "
+            "output it gives an input none"
+        )
+    full = _trace_backward(spec, spec.cotangents)
+    if isinstance(full, str) or full.present_grads() != full_grads:
+        return "tracing it again for every output did not repeat the first trace"
+    _commit(spec, full, spec.cotangent_ids)
+    return None
+
+
+def _commit_subsets(
+    spec: _VjpTraceSpec, differentiable: list[int], full_grads: frozenset[int]
+) -> tuple[int, int] | str:
+    """Commit each proper subset's region that traces: (committed, left out), or a refusal."""
+    committed = left_out = 0
     for subset in _demand_subsets(len(differentiable)):
         given = list(spec.cotangents)
         for j, pos in enumerate(differentiable):
@@ -507,23 +536,18 @@ def _trace_demand_variants(spec: _VjpTraceSpec, differentiable: list[int]) -> st
                 given[pos] = None
         traced = _trace_backward(spec, given)
         if isinstance(traced, str):
+            left_out += 1
             continue
         if not traced.present_grads() <= full_grads:
             spec.tracer.discard_ops_from(traced.bwd_begin)
-            continue
+            return (
+                "for a gradient on some of its outputs it gives an input a gradient "
+                "it does not give for one on every output"
+            )
         cot_ids = [cid if j in subset else -1 for j, cid in enumerate(spec.cotangent_ids)]
         _commit(spec, traced, cot_ids)
         committed += 1
-    if committed == 0:
-        return (
-            "it does not materialize grads, and it could be traced only for a "
-            "gradient on every output"
-        )
-    full = _trace_backward(spec, spec.cotangents)
-    if isinstance(full, str) or full.present_grads() != full_grads:
-        return "tracing it again for every output did not repeat the first trace"
-    _commit(spec, full, spec.cotangent_ids)
-    return None
+    return committed, left_out
 
 
 def _try_trace_custom_vjp(spec: _VjpTraceSpec) -> str | None:
