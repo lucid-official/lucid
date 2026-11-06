@@ -118,8 +118,8 @@ nodes = [
 [[rule]]
 id = "E-ABI-BUMP"
 statement = """
-A range that moves the engine's binary interface raises LUCID_ABI_VERSION, or a commit at or
-after each move says why it did not: `ABI: none (<reason>)`."""
+A range that moves the engine's binary interface raises LUCID_ABI_VERSION, or each commit that
+moved it says why not (`ABI: none (<reason>)`); `ABI: bump needed` fails until it is raised."""
 why = "An engine built before the move imports cleanly and fails at its first call."
 scope = ["lucid/_C/**"]
 doc = "engine"
@@ -152,6 +152,12 @@ nodes = [
     "tools/test_rules.py::test_abi_bump_lets_through_what_moves_nothing",
     "tools/test_rules.py::test_abi_bump_takes_a_bump_anywhere_in_the_range",
     "tools/test_rules.py::test_abi_bump_takes_a_reason_not_a_habit",
+    "tools/test_rules.py::test_abi_bump_excuses_what_a_commit_moved_not_what_another_did",
+    "tools/test_rules.py::test_abi_bump_takes_a_later_reason_that_names_the_commit",
+    "tools/test_rules.py::test_abi_bump_takes_a_later_reason_that_names_every_symbol",
+    "tools/test_rules.py::test_abi_bump_asks_for_a_sha_where_a_name_is_too_short_to_mean_anything",
+    "tools/test_rules.py::test_abi_bump_needed_is_excused_by_nothing_but_the_bump",
+    "tools/test_rules.py::test_abi_bump_forgets_a_move_that_a_later_commit_undid",
     "tools/test_rules.py::test_abi_bump_reads_a_range_or_says_it_cannot",
     "tools/test_rules.py::test_a_cpp_push_is_judged_through_real_git",
 ]

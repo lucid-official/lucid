@@ -19,9 +19,13 @@ between files, a reflow or a comment is no change:
 - the names in ``lucid/_C/engine.pyi``.
 
 A range that moves any of them passes when ``LUCID_ABI_VERSION`` rose between its ends,
-or when every commit that moves it is followed (or carried) by one with a reason in its
-``ABI:`` trailer, as in ``ABI: none (only a comment in Node.h moved)``.  A bare
-``ABI: none`` is no reason: most commits carry one by habit.
+or when every commit that moves it is excused.  A commit speaks for its own moves: a
+reason in its ``ABI:`` trailer, as in ``ABI: none (only a comment in Node.h moved)``,
+excuses what that commit moved and nothing else.  A later commit excuses another's moves
+only by naming them in its reason: the commit's sha, or every symbol it moved
+(``ABI: none (Node::pack_saved is private to the CPU backend)``).  A bare ``ABI: none``
+is no reason, most commits carry one by habit, and ``ABI: bump needed`` is no excuse at
+all: it keeps the range failing until the counter moves.
 
 Usage::
 
@@ -42,7 +46,7 @@ from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final
+from typing import Final, NamedTuple
 
 ROOT: Final = Path(__file__).resolve().parents[1]
 ENGINE: Final = "lucid/_C"
@@ -57,7 +61,12 @@ _SHOWN: Final = 12
 _ABI_LINE: Final = re.compile(r"^\s*#\s*define\s+LUCID_ABI_VERSION\s+(\d+)\b", re.MULTILINE)
 # A reason is words, not a number: ``ABI: none (40)`` is in the history and says nothing.
 _EXCUSE: Final = re.compile(r"\s*none\b\W*(?P<reason>.*)", re.IGNORECASE | re.DOTALL)
+# A commit that says the counter has to move: no reason, its own or another's, undoes that.
+_BUMP_NEEDED: Final = re.compile(r"\s*bump\s+needed\b", re.IGNORECASE)
 _WORD: Final = re.compile(r"[A-Za-z]{2,}")
+_SHA: Final = re.compile(r"\b[0-9a-f]{7,40}\b")
+# A symbol shorter than this is in too much prose to be named by it; a sha names it instead.
+_MIN_NAME: Final = 3
 # Raw strings first, so that a quote or a brace inside one ends nothing.
 _NOISE: Final = re.compile(
     r'R"(?P<delim>[^(\s"]{0,16})\((?s:.*?)\)(?P=delim)"'
@@ -354,26 +363,58 @@ def read_interface(rev: str, paths: Iterable[str]) -> Interface:
     return found
 
 
-def _counted(old: Iterable[str], new: Iterable[str]) -> list[str]:
+class Move(NamedTuple):
+    """One line of how the interface moved, and the name a reason can speak for it by."""
+
+    subject: str
+    text: str
+
+
+def _counted(old: Iterable[str], new: Iterable[str]) -> list[tuple[str, str]]:
+    """``(sign, key)`` for what one end has more of than the other, removals first."""
     before, after = Counter(old), Counter(new)
-    return [f"- {k}" for k in sorted(before - after)] + [f"+ {k}" for k in sorted(after - before)]
+    return [("-", k) for k in sorted(before - after)] + [("+", k) for k in sorted(after - before)]
 
 
-def _type_moves(name: str, before: _Type | None, after: _Type | None) -> list[str]:
+def _leaf(qualified: str) -> str:
+    """``lucid::Node#1`` -> ``Node``: the name a person writes for it."""
+    return qualified.rsplit("::", 1)[-1].partition("#")[0]
+
+
+def _declared(declaration: str) -> str:
+    """The name a free declaration introduces: the word before its parameter list."""
+    head = declaration.partition(" (")[0]
+    return next(reversed(_NAME.findall(head)), declaration)
+
+
+def _type_moves(name: str, before: _Type | None, after: _Type | None) -> list[Move]:
     either = before or after
+    leaf = _leaf(name)
     if before is None or after is None:
         gone = "removed" if after is None else "added"
-        return [f"{name} (exported) {gone}"] if either is not None and either.exported else []
+        return [Move(leaf, f"{name} (exported) {gone}")] if either and either.exported else []
     tag = "exported" if before.exported or after.exported else "internal"
-    found = [f"{name} ({tag}) layout {line}" for line in _counted(before.layout, after.layout)]
+    found = [
+        Move(leaf, f"{name} ({tag}) layout {sign} {key}")
+        for sign, key in _counted(before.layout, after.layout)
+    ]
     if not found and before.layout != after.layout:
-        found.append(f"{name} ({tag}) layout: members reordered")
+        found.append(Move(leaf, f"{name} ({tag}) layout: members reordered"))
     if tag == "exported":
-        found += [f"{name} (exported) {line}" for line in _counted(before.calls, after.calls)]
+        found += [
+            Move(leaf, f"{name} (exported) {sign} {key}")
+            for sign, key in _counted(before.calls, after.calls)
+        ]
     return found
 
 
-def moves(base: str, tip: str) -> list[str]:
+def _bound_name(key: str) -> str:
+    """``def reset`` -> ``reset``; a constructor binding has no name of its own."""
+    kind, _, name = key.partition(" ")
+    return "init" if kind == "init" else name
+
+
+def moves(base: str, tip: str) -> list[Move]:
     """How the interface moved from ``base`` to ``tip``, a line each; empty when it did not."""
     names = _git("diff", "--name-only", "--no-renames", "-z", base, tip, "--", ENGINE)
     paths = sorted(p for p in names.split("\0") if p.endswith(_SOURCES) or p == STUB)
@@ -381,22 +422,28 @@ def moves(base: str, tip: str) -> list[str]:
         return []
     old, new = read_interface(base, paths), read_interface(tip, paths)
     found = [
-        line
+        move
         for name in sorted(old.types.keys() | new.types.keys())
-        for line in _type_moves(name, old.types.get(name), new.types.get(name))
+        for move in _type_moves(name, old.types.get(name), new.types.get(name))
     ]
     found += [
-        f"LUCID_API {line}" for line in _counted(old.exports.elements(), new.exports.elements())
+        Move(_declared(key), f"LUCID_API {sign} {key}")
+        for sign, key in _counted(old.exports.elements(), new.exports.elements())
     ]
     found += [
-        f"binding {line}" for line in _counted(old.bindings.elements(), new.bindings.elements())
+        Move(_bound_name(key), f"binding {sign} {key}")
+        for sign, key in _counted(old.bindings.elements(), new.bindings.elements())
     ]
     # A new alias or one gone moves nothing by itself; one that means another type does.
     meant = sorted(
         k for k in old.aliases.keys() & new.aliases.keys() if old.aliases[k] != new.aliases[k]
     )
-    found += [f"alias {k}: {old.aliases[k]} -> {new.aliases[k]}" for k in meant]
-    return found + [f"engine.pyi {line}" for line in _counted(old.stub, new.stub)]
+    found += [Move(_leaf(k), f"alias {k}: {old.aliases[k]} -> {new.aliases[k]}") for k in meant]
+    found += [
+        Move(key.rsplit(".", 1)[-1], f"engine.pyi {sign} {key}")
+        for sign, key in _counted(old.stub, new.stub)
+    ]
+    return found
 
 
 # ── the range ────────────────────────────────────────────────────────────────
@@ -413,6 +460,7 @@ class Commit:
     parent: str
     subject: str
     reason: str  # what its ``ABI: none`` trailer gives as the reason; empty when nothing
+    needs_bump: bool = False  # its trailer says ``ABI: bump needed``: nothing excuses it
 
     @property
     def line(self) -> str:
@@ -427,6 +475,10 @@ def _reason(trailers: str) -> str:
     return ""
 
 
+def _needs_bump(trailers: str) -> bool:
+    return any(_BUMP_NEEDED.match(value) for value in trailers.split("\x1e"))
+
+
 def commits(spec: str, *options: str) -> list[Commit]:
     """Oldest first; a root commit's parent is the empty tree."""
     fields = "%H%x1f%P%x1f%s%x1f%(trailers:key=ABI,valueonly,separator=%x1e)%x00"
@@ -434,13 +486,51 @@ def commits(spec: str, *options: str) -> list[Commit]:
     found = []
     for record in filter(str.strip, text.split("\0")):
         sha, parents, subject, trailers = record.strip("\n").split("\x1f")
-        found.append(Commit(sha, (parents.split() or [EMPTY_TREE])[0], subject, _reason(trailers)))
+        parent = (parents.split() or [EMPTY_TREE])[0]
+        found.append(Commit(sha, parent, subject, _reason(trailers), _needs_bump(trailers)))
     return found
 
 
 def _bumped(base: str, tip: str) -> tuple[int | None, int | None, bool]:
     before, after = abi_version(base), abi_version(tip)
     return before, after, after is not None and (before is None or after > before)
+
+
+def _speaks_for(excuse: Commit, other: Commit, made: Sequence[Move]) -> bool:
+    """Does ``excuse``'s reason name ``other``, by its sha or by every symbol it moved?"""
+    if any(other.sha.startswith(sha) for sha in _SHA.findall(excuse.reason)):
+        return True
+    named = set(_NAME.findall(excuse.reason))
+    return all(len(move.subject) >= _MIN_NAME and move.subject in named for move in made)
+
+
+def _settle(
+    history: Sequence[Commit], found: Sequence[Move]
+) -> tuple[list[tuple[Commit, list[Move]]], list[tuple[Commit, list[Commit]]]]:
+    """Which commits still hold a move nobody excused, and which commits excused something.
+
+    A commit's reason speaks for its own moves.  It speaks for an earlier commit's only by
+    naming it.  A commit that says a bump is needed is never excused.  A move whose symbol
+    is not among those that moved end to end was undone by a later commit and holds nothing.
+    """
+    standing = {move.subject for move in found}
+    held: list[tuple[Commit, list[Move]]] = []
+    excused: list[tuple[Commit, list[Commit]]] = []
+    for commit in history:
+        made = [move for move in moves(commit.parent, commit.sha) if move.subject in standing]
+        if commit.needs_bump or not commit.reason:
+            if made or commit.needs_bump:
+                held.append((commit, made))
+            continue
+        covered = [
+            (other, theirs)
+            for other, theirs in held
+            if not other.needs_bump and _speaks_for(commit, other, theirs)
+        ]
+        held = [entry for entry in held if entry not in covered]
+        if made or covered:
+            excused.append((commit, [other for other, _ in covered]))
+    return held, excused
 
 
 def judge(base: str, tip: str) -> int:
@@ -454,26 +544,29 @@ def judge(base: str, tip: str) -> int:
     if bumped:
         print(f"abi-bump: the interface moved and LUCID_ABI_VERSION went {before} -> {after}")
         return 0
-    pending: list[Commit] = []
-    excused: list[Commit] = []
-    for commit in commits(f"{base}..{tip}", "--first-parent"):
-        if commit.reason:
-            excused.append(commit)
-            pending.clear()
-        elif moves(commit.parent, commit.sha):
-            pending.append(commit)
-    if excused and not pending:
-        for commit in excused:
+    held, excused = _settle(commits(f"{base}..{tip}", "--first-parent"), found)
+    if excused and not held:
+        for commit, covering in excused:
             # "note: " is what a passing push still prints: the trailer is the excuse's only record.
-            print(f"note: abi-bump excused by {commit.line}: ABI: none ({commit.reason})")
+            also = "".join(f", and {c.sha[:9]}" for c in covering)
+            print(f"note: abi-bump excused by {commit.line}{also}: ABI: none ({commit.reason})")
         return 0
     print(f"abi-bump: lucid/_C moved its binary interface and LUCID_ABI_VERSION is still {after}:")
-    shown = [*found[:_SHOWN], *([f"... and {len(found) - _SHOWN} more"] if found[_SHOWN:] else [])]
-    shown += [f"moved by {commit.line}" for commit in pending]
+    shown = [
+        *(move.text for move in found[:_SHOWN]),
+        *([f"... and {len(found) - _SHOWN} more"] if found[_SHOWN:] else []),
+    ]
+    for commit, made in held:
+        what = ", ".join(sorted({move.subject for move in made})) or "nothing it can name"
+        says = "; it says `ABI: bump needed`" if commit.needs_bump else ""
+        shown.append(f"moved by {commit.line} [{what}]{says}")
     print("".join(f"  {line}\n" for line in shown), end="")
     print(
-        f"Bump LUCID_ABI_VERSION in {VERSION_H} in this range.  If the engine's interface did\n"
-        "not move, say why in a commit after these, as a trailer: `ABI: none (<why>)`."
+        f"Bump LUCID_ABI_VERSION in {VERSION_H} in this range.  If a commit's move changes no\n"
+        "binary interface, say why in that commit's own trailer: `ABI: none (<why>)`.  A later\n"
+        "commit excuses another's move only by naming it in its reason: the other commit's sha,\n"
+        "or every symbol it moved listed in brackets above.  `ABI: bump needed` is excused by\n"
+        "nothing but the bump."
     )
     return 1
 
@@ -489,7 +582,7 @@ def judge_each(base: str, tip: str) -> int:
         verdict = "bumped" if bumped else "excused" if commit.reason else "MISSING"
         worst = max(worst, int(verdict == "MISSING"))
         print(f"{verdict:<8s}{commit.line}  [{len(found)} move(s); ABI {before} -> {after}]")
-        print("".join(f"          {line}\n" for line in found[:_SHOWN]), end="")
+        print("".join(f"          {move.text}\n" for move in found[:_SHOWN]), end="")
     return worst
 
 

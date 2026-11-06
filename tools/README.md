@@ -92,9 +92,14 @@ and a member's `alignas` included; a specifier on the struct's own head is not r
 member of a `LUCID_API` type, a free `LUCID_API`
 declaration, a `using` alias that comes to mean another type, a name a binding gives
 Python, or a name in `engine.pyi`. The range passes when `LUCID_ABI_VERSION` rose between
-its ends, or when a commit at or after each move says why it is none, as a trailer:
-`ABI: none (<reason>)`. A bare `ABI: none` is a habit, not a reason. What it cannot see
-is the record's `gap`.
+its ends, or when every commit that moved it is excused. A commit's reason speaks for what
+that commit moved, as a trailer on it: `ABI: none (<reason>)`. It speaks for another
+commit's move only by naming it, in the reason: that commit's sha (seven digits or more),
+or every symbol it moved (the names in the brackets after `moved by` in the failure; a
+name of fewer than three letters needs the sha). An unrelated `ABI: none (Python only)`
+excuses nothing but itself. `ABI: bump needed; <what>` is excused by nothing: the range
+fails until `LUCID_ABI_VERSION` moves. A bare `ABI: none` is a habit, not a reason. What
+it cannot see is the record's `gap`. A move that a later commit undid holds nothing.
 
     python tools/check_abi_bump.py --range A..B            # as pre-push judges it
     python tools/check_abi_bump.py --range A..B --each     # every commit on its own

@@ -1875,25 +1875,147 @@ def test_abi_bump_takes_a_bump_anywhere_in_the_range(scratch: Scratch) -> None:
     assert check("--range", f"{base}..HEAD").returncode == 1
 
 
-def test_abi_bump_takes_a_reason_not_a_habit(scratch: Scratch) -> None:
+_READY = ("    int size_;\n", "    int size_;\n    bool ready_;\n")
+_MORE = ("    int seen_ = 0;\n", "    int seen_ = 0;\n    int more_;\n")
+_BIND_H = "lucid/_C/bindings/bind.cpp"
+_RESET = ("&Thing::count)", '&Thing::count).def("reset", &Thing::reset)')
+_SAYS_WHY = "ABI: none (the member is read by no one outside)"
+
+
+def _move(s: Scratch, edit: tuple[str, str], trailer: str = "", path: str = _THING_H) -> str:
+    """Commit one move of the interface, say what the trailer says; its sha."""
+    _swap_in(s, path, *edit)
+    s.commit_all("feat: a move" + (f"\n\n{trailer}" if trailer else ""))
+    return s.sha()
+
+
+def _said(s: Scratch, trailer: str) -> None:
+    """A commit that moves nothing and says only this."""
+    s.write(f"src/{s.sha()[:8]}.txt", "ok\n")
+    s.commit_all(f"chore: say it\n\n{trailer}")
+
+
+def _held(done: subprocess.CompletedProcess[str]) -> list[str]:
+    return [line.split()[2] for line in done.stdout.splitlines() if "moved by" in line]
+
+
+@pytest.mark.parametrize(
+    ("trailer", "passes"),
+    [
+        ("ABI: none", False),  # what most commits say by habit
+        ("ABI: none (40)", False),  # a number is no reason
+        ("ABI: bump needed; Thing gains ready_", False),
+        (_SAYS_WHY, True),
+    ],
+    ids=["bare", "a-number", "bump-needed", "a-reason"],
+)
+def test_abi_bump_takes_a_reason_not_a_habit(scratch: Scratch, trailer: str, passes: bool) -> None:
     check = _abi_repo(scratch)
     base = scratch.sha()
-    _swap_in(scratch, _THING_H, "    int size_;\n", "    int size_;\n    bool ready_;\n")
-    scratch.commit_all("feat: a member\n\nABI: none")
-    assert check("--since", base).returncode == 1  # what most commits say by habit
-    scratch.write("src/b.txt", "ok\n")
-    scratch.commit_all("chore: say why\n\nABI: none (40)")
-    assert check("--since", base).returncode == 1  # a number is no reason
-    scratch.write("src/c.txt", "ok\n")
-    scratch.commit_all("chore: say why\n\nABI: none (the member is read by no one outside)")
+    moved = _move(scratch, _READY, trailer)
+    done = check("--since", base)
+    assert (done.returncode == 0) is passes, done.stdout
+    if passes:
+        assert (
+            "note: abi-bump excused by" in done.stdout and "read by no one outside" in done.stdout
+        )
+        # A reason covers what its commit moved, not what comes after.
+        later = _move(scratch, _MORE)
+        done = check("--since", base)
+        assert done.returncode == 1 and _held(done) == [later[:9]], done.stdout
+    else:
+        assert _held(done) == [moved[:9]], done.stdout
+
+
+def test_abi_bump_excuses_what_a_commit_moved_not_what_another_did(scratch: Scratch) -> None:
+    """The LCD-900 shape: a move, then an unrelated commit with a reason of its own."""
+    check = _abi_repo(scratch)
+    base = scratch.sha()
+    first = _move(scratch, _READY)
+    _said(scratch, "ABI: none (Python only)")
+    done = check("--since", base)
+    assert done.returncode == 1 and _held(done) == [first[:9]], done.stdout
+    second = _move(scratch, _MORE, _SAYS_WHY)  # its own move is its to excuse
+    done = check("--since", base)
+    assert done.returncode == 1 and _held(done) == [first[:9]], done.stdout
+    assert second[:9] not in "".join(_held(done))
+
+
+def test_abi_bump_takes_a_later_reason_that_names_the_commit(scratch: Scratch) -> None:
+    check = _abi_repo(scratch)
+    base = scratch.sha()
+    first = _move(scratch, _READY)
+    _said(scratch, f"ABI: none ({first[:6]} is a member nothing outside reads)")  # six is no sha
+    assert check("--since", base).returncode == 1
+    _said(scratch, f"ABI: none ({first[:7]} is a member nothing outside reads)")
     done = check("--since", base)
     assert done.returncode == 0, done.stdout
-    assert "note: abi-bump excused by" in done.stdout and "read by no one outside" in done.stdout
-    # A reason covers what came before it, not what comes after.
-    _swap_in(scratch, _THING_H, "    int seen_ = 0;\n", "    int seen_ = 0;\n    int more_;\n")
-    scratch.commit_all("feat: another member")
+    assert f", and {first[:9]}" in done.stdout, done.stdout
+    # It names that commit, so it cannot speak for another.
+    other = _move(scratch, _MORE)
     done = check("--since", base)
-    assert done.returncode == 1 and "moved by" in done.stdout and "another member" in done.stdout
+    assert done.returncode == 1 and _held(done) == [other[:9]], done.stdout
+
+
+def test_abi_bump_takes_a_later_reason_that_names_every_symbol(scratch: Scratch) -> None:
+    check = _abi_repo(scratch)
+    base = scratch.sha()
+    _swap_in(scratch, _THING_H, *_READY)
+    _move(scratch, _RESET, path=_BIND_H)  # one commit, two things: Thing and reset
+    _said(scratch, "ABI: none (a Python-side note only)")
+    assert check("--since", base).returncode == 1
+    _said(scratch, "ABI: none (Thing is private to the engine)")
+    done = check("--since", base)
+    assert done.returncode == 1 and "[Thing, reset]" in done.stdout, done.stdout  # reset unnamed
+    _said(scratch, "ABI: none (Thing and reset are private to the engine)")
+    done = check("--since", base)
+    assert done.returncode == 0 and "note: abi-bump excused by" in done.stdout, done.stdout
+
+
+def test_abi_bump_asks_for_a_sha_where_a_name_is_too_short_to_mean_anything(
+    scratch: Scratch,
+) -> None:
+    check = _abi_repo(scratch)
+    base = scratch.sha()
+    first = _move(scratch, ("&Thing::count)", '&Thing::count).def("go", &Thing::go)'), path=_BIND_H)
+    _said(scratch, "ABI: none (go is a name no caller outside uses)")
+    done = check("--since", base)
+    assert done.returncode == 1 and _held(done) == [first[:9]], done.stdout
+    _said(scratch, f"ABI: none ({first[:7]} binds a name no caller outside uses)")
+    assert check("--since", base).returncode == 0
+
+
+def test_abi_bump_needed_is_excused_by_nothing_but_the_bump(scratch: Scratch) -> None:
+    check = _abi_repo(scratch)
+    base = scratch.sha()
+    first = _move(scratch, _READY, "ABI: bump needed; Thing gains ready_")
+    for trailer in (
+        "ABI: none (Python only)",
+        f"ABI: none ({first[:7]} Thing gains ready_, which nothing outside reads)",
+    ):
+        _said(scratch, trailer)
+        done = check("--since", base)
+        assert done.returncode == 1 and _held(done) == [first[:9]], done.stdout
+        assert "bump needed" in done.stdout
+    # Not even a reason of its own, written beside the demand for a bump.
+    _move(scratch, _MORE, "ABI: bump needed; more_\nABI: none (it is read by no one outside)")
+    assert check("--since", base).returncode == 1
+    scratch.write("lucid/_C/version.h", _ABI.format(8))
+    scratch.commit_all("chore: bump the ABI to 8")
+    done = check("--since", base)
+    assert done.returncode == 0 and "went 7 -> 8" in done.stdout, done.stdout
+
+
+def test_abi_bump_forgets_a_move_that_a_later_commit_undid(scratch: Scratch) -> None:
+    check = _abi_repo(scratch)
+    base = scratch.sha()
+    _move(scratch, _READY)
+    _move(scratch, _READY[::-1])  # takes the member out again
+    hidden = ("float weight;\n", "float weight;\n    float bias;\n")
+    last = _move(scratch, hidden, _SAYS_WHY)
+    done = check("--since", base)
+    assert done.returncode == 0 and last[:9] in done.stdout, done.stdout
+    assert "moved by" not in done.stdout
 
 
 def test_abi_bump_reads_a_range_or_says_it_cannot(scratch: Scratch) -> None:
@@ -2510,6 +2632,62 @@ _REAL_MUTANTS = [
         "(before is None or after >= before)",
         "abi-bump",
         "abi-bump control: tools/test_rules.py::test_abi_bump_sees_each_way_the_interface_moves",
+    ),
+    (
+        "A3-an-unrelated-reason-excuses-every-earlier-move",
+        _ABI_TOOL,
+        "held = [entry for entry in held if entry not in covered]",
+        "held = []",
+        "abi-bump",
+        "abi-bump control: tools/test_rules.py::test_abi_bump_excuses_what_a_commit_moved_not_what_another_did",
+    ),
+    (
+        "A4-a-reason-excuses-bump-needed",
+        _ABI_TOOL,
+        "if not other.needs_bump and _speaks_for(",
+        "if _speaks_for(",
+        "abi-bump",
+        "abi-bump control: tools/test_rules.py::test_abi_bump_needed_is_excused_by_nothing_but_the_bump",
+    ),
+    (
+        "A5-one-symbol-named-is-enough",
+        _ABI_TOOL,
+        "return all(len(move.subject)",
+        "return any(len(move.subject)",
+        "abi-bump",
+        "abi-bump control: tools/test_rules.py::test_abi_bump_takes_a_later_reason_that_names_every_symbol",
+    ),
+    (
+        "A6-a-move-undone-still-holds",
+        _ABI_TOOL,
+        "if move.subject in standing]",
+        "if move.subject]",
+        "abi-bump",
+        "abi-bump control: tools/test_rules.py::test_abi_bump_forgets_a_move_that_a_later_commit_undid",
+    ),
+    (
+        "A7-a-two-letter-word-names-a-symbol",
+        _ABI_TOOL,
+        "_MIN_NAME: Final = 3",
+        "_MIN_NAME: Final = 1",
+        "abi-bump",
+        "abi-bump control: tools/test_rules.py::test_abi_bump_asks_for_a_sha_where_a_name_is_too_short_to_mean_anything",
+    ),
+    (
+        "A8-a-six-digit-prefix-names-a-commit",
+        _ABI_TOOL,
+        "{7,40}",
+        "{6,40}",
+        "abi-bump",
+        "abi-bump control: tools/test_rules.py::test_abi_bump_takes_a_later_reason_that_names_the_commit",
+    ),
+    (
+        "A9-bump-needed-is-not-read",
+        _ABI_TOOL,
+        'r"\\s*bump\\s+needed\\b"',
+        'r"\\s*bump\\s+neededX\\b"',
+        "abi-bump",
+        "abi-bump control: tools/test_rules.py::test_abi_bump_needed_is_excused_by_nothing_but_the_bump",
     ),
     (
         "A2-a-failed-attestation-passes",
