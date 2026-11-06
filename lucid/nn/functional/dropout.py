@@ -40,15 +40,14 @@ def _drop_everything(x: Tensor, p: float, training: bool) -> Tensor | None:
     answers ``x * 0`` instead: zeros that keep the autograd edge, so the
     gradient reaching ``x`` is zero rather than missing.  Returns ``None``
     when a mask has to be drawn.
+
+    A trace takes the identity too: a later write to ``x`` reaches the result,
+    and a copy in the recording would read from before it.
     """
     _check_probability(p)
     if p == 1.0:
         return x * 0.0 if training else x
-    if (
-        (not training or p == 0.0)
-        and _C_engine.compile.current_tracer() is None
-        and not (x.requires_grad and _C_engine.grad_enabled())
-    ):
+    if (not training or p == 0.0) and not (x.requires_grad and _C_engine.grad_enabled()):
         return x
     return None
 

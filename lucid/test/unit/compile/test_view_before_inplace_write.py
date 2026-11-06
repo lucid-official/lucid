@@ -29,6 +29,7 @@ import pytest
 import lucid
 import lucid.coreml as cml
 import lucid.nn as nn
+import lucid.nn.functional as F
 import lucid.optim as optim
 from lucid._C import engine as _C_engine
 from lucid.coreml import _build as cml_build
@@ -66,6 +67,21 @@ VIEWS: dict[str, View] = {
     "contiguous": lambda y: y.contiguous(),
     "contiguous-free": lambda y: lucid.contiguous(y),
     "contiguous-copy": lambda y: y.mT.contiguous(),
+    # A dropout with nothing to drop is its input, as ``contiguous`` is.
+    "dropout-eval": lambda y: F.dropout(y, 0.5, False),
+    "dropout-p0": lambda y: F.dropout(y, 0.0, True),
+    "dropout-p1-eval": lambda y: F.dropout(y, 1.0, False),
+    "dropout-eval-inplace": lambda y: F.dropout(y, 0.5, False, inplace=True),
+    "dropout1d-eval": lambda y: F.dropout1d(y, 0.5, False),
+    "dropout1d-p0": lambda y: F.dropout1d(y, 0.0, True),
+    "dropout2d-eval": lambda y: F.dropout2d(y.unsqueeze(0), 0.5, False)[0],
+    "dropout2d-p0": lambda y: F.dropout2d(y.unsqueeze(0), 0.0, True)[0],
+    "dropout3d-eval": lambda y: F.dropout3d(y.unsqueeze(0).unsqueeze(0), 0.5, False)[0][0],
+    "dropout3d-p0": lambda y: F.dropout3d(y.unsqueeze(0).unsqueeze(0), 0.0, True)[0][0],
+    "alpha-dropout-eval": lambda y: F.alpha_dropout(y, 0.5, False),
+    "alpha-dropout-p0": lambda y: F.alpha_dropout(y, 0.0, True),
+    "feature-alpha-dropout-eval": lambda y: F.feature_alpha_dropout(y, 0.5, False),
+    "feature-alpha-dropout-p0": lambda y: F.feature_alpha_dropout(y, 0.0, True),
 }
 
 

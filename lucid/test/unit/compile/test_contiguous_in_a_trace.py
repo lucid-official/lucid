@@ -165,6 +165,9 @@ CONTROLS: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
     "of-a-transpose": lambda x: x.mT.contiguous().sum() * x,
     "free-function": lambda x: lucid.contiguous(x * 2.0) + x,
     "read-before-the-write": _read_before_the_write,
+    "eval-dropout": lambda x: nn.functional.dropout(x * 2.0, 0.5, False) + x,
+    "no-dropout": lambda x: nn.functional.dropout(x * 2.0, 0.0, True) + x,
+    "eval-channel-dropout": lambda x: nn.functional.dropout1d(x * 2.0, 0.5, False) + x,
 }
 
 
