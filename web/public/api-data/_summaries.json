@@ -5288,7 +5288,7 @@
           },
           {
             "name": "transformer",
-            "type": "TransformerTower",
+            "type": "_TransformerTower",
             "params": 85054464,
             "own_params": 0,
             "children": [
@@ -5300,7 +5300,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "ResidualAttentionBlock",
+                    "type": "_ResidualAttentionBlock",
                     "params": 7087872,
                     "own_params": 0,
                     "children": [
@@ -5340,7 +5340,7 @@
                           },
                           {
                             "name": "1",
-                            "type": "QuickGELU",
+                            "type": "_QuickGELU",
                             "params": 0,
                             "own_params": 0,
                             "children": []
@@ -5385,7 +5385,7 @@
           },
           {
             "name": "transformer",
-            "type": "TransformerTower",
+            "type": "_TransformerTower",
             "params": 37828608,
             "own_params": 0,
             "children": [
@@ -5397,7 +5397,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "ResidualAttentionBlock",
+                    "type": "_ResidualAttentionBlock",
                     "params": 3152384,
                     "own_params": 0,
                     "children": [
@@ -5437,7 +5437,7 @@
                           },
                           {
                             "name": "1",
-                            "type": "QuickGELU",
+                            "type": "_QuickGELU",
                             "params": 0,
                             "own_params": 0,
                             "children": []
@@ -5503,7 +5503,7 @@
               },
               {
                 "name": "transformer",
-                "type": "TransformerTower",
+                "type": "_TransformerTower",
                 "params": 85054464,
                 "own_params": 0,
                 "children": [
@@ -5515,7 +5515,7 @@
                     "children": [
                       {
                         "name": "0",
-                        "type": "ResidualAttentionBlock",
+                        "type": "_ResidualAttentionBlock",
                         "params": 7087872,
                         "own_params": 0,
                         "children": [
@@ -5555,7 +5555,7 @@
                               },
                               {
                                 "name": "1",
-                                "type": "QuickGELU",
+                                "type": "_QuickGELU",
                                 "params": 0,
                                 "own_params": 0,
                                 "children": []
@@ -5600,7 +5600,7 @@
               },
               {
                 "name": "transformer",
-                "type": "TransformerTower",
+                "type": "_TransformerTower",
                 "params": 37828608,
                 "own_params": 0,
                 "children": [
@@ -5612,7 +5612,7 @@
                     "children": [
                       {
                         "name": "0",
-                        "type": "ResidualAttentionBlock",
+                        "type": "_ResidualAttentionBlock",
                         "params": 3152384,
                         "own_params": 0,
                         "children": [
@@ -5652,7 +5652,7 @@
                               },
                               {
                                 "name": "1",
-                                "type": "QuickGELU",
+                                "type": "_QuickGELU",
                                 "params": 0,
                                 "own_params": 0,
                                 "children": []
@@ -5714,7 +5714,7 @@
           },
           {
             "name": "transformer",
-            "type": "TransformerTower",
+            "type": "_TransformerTower",
             "params": 85054464,
             "own_params": 0,
             "children": [
@@ -5726,7 +5726,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "ResidualAttentionBlock",
+                    "type": "_ResidualAttentionBlock",
                     "params": 7087872,
                     "own_params": 0,
                     "children": [
@@ -5766,7 +5766,7 @@
                           },
                           {
                             "name": "1",
-                            "type": "QuickGELU",
+                            "type": "_QuickGELU",
                             "params": 0,
                             "own_params": 0,
                             "children": []
@@ -5811,7 +5811,7 @@
           },
           {
             "name": "transformer",
-            "type": "TransformerTower",
+            "type": "_TransformerTower",
             "params": 37828608,
             "own_params": 0,
             "children": [
@@ -5823,7 +5823,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "ResidualAttentionBlock",
+                    "type": "_ResidualAttentionBlock",
                     "params": 3152384,
                     "own_params": 0,
                     "children": [
@@ -5863,7 +5863,7 @@
                           },
                           {
                             "name": "1",
-                            "type": "QuickGELU",
+                            "type": "_QuickGELU",
                             "params": 0,
                             "own_params": 0,
                             "children": []
@@ -5929,7 +5929,7 @@
               },
               {
                 "name": "transformer",
-                "type": "TransformerTower",
+                "type": "_TransformerTower",
                 "params": 85054464,
                 "own_params": 0,
                 "children": [
@@ -5941,7 +5941,7 @@
                     "children": [
                       {
                         "name": "0",
-                        "type": "ResidualAttentionBlock",
+                        "type": "_ResidualAttentionBlock",
                         "params": 7087872,
                         "own_params": 0,
                         "children": [
@@ -5981,7 +5981,7 @@
                               },
                               {
                                 "name": "1",
-                                "type": "QuickGELU",
+                                "type": "_QuickGELU",
                                 "params": 0,
                                 "own_params": 0,
                                 "children": []
@@ -6026,7 +6026,7 @@
               },
               {
                 "name": "transformer",
-                "type": "TransformerTower",
+                "type": "_TransformerTower",
                 "params": 37828608,
                 "own_params": 0,
                 "children": [
@@ -6038,7 +6038,7 @@
                     "children": [
                       {
                         "name": "0",
-                        "type": "ResidualAttentionBlock",
+                        "type": "_ResidualAttentionBlock",
                         "params": 3152384,
                         "own_params": 0,
                         "children": [
@@ -6078,7 +6078,7 @@
                               },
                               {
                                 "name": "1",
-                                "type": "QuickGELU",
+                                "type": "_QuickGELU",
                                 "params": 0,
                                 "own_params": 0,
                                 "children": []
@@ -6140,7 +6140,7 @@
           },
           {
             "name": "transformer",
-            "type": "TransformerTower",
+            "type": "_TransformerTower",
             "params": 302309376,
             "own_params": 0,
             "children": [
@@ -6152,7 +6152,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "ResidualAttentionBlock",
+                    "type": "_ResidualAttentionBlock",
                     "params": 12596224,
                     "own_params": 0,
                     "children": [
@@ -6192,7 +6192,7 @@
                           },
                           {
                             "name": "1",
-                            "type": "QuickGELU",
+                            "type": "_QuickGELU",
                             "params": 0,
                             "own_params": 0,
                             "children": []
@@ -6237,7 +6237,7 @@
           },
           {
             "name": "transformer",
-            "type": "TransformerTower",
+            "type": "_TransformerTower",
             "params": 85054464,
             "own_params": 0,
             "children": [
@@ -6249,7 +6249,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "ResidualAttentionBlock",
+                    "type": "_ResidualAttentionBlock",
                     "params": 7087872,
                     "own_params": 0,
                     "children": [
@@ -6289,7 +6289,7 @@
                           },
                           {
                             "name": "1",
-                            "type": "QuickGELU",
+                            "type": "_QuickGELU",
                             "params": 0,
                             "own_params": 0,
                             "children": []
@@ -6349,7 +6349,7 @@
           },
           {
             "name": "transformer",
-            "type": "TransformerTower",
+            "type": "_TransformerTower",
             "params": 302309376,
             "own_params": 0,
             "children": [
@@ -6361,7 +6361,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "ResidualAttentionBlock",
+                    "type": "_ResidualAttentionBlock",
                     "params": 12596224,
                     "own_params": 0,
                     "children": [
@@ -6401,7 +6401,7 @@
                           },
                           {
                             "name": "1",
-                            "type": "QuickGELU",
+                            "type": "_QuickGELU",
                             "params": 0,
                             "own_params": 0,
                             "children": []
@@ -6446,7 +6446,7 @@
           },
           {
             "name": "transformer",
-            "type": "TransformerTower",
+            "type": "_TransformerTower",
             "params": 85054464,
             "own_params": 0,
             "children": [
@@ -6458,7 +6458,7 @@
                 "children": [
                   {
                     "name": "0",
-                    "type": "ResidualAttentionBlock",
+                    "type": "_ResidualAttentionBlock",
                     "params": 7087872,
                     "own_params": 0,
                     "children": [
@@ -6498,7 +6498,7 @@
                           },
                           {
                             "name": "1",
-                            "type": "QuickGELU",
+                            "type": "_QuickGELU",
                             "params": 0,
                             "own_params": 0,
                             "children": []
@@ -6564,7 +6564,7 @@
               },
               {
                 "name": "transformer",
-                "type": "TransformerTower",
+                "type": "_TransformerTower",
                 "params": 302309376,
                 "own_params": 0,
                 "children": [
@@ -6576,7 +6576,7 @@
                     "children": [
                       {
                         "name": "0",
-                        "type": "ResidualAttentionBlock",
+                        "type": "_ResidualAttentionBlock",
                         "params": 12596224,
                         "own_params": 0,
                         "children": [
@@ -6616,7 +6616,7 @@
                               },
                               {
                                 "name": "1",
-                                "type": "QuickGELU",
+                                "type": "_QuickGELU",
                                 "params": 0,
                                 "own_params": 0,
                                 "children": []
@@ -6661,7 +6661,7 @@
               },
               {
                 "name": "transformer",
-                "type": "TransformerTower",
+                "type": "_TransformerTower",
                 "params": 85054464,
                 "own_params": 0,
                 "children": [
@@ -6673,7 +6673,7 @@
                     "children": [
                       {
                         "name": "0",
-                        "type": "ResidualAttentionBlock",
+                        "type": "_ResidualAttentionBlock",
                         "params": 7087872,
                         "own_params": 0,
                         "children": [
@@ -6713,7 +6713,7 @@
                               },
                               {
                                 "name": "1",
-                                "type": "QuickGELU",
+                                "type": "_QuickGELU",
                                 "params": 0,
                                 "own_params": 0,
                                 "children": []
@@ -6781,7 +6781,7 @@
               },
               {
                 "name": "transformer",
-                "type": "TransformerTower",
+                "type": "_TransformerTower",
                 "params": 302309376,
                 "own_params": 0,
                 "children": [
@@ -6793,7 +6793,7 @@
                     "children": [
                       {
                         "name": "0",
-                        "type": "ResidualAttentionBlock",
+                        "type": "_ResidualAttentionBlock",
                         "params": 12596224,
                         "own_params": 0,
                         "children": [
@@ -6833,7 +6833,7 @@
                               },
                               {
                                 "name": "1",
-                                "type": "QuickGELU",
+                                "type": "_QuickGELU",
                                 "params": 0,
                                 "own_params": 0,
                                 "children": []
@@ -6878,7 +6878,7 @@
               },
               {
                 "name": "transformer",
-                "type": "TransformerTower",
+                "type": "_TransformerTower",
                 "params": 85054464,
                 "own_params": 0,
                 "children": [
@@ -6890,7 +6890,7 @@
                     "children": [
                       {
                         "name": "0",
-                        "type": "ResidualAttentionBlock",
+                        "type": "_ResidualAttentionBlock",
                         "params": 7087872,
                         "own_params": 0,
                         "children": [
@@ -6930,7 +6930,7 @@
                               },
                               {
                                 "name": "1",
-                                "type": "QuickGELU",
+                                "type": "_QuickGELU",
                                 "params": 0,
                                 "own_params": 0,
                                 "children": []
@@ -93197,7 +93197,7 @@
       },
       {
         "name": "reward_head",
-        "type": "TwoHotHead",
+        "type": "_TwoHotHead",
         "params": 6095103,
         "own_params": 0,
         "children": [
@@ -93235,7 +93235,7 @@
       },
       {
         "name": "value_head",
-        "type": "TwoHotHead",
+        "type": "_TwoHotHead",
         "params": 7276287,
         "own_params": 0,
         "children": [
@@ -93569,7 +93569,7 @@
           },
           {
             "name": "reward_head",
-            "type": "TwoHotHead",
+            "type": "_TwoHotHead",
             "params": 6095103,
             "own_params": 0,
             "children": [
@@ -93607,7 +93607,7 @@
           },
           {
             "name": "value_head",
-            "type": "TwoHotHead",
+            "type": "_TwoHotHead",
             "params": 7276287,
             "own_params": 0,
             "children": [
@@ -93732,7 +93732,7 @@
       },
       {
         "name": "returns",
-        "type": "ReturnNormaliser",
+        "type": "_ReturnNormaliser",
         "params": 0,
         "own_params": 0,
         "children": []
@@ -93944,7 +93944,7 @@
       },
       {
         "name": "reward_head",
-        "type": "TwoHotHead",
+        "type": "_TwoHotHead",
         "params": 721151,
         "own_params": 0,
         "children": [
@@ -93982,7 +93982,7 @@
       },
       {
         "name": "value_head",
-        "type": "TwoHotHead",
+        "type": "_TwoHotHead",
         "params": 852735,
         "own_params": 0,
         "children": [
@@ -94316,7 +94316,7 @@
           },
           {
             "name": "reward_head",
-            "type": "TwoHotHead",
+            "type": "_TwoHotHead",
             "params": 721151,
             "own_params": 0,
             "children": [
@@ -94354,7 +94354,7 @@
           },
           {
             "name": "value_head",
-            "type": "TwoHotHead",
+            "type": "_TwoHotHead",
             "params": 852735,
             "own_params": 0,
             "children": [
@@ -94479,7 +94479,7 @@
       },
       {
         "name": "returns",
-        "type": "ReturnNormaliser",
+        "type": "_ReturnNormaliser",
         "params": 0,
         "own_params": 0,
         "children": []
@@ -94691,7 +94691,7 @@
       },
       {
         "name": "reward_head",
-        "type": "TwoHotHead",
+        "type": "_TwoHotHead",
         "params": 10748159,
         "own_params": 0,
         "children": [
@@ -94729,7 +94729,7 @@
       },
       {
         "name": "value_head",
-        "type": "TwoHotHead",
+        "type": "_TwoHotHead",
         "params": 12847359,
         "own_params": 0,
         "children": [
@@ -95063,7 +95063,7 @@
           },
           {
             "name": "reward_head",
-            "type": "TwoHotHead",
+            "type": "_TwoHotHead",
             "params": 10748159,
             "own_params": 0,
             "children": [
@@ -95101,7 +95101,7 @@
           },
           {
             "name": "value_head",
-            "type": "TwoHotHead",
+            "type": "_TwoHotHead",
             "params": 12847359,
             "own_params": 0,
             "children": [
@@ -95226,7 +95226,7 @@
       },
       {
         "name": "returns",
-        "type": "ReturnNormaliser",
+        "type": "_ReturnNormaliser",
         "params": 0,
         "own_params": 0,
         "children": []
@@ -95438,7 +95438,7 @@
       },
       {
         "name": "reward_head",
-        "type": "TwoHotHead",
+        "type": "_TwoHotHead",
         "params": 1573119,
         "own_params": 0,
         "children": [
@@ -95476,7 +95476,7 @@
       },
       {
         "name": "value_head",
-        "type": "TwoHotHead",
+        "type": "_TwoHotHead",
         "params": 1868799,
         "own_params": 0,
         "children": [
@@ -95810,7 +95810,7 @@
           },
           {
             "name": "reward_head",
-            "type": "TwoHotHead",
+            "type": "_TwoHotHead",
             "params": 1573119,
             "own_params": 0,
             "children": [
@@ -95848,7 +95848,7 @@
           },
           {
             "name": "value_head",
-            "type": "TwoHotHead",
+            "type": "_TwoHotHead",
             "params": 1868799,
             "own_params": 0,
             "children": [
@@ -95973,7 +95973,7 @@
       },
       {
         "name": "returns",
-        "type": "ReturnNormaliser",
+        "type": "_ReturnNormaliser",
         "params": 0,
         "own_params": 0,
         "children": []
@@ -96185,7 +96185,7 @@
       },
       {
         "name": "reward_head",
-        "type": "TwoHotHead",
+        "type": "_TwoHotHead",
         "params": 23986431,
         "own_params": 0,
         "children": [
@@ -96223,7 +96223,7 @@
       },
       {
         "name": "value_head",
-        "type": "TwoHotHead",
+        "type": "_TwoHotHead",
         "params": 28708095,
         "own_params": 0,
         "children": [
@@ -96557,7 +96557,7 @@
           },
           {
             "name": "reward_head",
-            "type": "TwoHotHead",
+            "type": "_TwoHotHead",
             "params": 23986431,
             "own_params": 0,
             "children": [
@@ -96595,7 +96595,7 @@
           },
           {
             "name": "value_head",
-            "type": "TwoHotHead",
+            "type": "_TwoHotHead",
             "params": 28708095,
             "own_params": 0,
             "children": [
@@ -96720,7 +96720,7 @@
       },
       {
         "name": "returns",
-        "type": "ReturnNormaliser",
+        "type": "_ReturnNormaliser",
         "params": 0,
         "own_params": 0,
         "children": []
@@ -96932,7 +96932,7 @@
       },
       {
         "name": "reward_head",
-        "type": "TwoHotHead",
+        "type": "_TwoHotHead",
         "params": 2752767,
         "own_params": 0,
         "children": [
@@ -96970,7 +96970,7 @@
       },
       {
         "name": "value_head",
-        "type": "TwoHotHead",
+        "type": "_TwoHotHead",
         "params": 3278079,
         "own_params": 0,
         "children": [
@@ -97304,7 +97304,7 @@
           },
           {
             "name": "reward_head",
-            "type": "TwoHotHead",
+            "type": "_TwoHotHead",
             "params": 2752767,
             "own_params": 0,
             "children": [
@@ -97342,7 +97342,7 @@
           },
           {
             "name": "value_head",
-            "type": "TwoHotHead",
+            "type": "_TwoHotHead",
             "params": 3278079,
             "own_params": 0,
             "children": [
@@ -97467,7 +97467,7 @@
       },
       {
         "name": "returns",
-        "type": "ReturnNormaliser",
+        "type": "_ReturnNormaliser",
         "params": 0,
         "own_params": 0,
         "children": []
@@ -97765,6 +97765,1586 @@
                     "children": []
                   }
                 ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "drifting_base_16": {
+    "name": "DriftingModel",
+    "type": "DriftingModel",
+    "params": 133864704,
+    "own_params": 208896,
+    "children": [
+      {
+        "name": "class_embed",
+        "type": "Embedding",
+        "params": 768000,
+        "own_params": 768000,
+        "children": []
+      },
+      {
+        "name": "noise_embeds",
+        "type": "ModuleList",
+        "params": 1572864,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "0",
+            "type": "Embedding",
+            "params": 49152,
+            "own_params": 49152,
+            "children": [],
+            "repeat": 32
+          }
+        ]
+      },
+      {
+        "name": "cfg_embedder",
+        "type": "_CFGEmbedder",
+        "params": 787968,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "fc1",
+            "type": "Linear",
+            "params": 197376,
+            "own_params": 197376,
+            "children": []
+          },
+          {
+            "name": "fc2",
+            "type": "Linear",
+            "params": 590592,
+            "own_params": 590592,
+            "children": []
+          }
+        ]
+      },
+      {
+        "name": "cfg_norm",
+        "type": "RMSNorm",
+        "params": 768,
+        "own_params": 768,
+        "children": []
+      },
+      {
+        "name": "patch_embed",
+        "type": "Linear",
+        "params": 590592,
+        "own_params": 590592,
+        "children": [],
+        "repeat": 2
+      },
+      {
+        "name": "rope",
+        "type": "RotaryEmbedding",
+        "params": 0,
+        "own_params": 0,
+        "children": []
+      },
+      {
+        "name": "blocks",
+        "type": "ModuleList",
+        "params": 127572480,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "0",
+            "type": "_LightningDiTBlock",
+            "params": 10631040,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "norm1",
+                "type": "RMSNorm",
+                "params": 768,
+                "own_params": 768,
+                "children": [],
+                "repeat": 2
+              },
+              {
+                "name": "attn",
+                "type": "_Attention",
+                "params": 2362496,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "qkv",
+                    "type": "Linear",
+                    "params": 1771776,
+                    "own_params": 1771776,
+                    "children": []
+                  },
+                  {
+                    "name": "q_norm",
+                    "type": "RMSNorm",
+                    "params": 64,
+                    "own_params": 64,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "proj",
+                    "type": "Linear",
+                    "params": 590592,
+                    "own_params": 590592,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "mlp",
+                "type": "_SwiGLU",
+                "params": 4723456,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "w1",
+                    "type": "Linear",
+                    "params": 1574912,
+                    "own_params": 1574912,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "w2",
+                    "type": "Linear",
+                    "params": 1573632,
+                    "own_params": 1573632,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "ada_ln",
+                "type": "Linear",
+                "params": 3543552,
+                "own_params": 3543552,
+                "children": []
+              }
+            ],
+            "repeat": 12
+          }
+        ]
+      },
+      {
+        "name": "final",
+        "type": "_FinalLayer",
+        "params": 1772544,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "norm",
+            "type": "RMSNorm",
+            "params": 768,
+            "own_params": 768,
+            "children": []
+          },
+          {
+            "name": "ada_ln",
+            "type": "Linear",
+            "params": 1181184,
+            "own_params": 1181184,
+            "children": []
+          },
+          {
+            "name": "proj",
+            "type": "Linear",
+            "params": 590592,
+            "own_params": 590592,
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "drifting_base_16_gen": {
+    "name": "DriftingForImageGeneration",
+    "type": "DriftingForImageGeneration",
+    "params": 133864704,
+    "own_params": 0,
+    "children": [
+      {
+        "name": "drifting",
+        "type": "DriftingModel",
+        "params": 133864704,
+        "own_params": 208896,
+        "children": [
+          {
+            "name": "class_embed",
+            "type": "Embedding",
+            "params": 768000,
+            "own_params": 768000,
+            "children": []
+          },
+          {
+            "name": "noise_embeds",
+            "type": "ModuleList",
+            "params": 1572864,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "Embedding",
+                "params": 49152,
+                "own_params": 49152,
+                "children": [],
+                "repeat": 32
+              }
+            ]
+          },
+          {
+            "name": "cfg_embedder",
+            "type": "_CFGEmbedder",
+            "params": 787968,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "fc1",
+                "type": "Linear",
+                "params": 197376,
+                "own_params": 197376,
+                "children": []
+              },
+              {
+                "name": "fc2",
+                "type": "Linear",
+                "params": 590592,
+                "own_params": 590592,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "cfg_norm",
+            "type": "RMSNorm",
+            "params": 768,
+            "own_params": 768,
+            "children": []
+          },
+          {
+            "name": "patch_embed",
+            "type": "Linear",
+            "params": 590592,
+            "own_params": 590592,
+            "children": [],
+            "repeat": 2
+          },
+          {
+            "name": "rope",
+            "type": "RotaryEmbedding",
+            "params": 0,
+            "own_params": 0,
+            "children": []
+          },
+          {
+            "name": "blocks",
+            "type": "ModuleList",
+            "params": 127572480,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "_LightningDiTBlock",
+                "params": 10631040,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm1",
+                    "type": "RMSNorm",
+                    "params": 768,
+                    "own_params": 768,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "attn",
+                    "type": "_Attention",
+                    "params": 2362496,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "qkv",
+                        "type": "Linear",
+                        "params": 1771776,
+                        "own_params": 1771776,
+                        "children": []
+                      },
+                      {
+                        "name": "q_norm",
+                        "type": "RMSNorm",
+                        "params": 64,
+                        "own_params": 64,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "proj",
+                        "type": "Linear",
+                        "params": 590592,
+                        "own_params": 590592,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "mlp",
+                    "type": "_SwiGLU",
+                    "params": 4723456,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "w1",
+                        "type": "Linear",
+                        "params": 1574912,
+                        "own_params": 1574912,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "w2",
+                        "type": "Linear",
+                        "params": 1573632,
+                        "own_params": 1573632,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Linear",
+                    "params": 3543552,
+                    "own_params": 3543552,
+                    "children": []
+                  }
+                ],
+                "repeat": 12
+              }
+            ]
+          },
+          {
+            "name": "final",
+            "type": "_FinalLayer",
+            "params": 1772544,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "norm",
+                "type": "RMSNorm",
+                "params": 768,
+                "own_params": 768,
+                "children": []
+              },
+              {
+                "name": "ada_ln",
+                "type": "Linear",
+                "params": 1181184,
+                "own_params": 1181184,
+                "children": []
+              },
+              {
+                "name": "proj",
+                "type": "Linear",
+                "params": 590592,
+                "own_params": 590592,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "drifting_base_2": {
+    "name": "DriftingModel",
+    "type": "DriftingModel",
+    "params": 132708880,
+    "own_params": 208896,
+    "children": [
+      {
+        "name": "class_embed",
+        "type": "Embedding",
+        "params": 768000,
+        "own_params": 768000,
+        "children": []
+      },
+      {
+        "name": "noise_embeds",
+        "type": "ModuleList",
+        "params": 1572864,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "0",
+            "type": "Embedding",
+            "params": 49152,
+            "own_params": 49152,
+            "children": [],
+            "repeat": 32
+          }
+        ]
+      },
+      {
+        "name": "cfg_embedder",
+        "type": "_CFGEmbedder",
+        "params": 787968,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "fc1",
+            "type": "Linear",
+            "params": 197376,
+            "own_params": 197376,
+            "children": []
+          },
+          {
+            "name": "fc2",
+            "type": "Linear",
+            "params": 590592,
+            "own_params": 590592,
+            "children": []
+          }
+        ]
+      },
+      {
+        "name": "cfg_norm",
+        "type": "RMSNorm",
+        "params": 768,
+        "own_params": 768,
+        "children": []
+      },
+      {
+        "name": "patch_embed",
+        "type": "Linear",
+        "params": 13056,
+        "own_params": 13056,
+        "children": []
+      },
+      {
+        "name": "cls_proj",
+        "type": "Linear",
+        "params": 590592,
+        "own_params": 590592,
+        "children": []
+      },
+      {
+        "name": "rope",
+        "type": "RotaryEmbedding",
+        "params": 0,
+        "own_params": 0,
+        "children": []
+      },
+      {
+        "name": "blocks",
+        "type": "ModuleList",
+        "params": 127572480,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "0",
+            "type": "_LightningDiTBlock",
+            "params": 10631040,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "norm1",
+                "type": "RMSNorm",
+                "params": 768,
+                "own_params": 768,
+                "children": [],
+                "repeat": 2
+              },
+              {
+                "name": "attn",
+                "type": "_Attention",
+                "params": 2362496,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "qkv",
+                    "type": "Linear",
+                    "params": 1771776,
+                    "own_params": 1771776,
+                    "children": []
+                  },
+                  {
+                    "name": "q_norm",
+                    "type": "RMSNorm",
+                    "params": 64,
+                    "own_params": 64,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "proj",
+                    "type": "Linear",
+                    "params": 590592,
+                    "own_params": 590592,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "mlp",
+                "type": "_SwiGLU",
+                "params": 4723456,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "w1",
+                    "type": "Linear",
+                    "params": 1574912,
+                    "own_params": 1574912,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "w2",
+                    "type": "Linear",
+                    "params": 1573632,
+                    "own_params": 1573632,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "ada_ln",
+                "type": "Linear",
+                "params": 3543552,
+                "own_params": 3543552,
+                "children": []
+              }
+            ],
+            "repeat": 12
+          }
+        ]
+      },
+      {
+        "name": "final",
+        "type": "_FinalLayer",
+        "params": 1194256,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "norm",
+            "type": "RMSNorm",
+            "params": 768,
+            "own_params": 768,
+            "children": []
+          },
+          {
+            "name": "ada_ln",
+            "type": "Linear",
+            "params": 1181184,
+            "own_params": 1181184,
+            "children": []
+          },
+          {
+            "name": "proj",
+            "type": "Linear",
+            "params": 12304,
+            "own_params": 12304,
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "drifting_base_2_gen": {
+    "name": "DriftingForImageGeneration",
+    "type": "DriftingForImageGeneration",
+    "params": 132708880,
+    "own_params": 0,
+    "children": [
+      {
+        "name": "drifting",
+        "type": "DriftingModel",
+        "params": 132708880,
+        "own_params": 208896,
+        "children": [
+          {
+            "name": "class_embed",
+            "type": "Embedding",
+            "params": 768000,
+            "own_params": 768000,
+            "children": []
+          },
+          {
+            "name": "noise_embeds",
+            "type": "ModuleList",
+            "params": 1572864,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "Embedding",
+                "params": 49152,
+                "own_params": 49152,
+                "children": [],
+                "repeat": 32
+              }
+            ]
+          },
+          {
+            "name": "cfg_embedder",
+            "type": "_CFGEmbedder",
+            "params": 787968,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "fc1",
+                "type": "Linear",
+                "params": 197376,
+                "own_params": 197376,
+                "children": []
+              },
+              {
+                "name": "fc2",
+                "type": "Linear",
+                "params": 590592,
+                "own_params": 590592,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "cfg_norm",
+            "type": "RMSNorm",
+            "params": 768,
+            "own_params": 768,
+            "children": []
+          },
+          {
+            "name": "patch_embed",
+            "type": "Linear",
+            "params": 13056,
+            "own_params": 13056,
+            "children": []
+          },
+          {
+            "name": "cls_proj",
+            "type": "Linear",
+            "params": 590592,
+            "own_params": 590592,
+            "children": []
+          },
+          {
+            "name": "rope",
+            "type": "RotaryEmbedding",
+            "params": 0,
+            "own_params": 0,
+            "children": []
+          },
+          {
+            "name": "blocks",
+            "type": "ModuleList",
+            "params": 127572480,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "_LightningDiTBlock",
+                "params": 10631040,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm1",
+                    "type": "RMSNorm",
+                    "params": 768,
+                    "own_params": 768,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "attn",
+                    "type": "_Attention",
+                    "params": 2362496,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "qkv",
+                        "type": "Linear",
+                        "params": 1771776,
+                        "own_params": 1771776,
+                        "children": []
+                      },
+                      {
+                        "name": "q_norm",
+                        "type": "RMSNorm",
+                        "params": 64,
+                        "own_params": 64,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "proj",
+                        "type": "Linear",
+                        "params": 590592,
+                        "own_params": 590592,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "mlp",
+                    "type": "_SwiGLU",
+                    "params": 4723456,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "w1",
+                        "type": "Linear",
+                        "params": 1574912,
+                        "own_params": 1574912,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "w2",
+                        "type": "Linear",
+                        "params": 1573632,
+                        "own_params": 1573632,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Linear",
+                    "params": 3543552,
+                    "own_params": 3543552,
+                    "children": []
+                  }
+                ],
+                "repeat": 12
+              }
+            ]
+          },
+          {
+            "name": "final",
+            "type": "_FinalLayer",
+            "params": 1194256,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "norm",
+                "type": "RMSNorm",
+                "params": 768,
+                "own_params": 768,
+                "children": []
+              },
+              {
+                "name": "ada_ln",
+                "type": "Linear",
+                "params": 1181184,
+                "own_params": 1181184,
+                "children": []
+              },
+              {
+                "name": "proj",
+                "type": "Linear",
+                "params": 12304,
+                "own_params": 12304,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "drifting_large_16": {
+    "name": "DriftingModel",
+    "type": "DriftingModel",
+    "params": 464450304,
+    "own_params": 278528,
+    "children": [
+      {
+        "name": "class_embed",
+        "type": "Embedding",
+        "params": 1024000,
+        "own_params": 1024000,
+        "children": []
+      },
+      {
+        "name": "noise_embeds",
+        "type": "ModuleList",
+        "params": 2097152,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "0",
+            "type": "Embedding",
+            "params": 65536,
+            "own_params": 65536,
+            "children": [],
+            "repeat": 32
+          }
+        ]
+      },
+      {
+        "name": "cfg_embedder",
+        "type": "_CFGEmbedder",
+        "params": 1312768,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "fc1",
+            "type": "Linear",
+            "params": 263168,
+            "own_params": 263168,
+            "children": []
+          },
+          {
+            "name": "fc2",
+            "type": "Linear",
+            "params": 1049600,
+            "own_params": 1049600,
+            "children": []
+          }
+        ]
+      },
+      {
+        "name": "cfg_norm",
+        "type": "RMSNorm",
+        "params": 1024,
+        "own_params": 1024,
+        "children": []
+      },
+      {
+        "name": "patch_embed",
+        "type": "Linear",
+        "params": 787456,
+        "own_params": 787456,
+        "children": []
+      },
+      {
+        "name": "cls_proj",
+        "type": "Linear",
+        "params": 1049600,
+        "own_params": 1049600,
+        "children": []
+      },
+      {
+        "name": "rope",
+        "type": "RotaryEmbedding",
+        "params": 0,
+        "own_params": 0,
+        "children": []
+      },
+      {
+        "name": "blocks",
+        "type": "ModuleList",
+        "params": 455012352,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "0",
+            "type": "_LightningDiTBlock",
+            "params": 18958848,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "norm1",
+                "type": "RMSNorm",
+                "params": 1024,
+                "own_params": 1024,
+                "children": [],
+                "repeat": 2
+              },
+              {
+                "name": "attn",
+                "type": "_Attention",
+                "params": 4198528,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "qkv",
+                    "type": "Linear",
+                    "params": 3148800,
+                    "own_params": 3148800,
+                    "children": []
+                  },
+                  {
+                    "name": "q_norm",
+                    "type": "RMSNorm",
+                    "params": 64,
+                    "own_params": 64,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "proj",
+                    "type": "Linear",
+                    "params": 1049600,
+                    "own_params": 1049600,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "mlp",
+                "type": "_SwiGLU",
+                "params": 8460672,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "w1",
+                    "type": "Linear",
+                    "params": 2820800,
+                    "own_params": 2820800,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "w2",
+                    "type": "Linear",
+                    "params": 2819072,
+                    "own_params": 2819072,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "ada_ln",
+                "type": "Linear",
+                "params": 6297600,
+                "own_params": 6297600,
+                "children": []
+              }
+            ],
+            "repeat": 24
+          }
+        ]
+      },
+      {
+        "name": "final",
+        "type": "_FinalLayer",
+        "params": 2887424,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "norm",
+            "type": "RMSNorm",
+            "params": 1024,
+            "own_params": 1024,
+            "children": []
+          },
+          {
+            "name": "ada_ln",
+            "type": "Linear",
+            "params": 2099200,
+            "own_params": 2099200,
+            "children": []
+          },
+          {
+            "name": "proj",
+            "type": "Linear",
+            "params": 787200,
+            "own_params": 787200,
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "drifting_large_16_gen": {
+    "name": "DriftingForImageGeneration",
+    "type": "DriftingForImageGeneration",
+    "params": 464450304,
+    "own_params": 0,
+    "children": [
+      {
+        "name": "drifting",
+        "type": "DriftingModel",
+        "params": 464450304,
+        "own_params": 278528,
+        "children": [
+          {
+            "name": "class_embed",
+            "type": "Embedding",
+            "params": 1024000,
+            "own_params": 1024000,
+            "children": []
+          },
+          {
+            "name": "noise_embeds",
+            "type": "ModuleList",
+            "params": 2097152,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "Embedding",
+                "params": 65536,
+                "own_params": 65536,
+                "children": [],
+                "repeat": 32
+              }
+            ]
+          },
+          {
+            "name": "cfg_embedder",
+            "type": "_CFGEmbedder",
+            "params": 1312768,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "fc1",
+                "type": "Linear",
+                "params": 263168,
+                "own_params": 263168,
+                "children": []
+              },
+              {
+                "name": "fc2",
+                "type": "Linear",
+                "params": 1049600,
+                "own_params": 1049600,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "cfg_norm",
+            "type": "RMSNorm",
+            "params": 1024,
+            "own_params": 1024,
+            "children": []
+          },
+          {
+            "name": "patch_embed",
+            "type": "Linear",
+            "params": 787456,
+            "own_params": 787456,
+            "children": []
+          },
+          {
+            "name": "cls_proj",
+            "type": "Linear",
+            "params": 1049600,
+            "own_params": 1049600,
+            "children": []
+          },
+          {
+            "name": "rope",
+            "type": "RotaryEmbedding",
+            "params": 0,
+            "own_params": 0,
+            "children": []
+          },
+          {
+            "name": "blocks",
+            "type": "ModuleList",
+            "params": 455012352,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "_LightningDiTBlock",
+                "params": 18958848,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm1",
+                    "type": "RMSNorm",
+                    "params": 1024,
+                    "own_params": 1024,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "attn",
+                    "type": "_Attention",
+                    "params": 4198528,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "qkv",
+                        "type": "Linear",
+                        "params": 3148800,
+                        "own_params": 3148800,
+                        "children": []
+                      },
+                      {
+                        "name": "q_norm",
+                        "type": "RMSNorm",
+                        "params": 64,
+                        "own_params": 64,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "proj",
+                        "type": "Linear",
+                        "params": 1049600,
+                        "own_params": 1049600,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "mlp",
+                    "type": "_SwiGLU",
+                    "params": 8460672,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "w1",
+                        "type": "Linear",
+                        "params": 2820800,
+                        "own_params": 2820800,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "w2",
+                        "type": "Linear",
+                        "params": 2819072,
+                        "own_params": 2819072,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Linear",
+                    "params": 6297600,
+                    "own_params": 6297600,
+                    "children": []
+                  }
+                ],
+                "repeat": 24
+              }
+            ]
+          },
+          {
+            "name": "final",
+            "type": "_FinalLayer",
+            "params": 2887424,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "norm",
+                "type": "RMSNorm",
+                "params": 1024,
+                "own_params": 1024,
+                "children": []
+              },
+              {
+                "name": "ada_ln",
+                "type": "Linear",
+                "params": 2099200,
+                "own_params": 2099200,
+                "children": []
+              },
+              {
+                "name": "proj",
+                "type": "Linear",
+                "params": 787200,
+                "own_params": 787200,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "drifting_large_2": {
+    "name": "DriftingModel",
+    "type": "DriftingModel",
+    "params": 462909456,
+    "own_params": 278528,
+    "children": [
+      {
+        "name": "class_embed",
+        "type": "Embedding",
+        "params": 1024000,
+        "own_params": 1024000,
+        "children": []
+      },
+      {
+        "name": "noise_embeds",
+        "type": "ModuleList",
+        "params": 2097152,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "0",
+            "type": "Embedding",
+            "params": 65536,
+            "own_params": 65536,
+            "children": [],
+            "repeat": 32
+          }
+        ]
+      },
+      {
+        "name": "cfg_embedder",
+        "type": "_CFGEmbedder",
+        "params": 1312768,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "fc1",
+            "type": "Linear",
+            "params": 263168,
+            "own_params": 263168,
+            "children": []
+          },
+          {
+            "name": "fc2",
+            "type": "Linear",
+            "params": 1049600,
+            "own_params": 1049600,
+            "children": []
+          }
+        ]
+      },
+      {
+        "name": "cfg_norm",
+        "type": "RMSNorm",
+        "params": 1024,
+        "own_params": 1024,
+        "children": []
+      },
+      {
+        "name": "patch_embed",
+        "type": "Linear",
+        "params": 17408,
+        "own_params": 17408,
+        "children": []
+      },
+      {
+        "name": "cls_proj",
+        "type": "Linear",
+        "params": 1049600,
+        "own_params": 1049600,
+        "children": []
+      },
+      {
+        "name": "rope",
+        "type": "RotaryEmbedding",
+        "params": 0,
+        "own_params": 0,
+        "children": []
+      },
+      {
+        "name": "blocks",
+        "type": "ModuleList",
+        "params": 455012352,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "0",
+            "type": "_LightningDiTBlock",
+            "params": 18958848,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "norm1",
+                "type": "RMSNorm",
+                "params": 1024,
+                "own_params": 1024,
+                "children": [],
+                "repeat": 2
+              },
+              {
+                "name": "attn",
+                "type": "_Attention",
+                "params": 4198528,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "qkv",
+                    "type": "Linear",
+                    "params": 3148800,
+                    "own_params": 3148800,
+                    "children": []
+                  },
+                  {
+                    "name": "q_norm",
+                    "type": "RMSNorm",
+                    "params": 64,
+                    "own_params": 64,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "proj",
+                    "type": "Linear",
+                    "params": 1049600,
+                    "own_params": 1049600,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "mlp",
+                "type": "_SwiGLU",
+                "params": 8460672,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "w1",
+                    "type": "Linear",
+                    "params": 2820800,
+                    "own_params": 2820800,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "w2",
+                    "type": "Linear",
+                    "params": 2819072,
+                    "own_params": 2819072,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "ada_ln",
+                "type": "Linear",
+                "params": 6297600,
+                "own_params": 6297600,
+                "children": []
+              }
+            ],
+            "repeat": 24
+          }
+        ]
+      },
+      {
+        "name": "final",
+        "type": "_FinalLayer",
+        "params": 2116624,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "norm",
+            "type": "RMSNorm",
+            "params": 1024,
+            "own_params": 1024,
+            "children": []
+          },
+          {
+            "name": "ada_ln",
+            "type": "Linear",
+            "params": 2099200,
+            "own_params": 2099200,
+            "children": []
+          },
+          {
+            "name": "proj",
+            "type": "Linear",
+            "params": 16400,
+            "own_params": 16400,
+            "children": []
+          }
+        ]
+      }
+    ]
+  },
+  "drifting_large_2_gen": {
+    "name": "DriftingForImageGeneration",
+    "type": "DriftingForImageGeneration",
+    "params": 462909456,
+    "own_params": 0,
+    "children": [
+      {
+        "name": "drifting",
+        "type": "DriftingModel",
+        "params": 462909456,
+        "own_params": 278528,
+        "children": [
+          {
+            "name": "class_embed",
+            "type": "Embedding",
+            "params": 1024000,
+            "own_params": 1024000,
+            "children": []
+          },
+          {
+            "name": "noise_embeds",
+            "type": "ModuleList",
+            "params": 2097152,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "Embedding",
+                "params": 65536,
+                "own_params": 65536,
+                "children": [],
+                "repeat": 32
+              }
+            ]
+          },
+          {
+            "name": "cfg_embedder",
+            "type": "_CFGEmbedder",
+            "params": 1312768,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "fc1",
+                "type": "Linear",
+                "params": 263168,
+                "own_params": 263168,
+                "children": []
+              },
+              {
+                "name": "fc2",
+                "type": "Linear",
+                "params": 1049600,
+                "own_params": 1049600,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "cfg_norm",
+            "type": "RMSNorm",
+            "params": 1024,
+            "own_params": 1024,
+            "children": []
+          },
+          {
+            "name": "patch_embed",
+            "type": "Linear",
+            "params": 17408,
+            "own_params": 17408,
+            "children": []
+          },
+          {
+            "name": "cls_proj",
+            "type": "Linear",
+            "params": 1049600,
+            "own_params": 1049600,
+            "children": []
+          },
+          {
+            "name": "rope",
+            "type": "RotaryEmbedding",
+            "params": 0,
+            "own_params": 0,
+            "children": []
+          },
+          {
+            "name": "blocks",
+            "type": "ModuleList",
+            "params": 455012352,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "_LightningDiTBlock",
+                "params": 18958848,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm1",
+                    "type": "RMSNorm",
+                    "params": 1024,
+                    "own_params": 1024,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "attn",
+                    "type": "_Attention",
+                    "params": 4198528,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "qkv",
+                        "type": "Linear",
+                        "params": 3148800,
+                        "own_params": 3148800,
+                        "children": []
+                      },
+                      {
+                        "name": "q_norm",
+                        "type": "RMSNorm",
+                        "params": 64,
+                        "own_params": 64,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "proj",
+                        "type": "Linear",
+                        "params": 1049600,
+                        "own_params": 1049600,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "mlp",
+                    "type": "_SwiGLU",
+                    "params": 8460672,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "w1",
+                        "type": "Linear",
+                        "params": 2820800,
+                        "own_params": 2820800,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "w2",
+                        "type": "Linear",
+                        "params": 2819072,
+                        "own_params": 2819072,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Linear",
+                    "params": 6297600,
+                    "own_params": 6297600,
+                    "children": []
+                  }
+                ],
+                "repeat": 24
+              }
+            ]
+          },
+          {
+            "name": "final",
+            "type": "_FinalLayer",
+            "params": 2116624,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "norm",
+                "type": "RMSNorm",
+                "params": 1024,
+                "own_params": 1024,
+                "children": []
+              },
+              {
+                "name": "ada_ln",
+                "type": "Linear",
+                "params": 2099200,
+                "own_params": 2099200,
+                "children": []
+              },
+              {
+                "name": "proj",
+                "type": "Linear",
+                "params": 16400,
+                "own_params": 16400,
+                "children": []
               }
             ]
           }
