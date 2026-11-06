@@ -41,7 +41,8 @@ The tests are kept because "finds the best constant action" is still far
 more than the rest of the suite establishes — a mis-wired recurrence
 fails it — but the name of the file should not be read as more than that.
 
-Cost, measured on an M1 Pro: about 45 seconds for both families.
+Cost, measured on an M4 Max: 34 seconds for the file under a CPU default,
+31 under Metal.
 """
 
 import math
@@ -600,10 +601,11 @@ def _reward_range(replay: SequenceReplay) -> tuple[float, float]:
     """The rewards the world model was trained on — where real reward lives for it.
 
     Not a fresh episode drawn after training. That one was the old band,
-    and over 20 seeds it put a calibrated model outside it on 2 Metal and
-    2 CPU seeds (DreamerV3 and PlaNet): an episode that wandered close to
-    the target gave a band of ``[0.375, 0.927]`` against a model whose
-    training batch averaged 0.244, and it read 0.231.
+    and over 20 seeds it put a calibrated model outside it on 2 Metal
+    seeds for DreamerV3 and 2 for PlaNet: an episode that wandered close
+    to the target gave a band of ``[0.375, 0.927]`` against a model whose
+    training batch averaged 0.244, and it read 0.231. This band held all
+    40 seed-device runs of each, by 0.05 at the least.
     """
     rewards = lucid.cat([episode.rewards for episode in replay.episodes], dim=0)
     return float(rewards.min().item()), float(rewards.max().item())
