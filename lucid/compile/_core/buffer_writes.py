@@ -64,16 +64,53 @@ def _lands_in_argument(
     return any(a is impl or (family != 0 and a.family_id() == family) for a in arguments)
 
 
+type _PutBack = list[tuple[_C_engine.TensorImpl, _C_engine.TensorImpl, int]]
+
+
 class _HeldPutBack(threading.local):
-    """What the last refused trace put back of the tensors it made that Python
-    still holds: ``(tensor, its value after the trace, its version once put
-    back)``, for the eager call that follows (:func:`eager_rerun`)."""
+    """What a refused trace put back of the tensors it made that Python still
+    holds: ``(tensor, its value after the trace, its version once put back)``.
+
+    ``pending`` while the compile attempt that put them back runs, ``ready``
+    once it has ended normally, for the eager call that follows it
+    (:func:`eager_rerun`).  An attempt that raises drops them: no other call
+    may take them for its own.
+    """
 
     def __init__(self) -> None:
-        self.pending: list[tuple[_C_engine.TensorImpl, _C_engine.TensorImpl, int]] = []
+        self.pending: _PutBack = []
+        self.ready: _PutBack = []
 
 
 _HELD = _HeldPutBack()
+
+
+def begin_attempt() -> _PutBack:
+    """Open a compile attempt's record of what it puts back.
+
+    Returns
+    -------
+    list
+        The enclosing attempt's record, for :func:`end_attempt` to give back:
+        attempts nest.
+    """
+    outer, _HELD.pending, _HELD.ready = _HELD.pending, [], []
+    return outer
+
+
+def end_attempt(outer: _PutBack, *, finished: bool) -> None:
+    """Close a compile attempt's record.
+
+    Parameters
+    ----------
+    outer : list
+        What :func:`begin_attempt` answered.
+    finished : bool, keyword-only
+        Whether the attempt ended normally: only then does the eager call that
+        follows it take what it put back.
+    """
+    _HELD.ready = _HELD.pending if finished else []
+    _HELD.pending = outer
 
 #: ``(tensor, its value before the trace's write, its value after)``.
 type HeldWrites = list[tuple[_C_engine.TensorImpl, _C_engine.TensorImpl, _C_engine.TensorImpl]]
@@ -94,10 +131,27 @@ class TraceAnswer[T]:
 
 
 def stood_as_the_call[T](tracer: Tracer, answer: T) -> TraceAnswer[T]:
-    """``answer``, the trace-time call's result, as the call's, saying why the
-    call was not compiled."""
+    """The trace-time call's result as the call's, saying why it was not compiled.
+
+    The trace left the buffers a kernel hands new values out for (batch norm's
+    running statistics, a functional one's too) as they were: they get those
+    values now, or the statistics would miss this call's update for good.
+
+    Parameters
+    ----------
+    tracer : Tracer
+        The finished trace, refused by :func:`held_writes`.
+    answer : object
+        What the trace-time call returned.
+
+    Returns
+    -------
+    TraceAnswer
+        ``answer``, for the entry point to hand back.
+    """
     from lucid.compile._core.fallback import _fallback_notice
 
+    tracer.apply_buffer_updates()
     _fallback_notice("held-write", str(tracer.graph.unsupported))
     return TraceAnswer(answer)
 
@@ -135,11 +189,11 @@ def eager_rerun() -> Iterator[None]:
     None
         While the eager call runs.
     """
-    pending, _HELD.pending = _HELD.pending, []
+    ready, _HELD.ready = _HELD.ready, []
     try:
         yield
     finally:
-        for impl, after, version in pending:
+        for impl, after, version in ready:
             if int(impl.version) == version:
                 impl.copy_from(after)
 
@@ -217,7 +271,7 @@ def write_back(targets: list[object], values: list[object]) -> None:
         dst.copy_from(src)
 
 
-def refuse(tracer: Tracer) -> None:
+def refuse(tracer: Tracer, *, rerun: bool = True) -> None:
     """Put the written tensors back and mark the trace unsupported if any were.
 
     For the entry points that do not write back: running eager is right, and
@@ -227,7 +281,12 @@ def refuse(tracer: Tracer) -> None:
     ----------
     tracer : Tracer
         The finished trace.
+    rerun : bool, optional, keyword-only, default=True
+        Whether an eager call follows.  Without one, a tensor the call made and
+        Python holds keeps the trace's write: put back, it would stay empty
+        with nothing to write it again.
     """
-    _put_back(tracer)
+    held = held_writes(tracer)
+    _put_back(tracer, held if rerun else [])
     if _written(tracer):
         tracer.mark_unsupported(_OUTSIDE)

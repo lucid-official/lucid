@@ -528,49 +528,173 @@ def _fills_a_cache_from_its_state(model: nn.Module, x: Tensor) -> Tensor:
 
 @pytest.mark.parametrize("entry", ENTRIES)
 def test_a_cache_filled_once_from_the_model_s_state_holds_its_values(entry: str) -> None:
-    """The write reads the model's state, so the trace cannot call it a constant.
-    Run again eagerly with the cache put back, the call would find it built and
-    answer from the empty one (and a training step would step on that answer for
-    good); so the trace-time call stands as the call."""
+    """The write reads the model's state, so the trace cannot call it a constant;
+    it overwrites the cache, so it lands the same values however often it runs,
+    and nothing puts it back."""
     _agrees(_fills_a_cache_from_its_state, entry, _a_cache_slot)
 
 
-class _TracksItsStatistics(nn.Module):
-    """A cache filled once from the model's state, beside a batch norm in training."""
+# -- the review's cases: a kept tensor beside every entry and every norm -----------
+#
+# Each failed on the branch and was right on base: a held tensor put back for an
+# eager rerun that never wrote it again, or a trace standing as the call without
+# the statistics it left alone.  Pinned by name.
 
-    def __init__(self) -> None:
+
+class _Part(nn.Module):
+    """A kept tensor and a norm, as the first of two parts of a model."""
+
+    def __init__(self, kept: str, norm: str) -> None:
         super().__init__()
+        self.kept, self.norm_kind = kept, norm
         self.register_buffer("scale", lucid.full((SHAPE[-1],), 2.0, device=COMPILE_DEVICE))
         self.cache: Tensor | None = None
-        self.norm = nn.BatchNorm1d(SHAPE[-1])
-        self.lin = nn.Linear(SHAPE[-1], 2)
+        self.box: dict[str, Tensor] = {}
+        if norm == "functional":
+            self.register_buffer("rm", lucid.zeros(SHAPE[-1], device=COMPILE_DEVICE))
+            self.register_buffer("rv", lucid.ones(SHAPE[-1], device=COMPILE_DEVICE))
+        self.norm = _NORMS[norm]()
 
     def forward(self, x: Tensor) -> Tensor:
-        if self.cache is None:
-            self.cache = lucid.zeros(SHAPE[-1], device=COMPILE_DEVICE)
-            self.cache.copy_(self.scale * 3.0)
-        # Rows that differ, or the norm answers zeros from any scale of them.
+        # Rows that differ, or a norm answers zeros from any scale of them.
         rows = lucid.arange(float(SHAPE[0]), device=COMPILE_DEVICE).reshape(SHAPE[0], 1)
-        return self.lin(self.norm((x + rows) * self.cache))
+        return self._normed((x + rows) * self._kept_value(x))
+
+    def _kept_value(self, x: Tensor) -> Tensor:
+        if self.kept == "overwrite":
+            if self.cache is None:
+                self.cache = lucid.zeros(SHAPE[-1], device=COMPILE_DEVICE)
+                self.cache.copy_(self.scale * 3.0)
+            return self.cache
+        if "h" not in self.box:
+            self.box["h"] = lucid.ones(SHAPE[-1], device=COMPILE_DEVICE)
+        self.box["h"].add_(x.mean().detach())
+        return self.box["h"]
+
+    def _normed(self, y: Tensor) -> Tensor:
+        if self.norm_kind == "functional":
+            return F.batch_norm(y, self.rm, self.rv, training=True)
+        if self.norm_kind == "instance":
+            return self.norm(y.mT.unsqueeze(0)).squeeze(0).mT
+        if self.norm_kind == "batch2d":
+            return self.norm(y.reshape(*SHAPE, 1, 1)).reshape(*SHAPE)
+        return self.norm(y)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="a traced call leaves batch norm's statistics alone, so it cannot stand as the "
-    "call; the eager rerun answers its first call from the cache put back (to be filed)",
-)
-@pytest.mark.parametrize("entry", ["make_step", "fused_step"])
-def test_a_cache_filled_beside_a_batch_norm_holds_its_values(entry: str) -> None:
-    run, run_eager = ENTRIES[entry]
+_NORMS: dict[str, Callable[[], nn.Module]] = {
+    "none": nn.Identity,
+    "batch1d": lambda: nn.BatchNorm1d(SHAPE[-1]),
+    "batch1d-cumulative": lambda: nn.BatchNorm1d(SHAPE[-1], momentum=None),
+    "batch2d": lambda: nn.BatchNorm2d(SHAPE[-1]),
+    "instance": lambda: nn.InstanceNorm1d(SHAPE[-1], track_running_stats=True),
+    "functional": nn.Identity,
+}
 
-    def build() -> _Model:
-        lucid.manual_seed(0)
-        return cast(_Model, _TracksItsStatistics().to(COMPILE_DEVICE))
 
-    got, want = run(build()), run_eager(build())
+def _two_parts(kept: str, norm: str) -> nn.Module:
+    lucid.manual_seed(0)
+    return nn.Sequential(_Part(kept, norm), nn.Linear(SHAPE[-1], 2)).to(COMPILE_DEVICE)
+
+
+def _grads(model: nn.Module) -> list[float]:
+    return [v for p in model.parameters() if p.grad is not None for v in _floats(p.grad)]
+
+
+def _steps(call: Callable[[Tensor], Tensor], model: nn.Module, *, grads: bool) -> _Seen:
+    seen = _Seen([], [], False)
+    for x in _inputs():
+        loss = call(x)
+        if grads and loss.requires_grad:
+            loss.backward()
+        seen.answers.append([float(loss.item()), *(_grads(model) if grads else [])])
+        part = cast(_Part, model[0])
+        kept = part.cache if part.cache is not None else part.box["h"]
+        seen.states.append({**_state(model), "kept": kept.tolist()})
+    return seen
+
+
+def _review_module(model: nn.Module, compiled: bool) -> _Seen:
+    run = lucid.compile(model) if compiled else model
+    with lucid.no_grad():
+        return _steps(lambda x: _loss(run(x)), model, grads=False)
+
+
+def _review_compiled_step(model: nn.Module, compiled: bool) -> _Seen:
+    if compiled:
+        return _steps(lambda x: lucid.compile.compiled_step(model, x, _loss), model, grads=True)
+    return _steps(lambda x: _loss(model(x)), model, grads=True)
+
+
+def _review_make_step(segments: int) -> Callable[[nn.Module, bool], _Seen]:
+    def run(model: nn.Module, compiled: bool) -> _Seen:
+        call = lucid.compile.make_step(model, _loss, segments=segments) if compiled else None
+        return _steps(lambda x: call(x) if call else _loss(model(x)), model, grads=True)
+
+    return run
+
+
+def _review_fused(model: nn.Module, compiled: bool) -> _Seen:
+    opt = optim.SGD(model.parameters(), lr=1e-2)
+    step = lucid.compile.fused_step(model, _loss, opt) if compiled else None
+
+    def eager(x: Tensor) -> Tensor:
+        opt.zero_grad()
+        loss = _loss(model(x))
+        loss.backward()
+        opt.step()
+        return loss.detach()
+
+    return _steps(lambda x: step(x) if step else eager(x), model, grads=False)
+
+
+REVIEW_ENTRIES: dict[str, Callable[[nn.Module, bool], _Seen]] = {
+    "module": _review_module,
+    "compiled_step": _review_compiled_step,
+    "make_step": _review_make_step(1),
+    "make_step-segments": _review_make_step(2),
+    "fused_step": _review_fused,
+}
+
+
+def _review_case(kept: str, norm: str, entry: str) -> None:
+    got = REVIEW_ENTRIES[entry](_two_parts(kept, norm), True)
+    want = REVIEW_ENTRIES[entry](_two_parts(kept, norm), False)
     for i in range(len(SCALES)):
-        assert _close(got.answers[i], want.answers[i]), f"call {i}"
+        assert _close(got.answers[i], want.answers[i]), f"call {i}: {got.answers} vs {want.answers}"
+        for name, value in want.states[i].items():
+            assert _close(_flat(got.states[i][name]), _flat(value)), f"call {i}: {name}"
 
+
+def _flat(value: object) -> list[float]:
+    if isinstance(value, list):
+        return [v for item in value for v in _flat(item)]
+    return [float(cast(float, value))]
+
+
+@pytest.mark.parametrize("entry", REVIEW_ENTRIES)
+@pytest.mark.parametrize("norm", _NORMS)
+def test_a_cache_the_call_fills_once_ends_as_eager_ends(norm: str, entry: str) -> None:
+    """An overwrite: nothing to put back, under any entry, statistics included."""
+    _review_case("overwrite", norm, entry)
+
+
+@pytest.mark.parametrize("entry", [e for e in REVIEW_ENTRIES if e != "compiled_step"])
+@pytest.mark.parametrize("norm", _NORMS)
+def test_a_kept_tensor_the_call_adds_to_ends_as_eager_ends(norm: str, entry: str) -> None:
+    """A read-modify-write: the trace stands as the call, statistics written
+    from what the kernel handed out, or the call reruns eagerly from the tensor
+    put back."""
+    _review_case("read-modify-write", norm, entry)
+
+
+def test_a_compiled_step_refuses_a_kept_tensor_it_adds_to_and_leaves_the_write() -> None:
+    """``compiled_step`` has no eager call to rerun: it refuses, loudly, and the
+    tensor keeps the write the call made, as the call's other effects do."""
+    model = _two_parts("read-modify-write", "none")
+    x = _inputs()[0]
+    with pytest.raises(RuntimeError, match="still held after the call"):
+        lucid.compile.compiled_step(model, x, _loss)
+    assert cast(_Part, model[0]).box["h"].tolist() == [2.0] * SHAPE[-1]
 
 def _rebuilds_its_total_every_call(model: nn.Module, x: Tensor) -> Tensor:
     model.total = lucid.zeros(SHAPE[-1], device=COMPILE_DEVICE)

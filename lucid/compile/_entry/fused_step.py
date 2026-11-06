@@ -883,7 +883,6 @@ class _FusedStep:
     ) -> _FusedTrace:
         """Trace forward + loss in the caller's grad mode and optimizer update under ``no_grad()``."""
         from lucid.autograd._grad_mode import no_grad
-        from lucid.compile._core.bn_runstats import model_has_tracking_bn
         from lucid.compile._core.buffer_writes import held_writes, require_outside_writes
         from lucid.compile._core.trace_context import recording
 
@@ -931,7 +930,8 @@ class _FusedStep:
         # forward's result does not, it is made anew on every run.
         del out
         held = held_writes(tracer)
-        if held and not model_has_tracking_bn(self._model):
+        if held:
+            tracer.apply_buffer_updates()  # the statistics the trace left alone
             raise _TraceStands(loss)
         write_ids, written = require_outside_writes(
             tracer, [_unwrap_hot(a) for a in args], "fused_step", held

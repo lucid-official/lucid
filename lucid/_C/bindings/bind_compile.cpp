@@ -289,12 +289,14 @@ void bind_tracer_writes(py::class_<lucid::compile::Tracer>& tracer) {
                 });
             },
             "Mark the recording unsupported if Python still holds a tensor the call "
-            "made and wrote in place from its inputs, or a view of it; answer "
-            "(tensor, value before, value after) for each, changing none. "
+            "made and wrote in place, reading it, from its inputs, or a view of it; "
+            "answer (tensor, value before, value after) for each, changing none. "
             "Call once the call's result has been dropped.")
         .def("keep_answer", &Tracer::keep_answer, py::arg("answer"),
              "Hold the call's result in C++ while refuse_kept_writes runs.")
         .def("take_answer", &Tracer::take_answer, "Hand the held result back.")
+        .def("apply_buffer_updates", &Tracer::apply_buffer_updates,
+             "Write into each buffer the value a kernel handed out for it.")
         .def(
             "outside_writes",
             [](const Tracer& t) {

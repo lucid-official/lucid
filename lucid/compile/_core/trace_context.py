@@ -89,13 +89,21 @@ def compile_attempt() -> Iterator[CompileAttempt]:
     states in ``finally`` ensures the first real execution sees the exact
     pre-call stream positions — LIFO when attempts nest.  Unless the trace
     stood as the call itself (``CompileAttempt.answered``): its draws were
-    the call's.
+    the call's.  What it put back of the tensors it made and Python holds goes
+    to the eager call after it, and nowhere if it raises
+    (:func:`~lucid.compile._core.buffer_writes.eager_rerun`).
     """
+    from lucid.compile._core.buffer_writes import begin_attempt, end_attempt
+
     saved = _stream_states()
     attempt = CompileAttempt()
+    outer = begin_attempt()
+    finished = False
     try:
         yield attempt
+        finished = True
     finally:
+        end_attempt(outer, finished=finished)
         if not attempt.answered:
             _restore_stream_states(saved)
 

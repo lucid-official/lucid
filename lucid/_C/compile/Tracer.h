@@ -360,6 +360,12 @@ public:
     void keep_answer(std::vector<TensorImplPtr> answer) { answer_ = std::move(answer); }
     std::vector<TensorImplPtr> take_answer() { return std::exchange(answer_, {}); }
 
+    // Writes into each buffer the value a kernel handed out for it instead of
+    // writing it (:meth:`on_buffer_update`: batch norm's running statistics, a
+    // functional one's too).  A trace that stands as the call does this, or the
+    // statistics miss that call's update for good.
+    void apply_buffer_updates() const;
+
     // Whether :meth:`restore_outside_writes` keeps the written values for
     // :meth:`retained_values`, for a caller that reads a traced value's contents
     // (Core ML, which folds them).  Off, the compiled paths pay for no copy.
@@ -506,6 +512,13 @@ private:
     // the call made.  Anything else — an argument, a buffer, a draw, an op it
     // does not know — answers no.
     bool from_constants(TensorId id, ConstantWalk& walk) const;
+    // Fills ``walk.producer`` once.
+    void index_producers(ConstantWalk& walk) const;
+    // Whether the value ``target`` was last written reads a value the tensor, or
+    // a view of it, held before (``prior_ids_``): a read-modify-write, which
+    // counts its runs.  A value that only keeps an earlier one as the base it
+    // overwrites (a setitem's scatter) does not read it.
+    bool reads_its_own_value(const TensorImplPtr& target, ConstantWalk& walk) const;
     // One step of that walk: settles ``id`` when what it reads is known, and
     // otherwise pushes what is not and answers false.
     bool decide(TensorId id, ConstantWalk& walk, std::vector<TensorId>& stack) const;
@@ -571,6 +584,11 @@ private:
     std::unordered_set<TensorId> constant_feeds_;
     // The call's result while the trace is judged (see ``keep_answer``).
     std::vector<TensorImplPtr> answer_;
+    // For each tensor the call made (or a view of one) that it wrote, the ids
+    // it went by before each write (see ``reads_its_own_value``).
+    std::unordered_map<const TensorImpl*, std::vector<TensorId>> prior_ids_;
+    // (buffer, value) for each :meth:`on_buffer_update`, in order.
+    std::vector<std::pair<TensorImplPtr, TensorImplPtr>> buffer_updates_;
     bool keep_written_values_ = false;
     // Owning: the call's arguments (``watch``), keyed by raw pointer.
     std::unordered_map<TensorImpl*, TensorImplPtr> watched_;

@@ -332,14 +332,13 @@ def _compile_step_entry(
     """Trace ``model`` + ``loss_fn`` once for ``x_args`` and compile.
 
     A :class:`TraceAnswer` holds the trace's own loss when the call wrote a
-    tensor it made and keeps: the trace-time call stands as the call.  Not
-    with a batch norm that tracks its statistics, which a traced call leaves
-    alone (the compiled step writes them back).
+    tensor it made and keeps, reading it: the trace-time call stands as the
+    call, batch norm's statistics included (``stood_as_the_call``).
     """
     from lucid._dispatch import _unwrap, _wrap
     from lucid._tensor.tensor import Tensor
     from lucid.compile._core.attention_probe import maybe_probe_for_graph
-    from lucid.compile._core.bn_runstats import model_has_cumulative_bn, model_has_tracking_bn
+    from lucid.compile._core.bn_runstats import model_has_cumulative_bn
     from lucid.compile._core.buffer_writes import held_writes, outside_writes, stood_as_the_call
     from lucid.compile._core.fallback import _fallback_notice
     from lucid.compile._core.signature import leaf_tensors, outside_feeds
@@ -359,7 +358,7 @@ def _compile_step_entry(
     # call made: the loss does not, it is made anew on every run.
     del traced, loss_t
     held = held_writes(tracer)
-    if held and found is not None and not model_has_tracking_bn(model):
+    if held and found is not None:
         return stood_as_the_call(tracer, _wrap(tracer.take_answer()[0]))
 
     writes = outside_writes(tracer, [_unwrap(t) for t in leaf_tensors(x_args, {})], held)

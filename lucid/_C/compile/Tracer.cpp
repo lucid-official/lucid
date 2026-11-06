@@ -16,6 +16,7 @@
 #include "Tracer.h"
 
 #include <algorithm>
+#include <set>
 
 #include "../backend/Dispatcher.h"
 #include "../core/StridedCopy.h"
@@ -251,6 +252,7 @@ void Tracer::on_buffer_update(const TensorImplPtr& buffer, const TensorImplPtr& 
     if (it != impl_to_id_.end()) {
         impl_to_id_[buffer.get()] = it->second;
         buffer_values_[buffer.get()] = value;
+        buffer_updates_.emplace_back(buffer, value);
         // The kernel leaves the buffer's bytes alone and hands the new values
         // out, so no hook sees this write; eager has updated every view of it.
         // The values come from the input: never the constant write an earlier
@@ -288,11 +290,14 @@ void Tracer::on_inplace_write(const TensorImplPtr& target, const TensorImplPtr& 
     }
     // Landing in bytes a tensor from outside reads: keep what puts them back.
     const auto made = [&](const TensorImpl* impl) { return made_here(impl); };
-    if (lands_outside(target))
+    const bool in_made = !lands_outside(target) && lands_in_made(target);
+    if (!in_made && lands_outside(target))
         keep_outside(target);
-    else if (lands_in_made(target) && !whole_member(target, made))
+    else if (in_made && !whole_member(target, made))
         keep_original(made_originals_, target);
-    feed_id(target);
+    const TensorId was = feed_id(target);
+    if (in_made)
+        prior_ids_[target.get()].push_back(was);
     impl_to_id_[target.get()] = written_id(value);
 }
 
@@ -356,6 +361,13 @@ Tracer::refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held) {
         // that never writes them again would empty the table for good.
         if (from_constants(lookup_id(it->first.get()), walk))
             continue;
+        // A write that only overwrites (``copy_``, ``fill_``, a setitem) lands
+        // the same values however often it runs: whoever holds the tensor holds
+        // them, an eager call that writes it again writes them again, and one
+        // that finds it built reads them.  Only a write that reads the tensor
+        // (``add_``, ``h.copy_(h * 2)``) counts its runs.
+        if (!reads_its_own_value(it->first, walk))
+            continue;
         mark_unsupported("a tensor the call made is still held after the call and was written "
                          "in place, so a compiled call would start it over every time");
         // ``fill_`` is the only write through repeated elements, and running it
@@ -391,12 +403,64 @@ bool pure_op(std::string_view name, bool no_inputs) {
 }
 }  // namespace
 
-bool Tracer::from_constants(TensorId root, ConstantWalk& walk) const {
-    if (walk.producer.empty()) {
-        for (const auto& op : graph_.ops)
-            for (const auto& out : op.outputs)
-                walk.producer.emplace(out.id, &op);
+void Tracer::index_producers(ConstantWalk& walk) const {
+    if (!walk.producer.empty())
+        return;
+    for (const auto& op : graph_.ops)
+        for (const auto& out : op.outputs)
+            walk.producer.emplace(out.id, &op);
+}
+
+namespace {
+// Whether operand ``i`` of op ``name`` passes into its result as a whole, so a
+// value read through it is the value kept, not one the op computes from:
+// every operand of a view, the base an overwrite writes into.
+bool keeps_operand(std::string_view name, std::size_t i) {
+    static const std::unordered_set<std::string_view> views{"reshape", "view",      "contiguous",
+                                                            "squeeze", "unsqueeze", "flatten"};
+    static const std::unordered_set<std::string_view> overwrites{"scatter_set", "masked_fill"};
+    return views.count(name) != 0 || (i == 0 && overwrites.count(name) != 0);
+}
+}  // namespace
+
+bool Tracer::reads_its_own_value(const TensorImplPtr& target, ConstantWalk& walk) const {
+    std::unordered_set<TensorId> prior;
+    const auto add = [&](const TensorImpl* impl) {
+        if (const auto p = prior_ids_.find(impl); p != prior_ids_.end())
+            prior.insert(p->second.begin(), p->second.end());
+    };
+    add(target.get());
+    for (const auto& member : target->live_views())
+        add(member.get());
+    index_producers(walk);
+    // (id, reached only through kept operands): an earlier value reached that
+    // way is the one an overwrite keeps; reached any other way, it is read.
+    std::vector<std::pair<TensorId, bool>> stack{{lookup_id(target.get()), true}};
+    std::set<std::pair<TensorId, bool>> visited;
+    while (!stack.empty()) {
+        const auto [id, kept] = stack.back();
+        stack.pop_back();
+        if (id < 0 || !visited.insert({id, kept}).second)
+            continue;
+        if (prior.count(id) != 0 && !kept)
+            return true;
+        const auto p = walk.producer.find(id);
+        if (prior.count(id) != 0 || p == walk.producer.end())
+            continue;
+        const OpNode& node = *p->second;
+        for (std::size_t i = 0; i < node.inputs.size(); ++i)
+            stack.emplace_back(node.inputs[i], kept && keeps_operand(node.name, i));
     }
+    return false;
+}
+
+void Tracer::apply_buffer_updates() const {
+    for (const auto& [buffer, value] : buffer_updates_)
+        buffer->copy_from(*value);
+}
+
+bool Tracer::from_constants(TensorId root, ConstantWalk& walk) const {
+    index_producers(walk);
     // Depth first, without recursion: a chain of a few hundred writes is a
     // chain of a few hundred ops.
     std::vector<TensorId> stack{root};
@@ -512,6 +576,7 @@ void Tracer::write_made(const TensorImplPtr& target, const TensorImplPtr& value)
             feed->second = before ? before : snapshot(target);
             note_constant_feed(it->second, *target);
         }
+        prior_ids_[target.get()].push_back(it->second);
     }
     impl_to_id_[target.get()] = written_id(value);
 }
