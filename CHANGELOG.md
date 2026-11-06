@@ -123,6 +123,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Compiled `linalg.eigh` and `eigvalsh` no longer return inf or NaN on entries past 1.7e38, and they read back an eigenvalue beside one up to 38 orders larger when the eigenvectors don't mix them.
 
+- cast after the move when .to() goes to the CPU (LCD-866)
+
 ### Performance
 
 - `_C.engine` (`Linear`, `ConvNd`, `ConvTransposeNd`, `LayerNorm`, `RMSNorm`, `BatchNormNd`, `GroupNorm`, `BatchNormEval`, `GlobalResponseNorm`, `Bilinear`): thread `needs_input_grad` (`grad_mask`) and `kGradReads` through fused CPU/Metal backward kernels and `apply_for_graph`, skipping unneeded `dx`/`dW`/`db` GEMMs, convolutions, reductions, and buffer allocations (LCD-697).

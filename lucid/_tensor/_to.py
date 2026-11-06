@@ -234,6 +234,42 @@ def _resolve_to_targets(
     return target_device, target_dtype, copy
 
 
+def _casts_after_the_move(
+    src_impl: _C_engine.TensorImpl, target_device: _C_engine.Device, target_dtype: _C_engine.Dtype
+) -> bool:
+    """Whether a cast that goes with this move runs after it.
+
+    The CPU holds every dtype and Metal does not (no float64, no complex128),
+    so a cast that goes with a move to the CPU runs after it: casting first
+    asked Metal for a dtype it cannot hold.  A move to Metal still casts first,
+    so Metal never receives a dtype it cannot hold either.
+    """
+    if target_dtype == src_impl.dtype or target_device == src_impl.device:
+        return False
+    return target_device == _C_engine.Device.CPU
+
+
+def _move_impl(
+    impl: _C_engine.TensorImpl,
+    target_device: _C_engine.Device,
+    cast_to: _C_engine.Dtype | None,
+    rg: bool,
+) -> _C_engine.TensorImpl:
+    """Move ``impl`` to ``target_device``, casting to ``cast_to`` after the move."""
+    if rg and impl.requires_grad:
+        # Inside a graph the move is differentiable: the gradient
+        # goes back to the source device.
+        moved = _C_engine.to_device(impl, target_device)
+        return moved if cast_to is None else _C_engine.astype(moved, cast_to)
+    if impl.is_metal_shared:
+        impl = _C_engine.transfer_storage(impl, target_device)
+    else:
+        impl = impl.transfer_to_device(target_device, rg)
+    if cast_to is not None:
+        impl = _C_engine.astype(impl, cast_to)
+    return impl if impl.requires_grad == rg else _impl_with_grad(impl, rg)
+
+
 def _transfer_impl(
     src_impl: _C_engine.TensorImpl, target_device: _C_engine.Device, target_dtype: _C_engine.Dtype
 ) -> Tensor:
@@ -246,9 +282,11 @@ def _transfer_impl(
     # copy is needed only when no cast follows; taking it first copied
     # every element twice (a third of ``.long()``).
     relabel = src_impl.is_metal_shared and target_dtype == src_impl.dtype
-    casts = target_dtype != src_impl.dtype
-    impl = src_impl if relabel or casts else _C_engine.contiguous(src_impl)
-    if target_dtype != impl.dtype:
+    casts_first = target_dtype != src_impl.dtype
+    cast_after = _casts_after_the_move(src_impl, target_device, target_dtype)
+    casts_first = casts_first and not cast_after
+    impl = src_impl if relabel or casts_first else _C_engine.contiguous(src_impl)
+    if casts_first:
         impl = _C_engine.astype(impl, target_dtype)
 
     # The result keeps the source's flag — except under ``no_grad``, where
@@ -259,17 +297,8 @@ def _transfer_impl(
     rg = src_impl.requires_grad and _C_engine.grad_enabled()
     rg = rg and not _promotion.is_integral(target_dtype)
     if target_device != impl.device:
-        if rg and impl.requires_grad:
-            # Inside a graph the move is differentiable: the gradient
-            # goes back to the source device.
-            return _wrap(_C_engine.to_device(impl, target_device))
-        if impl.is_metal_shared:
-            impl = _C_engine.transfer_storage(impl, target_device)
-        else:
-            impl = impl.transfer_to_device(target_device, rg)
-        if impl.requires_grad != rg:
-            impl = _impl_with_grad(impl, rg)
-    elif impl.requires_grad != rg:
+        return _wrap(_move_impl(impl, target_device, target_dtype if cast_after else None, rg))
+    if impl.requires_grad != rg:
         impl = _impl_with_grad(impl, rg)
     return _wrap(impl)
 
