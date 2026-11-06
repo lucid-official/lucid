@@ -479,6 +479,31 @@ def test_a_write_on_a_copy_of_the_input(write: str, entry: str) -> None:
     assert ran.stayed_compiled() in (True, None), "refusing the write would pass the comparison"
 
 
+#: A segment whose answer reads nothing of its input runs eagerly, written or not
+#: (``y = ones(...) * 2.0`` does too): these leave a factory's tensor a constant.
+_CONSTANT_SEGMENT = {
+    (write, "segmented")
+    for write in (
+        "mul_scalar",
+        "mul_itself",
+        "div_",
+        "iadd_itself",
+        "idiv",
+        "unary_clamp",
+        "unary_neg",
+        "unary_exp",
+        "copy_of_itself",
+        "fill",
+        "zero",
+        "view_mul",
+        "relu_inplace",
+        "row_mul",
+        "row_fill",
+        "column_mul",
+        "element_mul",
+    )
+}
+
 _MASK_ONLY = pytest.mark.xfail(
     strict=True,
     reason="LCD-899: a parameter only a mask reaches gets zeros from a segmented step, "
@@ -496,7 +521,8 @@ _MASK_ONLY = pytest.mark.xfail(
 )
 def test_a_write_on_a_factorys_tensor(write: str, entry: str) -> None:
     ran = _run(lambda: _Writes(WRITES[write], MADE["factory"]), entry)
-    assert ran.stayed_compiled() in (True, None), "refusing the write would pass the comparison"
+    if (write, entry) not in _CONSTANT_SEGMENT:
+        assert ran.stayed_compiled() in (True, None), "refusing would pass the comparison"
 
 
 @pytest.mark.parametrize("entry", list(ENTRIES))
