@@ -35,10 +35,12 @@ SUITES: Final = ("lucid/test/unit/compile", "lucid/test/unit/cost")
 # What the suites read: an edit there that is not committed is not what a record names.
 _CLEAN: Final = ("lucid", "pyproject.toml", *NATIVE)
 # A selection from outside the repository: a --deselect or a plugin would pass what it hid.
-_SELECTION_ENV: Final = ("PYTEST_ADDOPTS", "PYTEST_PLUGINS")
-# Measured on the Studio, 2026-11-06: unit/compile skips 14 of 6221 (0.2 %, 13 of them
-# xfail), unit/cost 0 of 42.  A run under memory pressure (lucid/test/conftest.py's
-# governor) skips by the hundred; 5 % is 20 times what a sound run skips.
+# Autoload off drops the benchmark plugin a compile test's fixture needs: a red run then
+# overwrites a green record (scripts/ci_local.sh sets it).
+_SELECTION_ENV: Final = ("PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTEST_DISABLE_PLUGIN_AUTOLOAD")
+# Measured on a loaded Studio, 2026-11-06: unit/compile skips 13 of 7497 (0.17 %, xfails
+# included), unit/cost 0 of 42.  A run under memory pressure (lucid/test/conftest.py's
+# governor) skips by the hundred; 5 % is some 30 times what a sound run skips.
 _MOST_SKIPPED: Final = 0.05
 _COMMAND: Final = ".venv/bin/python3 -m tools.rules attest"
 _PROBE: Final = (
@@ -76,7 +78,11 @@ class SuiteRun:
         if self.tests - self.skipped <= 0:
             return f"{self.path} ran no test ({self.tests} selected, {self.skipped} skipped)"
         if self.skipped > _MOST_SKIPPED * self.tests:
-            return f"{self.path} skipped {self.skipped} of {self.tests}, over {_MOST_SKIPPED:.0%}"
+            return (
+                f"{self.path} skipped {self.skipped} of {self.tests}, over {_MOST_SKIPPED:.0%}: "
+                "read the memory governor's summary in its output, and run it again when "
+                "memory is free"
+            )
         return None
 
 

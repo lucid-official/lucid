@@ -44,7 +44,7 @@ with `gap` is enforced only partly.
 | `audit` section | exit 1 | exit 2 |
 |---|---|---|
 | controls | a check stayed green on its seed, went red for another reason, or left the seed outside its trigger; a test node failed | a control could not run; a check is red on the near miss; a test node did not run |
-| wiring | a hook level's real commit or push did not run the tool, or went through with it failing; a CI level does not name the tool; a `pending` level is wired now; a trigger or scope glob matches no file | |
+| wiring | a hook level's real commit or push did not run the tool, or went through with it failing; a CI level does not name the tool; a `pending` level is wired now; a trigger or scope glob matches no file; a check's trigger leaves out a file in the scope of a rule that claims it | |
 | allowlists | a table's size differs from its `ceiling` | a table could not be read |
 | budgets | a ceiling is passed; the `pending` count fell and its ceiling did not | a budget's paths match nothing |
 
@@ -60,6 +60,12 @@ with `gap` is enforced only partly.
 - A test node is proven to run and pass, not to contain an assertion. An empty body
   passes.
 - `pending = "LCD-n"` is checked for shape; the tracker is out of reach.
+- A trigger is held to its rule's scope over what `git ls-files -co --exclude-standard`
+  lists, so every checkout of a tree gets one answer. A copy with no git is walked as it
+  is, ignored files and all.
+
+The whole audit took 68 s on a loaded Studio and 92 s on an M1 Pro (2026-11-06), most of
+it the C++ records' controls: the real-git push case alone is about 15 s.
 
 **Adding a rule.** Write the record. Each check it claims needs a control: `seed`
 (the tool and `tree` in a scratch directory; the `clean` near miss at `path` must
@@ -82,7 +88,8 @@ check still shows its `note: ` lines at push, so an excuse it took is printed.
 **`E-ABI-BUMP`**, `tools/check_abi_bump.py`. It reads the two ends of the range, not the
 diff lines, so a reflow, a comment, a renamed parameter or a type moved between headers
 is no move. A move is a data member or virtual of any class or struct in a header (order
-and `alignas` included), any member of a `LUCID_API` type, a free `LUCID_API`
+and a member's `alignas` included; a specifier on the struct's own head is not read), any
+member of a `LUCID_API` type, a free `LUCID_API`
 declaration, a `using` alias that comes to mean another type, a name a binding gives
 Python, or a name in `engine.pyi`. The range passes when `LUCID_ABI_VERSION` rose between
 its ends, or when a commit at or after each move says why it is none, as a trailer:
@@ -111,9 +118,11 @@ minutes, so the run and the check are apart:
 `attest` refuses (exit 2) when `lucid/`, `pyproject.toml`, `setup.py` or
 `tools/fetch_mlx.py` holds anything uncommitted; when `tools/agent_ws.py` calls the engine
 stale; when the checkout's python imports lucid or its engine from anywhere else; when a
-suite ran no test, every one skipped, or skipped more than 5 % (a sound run skips 0.2 %);
+suite ran no test, every one skipped, or skipped more than 5 % (a sound run skips 0.17 %;
+the memory governor's summary in the output says why, so run it again when memory is free);
 and when HEAD or what the suites read moved during the run. It runs each suite in its own
-process, without `PYTEST_ADDOPTS` or `PYTEST_PLUGINS` (it says when it drops one), and
+process, without `PYTEST_ADDOPTS`, `PYTEST_PLUGINS` or `PYTEST_DISABLE_PLUGIN_AUTOLOAD`
+(it says when it drops one), and
 writes `<git common dir>/lucid-attest/<key>.json`: counts, commit, host, time. A failing
 run is recorded too, and exits 1. The key digests what the engine is built from:
 `HEAD:lucid/_C`, `setup.py`, `tools/fetch_mlx.py` and `[tool.lucid.mlx]`. So one record

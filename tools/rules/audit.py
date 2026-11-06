@@ -11,6 +11,7 @@ from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
+from pathlib import PurePosixPath
 from typing import Final, override
 
 from tools.rules.checks import WORKERS, Check, PytestCheck
@@ -150,16 +151,25 @@ class Audit:
                 if not any(path.is_file() for path in self.registry.root.glob(glob)):
                     yield Finding(owner, Exit.VIOLATION, f"{glob} matches no file")
 
+    def _tree_files(self) -> list[str]:
+        """What git would commit, so every checkout of a tree gets one answer; else what is there."""
+        ws = replace(self.registry.workspace, isolated=True)
+        listed = ws.spawn(["git", "ls-files", "-co", "--exclude-standard", "-z"])
+        if listed.returncode == 0:
+            return [path for path in listed.stdout.split("\0") if path]
+        return [p.relative_to(ws.root).as_posix() for p in ws.root.rglob("*") if p.is_file()]
+
     def _uncovered(self) -> Iterator[Finding]:
         """A trigger narrower than its rule's scope skips a change the rule is about."""
-        root, checks = self.registry.root, self.registry.checks
+        checks = self.registry.checks
+        tree: list[str] | None = None
         for rule in self._rules:
             claimed = [checks[n] for n in dict.fromkeys(e.check for e in rule.enforce)]
             narrow = [c for c in claimed if c.trigger and not set(rule.scope) <= set(c.trigger)]
             if not narrow:  # a trigger that lists the scope's globs covers it: no walk
                 continue
-            files = [p.relative_to(root).as_posix() for g in rule.scope for p in root.glob(g)]
-            files = [f for f in files if (root / f).is_file()]
+            tree = self._tree_files() if tree is None else tree
+            files = [f for f in tree if any(PurePosixPath(f).full_match(g) for g in rule.scope)]
             for check in narrow:
                 left = [f for f in files if not check.relevant([f])]
                 if left:

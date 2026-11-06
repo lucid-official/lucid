@@ -1941,6 +1941,9 @@ _C_engine = types.SimpleNamespace(
 _SO = "lucid/_C/engine.cpython-314-darwin.so"
 
 
+_PROJECT = '[project]\nname = "thing"\nversion = "1"\n\n[tool.lucid.mlx]\nversion = "0.1"\n'
+
+
 def _attest_repo(s: Scratch, suite: str = "def test_ok():\n    pass\n") -> None:
     """A checkout whose engine is built from its C++, and whose suites pass."""
     site = Path(pytest.__file__).resolve().parents[1]
@@ -1953,6 +1956,9 @@ def _attest_repo(s: Scratch, suite: str = "def test_ok():\n    pass\n") -> None:
     s.write("lucid/__init__.py", _FAKE_ENGINE.format(abi=7, where=str(s.root / "lucid/_C")))
     s.write("lucid/_C/version.h", _ABI.format(7))
     s.write("lucid/_C/core/Thing.cpp", "int thing() { return 1; }\n")
+    for native in attest.NATIVE:  # what builds the engine besides its sources
+        s.write(native, "built = True\n")
+    s.write("pyproject.toml", f"{(s.root / 'pyproject.toml').read_text()}\n{_PROJECT}")
     for path in attest.SUITES:
         s.write(f"{path}/test_suite.py", suite)
     s.commit_all("chore: base")
@@ -1986,12 +1992,16 @@ def test_attest_records_a_pass_that_push_then_finds(scratch: Scratch) -> None:
     linked = scratch.root.parent / "linked"
     scratch.git("worktree", "add", "-q", str(linked))
     assert _rules_in(Scratch(linked, scratch.env), "attest", "--verify").returncode == 0
-    # The MLX pin moves: the engine is built from another library, and the key says so.
-    pinned = (scratch.root / "pyproject.toml").read_text() + '\n[tool.lucid.mlx]\nversion = "9"\n'
-    scratch.write("pyproject.toml", pinned)
-    scratch.commit_all("build: another MLX")
-    assert _rules_in(scratch, "attest", "--verify").returncode == 1
-    scratch.git("reset", "-q", "--hard", "HEAD~1")
+    # What builds the engine moves (the MLX pin, setup.py): the key follows; a version does not.
+    for path, old, new, code in (
+        ("pyproject.toml", 'version = "0.1"', 'version = "9"', 1),
+        ("setup.py", "built = True", "built = False", 1),
+        ("pyproject.toml", 'version = "1"', 'version = "2"', 0),
+    ):
+        _swap_in(scratch, path, old, new)
+        scratch.commit_all(f"build: {path} moves")
+        assert _rules_in(scratch, "attest", "--verify").returncode == code, (path, new)
+        scratch.git("reset", "-q", "--hard", "HEAD~1")
     assert _rules_in(scratch, "attest", "--verify").returncode == 0
     # The C++ moves: no record names its key, and the refusal says what to run.
     scratch.write("lucid/_C/core/Thing.cpp", "int thing() { return 2; }\n")
@@ -2030,6 +2040,18 @@ def _dirty_pyproject(s: Scratch) -> None:
     s.write("pyproject.toml", (s.root / "pyproject.toml").read_text() + "\n# an edit\n")
 
 
+def _dirty_setup(s: Scratch) -> None:
+    s.write("setup.py", "built = False\n")
+
+
+def _committed(path: str, old: str, new: str) -> Callable[[Scratch], None]:
+    def spoil(s: Scratch) -> None:
+        _swap_in(s, path, old, new)
+        s.commit_all(f"build: {path} moves")
+
+    return spoil
+
+
 def _suite(text: str, *, both: bool = False) -> Callable[[Scratch], None]:
     """The compile suite (or both) as ``text``, committed: what the run then finds."""
 
@@ -2050,22 +2072,34 @@ _RUN = 'subprocess.run(["git", *{}], check=True)'
 _CPP_COMMIT = f'pathlib.Path("lucid/_C/core/Thing.cpp").write_text("int t;"); {_RUN.format(["commit", "-qam", "x"])}'
 _PY_COMMIT = f'pathlib.Path("lucid/late.py").write_text("x = 1"); {_RUN.format(["add", "lucid/late.py"])}; {_RUN.format(["commit", "-qm", "x"])}'
 _EDIT = 'pathlib.Path("lucid/late.py").write_text("x = 1")'
+_UNSELECTED = (
+    "import os\ndef test_env():\n"
+    "    assert not {'PYTEST_PLUGINS', 'PYTEST_DISABLE_PLUGIN_AUTOLOAD'} & set(os.environ)\n"
+)
+_VERIFY = ("attest", "--verify")
 
 
 @dataclass(frozen=True)
 class Attempt:
-    """An attest run in a checkout spoiled one way, and how it must end."""
+    """An attest run in a checkout spoiled one way, and how it must end.
+
+    ``first``: a passing attest before the spoil, by the same code, so that ``args`` (a
+    lookup) answers for the key that code computes.
+    """
 
     spoil: Callable[[Scratch], None]
     code: int
     said: str
     env: dict[str, str] = field(default_factory=dict)
+    args: tuple[str, ...] = ("attest",)
+    first: bool = False
 
 
 _ATTEMPTS = {
     "dirty": Attempt(_dirty_cpp, 2, "not committed"),
     "untracked": Attempt(_untracked, 2, "not committed"),
     "dirty-pyproject": Attempt(_dirty_pyproject, 2, "not committed"),
+    "dirty-setup": Attempt(_dirty_setup, 2, "not committed"),
     "stale-engine": Attempt(_stale, 2, "missing or older than lucid/_C"),
     "no-engine": Attempt(_no_engine, 2, "missing or older than lucid/_C"),
     "engine-elsewhere": Attempt(_engine_elsewhere, 2, "and its engine from /elsewhere/lucid/_C"),
@@ -2082,29 +2116,68 @@ _ATTEMPTS = {
         "FAILED on",
         {"PYTEST_ADDOPTS": "--deselect=lucid/test/unit/compile/test_suite.py::test_bad"},
     ),
+    # Autoload off loses the benchmark plugin a compile test's fixture needs.
+    "plugins-env": Attempt(
+        _suite(_UNSELECTED),
+        0,
+        "attest ignores PYTEST_DISABLE_PLUGIN_AUTOLOAD=",
+        {"PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1", "PYTEST_PLUGINS": ""},
+    ),
+    # The key reads what builds the engine, and only that.
+    "setup-moved": Attempt(
+        _committed("setup.py", "built = True", "built = False"),
+        1,
+        "has no record",
+        args=_VERIFY,
+        first=True,
+    ),
+    "version-moved": Attempt(
+        _committed("pyproject.toml", 'version = "1"', 'version = "2"'),
+        0,
+        "attested: key",
+        args=_VERIFY,
+        first=True,
+    ),
 }
 _REFUSED = [name for name, attempt in _ATTEMPTS.items() if attempt.code == 2]
 
 
 def _attempt(s: Scratch, name: str, home: Path = REPO) -> subprocess.CompletedProcess[str]:
+    attempt = _ATTEMPTS[name]
     _attest_repo(s)
-    _ATTEMPTS[name].spoil(s)
-    return _rules_in(s, "attest", home=home, **_ATTEMPTS[name].env)
+    if attempt.first:
+        _rules_in(s, "attest", home=home)
+    attempt.spoil(s)
+    return _rules_in(s, *attempt.args, home=home, **attempt.env)
+
+
+def _ended_as_said(done: subprocess.CompletedProcess[str], name: str) -> bool:
+    attempt = _ATTEMPTS[name]
+    return done.returncode == attempt.code and attempt.said in done.stdout + done.stderr
 
 
 @pytest.mark.parametrize("name", _REFUSED)
 def test_attest_refuses_what_it_cannot_vouch_for(scratch: Scratch, name: str) -> None:
     done = _attempt(scratch, name)
-    said = _ATTEMPTS[name].said
-    assert done.returncode == 2 and said in done.stderr, done.stdout + done.stderr
+    assert _ended_as_said(done, name) and _ATTEMPTS[name].said in done.stderr, (
+        done.stdout + done.stderr
+    )
     assert not (scratch.root / ".git/lucid-attest").exists()
 
 
-def test_attest_runs_the_suites_as_committed(scratch: Scratch) -> None:
-    done = _attempt(scratch, "deselected")
-    assert done.returncode == 1 and "FAILED on" in done.stdout, done.stdout + done.stderr
-    assert "attest ignores PYTEST_ADDOPTS=" in done.stdout
-    assert json.loads(_record_of(scratch).read_text())["suites"][0]["failures"] == 1
+@pytest.mark.parametrize("name", ["deselected", "plugins-env"])
+def test_attest_runs_the_suites_as_committed(scratch: Scratch, name: str) -> None:
+    done = _attempt(scratch, name)
+    assert _ended_as_said(done, name), done.stdout + done.stderr
+    assert all(f"attest ignores {var}=" in done.stdout for var in _ATTEMPTS[name].env)
+    record = json.loads(_record_of(scratch).read_text())
+    assert record["suites"][0]["failures"] == int(name == "deselected")
+
+
+@pytest.mark.parametrize("name", ["setup-moved", "version-moved"])
+def test_attest_keys_what_builds_the_engine(scratch: Scratch, name: str) -> None:
+    done = _attempt(scratch, name)
+    assert _ended_as_said(done, name), done.stdout + done.stderr
 
 
 # (id, the line in attest.py, its replacement, the attempt that must now end otherwise)
@@ -2140,6 +2213,21 @@ _ATTEST_MUTANTS = [
         '(engine_key(ws), _dirty(ws)) != (key, "")',
         "head-moved-mid-run",
     ),
+    (
+        "K4-native-inputs-unkeyed",
+        'blobs += [ws.spawn(["git", "rev-parse", "-q", "--verify", f"HEAD:{p}"]).stdout for p in NATIVE]',
+        "blobs += []",
+        "setup-moved",
+    ),
+    ("K6-whole-pyproject-keyed", "json.dumps(pin, sort_keys=True)", "project", "version-moved"),
+    (
+        "K7-native-inputs-not-clean",
+        '_CLEAN: Final = ("lucid", "pyproject.toml", *NATIVE)',
+        '_CLEAN: Final = ("lucid", "pyproject.toml")',
+        "dirty-setup",
+    ),
+    ("autoload-passed-on", ', "PYTEST_DISABLE_PLUGIN_AUTOLOAD")', ")", "plugins-env"),
+    ("plugins-passed-on", '"PYTEST_PLUGINS", ', "", "plugins-env"),
 ]
 
 
@@ -2158,10 +2246,9 @@ def test_a_line_broken_in_attest_is_seen(
     assert line in source.read_text(), line
     source.write_text(source.read_text().replace(line, new, 1))
     done = _attempt(scratch, name, home=home)
-    expected = _ATTEMPTS[name]
     out = done.stdout + done.stderr
     assert "Traceback" not in out, out  # a crash is no proof that the line is needed
-    assert not (done.returncode == expected.code and expected.said in out), f"survived: {line}"
+    assert not _ended_as_said(done, name), f"survived: {line}"
 
 
 def test_attest_records_a_failure_and_push_refuses_it(scratch: Scratch) -> None:

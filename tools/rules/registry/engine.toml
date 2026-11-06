@@ -128,17 +128,22 @@ It reads headers as text, not as a compiler does.  Members a macro declares are 
 sides of an #if count, and #pragma pack is a directive it drops.  A function-pointer member reads \
 as a function.  A new class that is not LUCID_API, an enumerator, a default argument, an inline \
 body and a static constexpr member are no move, so neither is the bound of `float x_[kN]` when \
-kN changes.  A `using X = T` that comes to mean another T is a move; a template alias and a \
-typedef are not read.  A `>>` in a default argument folds the parameter list, so a later \
-parameter's type can change unseen.  Bindings and engine.pyi are compared by name: an argument \
-a binding gains passes, and so do py::setattr and a name a registry binds at run time unless \
-engine.pyi was regenerated.  On 2026-11-06 the headers hold no #pragma pack, typedef, \
-py::setattr or shift in a default argument.  A reason is taken as written.  Push only: no CI \
-level until LCD-841-B5."""
+kN changes.  A specifier on a struct's head is no part of what it reads, so `struct \
+alignas(16)` becoming `alignas(32)`, or an `__attribute__((packed))` there going, is unseen; \
+an alignas on a member is seen.  A `using X = T` that comes to mean another T is a move; a \
+template alias and a typedef are not read.  A `>>` or a `<` comparison in a default argument \
+folds the parameter list, so a later parameter's type can change unseen.  Bindings and \
+engine.pyi are compared by name: an argument a binding gains passes, and so do py::setattr \
+and a name a registry binds at run time unless engine.pyi was regenerated.  On 2026-11-06 \
+the headers hold none of these forms: no #pragma pack, packed or alignas struct, typedef, \
+py::setattr, or comparison or shift in a default argument.  A reason is taken as written.  \
+Push only: no CI level until LCD-841-B5."""
 enforce = [{ level = "push", check = "abi-bump" }]
 
 # The last node is the record's own run line, in a real push: a control that only runs the
-# tool would stay green with `{since}` gone or the trigger narrowed.
+# tool would stay green with `{since}` gone or the trigger narrowed.  It costs about 15 s;
+# with it the whole audit took 68 s on a loaded Studio and 92 s on an M1 Pro (2026-11-06),
+# where R1 aimed at 30 s.
 [[rule.control]]
 kind = "pytest"
 check = ["abi-bump"]
@@ -181,5 +186,6 @@ nodes = [
     "tools/test_rules.py::test_attest_records_a_failure_and_push_refuses_it",
     "tools/test_rules.py::test_attest_a_record_that_does_not_read_is_none",
     "tools/test_rules.py::test_attest_runs_the_suites_as_committed",
+    "tools/test_rules.py::test_attest_keys_what_builds_the_engine",
     "tools/test_rules.py::test_a_cpp_push_is_judged_through_real_git",
 ]
