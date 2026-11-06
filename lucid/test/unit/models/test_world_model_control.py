@@ -11,9 +11,23 @@ collect with the policy being learned, and check the return beats random.
 
 **What this does not establish.** The target here is fixed, so a policy
 that ignores its observation entirely and pushes in one direction already
-scores 15.78 against random's 5.77 — measured, and pinned below. Passing
-these therefore shows the agent found a good *constant* action, not that
-it learned to read a state and respond to it.
+scores 15.78 against random's expected 6.21 — measured, and pinned below.
+Passing these therefore shows the agent found a good *constant* action,
+not that it learned to read a state and respond to it.
+
+**Every bar is a property of the task, not of one draw** (LCD-872). The
+tests used to compare against a five-episode random draw and a reward band
+from one more random episode, both taken after seeding. Those draws differ
+per device for the same seed — Metal keys MLX's sampler from the generator
+where the CPU fills element by element — so the bars moved with the device
+while the learning did not: Metal arithmetic fed the CPU's draws matches
+the CPU run to about 1e-7 at the first step and to five decimals after
+sixty, on every seed measured. Over 20 seeds the old DreamerV3 and PlaNet
+bars alone failed 8 CPU seeds and 11 Metal seeds in one test or another,
+and seed 0 happened to be one of the Metal ones. The bars now come from the
+expectation (``_RANDOM_RETURN``), the rewards each model trained on
+(``_reward_range``) and a shifted-reward control, so a seed's draws change
+the run but never the bar it is held to.
 
 State-dependent control **is** achieved, but not here and not this
 cheaply. On a variant with the target moved each episode, where no
@@ -44,14 +58,6 @@ from lucid.test._fixtures.point_mass import PointMass
 from lucid.utils.rollout import LatentPolicy, RandomPolicy, SequenceReplay, StepResult, rollout
 
 pytestmark = pytest.mark.slow
-
-#: Under a Metal default three of these short runs land short of the thresholds
-#: they were tuned at, with the same numbers on every run and on both machines.
-_LCD_872 = pytest.mark.xfail(
-    lucid.get_default_device() == "metal",
-    strict=True,
-    reason="LCD-872: deterministic Metal learning shortfall in a short control run",
-)
 
 
 def _clip(model: object) -> None:
@@ -87,6 +93,17 @@ _TINY = dict(
 TRAIN_STEPS = 120
 SEED_EPISODES = 5
 BATCH, LENGTH = 8, 15
+
+#: What a uniform random policy is expected to score on ``PointMass(horizon=20)``
+#: — 6.2113 +- 0.0030 over 400,000 episodes of the same dynamics, and pinned
+#: against the fixture itself in :class:`TestWhatTheThresholdActuallyRequires`.
+#: Every "beats random" bar here is scaled from this rather than from a
+#: five-episode draw: that draw has a standard deviation of 0.84, its largest
+#: value over 200 Metal seeds (9.92) fell on seed 0, and its draws differ per
+#: device, so the bar itself moved with the device (LCD-872).
+_RANDOM_RETURN = 6.21
+#: One random episode's standard deviation on the same task, measured with it.
+_RANDOM_RETURN_SD = 1.87
 
 
 def _policy(model: object, noise: float = 0.0) -> LatentPolicy:
@@ -144,9 +161,8 @@ class TestPointMassEnvironment:
     def test_greedy_beats_random_by_a_wide_margin(self) -> None:
         """If it did not, the learning test could not distinguish anything."""
         env = PointMass()
-        random_return = _average_return(env, RandomPolicy(2), episodes=5)
         greedy_return = _average_return(env, _Greedy(env), episodes=2)
-        assert greedy_return > 2.5 * random_return
+        assert greedy_return > 2.5 * _RANDOM_RETURN
 
     def test_reward_is_dense(self) -> None:
         """A sparse reward would measure luck over a run this short."""
@@ -185,14 +201,29 @@ class TestWhatTheThresholdActuallyRequires:
         def __call__(self, observation: lucid.Tensor) -> lucid.Tensor:
             return self.value
 
+    def test_the_random_return_is_what_the_bars_are_scaled_from(self) -> None:
+        """Pins ``_RANDOM_RETURN`` against the fixture, to four standard errors.
+
+        Drawn on the CPU from its own seed: the estimate is a property of
+        the task, and a CPU frame costs a seventh of a Metal one.
+        """
+        lucid.manual_seed(0)
+        env = PointMass(horizon=20, device="cpu")
+        episodes = 400
+        estimate = _average_return(env, RandomPolicy(2), episodes=episodes)
+        tolerance = 4.0 * _RANDOM_RETURN_SD / math.sqrt(episodes)
+        assert abs(estimate - _RANDOM_RETURN) < tolerance, (
+            f"random scores {estimate:.3f} over {episodes} episodes, not "
+            f"{_RANDOM_RETURN} +- {tolerance:.2f} — the fixture changed"
+        )
+
     def test_a_constant_action_already_clears_the_bar(self) -> None:
         env = PointMass(horizon=20)
-        baseline = _average_return(env, RandomPolicy(2), episodes=5)
         best = max(
             _average_return(env, self._Constant(v), episodes=1)
             for v in ([1.0, -1.0], [1.0, 0.0], [0.0, -1.0], [0.7, -0.7])
         )
-        assert best > 1.3 * baseline, (
+        assert best > 1.3 * _RANDOM_RETURN, (
             "if this ever fails the tests below became stronger than "
             "documented, and the module docstring needs revisiting"
         )
@@ -205,42 +236,45 @@ class TestWhatTheThresholdActuallyRequires:
         assert greedy > best_constant
 
 
+def _train_dreamer(seed: int = 0) -> list[float]:
+    """Dreamer on the fixed target; the greedy evaluator's return every 40 steps."""
+    lucid.manual_seed(seed)
+    env = PointMass(horizon=20)
+    model = M.create_model("dreamer_world_model", **_TINY)
+    optimisers = [
+        optim.Adam(model.world_parameters(), lr=6e-4),
+        optim.Adam(model.value_parameters(), lr=8e-5),
+        optim.Adam(model.actor_parameters(), lr=8e-5),
+    ]
+
+    replay = SequenceReplay(capacity=20_000)
+    for _ in range(SEED_EPISODES):
+        replay.add(rollout(env, RandomPolicy(2))[0])
+
+    collector = _policy(model.dreamer, noise=0.3)
+    evaluator = _policy(model.dreamer)
+
+    curve = []
+    for step in range(TRAIN_STEPS):
+        batch = replay.sample(BATCH, LENGTH)
+        out = model(batch.observations, batch.actions, batch.rewards)
+        model.backward(out)
+        _clip(model)
+        for opt in optimisers:
+            opt.step()
+
+        if (step + 1) % 40 == 0:
+            replay.add(rollout(env, collector)[0])
+            curve.append(_average_return(env, evaluator))
+    return curve
+
+
 class TestDreamerLearnsControl:
-    @_LCD_872
     def test_return_improves_over_random(self) -> None:
-        lucid.manual_seed(0)
-        env = PointMass(horizon=20)
-        model = M.create_model("dreamer_world_model", **_TINY)
-        optimisers = [
-            optim.Adam(model.world_parameters(), lr=6e-4),
-            optim.Adam(model.value_parameters(), lr=8e-5),
-            optim.Adam(model.actor_parameters(), lr=8e-5),
-        ]
-
-        replay = SequenceReplay(capacity=20_000)
-        for _ in range(SEED_EPISODES):
-            replay.add(rollout(env, RandomPolicy(2))[0])
-        baseline = _average_return(env, RandomPolicy(2), episodes=5)
-
-        collector = _policy(model.dreamer, noise=0.3)
-        evaluator = _policy(model.dreamer)
-
-        curve = []
-        for step in range(TRAIN_STEPS):
-            batch = replay.sample(BATCH, LENGTH)
-            out = model(batch.observations, batch.actions, batch.rewards)
-            model.backward(out)
-            _clip(model)
-            for opt in optimisers:
-                opt.step()
-
-            if (step + 1) % 40 == 0:
-                replay.add(rollout(env, collector)[0])
-                curve.append(_average_return(env, evaluator))
-
+        curve = _train_dreamer()
         best = max(curve)
-        assert best > 1.3 * baseline, (
-            f"policy did not learn: best {best:.2f} vs random {baseline:.2f}, "
+        assert best > 1.3 * _RANDOM_RETURN, (
+            f"policy did not learn: best {best:.2f} vs random {_RANDOM_RETURN}, "
             f"curve {[round(c, 2) for c in curve]}"
         )
         assert curve[-1] > curve[0], f"return did not trend upward: {curve}"
@@ -337,6 +371,51 @@ def _v2_policy(model: object, noise: float = 0.0) -> LatentPolicy:
     )
 
 
+def _train_dreamer_v2(seed: int = 0) -> tuple[list[float], float, float]:
+    """DreamerV2 on the fixed target: the return curve, first and last policy entropy."""
+    lucid.manual_seed(seed)
+    env = PointMass(horizon=20)
+    model = M.create_model("dreamer_v2_world_model", **_TINY_V2)
+    optimisers = [
+        optim.Adam(model.world_parameters(), lr=6e-4),
+        optim.Adam(model.value_parameters(), lr=2e-4),
+        # 8e-4, not the released 8e-5. DreamerV2's policy starts at
+        # 99% of the maximum entropy the interval allows — std is
+        # 2*sigmoid(0) + min_std ~= 1.1, which on [-1, 1] is nearly
+        # uniform, so the mean barely moves the sample. Sharpening it
+        # is most of the learning, and the published rate is set for
+        # millions of steps rather than the sixty here. Measured: at
+        # 8e-5 the policy is still uniform after 120 steps and scores
+        # 0.70x random; at 8e-4 it reaches 2.9x by step 50.
+        optim.Adam(model.actor_parameters(), lr=8e-4),
+    ]
+
+    replay = SequenceReplay(capacity=20_000)
+    for _ in range(SEED_EPISODES):
+        replay.add(rollout(env, RandomPolicy(2))[0])
+
+    inner = model.dreamer_v2
+    collector = _v2_policy(inner, noise=0.3)
+    evaluator = _v2_policy(inner)
+
+    curve = []
+    entropies = []
+    for step in range(60):
+        batch = replay.sample(BATCH, LENGTH)
+        out = model(batch.observations, batch.actions, batch.rewards)
+        assert out.behavior is not None
+        entropies.append(float(out.behavior.entropy.item()))
+        model.backward(out)
+        _clip(model)
+        for opt in optimisers:
+            opt.step()
+        model.update_slow_target()
+        if (step + 1) % 30 == 0:
+            replay.add(rollout(env, collector)[0])
+            curve.append(_average_return(env, evaluator))
+    return curve, entropies[0], entropies[-1]
+
+
 class TestDreamerV2LearnsControl:
     """The same question asked of the discrete latent.
 
@@ -347,53 +426,10 @@ class TestDreamerV2LearnsControl:
     """
 
     def test_return_improves_over_random(self) -> None:
-        lucid.manual_seed(0)
-        env = PointMass(horizon=20)
-        model = M.create_model("dreamer_v2_world_model", **_TINY_V2)
-        optimisers = [
-            optim.Adam(model.world_parameters(), lr=6e-4),
-            optim.Adam(model.value_parameters(), lr=2e-4),
-            # 8e-4, not the released 8e-5. DreamerV2's policy starts at
-            # 99% of the maximum entropy the interval allows — std is
-            # 2*sigmoid(0) + min_std ~= 1.1, which on [-1, 1] is nearly
-            # uniform, so the mean barely moves the sample. Sharpening it
-            # is most of the learning, and the published rate is set for
-            # millions of steps rather than the sixty here. Measured: at
-            # 8e-5 the policy is still uniform after 120 steps and scores
-            # 0.70x random; at 8e-4 it reaches 2.9x by step 50.
-            optim.Adam(model.actor_parameters(), lr=8e-4),
-        ]
-
-        replay = SequenceReplay(capacity=20_000)
-        for _ in range(SEED_EPISODES):
-            replay.add(rollout(env, RandomPolicy(2))[0])
-        baseline = _average_return(env, RandomPolicy(2), episodes=5)
-
-        inner = model.dreamer_v2
-        collector = _v2_policy(inner, noise=0.3)
-        evaluator = _v2_policy(inner)
-
-        curve = []
-        entropy_first = entropy_last = None
-        for step in range(60):
-            batch = replay.sample(BATCH, LENGTH)
-            out = model(batch.observations, batch.actions, batch.rewards)
-            assert out.behavior is not None
-            entropy = float(out.behavior.entropy.item())
-            entropy_first = entropy if step == 0 else entropy_first
-            entropy_last = entropy
-            model.backward(out)
-            _clip(model)
-            for opt in optimisers:
-                opt.step()
-            model.update_slow_target()
-            if (step + 1) % 30 == 0:
-                replay.add(rollout(env, collector)[0])
-                curve.append(_average_return(env, evaluator))
-
+        curve, entropy_first, entropy_last = _train_dreamer_v2()
         best = max(curve)
-        assert best > 1.3 * baseline, (
-            f"policy did not learn: best {best:.2f} vs random {baseline:.2f}, "
+        assert best > 1.3 * _RANDOM_RETURN, (
+            f"policy did not learn: best {best:.2f} vs random {_RANDOM_RETURN}, "
             f"curve {[round(c, 2) for c in curve]}"
         )
         # The mechanism, on the same run rather than a second one. A
@@ -536,15 +572,32 @@ _TINY_V3 = dict(
 )
 
 
-def _reward_range(env: PointMass) -> tuple[float, float]:
-    """What a reward on this task actually is, measured not assumed."""
-    episode = rollout(env, RandomPolicy(2))[0]
-    return float(episode.rewards.min()), float(episode.rewards.max())
+#: Added to every reward a counterfactual run is trained on.  Real rewards
+#: are ``exp(-d^2 / 2)`` on a box, so they lie in ``(0.105, 1]`` and a shift
+#: of 1 moves the whole band clear of where it was.
+_REWARD_SHIFT = 1.0
 
 
-def _train_v3(steps: int = 60, world: bool = True) -> tuple:
-    """One short end-to-end run; returns the pieces the tests read."""
-    lucid.manual_seed(0)
+def _reward_range(replay: SequenceReplay) -> tuple[float, float]:
+    """The rewards the world model was trained on — where real reward lives for it.
+
+    Not a fresh episode drawn after training. That one was the old band,
+    and over 20 seeds it put a calibrated model outside it on 2 Metal and
+    2 CPU seeds (DreamerV3 and PlaNet): an episode that wandered close to
+    the target gave a band of ``[0.375, 0.927]`` against a model whose
+    training batch averaged 0.244, and it read 0.231.
+    """
+    rewards = lucid.cat([episode.rewards for episode in replay.episodes], dim=0)
+    return float(rewards.min().item()), float(rewards.max().item())
+
+
+def _train_v3(steps: int = 60, world: bool = True, seed: int = 0, shift: float = 0.0) -> tuple:
+    """One short end-to-end run; returns the pieces the tests read.
+
+    ``shift`` is added to the rewards the model is trained on, and to
+    nothing else — the buffer keeps the task's own.
+    """
+    lucid.manual_seed(seed)
     env = PointMass(horizon=20)
     model = M.create_model("dreamer_v3_12m_world_model", **_TINY_V3)
     world_opt = optim.Adam(model.world_parameters(), lr=3e-3)
@@ -558,7 +611,7 @@ def _train_v3(steps: int = 60, world: bool = True) -> tuple:
     out = None
     for _ in range(steps):
         batch = replay.sample(BATCH, LENGTH)
-        out = model(batch.observations, batch.actions, batch.rewards)
+        out = model(batch.observations, batch.actions, batch.rewards + shift)
         model.backward(out)
         _clip(model)
         if world:
@@ -586,7 +639,7 @@ class TestDreamerV3EndToEnd:
     imagined lambda-return it is actually maximising climbs from about
     zero to 3.4-5.6 on every one — but because on this task that number
     means less than it looks. The best constant action scores 15.78
-    against random's 5.77, and 15.78 is precisely where all five runs
+    against random's expected 6.21, and 15.78 is precisely where all five runs
     land. So the honest reading is "found a good constant", the same
     reading the file's header gives v1 and v2.
 
@@ -632,30 +685,39 @@ class TestDreamerV3EndToEnd:
 
     def test_the_reward_head_calibrates_to_the_task(self) -> None:
         """Imagined reward has to land where real reward lives."""
-        model, env, _, out = _train_v3()
-        low, high = _reward_range(env)
+        _, _, replay, out = _train_v3()
+        low, high = _reward_range(replay)
         imagined = float(out.behavior.imagined_reward.mean().item())
-        assert low - 0.1 <= imagined <= high + 0.1, (
-            f"imagined reward {imagined:.3f} outside the task's own range "
+        assert low <= imagined <= high, (
+            f"imagined reward {imagined:.3f} outside the rewards it was trained on "
             f"[{low:.3f}, {high:.3f}]"
         )
 
-    @_LCD_872
-    def test_a_frozen_world_model_does_not(self) -> None:
+    def test_the_reading_follows_the_reward_it_was_trained_on(self) -> None:
         """Guards the test above.
 
         Rewards here are ``exp(-d^2)``, so they sit in a narrow positive
-        band that an untrained head could plausibly fall inside by
-        accident — which would make the check above pass without the
-        model having learned anything. Withholding the world optimiser
-        and nothing else shows the calibration is what moved it.
+        band that an untrained head could fall inside by accident — which
+        would make the check above pass without the model having learned
+        anything. It does: this head is not zero-initialised, and over 20
+        seeds an untrained one read -0.39 to 0.75, inside the band on 6 of
+        20 seeds on the CPU and on Metal alike. Withholding the world
+        optimiser, the guard this replaces, was therefore a draw on the
+        initialisation, and seed 0 lost it on Metal only (LCD-872).
+
+        So the guard moves the target instead of withholding the training:
+        the same run on rewards shifted by ``_REWARD_SHIFT`` must read the
+        shifted band, which no initialisation reaches by accident and
+        which lies wholly outside the real one.
         """
-        _, env, _, out = _train_v3(world=False)
-        low, high = _reward_range(env)
+        _, _, replay, out = _train_v3(shift=_REWARD_SHIFT)
+        low, high = _reward_range(replay)
+        assert high < low + _REWARD_SHIFT, "the shifted band overlaps the real one"
         imagined = float(out.behavior.imagined_reward.mean().item())
-        assert not (low - 0.1 <= imagined <= high + 0.1), (
-            f"an untrained reward head already reads {imagined:.3f} inside "
-            f"[{low:.3f}, {high:.3f}] — the calibration test proves nothing"
+        assert low + _REWARD_SHIFT <= imagined <= high + _REWARD_SHIFT, (
+            f"trained on rewards shifted by {_REWARD_SHIFT}, the head reads "
+            f"{imagined:.3f} — not the shifted band "
+            f"[{low + _REWARD_SHIFT:.3f}, {high + _REWARD_SHIFT:.3f}]"
         )
 
 
@@ -670,8 +732,9 @@ _TINY_PLANET = dict(
 _PLAN = dict(horizon=6, iterations=4, candidates=64, elites=8)
 
 
-def _train_planet(steps: int = 60, train: bool = True) -> tuple:
-    lucid.manual_seed(0)
+def _train_planet(steps: int = 60, train: bool = True, seed: int = 0, shift: float = 0.0) -> tuple:
+    """As :func:`_train_v3`, for PlaNet's single objective."""
+    lucid.manual_seed(seed)
     env = PointMass(horizon=20)
     model = M.create_model("planet_world_model", **_TINY_PLANET)
     opt = optim.Adam(model.parameters(), lr=1e-3)
@@ -682,8 +745,13 @@ def _train_planet(steps: int = 60, train: bool = True) -> tuple:
 
     first = out = None
     for step in range(steps):
+        # Every step's own gradient. Without this they summed across all
+        # sixty and Adam stepped along the running total: over 20 seeds
+        # the reward head then read 0.02-0.40 against batches averaging
+        # 0.20-0.59, and a fresh gradient each step reads 0.20-0.44.
+        opt.zero_grad()
         batch = replay.sample(BATCH, LENGTH)
-        out = model(batch.observations, batch.actions, batch.rewards)
+        out = model(batch.observations, batch.actions, batch.rewards + shift)
         first = float(out.recon_loss.item()) if step == 0 else first
         out.loss.backward()
         # PlaNet plans with CEM rather than an actor-critic, so the world
@@ -739,25 +807,39 @@ class TestPlaNetPlansThroughTheLoop:
         episode = rollout(env, _planner(model))[0]
         assert float(episode.actions.abs().max().item()) <= 1.0
 
-    @_LCD_872
     def test_the_reward_head_calibrates_to_the_task(self) -> None:
-        model, env, _, out, first = _train_planet()
-        low, high = _reward_range(env)
+        _, _, replay, out, first = _train_planet()
+        low, high = _reward_range(replay)
         predicted = float(out.reward.mean().item())
         assert (
-            low - 0.1 <= predicted <= high + 0.1
+            low <= predicted <= high
         ), f"predicted reward {predicted:.3f} outside [{low:.3f}, {high:.3f}]"
         assert float(out.recon_loss.item()) < first
 
-    def test_a_frozen_model_does_not(self) -> None:
-        """Guards the test above, the same way."""
-        _, env, _, out, first = _train_planet(train=False)
-        low, high = _reward_range(env)
+    def test_the_reading_follows_the_reward_it_was_trained_on(self) -> None:
+        """Guards the reward half of the test above, as for DreamerV3.
+
+        An untrained head here read inside the band on 2 of 20 CPU seeds
+        and 4 of 20 Metal ones, so withholding the optimiser guarded it
+        only on the seeds where the initialisation happened to miss.
+        """
+        _, _, replay, out, _ = _train_planet(shift=_REWARD_SHIFT)
+        low, high = _reward_range(replay)
         predicted = float(out.reward.mean().item())
-        assert not (low - 0.1 <= predicted <= high + 0.1), (
-            f"an untrained reward head already reads {predicted:.3f} inside "
-            f"[{low:.3f}, {high:.3f}]"
+        assert low + _REWARD_SHIFT <= predicted <= high + _REWARD_SHIFT, (
+            f"trained on rewards shifted by {_REWARD_SHIFT}, the head reads "
+            f"{predicted:.3f} — not the shifted band "
+            f"[{low + _REWARD_SHIFT:.3f}, {high + _REWARD_SHIFT:.3f}]"
         )
+
+    def test_a_frozen_model_does_not_learn_to_reconstruct(self) -> None:
+        """Guards the reconstruction half of the test above.
+
+        Without a step the reconstruction only varies with the batch:
+        over 20 seeds it ended at 0.96-1.05 of where it began, where a
+        trained run ends at 0.27-0.73.
+        """
+        _, _, _, out, first = _train_planet(train=False)
         assert float(out.recon_loss.item()) >= first * 0.9
 
 
