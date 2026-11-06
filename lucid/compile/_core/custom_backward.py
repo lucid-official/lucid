@@ -33,6 +33,8 @@ mechanisms allow a ``Function`` to participate in compiled training steps:
    :class:`MPSGraphExecutable`.  A class that does not materialize grads gets
    one region per subset of its outputs a gradient may reach, and the walker
    emits the one for the subset that does (:func:`_trace_demand_variants`).
+   A recorded ``backward`` is emitted, never differentiated, so a ``Function``
+   it applies leaves only its ``forward`` ops there (:func:`note_applied`).
 
 ``apply`` reports every call made while a tracer is installed
 (:func:`note_applied`); each entry point that differentiates a recording calls
@@ -131,6 +133,9 @@ class _Applied:
 
 #: Every call noted, per tracer — gone with the tracer.
 _APPLIED: weakref.WeakKeyDictionary[Tracer, list[_Applied]] = weakref.WeakKeyDictionary()
+
+#: The tracers a ``backward`` is being recorded on right now.
+_RECORDING_BACKWARD: weakref.WeakSet[Tracer] = weakref.WeakSet()
 
 
 def _impls(values: tuple[object, ...], *, floating: bool) -> tuple[_C_engine.TensorImpl, ...]:
@@ -412,6 +417,7 @@ def _record_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _T
         ctx._saved_record = None
         ctx._carrier = None
         tracer.fold_constants = False
+        _RECORDING_BACKWARD.add(tracer)
         with _C_engine.NoGradGuard():
             input_grad_ids = _run_vjp_backward(spec, cotangents)
     # ``AssertionError`` too: a demand variant hands ``backward`` a ``None``
@@ -429,6 +435,7 @@ def _record_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _T
         tracer.discard_ops_from(bwd_begin)
         return f"it raised {type(why).__name__}: {why}"
     finally:
+        _RECORDING_BACKWARD.discard(tracer)
         (
             ctx.needs_input_grad,
             ctx._saved_tensors,
@@ -593,6 +600,14 @@ def note_applied(
     grad mode: under a compiled step's ``no_grad`` it is the only trace the
     call leaves.
 
+    A call made while a ``backward`` is being recorded is not noted.  Its
+    ``forward`` ops are about to leave ``graph.ops`` with the rest of that
+    ``backward``, or to be discarded with it, so a region over them would come
+    to cover whatever the trace records next, and the walker would jump over
+    those ops.  Nor does it need one: nothing differentiates a recorded
+    ``backward``, so this recording runs only ``forward``, as eager's first-order
+    pass does.
+
     Parameters
     ----------
     tracer : Tracer
@@ -608,6 +623,8 @@ def note_applied(
         ``(ctx, raw_saved, marked, fwd_begin)`` captured when
         ``function._traced_backward`` is enabled.
     """
+    if tracer in _RECORDING_BACKWARD:
+        return
     outputs = _impls(output if isinstance(output, tuple) else (output,), floating=True)
     if not outputs:
         return
