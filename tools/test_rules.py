@@ -2256,7 +2256,7 @@ def real_copy(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """This repository's rule-bearing files, shared by the mutant cases, which restore them."""
     root = tmp_path_factory.mktemp("real").resolve()
     _clone(root, "tools", ".githooks", "scripts", ".github", "pyproject.toml", "lucid")
-    _clone(root, ".gitignore")
+    _clone(root, ".gitignore", "setup.py")  # E-VERIFY-CPP's key and trigger read setup.py
     finder = REPO / ".venv/lib/python3.14/site-packages/_lucid_worktree_finder.py"
     if finder.exists():  # a worktree's light venv pins lucid and tools to the worktree
         _clone(root, ".venv")
