@@ -291,6 +291,9 @@ class _FusedStep(_Entry):
     def call(self, x: Tensor) -> float:
         return float(self.step(x).item())
 
+    def stayed_compiled(self) -> bool:
+        return not self.step.cache_info()["eager_only"]
+
 
 class _ModuleGrad(_Entry):
     def __init__(self, model: nn.Module, optimizer: optim.Optimizer) -> None:
@@ -314,6 +317,9 @@ class _ModuleNoGrad(_Entry):
     def call(self, x: Tensor) -> float:
         with lucid.no_grad():
             return float(_loss(self.compiled(x)).item())
+
+    def stayed_compiled(self) -> bool:
+        return not self.compiled.cache_info()["eager_only"]
 
 
 ENTRIES: dict[str, type[_Entry]] = {
@@ -372,13 +378,14 @@ def _run(
 @pytest.mark.parametrize("write", list(WRITES))
 def test_a_write_on_what_an_op_computed(write: str, entry: str) -> None:
     ran = _run(lambda: _Writes(WRITES[write], MADE["op"]), entry)
-    assert ran.stayed_compiled() in (True, None)
+    assert ran.stayed_compiled() in (True, None), "refusing the write would pass the comparison"
 
 
 @pytest.mark.parametrize("entry", list(ENTRIES))
 @pytest.mark.parametrize("write", list(WRITES))
 def test_a_write_on_a_copy_of_the_input(write: str, entry: str) -> None:
-    _run(lambda: _Writes(WRITES[write], MADE["clone"]), entry)
+    ran = _run(lambda: _Writes(WRITES[write], MADE["clone"]), entry)
+    assert ran.stayed_compiled() in (True, None), "refusing the write would pass the comparison"
 
 
 _MASK_ONLY = pytest.mark.xfail(
@@ -471,7 +478,9 @@ def test_compiled_step_refuses_a_write_on_the_calls_input() -> None:
 def test_a_buffer_written_from_the_graph(entry: str) -> None:
     """One call: eager's second refuses a graph the first freed, and a compiled one need not."""
     ran = _run(_WritesABufferFromTheGraph, entry, build=_alone, calls=1)
-    assert not ran.model.total.requires_grad or entry != "make_step"
+    twin = _alone(_WritesABufferFromTheGraph)
+    twin(_batches()[0])
+    assert _close(ran.model.total.detach(), twin.total.detach())
 
 
 # -- a value the tracer was not told of ----------------------------------------
