@@ -675,7 +675,7 @@ def _flat(value: object) -> list[float]:
 #: measured there: not this branch's, and each pinned until it is fixed.
 _MAIN_GETS_WRONG: dict[tuple[str, str], str] = {
     ("instance", "compiled_step"): "LCD-877: compiled_step refuses an instance norm that "
-    "tracks running statistics, loudly (it wrote in place to a tensor it did not create)",
+    "tracks running statistics, loudly (it wrote in place to a tensor it did not create)"
 }
 
 #: Refused by design, with a message: :func:`test_a_compiled_step_refuses_a_cumulative_batch_norm`.
@@ -929,11 +929,7 @@ def test_a_made_tensor_in_the_graph_is_not_held_by_the_graph() -> None:
         want = _loss(ref(x))
         want.backward()
         assert _close(
-            [float(got.item()), *_floats(model.w.grad)],
-            [
-                float(want.item()),
-                *_floats(ref.w.grad),
-            ],
+            [float(got.item()), *_floats(model.w.grad)], [float(want.item()), *_floats(ref.w.grad)]
         )
     assert len(step.cache) == 1 and not step.eager_only.snapshot()
 

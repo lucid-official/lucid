@@ -40,11 +40,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast, final
 
 from lucid._C import engine as _C_engine
-from lucid.compile._core.bn_runstats import (
-    BnWriteback,
-    bn_statistics_lost,
-    bn_writeback_targets,
-)
+from lucid.compile._core.bn_runstats import BnWriteback, bn_statistics_lost, bn_writeback_targets
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
@@ -327,10 +323,7 @@ def eager_rerun() -> Iterator[None]:
 
 
 def require_outside_writes(
-    tracer: Tracer,
-    arguments: Sequence[_C_engine.TensorImpl],
-    caller: str,
-    held: HeldWrites,
+    tracer: Tracer, arguments: Sequence[_C_engine.TensorImpl], caller: str, held: HeldWrites
 ) -> tuple[list[int], list[_C_engine.TensorImpl]]:
     """Put the written tensors back; return their ids and impls or raise.
 
