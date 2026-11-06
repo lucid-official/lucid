@@ -19,15 +19,19 @@ stop-gradiented drifted target.  Everything up to the target runs without
 gradient; the loss's gradient reaches the generator only through its own
 sample.
 
-**The feature space** (:class:`DriftingFeatureEncoder`) is the frozen encoder
+**The feature space** (:class:`_DriftingFeatureEncoder`) is the frozen encoder
 the loss is computed in: the paper's ResNet-style MAE encoder (latent- or
 pixel-MAE), and for pixel models ConvNeXt-V2-Base as well, each turned into
 dozens of per-scale, per-location feature sets (A.5).  It is a training-time
-network and is built on request, never with the generator.
+network, built on request by
+:meth:`DriftingForImageGeneration.load_feature_encoder`, never with the
+generator.
 
-**The sample queue** (:class:`DriftingSampleQueue`) is A.8's MoCo-style
+**The sample queue** (:class:`_DriftingSampleQueue`) is A.8's MoCo-style
 per-class ring buffer of real samples, from which positives and
 unconditional negatives are drawn.
+:meth:`DriftingForImageGeneration.make_sample_queues` makes the two a
+training loop feeds.
 """
 
 import math
@@ -54,13 +58,7 @@ from lucid.models.generative.drifting._weights import DriftingConvNeXtV2Weights,
 from lucid.utils.checkpoint import checkpoint
 from lucid.weights import load_weight_entry
 
-__all__ = [
-    "DriftingModel",
-    "DriftingForImageGeneration",
-    "DriftingFeatureEncoder",
-    "DriftingSampleQueue",
-    "DriftingOutput",
-]
+__all__ = ["DriftingModel", "DriftingForImageGeneration", "DriftingOutput"]
 
 # ``cond = class + styles + 0.02 * RMSNorm(embed(alpha))`` — a constant in
 # the release's ``c_cfg_noise_to_cond``, not a config field there either.
@@ -910,7 +908,7 @@ class _ConvNeXtV2(nn.Module):
         return out
 
 
-class DriftingFeatureEncoder(nn.Module):
+class _DriftingFeatureEncoder(nn.Module):
     r"""The frozen feature map :math:`\phi` the drifting loss is computed in.
 
     Parameters
@@ -942,11 +940,11 @@ class DriftingFeatureEncoder(nn.Module):
     Examples
     --------
     >>> import lucid
-    >>> from lucid.models.generative.drifting import (
-    ...     DriftingConfig, DriftingFeatureEncoder)
-    >>> config = DriftingConfig(sample_size=8, hidden_size=32, num_heads=4,
-    ...                         mae_base_channels=16, mae_layers=(1, 1, 1, 1))
-    >>> feats = DriftingFeatureEncoder(config)(lucid.randn(2, 4, 8, 8))
+    >>> import lucid.models as models
+    >>> model = models.create_model("drifting_base_2_gen", mae_base_channels=16,
+    ...                             mae_layers=(1, 1, 1, 1), sample_size=8,
+    ...                             hidden_size=32, cond_dim=32, depth=1, num_heads=4)
+    >>> feats = model.load_feature_encoder()(lucid.randn(2, 4, 8, 8))
     >>> feats["global"].shape, feats["layer1"].shape
     ((2, 1, 256), (2, 64, 16))
     """
@@ -1022,7 +1020,7 @@ def _int_list(indices: Tensor) -> list[int]:
     return ints
 
 
-class DriftingSampleQueue:
+class _DriftingSampleQueue:
     """Per-class ring buffers of real samples — the release's ``ArrayMemoryBank``.
 
     Parameters
@@ -1042,8 +1040,12 @@ class DriftingSampleQueue:
     Examples
     --------
     >>> import lucid
-    >>> from lucid.models.generative.drifting import DriftingSampleQueue
-    >>> queue = DriftingSampleQueue(num_classes=2, max_size=4)
+    >>> from lucid.models.generative.drifting import (
+    ...     DriftingConfig, DriftingForImageGeneration)
+    >>> config = DriftingConfig(sample_size=8, hidden_size=32, cond_dim=32, depth=1,
+    ...                         num_heads=4, num_classes=2, positive_bank_size=4,
+    ...                         use_mae=False)
+    >>> queue, _ = DriftingForImageGeneration(config).make_sample_queues()
     >>> queue.add(lucid.randn(3, 4, 8, 8), lucid.tensor([0, 1, 0]))
     >>> queue.sample(lucid.tensor([0, 1]), 2).shape
     (2, 2, 4, 8, 8)
@@ -1143,7 +1145,7 @@ class DriftingForImageGeneration(ImageGenerationModel):
     ----------
     drifting : DriftingModel
         The generator — the only trainable network.
-    feature_encoder : DriftingFeatureEncoder
+    feature_encoder : _DriftingFeatureEncoder
         The frozen :math:`\phi`.  Empty until
         :meth:`load_feature_encoder` builds it, unless the config drifts
         in the raw space (``use_mae=False, use_convnext=False``).
@@ -1180,14 +1182,14 @@ class DriftingForImageGeneration(ImageGenerationModel):
         self.config: DriftingConfig = config
         self.drifting = DriftingModel(config)
         # Raw-space drifting needs no network, so the shell is complete.
-        encoder = DriftingFeatureEncoder(config, build=False)
+        encoder = _DriftingFeatureEncoder(config, build=False)
         if not encoder.needed:
             encoder.build()
         self.feature_encoder = encoder
 
     # ── the feature encoder ──────────────────────────────────────────────
 
-    def load_feature_encoder(self, pretrained: bool | str = False) -> DriftingFeatureEncoder:
+    def load_feature_encoder(self, pretrained: bool | str = False) -> _DriftingFeatureEncoder:
         """Build the frozen feature encoder, optionally with the released weights.
 
         Parameters
@@ -1199,16 +1201,21 @@ class DriftingForImageGeneration(ImageGenerationModel):
 
         Returns
         -------
-        DriftingFeatureEncoder
+        feature_encoder : _DriftingFeatureEncoder
             The encoder, also stored as ``self.feature_encoder``, with every
-            parameter frozen.
+            parameter frozen and on the generator's device.  Called on
+            ``(B, C, H, W)`` samples it returns the feature sets the loss is
+            summed over, a dict of ``(B, T, D)`` tensors keyed by set name,
+            ``"global"`` (the raw sample) first.  :meth:`forward` reads it
+            from ``self.feature_encoder``, so the return value is only
+            needed to look at the features.
 
         Raises
         ------
         ValueError
             If no released MAE matches the config, or the tag is unknown.
         """
-        encoder = DriftingFeatureEncoder(self.config, build=True)
+        encoder = _DriftingFeatureEncoder(self.config, build=True)
         if pretrained is not False and self.config.use_mae:
             tag = pretrained if isinstance(pretrained, str) else self._mae_tag()
             if tag not in DriftingMAEWeights.__members__:
@@ -1244,18 +1251,58 @@ class DriftingForImageGeneration(ImageGenerationModel):
 
     # ── the sample queues (A.8) ──────────────────────────────────────────
 
-    def make_sample_queues(self) -> tuple[DriftingSampleQueue, DriftingSampleQueue]:
-        """The per-class positive queue and the global unconditional queue."""
+    def make_sample_queues(self) -> tuple[_DriftingSampleQueue, _DriftingSampleQueue]:
+        """The two empty sample queues a training loop feeds (A.8's memory banks).
+
+        Returns
+        -------
+        positive_queue : _DriftingSampleQueue
+            ``num_classes`` ring buffers of ``positive_bank_size`` real
+            samples each, one per class.
+        unconditional_queue : _DriftingSampleQueue
+            One ring buffer of ``negative_bank_size`` real samples of any
+            class.
+
+        Notes
+        -----
+        Each step, push the real batch into both with ``add(samples,
+        labels)``: ``(N, C, H, W)`` samples and their ``(N,)`` integer
+        labels, all zeros for ``unconditional_queue``.  A full buffer
+        overwrites its oldest entry.  :meth:`draw_training_batch` then reads
+        ``pos_per_sample`` positives per label and ``neg_per_sample``
+        unconditional negatives from them, which are the ``images`` and
+        ``negatives`` of :meth:`forward`.
+
+        Examples
+        --------
+        >>> import lucid
+        >>> import lucid.models as models
+        >>> model = models.create_model("drifting_base_2_gen", pos_per_sample=3,
+        ...                             neg_per_sample=2, use_mae=False, sample_size=8,
+        ...                             hidden_size=32, cond_dim=32, depth=1, num_heads=4,
+        ...                             num_classes=10, gen_per_label=4)
+        >>> positive_queue, unconditional_queue = model.make_sample_queues()
+        >>> images, labels = lucid.randn(6, 4, 8, 8), lucid.tensor([0, 1, 0, 1, 0, 1])
+        >>> positive_queue.add(images, labels)
+        >>> unconditional_queue.add(images, lucid.zeros_like(labels))
+        >>> step = lucid.tensor([0, 1])
+        >>> positives, negatives = model.draw_training_batch(
+        ...     positive_queue, unconditional_queue, step)
+        >>> positives.shape, negatives.shape
+        ((2, 3, 4, 8, 8), (2, 2, 4, 8, 8))
+        >>> model(positives, step, negatives).loss.ndim
+        0
+        """
         config = self.config
         return (
-            DriftingSampleQueue(config.num_classes, config.positive_bank_size),
-            DriftingSampleQueue(1, config.negative_bank_size),
+            _DriftingSampleQueue(config.num_classes, config.positive_bank_size),
+            _DriftingSampleQueue(1, config.negative_bank_size),
         )
 
     def draw_training_batch(
         self,
-        positive_queue: DriftingSampleQueue,
-        unconditional_queue: DriftingSampleQueue,
+        positive_queue: _DriftingSampleQueue,
+        unconditional_queue: _DriftingSampleQueue,
         labels: Tensor,
     ) -> tuple[Tensor, Tensor]:
         """Positives ``(N_c, pos_per_sample, ...)`` and negatives ``(N_c, neg_per_sample, ...)``."""

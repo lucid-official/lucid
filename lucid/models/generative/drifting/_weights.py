@@ -312,7 +312,7 @@ class DriftingLarge16Weights(WeightsEnum):
 class DriftingMAEWeights(WeightsEnum):
     r"""The three released MAE feature encoders (encoder half only).
 
-    Loaded into ``DriftingFeatureEncoder.mae`` by
+    Loaded into the feature encoder's ``mae`` by
     :meth:`DriftingForImageGeneration.load_feature_encoder`, which picks
     the tag matching the config.  The MAE decoder and the classification
     head are dropped by the converter: the drifting loss reads only the

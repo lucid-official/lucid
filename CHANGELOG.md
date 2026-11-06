@@ -198,6 +198,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The DreamerV3 learning benchmark (`TestDreamerV3ReadsTheGoal`) scores every policy on a fixed 36-goal panel, treats the goal-blind ceiling as a policy, and asserts what the goal is worth to the policy (the cost of a decoy), over 3000 steps. The old test's blind ceiling was not a ceiling, and its verdict was one random draw.
 - A compiled step through a `_traced_backward` Function with `_materialize_grads=False` (or `ctx.set_materialize_grads(False)`) traces its backward once per set of outputs a gradient may reach; one that cannot be traced for the demands it may meet runs eagerly, and the fallback warning says why. More than 4 differentiable outputs run eagerly.
 - bring the family under the gate
+- make the encoder and queue private
 
 ---
 

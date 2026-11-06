@@ -18,13 +18,17 @@ from lucid.models._utils._common import apply_overrides
 from lucid.models.generative.drifting import (
     DriftingBase2Weights,
     DriftingConfig,
-    DriftingFeatureEncoder,
     DriftingForImageGeneration,
     DriftingMAEWeights,
     DriftingModel,
-    DriftingSampleQueue,
 )
-from lucid.models.generative.drifting._model import _drift_loss, _pairwise_distance, _self_mask
+from lucid.models.generative.drifting._model import (
+    _drift_loss,
+    _DriftingFeatureEncoder,
+    _DriftingSampleQueue,
+    _pairwise_distance,
+    _self_mask,
+)
 from lucid.models.generative.drifting._pretrained import (
     _CFG_BASE_2,
     _CFG_BASE_16,
@@ -237,7 +241,7 @@ class TestFeatureEncoder:
         # The release's MAEResNetJAX.get_activations on a 32x32 input yields
         # these 85 sets, in this order; the encoder adds "global" first.
         cfg = DriftingConfig(sample_size=32, mae_base_channels=16)
-        feats = DriftingFeatureEncoder(cfg)(lucid.randn(1, 4, 32, 32))
+        feats = _DriftingFeatureEncoder(cfg)(lucid.randn(1, 4, 32, 32))
         keys = list(feats)
         assert keys[:2] == ["global", "norm_x"]
         assert len(keys) == 86
@@ -268,7 +272,7 @@ class TestFeatureEncoder:
             mae_layers=(1, 1, 1, 1),
             mae_input_patch_size=8,
         )
-        feats = DriftingFeatureEncoder(cfg)(lucid.randn(1, 3, 64, 64))
+        feats = _DriftingFeatureEncoder(cfg)(lucid.randn(1, 3, 64, 64))
         assert tuple(feats["norm_x"].shape) == (1, 1, 192)
         assert tuple(feats["conv1"].shape) == (1, 64, 16)
 
@@ -305,13 +309,13 @@ class TestFeatureEncoder:
 
 class TestSampleQueue:
     def test_ring_buffer_keeps_the_newest(self) -> None:
-        queue = DriftingSampleQueue(num_classes=1, max_size=2)
+        queue = _DriftingSampleQueue(num_classes=1, max_size=2)
         queue.add(lucid.tensor([[1.0], [2.0], [3.0]]), lucid.tensor([0, 0, 0]))
         drawn = queue.sample(lucid.tensor([0]), 2)
         assert sorted(drawn.reshape(-1).tolist()) == [2.0, 3.0]
 
     def test_empty_class_yields_zeros(self) -> None:
-        queue = DriftingSampleQueue(num_classes=2, max_size=4)
+        queue = _DriftingSampleQueue(num_classes=2, max_size=4)
         queue.add(lucid.ones(1, 3), lucid.tensor([0]))
         assert float(queue.sample(lucid.tensor([1]), 2).abs().max().item()) == 0.0
 

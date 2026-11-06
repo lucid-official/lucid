@@ -9,11 +9,9 @@ network evaluation, with guidance trained in rather than applied.
 
 from lucid.models.generative.drifting._config import DriftingConfig
 from lucid.models.generative.drifting._model import (
-    DriftingFeatureEncoder,
     DriftingForImageGeneration,
     DriftingModel,
     DriftingOutput,
-    DriftingSampleQueue,
 )
 from lucid.models.generative.drifting._pretrained import (
     drifting_base_2,
@@ -38,8 +36,6 @@ __all__ = [
     "DriftingConfig",
     "DriftingModel",
     "DriftingForImageGeneration",
-    "DriftingFeatureEncoder",
-    "DriftingSampleQueue",
     "DriftingOutput",
     "DriftingBase2Weights",
     "DriftingLarge2Weights",
