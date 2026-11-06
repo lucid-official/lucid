@@ -290,8 +290,8 @@ class _DriftingFeatureEncoder(nn.Module):
         Reads ``use_mae``, ``use_convnext``, the ``mae_*`` architecture and
         the A.5 feature options.
     build : bool, default=True
-        Construct the encoders now.  ``False`` leaves an empty shell that
-        :meth:`DriftingForImageGeneration.load_feature_encoder` fills —
+        Construct the encoders now.  ``False`` leaves an empty shell, which
+        :meth:`DriftingForImageGeneration.load_feature_encoder` replaces —
         the MAE-640 encoder is far larger than the generator, and sampling
         never needs it.
 

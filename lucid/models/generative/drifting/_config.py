@@ -22,11 +22,12 @@ The fields below are the official release's, one for one.  Three groups:
   :meth:`DriftingForImageGeneration.load_feature_encoder`.
 
 Two release flags have no field because Lucid expresses them differently.
-``use_bf16`` is the dtype the model is cast to (``model.to(lucid.bfloat16)``
-or :class:`lucid.amp.autocast`), and the MAE's ``use_bf16`` likewise.  The
-optimizer, EMA and sample-queue push rate are training-loop settings, not
-model settings; each released checkpoint records them under
-``meta["recipe"]`` on its :class:`~lucid.weights.WeightEntry`.
+``use_bf16``, and the MAE's ``use_bf16`` likewise, is :class:`lucid.amp.autocast`
+with ``dtype=lucid.bfloat16``.  Do not cast the model instead: the release
+keeps its parameters in float32, and bfloat16 parameters round small optimizer
+updates away (one AdamW step at ``lr=4e-4`` changed 80.6% of the elements,
+against 100% in float32 and under autocast).  The optimizer, EMA and
+sample-queue push rate are training-loop settings, not model settings.
 """
 
 import math
@@ -41,10 +42,18 @@ from lucid.models.generative._common._config import (
     patch_grid_side,
 )
 
-# Counts a model cannot be built with at zero, and counts where zero is a
-# switch (no style codebook, no in-context tokens, no positives / negatives).
-_POSITIVE_COUNTS = ("depth", "cond_dim", "num_classes", "noise_coords", "gen_per_label")
-_NON_NEGATIVE_COUNTS = ("noise_classes", "n_cls_tokens", "pos_per_sample", "neg_per_sample")
+# Counts a model cannot be built or trained with at zero (the field attracts
+# toward positives, so it has nothing without them), and counts where zero is
+# a switch (no style codebook, no in-context tokens, no guidance negatives).
+_POSITIVE_COUNTS = (
+    "depth",
+    "cond_dim",
+    "num_classes",
+    "noise_coords",
+    "gen_per_label",
+    "pos_per_sample",
+)
+_NON_NEGATIVE_COUNTS = ("noise_classes", "n_cls_tokens", "neg_per_sample")
 
 
 @model_family_meta(
@@ -172,12 +181,15 @@ class DriftingConfig(GenerativeModelConfig):
         Positive (same-class) samples drawn per label, :math:`N_\mathrm{pos}`.
     neg_per_sample : int, default=32
         Unconditional real samples drawn per label, :math:`N_\mathrm{unc}`.
+        ``0`` trains without guidance negatives.
     positive_bank_size : int, default=128
         Per-class sample-queue length.
     negative_bank_size : int, default=1000
         Global unconditional queue length.
     use_mae : bool, default=True
-        Compute the loss in the latent- / pixel-MAE feature space.
+        Compute the loss in the latent- / pixel-MAE feature space.  No trained
+        encoder is published, so see
+        :meth:`DriftingForImageGeneration.load_feature_encoder`.
     use_convnext : bool, default=False
         Also use ConvNeXt-V2-Base (ImageNet-22k) features.  Pixel models only.
     mae_base_channels : int, default=640
@@ -195,7 +207,7 @@ class DriftingConfig(GenerativeModelConfig):
     Table 8.  Loss: Alg. 2 and Appendices A.5–A.7.
 
     Where Table 8 and the released ``configs/gen/*.yaml`` disagree, the
-    release wins, because the hosted checkpoints were trained by it: the
+    release wins, because the authors' checkpoints were trained by it: the
     latent ``B/2`` uses 64 positives per label (Table 8 says 128).
 
     Examples

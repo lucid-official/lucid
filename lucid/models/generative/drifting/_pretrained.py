@@ -7,31 +7,24 @@ The four system-level generators the paper reports on ImageNet 256x256 —
 paper's single-letter sizes, so ``B/2`` is ``drifting_base_2`` and
 ``L/16`` is ``drifting_large_16``.
 
+No checkpoint is published for any of them, so ``pretrained=True`` is refused.
+
 The ablation default of Table 8 is not a fifth factory: it *is* the
 ``B/2`` architecture, trained shorter against the narrower MAE-256 with
-different guidance sampling.  It ships as the ``IMAGENET1K_256_ABLATION``
-tag of :class:`DriftingBase2Weights`, whose ``config`` overrides the
-factory applies.
+different guidance sampling, which ``drifting_base_2_gen(attn_fp32=True,
+mae_base_channels=256, neg_cfg_pw=3.0, neg_per_sample=16)`` configures.
 
 Each ``_CFG_*`` constant is the matching ``configs/gen/*.yaml`` of the
 official release, field for field — ``model``, ``train.forward_dict``,
 ``train.loss_kwargs``, ``train.activation_kwargs``, the sample-queue sizes
-and ``feature``.  Parameter counts are the paper's (Tables 5 and 6) and
-agree with the converted checkpoints: ``B/2`` is 132,708,880.
+and ``feature``.  The ``params`` are the paper's (Tables 5 and 6), which
+round the built counts: ``B/2`` is 132,708,880.
 """
 
-import lucid.weights as weights_mod
 from lucid.models._registry import register_model
-from lucid.models._utils._common import apply_overrides
+from lucid.models._utils._common import apply_overrides, reject_unavailable_pretrained
 from lucid.models.generative.drifting._config import DriftingConfig
 from lucid.models.generative.drifting._model import DriftingForImageGeneration, DriftingModel
-from lucid.models.generative.drifting._weights import (
-    DriftingBase2Weights,
-    DriftingBase16Weights,
-    DriftingLarge2Weights,
-    DriftingLarge16Weights,
-)
-from lucid.weights import WeightsEnum
 
 __all__ = [
     "drifting_base_2",
@@ -122,66 +115,6 @@ _CFG_LARGE_16 = DriftingConfig(
 )
 
 
-def _tag_config(entry: WeightsEnum | None, overrides: dict[str, object]) -> dict[str, object]:
-    """Merge a weight tag's own config under the caller's overrides.
-
-    The ablation checkpoint shares ``B/2``'s architecture but was trained
-    with a different feature encoder and guidance sampling; its tag records
-    those fields so a loaded model reproduces its training objective.  An
-    explicit override still wins.
-
-    Parameters
-    ----------
-    entry : WeightsEnum or None
-        The tag :func:`~lucid.weights.resolve_weights` picked; ``None`` for
-        an untrained build, which adds nothing.
-    overrides : dict
-        The factory's ``**overrides``.
-
-    Returns
-    -------
-    dict
-        The tag's ``config`` with ``overrides`` on top, or ``overrides``
-        alone when the tag records none.
-    """
-    if entry is None:
-        return overrides
-    tagged = entry.value.meta.get("config")
-    return overrides if not isinstance(tagged, dict) else {**tagged, **overrides}
-
-
-def _trunk(
-    name: str,
-    cfg: DriftingConfig,
-    enum_cls: type[WeightsEnum],
-    pretrained: bool | str,
-    weights: WeightsEnum | None,
-    overrides: dict[str, object],
-) -> DriftingModel:
-    entry = weights_mod.resolve_weights(enum_cls, pretrained, weights)
-    model = DriftingModel(apply_overrides(cfg, _tag_config(entry, overrides)))
-    if entry is not None:
-        weights_mod.load_weight_entry(model, entry, name=name)
-    return model
-
-
-def _gen(
-    name: str,
-    cfg: DriftingConfig,
-    enum_cls: type[WeightsEnum],
-    pretrained: bool | str,
-    weights: WeightsEnum | None,
-    overrides: dict[str, object],
-) -> DriftingForImageGeneration:
-    entry = weights_mod.resolve_weights(enum_cls, pretrained, weights)
-    model = DriftingForImageGeneration(apply_overrides(cfg, _tag_config(entry, overrides)))
-    if entry is not None:
-        # The checkpoint holds the generator, which this wrapper keeps under
-        # ``drifting`` — the feature encoder loads separately, on request.
-        weights_mod.load_weight_entry(model.drifting, entry, name=name)
-    return model
-
-
 @register_model(
     task="base",
     family="drifting",
@@ -191,22 +124,14 @@ def _gen(
     params=133_000_000,
     summary="auto",
 )
-def drifting_base_2(
-    pretrained: bool | str = False,
-    *,
-    weights: DriftingBase2Weights | None = None,
-    **overrides: object,
-) -> DriftingModel:
+def drifting_base_2(pretrained: bool = False, **overrides: object) -> DriftingModel:
     """Drifting ``B/2`` — the Base generator over the 32x32x4 SD-VAE latent.
 
     Parameters
     ----------
-    pretrained : bool or str, default=False
-        Load a released checkpoint.  ``True`` takes ``IMAGENET1K_256`` (the
-        Table 5 model); ``"IMAGENET1K_256_ABLATION"`` takes the Table 8
-        ablation default and applies the config it was trained with.
-    weights : DriftingBase2Weights or None, optional, keyword-only
-        An explicit ``B/2`` tag, taking precedence over ``pretrained``.
+    pretrained : bool, default=False
+        No checkpoint is published for ``drifting_base_2``, so ``True`` raises
+        ``NotImplementedError`` rather than return randomly initialised weights.
     **overrides : object
         :class:`DriftingConfig` fields to change on the ``latent_sota_B``
         release config.
@@ -221,7 +146,7 @@ def drifting_base_2(
     Reference: Deng, Li, Li, Du, and He, *"Generative Modeling via
     Drifting"*, arXiv:2602.04770, 2026, Table 8 (``B/2, latent``) and
     Table 5 — 12 blocks, width 768, 12 heads, 16 in-context tokens,
-    32 style tokens.  FID 1.75 at one evaluation, guidance 1.1.
+    32 style tokens.  The paper reports FID 1.75 at one evaluation, guidance 1.1.
 
     Examples
     --------
@@ -230,9 +155,9 @@ def drifting_base_2(
     >>> config.depth, config.hidden_size, config.patch_size
     (12, 768, 2)
     """
-    return _trunk(
-        "drifting_base_2", _CFG_BASE_2, DriftingBase2Weights, pretrained, weights, overrides
-    )
+    if pretrained:
+        reject_unavailable_pretrained("drifting_base_2")
+    return DriftingModel(apply_overrides(_CFG_BASE_2, overrides))
 
 
 @register_model(
@@ -244,21 +169,14 @@ def drifting_base_2(
     params=463_000_000,
     summary="auto",
 )
-def drifting_large_2(
-    pretrained: bool | str = False,
-    *,
-    weights: DriftingLarge2Weights | None = None,
-    **overrides: object,
-) -> DriftingModel:
+def drifting_large_2(pretrained: bool = False, **overrides: object) -> DriftingModel:
     """Drifting ``L/2`` — the Large latent generator, the paper's headline model.
 
     Parameters
     ----------
-    pretrained : bool or str, default=False
-        Load the released ``L/2`` checkpoint.  ``True`` takes
-        ``IMAGENET1K_256``.
-    weights : DriftingLarge2Weights or None, optional, keyword-only
-        An explicit ``L/2`` tag, taking precedence over ``pretrained``.
+    pretrained : bool, default=False
+        No checkpoint is published for ``drifting_large_2``, so ``True`` raises
+        ``NotImplementedError`` rather than return randomly initialised weights.
     **overrides : object
         :class:`DriftingConfig` fields to change on the ``latent_sota_L``
         release config.
@@ -272,7 +190,7 @@ def drifting_large_2(
     -----
     Reference: Deng, Li, Li, Du, and He, arXiv:2602.04770, 2026, Table 8
     (``L/2, latent``) and Table 5 — 24 blocks, width 1024, 16 heads.
-    FID 1.54 at one evaluation, guidance 1.0.
+    The paper reports FID 1.54 at one evaluation, guidance 1.0.
 
     Examples
     --------
@@ -281,9 +199,9 @@ def drifting_large_2(
     >>> config.depth, config.hidden_size, config.no_cfg_frac
     (24, 1024, 0.5)
     """
-    return _trunk(
-        "drifting_large_2", _CFG_LARGE_2, DriftingLarge2Weights, pretrained, weights, overrides
-    )
+    if pretrained:
+        reject_unavailable_pretrained("drifting_large_2")
+    return DriftingModel(apply_overrides(_CFG_LARGE_2, overrides))
 
 
 @register_model(
@@ -295,21 +213,14 @@ def drifting_large_2(
     params=134_000_000,
     summary="auto",
 )
-def drifting_base_16(
-    pretrained: bool | str = False,
-    *,
-    weights: DriftingBase16Weights | None = None,
-    **overrides: object,
-) -> DriftingModel:
+def drifting_base_16(pretrained: bool = False, **overrides: object) -> DriftingModel:
     """Drifting ``B/16`` — the Base generator directly in 256x256 pixel space.
 
     Parameters
     ----------
-    pretrained : bool or str, default=False
-        Load the released ``B/16`` checkpoint.  ``True`` takes
-        ``IMAGENET1K_256``.
-    weights : DriftingBase16Weights or None, optional, keyword-only
-        An explicit ``B/16`` tag, taking precedence over ``pretrained``.
+    pretrained : bool, default=False
+        No checkpoint is published for ``drifting_base_16``, so ``True`` raises
+        ``NotImplementedError`` rather than return randomly initialised weights.
     **overrides : object
         :class:`DriftingConfig` fields to change on the ``pixel_sota_B``
         release config.
@@ -323,7 +234,7 @@ def drifting_base_16(
     -----
     Reference: Deng, Li, Li, Du, and He, arXiv:2602.04770, 2026, Table 8
     (``B/16, pixel``) and Table 6 — the ``B/2`` backbone at patch 16, so
-    the sequence is again 256 tokens.  FID 1.76, guidance 1.0.
+    the sequence is again 256 tokens.  The paper reports FID 1.76, guidance 1.0.
 
     Examples
     --------
@@ -332,9 +243,9 @@ def drifting_base_16(
     >>> config.sample_size, config.patch_size, config.num_patches
     (256, 16, 256)
     """
-    return _trunk(
-        "drifting_base_16", _CFG_BASE_16, DriftingBase16Weights, pretrained, weights, overrides
-    )
+    if pretrained:
+        reject_unavailable_pretrained("drifting_base_16")
+    return DriftingModel(apply_overrides(_CFG_BASE_16, overrides))
 
 
 @register_model(
@@ -346,21 +257,14 @@ def drifting_base_16(
     params=464_000_000,
     summary="auto",
 )
-def drifting_large_16(
-    pretrained: bool | str = False,
-    *,
-    weights: DriftingLarge16Weights | None = None,
-    **overrides: object,
-) -> DriftingModel:
+def drifting_large_16(pretrained: bool = False, **overrides: object) -> DriftingModel:
     """Drifting ``L/16`` — the Large generator in pixel space.
 
     Parameters
     ----------
-    pretrained : bool or str, default=False
-        Load the released ``L/16`` checkpoint.  ``True`` takes
-        ``IMAGENET1K_256``.
-    weights : DriftingLarge16Weights or None, optional, keyword-only
-        An explicit ``L/16`` tag, taking precedence over ``pretrained``.
+    pretrained : bool, default=False
+        No checkpoint is published for ``drifting_large_16``, so ``True`` raises
+        ``NotImplementedError`` rather than return randomly initialised weights.
     **overrides : object
         :class:`DriftingConfig` fields to change on the ``pixel_sota_L``
         release config.
@@ -373,7 +277,7 @@ def drifting_large_16(
     Notes
     -----
     Reference: Deng, Li, Li, Du, and He, arXiv:2602.04770, 2026, Table 8
-    (``L/16, pixel``) and Table 6.  FID 1.61, guidance 1.0.
+    (``L/16, pixel``) and Table 6.  The paper reports FID 1.61, guidance 1.0.
 
     Examples
     --------
@@ -382,9 +286,9 @@ def drifting_large_16(
     >>> config.depth, config.hidden_size, config.use_convnext
     (24, 1024, True)
     """
-    return _trunk(
-        "drifting_large_16", _CFG_LARGE_16, DriftingLarge16Weights, pretrained, weights, overrides
-    )
+    if pretrained:
+        reject_unavailable_pretrained("drifting_large_16")
+    return DriftingModel(apply_overrides(_CFG_LARGE_16, overrides))
 
 
 @register_model(
@@ -397,22 +301,15 @@ def drifting_large_16(
     summary="auto",
 )
 def drifting_base_2_gen(
-    pretrained: bool | str = False,
-    *,
-    weights: DriftingBase2Weights | None = None,
-    **overrides: object,
+    pretrained: bool = False, **overrides: object
 ) -> DriftingForImageGeneration:
     """:func:`drifting_base_2` with the drifting objective and the one-step sampler.
 
     Parameters
     ----------
-    pretrained : bool or str, default=False
-        Load a released generator checkpoint into ``model.drifting``.
-        ``True`` takes ``IMAGENET1K_256``; ``"IMAGENET1K_256_ABLATION"``
-        takes the ablation default.  The feature encoder is loaded
-        separately by :meth:`DriftingForImageGeneration.load_feature_encoder`.
-    weights : DriftingBase2Weights or None, optional, keyword-only
-        An explicit ``B/2`` tag; wins over ``pretrained``.
+    pretrained : bool, default=False
+        No checkpoint is published for ``drifting_base_2_gen``, so ``True`` raises
+        ``NotImplementedError`` rather than return randomly initialised weights.
     **overrides : object
         :class:`DriftingConfig` fields to change, the loss's and the
         sample queue's included.
@@ -432,9 +329,9 @@ def drifting_base_2_gen(
     >>> from lucid.models import drifting_base_2_gen
     >>> model = drifting_base_2_gen()  # doctest: +SKIP
     """
-    return _gen(
-        "drifting_base_2", _CFG_BASE_2, DriftingBase2Weights, pretrained, weights, overrides
-    )
+    if pretrained:
+        reject_unavailable_pretrained("drifting_base_2_gen")
+    return DriftingForImageGeneration(apply_overrides(_CFG_BASE_2, overrides))
 
 
 @register_model(
@@ -447,20 +344,15 @@ def drifting_base_2_gen(
     summary="auto",
 )
 def drifting_large_2_gen(
-    pretrained: bool | str = False,
-    *,
-    weights: DriftingLarge2Weights | None = None,
-    **overrides: object,
+    pretrained: bool = False, **overrides: object
 ) -> DriftingForImageGeneration:
     """:func:`drifting_large_2` with the drifting objective and the one-step sampler.
 
     Parameters
     ----------
-    pretrained : bool or str, default=False
-        Load the released ``L/2`` generator into ``model.drifting``.
-        ``True`` takes ``IMAGENET1K_256``.
-    weights : DriftingLarge2Weights or None, optional, keyword-only
-        An explicit ``L/2`` tag; wins over ``pretrained``.
+    pretrained : bool, default=False
+        No checkpoint is published for ``drifting_large_2_gen``, so ``True`` raises
+        ``NotImplementedError`` rather than return randomly initialised weights.
     **overrides : object
         :class:`DriftingConfig` fields to change on ``latent_sota_L``; its
         ``no_cfg_frac=0.5`` is the half of the batch trained unguided.
@@ -480,9 +372,9 @@ def drifting_large_2_gen(
     >>> from lucid.models import drifting_large_2_gen
     >>> model = drifting_large_2_gen()  # doctest: +SKIP
     """
-    return _gen(
-        "drifting_large_2", _CFG_LARGE_2, DriftingLarge2Weights, pretrained, weights, overrides
-    )
+    if pretrained:
+        reject_unavailable_pretrained("drifting_large_2_gen")
+    return DriftingForImageGeneration(apply_overrides(_CFG_LARGE_2, overrides))
 
 
 @register_model(
@@ -495,20 +387,15 @@ def drifting_large_2_gen(
     summary="auto",
 )
 def drifting_base_16_gen(
-    pretrained: bool | str = False,
-    *,
-    weights: DriftingBase16Weights | None = None,
-    **overrides: object,
+    pretrained: bool = False, **overrides: object
 ) -> DriftingForImageGeneration:
     """:func:`drifting_base_16` with the drifting objective and the one-step sampler.
 
     Parameters
     ----------
-    pretrained : bool or str, default=False
-        Load the released ``B/16`` generator into ``model.drifting``.
-        ``True`` takes ``IMAGENET1K_256``.
-    weights : DriftingBase16Weights or None, optional, keyword-only
-        An explicit ``B/16`` tag; wins over ``pretrained``.
+    pretrained : bool, default=False
+        No checkpoint is published for ``drifting_base_16_gen``, so ``True`` raises
+        ``NotImplementedError`` rather than return randomly initialised weights.
     **overrides : object
         :class:`DriftingConfig` fields to change on ``pixel_sota_B`` —
         ``use_convnext=False`` drops the ConvNeXt-V2 term.
@@ -528,9 +415,9 @@ def drifting_base_16_gen(
     >>> from lucid.models import drifting_base_16_gen
     >>> model = drifting_base_16_gen()  # doctest: +SKIP
     """
-    return _gen(
-        "drifting_base_16", _CFG_BASE_16, DriftingBase16Weights, pretrained, weights, overrides
-    )
+    if pretrained:
+        reject_unavailable_pretrained("drifting_base_16_gen")
+    return DriftingForImageGeneration(apply_overrides(_CFG_BASE_16, overrides))
 
 
 @register_model(
@@ -543,20 +430,15 @@ def drifting_base_16_gen(
     summary="auto",
 )
 def drifting_large_16_gen(
-    pretrained: bool | str = False,
-    *,
-    weights: DriftingLarge16Weights | None = None,
-    **overrides: object,
+    pretrained: bool = False, **overrides: object
 ) -> DriftingForImageGeneration:
     """:func:`drifting_large_16` with the drifting objective and the one-step sampler.
 
     Parameters
     ----------
-    pretrained : bool or str, default=False
-        Load the released ``L/16`` generator into ``model.drifting``.
-        ``True`` takes ``IMAGENET1K_256``.
-    weights : DriftingLarge16Weights or None, optional, keyword-only
-        An explicit ``L/16`` tag; wins over ``pretrained``.
+    pretrained : bool, default=False
+        No checkpoint is published for ``drifting_large_16_gen``, so ``True`` raises
+        ``NotImplementedError`` rather than return randomly initialised weights.
     **overrides : object
         :class:`DriftingConfig` fields to change on ``pixel_sota_L``.
 
@@ -576,6 +458,6 @@ def drifting_large_16_gen(
     >>> from lucid.models import drifting_large_16_gen
     >>> model = drifting_large_16_gen()  # doctest: +SKIP
     """
-    return _gen(
-        "drifting_large_16", _CFG_LARGE_16, DriftingLarge16Weights, pretrained, weights, overrides
-    )
+    if pretrained:
+        reject_unavailable_pretrained("drifting_large_16_gen")
+    return DriftingForImageGeneration(apply_overrides(_CFG_LARGE_16, overrides))

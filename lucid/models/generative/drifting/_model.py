@@ -25,7 +25,8 @@ pixel-MAE), and for pixel models ConvNeXt-V2-Base as well, each turned into
 dozens of per-scale, per-location feature sets (A.5).  It is a training-time
 network, built on request by
 :meth:`DriftingForImageGeneration.load_feature_encoder`, never with the
-generator.
+generator, and it is not part of a generator checkpoint.  No trained encoder
+is published, so what that builds is random, which is not the paper's objective.
 
 **The sample queue** (:class:`_DriftingSampleQueue`) is A.8's MoCo-style
 per-class ring buffer of real samples, from which positives and
@@ -35,8 +36,10 @@ training loop feeds.
 """
 
 import math
+import warnings
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import ClassVar, override
+from typing import ClassVar, Self, override
 
 import lucid
 import lucid.nn as nn
@@ -46,7 +49,8 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._output import DiffusionModelOutput, GenerationOutput, ModelOutput
 from lucid.models._tasks import ImageGenerationModel
-from lucid.models._utils._generative import resolve_generation_device, start_noise
+from lucid.models._utils._common import reject_unavailable_pretrained
+from lucid.models._utils._generative import model_dtype, resolve_generation_device, start_noise
 from lucid.models.generative._common._transformers import (
     check_latent_size,
     sincos_position_embedding,
@@ -55,9 +59,7 @@ from lucid.models.generative._common._transformers import (
 )
 from lucid.models.generative.drifting._config import DriftingConfig
 from lucid.models.generative.drifting._feature_encoder import _DriftingFeatureEncoder
-from lucid.models.generative.drifting._weights import DriftingConvNeXtV2Weights, DriftingMAEWeights
 from lucid.utils.checkpoint import checkpoint
-from lucid.weights import load_weight_entry
 
 __all__ = ["DriftingModel", "DriftingForImageGeneration", "DriftingOutput"]
 
@@ -388,7 +390,37 @@ class DriftingModel(PretrainedModel):
     def conditioning(
         self, labels: Tensor, guidance_scale: Tensor, style_indices: Tensor, dtype: lucid.dtype
     ) -> Tensor:
-        r"""Class, styles and guidance scale summed into ``(B, cond_dim)``."""
+        r"""Class, styles and guidance scale summed into ``(B, cond_dim)``.
+
+        Parameters
+        ----------
+        labels : Tensor
+            ``(B,)`` class indices.
+        guidance_scale : Tensor
+            ``(B,)`` guidance scales :math:`\alpha`.
+        style_indices : Tensor
+            ``(B, noise_coords)`` style indices, unread when ``noise_classes=0``.
+        dtype : lucid.dtype
+            The dtype of the result.
+
+        Returns
+        -------
+        Tensor
+            The ``(B, cond_dim)`` conditioning vector.
+
+        Raises
+        ------
+        ValueError
+            If ``style_indices`` does not hold one column per style codebook.
+        """
+        coords = self.config.noise_coords
+        if self.config.noise_classes > 0 and (
+            style_indices.ndim != 2 or int(style_indices.shape[1]) != coords
+        ):
+            raise ValueError(
+                f"style_indices must be (B, {coords}), one column per style codebook, "
+                f"got shape {tuple(style_indices.shape)}"
+            )
         cond = self.class_embed(labels)
         for i, embed in enumerate(self.noise_embeds):
             cond = cond + embed(style_indices[:, i])
@@ -707,10 +739,58 @@ class _DriftingSampleQueue:
         self._ptr = [0] * self.num_classes
         self._like: Tensor | None = None
 
+    def _checked_labels(self, labels: Tensor) -> list[int]:
+        """``labels`` as queue indices; a negative one would name the last class silently."""
+        ids = _int_list(labels)
+        for lbl in ids:
+            if not 0 <= lbl < self.num_classes:
+                raise IndexError(
+                    f"label {lbl} is out of range for {self.num_classes} queue(s) "
+                    f"(valid range [0, {self.num_classes - 1}])"
+                )
+        return ids
+
+    @staticmethod
+    def _copies(samples: Tensor, count: int) -> list[Tensor]:
+        """Each sample in storage of its own, or one kept entry would pin its whole batch.
+
+        Evaluated here because on Metal an unevaluated copy still holds the
+        batch it will be computed from.
+        """
+        copies = [samples[i].detach().clone() for i in range(count)]
+        lucid.eval(*copies)
+        return copies
+
     def add(self, samples: Tensor, labels: Tensor) -> None:
-        """Push ``(N, ...)`` samples into the queues named by ``(N,)`` labels."""
-        for i, lbl in enumerate(_int_list(labels)):
-            sample = samples[i].detach()
+        """Push ``(N, ...)`` samples into the queues named by ``(N,)`` labels.
+
+        Every argument is checked before the first entry is written, so a
+        refused batch leaves the queues as they were.
+
+        Raises
+        ------
+        IndexError
+            If a label is not a queue of this object.
+        ValueError
+            If ``samples`` and ``labels`` differ in length, or the samples
+            differ in shape from those already queued.
+        TypeError
+            If ``labels`` is not a 1-D tensor of integers.
+        """
+        ids = self._checked_labels(labels)
+        if samples.ndim == 0 or int(samples.shape[0]) != len(ids):
+            raise ValueError(
+                f"expected one label per sample, got {len(ids)} labels "
+                f"for samples of shape {tuple(samples.shape)}"
+            )
+        if self._like is not None and samples.shape[1:] != self._like.shape:
+            raise ValueError(
+                f"the queue holds samples of shape {tuple(self._like.shape)}, "
+                f"got {tuple(samples.shape[1:])}"
+            )
+        if not ids:
+            return
+        for lbl, sample in zip(ids, self._copies(samples, len(ids)), strict=True):
             queue = self._items[lbl]
             if len(queue) < self.max_size:
                 queue.append(sample)
@@ -720,12 +800,28 @@ class _DriftingSampleQueue:
             self._like = sample
 
     def sample(self, labels: Tensor, n_samples: int) -> Tensor:
-        """Draw ``n_samples`` per label: ``(B, n_samples, ...)``."""
+        """Draw ``n_samples`` per label: ``(B, n_samples, ...)``.
+
+        Raises
+        ------
+        IndexError
+            If a label is not a queue of this object.
+        ValueError
+            If there are no labels, or ``n_samples`` is not positive.
+        RuntimeError
+            If nothing has been added yet.
+        """
         if self._like is None:
             raise RuntimeError("the sample queue is empty; call add() before sample()")
         like = self._like
+        ids = self._checked_labels(labels)
+        if not ids or n_samples < 1:
+            raise ValueError(
+                f"sampling needs at least one label and one sample per label, "
+                f"got {len(ids)} labels and n_samples={n_samples}"
+            )
         rows: list[Tensor] = []
-        for lbl in _int_list(labels):
+        for lbl in ids:
             queue = self._items[lbl]
             valid = len(queue)
             if valid == 0:
@@ -794,7 +890,9 @@ class DriftingForImageGeneration(ImageGenerationModel):
     feature_encoder : _DriftingFeatureEncoder
         The frozen :math:`\phi`.  Empty until
         :meth:`load_feature_encoder` builds it, unless the config drifts
-        in the raw space (``use_mae=False, use_convnext=False``).
+        in the raw space (``use_mae=False, use_convnext=False``).  It moves
+        and casts with the model but is not a child of it, so it is in no
+        ``state_dict``, ``parameters()`` or ``train()`` walk.
 
     Notes
     -----
@@ -802,6 +900,14 @@ class DriftingForImageGeneration(ImageGenerationModel):
     Drifting"*, arXiv:2602.04770, 2026.  Training is Alg. 1 with the
     feature-space loss of Eq. (14) and the guidance of A.7; sampling is
     one evaluation of :math:`f_\theta`.
+
+    A checkpoint holds the generator alone: about 8.5 GB of encoder at real
+    size has no place in it, and :meth:`from_pretrained` loads strictly into
+    a model whose encoder is an empty shell.
+
+    Train under :class:`lucid.amp.autocast` with ``dtype=lucid.bfloat16``
+    rather than casting the model, which loses optimizer updates (see
+    :class:`DriftingConfig`).
 
     Examples
     --------
@@ -822,6 +928,8 @@ class DriftingForImageGeneration(ImageGenerationModel):
     config_class: ClassVar[type[DriftingConfig]] = DriftingConfig
     base_model_prefix = "drifting"
 
+    feature_encoder: _DriftingFeatureEncoder
+
     def __init__(self, config: DriftingConfig) -> None:
         """Initialise the model. See the class docstring for parameters."""
         super().__init__(config)
@@ -833,67 +941,81 @@ class DriftingForImageGeneration(ImageGenerationModel):
             encoder.build()
         self.feature_encoder = encoder
 
+    @override
+    def __setattr__(self, name: str, value: object) -> None:
+        # Every assignment of the encoder stays out of the module tree; the
+        # one that registered it put it in the checkpoint.
+        if name == "feature_encoder":
+            object.__setattr__(self, name, value)
+        else:
+            super().__setattr__(name, value)
+
+    @override
+    def _apply(self, fn: Callable[[Tensor], Tensor]) -> Self:
+        super()._apply(fn)
+        # Not a child, so the walk misses it, but it reads the generator's
+        # samples: it moves and casts with the model.
+        self.feature_encoder._apply(fn)
+        return self
+
     # ── the feature encoder ──────────────────────────────────────────────
 
-    def load_feature_encoder(self, pretrained: bool | str = False) -> _DriftingFeatureEncoder:
-        """Build the frozen feature encoder, optionally with the released weights.
+    def load_feature_encoder(self, pretrained: bool = False) -> _DriftingFeatureEncoder:
+        """Build the frozen feature encoder, with random weights.
 
         Parameters
         ----------
-        pretrained : bool or str, default=False
-            ``True`` loads the MAE encoder matching the config
-            (``LATENT_640``, ``LATENT_256`` or ``PIXEL_640``) and, for pixel
-            models, ConvNeXt-V2-Base.  A string names the MAE tag.
+        pretrained : bool, default=False
+            No trained encoder is published, so ``True`` raises
+            ``NotImplementedError`` before anything is allocated.
 
         Returns
         -------
         feature_encoder : _DriftingFeatureEncoder
             The encoder, also stored as ``self.feature_encoder``, with every
-            parameter frozen and on the generator's device.  Called on
-            ``(B, C, H, W)`` samples it returns the feature sets the loss is
-            summed over, a dict of ``(B, T, D)`` tensors keyed by set name,
-            ``"global"`` (the raw sample) first.  :meth:`forward` reads it
-            from ``self.feature_encoder``, so the return value is only
-            needed to look at the features.
+            parameter frozen, on the generator's device and in its dtype.
+            Called on ``(B, C, H, W)`` samples it returns the feature sets
+            the loss is summed over, a dict of ``(B, T, D)`` tensors keyed by
+            set name, ``"global"`` (the raw sample) first.  :meth:`forward`
+            reads it from ``self.feature_encoder``, so the return value is
+            only needed to look at the features.
 
         Raises
         ------
-        ValueError
-            If no released MAE matches the config, or the tag is unknown.
+        NotImplementedError
+            If ``pretrained`` is set.
+
+        Warns
+        -----
+        UserWarning
+            If the config asks for a learned feature space, which this does
+            not deliver: see the Notes.
+
+        Notes
+        -----
+        The paper's objective is the drifting loss in the feature space of
+        an encoder trained as an MAE (A.3), and of ConvNeXt-V2 for pixels
+        (A.4).  A random encoder is a different objective: training runs
+        end to end against it, which exercises the pipeline, but do not
+        expect the paper's results from it.  ``use_mae=False,
+        use_convnext=False`` drifts in the raw space and needs no encoder.
         """
+        if pretrained:
+            reject_unavailable_pretrained("DriftingForImageGeneration.load_feature_encoder")
         encoder = _DriftingFeatureEncoder(self.config, build=True)
-        if pretrained is not False and self.config.use_mae:
-            tag = pretrained if isinstance(pretrained, str) else self._mae_tag()
-            if tag not in DriftingMAEWeights.__members__:
-                raise ValueError(
-                    f"no released MAE encoder is tagged {tag!r}; known: "
-                    f"{list(DriftingMAEWeights.__members__)}"
-                )
-            load_weight_entry(encoder.mae, DriftingMAEWeights[tag], name=f"drifting_mae/{tag}")
-        if pretrained is not False and self.config.use_convnext:
-            load_weight_entry(
-                encoder.convnext,
-                DriftingConvNeXtV2Weights.DEFAULT,
-                name="drifting_convnext_v2/IMAGENET22K_224",
+        if encoder.needed:
+            warnings.warn(
+                "load_feature_encoder() built a randomly initialised encoder, because no "
+                "trained one is published. The drifting loss in a random feature space is "
+                "not the paper's objective, so do not expect its results.",
+                UserWarning,
+                stacklevel=2,
             )
         encoder.requires_grad_(False)
         encoder.eval()
-        encoder.to(resolve_generation_device(self.drifting, None))
+        encoder.to(resolve_generation_device(self.drifting, None), model_dtype(self.drifting))
         self.feature_encoder = encoder
         return encoder
-
-    def _mae_tag(self) -> str:
-        """The released MAE encoder this config was trained against."""
-        config = self.config
-        for name, member in DriftingMAEWeights.__members__.items():
-            wanted = member.value.meta["config"]
-            if isinstance(wanted, dict) and all(getattr(config, k) == v for k, v in wanted.items()):
-                return name
-        raise ValueError(
-            f"no released MAE encoder has in_channels={config.in_channels}, "
-            f"mae_base_channels={config.mae_base_channels}, "
-            f"mae_input_patch_size={config.mae_input_patch_size}"
-        )
 
     # ── the sample queues (A.8) ──────────────────────────────────────────
 
@@ -951,9 +1073,30 @@ class DriftingForImageGeneration(ImageGenerationModel):
         unconditional_queue: _DriftingSampleQueue,
         labels: Tensor,
     ) -> tuple[Tensor, Tensor]:
-        """Positives ``(N_c, pos_per_sample, ...)`` and negatives ``(N_c, neg_per_sample, ...)``."""
+        """Draw what one training step reads from the two queues.
+
+        Parameters
+        ----------
+        positive_queue : _DriftingSampleQueue
+            The per-class queue :meth:`make_sample_queues` made.
+        unconditional_queue : _DriftingSampleQueue
+            The single-class queue :meth:`make_sample_queues` made.  With
+            ``neg_per_sample=0`` it is not read, so it need not have been fed.
+        labels : Tensor
+            ``(N_c,)`` the classes to train on.
+
+        Returns
+        -------
+        positives : Tensor
+            ``(N_c, pos_per_sample, ...)`` samples of each label.
+        negatives : Tensor
+            ``(N_c, neg_per_sample, ...)`` samples of any class, empty in that
+            shape with ``neg_per_sample=0``.
+        """
         config = self.config
         positives = positive_queue.sample(labels, config.pos_per_sample)
+        if config.neg_per_sample == 0:
+            return positives, positives[:, :0]
         negatives = unconditional_queue.sample(lucid.zeros_like(labels), config.neg_per_sample)
         return positives, negatives
 
@@ -976,6 +1119,36 @@ class DriftingForImageGeneration(ImageGenerationModel):
         keep = (lucid.rand((batch,), device=device) >= config.no_cfg_frac).to(cfg.dtype)
         return (cfg * keep + (1.0 - keep)).to(dtype)
 
+    @staticmethod
+    def _positives(images: Tensor, labels: Tensor, negatives: Tensor | None) -> Tensor:
+        """The positives as ``(N_c, N_pos, C, H, W)``, once the batch is known to fit together."""
+        if images.ndim not in (4, 5):
+            raise ValueError(
+                "images must be (N_c, N_pos, C, H, W), or (N_c, C, H, W) for one positive "
+                f"per label, got shape {tuple(images.shape)}"
+            )
+        positives = images if images.ndim == 5 else images.unsqueeze(1)
+        n_c, n_pos = int(positives.shape[0]), int(positives.shape[1])
+        if n_c == 0 or n_pos == 0:
+            raise ValueError(
+                "the drifting field attracts toward positives, so it needs at least one "
+                f"label and one positive per label, got shape {tuple(positives.shape)}"
+            )
+        if tuple(labels.shape) != (n_c,):
+            raise ValueError(
+                f"labels must be ({n_c},), one per row of images, got {tuple(labels.shape)}"
+            )
+        if negatives is not None and (
+            negatives.ndim != 5
+            or int(negatives.shape[0]) != n_c
+            or negatives.shape[2:] != positives.shape[2:]
+        ):
+            raise ValueError(
+                f"negatives must be ({n_c}, N_unc, {', '.join(map(str, positives.shape[2:]))}), "
+                f"got {tuple(negatives.shape)}"
+            )
+        return positives
+
     @override
     def forward(
         self,
@@ -990,13 +1163,13 @@ class DriftingForImageGeneration(ImageGenerationModel):
         ----------
         images : Tensor
             Positives: ``(N_c, N_pos, C, H, W)`` real samples of each label,
-            or ``(N_c, C, H, W)`` for one each.
+            or ``(N_c, C, H, W)`` for one each.  At least one is required.
         labels : Tensor
             ``(N_c,)`` class labels.
         negatives : Tensor or None, optional
             ``(N_c, N_unc, C, H, W)`` unconditional real samples (random
-            classes) — the extra negatives guidance trains with.  ``None``
-            trains without guidance.
+            classes) — the extra negatives guidance trains with.  ``None``,
+            or ``N_unc = 0``, trains without guidance.
         guidance_scale : Tensor or None, optional
             ``(N_c,)`` guidance scales.  Drawn from the configured power law
             when ``None`` and negatives are given; ``1`` when neither is.
@@ -1006,6 +1179,14 @@ class DriftingForImageGeneration(ImageGenerationModel):
         DriftingOutput
             The loss, the generated batch, the scales and the per-feature
             terms.
+
+        Raises
+        ------
+        ValueError
+            If the batch is empty, or its tensors do not fit together.
+        RuntimeError
+            If the config asks for a learned feature space and no encoder has
+            been built.
 
         Notes
         -----
@@ -1017,7 +1198,7 @@ class DriftingForImageGeneration(ImageGenerationModel):
         unconditional samples; the terms are summed (Eq. 14).
         """
         config = self.config
-        positives = images if images.ndim == 5 else images.unsqueeze(1)
+        positives = self._positives(images, labels, negatives)
         n_c, n_pos = int(positives.shape[0]), int(positives.shape[1])
         sample_shape = tuple(int(s) for s in positives.shape[2:])
         device = positives.device.type
@@ -1094,7 +1275,7 @@ class DriftingForImageGeneration(ImageGenerationModel):
             the model is class-conditional and has no null class.
         guidance_scale : float or Tensor, default=1.0
             Guidance scale :math:`\alpha`; any value in the trained range
-            works without retraining.  The released best: ``1.0`` for
+            works without retraining.  The paper's best: ``1.0`` for
             ``L/2``, ``B/16``, ``L/16``; ``1.1`` for ``B/2``.
         temperature : float, default=1.0
             Multiplier on the Gaussian noise (the release's ``temp``).
