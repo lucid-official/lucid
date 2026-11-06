@@ -604,9 +604,7 @@ class EfficientFormerOutput(ImageClassificationOutput):
     Examples
     --------
     >>> import lucid
-    >>> from lucid.models.vision.efficientformer._model import (
-    ...     EfficientFormerOutput,
-    ... )
+    >>> from lucid.models.vision.efficientformer import EfficientFormerOutput
     >>> out = EfficientFormerOutput(logits=lucid.zeros(1, 1000))
     >>> out.logits.shape
     (1, 1000)

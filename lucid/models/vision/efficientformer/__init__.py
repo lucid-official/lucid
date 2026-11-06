@@ -4,6 +4,7 @@ from lucid.models.vision.efficientformer._config import EfficientFormerConfig
 from lucid.models.vision.efficientformer._model import (
     EfficientFormer,
     EfficientFormerForImageClassification,
+    EfficientFormerOutput,
 )
 from lucid.models.vision.efficientformer._pretrained import (
     efficientformer_l1,
@@ -23,6 +24,7 @@ __all__ = [
     "EfficientFormerConfig",
     "EfficientFormer",
     "EfficientFormerForImageClassification",
+    "EfficientFormerOutput",
     "efficientformer_l1",
     "efficientformer_l1_cls",
     "efficientformer_l3",

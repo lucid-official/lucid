@@ -220,15 +220,16 @@ class FCNOutput(SemanticSegmentationOutput):
 
     Examples
     --------
-    The value a segmentation forward returns. It is not exported from the
-    package — you receive one rather than construct one.
+    The value a segmentation forward returns. It is exported from the
+    package so a caller can annotate with it, but you receive one rather
+    than construct one.
 
     >>> import lucid
-    >>> from lucid.models.vision.fcn import fcn_resnet50
+    >>> from lucid.models.vision.fcn import FCNOutput, fcn_resnet50
     >>> model = fcn_resnet50(num_classes=21).eval()
     >>> out = model(lucid.randn(1, 3, 224, 224))
-    >>> type(out).__name__
-    'FCNOutput'
+    >>> isinstance(out, FCNOutput)
+    True
     >>> out.logits.shape          # (B, K, H, W) — full input resolution
     (1, 21, 224, 224)
 

@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - add Drifting Models (arXiv 2602.04770)
 
+- export FCNOutput and EfficientFormerOutput
+
 ### Fixed
 
 - `lucid.compile`: a compiled function using `masked_select`, `linalg.lu_factor_ex`, `linalg.ldl_factor_ex` or `linalg.householder_product` returned the first call's result for every later input with no error. These signatures now run eagerly and answer each input (LCD-836).
