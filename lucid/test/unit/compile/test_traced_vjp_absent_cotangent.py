@@ -35,6 +35,13 @@ from lucid.compile._core.trace_context import recording
 
 _LA = lucid.linalg
 
+
+@pytest.fixture(autouse=True)
+def _clear_verbose(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ensure ``LUCID_COMPILE_VERBOSE`` left by earlier matrix runs does not suppress warnings."""
+    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
+
+
 _OPS: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
     "svd": lambda a: _LA.svd(a)[1],
     "svdvals": lambda a: _LA.svdvals(a),
