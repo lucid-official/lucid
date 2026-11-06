@@ -69,9 +69,11 @@ public:
             MPSGraphTensor* s = [g reductionSumWithTensor:sq axes:axes name:nil];
             r = [g squareRootWithTensor:s name:nil];
         } else if (std::isinf(ord) && ord > 0) {
-            r = [g reductionMaximumWithTensor:abs_x axes:axes name:nil];
+            // A NaN entry makes the norm NaN, as eager's; the plain reduction
+            // skipped it (LCD-865).
+            r = [g reductionMaximumPropagateNaNWithTensor:abs_x axes:axes name:nil];
         } else if (std::isinf(ord) && ord < 0) {
-            r = [g reductionMinimumWithTensor:abs_x axes:axes name:nil];
+            r = [g reductionMinimumPropagateNaNWithTensor:abs_x axes:axes name:nil];
         } else {
             MPSGraphTensor* ord_c = [g constantWithScalar:ord dataType:x.dataType];
             MPSGraphTensor* powed =

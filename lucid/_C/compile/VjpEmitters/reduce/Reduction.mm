@@ -1,6 +1,6 @@
 // lucid/_C/compile/VjpEmitters/reduce/Reduction.mm
 //
-// VJPs for ``sum`` and ``mean`` reductions.
+// VJPs for the ``sum`` / ``mean`` / ``max`` / ``min`` reductions and ``cumsum``.
 //
 // Forward emitter (see :file:`OpEmitters/reduce/Reduction.mm`) carries
 // ``dims`` (vector<int64>) + ``keepdim`` (bool) attrs and squeezes the
@@ -15,6 +15,7 @@
 #import <MetalPerformanceShadersGraph/MetalPerformanceShadersGraph.h>
 
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <variant>
 #include <vector>
@@ -122,9 +123,51 @@ public:
     }
 };
 
+// The axes the forward reduced, as the trace recorded them (none recorded =
+// all); nullopt for an axis outside the input's rank.
+std::optional<std::vector<bool>> reduced_axes(const OpNode& node, std::size_t rank) {
+    auto it = node.attrs.find("dims");
+    const auto* dims =
+        it == node.attrs.end() ? nullptr : std::get_if<std::vector<std::int64_t>>(&it->second);
+    if (dims == nullptr || dims->empty())
+        return std::vector<bool>(rank, true);
+    std::vector<bool> reduced(rank, false);
+    const auto r = static_cast<std::int64_t>(rank);
+    for (std::int64_t d : *dims) {
+        if (d < 0)
+            d += r;
+        if (d < 0 || d >= r)
+            return std::nullopt;
+        reduced[static_cast<std::size_t>(d)] = true;
+    }
+    return reduced;
+}
+
+// ``mask / (ties + 1 - mask)``, with ``ties`` the sum of ``mask`` over ``axes``.
+MPSGraphTensor* share_among_ties(MPSGraph* g, MPSGraphTensor* mask, NSArray<NSNumber*>* axes) {
+    // A 0-d input reduces over no axis: its one element is its own tie count.
+    MPSGraphTensor* ties =
+        axes.count == 0 ? mask : [g reductionSumWithTensor:mask axes:axes name:nil];
+    MPSGraphTensor* one = [g constantWithScalar:1.0 dataType:mask.dataType];
+    MPSGraphTensor* denom = [g subtractionWithPrimaryTensor:[g additionWithPrimaryTensor:ties
+                                                                         secondaryTensor:one
+                                                                                    name:nil]
+                                            secondaryTensor:mask
+                                                       name:nil];
+    return [g divisionWithPrimaryTensor:mask secondaryTensor:denom name:nil];
+}
+
 // ────────────────────────────────────────────────────────────────────
-// max / min: the gradient goes to every element equal to the result — a
-// tie gets the full gradient at each position, which is what eager does.
+// max / min: a slice's gradient is shared evenly among the elements tied
+// for its extremum, ``mask / (ties + 1 - mask)`` with ``mask = (x == y)``
+// — eager's ``share_among_ties`` (ops/ufunc/Reductions.cpp), in the same
+// order of operations so a half-precision share rounds as eager's does.
+// Where ``mask`` is 1 the denominator is the slice's tie count; where it
+// is 0 it is at least 1, so a slice nothing matches (a NaN extremum) gets
+// zeros.  Giving every tie the whole gradient made a step on a tie — a
+// zero-initialised tensor, ``matrix_norm(a, 2)`` or ``cond`` on a repeated
+// singular value — that many times too large (LCD-865).  An int ``dim``
+// (``x.max(dim)``) gathers at its argmax and never reaches this VJP.
 // cumsum: the adjoint of a running sum is the running sum taken backwards.
 // Neither had a VJP, and MPSGraph's autodiff aborts on both, so
 // ``logsumexp``, ``norm`` and any max over a sequence ran eager.
@@ -133,8 +176,8 @@ template <bool IS_MAX>
 class ExtremumVjp final : public VjpEmitter {
 public:
     std::string_view op_name() const override { return IS_MAX ? "max" : "min"; }
-    bool emit(BackwardContext& bctx, const OpNode& node,
-              const std::vector<void*>& grad_outs) override {
+    bool
+    emit(BackwardContext& bctx, const OpNode& node, const std::vector<void*>& grad_outs) override {
         if (node.inputs.size() != 1 || node.inputs[0] < 0 || node.outputs.empty() ||
             grad_outs.empty() || grad_outs[0] == nullptr)
             return false;
@@ -145,39 +188,30 @@ public:
         if (g == nil || go == nil || x == nil || y == nil)
             return false;
         const auto x_shape = shape_of_mps(x);
-        const auto rank = static_cast<std::int64_t>(x_shape.size());
-        // Reduced axes as the forward recorded them; none recorded = all.
-        std::vector<bool> reduced(x_shape.size(), false);
-        auto it = node.attrs.find("dims");
-        const auto* dims = it == node.attrs.end()
-                               ? nullptr
-                               : std::get_if<std::vector<std::int64_t>>(&it->second);
-        if (dims == nullptr || dims->empty()) {
-            reduced.assign(x_shape.size(), true);
-        } else {
-            for (std::int64_t d : *dims) {
-                if (d < 0)
-                    d += rank;
-                if (d < 0 || d >= rank)
-                    return false;
-                reduced[static_cast<std::size_t>(d)] = true;
-            }
-        }
+        const auto reduced = reduced_axes(node, x_shape.size());
+        if (!reduced)
+            return false;
         // Result and grad in keepdim form, so both broadcast against x.
         std::vector<std::int64_t> kept(x_shape);
-        for (std::size_t d = 0; d < kept.size(); ++d)
-            if (reduced[d])
-                kept[d] = 1;
+        NSMutableArray<NSNumber*>* axes = [NSMutableArray arrayWithCapacity:x_shape.size()];
+        for (std::size_t d = 0; d < kept.size(); ++d) {
+            if (!(*reduced)[d])
+                continue;
+            kept[d] = 1;
+            [axes addObject:[NSNumber numberWithUnsignedLong:d]];
+        }
         MPSGraphTensor* y_k = [g reshapeTensor:cast_if_needed(g, y, x.dataType)
                                      withShape:shape_to_ns(kept)
                                           name:nil];
         MPSGraphTensor* go_k = [g reshapeTensor:go withShape:shape_to_ns(kept) name:nil];
-        MPSGraphTensor* hit = [g equalWithPrimaryTensor:x secondaryTensor:y_k name:nil];
-        MPSGraphTensor* dx =
-            [g selectWithPredicateTensor:hit
-                     truePredicateTensor:[g broadcastTensor:go_k toShape:shape_to_ns(x_shape) name:nil]
-                    falsePredicateTensor:[g constantWithScalar:0.0 dataType:go.dataType]
-                                    name:IS_MAX ? @"max_vjp" : @"min_vjp"];
+        MPSGraphTensor* mask = [g castTensor:[g equalWithPrimaryTensor:x
+                                                       secondaryTensor:y_k
+                                                                  name:nil]
+                                      toType:go.dataType
+                                        name:nil];
+        MPSGraphTensor* dx = [g multiplicationWithPrimaryTensor:go_k
+                                                secondaryTensor:share_among_ties(g, mask, axes)
+                                                           name:IS_MAX ? @"max_vjp" : @"min_vjp"];
         bctx.accumulate_grad(node.inputs[0], from_tensor(dx));
         return true;
     }

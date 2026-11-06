@@ -118,24 +118,23 @@ public:
     }
 };
 
-class MaxReduceEmitter final : public OpEmitter {
+// max / min: a slice holding a NaN reduces to NaN, as eager's does.  The
+// plain ``reductionMaximum`` skips NaN — ``[1, nan, 1]`` gave 1 and an
+// all-NaN slice -inf — so a compiled loss was finite where eager's is NaN,
+// and the max VJP's tie mask picked elements eager's does not (LCD-865).
+// An integer or bool input holds no NaN and keeps the plain reduction.
+template <bool IS_MAX>
+class ExtremumReduceEmitter final : public OpEmitter {
 public:
-    std::string_view op_name() const override { return "max"; }
+    std::string_view op_name() const override { return IS_MAX ? "max" : "min"; }
     bool emit(BuilderContext& ctx, const OpNode& node) override {
-        return emit_reduce(ctx, node, [](MPSGraph* g, MPSGraphTensor* x,
-                                          NSArray<NSNumber*>* axes) {
-            return [g reductionMaximumWithTensor:x axes:axes name:@"max"];
-        });
-    }
-};
-
-class MinReduceEmitter final : public OpEmitter {
-public:
-    std::string_view op_name() const override { return "min"; }
-    bool emit(BuilderContext& ctx, const OpNode& node) override {
-        return emit_reduce(ctx, node, [](MPSGraph* g, MPSGraphTensor* x,
-                                          NSArray<NSNumber*>* axes) {
-            return [g reductionMinimumWithTensor:x axes:axes name:@"min"];
+        return emit_reduce(ctx, node, [](MPSGraph* g, MPSGraphTensor* x, NSArray<NSNumber*>* axes) {
+            NSString* name = IS_MAX ? @"max" : @"min";
+            if ((x.dataType & MPSDataTypeFloatBit) == 0)
+                return IS_MAX ? [g reductionMaximumWithTensor:x axes:axes name:name]
+                              : [g reductionMinimumWithTensor:x axes:axes name:name];
+            return IS_MAX ? [g reductionMaximumPropagateNaNWithTensor:x axes:axes name:name]
+                          : [g reductionMinimumPropagateNaNWithTensor:x axes:axes name:name];
         });
     }
 };
@@ -169,8 +168,8 @@ struct ReductionEmitterRegistrar {
     ReductionEmitterRegistrar() {
         register_emitter(std::make_unique<SumEmitter>());
         register_emitter(std::make_unique<MeanEmitter>());
-        register_emitter(std::make_unique<MaxReduceEmitter>());
-        register_emitter(std::make_unique<MinReduceEmitter>());
+        register_emitter(std::make_unique<ExtremumReduceEmitter<true>>());
+        register_emitter(std::make_unique<ExtremumReduceEmitter<false>>());
         register_emitter(std::make_unique<ProdEmitter>());
         register_emitter(std::make_unique<VarEmitter>());
     }

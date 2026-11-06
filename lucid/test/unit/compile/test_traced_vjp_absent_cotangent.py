@@ -67,18 +67,14 @@ _MATRICES: dict[str, list[list[float]]] = {
 }
 
 # ``matrix_norm(a, 2)`` is a ``max`` over the singular values: on a tied
-# largest one the compiled ``max`` VJP sends the full gradient to every tie.
-_TIED_MAX = pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason="LCD-865: compiled max VJP on a tie"
-)
-
+# largest one it also holds the compiled ``max`` VJP to eager's even split
+# among the ties (LCD-865, ``test_extremum_tie_gradient.py``).
 _AFFECTED = [
     *(
         pytest.param(op, mat)
-        for op in ("svd", "svdvals", "matrix_norm_nuc", "eigh_values", "eigvalsh")
+        for op in ("svd", "svdvals", "matrix_norm_nuc", "matrix_norm_2", "eigh_values", "eigvalsh")
         for mat in ("eye", "diag_3_3_1", "zero")
     ),
-    *(pytest.param("matrix_norm_2", mat, marks=_TIED_MAX) for mat in ("eye", "diag_3_3_1", "zero")),
     pytest.param("matrix_norm_2", "diag_3_1_1"),
     pytest.param("svdvals", "tall_rank_deficient"),
     pytest.param("matrix_norm_nuc", "tall_rank_deficient"),
@@ -150,7 +146,7 @@ def _linalg_case(op: str, mat: str, device: str) -> tuple[list[lucid.Tensor], lu
 
 @pytest.mark.parametrize(("op", "mat"), [p.values for p in _AFFECTED])
 def test_eager_gradient_on_the_spectrum_is_finite(op: str, mat: str, device_gpu_only: str) -> None:
-    """The premise of the xfails below: eager answers these with a finite gradient."""
+    """The premise of the cases below: eager answers these with a finite gradient."""
     model = _OfMatrix(lucid.tensor(_MATRICES[mat], device=device_gpu_only), _OPS[op])
     x = lucid.ones(1, device=device_gpu_only)
     _loss(model(x), lucid.ones(1, device=device_gpu_only)).backward()

@@ -137,6 +137,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Compiled training steps through `svd`, `svdvals`, `matrix_norm(nuc)`, `eigh` and `eigvalsh` on a repeated or zero spectrum (identity or orthogonal weights) no longer give NaN gradients. A custom Function that does not materialize grads now gets, in a compiled step, the cotangents eager gives it for the outputs a gradient reached (`None` for the rest).
 
+- split a max/min gradient among ties and keep NaN
+
 ### Performance
 
 - `_C.engine` (`Linear`, `ConvNd`, `ConvTransposeNd`, `LayerNorm`, `RMSNorm`, `BatchNormNd`, `GroupNorm`, `BatchNormEval`, `GlobalResponseNorm`, `Bilinear`): thread `needs_input_grad` (`grad_mask`) and `kGradReads` through fused CPU/Metal backward kernels and `apply_for_graph`, skipping unneeded `dx`/`dW`/`db` GEMMs, convolutions, reductions, and buffer allocations (LCD-697).
