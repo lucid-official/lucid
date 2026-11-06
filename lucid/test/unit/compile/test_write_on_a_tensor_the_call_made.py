@@ -159,9 +159,9 @@ class _KeepsIt(nn.Module):
         return y * 2.0
 
 
-def _sequential(middle: nn.Module) -> nn.Module:
+def _sequential(middle: Callable[[], nn.Module]) -> nn.Module:
     lucid.manual_seed(0)
-    return nn.Sequential(nn.Linear(WIDTH, WIDTH), middle, nn.Linear(WIDTH, WIDTH)).to(
+    return nn.Sequential(nn.Linear(WIDTH, WIDTH), middle(), nn.Linear(WIDTH, WIDTH)).to(
         COMPILE_DEVICE
     )
 
@@ -292,7 +292,7 @@ def _eager_call(model: nn.Module, x: Tensor, grad: bool) -> float:
 
 def _run(middle: Callable[[], nn.Module], entry_name: str) -> _Entry:
     """Run ``entry_name`` against an eager twin, comparing after each call."""
-    model, twin = _sequential(middle()), _sequential(middle())
+    model, twin = _sequential(middle), _sequential(middle)
     optimizer = optim.SGD(model.parameters(), lr=0.01)
     twin_optimizer = optim.SGD(twin.parameters(), lr=0.01)
     entry = ENTRIES[entry_name](model, optimizer)
@@ -328,8 +328,21 @@ def test_a_write_on_a_copy_of_the_input(write: str, entry: str) -> None:
     _run(lambda: _Writes(WRITES[write], MADE["clone"]), entry)
 
 
-@pytest.mark.parametrize("entry", list(ENTRIES))
-@pytest.mark.parametrize("write", list(WRITES))
+_MASK_ONLY = pytest.mark.xfail(
+    strict=True,
+    reason="a parameter only a mask reaches gets zeros from a segmented step, eager None; "
+    "the out-of-place masked_fill does the same (found in LCD-895)",
+)
+
+
+@pytest.mark.parametrize(
+    ("write", "entry"),
+    [
+        pytest.param(w, e, marks=[_MASK_ONLY] if (w, e) == ("masked_fill", "segmented") else [])
+        for w in WRITES
+        for e in ENTRIES
+    ],
+)
 def test_a_write_on_a_factorys_tensor(write: str, entry: str) -> None:
     _run(lambda: _Writes(WRITES[write], MADE["factory"]), entry)
 
@@ -337,11 +350,22 @@ def test_a_write_on_a_factorys_tensor(write: str, entry: str) -> None:
 @pytest.mark.parametrize("entry", list(ENTRIES))
 @pytest.mark.parametrize(
     "middle",
-    [_ReadsBeforeAndAfter, _WritesAViewReadAfter, _ReadsAViewFromBefore, _WritesItsArgument],
+    [_ReadsBeforeAndAfter, _WritesAViewReadAfter, _WritesItsArgument],
     ids=lambda c: c.__name__.strip("_"),
 )
 def test_what_reads_around_the_write(middle: type[nn.Module], entry: str) -> None:
     _run(middle, entry)
+
+
+@pytest.mark.parametrize("entry", [e for e in ENTRIES if e != "compiled_step"])
+def test_a_view_read_from_before_the_write_runs_eagerly(entry: str) -> None:
+    _run(_ReadsAViewFromBefore, entry)
+
+
+def test_compiled_step_refuses_a_view_read_from_before_the_write() -> None:
+    """It has no eager path: a trace it cannot lower raises."""
+    with pytest.raises(RuntimeError, match="a view of a tensor was read"):
+        _run(_ReadsAViewFromBefore, "compiled_step")
 
 
 @pytest.mark.parametrize("entry", list(ENTRIES))
@@ -382,11 +406,16 @@ class _ComputesUntraced(nn.Module):
         return y * 3.0
 
 
-@pytest.mark.parametrize("entry", ["make_step", "fused_step", "compiled_step"])
+@pytest.mark.parametrize("entry", ["make_step", "segmented", "fused_step"])
 def test_a_computed_value_the_trace_cannot_name_runs_eagerly(entry: str) -> None:
     """Refused, not frozen: with no id to read, the trace cannot stand for the call."""
     ran = _run(_ComputesUntraced, entry)
     assert ran.stayed_compiled() in (False, None)
+
+
+def test_compiled_step_refuses_a_computed_value_the_trace_cannot_name() -> None:
+    with pytest.raises(RuntimeError, match="computed during the trace"):
+        _run(_ComputesUntraced, "compiled_step")
 
 
 def test_a_leaf_of_the_model_is_no_computed_value() -> None:

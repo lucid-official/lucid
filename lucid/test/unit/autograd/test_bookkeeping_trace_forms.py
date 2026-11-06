@@ -8,8 +8,9 @@ their plain ops instead (``Function._trace_form``): the ops a recording
 under ``no_grad`` takes, plus one graph-carrying copy (``contiguous``) per
 operand the node reads, so the plain ops save nothing the traced code may
 write — an eager backward run inside the recording still sees what eager
-sees.  No ``detach`` (a gradient sink), no ``_make_view`` (no emitter), and
-no call noted as a custom backward.  Values and ``requires_grad`` stay
+sees.  ``_Overwritten`` also records the ``where`` that carries its zero
+derivative.  No ``detach`` (a gradient sink), no ``_make_view`` (no emitter),
+and no call noted as a custom backward.  Values and ``requires_grad`` stay
 eager's.
 
 Only a class defined in Lucid is trusted with these markers; one set on a
@@ -159,13 +160,18 @@ _PLAIN_ONLY: dict[tuple[str, str], list[str]] = {
 #: makes into ``t``'s buffer without recording it.
 _RECORDED_ONLY: dict[str, list[str]] = {"setitem_whole": ["contiguous"]}
 
+#: What ``_Overwritten``'s trace form records besides its copy: the mask and the
+#: ``where`` whose derivative with respect to the overwritten tensor is zero.
+_ZERO_DERIVATIVE = ["where", "zeros"]
+_OVERWRITES = {"fill_", "zero_", "fill_view"}
+
 #: How many operands each bookkeeping trace form reads through a copy: the
 #: tensors its node's plain op would otherwise save.
 _OPERANDS_READ: dict[type[Function], int] = {
     _Snapshot: 1,
     _RoundDecimals: 1,
     _TruncQuotient: 2,
-    _Overwritten: 0,
+    _Overwritten: 1,
 }
 
 
@@ -224,7 +230,8 @@ def test_a_grad_mode_recording_takes_the_no_grad_ops(
     assert noted == 0, "a bookkeeping node was noted as a custom backward"
     assert "detach" not in recorded and "_make_view" not in recorded
     extra, missing = _differences(plain, recorded)
-    assert sorted(extra) == ["contiguous"] * copies + _RECORDED_ONLY.get(name, [])
+    expected = ["contiguous"] * copies + _RECORDED_ONLY.get(name, [])
+    assert sorted(extra) == expected + (_ZERO_DERIVATIVE if name in _OVERWRITES else [])
     assert missing == _PLAIN_ONLY.get((name, device), [])
 
 
