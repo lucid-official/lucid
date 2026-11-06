@@ -41,6 +41,8 @@ class _TracerLike(Protocol):
 
     def made_here(self, impl: object) -> bool: ...
 
+    def keep_answer(self, answer: list[_C_engine.TensorImpl]) -> None: ...
+
 
 class _ExecutableLike(Protocol):
     input_ids: list[int]
@@ -50,6 +52,7 @@ class _ExecutableLike(Protocol):
 
 from lucid._C import engine as _C_engine
 
+from lucid.compile._core.buffer_writes import HeldWrites, TraceAnswer
 from lucid.compile._core.fallback import EagerFallbackSet, _fallback_notice, _narrate, run_eager
 from lucid.compile._core.signature import (
     CacheKey,
@@ -98,11 +101,16 @@ def _extract_return_impls(value: object, tracer: _TracerLike) -> tuple[object, l
     slot for it so the executable's flat output list lines up with the
     spec.  The Python compile harness handles that case by falling
     back to eager when the tensor isn't reachable in the graph.
+
+    The slots' tensors are handed to the tracer (``keep_answer``), so the
+    result can stand as the call if the trace is refused for a tensor the
+    call made and keeps (:func:`~lucid.compile._core.buffer_writes.held_writes`).
     """
     from lucid._dispatch import _unwrap
     from lucid._tensor.tensor import Tensor
 
     flat_ids: list[int] = []
+    flat_impls: list[_C_engine.TensorImpl] = []
 
     def visit(v: object) -> object:
         """Recursive walk producing the spec tree + side-effecting ``flat_ids``.
@@ -127,6 +135,7 @@ def _extract_return_impls(value: object, tracer: _TracerLike) -> tuple[object, l
                 return ("passthrough", v)
             slot = len(flat_ids)
             flat_ids.append(int(tid))
+            flat_impls.append(impl)
             return ("tensor", slot)
         if isinstance(v, tuple):
             return ("tuple", [visit(x) for x in v])
@@ -148,6 +157,7 @@ def _extract_return_impls(value: object, tracer: _TracerLike) -> tuple[object, l
         return ("scalar", v)
 
     spec = visit(value)
+    tracer.keep_answer(flat_impls)
     return spec, flat_ids
 
 
@@ -915,18 +925,29 @@ class CompiledModule[**P, R](_ModuleWrapper):
             # A tensor no module holds — a closure's, a global, one a factory
             # makes — is seen only once the trace has read it.  The executable
             # stays cached for the calls made under ``no_grad``.
-            if entry is not None and grad_mode and entry.reads_grad():
+            if isinstance(entry, _CacheEntry) and grad_mode and entry.reads_grad():
                 return self._run_differentiable(key, args, kwargs)
         self._count(key)
-        return (
-            run_eager(self._model, args, kwargs)
-            if entry is None
-            else self._execute(key, entry, args, kwargs)
-        )
+        return self._answer(key, entry, args, kwargs)
+
+    def _answer(
+        self,
+        key: CacheKey,
+        entry: _CacheEntry | TraceAnswer[object] | None,
+        args: tuple[object, ...],
+        kwargs: dict[str, object],
+    ) -> object:
+        """Run ``entry``, or the call eagerly without one; a trace that stood
+        as the call (:class:`TraceAnswer`) is the answer already."""
+        if isinstance(entry, TraceAnswer):
+            return entry.value
+        if entry is None:
+            return run_eager(self._model, args, kwargs)
+        return self._execute(key, entry, args, kwargs)
 
     def _compile_and_cache(
         self, key: CacheKey, symbolic: bool, args: tuple[object, ...], kwargs: dict[str, object]
-    ) -> tuple[CacheKey, _CacheEntry | None]:
+    ) -> tuple[CacheKey, _CacheEntry | TraceAnswer[object] | None]:
         """Trace and compile a signature not cached yet; ``None`` if it cannot be.
 
         Returns the key the entry is cached under: the first trace may have
@@ -936,19 +957,20 @@ class CompiledModule[**P, R](_ModuleWrapper):
         """
         from lucid.compile._core.trace_context import compile_attempt
 
-        with compile_attempt():
+        with compile_attempt() as attempt:
             before = self._param_fp.outside_slots()
             entry = self._compile_for(args, kwargs)
-            self._param_fp.settle(() if entry is None else entry.reads.fed, before)
+            attempt.answered = isinstance(entry, TraceAnswer)
+            self._param_fp.settle(entry.reads.fed if isinstance(entry, _CacheEntry) else (), before)
         resolved = self._symbolic_resolved
         if resolved is not None and resolved != symbolic:
             key = self._param_fp.key_of(args, kwargs, dynamic=resolved)
         # An argument that is a tensor attribute the trace read shares its feed.
         key = self._param_fp.rekey(key, args, kwargs)
-        if entry is None:
-            self._eager_only.add(key)
-        else:
+        if isinstance(entry, _CacheEntry):
             self._cache[key] = entry
+        else:
+            self._eager_only.add(key)
         return key, entry
 
     def _count(self, key: CacheKey) -> None:
@@ -1117,12 +1139,14 @@ class CompiledModule[**P, R](_ModuleWrapper):
 
     def _trace_forward(
         self, args: tuple[object, ...], kwargs: dict[str, object]
-    ) -> tuple[Tracer, object, list[int]] | None:
+    ) -> tuple[Tracer, object, list[int], HeldWrites] | TraceAnswer[object] | None:
         """Trace ``self._model(*args, **kwargs)`` in the caller's grad mode.
 
         Returns the tracer and what the call's result becomes, not the result:
-        what asks afterwards who still holds a tensor the call made
-        (``outside_writes``) must not find this.
+        what asks who else still holds a tensor the call made (``held_writes``)
+        must not find the result, which is made anew on every run.  When
+        something does, the trace-time call stands as the call
+        (:class:`TraceAnswer`).
 
         Extracts the user's return value structure into a ``return_spec``, a tree
         that mirrors it with every Tensor swapped for a slot index, and the ordered
@@ -1131,7 +1155,9 @@ class CompiledModule[**P, R](_ModuleWrapper):
         but the helper tolerates arbitrary scalars / strings / Nones via the
         "scalar" leaf.
         """
+        from lucid._dispatch import _wrap
         from lucid._tensor.tensor import Tensor
+        from lucid.compile._core.buffer_writes import held_writes, stood_as_the_call
         from lucid.compile._core.trace_context import notice_if_tensor_hook_error, recording
 
         try:
@@ -1144,11 +1170,17 @@ class CompiledModule[**P, R](_ModuleWrapper):
         if not tracer.graph.ops:
             _fallback_notice("empty-trace", "traced call recorded no operations")
             return None
-        return (tracer, *_extract_return_impls(return_value, tracer))
+        return_spec, explicit_outputs = _extract_return_impls(return_value, tracer)
+        del return_value
+        held = held_writes(tracer)
+        if held:
+            outs: list[object] = [_wrap(impl) for impl in tracer.take_answer()]
+            return stood_as_the_call(tracer, _repack_outputs(return_spec, outs))
+        return tracer, return_spec, explicit_outputs, held
 
     def _compile_for(
         self, args: tuple[object, ...], kwargs: dict[str, object]
-    ) -> _CacheEntry | None:
+    ) -> _CacheEntry | TraceAnswer[object] | None:
         """Trace + compile + wrap one signature into a :class:`_CacheEntry`.
 
         Parameters
@@ -1158,11 +1190,11 @@ class CompiledModule[**P, R](_ModuleWrapper):
 
         Returns
         -------
-        _CacheEntry or None
-            ``None`` on compile failure or any abort condition
-            (kwarg-bound tensors, empty trace, unresolvable feed,
-            backend rejection); the caller marks the signature as
-            ``eager_only`` and routes to eager.
+        _CacheEntry or TraceAnswer or None
+            ``None`` on compile failure or any abort condition (kwarg-bound
+            tensors, empty trace, unresolvable feed, backend rejection) and a
+            :class:`TraceAnswer` when the trace stands as the call
+            (:meth:`_trace_forward`); either way the signature is ``eager_only``.
         """
         # Local imports keep ``lucid.compile`` import-cheap.
         from lucid._dispatch import _unwrap
@@ -1190,9 +1222,9 @@ class CompiledModule[**P, R](_ModuleWrapper):
 
         t_compile_start = time.perf_counter()
         traced = self._trace_forward(args, kwargs)
-        if traced is None:
-            return None
-        tracer, return_spec, explicit_outputs = traced
+        if not isinstance(traced, tuple):
+            return traced  # nothing compiled, or the trace-time call standing as the call
+        tracer, return_spec, explicit_outputs, held = traced
         graph = tracer.graph
 
         # If this graph has attention, make sure the fused-attention workaround
@@ -1203,7 +1235,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
 
         # The trace-time call applied its in-place buffer writes; put the
         # buffers back so the executable (or an eager fallback) applies them.
-        writes = outside_writes(tracer, [_unwrap(t) for t in leaf_tensors(args, kwargs)])
+        writes = outside_writes(tracer, [_unwrap(t) for t in leaf_tensors(args, kwargs)], held)
         if isinstance(writes, str):
             _fallback_notice("argument-write", writes)
             return None

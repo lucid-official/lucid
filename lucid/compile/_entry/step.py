@@ -47,6 +47,7 @@ from typing import (
 from lucid._C import engine as _C_engine
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.compile._core.bn_runstats import BnWriteback
+from lucid.compile._core.buffer_writes import TraceAnswer
 
 
 class _ExecutableLike(Protocol):
@@ -327,13 +328,19 @@ def _compile_step_entry(
     x_args: tuple[Tensor, ...],
     *,
     use_dynamic: bool = False,
-) -> _StepEntry | None:
-    """Trace ``model`` + ``loss_fn`` once for ``x_args`` and compile."""
-    from lucid._dispatch import _unwrap
+) -> _StepEntry | TraceAnswer[Tensor] | None:
+    """Trace ``model`` + ``loss_fn`` once for ``x_args`` and compile.
+
+    A :class:`TraceAnswer` holds the trace's own loss when the call wrote a
+    tensor it made and keeps: the trace-time call stands as the call.  Not
+    with a batch norm that tracks its statistics, which a traced call leaves
+    alone (the compiled step writes them back).
+    """
+    from lucid._dispatch import _unwrap, _wrap
     from lucid._tensor.tensor import Tensor
     from lucid.compile._core.attention_probe import maybe_probe_for_graph
-    from lucid.compile._core.bn_runstats import model_has_cumulative_bn
-    from lucid.compile._core.buffer_writes import outside_writes
+    from lucid.compile._core.bn_runstats import model_has_cumulative_bn, model_has_tracking_bn
+    from lucid.compile._core.buffer_writes import held_writes, outside_writes, stood_as_the_call
     from lucid.compile._core.fallback import _fallback_notice
     from lucid.compile._core.signature import leaf_tensors, outside_feeds
     from lucid.compile._debug.trace_dump import trace_to_json
@@ -347,11 +354,15 @@ def _compile_step_entry(
     maybe_probe_for_graph(graph)
 
     found = tracer.read_id(_unwrap(loss_t)) if isinstance(loss_t, Tensor) else None
-    # Before ``outside_writes``, which asks what else still holds a tensor the
+    tracer.keep_answer([] if found is None else [_unwrap(loss_t)])
+    # Before ``held_writes``, which asks what else still holds a tensor the
     # call made: the loss does not, it is made anew on every run.
     del traced, loss_t
+    held = held_writes(tracer)
+    if held and found is not None and not model_has_tracking_bn(model):
+        return stood_as_the_call(tracer, _wrap(tracer.take_answer()[0]))
 
-    writes = outside_writes(tracer, [_unwrap(t) for t in leaf_tensors(x_args, {})])
+    writes = outside_writes(tracer, [_unwrap(t) for t in leaf_tensors(x_args, {})], held)
     if isinstance(writes, str):
         _fallback_notice("argument-write", writes)
         return None
@@ -561,19 +572,18 @@ def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Call
         if entry is None:
             from lucid.compile._core.trace_context import compile_attempt
 
-            with compile_attempt():
+            with compile_attempt() as attempt:
                 before = fingerprint.outside_slots()
-                entry = _compile_step_entry(model, loss_fn, params, x_args, use_dynamic=use_dynamic)
-                fingerprint.settle(() if entry is None else entry.fed, before)
+                built = _compile_step_entry(model, loss_fn, params, x_args, use_dynamic=use_dynamic)
+                attempt.answered = isinstance(built, TraceAnswer)
+                fingerprint.settle(built.fed if isinstance(built, _StepEntry) else (), before)
             if key is not None:
                 key = fingerprint.rekey(key, x_args, {})
-            if entry is None:
-                from lucid.compile._core.buffer_writes import eager_rerun
-
+            if not isinstance(built, _StepEntry):
                 if key is not None:
                     eager_only.add(key)
-                with eager_rerun():
-                    return loss_fn(model(*x_args[:1]), *x_args[1:])
+                return _answered_or_eager(built, model, loss_fn, x_args)
+            entry = built
             if key is not None:
                 cache[key] = entry
 
@@ -717,6 +727,21 @@ def _segment_count(segments: object) -> int | Literal["auto"]:
     if count < 1:
         raise ValueError(f"make_step: segments must be a positive int or 'auto', got {count}")
     return count
+
+
+def _answered_or_eager(
+    answer: TraceAnswer[Tensor] | None,
+    model: Module,
+    loss_fn: Callable[..., Tensor],
+    x_args: tuple[Tensor, ...],
+) -> Tensor:
+    """The trace's own loss when it stood as the call, else the step run eagerly."""
+    from lucid.compile._core.buffer_writes import eager_rerun
+
+    if answer is not None:
+        return answer.value
+    with eager_rerun():
+        return loss_fn(model(*x_args[:1]), *x_args[1:])
 
 
 def _trace_step(

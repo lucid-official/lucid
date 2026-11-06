@@ -32,6 +32,7 @@ back (:func:`refuse`).
 import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
 from lucid._C import engine as _C_engine
@@ -74,12 +75,48 @@ class _HeldPutBack(threading.local):
 
 _HELD = _HeldPutBack()
 
+#: ``(tensor, its value before the trace's write, its value after)``.
+type HeldWrites = list[tuple[_C_engine.TensorImpl, _C_engine.TensorImpl, _C_engine.TensorImpl]]
 
-def _put_back(tracer: Tracer) -> None:
+
+@dataclass(frozen=True)
+class TraceAnswer[T]:
+    """The trace-time call, standing as the call it traced.
+
+    For a trace refused because the call wrote a tensor it made and Python keeps
+    (:func:`held_writes`): run again eagerly, the call would read that tensor
+    put back, and one that finds it already built (a cache filled from the
+    model's state) answers from the empty one.  The trace ran the call once, in
+    the caller's grad mode, so its result and its writes are the call's.
+    """
+
+    value: T
+
+
+def stood_as_the_call[T](tracer: Tracer, answer: T) -> TraceAnswer[T]:
+    """``answer``, the trace-time call's result, as the call's, saying why the
+    call was not compiled."""
+    from lucid.compile._core.fallback import _fallback_notice
+
+    _fallback_notice("held-write", str(tracer.graph.unsupported))
+    return TraceAnswer(answer)
+
+
+def held_writes(tracer: Tracer) -> HeldWrites:
+    """The tensors the call made, wrote from its inputs and Python still holds.
+
+    Any of them marks the trace unsupported; none is changed.  Call once, with
+    the call's result dropped: a result is handed back on every run.
+    """
+    return [(impl, before, after) for impl, before, after in tracer.refuse_kept_writes()]
+
+
+def _put_back(tracer: Tracer, held: HeldWrites | None = None) -> None:
     """Undo the trace-time call's writes that whatever runs next applies itself."""
-    _HELD.pending = [
-        (impl, after, int(impl.version)) for impl, after in tracer.refuse_kept_writes()
-    ]
+    held = held_writes(tracer) if held is None else held
+    for impl, before, _after in held:
+        impl.copy_from(before)
+    _HELD.pending = [(impl, after, int(impl.version)) for impl, _before, after in held]
     tracer.restore_outside_writes()
 
 
@@ -123,7 +160,7 @@ def require_outside_writes(
 
 
 def outside_writes(
-    tracer: Tracer, arguments: Sequence[_C_engine.TensorImpl]
+    tracer: Tracer, arguments: Sequence[_C_engine.TensorImpl], held: HeldWrites | None = None
 ) -> tuple[list[int], list[object]] | str:
     """Put the written tensors back; return what the executable must carry.
 
@@ -137,6 +174,8 @@ def outside_writes(
         The finished trace.
     arguments : sequence of TensorImpl
         Every tensor impl the traced call was given.
+    held : HeldWrites or None, optional, default=None
+        What :func:`held_writes` answered, when the caller asked already.
 
     Returns
     -------
@@ -146,7 +185,7 @@ def outside_writes(
         its value from before the trace.  A string instead when a write
         landed in one of its own arguments: the reason it has to run eager.
     """
-    _put_back(tracer)
+    _put_back(tracer, held)
     ids: list[int] = []
     targets: list[object] = []
     for latest, impl in _written(tracer):

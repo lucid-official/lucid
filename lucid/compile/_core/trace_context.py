@@ -79,7 +79,7 @@ def recording_active() -> bool:
 
 
 @contextmanager
-def compile_attempt() -> Iterator[None]:
+def compile_attempt() -> Iterator[CompileAttempt]:
     """Snapshot and restore every RNG stream across a compile-on-miss attempt.
 
     A compile-on-miss traces the callable (which advances any RNG streams it
@@ -87,13 +87,25 @@ def compile_attempt() -> Iterator[None]:
     caller then executes the compiled graph (whose ``RngFeeds`` redraws from
     the default stream) or falls back to an eager call.  Restoring the stream
     states in ``finally`` ensures the first real execution sees the exact
-    pre-call stream positions — LIFO when attempts nest.
+    pre-call stream positions — LIFO when attempts nest.  Unless the trace
+    stood as the call itself (``CompileAttempt.answered``): its draws were
+    the call's.
     """
     saved = _stream_states()
+    attempt = CompileAttempt()
     try:
-        yield
+        yield attempt
     finally:
-        _restore_stream_states(saved)
+        if not attempt.answered:
+            _restore_stream_states(saved)
+
+
+class CompileAttempt:
+    """What a :func:`compile_attempt` ended as: ``answered`` when the trace-time
+    call stands as the call (:class:`~lucid.compile._core.buffer_writes.TraceAnswer`)."""
+
+    def __init__(self) -> None:
+        self.answered = False
 
 
 def _scan_retained_values(tracer: Tracer) -> None:

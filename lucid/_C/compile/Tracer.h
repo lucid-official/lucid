@@ -44,8 +44,10 @@
 #include <functional>
 #include <optional>
 #include <string_view>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "../api.h"
@@ -333,27 +335,30 @@ public:
     void restore_outside_writes();
 
     // Marks the trace unsupported if a tensor the call made and wrote in place,
-    // or a view of it, is still ``held`` by something outside the trace, and
-    // puts each such tensor back for the eager call that follows.  The trace
-    // took it for the call's own, starting over every time; whoever holds it
-    // (``self.h = lucid.tensor(...)``, once) expects each call to go on from the
-    // last.  Call once the trace has finished and the call's result is dropped:
-    // a result is handed back on every run and holds nothing over.
+    // or a view of it, is still ``held`` by something outside the trace.  The
+    // trace took it for the call's own, starting over every time; whoever holds
+    // it (``self.h = lucid.tensor(...)``, once) expects each call to go on from
+    // the last.  Call once the trace has finished and the call's result is
+    // dropped: a result is handed back on every run and holds nothing over.
     //
     // A write whose value comes from the trace's constants alone
     // (:meth:`from_constants`) is left as it is: a cached or lazily built table
-    // holds the same values whoever filled it, and putting it back would empty
-    // it for good, since the eager call that follows finds it built and never
-    // writes it again.  What the walk cannot decide counts as an input.  A table
-    // added to on every call by a constant (``h.add_(1.0)``) stays frozen at its
-    // trace-time value, as before (LCD-864).
+    // holds the same values whoever filled it.  What the walk cannot decide
+    // counts as an input.  A table added to on every call by a constant
+    // (``h.add_(1.0)``) stays frozen at its trace-time value, as before
+    // (LCD-864).
     //
-    // Answers ``(tensor, its value after the trace)`` for each tensor it put
-    // back: an eager call that finds such a tensor already built (a cache filled
-    // from the model's state) writes nothing to it, and the caller gives it the
-    // trace's values again (``lucid/compile/_core/buffer_writes.py``).
-    std::vector<std::pair<TensorImplPtr, TensorImplPtr>>
+    // Answers ``(tensor, value before the trace's write, value after it)`` for
+    // each such tensor and changes none of them: the caller either lets the
+    // trace stand as the call, or puts them back for an eager call to write
+    // (``lucid/compile/_core/buffer_writes.py``).
+    std::vector<std::tuple<TensorImplPtr, TensorImplPtr, TensorImplPtr>>
     refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held);
+
+    // Holds the call's result while ``refuse_kept_writes`` asks who else holds
+    // what the call made: in C++, the result is not one of those holders.
+    void keep_answer(std::vector<TensorImplPtr> answer) { answer_ = std::move(answer); }
+    std::vector<TensorImplPtr> take_answer() { return std::exchange(answer_, {}); }
 
     // Whether :meth:`restore_outside_writes` keeps the written values for
     // :meth:`retained_values`, for a caller that reads a traced value's contents
@@ -564,6 +569,8 @@ private:
     std::vector<std::pair<TensorImplPtr, TensorImplPtr>> made_originals_;
     // Feeds that hold a copy of a tensor the call made (see ``constant_feed``).
     std::unordered_set<TensorId> constant_feeds_;
+    // The call's result while the trace is judged (see ``keep_answer``).
+    std::vector<TensorImplPtr> answer_;
     bool keep_written_values_ = false;
     // Owning: the call's arguments (``watch``), keyed by raw pointer.
     std::unordered_map<TensorImpl*, TensorImplPtr> watched_;
