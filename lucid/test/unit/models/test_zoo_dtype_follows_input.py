@@ -147,6 +147,14 @@ _DETECTOR = {"backbone_layers": (1, 1, 1, 1), "fpn_out_channels": 32}
 #: nothing: the matrix sizes some families for a numerically stable
 #: train-mode step, and leaves a ResNet-101 trunk at its depth.
 _SMALLER: dict[str, dict[str, object]] = {
+    # At their native 512 and 256 sides these two set a zoo file's peak footprint.
+    "efficientdet": {"image_size": 256, "fpn_channels": 16, "fpn_repeats": 1, "head_repeats": 1},
+    "rectified_flow": {
+        "sample_size": 16,
+        "channel_mult": (1, 2, 2),
+        "num_res_blocks": 1,
+        "attention_resolutions": (4,),
+    },
     "detr": {"backbone_layers": (1, 1, 1, 1)},
     "maskformer": {"backbone_layers": (1, 1, 1, 1)},
     "fcn": {"classifier_hidden_channels": 16, "aux_hidden_channels": 16},
@@ -495,7 +503,12 @@ def _sampler_case(family: str) -> tuple[str, dict[str, Any]]:
     overrides = dict(_GENERATE_SMALLER.get(family, {}))
     if family != "stable_diffusion":
         cfg = _REGISTRY[name].default_config
-        overrides = {**zoo.shrink(cfg), **zoo.SPECS.get(family, zoo.Spec()).overrides, **overrides}
+        overrides = {
+            **zoo.shrink(cfg),
+            **zoo.SPECS.get(family, zoo.Spec()).overrides,
+            **_SMALLER.get(family, {}),
+            **overrides,
+        }
     return name, overrides
 
 
