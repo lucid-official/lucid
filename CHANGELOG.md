@@ -147,6 +147,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `shadow_alloc` refuses float64 and complex128 on Metal with the `NotImplementedError` a real allocation raises.
 - A push to main or a `v*` tag is now judged again by `.githooks/pre-push` (`python -m tools.rules push`), and a commit that skipped pre-commit carries a `Lucid-Bypass` trailer and a log line.
 - The pre-commit hook runs the rule registry's commit level on the staged blobs, so a `git add -p` of part of a file under `lucid/` is refused. `LUCID_SKIP_H4_GUARD` and `LUCID_SKIP_QUALITY_GATE` are gone: `--no-verify` is the only way past those checks, and it leaves the trailer.
+- The DreamerV3 learning benchmark (`TestDreamerV3ReadsTheGoal`) scores every policy on a fixed 36-goal panel, treats the goal-blind ceiling as a policy, and asserts what the goal is worth to the policy (the cost of a decoy), over 3000 steps. The old test's blind ceiling was not a ceiling, and its verdict was one random draw.
 
 ---
 
