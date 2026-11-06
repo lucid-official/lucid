@@ -359,7 +359,7 @@ def _compile_step_entry(
     del traced, loss_t
     held = held_writes(tracer)
     if held and found is not None:
-        return stood_as_the_call(tracer, _wrap(tracer.take_answer()[0]))
+        return stood_as_the_call(tracer, model, _wrap(tracer.take_answer()[0]))
 
     writes = outside_writes(tracer, [_unwrap(t) for t in leaf_tensors(x_args, {})], held)
     if isinstance(writes, str):

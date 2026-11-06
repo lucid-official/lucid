@@ -296,9 +296,17 @@ void Tracer::on_inplace_write(const TensorImplPtr& target, const TensorImplPtr& 
     else if (in_made && !whole_member(target, made))
         keep_original(made_originals_, target);
     const TensorId was = feed_id(target);
-    if (in_made)
+    const TensorId now = written_id(value);
+    note_prior(target, was, now, in_made);
+    impl_to_id_[target.get()] = now;
+}
+
+void Tracer::note_prior(const TensorImplPtr& target, TensorId was, TensorId now, bool in_made) {
+    // A write is noted twice when the result is spliced and then written
+    // through (``take_storage_from``): the second time the tensor already goes
+    // by the value's id, which is no earlier value of it.
+    if (in_made && was != now)
         prior_ids_[target.get()].push_back(was);
-    impl_to_id_[target.get()] = written_id(value);
 }
 
 TensorImplPtr Tracer::whole_member(const TensorImplPtr& target,
@@ -576,9 +584,11 @@ void Tracer::write_made(const TensorImplPtr& target, const TensorImplPtr& value)
             feed->second = before ? before : snapshot(target);
             note_constant_feed(it->second, *target);
         }
-        prior_ids_[target.get()].push_back(it->second);
     }
-    impl_to_id_[target.get()] = written_id(value);
+    const TensorId now = written_id(value);
+    if (it != impl_to_id_.end())
+        note_prior(target, it->second, now, true);
+    impl_to_id_[target.get()] = now;
 }
 
 void Tracer::on_stale_view(const TensorImplPtr& view) {

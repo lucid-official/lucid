@@ -39,6 +39,7 @@ from lucid._C import engine as _C_engine
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
+    from lucid.nn.module import Module
 
 _OUTSIDE = (
     "the traced call wrote in place to a tensor it did not create; "
@@ -130,17 +131,15 @@ class TraceAnswer[T]:
     value: T
 
 
-def stood_as_the_call[T](tracer: Tracer, answer: T) -> TraceAnswer[T]:
+def stood_as_the_call[T](tracer: Tracer, model: Module, answer: T) -> TraceAnswer[T]:
     """The trace-time call's result as the call's, saying why it was not compiled.
-
-    The trace left the buffers a kernel hands new values out for (batch norm's
-    running statistics, a functional one's too) as they were: they get those
-    values now, or the statistics would miss this call's update for good.
 
     Parameters
     ----------
     tracer : Tracer
         The finished trace, refused by :func:`held_writes`.
+    model : Module
+        The traced model, whose batch norms :func:`complete_the_call` steps.
     answer : object
         What the trace-time call returned.
 
@@ -151,9 +150,29 @@ def stood_as_the_call[T](tracer: Tracer, answer: T) -> TraceAnswer[T]:
     """
     from lucid.compile._core.fallback import _fallback_notice
 
-    tracer.apply_buffer_updates()
+    complete_the_call(tracer, model)
     _fallback_notice("held-write", str(tracer.graph.unsupported))
     return TraceAnswer(answer)
+
+
+def complete_the_call(tracer: Tracer, model: Module) -> None:
+    """Do what the trace-time call left undone, once it stands as the call.
+
+    A traced batch norm leaves its running statistics alone and hands the new
+    values out (a functional one too), and its counter advances only after a
+    compiled run.  Without both, the statistics miss this call for good.
+
+    Parameters
+    ----------
+    tracer : Tracer
+        The finished trace.
+    model : Module
+        The traced model, which owns the counters.
+    """
+    from lucid.compile._core.bn_runstats import advance_bn_counters, bn_counter_targets
+
+    tracer.apply_buffer_updates()
+    advance_bn_counters(bn_counter_targets(model, tracer.graph, tracer.external_feeds))
 
 
 def held_writes(tracer: Tracer) -> HeldWrites:

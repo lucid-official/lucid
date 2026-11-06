@@ -300,7 +300,10 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Module", "lucid.nn.module", "Module"),
         ("TensorImpl", "lucid._C.engine", "TensorImpl"),
     ),
-    "lucid.compile._core.buffer_writes": (("Tracer", "lucid._C.engine.compile", "Tracer"),),
+    "lucid.compile._core.buffer_writes": (
+        ("Module", "lucid.nn.module", "Module"),
+        ("Tracer", "lucid._C.engine.compile", "Tracer"),
+    ),
     "lucid.compile._core.custom_backward": (
         ("TraceGraph", "lucid._C.engine.compile", "TraceGraph"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),

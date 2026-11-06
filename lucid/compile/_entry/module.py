@@ -1179,7 +1179,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         held = held_writes(tracer)
         if held:
             outs: list[object] = [_wrap(impl) for impl in tracer.take_answer()]
-            return stood_as_the_call(tracer, _repack_outputs(return_spec, outs))
+            return stood_as_the_call(tracer, self._model, _repack_outputs(return_spec, outs))
         return tracer, return_spec, explicit_outputs, held
 
     def _compile_for(

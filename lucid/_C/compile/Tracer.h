@@ -514,6 +514,10 @@ private:
     bool from_constants(TensorId id, ConstantWalk& walk) const;
     // Fills ``walk.producer`` once.
     void index_producers(ConstantWalk& walk) const;
+    // Records ``was`` as an earlier value of ``target`` (``prior_ids_``), for a
+    // tensor the call made or a view of one, unless the write is one already
+    // recorded (``now`` is ``was``).
+    void note_prior(const TensorImplPtr& target, TensorId was, TensorId now, bool in_made);
     // Whether the value ``target`` was last written reads a value the tensor, or
     // a view of it, held before (``prior_ids_``): a read-modify-write, which
     // counts its runs.  A value that only keeps an earlier one as the base it
