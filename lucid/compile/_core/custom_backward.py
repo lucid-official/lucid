@@ -52,6 +52,7 @@ from lucid._engine_scope import untraced
 from lucid._tensor.tensor import Tensor
 from lucid.autograd._python_node import _InputMeta, _per_input, _validate
 from lucid.autograd.function import Function, FunctionCtx, _is_exact_derivative
+from lucid.compile._core.fallback import _narrate
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import TraceGraph, Tracer, VjpRegion
@@ -111,6 +112,21 @@ class _Applied:
     tracked: bool
     # Whether ``backward`` was traced into ``tracer.graph.vjp_regions``.
     traced_vjp: bool = False
+    # Why a ``_traced_backward`` class's ``backward`` was not, for the refusal.
+    untraced: str | None = None
+
+    def refusal(self) -> str:
+        """What a lowering refused because of this call says."""
+        if self.untraced is not None:
+            return (
+                f"autograd.Function {self.name}'s backward could not be traced into the "
+                f"compiled step: {self.untraced}"
+            )
+        return (
+            f"autograd.Function {self.name} defines its own backward, which a "
+            f"compiled backward cannot run: it would differentiate "
+            f"{self.name}.forward instead"
+        )
 
 
 #: Every call noted, per tracer — gone with the tracer.
@@ -361,8 +377,21 @@ def _valid_vjp_ops(tracer: Tracer, bwd_begin: int, writes_before: int) -> bool:
     return True
 
 
-def _trace_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _TracedBackward | None:
-    """Record one call of ``backward`` on ``cotangents``, or ``None`` with its ops discarded."""
+def _trace_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _TracedBackward | str:
+    """Record one call of ``backward`` on ``cotangents``, or say why not, its ops discarded.
+
+    A failure is narrated under ``LUCID_COMPILE_VERBOSE=1``: it is not a
+    fallback yet — a demand variant may fail where the call still compiles.
+    """
+    traced = _record_backward(spec, cotangents)
+    if isinstance(traced, str):
+        given = ", ".join("None" if c is None else "a cotangent" for c in cotangents)
+        _narrate(f"tracing {spec.function.__name__}.backward({given}) failed: {traced}")
+    return traced
+
+
+def _record_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _TracedBackward | str:
+    """:func:`_trace_backward` without the narration."""
     tracer = spec.tracer
     ctx = spec.ctx
     bwd_begin = int(tracer.op_count())
@@ -396,9 +425,9 @@ def _trace_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _Tr
         ArithmeticError,
         AttributeError,
         AssertionError,
-    ):
+    ) as why:
         tracer.discard_ops_from(bwd_begin)
-        return None
+        return f"it raised {type(why).__name__}: {why}"
     finally:
         (
             ctx.needs_input_grad,
@@ -408,9 +437,12 @@ def _trace_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _Tr
             tracer.fold_constants,
         ) = prev_state
 
-    if input_grad_ids is None or not _valid_vjp_ops(tracer, bwd_begin, writes_before):
+    if input_grad_ids is None:
         tracer.discard_ops_from(bwd_begin)
-        return None
+        return "it returned a gradient the trace has no id for"
+    if not _valid_vjp_ops(tracer, bwd_begin, writes_before):
+        tracer.discard_ops_from(bwd_begin)
+        return "it recorded an op a compiled backward cannot emit on Metal, or wrote outside it"
     return _TracedBackward(bwd_begin, input_grad_ids)
 
 
@@ -433,7 +465,7 @@ def _demand_subsets(n: int) -> list[tuple[int, ...]]:
     return [s for size in range(1, n) for s in itertools.combinations(range(n), size)]
 
 
-def _trace_demand_variants(spec: _VjpTraceSpec, differentiable: list[int]) -> bool:
+def _trace_demand_variants(spec: _VjpTraceSpec, differentiable: list[int]) -> str | None:
     """Commit one region per non-empty subset of the differentiable outputs, the full set last.
 
     Each region is the call eager makes when exactly that subset receives a
@@ -447,42 +479,54 @@ def _trace_demand_variants(spec: _VjpTraceSpec, differentiable: list[int]) -> bo
 
     A subset ``backward`` cannot be traced for — one written for a demand the
     model never makes, ``g_first * 2`` with ``g_first=None`` — or that
-    returns a gradient the full variant does not is left out: the walker
-    refuses that demand if it comes, and the step runs eagerly.
+    returns a gradient the full variant does not is left out, and the walker
+    refuses that demand if it comes: no other region of the group matches
+    it.  That needs a group, though.  When no proper subset is traced the
+    full region would stand alone, which the walker cannot tell from a call
+    that materializes grads — it would bind zeros where eager hands
+    ``None`` — so the call is not traced at all.
 
     ``differentiable`` holds the positions in ``spec.cotangents`` that have a
-    cotangent.  ``False`` leaves the call untraced, so a step whose gradient
-    goes through it runs eagerly — after commits have started too: the
-    regions already committed belong to a call :func:`refuse_custom_backward`
-    refuses, and off the gradient path nothing demands them.
+    cotangent.  Returns ``None`` once the regions are committed, else why
+    the call is left untraced, for :func:`refuse_custom_backward`'s refusal.
+    That still holds once commits have started: the regions already
+    committed belong to a call it refuses, and off the gradient path
+    nothing demands them.
     """
     full = _trace_backward(spec, spec.cotangents)
-    if full is None:
-        return False
+    if isinstance(full, str):
+        return f"tracing it for every output failed: {full}"
     # A validation run: a ``backward`` that cannot be traced commits nothing.
     spec.tracer.discard_ops_from(full.bwd_begin)
     full_grads = full.present_grads()
+    committed = 0
     for subset in _demand_subsets(len(differentiable)):
         given = list(spec.cotangents)
         for j, pos in enumerate(differentiable):
             if j not in subset:
                 given[pos] = None
         traced = _trace_backward(spec, given)
-        if traced is None:
+        if isinstance(traced, str):
             continue
         if not traced.present_grads() <= full_grads:
             spec.tracer.discard_ops_from(traced.bwd_begin)
             continue
         cot_ids = [cid if j in subset else -1 for j, cid in enumerate(spec.cotangent_ids)]
         _commit(spec, traced, cot_ids)
+        committed += 1
+    if committed == 0:
+        return (
+            "it does not materialize grads, and it could be traced only for a "
+            "gradient on every output"
+        )
     full = _trace_backward(spec, spec.cotangents)
-    if full is None or full.present_grads() != full_grads:
-        return False
+    if isinstance(full, str) or full.present_grads() != full_grads:
+        return "tracing it again for every output did not repeat the first trace"
     _commit(spec, full, spec.cotangent_ids)
-    return True
+    return None
 
 
-def _try_trace_custom_vjp(spec: _VjpTraceSpec) -> bool:
+def _try_trace_custom_vjp(spec: _VjpTraceSpec) -> str | None:
     """Trace ``spec.function.backward`` into ``spec.tracer.graph.vjp_regions``.
 
     A ``Function`` that materializes grads gets zeros for an output no
@@ -492,16 +536,22 @@ def _try_trace_custom_vjp(spec: _VjpTraceSpec) -> bool:
     on a repeated spectrum), so it is traced once per demand.  Past
     :data:`_MAX_DEMAND_OUTPUTS` outputs that is too many variants: the call
     is left untraced and a step it is on runs eagerly.
+
+    Returns ``None`` when traced, else why not.
     """
     differentiable = [pos for pos, cot in enumerate(spec.cotangents) if cot is not None]
     if _materializes(spec.function, spec.ctx) or len(differentiable) <= 1:
         traced = _trace_backward(spec, spec.cotangents)
-        if traced is None:
-            return False
+        if isinstance(traced, str):
+            return f"tracing it failed: {traced}"
         _commit(spec, traced, spec.cotangent_ids)
-        return True
+        return None
     if len(differentiable) > _MAX_DEMAND_OUTPUTS:
-        return False
+        return (
+            f"it does not materialize grads and has {len(differentiable)} differentiable "
+            f"outputs, more than the {_MAX_DEMAND_OUTPUTS} a compiled step traces it per "
+            "demand for"
+        )
     return _trace_demand_variants(spec, differentiable)
 
 
@@ -540,11 +590,14 @@ def note_applied(
     inputs = _impls(args, floating=False)
     exact = issubclass(function, Function) and _is_exact_derivative(function)
     tracked = any(isinstance(a, Tensor) and a.requires_grad for a in args)
-    traced_vjp = False
+    untraced: str | None = None
     if vjp_call is not None and issubclass(function, Function):
         spec = _prepare_vjp_spec(tracer, function, args, output, vjp_call)
-        if spec is not None:
-            traced_vjp = _try_trace_custom_vjp(spec)
+        untraced = (
+            "the call left no Metal forward ops, outputs and saved tensors to trace it over"
+            if spec is None
+            else _try_trace_custom_vjp(spec)
+        )
     _APPLIED.setdefault(tracer, []).append(
         _Applied(
             function.__name__,
@@ -554,7 +607,8 @@ def note_applied(
             _ids(tracer, outputs),
             exact,
             tracked,
-            traced_vjp,
+            vjp_call is not None and untraced is None,
+            untraced,
         )
     )
 
@@ -676,11 +730,7 @@ def refuse_custom_backward(tracer: Tracer, sink_id: int, source_ids: list[int]) 
         if call.tracked or not descendants.isdisjoint(inputs):
             if call.exact:
                 continue
-            raise CustomBackwardInTrace(
-                f"autograd.Function {call.name} defines its own backward, which a "
-                f"compiled backward cannot run: it would differentiate "
-                f"{call.name}.forward instead"
-            )
+            raise CustomBackwardInTrace(call.refusal())
         if not descendants.isdisjoint(outputs):
             if call.exact:
                 raise CustomBackwardInTrace(
@@ -689,8 +739,4 @@ def refuse_custom_backward(tracer: Tracer, sink_id: int, source_ids: list[int]) 
                     f"compiled backward would differentiate the tensors "
                     f"{call.name}.forward closed over"
                 )
-            raise CustomBackwardInTrace(
-                f"autograd.Function {call.name} defines its own backward, which a "
-                f"compiled backward cannot run: it would differentiate "
-                f"{call.name}.forward instead"
-            )
+            raise CustomBackwardInTrace(call.refusal())

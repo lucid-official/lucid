@@ -574,7 +574,10 @@ std::vector<const VjpRegion*> region_group(const std::vector<const VjpRegion*>& 
 // gradient — the call eager makes, which hands ``backward`` ``None`` for
 // the others.  No match is a failure, never a silent pick: a wrong variant
 // is a wrong gradient.  A lone region traced with every cotangent is the
-// one-region call, which binds zeros to an output no gradient reached.
+// one-region call of a Function that materializes grads (or has one output),
+// which binds zeros to an output no gradient reached.  A call that does not
+// materialize them never commits its full region alone: when none of its
+// subsets traces, ``custom_backward._trace_demand_variants`` commits nothing.
 bool emit_vjp_region_group(MPSGraph* graph,
                            BackwardContext& bctx,
                            const std::vector<const VjpRegion*>& group,

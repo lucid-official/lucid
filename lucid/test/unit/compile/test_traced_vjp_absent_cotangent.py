@@ -14,12 +14,15 @@ eager's was finite.
 Such a call now commits one region per subset of its outputs a gradient may
 reach (``custom_backward._trace_demand_variants``), and the walker emits the
 one for the outputs that do (``VjpEmitter.mm`` ``emit_vjp_region_group``).
-Every case here must compile — a fallback to eager under
-``CompileFallbackWarning`` fails it — and match eager.  The controls — a
+The spectrum and demand cases must compile — a fallback to eager under
+``CompileFallbackWarning`` fails them — and match eager.  The controls — a
 distinct spectrum, and ``qr(mode="r")``, whose zero-cotangent term is
 ``solve_triangular(R, 0) = 0`` for a nonsingular ``R`` — were right before.
+A call that cannot be traced for the demands it may meet runs eagerly
+instead, with the notice saying why.
 """
 
+import itertools
 import warnings
 from collections.abc import Callable
 
@@ -307,6 +310,41 @@ class _Materializing(Function):
         return g_first * 2.0 + g_second * 3.0
 
 
+class _OffMetalUnlessEveryOutput(Function):
+    """Traces only for a gradient on every output: its path for ``None`` leaves Metal."""
+
+    _materialize_grads = False
+    _traced_backward = True
+
+    @staticmethod
+    def forward(ctx, a):
+        ctx.save_for_backward(a)
+        return a * 2.0, a * 3.0
+
+    @staticmethod
+    def backward(ctx, g_first, g_second):
+        (a,) = ctx.saved_tensors
+        if g_first is None or g_second is None:
+            g = g_first if g_first is not None else g_second
+            return (g.cpu() * 2.0).to(a.device)
+        return g_first * 2.0 + g_second / (a - a)
+
+
+class _EveryOutputOrRaise(Function):
+    """Written for a gradient on every output: eager raises on any other demand."""
+
+    _materialize_grads = False
+    _traced_backward = True
+
+    @staticmethod
+    def forward(ctx, a):
+        return a * 2.0, a * 3.0
+
+    @staticmethod
+    def backward(ctx, g_first, g_second):
+        return g_first * 2.0 + g_second * 3.0
+
+
 class _FirstOutputOnly(nn.Module):
     def __init__(self, fn: type[Function], device: str) -> None:
         super().__init__()
@@ -336,7 +374,7 @@ def _present_sets(call: Callable[[lucid.Tensor], object], device: str) -> list[t
     with recording(watch=(a,)) as tracer:
         call(a)
     regions = tracer.graph.vjp_regions
-    assert len({(int(r.fwd_begin), int(r.fwd_end)) for r in regions}) == 1
+    assert len({(int(r.fwd_begin), int(r.fwd_end)) for r in regions}) <= 1
     # Every variant answers for the input: the full one, last, covers them all.
     assert all(int(r.input_grad_ids[0]) >= 0 for r in regions)
     return [tuple(j for j, cid in enumerate(r.cotangent_ids) if int(cid) >= 0) for r in regions]
@@ -349,14 +387,28 @@ def _present_sets(call: Callable[[lucid.Tensor], object], device: str) -> list[t
         (_LA.qr, [(0,), (1,), (0, 1)]),
         (_LA.eigh, [(0,), (1,), (0, 1)]),
         # ``backward`` cannot take ``None`` for the first output: the demand
-        # without it is not traced, and the walker refuses it if it comes.
+        # without it is not traced, and no region of the group matches it.
         (_CtxFlagUnused.apply, [(0,), (0, 1)]),
         (_AssertsFirst.apply, [(0,), (0, 1)]),
+        # No demand short of every output traces.  The full region alone
+        # would read as a call that materializes grads, so nothing is kept.
+        (_OffMetalUnlessEveryOutput.apply, []),
+        (_EveryOutputOrRaise.apply, []),
         # One differentiable output, or zeros for the rest: one region.
         (_CtxFlagMarked.apply, [(0,)]),
         (_Materializing.apply, [(0, 1)]),
     ],
-    ids=["svd", "qr", "eigh", "ctx_flag", "asserts", "ctx_flag_marked", "materializing"],
+    ids=[
+        "svd",
+        "qr",
+        "eigh",
+        "ctx_flag",
+        "asserts",
+        "off_metal",
+        "every_or_raise",
+        "ctx_flag_marked",
+        "materializing",
+    ],
 )
 def test_a_call_commits_one_region_per_demand_the_full_set_last(
     call: Callable[[lucid.Tensor], object], present: list[tuple[int, ...]], device_gpu_only: str
@@ -370,13 +422,128 @@ def test_a_function_with_too_many_outputs_to_trace_runs_eagerly(device_gpu_only:
     model = _FirstOutputOnly(_FiveOutputs, device_gpu_only)
     step = make_step(model, _loss)
     _NOTICED.discard("custom-backward")
-    with pytest.warns(CompileFallbackWarning, match="_FiveOutputs"):
+    with pytest.warns(
+        CompileFallbackWarning,
+        match=r"_FiveOutputs's backward could not be traced .* has 5 differentiable outputs",
+    ):
         step(x, t).backward()
     assert len(step.eager_only) == 1
     eager = _FirstOutputOnly(_FiveOutputs, device_gpu_only)
     _loss(eager(x), t).backward()
     assert model.p.grad is not None and eager.p.grad is not None
     _assert_matches_eager([model.p.grad.cpu()], eager.p.grad.cpu())
+
+
+def test_a_function_traced_only_for_every_output_runs_eagerly(device_gpu_only: str) -> None:
+    """A lone full region would get zeros for the unreached output: ``0 / 0`` here."""
+    x = lucid.ones(1, device=device_gpu_only)
+    t = lucid.ones(1, device=device_gpu_only)
+    model = _FirstOutputOnly(_OffMetalUnlessEveryOutput, device_gpu_only)
+    step = make_step(model, _loss)
+    _NOTICED.discard("custom-backward")
+    with pytest.warns(
+        CompileFallbackWarning,
+        match=r"_OffMetalUnlessEveryOutput's backward could not be traced .* only for a "
+        r"gradient on every output",
+    ):
+        step(x, t).backward()
+    assert len(step.eager_only) == 1
+    eager = _FirstOutputOnly(_OffMetalUnlessEveryOutput, device_gpu_only)
+    _loss(eager(x), t).backward()
+    assert model.p.grad is not None and eager.p.grad is not None
+    assert bool(lucid.isfinite(eager.p.grad).all().item())
+    _assert_matches_eager([model.p.grad.cpu()], eager.p.grad.cpu())
+
+
+def test_a_demand_eager_refuses_is_not_compiled(device_gpu_only: str) -> None:
+    """No compiled gradient where eager's ``backward`` raises: the step runs it eagerly."""
+    x = lucid.ones(1, device=device_gpu_only)
+    t = lucid.ones(1, device=device_gpu_only)
+    eager = _FirstOutputOnly(_EveryOutputOrRaise, device_gpu_only)
+    with pytest.raises(TypeError):
+        _loss(eager(x), t).backward()
+    model = _FirstOutputOnly(_EveryOutputOrRaise, device_gpu_only)
+    step = make_step(model, _loss)
+    _NOTICED.discard("custom-backward")
+    with pytest.warns(CompileFallbackWarning, match="_EveryOutputOrRaise's backward"):
+        loss = step(x, t)
+    with pytest.raises(TypeError):
+        loss.backward()
+    assert len(step.eager_only) == 1
+
+
+def test_a_backward_that_fails_to_trace_is_narrated(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], device_gpu_only: str
+) -> None:
+    """Why a demand variant was left out shows under ``LUCID_COMPILE_VERBOSE=1``."""
+    monkeypatch.setenv("LUCID_COMPILE_VERBOSE", "1")
+    assert _present_sets(_AssertsFirst.apply, device_gpu_only) == [(0,), (0, 1)]
+    assert (
+        "tracing _AssertsFirst.backward(None, a cotangent) failed: it raised AssertionError"
+        in capsys.readouterr().err
+    )
+
+
+_W_MATRIX = [[1.0, 2.0, 3.0], [0.5, -1.0, 2.5], [1.5, 0.25, -0.5]]
+_W_VECTOR = [1.0, -2.0, 0.5]
+
+_FACTORIZATIONS: dict[str, tuple[Callable[[lucid.Tensor], tuple[lucid.Tensor, ...]], int]] = {
+    "svd": (lambda a: tuple(_LA.svd(a)), 3),
+    "qr": (lambda a: tuple(_LA.qr(a)), 2),
+    "eigh": (lambda a: tuple(_LA.eigh(a)), 2),
+}
+
+
+class _OfDemand(nn.Module):
+    """A weighted sum of squares of the factors in ``demand``, blind to their column signs."""
+
+    def __init__(
+        self,
+        a: lucid.Tensor,
+        factorize: Callable[[lucid.Tensor], tuple[lucid.Tensor, ...]],
+        demand: tuple[int, ...],
+    ) -> None:
+        super().__init__()
+        self.a = nn.Parameter(a)
+        self.factorize = factorize
+        self.demand = demand
+        self.register_buffer("w_matrix", lucid.tensor(_W_MATRIX, device=a.device))
+        self.register_buffer("w_vector", lucid.tensor(_W_VECTOR, device=a.device))
+
+    def forward(self, x: lucid.Tensor) -> lucid.Tensor:
+        factors = self.factorize(self.a)
+        terms = [
+            (factors[j] ** 2 * (self.w_matrix if factors[j].ndim == 2 else self.w_vector)).sum()
+            for j in self.demand
+        ]
+        total = terms[0]
+        for term in terms[1:]:
+            total = total + term
+        return (total * x).sum().reshape(1)
+
+
+@pytest.mark.parametrize(
+    ("name", "demand"),
+    [
+        pytest.param(name, demand, id=f"{name}-{''.join(map(str, demand))}")
+        for name, (_, n) in _FACTORIZATIONS.items()
+        for size in range(1, n + 1)
+        for demand in itertools.combinations(range(n), size)
+    ],
+)
+def test_every_demand_gets_its_own_variant(
+    name: str, demand: tuple[int, ...], device_gpu_only: str
+) -> None:
+    """A variant for another demand of the same size would drop or add a factor's term."""
+    factorize, _ = _FACTORIZATIONS[name]
+
+    def build() -> nn.Module:
+        return _OfDemand(
+            lucid.tensor(_MATRICES["distinct"], device=device_gpu_only), factorize, demand
+        )
+
+    got, want = _compiled_and_eager(build, lambda m: m.a, device_gpu_only)
+    _assert_matches_eager(got, want)
 
 
 def test_a_demand_no_region_was_traced_for_is_refused_loudly(
