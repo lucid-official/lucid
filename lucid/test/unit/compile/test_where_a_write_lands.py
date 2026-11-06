@@ -709,6 +709,31 @@ def test_a_kept_tensor_the_call_adds_to_ends_as_eager_ends(norm: str, entry: str
     _review_case("read-modify-write", norm, entry)
 
 
+def test_what_an_attempt_put_back_goes_to_the_call_after_it_and_nowhere_if_it_raises() -> None:
+    """A tensor put back for the eager call after a refused trace gets the trace's
+    values back if that call does not write it.  An attempt that raises hands
+    nothing over: another call must not take its record for its own."""
+    from lucid.compile._core import buffer_writes
+    from lucid.compile._core.trace_context import compile_attempt
+
+    kept, after = lucid.zeros(4, device=COMPILE_DEVICE), lucid.ones(4, device=COMPILE_DEVICE)
+
+    def put_back() -> None:
+        buffer_writes._HELD.pending = [(kept._impl, after._impl, int(kept._impl.version))]
+
+    with pytest.raises(RuntimeError, match="the attempt failed"), compile_attempt():
+        put_back()
+        raise RuntimeError("the attempt failed")
+    with buffer_writes.eager_rerun():
+        pass
+    assert kept.tolist() == [0.0] * 4
+    with compile_attempt():
+        put_back()
+    with buffer_writes.eager_rerun():
+        pass
+    assert kept.tolist() == [1.0] * 4
+
+
 def test_a_compiled_step_refuses_a_kept_tensor_it_adds_to_and_leaves_the_write() -> None:
     """``compiled_step`` has no eager call to rerun: it refuses, loudly, and the
     tensor keeps the write the call made, as the call's other effects do."""
