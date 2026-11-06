@@ -19,13 +19,13 @@ import pytest
 import lucid
 import lucid.optim as optim
 from lucid.models.generative._common._pixel_nets import DenseHead
-from lucid.models.generative.dreamer_v3._heads import TwoHotHead
+from lucid.models.generative.dreamer_v3._heads import _TwoHotHead
 
 
 def _fit(head: object, inputs: lucid.Tensor, targets: lucid.Tensor, steps: int) -> None:
     optimiser = optim.Adam(head.parameters(), lr=3e-2)
     for _ in range(steps):
-        if isinstance(head, TwoHotHead):
+        if isinstance(head, _TwoHotHead):
             loss = head.loss(inputs, targets)
         else:
             loss = (0.5 * (head(inputs) - targets) ** 2).mean()
@@ -36,7 +36,7 @@ def _fit(head: object, inputs: lucid.Tensor, targets: lucid.Tensor, steps: int) 
 
 class TestTwoHotHead:
     def test_shapes(self) -> None:
-        head = TwoHotHead(8, 16, 2, num_bins=41)
+        head = _TwoHotHead(8, 16, 2, num_bins=41)
         feature = lucid.zeros((2, 3, 8))
         assert head(feature).shape == (2, 3, 41)
         assert head.predict(feature).shape == (2, 3)
@@ -51,18 +51,18 @@ class TestTwoHotHead:
         which made the earlier equality test a statement about summation
         order rather than about the head.
         """
-        head = TwoHotHead(8, 16, 2, zero_init=True)
+        head = _TwoHotHead(8, 16, 2, zero_init=True)
         assert float(head.predict(lucid.randn((4, 5, 8))).abs().max().item()) < 1e-5
 
     def test_without_zero_init_it_does_not(self) -> None:
         """Guards the test above — otherwise it would pass on any head."""
         lucid.manual_seed(0)
-        head = TwoHotHead(8, 16, 2, zero_init=False)
+        head = _TwoHotHead(8, 16, 2, zero_init=False)
         assert float(head.predict(lucid.randn((4, 5, 8))).abs().max().item()) > 1e-3
 
     def test_the_loss_is_a_cross_entropy(self) -> None:
         """Non-negative, and minimised when the logits match the encoding."""
-        head = TwoHotHead(4, 16, 2, zero_init=True)
+        head = _TwoHotHead(4, 16, 2, zero_init=True)
         inputs = lucid.randn((16, 1, 4))
         targets = lucid.ones((16, 1)) * 5.0
         before = float(head.loss(inputs, targets).item())
@@ -72,7 +72,7 @@ class TestTwoHotHead:
 
     def test_the_target_is_not_differentiated(self) -> None:
         """It is data; a head able to move its own target fits nothing."""
-        head = TwoHotHead(4, 16, 2)
+        head = _TwoHotHead(4, 16, 2)
         targets = lucid.ones((8, 1), requires_grad=True)
         head.loss(lucid.randn((8, 1, 4)), targets).backward()
         assert targets.grad is None or float(targets.grad.abs().sum().item()) == 0.0
@@ -81,7 +81,7 @@ class TestTwoHotHead:
     def test_one_configuration_fits_any_scale(self, scale: float) -> None:
         """The paper's claim, at four magnitudes, with the rate held fixed."""
         lucid.manual_seed(0)
-        head = TwoHotHead(4, 32, 2, zero_init=True)
+        head = _TwoHotHead(4, 32, 2, zero_init=True)
         inputs = lucid.randn((64, 1, 4))
         targets = lucid.ones((64, 1)) * scale
         _fit(head, inputs, targets, 300)
@@ -91,11 +91,11 @@ class TestTwoHotHead:
     @pytest.mark.parametrize("bins", [1, 0])
     def test_rejects_a_grid_too_small_to_interpolate(self, bins: int) -> None:
         with pytest.raises(ValueError):
-            TwoHotHead(4, 8, 1, num_bins=bins)
+            _TwoHotHead(4, 8, 1, num_bins=bins)
 
     def test_rejects_a_degenerate_range(self) -> None:
         with pytest.raises(ValueError):
-            TwoHotHead(4, 8, 1, bin_range=0.0)
+            _TwoHotHead(4, 8, 1, bin_range=0.0)
 
 
 class TestAgainstSquaredError:
@@ -113,7 +113,7 @@ class TestAgainstSquaredError:
         inputs, targets, large = self._mixed()
         _fit(head, inputs, targets, steps)
         with lucid.no_grad():
-            predicted = head.predict(inputs) if isinstance(head, TwoHotHead) else head(inputs)
+            predicted = head.predict(inputs) if isinstance(head, _TwoHotHead) else head(inputs)
             small_error = (
                 float(
                     ((predicted - 0.01).abs() * (1.0 - large)).sum().item()
@@ -131,7 +131,7 @@ class TestAgainstSquaredError:
 
     def test_two_hot_fits_both_magnitudes(self) -> None:
         lucid.manual_seed(0)
-        small, large = self._errors(TwoHotHead(4, 64, 2, zero_init=True))
+        small, large = self._errors(_TwoHotHead(4, 64, 2, zero_init=True))
         # Measured: 0.27 and 0.002.
         assert small < 1.0
         assert large < 0.05

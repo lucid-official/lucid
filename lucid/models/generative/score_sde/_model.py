@@ -29,7 +29,7 @@ from lucid.models._utils._generative import model_dtype, resolve_generation_devi
 from lucid.models.generative.ddpm._config import DDPMConfig
 from lucid.models.generative.ddpm._model import _DDPMUNet
 from lucid.models.generative.score_sde._config import ScoreSDEConfig
-from lucid.models.generative.score_sde._sde import SDE, VESDE, make_sde
+from lucid.models.generative.score_sde._sde import SDE, VESDE, _make_sde
 from lucid.models._utils._common import host_floats
 
 __all__ = ["ScoreSDEModel", "ScoreSDEForImageGeneration", "ScoreSDEOutput"]
@@ -122,7 +122,7 @@ class ScoreSDEModel(PretrainedModel):
 
     def __init__(self, config: ScoreSDEConfig) -> None:
         super().__init__(config)
-        self.sde: SDE = make_sde(
+        self.sde: SDE = _make_sde(
             config.sde_type,
             sigma_min=config.sigma_min,
             sigma_max=config.sigma_max,

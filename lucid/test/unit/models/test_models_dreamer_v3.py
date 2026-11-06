@@ -50,9 +50,9 @@ from lucid.models.generative._common._actor import Actor
 from lucid.models.generative._common._rssm import RSSM, BlockLinear, RSSMState, categorical_kl
 from lucid.models.generative.dreamer_v3._config import DREAMER_V3_SIZES
 from lucid.models.generative.dreamer_v3._objectives import (
-    ReturnNormaliser,
-    free_bits_kl,
-    percentile,
+    _ReturnNormaliser,
+    _free_bits_kl,
+    _percentile,
 )
 
 _FACTORIES = [
@@ -283,7 +283,7 @@ class TestFreeBits:
         mean_first = float(raw.mean().clip(1.0, None).item())
         assert mean_first < per_step, "the batch must be one where they disagree"
 
-        dynamics, _ = free_bits_kl(posterior, prior, free_nats=1.0)
+        dynamics, _ = _free_bits_kl(posterior, prior, free_nats=1.0)
         assert abs(float(dynamics.item()) - per_step) < 1e-5
         assert abs(float(dynamics.item()) - mean_first) > 1e-3
 
@@ -291,20 +291,20 @@ class TestFreeBits:
         """Restated as the thing that actually matters."""
         posterior, prior = self._mixed_pair()
         assert prior.logits is not None
-        dynamics, _ = free_bits_kl(posterior, prior, free_nats=1.0)
+        dynamics, _ = _free_bits_kl(posterior, prior, free_nats=1.0)
         dynamics.backward()
         assert prior.logits.grad is not None
         assert float(prior.logits.grad[0, 0].abs().sum().item()) > 0.0
 
     def test_the_two_halves_carry_the_paper_ratio(self) -> None:
         posteriors, priors = self._states(1.0)
-        dynamics, representation = free_bits_kl(posteriors, priors)  # type: ignore[arg-type]
+        dynamics, representation = _free_bits_kl(posteriors, priors)  # type: ignore[arg-type]
         ratio = float(representation.item()) / float(dynamics.item())
         assert abs(ratio - 0.1) < 1e-4
 
     def test_free_nats_floors_both(self) -> None:
         posteriors, priors = self._states(1.0)
-        dynamics, representation = free_bits_kl(posteriors, priors, free_nats=50.0)  # type: ignore[arg-type]
+        dynamics, representation = _free_bits_kl(posteriors, priors, free_nats=50.0)  # type: ignore[arg-type]
         assert abs(float(dynamics.item()) - 50.0) < 1e-3
         assert abs(float(representation.item()) - 5.0) < 1e-3
 
@@ -313,28 +313,28 @@ class TestFreeBits:
         rssm = RSSM(stoch_size=3, deter_size=8, hidden_size=8, action_dim=2, embed_size=6).eval()
         priors, posteriors = rssm.observe(lucid.randn((2, 3, 6)), lucid.randn((2, 3, 2)))
         with pytest.raises(ValueError):
-            free_bits_kl(posteriors, priors)
+            _free_bits_kl(posteriors, priors)
 
 
 class TestReturnNormalisation:
     def test_percentiles_are_exact_on_a_known_sample(self) -> None:
         values = lucid.tensor([float(i) for i in range(101)])
         for fraction in (0.0, 5.0, 50.0, 95.0, 100.0):
-            assert abs(float(percentile(values, fraction).item()) - fraction) < 1e-5
+            assert abs(float(_percentile(values, fraction).item()) - fraction) < 1e-5
 
     def test_it_converges_to_the_spread(self) -> None:
         lucid.manual_seed(0)
         returns = lucid.randn((256,)) * 1000.0
-        normaliser = ReturnNormaliser()
+        normaliser = _ReturnNormaliser()
         for _ in range(400):
             divisor = float(normaliser.update(returns))
-        spread = float((percentile(returns, 95.0) - percentile(returns, 5.0)).item())
+        spread = float((_percentile(returns, 95.0) - _percentile(returns, 5.0)).item())
         assert abs(divisor - spread) / spread < 0.05
 
     def test_small_returns_are_left_alone(self) -> None:
         """The floor at one — dividing by a narrow spread amplifies noise."""
         lucid.manual_seed(0)
-        normaliser = ReturnNormaliser()
+        normaliser = _ReturnNormaliser()
         for _ in range(400):
             divisor = float(normaliser.update(lucid.randn((256,)) * 0.001))
         assert divisor == 1.0

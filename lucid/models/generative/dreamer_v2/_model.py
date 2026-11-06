@@ -143,7 +143,7 @@ class DreamerV2Output(ModelOutput):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def balanced_kl(
+def _balanced_kl(
     posterior: RSSMState, prior: RSSMState, *, balance: float, free_nats: float = 0.0
 ) -> Tensor:
     r"""KL balancing — the two directions weighted apart.
@@ -198,8 +198,8 @@ def balanced_kl(
     ...     std=None,
     ...     logits=lucid.zeros(2, 4, 8),
     ... )
-    >>> from lucid.models.generative.dreamer_v2._model import balanced_kl
-    >>> balanced_kl(state, state, balance=0.8, free_nats=1.0).shape
+    >>> from lucid.models.generative.dreamer_v2._model import _balanced_kl
+    >>> _balanced_kl(state, state, balance=0.8, free_nats=1.0).shape
     ()
 
     A scalar, and against itself it is the free-nats floor rather than
@@ -935,7 +935,7 @@ class DreamerV2ForWorldModeling(WorldModelingModel):
         diff = (reconstruction - observations) ** 2
         recon_loss = 0.5 * diff.reshape(b, t, -1).sum(dim=-1).mean()
         reward_loss = 0.5 * ((predicted_reward - rewards) ** 2).mean()
-        kl_loss = balanced_kl(
+        kl_loss = _balanced_kl(
             posteriors, priors, balance=self._kl_balance, free_nats=self._free_nats
         )
         loss = recon_loss + reward_loss + self._kl_weight * kl_loss

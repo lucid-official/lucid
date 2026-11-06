@@ -12,7 +12,7 @@ block with one user belongs to that user, and moves up when a second
 appears — SigLIP and ALIGN would both want exactly this block.
 
 They are not in :mod:`lucid.nn` for a different reason: they encode a
-pre-norm-with-``QuickGELU`` shape because that is what the released
+pre-norm-with-``_QuickGELU`` shape because that is what the released
 contrastive checkpoints were trained in.
 :class:`lucid.nn.TransformerEncoderLayer` is the same idea with the
 framework's own defaults, and it will not load these weights.
@@ -24,11 +24,9 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 
-__all__ = ["QuickGELU", "ResidualAttentionBlock", "TransformerTower"]
-
 
 @final
-class QuickGELU(nn.Module):
+class _QuickGELU(nn.Module):
     r"""``x * sigmoid(1.702 x)`` — the activation the released weights use.
 
     Notes
@@ -44,8 +42,8 @@ class QuickGELU(nn.Module):
     Examples
     --------
     >>> import lucid
-    >>> from lucid.models.multimodal.clip._towers import QuickGELU
-    >>> float(QuickGELU()(lucid.tensor([0.0])).item())
+    >>> from lucid.models.multimodal.clip._towers import _QuickGELU
+    >>> float(_QuickGELU()(lucid.tensor([0.0])).item())
     0.0
     """
 
@@ -67,7 +65,7 @@ class QuickGELU(nn.Module):
 
 
 @final
-class ResidualAttentionBlock(nn.Module):
+class _ResidualAttentionBlock(nn.Module):
     """Pre-norm Transformer block, used by both towers of a two-tower model.
 
     Parameters
@@ -88,7 +86,7 @@ class ResidualAttentionBlock(nn.Module):
     attn : lucid.nn.MultiheadAttention
         Self-attention with fused Q/K/V.
     mlp : lucid.nn.Sequential
-        ``Linear → QuickGELU → Linear`` at four times the width.
+        ``Linear → _QuickGELU → Linear`` at four times the width.
 
     Notes
     -----
@@ -99,8 +97,8 @@ class ResidualAttentionBlock(nn.Module):
     Examples
     --------
     >>> import lucid
-    >>> from lucid.models.multimodal.clip._towers import ResidualAttentionBlock
-    >>> block = ResidualAttentionBlock(32, 4).eval()
+    >>> from lucid.models.multimodal.clip._towers import _ResidualAttentionBlock
+    >>> block = _ResidualAttentionBlock(32, 4).eval()
     >>> block(lucid.randn((2, 5, 32))).shape
     (2, 5, 32)
     """
@@ -117,7 +115,7 @@ class ResidualAttentionBlock(nn.Module):
         self.attn = nn.MultiheadAttention(width, heads, batch_first=True)
         self.ln_2 = nn.LayerNorm(width)
         self.mlp = nn.Sequential(
-            nn.Linear(width, width * 4), QuickGELU(), nn.Linear(width * 4, width)
+            nn.Linear(width, width * 4), _QuickGELU(), nn.Linear(width * 4, width)
         )
 
     @override
@@ -141,8 +139,8 @@ class ResidualAttentionBlock(nn.Module):
 
 
 @final
-class TransformerTower(nn.Module):
-    """A stack of :class:`ResidualAttentionBlock`.
+class _TransformerTower(nn.Module):
+    """A stack of ``_ResidualAttentionBlock``.
 
     Parameters
     ----------
@@ -164,8 +162,8 @@ class TransformerTower(nn.Module):
     Examples
     --------
     >>> import lucid
-    >>> from lucid.models.multimodal.clip._towers import TransformerTower
-    >>> tower = TransformerTower(32, 2, 4, causal=True).eval()
+    >>> from lucid.models.multimodal.clip._towers import _TransformerTower
+    >>> tower = _TransformerTower(32, 2, 4, causal=True).eval()
     >>> tower(lucid.randn((1, 6, 32))).shape
     (1, 6, 32)
     """
@@ -177,8 +175,8 @@ class TransformerTower(nn.Module):
         super().__init__()
         self.width = width
         self.layers = layers
-        self.resblocks: nn.ModuleList[ResidualAttentionBlock] = nn.ModuleList(
-            [ResidualAttentionBlock(width, heads, causal) for _ in range(layers)]
+        self.resblocks: nn.ModuleList[_ResidualAttentionBlock] = nn.ModuleList(
+            [_ResidualAttentionBlock(width, heads, causal) for _ in range(layers)]
         )
 
     @override

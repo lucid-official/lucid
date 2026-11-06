@@ -927,11 +927,11 @@ def test_dreamer_v3_two_hot_head_matches_across_devices(paired):
 @pytest.mark.parametrize("device", DEVICES)
 def test_dreamer_v3_return_normaliser_sorts_on_device(device):
     """The percentile spread, which is the one sort in this family."""
-    from lucid.models.generative.dreamer_v3._objectives import percentile
+    from lucid.models.generative.dreamer_v3._objectives import _percentile
 
     values = lucid.tensor([float(i) for i in range(101)], device=device, dtype=lucid.float32)
     for fraction in (5.0, 50.0, 95.0):
-        got = percentile(values, fraction)
+        got = _percentile(values, fraction)
         assert str(got.device) == f"device('{device}')"
         assert abs(float(got.to("cpu").item()) - fraction) < 1e-4
 

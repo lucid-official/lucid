@@ -26,7 +26,7 @@ from lucid.models._utils._generative import (
     resolve_generation_device,
 )
 from lucid.models.generative.ddpm._config import DDPMConfig
-from lucid.models.generative.ncsn._refinenet import RefineNetScoreNet
+from lucid.models.generative.ncsn._refinenet import _RefineNetScoreNet
 from lucid.models.generative.ddpm._model import _DDPMUNet
 from lucid.models.generative.ncsn._config import NCSNConfig
 from lucid.models._utils._common import host_floats
@@ -154,9 +154,9 @@ class NCSNModel(PretrainedModel):
         # loads a released v1/v2 checkpoint — the weights are not published
         # in a form this can convert — so the choice is about inductive
         # bias, not about weight compatibility.
-        self.unet: RefineNetScoreNet | _DDPMUNet
+        self.unet: _RefineNetScoreNet | _DDPMUNet
         if config.backbone == "refinenet":
-            self.unet = RefineNetScoreNet(
+            self.unet = _RefineNetScoreNet(
                 config.in_channels,
                 base_channels=config.base_channels,
                 num_classes=config.num_noise_levels,

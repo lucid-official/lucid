@@ -57,7 +57,7 @@ import lucid
 import lucid.models as models
 from lucid._dtype import _float32_or_wider
 from lucid.models._registry import _REGISTRY
-from lucid.models.generative.score_sde._sde import make_sde
+from lucid.models.generative.score_sde._sde import _make_sde
 from lucid.test._default_device import device_of
 from lucid.test._fixtures.devices import device_supports, metal_available
 from lucid.test.unit.compile import _zoo_matrix as zoo
@@ -568,7 +568,7 @@ def test_every_sde_works_its_cancelling_coefficients_out_wide(sde_type: str) -> 
     VP's and sub-VP's standard deviation and sub-VP's diffusion came out 0
     there — a relative error of 1 — and the score infinite.
     """
-    sde = make_sde(sde_type)
+    sde = _make_sde(sde_type)
     times = [sde.t_min, 0.01, 0.5, 1.0]
     t, x = lucid.tensor(times), lucid.ones((len(times), 3, 4, 4))
     narrow_t, narrow_x = t.to(_HALF_DEVICE).to(_F16), x.to(_HALF_DEVICE).to(_F16)

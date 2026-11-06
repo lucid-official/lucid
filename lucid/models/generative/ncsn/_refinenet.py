@@ -21,11 +21,9 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 
-__all__ = ["RefineNetScoreNet"]
-
 
 @final
-class CondInstanceNormPlusPlus(nn.Module):
+class _CondInstanceNormPlusPlus(nn.Module):
     r"""Conditional InstanceNorm++ (Song & Ermon 2019, §3.3).
 
     For input :math:`x` with per-channel spatial statistics
@@ -57,9 +55,9 @@ class CondInstanceNormPlusPlus(nn.Module):
     --------
     >>> import lucid
     >>> from lucid.models.generative.ncsn._refinenet import (
-    ...     CondInstanceNormPlusPlus,
+    ...     _CondInstanceNormPlusPlus,
     ... )
-    >>> norm = CondInstanceNormPlusPlus(4, num_classes=3)
+    >>> norm = _CondInstanceNormPlusPlus(4, num_classes=3)
     >>> out = norm(lucid.randn(2, 4, 8, 8), lucid.tensor([0, 2]).long())
     >>> out.shape
     (2, 4, 8, 8)
@@ -107,9 +105,9 @@ class _CondResBlock(nn.Module):
 
     def __init__(self, in_ch: int, out_ch: int, num_classes: int, dilation: int = 1) -> None:
         super().__init__()
-        self.norm1 = CondInstanceNormPlusPlus(in_ch, num_classes)
+        self.norm1 = _CondInstanceNormPlusPlus(in_ch, num_classes)
         self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=dilation, dilation=dilation, bias=False)
-        self.norm2 = CondInstanceNormPlusPlus(out_ch, num_classes)
+        self.norm2 = _CondInstanceNormPlusPlus(out_ch, num_classes)
         self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=dilation, dilation=dilation, bias=False)
         self.skip: nn.Conv2d | nn.Identity = (
             nn.Conv2d(in_ch, out_ch, 1, bias=False) if in_ch != out_ch else nn.Identity()
@@ -155,7 +153,7 @@ class _RefineBlock(nn.Module):
 
 
 @final
-class RefineNetScoreNet(nn.Module):
+class _RefineNetScoreNet(nn.Module):
     r"""4-cascade RefineNet score network with conditional InstanceNorm++.
 
     Signature-compatible with the DDPM U-Net this family uses by default —
@@ -180,8 +178,8 @@ class RefineNetScoreNet(nn.Module):
     Examples
     --------
     >>> import lucid
-    >>> from lucid.models.generative.ncsn._refinenet import RefineNetScoreNet
-    >>> net = RefineNetScoreNet(3, base_channels=16, num_classes=4)
+    >>> from lucid.models.generative.ncsn._refinenet import _RefineNetScoreNet
+    >>> net = _RefineNetScoreNet(3, base_channels=16, num_classes=4)
     >>> out = net(lucid.randn(2, 3, 32, 32), lucid.tensor([0, 3]).long())
     >>> out.shape
     (2, 3, 32, 32)
@@ -224,7 +222,7 @@ class RefineNetScoreNet(nn.Module):
                 for i in reversed(range(len(widths) - 1))
             ]
         )
-        self.out_norm = CondInstanceNormPlusPlus(widths[0], num_classes)
+        self.out_norm = _CondInstanceNormPlusPlus(widths[0], num_classes)
         self.out_conv = nn.Conv2d(widths[0], in_channels, 3, padding=1)
 
     @override

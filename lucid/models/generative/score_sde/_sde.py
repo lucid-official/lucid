@@ -25,7 +25,7 @@ import lucid
 from lucid._dtype import _float32_or_wider
 from lucid._tensor.tensor import Tensor
 
-__all__ = ["SDE", "VESDE", "VPSDE", "SubVPSDE", "make_sde"]
+__all__ = ["SDE", "VESDE", "VPSDE", "SubVPSDE"]
 
 
 def _expand(scalar: Tensor, like: Tensor) -> Tensor:
@@ -62,8 +62,8 @@ class SDE(ABC):
     Examples
     --------
     >>> import lucid
-    >>> from lucid.models.generative.score_sde._sde import make_sde
-    >>> sde = make_sde("vp")
+    >>> from lucid.models.generative.score_sde._sde import _make_sde
+    >>> sde = _make_sde("vp")
     >>> x = lucid.zeros(2, 3, 8, 8)
     >>> t = lucid.zeros(2) + 0.5
     >>> sde.drift(x, t).shape
@@ -112,17 +112,17 @@ class SDE(ABC):
         Examples
         --------
         >>> import lucid
-        >>> from lucid.models.generative.score_sde._sde import make_sde
+        >>> from lucid.models.generative.score_sde._sde import _make_sde
         >>> x = lucid.ones((2, 3, 4, 4))
         >>> t = lucid.tensor([0.1, 0.9])
-        >>> vp = make_sde("vp")
+        >>> vp = _make_sde("vp")
         >>> mean, std = vp.marginal_prob(x, t)
         >>> mean.shape, std.shape
         ((2, 3, 4, 4), (2,))
         >>> scale = mean[:, 0, 0, 0]  # x is all ones, so this is the mean's factor
         >>> bool(((scale**2 + std**2 - 1.0).abs() < 1e-5).all().item())  # VP
         True
-        >>> ve = make_sde("ve")
+        >>> ve = _make_sde("ve")
         >>> mean, std = ve.marginal_prob(x, t)
         >>> mean is x  # VE never moves the mean
         True
@@ -402,7 +402,7 @@ class SubVPSDE(VPSDE):
         return mean, std.to(x.dtype)
 
 
-def make_sde(
+def _make_sde(
     kind: str,
     sigma_min: float = 0.01,
     sigma_max: float = 50.0,
@@ -432,8 +432,8 @@ def make_sde(
 
     Examples
     --------
-    >>> from lucid.models.generative.score_sde._sde import make_sde
-    >>> [type(make_sde(k)).__name__ for k in ("ve", "vp", "subvp")]
+    >>> from lucid.models.generative.score_sde._sde import _make_sde
+    >>> [type(_make_sde(k)).__name__ for k in ("ve", "vp", "subvp")]
     ['VESDE', 'VPSDE', 'SubVPSDE']
 
     The three the literature settled on, by name rather than by import,

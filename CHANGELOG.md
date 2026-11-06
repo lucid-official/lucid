@@ -199,6 +199,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A compiled step through a `_traced_backward` Function with `_materialize_grads=False` (or `ctx.set_materialize_grads(False)`) traces its backward once per set of outputs a gradient may reach; one that cannot be traced for the demands it may meet runs eagerly, and the fallback warning says why. More than 4 differentiable outputs run eagerly.
 - bring the family under the gate
 - make the encoder and queue private
+- prefix family-internal helpers with an underscore
 
 ---
 

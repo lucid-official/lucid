@@ -43,7 +43,7 @@ from lucid.models.multimodal.clip import (
     CLIPViTLarge14Weights,
 )
 from lucid.models.multimodal.clip._tokenizer import _PATTERN
-from lucid.models.multimodal.clip._towers import QuickGELU
+from lucid.models.multimodal.clip._towers import _QuickGELU
 from lucid.models.multimodal.clip._model import _contrastive_loss, _TextTransformer
 
 _TINY = dict(
@@ -286,7 +286,7 @@ class TestTheTowersAttendCorrectly:
 class TestQuickGELU:
     def test_it_is_the_sigmoid_approximation(self) -> None:
         x = lucid.tensor([-2.0, 0.0, 1.0])
-        got = QuickGELU()(x).tolist()
+        got = _QuickGELU()(x).tolist()
         want = [v * (1.0 / (1.0 + math.exp(-1.702 * v))) for v in (-2.0, 0.0, 1.0)]
         assert [round(g, 6) for g in got] == [round(w, 6) for w in want]
 
@@ -296,7 +296,7 @@ class TestQuickGELU:
         import lucid.nn.functional as F
 
         x = lucid.tensor([1.5])
-        assert abs(float(QuickGELU()(x).item()) - float(F.gelu(x).item())) > 1e-4
+        assert abs(float(_QuickGELU()(x).item()) - float(F.gelu(x).item())) > 1e-4
 
 
 class TestVariants:

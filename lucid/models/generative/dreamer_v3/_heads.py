@@ -27,11 +27,9 @@ import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
 from lucid.models.generative._common._pixel_nets import DenseHead
 
-__all__ = ["TwoHotHead"]
-
 
 @final
-class TwoHotHead(nn.Module):
+class _TwoHotHead(nn.Module):
     r"""A dense trunk whose output is a distribution over symlog bins.
 
     Parameters
@@ -69,8 +67,8 @@ class TwoHotHead(nn.Module):
     Examples
     --------
     >>> import lucid
-    >>> from lucid.models.generative.dreamer_v3._heads import TwoHotHead
-    >>> head = TwoHotHead(8, 16, 2, num_bins=41)
+    >>> from lucid.models.generative.dreamer_v3._heads import _TwoHotHead
+    >>> head = _TwoHotHead(8, 16, 2, num_bins=41)
     >>> head.predict(lucid.zeros((2, 3, 8))).shape
     (2, 3)
     """
@@ -146,8 +144,8 @@ class TwoHotHead(nn.Module):
         Examples
         --------
         >>> import lucid
-        >>> from lucid.models.generative.dreamer_v3._heads import TwoHotHead
-        >>> head = TwoHotHead(8, 16, 2, num_bins=41)
+        >>> from lucid.models.generative.dreamer_v3._heads import _TwoHotHead
+        >>> head = _TwoHotHead(8, 16, 2, num_bins=41)
         >>> head.predict(lucid.randn((2, 3, 8))).shape
         (2, 3)
 
@@ -155,7 +153,7 @@ class TwoHotHead(nn.Module):
         so it predicts ``symexp(0) = 0``, up to the rounding of the grid's
         float32 sum — which is how the critic starts:
 
-        >>> critic = TwoHotHead(8, 16, 2, num_bins=41, zero_init=True)
+        >>> critic = _TwoHotHead(8, 16, 2, num_bins=41, zero_init=True)
         >>> float(critic.predict(lucid.randn((2, 3, 8))).abs().max().item()) < 1e-6
         True
         """
@@ -192,8 +190,8 @@ class TwoHotHead(nn.Module):
         --------
         >>> import math
         >>> import lucid
-        >>> from lucid.models.generative.dreamer_v3._heads import TwoHotHead
-        >>> head = TwoHotHead(8, 16, 2, num_bins=41, zero_init=True)
+        >>> from lucid.models.generative.dreamer_v3._heads import _TwoHotHead
+        >>> head = _TwoHotHead(8, 16, 2, num_bins=41, zero_init=True)
         >>> target = lucid.tensor([[0.0, 1.0, -5.0], [1e4, 0.5, 2.0]])
         >>> per_step = head.cross_entropy(lucid.randn((2, 3, 8)), target)
         >>> per_step.shape
@@ -229,8 +227,8 @@ class TwoHotHead(nn.Module):
         Examples
         --------
         >>> import lucid
-        >>> from lucid.models.generative.dreamer_v3._heads import TwoHotHead
-        >>> head = TwoHotHead(8, 16, 2, num_bins=41)
+        >>> from lucid.models.generative.dreamer_v3._heads import _TwoHotHead
+        >>> head = _TwoHotHead(8, 16, 2, num_bins=41)
         >>> feature = lucid.randn((2, 3, 8))
         >>> target = lucid.randn((2, 3), requires_grad=True)
         >>> loss = head.loss(feature, target)

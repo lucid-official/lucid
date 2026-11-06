@@ -37,7 +37,7 @@ from lucid.models import (
 )
 from lucid.models.generative.dreamer_v2 import DreamerV2BehaviorOutput, DreamerV2Output
 from lucid.models.generative._common._dists import OneHotCategorical, TruncatedNormal
-from lucid.models.generative.dreamer_v2._model import balanced_kl
+from lucid.models.generative.dreamer_v2._model import _balanced_kl
 
 
 def _tiny_cfg(**overrides: object) -> DreamerV2Config:
@@ -197,7 +197,9 @@ class TestKLBalancing:
         """
         model = DreamerV2Model(_tiny_cfg(mean_only=True))
         priors, posteriors = model.observe(*_batch()[:2])
-        values = [float(balanced_kl(posteriors, priors, balance=b).item()) for b in (0.0, 0.5, 1.0)]
+        values = [
+            float(_balanced_kl(posteriors, priors, balance=b).item()) for b in (0.0, 0.5, 1.0)
+        ]
         assert max(values) - min(values) < 1e-5
 
     def test_refuses_a_gaussian_state(self) -> None:
@@ -208,7 +210,7 @@ class TestKLBalancing:
         ).eval()
         priors, posteriors = gaussian.observe(lucid.randn((2, 2, 6)), lucid.randn((2, 2, 2)))
         with pytest.raises(ValueError):
-            balanced_kl(posteriors, priors, balance=0.8)
+            _balanced_kl(posteriors, priors, balance=0.8)
 
 
 class TestTargetCritic:

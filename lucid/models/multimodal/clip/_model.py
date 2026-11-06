@@ -33,7 +33,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._output import ModelOutput
-from lucid.models.multimodal.clip._towers import TransformerTower
+from lucid.models.multimodal.clip._towers import _TransformerTower
 from lucid.models.multimodal.clip._config import CLIPConfig
 
 __all__ = ["CLIPModel", "CLIPForZeroShotImageClassification", "CLIPOutput", "CLIPZeroShotOutput"]
@@ -77,7 +77,7 @@ class _VisionTransformer(nn.Module):
         self.class_embedding = nn.Parameter(lucid.zeros((width,)))
         self.positional_embedding = nn.Parameter(lucid.zeros((self.num_patches + 1, width)))
         self.ln_pre = nn.LayerNorm(width)
-        self.transformer = TransformerTower(width, config.vision_layers, config.vision_heads)
+        self.transformer = _TransformerTower(width, config.vision_layers, config.vision_heads)
         self.ln_post = nn.LayerNorm(width)
         self.proj = nn.Parameter(lucid.zeros((width, config.embed_dim)))
 
@@ -130,7 +130,7 @@ class _TextTransformer(nn.Module):
 
         self.token_embedding = nn.Embedding(config.vocab_size, width)
         self.positional_embedding = nn.Parameter(lucid.zeros((config.context_length, width)))
-        self.transformer = TransformerTower(
+        self.transformer = _TransformerTower(
             width, config.text_layers, config.text_heads, causal=True
         )
         self.ln_final = nn.LayerNorm(width)

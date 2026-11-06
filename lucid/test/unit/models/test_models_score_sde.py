@@ -32,7 +32,7 @@ from lucid.models import (
     list_models,
     score_sde_vp,
 )
-from lucid.models.generative.score_sde._sde import SubVPSDE, VPSDE, make_sde
+from lucid.models.generative.score_sde._sde import SubVPSDE, VPSDE, _make_sde
 
 _TINY = dict(
     sample_size=8,
@@ -79,7 +79,7 @@ class TestSDEs:
         """A closed form that disagrees with its own SDE trains one model
         and samples another."""
         lucid.manual_seed(0)
-        sde = make_sde(kind)
+        sde = _make_sde(kind)
         count, end, steps = 4000, 0.6, 1500
         x = lucid.ones((count, 1))
         step = (end - sde.t_min) / steps
@@ -107,7 +107,7 @@ class TestSDEs:
 
     def test_ve_leaves_the_mean_alone(self) -> None:
         """'Variance exploding' — the drift is zero by construction."""
-        sde = make_sde("ve")
+        sde = _make_sde("ve")
         x = lucid.randn((8, 3))
         mean, _ = sde.marginal_prob(x, lucid.ones((8,)) * 0.7)
         assert float((mean - x).abs().max().item()) == 0.0
@@ -116,14 +116,14 @@ class TestSDEs:
     def test_the_priors_have_the_widths_the_sdes_need(self) -> None:
         """A VE sampler started from a standard normal would silently fail."""
         lucid.manual_seed(0)
-        wide = make_sde("ve").prior_sampling((4000, 1), "cpu")
-        unit = make_sde("vp").prior_sampling((4000, 1), "cpu")
+        wide = _make_sde("ve").prior_sampling((4000, 1), "cpu")
+        unit = _make_sde("vp").prior_sampling((4000, 1), "cpu")
         assert 45.0 < float(wide.std().item()) < 55.0
         assert 0.9 < float(unit.std().item()) < 1.1
 
     def test_it_rejects_an_unknown_sde(self) -> None:
         with pytest.raises(ValueError):
-            make_sde("brownian")
+            _make_sde("brownian")
 
 
 class TestSamplersAgainstAnAnalyticScore:
@@ -147,7 +147,7 @@ class TestSamplersAgainstAnAnalyticScore:
     @pytest.mark.parametrize("kind", _KINDS)
     def test_the_reverse_sde_recovers_the_distribution(self, kind: str) -> None:
         lucid.manual_seed(0)
-        sde = make_sde(kind)
+        sde = _make_sde(kind)
         steps = 300
         x = sde.prior_sampling((self.COUNT, 1), lucid.get_default_device())
         times = lucid.linspace(1.0, sde.t_min, steps)
@@ -164,7 +164,7 @@ class TestSamplersAgainstAnAnalyticScore:
     def test_the_probability_flow_ode_recovers_it_too(self, kind: str) -> None:
         """Equation 13's claim: the deterministic process shares the marginals."""
         lucid.manual_seed(0)
-        sde = make_sde(kind)
+        sde = _make_sde(kind)
 
         def rhs(moment: lucid.Tensor, flat: lucid.Tensor) -> lucid.Tensor:
             x = flat.reshape(self.COUNT, 1)
@@ -186,7 +186,7 @@ class TestSamplersAgainstAnAnalyticScore:
         the model entirely could pass.
         """
         lucid.manual_seed(0)
-        sde = make_sde("vp")
+        sde = _make_sde("vp")
         steps = 300
         x = sde.prior_sampling((self.COUNT, 1), lucid.get_default_device())
         times = lucid.linspace(1.0, sde.t_min, steps)
@@ -338,8 +338,8 @@ class TestExactLikelihood:
     def test_the_prior_width_follows_the_sde(self) -> None:
         """VE's prior is as wide as sigma_max; assuming unit variance
         would silently bias every VE likelihood."""
-        assert make_sde("ve").prior_variance == 50.0**2
-        assert make_sde("vp").prior_variance == 1.0
+        assert _make_sde("ve").prior_variance == 50.0**2
+        assert _make_sde("vp").prior_variance == 1.0
 
 
 class TestControllableGeneration:

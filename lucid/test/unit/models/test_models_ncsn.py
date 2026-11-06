@@ -274,8 +274,8 @@ class TestNCSNRefineNetBackbone:
         refine = {
             type(mod).__name__ for mod in NCSNModel(self._config(backbone="refinenet")).modules()
         }
-        assert "GroupNorm" in default and "CondInstanceNormPlusPlus" not in default
-        assert "CondInstanceNormPlusPlus" in refine and "GroupNorm" not in refine
+        assert "GroupNorm" in default and "_CondInstanceNormPlusPlus" not in default
+        assert "_CondInstanceNormPlusPlus" in refine and "GroupNorm" not in refine
 
     def test_conditional_gains_all_receive_gradient(self) -> None:
         """A per-noise-level gain that never trains is a dead parameter."""
@@ -293,12 +293,12 @@ class TestNCSNRefineNetBackbone:
 
     def test_instance_norm_plus_plus_keeps_the_brightness_pattern(self) -> None:
         """§3.3's whole point: plain instance norm throws this away."""
-        from lucid.models.generative.ncsn._refinenet import CondInstanceNormPlusPlus
+        from lucid.models.generative.ncsn._refinenet import _CondInstanceNormPlusPlus
 
         def make(means: list[float]) -> Tensor:
             return lucid.tensor([[[[m - 0.5, m + 0.5]] for m in means]])
 
-        norm = CondInstanceNormPlusPlus(3, num_classes=1)
+        norm = _CondInstanceNormPlusPlus(3, num_classes=1)
         label = lucid.tensor([0]).long()
         a, b = make([1.0, 2.0, 3.0]), make([1.0, 2.0, 9.0])
 

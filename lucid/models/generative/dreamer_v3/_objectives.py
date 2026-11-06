@@ -12,10 +12,8 @@ import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.models.generative._common._rssm import RSSMState, categorical_kl
 
-__all__ = ["free_bits_kl", "percentile", "ReturnNormaliser"]
 
-
-def free_bits_kl(
+def _free_bits_kl(
     posterior: RSSMState,
     prior: RSSMState,
     *,
@@ -76,9 +74,9 @@ def free_bits_kl(
     ...     logits=lucid.zeros(2, 4, 8),
     ... )
     >>> from lucid.models.generative.dreamer_v3._objectives import (
-    ...     free_bits_kl,
+    ...     _free_bits_kl,
     ... )
-    >>> dynamics, representation = free_bits_kl(
+    >>> dynamics, representation = _free_bits_kl(
     ...     state, state, dyn_scale=1.0, rep_scale=1.0, free_nats=1.0
     ... )
     >>> float(dynamics.item()), float(representation.item())
@@ -106,7 +104,7 @@ def free_bits_kl(
     return dyn_scale * floored(toward_prior), rep_scale * floored(toward_posterior)
 
 
-def percentile(values: Tensor, fraction: float) -> Tensor:
+def _percentile(values: Tensor, fraction: float) -> Tensor:
     r"""The ``fraction``-th percentile of a flattened tensor.
 
     Parameters
@@ -131,15 +129,15 @@ def percentile(values: Tensor, fraction: float) -> Tensor:
     Examples
     --------
     >>> import lucid
-    >>> from lucid.models.generative.dreamer_v3._objectives import percentile
+    >>> from lucid.models.generative.dreamer_v3._objectives import _percentile
     >>> values = lucid.tensor([float(i) for i in range(1, 101)])
-    >>> float(percentile(values, 95).item())
+    >>> float(_percentile(values, 95).item())
     95.0
 
     ``fraction`` is in [0, 100], not [0, 1] — 0.5 asks for the half-th
     percentile and returns the smallest value, not the median.
 
-    >>> float(percentile(values, 0.5).item())
+    >>> float(_percentile(values, 0.5).item())
     1.0
     """
     if not 0.0 <= fraction <= 100.0:
@@ -151,7 +149,7 @@ def percentile(values: Tensor, fraction: float) -> Tensor:
     return ordered[index]
 
 
-class ReturnNormaliser(nn.Module):
+class _ReturnNormaliser(nn.Module):
     r"""A slow estimate of how wide the returns currently are.
 
     Parameters
@@ -199,8 +197,8 @@ class ReturnNormaliser(nn.Module):
     Examples
     --------
     >>> import lucid
-    >>> from lucid.models.generative.dreamer_v3._objectives import ReturnNormaliser
-    >>> norm = ReturnNormaliser()
+    >>> from lucid.models.generative.dreamer_v3._objectives import _ReturnNormaliser
+    >>> norm = _ReturnNormaliser()
     >>> scaled = norm(lucid.randn((4, 8)))
     >>> scaled.shape
     (4, 8)
@@ -263,8 +261,8 @@ class ReturnNormaliser(nn.Module):
         --------
         >>> import lucid
         >>> from lucid.models.generative.dreamer_v3._objectives import (
-        ...     ReturnNormaliser)
-        >>> norm = ReturnNormaliser()
+        ...     _ReturnNormaliser)
+        >>> norm = _ReturnNormaliser()
         >>> returns = lucid.tensor([float(i) for i in range(101)])
         >>> float(norm.update(returns))
         1.0
@@ -280,7 +278,7 @@ class ReturnNormaliser(nn.Module):
         >>> round(float(scale), 2)
         57.06
         """
-        observed = percentile(returns, self.high) - percentile(returns, self.low)
+        observed = _percentile(returns, self.high) - _percentile(returns, self.low)
         self.spread.mul_(self.decay).add_(observed * (1.0 - self.decay))
         return self.scale
 

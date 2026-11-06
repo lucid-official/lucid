@@ -56,8 +56,8 @@ from lucid.models.generative._common._pixel_nets import DenseHead, PixelDecoder,
 from lucid.models.generative._common import _returns
 from lucid.models.generative._common._rssm import RSSM, RSSMState
 from lucid.models.generative.dreamer_v3._config import DreamerV3Config
-from lucid.models.generative.dreamer_v3._heads import TwoHotHead
-from lucid.models.generative.dreamer_v3._objectives import ReturnNormaliser, free_bits_kl
+from lucid.models.generative.dreamer_v3._heads import _TwoHotHead
+from lucid.models.generative.dreamer_v3._objectives import _ReturnNormaliser, _free_bits_kl
 
 __all__ = [
     "DreamerV3Model",
@@ -206,7 +206,7 @@ class DreamerV3Model(PretrainedModel):
 
     Two architectural differences from DreamerV2 are visible here.
 
-    The reward and value heads are :class:`~.TwoHotHead`\ s — they predict
+    The reward and value heads are ``_TwoHotHead``\ s — they predict
     a distribution over exponentially spaced bins and are read back
     through ``symexp``, which is what decouples the gradients from the
     reward's magnitude.
@@ -252,7 +252,7 @@ class DreamerV3Model(PretrainedModel):
         self.decoder = PixelDecoder(
             config.latent_size, config.out_channels, config.cnn_depth, config.act_fn
         )
-        self.reward_head = TwoHotHead(
+        self.reward_head = _TwoHotHead(
             config.latent_size,
             config.reward_hidden,
             config.reward_layers,
@@ -263,7 +263,7 @@ class DreamerV3Model(PretrainedModel):
         # Both critics start predicting exactly zero.  A critic that opens
         # by asserting large returns sends the actor chasing them, and the
         # slow copy would then spend its whole warm-up defending that.
-        self.value_head = TwoHotHead(
+        self.value_head = _TwoHotHead(
             config.latent_size,
             config.value_hidden,
             config.value_layers,
@@ -272,7 +272,7 @@ class DreamerV3Model(PretrainedModel):
             act_fn=config.act_fn,
             zero_init=True,
         )
-        self.slow_value_head = TwoHotHead(
+        self.slow_value_head = _TwoHotHead(
             config.latent_size,
             config.value_hidden,
             config.value_layers,
@@ -640,7 +640,7 @@ class DreamerV3ForWorldModeling(WorldModelingModel):
         self._replay_value_scale = config.replay_value_scale
         self._pcont_scale = config.pcont_scale
         self._updates = 0
-        self.returns = ReturnNormaliser(
+        self.returns = _ReturnNormaliser(
             decay=config.return_ema_decay, low=config.return_low, high=config.return_high
         )
 
@@ -1040,7 +1040,7 @@ class DreamerV3ForWorldModeling(WorldModelingModel):
         diff = (reconstruction - observations) ** 2
         recon_loss = 0.5 * diff.reshape(b, t, -1).sum(dim=-1).mean()
         reward_loss = model.reward_head.loss(posteriors.feature, rewards)
-        dynamics_loss, representation_loss = free_bits_kl(
+        dynamics_loss, representation_loss = _free_bits_kl(
             posteriors,
             priors,
             dyn_scale=self._dyn_scale,
