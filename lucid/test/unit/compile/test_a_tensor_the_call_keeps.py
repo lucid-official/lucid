@@ -2,19 +2,20 @@
 
 The trace sees the tensor made, so it takes it for the call's own, to start
 over on every call; whoever holds it expects each call to go on from the last,
-or to find it built.  The entry points answer three ways:
+or to find it built.  The entry points answer two ways:
 
-* ``lucid.compile``, ``make_step`` and ``fused_step`` let the trace-time call
-  stand as the call when such a tensor is written from anything but constants,
-  and run the calls after it eagerly.
-* A segmented ``make_step`` cannot.  A write that reads the tensor's own
-  earlier value, hidden behind a partial overwrite or not, is put back for an
-  eager rerun; an overwrite stays compiled, as on main, and one that runs on
-  the first call only is compiled into every call (LCD-876, pinned here).
+* ``lucid.compile``, ``make_step``, a segmented ``make_step`` and
+  ``fused_step`` let the trace-time call stand as the call when such a tensor
+  is written from anything but constants, and run the calls after it eagerly.
+  A segmented step lets the trace of the segment that wrote it stand for that
+  segment and runs the segments after it eagerly.  It used to put back only a
+  write that read the tensor, for an eager rerun that a tensor built on the
+  first call only was never written by again, and compiled an overwrite, so a
+  buffer filled from the first batch was filled again from every batch
+  (LCD-876).
 * ``compiled_step`` traces every call afresh, and the trace's writes are that
   call's: the first call is right whatever it writes, and from the second the
   tensor is the model's state, a write to which it refuses as to any buffer.
-  LCD-876 does not happen there; do not pin it.
 
 Every case runs four calls on inputs that differ in sign and size against a
 twin running eagerly, and compares the answers and the held tensor after each.
@@ -361,8 +362,8 @@ def _model(write: str, holder: str) -> nn.Sequential:
     return nn.Sequential(_Keeps(write, holder), nn.Linear(SHAPE[-1], 2)).to(COMPILE_DEVICE)
 
 
-def _kept(model: nn.Sequential) -> list[float]:
-    keeps = model[0]
+def _kept(model: nn.Sequential, at: int = 0) -> list[float]:
+    keeps = model[at]
     assert isinstance(keeps, _Keeps)
     return _floats(keeps.holder.peek(keeps))
 
@@ -434,13 +435,8 @@ def _fused_step(model: nn.Sequential, compiled: bool) -> Seen:
 STANDING: dict[str, Callable[[nn.Sequential, bool], Seen]] = {
     "module": _module,
     "make_step": _make_step(1),
-    "fused_step": _fused_step,
-}
-
-#: Cannot: an eager rerun from the tensor put back, or a refusal.
-NOT_STANDING: dict[str, Callable[[nn.Sequential, bool], Seen]] = {
-    "compiled_step": _compiled_step,
     "make_step-segments": _make_step(2),
+    "fused_step": _fused_step,
 }
 
 
@@ -468,41 +464,42 @@ def test_a_held_tensor_ends_each_call_as_eager_ends(write: str, holder: str, ent
     _ends_as_eager_ends(STANDING[entry], write, holder)
 
 
-# -- where the trace cannot stand ------------------------------------------------
+class _KeepsBehindATrunk(_Keeps):
+    """Writes from its input's values: the input requires grad, and a tensor kept
+    across calls must not keep the graph of the call that wrote it."""
 
-#: Filled on the first call only, from that call's input (LCD-876 under a
-#: segmented step).
-FILLED_FROM_THE_FIRST_BATCH = ("first-batch", "first-batch-row", "first-batch-add_")
-
-
-@pytest.mark.parametrize("write", [w for w in WRITES if w not in FILLED_FROM_THE_FIRST_BATCH])
-def test_a_segmented_step_ends_a_held_tensor_as_eager_ends(write: str) -> None:
-    """A read-modify-write, hidden behind a partial overwrite or not, is put back
-    and run again eagerly, once; the next trace finds an overwrite every call
-    writes from outside, and runs eagerly too."""
-    _ends_as_eager_ends(NOT_STANDING["make_step-segments"], write, "closure-cell")
+    def forward(self, x: Tensor) -> Tensor:
+        t, new = self.holder.fetch(self)
+        self.write(self, t, x.detach(), new)
+        return x * t * self.gain
 
 
-@pytest.mark.parametrize("write", ["first-batch", "first-batch-row"])
-@pytest.mark.xfail(strict=True, reason="recomputed from every batch; LCD-876")
-def test_a_segmented_step_keeps_a_tensor_filled_from_the_first_batch(write: str) -> None:
-    """Where the trace cannot stand as the call, an overwrite on the first call
-    only is compiled into every call: the answers read each batch, not the
-    first (the tensor itself keeps the first)."""
-    _ends_as_eager_ends(NOT_STANDING["make_step-segments"], write, "closure-cell")
+def _in_a_later_segment(write: str) -> nn.Sequential:
+    lucid.manual_seed(0)
+    return nn.Sequential(
+        nn.Linear(SHAPE[-1], SHAPE[-1]),
+        _KeepsBehindATrunk(write, "closure-cell"),
+        nn.Linear(SHAPE[-1], 2),
+    ).to(COMPILE_DEVICE)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="the first call's eager rerun reads the tensor put back for it, and adds "
-    "the batch no more; LCD-876",
-)
-def test_a_segmented_step_answers_the_first_call_from_a_tensor_it_adds_the_batch_to() -> None:
-    """A read-modify-write on the first call only is put back for the eager
-    rerun, which finds the tensor made and does not write it: that call answers
-    from the tensor as it was.  The rerun's end gives it the trace's write back,
-    so the calls after it are right."""
-    _ends_as_eager_ends(NOT_STANDING["make_step-segments"], "first-batch-add_", "closure-cell")
+@pytest.mark.parametrize("write", ["first-batch", "add_", "copy_-of-the-input", "a-constant"])
+def test_a_segment_after_a_compiled_one_stands_for_its_own_call(write: str) -> None:
+    """The first segment runs compiled; the second's trace stands for it, and the
+    third runs eagerly on that trace's output.  The loss is backpropagated
+    through all three, into the first segment's executable."""
+    model, twin = _in_a_later_segment(write), _in_a_later_segment(write)
+    step = lucid.compile.make_step(model, _loss, segments=3)
+    for x in _inputs():
+        got, want = step(x), _loss(twin(x))
+        got.backward()
+        want.backward()
+        assert _close(
+            [float(got.item()), *_grads(model), *_kept(model, 1)],
+            [float(want.item()), *_grads(twin), *_kept(twin, 1)],
+        )
+    assert [len(cache) for cache in step.cache] == [1, 0, 0]
+    assert step.eager_only["flag"]
 
 
 def _one_call(model: nn.Sequential, x: Tensor, *, compiled: bool) -> list[float]:
@@ -529,4 +526,4 @@ def test_a_compiled_step_keeps_the_first_write_and_refuses_the_next(write: str) 
 def test_a_compiled_step_ends_a_tensor_written_on_the_first_call_as_eager_ends(write: str) -> None:
     """After the first call the tensor is the model's state, read and not written:
     a buffer filled from the first batch keeps that batch (no LCD-876 here)."""
-    _ends_as_eager_ends(NOT_STANDING["compiled_step"], write, "closure-cell")
+    _ends_as_eager_ends(_compiled_step, write, "closure-cell")

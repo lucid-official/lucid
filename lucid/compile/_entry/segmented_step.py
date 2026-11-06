@@ -64,7 +64,7 @@ from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.compile._core.bn_runstats import BnWriteback
-from lucid.compile._core.buffer_writes import eager_rerun
+from lucid.compile._core.buffer_writes import TraceAnswer, eager_rerun
 from lucid.compile._core.signature import CacheKey, outside_feeds, tree_tensors
 
 if TYPE_CHECKING:
@@ -218,9 +218,12 @@ class _Segment:
 def _trace_segment_fn(
     watch: tuple[object, ...], fn: Callable[[], Tensor]
 ) -> tuple[Tracer, Tensor] | None:
-    """Trace *fn* in the caller's grad mode, returning ``None`` on a tensor hook or empty graph."""
+    """Trace *fn* in the caller's grad mode, returning ``None`` on a tensor hook or empty graph.
+
+    The caller decides what becomes of the writes the trace made
+    (``_core/buffer_writes``).
+    """
     from lucid.compile._core.attention_probe import maybe_probe_for_graph
-    from lucid.compile._core.buffer_writes import held_writes, refuse
     from lucid.compile._core.trace_context import notice_if_tensor_hook_error, recording
 
     try:
@@ -233,8 +236,53 @@ def _trace_segment_fn(
     if not tracer.graph.ops:
         return None
     maybe_probe_for_graph(tracer.graph)
-    refuse(tracer, held_writes(tracer, stands=False))
     return tracer, out
+
+
+def _trace_segment_forward(
+    seg: _Segment, x: Tensor, owner: Module
+) -> tuple[Tracer, Tensor] | TraceAnswer[Tensor] | None:
+    """Trace ``seg``'s forward at ``x``; the trace-time call stands as the
+    segment's call when it wrote a tensor it made and Python keeps.
+
+    Such a tensor, built once and kept or built anew every call and kept, looks
+    the same from inside one trace (``held_writes``).  Compiled, a buffer filled
+    from the first batch would be filled again from every batch; put back for
+    an eager rerun, one the rerun finds built would never be written again
+    (LCD-876).  The trace ran the forward once in the caller's grad mode, so
+    its result, with its autograd graph, is the segment's: the step runs the
+    rest of this call and every later call eagerly.
+    """
+    from lucid._dispatch import _unwrap, _wrap
+    from lucid.compile._core.buffer_writes import held_writes, refuse, stood_as_the_call
+
+    traced = _trace_segment_fn((x, seg.state), lambda: seg.forward_fn(x))
+    if traced is None:
+        return None
+    tracer, y = traced
+    found = tracer.read_id(_unwrap(y))
+    # Held in C++ while ``held_writes`` asks who else holds a tensor the call
+    # made: the output is made anew on every run.
+    tracer.keep_answer([] if found is None else [_unwrap(y)])
+    del traced, y
+    held = held_writes(tracer, stands=found is not None)
+    if held and found is not None:
+        return stood_as_the_call(tracer, owner, _wrap(tracer.take_answer()[0]))
+    refuse(tracer, held)
+    answer = tracer.take_answer()
+    return (tracer, _wrap(answer[0])) if answer else None
+
+
+def _trace_segment_backward(seg: _Segment, x: Tensor, go: Tensor) -> Tracer | None:
+    """Trace ``sum(seg.forward_fn(x) * go)``, the forward again: whatever it
+    writes was the forward trace's to stand for, so a write here refuses it."""
+    from lucid.compile._core.buffer_writes import held_writes, refuse
+
+    traced = _trace_segment_fn((x, seg.state), lambda: (seg.forward_fn(x) * go).sum())
+    if traced is None:
+        return None
+    refuse(traced[0], held_writes(traced[0], stands=False))
+    return traced[0]
 
 
 def _grad_targets(x: Tensor, x_id: int, param_ids: list[int]) -> list[int]:
@@ -291,14 +339,16 @@ def _lower_segment_backward(
         return None
 
 
-def _compile_segment(seg: _Segment, x: Tensor, owner: Module) -> _SegCompiled | None:
+def _compile_segment(
+    seg: _Segment, x: Tensor, owner: Module
+) -> _SegCompiled | TraceAnswer[Tensor] | None:
     """Trace + compile the forward and backward executables for ``seg`` at ``x``.
 
     Two traces are taken (forward-only, then forward + ``loss_seg``) so the
     forward executable does not carry the cotangent-product tail.  ``owner``
     is the model the segment is part of, whose BatchNorm counters it advances.
     Returns ``None`` on any uncompilable condition → the caller falls back to
-    eager.
+    eager; the forward trace's output when it stands as the segment's call.
     """
     import lucid
     from lucid._dispatch import _unwrap
@@ -307,9 +357,9 @@ def _compile_segment(seg: _Segment, x: Tensor, owner: Module) -> _SegCompiled | 
     x_impl = _unwrap(x)
 
     # --- Trace 1: forward only (x -> y) -----------------------------------
-    traced_fwd = _trace_segment_fn((x, seg.state), lambda: seg.forward_fn(x))
-    if traced_fwd is None:
-        return None
+    traced_fwd = _trace_segment_forward(seg, x, owner)
+    if not isinstance(traced_fwd, tuple):
+        return traced_fwd
     t_fwd, y = traced_fwd
     ext_fwd = t_fwd.external_feeds
     # The segment's output, not whatever op it recorded last.
@@ -346,10 +396,9 @@ def _compile_segment(seg: _Segment, x: Tensor, owner: Module) -> _SegCompiled | 
     # ``grad_out`` is a fresh leaf feed shaped like ``y``; the backward feeds the
     # upstream cotangent into this slot.
     go = lucid.zeros(y.shape, dtype=y.dtype, device=y.device)
-    traced_bwd = _trace_segment_fn((x, seg.state), lambda: (seg.forward_fn(x) * go).sum())
-    if traced_bwd is None:
+    t_bwd = _trace_segment_backward(seg, x, go)
+    if t_bwd is None:
         return None
-    t_bwd, _ = traced_bwd
     g_bwd = t_bwd.graph
     ext_bwd = t_bwd.external_feeds
     loss_id = g_bwd.ops[-1].outputs[0].id
@@ -393,32 +442,35 @@ def _compile_segment(seg: _Segment, x: Tensor, owner: Module) -> _SegCompiled | 
 
 def _compile_into(
     seg: _Segment, x: Tensor, fingerprint: ParamFingerprint, key: CacheKey
-) -> _SegCompiled:
+) -> _SegCompiled | TraceAnswer[Tensor]:
     """Compile ``seg`` at ``x`` into its cache, telling ``fingerprint`` what the
     traces read; raise :class:`_SegmentCompileError` if it does not compile.
 
     ``key`` is the segment's key taken before the traces: what a forward does
     to its own state while traced does not move it.  A model with a
     cumulative-average BatchNorm runs eagerly, as the monolithic step does:
-    that update reads the counter on the host.
+    that update reads the counter on the host.  A forward trace that stands
+    as the segment's call is answered, not cached; its draws were the call's.
     """
     from lucid.compile._core.bn_runstats import model_has_cumulative_bn
     from lucid.compile._core.trace_context import compile_attempt
 
     owner = fingerprint.model
-    with compile_attempt():
+    with compile_attempt() as attempt:
         before = fingerprint.outside_slots()
         compiled = None if model_has_cumulative_bn(owner) else _compile_segment(seg, x, owner)
-        fingerprint.settle(() if compiled is None else compiled.fed, before)
+        attempt.answered = isinstance(compiled, TraceAnswer)
+        fingerprint.settle(compiled.fed if isinstance(compiled, _SegCompiled) else (), before)
     if compiled is None:
         raise _SegmentCompileError(seg.index)
-    seg.cache[fingerprint.rekey(key, (x,), {})] = compiled
+    if isinstance(compiled, _SegCompiled):
+        seg.cache[fingerprint.rekey(key, (x,), {})] = compiled
     return compiled
 
 
 def _forward_segments(
     seg_objs: Sequence[_Segment], cur: Tensor, fingerprint: ParamFingerprint
-) -> Tensor:
+) -> tuple[Tensor, bool]:
     """Run (and lazily compile) each segment in ``seg_objs`` on ``cur``.
 
     Each segment run writes its BatchNorm state back, so a later segment that
@@ -427,6 +479,13 @@ def _forward_segments(
     A call compiles when its first segment has no executable for its input
     (every later input follows from that one and the module state, both in
     the key), so that is when the buffers are kept, to be put back.
+
+    Returns the last segment's output, and whether a segment's forward trace
+    stood as its call (:func:`_trace_segment_forward`).  That ends the
+    compiled part of the step: the segments after it run eagerly on the
+    trace's output, every segment ran once and nothing is put back, and the
+    calls after this one run eagerly, as every entry point's do after a trace
+    stood.
     """
     key = _segment_key(cur, fingerprint)
     restore = None if key in seg_objs[0].cache else _keep_buffers(fingerprint.model)
@@ -436,13 +495,23 @@ def _forward_segments(
                 key = _segment_key(cur, fingerprint)
             compiled = seg.cache.get(key)
             if compiled is None:
-                compiled = _compile_into(seg, cur, fingerprint, key)
+                built = _compile_into(seg, cur, fingerprint, key)
+                if isinstance(built, TraceAnswer):
+                    return _run_eagerly(seg_objs[i + 1 :], built.value), True
+                compiled = built
             holder: list[object] = [compiled]
             cur = cast(Tensor, _SegmentFunction.apply(holder, cur, *seg.params))
     except _SegmentCompileError:
         if restore is not None:
             restore()
         raise
+    return cur, False
+
+
+def _run_eagerly(seg_objs: Sequence[_Segment], cur: Tensor) -> Tensor:
+    """``cur`` through each segment of ``seg_objs``, eagerly."""
+    for seg in seg_objs:
+        cur = seg.forward_fn(cur)
     return cur
 
 
@@ -641,7 +710,7 @@ def make_segmented_step(
 
         rng_before = _stream_states()
         try:
-            cur = _forward_segments(seg_objs, x_args[0], fingerprint)
+            cur, eager_only["flag"] = _forward_segments(seg_objs, x_args[0], fingerprint)
         except _SegmentCompileError:
             _restore_stream_states(rng_before)
             eager_only["flag"] = True
