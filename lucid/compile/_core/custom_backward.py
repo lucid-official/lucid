@@ -20,7 +20,8 @@ mechanisms allow a ``Function`` to participate in compiled training steps:
    source.  When none of its inputs does and only a tensor ``forward`` closed
    over descends from a source, eager leaves the node off the graph while a
    compiled backward would differentiate through the closed-over tensor, so that
-   call is refused as well.
+   call is refused as well, unless the recording marked its ops as constants
+   (a recording in grad mode, where such a call runs under ``no_grad``).
 2. **Traced custom VJP** (:attr:`~lucid.autograd.Function._traced_backward`):
    When ``_traced_backward = True`` is declared on the subclass, ``apply``
    traces ``backward(ctx, *grad_outputs)`` immediately after ``forward`` into a
@@ -407,6 +408,7 @@ def _record_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _T
         ctx._saved_record,
         ctx._carrier,
         bool(tracer.fold_constants),
+        bool(tracer.differentiated),
     )
     try:
         if not any(ctx.needs_input_grad):
@@ -417,6 +419,8 @@ def _record_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _T
         ctx._saved_record = None
         ctx._carrier = None
         tracer.fold_constants = False
+        # Nothing differentiates a recorded ``backward``.
+        tracer.differentiated = False
         _RECORDING_BACKWARD.add(tracer)
         with _C_engine.NoGradGuard():
             input_grad_ids = _run_vjp_backward(spec, cotangents)
@@ -442,6 +446,7 @@ def _record_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _T
             ctx._saved_record,
             ctx._carrier,
             tracer.fold_constants,
+            tracer.differentiated,
         ) = prev_state
 
     if input_grad_ids is None:
@@ -623,7 +628,8 @@ def note_applied(
         ``(ctx, raw_saved, marked, fwd_begin)`` captured when
         ``function._traced_backward`` is enabled.
     """
-    if tracer in _RECORDING_BACKWARD:
+    # Under ``no_grad`` eager builds no node: the call's ops are constants, as any.
+    if tracer in _RECORDING_BACKWARD or tracer.grad_stopped:
         return
     outputs = _impls(output if isinstance(output, tuple) else (output,), floating=True)
     if not outputs:
@@ -686,8 +692,9 @@ def step_region_ancestors(r: VjpRegion | None, needed: set[int]) -> None:
 # path kept here that no gradient takes only sends to eager a step that could
 # have compiled.  ``_descendants``, however, decides whether a call's inputs
 # carry a gradient from a source — which allows an ``exact`` call to stay
-# compiled — so it stops at gradient sinks (``detach``, comparisons, ``argmax``)
-# and non-floating outputs, matching the backward walker (``VjpEmitter.mm``).
+# compiled — so it stops at gradient sinks (``detach``, comparisons, ``argmax``),
+# ops recorded under ``no_grad`` and non-floating outputs, matching the backward
+# walker (``VjpEmitter.mm``).
 
 
 def _ancestors(graph: TraceGraph, sink_id: int) -> set[int]:
@@ -704,8 +711,7 @@ def _ancestors(graph: TraceGraph, sink_id: int) -> set[int]:
 
 def _descendants(graph: TraceGraph, source_ids: list[int]) -> set[int]:
     """Every gradient-carrying trace id computed from ``source_ids``."""
-    sink = _C_engine.compile.VjpRegistration.GradSink
-    status = _C_engine.compile.vjp_registration_status
+    stops = _C_engine.compile.stops_gradient
     in_region, region_at_end = vjp_region_index(graph)
     reached = set(source_ids)
     for idx, node in enumerate(graph.ops):
@@ -717,7 +723,7 @@ def _descendants(graph: TraceGraph, source_ids: list[int]) -> set[int]:
             ):
                 reached.update(int(om.id) for om in r.output_metas if om.dtype in GRADIENT_DTYPES)
             continue
-        if status(node.name) == sink:
+        if stops(node):
             continue
         if any(int(i) in reached for i in node.inputs):
             reached.update(int(meta.id) for meta in node.outputs if meta.dtype in GRADIENT_DTYPES)

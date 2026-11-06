@@ -170,6 +170,9 @@ class FunctionCtx:
         self._non_differentiable: list[Tensor] = []
         self._dirty: list[Tensor] = []
         self._materialize: bool = True
+        # Written by ``apply``: this ``forward`` runs in a recording that takes the
+        # derivative of what it records for ``backward`` (``_exact_derivative``).
+        self._recorded_for_backward: bool = False
         self._extra: dict[str, object] = {}
 
     def save_for_backward(self, *tensors: Tensor) -> None:
@@ -776,6 +779,55 @@ def _run_forward(
         return output
 
 
+def _run_traced_forward(
+    tracer: _C_engine.compile.Tracer,
+    klass: type[Function],
+    ctx: FunctionCtx,
+    args: tuple[object, ...],
+    kwargs: dict[str, object],
+    tracked: bool,
+) -> object:
+    """:func:`_run_forward` in a recording, which marks what runs with grad mode off.
+
+    That marks a constant to the backward, and the ``no_grad`` here says nothing
+    of the kind about a tracked call: its node joins its outputs to its inputs.
+    Its ops are a :class:`VjpRegion`'s or a call a lowering refuses, so they go
+    unmarked.  An exact derivative's are differentiated, and it records them with
+    grad mode on, leaving a ``no_grad`` of its own to mean what it says.  An
+    untracked call has no node: its ops are constants, marked like any others.
+    """
+    exact = _is_exact_derivative(klass)
+    if not tracked or exact:
+        ctx._recorded_for_backward = tracked and exact
+        return _run_forward(klass, ctx, args, kwargs)
+    differentiated = tracer.differentiated
+    tracer.differentiated = False
+    try:
+        return _run_forward(klass, ctx, args, kwargs)
+    finally:
+        tracer.differentiated = differentiated
+
+
+def _traced_vjp_bounds(
+    tracer: _C_engine.compile.Tracer, klass: type[Function], args: tuple[object, ...], tracked: bool
+) -> tuple[int, int, bool] | None:
+    """Where this call's ops start, if its ``backward`` goes into the recording.
+
+    Not under ``no_grad``: eager registers no node there, so nothing calls
+    ``backward``, and the ops ``forward`` leaves are constants like any others.
+    """
+    if (
+        tracer.fold_constants
+        or tracer.grad_stopped
+        or not getattr(klass, "_traced_backward", False)
+    ):
+        return None
+    for a in args:
+        if isinstance(a, Tensor):
+            tracer.ensure_id(a._impl)
+    return int(tracer.op_count()), int(tracer.graph.next_id), tracked
+
+
 def _make_apply() -> classmethod:  # type: ignore[type-arg]
     """Build the per-subclass ``apply`` classmethod injected by ``FunctionMeta``."""
 
@@ -793,17 +845,14 @@ def _make_apply() -> classmethod:  # type: ignore[type-arg]
         ctx.needs_input_grad = tuple(isinstance(a, Tensor) and a.requires_grad for a in args)
         tracked = _C_engine.grad_enabled() and any(ctx.needs_input_grad)
         bounds: tuple[int, int, bool] | None = None
-        if (
-            tracer is not None
-            and not tracer.fold_constants
-            and getattr(klass, "_traced_backward", False)
-        ):
-            for a in args:
-                if isinstance(a, Tensor):
-                    tracer.ensure_id(a._impl)
-            bounds = (int(tracer.op_count()), int(tracer.graph.next_id), tracked)
+        if tracer is not None:
+            bounds = _traced_vjp_bounds(tracer, klass, args, tracked)
 
-        output = _run_forward(klass, ctx, args, kwargs)
+        output = (
+            _run_forward(klass, ctx, args, kwargs)
+            if tracer is None
+            else _run_traced_forward(tracer, klass, ctx, args, kwargs, tracked)
+        )
         vjp_call: tuple[FunctionCtx, tuple[Tensor, ...], list[bool], int] | None = None
         if tracer is not None and bounds is not None:
             output, vjp_call = _prep_traced_vjp(tracer, ctx, args, output, bounds)

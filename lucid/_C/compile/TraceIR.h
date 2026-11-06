@@ -188,6 +188,13 @@ struct LUCID_API OpNode {
     std::unordered_map<std::string, AttributeValue> attrs;
 };
 
+// The attribute on an op a recording to be differentiated made with grad mode
+// off (:meth:`Tracer::grad_stopped`).  Its results are constants to the backward,
+// as they are to eager, which builds no node for them.  Nothing emits from it; it
+// sits among the attributes so that the executable cache tells such a trace from
+// one with the same ops recorded with grad mode on.
+inline constexpr const char* kGradOffAttr = "grad_off";
+
 // Custom backward subgraph captured for a :class:`lucid.autograd.Function`
 // with ``_traced_backward = True``.
 //

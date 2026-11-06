@@ -187,6 +187,8 @@ def recording(
         mode_ctx = no_grad()
 
     with mode_ctx, _tracing(watch=watch, module=module, fold_constants=fold_constants) as tracer:
+        # After ``mode_ctx``: a call made under ``no_grad`` has no grad mode to leave.
+        tracer.differentiated = _C_engine.grad_enabled()
         yield tracer
         _scan_retained_values(tracer)
 

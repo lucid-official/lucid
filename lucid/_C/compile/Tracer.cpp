@@ -21,6 +21,7 @@
 #include "../autograd/Node.h"
 #include "../autograd/TensorHooks.h"
 #include "../backend/Dispatcher.h"
+#include "../core/GradMode.h"
 #include "../core/StridedCopy.h"
 #include "../core/TensorImpl.h"
 
@@ -105,7 +106,13 @@ void Tracer::on_op_enter(std::string_view name, Device device, Dtype dtype, Shap
     node.name = std::string(name);
     // inputs filled by on_op_io if the op goes through wire_autograd.
     node.outputs.push_back(TensorMeta{out_id, std::move(shape), dtype, device});
+    if (grad_stopped())
+        node.attrs.emplace(kGradOffAttr, true);
     graph_.ops.push_back(std::move(node));
+}
+
+bool Tracer::grad_stopped() const {
+    return differentiated_ && !GradMode::is_enabled();
 }
 
 void Tracer::on_op_io(const std::vector<TensorImplPtr>& inputs, const TensorImplPtr& output) {
@@ -286,6 +293,8 @@ void Tracer::on_inplace_write(const TensorImplPtr& target, const TensorImplPtr& 
     if (!target || !value || target.get() == value.get())
         return;
     refuse_hooked_write(target);
+    if (differentiated_ && (!GradMode::is_enabled() || target->is_detached_alias()))
+        refuse_untracked_write(target, value);
     // Copying ``value`` in reads it.
     refuse_stale(value.get());
     constant_write_ = made_here(value.get()) && !sees(value.get());
@@ -322,6 +331,16 @@ void Tracer::refuse_hooked_write(const TensorImplPtr& target) {
                     [](const TensorImplPtr& member) { return has_tensor_hooks(*member); }))
         mark_unsupported("a gradient hook sits on a value an in-place write replaces, and a "
                          "compiled backward runs no hook");
+}
+
+void Tracer::refuse_untracked_write(const TensorImplPtr& target, const TensorImplPtr& value) {
+    const auto members = target->live_views();
+    if (value->requires_grad() || target->requires_grad() ||
+        std::any_of(members.begin(), members.end(),
+                    [](const TensorImplPtr& member) { return member->requires_grad(); }))
+        mark_unsupported("a write autograd does not track (under no_grad, or through .data or "
+                         ".detach()) reached a tensor a gradient flows through, or copied one "
+                         "in, and a compiled backward has one value there");
 }
 
 void Tracer::note_prior(const TensorImplPtr& target, TensorId was, TensorId now, bool in_made) {

@@ -131,7 +131,6 @@ void propagate_region_dependents(const VjpRegion& region, std::unordered_set<Ten
 std::unordered_set<TensorId> param_dependents(const TraceGraph& trace,
                                               const std::vector<TensorId>& param_ids) {
     const auto& ops = trace.ops;
-    const auto& sink = no_grad_ops();
     std::unordered_map<std::size_t, const VjpRegion*> region_by_begin;
     for (const auto& r : trace.vjp_regions) {
         if (r.fwd_end > r.fwd_begin)
@@ -147,7 +146,7 @@ std::unordered_set<TensorId> param_dependents(const TraceGraph& trace,
             continue;
         }
         const OpNode& node = ops[idx++];
-        if (sink.find(node.name) != sink.end() || !carries_gradient(node))
+        if (stops_gradient(node) || !carries_gradient(node))
             continue;
         for (TensorId in : node.inputs) {
             if (in >= 0 && depends.count(in) != 0) {
@@ -328,6 +327,11 @@ VjpRegistration vjp_registration_status(const std::string& op_name) {
     return VjpRegistration::Missing;
 }
 
+bool stops_gradient(const OpNode& node) {
+    const auto& sinks = no_grad_ops();
+    return sinks.find(node.name) != sinks.end() || node.attrs.count(kGradOffAttr) != 0;
+}
+
 // ────────────────────────────────────────────────────────────────────
 // Error formatting helpers — shared by the walker's failure paths so
 // debug output stays consistent with the propagated error string.
@@ -490,8 +494,7 @@ bool emit_backward_node(MPSGraph* graph,
         }
         grad_outs.push_back(go);
     }
-    const auto& sink = no_grad_ops();
-    if (!any_demand || sink.find(node.name) != sink.end() || !carries_gradient(node))
+    if (!any_demand || stops_gradient(node) || !carries_gradient(node))
         return true;
 
     VjpEmitter* vjp = find_vjp_emitter(node.name);

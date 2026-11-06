@@ -343,14 +343,14 @@ def _loss_ancestors(graph: TraceGraph, loss_id: int) -> set[int]:
     One reverse walk over the ops recorded so far — the forward and the
     loss, since the optimizer update has not been traced yet.  The walk
     stops where the backward walker (``VjpEmitter.mm``) does: at a gradient
-    sink (``detach``, a comparison, a factory) and at an op with no
-    floating result (a cast to an integer), while stepping across any
-    traced custom VJP regions (``graph.vjp_regions``) from region outputs
-    to region inputs.  A parameter seen only through a sink gets no
-    gradient, so eager leaves its ``grad`` None and the optimizer skips it.
+    sink (``detach``, a comparison, a factory), at an op recorded under
+    ``no_grad`` and at an op with no floating result (a cast to an integer),
+    while stepping across any traced custom VJP regions
+    (``graph.vjp_regions``) from region outputs to region inputs.  A parameter
+    seen only through one of those gets no gradient, so eager leaves its
+    ``grad`` None and the optimizer skips it.
     """
-    sink = _C_engine.compile.VjpRegistration.GradSink
-    status = _C_engine.compile.vjp_registration_status
+    stops = _C_engine.compile.stops_gradient
     in_region, region_at_end = vjp_region_index(graph)
     needed = {loss_id}
     for idx in range(len(graph.ops) - 1, -1, -1):
@@ -360,9 +360,7 @@ def _loss_ancestors(graph: TraceGraph, loss_id: int) -> set[int]:
         node = graph.ops[idx]
         if not any(int(meta.id) in needed for meta in node.outputs):
             continue
-        if status(node.name) == sink or not any(
-            meta.dtype in GRADIENT_DTYPES for meta in node.outputs
-        ):
+        if stops(node) or not any(meta.dtype in GRADIENT_DTYPES for meta in node.outputs):
             continue
         needed.update(int(i) for i in node.inputs if int(i) >= 0)
     return needed
@@ -909,6 +907,8 @@ class _FusedStep:
                         loss_for_bwd = loss
 
                     members = self._resolve_members(tracer, loss_for_bwd)
+                    # The update comes after the backward, and writes the parameters.
+                    tracer.differentiated = False
                     with no_grad():
                         with _untraced(tracer):
                             for i in members:

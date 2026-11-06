@@ -321,10 +321,29 @@ static const std::unordered_set<std::string_view> kAutodiffSafeOps{
 inline std::string first_op_unsafe_for_autodiff(const TraceGraph& graph) {
     if (!graph.vjp_regions.empty())
         return "custom_vjp";
-    for (const auto& node : graph.ops)
+    for (const auto& node : graph.ops) {
         if (kAutodiffSafeOps.find(node.name) == kAutodiffSafeOps.end())
             return node.name;
+        // MPSGraph differentiates whatever it is handed.
+        if (node.attrs.count(kGradOffAttr) != 0)
+            return node.name + " under no_grad";
+    }
     return {};
+}
+
+// Whether MPSGraph's autodiff may stand in for the manual VJP that failed with
+// ``vjp_err``.  When not, ``error_msg`` says so for ``entry``.
+inline bool autodiff_may_stand_in(const TraceGraph& graph,
+                                  std::string_view entry,
+                                  const std::string& vjp_err,
+                                  std::string* error_msg) {
+    const std::string bad = first_op_unsafe_for_autodiff(graph);
+    if (bad.empty())
+        return true;
+    if (error_msg)
+        *error_msg = std::string(entry) + ": " + vjp_err + "; op '" + bad +
+                     "' rules out MPSGraph's autodiff as the fallback";
+    return false;
 }
 
 inline std::string first_invalid_graph_op(const TraceGraph& graph,
@@ -2088,12 +2107,8 @@ MpsBuilder::compile_generic_fused_step(TensorId loss_id,
                 }
             }
 
-            if (const std::string bad = first_op_unsafe_for_autodiff(graph); !bad.empty()) {
-                if (error_msg)
-                    *error_msg = "compile_generic_fused_step: " + vjp_err + "; op '" + bad +
-                                 "' rules out MPSGraph's autodiff as the fallback";
+            if (!autodiff_may_stand_in(graph, "compile_generic_fused_step", vjp_err, error_msg))
                 return false;
-            }
             NSDictionary<MPSGraphTensor*, MPSGraphTensor*>* grad_map =
                 [graph_obj gradientForPrimaryTensor:autodiff_primary(graph_obj, loss_t)
                                         withTensors:param_arr
@@ -2493,6 +2508,9 @@ CompiledExecutable* MpsBuilder::compile_generic_fused_step_with_vars(
                 }
             }
 
+            if (!autodiff_may_stand_in(graph, "compile_generic_fused_step_with_vars", vjp_err,
+                                       error_msg))
+                return false;
             NSDictionary<MPSGraphTensor*, MPSGraphTensor*>* grad_map =
                 [graph_obj gradientForPrimaryTensor:autodiff_primary(graph_obj, loss_t)
                                         withTensors:param_arr

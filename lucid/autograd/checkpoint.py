@@ -174,8 +174,11 @@ def _make_checkpoint_fn(
             # first saw — the same random draws, the same autocast dtypes —
             # or its gradient belongs to a different network.
             ctx.forward_state = _ForwardState.capture(preserve_rng_state=preserve_rng_state)
-            # Run without tracking so intermediate activations are NOT stored.
-            with no_grad():
+            # Run without tracking so intermediate activations are NOT stored.  In
+            # a compile recording this one run stands for both, and the backward
+            # differentiates it: it runs as the second run does, so a ``no_grad``
+            # inside the segment is the only thing that stops a gradient there.
+            with enable_grad() if ctx._recorded_for_backward else no_grad():
                 output = fn(*real, **kw)
             return output
 

@@ -11,10 +11,9 @@ compiled on Metal with gradients equal to eager.
 When none of its positional inputs requires grad or descends from a source and
 only a tensor ``forward`` closed over does — ``checkpoint(fn, x,
 use_reentrant=True)`` on an ungrad ``x`` where ``fn`` closes over parameters —
-eager does not run ``backward`` at all (leaving those parameters with ``None``
-gradients), whereas a compiled backward would differentiate the closed-over
-parameters.  That call is refused with a closure-only
-:class:`~lucid.compile._core.custom_backward.CustomBackwardInTrace`.
+eager does not run ``backward`` at all, leaving those parameters with ``None``
+gradients.  Such a call has no node: it runs under ``no_grad``, so its ops are
+constants to the compiled backward as well, and it stays compiled (LCD-901).
 """
 
 import warnings
@@ -31,7 +30,7 @@ from lucid.autograd import Function
 from lucid.autograd.checkpoint import checkpoint
 from lucid.compile import fused_step, make_step
 from lucid.compile._core.custom_backward import CustomBackwardInTrace
-from lucid.compile._core.fallback import _NOTICED, CompileFallbackWarning
+from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.compile._entry.function import compiled_step
 from lucid.test.unit.compile.test_function_compile_classes import EXACT, _scan_lucid_functions
 
@@ -205,7 +204,27 @@ def test_tracked_checkpoint_compiles_under_compiled_step_and_matches_eager(
     _assert_close_maps(_grads(model), want_grads)
 
 
-def test_reentrant_checkpoint_with_closure_only_params_is_refused(device_gpu_only: str) -> None:
+def _a_call_with_no_node_stays_compiled(
+    factory: Callable[[], nn.Module],
+    x: Tensor,
+    t: Tensor,
+    want_grads: dict[str, list[object] | None],
+    want_params: dict[str, list[object]],
+) -> None:
+    model = factory()
+    compiled_step(model, x, lambda y: F.mse_loss(y, t))
+    _assert_close_maps(_grads(model), want_grads)
+
+    model = factory()
+    step = make_step(model, F.mse_loss)
+    step(x, t).backward()
+    optim.SGD(model.parameters(), lr=0.25).step()
+    assert not step.eager_only
+    _assert_close_maps(_grads(model), want_grads)
+    _assert_close_maps(_params(model), want_params)
+
+
+def test_reentrant_checkpoint_with_closure_only_params_has_no_node(device_gpu_only: str) -> None:
     """``checkpoint(fn, x, use_reentrant=True)`` on ungrad ``x``: eager drops the block's grads."""
     device = device_gpu_only
     x, t = _data(device)
@@ -216,22 +235,7 @@ def test_reentrant_checkpoint_with_closure_only_params_is_refused(device_gpu_onl
     assert want_grads["0.fc1.weight"] is None
     assert want_grads["0.fc2.weight"] is None
     assert want_grads["1.weight"] is not None
-
-    model = factory()
-    with pytest.raises(
-        CustomBackwardInTrace, match="receives no input that requires grad.*closed over"
-    ):
-        compiled_step(model, x, lambda y: F.mse_loss(y, t))
-
-    model = factory()
-    step = make_step(model, F.mse_loss)
-    _NOTICED.discard("custom-backward")
-    with pytest.warns(CompileFallbackWarning, match="_CheckpointFn"):
-        step(x, t).backward()
-    optim.SGD(model.parameters(), lr=0.25).step()
-    assert len(step.eager_only) == 1
-    _assert_close_maps(_grads(model), want_grads)
-    _assert_close_maps(_params(model), want_params)
+    _a_call_with_no_node_stays_compiled(factory, x, t, want_grads, want_params)
 
 
 class _DetachedStemCheckpointedModel(nn.Module):
@@ -248,7 +252,7 @@ class _DetachedStemCheckpointedModel(nn.Module):
         return self.head(self.block(h))
 
 
-def test_reentrant_checkpoint_after_detached_parameter_path_is_refused(
+def test_reentrant_checkpoint_after_detached_parameter_path_has_no_node(
     device_gpu_only: str,
 ) -> None:
     """A ``detach()`` cuts the gradient from ``stem``, so ``block``'s input needs no grad."""
@@ -264,22 +268,7 @@ def test_reentrant_checkpoint_after_detached_parameter_path_is_refused(
     assert want_grads["block.fc1.weight"] is None
     assert want_grads["block.fc2.weight"] is None
     assert want_grads["head.weight"] is not None
-
-    model = factory()
-    with pytest.raises(
-        CustomBackwardInTrace, match="receives no input that requires grad.*closed over"
-    ):
-        compiled_step(model, x, lambda y: F.mse_loss(y, t))
-
-    model = factory()
-    step = make_step(model, F.mse_loss)
-    _NOTICED.discard("custom-backward")
-    with pytest.warns(CompileFallbackWarning, match="_CheckpointFn"):
-        step(x, t).backward()
-    optim.SGD(model.parameters(), lr=0.25).step()
-    assert len(step.eager_only) == 1
-    _assert_close_maps(_grads(model), want_grads)
-    _assert_close_maps(_params(model), want_params)
+    _a_call_with_no_node_stays_compiled(factory, x, t, want_grads, want_params)
 
 
 class _UntrustedExactClaim(Function):

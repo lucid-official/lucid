@@ -231,6 +231,19 @@ public:
     bool fold_constants() const { return fold_constants_; }
     void set_fold_constants(bool on) { fold_constants_ = on; }
 
+    // Whether a backward will differentiate this recording, so grad mode decides
+    // what it reaches.  Off by default: a forward-only tracer, Core ML export and
+    // the optimizer's own recording run wholly under ``no_grad`` and answer no
+    // question about gradients.  ``trace_context.recording`` turns it on when the
+    // caller's grad mode is on, and ``fused_step`` turns it off again for the
+    // update it records after the loss.
+    bool differentiated() const { return differentiated_; }
+    void set_differentiated(bool on) { differentiated_ = on; }
+
+    // Whether what runs now is a constant to that backward: grad mode is off in a
+    // recording to be differentiated.
+    bool grad_stopped() const;
+
     // ``out`` was made from nothing by the op now open — a factory
     // (``zeros`` / ``arange`` / ``eye`` …), never a random draw.  With
     // folding on and ``out`` off Metal, the op is left out and ``out`` is a
@@ -518,6 +531,11 @@ private:
     // Marks the trace unsupported when ``target`` or a view of it holds a gradient
     // hook at the place in the graph the write about to land moves it from.
     void refuse_hooked_write(const TensorImplPtr& target);
+    // Marks the trace unsupported when a write autograd does not track moves a value
+    // the recording cannot keep apart from the gradient: eager leaves ``target``'s
+    // place in the graph as it was and takes the new values as a constant, and a
+    // recorded value has one id, either differentiated or not.
+    void refuse_untracked_write(const TensorImplPtr& target, const TensorImplPtr& value);
     // Notes the place in the autograd graph of each tensor from outside the trace
     // in ``target``'s family, for :meth:`restore_outside_writes`.
     void keep_graph_positions(const TensorImplPtr& target);
@@ -652,6 +670,7 @@ private:
     std::unordered_map<TensorImpl*, TensorImplPtr> watched_;
     bool redraw_rng_ = true;
     bool fold_constants_ = false;
+    bool differentiated_ = false;
     // The open op's node while it is held out of the recording; it goes
     // back in if a later ``on_op_io`` of the same op names a non-constant
     // input (an op that re-records its full input list), and is dropped at

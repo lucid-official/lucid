@@ -227,6 +227,10 @@ void bind_trace_nodes(py::module_& m) {
                    ", attrs=" + std::to_string(n.attrs.size()) + ")";
         });
 
+    m.def("stops_gradient", &lucid::compile::stops_gradient, py::arg("node"),
+          "Whether a compiled backward stops at ``node``: a gradient sink, or an op "
+          "recorded under ``no_grad``.");
+
     py::class_<VjpRegion>(m, "VjpRegion")
         .def_readonly("fwd_begin", &VjpRegion::fwd_begin)
         .def_readonly("fwd_end", &VjpRegion::fwd_end)
@@ -331,6 +335,11 @@ void bind_tracer_class(py::module_& m) {
                       "Whether an op whose inputs were all made inside the trace is left "
                       "out, its output a constant feed (compile) or recorded (every other "
                       "tracer).")
+        .def_property("differentiated", &Tracer::differentiated, &Tracer::set_differentiated,
+                      "Whether a backward will differentiate this recording, so that what "
+                      "runs with grad mode off is a constant to it.")
+        .def_property_readonly("grad_stopped", &Tracer::grad_stopped,
+                               "Whether what runs now is a constant to that backward.")
         .def(
             "made_here",
             [](const Tracer& t, const lucid::TensorImplPtr& impl) {

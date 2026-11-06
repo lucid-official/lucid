@@ -233,6 +233,12 @@ enum class VjpRegistration : std::uint8_t {
 // ``VjpEmitters/**/*.mm`` translation unit).
 LUCID_API VjpRegistration vjp_registration_status(const std::string& op_name);
 
+// Whether the backward stops at ``node``: its op is a :class:`VjpRegistration`
+// ``GradSink`` or it was recorded with grad mode off (``kGradOffAttr``).  The one
+// rule, for the walker here and for what ``lucid.compile`` works out in Python
+// about where a gradient reaches.
+LUCID_API bool stops_gradient(const OpNode& node);
+
 // Tri-state return from :func:`try_manual_vjp_grads`.  Encodes which
 // path the caller should take after the helper runs:
 //
