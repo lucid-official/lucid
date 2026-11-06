@@ -8,7 +8,6 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Final
 
-from tools.rules import attest
 from tools.rules.audit import Audit
 from tools.rules.checks import CannotMeasure, Changes, staged_changes
 from tools.rules.model import Exit, Level, Rule, RuleError, Verdict
@@ -74,6 +73,9 @@ def _audit(registry: Registry, args: argparse.Namespace) -> Exit:
 
 
 def _attest(registry: Registry, args: argparse.Namespace) -> Exit:
+    # Here, not above: it brings tools/agent_ws.py, which no other subcommand needs.
+    from tools.rules import attest
+
     check = attest.verify if args.verify else attest.attest
     return check(registry.workspace)
 

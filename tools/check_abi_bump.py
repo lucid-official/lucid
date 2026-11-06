@@ -70,7 +70,13 @@ _TOKEN: Final = re.compile(r"[A-Za-z_]\w*|\d[\w.']*|::|->|\.\.\.|[^\s\w]")
 _BINDINGS: Final = (
     ("def", re.compile(r'\.def(?:_\w+)?\s*\(\s*"([^"]+)"')),
     ("init", re.compile(r"\.def\s*\(\s*(?:py|pybind11)::init\s*<([^;]*?)>\s*\(")),
-    ("class", re.compile(r'\b(?:class_|enum_|exception)\s*<[^;]*?>\s*\(\s*\w+\s*,\s*"([^"]+)"')),
+    # A temporary or a named one: ``class_<T>(m, "T")``, ``class_<T> t(m, "T")``.
+    (
+        "class",
+        re.compile(
+            r'\b(?:class_|enum_|exception)\s*<[^;]*?>\s*(?:\w+\s*)?\(\s*\w+\s*,\s*"([^"]+)"'
+        ),
+    ),
     ("value", re.compile(r'\.value\s*\(\s*"([^"]+)"')),
     ("attr", re.compile(r'\.attr\s*\(\s*"([^"]+)"\s*\)\s*=[^=]')),
 )
@@ -84,7 +90,9 @@ _CLOSE: Final = (")", "]")
 _ACCESS: Final = frozenset({"public", "private", "protected"})
 _NOT_MEMBERS: Final = frozenset({"friend", "using", "typedef", "static_assert", "enum"})
 _TYPE_KEYS: Final = frozenset({"class", "struct", "union"})
-_NAME_SKIP: Final = frozenset({"LUCID_API", "LUCID_INTERNAL", "final", "::"})
+# A word whose parentheses are no parameter list: ``struct alignas(16) X``, ``decltype(y) z_``.
+_SPECIFIERS: Final = frozenset({"alignas", "decltype", "__attribute__", "__declspec"})
+_NAME_SKIP: Final = frozenset({"LUCID_API", "LUCID_INTERNAL", "final", "::", *_SPECIFIERS})
 _SCOPE_SKIP: Final = frozenset({"namespace", "inline", "extern"})
 
 
@@ -129,6 +137,7 @@ class Interface:
     exports: Counter[str] = field(default_factory=Counter)
     bindings: Counter[str] = field(default_factory=Counter)
     stub: frozenset[str] = frozenset()
+    aliases: dict[str, str] = field(default_factory=dict)  # ``using X = T``: X's T
 
 
 def _depth0(tokens: Sequence[str]) -> list[tuple[int, str]]:
@@ -139,7 +148,7 @@ def _depth0(tokens: Sequence[str]) -> list[tuple[int, str]]:
     for n, tok in enumerate(tokens):
         top = parens == 0 and angles == 0
         if tok in _OPEN:
-            out += [(n, tok)] if top else []
+            out += [(n, tok)] if top and not (n and tokens[n - 1] in _SPECIFIERS) else []
             parens += 1
         elif tok in _CLOSE:
             parens = max(parens - 1, 0)
@@ -183,7 +192,9 @@ def _signature(tokens: Sequence[str]) -> str:
     part: list[str] = []
     depth, end = 0, len(tokens)
     for n in range(opens[0] + 1, len(tokens)):
-        depth += (tokens[n] in _OPEN or tokens[n] == "<") - (
+        after = tokens[n + 1] if n + 1 < len(tokens) else ""
+        shift = tokens[n] == "<" and "<" in (tokens[n - 1], after)  # ``a << b``: no template
+        depth += (tokens[n] in _OPEN or (tokens[n] == "<" and not shift)) - (
             tokens[n] in _CLOSE or tokens[n] == ">"
         )
         if depth < 0 or (depth == 0 and tokens[n] == ","):
@@ -240,7 +251,7 @@ class _Scanner:
             if parens == 0 and tok == "}":
                 return i + 1
             if parens == 0 and tok == ";":
-                self.statement(stmt, owner)
+                self.statement(stmt, path, owner)
                 stmt, i = [], i + 1
             elif parens == 0 and tok == "{":
                 stmt, i = self.brace(_strip_access(stmt), i, path, owner)
@@ -276,11 +287,13 @@ class _Scanner:
             i = self.skip_group(i)
         i += int(i < len(self.tokens) and self.tokens[i] == ";")
         colon = next((n for n, tok in _depth0(head) if tok == ":"), len(head))
-        self.statement(head[:colon], owner)
+        self.statement(head[:colon], path, owner)
         return [], i
 
-    def statement(self, stmt: list[str], owner: _Type | None) -> None:
+    def statement(self, stmt: list[str], path: str, owner: _Type | None) -> None:
         stmt = _strip_access(stmt)
+        if stmt[:1] == ["using"] and stmt[2:3] == ["="]:  # a layout reads the type through it
+            self.into.aliases[f"{path}{stmt[1]}"] = " ".join(stmt[3:])
         if not stmt or stmt[0] in _NOT_MEMBERS:
             return
         function = _is_function(stmt)
@@ -378,6 +391,11 @@ def moves(base: str, tip: str) -> list[str]:
     found += [
         f"binding {line}" for line in _counted(old.bindings.elements(), new.bindings.elements())
     ]
+    # A new alias or one gone moves nothing by itself; one that means another type does.
+    meant = sorted(
+        k for k in old.aliases.keys() & new.aliases.keys() if old.aliases[k] != new.aliases[k]
+    )
+    found += [f"alias {k}: {old.aliases[k]} -> {new.aliases[k]}" for k in meant]
     return found + [f"engine.pyi {line}" for line in _counted(old.stub, new.stub)]
 
 
@@ -446,7 +464,8 @@ def judge(base: str, tip: str) -> int:
             pending.append(commit)
     if excused and not pending:
         for commit in excused:
-            print(f"abi-bump: excused by {commit.line}: ABI: none ({commit.reason})")
+            # "note: " is what a passing push still prints: the trailer is the excuse's only record.
+            print(f"note: abi-bump excused by {commit.line}: ABI: none ({commit.reason})")
         return 0
     print(f"abi-bump: lucid/_C moved its binary interface and LUCID_ABI_VERSION is still {after}:")
     shown = [*found[:_SHOWN], *([f"... and {len(found) - _SHOWN} more"] if found[_SHOWN:] else [])]

@@ -76,28 +76,31 @@ goes unseen; add one when you add a way for a claim to be false.
 ## C++ at push
 
 A push whose range changes `lucid/_C` meets two more records in `registry/engine.toml`.
-Neither runs at commit: a worker may not touch `version.h` or run the suites.
+Neither runs at commit: a worker may not touch `version.h` or run the suites. A passing
+check still shows its `note: ` lines at push, so an excuse it took is printed.
 
 **`E-ABI-BUMP`**, `tools/check_abi_bump.py`. It reads the two ends of the range, not the
 diff lines, so a reflow, a comment, a renamed parameter or a type moved between headers
 is no move. A move is a data member or virtual of any class or struct in a header (order
-included), any member of a `LUCID_API` type, a free `LUCID_API` declaration, a name a
-binding gives Python, or a name in `engine.pyi`. The range passes when
-`LUCID_ABI_VERSION` rose between its ends, or when a commit at or after each move says
-why it is none, as a trailer: `ABI: none (<reason>)`. A bare `ABI: none` is a habit, not
-a reason.
+and `alignas` included), any member of a `LUCID_API` type, a free `LUCID_API`
+declaration, a `using` alias that comes to mean another type, a name a binding gives
+Python, or a name in `engine.pyi`. The range passes when `LUCID_ABI_VERSION` rose between
+its ends, or when a commit at or after each move says why it is none, as a trailer:
+`ABI: none (<reason>)`. A bare `ABI: none` is a habit, not a reason. What it cannot see
+is the record's `gap`.
 
     python tools/check_abi_bump.py --range A..B            # as pre-push judges it
     python tools/check_abi_bump.py --range A..B --each     # every commit on its own
 
-Backtest, 2026-11-06, `--each` over main's last 300 commits: 10 move the interface; 2
-bump in the same commit, and 8 do not. Five of those eight went out in a push that held
-their bump (LCD-837's Tracer, LCD-834's grad masks), or undid themselves before it
-(LCD-850). Judged as main's real pushes were (origin/main's reflog, 104 pushes), it
-refuses 3: `578247379` and `48f57990e`, which shipped at ABI 40 with no bump, and
-`78d57bf38`, which added a member to a struct private to `CpuBackend`. That last one is
-what `version.h` asks a bump for, and the one a reader may call needless. Every one of the
-35 bumps in the history has a move before it.
+Backtest, 2026-11-06, `--each` over main's last 300 commits up to `4db11a36a`: 19 move
+the interface; 2 bump in the same commit, and 17 do not. Fourteen of those went out in a
+range that held their bump (LCD-853's nine with ABI 44, LCD-837's Tracer, LCD-834's grad
+masks, LCD-717's new node), or undid themselves before it (LCD-850). Judged as main's
+real pushes were (origin/main's reflog, 104 pushes up to `a9ffe63aa`), it refuses 3:
+`578247379` and `48f57990e`, which shipped at ABI 40 with no bump, and `78d57bf38`, which
+added a member to a struct private to `CpuBackend`. That last one is what `version.h` asks
+a bump for, and the one a reader may call needless. Every bump in the history has a move
+before it.
 
 **`E-VERIFY-CPP`**, the attestation. `lucid/test/unit/compile` and `unit/cost` take
 minutes, so the run and the check are apart:
@@ -105,15 +108,21 @@ minutes, so the run and the check are apart:
     .venv/bin/python3 -m tools.rules attest            # run them here, record the result
     .venv/bin/python3 -m tools.rules attest --verify   # what pre-push asks; instant
 
-`attest` refuses (exit 2) when `lucid/` or `pyproject.toml` holds anything uncommitted,
-when `tools/agent_ws.py` calls the engine stale, when the checkout's python imports lucid
-or its engine from anywhere else, and when a suite selects no test. Otherwise it runs each
-suite in its own process and writes `<git common dir>/lucid-attest/<tree>.json`, keyed by
-`git rev-parse HEAD:lucid/_C`: counts, commit, host, time. A failing run is recorded too,
-and exits 1. The key is the C++ tree, so one record covers any number of lands that leave
-the C++ alone, a Python-only push needs none, and every worktree reads the same ledger. A
-record is a local file: write it where the commit is checked out and the engine is built,
-in a checkout whose `.git` the pushing one shares or syncs with, or copy the one file.
+`attest` refuses (exit 2) when `lucid/`, `pyproject.toml`, `setup.py` or
+`tools/fetch_mlx.py` holds anything uncommitted; when `tools/agent_ws.py` calls the engine
+stale; when the checkout's python imports lucid or its engine from anywhere else; when a
+suite ran no test, every one skipped, or skipped more than 5 % (a sound run skips 0.2 %);
+and when HEAD or what the suites read moved during the run. It runs each suite in its own
+process, without `PYTEST_ADDOPTS` or `PYTEST_PLUGINS` (it says when it drops one), and
+writes `<git common dir>/lucid-attest/<key>.json`: counts, commit, host, time. A failing
+run is recorded too, and exits 1. The key digests what the engine is built from:
+`HEAD:lucid/_C`, `setup.py`, `tools/fetch_mlx.py` and `[tool.lucid.mlx]`. So one record
+covers any number of lands that leave those alone, a Python-only push needs none, and
+every worktree reads the same ledger. A record is a local file: write it where the commit
+is checked out and the engine is built, in a checkout whose `.git` the pushing one shares
+or syncs with, or copy the one file. In the Studio's main checkout run `git reset -q`
+first: `.git/index` is not synced, so a stale index reads as uncommitted edits (the
+working tree is left alone).
 
 ## Quality gate
 

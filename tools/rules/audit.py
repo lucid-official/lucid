@@ -120,7 +120,7 @@ class Audit:
     def wiring(self) -> Section:
         wired = 0
         pending: Counter[str] = Counter()
-        findings = list(self._dead_globs())
+        findings = [*self._dead_globs(), *self._uncovered()]
         unwired = 0
         problems = self._unwired()
         for rule in self._rules:
@@ -149,6 +149,24 @@ class Audit:
             for glob in globs:
                 if not any(path.is_file() for path in self.registry.root.glob(glob)):
                     yield Finding(owner, Exit.VIOLATION, f"{glob} matches no file")
+
+    def _uncovered(self) -> Iterator[Finding]:
+        """A trigger narrower than its rule's scope skips a change the rule is about."""
+        root, checks = self.registry.root, self.registry.checks
+        for rule in self._rules:
+            claimed = [checks[n] for n in dict.fromkeys(e.check for e in rule.enforce)]
+            narrow = [c for c in claimed if c.trigger and not set(rule.scope) <= set(c.trigger)]
+            if not narrow:  # a trigger that lists the scope's globs covers it: no walk
+                continue
+            files = [p.relative_to(root).as_posix() for g in rule.scope for p in root.glob(g)]
+            files = [f for f in files if (root / f).is_file()]
+            for check in narrow:
+                left = [f for f in files if not check.relevant([f])]
+                if left:
+                    message = (
+                        f"{check.name}'s trigger leaves out {len(left)} of its scope: {left[0]}"
+                    )
+                    yield Finding(rule.id, Exit.VIOLATION, message)
 
     def allowlists(self) -> Section:
         lists = [(r, r.allowlist) for r in self._rules if r.allowlist is not None]

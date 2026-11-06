@@ -1,17 +1,21 @@
 """C++ leaves for main only with a recorded pass of the suites that see it, on an engine built from it.
 
 The suites take minutes, so the run and the check are apart: ``attest`` runs them where
-the engine is fresh and records the result under ``HEAD:lucid/_C``, the C++ tree's hash,
-and pre-push only looks it up.  One record covers any number of commits that leave the
-C++ as it is, a Python-only change needs none, and every worktree reads the same ledger.
+the engine is fresh and records the result under a key for what the engine is built from
+(``HEAD:lucid/_C``, the native inputs outside it, the MLX pin), and pre-push only looks the
+key up.  One record covers any number of commits that leave those as they are, a
+Python-only change needs none, and every worktree reads the same ledger.
 """
 
+import hashlib
 import json
+import os
 import platform
 import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 import xml.etree.ElementTree as ElementTree
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -19,19 +23,27 @@ from typing import Final, Self
 
 # One rule for "is this engine built from these sources", shared with the workspace tool.
 from tools.agent_ws import _engine_is_stale, _header_abi_version
-from tools.rules.checks import Workspace
+from tools.rules.checks import CannotMeasure, Workspace
 from tools.rules.model import Exit, read
 from tools.rules.push import _git
 
 ENGINE: Final = "lucid/_C"
+# What builds the engine besides lucid/_C; pyproject.toml's [tool.lucid.mlx] pins the MLX.
+NATIVE: Final = ("setup.py", "tools/fetch_mlx.py")
 # The suites that see what the C++ does to a traced graph and what each op costs.
 SUITES: Final = ("lucid/test/unit/compile", "lucid/test/unit/cost")
 # What the suites read: an edit there that is not committed is not what a record names.
-_CLEAN: Final = ("lucid", "pyproject.toml")
+_CLEAN: Final = ("lucid", "pyproject.toml", *NATIVE)
+# A selection from outside the repository: a --deselect or a plugin would pass what it hid.
+_SELECTION_ENV: Final = ("PYTEST_ADDOPTS", "PYTEST_PLUGINS")
+# Measured on the Studio, 2026-11-06: unit/compile skips 14 of 6221 (0.2 %, 13 of them
+# xfail), unit/cost 0 of 42.  A run under memory pressure (lucid/test/conftest.py's
+# governor) skips by the hundred; 5 % is 20 times what a sound run skips.
+_MOST_SKIPPED: Final = 0.05
 _COMMAND: Final = ".venv/bin/python3 -m tools.rules attest"
 _PROBE: Final = (
-    "import lucid; from lucid import _C_engine as e; "
-    "print(lucid.__file__, e.__file__, e.ABI_VERSION, sep='\\n')"
+    "import lucid; from lucid import _C_engine; "
+    "print(lucid.__file__, _C_engine.__file__, _C_engine.ABI_VERSION, sep='\\n')"
 )
 
 
@@ -58,10 +70,19 @@ class SuiteRun:
     def line(self) -> str:
         return f"{self.path}: {self.tests} tests, {self.failures} failed, {self.skipped} skipped"
 
+    @property
+    def unproven(self) -> str | None:
+        """Why a clean exit here would prove nothing, or None.  junit's tests count skips."""
+        if self.tests - self.skipped <= 0:
+            return f"{self.path} ran no test ({self.tests} selected, {self.skipped} skipped)"
+        if self.skipped > _MOST_SKIPPED * self.tests:
+            return f"{self.path} skipped {self.skipped} of {self.tests}, over {_MOST_SKIPPED:.0%}"
+        return None
+
 
 @dataclass(frozen=True)
 class Attestation:
-    tree: str
+    key: str
     commit: str
     host: str
     at: str
@@ -71,7 +92,7 @@ class Attestation:
 
     @property
     def passed(self) -> bool:
-        ran = all(run.returncode == 0 and run.tests > 0 for run in self.suites)
+        ran = all(run.returncode == 0 and run.unproven is None for run in self.suites)
         return ran and tuple(run.path for run in self.suites) == SUITES
 
     @property
@@ -82,13 +103,26 @@ class Attestation:
         )
 
 
-def engine_tree(ws: Workspace) -> str:
-    return _git(ws, "rev-parse", "--verify", f"HEAD:{ENGINE}")
+def engine_key(ws: Workspace) -> str:
+    """One digest of what HEAD builds the engine from: lucid/_C, NATIVE and the MLX pin."""
+    blobs = [_git(ws, "rev-parse", "--verify", f"HEAD:{ENGINE}")]
+    blobs += [ws.spawn(["git", "rev-parse", "-q", "--verify", f"HEAD:{p}"]).stdout for p in NATIVE]
+    project = ws.spawn(["git", "show", "HEAD:pyproject.toml"]).stdout
+    try:
+        pin = tomllib.loads(project).get("tool", {}).get("lucid", {}).get("mlx", {})
+    except tomllib.TOMLDecodeError as exc:
+        raise CannotMeasure(f"pyproject.toml at HEAD: {exc}") from exc
+    text = "\0".join([*(blob.strip() for blob in blobs), json.dumps(pin, sort_keys=True)])
+    return hashlib.sha1(text.encode()).hexdigest()
+
+
+def _head(ws: Workspace) -> str:
+    return _git(ws, "rev-parse", "--verify", "HEAD")
 
 
 @dataclass(frozen=True)
 class Ledger:
-    """``<git common dir>/lucid-attest/<tree>.json``: local, and shared by every worktree."""
+    """``<git common dir>/lucid-attest/<key>.json``: local, and shared by every worktree."""
 
     directory: Path
 
@@ -99,15 +133,15 @@ class Ledger:
 
     def record(self, attestation: Attestation) -> Path:
         self.directory.mkdir(parents=True, exist_ok=True)
-        path = self.directory / f"{attestation.tree}.json"
+        path = self.directory / f"{attestation.key}.json"
         part = path.with_suffix(".part")
         part.write_text(json.dumps(asdict(attestation), indent=2), encoding="utf-8")
         part.replace(path)  # a reader sees the old record or the new one, never half
         return path
 
-    def find(self, tree: str) -> Attestation | None:
-        """The record for ``tree``; one that does not read as a record is none."""
-        path = self.directory / f"{tree}.json"
+    def find(self, key: str) -> Attestation | None:
+        """The record for ``key``; one that does not read as a record is none."""
+        path = self.directory / f"{key}.json"
         try:
             table = json.loads(path.read_text(encoding="utf-8"))
             runs = tuple(read(SuiteRun, run, str(path)) for run in table.pop("suites"))
@@ -138,59 +172,54 @@ def _dirty(ws: Workspace) -> str:
 
 def _run_suites(ws: Workspace) -> list[SuiteRun]:
     """One process each, its output on the terminal: these take minutes."""
+    env = {name: value for name, value in os.environ.items() if name not in _SELECTION_ENV}
+    for name in sorted(os.environ.keys() - env.keys()):
+        print(f"[rules] attest ignores {name}={os.environ[name]!r}: suites run as committed")
     runs = []
     for suite in SUITES:
         with tempfile.TemporaryDirectory(prefix="lucid-attest-") as tmp:
             report = Path(tmp) / "junit.xml"
-            argv = [
-                ws.python,
-                "-m",
-                "pytest",
-                "-q",
-                "-p",
-                "no:cacheprovider",
-                f"--junitxml={report}",
-            ]
-            done = subprocess.run([*argv, suite], cwd=ws.root, check=False)
+            argv = [ws.python, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+            done = subprocess.run(
+                [*argv, f"--junitxml={report}", suite], cwd=ws.root, env=env, check=False
+            )
             runs.append(SuiteRun.of(suite, done.returncode, report))
     return runs
 
 
 def attest(ws: Workspace) -> Exit:
-    """Run the suites on this checkout's engine and record the result under its C++ tree."""
-    tree, dirty = engine_tree(ws), _dirty(ws)
+    """Run the suites on this checkout's engine and record the result under its key."""
+    key, commit, dirty = engine_key(ws), _head(ws), _dirty(ws)
     problem = f"what the suites read is not committed:\n{dirty}" if dirty else _engine_problem(ws)
     start = time.monotonic()
     runs = [] if problem else _run_suites(ws)
-    idle = [run.path for run in runs if run.tests == 0]
-    if idle:
-        problem = f"{', '.join(idle)} selected no test: a run of nothing proves nothing"
-    elif runs and (engine_tree(ws) != tree or _dirty(ws)):
-        problem = f"{ENGINE} or what the suites read changed during the run"
+    unproven = [why for run in runs if (why := run.unproven)]
+    if unproven:
+        problem = "; ".join(unproven)
+    elif runs and (engine_key(ws), _head(ws), _dirty(ws)) != (key, commit, ""):
+        problem = f"HEAD or what the suites read changed during the run, from {commit[:9]}"
     if problem:
         print(f"[rules] attest refused: {problem}", file=sys.stderr)
         return Exit.UNMEASURED
-    commit, host = _git(ws, "rev-parse", "HEAD"), platform.node().split(".")[0]
-    at, seconds = time.strftime("%Y-%m-%dT%H:%M:%S%z"), round(time.monotonic() - start, 1)
-    made = Attestation(
-        tree, commit, host, at, seconds, _header_abi_version(ws.root) or 0, tuple(runs)
-    )
+    host, at = platform.node().split(".")[0], time.strftime("%Y-%m-%dT%H:%M:%S%z")
+    abi, seconds = _header_abi_version(ws.root) or 0, round(time.monotonic() - start, 1)
+    made = Attestation(key, commit, host, at, seconds, abi, tuple(runs))
     path = Ledger.of(ws).record(made)
     print("".join(f"  {run.line}\n" for run in runs), end="")
-    print(f"attest: {ENGINE} tree {tree[:9]} {made.line}\n  recorded in {path}")
+    print(f"attest: key {key[:9]} {made.line}\n  recorded in {path}")
     return Exit.PASS if made.passed else Exit.VIOLATION
 
 
 def verify(ws: Workspace) -> Exit:
-    """What pre-push asks: has this C++ tree a passing record?"""
-    tree, ledger = engine_tree(ws), Ledger.of(ws)
-    found = ledger.find(tree)
+    """What pre-push asks: has what HEAD builds the engine from a passing record?"""
+    key, ledger = engine_key(ws), Ledger.of(ws)
+    found = ledger.find(key)
     if found is not None and found.passed:
-        print(f"attested: {ENGINE} tree {tree[:9]} {found.line}")
+        print(f"attested: key {key[:9]} {found.line}")
         return Exit.PASS
     said = "has no record" if found is None else f"has a record that {found.line}"
     print(
-        f"{ENGINE} at HEAD (tree {tree[:9]}) {said}:\n"
+        f"{ENGINE} and the native inputs at HEAD (key {key[:9]}) {said}:\n"
         f"{' and '.join(SUITES)} have not passed on an engine built from it.\n"
         f"Where this commit is checked out and its engine is built, run\n\n    {_COMMAND}\n\n"
         f"then push again.  The record goes to {ledger.directory},\nwhich every worktree shares."

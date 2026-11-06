@@ -797,6 +797,9 @@ def test_a_line_broken_in_this_package_is_seen(
     scenario = _SCENARIOS[name]
     scenario.setup(scratch)
     done = scratch.rules(*scenario.args, home=home)
+    # A copy that cannot import "kills" every mutant: attest.py's top-level import of
+    # tools/agent_ws.py, absent from the copy, did so for every case here once.
+    assert "Traceback" not in done.stderr, done.stderr
     ended_as_before = (
         done.returncode == scenario.code and scenario.said in done.stdout + done.stderr
     )
@@ -1108,6 +1111,18 @@ def test_push_gate_prints_the_bypasses_in_the_range(scratch: Scratch) -> None:
     assert done.returncode == 0 and "2 commit(s)" in done.stdout
     assert "bypassed at commit (no-verify)" in done.stdout and "chore: skipped" in done.stdout
     assert "chore: cleared" not in done.stdout
+
+
+def test_push_gate_shows_what_a_pass_notes_and_nothing_else(scratch: Scratch) -> None:
+    scratch.records(RULE.replace('level = "commit"', 'level = "push"'))
+    scratch.write("tools/x.py", 'print("note: let through, and why")\nprint("chatter")\n')
+    scratch.commit_all("base")
+    base = scratch.sha()
+    scratch.write("src/n.txt", "ok\n")
+    scratch.commit_all("tip")
+    done = scratch.rules("push", "--range", f"{base}..HEAD")
+    assert done.returncode == 0 and "      note: let through, and why" in done.stdout, done.stdout
+    assert "chatter" not in done.stdout
 
 
 def test_push_gate_refuses_what_is_no_range_and_a_terminal(scratch: Scratch) -> None:
@@ -1636,7 +1651,14 @@ struct Hidden {
     float weight;
 };
 
+struct alignas(16) Packed {
+    alignas(8) float a;
+};
+
+using Index = int;
+
 LUCID_API int make_thing(const Thing& thing, int n);
+LUCID_API int shift_thing(int bits = 1 << 2, int count = 0);
 
 }  // namespace lucid
 """
@@ -1716,6 +1738,34 @@ _ABI_MOVES = [
         "-> int: ...\n    def reset(self) -> None: ...\n",
         "engine.pyi + Thing.reset",
     ),
+    (
+        "aligned-struct",
+        _THING_H,
+        "    alignas(8) float a;\n",
+        "    alignas(8) float a;\n    float b;\n",
+        "lucid::Packed (internal) layout + float b",
+    ),
+    (
+        "aligned-member",
+        _THING_H,
+        "alignas(8) float a",
+        "alignas(16) float a",
+        "lucid::Packed (internal) layout + alignas ( 16 ) float a",
+    ),
+    (
+        "alias",
+        _THING_H,
+        "using Index = int;",
+        "using Index = long;",
+        "alias lucid::Index: int -> long",
+    ),
+    (
+        "after-a-shift",
+        _THING_H,
+        "int count = 0)",
+        "long count = 0)",
+        "LUCID_API + LUCID_API int shift_thing ( int, long )",
+    ),
 ]
 _ABI_STILL = [
     (
@@ -1741,6 +1791,13 @@ _ABI_STILL = [
     ),
     ("moved-to-another-header", _THING_H, "struct Hidden {\n    float weight;\n};\n", ""),
     ("source-body", "lucid/_C/core/Thing.cpp", "return 1;", "return 2;"),
+    ("new-alias", _THING_H, "using Index = int;", "using Index = int;\nusing Offset = long;"),
+    (
+        "named-class-binding",
+        "lucid/_C/bindings/bind.cpp",
+        '    py::class_<Thing>(m, "Thing").def(',
+        '    py::class_<Thing> thing(m, "Thing");\n    thing.def(',
+    ),
 ]
 
 
@@ -1830,7 +1887,8 @@ def test_abi_bump_takes_a_reason_not_a_habit(scratch: Scratch) -> None:
     scratch.write("src/c.txt", "ok\n")
     scratch.commit_all("chore: say why\n\nABI: none (the member is read by no one outside)")
     done = check("--since", base)
-    assert done.returncode == 0 and "excused by" in done.stdout, done.stdout
+    assert done.returncode == 0, done.stdout
+    assert "note: abi-bump excused by" in done.stdout and "read by no one outside" in done.stdout
     # A reason covers what came before it, not what comes after.
     _swap_in(scratch, _THING_H, "    int seen_ = 0;\n", "    int seen_ = 0;\n    int more_;\n")
     scratch.commit_all("feat: another member")
@@ -1901,13 +1959,16 @@ def _attest_repo(s: Scratch, suite: str = "def test_ok():\n    pass\n") -> None:
     s.write(_SO, "")  # newer than every source, as a build leaves it
 
 
-def _rules_in(s: Scratch, *args: str) -> subprocess.CompletedProcess[str]:
+def _rules_in(
+    s: Scratch, *args: str, home: Path = REPO, **env: str
+) -> subprocess.CompletedProcess[str]:
     argv = [sys.executable, "-S", "-m", "tools.rules", "--root", str(s.root), *args]
-    return subprocess.run(argv, cwd=REPO, env=s.env, capture_output=True, text=True)
+    return subprocess.run(argv, cwd=home, env={**s.env, **env}, capture_output=True, text=True)
 
 
 def _record_of(s: Scratch) -> Path:
-    return s.root / ".git/lucid-attest" / f"{s.sha('HEAD:lucid/_C')}.json"
+    key = attest.engine_key(Workspace(s.root, sys.executable, isolated=True))
+    return s.root / ".git/lucid-attest" / f"{key}.json"
 
 
 def test_attest_records_a_pass_that_push_then_finds(scratch: Scratch) -> None:
@@ -1925,7 +1986,14 @@ def test_attest_records_a_pass_that_push_then_finds(scratch: Scratch) -> None:
     linked = scratch.root.parent / "linked"
     scratch.git("worktree", "add", "-q", str(linked))
     assert _rules_in(Scratch(linked, scratch.env), "attest", "--verify").returncode == 0
-    # The C++ moves: no record names its tree, and the refusal says what to run.
+    # The MLX pin moves: the engine is built from another library, and the key says so.
+    pinned = (scratch.root / "pyproject.toml").read_text() + '\n[tool.lucid.mlx]\nversion = "9"\n'
+    scratch.write("pyproject.toml", pinned)
+    scratch.commit_all("build: another MLX")
+    assert _rules_in(scratch, "attest", "--verify").returncode == 1
+    scratch.git("reset", "-q", "--hard", "HEAD~1")
+    assert _rules_in(scratch, "attest", "--verify").returncode == 0
+    # The C++ moves: no record names its key, and the refusal says what to run.
     scratch.write("lucid/_C/core/Thing.cpp", "int thing() { return 2; }\n")
     scratch.commit_all("fix: the C++")
     done = _rules_in(scratch, "attest", "--verify")
@@ -1958,33 +2026,142 @@ def _engine_elsewhere(s: Scratch) -> None:
     s.write(_SO, "")
 
 
-def _no_tests(s: Scratch) -> None:
-    for path in attest.SUITES:
-        s.write(f"{path}/test_suite.py", "import pytest\n")
-    s.commit_all("test: nothing to select")
-    s.write(_SO, "")
+def _dirty_pyproject(s: Scratch) -> None:
+    s.write("pyproject.toml", (s.root / "pyproject.toml").read_text() + "\n# an edit\n")
+
+
+def _suite(text: str, *, both: bool = False) -> Callable[[Scratch], None]:
+    """The compile suite (or both) as ``text``, committed: what the run then finds."""
+
+    def spoil(s: Scratch) -> None:
+        for path in attest.SUITES if both else attest.SUITES[:1]:
+            s.write(f"{path}/test_suite.py", text)
+        s.commit_all("test: the suite as it is now")
+        s.write(_SO, "")
+
+    return spoil
+
+
+_SKIPPED = "import pytest\n@pytest.mark.skip\ndef test_skip():\n    pass\n"
+_FAILING = "def test_ok():\n    pass\ndef test_bad():\n    assert False\n"
+# What a suite does to the checkout while it runs.
+_MID_RUN = "import pathlib, subprocess\ndef test_moves_the_checkout():\n    {}\n"
+_RUN = 'subprocess.run(["git", *{}], check=True)'
+_CPP_COMMIT = f'pathlib.Path("lucid/_C/core/Thing.cpp").write_text("int t;"); {_RUN.format(["commit", "-qam", "x"])}'
+_PY_COMMIT = f'pathlib.Path("lucid/late.py").write_text("x = 1"); {_RUN.format(["add", "lucid/late.py"])}; {_RUN.format(["commit", "-qm", "x"])}'
+_EDIT = 'pathlib.Path("lucid/late.py").write_text("x = 1")'
+
+
+@dataclass(frozen=True)
+class Attempt:
+    """An attest run in a checkout spoiled one way, and how it must end."""
+
+    spoil: Callable[[Scratch], None]
+    code: int
+    said: str
+    env: dict[str, str] = field(default_factory=dict)
+
+
+_ATTEMPTS = {
+    "dirty": Attempt(_dirty_cpp, 2, "not committed"),
+    "untracked": Attempt(_untracked, 2, "not committed"),
+    "dirty-pyproject": Attempt(_dirty_pyproject, 2, "not committed"),
+    "stale-engine": Attempt(_stale, 2, "missing or older than lucid/_C"),
+    "no-engine": Attempt(_no_engine, 2, "missing or older than lucid/_C"),
+    "engine-elsewhere": Attempt(_engine_elsewhere, 2, "and its engine from /elsewhere/lucid/_C"),
+    "no-tests": Attempt(_suite("import pytest\n", both=True), 2, "ran no test (0 selected"),
+    "all-skipped": Attempt(_suite(_SKIPPED), 2, "ran no test (1 selected, 1 skipped)"),
+    "mostly-skipped": Attempt(_suite(f"{_SKIPPED}def test_ok():\n    pass\n"), 2, "skipped 1 of 2"),
+    "cpp-moved-mid-run": Attempt(_suite(_MID_RUN.format(_CPP_COMMIT)), 2, "during the run"),
+    "head-moved-mid-run": Attempt(_suite(_MID_RUN.format(_PY_COMMIT)), 2, "during the run"),
+    "edited-mid-run": Attempt(_suite(_MID_RUN.format(_EDIT)), 2, "during the run"),
+    # A selection from the environment would have hidden the failure: it is dropped.
+    "deselected": Attempt(
+        _suite(_FAILING),
+        1,
+        "FAILED on",
+        {"PYTEST_ADDOPTS": "--deselect=lucid/test/unit/compile/test_suite.py::test_bad"},
+    ),
+}
+_REFUSED = [name for name, attempt in _ATTEMPTS.items() if attempt.code == 2]
+
+
+def _attempt(s: Scratch, name: str, home: Path = REPO) -> subprocess.CompletedProcess[str]:
+    _attest_repo(s)
+    _ATTEMPTS[name].spoil(s)
+    return _rules_in(s, "attest", home=home, **_ATTEMPTS[name].env)
+
+
+@pytest.mark.parametrize("name", _REFUSED)
+def test_attest_refuses_what_it_cannot_vouch_for(scratch: Scratch, name: str) -> None:
+    done = _attempt(scratch, name)
+    said = _ATTEMPTS[name].said
+    assert done.returncode == 2 and said in done.stderr, done.stdout + done.stderr
+    assert not (scratch.root / ".git/lucid-attest").exists()
+
+
+def test_attest_runs_the_suites_as_committed(scratch: Scratch) -> None:
+    done = _attempt(scratch, "deselected")
+    assert done.returncode == 1 and "FAILED on" in done.stdout, done.stdout + done.stderr
+    assert "attest ignores PYTEST_ADDOPTS=" in done.stdout
+    assert json.loads(_record_of(scratch).read_text())["suites"][0]["failures"] == 1
+
+
+# (id, the line in attest.py, its replacement, the attempt that must now end otherwise)
+_ATTEST_MUTANTS = [
+    (
+        "skips-read-as-runs",
+        "if self.tests - self.skipped <= 0:",
+        "if self.tests <= 0:",
+        "all-skipped",
+    ),
+    (
+        "skips-unbounded",
+        "_MOST_SKIPPED: Final = 0.05",
+        "_MOST_SKIPPED: Final = 1.0",
+        "mostly-skipped",
+    ),
+    ("selection-passed-on", "if name not in _SELECTION_ENV}", "if name}", "deselected"),
+    (
+        "pyproject-not-read",
+        '_CLEAN: Final = ("lucid", "pyproject.toml", *NATIVE)',
+        '_CLEAN: Final = ("lucid", *NATIVE)',
+        "dirty-pyproject",
+    ),
+    (
+        "no-recheck",
+        'elif runs and (engine_key(ws), _head(ws), _dirty(ws)) != (key, commit, ""):',
+        "elif False:",
+        "cpp-moved-mid-run",
+    ),
+    (
+        "head-not-rechecked",
+        '(engine_key(ws), _head(ws), _dirty(ws)) != (key, commit, "")',
+        '(engine_key(ws), _dirty(ws)) != (key, "")',
+        "head-moved-mid-run",
+    ),
+]
 
 
 @pytest.mark.parametrize(
-    ("spoil", "said"),
-    [
-        (_dirty_cpp, "not committed"),
-        (_untracked, "not committed"),
-        (_stale, "missing or older than lucid/_C"),
-        (_no_engine, "missing or older than lucid/_C"),
-        (_engine_elsewhere, "and its engine from /elsewhere/lucid/_C"),
-        (_no_tests, "selected no test"),
-    ],
-    ids=["dirty", "untracked", "stale-engine", "no-engine", "engine-elsewhere", "no-tests"],
+    ("line", "new", "name"), [m[1:] for m in _ATTEST_MUTANTS], ids=[m[0] for m in _ATTEST_MUTANTS]
 )
-def test_attest_refuses_what_it_cannot_vouch_for(
-    scratch: Scratch, spoil: Callable[[Scratch], None], said: str
+def test_a_line_broken_in_attest_is_seen(
+    scratch: Scratch, tmp_path_factory: pytest.TempPathFactory, line: str, new: str, name: str
 ) -> None:
-    _attest_repo(scratch)
-    spoil(scratch)
-    done = _rules_in(scratch, "attest")
-    assert done.returncode == 2 and said in done.stderr, done.stdout + done.stderr
-    assert not (scratch.root / ".git/lucid-attest").exists()
+    home = tmp_path_factory.mktemp("mutant")
+    shutil.copytree(
+        REPO / "tools/rules", home / "tools/rules", ignore=shutil.ignore_patterns("__pycache__")
+    )
+    shutil.copy(REPO / "tools/agent_ws.py", home / "tools/agent_ws.py")
+    source = home / "tools/rules/attest.py"
+    assert line in source.read_text(), line
+    source.write_text(source.read_text().replace(line, new, 1))
+    done = _attempt(scratch, name, home=home)
+    expected = _ATTEMPTS[name]
+    out = done.stdout + done.stderr
+    assert "Traceback" not in out, out  # a crash is no proof that the line is needed
+    assert not (done.returncode == expected.code and expected.said in out), f"survived: {line}"
 
 
 def test_attest_records_a_failure_and_push_refuses_it(scratch: Scratch) -> None:
@@ -2012,29 +2189,35 @@ def test_attest_a_record_that_does_not_read_is_none(scratch: Scratch) -> None:
 
 
 @_needs_the_gate
-def test_push_refuses_cpp_without_its_bump_and_record_through_real_git(
-    real_copy: Path, tmp_path: Path
-) -> None:
-    header = "lucid/_C/api.h"
+def test_a_cpp_push_is_judged_through_real_git(real_copy: Path, tmp_path: Path) -> None:
+    """The records' own run lines through the real hook: ``{since}``, ``--verify``, triggers.
+
+    A control that runs only the tool stays green with ``{since}`` gone or a trigger
+    narrowed; a header below lucid/_C and one at its top each go out alone.
+    """
     with _real_repository(real_copy, tmp_path / "remote.git") as repo:
 
         def on_the_remote() -> str:
             return repo.attempt("ls-remote", "origin", "refs/heads/main").stdout.split()[0]
 
+        def refused(header: str, name: str) -> None:
+            seeded = f"namespace lucid {{\nstruct LUCID_API {name} {{\n    int seeded_;\n}};\n}}\n"
+            repo.write(header, (repo.root / header).read_text() + seeded)
+            repo.git("add", header)
+            commit = repo.attempt("commit", "-qm", f"feat: {name}", "--no-verify")
+            assert commit.returncode == 0, commit.stderr
+            push = repo.attempt("push", "origin", "main")
+            said = push.stdout + push.stderr
+            assert push.returncode != 0 and on_the_remote() == out_there, said
+            assert re.search(r"VIOLATION\s+abi-bump", said), said
+            assert f"lucid::{name} (exported) added" in said, said
+            assert re.search(r"VIOLATION\s+cpp-attested", said), said
+            assert ".venv/bin/python3 -m tools.rules attest" in said
+
         out_there = repo.sha()
-        seeded = "namespace lucid {\nstruct LUCID_API SeededForPush {\n    int seeded_;\n};\n}\n"
-        repo.write(header, (repo.root / header).read_text() + seeded)
-        repo.git("add", header)
-        assert (
-            repo.attempt("commit", "-qm", "feat: an exported type", "--no-verify").returncode == 0
-        )
-        push = repo.attempt("push", "origin", "main")
-        said = push.stdout + push.stderr
-        assert push.returncode != 0 and on_the_remote() == out_there, said
-        assert re.search(r"VIOLATION\s+abi-bump", said), said
-        assert "lucid::SeededForPush (exported) added" in said
-        assert re.search(r"VIOLATION\s+cpp-attested", said), said
-        assert ".venv/bin/python3 -m tools.rules attest" in said
+        refused("lucid/_C/core/Shape.h", "SeededBelow")
+        repo.git("reset", "-q", "--hard", out_there)
+        refused("lucid/_C/api.h", "SeededAtTheTop")
 
         # The bump in the same range, and the record an attest run would have left.
         version = repo.root / "lucid/_C/version.h"
@@ -2046,7 +2229,7 @@ def test_push_refuses_cpp_without_its_bump_and_record_through_real_git(
         assert repo.attempt("commit", "-qm", "chore: bump the ABI", "--no-verify").returncode == 0
         ws = Workspace(repo.root, sys.executable, isolated=True)
         runs = tuple(attest.SuiteRun(path, 0, 1, 0, 0) for path in attest.SUITES)
-        made = attest.Attestation(attest.engine_tree(ws), repo.sha(), "t", "now", 1.0, abi, runs)
+        made = attest.Attestation(attest.engine_key(ws), repo.sha(), "t", "now", 1.0, abi, runs)
         attest.Ledger.of(ws).record(made)
         push = repo.attempt("push", "origin", "main")
         said = push.stdout + push.stderr
@@ -2245,6 +2428,22 @@ _REAL_MUTANTS = [
         "if found is not None:",
         "cpp-attested",
         "cpp-attested control: tools/test_rules.py::test_attest_records_a_failure_and_push",
+    ),
+    (
+        "R1-abi-bump-range-emptied",
+        _ENG,
+        '"--since", "{since}"',
+        '"--since", "HEAD"',
+        "abi-bump",
+        "abi-bump control: tools/test_rules.py::test_a_cpp_push_is_judged_through_real_git",
+    ),
+    (
+        "T2-abi-bump-trigger-narrowed",
+        _ENG,
+        'trigger = ["lucid/_C/**", "tools/check_abi_bump.py"]',
+        'trigger = ["lucid/_C/*.h", "tools/check_abi_bump.py"]',
+        "numpy-h4",
+        "E-ABI-BUMP: abi-bump's trigger leaves out",
     ),
 ]
 

@@ -24,10 +24,11 @@ trigger = ["lucid/_C/**", "tools/check_cpp_layers.py"]
 run = ["{py}", "tools/check_abi_bump.py", "--since", "{since}"]
 trigger = ["lucid/_C/**", "tools/check_abi_bump.py"]
 
-# A lookup in the ledger, instant.  The suites run in `attest`, never from a hook.
+# A lookup in the ledger, instant.  The suites run in `attest`, never from a hook.  The
+# trigger is what the key reads: the engine's sources, the native inputs and the MLX pin.
 [check.cpp-attested]
 run = ["{py}", "-m", "tools.rules", "attest", "--verify"]
-trigger = ["lucid/_C/**"]
+trigger = ["lucid/_C/**", "setup.py", "tools/fetch_mlx.py", "pyproject.toml"]
 
 # test_numpy_independence is not claimed: it is a behaviour smoke over a fixed list of calls,
 # and no seed can show it would notice an import, so R5 should not bring it back as a level.
@@ -37,7 +38,7 @@ statement = """
 No external library in lucid/ compute paths: the C++ engine and the standard library only,
 through the six bridges."""
 why = "A compute path that needs a package breaks the bare install and hides a second backend."
-scope = ["lucid/**"]
+scope = ["lucid/**/*.py"]
 doc = "python"
 gap = """
 numpy and mlx only: any other package passes. numpy-h4 sees import statements and .numpy() calls, \
@@ -45,7 +46,7 @@ so importlib.import_module("numpy") and __import__("numpy") pass (test-mlx-insta
 forms, for mlx). tensor.py, optim/optimizer.py and optim/lbfgs.py are allowed per file with no \
 method limit. The tool's SANCTIONED list is the real bridge list, and it adds \
 compile/_optim/compiler.py to the six. The tool skips lucid/test and lucid/benchmarks although the \
-scope says lucid/**. LCD-841-B2 generalises it."""
+scope says lucid/**/*.py. LCD-841-B2 generalises it."""
 enforce = [
     { level = "commit", check = "numpy-h4" },
     { level = "push", check = "numpy-h4" },
@@ -123,14 +124,21 @@ why = "An engine built before the move imports cleanly and fails at its first ca
 scope = ["lucid/_C/**"]
 doc = "engine"
 gap = """
-It reads headers as text, not as a compiler does: members a macro declares are not seen, both \
-sides of an #if count, and a function-pointer member reads as a function.  A new class that is \
-not LUCID_API, an enumerator, a default argument and an inline body are no move.  Bindings and \
-engine.pyi are compared by name, so an argument a binding gains passes, and so does a name a \
-registry binds at run time unless engine.pyi was regenerated.  A reason is taken as written.  \
-Push only: no CI level until LCD-841-B5."""
+It reads headers as text, not as a compiler does.  Members a macro declares are not seen, both \
+sides of an #if count, and #pragma pack is a directive it drops.  A function-pointer member reads \
+as a function.  A new class that is not LUCID_API, an enumerator, a default argument, an inline \
+body and a static constexpr member are no move, so neither is the bound of `float x_[kN]` when \
+kN changes.  A `using X = T` that comes to mean another T is a move; a template alias and a \
+typedef are not read.  A `>>` in a default argument folds the parameter list, so a later \
+parameter's type can change unseen.  Bindings and engine.pyi are compared by name: an argument \
+a binding gains passes, and so do py::setattr and a name a registry binds at run time unless \
+engine.pyi was regenerated.  On 2026-11-06 the headers hold no #pragma pack, typedef, \
+py::setattr or shift in a default argument.  A reason is taken as written.  Push only: no CI \
+level until LCD-841-B5."""
 enforce = [{ level = "push", check = "abi-bump" }]
 
+# The last node is the record's own run line, in a real push: a control that only runs the
+# tool would stay green with `{since}` gone or the trigger narrowed.
 [[rule.control]]
 kind = "pytest"
 check = ["abi-bump"]
@@ -140,6 +148,7 @@ nodes = [
     "tools/test_rules.py::test_abi_bump_takes_a_bump_anywhere_in_the_range",
     "tools/test_rules.py::test_abi_bump_takes_a_reason_not_a_habit",
     "tools/test_rules.py::test_abi_bump_reads_a_range_or_says_it_cannot",
+    "tools/test_rules.py::test_a_cpp_push_is_judged_through_real_git",
 ]
 
 # On 2026-11-04 C++ reached main with unit/compile never run, and CI cancelled the runs
@@ -149,16 +158,18 @@ nodes = [
 id = "E-VERIFY-CPP"
 statement = """
 C++ leaves for main only with a recorded pass of lucid/test/unit/compile and unit/cost on an
-engine built from that tree: `python -m tools.rules attest` writes it."""
+engine built from what it holds: `python -m tools.rules attest` writes it."""
 why = "C++ the suites never saw reached main, and CI cancelled the run that would have seen it."
-scope = ["lucid/_C/**"]
+scope = ["lucid/_C/**", "setup.py", "tools/fetch_mlx.py", "pyproject.toml"]
 doc = "engine"
 gap = """
-A record is trusted as written: a hand-made file in the ledger passes.  "Built from that tree" \
-is tools/agent_ws.py's freshness rule (the ABI the engine reports, then a source digest or \
-mtimes), which does not see a CMakeLists or vendored-library change alone.  Python that \
-changes after the record does not void it.  The engine-dependent checks of design section 9 \
-step 5 do not run in it yet.  Push only."""
+A record is trusted as written: a hand-made file in the ledger passes.  The key covers \
+lucid/_C, setup.py, tools/fetch_mlx.py and [tool.lucid.mlx], but "the engine is built from \
+them" is tools/agent_ws.py's freshness rule (the ABI the engine reports, then a digest of \
+lucid/_C's .cpp/.h/.mm/.def or, with no build/.engine_stamp, mtimes), which a CMakeLists, \
+setup.py or MLX pin change alone does not stale.  A main checkout or a scratch clone has no \
+stamp, so mtimes are all it reads there.  Python that changes after the record does not void \
+it.  The engine-dependent checks of design section 9 step 5 do not run in it yet.  Push only."""
 enforce = [{ level = "push", check = "cpp-attested" }]
 
 [[rule.control]]
@@ -169,4 +180,6 @@ nodes = [
     "tools/test_rules.py::test_attest_refuses_what_it_cannot_vouch_for",
     "tools/test_rules.py::test_attest_records_a_failure_and_push_refuses_it",
     "tools/test_rules.py::test_attest_a_record_that_does_not_read_is_none",
+    "tools/test_rules.py::test_attest_runs_the_suites_as_committed",
+    "tools/test_rules.py::test_a_cpp_push_is_judged_through_real_git",
 ]

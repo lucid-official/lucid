@@ -18,6 +18,8 @@ _RELEASE: Final = re.compile(r"refs/tags/v[^/]*")
 _NO_OBJECT: Final = re.compile(r"0+")
 # What the checks read.  A change to one of these would be judged in place of what leaves.
 _READ: Final = ("lucid", "tools", "scripts", ".githooks", "pyproject.toml")
+# A line a passing check still shows: an excuse it took, which would otherwise go unseen.
+_NOTE: Final = "note: "
 
 
 def _git(ws: Workspace, *args: str) -> str:
@@ -40,8 +42,10 @@ def run_level(registry: Registry, level: Level, changes: Changes | None) -> Exit
         word = "SKIP" if result.skipped else result.outcome.name
         note = result.skipped or f"{result.seconds:.1f}s"
         print(f"  {word:<11s}{result.check:<20s}[{' '.join(r.id for r in rules)}]  {note}")
-        if result.outcome is not Exit.PASS:
-            print("".join(f"      {line}\n" for line in result.output.splitlines()), end="")
+        lines = result.output.splitlines()
+        if result.outcome is Exit.PASS:  # a pass says only what it let through, and why
+            lines = [line for line in lines if line.startswith(_NOTE)]
+        print("".join(f"      {line}\n" for line in lines), end="")
     return max(result.outcome for result in results)
 
 

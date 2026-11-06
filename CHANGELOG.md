@@ -179,6 +179,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - give self pairs their exact distance
 
+- prove the C++ push checks' run lines, refuse a run of skips
+
 ### Performance
 
 - `_C.engine` (`Linear`, `ConvNd`, `ConvTransposeNd`, `LayerNorm`, `RMSNorm`, `BatchNormNd`, `GroupNorm`, `BatchNormEval`, `GlobalResponseNorm`, `Bilinear`): thread `needs_input_grad` (`grad_mask`) and `kGradReads` through fused CPU/Metal backward kernels and `apply_for_graph`, skipping unneeded `dx`/`dW`/`db` GEMMs, convolutions, reductions, and buffer allocations (LCD-697).
