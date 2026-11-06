@@ -64,10 +64,12 @@ Run::
 
 Exit codes
 ----------
-0 — every checkpoint fits, or none was reachable to test.
-1 — at least one checkpoint does not fit its factory.
-2 — the network could not be reached for some checkpoint (reported
-    separately from a mismatch, because "unknown" is not "broken").
+0 — every checkpoint was read, and every one fits.
+1 — at least one checkpoint does not fit its factory, or an entry holds a
+    placeholder digest (``"0" * 64``), which no download can ever verify.
+2 — some checkpoint could not be read (reported separately from a
+    mismatch, because "unknown" is not "broken").  The summary says how
+    many, and says OK only when none of them were left out.
 """
 
 import argparse
@@ -78,6 +80,7 @@ import time
 import urllib.error
 import urllib.request
 import warnings
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager, nullcontext
 from typing import Iterator
@@ -101,6 +104,9 @@ _CONNECTIONS = 16
 
 #: Tries per header before a network error counts as unreachable.
 _ATTEMPTS = 3
+
+#: What an entry's ``sha256`` holds before a checkpoint is published.
+_PLACEHOLDER_DIGEST = "0" * 64
 
 
 def _normalise(shape: object) -> tuple[int, ...]:
@@ -268,7 +274,67 @@ def _describe(model_name: str, tag: str, report: dict[str, object]) -> list[str]
     return lines
 
 
-def main() -> int:
+def _placeholders(
+    targets: Sequence[tuple[str, type[WeightsEnum]]],
+) -> list[tuple[str, str, WeightEntry]]:
+    """Entries whose digest is a stand-in, as ``(factory, tag, entry)``.
+
+    Such an entry is an error by itself: ``_verify_sha256`` can never pass
+    for it, so ``pretrained=True`` raises however well the shapes fit.
+    """
+    return [
+        (name, tag, enum[tag].entry)
+        for name, enum in targets
+        for tag in _tags(enum)
+        if enum[tag].entry.sha256 == _PLACEHOLDER_DIGEST
+    ]
+
+
+def _conclude(
+    *, checked: int, declined: int, unreachable: Sequence[str], bad: Sequence[str]
+) -> int:
+    """Print what the run found and return its exit code.
+
+    "OK" is claimed only for checkpoints that were read: a run that read
+    none, or only some, says how many it could not, and never that
+    everything fits.
+    """
+    print(f"{checked} checkpoints read, {len(unreachable)} could not be read", end="")
+    print(f", {declined} declined by a sibling factory" if declined else "")
+    if unreachable:
+        print(f"\n{len(unreachable)} could not be read:", file=sys.stderr)
+        for line in unreachable:
+            print(line, file=sys.stderr)
+    if bad:
+        print(f"\n{len(bad)} problem(s):", file=sys.stderr)
+        for line in bad:
+            print(line, file=sys.stderr)
+        print(
+            "\nEach of these means pretrained=True raises for that factory: its "
+            "config drifted from the checkpoint, the entry needs a key_map, or "
+            "the digest is a placeholder no download can verify.",
+            file=sys.stderr,
+        )
+        return 1
+    if not checked:
+        print(
+            "[check_weight_fit] NOTHING CHECKED — no checkpoint could be read, "
+            "so whether any fits is unknown.",
+            file=sys.stderr,
+        )
+        return 2
+    if unreachable:
+        print(
+            f"[check_weight_fit] INCOMPLETE — the {checked} read fit their factory; "
+            f"the {len(unreachable)} that could not be read are unknown.",
+            file=sys.stderr,
+        )
+        return 2
+    print("[check_weight_fit] OK — every checkpoint fits its factory.")
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
     parser.add_argument(
         "--family", help="only this family, as registered (e.g. sknet, not sk_resnet)"
@@ -277,7 +343,7 @@ def main() -> int:
     parser.add_argument(
         "--list", action="store_true", help="print what would be checked, then stop"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     targets = sorted(_WEIGHTS_BY_MODEL.items())
     if args.model:
@@ -320,7 +386,12 @@ def main() -> int:
         return 0
 
     print(f"checking {checkpoints} checkpoints across {len(targets)} factories")
-    bad: list[str] = []
+    stand_ins = _placeholders(targets)
+    bad: list[str] = [
+        f"  {name} [{tag}]: sha256 is the placeholder {_PLACEHOLDER_DIGEST[:8]}…, "
+        "so no download can verify against it"
+        for name, tag, _ in stand_ins
+    ]
     unreachable: list[str] = []
     checked = 0
     declined = 0
@@ -342,7 +413,14 @@ def main() -> int:
     if built_for_real:
         print(f"built for real, shadow mode could not follow: {', '.join(built_for_real)}")
 
-    urls = sorted({e.url for *_, b in builds if isinstance(e := b.get("entry"), WeightEntry)})
+    unpublished = {entry.url for *_, entry in stand_ins}  # nothing there to read
+    urls = sorted(
+        {
+            e.url
+            for *_, b in builds
+            if isinstance(e := b.get("entry"), WeightEntry) and e.url not in unpublished
+        }
+    )
     headers = _read_headers(urls)
 
     for name, tag, built in builds:
@@ -355,6 +433,9 @@ def main() -> int:
             continue
         entry = built["entry"]
         assert isinstance(entry, WeightEntry)
+        if entry.url in unpublished:
+            fitted.add(tag)  # its placeholder is already reported, not an orphan as well
+            continue
         header = headers[entry.url]
         if isinstance(header, str):
             unreachable.append(f"  {name} [{tag}]: {header}")
@@ -369,26 +450,7 @@ def main() -> int:
     for tag in sorted(offered - fitted):
         bad.append(f"  [{tag}]: no factory in this run could load this checkpoint")
 
-    print(f"{checked} checkpoints read", end="")
-    print(f", {declined} declined by a sibling factory" if declined else "")
-    if unreachable:
-        print(f"\n{len(unreachable)} could not be reached:", file=sys.stderr)
-        for line in unreachable:
-            print(line, file=sys.stderr)
-    if bad:
-        print(f"\n{len(bad)} problem(s):", file=sys.stderr)
-        for line in bad:
-            print(line, file=sys.stderr)
-        print(
-            "\nA checkpoint that does not fit means pretrained=True raises for "
-            "that factory. Either the factory's config drifted from the "
-            "checkpoint, or the entry needs a key_map.",
-            file=sys.stderr,
-        )
-        return 1
-
-    print("[check_weight_fit] OK — every checkpoint fits its factory.")
-    return 2 if unreachable else 0
+    return _conclude(checked=checked, declined=declined, unreachable=unreachable, bad=bad)
 
 
 if __name__ == "__main__":
