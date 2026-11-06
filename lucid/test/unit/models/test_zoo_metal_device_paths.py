@@ -368,7 +368,8 @@ def test_ddpm_generate_honours_an_explicit_device() -> None:
     from lucid.models.generative import DDPMScheduler
 
     lucid.manual_seed(0)
-    model = M.create_model("ddpm_cifar_gen", **_DDPM_SMALL).eval()
+    # A CPU model asked for CPU samples: under a Metal default the explicit device wins.
+    model = M.create_model("ddpm_cifar_gen", **_DDPM_SMALL).to("cpu").eval()
     out = model.generate(
         DDPMScheduler(num_train_timesteps=20), n_samples=1, num_inference_steps=2, device="cpu"
     )
