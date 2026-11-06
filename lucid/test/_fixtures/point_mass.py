@@ -145,6 +145,34 @@ class PointMass:
         self._t = 0
         return self._render()
 
+    def place(self, target: tuple[float, float], shown: tuple[float, float] | None = None) -> None:
+        """Fix the goal for the episodes that follow, and where it is drawn.
+
+        Parameters
+        ----------
+        target : tuple of float
+            The goal the reward is measured against.
+        shown : tuple of float or None, optional
+            Where channel 1 draws the goal.  ``None`` draws it at
+            ``target``.  Any other point is a decoy: the reward still
+            follows ``target``, so a policy that never reads the goal
+            scores exactly what it scores without the decoy, and only one
+            that reads it can be misled.
+
+        Raises
+        ------
+        ValueError
+            If the environment redraws its goal on every reset, which
+            would discard this one.
+        """
+        if self.random_target:
+            raise ValueError(
+                "this environment draws a new goal on every reset; construct it "
+                "with random_target=False to place one"
+            )
+        self.target = target
+        self._target_blob = self._blob(*(target if shown is None else shown))
+
     def step(self, action: Tensor) -> StepResult:
         """Move the agent and score how close it now is.
 
