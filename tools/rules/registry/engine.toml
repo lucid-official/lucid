@@ -18,6 +18,17 @@ kind = "pytest"
 nodes = ["lucid/test/unit/test_check_cpp_layers.py::test_real_engine_tree_passes"]
 trigger = ["lucid/_C/**", "tools/check_cpp_layers.py"]
 
+# Push only: a worker may not touch version.h, so a commit that moves the interface is
+# right to leave the bump to whoever lands it.  {since} is the remote's tip.
+[check.abi-bump]
+run = ["{py}", "tools/check_abi_bump.py", "--since", "{since}"]
+trigger = ["lucid/_C/**", "tools/check_abi_bump.py"]
+
+# A lookup in the ledger, instant.  The suites run in `attest`, never from a hook.
+[check.cpp-attested]
+run = ["{py}", "-m", "tools.rules", "attest", "--verify"]
+trigger = ["lucid/_C/**"]
+
 # test_numpy_independence is not claimed: it is a behaviour smoke over a fixed list of calls,
 # and no seed can show it would notice an import, so R5 should not bring it back as a level.
 [[rule]]
@@ -99,4 +110,63 @@ check = ["test-cpp-layers"]
 nodes = [
     "lucid/test/unit/test_check_cpp_layers.py::test_injected_violation_is_reported",
     "lucid/test/unit/test_check_cpp_layers.py::test_allowlist_ratchet_detects_stale_and_duplicate_entries",
+]
+
+# 578247379 put five virtuals on Node at ABI 40 and reached main; ABI 41 and 42 came as
+# follow-ups.  The backtest is in tools/README.md, "C++ at push".
+[[rule]]
+id = "E-ABI-BUMP"
+statement = """
+A range that moves the engine's binary interface raises LUCID_ABI_VERSION, or a commit at or
+after each move says why it did not: `ABI: none (<reason>)`."""
+why = "An engine built before the move imports cleanly and fails at its first call."
+scope = ["lucid/_C/**"]
+doc = "engine"
+gap = """
+It reads headers as text, not as a compiler does: members a macro declares are not seen, both \
+sides of an #if count, and a function-pointer member reads as a function.  A new class that is \
+not LUCID_API, an enumerator, a default argument and an inline body are no move.  Bindings and \
+engine.pyi are compared by name, so an argument a binding gains passes, and so does a name a \
+registry binds at run time unless engine.pyi was regenerated.  A reason is taken as written.  \
+Push only: no CI level until LCD-841-B5."""
+enforce = [{ level = "push", check = "abi-bump" }]
+
+[[rule.control]]
+kind = "pytest"
+check = ["abi-bump"]
+nodes = [
+    "tools/test_rules.py::test_abi_bump_sees_each_way_the_interface_moves",
+    "tools/test_rules.py::test_abi_bump_lets_through_what_moves_nothing",
+    "tools/test_rules.py::test_abi_bump_takes_a_bump_anywhere_in_the_range",
+    "tools/test_rules.py::test_abi_bump_takes_a_reason_not_a_habit",
+    "tools/test_rules.py::test_abi_bump_reads_a_range_or_says_it_cannot",
+]
+
+# On 2026-11-04 C++ reached main with unit/compile never run, and CI cancelled the runs
+# that would have.  The suites cannot run at push, so `attest` runs them where the engine
+# is fresh, and the push gate only looks the C++ tree up.
+[[rule]]
+id = "E-VERIFY-CPP"
+statement = """
+C++ leaves for main only with a recorded pass of lucid/test/unit/compile and unit/cost on an
+engine built from that tree: `python -m tools.rules attest` writes it."""
+why = "C++ the suites never saw reached main, and CI cancelled the run that would have seen it."
+scope = ["lucid/_C/**"]
+doc = "engine"
+gap = """
+A record is trusted as written: a hand-made file in the ledger passes.  "Built from that tree" \
+is tools/agent_ws.py's freshness rule (the ABI the engine reports, then a source digest or \
+mtimes), which does not see a CMakeLists or vendored-library change alone.  Python that \
+changes after the record does not void it.  The engine-dependent checks of design section 9 \
+step 5 do not run in it yet.  Push only."""
+enforce = [{ level = "push", check = "cpp-attested" }]
+
+[[rule.control]]
+kind = "pytest"
+check = ["cpp-attested"]
+nodes = [
+    "tools/test_rules.py::test_attest_records_a_pass_that_push_then_finds",
+    "tools/test_rules.py::test_attest_refuses_what_it_cannot_vouch_for",
+    "tools/test_rules.py::test_attest_records_a_failure_and_push_refuses_it",
+    "tools/test_rules.py::test_attest_a_record_that_does_not_read_is_none",
 ]

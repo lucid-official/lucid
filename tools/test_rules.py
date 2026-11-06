@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 
 from tools import check_source_rules
+from tools.rules import attest
 from tools.rules.__main__ import main
 from tools.rules.audit import Audit
 from tools.rules.checks import EMPTY_TREE, CommandCheck, PytestCheck, Workspace, run_nodes
@@ -1608,6 +1609,451 @@ def test_a_real_commit_cannot_carry_a_blob_its_working_copy_hides(
         assert repo.attempt("show", "--name-only", "--format=", "HEAD").stdout.split() == [other]
 
 
+# ── the C++ at push: its ABI bump, and the record that its suites passed ─────
+
+_ABI_TOOL = "tools/check_abi_bump.py"
+_THING_H = "lucid/_C/core/Thing.h"
+_THING = """\
+#pragma once
+#include "../api.h"
+
+namespace lucid {
+
+// A thing { with a brace in the comment.
+class LUCID_API Thing {
+public:
+    explicit Thing(int size) : size_(size), seen_{0} {}
+    virtual ~Thing() = default;
+    virtual int count(int limit = 3, const char* why = "{") const;
+    int size() const { return size_ + 1; }
+
+private:
+    int size_;
+    int seen_ = 0;
+};
+
+struct Hidden {
+    float weight;
+};
+
+LUCID_API int make_thing(const Thing& thing, int n);
+
+}  // namespace lucid
+"""
+_BIND = 'void bind(py::module_& m) {\n    py::class_<Thing>(m, "Thing").def("count", &Thing::count);\n}\n'
+_STUB = "class Thing:\n    def count(self) -> int: ...\n"
+_ABI = "#define LUCID_ABI_VERSION {}\n"
+
+# (id, path, the text there, its replacement, what the check must say about it)
+_ABI_MOVES = [
+    (
+        "member",
+        _THING_H,
+        "    int seen_ = 0;\n",
+        "    int seen_ = 0;\n    bool ready_;\n",
+        "layout + bool ready_",
+    ),
+    (
+        "internal-member",
+        _THING_H,
+        "float weight;\n",
+        "float weight;\n    float bias;\n",
+        "lucid::Hidden (internal) layout + float bias",
+    ),
+    (
+        "member-order",
+        _THING_H,
+        "    int size_;\n    int seen_ = 0;\n",
+        "    int seen_ = 0;\n    int size_;\n",
+        "members reordered",
+    ),
+    (
+        "virtual",
+        _THING_H,
+        "    virtual ~Thing() = default;\n",
+        "    virtual ~Thing() = default;\n    virtual void reset();\n",
+        "layout + virtual void reset",
+    ),
+    (
+        "member-function",
+        _THING_H,
+        "    int size() const",
+        "    int area() const;\n    int size() const",
+        "(exported) + int area ( ) const",
+    ),
+    (
+        "exported-type",
+        _THING_H,
+        "struct Hidden {",
+        "struct LUCID_API Shown {};\nstruct Hidden {",
+        "lucid::Shown (exported) added",
+    ),
+    (
+        "export",
+        _THING_H,
+        "LUCID_API int make_thing",
+        "LUCID_API void drop_thing();\nLUCID_API int make_thing",
+        "LUCID_API + LUCID_API void drop_thing ( )",
+    ),
+    (
+        "signature",
+        _THING_H,
+        "const Thing& thing, int n)",
+        "const Thing& thing, long n)",
+        "LUCID_API + LUCID_API int make_thing ( const Thing &, long )",
+    ),
+    (
+        "binding",
+        "lucid/_C/bindings/bind.cpp",
+        "&Thing::count)",
+        '&Thing::count).def("reset", &Thing::reset)',
+        "binding + def reset",
+    ),
+    (
+        "stub",
+        "lucid/_C/engine.pyi",
+        "-> int: ...\n",
+        "-> int: ...\n    def reset(self) -> None: ...\n",
+        "engine.pyi + Thing.reset",
+    ),
+]
+_ABI_STILL = [
+    (
+        "comment-and-names",
+        _THING_H,
+        "// A thing { with a brace in the comment.\nclass LUCID_API Thing {",
+        "/* Renamed { */ class LUCID_API\nThing\n{",
+    ),
+    (
+        "parameter-names",
+        _THING_H,
+        'int limit = 3, const char* why = "{")',
+        'int most = 4, const char *reason = "}")',
+    ),
+    ("inline-body", _THING_H, "{ return size_ + 1; }", "{\n        return size_ * 2;\n    }"),
+    ("initializers", _THING_H, "seen_{0} {}", "seen_{1} { size_ += 0; }"),
+    ("default-member", _THING_H, "int seen_ = 0;", "int seen_{7};"),
+    (
+        "free-parameter",
+        _THING_H,
+        "const Thing& thing, int n)",
+        "const Thing &other,\n                    int count)",
+    ),
+    ("moved-to-another-header", _THING_H, "struct Hidden {\n    float weight;\n};\n", ""),
+    ("source-body", "lucid/_C/core/Thing.cpp", "return 1;", "return 2;"),
+]
+
+
+def _abi_repo(s: Scratch) -> Callable[..., subprocess.CompletedProcess[str]]:
+    """A repository holding one exported class, its binding and its stub, at ABI 7."""
+    s.write(_ABI_TOOL, (REPO / _ABI_TOOL).read_text())
+    s.write(_THING_H, _THING)
+    s.write("lucid/_C/core/Thing.cpp", "int thing() { return 1; }\n")
+    s.write("lucid/_C/bindings/bind.cpp", _BIND)
+    s.write("lucid/_C/engine.pyi", _STUB)
+    s.write("lucid/_C/version.h", _ABI.format(7))
+    s.commit_all("chore: base")
+
+    def check(*args: str) -> subprocess.CompletedProcess[str]:
+        argv = [sys.executable, "-S", _ABI_TOOL, *args]
+        return subprocess.run(argv, cwd=s.root, env=s.env, capture_output=True, text=True)
+
+    return check
+
+
+def _swap_in(s: Scratch, path: str, old: str, new: str) -> None:
+    text = (s.root / path).read_text()
+    assert old in text, old
+    s.write(path, text.replace(old, new, 1))
+
+
+@pytest.mark.parametrize(
+    ("path", "old", "new", "said"), [m[1:] for m in _ABI_MOVES], ids=[m[0] for m in _ABI_MOVES]
+)
+def test_abi_bump_sees_each_way_the_interface_moves(
+    scratch: Scratch, path: str, old: str, new: str, said: str
+) -> None:
+    check = _abi_repo(scratch)
+    _swap_in(scratch, path, old, new)
+    scratch.commit_all("feat: a move")
+    done = check("--since", "HEAD~1")
+    assert done.returncode == 1 and said in done.stdout, done.stdout + done.stderr
+    assert "LUCID_ABI_VERSION is still 7" in done.stdout and "moved by" in done.stdout
+    assert "ABI: none (<why>)" in done.stdout
+
+
+@pytest.mark.parametrize(
+    ("path", "old", "new"), [m[1:] for m in _ABI_STILL], ids=[m[0] for m in _ABI_STILL]
+)
+def test_abi_bump_lets_through_what_moves_nothing(
+    scratch: Scratch, path: str, old: str, new: str
+) -> None:
+    check = _abi_repo(scratch)
+    _swap_in(scratch, path, old, new)
+    if not new:  # the struct moves to a header of its own
+        scratch.write(
+            "lucid/_C/core/Hidden.h", "namespace lucid {\nstruct Hidden { float weight; };\n}\n"
+        )
+    scratch.commit_all("refactor: nothing moves")
+    done = check("--since", "HEAD~1")
+    assert (done.returncode, done.stdout) == (0, ""), done.stdout + done.stderr
+
+
+def test_abi_bump_takes_a_bump_anywhere_in_the_range(scratch: Scratch) -> None:
+    check = _abi_repo(scratch)
+    base = scratch.sha()
+    _swap_in(scratch, _THING_H, "    int size_;\n", "    int size_;\n    bool ready_;\n")
+    scratch.commit_all("feat: a member")
+    scratch.write("lucid/_C/version.h", _ABI.format(8))
+    scratch.commit_all("chore: bump the ABI to 8")
+    done = check("--range", f"{base}..HEAD")
+    assert done.returncode == 0 and "went 7 -> 8" in done.stdout, done.stdout
+    # Commit by commit, the member came without one: the backtest's view.
+    each = check("--range", f"{base}..HEAD", "--each")
+    assert each.returncode == 1 and "MISSING" in each.stdout and "feat: a member" in each.stdout
+    assert "chore: bump" not in each.stdout  # moves nothing itself
+    # A counter that went down moved nowhere.
+    scratch.write("lucid/_C/version.h", _ABI.format(6))
+    scratch.commit_all("chore: the counter backwards")
+    assert check("--range", f"{base}..HEAD").returncode == 1
+
+
+def test_abi_bump_takes_a_reason_not_a_habit(scratch: Scratch) -> None:
+    check = _abi_repo(scratch)
+    base = scratch.sha()
+    _swap_in(scratch, _THING_H, "    int size_;\n", "    int size_;\n    bool ready_;\n")
+    scratch.commit_all("feat: a member\n\nABI: none")
+    assert check("--since", base).returncode == 1  # what most commits say by habit
+    scratch.write("src/b.txt", "ok\n")
+    scratch.commit_all("chore: say why\n\nABI: none (40)")
+    assert check("--since", base).returncode == 1  # a number is no reason
+    scratch.write("src/c.txt", "ok\n")
+    scratch.commit_all("chore: say why\n\nABI: none (the member is read by no one outside)")
+    done = check("--since", base)
+    assert done.returncode == 0 and "excused by" in done.stdout, done.stdout
+    # A reason covers what came before it, not what comes after.
+    _swap_in(scratch, _THING_H, "    int seen_ = 0;\n", "    int seen_ = 0;\n    int more_;\n")
+    scratch.commit_all("feat: another member")
+    done = check("--since", base)
+    assert done.returncode == 1 and "moved by" in done.stdout and "another member" in done.stdout
+
+
+def test_abi_bump_reads_a_range_or_says_it_cannot(scratch: Scratch) -> None:
+    check = _abi_repo(scratch)
+    assert check("--range", "nowhere..HEAD").returncode == 2
+    assert check("--range", "HEAD").returncode == 2
+    done = check("--since", EMPTY_TREE)  # a remote with nothing on it
+    assert done.returncode == 0 and "holds nothing" in done.stdout, done.stdout + done.stderr
+    scratch.write("lucid/_C/engine.pyi", "def broken(:\n")
+    scratch.commit_all("chore: a stub that does not parse")
+    done = check("--since", "HEAD~1")
+    assert done.returncode == 2 and "does not parse" in done.stderr, done.stderr
+
+
+def test_abi_bump_flags_the_commits_that_shipped_without_one() -> None:
+    """The backtest, pinned: 578247379 moved Node's vtable at ABI 40; LCD-837 bumped in range."""
+    history = ("578247379", "60b4519a0", "d324733a2")
+    known = [_git_ok(REPO, "cat-file", "-e", f"{sha}^{{commit}}") for sha in history]
+    if not all(known):
+        pytest.skip("a shallow clone holds no history to backtest")
+
+    def check(spec: str) -> subprocess.CompletedProcess[str]:
+        argv = [sys.executable, "-S", _ABI_TOOL, "--range", spec]
+        return subprocess.run(argv, cwd=REPO, capture_output=True, text=True)
+
+    done = check("578247379~1..578247379")
+    assert done.returncode == 1, done.stdout + done.stderr
+    assert "lucid::Node (exported) layout + virtual void pack_saved" in done.stdout
+    assert "still 40" in done.stdout
+    assert check("60b4519a0~1..60b4519a0").returncode == 1  # the Tracer's members, alone
+    done = check("60b4519a0~1..d324733a2")  # with the bump that followed them
+    assert done.returncode == 0 and "went 42 -> 43" in done.stdout, done.stdout
+
+
+def _git_ok(root: Path, *args: str) -> bool:
+    return subprocess.run(["git", *args], cwd=root, capture_output=True).returncode == 0
+
+
+_FAKE_ENGINE = """\
+import pathlib, types
+_C_engine = types.SimpleNamespace(
+    ABI_VERSION={abi}, __file__=str(pathlib.Path({where!r}) / "engine.cpython-314-darwin.so")
+)
+"""
+_SO = "lucid/_C/engine.cpython-314-darwin.so"
+
+
+def _attest_repo(s: Scratch, suite: str = "def test_ok():\n    pass\n") -> None:
+    """A checkout whose engine is built from its C++, and whose suites pass."""
+    site = Path(pytest.__file__).resolve().parents[1]
+    # -S: the light venv's finder would hand over this worktree's lucid in place of the scratch's.
+    s.write(
+        ".venv/bin/python3", f'#!/bin/sh\nPYTHONPATH="{site}" exec "{sys.executable}" -S "$@"\n'
+    )
+    (s.root / ".venv/bin/python3").chmod(0o755)
+    s.write(".gitignore", ".venv/\n__pycache__/\n*.so\n")
+    s.write("lucid/__init__.py", _FAKE_ENGINE.format(abi=7, where=str(s.root / "lucid/_C")))
+    s.write("lucid/_C/version.h", _ABI.format(7))
+    s.write("lucid/_C/core/Thing.cpp", "int thing() { return 1; }\n")
+    for path in attest.SUITES:
+        s.write(f"{path}/test_suite.py", suite)
+    s.commit_all("chore: base")
+    s.write(_SO, "")  # newer than every source, as a build leaves it
+
+
+def _rules_in(s: Scratch, *args: str) -> subprocess.CompletedProcess[str]:
+    argv = [sys.executable, "-S", "-m", "tools.rules", "--root", str(s.root), *args]
+    return subprocess.run(argv, cwd=REPO, env=s.env, capture_output=True, text=True)
+
+
+def _record_of(s: Scratch) -> Path:
+    return s.root / ".git/lucid-attest" / f"{s.sha('HEAD:lucid/_C')}.json"
+
+
+def test_attest_records_a_pass_that_push_then_finds(scratch: Scratch) -> None:
+    _attest_repo(scratch)
+    done = _rules_in(scratch, "attest")
+    assert done.returncode == 0, done.stdout + done.stderr
+    record = json.loads(_record_of(scratch).read_text())
+    assert [run["tests"] for run in record["suites"]] == [1, 1] and record["abi"] == 7
+    assert record["commit"] == scratch.sha() and "passed on" in done.stdout
+    assert _rules_in(scratch, "attest", "--verify").returncode == 0
+    # Python moves on, the C++ tree does not: the record still holds, in any worktree.
+    scratch.write("lucid/extra.py", "x = 1\n")
+    scratch.commit_all("feat: python only")
+    assert _rules_in(scratch, "attest", "--verify").returncode == 0
+    linked = scratch.root.parent / "linked"
+    scratch.git("worktree", "add", "-q", str(linked))
+    assert _rules_in(Scratch(linked, scratch.env), "attest", "--verify").returncode == 0
+    # The C++ moves: no record names its tree, and the refusal says what to run.
+    scratch.write("lucid/_C/core/Thing.cpp", "int thing() { return 2; }\n")
+    scratch.commit_all("fix: the C++")
+    done = _rules_in(scratch, "attest", "--verify")
+    assert done.returncode == 1 and "has no record" in done.stdout, done.stdout
+    assert ".venv/bin/python3 -m tools.rules attest" in done.stdout
+
+
+def _dirty_cpp(s: Scratch) -> None:
+    s.write("lucid/_C/core/Thing.cpp", "int thing() { return 3; }\n")
+
+
+def _untracked(s: Scratch) -> None:
+    s.write("lucid/_C/core/New.cpp", "int added() { return 0; }\n")
+
+
+def _stale(s: Scratch) -> None:
+    s.write("lucid/_C/core/Thing.cpp", "int thing() { return 3; }\n")
+    s.commit_all("fix: C++ the engine was not built from")
+    later = (s.root / _SO).stat().st_mtime + 5
+    os.utime(s.root / "lucid/_C/core/Thing.cpp", (later, later))
+
+
+def _no_engine(s: Scratch) -> None:
+    (s.root / _SO).unlink()
+
+
+def _engine_elsewhere(s: Scratch) -> None:
+    s.write("lucid/__init__.py", _FAKE_ENGINE.format(abi=7, where="/elsewhere/lucid/_C"))
+    s.commit_all("chore: an engine from another checkout")
+    s.write(_SO, "")
+
+
+def _no_tests(s: Scratch) -> None:
+    for path in attest.SUITES:
+        s.write(f"{path}/test_suite.py", "import pytest\n")
+    s.commit_all("test: nothing to select")
+    s.write(_SO, "")
+
+
+@pytest.mark.parametrize(
+    ("spoil", "said"),
+    [
+        (_dirty_cpp, "not committed"),
+        (_untracked, "not committed"),
+        (_stale, "missing or older than lucid/_C"),
+        (_no_engine, "missing or older than lucid/_C"),
+        (_engine_elsewhere, "and its engine from /elsewhere/lucid/_C"),
+        (_no_tests, "selected no test"),
+    ],
+    ids=["dirty", "untracked", "stale-engine", "no-engine", "engine-elsewhere", "no-tests"],
+)
+def test_attest_refuses_what_it_cannot_vouch_for(
+    scratch: Scratch, spoil: Callable[[Scratch], None], said: str
+) -> None:
+    _attest_repo(scratch)
+    spoil(scratch)
+    done = _rules_in(scratch, "attest")
+    assert done.returncode == 2 and said in done.stderr, done.stdout + done.stderr
+    assert not (scratch.root / ".git/lucid-attest").exists()
+
+
+def test_attest_records_a_failure_and_push_refuses_it(scratch: Scratch) -> None:
+    _attest_repo(scratch, suite="def test_ok():\n    pass\ndef test_bad():\n    assert False\n")
+    done = _rules_in(scratch, "attest")
+    assert done.returncode == 1 and "FAILED on" in done.stdout, done.stdout + done.stderr
+    assert json.loads(_record_of(scratch).read_text())["suites"][0]["failures"] == 1
+    done = _rules_in(scratch, "attest", "--verify")
+    assert done.returncode == 1 and "has a record that FAILED" in done.stdout, done.stdout
+
+
+def test_attest_a_record_that_does_not_read_is_none(scratch: Scratch) -> None:
+    _attest_repo(scratch)
+    assert _rules_in(scratch, "attest").returncode == 0
+    record = _record_of(scratch)
+    table = json.loads(record.read_text())
+    for spoiled in (
+        "{",
+        json.dumps({**table, "suites": table["suites"][:1]}),
+        json.dumps({**table, "abi": "7"}),
+    ):
+        record.write_text(spoiled)
+        done = _rules_in(scratch, "attest", "--verify")
+        assert done.returncode == 1, (spoiled, done.stdout)
+
+
+@_needs_the_gate
+def test_push_refuses_cpp_without_its_bump_and_record_through_real_git(
+    real_copy: Path, tmp_path: Path
+) -> None:
+    header = "lucid/_C/api.h"
+    with _real_repository(real_copy, tmp_path / "remote.git") as repo:
+
+        def on_the_remote() -> str:
+            return repo.attempt("ls-remote", "origin", "refs/heads/main").stdout.split()[0]
+
+        out_there = repo.sha()
+        seeded = "namespace lucid {\nstruct LUCID_API SeededForPush {\n    int seeded_;\n};\n}\n"
+        repo.write(header, (repo.root / header).read_text() + seeded)
+        repo.git("add", header)
+        assert (
+            repo.attempt("commit", "-qm", "feat: an exported type", "--no-verify").returncode == 0
+        )
+        push = repo.attempt("push", "origin", "main")
+        said = push.stdout + push.stderr
+        assert push.returncode != 0 and on_the_remote() == out_there, said
+        assert re.search(r"VIOLATION\s+abi-bump", said), said
+        assert "lucid::SeededForPush (exported) added" in said
+        assert re.search(r"VIOLATION\s+cpp-attested", said), said
+        assert ".venv/bin/python3 -m tools.rules attest" in said
+
+        # The bump in the same range, and the record an attest run would have left.
+        version = repo.root / "lucid/_C/version.h"
+        found = re.search(r"LUCID_ABI_VERSION (\d+)\n", version.read_text())
+        assert found is not None
+        abi = int(found[1]) + 1
+        version.write_text(version.read_text().replace(found[0], f"LUCID_ABI_VERSION {abi}\n"))
+        repo.git("add", "lucid/_C/version.h")
+        assert repo.attempt("commit", "-qm", "chore: bump the ABI", "--no-verify").returncode == 0
+        ws = Workspace(repo.root, sys.executable, isolated=True)
+        runs = tuple(attest.SuiteRun(path, 0, 1, 0, 0) for path in attest.SUITES)
+        made = attest.Attestation(attest.engine_tree(ws), repo.sha(), "t", "now", 1.0, abi, runs)
+        attest.Ledger.of(ws).record(made)
+        push = repo.attempt("push", "origin", "main")
+        said = push.stdout + push.stderr
+        assert push.returncode == 0 and on_the_remote() == repo.sha(), said
+        assert re.search(r"PASS\s+abi-bump", said) and re.search(r"PASS\s+cpp-attested", said)
+
+
 # ── the real registry ────────────────────────────────────────────────────────
 
 
@@ -1784,6 +2230,22 @@ _REAL_MUTANTS = [
         "numpy-h4",
         "fell to 0",
     ),
+    (
+        "A1-abi-counter-unmoved-reads-as-a-bump",
+        _ABI_TOOL,
+        "(before is None or after > before)",
+        "(before is None or after >= before)",
+        "abi-bump",
+        "abi-bump control: tools/test_rules.py::test_abi_bump_sees_each_way_the_interface_moves",
+    ),
+    (
+        "A2-a-failed-attestation-passes",
+        "tools/rules/attest.py",
+        "if found is not None and found.passed:",
+        "if found is not None:",
+        "cpp-attested",
+        "cpp-attested control: tools/test_rules.py::test_attest_records_a_failure_and_push",
+    ),
 ]
 
 
@@ -1851,9 +2313,13 @@ def test_each_real_seed_goes_red_and_a_tool_gone_green_would_show(tmp_path: Path
 
 def test_the_real_records_say_what_the_inventory_says() -> None:
     rules = _real().rules
-    verdicts = {name: rules[name].verdict for name in ("H1", "H4", "H5", "H7", "H13", "S22")}
+    verdicts = {name: rule.verdict for name, rule in rules.items()}
     enforced = dict.fromkeys(("H1", "H5", "H7", "H13", "S22"), Verdict.ENFORCED)
-    assert verdicts == {**enforced, "H4": Verdict.PARTLY}
+    partly = dict.fromkeys(("H4", "E-ABI-BUMP", "E-VERIFY-CPP"), Verdict.PARTLY)
+    assert verdicts == {**enforced, **partly}
+    # The C++ at push: judged where it leaves, and nowhere a worker could not satisfy it.
+    for name in ("E-ABI-BUMP", "E-VERIFY-CPP"):
+        assert [e.level for e in rules[name].enforce] == [Level.PUSH], name
     sanctioned, goto = rules["H4"].allowlist, rules["H13"].allowlist
     assert sanctioned is not None and sanctioned.ceiling == 8
     assert goto is not None and (goto.match, goto.ceiling) == ("goto", 0)

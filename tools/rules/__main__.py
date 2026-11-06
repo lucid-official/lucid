@@ -1,4 +1,5 @@
-"""python -m tools.rules: list the rules, show one, run a level, judge a push, audit the claims."""
+"""python -m tools.rules: list the rules, show one, run a level, judge a push, audit the claims,
+attest the C++."""
 
 import argparse
 import sys
@@ -7,6 +8,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Final
 
+from tools.rules import attest
 from tools.rules.audit import Audit
 from tools.rules.checks import CannotMeasure, Changes, staged_changes
 from tools.rules.model import Exit, Level, Rule, RuleError, Verdict
@@ -71,6 +73,11 @@ def _audit(registry: Registry, args: argparse.Namespace) -> Exit:
     return report.outcome
 
 
+def _attest(registry: Registry, args: argparse.Namespace) -> Exit:
+    check = attest.verify if args.verify else attest.attest
+    return check(registry.workspace)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m tools.rules", description=__doc__)
     parser.add_argument("--root", type=Path, default=_ROOT, help="repository root")
@@ -96,6 +103,9 @@ def main(argv: list[str] | None = None) -> int:
     audit.add_argument("--rule", action="append", default=[], help="only these rules' controls")
     audit.add_argument("--check", action="append", default=[], help="only these checks' controls")
     audit.set_defaults(handler=_audit)
+    attesting = commands.add_parser("attest", help="run the C++ suites here and record them")
+    attesting.add_argument("--verify", action="store_true", help="only look HEAD's record up")
+    attesting.set_defaults(handler=_attest)
     args = parser.parse_args(argv)
     try:
         return int(args.handler(Registry.load(args.root.resolve()), args))

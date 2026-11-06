@@ -5,10 +5,11 @@ unit = "bytes"
 ceiling = 61440
 paths = ["tools/rules/registry/*.toml"]
 
-# Non-blank, non-comment lines.
+# Non-blank, non-comment lines.  R3 raised it by 173, measured: attest.py's ledger, record,
+# refusals and suite runner (165) and the `attest` subcommand (8).
 [budget.code-lines]
 unit = "lines"
-ceiling = 1048
+ceiling = 1221
 paths = ["tools/rules/**/*.py"]
 
 # Rules and levels recorded as owed.  It equals the count, so it can only fall with it;
