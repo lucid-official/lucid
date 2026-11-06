@@ -15,6 +15,7 @@
 
 #include "../../autograd/TensorHooks.h"
 #include "../../backend/Dispatcher.h"
+#include "../../compile/Tracer.h"
 #include "../../core/AmpPolicy.h"
 #include "../../core/ErrorBuilder.h"
 #include "../../core/GradMode.h"
@@ -100,6 +101,8 @@ inline TensorImplPtr snapshot(const TensorImplPtr& a, const TensorImplPtr& other
         source->set_grad_fn(a->grad_fn());
         source->set_grad_output_nr(a->grad_output_nr());
     }
+    if (auto* tracer = compile::current_tracer())
+        tracer->on_stand_in(source, a);
     return source;
 }
 

@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <set>
 
+#include "../autograd/Node.h"
 #include "../backend/Dispatcher.h"
 #include "../core/StridedCopy.h"
 #include "../core/TensorImpl.h"
@@ -69,6 +70,8 @@ Tracer* current_tracer() {
 void set_current_tracer(Tracer* t) {
     g_current = t;
 }
+
+Tracer::Tracer() : first_node_(next_sequence_nr()) {}
 
 void Tracer::on_op_enter(std::string_view name, Device device, Dtype dtype, Shape shape) {
     // The op before this one is over; if it was held out, it stays out, and
@@ -163,15 +166,7 @@ void Tracer::record_io(const std::vector<TensorImplPtr>& inputs, const TensorImp
                 node.inputs.push_back(-1);
                 continue;
             }
-            const auto it = impl_to_id_.find(raw);
-            if (it != impl_to_id_.end()) {
-                node.inputs.push_back(it->second);
-            } else {
-                const TensorId fresh = graph_.next_id++;
-                impl_to_id_[raw] = fresh;
-                external_feeds_[fresh] = inp;  // owning ref
-                node.inputs.push_back(fresh);
-            }
+            node.inputs.push_back(feed_id(inp));
         }
     }
 
@@ -563,11 +558,28 @@ TensorId Tracer::feed_id(const TensorImplPtr& impl) {
     const auto it = impl_to_id_.find(impl.get());
     if (it != impl_to_id_.end())
         return it->second;
+    refuse_computed_feed(*impl);
     const TensorId fresh = graph_.next_id++;
     impl_to_id_[impl.get()] = fresh;
     external_feeds_[fresh] = impl;
     live_refs_.push_back(impl);
     return fresh;
+}
+
+void Tracer::refuse_computed_feed(const TensorImpl& feed) {
+    // A leaf's node (``AccumulateGrad``) is made when something first asks for it.
+    if (feed.is_leaf() || !feed.grad_fn() || feed.grad_fn()->sequence_nr() < first_node_)
+        return;
+    mark_unsupported("a value computed during the trace reached an op under a tensor the trace "
+                     "was never told of, so each call would reuse the first call's value");
+}
+
+void Tracer::on_stand_in(const TensorImplPtr& stand_in, const TensorImplPtr& of) {
+    if (!stand_in || !of)
+        return;
+    refuse_stale(of.get());
+    live_refs_.push_back(stand_in);
+    impl_to_id_[stand_in.get()] = feed_id(of);
 }
 
 void Tracer::write_made(const TensorImplPtr& target, const TensorImplPtr& value) {

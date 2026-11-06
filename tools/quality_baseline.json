@@ -1938,7 +1938,7 @@
     "lucid/_C/compile/OpEmitters/nn/Norm.mm": 48,
     "lucid/_C/compile/OpEmitters/nn/Rnn.mm": 61,
     "lucid/_C/compile/OpEmitters/nn/Spatial.mm": 37,
-    "lucid/_C/compile/Tracer.cpp": 34,
+    "lucid/_C/compile/Tracer.cpp": 26,
     "lucid/_C/compile/VjpEmitters/nn/Attention.mm": 21,
     "lucid/_C/compile/VjpEmitters/nn/Conv.mm": 78,
     "lucid/_C/compile/VjpEmitters/nn/Norm.mm": 124,

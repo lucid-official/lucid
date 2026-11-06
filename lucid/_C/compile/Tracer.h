@@ -41,6 +41,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <string_view>
@@ -92,10 +93,9 @@ public:
     // Construct an empty ``Tracer`` ready to be installed via
     // :func:`set_current_tracer`.
     //
-    // Defaulted; ``graph_`` starts empty and ``impl_to_id_`` starts with
-    // no entries.  No op hooks fire until the tracer is installed as the
-    // active TLS sink — construction itself has zero side effects.
-    Tracer() = default;
+    // ``graph_`` starts empty and ``impl_to_id_`` starts with no entries.  No
+    // op hooks fire until the tracer is installed as the active TLS sink.
+    Tracer();
 
     Tracer(const Tracer&) = delete;
     Tracer& operator=(const Tracer&) = delete;
@@ -326,6 +326,16 @@ public:
     // ``lookup_id``.
     TensorId read_id(const TensorImpl* impl);
 
+    // ``stand_in`` holds what ``of`` holds now, under a tensor of its own: an
+    // in-place op recording a graph runs its forward against one
+    // (``inplace::snapshot``), so that its node keeps the values ``of`` is
+    // about to lose.  It goes by ``of``'s current id, for good: what the op
+    // reads is the value ``of`` holds now, computed by whatever computed it.
+    // Unnamed, it was a tensor the trace had never seen, so the op read a feed
+    // pinned at the trace-time value, and a feed that requires grad besides:
+    // the step backpropagated through the trace-time call's graph.
+    void on_stand_in(const TensorImplPtr& stand_in, const TensorImplPtr& of);
+
     // Puts every tensor from outside the trace that the trace wrote in place
     // back to its value from before the trace, from the copy
     // :meth:`on_inplace_write` kept at the first write.  The trace-time call
@@ -498,6 +508,11 @@ private:
     // Notes that the call made ``out`` from nothing, and whether folding may
     // absorb what reads it.
     void note_made(const TensorImplPtr& out);
+    // Marks the trace unsupported when ``feed``, about to be read from outside
+    // the trace, was computed during it: its node is younger than the trace.
+    // Whatever made it told the tracer nothing, and a compiled call would answer
+    // with this call's value.
+    void refuse_computed_feed(const TensorImpl& feed);
     // ``on_inplace_write`` for a target the trace made itself.
     void write_made(const TensorImplPtr& target, const TensorImplPtr& value);
     // Whether ``impl`` reached the trace from outside it: neither made by the
@@ -636,6 +651,8 @@ private:
     // from before the write (see ``on_stale_view``).  Owning so a freed view's
     // address cannot be taken for a stale one.
     std::unordered_map<TensorImpl*, TensorImplPtr> stale_;
+    // The lowest number an autograd node made during this trace can have.
+    std::uint64_t first_node_;
     // Whether the in-place write being followed puts a constant of the trace
     // into its target: a view of a constant that no op has read yet then holds
     // that constant, and is not stale.  Only a value the trace folded counts;
