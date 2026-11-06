@@ -549,7 +549,9 @@ class _TracksItsStatistics(nn.Module):
         if self.cache is None:
             self.cache = lucid.zeros(SHAPE[-1], device=COMPILE_DEVICE)
             self.cache.copy_(self.scale * 3.0)
-        return self.lin(self.norm(x * self.cache))
+        # Rows that differ, or the norm answers zeros from any scale of them.
+        rows = lucid.arange(float(SHAPE[0]), device=COMPILE_DEVICE).reshape(SHAPE[0], 1)
+        return self.lin(self.norm((x + rows) * self.cache))
 
 
 @pytest.mark.xfail(
