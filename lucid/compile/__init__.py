@@ -603,8 +603,8 @@ def compile[**P, R](
         Compatibility flag with the reference signature.  Default ``False``.
     dynamic : bool or None, optional
         Treat the leading (batch) axis as symbolic so calls differing only
-        in batch size share **one** compiled executable (no recompile per
-        batch).  Default ``None`` (treated as ``False``).
+        in batch size, other than a batch of one, share **one** executable
+        (no recompile per batch).  Default ``None`` (treated as ``False``).
     backend : str or callable or None, optional
         Compatibility flag with the reference signature.  Default ``None``.
     mode : str or None, optional
