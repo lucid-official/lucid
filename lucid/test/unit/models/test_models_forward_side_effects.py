@@ -31,6 +31,8 @@ answered it — silently, with an output of the built size rather than the
 input's.
 """
 
+import inspect
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -60,6 +62,7 @@ def _image_cases() -> list[Any]:
                     factory,
                     overrides,
                     tuple(first.shape),
+                    make_inputs,
                     id=family,
                     marks=getattr(case, "marks", ()),
                 )
@@ -67,15 +70,28 @@ def _image_cases() -> list[Any]:
     return picked
 
 
-def _call(model: lucid.nn.Module, x: lucid.Tensor) -> list[tuple[str, lucid.Tensor]]:
+def _required_inputs(model: lucid.nn.Module, make_inputs: Callable[[], Any]) -> dict[str, Any]:
+    """The case's keyword inputs ``model`` cannot be called without.
+
+    Most targets are optional and asking for a loss is not what this file
+    tests, but Drifting has no null class, so its labels are not optional.
+    """
+    parameters = inspect.signature(model.forward).parameters
+    _, kwargs = make_inputs()
+    return {k: v for k, v in kwargs.items() if parameters[k].default is inspect.Parameter.empty}
+
+
+def _call(
+    model: lucid.nn.Module, x: lucid.Tensor, required: dict[str, Any]
+) -> list[tuple[str, lucid.Tensor]]:
     lucid.manual_seed(1)
     with lucid.no_grad():
-        return [(n, t.detach().clone()) for n, t in _tensors_of(model(x))]
+        return [(n, t.detach().clone()) for n, t in _tensors_of(model(x, **required))]
 
 
-@pytest.mark.parametrize(("factory", "overrides", "shape"), _image_cases())
+@pytest.mark.parametrize(("factory", "overrides", "shape", "make_inputs"), _image_cases())
 def test_another_resolution_leaves_the_model_unchanged(
-    factory: str, overrides: dict[str, Any], shape: tuple[int, ...]
+    factory: str, overrides: dict[str, Any], shape: tuple[int, ...], make_inputs: Callable[[], Any]
 ) -> None:
     lucid.manual_seed(0)
     model = models.create_model(factory, **overrides).eval()
@@ -86,15 +102,16 @@ def test_another_resolution_leaves_the_model_unchanged(
     native = lucid.randn(batch, channels, height, width)
     larger = lucid.randn(batch, channels, height + _GROWTH, width + _GROWTH)
 
-    first = _call(model, native)
+    required = _required_inputs(model, make_inputs)
+    first = _call(model, native, required)
     # Refusing an unsupported size is allowed; the checks below still hold —
     # a refusal must not leave the model half-changed either.
     refusal: ValueError | None = None
     try:
-        _call(model, larger)
+        _call(model, larger, required)
     except ValueError as raised:
         refusal = raised
-    again = _call(model, native)
+    again = _call(model, native, required)
 
     after = dict(model.named_parameters())
     assert after.keys() == owned.keys(), f"{factory}: parameter names changed"

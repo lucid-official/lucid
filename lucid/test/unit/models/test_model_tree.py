@@ -72,7 +72,6 @@ def test_factories_sort_numerically() -> None:
         ("── lenet/", "── not_a_family/", "family 'not_a_family'"),
         ("── image-classification/", "── image-generation/", "is registered as multimodal/image-c"),
         ("── vision/", "── visual/", "is registered as vision/"),
-        ("494 models", "495 models", "out of order"),
     ],
 )
 def test_each_way_the_tree_can_drift_is_caught(old: str, new: str, complaint: str) -> None:
@@ -80,6 +79,15 @@ def test_each_way_the_tree_can_drift_is_caught(old: str, new: str, complaint: st
     assert old in text
     problems = check(text.replace(old, new, 1), registered())
     assert any(complaint in problem for problem in problems), problems
+
+
+def test_a_wrong_model_count_is_caught() -> None:
+    # Derived, so a new factory has only MODELS.tree to change.
+    count = len(registered())
+    text = _text()
+    assert f"{count} models" in text
+    problems = check(text.replace(f"{count} models", f"{count + 1} models", 1), registered())
+    assert any("out of order" in problem for problem in problems), problems
 
 
 def test_a_factory_missing_from_the_tree_is_caught() -> None:
