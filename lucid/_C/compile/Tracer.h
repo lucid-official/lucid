@@ -350,12 +350,14 @@ public:
     //
     // ``stands``: whether the caller can let the trace-time call stand as the
     // call, its result and writes the call's.  Then every other write counts.
-    // A caller that cannot (``compiled_step``, a segmented step, a cumulative
-    // batch norm) has only an eager rerun from the tensor put back, or a
-    // refusal, and counts only a write that reads the tensor's own earlier
-    // value (:meth:`reads_its_own_value`): an overwrite lands the same values
+    // A caller that cannot (a segmented step, a step with a cumulative batch
+    // norm) has only an eager rerun from the tensor put back, and counts only
+    // a write that reads the tensor's own earlier value
+    // (:meth:`reads_its_own_value`): an overwrite lands the same values
     // however often it runs.  One that runs only on the first call (a buffer
-    // filled from the first batch) stays as wrong there as before (LCD-876).
+    // filled from the first batch) is compiled into every call there, as
+    // before (LCD-876).  ``compiled_step`` does not ask: it traces every call,
+    // and the trace's writes are that call's.
     //
     // Answers ``(tensor, value before the trace's write, value after it)`` for
     // each such tensor and changes none of them: the caller either lets the

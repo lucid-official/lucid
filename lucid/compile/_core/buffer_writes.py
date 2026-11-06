@@ -190,7 +190,7 @@ def held_writes(tracer: Tracer, *, stands: bool) -> HeldWrites:
         Whether the caller lets the trace-time call stand as the call when there
         are any (:func:`stood_as_the_call`): then every such write counts.
         Without that only one that reads the tensor's own earlier value does,
-        to be put back for an eager call or refused.  An overwrite stays
+        to be put back for an eager call.  An overwrite stays
         compiled, which is wrong for one that runs only on the first call, a
         buffer filled from the first batch (LCD-876).
 
@@ -319,13 +319,13 @@ def refuse(tracer: Tracer, *, rerun: bool = True) -> None:
     tracer : Tracer
         The finished trace.
     rerun : bool, optional, keyword-only, default=True
-        Whether an eager call follows.  Without one, a tensor the call made and
-        Python holds keeps the trace's write: put back, it would stay empty
-        with nothing to write it again.
+        Whether an eager call follows.  Without one (``compiled_step``, which
+        traces every call afresh) the trace's writes are the call's: a tensor
+        the call made and Python holds keeps them, whatever they read, and the
+        next call's trace finds it from outside.
     """
-    # Neither caller can let the trace stand as the call: only a held tensor's
-    # read-modify-write refuses it (:func:`held_writes`).
-    held = held_writes(tracer, stands=False)
-    _put_back(tracer, held if rerun else [])
+    # A segmented step cannot let the trace stand as the call: only a held
+    # tensor's read-modify-write refuses it (:func:`held_writes`).
+    _put_back(tracer, held_writes(tracer, stands=False) if rerun else [])
     if _written(tracer):
         tracer.mark_unsupported(_OUTSIDE)

@@ -747,14 +747,19 @@ def test_what_an_attempt_put_back_goes_to_the_call_after_it_and_nowhere_if_it_ra
     assert kept.tolist() == [1.0] * 4
 
 
-def test_a_compiled_step_refuses_a_kept_tensor_it_adds_to_and_leaves_the_write() -> None:
-    """``compiled_step`` has no eager call to rerun: it refuses, loudly, and the
-    tensor keeps the write the call made, as the call's other effects do."""
-    model = _two_parts("read-modify-write", "none")
-    x = _inputs()[0]
-    with pytest.raises(RuntimeError, match="still held after the call"):
-        lucid.compile.compiled_step(model, x, _loss)
-    assert cast(_Part, model[0]).box["h"].tolist() == [2.0] * SHAPE[-1]
+def test_a_compiled_step_keeps_the_write_to_a_kept_tensor_and_refuses_the_next() -> None:
+    """``compiled_step`` traces every call, and the trace's writes are the call's:
+    the first call is eager's, the kept tensor included.  The next call's trace
+    finds that tensor from outside and refuses the write, loudly, as on main."""
+    model, twin = _two_parts("read-modify-write", "none"), _two_parts("read-modify-write", "none")
+    first, second = _inputs()[:2]
+    got = lucid.compile.compiled_step(model, first, _loss)
+    want = _loss(twin(first))
+    want.backward()
+    assert _close([float(got.item()), *_grads(model)], [float(want.item()), *_grads(twin)])
+    assert cast(_Part, model[0]).box["h"].tolist() == cast(_Part, twin[0]).box["h"].tolist()
+    with pytest.raises(RuntimeError, match="did not create"):
+        lucid.compile.compiled_step(model, second, _loss)
 
 
 def _rebuilds_its_total_every_call(model: nn.Module, x: Tensor) -> Tensor:
