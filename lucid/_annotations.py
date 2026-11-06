@@ -257,6 +257,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid._tensor._pickle": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid._tensor._repr": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid._tensor._to": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
+    "lucid._tensor._unary_plus": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid._tensor.tensor": (
         ("NpDTypeLike", "numpy.typing", "DTypeLike"),
         ("_RemovableHandle", "lucid.autograd._hooks", "RemovableHandle"),

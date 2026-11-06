@@ -127,16 +127,10 @@ def positive(input: Tensor) -> Tensor:
         ``input`` itself, returned without modification (no copy, no
         autograd op inserted).
 
-    Notes
-    -----
-    Mathematical definition:
-
-    .. math::
-
-        \text{out}_i = +x_i = x_i
-
-    Useful only for symmetry with frameworks that treat ``+x`` as a unary
-    operator.
+    Raises
+    ------
+    RuntimeError
+        If ``input`` is a boolean tensor: ``+`` is not defined on booleans.
 
     Examples
     --------
@@ -145,6 +139,8 @@ def positive(input: Tensor) -> Tensor:
     >>> lucid.positive(x) is x
     True
     """
+    if input.dtype == lucid.bool_:
+        raise RuntimeError("the + operator is not supported on a boolean tensor")
     return input
 
 

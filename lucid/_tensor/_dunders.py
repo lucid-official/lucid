@@ -17,6 +17,7 @@ from lucid._dispatch import (
     _wrap,
 )
 from lucid._tensor._indexing import _adopt_inplace, _getitem, _setitem
+from lucid._tensor._unary_plus import __pos__
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -784,13 +785,11 @@ def __neg__(self: Tensor) -> Tensor:
 
     Notes
     -----
-    Math:
     .. math::
         \text{out}_i = -\text{self}_i
 
-    Defined for all signed numeric dtypes.  Applied to an unsigned
-    integer dtype the engine raises ``TypeError`` because the result
-    would not be representable.  Jacobian is ``-1``.
+    Defined for all signed numeric dtypes; an unsigned integer dtype raises
+    ``TypeError`` because the result would not be representable.  Jacobian is ``-1``.
 
     Examples
     --------
@@ -1686,6 +1685,7 @@ _DUNDER_METHODS = (
     __ipow__,
     __matmul__,
     __rmatmul__,
+    __pos__,
     __neg__,
     __abs__,
     __invert__,
