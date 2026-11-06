@@ -133,14 +133,16 @@ def _tag_config(entry: WeightsEnum | None, overrides: dict[str, object]) -> dict
     Parameters
     ----------
     entry : WeightsEnum or None
-        The resolved weight tag, or ``None`` when building untrained.
+        The tag :func:`~lucid.weights.resolve_weights` picked; ``None`` for
+        an untrained build, which adds nothing.
     overrides : dict
-        Config overrides the caller passed.
+        The factory's ``**overrides``.
 
     Returns
     -------
     dict
-        ``overrides`` on top of the tag's ``config``, if it has one.
+        The tag's ``config`` with ``overrides`` on top, or ``overrides``
+        alone when the tag records none.
     """
     if entry is None:
         return overrides
@@ -204,14 +206,15 @@ def drifting_base_2(
         Table 5 model); ``"IMAGENET1K_256_ABLATION"`` takes the Table 8
         ablation default and applies the config it was trained with.
     weights : DriftingBase2Weights or None, optional, keyword-only
-        An explicit tag, taking precedence over ``pretrained``.
+        An explicit ``B/2`` tag, taking precedence over ``pretrained``.
     **overrides : object
-        Optional :class:`DriftingConfig` field overrides.
+        :class:`DriftingConfig` fields to change on the ``latent_sota_B``
+        release config.
 
     Returns
     -------
     DriftingModel
-        The one-step generator.
+        The ``B/2`` one-step generator; it emits an SD-VAE latent.
 
     Notes
     -----
@@ -252,16 +255,18 @@ def drifting_large_2(
     Parameters
     ----------
     pretrained : bool or str, default=False
-        Load the released checkpoint.  ``True`` takes ``IMAGENET1K_256``.
+        Load the released ``L/2`` checkpoint.  ``True`` takes
+        ``IMAGENET1K_256``.
     weights : DriftingLarge2Weights or None, optional, keyword-only
-        An explicit tag, taking precedence over ``pretrained``.
+        An explicit ``L/2`` tag, taking precedence over ``pretrained``.
     **overrides : object
-        Optional :class:`DriftingConfig` field overrides.
+        :class:`DriftingConfig` fields to change on the ``latent_sota_L``
+        release config.
 
     Returns
     -------
     DriftingModel
-        The one-step generator.
+        The ``L/2`` one-step generator; it emits an SD-VAE latent.
 
     Notes
     -----
@@ -301,16 +306,18 @@ def drifting_base_16(
     Parameters
     ----------
     pretrained : bool or str, default=False
-        Load the released checkpoint.  ``True`` takes ``IMAGENET1K_256``.
+        Load the released ``B/16`` checkpoint.  ``True`` takes
+        ``IMAGENET1K_256``.
     weights : DriftingBase16Weights or None, optional, keyword-only
-        An explicit tag, taking precedence over ``pretrained``.
+        An explicit ``B/16`` tag, taking precedence over ``pretrained``.
     **overrides : object
-        Optional :class:`DriftingConfig` field overrides.
+        :class:`DriftingConfig` fields to change on the ``pixel_sota_B``
+        release config.
 
     Returns
     -------
     DriftingModel
-        The one-step generator; it emits ``[-1, 1]`` RGB.
+        The ``B/16`` one-step generator; it emits ``[-1, 1]`` RGB.
 
     Notes
     -----
@@ -350,16 +357,18 @@ def drifting_large_16(
     Parameters
     ----------
     pretrained : bool or str, default=False
-        Load the released checkpoint.  ``True`` takes ``IMAGENET1K_256``.
+        Load the released ``L/16`` checkpoint.  ``True`` takes
+        ``IMAGENET1K_256``.
     weights : DriftingLarge16Weights or None, optional, keyword-only
-        An explicit tag, taking precedence over ``pretrained``.
+        An explicit ``L/16`` tag, taking precedence over ``pretrained``.
     **overrides : object
-        Optional :class:`DriftingConfig` field overrides.
+        :class:`DriftingConfig` fields to change on the ``pixel_sota_L``
+        release config.
 
     Returns
     -------
     DriftingModel
-        The one-step generator; it emits ``[-1, 1]`` RGB.
+        The ``L/16`` one-step generator; it emits ``[-1, 1]`` RGB.
 
     Notes
     -----
@@ -403,14 +412,16 @@ def drifting_base_2_gen(
         takes the ablation default.  The feature encoder is loaded
         separately by :meth:`DriftingForImageGeneration.load_feature_encoder`.
     weights : DriftingBase2Weights or None, optional, keyword-only
-        An explicit tag, taking precedence over ``pretrained``.
+        An explicit ``B/2`` tag; wins over ``pretrained``.
     **overrides : object
-        Optional :class:`DriftingConfig` field overrides.
+        :class:`DriftingConfig` fields to change, the loss's and the
+        sample queue's included.
 
     Returns
     -------
     DriftingForImageGeneration
-        Exposes the training objective and :meth:`generate`.
+        The ``B/2`` training objective over latent-MAE features, and
+        :meth:`~DriftingForImageGeneration.generate`.
 
     Notes
     -----
@@ -446,17 +457,18 @@ def drifting_large_2_gen(
     Parameters
     ----------
     pretrained : bool or str, default=False
-        Load the released generator checkpoint into ``model.drifting``.
+        Load the released ``L/2`` generator into ``model.drifting``.
         ``True`` takes ``IMAGENET1K_256``.
     weights : DriftingLarge2Weights or None, optional, keyword-only
-        An explicit tag, taking precedence over ``pretrained``.
+        An explicit ``L/2`` tag; wins over ``pretrained``.
     **overrides : object
-        Optional :class:`DriftingConfig` field overrides.
+        :class:`DriftingConfig` fields to change on ``latent_sota_L``; its
+        ``no_cfg_frac=0.5`` is the half of the batch trained unguided.
 
     Returns
     -------
     DriftingForImageGeneration
-        Exposes the training objective and :meth:`generate`.
+        The ``L/2`` objective and one-step sampler.
 
     Notes
     -----
@@ -493,17 +505,18 @@ def drifting_base_16_gen(
     Parameters
     ----------
     pretrained : bool or str, default=False
-        Load the released generator checkpoint into ``model.drifting``.
+        Load the released ``B/16`` generator into ``model.drifting``.
         ``True`` takes ``IMAGENET1K_256``.
     weights : DriftingBase16Weights or None, optional, keyword-only
-        An explicit tag, taking precedence over ``pretrained``.
+        An explicit ``B/16`` tag; wins over ``pretrained``.
     **overrides : object
-        Optional :class:`DriftingConfig` field overrides.
+        :class:`DriftingConfig` fields to change on ``pixel_sota_B`` —
+        ``use_convnext=False`` drops the ConvNeXt-V2 term.
 
     Returns
     -------
     DriftingForImageGeneration
-        Exposes the training objective and :meth:`generate`.
+        The ``B/16`` pixel-space objective and one-step sampler.
 
     Notes
     -----
@@ -540,17 +553,18 @@ def drifting_large_16_gen(
     Parameters
     ----------
     pretrained : bool or str, default=False
-        Load the released generator checkpoint into ``model.drifting``.
+        Load the released ``L/16`` generator into ``model.drifting``.
         ``True`` takes ``IMAGENET1K_256``.
     weights : DriftingLarge16Weights or None, optional, keyword-only
-        An explicit tag, taking precedence over ``pretrained``.
+        An explicit ``L/16`` tag; wins over ``pretrained``.
     **overrides : object
-        Optional :class:`DriftingConfig` field overrides.
+        :class:`DriftingConfig` fields to change on ``pixel_sota_L``.
 
     Returns
     -------
     DriftingForImageGeneration
-        Exposes the training objective and :meth:`generate`.
+        The ``L/16`` objective — MAE-640 (pixel) plus ConvNeXt-V2-Base
+        features — and its one-step sampler.
 
     Notes
     -----

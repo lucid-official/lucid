@@ -14,11 +14,13 @@ import pytest
 
 import lucid
 from lucid.models import DiffusionModelOutput
+from lucid.models._utils._common import apply_overrides
 from lucid.models.generative.drifting import (
     DriftingBase2Weights,
     DriftingConfig,
     DriftingFeatureEncoder,
     DriftingForImageGeneration,
+    DriftingMAEWeights,
     DriftingModel,
     DriftingSampleQueue,
 )
@@ -236,6 +238,36 @@ class TestFeatureEncoder:
         assert tuple(feats["norm_x"].shape) == (1, 1, 192)
         assert tuple(feats["conv1"].shape) == (1, 64, 16)
 
+    @pytest.mark.parametrize(
+        ("cfg", "member"),
+        [
+            (_CFG_BASE_2, DriftingMAEWeights.LATENT_640),
+            (_CFG_LARGE_2, DriftingMAEWeights.LATENT_640),
+            (
+                apply_overrides(
+                    _CFG_BASE_2, _tag_config(DriftingBase2Weights.IMAGENET1K_256_ABLATION, {})
+                ),
+                DriftingMAEWeights.LATENT_256,
+            ),
+            (_CFG_BASE_16, DriftingMAEWeights.PIXEL_640),
+            (_CFG_LARGE_16, DriftingMAEWeights.PIXEL_640),
+        ],
+        ids=["base_2", "large_2", "base_2_ablation", "base_16", "large_16"],
+    )
+    def test_each_release_finds_the_mae_it_was_trained_against(
+        self, cfg: DriftingConfig, member: DriftingMAEWeights
+    ) -> None:
+        # load_feature_encoder(pretrained=True) loads exactly this tag.
+        with shadow_alloc():
+            tag = DriftingForImageGeneration(cfg)._mae_tag()
+        assert tag == member.tag
+        assert DriftingMAEWeights[tag] is member
+
+    def test_no_released_mae_matches_an_unreleased_width(self) -> None:
+        model = DriftingForImageGeneration(_tiny(mae_base_channels=32))
+        with pytest.raises(ValueError, match="no released MAE encoder"):
+            model._mae_tag()
+
 
 class TestSampleQueue:
     def test_ring_buffer_keeps_the_newest(self) -> None:
@@ -248,6 +280,38 @@ class TestSampleQueue:
         queue = DriftingSampleQueue(num_classes=2, max_size=4)
         queue.add(lucid.ones(1, 3), lucid.tensor([0]))
         assert float(queue.sample(lucid.tensor([1]), 2).abs().max().item()) == 0.0
+
+    def test_the_model_queues_feed_a_training_batch(self) -> None:
+        cfg = _tiny(pos_per_sample=3, neg_per_sample=2, positive_bank_size=4, negative_bank_size=5)
+        model = DriftingForImageGeneration(cfg)
+        positive_queue, unconditional_queue = model.make_sample_queues()
+        assert (positive_queue.num_classes, positive_queue.max_size) == (10, 4)
+        assert (unconditional_queue.num_classes, unconditional_queue.max_size) == (1, 5)
+
+        # Sample ``i`` is filled with ``i``, so a drawn sample names its source.
+        ids = lucid.arange(7, dtype=lucid.float64).reshape(7, 1, 1, 1)
+        samples = ids * lucid.ones(7, 4, 8, 8, dtype=lucid.float64)
+        # Class 2 receives 0, 2, 4, 5, 6 and keeps the newest four; class 5 holds 1, 3.
+        positive_queue.add(samples, lucid.tensor([2, 5, 2, 5, 2, 2, 2]))
+        unconditional_queue.add(samples[:3] + 100.0, lucid.zeros(3, dtype=lucid.int64))
+
+        positives, negatives = model.draw_training_batch(
+            positive_queue, unconditional_queue, lucid.tensor([5, 2])
+        )
+        assert tuple(positives.shape) == (2, 3, 4, 8, 8)
+        assert tuple(negatives.shape) == (2, 2, 4, 8, 8)
+        assert positives.dtype == negatives.dtype == lucid.float64
+        assert positives.device == negatives.device == samples.device
+        # Every drawn sample is one queued sample, whole.
+        for drawn in (positives, negatives):
+            assert bool((drawn == drawn[:, :, :1, :1, :1]).all().item())
+        drawn_ids = positives[:, :, 0, 0, 0].tolist()
+        # Two queued for class 5 and three asked for: drawn with replacement.
+        assert set(drawn_ids[0]) <= {1.0, 3.0}
+        # Four queued for class 2: three distinct, never the overwritten 0.
+        assert len(set(drawn_ids[1])) == 3 and set(drawn_ids[1]) <= {2.0, 4.0, 5.0, 6.0}
+        for row in negatives[:, :, 0, 0, 0].tolist():
+            assert len(set(row)) == 2 and set(row) <= {100.0, 101.0, 102.0}
 
 
 class TestConfig:

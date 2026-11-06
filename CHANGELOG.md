@@ -193,6 +193,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The pre-commit hook runs the rule registry's commit level on the staged blobs, so a `git add -p` of part of a file under `lucid/` is refused. `LUCID_SKIP_H4_GUARD` and `LUCID_SKIP_QUALITY_GATE` are gone: `--no-verify` is the only way past those checks, and it leaves the trailer.
 - The DreamerV3 learning benchmark (`TestDreamerV3ReadsTheGoal`) scores every policy on a fixed 36-goal panel, treats the goal-blind ceiling as a policy, and asserts what the goal is worth to the policy (the cost of a decoy), over 3000 steps. The old test's blind ceiling was not a ceiling, and its verdict was one random draw.
 - A compiled step through a `_traced_backward` Function with `_materialize_grads=False` (or `ctx.set_materialize_grads(False)`) traces its backward once per set of outputs a gradient may reach; one that cannot be traced for the demands it may meet runs eagerly, and the fallback warning says why. More than 4 differentiable outputs run eagerly.
+- bring the family under the gate
 
 ---
 

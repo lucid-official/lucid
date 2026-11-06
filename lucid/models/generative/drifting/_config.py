@@ -38,7 +38,13 @@ from lucid.models.generative._common._config import (
     GenerativeModelConfig,
     check_patch_grid,
     check_sample_space_channels,
+    patch_grid_side,
 )
+
+# Counts a model cannot be built with at zero, and counts where zero is a
+# switch (no style codebook, no in-context tokens, no positives / negatives).
+_POSITIVE_COUNTS = ("depth", "cond_dim", "num_classes", "noise_coords", "gen_per_label")
+_NON_NEGATIVE_COUNTS = ("noise_classes", "n_cls_tokens", "pos_per_sample", "neg_per_sample")
 
 
 @model_family_meta(
@@ -255,8 +261,7 @@ class DriftingConfig(GenerativeModelConfig):
     @property
     def grid_size(self) -> int:
         """Tokens per side of the patch grid."""
-        side = self.sample_size if isinstance(self.sample_size, int) else self.sample_size[0]
-        return side // self.patch_size
+        return patch_grid_side(self.sample_size) // self.patch_size
 
     @property
     def num_patches(self) -> int:
@@ -286,21 +291,38 @@ class DriftingConfig(GenerativeModelConfig):
         object.__setattr__(self, "patch_std_size", tuple(int(s) for s in self.patch_std_size))
         object.__setattr__(self, "mae_layers", tuple(int(n) for n in self.mae_layers))
 
+        # One check per group of fields, in the order the groups are declared.
         check_patch_grid(self.sample_size, self.patch_size, self.hidden_size, self.num_heads)
         check_sample_space_channels(self.in_channels, self.out_channels, "the generated sample")
-        for name in ("depth", "cond_dim", "num_classes", "noise_coords", "gen_per_label"):
+        self._check_counts()
+        self._check_rope()
+        self._check_drift_kernel()
+        self._check_feature_sets()
+        self._check_sample_queue()
+        self._check_mae_encoder()
+        self._check_convnext()
+
+    def _check_counts(self) -> None:
+        """Refuse a zero model dimension, or a negative count that may be zero."""
+        for name in _POSITIVE_COUNTS:
             value = getattr(self, name)
             if value <= 0:
                 raise ValueError(f"{name} must be positive, got {value}")
-        for name in ("noise_classes", "n_cls_tokens", "pos_per_sample", "neg_per_sample"):
+        for name in _NON_NEGATIVE_COUNTS:
             value = getattr(self, name)
             if value < 0:
                 raise ValueError(f"{name} must be non-negative, got {value}")
+
+    def _check_rope(self) -> None:
+        """Refuse an odd head width under RoPE, which rotates feature pairs."""
         if self.use_rope and self.head_dim % 2 != 0:
             raise ValueError(
                 f"use_rope rotates feature pairs, so the head width must be even; "
                 f"got hidden_size={self.hidden_size} over num_heads={self.num_heads}"
             )
+
+    def _check_drift_kernel(self) -> None:
+        """Refuse kernel temperatures or a guidance distribution Alg. 2 cannot use."""
         if not self.temperatures or any(t <= 0.0 for t in self.temperatures):
             raise ValueError(
                 f"temperatures must be non-empty and positive, got {self.temperatures}"
@@ -314,14 +336,23 @@ class DriftingConfig(GenerativeModelConfig):
             raise ValueError(f"neg_cfg_pw must be finite, got {self.neg_cfg_pw}")
         if not 0.0 <= self.no_cfg_frac <= 1.0:
             raise ValueError(f"no_cfg_frac is a probability, got {self.no_cfg_frac}")
+
+    def _check_feature_sets(self) -> None:
+        """Refuse a block stride or a pooling side no feature map can be cut by (A.5)."""
         if self.every_k_block is not None and self.every_k_block < 1:
             raise ValueError(
                 f"every_k_block must be at least 1, or None to disable, got {self.every_k_block}"
             )
         if any(s <= 0 for s in self.patch_mean_size + self.patch_std_size):
             raise ValueError("patch_mean_size / patch_std_size entries must be positive")
+
+    def _check_sample_queue(self) -> None:
+        """Refuse an empty sample queue (A.8)."""
         if self.positive_bank_size <= 0 or self.negative_bank_size <= 0:
             raise ValueError("the sample-queue sizes must be positive")
+
+    def _check_mae_encoder(self) -> None:
+        """Refuse an MAE ResNet that cannot be built over this sample."""
         if self.mae_base_channels <= 0 or len(self.mae_layers) != 4:
             raise ValueError(
                 f"the MAE encoder needs a positive width and four stages, got "
@@ -329,12 +360,15 @@ class DriftingConfig(GenerativeModelConfig):
             )
         if any(n <= 0 for n in self.mae_layers):
             raise ValueError(f"mae_layers entries must be positive, got {self.mae_layers}")
-        side = self.sample_size if isinstance(self.sample_size, int) else self.sample_size[0]
+        side = patch_grid_side(self.sample_size)
         if self.mae_input_patch_size <= 0 or side % self.mae_input_patch_size != 0:
             raise ValueError(
                 f"mae_input_patch_size must be positive and divide sample_size {side}, "
                 f"got {self.mae_input_patch_size}"
             )
+
+    def _check_convnext(self) -> None:
+        """Refuse ConvNeXt-V2 features for a sample that is not an RGB image."""
         if self.use_convnext and self.in_channels != 3:
             raise ValueError(
                 "use_convnext reads RGB images; it applies to pixel-space models "

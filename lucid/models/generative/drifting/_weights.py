@@ -4,8 +4,8 @@ The authors released every checkpoint the paper reports, in Flax msgpack
 form, at ``huggingface.co/Goodeat/drifting`` (MIT).  Five generators — the
 four system-level models of Tables 5 and 6 plus the ablation default of
 Table 8 — and the three MAE feature encoders they were trained against.
-:mod:`tools.convert_weights.drifting` turns each into a Lucid safetensors
-file and re-hosts it under the ``lucid-dl`` org.
+Each is converted to a Lucid safetensors file and re-hosted under the
+``lucid-dl`` org.
 
 What a caller needs to know:
 
@@ -312,7 +312,7 @@ class DriftingLarge16Weights(WeightsEnum):
 class DriftingMAEWeights(WeightsEnum):
     r"""The three released MAE feature encoders (encoder half only).
 
-    Loaded into :attr:`DriftingFeatureEncoder.mae` by
+    Loaded into ``DriftingFeatureEncoder.mae`` by
     :meth:`DriftingForImageGeneration.load_feature_encoder`, which picks
     the tag matching the config.  The MAE decoder and the classification
     head are dropped by the converter: the drifting loss reads only the

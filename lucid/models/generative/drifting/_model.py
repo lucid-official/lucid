@@ -32,7 +32,7 @@ unconditional negatives are drawn.
 
 import math
 from dataclasses import dataclass
-from typing import ClassVar, cast, override
+from typing import ClassVar, override
 
 import lucid
 import lucid.nn as nn
@@ -368,6 +368,19 @@ class DriftingModel(PretrainedModel):
 
         Drawn uniformly, as the release does (``max(1, ·)`` keeps the shape
         valid when styles are disabled; the indices are then unused).
+
+        Parameters
+        ----------
+        batch : int
+            Number of samples to draw indices for.
+        device : str
+            Device the indices are created on.
+
+        Returns
+        -------
+        Tensor
+            ``int64`` indices of shape ``(batch, max(1, noise_coords))``, each
+            in ``[0, max(1, noise_classes))``.
         """
         config = self.config
         return lucid.randint(
@@ -446,7 +459,11 @@ class DriftingModel(PretrainedModel):
         )
         for block in self.blocks:
             if config.use_remat and self.training:
-                tokens = cast(Tensor, checkpoint(block, tokens, cond, *rope))
+                recomputed = checkpoint(block, tokens, cond, *rope)
+                # A block returns one tensor; checkpoint's return type also
+                # admits the tuple a multi-output segment would give.
+                assert isinstance(recomputed, Tensor)
+                tokens = recomputed
             else:
                 tokens = block(tokens, cond, *rope)
 
@@ -515,30 +532,13 @@ def _drift_loss(
     every group and location, as is each temperature's drift
     normalisation.
     """
-    work = _float32_or_wider(gen.dtype)
-    gen = gen.to(work)
-    b, c_g, s = (int(d) for d in gen.shape)
-    device = gen.device.type
+    gen = gen.to(_float32_or_wider(gen.dtype))
+    s = int(gen.shape[-1])
     info: dict[str, Tensor] = {}
 
     with lucid.no_grad():
         old = gen.detach()
-        parts = [old]
-        weights = [lucid.ones((b, c_g), dtype=work, device=device)]
-        c_n = 0
-        if neg is not None and int(neg.shape[1]) > 0:
-            c_n = int(neg.shape[1])
-            parts.append(neg.to(work))
-            weights.append(
-                weight_neg.to(work)
-                if weight_neg is not None
-                else lucid.ones((b, c_n), dtype=work, device=device)
-            )
-        c_p = int(pos.shape[1])
-        parts.append(pos.to(work))
-        weights.append(lucid.ones((b, c_p), dtype=work, device=device))
-        targets = lucid.cat(parts, dim=1)
-        target_w = lucid.cat(weights, dim=1)
+        targets, target_w, c_n = _drift_targets(old, pos, neg, weight_neg)
 
         dist = _pairwise_distance(old, targets)
         scale = (dist * target_w.unsqueeze(1)).mean() / target_w.mean()
@@ -549,38 +549,89 @@ def _drift_loss(
         targets_scaled = targets / scale_inputs
         dist_normed = dist / lucid.clamp(scale, min=1e-3)
 
-        self_mask = lucid.cat(
-            [
-                lucid.eye(c_g, dtype=work, device=device),
-                lucid.zeros((c_g, c_n + c_p), dtype=work, device=device),
-            ],
-            dim=1,
+        force, energies = _drift_force(
+            dist_normed, target_w, targets_scaled, old_scaled, c_n, temperatures
         )
-        dist_normed = dist_normed + self_mask.unsqueeze(0) * _SELF_MASK
-
-        split = c_g + c_n
-        force = lucid.zeros_like(old_scaled)
-        for tau in temperatures:
-            logits = -dist_normed / tau
-            affinity = F.softmax(logits, dim=-1) * F.softmax(logits, dim=-2)
-            affinity = lucid.sqrt(lucid.clamp(affinity, min=1e-6)) * target_w.unsqueeze(1)
-            aff_neg = affinity[:, :, :split]
-            aff_pos = affinity[:, :, split:]
-            coeff_neg = -aff_neg * aff_pos.sum(dim=-1, keepdim=True)
-            coeff_pos = aff_pos * aff_neg.sum(dim=-1, keepdim=True)
-            coeff = lucid.cat([coeff_neg, coeff_pos], dim=2)
-            # sum_y coeff * (y - x): the coefficients total zero only when
-            # nothing repels, so the ``- x`` term is kept explicit.
-            drift = (
-                lucid.matmul(coeff, targets_scaled) - coeff.sum(dim=-1).unsqueeze(-1) * old_scaled
-            )
-            energy = (drift * drift).mean()
-            info[f"loss_{tau}"] = energy
-            force = force + drift / lucid.sqrt(lucid.clamp(energy, min=1e-8))
+        info.update(energies)
         goal = old_scaled + force
 
     diff = gen / scale_inputs - goal
     return (diff * diff).mean(dim=(1, 2)), info
+
+
+def _drift_targets(
+    old: Tensor, pos: Tensor, neg: Tensor | None, weight_neg: Tensor | None
+) -> tuple[Tensor, Tensor, int]:
+    """Everything the field compares a sample with, ordered ``[generated, unconditional, positive]``.
+
+    Returns the ``(B, C_g + C_n + C_p, S)`` targets in ``old``'s dtype, their
+    ``(B, C_g + C_n + C_p)`` kernel weights — one, except :math:`w` on the
+    unconditional negatives — and ``C_n``, zero when there are none.
+    """
+    b, c_g, _ = (int(d) for d in old.shape)
+    work, device = old.dtype, old.device.type
+    parts = [old]
+    weights = [lucid.ones((b, c_g), dtype=work, device=device)]
+    c_n = 0
+    if neg is not None and int(neg.shape[1]) > 0:
+        c_n = int(neg.shape[1])
+        parts.append(neg.to(work))
+        weights.append(
+            weight_neg.to(work)
+            if weight_neg is not None
+            else lucid.ones((b, c_n), dtype=work, device=device)
+        )
+    c_p = int(pos.shape[1])
+    parts.append(pos.to(work))
+    weights.append(lucid.ones((b, c_p), dtype=work, device=device))
+    return lucid.cat(parts, dim=1), lucid.cat(weights, dim=1), c_n
+
+
+def _drift_force(
+    dist_normed: Tensor,
+    target_w: Tensor,
+    targets_scaled: Tensor,
+    old_scaled: Tensor,
+    c_n: int,
+    temperatures: tuple[float, ...],
+) -> tuple[Tensor, dict[str, Tensor]]:
+    """Alg. 2's field at every generated sample, normalised per temperature and summed.
+
+    The first ``C_g`` targets are the samples themselves, masked out of
+    their own kernel row; those and the next ``c_n`` repel, the rest
+    attract.  Returns the force and each temperature's raw drift energy,
+    keyed ``loss_{tau}``.
+    """
+    c_g, n_targets = int(old_scaled.shape[1]), int(targets_scaled.shape[1])
+    work, device = old_scaled.dtype, old_scaled.device.type
+    self_mask = lucid.cat(
+        [
+            lucid.eye(c_g, dtype=work, device=device),
+            lucid.zeros((c_g, n_targets - c_g), dtype=work, device=device),
+        ],
+        dim=1,
+    )
+    dist_normed = dist_normed + self_mask.unsqueeze(0) * _SELF_MASK
+
+    split = c_g + c_n
+    energies: dict[str, Tensor] = {}
+    force = lucid.zeros_like(old_scaled)
+    for tau in temperatures:
+        logits = -dist_normed / tau
+        affinity = F.softmax(logits, dim=-1) * F.softmax(logits, dim=-2)
+        affinity = lucid.sqrt(lucid.clamp(affinity, min=1e-6)) * target_w.unsqueeze(1)
+        aff_neg = affinity[:, :, :split]
+        aff_pos = affinity[:, :, split:]
+        coeff_neg = -aff_neg * aff_pos.sum(dim=-1, keepdim=True)
+        coeff_pos = aff_pos * aff_neg.sum(dim=-1, keepdim=True)
+        coeff = lucid.cat([coeff_neg, coeff_pos], dim=2)
+        # sum_y coeff * (y - x): the coefficients total zero only when
+        # nothing repels, so the ``- x`` term is kept explicit.
+        drift = lucid.matmul(coeff, targets_scaled) - coeff.sum(dim=-1).unsqueeze(-1) * old_scaled
+        energy = (drift * drift).mean()
+        energies[f"loss_{tau}"] = energy
+        force = force + drift / lucid.sqrt(lucid.clamp(energy, min=1e-8))
+    return force, energies
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -624,6 +675,31 @@ def _space_to_depth(x: Tensor, patch: int) -> Tensor:
     return x.reshape(b, patch * patch * c, h // patch, w // patch)
 
 
+def _add_feature_sets(
+    out: dict[str, Tensor], name: str, feat: Tensor, config: DriftingConfig
+) -> None:
+    """Add one ``(B, C, H, W)`` map's feature sets to ``out``, in the release's order.
+
+    Its locations as ``name``; its global ``_mean`` and ``_std``; then the
+    means and stds pooled over each ``patch_mean_size`` / ``patch_std_size``
+    square that tiles the map.
+    """
+    b, c, h, w = (int(s) for s in feat.shape)
+    out[name] = _tokens(feat)
+    if config.use_mean:
+        out[f"{name}_mean"] = feat.mean(dim=(2, 3)).unsqueeze(1)
+    if config.use_std:
+        out[f"{name}_std"] = _safe_std(feat, (2, 3)).unsqueeze(1)
+    for size in config.patch_mean_size:
+        if h % size == 0 and w % size == 0:
+            grouped = feat.reshape(b, c, h // size, size, w // size, size)
+            out[f"{name}_mean_{size}"] = _tokens(grouped.mean(dim=(3, 5)))
+    for size in config.patch_std_size:
+        if h % size == 0 and w % size == 0:
+            grouped = feat.reshape(b, c, h // size, size, w // size, size)
+            out[f"{name}_std_{size}"] = _tokens(_safe_std(grouped, (3, 5)))
+
+
 class _MAEBasicBlock(nn.Module):
     """ResNet basic block with GroupNorm: two 3x3 convs, projected skip on change."""
 
@@ -661,8 +737,8 @@ class _MAEResNetEncoder(nn.Module):
         in_ch = config.in_channels * self.input_patch_size**2
         self.conv1 = nn.Conv2d(in_ch, base, 3, stride=1, padding=1, bias=False)
         self.gn1 = _group_norm(base)
-        stages: list[nn.Module] = []
-        norms: list[nn.Module] = []
+        stages: list[nn.ModuleList[_MAEBasicBlock]] = []
+        norms: list[nn.GroupNorm] = []
         ch = base
         for stage, num_blocks in enumerate(config.mae_layers):
             out_ch = base * (2**stage)
@@ -687,37 +763,19 @@ class _MAEResNetEncoder(nn.Module):
         work = _float32_or_wider(x.dtype)
         out["norm_x"] = lucid.sqrt((x.to(work) ** 2).mean(dim=(2, 3)) + 1e-6).unsqueeze(1)
 
-        def process(name: str, feat: Tensor) -> None:
-            b, c, h, w = (int(s) for s in feat.shape)
-            out[name] = _tokens(feat)
-            if config.use_mean:
-                out[f"{name}_mean"] = feat.mean(dim=(2, 3)).unsqueeze(1)
-            if config.use_std:
-                out[f"{name}_std"] = _safe_std(feat, (2, 3)).unsqueeze(1)
-            for size in config.patch_mean_size:
-                if h % size == 0 and w % size == 0:
-                    grouped = feat.reshape(b, c, h // size, size, w // size, size)
-                    out[f"{name}_mean_{size}"] = _tokens(grouped.mean(dim=(3, 5)))
-            for size in config.patch_std_size:
-                if h % size == 0 and w % size == 0:
-                    grouped = feat.reshape(b, c, h // size, size, w // size, size)
-                    out[f"{name}_std_{size}"] = _tokens(_safe_std(grouped, (3, 5)))
-
         x = F.relu(self.gn1(self.conv1(x)))
         stage_feats: dict[str, Tensor] = {"conv1": x}
         block_feats: list[tuple[str, Tensor]] = []
         k = config.every_k_block
         for i, (blocks, norm) in enumerate(zip(self.stages, self.stage_norms, strict=True)):
-            for j, block in enumerate(cast(nn.ModuleList, blocks), start=1):
+            for j, block in enumerate(blocks, start=1):
                 x = block(x)
                 if k is not None and j % k == 0:
                     block_feats.append((f"layer{i + 1}_blk{j}", x))
             x = norm(x)
             stage_feats[f"layer{i + 1}"] = x
-        for name, feat in stage_feats.items():
-            process(name, feat)
-        for name, feat in block_feats:
-            process(name, feat)
+        for name, feat in [*stage_feats.items(), *block_feats]:
+            _add_feature_sets(out, name, feat, config)
         return out
 
 
@@ -793,12 +851,12 @@ class _ConvNeXtV2(nn.Module):
         layers: list[nn.Module] = [
             nn.Sequential(nn.Conv2d(3, dims[0], 4, stride=4), _ChannelsLastLayerNorm(dims[0]))
         ]
-        for i in range(3):
-            layers.append(
-                nn.Sequential(
-                    _ChannelsLastLayerNorm(dims[i]), nn.Conv2d(dims[i], dims[i + 1], 2, stride=2)
-                )
+        layers.extend(
+            nn.Sequential(
+                _ChannelsLastLayerNorm(dims[i]), nn.Conv2d(dims[i], dims[i + 1], 2, stride=2)
             )
+            for i in range(3)
+        )
         self.downsample_layers = nn.ModuleList(layers)
         self.stages = nn.ModuleList(
             [
@@ -933,6 +991,26 @@ class DriftingFeatureEncoder(nn.Module):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _int_list(indices: Tensor) -> list[int]:
+    """A 1-D integer tensor's elements as Python ints, read back in one transfer.
+
+    Raises
+    ------
+    TypeError
+        If ``indices`` is not 1-D or holds anything but integers — the error
+        indexing a queue with such a value would raise.
+    """
+    values = indices.tolist()
+    if not isinstance(values, list):
+        raise TypeError(f"expected a 1-D tensor of indices, got shape {tuple(indices.shape)}")
+    ints: list[int] = []
+    for value in values:
+        if not isinstance(value, int):
+            raise TypeError(f"expected integer indices, got {type(value).__name__}")
+        ints.append(value)
+    return ints
+
+
 class DriftingSampleQueue:
     """Per-class ring buffers of real samples — the release's ``ArrayMemoryBank``.
 
@@ -964,20 +1042,22 @@ class DriftingSampleQueue:
         """Initialise empty queues. See the class docstring."""
         self.num_classes = int(num_classes)
         self.max_size = int(max_size)
-        self._items: list[list[Tensor | None]] = [
-            [None] * self.max_size for _ in range(self.num_classes)
-        ]
+        # A queue grows to ``max_size`` and is then overwritten in place, so
+        # its length is how many entries it holds.
+        self._items: list[list[Tensor]] = [[] for _ in range(self.num_classes)]
         self._ptr = [0] * self.num_classes
-        self._count = [0] * self.num_classes
         self._like: Tensor | None = None
 
     def add(self, samples: Tensor, labels: Tensor) -> None:
         """Push ``(N, ...)`` samples into the queues named by ``(N,)`` labels."""
-        for i, lbl in enumerate(cast(list[int], labels.tolist())):
+        for i, lbl in enumerate(_int_list(labels)):
             sample = samples[i].detach()
-            self._items[lbl][self._ptr[lbl]] = sample
+            queue = self._items[lbl]
+            if len(queue) < self.max_size:
+                queue.append(sample)
+            else:
+                queue[self._ptr[lbl]] = sample
             self._ptr[lbl] = (self._ptr[lbl] + 1) % self.max_size
-            self._count[lbl] = min(self._count[lbl] + 1, self.max_size)
             self._like = sample
 
     def sample(self, labels: Tensor, n_samples: int) -> Tensor:
@@ -986,18 +1066,19 @@ class DriftingSampleQueue:
             raise RuntimeError("the sample queue is empty; call add() before sample()")
         like = self._like
         rows: list[Tensor] = []
-        for lbl in cast(list[int], labels.tolist()):
-            valid = self._count[lbl]
+        for lbl in _int_list(labels):
+            queue = self._items[lbl]
+            valid = len(queue)
             if valid == 0:
                 rows.append(
                     lucid.zeros((n_samples, *like.shape), dtype=like.dtype, device=like.device.type)
                 )
                 continue
             if valid < n_samples:
-                picks = cast(list[int], lucid.randint(0, valid, (n_samples,)).tolist())
+                picks = _int_list(lucid.randint(0, valid, (n_samples,)))
             else:
-                picks = cast(list[int], lucid.randperm(valid)[:n_samples].tolist())
-            rows.append(lucid.stack([cast(Tensor, self._items[lbl][j]) for j in picks]))
+                picks = _int_list(lucid.randperm(valid)[:n_samples])
+            rows.append(lucid.stack([queue[j] for j in picks]))
         return lucid.stack(rows)
 
 
@@ -1108,7 +1189,7 @@ class DriftingForImageGeneration(ImageGenerationModel):
         Returns
         -------
         DriftingFeatureEncoder
-            The encoder, also stored as :attr:`feature_encoder`, with every
+            The encoder, also stored as ``self.feature_encoder``, with every
             parameter frozen.
 
         Raises
@@ -1141,8 +1222,8 @@ class DriftingForImageGeneration(ImageGenerationModel):
         """The released MAE encoder this config was trained against."""
         config = self.config
         for name, member in DriftingMAEWeights.__members__.items():
-            wanted = cast(dict[str, object], member.value.meta["config"])
-            if all(getattr(config, k) == v for k, v in wanted.items()):
+            wanted = member.value.meta["config"]
+            if isinstance(wanted, dict) and all(getattr(config, k) == v for k, v in wanted.items()):
                 return name
         raise ValueError(
             f"no released MAE encoder has in_channels={config.in_channels}, "
@@ -1330,13 +1411,11 @@ class DriftingForImageGeneration(ImageGenerationModel):
 
         Examples
         --------
-        >>> import lucid
-        >>> from lucid.models.generative.drifting import (
-        ...     DriftingConfig, DriftingForImageGeneration)
-        >>> config = DriftingConfig(sample_size=8, hidden_size=32, cond_dim=32, depth=1,
-        ...                         num_heads=4, num_classes=10, noise_classes=4,
-        ...                         noise_coords=2, n_cls_tokens=2, use_mae=False)
-        >>> model = DriftingForImageGeneration(config).eval()
+        A released configuration, shrunk by overrides so it builds quickly:
+
+        >>> from lucid.models import create_model
+        >>> model = create_model("drifting_base_2_gen", sample_size=8, hidden_size=32,
+        ...                      cond_dim=32, depth=1, num_heads=4).eval()
         >>> model.generate(3, cfg_scale=1.5).samples.shape
         (3, 4, 8, 8)
         """
