@@ -39,6 +39,7 @@ NEVER_RUN: dict[str, str] = {}
 # Cases whose export is refused, and why.
 EXPECTED_REFUSAL: dict[str, str] = {
     "astype_f32": "a cast to the input's own dtype is the input: nothing reads it",
+    "dropout_eval": "an eval dropout is its input, as eager's is: nothing reads it",
     "nextafter": "no MIL op, and no exact composition of MIL ops",
     "cumprod": "MIL has cumsum only; exp of a log-cumsum is not exact",
     "cummax": "no running maximum in MIL",
