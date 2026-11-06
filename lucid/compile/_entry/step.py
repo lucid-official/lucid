@@ -358,7 +358,7 @@ def _compile_step_entry(
     # call made: the loss does not, it is made anew on every run.
     del traced, loss_t
     held = held_writes(tracer)
-    if held and found is not None:
+    if held and found is not None and not model_has_cumulative_bn(model):
         return stood_as_the_call(tracer, model, _wrap(tracer.take_answer()[0]))
 
     writes = outside_writes(tracer, [_unwrap(t) for t in leaf_tensors(x_args, {})], held)
