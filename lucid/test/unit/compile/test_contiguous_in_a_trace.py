@@ -207,6 +207,40 @@ def test_a_call_that_is_only_contiguous_answers_as_eager() -> None:
     assert compiled.cache_info()["eager_only"]
 
 
+class _WritesItsBuffer(nn.Module):
+    """A write through ``contiguous`` reaches the buffer only if that is contiguous."""
+
+    def __init__(self, state: lucid.Tensor) -> None:
+        super().__init__()
+        self.register_buffer("state", state)
+
+    def forward(self, x: lucid.Tensor) -> lucid.Tensor:
+        v = self.state.contiguous()
+        v.add_(1.0)
+        return x + self.state
+
+
+@needs_metal
+@pytest.mark.usefixtures("inference")
+@pytest.mark.parametrize(
+    "state",
+    [
+        lambda: lucid.zeros(3, 4).to(COMPILE_DEVICE),
+        lambda: lucid.zeros(3, 8).to(COMPILE_DEVICE)[:, ::2],
+    ],
+    ids=["contiguous", "strided"],
+)
+def test_a_write_through_contiguous_of_a_buffer_ends_as_eager_ends(
+    state: Callable[[], lucid.Tensor],
+) -> None:
+    eager, traced = _WritesItsBuffer(state()), _WritesItsBuffer(state())
+    compiled = lucid.compile(traced)
+    x = _grid(3, 4)
+    for _ in range(3):
+        assert compiled(x).tolist() == eager(x).tolist()
+        assert traced.state.tolist() == eager.state.tolist()
+
+
 # ---------------------------------------------------------------------------
 # ``dynamic=True``: a size-one batch axis makes a view contiguous, and a batch of
 # one is its own key.
