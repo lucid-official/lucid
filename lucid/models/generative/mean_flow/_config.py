@@ -22,9 +22,9 @@ from typing import ClassVar, Literal, override
 from lucid.models._meta import model_family_meta
 from lucid.models.generative._common._config import (
     GenerativeModelConfig,
-    check_patch_grid,
+    check_transformer_backbone,
     check_sample_space_channels,
-    patch_grid_side,
+    patch_token_count,
 )
 
 # How ``(r, t)`` reach the network.  The field is a function of both, but
@@ -241,14 +241,12 @@ class MeanFlowConfig(GenerativeModelConfig):
     @property
     def num_patches(self) -> int:
         """Tokens the field is cut into — ``(sample_size / patch_size)^2``."""
-        return (patch_grid_side(self.sample_size) // self.patch_size) ** 2
+        return patch_token_count(self)
 
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        check_patch_grid(self.sample_size, self.patch_size, self.hidden_size, self.num_heads)
-        if self.depth <= 0:
-            raise ValueError(f"depth must be positive, got {self.depth}")
+        check_transformer_backbone(self)
         check_sample_space_channels(self.in_channels, self.out_channels, "the average velocity")
         if not 0.0 <= self.ratio_r_not_t <= 1.0:
             raise ValueError(f"ratio_r_not_t is a probability, got {self.ratio_r_not_t}")

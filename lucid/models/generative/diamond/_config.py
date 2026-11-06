@@ -278,9 +278,29 @@ class DIAMONDConfig(GenerativeModelConfig):
         Atari's frames are square and CS:GO's are not — 150 by 280 —
         so nothing downstream may assume one number.
         """
-        if isinstance(self.sample_size, int):
-            return (self.sample_size, self.sample_size)
-        return (self.sample_size[0], self.sample_size[1])
+        return self.sample_hw
+
+    @property
+    def reward_feature_hw(self) -> tuple[int, int]:
+        """Height and width of the map the reward model's LSTM flattens.
+
+        Each stage after the first halves with a stride-2 convolution, which
+        rounds up, so 30 becomes 15 and then 8.
+        """
+        height, width = self.frame_shape
+        for _ in range(len(self.reward_channels) - 1):
+            height, width = (height + 1) // 2, (width + 1) // 2
+        return height, width
+
+    @property
+    def actor_feature_hw(self) -> tuple[int, int]:
+        """Height and width of the map the actor's LSTM flattens.
+
+        Every stage ends in a 2x2 max-pool, which rounds down.
+        """
+        height, width = self.frame_shape
+        stages = len(self.actor_channels)
+        return height >> stages, width >> stages
 
     @property
     def denoiser_in_channels(self) -> int:

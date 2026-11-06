@@ -28,6 +28,7 @@ from lucid.models._utils._generative import (
     resolve_generation_device,
     start_noise,
 )
+from lucid.models.generative._common._config import patch_grid_side
 from lucid.models.generative._common._transformers import (
     DiTBlock,
     DiTFinalLayer,
@@ -263,7 +264,7 @@ class DiTModel(PretrainedModel):
         """Initialise the network. See the class docstring for parameters."""
         super().__init__(config)
         self.config: DiTConfig = config
-        side = config.sample_size if isinstance(config.sample_size, int) else config.sample_size[0]
+        side = patch_grid_side(config.sample_size)
         self.grid = side // config.patch_size
 
         self.patch_embed = nn.Conv2d(
@@ -583,7 +584,7 @@ class DiTForImageGeneration(ImageGenerationModel):
             raise ValueError(f"steps must be positive, got {steps}")
         if not 0.0 <= eta <= 1.0:
             raise ValueError(f"eta interpolates DDIM and DDPM, got {eta}")
-        side = config.sample_size if isinstance(config.sample_size, int) else config.sample_size[0]
+        side = patch_grid_side(config.sample_size)
         device = resolve_generation_device(self, device)
         if noise is None:
             noise = start_noise(self, (n_samples, config.in_channels, side, side), device)

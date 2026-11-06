@@ -269,9 +269,7 @@ class GenieConfig(GenerativeModelConfig):
     @property
     def frame_shape(self) -> tuple[int, int]:
         """Frame height and width, whichever way ``sample_size`` was written."""
-        if isinstance(self.sample_size, int):
-            return (self.sample_size, self.sample_size)
-        return (self.sample_size[0], self.sample_size[1])
+        return self.sample_hw
 
     @property
     def token_grid(self) -> tuple[int, int]:

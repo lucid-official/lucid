@@ -795,8 +795,8 @@ class _RewardEndModel(nn.Module):
             cond_dim,
             config.attention_head_dim,
         )
-        side = _side(config) // (2 ** (len(config.reward_channels) - 1))
-        flat = self.encoder.out_channels * side * side
+        height, width = config.reward_feature_hw
+        flat = self.encoder.out_channels * height * width
         self.cell = nn.LSTMCell(flat, config.reward_lstm_dim)
         self.head = nn.Sequential(
             nn.Linear(config.reward_lstm_dim, config.reward_lstm_dim),
@@ -909,8 +909,8 @@ class _ActorCritic(nn.Module):
                 width = out_ch
             layers.append(nn.MaxPool2d(2, stride=2))
         self.encoder = nn.Sequential(*layers)
-        side = _side(config) // (2 ** len(config.actor_channels))
-        self.cell = nn.LSTMCell(width * side * side, config.actor_lstm_dim)
+        rows, cols = config.actor_feature_hw
+        self.cell = nn.LSTMCell(width * rows * cols, config.actor_lstm_dim)
         self.actor_linear = nn.Linear(config.actor_lstm_dim, config.num_actions)
         self.critic_linear = nn.Linear(config.actor_lstm_dim, 1)
 
@@ -944,13 +944,6 @@ class _ActorCritic(nn.Module):
         logits = self.actor_linear(hidden)
         value = self.critic_linear(hidden).reshape(-1)
         return logits, value, (hidden, cell)
-
-
-# The decoder's upsample takes a target size rather than a second tensor,
-# for the same reason: a stride-2 encoder does not halve cleanly.
-def _side(config: DIAMONDConfig) -> int:
-    """Frame side length, whichever way ``sample_size`` was written."""
-    return config.sample_size if isinstance(config.sample_size, int) else config.sample_size[0]
 
 
 @dataclass(slots=True)

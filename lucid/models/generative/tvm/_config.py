@@ -18,9 +18,9 @@ from typing import ClassVar, Literal, override
 from lucid.models._meta import model_family_meta
 from lucid.models.generative._common._config import (
     GenerativeModelConfig,
-    check_patch_grid,
+    check_transformer_backbone,
     check_sample_space_channels,
-    patch_grid_side,
+    patch_token_count,
 )
 
 # How ``(t, s)`` are drawn (Section 7.3, Table 3).  All three bias ``t``
@@ -307,19 +307,12 @@ class TVMConfig(GenerativeModelConfig):
     @property
     def num_patches(self) -> int:
         """Tokens the latent is cut into — ``(sample_size / patch_size)^2``."""
-        return (patch_grid_side(self.sample_size) // self.patch_size) ** 2
+        return patch_token_count(self)
 
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        if isinstance(self.sample_size, tuple) and (self.sample_size[0] != self.sample_size[1]):
-            raise ValueError(
-                f"sample_size must be square — the positional table is built "
-                f"over a square grid, got {self.sample_size}"
-            )
-        check_patch_grid(self.sample_size, self.patch_size, self.hidden_size, self.num_heads)
-        if self.depth <= 0:
-            raise ValueError(f"depth must be positive, got {self.depth}")
+        check_transformer_backbone(self)
         self._check_guidance()
         self._check_times()
         self._check_latent()

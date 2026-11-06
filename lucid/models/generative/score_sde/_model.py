@@ -438,9 +438,8 @@ class ScoreSDEForImageGeneration(ImageGenerationModel):
         config = cast(ScoreSDEConfig, self.config)
         resolved = resolve_generation_device(self, device)
         dtype = model_dtype(self)
-        size = config.sample_size
-        assert isinstance(size, int)
-        shape: tuple[int, ...] = (n_samples, config.in_channels, size, size)
+        height, width = config.sample_hw
+        shape: tuple[int, ...] = (n_samples, config.in_channels, height, width)
         count = steps or self._num_scales
 
         with lucid.no_grad():

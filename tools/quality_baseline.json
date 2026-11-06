@@ -1033,7 +1033,7 @@
     "lucid/fft/__init__.py": 339,
     "lucid/linalg/__init__.py": 1857,
     "lucid/models/_utils/_detection.py": 1218,
-    "lucid/models/generative/diamond/_model.py": 634,
+    "lucid/models/generative/diamond/_model.py": 627,
     "lucid/models/generative/rectified_flow/_model.py": 129,
     "lucid/nn/functional/loss.py": 769,
     "lucid/nn/modules/activation.py": 707,

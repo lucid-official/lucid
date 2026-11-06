@@ -14,7 +14,7 @@ Two tiers:
 """
 
 from dataclasses import dataclass
-from typing import ClassVar, Literal, override
+from typing import ClassVar, Literal, Protocol, override
 
 from lucid.models._base import ModelConfig
 
@@ -76,6 +76,12 @@ class GenerativeModelConfig(ModelConfig):
             raise ValueError(f"in_channels must be positive, got {self.in_channels}")
         if self.out_channels <= 0:
             raise ValueError(f"out_channels must be positive, got {self.out_channels}")
+
+    @property
+    def sample_hw(self) -> tuple[int, int]:
+        """tuple of int: ``(height, width)``, whichever way ``sample_size`` was written."""
+        size = self.sample_size
+        return (size, size) if isinstance(size, int) else (size[0], size[1])
 
 
 @dataclass(frozen=True)
@@ -170,8 +176,11 @@ __all__ = [
     "GenerativeActivation",
     "BetaSchedule",
     "FlowPrior",
+    "square_side",
     "patch_grid_side",
     "check_patch_grid",
+    "check_transformer_backbone",
+    "patch_token_count",
     "check_sample_space_channels",
     "check_noise_prediction_channels",
 ]
@@ -302,8 +311,41 @@ class WorldModelConfig(GenerativeModelConfig):
 # ── the patch grid of the DiT-backbone families ──────────────────────────────
 
 
+def square_side(sample_size: int | tuple[int, int], reason: str) -> int:
+    """The side of a square ``sample_size``, refusing a rectangle.
+
+    The one place a family that is built over a square grid learns its side.
+    A rectangle must not reach it as ``sample_size[0]``: that builds the
+    square model silently, and the mismatch surfaces — if at all — as a shape
+    error far from the config.
+
+    Parameters
+    ----------
+    sample_size : int or tuple of int
+        A config's ``sample_size``.
+    reason : str
+        Why the family needs a square, worded to follow "must be square —".
+
+    Returns
+    -------
+    int
+        ``sample_size`` itself, or the common side of a ``(side, side)`` pair.
+
+    Raises
+    ------
+    ValueError
+        If ``sample_size`` is a pair with unequal sides.
+    """
+    if isinstance(sample_size, int):
+        return sample_size
+    height, width = sample_size
+    if height != width:
+        raise ValueError(f"sample_size must be square — {reason}, got {sample_size}")
+    return height
+
+
 def patch_grid_side(sample_size: int | tuple[int, int]) -> int:
-    """The side of a square latent, given as an int or a ``(side, side)`` pair.
+    """The side of the square latent a DiT backbone cuts into patches.
 
     Parameters
     ----------
@@ -313,9 +355,18 @@ def patch_grid_side(sample_size: int | tuple[int, int]) -> int:
     Returns
     -------
     int
-        ``sample_size`` itself, or its first entry.
+        The side of ``sample_size``.
+
+    Raises
+    ------
+    ValueError
+        If ``sample_size`` is a rectangle: the position table, the
+        unpatchify and the latent-size check all assume a ``grid x grid``
+        token grid.
     """
-    return sample_size if isinstance(sample_size, int) else sample_size[0]
+    return square_side(
+        sample_size, "the patch grid's position table and unpatchify assume a square token grid"
+    )
 
 
 def check_patch_grid(
@@ -330,7 +381,7 @@ def check_patch_grid(
     Parameters
     ----------
     sample_size : int or tuple of int
-        Side of the latent.
+        Side of the latent; a pair must have equal sides.
     patch_size : int
         Side of a patch.
     hidden_size : int
@@ -341,8 +392,9 @@ def check_patch_grid(
     Raises
     ------
     ValueError
-        If ``patch_size`` is not positive, does not divide the side, or the
-        width is not divisible by 4 (the positional table) or by the heads.
+        If ``sample_size`` is a rectangle, ``patch_size`` is not positive or
+        does not divide the side, or the width is not divisible by 4 (the
+        positional table) or by the heads.
     """
     side = patch_grid_side(sample_size)
     if patch_size <= 0:
@@ -362,6 +414,64 @@ def check_patch_grid(
         raise ValueError(
             f"hidden_size must be divisible by num_heads, got " f"{hidden_size} and {num_heads}"
         )
+
+
+class _TransformerBackboneConfig(Protocol):
+    """The fields a patch-token transformer config shares (read-only views)."""
+
+    @property
+    def sample_size(self) -> int | tuple[int, int]: ...
+    @property
+    def patch_size(self) -> int: ...
+    @property
+    def hidden_size(self) -> int: ...
+    @property
+    def num_heads(self) -> int: ...
+    @property
+    def depth(self) -> int: ...
+
+
+def patch_token_count(config: _TransformerBackboneConfig) -> int:
+    """Tokens a backbone cuts its square latent into — ``(side / patch)^2``.
+
+    Parameters
+    ----------
+    config : DiTConfig or MeanFlowConfig or TVMConfig
+        A config with ``sample_size`` and ``patch_size``.
+
+    Returns
+    -------
+    int
+        The token count.
+
+    Raises
+    ------
+    ValueError
+        If ``sample_size`` is a rectangle.
+    """
+    return (patch_grid_side(config.sample_size) // config.patch_size) ** 2
+
+
+def check_transformer_backbone(config: _TransformerBackboneConfig) -> None:
+    """Refuse a DiT-style backbone that cannot be built from ``config``.
+
+    The patch grid (:func:`check_patch_grid`) plus a positive ``depth`` —
+    the checks DiT, MeanFlow and TVM make first, once.
+
+    Parameters
+    ----------
+    config : DiTConfig or MeanFlowConfig or TVMConfig
+        A config with ``sample_size``, ``patch_size``, ``hidden_size``,
+        ``num_heads`` and ``depth``.
+
+    Raises
+    ------
+    ValueError
+        As :func:`check_patch_grid`, or if ``depth`` is not positive.
+    """
+    check_patch_grid(config.sample_size, config.patch_size, config.hidden_size, config.num_heads)
+    if config.depth <= 0:
+        raise ValueError(f"depth must be positive, got {config.depth}")
 
 
 # ── fields that live in the sample's own space ───────────────────────────────

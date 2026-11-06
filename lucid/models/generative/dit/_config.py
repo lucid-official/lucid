@@ -20,8 +20,8 @@ from lucid.models._meta import model_family_meta
 from lucid.models.generative._common._config import (
     DiffusionModelConfig,
     check_noise_prediction_channels,
-    check_patch_grid,
-    patch_grid_side,
+    check_transformer_backbone,
+    patch_token_count,
 )
 
 # How the timestep and class label reach the blocks.  The paper compares
@@ -189,20 +189,18 @@ class DiTConfig(DiffusionModelConfig):
     @property
     def num_patches(self) -> int:
         """Tokens the latent is cut into — ``(sample_size / patch_size)^2``."""
-        return (patch_grid_side(self.sample_size) // self.patch_size) ** 2
+        return patch_token_count(self)
 
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
-        check_patch_grid(self.sample_size, self.patch_size, self.hidden_size, self.num_heads)
+        check_transformer_backbone(self)
         if self.frequency_embedding_size % 2 != 0:
             raise ValueError(
                 f"frequency_embedding_size must be even — the sinusoid "
                 f"splits it into cosine and sine, got "
                 f"{self.frequency_embedding_size}"
             )
-        if self.depth <= 0:
-            raise ValueError(f"depth must be positive, got {self.depth}")
         if not 0.0 <= self.class_dropout <= 1.0:
             raise ValueError(f"class_dropout is a probability, got {self.class_dropout}")
         check_noise_prediction_channels(self.in_channels, self.out_channels, self.learn_sigma)
