@@ -160,6 +160,18 @@ MULTI_INPUT = [
             lucid.zeros(1).to(lucid.int64),
         ),
     ),
+    # The one-step generator: noise, a label, the guidance scale and the style
+    # indices, which it would draw itself if they were left out.  The objective
+    # needs a feature encoder and is training-time; sampling is this network.
+    (
+        "drifting_base_2",
+        lambda: (
+            lucid.randn(1, 4, 8, 8),
+            lucid.zeros(1).to(lucid.int64),
+            lucid.ones(1),
+            lucid.zeros(1, 2).to(lucid.int64),
+        ),
+    ),
 ]
 
 #: Factories whose only sizes are too large to export in a unit test, built
@@ -172,7 +184,19 @@ SMALL: dict[str, dict[str, object]] = {
         "depth": 1,
         "num_heads": 4,
         "num_classes": 4,
-    }
+    },
+    # 133M parameters at the smallest size the paper gives.
+    "drifting_base_2": {
+        "sample_size": 8,
+        "hidden_size": 32,
+        "cond_dim": 32,
+        "depth": 1,
+        "num_heads": 4,
+        "num_classes": 4,
+        "noise_classes": 4,
+        "noise_coords": 2,
+        "n_cls_tokens": 2,
+    },
 }
 
 #: Families whose ``forward`` draws random numbers, exported with the
