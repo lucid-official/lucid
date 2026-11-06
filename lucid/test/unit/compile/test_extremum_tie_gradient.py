@@ -15,9 +15,10 @@ the ``±inf`` vector norms and the ``±1`` / ``±inf`` matrix norms,
 ``matrix_norm(a, 2)`` and ``cond`` — over every element and over an axis with
 ties in some rows only, with and without ``keepdim``, through the three training
 entry points, for two SGD steps (the second runs the cached executable on the
-updated values), in float32 and float16.  ``x.max(dim)`` with an int ``dim``
-gathers at its index and gives a tie's gradient to that element alone: a control,
-as is a slice with no tie.
+updated values), in float32, float16 and bfloat16.  ``x.max(dim)`` with an int
+``dim`` gathers at its index and gives a tie's gradient to that element alone: a
+control, as is a slice with no tie.  The forward values are held to eager's
+element by element, an integer input included (it keeps the plain reduction).
 """
 
 import math
@@ -55,8 +56,8 @@ _NAN_ROW = [[1.0, _NAN, 1.0], [2.0, 2.0, 0.0]]
 class _Case:
     values: object
     op: Callable[[lucid.Tensor], lucid.Tensor]
-    #: ``svd`` is a custom ``Function``: ``compiled_step`` refuses it, and it has
-    #: no float16 kernel.
+    #: Through ``svd``, a custom ``Function`` that ``compiled_step`` refuses; run in
+    #: float32 only.
     spectral: bool = False
 
 
