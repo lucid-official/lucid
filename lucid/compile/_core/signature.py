@@ -7,6 +7,8 @@ same executable iff their keys compare equal:
 
   * Same input *positional* and *keyword* tensor shapes / dtypes.
   * Same device for every input tensor.
+  * Same layout of every input tensor (:attr:`TensorSig.layout`): what a
+    ``contiguous()`` or a branch on ``is_contiguous()`` reads off its views.
   * Same ``training`` flag on the wrapped model (so a ``train()`` ↔
     ``eval()`` flip forces a recompile — BN / Dropout differ), and the
     same state on every module of its tree: each one's ``training`` and
@@ -65,16 +67,16 @@ class TensorSig:
     """One tensor's hashable description.
 
     Captures only what the graph capture path actually depends on:
-    rank, per-axis size, dtype name, device type, and a flag whether
-    the tensor required grad at trace time (so a leaf vs non-leaf
-    input never collides).
+    rank, per-axis size, dtype name, device type, a flag whether the
+    tensor required grad at trace time (so a leaf vs non-leaf input
+    never collides), and where its elements sit in its buffer.
 
     Attributes
     ----------
     shape : tuple of int
         Per-axis sizes.  When ``dynamic_batch`` was active during
         construction, ``shape[0]`` is ``-1`` to wildcard the batch
-        dim.
+        dim, except for a batch of one (see :meth:`of`).
     dtype : str
         Stringified dtype (``"lucid.float32"``, ``"lucid.int64"``, …).
     device : str
@@ -82,6 +84,15 @@ class TensorSig:
         dropped — Lucid currently runs a single device per kind.
     requires_grad : bool
         Whether the tensor was a graph leaf at trace time.
+    layout : tuple of int or None
+        The strides of a tensor that is not contiguous, ``None`` for one
+        that is.  ``contiguous()`` answers its own input when that is
+        contiguous and a copy when it is not, so a trace aliases as this
+        tensor and its views are laid out, and a write through the result
+        reaches the input for one layout and not for another.  Contiguous
+        tensors all lay out their views alike whatever their offset; strided
+        ones do not (``x[0]`` is contiguous for ``a[::2]`` and not for
+        ``a[:, ::2]``), so they differ by their strides.
 
     Examples
     --------
@@ -101,6 +112,7 @@ class TensorSig:
     dtype: str
     device: str
     requires_grad: bool
+    layout: tuple[int, ...] | None = None
 
     @classmethod
     def of(cls, t: Tensor, *, dynamic_batch: bool = False) -> TensorSig:
@@ -114,8 +126,10 @@ class TensorSig:
         dynamic_batch : bool, optional
             When ``True`` wildcard the leading axis to ``-1`` so two
             calls that differ only in batch size share a cache
-            entry.  Phase 1.6 opt-in; currently always called with
-            the default ``False``.
+            entry.  A batch of one keeps its size: its views are
+            contiguous where another batch's are not (``x[:, :2]``),
+            and ``squeeze`` drops its axis, so no trace of another
+            batch stands for it, nor it for them.
 
         Returns
         -------
@@ -132,13 +146,15 @@ class TensorSig:
 
         impl = t._impl
         shape = tuple(impl.shape)
-        if dynamic_batch and len(shape) >= 1:
+        if dynamic_batch and len(shape) >= 1 and shape[0] != 1:
             shape = (-1, *shape[1:])
+        # ``impl.stride`` builds a list on every call, so only a strided tensor pays for it.
         return cls(
             shape=shape,
             dtype=str(_ENGINE_TO_DTYPE[impl.dtype]),
             device="metal" if impl.device == _C_engine.Device.GPU else "cpu",
             requires_grad=impl.requires_grad,
+            layout=None if impl.is_contiguous() else tuple(impl.stride),
         )
 
 
@@ -1325,7 +1341,8 @@ def signature_of(
     ``dynamic=True`` opts into Phase 1.6's symbolic batch axis: the
     leading dim of every input tensor is wildcarded to ``-1`` in the
     captured :class:`TensorSig`, so a call sequence like
-    ``compiled(x_bs1); compiled(x_bs32)`` shares a single cache entry.
+    ``compiled(x_bs8); compiled(x_bs32)`` shares a single cache entry
+    (a batch of one has its own, :meth:`TensorSig.of`).
     ``dynamic`` is itself recorded in :attr:`CacheKey.dynamic` so the
     same model can co-exist as static + dynamic.
 

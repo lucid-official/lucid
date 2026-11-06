@@ -518,12 +518,13 @@ _as_strided_adapter.__name__ = _as_strided_adapter.__qualname__ = "as_strided"
 
 
 def _contiguous_adapter(a_impl: _Impl) -> _Impl:
-    """contiguous(a) — return the input itself when already contiguous outside a trace."""
-    if (
-        a_impl.is_contiguous()
-        and _C_engine.compile.current_tracer() is None
-        and (not a_impl.is_phantom or _C_engine.phantom_mode())
-    ):
+    """contiguous(a) — the input itself when already contiguous, a copy otherwise.
+
+    A trace answers the same way: which of the two a later write reaches is part
+    of the answer.  Calls that lay out their input differently do not share a
+    trace (``TensorSig.layout``).
+    """
+    if a_impl.is_contiguous() and (not a_impl.is_phantom or _C_engine.phantom_mode()):
         return a_impl
     return _C_engine.contiguous(a_impl)
 

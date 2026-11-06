@@ -61,11 +61,20 @@ VIEWS: dict[str, View] = {
     "reshape": lambda y: y.reshape(4, 3),
     "unsqueeze": lambda y: y.unsqueeze(0),
     "diagonal": lambda y: lucid.diagonal(y),
+    # ``y`` is contiguous, so this is ``y`` itself; and it stays apart from ``y``
+    # when it is a copy, which is what a transpose makes it.
+    "contiguous": lambda y: y.contiguous(),
+    "contiguous-free": lambda y: lucid.contiguous(y),
+    "contiguous-copy": lambda y: y.mT.contiguous(),
 }
 
 
 def _slice_assign(y: lucid.Tensor, x: lucid.Tensor) -> None:
     y[1:] = x[1:] * 3.0
+
+
+def _list_index(y: lucid.Tensor, x: lucid.Tensor) -> None:
+    y[[0, 2]] = x[[1, 2]]
 
 
 def _through_sibling(y: lucid.Tensor, x: lucid.Tensor) -> None:
@@ -78,6 +87,7 @@ WRITES: dict[str, Write] = {
     "add_": lambda y, x: y.add_(1.0),
     "copy_": lambda y, x: y.copy_(x * 3.0 + 1.0),
     "slice-assign": _slice_assign,
+    "list-index": _list_index,
     "sibling": _through_sibling,
 }
 
