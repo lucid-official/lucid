@@ -16,9 +16,8 @@ separation where the point mass offers 2.1x.
 Nothing outside Lucid is used.  The dynamics are integrated with
 :func:`lucid.diffeq.odeint` — the same tested Runge-Kutta the library
 ships — and the frames are drawn with tensor arithmetic, as
-:class:`~lucid.test._fixtures.point_mass.PointMass` draws its own.  Set
-``device="metal"`` to render on the accelerator and skip a transfer per
-step.
+:class:`~lucid.test._fixtures.point_mass.PointMass` draws its own, on the
+default device unless ``device=`` says otherwise.
 
 On getting the physics right
 ----------------------------
@@ -131,9 +130,10 @@ class Pendulum:
         ``m g l / 2``.  Below ``1`` the pendulum **cannot** be lifted
         directly and has to be pumped, which is the whole point; the
         default leaves a comfortable margin.
-    device : str, default="cpu"
-        Where frames are rendered.  Set ``"metal"`` to keep observations on
-        the accelerator and skip a transfer per step.
+    device : str or None, default=None
+        Where frames are rendered; ``None`` is the default device, as for
+        every Lucid factory, so a model built there gets its observations
+        without a transfer per step.
 
     Attributes
     ----------
@@ -172,7 +172,7 @@ class Pendulum:
     """
 
     def __init__(
-        self, horizon: int = 120, dt: float = 0.05, torque: float = 0.35, device: str = "cpu"
+        self, horizon: int = 120, dt: float = 0.05, torque: float = 0.35, device: str | None = None
     ) -> None:
         """Initialise the task. See the class docstring for parameters."""
         if not 0.0 < torque < 1.0:
@@ -187,8 +187,8 @@ class Pendulum:
         self.gravity = 9.81
         # The peak gravitational torque, at the horizontal.
         self.max_torque = torque * self.mass * self.gravity * self.length / 2.0
-        self.device = device
-        self._ys, self._xs = _grid(device)
+        self.device = lucid.get_default_device() if device is None else device
+        self._ys, self._xs = _grid(self.device)
         self.theta = math.pi
         self.omega = 0.0
         self._t = 0

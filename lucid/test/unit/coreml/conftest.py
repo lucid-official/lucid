@@ -56,8 +56,10 @@ Export reads the weights on the host and refuses a model whose parameters
 are on Metal, by design.  These tests build their models with the default
 device, so under ``lucid-audit --models`` (Metal by default) every one of
 them was refused before it exported anything.  The directory therefore runs
-with the CPU as its default and puts the process's default back after its
-last test.  A test about a Metal model moves it there itself.
+with the CPU as its default — while its modules are collected, since some
+build their layers at import, and through its tests — and puts the
+process's default back after its last test.  A test about a Metal model
+moves it there itself.
 """
 
 import os
@@ -86,6 +88,16 @@ def _exports_from_the_cpu() -> Iterator[None]:
     # the directory builds its model, and undone before the next directory.
     with default_device("cpu"):
         yield
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_make_collect_report(
+    collector: pytest.Collector,
+) -> Generator[None, pytest.CollectReport, pytest.CollectReport]:
+    # A module that builds its catalogue of layers at import does so while
+    # it is collected, before any fixture runs.
+    with default_device("cpu"):
+        return (yield)
 
 
 @pytest.fixture(autouse=True, scope="session")
