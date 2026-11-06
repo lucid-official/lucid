@@ -135,6 +135,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse a call whose full variant misses an input gradient
 
+- Compiled training steps through `svd`, `svdvals`, `matrix_norm(nuc)`, `eigh` and `eigvalsh` on a repeated or zero spectrum (identity or orthogonal weights) no longer give NaN gradients. A custom Function that does not materialize grads now gets, in a compiled step, the cotangents eager gives it for the outputs a gradient reached (`None` for the rest).
+
 ### Performance
 
 - `_C.engine` (`Linear`, `ConvNd`, `ConvTransposeNd`, `LayerNorm`, `RMSNorm`, `BatchNormNd`, `GroupNorm`, `BatchNormEval`, `GlobalResponseNorm`, `Bilinear`): thread `needs_input_grad` (`grad_mask`) and `kGradReads` through fused CPU/Metal backward kernels and `apply_for_graph`, skipping unneeded `dx`/`dW`/`db` GEMMs, convolutions, reductions, and buffer allocations (LCD-697).
@@ -158,6 +160,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A push to main or a `v*` tag is now judged again by `.githooks/pre-push` (`python -m tools.rules push`), and a commit that skipped pre-commit carries a `Lucid-Bypass` trailer and a log line.
 - The pre-commit hook runs the rule registry's commit level on the staged blobs, so a `git add -p` of part of a file under `lucid/` is refused. `LUCID_SKIP_H4_GUARD` and `LUCID_SKIP_QUALITY_GATE` are gone: `--no-verify` is the only way past those checks, and it leaves the trailer.
 - The DreamerV3 learning benchmark (`TestDreamerV3ReadsTheGoal`) scores every policy on a fixed 36-goal panel, treats the goal-blind ceiling as a policy, and asserts what the goal is worth to the policy (the cost of a decoy), over 3000 steps. The old test's blind ceiling was not a ceiling, and its verdict was one random draw.
+- A compiled step through a `_traced_backward` Function with `_materialize_grads=False` (or `ctx.set_materialize_grads(False)`) traces its backward once per set of outputs a gradient may reach; one that cannot be traced for the demands it may meet runs eagerly, and the fallback warning says why. More than 4 differentiable outputs run eagerly.
 
 ---
 
