@@ -25,6 +25,7 @@ from lucid.models.generative.dit import DiTConfig
 from lucid.models.generative.dreamer import DreamerConfig
 from lucid.models.generative.dreamer_v2 import DreamerV2Config
 from lucid.models.generative.dreamer_v3 import DreamerV3Config
+from lucid.models.generative.genie import GenieConfig
 from lucid.models.generative.mean_flow import MeanFlowConfig
 from lucid.models.generative.planet import PlaNetConfig
 from lucid.models.generative.tvm import TVMConfig
@@ -140,6 +141,27 @@ def test_a_square_only_family_still_takes_a_tuple_with_equal_sides(family: str) 
     config = _SQUARE_ONLY[family](sample_size=(16, 16))
     assert config.sample_size == (16, 16)
     assert patch_grid_side(config.sample_size) == 16
+    assert config.num_patches == _SQUARE_ONLY[family](sample_size=16).num_patches
+
+
+@pytest.mark.parametrize("family", ["dit", "mean_flow", "tvm"])
+def test_a_backbone_refuses_a_depth_that_is_not_positive(family: str) -> None:
+    with pytest.raises(ValueError, match="depth must be positive"):
+        _SQUARE_ONLY[family](depth=0)
+
+
+def test_dit_builds_and_generates_over_its_square_latent() -> None:
+    model = create_model(
+        "dit_small_2_gen", sample_size=(16, 16), hidden_size=32, depth=1, num_heads=2, num_classes=3
+    ).eval()
+    with lucid.no_grad():
+        samples = model.generate(n_samples=1, steps=2).samples
+    assert tuple(samples.shape[-2:]) == (16, 16)
+
+
+def test_genie_reads_its_frame_shape_from_the_base_pair() -> None:
+    assert GenieConfig(sample_size=_RECT).frame_shape == _RECT
+    assert GenieConfig(sample_size=32).frame_shape == (32, 32)
 
 
 @pytest.mark.parametrize("family", sorted(_RECTANGULAR))
