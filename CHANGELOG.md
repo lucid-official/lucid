@@ -228,6 +228,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - bring the family under the gate
 - make the encoder and queue private
 - prefix family-internal helpers with an underscore
+- give Drifting's feature encoder its own module
 
 ---
 
