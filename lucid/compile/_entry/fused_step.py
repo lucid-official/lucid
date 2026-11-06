@@ -934,8 +934,9 @@ class _FusedStep:
         # ``held_writes`` asks what else still holds a tensor the call made: the
         # forward's result does not, it is made anew on every run.
         del out
-        held = held_writes(tracer)
-        if held and not model_has_cumulative_bn(self._model):
+        stands = not model_has_cumulative_bn(self._model)
+        held = held_writes(tracer, stands=stands)
+        if held and stands:
             complete_the_call(tracer, self._model)
             raise _TraceStands(loss)
         write_ids, written = require_outside_writes(

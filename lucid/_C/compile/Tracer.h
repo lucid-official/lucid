@@ -348,12 +348,21 @@ public:
     // (``h.add_(1.0)``) stays frozen at its trace-time value, as before
     // (LCD-864).
     //
+    // ``stands``: whether the caller can let the trace-time call stand as the
+    // call, its result and writes the call's.  Then every other write counts.
+    // A caller that cannot (``compiled_step``, a segmented step, a cumulative
+    // batch norm) has only an eager rerun from the tensor put back, or a
+    // refusal, and counts only a write that reads the tensor's own earlier
+    // value (:meth:`reads_its_own_value`): an overwrite lands the same values
+    // however often it runs.  One that runs only on the first call (a buffer
+    // filled from the first batch) stays as wrong there as before (LCD-876).
+    //
     // Answers ``(tensor, value before the trace's write, value after it)`` for
     // each such tensor and changes none of them: the caller either lets the
     // trace stand as the call, or puts them back for an eager call to write
     // (``lucid/compile/_core/buffer_writes.py``).
     std::vector<std::tuple<TensorImplPtr, TensorImplPtr, TensorImplPtr>>
-    refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held);
+    refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held, bool stands);
 
     // Holds the call's result while ``refuse_kept_writes`` asks who else holds
     // what the call made: in C++, the result is not one of those holders.
@@ -520,9 +529,16 @@ private:
     void note_prior(const TensorImplPtr& target, TensorId was, TensorId now, bool in_made);
     // Whether the value ``target`` was last written reads a value the tensor, or
     // a view of it, held before (``prior_ids_``): a read-modify-write, which
-    // counts its runs.  A value that only keeps an earlier one as the base it
-    // overwrites (a setitem's scatter) does not read it.
+    // counts its runs.  A value that keeps an earlier one whole, through views
+    // or as the base an overwrite at constant positions writes into (a
+    // setitem's scatter), reads what that earlier value read.  The base of an
+    // overwrite whose positions are not constants is read: the positions a call
+    // leaves alone hold what earlier calls wrote there.
     bool reads_its_own_value(const TensorImplPtr& target, ConstantWalk& walk) const;
+    // Whether operand ``i`` of ``node`` passes into its result whole, so an
+    // earlier value reached through it is kept, not read (see
+    // :meth:`reads_its_own_value`).
+    bool keeps_operand(const OpNode& node, std::size_t i, ConstantWalk& walk) const;
     // One step of that walk: settles ``id`` when what it reads is known, and
     // otherwise pushes what is not and answers false.
     bool decide(TensorId id, ConstantWalk& walk, std::vector<TensorId>& stack) const;

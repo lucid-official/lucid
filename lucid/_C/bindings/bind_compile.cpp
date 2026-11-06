@@ -282,16 +282,20 @@ void bind_tracer_writes(py::class_<lucid::compile::Tracer>& tracer) {
                       "(Core ML).")
         .def(
             "refuse_kept_writes",
-            [](Tracer& t) {
+            [](Tracer& t, bool stands) {
                 const auto* type = py::detail::get_type_info(typeid(lucid::TensorImpl));
-                return t.refuse_kept_writes([type](const lucid::TensorImpl* impl) {
-                    return static_cast<bool>(py::detail::get_object_handle(impl, type));
-                });
+                return t.refuse_kept_writes(
+                    [type](const lucid::TensorImpl* impl) {
+                        return static_cast<bool>(py::detail::get_object_handle(impl, type));
+                    },
+                    stands);
             },
+            py::arg("stands"),
             "Mark the recording unsupported if Python still holds a tensor the call "
-            "made and wrote in place, reading it, from its inputs, or a view of it; "
-            "answer (tensor, value before, value after) for each, changing none. "
-            "Call once the call's result has been dropped.")
+            "made and wrote in place from its inputs, or a view of it: any such write "
+            "when the trace can stand as the call (stands), else only one that reads "
+            "the tensor's earlier value. Answer (tensor, value before, value after) "
+            "for each, changing none. Call once the call's result has been dropped.")
         .def("keep_answer", &Tracer::keep_answer, py::arg("answer"),
              "Hold the call's result in C++ while refuse_kept_writes runs.")
         .def("take_answer", &Tracer::take_answer, "Hand the held result back.")

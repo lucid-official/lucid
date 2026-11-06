@@ -113,6 +113,7 @@ def end_attempt(outer: _PutBack, *, finished: bool) -> None:
     _HELD.ready = _HELD.pending if finished else []
     _HELD.pending = outer
 
+
 #: ``(tensor, its value before the trace's write, its value after)``.
 type HeldWrites = list[tuple[_C_engine.TensorImpl, _C_engine.TensorImpl, _C_engine.TensorImpl]]
 
@@ -175,18 +176,35 @@ def complete_the_call(tracer: Tracer, model: Module) -> None:
     advance_bn_counters(bn_counter_targets(model, tracer.graph, tracer.external_feeds))
 
 
-def held_writes(tracer: Tracer) -> HeldWrites:
+def held_writes(tracer: Tracer, *, stands: bool) -> HeldWrites:
     """The tensors the call made, wrote from its inputs and Python still holds.
 
     Any of them marks the trace unsupported; none is changed.  Call once, with
     the call's result dropped: a result is handed back on every run.
+
+    Parameters
+    ----------
+    tracer : Tracer
+        The finished trace.
+    stands : bool, keyword-only
+        Whether the caller lets the trace-time call stand as the call when there
+        are any (:func:`stood_as_the_call`): then every such write counts.
+        Without that only one that reads the tensor's own earlier value does,
+        to be put back for an eager call or refused.  An overwrite stays
+        compiled, which is wrong for one that runs only on the first call, a
+        buffer filled from the first batch (LCD-876).
+
+    Returns
+    -------
+    HeldWrites
+        ``(tensor, value before the trace's write, value after)`` for each.
     """
-    return [(impl, before, after) for impl, before, after in tracer.refuse_kept_writes()]
+    kept = tracer.refuse_kept_writes(stands=stands)
+    return [(impl, before, after) for impl, before, after in kept]
 
 
-def _put_back(tracer: Tracer, held: HeldWrites | None = None) -> None:
+def _put_back(tracer: Tracer, held: HeldWrites) -> None:
     """Undo the trace-time call's writes that whatever runs next applies itself."""
-    held = held_writes(tracer) if held is None else held
     for impl, before, _after in held:
         impl.copy_from(before)
     _HELD.pending = [(impl, after, int(impl.version)) for impl, _before, after in held]
@@ -221,7 +239,7 @@ def require_outside_writes(
     tracer: Tracer,
     arguments: Sequence[_C_engine.TensorImpl],
     caller: str,
-    held: HeldWrites | None = None,
+    held: HeldWrites,
 ) -> tuple[list[int], list[_C_engine.TensorImpl]]:
     """Put the written tensors back; return their ids and impls or raise ``RuntimeError``."""
     _put_back(tracer, held)
@@ -236,7 +254,7 @@ def require_outside_writes(
 
 
 def outside_writes(
-    tracer: Tracer, arguments: Sequence[_C_engine.TensorImpl], held: HeldWrites | None = None
+    tracer: Tracer, arguments: Sequence[_C_engine.TensorImpl], held: HeldWrites
 ) -> tuple[list[int], list[object]] | str:
     """Put the written tensors back; return what the executable must carry.
 
@@ -250,8 +268,8 @@ def outside_writes(
         The finished trace.
     arguments : sequence of TensorImpl
         Every tensor impl the traced call was given.
-    held : HeldWrites or None, optional, default=None
-        What :func:`held_writes` answered, when the caller asked already.
+    held : HeldWrites
+        What :func:`held_writes` answered: put back with the rest.
 
     Returns
     -------
@@ -305,7 +323,9 @@ def refuse(tracer: Tracer, *, rerun: bool = True) -> None:
         Python holds keeps the trace's write: put back, it would stay empty
         with nothing to write it again.
     """
-    held = held_writes(tracer)
+    # Neither caller can let the trace stand as the call: only a held tensor's
+    # read-modify-write refuses it (:func:`held_writes`).
+    held = held_writes(tracer, stands=False)
     _put_back(tracer, held if rerun else [])
     if _written(tracer):
         tracer.mark_unsupported(_OUTSIDE)

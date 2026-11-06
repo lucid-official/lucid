@@ -528,9 +528,9 @@ def _fills_a_cache_from_its_state(model: nn.Module, x: Tensor) -> Tensor:
 
 @pytest.mark.parametrize("entry", ENTRIES)
 def test_a_cache_filled_once_from_the_model_s_state_holds_its_values(entry: str) -> None:
-    """The write reads the model's state, so the trace cannot call it a constant;
-    it overwrites the cache, so it lands the same values however often it runs,
-    and nothing puts it back."""
+    """The write reads the model's state, so the trace cannot call it a constant:
+    the trace stands as the call, and the eager calls after it find the cache
+    built."""
     _agrees(_fills_a_cache_from_its_state, entry, _a_cache_slot)
 
 
@@ -671,23 +671,26 @@ def _flat(value: object) -> list[float]:
     return [float(cast(float, value))]
 
 
-#: (norm, entry) pairs whose statistics end apart from eager on main too, the same
-#: model measured there: not this branch's, and each pinned until it is fixed.
-_STATISTICS_MAIN_GETS_WRONG: dict[tuple[str, str], str] = {
-    ("functional", "module"): "lucid.compile drops a functional batch norm's running "
-    "statistics in training (to be filed)",
-    ("batch1d-cumulative", "compiled_step"): "compiled_step leaves a cumulative batch norm's "
-    "statistics behind (to be filed)",
-    ("instance", "compiled_step"): "compiled_step leaves an instance norm's running "
-    "statistics behind (to be filed)",
+#: (norm, entry) pairs that end apart from eager on main too, the same model
+#: measured there: not this branch's, and each pinned until it is fixed.
+_MAIN_GETS_WRONG: dict[tuple[str, str], str] = {
+    ("functional", "module"): "LCD-875: under no_grad, lucid.compile leaves a functional "
+    "batch norm's running statistics where they were",
+    ("instance", "compiled_step"): "LCD-877: compiled_step refuses an instance norm that "
+    "tracks running statistics, loudly (it wrote in place to a tensor it did not create)",
 }
+
+#: Refused by design, with a message: :func:`test_a_compiled_step_refuses_a_cumulative_batch_norm`.
+_REFUSED = {("batch1d-cumulative", "compiled_step")}
 
 
 def _review_params(entries: list[str]) -> list[object]:
     params: list[object] = []
     for norm in _NORMS:
         for entry in entries:
-            why = _STATISTICS_MAIN_GETS_WRONG.get((norm, entry))
+            if (norm, entry) in _REFUSED:
+                continue
+            why = _MAIN_GETS_WRONG.get((norm, entry))
             marks = [pytest.mark.xfail(strict=True, reason=why)] if why else []
             params.append(pytest.param(norm, entry, marks=marks, id=f"{norm}-{entry}"))
     return params
@@ -695,8 +698,18 @@ def _review_params(entries: list[str]) -> list[object]:
 
 @pytest.mark.parametrize(("norm", "entry"), _review_params(list(REVIEW_ENTRIES)))
 def test_a_cache_the_call_fills_once_ends_as_eager_ends(norm: str, entry: str) -> None:
-    """An overwrite: nothing to put back, under any entry, statistics included."""
+    """Filled from the model's state: the trace stands as the call where it can,
+    statistics written from what the kernel handed out; where it cannot, the
+    overwrite stays compiled and lands the same values every call."""
     _review_case("overwrite", norm, entry)
+
+
+@pytest.mark.parametrize("kept", ["overwrite", "read-modify-write"])
+def test_a_compiled_step_refuses_a_cumulative_batch_norm(kept: str) -> None:
+    """Its update reads the counter on the host, and ``compiled_step`` has no eager
+    call to fall back to: a refusal that says so, kept tensor or not."""
+    with pytest.raises(RuntimeError, match="BatchNorm with momentum=None.*no eager fallback"):
+        lucid.compile.compiled_step(_two_parts(kept, "batch1d-cumulative"), _inputs()[0], _loss)
 
 
 @pytest.mark.parametrize(
@@ -742,6 +755,7 @@ def test_a_compiled_step_refuses_a_kept_tensor_it_adds_to_and_leaves_the_write()
     with pytest.raises(RuntimeError, match="still held after the call"):
         lucid.compile.compiled_step(model, x, _loss)
     assert cast(_Part, model[0]).box["h"].tolist() == [2.0] * SHAPE[-1]
+
 
 def _rebuilds_its_total_every_call(model: nn.Module, x: Tensor) -> Tensor:
     model.total = lucid.zeros(SHAPE[-1], device=COMPILE_DEVICE)
@@ -911,10 +925,13 @@ def test_a_made_tensor_in_the_graph_is_not_held_by_the_graph() -> None:
         got.backward()
         want = _loss(ref(x))
         want.backward()
-        assert _close([float(got.item()), *_floats(model.w.grad)], [
-            float(want.item()),
-            *_floats(ref.w.grad),
-        ])
+        assert _close(
+            [float(got.item()), *_floats(model.w.grad)],
+            [
+                float(want.item()),
+                *_floats(ref.w.grad),
+            ],
+        )
     assert len(step.cache) == 1 and not step.eager_only.snapshot()
 
 

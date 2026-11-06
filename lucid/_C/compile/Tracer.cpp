@@ -354,7 +354,7 @@ bool Tracer::lands_in_made(const TensorImplPtr& target) const {
 }
 
 std::vector<std::tuple<TensorImplPtr, TensorImplPtr, TensorImplPtr>>
-Tracer::refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held) {
+Tracer::refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held, bool stands) {
     std::vector<std::tuple<TensorImplPtr, TensorImplPtr, TensorImplPtr>> kept;
     ConstantWalk walk;
     for (auto it = made_originals_.rbegin(); it != made_originals_.rend(); ++it) {
@@ -369,12 +369,13 @@ Tracer::refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held) {
         // that never writes them again would empty the table for good.
         if (from_constants(lookup_id(it->first.get()), walk))
             continue;
-        // A write that only overwrites (``copy_``, ``fill_``, a setitem) lands
-        // the same values however often it runs: whoever holds the tensor holds
-        // them, an eager call that writes it again writes them again, and one
-        // that finds it built reads them.  Only a write that reads the tensor
-        // (``add_``, ``h.copy_(h * 2)``) counts its runs.
-        if (!reads_its_own_value(it->first, walk))
+        // Standing, the trace is the call whatever the write: a buffer filled
+        // from the first batch keeps that batch, as eager does.  Without that, a
+        // write that only overwrites (``copy_``, ``fill_``, a setitem) lands the
+        // same values however often it runs, and only one that reads the tensor
+        // (``add_``, ``h.copy_(h * 2)``) has to run eagerly; one that runs only
+        // on the first call is compiled into every call (LCD-876).
+        if (!stands && !reads_its_own_value(it->first, walk))
             continue;
         mark_unsupported("a tensor the call made is still held after the call and was written "
                          "in place, so a compiled call would start it over every time");
@@ -419,17 +420,18 @@ void Tracer::index_producers(ConstantWalk& walk) const {
             walk.producer.emplace(out.id, &op);
 }
 
-namespace {
-// Whether operand ``i`` of op ``name`` passes into its result as a whole, so a
-// value read through it is the value kept, not one the op computes from:
-// every operand of a view, the base an overwrite writes into.
-bool keeps_operand(std::string_view name, std::size_t i) {
+bool Tracer::keeps_operand(const OpNode& node, std::size_t i, ConstantWalk& walk) const {
     static const std::unordered_set<std::string_view> views{"reshape", "view",      "contiguous",
                                                             "squeeze", "unsqueeze", "flatten"};
+    // Each takes (base, positions, values): the base passes into the result
+    // where the positions leave it, and those are the same every call only
+    // when the positions are constants.
     static const std::unordered_set<std::string_view> overwrites{"scatter_set", "masked_fill"};
-    return views.count(name) != 0 || (i == 0 && overwrites.count(name) != 0);
+    if (views.count(node.name) != 0)
+        return true;
+    return i == 0 && overwrites.count(node.name) != 0 && node.inputs.size() > 1 &&
+           from_constants(node.inputs[1], walk);
 }
-}  // namespace
 
 bool Tracer::reads_its_own_value(const TensorImplPtr& target, ConstantWalk& walk) const {
     std::unordered_set<TensorId> prior;
@@ -442,7 +444,8 @@ bool Tracer::reads_its_own_value(const TensorImplPtr& target, ConstantWalk& walk
         add(member.get());
     index_producers(walk);
     // (id, reached only through kept operands): an earlier value reached that
-    // way is the one an overwrite keeps; reached any other way, it is read.
+    // way is the one an overwrite keeps, and what it read is read; reached any
+    // other way, it is read.
     std::vector<std::pair<TensorId, bool>> stack{{lookup_id(target.get()), true}};
     std::set<std::pair<TensorId, bool>> visited;
     while (!stack.empty()) {
@@ -453,11 +456,11 @@ bool Tracer::reads_its_own_value(const TensorImplPtr& target, ConstantWalk& walk
         if (prior.count(id) != 0 && !kept)
             return true;
         const auto p = walk.producer.find(id);
-        if (prior.count(id) != 0 || p == walk.producer.end())
+        if (p == walk.producer.end())
             continue;
         const OpNode& node = *p->second;
         for (std::size_t i = 0; i < node.inputs.size(); ++i)
-            stack.emplace_back(node.inputs[i], kept && keeps_operand(node.name, i));
+            stack.emplace_back(node.inputs[i], kept && keeps_operand(node, i, walk));
     }
     return false;
 }

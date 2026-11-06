@@ -1176,7 +1176,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
             return None
         return_spec, explicit_outputs = _extract_return_impls(return_value, tracer)
         del return_value
-        held = held_writes(tracer)
+        held = held_writes(tracer, stands=True)
         if held:
             outs: list[object] = [_wrap(impl) for impl in tracer.take_answer()]
             return stood_as_the_call(tracer, self._model, _repack_outputs(return_spec, outs))
