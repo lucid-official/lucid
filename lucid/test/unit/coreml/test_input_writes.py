@@ -234,9 +234,7 @@ class TestAWriteThroughAView:
         assert example.tolist() == want
 
     @pytest.mark.parametrize(
-        "view",
-        [lambda t: t[0:1].expand(4), lambda t: t.unfold(0, 2, 1)],
-        ids=["expand", "unfold"],
+        "view", [lambda t: t[0:1].expand(4), lambda t: t.unfold(0, 2, 1)], ids=["expand", "unfold"]
     )
     def test_with_overlapping_elements_is_refused_and_put_back(
         self, view: Callable[[lucid.Tensor], lucid.Tensor]

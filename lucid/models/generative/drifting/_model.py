@@ -842,9 +842,7 @@ class _ConvNeXtV2(nn.Module):
     """ConvNeXt-V2-Base (``depths=(3, 3, 27, 3)``, ``dims=(128, 256, 512, 1024)``)."""
 
     def __init__(
-        self,
-        depths: tuple[int, ...] = (3, 3, 27, 3),
-        dims: tuple[int, ...] = (128, 256, 512, 1024),
+        self, depths: tuple[int, ...] = (3, 3, 27, 3), dims: tuple[int, ...] = (128, 256, 512, 1024)
     ) -> None:
         """Initialise the backbone. See the class docstring."""
         super().__init__()

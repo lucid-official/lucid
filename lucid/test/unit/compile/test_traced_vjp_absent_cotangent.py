@@ -80,11 +80,7 @@ _AFFECTED = [
     pytest.param("matrix_norm_nuc", "tall_rank_deficient"),
 ]
 
-_CONTROLS = [
-    *((op, "distinct") for op in _OPS),
-    ("qr_mode_r", "eye"),
-    ("qr_mode_r", "diag_3_3_1"),
-]
+_CONTROLS = [*((op, "distinct") for op in _OPS), ("qr_mode_r", "eye"), ("qr_mode_r", "diag_3_3_1")]
 
 
 class _OfMatrix(nn.Module):
@@ -132,9 +128,9 @@ def _assert_matches_eager(got: list[lucid.Tensor], want: lucid.Tensor) -> None:
             f"step {k}: compiled gradient {grad.reshape(-1).tolist()} is not finite, "
             f"eager's is {want.reshape(-1).tolist()}"
         )
-        assert bool(lucid.allclose(grad, want, rtol=1e-4, atol=1e-5)), (
-            f"step {k}: compiled {grad.reshape(-1).tolist()} != eager {want.reshape(-1).tolist()}"
-        )
+        assert bool(
+            lucid.allclose(grad, want, rtol=1e-4, atol=1e-5)
+        ), f"step {k}: compiled {grad.reshape(-1).tolist()} != eager {want.reshape(-1).tolist()}"
 
 
 def _linalg_case(op: str, mat: str, device: str) -> tuple[list[lucid.Tensor], lucid.Tensor]:
