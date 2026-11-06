@@ -24,7 +24,7 @@ from lucid.models.generative.drifting import (
     DriftingModel,
     DriftingSampleQueue,
 )
-from lucid.models.generative.drifting._model import _drift_loss
+from lucid.models.generative.drifting._model import _drift_loss, _pairwise_distance, _self_mask
 from lucid.models.generative.drifting._pretrained import (
     _CFG_BASE_2,
     _CFG_BASE_16,
@@ -75,7 +75,10 @@ class TestDriftLoss:
 
     def test_matches_the_release_with_guidance_negatives(self) -> None:
         # Reference values from ``drift_loss.py`` of the official release on
-        # these exact inputs (float32).
+        # these exact inputs (float32).  In float64 the same inputs give
+        # 0.484186572 and a scale of 1.94359325, so the release is the exact
+        # value to 1e-6; float32 here lands within 1.2e-6 of it on the CPU
+        # and on Metal.
         gen, pos, neg, weight = self._inputs()
         loss, info = _drift_loss(gen, pos, neg, weight, self.TEMPS)
         assert loss.tolist() == pytest.approx([15.9986839, 0.4841861], rel=1e-5)
@@ -85,6 +88,37 @@ class TestDriftLoss:
         gen, pos, _, _ = self._inputs()
         loss, _ = _drift_loss(gen, pos, None, None, self.TEMPS)
         assert loss.tolist() == pytest.approx([10.8916798, 3.2236001], rel=1e-5)
+
+    @staticmethod
+    def _random(seed: int) -> tuple[lucid.Tensor, lucid.Tensor, lucid.Tensor, lucid.Tensor]:
+        lucid.manual_seed(seed)
+        gen, pos, neg = lucid.randn(4, 16, 64), lucid.randn(4, 8, 64), lucid.randn(4, 6, 64)
+        return gen, pos, neg, lucid.rand(4, 6) + 0.5
+
+    @pytest.mark.parametrize("seed", [0, 1, 2])
+    def test_a_sample_s_distance_to_itself_is_the_floor_exactly(self, seed: int) -> None:
+        # The first C_g targets are the samples themselves, so their squared
+        # distance is zero and the floor makes it sqrt(1e-8).  Left to
+        # ``xx + yy - 2 xy`` it is the root of whatever ulp the matmul and
+        # the sum round apart by.  In float32, over these three seeds, 62 of
+        # the 192 were off the floor on the CPU (up to 7.8e-3) and 22 on Metal.
+        gen, pos, _, _ = self._random(seed)
+        targets = lucid.cat([gen, pos], dim=1)
+        dist = _pairwise_distance(gen, targets, _self_mask(gen, targets))
+        own = dist[:, :, :16].diagonal(dim1=1, dim2=2).reshape(-1).tolist()
+        assert own == pytest.approx([1e-4] * len(own), rel=1e-6)
+
+    @pytest.mark.parametrize("seed", [0, 1, 2])
+    def test_the_float32_normalisation_is_the_float64_one(self, seed: int) -> None:
+        # The scale is one mean over every pair, self pairs included, so a
+        # self distance off by ulps moves it.  Over 12 seeds the float32
+        # scale sits within 1.8e-7 of float64 on the CPU and on Metal; with
+        # the self block left to cancellation it was 3.5e-6 to 6.3e-6 off on
+        # the CPU and 1.0e-6 to 2.6e-6 on Metal.
+        inputs = self._random(seed)
+        _, info = _drift_loss(*inputs, self.TEMPS)
+        _, exact = _drift_loss(*(t.to("cpu").to(lucid.float64) for t in inputs), self.TEMPS)
+        assert float(info["scale"].item()) == pytest.approx(float(exact["scale"].item()), rel=5e-7)
 
     def test_one_temperature_averages_exactly_one(self) -> None:
         # A.6: the drift is divided by its own RMS over the batch, and the

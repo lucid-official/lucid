@@ -477,17 +477,23 @@ class DriftingModel(PretrainedModel):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _pairwise_distance(x: Tensor, y: Tensor, eps: float = 1e-8) -> Tensor:
+def _pairwise_distance(x: Tensor, y: Tensor, same: Tensor, eps: float = 1e-8) -> Tensor:
     """``(B, N, D) x (B, M, D) -> (B, N, M)`` L2 distances, the release's ``cdist``.
 
     Expanded-square form clipped at ``eps`` before the root, so a sample's
     distance to itself is ``1e-4`` rather than zero — reproduced exactly
-    because the global normalisation averages over it.
+    because the global normalisation averages over it.  ``same`` is one on
+    the ``(N, M)`` pairs that are one point twice, and their square is set
+    to its exact zero.  Cancellation would leave whatever ulp the matmul and
+    the sum round apart by, and the root magnifies it: on the CPU in float32
+    a residue of ``4.8e-7`` became a self distance of ``6.9e-4``, which moved
+    the normalisation by ``1e-5``.
     """
     xy = lucid.matmul(x, y.permute(0, 2, 1))
     xx = (x * x).sum(dim=-1)
     yy = (y * y).sum(dim=-1)
-    return lucid.sqrt(lucid.clamp(xx.unsqueeze(2) + yy.unsqueeze(1) - 2.0 * xy, min=eps))
+    square = (xx.unsqueeze(2) + yy.unsqueeze(1) - 2.0 * xy) * (1.0 - same)
+    return lucid.sqrt(lucid.clamp(square, min=eps))
 
 
 def _drift_loss(
@@ -539,8 +545,9 @@ def _drift_loss(
     with lucid.no_grad():
         old = gen.detach()
         targets, target_w, c_n = _drift_targets(old, pos, neg, weight_neg)
+        self_mask = _self_mask(old, targets)
 
-        dist = _pairwise_distance(old, targets)
+        dist = _pairwise_distance(old, targets, self_mask)
         scale = (dist * target_w.unsqueeze(1)).mean() / target_w.mean()
         info["scale"] = scale
         # Coordinates normalised so the mean distance is about sqrt(S).
@@ -550,7 +557,7 @@ def _drift_loss(
         dist_normed = dist / lucid.clamp(scale, min=1e-3)
 
         force, energies = _drift_force(
-            dist_normed, target_w, targets_scaled, old_scaled, c_n, temperatures
+            dist_normed, self_mask, target_w, targets_scaled, old_scaled, c_n, temperatures
         )
         info.update(energies)
         goal = old_scaled + force
@@ -587,8 +594,22 @@ def _drift_targets(
     return lucid.cat(parts, dim=1), lucid.cat(weights, dim=1), c_n
 
 
+def _self_mask(old: Tensor, targets: Tensor) -> Tensor:
+    """``(C_g, C_g + C_n + C_p)``: one where a generated sample meets itself among the targets."""
+    c_g, n_targets = int(old.shape[1]), int(targets.shape[1])
+    work, device = old.dtype, old.device.type
+    return lucid.cat(
+        [
+            lucid.eye(c_g, dtype=work, device=device),
+            lucid.zeros((c_g, n_targets - c_g), dtype=work, device=device),
+        ],
+        dim=1,
+    )
+
+
 def _drift_force(
     dist_normed: Tensor,
+    self_mask: Tensor,
     target_w: Tensor,
     targets_scaled: Tensor,
     old_scaled: Tensor,
@@ -598,19 +619,11 @@ def _drift_force(
     """Alg. 2's field at every generated sample, normalised per temperature and summed.
 
     The first ``C_g`` targets are the samples themselves, masked out of
-    their own kernel row; those and the next ``c_n`` repel, the rest
-    attract.  Returns the force and each temperature's raw drift energy,
-    keyed ``loss_{tau}``.
+    their own kernel row by ``self_mask``; those and the next ``c_n``
+    repel, the rest attract.  Returns the force and each temperature's raw
+    drift energy, keyed ``loss_{tau}``.
     """
-    c_g, n_targets = int(old_scaled.shape[1]), int(targets_scaled.shape[1])
-    work, device = old_scaled.dtype, old_scaled.device.type
-    self_mask = lucid.cat(
-        [
-            lucid.eye(c_g, dtype=work, device=device),
-            lucid.zeros((c_g, n_targets - c_g), dtype=work, device=device),
-        ],
-        dim=1,
-    )
+    c_g = int(old_scaled.shape[1])
     dist_normed = dist_normed + self_mask.unsqueeze(0) * _SELF_MASK
 
     split = c_g + c_n
