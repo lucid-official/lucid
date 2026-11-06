@@ -67,6 +67,9 @@ VIEWS: dict[str, View] = {
     "contiguous": lambda y: y.contiguous(),
     "contiguous-free": lambda y: lucid.contiguous(y),
     "contiguous-copy": lambda y: y.mT.contiguous(),
+    # With the list-index write, the two rows LCD-843 was filed with.
+    "clone": lambda y: y.clone(),
+    "whole-slice": lambda y: y[:],
     # A dropout with nothing to drop is its input, as ``contiguous`` is.
     "dropout-eval": lambda y: F.dropout(y, 0.5, False),
     "dropout-p0": lambda y: F.dropout(y, 0.0, True),
