@@ -142,8 +142,8 @@ enforce = [{ level = "push", check = "abi-bump" }]
 
 # The last node is the record's own run line, in a real push: a control that only runs the
 # tool would stay green with `{since}` gone or the trigger narrowed.  It costs about 15 s;
-# with it the whole audit took 68 s on a loaded Studio and 92 s on an M1 Pro (2026-11-06),
-# where R1 aimed at 30 s.
+# with it the whole audit took 40 to 68 s on a loaded Studio and 92 s on an M1 Pro
+# (2026-11-06/07), where R1 aimed at 30 s.
 [[rule.control]]
 kind = "pytest"
 check = ["abi-bump"]

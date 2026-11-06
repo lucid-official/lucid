@@ -64,8 +64,8 @@ with `gap` is enforced only partly.
   lists, so every checkout of a tree gets one answer. A copy with no git is walked as it
   is, ignored files and all.
 
-The whole audit took 68 s on a loaded Studio and 92 s on an M1 Pro (2026-11-06), most of
-it the C++ records' controls: the real-git push case alone is about 15 s.
+The whole audit took 40 to 68 s on a loaded Studio and 92 s on an M1 Pro (2026-11-06/07),
+most of it the C++ records' controls: the real-git push case alone is about 15 s.
 
 **Adding a rule.** Write the record. Each check it claims needs a control: `seed`
 (the tool and `tree` in a scratch directory; the `clean` near miss at `path` must
