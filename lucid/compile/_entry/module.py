@@ -158,6 +158,9 @@ def _extract_return_impls(value: object, tracer: _TracerLike) -> tuple[object, l
 
     spec = visit(value)
     tracer.keep_answer(flat_impls)
+    # ``visit`` refers to itself, so the list outlives this call until a
+    # collection: emptied, it holds no tensor anyone could take for a holder.
+    flat_impls.clear()
     return spec, flat_ids
 
 
@@ -917,9 +920,10 @@ class CompiledModule[**P, R](_ModuleWrapper):
             return run_eager(self._model, args, kwargs)
 
         grad_mode = _C_engine.grad_enabled()
-        entry = self._cache.get(key)
-        if grad_mode and self._needs_gradients(leaves, entry):
+        cached = self._cache.get(key)
+        if grad_mode and self._needs_gradients(leaves, cached):
             return self._run_differentiable(key, args, kwargs)
+        entry: _CacheEntry | TraceAnswer[object] | None = cached
         if entry is None:
             key, entry = self._compile_and_cache(key, eff, args, kwargs)
             # A tensor no module holds — a closure's, a global, one a factory
