@@ -159,6 +159,21 @@ class _KeepsIt(nn.Module):
         return y * 2.0
 
 
+class _HoldsAndAdds(nn.Module):
+    """Makes the tensor, keeps it, and writes it from a value in the graph."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.box: dict[str, Tensor] = {}
+
+    def forward(self, x: Tensor) -> Tensor:
+        if "held" not in self.box:
+            self.box["held"] = lucid.ones(*x.shape, device=x.device)
+        held = self.box["held"]
+        held.add_(x)
+        return held * 2.0
+
+
 class _WritesTheCallsInput(nn.Module):
     """``x`` is the caller's tensor, and the write puts it in the graph."""
 
@@ -409,6 +424,16 @@ def test_compiled_step_refuses_a_view_read_from_before_the_write() -> None:
 @pytest.mark.parametrize("entry", list(ENTRIES))
 def test_a_kept_tensor_written_in_the_graph(entry: str) -> None:
     _run(_KeepsIt, entry)
+
+
+@pytest.mark.parametrize("entry", ["make_step", "segmented", "fused_step"])
+def test_a_held_tensor_written_from_the_graph(entry: str) -> None:
+    """One call: eager's next one chains onto the graph the first freed.
+
+    A segmented step puts the tensor back for an eager rerun, which reads it from
+    outside the graph of the trace-time call or counts that call's path twice.
+    """
+    _run(_HoldsAndAdds, entry, calls=1)
 
 
 @pytest.mark.parametrize("grad", [True, False], ids=["grad", "no_grad"])

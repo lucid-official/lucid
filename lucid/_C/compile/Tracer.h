@@ -370,9 +370,10 @@ public:
     // and the trace's writes are that call's.
     //
     // Answers ``(tensor, value before the trace's write, value after it)`` for
-    // each such tensor and changes none of them: the caller either lets the
-    // trace stand as the call, or puts them back for an eager call to write
-    // (``lucid/compile/_core/buffer_writes.py``).
+    // each such tensor and changes none of their values: the caller either lets
+    // the trace stand as the call, or puts them back for an eager call to write
+    // (``lucid/compile/_core/buffer_writes.py``).  Without ``stands`` they leave
+    // the graph of the trace-time call here.
     std::vector<std::tuple<TensorImplPtr, TensorImplPtr, TensorImplPtr>>
     refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held, bool stands);
 

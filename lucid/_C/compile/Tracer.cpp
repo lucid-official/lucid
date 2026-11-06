@@ -62,6 +62,15 @@ void move_graph_position(const TensorImpl& from, TensorImpl& to) {
     to.set_requires_grad(from.requires_grad());
 }
 
+void leave_graph(TensorImpl& t) {
+    if (!t.requires_grad() && !t.grad_fn())
+        return;
+    t.clear_grad_fn();
+    t.set_grad_output_nr(0);
+    t.set_leaf(true);
+    t.set_requires_grad(false);
+}
+
 // Keeps ``target``'s current value in ``originals`` unless it is there already;
 // answers the copy when it made one.
 TensorImplPtr keep_original(std::vector<std::pair<TensorImplPtr, TensorImplPtr>>& originals,
@@ -395,6 +404,14 @@ Tracer::refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held, b
         // again overwrites them: nothing to put back.
         if (!repeats_elements(*it->first))
             kept.emplace_back(it->first, it->second, snapshot(it->first));
+        // The eager call after it adds to the tensor put back, and must not
+        // chain onto the trace-time call's graph.  A tensor the call made sat in
+        // no graph before the write.
+        if (!stands) {
+            leave_graph(*it->first);
+            for (const auto& member : members)
+                leave_graph(*member);
+        }
     }
     return kept;
 }
