@@ -9,8 +9,8 @@ Layer 1 (``ModelConfig.__init_subclass__``) and Layer 2
 (``@model_family_meta`` decorator) cover *runtime* mistakes that surface
 the moment a malformed Config is imported.  This validator covers the
 rest: directory layout, decorator presence, naming patterns of model
-classes and factory functions — things that ``ast.parse`` can verify
-without executing user code.
+classes and factory functions, and which names a family exports — things
+that ``ast.parse`` can verify without executing user code.
 
 Usage
 -----
@@ -505,12 +505,94 @@ def _check_pretrained(family_dir: Path, issues: list[Issue]) -> None:
         )
 
 
+def _declared_all(tree: ast.Module) -> set[str] | None:
+    """The names in a module's literal ``__all__``; ``None`` if absent or not a literal."""
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets, value = node.targets, node.value
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "__all__" for t in targets):
+            continue
+        if not isinstance(value, (ast.List, ast.Tuple)):
+            return None
+        names = [_literal_str(e) for e in value.elts]
+        if any(n is None for n in names):
+            return None
+        return {n for n in names if n is not None}
+    return None
+
+
+def _check_exports(family_dir: Path, issues: list[Issue]) -> None:
+    """A public name is either exported from the family package or it is not public.
+
+    MZ080: a top-level class or function whose name has no leading underscore,
+    defined in any module of the family but ``__init__.py``, must be listed in
+    the family package's ``__all__``.  Such a name is neither one thing nor the
+    other: the docs site and ``from <family> import *`` treat it as internal
+    while its spelling says public.  The fix is one of two: export it (it is
+    a config, model, task wrapper, ``*Output``, factory, ``*Weights`` or a
+    documented family component in its own ``_<component>.py``) or prefix it
+    with ``_`` (it is a building block).
+
+    MZ081: the ``__all__`` the rule reads must be a literal list of strings,
+    otherwise the check could not tell and would silently pass.
+
+    Only reached through :func:`iter_families`, which skips every ``_``-prefixed
+    directory — so the four ``<domain>/_common`` packages, which are substrate
+    several families share rather than families, are not held to this.
+    """
+    init = family_dir / "__init__.py"
+    if not init.is_file():
+        return  # MZ001 reports the missing file.
+    init_tree = _parse(init)
+    exported = _declared_all(init_tree) if init_tree is not None else None
+    if exported is None:
+        issues.append(
+            Issue(
+                "error",
+                "MZ081",
+                init,
+                1,
+                f"family {family_dir.name}: __init__.py needs a literal '__all__' list of "
+                f"names — MZ080 reads it statically.",
+            )
+        )
+        return
+    for fp in sorted(family_dir.rglob("*.py")):
+        if fp.name == "__init__.py":
+            continue
+        tree = _parse(fp)
+        if tree is None:
+            continue
+        for node in tree.body:
+            if not isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            if node.name.startswith("_") or node.name in exported:
+                continue
+            kind = "class" if isinstance(node, ast.ClassDef) else "function"
+            issues.append(
+                Issue(
+                    "error",
+                    "MZ080",
+                    fp,
+                    node.lineno,
+                    f"{node.name}: public {kind} in {fp.name} is not in "
+                    f"{family_dir.name}.__all__ — export it if it is part of the family's "
+                    f"public surface, otherwise rename it with a leading underscore.",
+                )
+            )
+
+
 # ---------------------------------------------------------------------------
 # Top-level driver
 # ---------------------------------------------------------------------------
 
 
 def iter_families(domain_filter: str | None, family_filter: str | None) -> Iterable[Path]:
+    """Family directories; ``_``-prefixed ones (``_common``, shared substrate) are not families."""
     domains = (domain_filter,) if domain_filter else DOMAINS
     for d in domains:
         dom_dir = MODELS_DIR / d
@@ -631,6 +713,7 @@ def validate(domain: str | None, family: str | None, strict: bool, runtime: bool
         config_names = _check_configs(cfg_files, fam, issues)
         _check_models(model_files, fam, config_names, issues)
         _check_pretrained(fam, issues)
+        _check_exports(fam, issues)
         if runtime:
             _check_protocols(fam, issues)
     if runtime:
