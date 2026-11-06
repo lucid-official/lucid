@@ -50,6 +50,18 @@ bool repeats_elements(const TensorImpl& t) {
     return !t.is_contiguous() && strided::overlaps_itself(t.shape(), t.stride());
 }
 
+// Gives ``to`` the place in the autograd graph ``from`` has.  A write recording a
+// graph gives its target its op's place, in the trace-time call's graph: a
+// tensor put back has to leave it, or whatever runs next chains onto that call.
+void move_graph_position(const TensorImpl& from, TensorImpl& to) {
+    if (!from.requires_grad() && !from.grad_fn() && !to.requires_grad() && !to.grad_fn())
+        return;
+    to.set_grad_fn(from.grad_fn());
+    to.set_grad_output_nr(from.grad_output_nr());
+    to.set_leaf(from.is_leaf());
+    to.set_requires_grad(from.requires_grad());
+}
+
 // Keeps ``target``'s current value in ``originals`` unless it is there already;
 // answers the copy when it made one.
 TensorImplPtr keep_original(std::vector<std::pair<TensorImplPtr, TensorImplPtr>>& originals,
@@ -325,11 +337,11 @@ void Tracer::keep_outside(const TensorImplPtr& target) {
     // v`` makes two, and each would be a copy of its own and an output on
     // every run.
     if (const TensorImplPtr carrier = whole_member(target, outside)) {
-        keep_original(outside_originals_, carrier);
+        keep_outside_original(carrier);
         return;
     }
     if (!repeats_elements(*target)) {
-        keep_original(outside_originals_, target);
+        keep_outside_original(target);
         return;
     }
     // The compiled call has no way to copy a value into such a view, and neither
@@ -338,8 +350,13 @@ void Tracer::keep_outside(const TensorImplPtr& target) {
                      "has no one value to carry back to the next call");
     for (const auto& member : target->live_views()) {
         if (from_outside(member.get()) && !repeats_elements(*member))
-            keep_original(outside_originals_, member);
+            keep_outside_original(member);
     }
+}
+
+void Tracer::keep_outside_original(const TensorImplPtr& target) {
+    if (const TensorImplPtr before = keep_original(outside_originals_, target))
+        move_graph_position(*target, *before);
 }
 
 bool Tracer::lands_in_made(const TensorImplPtr& target) const {
@@ -683,8 +700,10 @@ void Tracer::restore_outside_writes() {
     // trace's first write to it, and a tensor that overlaps an earlier one
     // kept that one's write in its copy.  The earlier copy goes last, so
     // every byte ends as it was before the trace.
-    for (auto it = outside_originals_.rbegin(); it != outside_originals_.rend(); ++it)
+    for (auto it = outside_originals_.rbegin(); it != outside_originals_.rend(); ++it) {
         it->first->copy_from(*it->second);
+        move_graph_position(*it->second, *it->first);
+    }
 }
 
 std::vector<std::pair<TensorId, TensorImplPtr>> Tracer::outside_writes() const {

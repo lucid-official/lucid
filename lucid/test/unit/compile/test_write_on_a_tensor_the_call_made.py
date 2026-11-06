@@ -159,11 +159,42 @@ class _KeepsIt(nn.Module):
         return y * 2.0
 
 
+class _WritesTheCallsInput(nn.Module):
+    """``x`` is the caller's tensor, and the write puts it in the graph."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(lucid.ones(WIDTH))
+
+    def forward(self, x: Tensor) -> Tensor:
+        x.add_(self.weight)
+        return x * 2.0
+
+
+class _WritesABufferFromTheGraph(nn.Module):
+    """The write puts a buffer in the graph; eager's next backward refuses it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.linear = nn.Linear(WIDTH, WIDTH)
+        self.register_buffer("total", lucid.zeros(WIDTH))
+
+    def forward(self, x: Tensor) -> Tensor:
+        y = self.linear(x)
+        self.total.add_(y.mean(0))
+        return y + self.total
+
+
 def _sequential(middle: Callable[[], nn.Module]) -> nn.Module:
     lucid.manual_seed(0)
     return nn.Sequential(nn.Linear(WIDTH, WIDTH), middle(), nn.Linear(WIDTH, WIDTH)).to(
         COMPILE_DEVICE
     )
+
+
+def _alone(model: Callable[[], nn.Module]) -> nn.Module:
+    lucid.manual_seed(0)
+    return model().to(COMPILE_DEVICE)
 
 
 def _batches() -> list[Tensor]:
@@ -290,19 +321,26 @@ def _eager_call(model: nn.Module, x: Tensor, grad: bool) -> float:
     return value
 
 
-def _run(middle: Callable[[], nn.Module], entry_name: str) -> _Entry:
+def _run(
+    middle: Callable[[], nn.Module],
+    entry_name: str,
+    build: Callable[[Callable[[], nn.Module]], nn.Module] = _sequential,
+    calls: int = CALLS,
+) -> _Entry:
     """Run ``entry_name`` against an eager twin, comparing after each call."""
-    model, twin = _sequential(middle), _sequential(middle)
+    model, twin = build(middle), build(middle)
     optimizer = optim.SGD(model.parameters(), lr=0.01)
     twin_optimizer = optim.SGD(twin.parameters(), lr=0.01)
     entry = ENTRIES[entry_name](model, optimizer)
     grad = entry_name != "module_no_grad"
-    for i, x in enumerate(_batches()):
+    for i, batch in enumerate(_batches()[:calls]):
         optimizer.zero_grad()
         twin_optimizer.zero_grad()
+        x, twin_x = batch.clone(), batch.clone()
         got = entry.call(x)
-        want = _eager_call(twin, x, grad)
+        want = _eager_call(twin, twin_x, grad)
         assert abs(got - want) / max(1.0, abs(want)) < TOLERANCE, f"call {i}: {got} vs {want}"
+        assert _close(x.detach(), twin_x.detach()), f"call {i}: the call's input"
         if entry.compares_grads:
             for p, q in zip(model.parameters(), twin.parameters(), strict=True):
                 assert _close(p.grad, q.grad), f"call {i}: gradient"
@@ -388,6 +426,27 @@ def test_the_write_reads_the_op_that_computed_the_value(grad: bool) -> None:
     add = next(op for op in tracer.graph.ops if op.name == "add")
     assert computed in list(add.inputs)
     assert set(tracer.external_feeds) == feeds
+
+
+# -- a write that puts a tensor from outside in the trace's graph ---------------
+
+
+@pytest.mark.parametrize("entry", ["make_step", "fused_step", "module_no_grad"])
+def test_a_write_on_the_calls_input(entry: str) -> None:
+    """Put back after the trace, it leaves the graph too: the rerun's is the only one."""
+    _run(_WritesTheCallsInput, entry, build=_alone)
+
+
+def test_compiled_step_refuses_a_write_on_the_calls_input() -> None:
+    with pytest.raises(RuntimeError, match="one of its own arguments|did not create"):
+        _run(_WritesTheCallsInput, "compiled_step", build=_alone)
+
+
+@pytest.mark.parametrize("entry", ["make_step", "fused_step"])
+def test_a_buffer_written_from_the_graph(entry: str) -> None:
+    """One call: eager's second refuses a graph the first freed, and a compiled one need not."""
+    ran = _run(_WritesABufferFromTheGraph, entry, build=_alone, calls=1)
+    assert not ran.model.total.requires_grad or entry != "make_step"
 
 
 # -- a value the tracer was not told of ----------------------------------------

@@ -337,8 +337,8 @@ public:
     void on_stand_in(const TensorImplPtr& stand_in, const TensorImplPtr& of);
 
     // Puts every tensor from outside the trace that the trace wrote in place
-    // back to its value from before the trace, from the copy
-    // :meth:`on_inplace_write` kept at the first write.  The trace-time call
+    // back to its value and place in the autograd graph from before the trace,
+    // from the copy :meth:`on_inplace_write` kept at the first write.  The trace-time call
     // ran those writes eagerly; whatever runs next — an executable or an
     // eager fallback — applies them itself, and would otherwise apply them
     // twice.  Call once the trace has finished.
@@ -513,6 +513,9 @@ private:
     // Whatever made it told the tracer nothing, and a compiled call would answer
     // with this call's value.
     void refuse_computed_feed(const TensorImpl& feed);
+    // Keeps what :meth:`restore_outside_writes` puts ``target`` back to: its value
+    // and its place in the autograd graph, both about to move.
+    void keep_outside_original(const TensorImplPtr& target);
     // ``on_inplace_write`` for a target the trace made itself.
     void write_made(const TensorImplPtr& target, const TensorImplPtr& value);
     // Whether ``impl`` reached the trace from outside it: neither made by the
