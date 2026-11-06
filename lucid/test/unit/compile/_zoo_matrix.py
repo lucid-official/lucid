@@ -185,7 +185,7 @@ def _class_conditional(cfg: Any, seed: int) -> tuple[tuple[Any, ...], dict[str, 
     side = int(cfg.sample_size)
     x = lucid.randn(BATCH, int(cfg.in_channels), side, side)
     labels = lucid.randint(0, int(cfg.num_classes), (BATCH,))
-    return (x.to(DEV),), {"labels": labels.to(DEV)}
+    return (x.to(DEV), labels.to(DEV)), {}
 
 
 def _regions(cfg: Any, seed: int) -> tuple[tuple[Any, ...], dict[str, Any]]:
@@ -543,7 +543,11 @@ def _compiled_step(
 
     Returns ``(replay loss, eager-fallback reason)``.
     """
-    if len(batches[0][0]) > 1 or batches[0][1]:
+    if batches[0][1]:
+        # ``step`` takes positional inputs only: a keyword here would reach the eager
+        # side but not this one, and the two would compare different calls.
+        raise TypeError(f"a Spec's inputs must be positional, got {sorted(batches[0][1])}")
+    if len(batches[0][0]) > 1:
         wrapper = _Through(model)
         wrapper.train(model.training)
 
