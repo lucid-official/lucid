@@ -315,6 +315,16 @@ def _untraced(tracer: object) -> Iterator[None]:
         _C_engine.compile.set_current_tracer(tracer)
 
 
+class _TraceStands(Exception):
+    """The trace-time call stands as the call (``TraceAnswer``): it wrote a
+    tensor it made and keeps, which an eager rerun would read put back.  Carries
+    the trace's loss, for the eager backward and step."""
+
+    def __init__(self, loss: Tensor) -> None:
+        super().__init__("the trace-time call stands as the call")
+        self.loss = loss
+
+
 def _fallback_category(why: Exception) -> str:
     """The kind of reason a fused plan was declined for, as announced once."""
     if isinstance(why, CustomBackwardInTrace):
@@ -652,11 +662,16 @@ class _FusedStep:
         prev_init = list(copt._initialized)
         prev_pstate = [dict(d) for d in copt._pstate]
         try:
-            with compile_attempt():
-                plan = self._build_plan(args, flags)
+            with compile_attempt() as attempt:
+                try:
+                    plan = self._build_plan(args, flags)
+                except _TraceStands:
+                    # Its draws were the call's: the streams stay where it left them.
+                    attempt.answered = True
+                    raise
             self._refresh_scaler_scalars()
             result = self._run(plan, args, flags)
-        except (RuntimeError, NotImplementedError) as why:
+        except (RuntimeError, NotImplementedError, _TraceStands) as why:
             msg = str(why)
             if (
                 "LUCID_MANUAL_VJP_REQUIRE=1" in msg
@@ -672,6 +687,8 @@ class _FusedStep:
                 self._fingerprint.rekey(call, args, {}),
             )
             self._eager_only.add(fallback_key)
+            if isinstance(why, _TraceStands):
+                return self._step_eagerly(why.loss)
             return self._run_eager(args)
         # Keyed after the build + first run: it initialised the new members'
         # state, and the trace showed which tensor attributes it reads.
@@ -682,26 +699,31 @@ class _FusedStep:
 
     def _run_eager(self, args: tuple[Tensor, ...]) -> Tensor:
         """Run one training step eagerly when the fused plan declines or fails."""
-        from lucid._tensor.tensor import Tensor
         from lucid.autograd._grad_mode import enable_grad
         from lucid.compile._core.buffer_writes import eager_rerun
+
+        with enable_grad(), eager_rerun():
+            loss = self._loss_fn(self._model(*args[:1]), *args[1:])
+        return self._step_eagerly(loss)
+
+    def _step_eagerly(self, loss: Tensor) -> Tensor:
+        """Backward ``loss`` and step, eagerly: the eager call's loss, or the
+        trace's when the trace stands as the call (``_TraceStands``)."""
+        from lucid._tensor.tensor import Tensor
 
         # Whoever owns the optimizer state steps it: the compiled wrapper once
         # it has the state, else the optimizer itself.
         stepper = self._optimizer if self._compiled is None else self._compiled
         stepper.zero_grad()
-        with enable_grad(), eager_rerun():
-            out = self._model(*args[:1])
-            loss = self._loss_fn(out, *args[1:])
-            if self._grad_scaler is not None and self._grad_scaler._enabled:
-                scaled = self._grad_scaler.scale(loss)
-                assert isinstance(scaled, Tensor)
-                scaled.backward()
-                self._grad_scaler.step(self._optimizer)
-                self._grad_scaler.update()
-            else:
-                loss.backward()
-                stepper.step()
+        if self._grad_scaler is not None and self._grad_scaler._enabled:
+            scaled = self._grad_scaler.scale(loss)
+            assert isinstance(scaled, Tensor)
+            scaled.backward()
+            self._grad_scaler.step(self._optimizer)
+            self._grad_scaler.update()
+        else:
+            loss.backward()
+            stepper.step()
         return loss.detach()
 
     def _refresh_scaler_scalars(self) -> None:
@@ -861,7 +883,8 @@ class _FusedStep:
     ) -> _FusedTrace:
         """Trace forward + loss in the caller's grad mode and optimizer update under ``no_grad()``."""
         from lucid.autograd._grad_mode import no_grad
-        from lucid.compile._core.buffer_writes import require_outside_writes
+        from lucid.compile._core.bn_runstats import model_has_tracking_bn
+        from lucid.compile._core.buffer_writes import held_writes, require_outside_writes
         from lucid.compile._core.trace_context import recording
 
         copt = self._copt
@@ -904,11 +927,14 @@ class _FusedStep:
         finally:
             _tls.active = False
 
-        # ``require_outside_writes`` asks what else still holds a tensor the call
-        # made: the forward's result does not, it is made anew on every run.
+        # ``held_writes`` asks what else still holds a tensor the call made: the
+        # forward's result does not, it is made anew on every run.
         del out
+        held = held_writes(tracer)
+        if held and not model_has_tracking_bn(self._model):
+            raise _TraceStands(loss)
         write_ids, written = require_outside_writes(
-            tracer, [_unwrap_hot(a) for a in args], "fused_step"
+            tracer, [_unwrap_hot(a) for a in args], "fused_step", held
         )
 
         return _FusedTrace(

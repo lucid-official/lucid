@@ -145,10 +145,13 @@ def eager_rerun() -> Iterator[None]:
 
 
 def require_outside_writes(
-    tracer: Tracer, arguments: Sequence[_C_engine.TensorImpl], caller: str
+    tracer: Tracer,
+    arguments: Sequence[_C_engine.TensorImpl],
+    caller: str,
+    held: HeldWrites | None = None,
 ) -> tuple[list[int], list[_C_engine.TensorImpl]]:
     """Put the written tensors back; return their ids and impls or raise ``RuntimeError``."""
-    _put_back(tracer)
+    _put_back(tracer, held)
     ids: list[int] = []
     targets: list[_C_engine.TensorImpl] = []
     for latest, impl in _written(tracer):

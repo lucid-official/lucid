@@ -25,7 +25,7 @@ these bugs from a correct answer: the first call agrees either way.
 
 import functools
 from collections.abc import Callable, Iterator
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 import pytest
 
@@ -526,35 +526,48 @@ def _fills_a_cache_from_its_state(model: nn.Module, x: Tensor) -> Tensor:
     return x * model.cache
 
 
-@pytest.mark.parametrize(
-    "entry",
-    [
-        "module",
-        "make_step",
-        pytest.param(
-            "fused_step",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="fused_step reruns the call eagerly with the cache put back, and that "
-                "call finds it built and reads it empty (issue to be filed with LCD-853's land)",
-            ),
-        ),
-    ],
-)
+@pytest.mark.parametrize("entry", ENTRIES)
 def test_a_cache_filled_once_from_the_model_s_state_holds_its_values(entry: str) -> None:
     """The write reads the model's state, so the trace cannot call it a constant.
     Run again eagerly with the cache put back, the call would find it built and
-    answer from the empty one; so the trace-time call stands as the call.  The
-    cache keeps the trace's values whichever way the call went."""
+    answer from the empty one (and a training step would step on that answer for
+    good); so the trace-time call stands as the call."""
     _agrees(_fills_a_cache_from_its_state, entry, _a_cache_slot)
 
 
-def test_after_a_fused_step_s_eager_call_the_cache_holds_its_values() -> None:
-    """The first call answers from the empty cache (above), and the cache gets
-    the trace's values back once that call has not written it."""
-    got = _run_fused(_twin(_fills_a_cache_from_its_state, _a_cache_slot))
-    want = _run_eager_fused(_twin(_fills_a_cache_from_its_state, _a_cache_slot))
-    assert all(_close(g, w) for g, w in zip(got.answers[1:], want.answers[1:], strict=True))
+class _TracksItsStatistics(nn.Module):
+    """A cache filled once from the model's state, beside a batch norm in training."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("scale", lucid.full((SHAPE[-1],), 2.0, device=COMPILE_DEVICE))
+        self.cache: Tensor | None = None
+        self.norm = nn.BatchNorm1d(SHAPE[-1])
+        self.lin = nn.Linear(SHAPE[-1], 2)
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.cache is None:
+            self.cache = lucid.zeros(SHAPE[-1], device=COMPILE_DEVICE)
+            self.cache.copy_(self.scale * 3.0)
+        return self.lin(self.norm(x * self.cache))
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="a traced call leaves batch norm's statistics alone, so it cannot stand as the "
+    "call; the eager rerun answers its first call from the cache put back (to be filed)",
+)
+@pytest.mark.parametrize("entry", ["make_step", "fused_step"])
+def test_a_cache_filled_beside_a_batch_norm_holds_its_values(entry: str) -> None:
+    run, run_eager = ENTRIES[entry]
+
+    def build() -> _Model:
+        lucid.manual_seed(0)
+        return cast(_Model, _TracksItsStatistics().to(COMPILE_DEVICE))
+
+    got, want = run(build()), run_eager(build())
+    for i in range(len(SCALES)):
+        assert _close(got.answers[i], want.answers[i]), f"call {i}"
 
 
 def _rebuilds_its_total_every_call(model: nn.Module, x: Tensor) -> Tensor:
