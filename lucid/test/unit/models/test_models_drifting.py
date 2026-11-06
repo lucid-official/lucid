@@ -327,8 +327,10 @@ class TestSampleQueue:
         assert (unconditional_queue.num_classes, unconditional_queue.max_size) == (1, 5)
 
         # Sample ``i`` is filled with ``i``, so a drawn sample names its source.
-        ids = lucid.arange(7, dtype=lucid.float64).reshape(7, 1, 1, 1)
-        samples = ids * lucid.ones(7, 4, 8, 8, dtype=lucid.float64)
+        # float16 is not the default dtype and exists on Metal as well as the
+        # CPU (float64 does not), and it holds these ids exactly.
+        ids = lucid.arange(7, dtype=lucid.float16).reshape(7, 1, 1, 1)
+        samples = ids * lucid.ones(7, 4, 8, 8, dtype=lucid.float16)
         # Class 2 receives 0, 2, 4, 5, 6 and keeps the newest four; class 5 holds 1, 3.
         positive_queue.add(samples, lucid.tensor([2, 5, 2, 5, 2, 2, 2]))
         unconditional_queue.add(samples[:3] + 100.0, lucid.zeros(3, dtype=lucid.int64))
@@ -338,7 +340,7 @@ class TestSampleQueue:
         )
         assert tuple(positives.shape) == (2, 3, 4, 8, 8)
         assert tuple(negatives.shape) == (2, 2, 4, 8, 8)
-        assert positives.dtype == negatives.dtype == lucid.float64
+        assert positives.dtype == negatives.dtype == lucid.float16
         assert positives.device == negatives.device == samples.device
         # Every drawn sample is one queued sample, whole.
         for drawn in (positives, negatives):
