@@ -386,13 +386,13 @@ class DriftingModel(PretrainedModel):
         )
 
     def conditioning(
-        self, labels: Tensor, cfg_scale: Tensor, style_indices: Tensor, dtype: lucid.dtype
+        self, labels: Tensor, guidance_scale: Tensor, style_indices: Tensor, dtype: lucid.dtype
     ) -> Tensor:
         r"""Class, styles and guidance scale summed into ``(B, cond_dim)``."""
         cond = self.class_embed(labels)
         for i, embed in enumerate(self.noise_embeds):
             cond = cond + embed(style_indices[:, i])
-        alpha = self.cfg_norm(self.cfg_embedder(cfg_scale))
+        alpha = self.cfg_norm(self.cfg_embedder(guidance_scale))
         return (cond + alpha * _CFG_EMBED_SCALE).to(dtype)
 
     @override
@@ -400,7 +400,7 @@ class DriftingModel(PretrainedModel):
         self,
         x: Tensor,
         labels: Tensor,
-        cfg_scale: float | Tensor = 1.0,
+        guidance_scale: float | Tensor = 1.0,
         style_indices: Tensor | None = None,
     ) -> DiffusionModelOutput:
         r"""Map noise to a sample in one evaluation.
@@ -412,7 +412,7 @@ class DriftingModel(PretrainedModel):
             sampling temperature, if any).
         labels : Tensor
             ``(B,)`` class indices.
-        cfg_scale : float or Tensor, default=1.0
+        guidance_scale : float or Tensor, default=1.0
             Guidance scale :math:`\alpha`, a scalar or ``(B,)``.  ``1`` is
             no guidance.
         style_indices : Tensor or None, optional
@@ -430,12 +430,12 @@ class DriftingModel(PretrainedModel):
         check_latent_size(height, width, grid, p, "Drifting")
         device = x.device.type
 
-        if isinstance(cfg_scale, Tensor):
-            alpha = cfg_scale.to(x.dtype).reshape(-1) + lucid.zeros(
+        if isinstance(guidance_scale, Tensor):
+            alpha = guidance_scale.to(x.dtype).reshape(-1) + lucid.zeros(
                 (b,), dtype=x.dtype, device=device
             )
         else:
-            alpha = lucid.full((b,), float(cfg_scale), dtype=x.dtype, device=device)
+            alpha = lucid.full((b,), float(guidance_scale), dtype=x.dtype, device=device)
         if style_indices is None:
             style_indices = self.draw_style_indices(b, device)
         cond = self.conditioning(labels, alpha, style_indices, x.dtype)
@@ -758,7 +758,7 @@ class DriftingOutput(ModelOutput):
     samples : Tensor
         ``(N_c * gen_per_label, C, H, W)`` — the generated batch, grouped
         label-major.
-    cfg_scale : Tensor
+    guidance_scale : Tensor
         ``(N_c,)`` — the guidance scale :math:`\alpha` each label trained at.
     feature_losses : dict of str to Tensor
         The per-feature-set loss terms, keyed as the encoder names them.
@@ -768,14 +768,14 @@ class DriftingOutput(ModelOutput):
     >>> import lucid
     >>> from lucid.models.generative.drifting import DriftingOutput
     >>> out = DriftingOutput(loss=lucid.zeros(()), samples=lucid.zeros(4, 4, 8, 8),
-    ...                      cfg_scale=lucid.ones(1), feature_losses={})
+    ...                      guidance_scale=lucid.ones(1), feature_losses={})
     >>> out.samples.shape
     (4, 4, 8, 8)
     """
 
     loss: Tensor
     samples: Tensor
-    cfg_scale: Tensor
+    guidance_scale: Tensor
     feature_losses: dict[str, Tensor]
 
 
@@ -959,7 +959,7 @@ class DriftingForImageGeneration(ImageGenerationModel):
 
     # ── the objective ────────────────────────────────────────────────────
 
-    def _sample_cfg(self, batch: int, device: str, dtype: lucid.dtype) -> Tensor:
+    def _sample_guidance(self, batch: int, device: str, dtype: lucid.dtype) -> Tensor:
         r"""Draw :math:`\alpha \in [\alpha_{\min}, \alpha_{\max}]` from :math:`p(\alpha) \propto \alpha^{-k}`.
 
         Inverse-CDF sampling, log-uniform at :math:`k = 1`; then a share
@@ -982,7 +982,7 @@ class DriftingForImageGeneration(ImageGenerationModel):
         images: Tensor,
         labels: Tensor,
         negatives: Tensor | None = None,
-        cfg_scale: Tensor | None = None,
+        guidance_scale: Tensor | None = None,
     ) -> DriftingOutput:
         r"""One drifting training step.
 
@@ -997,7 +997,7 @@ class DriftingForImageGeneration(ImageGenerationModel):
             ``(N_c, N_unc, C, H, W)`` unconditional real samples (random
             classes) — the extra negatives guidance trains with.  ``None``
             trains without guidance.
-        cfg_scale : Tensor or None, optional
+        guidance_scale : Tensor or None, optional
             ``(N_c,)`` guidance scales.  Drawn from the configured power law
             when ``None`` and negatives are given; ``1`` when neither is.
 
@@ -1025,19 +1025,19 @@ class DriftingForImageGeneration(ImageGenerationModel):
         g = config.gen_per_label
         n_unc = 0 if negatives is None else int(negatives.shape[1])
 
-        if cfg_scale is None:
-            cfg = (
-                self._sample_cfg(n_c, device, dtype)
+        if guidance_scale is None:
+            alpha = (
+                self._sample_guidance(n_c, device, dtype)
                 if n_unc > 0
                 else lucid.ones((n_c,), dtype=dtype, device=device)
             )
         else:
-            cfg = cfg_scale.to(dtype).reshape(-1)
-        uncond_w = (cfg - 1.0) * (g - 1) / max(1, n_unc)
+            alpha = guidance_scale.to(dtype).reshape(-1)
+        uncond_w = (alpha - 1.0) * (g - 1) / max(1, n_unc)
 
         noise = lucid.randn(n_c * g, *sample_shape, dtype=dtype, device=device)
         gen = self.drifting(
-            noise, labels.repeat_interleave(g, dim=0), cfg.repeat_interleave(g, dim=0)
+            noise, labels.repeat_interleave(g, dim=0), alpha.repeat_interleave(g, dim=0)
         ).sample
 
         real = (
@@ -1067,7 +1067,7 @@ class DriftingForImageGeneration(ImageGenerationModel):
 
         assert total is not None
         return DriftingOutput(
-            loss=total.to(dtype), samples=gen, cfg_scale=cfg, feature_losses=feature_losses
+            loss=total.to(dtype), samples=gen, guidance_scale=alpha, feature_losses=feature_losses
         )
 
     # ── sampling ─────────────────────────────────────────────────────────
@@ -1077,7 +1077,7 @@ class DriftingForImageGeneration(ImageGenerationModel):
         n_samples: int = 1,
         *,
         labels: Tensor | None = None,
-        cfg_scale: float | Tensor = 1.0,
+        guidance_scale: float | Tensor = 1.0,
         temperature: float = 1.0,
         noise: Tensor | None = None,
         style_indices: Tensor | None = None,
@@ -1092,7 +1092,7 @@ class DriftingForImageGeneration(ImageGenerationModel):
         labels : Tensor or None, optional
             ``(n_samples,)`` class indices.  Drawn uniformly when ``None`` —
             the model is class-conditional and has no null class.
-        cfg_scale : float or Tensor, default=1.0
+        guidance_scale : float or Tensor, default=1.0
             Guidance scale :math:`\alpha`; any value in the trained range
             works without retraining.  The released best: ``1.0`` for
             ``L/2``, ``B/16``, ``L/16``; ``1.1`` for ``B/2``.
@@ -1120,7 +1120,7 @@ class DriftingForImageGeneration(ImageGenerationModel):
         >>> from lucid.models import create_model
         >>> model = create_model("drifting_base_2_gen", sample_size=8, hidden_size=32,
         ...                      cond_dim=32, depth=1, num_heads=4).eval()
-        >>> model.generate(3, cfg_scale=1.5).samples.shape
+        >>> model.generate(3, guidance_scale=1.5).samples.shape
         (3, 4, 8, 8)
         """
         config = self.config
@@ -1135,5 +1135,5 @@ class DriftingForImageGeneration(ImageGenerationModel):
                 0, config.num_classes, (n_samples,), dtype=lucid.int64, device=device
             )
         with lucid.no_grad():
-            sample = self.drifting(noise, labels, cfg_scale, style_indices).sample
+            sample = self.drifting(noise, labels, guidance_scale, style_indices).sample
         return GenerationOutput(samples=sample)

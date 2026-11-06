@@ -206,11 +206,11 @@ class TestObjective:
     def test_guidance_scale_is_one_without_negatives(self) -> None:
         model = DriftingForImageGeneration(_tiny())
         out = model(lucid.randn(2, 4, 8, 8), lucid.tensor([0, 1]))
-        assert out.cfg_scale.tolist() == [1.0, 1.0]
+        assert out.guidance_scale.tolist() == [1.0, 1.0]
 
     def test_sampled_guidance_stays_in_range(self) -> None:
         model = DriftingForImageGeneration(_tiny(cfg_min=1.0, cfg_max=4.0, neg_cfg_pw=5.0))
-        alpha = model._sample_cfg(512, "cpu", lucid.float32)
+        alpha = model._sample_guidance(512, "cpu", lucid.float32)
         assert float(alpha.min().item()) >= 1.0 - 1e-6
         assert float(alpha.max().item()) <= 4.0 + 1e-6
         # p(alpha) ~ alpha^-5 piles its mass near the lower end.
@@ -232,7 +232,7 @@ class TestObjective:
 
     def test_generate_is_one_evaluation(self) -> None:
         model = DriftingForImageGeneration(_tiny()).eval()
-        out = model.generate(3, labels=lucid.tensor([0, 1, 2]), cfg_scale=1.5)
+        out = model.generate(3, labels=lucid.tensor([0, 1, 2]), guidance_scale=1.5)
         assert tuple(out.samples.shape) == (3, 4, 8, 8)
 
 
