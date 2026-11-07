@@ -39,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse a feed another thread computed during the call
 
+- keep the old wording in the off-thread refusal
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

@@ -709,7 +709,7 @@ bool Tracer::refuse_off_thread(const TensorImpl& feed) {
     // grad node would show it, but there is none under ``no_grad``.
     if (off_thread_epoch_ == 0 || !off_thread::made_since(&feed, off_thread_epoch_))
         return false;
-    mark_unsupported("a value computed on another thread during the trace reached an op, "
+    mark_unsupported("a value computed during the trace on another thread reached an op, "
                      "so each call would reuse the first call's value");
     return true;
 }
