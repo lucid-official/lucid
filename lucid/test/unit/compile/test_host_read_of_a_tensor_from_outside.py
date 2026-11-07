@@ -338,3 +338,13 @@ def test_a_read_of_a_tensor_the_call_made_stays_compiled() -> None:
             assert _floats(compiled(x)) == _floats(fn(x))
     info = compiled.cache_info()
     assert info["entries"] == 1 and not info["eager_only"], info
+
+
+def test_only_the_compile_entries_refuse_an_outside_read() -> None:
+    """Core ML export (``_tracing``) holds such a tensor as a constant of the package."""
+    from lucid.compile._core.trace_context import recording
+
+    with lucid.compile._tracing() as export_tracer:
+        assert not export_tracer.refuse_outside_reads
+    with recording() as compile_tracer:
+        assert compile_tracer.refuse_outside_reads
