@@ -66,49 +66,50 @@ class _Case(NamedTuple):
     #: Makes the kept tensor, once, on the first call.
     make: Callable[[], Tensor]
     #: The write, run on the kept tensor.
-    write: Callable[[Tensor], None]
-    #: Whether it runs inside the build (once) or on every call.
-    every_call: bool
-    #: Whether the write reads the tensor's own value.
-    reads: bool
+    write: Callable[[Tensor], object]
+    #: Whether it runs on every call, or only inside the build.
+    every_call: bool = True
 
 
 #: Writes that read the kept tensor: each call goes on from the last one.
 ACCUMULATING: dict[str, _Case] = {
-    "add_": _Case(_zeros, lambda h: h.add_(1.0), True, True),
-    "sub_": _Case(_zeros, lambda h: h.sub_(0.5), True, True),
-    "mul_": _Case(_ones, lambda h: h.mul_(1.5), True, True),
-    "div_": _Case(_ones, lambda h: h.div_(2.0), True, True),
-    "addcmul_": _Case(_zeros, lambda h: h.addcmul_(_ones(), _const(2.0), value=0.5), True, True),
-    "clamp_": _Case(_zeros, lambda h: h.add_(1.0).clamp_(max=3.0), True, True),
-    "add_of-a-tensor": _Case(_zeros, lambda h: h.add_(_const(2.0)), True, True),
-    "through-a-view": _Case(_zeros, lambda h: h[1:].add_(1.0), True, True),
+    "add_": _Case(_zeros, lambda h: h.add_(1.0)),
+    "sub_": _Case(_zeros, lambda h: h.sub_(0.5)),
+    "mul_": _Case(_ones, lambda h: h.mul_(1.5)),
+    "div_": _Case(_ones, lambda h: h.div_(2.0)),
+    "addcmul_": _Case(_zeros, lambda h: h.addcmul_(_ones(), _const(2.0), value=0.5)),
+    "clamp_": _Case(_zeros, lambda h: h.add_(1.0).clamp_(max=3.0)),
+    "add_of-a-tensor": _Case(_zeros, lambda h: h.add_(_const(2.0))),
+    "through-a-view": _Case(_zeros, lambda h: h[1:].add_(1.0)),
     "index_add_": _Case(
-        _zeros,
-        lambda h: h.index_add_(0, _index(), lucid.ones(2, device=COMPILE_DEVICE)),
-        True,
-        True,
+        _zeros, lambda h: h.index_add_(0, _index(), lucid.ones(2, device=COMPILE_DEVICE))
     ),
     "scatter_add_": _Case(
-        _zeros,
-        lambda h: h.scatter_add_(0, _index(), lucid.ones(2, device=COMPILE_DEVICE)),
-        True,
-        True,
+        _zeros, lambda h: h.scatter_add_(0, _index(), lucid.ones(2, device=COMPILE_DEVICE))
     ),
-    "copy_-of-itself-plus-a-constant": _Case(_zeros, lambda h: h.copy_(h + 1.0), True, True),
+    "copy_-of-itself-plus-a-constant": _Case(_zeros, lambda h: h.copy_(h + 1.0)),
 }
 
 #: Writes that only overwrite: the same values however often they run.
 OVERWRITING: dict[str, _Case] = {
-    "fill_-once": _Case(_zeros, lambda h: h.fill_(2.0), False, False),
-    "fill_-every-call": _Case(_zeros, lambda h: h.fill_(2.0), True, False),
-    "zero_-every-call": _Case(_ones, lambda h: h.zero_(), True, False),
-    "copy_-once": _Case(_zeros, lambda h: h.copy_(_const(3.0)), False, False),
-    "copy_-every-call": _Case(_zeros, lambda h: h.copy_(_const(3.0)), True, False),
-    "setitem-once": _Case(_zeros, lambda h: h.__setitem__(1, 5.0), False, False),
-    "setitem-every-call": _Case(_zeros, lambda h: h.__setitem__(1, 5.0), True, False),
-    "view-fill_-once": _Case(_zeros, lambda h: h[1:].fill_(2.0), False, False),
-    "view-fill_-every-call": _Case(_zeros, lambda h: h[1:].fill_(2.0), True, False),
+    "fill_-once": _Case(_zeros, lambda h: h.fill_(2.0), every_call=False),
+    "fill_-every-call": _Case(_zeros, lambda h: h.fill_(2.0)),
+    "zero_-every-call": _Case(_ones, lambda h: h.zero_()),
+    "copy_-once": _Case(_zeros, lambda h: h.copy_(_const(3.0)), every_call=False),
+    "copy_-every-call": _Case(_zeros, lambda h: h.copy_(_const(3.0))),
+    "setitem-once": _Case(_zeros, lambda h: h.__setitem__(1, 5.0), every_call=False),
+    "setitem-every-call": _Case(_zeros, lambda h: h.__setitem__(1, 5.0)),
+}
+
+#: Cases the tracer cannot tell from an accumulate, so they run eager: an
+#: overwrite through a view (the tracer does not follow a view write to the
+#: tensor's value) and a table built by accumulating inside the build (no
+#: difference from the repro inside one trace).  A missed compile, never a wrong
+#: answer: pinned to agree with eager, not to compile.
+CONSERVATIVE: dict[str, _Case] = {
+    "view-fill_-once": _Case(_zeros, lambda h: h[1:].fill_(2.0), every_call=False),
+    "view-fill_-every-call": _Case(_zeros, lambda h: h[1:].fill_(2.0)),
+    "add_-once": _Case(_zeros, lambda h: h.add_(1.0), every_call=False),
 }
 
 
@@ -136,30 +137,30 @@ def _answers(fn: Callable[[Tensor], Tensor]) -> list[list[float]]:
         return [[float(v) for v in fn(x).tolist()] for x in _inputs()]
 
 
-def _compare(case: _Case) -> tuple[list[list[float]], dict[str, object]]:
+def _compare(case: _Case) -> dict[str, object]:
     want = _answers(_body(case))
     compiled = lucid.compile(_body(case))
     got = _answers(compiled)
     assert got == want, f"compiled {got} vs eager {want}"
-    return got, compiled.cache_info()
+    return compiled.cache_info()
 
 
 @pytest.mark.parametrize("name", ACCUMULATING)
 def test_a_kept_tensor_a_constant_accumulates_into_goes_on_from_the_last_call(name: str) -> None:
-    _compare(ACCUMULATING[name])
-
-
-@pytest.mark.parametrize("name", ACCUMULATING)
-def test_an_accumulating_write_runs_eager_and_says_so(name: str) -> None:
-    _, info = _compare(ACCUMULATING[name])
+    info = _compare(ACCUMULATING[name])
     assert info["eager_only"], "a write that reads the kept tensor cannot be compiled"
 
 
 @pytest.mark.parametrize("name", OVERWRITING)
 def test_a_kept_tensor_a_constant_overwrites_stays_compiled(name: str) -> None:
-    _, info = _compare(OVERWRITING[name])
+    info = _compare(OVERWRITING[name])
     assert not info["eager_only"], f"fell back to eager: {info}"
     assert info["entries"] == 1
+
+
+@pytest.mark.parametrize("name", CONSERVATIVE)
+def test_a_write_the_tracer_cannot_tell_from_an_accumulate_agrees_with_eager(name: str) -> None:
+    _compare(CONSERVATIVE[name])
 
 
 def test_a_tensor_built_once_from_a_constant_chain_stays_compiled() -> None:
