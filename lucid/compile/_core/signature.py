@@ -1185,12 +1185,21 @@ class ParamFingerprint(_ModuleWrapper):
         ``self.last = x``, ``nonlocal last``, a global — holds the call's
         argument then, and recorded it traced again on every new input.
 
+        It also starts the attempt's rebinding watch (:class:`SlotWatch`): every
+        tensor slot as it is now, which :func:`held_writes` compares with the
+        slots once the trace is over.
+
         Returns
         -------
         frozenset
             ``(holder, name, TensorImpl id)`` for each such slot.
         """
-        return frozenset(_outside_tensors(self.model))
+        from lucid.compile._core.buffer_writes import watch_slots
+        from lucid.compile._core.rebound_slots import SlotWatch
+
+        model = self.model
+        watch_slots(SlotWatch(_iter_modules(_root_modules(model)), _wrapped_callable(model)))
+        return frozenset(_outside_tensors(model))
 
     def settle(
         self, fed: Iterable[_C_engine.TensorImpl] = (), before: frozenset[_Held] = frozenset()

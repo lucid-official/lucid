@@ -41,6 +41,7 @@ from typing import TYPE_CHECKING, cast, final
 
 from lucid._C import engine as _C_engine
 from lucid.compile._core.bn_runstats import BnWriteback, bn_statistics_lost, bn_writeback_targets
+from lucid.compile._core.rebound_slots import REBOUND_MARK, Rebinding, SlotWatch
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
@@ -160,48 +161,79 @@ class _HeldPutBack(threading.local):
     ``pending`` while the compile attempt that put them back runs, ``ready``
     once it has ended normally, for the eager call that follows it
     (:func:`eager_rerun`).  An attempt that raises drops them: no other call
-    may take them for its own.
+    may take them for its own.  ``watch`` is the attempt's :class:`SlotWatch`,
+    taken before its trace (:func:`watch_slots`).
     """
 
     def __init__(self) -> None:
         self.pending: _PutBack = []
         self.ready: _PutBack = []
+        self.watch: SlotWatch | None = None
 
 
 _HELD = _HeldPutBack()
 
 
-def begin_attempt() -> _PutBack:
+type _Outer = tuple[_PutBack, SlotWatch | None]
+
+
+def begin_attempt() -> _Outer:
     """Open a compile attempt's record of what it puts back.
 
     Returns
     -------
-    list
+    tuple
         The enclosing attempt's record, for :func:`end_attempt` to give back:
         attempts nest.
     """
-    outer, _HELD.pending, _HELD.ready = _HELD.pending, [], []
+    outer = (_HELD.pending, _HELD.watch)
+    _HELD.pending, _HELD.ready, _HELD.watch = [], [], None
     return outer
 
 
-def end_attempt(outer: _PutBack, *, finished: bool) -> None:
+def end_attempt(outer: _Outer, *, finished: bool) -> None:
     """Close a compile attempt's record.
 
     Parameters
     ----------
-    outer : list
+    outer : tuple
         What :func:`begin_attempt` answered.
     finished : bool, keyword-only
         Whether the attempt ended normally: only then does the eager call that
         follows it take what it put back.
     """
     _HELD.ready = _HELD.pending if finished else []
-    _HELD.pending = outer
+    _HELD.pending, _HELD.watch = outer
+
+
+def watch_slots(watch: SlotWatch) -> None:
+    """Record the tensor slots the attempt about to trace starts from.
+
+    Parameters
+    ----------
+    watch : SlotWatch
+        The model's slots as they are before the trace; :func:`held_writes`
+        asks it once the trace is over.
+    """
+    _HELD.watch = watch
 
 
 #: ``(tensor, its value before the trace's write, its value after)``.
 type _HeldWrite = tuple[_C_engine.TensorImpl, _C_engine.TensorImpl, _C_engine.TensorImpl]
-type HeldWrites = list[_HeldWrite]
+
+
+class HeldWrites(list[_HeldWrite]):
+    """What the trace-time call left that a compiled run cannot reproduce.
+
+    The tensors it made, wrote from its inputs and Python still holds (the items),
+    and the slots it rebound (:attr:`rebound`).  Truthy when there is either: the
+    trace is then unsupported, and an entry that can lets the trace stand as the call.
+    """
+
+    rebound: Rebinding | None = None
+
+    def __bool__(self) -> bool:
+        return len(self) > 0 or self.rebound is not None
 
 
 @dataclass(frozen=True)
@@ -238,7 +270,8 @@ def stood_as_the_call[T](tracer: Tracer, model: Module, answer: T) -> TraceAnswe
     from lucid.compile._core.fallback import _fallback_notice
 
     complete_the_call(tracer, model)
-    _fallback_notice("held-write", str(tracer.graph.unsupported))
+    why = str(tracer.graph.unsupported)
+    _fallback_notice("rebound-slot" if why.startswith(REBOUND_MARK) else "held-write", why)
     return TraceAnswer(answer)
 
 
@@ -286,10 +319,36 @@ def held_writes(tracer: Tracer, *, stands: bool) -> HeldWrites:
     Returns
     -------
     HeldWrites
-        ``(tensor, value before the trace's write, value after)`` for each.
+        ``(tensor, value before the trace's write, value after)`` for each, and
+        the slots the call rebound: a tensor attribute (or item of one) it read
+        and rebound, or stored where it held none.  Both mark the trace
+        unsupported.  A replay runs no Python, so nothing rebinds the slot and
+        the executable is fed the tensor it held at trace time (LCD-903).
     """
-    kept = tracer.refuse_kept_writes(stands=stands)
-    return [(impl, before, after) for impl, before, after in kept]
+    held = HeldWrites(tracer.refuse_kept_writes(stands=stands))
+    held.rebound = rebound_slots(tracer)
+    if held.rebound is not None:
+        tracer.mark_unsupported(held.rebound.why)
+    return held
+
+
+def rebound_slots(tracer: Tracer) -> Rebinding | None:
+    """What the traced call rebound that a compiled run would get wrong, if anything.
+
+    For an entry point that does not go through :func:`held_writes`.
+
+    Parameters
+    ----------
+    tracer : Tracer
+        The finished trace.
+
+    Returns
+    -------
+    Rebinding or None
+        The verdict, with the means to put the slots back for an eager call.
+    """
+    watch = _HELD.watch
+    return None if watch is None else watch.rebound(tracer)
 
 
 def _put_back(tracer: Tracer, held: Sequence[_HeldWrite]) -> None:
@@ -298,6 +357,8 @@ def _put_back(tracer: Tracer, held: Sequence[_HeldWrite]) -> None:
         impl.copy_from(before)
     _HELD.pending = [(impl, after, int(impl.version)) for impl, _before, after in held]
     tracer.restore_outside_writes()
+    if isinstance(held, HeldWrites) and held.rebound is not None:
+        held.rebound.restore()
 
 
 @contextmanager

@@ -37,6 +37,8 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Protocol, cast, final
 
 from lucid._C import engine as _C_engine
+from lucid.compile._core.buffer_writes import rebound_slots
+from lucid.compile._core.fallback import _fallback_notice
 from lucid.compile._core.signature import TraceReads, tree_requires_grad
 
 if TYPE_CHECKING:
@@ -173,7 +175,14 @@ def _trace_decode_step(
     finally:
         _tls.tracing = False
 
-    if not tracer.graph.ops or not isinstance(out, Tensor):
+    # A replay runs no Python: a step that rebinds a tensor attribute it reads
+    # would be fed the trace's value for good (LCD-903).  Put back, for the eager
+    # call that follows.
+    rebound = rebound_slots(tracer)
+    if rebound is not None:
+        rebound.restore()
+        _fallback_notice("rebound-slot", rebound.why)
+    if rebound is not None or not tracer.graph.ops or not isinstance(out, Tensor):
         _restore_cache(static_cache, snap)
         return None
     return tracer, out

@@ -132,6 +132,12 @@ class StateContract:
             pairs.append((key, sig))
         return ("dict", tuple(sorted(pairs, key=lambda pair: pair[0])))
 
+    @classmethod
+    def members(cls, obj: object) -> list[tuple[str, object]]:
+        """``obj``'s plain attributes, by name: what :meth:`fixed`, :meth:`held` and
+        :meth:`attrs` choose state from, and :mod:`rebound_slots` watches."""
+        return cls._candidates(obj)
+
     @staticmethod
     def _candidates(obj: object) -> list[tuple[str, object]]:
         """``obj``'s ``__dict__`` entries that may be state, by name."""
