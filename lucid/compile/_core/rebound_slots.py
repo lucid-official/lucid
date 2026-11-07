@@ -33,7 +33,7 @@ follows.
 
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
-from typing import ClassVar, final
+from typing import ClassVar, final, override
 
 from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
@@ -74,15 +74,18 @@ class _Attributes(_Root):
     def __init__(self, module: Module) -> None:
         self._module = module
 
+    @override
     def names(self) -> dict[str, object]:
         return dict(StateContract.members(self._module))
 
+    @override
     def put(self, name: str, value: object) -> None:
         if value is _ABSENT:
             vars(self._module).pop(name, None)
         else:
             vars(self._module)[name] = value
 
+    @override
     def label(self, name: str) -> str:
         return f"attribute {name!r} of {type(self._module).__name__}"
 
@@ -93,9 +96,11 @@ class _Callable(_Root):
     def __init__(self, fn: object) -> None:
         self._fn = fn
 
+    @override
     def names(self) -> dict[str, object]:
         return {f"{kind}:{key}": value for (kind, key), value in callable_slots(self._fn)}
 
+    @override
     def put(self, name: str, value: object) -> None:
         kind, _, key = name.partition(":")
         if kind == "cell":
@@ -110,6 +115,7 @@ class _Callable(_Root):
             else:
                 space[key] = value
 
+    @override
     def label(self, name: str) -> str:
         kind, _, key = name.partition(":")
         return f"{'closure cell' if kind == 'cell' else 'global'} {key!r}"
@@ -136,6 +142,18 @@ class Rebinding:
             put_back()
 
 
+@dataclass(frozen=True, slots=True)
+class _State:
+    """Every watched slot at one moment."""
+
+    #: What each root holds, by name, in the roots' order.
+    names: tuple[dict[str, object], ...]
+    #: The slots by path, containers opened.
+    leaves: dict[_Path, object]
+    #: Each container opened, with a copy of what it held.
+    containers: tuple[tuple[object, object], ...]
+
+
 @final
 class SlotWatch:
     """The tensor slots of a model and its wrapped callable, as they were.
@@ -144,6 +162,10 @@ class SlotWatch:
     (to :attr:`MAX_DEPTH` levels, at most :attr:`MAX_ITEMS` items each), or a
     closure cell or global of the callable.  Larger containers are data, not
     state, and are taken as one value.
+
+    Each :meth:`rebound` compares the slots with how they were at the last one
+    (or at construction): a segmented step traces a segment's forward and then its
+    backward, which runs the forward again, and each is asked for what it rebound.
 
     Parameters
     ----------
@@ -160,25 +182,23 @@ class SlotWatch:
         self._roots: list[_Root] = [_Attributes(m) for m in modules]
         if fn is not None:
             self._roots.append(_Callable(fn))
-        self._containers: list[tuple[object, object]] = []
-        self._before = self._leaves(keep=self._containers)
-        self._values = [root.names() for root in self._roots]
+        self._base = self._take()
 
-    def _leaves(self, keep: list[tuple[object, object]] | None = None) -> dict[_Path, object]:
-        """Every watched slot by path, containers opened.  ``keep`` collects each
-        opened container with a copy of what it holds."""
-        out: dict[_Path, object] = {}
-        for index, root in enumerate(self._roots):
-            for name, value in root.names().items():
-                self._open((index, name, ()), value, out, keep)
-        return out
+    def _take(self) -> _State:
+        names = tuple(root.names() for root in self._roots)
+        leaves: dict[_Path, object] = {}
+        containers: list[tuple[object, object]] = []
+        for index, held in enumerate(names):
+            for name, value in held.items():
+                self._open((index, name, ()), value, leaves, containers)
+        return _State(names, leaves, tuple(containers))
 
     def _open(
         self,
         path: _Path,
         value: object,
-        out: dict[_Path, object],
-        keep: list[tuple[object, object]] | None,
+        leaves: dict[_Path, object],
+        containers: list[tuple[object, object]],
     ) -> None:
         index, name, keys = path
         if (
@@ -186,12 +206,12 @@ class SlotWatch:
             and isinstance(value, (dict, list, tuple))
             and len(value) <= self.MAX_ITEMS
         ):
-            if keep is not None and not isinstance(value, tuple):
-                keep.append((value, value.copy()))
+            if not isinstance(value, tuple):
+                containers.append((value, value.copy()))
             for key, item in value.items() if isinstance(value, dict) else enumerate(value):
-                self._open((index, name, (*keys, key)), item, out, keep)
+                self._open((index, name, (*keys, key)), item, leaves, containers)
         else:
-            out[path] = value
+            leaves[path] = value
 
     def rebound(self, tracer: _C_engine.compile.Tracer) -> Rebinding | None:
         """What the traced call rebound that a compiled run would get wrong.
@@ -207,11 +227,12 @@ class SlotWatch:
             The verdict and the means to put the slots back, ``None`` when no
             slot is rebound that way.
         """
-        now = self._leaves()
+        base, now = self._base, self._take()
+        self._base = now
         fed = {id(impl) for impl in tracer.external_feeds.values()}
         why: list[str] = []
-        for path in {*self._before, *now}:
-            was, is_ = self._before.get(path, _ABSENT), now.get(path, _ABSENT)
+        for path in {*base.leaves, *now.leaves}:
+            was, is_ = base.leaves.get(path, _ABSENT), now.leaves.get(path, _ABSENT)
             if was is is_ or _same_tensor(was, is_):
                 continue
             if isinstance(was, Tensor) and id(was._impl) in fed:
@@ -228,20 +249,19 @@ class SlotWatch:
         return Rebinding(
             f"{REBOUND_MARK} {listed}: a compiled call runs no Python, so it would not rebind "
             "the slot and would be fed the tensor the trace saw there",
-            tuple(self._undo()),
+            tuple(self._undo(base, now)),
         )
 
     def _describe(self, path: _Path) -> str:
         index, name, keys = path
         return self._roots[index].label(name) + "".join(f" item {key!r}" for key in keys)
 
-    def _undo(self) -> Iterator[Callable[[], None]]:
-        for root, before in zip(self._roots, self._values, strict=True):
-            now = root.names()
-            for name in {*before, *now}:
-                if before.get(name, _ABSENT) is not now.get(name, _ABSENT):
+    def _undo(self, base: _State, now: _State) -> Iterator[Callable[[], None]]:
+        for root, before, after in zip(self._roots, base.names, now.names, strict=True):
+            for name in {*before, *after}:
+                if before.get(name, _ABSENT) is not after.get(name, _ABSENT):
                     yield _put(root, name, before.get(name, _ABSENT))
-        for container, copy in self._containers:
+        for container, copy in base.containers:
             yield _refill(container, copy)
 
 

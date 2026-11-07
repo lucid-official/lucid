@@ -320,6 +320,9 @@ class _Segmented(_Entry):
         loss.backward()
         return value
 
+    def compiled(self) -> bool:
+        return not self.step.eager_only["flag"]
+
 
 class _CompiledStep(_Entry):
     def call(self, x: Tensor) -> float:
@@ -399,11 +402,19 @@ def test_an_attribute_the_call_rebinds_is_read_as_it_is_now(case: str, entry: st
     _run(REBINDING[case], entry)
 
 
+#: A segmented step has one verdict for every later call.  It runs the two writes
+#: eagerly as it always did, and a tensor stored where there was none, whatever
+#: reads it, now too: from inside one trace a store nothing reads (``last``) is
+#: the same as one a branch on ``None`` reads (``h``).
+_SEGMENTED_EAGER = {"copies_into_the_old", "ema_in_place", "keeps_for_later"}
+
+
 @pytest.mark.parametrize("entry", ["make_step", "segmented", "fused_step", "module_no_grad"])
 @pytest.mark.parametrize("case", list(NOT_REBINDING))
 def test_what_is_not_a_rebinding_still_compiles(case: str, entry: str) -> None:
     ran = _run(NOT_REBINDING[case], entry)
-    assert ran.compiled() in (True, None), "refusing every attribute would pass the comparison"
+    if not (entry == "segmented" and case in _SEGMENTED_EAGER):
+        assert ran.compiled() in (True, None), "refusing every attribute would pass the comparison"
 
 
 def test_a_state_that_keeps_its_graph() -> None:
@@ -455,7 +466,6 @@ def test_a_sequence_that_starts_again_reads_its_state() -> None:
 def test_a_step_that_cannot_stand_puts_the_slots_back_for_the_eager_call(case: str) -> None:
     """A cumulative batch norm traces without its buffers, so the trace-time call
     cannot stand as the call: the slots it rebound go back, and eager rebinds once."""
-    lucid.manual_seed(0)
 
     def build() -> nn.Module:
         lucid.manual_seed(0)
