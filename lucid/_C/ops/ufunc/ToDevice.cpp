@@ -51,8 +51,9 @@ TensorImplPtr to_device_op(const TensorImplPtr& a, Device target) {
     // runs on one device, so a compiled call holding a move runs eagerly; an
     // unrecorded copy was a tensor the trace had never seen, and an op or
     // host read of it kept the first call's values for every later call.
-    // A move of a constant — a tensor the trace has not seen — records
-    // nothing (Tracer::on_derived).
+    // A move of a tensor the call made from constants records nothing; a
+    // move of one from outside the call is recorded too, unless it only
+    // relabels the same shared buffer (Tracer::on_derived).
     compile::traced_derive("to_device", a, out);
 
     // No saved version for ``a``: the derivative of a move never reads its
