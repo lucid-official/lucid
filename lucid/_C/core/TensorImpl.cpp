@@ -35,12 +35,12 @@
 #include "../backend/gpu/SharedBufferWrites.h"
 #include "../compile/Tracer.h"
 #include "Allocator.h"
-#include "OffThread.h"
 #include "Error.h"
 #include "ErrorBuilder.h"
 #include "GpuStrided.h"
 #include "GradMode.h"
 #include "MemoryStats.h"
+#include "OffThread.h"
 #include "PhantomMode.h"
 #include "StridedCopy.h"
 

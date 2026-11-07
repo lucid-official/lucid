@@ -127,9 +127,7 @@ class _Net(nn.Module):
         self.lin = nn.Linear(WIDTH, 2)
         self.source = SOURCES[source][0]
         self.before = lucid.ones(WIDTH, device=COMPILE_DEVICE) * 2.0
-        self.before_threaded = _on_a_thread(
-            lambda: lucid.ones(WIDTH, device=COMPILE_DEVICE) * 2.0
-        )
+        self.before_threaded = _on_a_thread(lambda: lucid.ones(WIDTH, device=COMPILE_DEVICE) * 2.0)
 
     def forward(self, x: Tensor) -> Tensor:
         return self.lin(self.source(self, x) * 3.0)
