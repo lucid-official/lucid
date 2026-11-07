@@ -46,6 +46,19 @@ bool whole_buffer(const TensorImpl& t) {
     return t.allocation_offset() == 0 && t.is_contiguous() && t.nbytes() == t.allocation_nbytes();
 }
 
+// Whether ``a`` and ``b`` read bytes of one buffer: members of one view family
+// (a detach, a reshape, ``_make_view``) or two labels of one Metal shared
+// buffer (a relabel between devices).  A new buffer made from another's
+// values (a copy to shared storage, a cross-device copy, a fused kernel's
+// result) does not.
+bool shares_bytes(const TensorImpl& a, const TensorImpl& b) {
+    if (a.family_id() != 0 && a.family_id() == b.family_id())
+        return true;
+    const SharedStorage* buffer = a.shared_buffer();
+    return buffer != nullptr && b.shared_buffer() != nullptr &&
+           buffer->cpu_ptr == b.shared_buffer()->cpu_ptr;
+}
+
 // Whether two of ``t``'s elements are one byte (``expand``, ``unfold``): only
 // ``fill_`` writes through such a view, and ``copy_from`` refuses it.
 bool repeats_elements(const TensorImpl& t) {
@@ -858,11 +871,22 @@ void Tracer::on_derived(std::string_view name,
         const auto foldable = [&](const TensorImplPtr& src) {
             return !src || foldable_.count(src.get()) != 0;
         };
-        if (std::all_of(srcs.begin(), srcs.end(), made))
+        if (std::all_of(srcs.begin(), srcs.end(), made)) {
             made_.emplace(out.get(), out);
-        if (fold_constants_ && std::all_of(srcs.begin(), srcs.end(), foldable))
-            foldable_.insert(out.get());
-        return;
+            if (fold_constants_ && std::all_of(srcs.begin(), srcs.end(), foldable))
+                foldable_.insert(out.get());
+            return;
+        }
+        // From a tensor the call did not make: ``out`` reads that tensor's bytes,
+        // and stays live with them, only when it is a label or view of them.  A
+        // copy holds the values of the moment, and a feed of it would hand every
+        // later call those.  Recorded, the source is a feed and the op is the
+        // call's, as when the trace already knew the source.
+        const auto labels = [&](const TensorImplPtr& src) {
+            return src && shares_bytes(*src, *out);
+        };
+        if (std::any_of(srcs.begin(), srcs.end(), labels))
+            return;
     }
     on_op_enter(name, out->device(), out->dtype(), out->shape());
     on_op_io(srcs, out);

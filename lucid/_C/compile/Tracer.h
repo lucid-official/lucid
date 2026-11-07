@@ -300,9 +300,15 @@ public:
     // data.  ``name`` is an emitter's when ``out`` holds ``src``'s values on
     // ``src``'s device (``"detach"``); any other name has no emitter and
     // sends the call to eager.  A ``src`` the trace has not seen is a
-    // constant to it, and so is ``out``: nothing is recorded.  With several
-    // sources (a fused kernel, a custom Metal kernel) the op reads all of
-    // them, and is recorded when the trace sees any one.
+    // constant when the call made it, and so is ``out``: nothing is recorded.
+    // Made outside the call, it is an input: ``out`` that only relabels or
+    // views its bytes (a detach, a shared-buffer relabel) needs no record, the
+    // first op to read ``out`` feeds it and reads the bytes as they are; a
+    // copy or a result computed from them (``to_shared``, a cross-device copy,
+    // a fused or custom kernel) holds the values of the trace, so it is recorded
+    // like a seen source and the source becomes a feed.  With several sources
+    // (a fused kernel, a custom Metal kernel) the op reads all of them, and is
+    // recorded when the trace sees any one, or any one is not the call's own.
     void on_derived(std::string_view name,
                     const std::vector<TensorImplPtr>& srcs,
                     const TensorImplPtr& out);
