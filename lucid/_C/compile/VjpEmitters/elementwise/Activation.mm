@@ -278,7 +278,7 @@ public:
 // conventions at the kinks —
 //   relu6'        = 1 on the open (0, 6), else 0;
 //   hard_sigmoid' = 1/6 on the open (-3, 3), else 0;
-//   hard_swish'   = 0 below -3, 1 above 3, (2x + 3)/6 between.
+//   hard_swish'   = 0 for x <= -3, 1 for x >= 3, x/3 + 1/2 between.
 // MobileNets train through these.  With the batch norm in training mode
 // ruling out MPSGraph's autodiff, a missing VJP here sent their compiled
 // training step eager.
@@ -320,32 +320,28 @@ public:
                                                    secondaryTensor:c(1.0 / 6.0)
                                                               name:nil];
                 } else {
-                    // (2x + 3)/6 inside; 0 below -3; 1 above 3.
-                    MPSGraphTensor* ramp = [g multiplicationWithPrimaryTensor:
-                                                  [g additionWithPrimaryTensor:
-                                                         [g multiplicationWithPrimaryTensor:x
-                                                                            secondaryTensor:c(2.0)
-                                                                                       name:nil]
-                                                               secondaryTensor:c(3.0)
-                                                                          name:nil]
-                                                              secondaryTensor:c(1.0 / 6.0)
-                                                                         name:nil];
-                    MPSGraphTensor* not_below =
-                        as_f([g greaterThanOrEqualToWithPrimaryTensor:x secondaryTensor:c(-3.0) name:nil]);
-                    MPSGraphTensor* above =
-                        as_f([g greaterThanWithPrimaryTensor:x secondaryTensor:c(3.0) name:nil]);
-                    // not_below * (above + (1 - above) * ramp)
-                    MPSGraphTensor* mid = [g multiplicationWithPrimaryTensor:
-                                                 [g subtractionWithPrimaryTensor:c(1.0)
-                                                                 secondaryTensor:above
-                                                                            name:nil]
-                                                             secondaryTensor:ramp
-                                                                        name:nil];
-                    slope = [g multiplicationWithPrimaryTensor:not_below
-                                               secondaryTensor:[g additionWithPrimaryTensor:above
-                                                                            secondaryTensor:mid
-                                                                                       name:nil]
-                                                          name:nil];
+                    // x/3 + 1/2 inside; the outer pieces own both ends, so
+                    // 0 for x <= -3 and 1 for x >= 3.  Selects, not a 0/1
+                    // blend: a blend turns the +-inf ramp into 0 * inf = NaN
+                    // where eager answers 1 / 0.
+                    MPSGraphTensor* ramp = [g additionWithPrimaryTensor:
+                                                  [g multiplicationWithPrimaryTensor:x
+                                                                     secondaryTensor:c(1.0 / 3.0)
+                                                                                name:nil]
+                                                        secondaryTensor:c(0.5)
+                                                                   name:nil];
+                    MPSGraphTensor* at_least_3 =
+                        [g greaterThanOrEqualToWithPrimaryTensor:x secondaryTensor:c(3.0) name:nil];
+                    MPSGraphTensor* at_most_m3 =
+                        [g lessThanOrEqualToWithPrimaryTensor:x secondaryTensor:c(-3.0) name:nil];
+                    MPSGraphTensor* upper = [g selectWithPredicateTensor:at_least_3
+                                                     truePredicateTensor:c(1.0)
+                                                    falsePredicateTensor:ramp
+                                                                    name:nil];
+                    slope = [g selectWithPredicateTensor:at_most_m3
+                                     truePredicateTensor:c(0.0)
+                                    falsePredicateTensor:upper
+                                                    name:nil];
                 }
                 return [g multiplicationWithPrimaryTensor:go secondaryTensor:slope name:nil];
             });
@@ -403,11 +399,14 @@ inline double vjp_double_attr(const OpNode& node, const char* key, double def) {
     return p ? *p : def;
 }
 
-// select(x >= 0, pos, neg) as the local derivative, times the incoming grad.
+// select(x > 0, pos, neg) as the local derivative, times the incoming grad.
+// Eager's backward tests ``x > 0`` — the forward is continuous at 0 — so the
+// kink itself, and NaN, take the negative branch (``x >= 0`` gave the
+// positive slope at exactly 0).
 inline MPSGraphTensor* piecewise_grad(MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* go,
                                       MPSGraphTensor* pos, MPSGraphTensor* neg) {
     MPSGraphTensor* zero = [g constantWithScalar:0.0 dataType:go.dataType];
-    MPSGraphTensor* mask = [g greaterThanOrEqualToWithPrimaryTensor:x secondaryTensor:zero name:nil];
+    MPSGraphTensor* mask = [g greaterThanWithPrimaryTensor:x secondaryTensor:zero name:nil];
     MPSGraphTensor* d = [g selectWithPredicateTensor:mask
                                  truePredicateTensor:pos
                                 falsePredicateTensor:neg
@@ -430,8 +429,8 @@ public:
     }
 };
 
-// elu: d/dx = 1 for x >= 0, alpha * exp(x) below.  selu is lambda times the
-// same with its fixed alpha.
+// elu: d/dx = 1 for x > 0, alpha * exp(x) at 0 and below (alpha at the kink,
+// as eager's backward).  selu is lambda times the same with its fixed alpha.
 template <bool SELU>
 class EluFamilyVjp final : public VjpEmitter {
 public:
