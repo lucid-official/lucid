@@ -21,6 +21,7 @@ call is what tells these bugs from a correct answer: the first compiled one
 agrees either way.
 """
 
+import types
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import NamedTuple
@@ -32,6 +33,7 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 from lucid.compile._core import fallback
+from lucid.compile._entry import decode_step
 from lucid.compile._entry.decode_step import compiled_decode_step
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
 from lucid.utils.cache import StaticCache
@@ -299,3 +301,128 @@ def test_a_cache_written_in_place_is_the_cache_not_an_outside_write(compiled: bo
     want = [float(v) for v in twin.key_cache[0].reshape(-1).tolist()]
     _assert_close([float(v) for v in cache.key_cache[0].reshape(-1).tolist()], want, "cache")
     _assert_close([float(v) for v in out.reshape(-1).tolist()], want, "answer")
+
+
+# -- a trace the step declines, each way it can ---------------------------------
+
+
+class _Declined(NamedTuple):
+    """One decode the step runs eagerly: what the eager call is compared with."""
+
+    forward: Callable[[Tensor, Tensor], Tensor | tuple[Tensor, Tensor]]
+    cache: StaticCache
+    tally: Tensor
+
+
+class _Notices(list[str]):
+    """The categories of the fallback notices the step said."""
+
+
+@pytest.fixture
+def notices(monkeypatch: pytest.MonkeyPatch) -> _Notices:
+    said = _Notices()
+    monkeypatch.setattr(
+        decode_step, "_fallback_notice", lambda category, detail: said.append(category)
+    )
+    return said
+
+
+def _tally_and_cache() -> tuple[Tensor, StaticCache]:
+    return lucid.zeros(1, device=COMPILE_DEVICE), StaticCache(_LEN)
+
+
+def _update(cache: StaticCache, hidden: Tensor, cache_position: Tensor) -> Tensor:
+    key = hidden.mean(0).reshape(1, 1, 1, _WIDTH)
+    keys, _ = cache.update(key, key, 0, {"cache_position": cache_position})
+    return keys * 1.0
+
+
+def _tuple_result() -> _Declined:
+    tally, cache = _tally_and_cache()
+
+    def forward(hidden: Tensor, cache_position: Tensor) -> tuple[Tensor, Tensor]:
+        tally.add_(1.0)
+        keys = _update(cache, hidden, cache_position)
+        return keys, keys * 2.0
+
+    return _Declined(forward, cache, tally)
+
+
+def _rebound_slot() -> _Declined:
+    tally, cache = _tally_and_cache()
+    box = {"h": lucid.zeros(1, 1, 1, _WIDTH, device=COMPILE_DEVICE)}
+
+    def forward(hidden: Tensor, cache_position: Tensor) -> Tensor:
+        tally.add_(1.0)
+        previous = box["h"]
+        box["h"] = hidden.mean(0).reshape(1, 1, 1, _WIDTH) * 1.0
+        return _update(cache, hidden, cache_position) + previous
+
+    return _Declined(forward, cache, tally)
+
+
+def _held_write() -> _Declined:
+    tally, cache = _tally_and_cache()
+    holder = types.SimpleNamespace(kept=None)
+
+    def forward(hidden: Tensor, cache_position: Tensor) -> Tensor:
+        tally.add_(1.0)
+        kept = lucid.ones(1, 1, 1, _WIDTH, device=COMPILE_DEVICE)
+        kept.add_(hidden.mean(0).reshape(1, 1, 1, _WIDTH))
+        holder.kept = kept
+        return _update(cache, hidden, cache_position) + kept
+
+    return _Declined(forward, cache, tally)
+
+
+def _no_emitter() -> _Declined:
+    tally, cache = _tally_and_cache()
+    eye = lucid.eye(3, device=COMPILE_DEVICE) * 4.0
+
+    def forward(hidden: Tensor, cache_position: Tensor) -> Tensor:
+        tally.add_(1.0)
+        keys = _update(cache, hidden, cache_position)
+        return keys + lucid.linalg.inv(hidden[:, :3] * 0.1 + eye).sum()
+
+    return _Declined(forward, cache, tally)
+
+
+#: The declined trace, and the notice it says (``None``: it says none).
+DECLINED: dict[str, tuple[Callable[[], _Declined], str | None]] = {
+    "a result the step cannot hand back": (_tuple_result, None),
+    "a slot the call rebinds": (_rebound_slot, "rebound-slot"),
+    "a tensor the call made, wrote and kept": (_held_write, "held-write"),
+    "an op with no emitter": (_no_emitter, None),
+}
+
+
+def _drive(make: Callable[[], _Declined], compiled: bool) -> tuple[list[list[float]], int]:
+    """The answers and the tally after each call; the executables the step cached."""
+    rig = make()
+    # A tuple result is the case under test: the step has to decline it.
+    step = (
+        compiled_decode_step(rig.forward, rig.cache)  # type: ignore[arg-type]
+        if compiled
+        else rig.forward
+    )
+    seen: list[list[float]] = []
+    for pos in range(_CALLS):
+        out = step(*_inputs(pos))
+        first = out if isinstance(out, Tensor) else out[0]
+        seen.append([float(v) for v in first.reshape(-1).tolist()])
+        seen.append([float(rig.tally.item())])
+    return seen, (len(step.cache) if compiled else 0)  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("name", DECLINED)
+def test_a_declined_trace_runs_eagerly_and_writes_once(name: str, notices: _Notices) -> None:
+    """The step answers as eager does, its outside write applied once per call, with its notice."""
+    make, category = DECLINED[name]
+    want, _ = _drive(make, compiled=False)
+    got, entries = _drive(make, compiled=True)
+    assert entries == 0, f"{name}: {entries} executables"
+    for i, (g, w) in enumerate(zip(got, want, strict=True)):
+        _assert_close(g, w, f"{name}: {'tally' if i % 2 else 'answer'} of call {i // 2}")
+    assert [n for n in notices if n in ("rebound-slot", "held-write")] == (
+        [] if category is None else [category]
+    )
