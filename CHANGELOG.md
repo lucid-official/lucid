@@ -35,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse a host read of a tensor from outside the call
 
+- a write that reads a kept tensor is not a constant one
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

@@ -455,19 +455,26 @@ Tracer::refuse_kept_writes(const std::function<bool(const TensorImpl*)>& held, b
             std::none_of(members.begin(), members.end(),
                          [&](const TensorImplPtr& member) { return held(member.get()); }))
             continue;
-        // Written from the trace's constants alone, the tensor holds the same
-        // values whoever wrote it and however often: a cached or lazily built
-        // table.  The holder keeps them; putting them back for an eager call
-        // that never writes them again would empty the table for good.
-        if (from_constants(lookup_id(it->first.get()), walk))
+        // A write that reads the tensor's own earlier value (``add_``,
+        // ``h.copy_(h * 2)``) is not idempotent: each call has to start from
+        // what the last one left, and a compiled call rebuilds the tensor from
+        // its factory every time, so the accumulate never carries.  The other
+        // operands being constants changes nothing (LCD-864).
+        const bool reads = reads_its_own_value(it->first, walk);
+        // Written from the trace's constants alone, without reading its own
+        // value, the tensor holds the same values whoever wrote it and however
+        // often: a cached or lazily built table.  The holder keeps them;
+        // putting them back for an eager call that never writes them again
+        // would empty the table for good.
+        if (!reads && from_constants(lookup_id(it->first.get()), walk))
             continue;
         // Standing, the trace is the call whatever the write: a buffer filled
         // from the first batch keeps that batch, as eager does.  Without that, a
         // write that only overwrites (``copy_``, ``fill_``, a setitem) lands the
         // same values however often it runs, and only one that reads the tensor
-        // (``add_``, ``h.copy_(h * 2)``) has to run eagerly; one that runs only
-        // on the first call is compiled into every call (LCD-876).
-        if (!stands && !reads_its_own_value(it->first, walk))
+        // has to run eagerly; one that runs only on the first call is compiled
+        // into every call (LCD-876).
+        if (!stands && !reads)
             continue;
         mark_unsupported("a tensor the call made is still held after the call and was written "
                          "in place, so a compiled call would start it over every time");

@@ -473,11 +473,6 @@ def _adds_a_constant_to_what_a_closure_keeps() -> Body:
     return body
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-864: a constant added to a lazily kept tensor on every call reads as a "
-    "constant table, so the compiled call holds its trace-time value",
-)
 def test_a_constant_added_to_a_tensor_a_closure_keeps_goes_on_from_the_last_call() -> None:
     got = _run_module(_twin(_adds_a_constant_to_what_a_closure_keeps(), None))
     want = _run_eager_module(_twin(_adds_a_constant_to_what_a_closure_keeps(), None))
