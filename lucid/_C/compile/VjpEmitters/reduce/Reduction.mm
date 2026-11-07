@@ -143,11 +143,46 @@ std::optional<std::vector<bool>> reduced_axes(const OpNode& node, std::size_t ra
     return reduced;
 }
 
-// ``mask / (ties + 1 - mask)``, with ``ties`` the sum of ``mask`` over ``axes``.
-MPSGraphTensor* share_among_ties(MPSGraph* g, MPSGraphTensor* mask, NSArray<NSNumber*>* axes) {
+// How a NaN slice's gradient is shaped: eager's ``ExtremumNanGrad``
+// (ops/ufunc/Reductions.h), carried by the forward as the ``nan_grad`` attr —
+// absent for the default.
+enum class NanGrad : std::int64_t { Slice = 0, Element = 1, Zero = 2 };
+
+NanGrad nan_grad_of(const OpNode& node) {
+    auto it = node.attrs.find("nan_grad");
+    const auto* v = it == node.attrs.end() ? nullptr : std::get_if<std::int64_t>(&it->second);
+    if (v == nullptr || *v < 0 || *v > 2)
+        return NanGrad::Slice;
+    return static_cast<NanGrad>(*v);
+}
+
+// ``mask / denom`` with ``ties`` the sum of ``mask`` over ``axes``: eager's
+// ``extremum_share``.  ``Slice`` divides by ``ties`` itself, so a slice nothing
+// matches (a NaN extremum) is 0 / 0 = NaN at every element; ``Element`` first
+// widens ``mask`` to the NaN elements of a NaN-extremum slice; ``Zero`` divides
+// by ``ties + 1 - mask``, so that slice gets zeros.  ``x`` and ``y`` (the
+// result, in keepdim form) are only read to find the NaN elements.  An integer
+// input holds no NaN and takes ``Zero``'s form, which is the same there.
+MPSGraphTensor* share_among_ties(MPSGraph* g,
+                                 MPSGraphTensor* mask,
+                                 NSArray<NSNumber*>* axes,
+                                 NanGrad rule,
+                                 MPSGraphTensor* x,
+                                 MPSGraphTensor* y) {
+    const bool nan_aware = rule != NanGrad::Zero && (x.dataType & MPSDataTypeFloatBit) != 0;
+    if (nan_aware && rule == NanGrad::Element) {
+        MPSGraphTensor* both_nan = [g logicalANDWithPrimaryTensor:[g isNaNWithTensor:x name:nil]
+                                                  secondaryTensor:[g isNaNWithTensor:y name:nil]
+                                                             name:nil];
+        mask = [g additionWithPrimaryTensor:mask
+                            secondaryTensor:[g castTensor:both_nan toType:mask.dataType name:nil]
+                                       name:nil];
+    }
     // A 0-d input reduces over no axis: its one element is its own tie count.
     MPSGraphTensor* ties =
         axes.count == 0 ? mask : [g reductionSumWithTensor:mask axes:axes name:nil];
+    if (nan_aware && rule == NanGrad::Slice)
+        return [g divisionWithPrimaryTensor:mask secondaryTensor:ties name:nil];
     MPSGraphTensor* one = [g constantWithScalar:1.0 dataType:mask.dataType];
     MPSGraphTensor* denom = [g subtractionWithPrimaryTensor:[g additionWithPrimaryTensor:ties
                                                                          secondaryTensor:one
@@ -164,9 +199,9 @@ MPSGraphTensor* share_among_ties(MPSGraph* g, MPSGraphTensor* mask, NSArray<NSNu
 // order of operations so a half-precision share rounds as eager's does while
 // the tie count is exact in that dtype (bfloat16 up to 256, float16 up to
 // 2048); past that eager's ``ties + 1`` rounds and the two differ.
-// Where ``mask`` is 1 the denominator is the slice's tie count; where it
-// is 0 it is at least 1, so a slice nothing matches (a NaN extremum) gets
-// zeros.  Giving every tie the whole gradient made a step on a tie — a
+// A slice holding a NaN is shaped by the forward's ``nan_grad`` attr (see
+// ``share_among_ties``): NaN everywhere (``amax``), the NaN elements
+// (``max()``) or zeros (``vector_norm(inf)``).  Giving every tie the whole gradient made a step on a tie — a
 // zero-initialised tensor, ``matrix_norm(a, 2)`` or ``cond`` on a repeated
 // singular value — that many times too large (LCD-865).  An int ``dim``
 // (``x.max(dim)``) gathers at its argmax and never reaches this VJP.
@@ -212,7 +247,7 @@ public:
                                       toType:go.dataType
                                         name:nil];
         MPSGraphTensor* dx = [g multiplicationWithPrimaryTensor:go_k
-                                                secondaryTensor:share_among_ties(g, mask, axes)
+                                                secondaryTensor:share_among_ties(g, mask, axes, nan_grad_of(node), x, y_k)
                                                            name:IS_MAX ? @"max_vjp" : @"min_vjp"];
         bctx.accumulate_grad(node.inputs[0], from_tensor(dx));
         return true;

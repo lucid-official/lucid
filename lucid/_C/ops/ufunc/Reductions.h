@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -208,6 +209,17 @@ public:
     TensorImplPtr scale_graph_grad(const TensorImplPtr& g);
 };
 
+// What the gradient of ``max`` / ``min`` does with a slice that holds a NaN.
+// The reference framework answers differently per caller, so the call picks:
+//   Slice   — every element of the slice gets NaN (``amax`` / ``amin`` /
+//             ``aminmax``, ``matrix_norm``): the equality mask is empty and the
+//             share ``mask / ties`` is 0 / 0.  The default.
+//   Element — the NaN elements split the gradient evenly (``x.max()`` /
+//             ``x.min()`` with no ``dim``): a NaN result matches NaN elements.
+//   Zero    — the slice gets zeros (``vector_norm(x, +-inf)``, ``lp_normalize``).
+// A slice without NaN, and an integer input, take the same gradient under all three.
+enum class ExtremumNanGrad : std::uint8_t { Slice, Element, Zero };
+
 // Autograd node for the multi-axis reduction maximum
 // $y = \max_{i \in \text{axes}} x_i$.
 //
@@ -266,6 +278,9 @@ public:
     // ``create_graph=True`` silently produced the incoming seed at
     // every position while eager backward was correct.
     TensorImplPtr scale_graph_grad(const TensorImplPtr& g);
+
+    // How a NaN slice's gradient is shaped; set by ``max_with_nan_grad_op``.
+    ExtremumNanGrad nan_grad_ = ExtremumNanGrad::Slice;
 };
 
 // Autograd node for the multi-axis reduction minimum
@@ -316,6 +331,9 @@ public:
     // ``create_graph=True`` silently produced the incoming seed at
     // every position while eager backward was correct.
     TensorImplPtr scale_graph_grad(const TensorImplPtr& g);
+
+    // How a NaN slice's gradient is shaped; set by ``min_with_nan_grad_op``.
+    ExtremumNanGrad nan_grad_ = ExtremumNanGrad::Slice;
 };
 
 // Reduce ``a`` by addition along ``axes``.
@@ -427,6 +445,13 @@ LUCID_API TensorImplPtr prod_op(const TensorImplPtr& a,
 // :class:`MaxBackward` — backward node.
 LUCID_API TensorImplPtr max_op(const TensorImplPtr& a, const std::vector<int>& axes, bool keepdims);
 
+// :func:`max_op` whose gradient treats a slice holding a NaN as ``nan_grad``
+// says (see :enum:`ExtremumNanGrad`); the values are the same.
+LUCID_API TensorImplPtr max_with_nan_grad_op(const TensorImplPtr& a,
+                                             const std::vector<int>& axes,
+                                             bool keepdims,
+                                             ExtremumNanGrad nan_grad);
+
 // Reduce ``a`` by minimum along ``axes``.
 //
 // Parameters
@@ -447,6 +472,12 @@ LUCID_API TensorImplPtr max_op(const TensorImplPtr& a, const std::vector<int>& a
 // --------
 // :class:`MinBackward` — backward node.
 LUCID_API TensorImplPtr min_op(const TensorImplPtr& a, const std::vector<int>& axes, bool keepdims);
+
+// :func:`min_op` with the NaN-gradient choice of :func:`max_with_nan_grad_op`.
+LUCID_API TensorImplPtr min_with_nan_grad_op(const TensorImplPtr& a,
+                                             const std::vector<int>& axes,
+                                             bool keepdims,
+                                             ExtremumNanGrad nan_grad);
 
 // Compute the (biased) standard deviation along ``axes``.
 //

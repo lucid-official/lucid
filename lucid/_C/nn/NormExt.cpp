@@ -232,9 +232,9 @@ TensorImplPtr real_p_norm_keepdim(const TensorImplPtr& r, double ord, int axis) 
         return astype_op(sum_op(nz, axes, true), r->dtype());
     }
     if (ord == std::numeric_limits<double>::infinity())
-        return max_op(r, axes, true);
+        return max_with_nan_grad_op(r, axes, true, ExtremumNanGrad::Zero);
     if (ord == -std::numeric_limits<double>::infinity())
-        return min_op(r, axes, true);
+        return min_with_nan_grad_op(r, axes, true, ExtremumNanGrad::Zero);
     if (ord == 1.0)
         return sum_op(r, axes, true);
     return real_non_trivial_p_norm(r, ord, axis);

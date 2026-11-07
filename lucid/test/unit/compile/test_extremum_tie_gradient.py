@@ -106,7 +106,8 @@ _CASES: dict[str, _Case] = {
     "max-int-dim": _Case(_ROWS, lambda a: a.max(dim=1)[0]),
     "min-int-dim-keepdim": _Case(_COLS, lambda a: a.min(dim=0, keepdim=True)[0]),
     "amax-no-tie": _Case([1.0, 3.0, 2.0], lambda a: lucid.amax(a)),
-    # A slice holding a NaN reduces to NaN and gives none of its elements a gradient.
+    # A slice holding a NaN reduces to NaN; its gradient follows the call (LCD-878, pinned
+    # value by value in test_extremum_nan_gradient.py).
     "max-nan": _Case([1.0, _NAN, 1.0], lambda a: a.max()),
     "min-nan": _Case([1.0, _NAN, 1.0], lambda a: a.min()),
     "max-all-nan": _Case([_NAN, _NAN], lambda a: a.max()),

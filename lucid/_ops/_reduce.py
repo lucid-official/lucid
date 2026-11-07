@@ -152,8 +152,10 @@ def _require_normable(impl: _Impl, op: str) -> _Impl:
     return impl
 
 
-#: The orders that reduce the magnitudes directly, with no power or root.
-_ABS_REDUCTIONS = {math.inf: _C_engine.max, -math.inf: _C_engine.min, 1.0: _C_engine.sum}
+#: The orders that pick an extremum of the magnitudes, with no power or root.  A NaN
+#: slice's gradient is zero there (the reference's ``vector_norm(inf)``), not the NaN
+#: ``amax`` gives.
+_ABS_EXTREMA = {math.inf: _C_engine.max, -math.inf: _C_engine.min}
 
 
 def _p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
@@ -172,8 +174,10 @@ def _p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
     if r.dtype in _HALF:
         out = _p_norm(_C_engine.astype(r, _C_engine.F32), p, axes, keepdim)
         return _C_engine.astype(out, r.dtype)
-    if p in _ABS_REDUCTIONS:
-        return _ABS_REDUCTIONS[p](_C_engine.abs(r), axes, keepdim)
+    if p in _ABS_EXTREMA:
+        return _ABS_EXTREMA[p](_C_engine.abs(r), axes, keepdim, _C_engine.ExtremumNanGrad.ZERO)
+    if p == 1:
+        return _C_engine.sum(_C_engine.abs(r), axes, keepdim)
     if p == 2:
         # r² = |x|² for a real r, one product cheaper than ``abs`` first.
         return _zero_safe_root(_C_engine.sum(_C_engine.mul(r, r), axes, keepdim), 2)
@@ -528,7 +532,7 @@ def _log_softmax_adapter(x_impl: _Impl, dim: int = -1, dtype: DTypeLike | None =
 
 def _extreme_adapter(
     name: str,
-    val_fn: Callable[[_Impl, list[int], bool], _Impl],
+    val_fn: Callable[[_Impl, list[int], bool, _C_engine.ExtremumNanGrad], _Impl],
     idx_fn: Callable[[_Impl, int, bool], _Impl],
     x_impl: _Impl,
     dim: int | Sequence[int] | None,
@@ -539,15 +543,19 @@ def _extreme_adapter(
     With an int ``dim`` a float result is gathered at the returned index, so
     a tie sends its whole gradient to that index (the first extremum), as the
     reference does.  The tuple/``None`` reductions keep the engine's even
-    split across every extremum.
+    split across every extremum.  A slice holding a NaN gives the gradient to
+    its NaN elements when ``dim`` is ``None`` (the reference's ``max()``) and
+    NaN to the whole slice for a tuple, the ``amax`` rule.
     """
     axes = _reduction_axes(x_impl, dim, name)
-    if dim is None or isinstance(dim, Sequence):
-        return val_fn(x_impl, axes, bool(keepdim))
+    if dim is None:
+        return val_fn(x_impl, axes, bool(keepdim), _C_engine.ExtremumNanGrad.ELEMENT)
+    if isinstance(dim, Sequence):
+        return val_fn(x_impl, axes, bool(keepdim), _C_engine.ExtremumNanGrad.SLICE)
     axis = axes[0] if axes else 0
     idx_in = _C_engine.astype(x_impl, _C_engine.I8) if x_impl.dtype == _C_engine.Bool else x_impl
     if not axes or _promotion.is_integral(x_impl.dtype):
-        values = val_fn(x_impl, axes, bool(keepdim))
+        values = val_fn(x_impl, axes, bool(keepdim), _C_engine.ExtremumNanGrad.ELEMENT)
         return _ValuesIndices((values, idx_fn(idx_in, axis, bool(keepdim))))
     kept = idx_fn(idx_in, axis, True)
     picked = _C_engine.gather(x_impl, kept, axis)

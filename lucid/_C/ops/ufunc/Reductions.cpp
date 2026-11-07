@@ -39,6 +39,7 @@
 #include "../utils/Select.h"
 #include "Astype.h"
 #include "Exponential.h"
+#include "Predicate.h"
 #include "Var.h"
 
 namespace lucid {
@@ -279,38 +280,75 @@ double reduced_count(const Shape& in_shape, const std::vector<int>& axes) {
     return n;
 }
 
+// Whether the NaN rule can matter: an integer / bool tensor holds no NaN, and
+// ``Zero`` is the rule that ignores it.
+bool nan_rule_applies(ExtremumNanGrad rule, Dtype dt) {
+    return rule != ExtremumNanGrad::Zero && is_floating_point(dt);
+}
+
 // The share of a slice's gradient each position gets under max / min:
-// ``mask / (ties + 1 - mask)``.  Where ``mask`` is 1 the denominator is
-// the number of positions tied for the extremum, so the shares sum to one
-// — a subgradient, as the reference framework's amax gives.  Where it is
-// 0 the denominator is at least 1, so a slice nothing matches (a NaN
-// extremum) gets zeros rather than 0 / 0.
-Storage share_among_ties(const Storage& mask,
-                         const Shape& in_shape,
-                         const std::vector<int>& axes,
-                         Dtype dt,
-                         Device device) {
+// ``mask / denom`` with ``mask`` the positions equal to the extremum.  Where
+// ``mask`` is 1 the denominator is the number of positions tied for it, so
+// the shares sum to one — a subgradient, as the reference framework's amax
+// gives.  A slice holding a NaN has a NaN extremum and an empty ``mask``,
+// and ``rule`` says what it gets (see :enum:`ExtremumNanGrad`):
+//   Slice   — ties, so 0 / 0 = NaN at every element.
+//   Element — ``mask`` is widened to the NaN elements, which split it.
+//   Zero    — ties + 1 - mask, so an empty ``mask`` divides by 1 and gives 0.
+Storage extremum_share(const Storage& x,
+                       const Storage& out_bcast,
+                       const Shape& in_shape,
+                       const std::vector<int>& axes,
+                       Dtype dt,
+                       Device device,
+                       ExtremumNanGrad rule) {
     const std::size_t n = shape_numel(in_shape);
+    // a == b iff a >= b AND b >= a, avoiding a separate equality kernel.
+    Storage mask = multiply_storages(ge_mask_storage(x, out_bcast, n, dt, device),
+                                     ge_mask_storage(out_bcast, x, n, dt, device), n, dt, device);
+    const bool nan_aware = nan_rule_applies(rule, dt);
+    if (nan_aware && rule == ExtremumNanGrad::Element) {
+        // ge(v, v) is 0 only at a NaN, so (1 - ge(out, out)) * (1 - ge(x, x))
+        // marks the NaN elements of a NaN-extremum slice; the equality mask
+        // is empty exactly there, so the two never overlap.
+        Storage out_ok = ge_mask_storage(out_bcast, out_bcast, n, dt, device);
+        Storage x_ok = ge_mask_storage(x, x, n, dt, device);
+        Storage both_nan = add_scalar_storage(
+            subtract_storages(subtract_storages(multiply_storages(out_ok, x_ok, n, dt, device),
+                                                out_ok, n, dt, device),
+                              x_ok, n, dt, device),
+            1.0, n, dt, device);
+        mask = add_storages(mask, both_nan, n, dt, device);
+    }
     Shape kept = in_shape;
     for (int ax : axes)
         kept[static_cast<std::size_t>(ax)] = 1;
     Storage ties =
         backend::Dispatcher::for_device(device).reduce_sum(mask, in_shape, {axes, true}, dt);
     Storage ties_b = broadcast_back_for_reduce(ties, kept, in_shape, axes, true, dt, device);
+    if (nan_aware && rule == ExtremumNanGrad::Slice)
+        return divide_storages(mask, ties_b, n, dt, device);
     Storage denom =
         subtract_storages(add_scalar_storage(ties_b, 1.0, n, dt, device), mask, n, dt, device);
     return divide_storages(mask, denom, n, dt, device);
 }
 
-// Graph-mode counterpart of :func:`share_among_ties`, built from ops so a
+// Graph-mode counterpart of :func:`extremum_share`, built from ops so a
 // second derivative passes through it (the shares are piecewise constant
 // in ``x``, so they contribute nothing of their own).
-TensorImplPtr share_among_ties_graph(const TensorImplPtr& mask,
-                                     const Shape& in_shape,
-                                     const std::vector<int>& axes) {
-    auto ties = broadcast_to_op(sum_op(mask, axes, /*keepdims=*/true), in_shape);
-    auto denom = sub_op(add_op(ties, ones_like_op(mask)), mask);
-    return div_op(mask, denom);
+TensorImplPtr extremum_share_graph(const TensorImplPtr& x,
+                                   const TensorImplPtr& out_bcast,
+                                   const std::vector<int>& axes,
+                                   Dtype dt,
+                                   ExtremumNanGrad rule) {
+    auto mask = astype_op(equal_op(x, out_bcast), dt);
+    const bool nan_aware = nan_rule_applies(rule, dt);
+    if (nan_aware && rule == ExtremumNanGrad::Element)
+        mask = add_op(mask, mul_op(astype_op(isnan_op(x), dt), astype_op(isnan_op(out_bcast), dt)));
+    auto ties = broadcast_to_op(sum_op(mask, axes, /*keepdims=*/true), x->shape());
+    if (nan_aware && rule == ExtremumNanGrad::Slice)
+        return div_op(mask, ties);
+    return div_op(mask, sub_op(add_op(ties, ones_like_op(mask)), mask));
 }
 }  // namespace
 
@@ -529,27 +567,16 @@ LUCID_REGISTER_OP(ProdBackward)
 // max — saves the output (max values) to build the equality mask cheaply.
 const OpSchema MaxBackward::schema_v1{"max", 1, AmpPolicy::KeepInput, true};
 
-// dL/dx = dL/dy * (x == max_val), broadcast back to the input shape.
-// The equality mask is constructed as ge(x, m) AND ge(m, x) to avoid a
-// dedicated equal-mask primitive; this handles ties correctly.
+// dL/dx = dL/dy * (x == max_val), broadcast back to the input shape, with the
+// slice's gradient split among the tied positions (``extremum_share``).
 Storage MaxBackward::grad_formula(const Storage& grad_out) {
     const std::size_t in_numel = shape_numel(this->full_input_shape_);
     Storage out_bcast =
         broadcast_back_for_reduce(this->saved_output_, this->out_shape_, this->full_input_shape_,
                                   this->reduce_axes_, this->keepdims_, this->dtype_, this->device_);
-
-    Storage mask_eq;
-    {
-        // a == b iff a >= b AND b >= a, avoiding a separate equality kernel.
-        Storage ge_a = ge_mask_storage(this->saved_inputs_[0], out_bcast, in_numel, this->dtype_,
-                                       this->device_);
-        Storage ge_b = ge_mask_storage(out_bcast, this->saved_inputs_[0], in_numel, this->dtype_,
-                                       this->device_);
-        mask_eq = multiply_storages(ge_a, ge_b, in_numel, this->dtype_, this->device_);
-    }
-    Storage share = share_among_ties(mask_eq, this->full_input_shape_, this->reduce_axes_,
-                                     this->dtype_, this->device_);
-
+    Storage share =
+        extremum_share(this->saved_inputs_[0], out_bcast, this->full_input_shape_,
+                       this->reduce_axes_, this->dtype_, this->device_, this->nan_grad_);
     Storage g_bcast =
         broadcast_back_for_reduce(grad_out, this->out_shape_, this->full_input_shape_,
                                   this->reduce_axes_, this->keepdims_, this->dtype_, this->device_);
@@ -561,12 +588,33 @@ TensorImplPtr MaxBackward::scale_graph_grad(const TensorImplPtr& g) {
     const auto& x = this->saved_impl_inputs_[0];
     auto out = max_op(x, this->reduce_axes_, /*keepdims=*/true);
     auto out_b = broadcast_to_op(out, this->full_input_shape_);
-    auto mask = astype_op(equal_op(x, out_b), this->dtype_);
-    return mul_op(g, share_among_ties_graph(mask, this->full_input_shape_, this->reduce_axes_));
+    return mul_op(
+        g, extremum_share_graph(x, out_b, this->reduce_axes_, this->dtype_, this->nan_grad_));
 }
+
+namespace {
+// ``out`` is the extremum just built: give its node ``nan_grad``, and tell the
+// trace (a compiled backward reads the attr) when the rule is not the default.
+template <class Node>
+TensorImplPtr with_nan_grad(TensorImplPtr out, ExtremumNanGrad nan_grad) {
+    if (nan_grad == ExtremumNanGrad::Slice)
+        return out;
+    if (auto* node = dynamic_cast<Node*>(out->grad_fn().get()))
+        node->nan_grad_ = nan_grad;
+    if (auto* trc = ::lucid::compile::current_tracer())
+        trc->on_op_attr("nan_grad", static_cast<std::int64_t>(nan_grad));
+    return out;
+}
+}  // namespace
 
 TensorImplPtr max_op(const TensorImplPtr& a, const std::vector<int>& axes, bool keepdims) {
     return MaxBackward::forward(a, axes, keepdims);
+}
+TensorImplPtr max_with_nan_grad_op(const TensorImplPtr& a,
+                                   const std::vector<int>& axes,
+                                   bool keepdims,
+                                   ExtremumNanGrad nan_grad) {
+    return with_nan_grad<MaxBackward>(MaxBackward::forward(a, axes, keepdims), nan_grad);
 }
 LUCID_REGISTER_OP(MaxBackward)
 
@@ -579,16 +627,9 @@ Storage MinBackward::grad_formula(const Storage& grad_out) {
     Storage out_bcast =
         broadcast_back_for_reduce(this->saved_output_, this->out_shape_, this->full_input_shape_,
                                   this->reduce_axes_, this->keepdims_, this->dtype_, this->device_);
-    Storage mask_eq;
-    {
-        Storage ge_a = ge_mask_storage(this->saved_inputs_[0], out_bcast, in_numel, this->dtype_,
-                                       this->device_);
-        Storage ge_b = ge_mask_storage(out_bcast, this->saved_inputs_[0], in_numel, this->dtype_,
-                                       this->device_);
-        mask_eq = multiply_storages(ge_a, ge_b, in_numel, this->dtype_, this->device_);
-    }
-    Storage share = share_among_ties(mask_eq, this->full_input_shape_, this->reduce_axes_,
-                                     this->dtype_, this->device_);
+    Storage share =
+        extremum_share(this->saved_inputs_[0], out_bcast, this->full_input_shape_,
+                       this->reduce_axes_, this->dtype_, this->device_, this->nan_grad_);
     Storage g_bcast =
         broadcast_back_for_reduce(grad_out, this->out_shape_, this->full_input_shape_,
                                   this->reduce_axes_, this->keepdims_, this->dtype_, this->device_);
@@ -600,12 +641,18 @@ TensorImplPtr MinBackward::scale_graph_grad(const TensorImplPtr& g) {
     const auto& x = this->saved_impl_inputs_[0];
     auto out = min_op(x, this->reduce_axes_, /*keepdims=*/true);
     auto out_b = broadcast_to_op(out, this->full_input_shape_);
-    auto mask = astype_op(equal_op(x, out_b), this->dtype_);
-    return mul_op(g, share_among_ties_graph(mask, this->full_input_shape_, this->reduce_axes_));
+    return mul_op(
+        g, extremum_share_graph(x, out_b, this->reduce_axes_, this->dtype_, this->nan_grad_));
 }
 
 TensorImplPtr min_op(const TensorImplPtr& a, const std::vector<int>& axes, bool keepdims) {
     return MinBackward::forward(a, axes, keepdims);
+}
+TensorImplPtr min_with_nan_grad_op(const TensorImplPtr& a,
+                                   const std::vector<int>& axes,
+                                   bool keepdims,
+                                   ExtremumNanGrad nan_grad) {
+    return with_nan_grad<MinBackward>(MinBackward::forward(a, axes, keepdims), nan_grad);
 }
 LUCID_REGISTER_OP(MinBackward)
 

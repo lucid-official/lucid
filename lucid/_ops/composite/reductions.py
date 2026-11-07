@@ -538,8 +538,8 @@ def aminmax(input: Tensor, *, dim: int | None = None, keepdim: bool = False) -> 
     if dim_num is not None and (isinstance(dim_num, bool) or not isinstance(dim_num, int)):
         raise TypeError(f"aminmax(): argument 'dim' must be int, not {type(dim).__name__}")
     if dim_num is None:
-        lo = lucid.min(input)
-        hi = lucid.max(input)
+        lo = amin(input)  # amin / amax: a NaN slice's gradient is NaN, as the reference's
+        hi = amax(input)
         if keepdim and input.ndim > 0:
             ones = (1,) * input.ndim
             lo = lo.reshape(ones)

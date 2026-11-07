@@ -51,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - compiled activation gradients take eager's side at kinks
 
+- max/min backward follows the reference through a NaN slice
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

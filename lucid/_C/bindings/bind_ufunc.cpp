@@ -45,6 +45,24 @@ namespace py = pybind11;
 
 namespace lucid::bindings {
 
+namespace {
+// ``max`` / ``min``, with the choice of how a NaN slice's gradient is shaped.
+void bind_extremum(py::module_& m) {
+    py::enum_<ExtremumNanGrad>(
+        m, "ExtremumNanGrad",
+        "The gradient of max / min for a slice that holds a NaN: SLICE gives every element "
+        "NaN (amax), ELEMENT splits it among the NaN elements (max()), ZERO gives zeros "
+        "(vector_norm(inf)).")
+        .value("SLICE", ExtremumNanGrad::Slice)
+        .value("ELEMENT", ExtremumNanGrad::Element)
+        .value("ZERO", ExtremumNanGrad::Zero);
+    m.def("max", &max_with_nan_grad_op, py::arg("a"), py::arg("dim") = std::vector<int>{},
+          py::arg("keepdims") = false, py::arg("nan_grad") = ExtremumNanGrad::Slice, "Reduce-max.");
+    m.def("min", &min_with_nan_grad_op, py::arg("a"), py::arg("dim") = std::vector<int>{},
+          py::arg("keepdims") = false, py::arg("nan_grad") = ExtremumNanGrad::Slice, "Reduce-min.");
+}
+}  // namespace
+
 // Registers all unary, reduction, axis, and scan ops.
 void register_ufunc(py::module_& m) {
     // Differentiable arithmetic unary ops.  bind_unary reads the Python name
@@ -114,8 +132,7 @@ void register_ufunc(py::module_& m) {
     bind_reduce<SumBackward>(m, &sum_op, "Reduce-sum along given dim (empty = all).");
     bind_reduce<MeanBackward>(m, &mean_op, "Reduce-mean.");
     bind_reduce<ProdBackward>(m, &prod_op, "Reduce-product.");
-    bind_reduce<MaxBackward>(m, &max_op, "Reduce-max.");
-    bind_reduce<MinBackward>(m, &min_op, "Reduce-min.");
+    bind_extremum(m);
 
     // Dim manipulation ops live here rather than in bind_utils because their
     // backward nodes are in the ufunc layer.
