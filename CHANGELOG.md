@@ -15,11 +15,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-
-### Fixed
-
-- refuse a value one segment makes and another reads
-
 ---
 
 ## [3.16.4] — 2026-11-07
@@ -56,6 +51,7 @@ Adds Drifting Models (arXiv 2602.04770), checked against the authors' running re
 
 ### Fixed
 
+- `lucid.compile`: `make_step(segments=N)` froze a value one segment stores and a later one reads (a dict, list, attribute or closure stash) and trained on the first call's value with a wrong gradient; it now runs eagerly with a `segment-values` notice and equals eager (LCD-902).
 - `lucid.compile`: a compiled function using `masked_select`, `linalg.lu_factor_ex`, `linalg.ldl_factor_ex` or `linalg.householder_product` returned the first call's result for every later input with no error. These signatures now run eagerly and answer each input (LCD-836).
 - `linalg.pinv` raises `LinAlgError` on an infinite matrix with `min(m, n) >= 3` instead of never returning, and `linalg.lstsq` returns a NaN solution for a non-finite batch element, as the reference does, instead of raising (LCD-833).
 - `ErrorBuilder` / `LapackInfo` / `Indexing`: prefix C++ errors with the public operation name (`take`, `index_select`, `transpose`, `unfold`, `scatter`, `frombuffer`, `clamp`, `fft`, `tril`/`triu`, `linalg.*`), omit `[trace=...]` unless `LUCID_ERROR_TRACE` is set, format index-out-of-bounds messages with the offending index, dimension, and extent, report human-readable LAPACK convergence/factorization failures, and raise `ValueError` instead of `RuntimeError` on invalid scalar/shape arguments across 19 ops (LCD-673, LCD-675).
