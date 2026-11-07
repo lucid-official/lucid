@@ -6,10 +6,9 @@ differentiable op by writing its forward and backward explicitly, for cases
 the composed ops cannot express.
 
 Grad modes: ``no_grad``, ``enable_grad``, ``inference_mode``, and the
-``set_grad_enabled`` / ``is_grad_enabled`` pair.  Note that
-``set_grad_enabled(flag)`` is a plain function returning ``None``, *not* a
-context manager — using it in a ``with`` statement turns grad off globally
-and never restores it, which then affects every later computation.
+``set_grad_enabled`` / ``is_grad_enabled`` pair.  ``set_grad_enabled(flag)``
+switches the mode when called and, used in a ``with`` statement or as a
+decorator, restores the previous mode on exit like the other three.
 
 Higher-order and verification: ``jacobian``, ``hessian``, ``vjp``, ``jvp``,
 ``hvp`` and ``vhp`` for derivatives of derivatives, and ``gradcheck`` /

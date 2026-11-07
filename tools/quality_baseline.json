@@ -1274,7 +1274,6 @@
     "lucid/_ops/composite/statistics.py": 1,
     "lucid/_tensor/_dunders.py": 14,
     "lucid/_tensor/tensor.py": 14,
-    "lucid/autograd/_grad_mode.py": 1,
     "lucid/benchmarks/_core.py": 1,
     "lucid/benchmarks/bench_train.py": 1,
     "lucid/compile/__init__.py": 2,

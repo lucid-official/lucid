@@ -4,7 +4,7 @@ Gradient mode context managers and decorators.
 
 import functools
 from contextlib import AbstractContextManager
-from typing import Callable, overload, override
+from typing import Callable, Self, overload, override
 
 from lucid._C import engine as _C_engine
 
@@ -23,7 +23,40 @@ def _scoped[F: Callable[..., object]](
     return wrapper  # type: ignore[return-value]  # wraps() result is not typed as F
 
 
-class no_grad:
+class _GradScope:
+    """Single owner of the save / switch / restore of the grad-mode flag.
+
+    ``no_grad``, ``enable_grad`` and ``set_grad_enabled`` differ only in the
+    mode they switch to.  The flag it replaces is kept on a stack so one
+    instance can be entered again — nested or after it has exited — and each
+    exit restores what its own entry saw.
+    """
+
+    mode: bool
+    _prev: list[bool]
+
+    def __init__(self, mode: bool) -> None:
+        """Record the mode this scope switches to."""
+        self.mode = mode
+        self._prev = []
+
+    def __enter__(self) -> Self:
+        """Switch to ``mode``, remembering the previous one.  Returns self for ``with ... as``."""
+        self._prev.append(_C_engine.raw_grad_enabled())
+        _C_engine.set_grad_enabled(self.mode)
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Restore the mode saved by the matching ``__enter__``, also when the body raised."""
+        _C_engine.set_grad_enabled(self._prev.pop())
+
+    def __call__[F: Callable[..., object]](self, fn: F) -> F:
+        """Wrap ``fn`` so every call runs inside a fresh scope of this mode."""
+        mode = self.mode
+        return _scoped(fn, lambda: _GradScope(mode))
+
+
+class no_grad(_GradScope):
     r"""Context manager / decorator that disables gradient tracking.
 
     Inside a ``no_grad`` scope every op skips the graph-building
@@ -52,9 +85,8 @@ class no_grad:
 
     Attributes
     ----------
-    _prev : bool
-        Internal — saved grad-mode flag captured at ``__enter__``
-        time and restored at ``__exit__``.
+    mode : bool
+        The grad mode the scope switches to.
 
     Notes
     -----
@@ -89,25 +121,12 @@ class no_grad:
     ...     return (x * x).sum()
     """
 
-    _prev: bool
-
-    def __enter__(self) -> no_grad:
-        """Enter the context.  Returns self so the value can be bound via ``with ... as``."""
-        self._prev = _C_engine.raw_grad_enabled()
-        _C_engine.set_grad_enabled(False)
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        """Exit the context, restoring any state that was modified on entry."""
-        _C_engine.set_grad_enabled(self._prev)
-
-    def __call__[F: Callable[..., object]](self, fn: F) -> F:
-        """Forward to the underlying callable (see class docstring)."""
-
-        return _scoped(fn, no_grad)
+    def __init__(self) -> None:
+        """Build a scope that disables gradient tracking."""
+        super().__init__(False)
 
 
-class enable_grad:
+class enable_grad(_GradScope):
     r"""Context manager / decorator that (re-)enables gradient tracking.
 
     Counterpart of :class:`no_grad`: turns gradient recording back
@@ -128,9 +147,8 @@ class enable_grad:
 
     Attributes
     ----------
-    _prev : bool
-        Internal — saved grad-mode flag captured at ``__enter__``
-        time and restored at ``__exit__``.
+    mode : bool
+        The grad mode the scope switches to.
 
     Notes
     -----
@@ -157,62 +175,92 @@ class enable_grad:
     True
     """
 
-    _prev: bool
-
-    def __enter__(self) -> enable_grad:
-        """Enter the context.  Returns self so the value can be bound via ``with ... as``."""
-        self._prev = _C_engine.raw_grad_enabled()
-        _C_engine.set_grad_enabled(True)
-        return self
-
-    def __exit__(self, *args: object) -> None:
-        """Exit the context, restoring any state that was modified on entry."""
-        _C_engine.set_grad_enabled(self._prev)
-
-    def __call__[F: Callable[..., object]](self, fn: F) -> F:
-        """Forward to the underlying callable (see class docstring)."""
-
-        return _scoped(fn, enable_grad)
+    def __init__(self) -> None:
+        """Build a scope that enables gradient tracking."""
+        super().__init__(True)
 
 
-def set_grad_enabled(mode: bool) -> None:
-    r"""Globally set the autograd gradient-tracking flag.
+class set_grad_enabled(_GradScope):
+    r"""Set the autograd gradient-tracking flag, as a function or a scope.
 
-    Imperative counterpart of :class:`no_grad` and
-    :class:`enable_grad`: flips the process-wide flag without a
-    ``with`` block. Useful when the desired state is determined
-    by configuration (e.g. an inference server that disables
-    grad once at start-up).
+    Constructing it switches the flag at once, so a bare
+    ``set_grad_enabled(False)`` call works as an imperative setter.  Used in
+    a ``with`` block the previous mode is restored on exit, also when the
+    body raises; used as a decorator every call of the wrapped function runs
+    in a scope of ``mode`` and the decoration itself changes nothing.  The
+    flag is per thread, like :class:`no_grad` and :class:`enable_grad`.
 
     Parameters
     ----------
     mode : bool
-        ``True`` to enable gradient tracking on subsequent ops,
-        ``False`` to disable it. The change persists until
-        another call to ``set_grad_enabled`` or until a
-        context-manager-based override.
+        ``True`` to enable gradient tracking, ``False`` to disable it.
+        Anything that is not a ``bool`` raises :class:`TypeError`.
 
-    Returns
-    -------
-    None
+    Attributes
+    ----------
+    mode : bool
+        The grad mode the scope switches to.
 
     Notes
     -----
-    Unlike the context-manager forms, this function does not
-    stack previous states — repeated calls simply overwrite the
-    flag. Pair it with :func:`is_grad_enabled` to save and
-    restore manually if needed.
+    Called as a function the switch is permanent until another call changes
+    it; nothing restores it.  Pair it with :func:`is_grad_enabled` to save
+    and restore by hand, or use the ``with`` form.
 
     Examples
     --------
+    As a function:
+
     >>> import lucid
     >>> from lucid.autograd import set_grad_enabled, is_grad_enabled
-    >>> set_grad_enabled(False)
+    >>> _ = set_grad_enabled(False)
     >>> is_grad_enabled()
     False
-    >>> set_grad_enabled(True)
+    >>> _ = set_grad_enabled(True)
+
+    As a context manager:
+
+    >>> is_train = False
+    >>> with set_grad_enabled(is_train):
+    ...     is_grad_enabled()
+    False
+    >>> is_grad_enabled()
+    True
+
+    As a decorator:
+
+    >>> @set_grad_enabled(False)
+    ... def predict(x):
+    ...     return x * 2
     """
-    _C_engine.set_grad_enabled(mode)
+
+    _pending: bool
+
+    def __init__(self, mode: bool) -> None:
+        """Switch the flag to ``mode`` now, keeping the mode it replaces."""
+        if not isinstance(mode, bool):
+            raise TypeError(f"set_grad_enabled expects a bool, got {type(mode).__name__}")
+        super().__init__(mode)
+        self._prev.append(_C_engine.raw_grad_enabled())
+        self._pending = True
+        _C_engine.set_grad_enabled(mode)
+
+    @override
+    def __enter__(self) -> Self:
+        """Enter the scope; the first entry reuses the mode the constructor saved."""
+        if self._pending:
+            self._pending = False
+            _C_engine.set_grad_enabled(self.mode)
+            return self
+        return super().__enter__()
+
+    @override
+    def __call__[F: Callable[..., object]](self, fn: F) -> F:
+        """Wrap ``fn``; the constructor's switch is undone so decorating changes nothing."""
+        if self._pending:
+            self._pending = False
+            _C_engine.set_grad_enabled(self._prev.pop())
+        return super().__call__(fn)
 
 
 def is_grad_enabled() -> bool:
