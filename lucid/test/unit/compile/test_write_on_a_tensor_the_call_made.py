@@ -504,20 +504,13 @@ _CONSTANT_SEGMENT = {
     )
 }
 
-_MASK_ONLY = pytest.mark.xfail(
-    strict=True,
-    reason="LCD-899: a parameter only a mask reaches gets zeros from a segmented step, "
-    "eager None; the out-of-place masked_fill does the same",
-)
 
-
+# ``masked_fill`` here leaves the first Linear's parameters with no gradient, which a
+# segmented step used to report as zeros (LCD-899; the class is in
+# test_no_gradient_paths_stay_none.py).
 @pytest.mark.parametrize(
     ("write", "entry"),
-    [
-        pytest.param(w, e, marks=[_MASK_ONLY] if (w, e) == ("masked_fill", "segmented") else [])
-        for w in WRITES
-        for e in ENTRIES
-    ],
+    [(w, e) for w in WRITES for e in ENTRIES],
 )
 def test_a_write_on_a_factorys_tensor(write: str, entry: str) -> None:
     ran = _run(lambda: _Writes(WRITES[write], MADE["factory"]), entry)

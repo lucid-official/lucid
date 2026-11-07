@@ -123,6 +123,11 @@ class _SegCompiled:
     # skips it — and is not one of its parameters (``_grad_targets``).
     produce_input_grad: bool
     n_params: int
+    # Per gradient the backward executable returns (the input's, if
+    # ``produce_input_grad``, then each parameter's): does the segment's loss
+    # depend on its target?  A gradient it does not reach comes back as zeros,
+    # and eager leaves that one ``None`` (LCD-899).
+    reached: tuple[bool, ...]
     # The BatchNorm statistics the forward executable returns after its
     # output, and the counters, written back after each forward run.  The
     # backward recomputes the forward and writes nothing: one step, one update.
@@ -391,6 +396,7 @@ class _SegBackward:
 
     exe: _SegExe
     produce_input_grad: bool
+    reached: tuple[bool, ...]
     fed: tuple[_C_engine.TensorImpl, ...]
 
 
@@ -436,6 +442,7 @@ def _compile_segment_backward(
     return _SegBackward(
         exe=_SegExe(exe=exe, feed_plan=plan),
         produce_input_grad=len(grad_target_ids) > len(param_ids),
+        reached=tuple(int(g) != -1 for g in exe.grad_output_ids),
         fed=outside_feeds(t_bwd),
     )
 
@@ -501,6 +508,7 @@ def _compile_segment(
         bwd=backward.exe,
         produce_input_grad=backward.produce_input_grad,
         n_params=len(seg.params),
+        reached=backward.reached,
         bn=bn,
         fed=outside_feeds(t_fwd) + backward.fed,
         draws=bool(drew),
@@ -622,7 +630,6 @@ class _SegmentFunction(Function):
         ctx.compiled = compiled
         ctx.x_impl = _unwrap(x)
         ctx.param_impls = param_impls
-        ctx.n_params = len(params)
         return _wrap(y_impl)
 
     # backward returns tuple[Tensor | None, ...], one per Tensor input (x then
@@ -635,7 +642,6 @@ class _SegmentFunction(Function):
 
         compiled = cast(_SegCompiled, ctx.compiled)
         x_impl = cast(_C_engine.TensorImpl, ctx.x_impl)
-        n_params = cast(int, ctx.n_params)
         param_impls = cast(list[object], ctx.param_impls)
 
         feeds = _feed(compiled.bwd.feed_plan, x_impl, _unwrap(grad_out), param_impls)
@@ -645,15 +651,15 @@ class _SegmentFunction(Function):
         with replayed(forward_rng if isinstance(forward_rng, tuple) else None):
             outs = _C_engine.compile.run_executable(compiled.bwd.exe, feeds)
 
-        # Output layout: [loss_seg, (grad_x?), *grad_params].
-        idx = 1  # skip loss_seg
-        if compiled.produce_input_grad:
-            grad_x: Tensor | None = _wrap(cast(_C_engine.TensorImpl, outs[idx]))
-            idx += 1
-        else:
-            grad_x = None
-        grad_params = [_wrap(cast(_C_engine.TensorImpl, outs[idx + i])) for i in range(n_params)]
-        return tuple([grad_x, *grad_params])
+        # Output layout: [loss_seg, (grad_x?), *grad_params]; a gradient the
+        # loss does not reach is a zero slot, which eager leaves None.
+        grads: list[Tensor | None] = [
+            _wrap(cast(_C_engine.TensorImpl, out)) if reached else None
+            for out, reached in zip(outs[1:], compiled.reached, strict=True)
+        ]
+        if not compiled.produce_input_grad:
+            grads.insert(0, None)
+        return tuple(grads)
 
 
 def _group_fn(mods: list[Module]) -> Callable[[Tensor], Tensor]:

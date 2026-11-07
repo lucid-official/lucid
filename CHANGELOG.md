@@ -31,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - carry a decode step's writes to outside tensors
 
+- leave a parameter the loss never reaches None in a segment
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
