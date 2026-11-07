@@ -250,6 +250,27 @@ def _function_after_it(s: _Holds, y: Tensor) -> Tensor:
     return _NoGradInForward.apply(y + c)
 
 
+class _Doubled(Function):
+    _traced_backward = True
+
+    @staticmethod
+    def forward(ctx: FunctionCtx, a: Tensor) -> Tensor:
+        return a * 2.0
+
+    @staticmethod
+    def backward(ctx: FunctionCtx, g: Tensor) -> Tensor:
+        return g * 2.0
+
+
+def _function_before_it(s: _Holds, y: Tensor) -> Tensor:
+    # The call records its forward with the block's marking off; the block after
+    # it is marked again only if the call puts the marking back.
+    z = _Doubled.apply(y * s.p)
+    with lucid.no_grad():
+        c = z.mean(0) * 0.1
+    return z + c
+
+
 def _erfc(s: _Holds, y: Tensor) -> Tensor:
     return lucid.erfc(y * 0.1)
 
@@ -293,6 +314,7 @@ CONSTANTS: dict[str, Body] = {
     "function_in_backward": _function_with_it_in_backward,
     "function_under_it": _function_under_it,
     "function_after_it": _function_after_it,
+    "function_before_it": _function_before_it,
     "erfc": _erfc,
     "expm1": _expm1,
     "log1p": _log1p,
@@ -329,10 +351,7 @@ def _parameter_detached(s: _Holds, y: Tensor) -> Tensor:
 
 
 #: A parameter reached only through a sink gets ``None`` in eager.
-_ONLY_THROUGH_IT: dict[str, Body] = {
-    "no_grad": _body_on_a_parameter,
-    "detach": _parameter_detached,
-}
+_ONLY_THROUGH_IT: dict[str, Body] = {"no_grad": _body_on_a_parameter, "detach": _parameter_detached}
 _ZEROS_IN_A_SEGMENT = pytest.mark.xfail(
     strict=True,
     reason="LCD-899: segments=N hands a parameter off the path zeros, where eager has None",
@@ -469,6 +488,56 @@ def test_mpsgraph_autodiff_does_not_stand_in_for_the_walker(
     monkeypatch.setenv("LUCID_MANUAL_VJP", "0")
     ran = _run(lambda: _Holds(_under_no_grad), entry)
     assert ran.stayed_compiled() is False
+
+
+def _plain() -> nn.Module:
+    return nn.Sequential(nn.Linear(WIDTH, WIDTH), nn.Tanh(), nn.Linear(WIDTH, WIDTH))
+
+
+def test_a_fused_update_is_no_block_to_the_autodiff_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The update ``fused_step`` records after the loss runs under ``no_grad``.
+
+    It comes after the backward, so its ops are not marked: marked, they ruled
+    out MPSGraph's autodiff for every model.
+    """
+    monkeypatch.setenv("LUCID_MANUAL_VJP", "0")
+    assert _run(_plain, "fused_step").stayed_compiled()
+
+
+def _branches_on_grad_mode(a: Tensor) -> Tensor:
+    return a * 3.0 if lucid.is_grad_enabled() else a * 1.0
+
+
+def _branch_reentrant(s: _Holds, y: Tensor) -> Tensor:
+    return checkpoint(_branches_on_grad_mode, y, use_reentrant=True)
+
+
+def _branch_nonreentrant(s: _Holds, y: Tensor) -> Tensor:
+    return checkpoint(_branches_on_grad_mode, y, use_reentrant=False)
+
+
+_READ_NOT_REFUSED = pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "LCD-907: a checkpointed function reading is_grad_enabled() is recorded as "
+        "the run backward makes, its loss wrong; the refusal waits on LCD-906's "
+        "_grad_mode.py"
+    ),
+)
+
+
+@_READ_NOT_REFUSED
+@pytest.mark.parametrize("entry", ["make_step", "fused_step"])
+@pytest.mark.parametrize(
+    "body",
+    [_branch_reentrant, _branch_nonreentrant],
+    ids=["reentrant", "nonreentrant"],
+)
+def test_a_checkpoint_reading_the_grad_mode_runs_eagerly(body: Body, entry: str) -> None:
+    """Eager runs it twice, under each grad mode: no one recording stands for both."""
+    assert _run(lambda: _Holds(body), entry).stayed_compiled() is False
 
 
 def _ops_marked(fn: Callable[[Tensor], Tensor], grad_mode: bool) -> list[str]:
