@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - equalize is non-differentiable and detaches (LCD-897)
 - scale each qr column before its reflector (LCD-862)
 
+### Added
+
+- expose Tracer.is_constant for a value kept past the call
+
 ---
 
 ## [3.16.4] — 2026-11-07

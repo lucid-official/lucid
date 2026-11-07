@@ -348,6 +348,15 @@ void bind_tracer_class(py::module_& m) {
             py::arg("impl"),
             "Whether ``impl`` is a constant the trace made itself, shared with "
             "nothing outside it.")
+        .def(
+            "is_constant",
+            [](const Tracer& t, const lucid::TensorImplPtr& impl) {
+                return t.is_constant(impl.get());
+            },
+            py::arg("impl"),
+            "Whether the value ``impl`` holds comes from the trace's constants alone: "
+            "a table built by factories and pure ops, the same on every call. A tensor "
+            "the trace never saw answers False.")
         .def("watch", &Tracer::watch, py::arg("impl"),
              "Declare an argument of the traced call: a host read of it marks the "
              "recording unsupported even before an op has consumed it.")

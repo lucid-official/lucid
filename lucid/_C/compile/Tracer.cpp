@@ -557,6 +557,14 @@ void Tracer::apply_buffer_updates() const {
         buffer->copy_from(*value);
 }
 
+bool Tracer::is_constant(const TensorImpl* impl) const {
+    const TensorId id = lookup_id(impl);
+    if (id < 0)
+        return false;
+    ConstantWalk walk;
+    return from_constants(id, walk);
+}
+
 bool Tracer::from_constants(TensorId root, ConstantWalk& walk) const {
     index_producers(walk);
     // Depth first, without recursion: a chain of a few hundred writes is a

@@ -268,6 +268,14 @@ public:
         return made_.count(const_cast<TensorImpl*>(impl)) != 0;
     }
 
+    // Whether the value ``impl`` holds comes from the trace's constants alone
+    // (:meth:`from_constants`): a table built by factories and pure ops, the same
+    // on every call.  A tensor the trace never saw answers no — an argument
+    // nothing read, a tensor from outside — as does anything that reads one of
+    // those or draws.  For a caller that asks whether a value kept past the call
+    // can differ from call to call.
+    bool is_constant(const TensorImpl* impl) const;
+
     // A value the trace knows — an op's output, an input, a parameter or a
     // random draw — read on the host (``item`` / ``tolist`` / ``numpy``,
     // and so ``float(t)`` or ``if t > 0``).  What the host does with it is
