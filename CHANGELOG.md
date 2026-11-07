@@ -43,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - complete the call when a traced forward raises
 
+- walk the object a bound method or callable is bound to
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

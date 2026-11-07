@@ -38,7 +38,7 @@ for ``forward(self, x, training=True)`` style guard arguments).
 import weakref
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from types import CodeType, MethodType
+from types import BuiltinFunctionType, CodeType, FunctionType, MethodType
 from typing import TYPE_CHECKING, final, override
 
 from lucid._C import engine as _C_engine
@@ -276,9 +276,10 @@ def _wrapped_callable(model: object) -> object | None:
 
 
 # A hop in a path from the wrapped callable to something it reaches
-# indirectly: ("cell"/"global", name) relative to a callable, ("item", key)
-# into a list/tuple (by stringified index) or a str-keyed dict, or ("attr",
-# name) on a plain object's ``__dict__``.
+# indirectly: ("cell"/"global", name) relative to a callable, ("self", "")
+# from a bound method to the object it is bound to, ("item", key) into a
+# list/tuple (by stringified index) or a str-keyed dict, or ("attr", name) on
+# a plain object's ``__dict__``.
 type _Hop = tuple[str, str]
 type _Path = tuple[_Hop, ...]
 
@@ -309,12 +310,42 @@ def _dict_children(value: dict[object, object]) -> Iterator[tuple[_Hop, object]]
             yield ("item", key), item
 
 
+def _bound_self(fn: object) -> object | None:
+    """The object a callable carries its state in, or ``None`` for a plain function.
+
+    A bound method's ``__self__``; a callable instance (a plain object with
+    ``__call__``) is its own.  Not a builtin function's ``__self__`` — that is
+    its module — and not a class.
+    """
+    if isinstance(fn, MethodType):
+        return fn.__self__
+    if isinstance(fn, (FunctionType, BuiltinFunctionType, type)) or not callable(fn):
+        return None
+    return fn
+
+
+def _callee_slots(fn: object) -> Iterator[tuple[_Hop, object]]:
+    """What ``fn`` reads that no argument hands it: the object a bound method
+    is bound to or a callable instance is (``("self", "")``), then its
+    function's cells and globals.
+
+    :func:`callable_slots` lists only the latter — a bound method forwards
+    ``__closure__`` and ``__code__`` to its function, a callable instance has
+    neither — so ``rig.forward`` and ``rig`` itself would otherwise hide every
+    module ``rig`` holds, where a closure over ``rig`` shows them (LCD-912).
+    """
+    bound = _bound_self(fn)
+    if bound is not None:
+        yield ("self", ""), bound
+    yield from callable_slots(fn)
+
+
 def _function_children(value: object, seen_funcs: set[int]) -> Iterator[tuple[_Hop, object]]:
     """``value``'s own cells and globals, once per function (cycle guard)."""
     if id(value) in seen_funcs:
         return
     seen_funcs.add(id(value))
-    yield from callable_slots(value)
+    yield from _callee_slots(value)
 
 
 def _object_children(value: object) -> Iterator[tuple[_Hop, object]]:
@@ -344,7 +375,7 @@ def _path_children(value: object, seen_funcs: set[int]) -> Iterator[tuple[_Hop, 
         yield from _sequence_children(value)
     elif isinstance(value, dict):
         yield from _dict_children(value)
-    elif callable(value) and hasattr(value, "__code__"):
+    elif callable(value) and isinstance(getattr(value, "__code__", None), CodeType):
         yield from _function_children(value, seen_funcs)
     elif not isinstance(value, (Module, Tensor)):
         yield from _object_children(value)
@@ -368,7 +399,7 @@ def _indirect_module_paths(fn: object) -> list[tuple[_Path, Module]]:
     found: list[tuple[_Path, Module]] = []
     seen_funcs: set[int] = {id(fn)}
     seen_values: set[int] = set()
-    frontier: list[tuple[_Path, object]] = [((hop,), value) for hop, value in callable_slots(fn)]
+    frontier: list[tuple[_Path, object]] = [((hop,), value) for hop, value in _callee_slots(fn)]
     for _ in range(_MAX_PATH_DEPTH):
         if not frontier:
             break
@@ -397,6 +428,8 @@ def _resolve_path(fn: object, path: _Path) -> object | None:
     for kind, key in path:
         if kind in ("cell", "global"):
             current = read_slot(current, (kind, key))
+        elif kind == "self":
+            current = _bound_self(current)
         elif kind == "item":
             if isinstance(current, dict):
                 current = current.get(key)
@@ -424,7 +457,7 @@ def _closure_modules(model: object) -> list[Module]:
     # A bound method — ``lucid.compile(model.forward)`` — runs its module's
     # tree as a closure would.  Read on every call (``_tree_walk``), so the
     # values only, not ``callable_slots``' keys.
-    held = [getattr(fn, "__self__", None)]
+    held = [_bound_self(fn)]
     held += map(cell_value, getattr(fn, "__closure__", None) or ())
     code = getattr(fn, "__code__", None)
     space = getattr(fn, "__globals__", None)
