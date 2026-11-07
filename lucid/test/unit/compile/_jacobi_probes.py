@@ -194,6 +194,36 @@ def _check_pinv(a: Tensor, p: Tensor) -> None:
     _assert_close(p @ a @ p, p, _max_abs(p), "P A P - P")
 
 
+def _check_qr_factors(a: Tensor, out: tuple[Tensor, Tensor]) -> None:
+    q, r = out
+    _assert_orthonormal(q, "Q")
+    assert _max_abs(lucid.tril(r, -1)) == 0.0, "R is not upper triangular"
+    _assert_close(q @ r, a, _max_abs(a), "Q R - A")
+
+
+def _check_qr(a: Tensor, out: tuple[Tensor, Tensor]) -> None:
+    """Eager's reflector signs are LAPACK's, so its factors are the compiled ones."""
+    _check_qr_factors(a, out)
+    q_eager, r_eager = _LA.qr(a)
+    _assert_close(out[0], q_eager, 1.0, "Q against eager")
+    _assert_close(out[1], r_eager, _max_abs(a), "R against eager")
+
+
+def _check_qr_columns(a: Tensor, out: tuple[Tensor, Tensor]) -> None:
+    """Householder is backward stable column by column, so each is held to its own length."""
+    q, r = out
+    _assert_orthonormal(q, "Q")
+    gap = (q @ r - a).abs()
+    for j in range(a.shape[1]):
+        own = _max_abs(a[:, j])
+        err = _max_abs(gap[:, j])
+        assert err <= _TOL * own, f"column {j}: off by {err:.3g} at its scale {own:.3g}"
+
+
+def _graded_columns(m: int, n: int, grades: list[float], seed: int) -> Tensor:
+    return _rand(m, n, seed) * _tensor(grades)[None, :]
+
+
 def _near_parallel(scale: float) -> Tensor:
     """A lower block of parallel columns, small enough to escape an absolute cut."""
     return scale * _tensor([[1.0, 0.0, 0.0], [0.0, 6e-7, 6e-7], [0.0, 6e-7, 6e-7]])
@@ -415,7 +445,32 @@ def _scale_group() -> list[_Probe]:
         "coupled": _tensor([[3e38, 1e37], [1e37, 1e38]]),
         "off_diagonal": _tensor([[1.0, 3e38], [3e38, 1.0]]),
     }
+    # LCD-862: Householder takes a column's norm from squares, the same scale.
+    qr_scales = (1.0, 1e-30, 1e-25, 1e-15, 1e15, 1e20)
+    qr_graded = {
+        "ascending": [1e-25, 1e-10, 1.0, 1e15],
+        "descending": [1e15, 1.0, 1e-10, 1e-25],
+        "interleaved": [1.0, 1e-30, 1e20, 1e-15],
+    }
+    qr_probes = [
+        _Probe(
+            f"qr_scales:{m}x{n}",
+            lambda a: tuple(_LA.qr(a)),
+            {f"{s:g}": _rand(m, n, 0) * s for s in qr_scales},
+            _check_qr,
+        )
+        for m, n in ((4, 4), (5, 3), (3, 5))
+    ]
+    qr_probes.append(
+        _Probe(
+            "qr_graded",
+            lambda a: tuple(_LA.qr(a)),
+            {k: _graded_columns(4, 4, v, 1) for k, v in qr_graded.items()},
+            _check_qr_columns,
+        )
+    )
     return [
+        *qr_probes,
         _Probe("svdvals_scales", lambda a: _LA.svdvals(a), inputs, _check_svdvals),
         _Probe("eigh_scales", lambda a: tuple(_LA.eigh(a)), inputs, _check_eigh),
         _Probe(
