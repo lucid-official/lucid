@@ -70,6 +70,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.compile._core.bn_runstats import BnWriteback
 from lucid.compile._core.buffer_writes import TraceAnswer, eager_rerun
+from lucid.compile._core.call_values import CallValues
 from lucid.compile._core.rng_replay import advance_since, replayed
 from lucid.compile._core.signature import CacheKey, outside_feeds, tree_tensors
 
@@ -359,8 +360,88 @@ def _lower_segment_backward(
         return None
 
 
+def _read_another_segments_value(values: CallValues, seg: _Segment, tracer: Tracer) -> bool:
+    """Whether ``seg``'s trace read a value an earlier segment made in this call,
+    outside its arguments; the step then runs eagerly (LCD-902).
+
+    The value is a constant of the executable, and whatever stored it — a
+    stash, an attribute, a closure cell — ran only while its segment was
+    traced: every compiled call would read the first call's.  A segment's own
+    values go on to its backward trace, and a value from before the call is the
+    caller's to rebind (LCD-903).
+    """
+    from lucid.compile._core.fallback import _fallback_notice
+
+    maker = values.foreign_read(seg.index, tracer)
+    if maker is None:
+        return False
+    _fallback_notice(
+        "segment-values",
+        f"segment {seg.index} reads a value segment {maker} computed in this call, "
+        "outside the segment's arguments",
+    )
+    return True
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class _SegBackward:
+    """A segment's backward executable, whether it returns the input's
+    cotangent, and what its trace was fed from outside."""
+
+    exe: _SegExe
+    produce_input_grad: bool
+    fed: tuple[_C_engine.TensorImpl, ...]
+
+
+def _compile_segment_backward(
+    seg: _Segment, x: Tensor, y: Tensor, drew: dict[_C_engine.Generator, int], values: CallValues
+) -> _SegBackward | None:
+    """Trace ``loss_seg = sum(y * grad_out)`` for ``seg`` and compile it, or
+    ``None`` when it cannot be compiled.
+
+    ``grad_out`` is a fresh leaf feed shaped like ``y``; the backward feeds the
+    upstream cotangent into this slot.
+    """
+    import lucid
+    from lucid._dispatch import _unwrap
+
+    go = lucid.zeros(y.shape, dtype=y.dtype, device=y.device)
+    t_bwd = _trace_segment_backward(seg, x, go, drew)
+    if t_bwd is None or _read_another_segments_value(values, seg, t_bwd):
+        return None
+    values.made_by(seg.index, t_bwd)
+    ext_bwd = t_bwd.external_feeds
+    loss_id = t_bwd.graph.ops[-1].outputs[0].id
+
+    x_id = _feed_id(ext_bwd, _unwrap(x))
+    go_id = _feed_id(ext_bwd, _unwrap(go))
+    if x_id is None or go_id is None:
+        return None
+
+    param_ids = _match_param_ids(ext_bwd, [_unwrap(p) for p in seg.params])
+    if param_ids is None:
+        return None
+
+    grad_target_ids = _grad_targets(x, x_id, param_ids)
+    exe = _lower_segment_backward(t_bwd, int(loss_id), grad_target_ids)
+    if exe is None:
+        return None
+
+    plan = _build_feed_plan(
+        list(exe.input_ids), ext_bwd, x_id, go_id, {pid: i for i, pid in enumerate(param_ids)}
+    )
+    if plan is None:
+        return None
+    return _SegBackward(
+        exe=_SegExe(exe=exe, feed_plan=plan),
+        produce_input_grad=len(grad_target_ids) > len(param_ids),
+        fed=outside_feeds(t_bwd),
+    )
+
+
 def _compile_segment(
-    seg: _Segment, x: Tensor, owner: Module
+    seg: _Segment, x: Tensor, owner: Module, values: CallValues
 ) -> _SegCompiled | TraceAnswer[Tensor] | None:
     """Trace + compile the forward and backward executables for ``seg`` at ``x``.
 
@@ -370,7 +451,6 @@ def _compile_segment(
     Returns ``None`` on any uncompilable condition → the caller falls back to
     eager; the forward trace's output when it stands as the segment's call.
     """
-    import lucid
     from lucid._dispatch import _unwrap
 
     param_impls = [_unwrap(p) for p in seg.params]
@@ -383,6 +463,9 @@ def _compile_segment(
     if not isinstance(traced_fwd, tuple):
         return traced_fwd
     t_fwd, y = traced_fwd
+    if _read_another_segments_value(values, seg, t_fwd):
+        return None
+    values.made_by(seg.index, t_fwd)
     ext_fwd = t_fwd.external_feeds
     # The segment's output, not whatever op it recorded last.
     found = t_fwd.read_id(_unwrap(y))
@@ -410,51 +493,22 @@ def _compile_segment(
     if fwd_plan is None:
         return None
 
-    # --- Trace 2: forward + loss_seg = sum(y * grad_out) -------------------
-    # ``grad_out`` is a fresh leaf feed shaped like ``y``; the backward feeds the
-    # upstream cotangent into this slot.
-    go = lucid.zeros(y.shape, dtype=y.dtype, device=y.device)
-    t_bwd = _trace_segment_backward(seg, x, go, drew)
-    if t_bwd is None:
+    backward = _compile_segment_backward(seg, x, y, drew, values)
+    if backward is None:
         return None
-    g_bwd = t_bwd.graph
-    ext_bwd = t_bwd.external_feeds
-    loss_id = g_bwd.ops[-1].outputs[0].id
-
-    x_id_bwd = _feed_id(ext_bwd, x_impl)
-    go_id_bwd = _feed_id(ext_bwd, _unwrap(go))
-    if x_id_bwd is None or go_id_bwd is None:
-        return None
-
-    bwd_param_ids = _match_param_ids(ext_bwd, param_impls)
-    if bwd_param_ids is None:
-        return None
-
-    grad_target_ids = _grad_targets(x, x_id_bwd, bwd_param_ids)
-    bwd_exe = _lower_segment_backward(t_bwd, int(loss_id), grad_target_ids)
-    if bwd_exe is None:
-        return None
-
-    bwd_pid_to_idx = {pid: i for i, pid in enumerate(bwd_param_ids)}
-    bwd_plan = _build_feed_plan(
-        list(bwd_exe.input_ids), ext_bwd, x_id_bwd, go_id_bwd, bwd_pid_to_idx
-    )
-    if bwd_plan is None:
-        return None
-
     return _SegCompiled(
         fwd=_SegExe(exe=fwd_exe, feed_plan=fwd_plan),
-        bwd=_SegExe(exe=bwd_exe, feed_plan=bwd_plan),
-        produce_input_grad=len(grad_target_ids) > len(bwd_param_ids),
+        bwd=backward.exe,
+        produce_input_grad=backward.produce_input_grad,
         n_params=len(seg.params),
         bn=bn,
-        fed=outside_feeds(t_fwd) + outside_feeds(t_bwd),
+        fed=outside_feeds(t_fwd) + backward.fed,
         draws=bool(drew),
     )
 
 
 def _compile_into(
-    seg: _Segment, x: Tensor, fingerprint: ParamFingerprint, key: CacheKey
+    seg: _Segment, x: Tensor, fingerprint: ParamFingerprint, key: CacheKey, values: CallValues
 ) -> _SegCompiled | TraceAnswer[Tensor]:
     """Compile ``seg`` at ``x`` into its cache, telling ``fingerprint`` what the
     traces read; raise :class:`_SegmentCompileError` if it does not compile.
@@ -464,14 +518,21 @@ def _compile_into(
     cumulative-average BatchNorm runs eagerly, as the monolithic step does:
     that update reads the counter on the host.  A forward trace that stands
     as the segment's call is answered, not cached; its draws were the call's.
+    ``values`` is what the call's earlier segments made, and ``x`` is handed to
+    ``seg`` unless the model holds it: then it is the model's own state.
     """
+    from lucid._dispatch import _unwrap
     from lucid.compile._core.bn_runstats import model_has_cumulative_bn
     from lucid.compile._core.trace_context import compile_attempt
 
     owner = fingerprint.model
+    if not fingerprint.tree_alias((x,), {}):
+        values.hand(seg.index, (_unwrap(x),))
     with compile_attempt() as attempt:
         before = fingerprint.outside_slots()
-        compiled = None if model_has_cumulative_bn(owner) else _compile_segment(seg, x, owner)
+        compiled = (
+            None if model_has_cumulative_bn(owner) else _compile_segment(seg, x, owner, values)
+        )
         attempt.answered = isinstance(compiled, TraceAnswer)
         fingerprint.settle(compiled.fed if isinstance(compiled, _SegCompiled) else (), before)
     if compiled is None:
@@ -502,13 +563,14 @@ def _forward_segments(
     """
     key = _segment_key(cur, fingerprint)
     restore = None if key in seg_objs[0].cache else _keep_buffers(fingerprint.model)
+    values = CallValues()
     try:
         for i, seg in enumerate(seg_objs):
             if i:
                 key = _segment_key(cur, fingerprint)
             compiled = seg.cache.get(key)
             if compiled is None:
-                built = _compile_into(seg, cur, fingerprint, key)
+                built = _compile_into(seg, cur, fingerprint, key, values)
                 if isinstance(built, TraceAnswer):
                     return _run_eagerly(seg_objs[i + 1 :], built.value), True
                 compiled = built

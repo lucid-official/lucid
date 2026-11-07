@@ -307,6 +307,10 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Module", "lucid.nn.module", "Module"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
     ),
+    "lucid.compile._core.call_values": (
+        ("Tracer", "lucid._C.engine.compile", "Tracer"),
+        ("_C_engine", "lucid._C", "engine"),
+    ),
     "lucid.compile._core.custom_backward": (
         ("TraceGraph", "lucid._C.engine.compile", "TraceGraph"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
