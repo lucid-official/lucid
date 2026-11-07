@@ -296,7 +296,7 @@ def _ldexp(work: Tensor, other: Tensor | Scalar) -> Tensor:
         if _reads_bits(work):
             return _metal_f32_ldexp(work, exp_t, integral)
         return _scale_pow2(work, exp_t, _limit(work))
-    if _reads_bits(work) or (exp_t.requires_grad and lucid.is_grad_enabled()):
+    if _reads_bits(work) or (exp_t.requires_grad and _C_engine.grad_enabled()):
         out = _Ldexp.apply(work, exp_t, integral)
         assert isinstance(out, Tensor)
         return out

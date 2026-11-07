@@ -256,6 +256,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Drifting says guidance_scale like the zoo (LCD-891)
 - drop the no_grad guards nothing reaches
 - drop an assert the typed no_grad makes redundant
+- _pow2 picks its path from the engine's grad mode
 
 ---
 
