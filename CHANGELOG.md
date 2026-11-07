@@ -280,7 +280,7 @@ Adds Drifting Models (arXiv 2602.04770), checked against the authors' running re
 
 - `_C.engine` (`Linear`, `ConvNd`, `ConvTransposeNd`, `LayerNorm`, `RMSNorm`, `BatchNormNd`, `GroupNorm`, `BatchNormEval`, `GlobalResponseNorm`, `Bilinear`): thread `needs_input_grad` (`grad_mask`) and `kGradReads` through fused CPU/Metal backward kernels and `apply_for_graph`, skipping unneeded `dx`/`dW`/`db` GEMMs, convolutions, reductions, and buffer allocations (LCD-697).
 - `CpuBackend::roll`, `lucid.fft`, and `lucid.signal.windows.kaiser`: replace the per-element modulo and single-element `memcpy` loop in `CpuBackend::roll` with a row-wise two-slice `std::memcpy` rotation (cutting `(256, 4096)` CPU `roll`/`fftshift` from 5.1 ms to 0.049 ms), dispatch CPU power-of-two single-precision FFTs (`fftn`/`ifftn`/`rfftn`/`irfftn`) directly through Apple Accelerate `vDSP` with thread-local plan/scratch caching and GCD parallelization across slices (cutting 64-point CPU `fft` from ~100 µs to 5.6 µs and `(256, 4096)` CPU `fft`/`ifft` from 2.8 ms to 0.41 ms), and use Horner evaluation and scalar denominator evaluation in `lucid.i0` / `windows.kaiser` (cutting `kaiser(64)` from 420 µs to 99 µs) (LCD-769).
-- `lucid.special.log_ndtr`: replace `log1p` on the upper-tail `erfcx` correction ($|q| \le 2.34 	imes 10^{-3}$) with a short Horner Mercator series, cutting Metal first-compile time from 4.4 s to 1.6 s while preserving full `float32` / `float64` accuracy (LCD-795).
+- `lucid.special.log_ndtr`: replace `log1p` on the upper-tail `erfcx` correction (`|q| <= 2.34e-3`) with a short Horner Mercator series, cutting Metal first-compile time from 4.4 s to 1.6 s while preserving full `float32` / `float64` accuracy (LCD-795).
 
 ### Tooling
 
