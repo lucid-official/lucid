@@ -107,7 +107,7 @@
 // classes, new enumerators appended to the end of an enum) still
 // require a bump because their absence in an older library breaks
 // the new extension module.
-#define LUCID_ABI_VERSION 45
+#define LUCID_ABI_VERSION 46
 
 namespace lucid {
 
