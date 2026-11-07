@@ -458,9 +458,9 @@ def test_a_sequence_that_starts_again_reads_its_state() -> None:
             for i, x in enumerate(batches):
                 got = float(_loss(compiled(x)).item())
                 want = float(_loss(twin(x)).item())
-                assert abs(got - want) / max(1.0, abs(want)) < TOLERANCE, (
-                    f"sequence {sequence} call {i}: {got} vs {want}"
-                )
+                assert (
+                    abs(got - want) / max(1.0, abs(want)) < TOLERANCE
+                ), f"sequence {sequence} call {i}: {got} vs {want}"
 
 
 @pytest.mark.parametrize("case", ["recurrent", "cache_dict"])
