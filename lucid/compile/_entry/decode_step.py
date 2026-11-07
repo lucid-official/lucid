@@ -183,11 +183,15 @@ def _trace_decode_step(
 ) -> tuple[Tracer, Tensor] | None:
     """Record ``forward_fn(*call)`` under ``recording`` and validate the output."""
     from lucid._tensor.tensor import Tensor
+    from lucid.compile._core.buffer_writes import completes_on_raise
     from lucid.compile._core.trace_context import is_tensor_hook_error, recording
 
     _tls.tracing = True
     try:
-        with recording(watch=call, module=adapter, grad_mode=False) as tracer:
+        with (
+            recording(watch=call, module=adapter, grad_mode=False) as tracer,
+            completes_on_raise(tracer, adapter),
+        ):
             out = forward_fn(*call)
     except RuntimeError as why:
         _restore_cache(static_cache, snap)

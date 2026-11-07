@@ -227,7 +227,7 @@ class _Segment:
 
 
 def _trace_segment_fn(
-    watch: tuple[object, ...], fn: Callable[[], Tensor]
+    watch: tuple[object, ...], fn: Callable[[], Tensor], owner: Module | None = None
 ) -> tuple[Tracer, Tensor] | None:
     """Trace *fn* in the caller's grad mode, returning ``None`` on a tensor hook or empty graph.
 
@@ -235,10 +235,11 @@ def _trace_segment_fn(
     (``_core/buffer_writes``).
     """
     from lucid.compile._core.attention_probe import maybe_probe_for_graph
+    from lucid.compile._core.buffer_writes import completes_on_raise
     from lucid.compile._core.trace_context import notice_if_tensor_hook_error, recording
 
     try:
-        with recording(watch=watch) as tracer:
+        with recording(watch=watch) as tracer, completes_on_raise(tracer, owner):
             out = fn()
     except RuntimeError as why:
         if not notice_if_tensor_hook_error(why):
@@ -267,7 +268,7 @@ def _trace_segment_forward(
     from lucid._dispatch import _unwrap, _wrap
     from lucid.compile._core.buffer_writes import held_writes, refuse, stood_as_the_call
 
-    traced = _trace_segment_fn((x, seg.state), lambda: seg.forward_fn(x))
+    traced = _trace_segment_fn((x, seg.state), lambda: seg.forward_fn(x), owner)
     if traced is None:
         return None
     tracer, y = traced

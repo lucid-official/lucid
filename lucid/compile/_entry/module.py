@@ -1162,11 +1162,18 @@ class CompiledModule[**P, R](_ModuleWrapper):
         """
         from lucid._dispatch import _wrap
         from lucid._tensor.tensor import Tensor
-        from lucid.compile._core.buffer_writes import held_writes, stood_as_the_call
+        from lucid.compile._core.buffer_writes import (
+            completes_on_raise,
+            held_writes,
+            stood_as_the_call,
+        )
         from lucid.compile._core.trace_context import notice_if_tensor_hook_error, recording
 
         try:
-            with recording(watch=(args, kwargs), module=self._model, fold_constants=True) as tracer:
+            with (
+                recording(watch=(args, kwargs), module=self._model, fold_constants=True) as tracer,
+                completes_on_raise(tracer, self._model),
+            ):
                 return_value = self._model(*(cast(Tensor, a) for a in args), **kwargs)
         except RuntimeError as why:
             if not notice_if_tensor_hook_error(why):

@@ -33,6 +33,7 @@ from lucid.compile._core.custom_backward import refuse_custom_backward
 from lucid.compile._entry.step import _ExecutableLike, _GradTargets, _grad_slots, _grad_targets
 
 if TYPE_CHECKING:
+    from lucid._C.engine.compile import Tracer
     from lucid.nn.module import Module
     from lucid.nn.parameter import Parameter
 
@@ -121,6 +122,22 @@ def _eager_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor], w
     return loss.detach()
 
 
+def _trace_loss(
+    model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor]
+) -> tuple[Tracer, Tensor]:
+    """Trace the forward and loss in grad mode; a forward that raises completes the
+    call first (:func:`~lucid.compile._core.buffer_writes.completes_on_raise`)."""
+    from lucid.compile._core.buffer_writes import completes_on_raise
+    from lucid.compile._core.trace_context import recording
+
+    with (
+        recording(watch=(x,), module=model, grad_mode=True) as tracer,
+        completes_on_raise(tracer, model),
+    ):
+        loss_t = _forward_loss(model, x, loss_fn)
+    return tracer, loss_t
+
+
 def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor]) -> Tensor:
     """Run one compiled training step: forward + backward + grad accumulation.
 
@@ -186,7 +203,7 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
     from lucid.compile._core.bn_runstats import BnWriteback, model_has_cumulative_bn
     from lucid.compile._core.buffer_writes import refuse
     from lucid.compile._core.fallback import off_gpu_detail
-    from lucid.compile._core.trace_context import compile_attempt, recording
+    from lucid.compile._core.trace_context import compile_attempt
 
     params = list(model.parameters())
     if not params:
@@ -195,9 +212,7 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
         return _eager_step(model, x, loss_fn, off_gpu)
 
     with compile_attempt():
-        with recording(watch=(x,), module=model, grad_mode=True) as tracer:
-            loss_t = _forward_loss(model, x, loss_fn)
-
+        tracer, loss_t = _trace_loss(model, x, loss_fn)
         g = tracer.graph
         ext = tracer.external_feeds
         refuse(tracer)

@@ -730,10 +730,11 @@ def _trace_step(
     model: Module, loss_fn: Callable[..., Tensor], x_args: tuple[Tensor, ...]
 ) -> tuple[Tracer, Tensor] | None:
     """Trace ``model`` + ``loss_fn`` in the caller's grad mode, declining on tensor hooks."""
+    from lucid.compile._core.buffer_writes import completes_on_raise
     from lucid.compile._core.trace_context import notice_if_tensor_hook_error, recording
 
     try:
-        with recording(watch=x_args, module=model) as tracer:
+        with recording(watch=x_args, module=model) as tracer, completes_on_raise(tracer, model):
             x_out = model(*x_args[:1])
             loss_t = loss_fn(x_out, *x_args[1:])
     except RuntimeError as why:

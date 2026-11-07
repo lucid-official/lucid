@@ -41,6 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - keep the old wording in the off-thread refusal
 
+- complete the call when a traced forward raises
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

@@ -295,6 +295,50 @@ def complete_the_call(tracer: Tracer, model: Module) -> None:
     advance_bn_counters(bn_counter_targets(model, tracer))
 
 
+@contextmanager
+def completes_on_raise(
+    tracer: Tracer, model: Module | None, *, reruns: tuple[type[BaseException], ...] = ()
+) -> Iterator[None]:
+    """Complete the traced call when the forward raises out of the entry point.
+
+    An eager batch norm updates its statistics inside its own call, so a forward
+    that raises after one has moved them (and its counter); traced, the norm only
+    hands them out, and an entry point writes them back after a run that
+    succeeded.  Without this a trace-time call that raised left them one batch
+    behind eager's (LCD-888).  Enter it inside the recording, so the call is
+    completed before the exception leaves, and re-raised unchanged.
+
+    An exception the entry answers by running the call eagerly again is left to
+    that rerun, which updates the statistics itself: a tensor-hook error
+    (:func:`~lucid.compile._core.trace_context.is_tensor_hook_error`) and any in
+    ``reruns``.
+
+    Parameters
+    ----------
+    tracer : Tracer
+        The recording the call runs under.
+    model : Module or None
+        The traced model, which owns the batch norm counters; ``None`` for a
+        trace that is only a second look at a call another trace stood for.
+    reruns : tuple of type, keyword-only, optional
+        Exceptions the entry point answers with an eager rerun, besides a
+        tensor-hook error.
+
+    Yields
+    ------
+    None
+        While the traced call runs.
+    """
+    from lucid.compile._core.trace_context import is_tensor_hook_error
+
+    try:
+        yield
+    except BaseException as why:
+        if model is not None and not (is_tensor_hook_error(why) or isinstance(why, reruns)):
+            complete_the_call(tracer, model)
+        raise
+
+
 def held_writes(tracer: Tracer, *, stands: bool) -> HeldWrites:
     """The tensors the call made, wrote from its inputs and Python still holds.
 

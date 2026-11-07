@@ -326,6 +326,12 @@ class _TraceStands(Exception):
         self.loss = loss
 
 
+#: What the plan build raises that the step answers by running the call eagerly
+#: again: the rerun puts the call's writes right itself.  Anything else leaves
+#: the call, with the writes an eager call would have left.
+_RERUN_ON = (RuntimeError, NotImplementedError)
+
+
 def _fallback_category(why: Exception) -> str:
     """The kind of reason a fused plan was declined for, as announced once."""
     if isinstance(why, CustomBackwardInTrace):
@@ -670,7 +676,7 @@ class _FusedStep:
                     raise
             self._refresh_scaler_scalars()
             result = self._run(plan, args, flags)
-        except (RuntimeError, NotImplementedError, _TraceStands) as why:
+        except (*_RERUN_ON, _TraceStands) as why:
             msg = str(why)
             if (
                 "LUCID_MANUAL_VJP_REQUIRE=1" in msg
@@ -885,6 +891,7 @@ class _FusedStep:
         from lucid.compile._core.bn_runstats import model_has_cumulative_bn
         from lucid.compile._core.buffer_writes import (
             complete_the_call,
+            completes_on_raise,
             held_writes,
             require_outside_writes,
         )
@@ -896,7 +903,10 @@ class _FusedStep:
 
         _tls.active = True
         try:
-            with recording(watch=args, module=self._model) as tracer:
+            with (
+                recording(watch=args, module=self._model) as tracer,
+                completes_on_raise(tracer, self._model, reruns=_RERUN_ON),
+            ):
                 try:
                     out = self._model(*args[:1])
                     loss = self._loss_fn(out, *args[1:])
@@ -926,7 +936,7 @@ class _FusedStep:
                             opt_outputs, slots = copt._emit(
                                 members, ghost_grads, layout, vectors, flags, False
                             )
-                except BaseException:
+                except _RERUN_ON:
                     tracer.restore_outside_writes()
                     raise
         finally:

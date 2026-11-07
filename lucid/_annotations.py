@@ -350,6 +350,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     "lucid.compile._entry.function": (
         ("Module", "lucid.nn.module", "Module"),
         ("Parameter", "lucid.nn.parameter", "Parameter"),
+        ("Tracer", "lucid._C.engine.compile", "Tracer"),
     ),
     "lucid.compile._entry.fused_step": (
         ("CompiledExecutable", "lucid._C.engine.compile", "CompiledExecutable"),
