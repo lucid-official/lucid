@@ -522,9 +522,7 @@ def _branch_nonreentrant(s: _Holds, y: Tensor) -> Tensor:
 
 @pytest.mark.parametrize("entry", ["make_step", "fused_step"])
 @pytest.mark.parametrize(
-    "body",
-    [_branch_reentrant, _branch_nonreentrant],
-    ids=["reentrant", "nonreentrant"],
+    "body", [_branch_reentrant, _branch_nonreentrant], ids=["reentrant", "nonreentrant"]
 )
 def test_a_checkpoint_reading_the_grad_mode_runs_eagerly(body: Body, entry: str) -> None:
     """Eager runs it twice, under each grad mode: no one recording stands for both."""

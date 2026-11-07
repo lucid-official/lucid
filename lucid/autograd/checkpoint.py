@@ -59,7 +59,6 @@ from lucid.amp._state import AutocastState
 from lucid.autograd._grad_mode import _grad_mode_reads_refused, enable_grad, no_grad
 from lucid.autograd.function import Function, FunctionCtx
 
-
 _READS_THE_MODE = (
     "a checkpointed function read is_grad_enabled(), which differs between its forward "
     "(no_grad) and its recompute (enable_grad): one recording cannot stand for both"
