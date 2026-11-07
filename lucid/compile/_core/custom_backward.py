@@ -17,11 +17,9 @@ mechanisms allow a ``Function`` to participate in compiled training steps:
    recorded ``forward`` (for example :func:`~lucid.autograd.checkpoint`'s
    ``_CheckpointFn``) is kept when eager would also run its ``backward`` — that
    is, when one of its inputs requires grad or descends from a differentiated
-   source.  When none of its inputs does and only a tensor ``forward`` closed
-   over descends from a source, eager leaves the node off the graph while a
-   compiled backward would differentiate through the closed-over tensor, so that
-   call is refused as well, unless the recording marked its ops as constants
-   (a recording in grad mode, where such a call runs under ``no_grad``).
+   source.  When none of its inputs does, eager registers no node, and the call
+   runs under ``no_grad``: the recording marks its ops as constants, so a
+   tensor ``forward`` closed over gets no gradient from it either.
 2. **Traced custom VJP** (:attr:`~lucid.autograd.Function._traced_backward`):
    When ``_traced_backward = True`` is declared on the subclass, ``apply``
    traces ``backward(ctx, *grad_outputs)`` immediately after ``forward`` into a
@@ -408,7 +406,6 @@ def _record_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _T
         ctx._saved_record,
         ctx._carrier,
         bool(tracer.fold_constants),
-        bool(tracer.differentiated),
     )
     try:
         if not any(ctx.needs_input_grad):
@@ -419,8 +416,6 @@ def _record_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _T
         ctx._saved_record = None
         ctx._carrier = None
         tracer.fold_constants = False
-        # Nothing differentiates a recorded ``backward``.
-        tracer.differentiated = False
         _RECORDING_BACKWARD.add(tracer)
         with _C_engine.NoGradGuard():
             input_grad_ids = _run_vjp_backward(spec, cotangents)
@@ -446,7 +441,6 @@ def _record_backward(spec: _VjpTraceSpec, cotangents: list[Tensor | None]) -> _T
             ctx._saved_record,
             ctx._carrier,
             tracer.fold_constants,
-            tracer.differentiated,
         ) = prev_state
 
     if input_grad_ids is None:
@@ -733,19 +727,13 @@ def _descendants(graph: TraceGraph, source_ids: list[int]) -> set[int]:
 def refuse_custom_backward(tracer: Tracer, sink_id: int, source_ids: list[int]) -> None:
     """Refuse a lowering whose gradient would disagree with a noted call's.
 
-    When one of a call's outputs leads to ``sink_id``:
-
-    * If one of its inputs requires grad (``tracked``) or descends from a
-      source, eager runs ``backward`` for the call.  An ``exact`` call's
-      recorded ``forward`` has the same derivative as its ``backward`` (and a
-      ``traced_vjp`` call has its ``backward`` traced into a ``VjpRegion``),
-      so it is kept; any other call is refused.
-    * Otherwise, if one of its outputs descends from a source — ``forward``
-      closed over a parameter while its positional inputs carried no gradient,
-      as in ``checkpoint(fn, x, use_reentrant=True)`` on an ungrad ``x`` —
-      eager does not run ``backward`` at all while a compiled backward would
-      differentiate the closed-over tensor, so even an ``exact`` call is
-      refused.
+    When one of a call's outputs leads to ``sink_id`` and one of its inputs
+    requires grad (``tracked``) or descends from a source, eager runs
+    ``backward`` for the call.  An ``exact`` call's recorded ``forward`` has the
+    same derivative as its ``backward`` (and a ``traced_vjp`` call has its
+    ``backward`` traced into a ``VjpRegion``), so it is kept; any other call is
+    refused.  A call with neither has no node in eager, and its ops are marked
+    as constants (``stops_gradient``): nothing to refuse.
 
     Parameters
     ----------
@@ -774,16 +762,5 @@ def refuse_custom_backward(tracer: Tracer, sink_id: int, source_ids: list[int]) 
         if ancestors.isdisjoint(outputs):
             continue
         inputs = call.input_ids | _ids(tracer, call.inputs)
-        if call.tracked or not descendants.isdisjoint(inputs):
-            if call.exact:
-                continue
-            raise CustomBackwardInTrace(call.refusal())
-        if not descendants.isdisjoint(outputs):
-            if call.exact:
-                raise CustomBackwardInTrace(
-                    f"autograd.Function {call.name} receives no input that requires "
-                    f"grad, so eager does not run {call.name}.backward while a "
-                    f"compiled backward would differentiate the tensors "
-                    f"{call.name}.forward closed over"
-                )
+        if (call.tracked or not descendants.isdisjoint(inputs)) and not call.exact:
             raise CustomBackwardInTrace(call.refusal())

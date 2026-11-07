@@ -811,16 +811,8 @@ def _run_traced_forward(
 def _traced_vjp_bounds(
     tracer: _C_engine.compile.Tracer, klass: type[Function], args: tuple[object, ...], tracked: bool
 ) -> tuple[int, int, bool] | None:
-    """Where this call's ops start, if its ``backward`` goes into the recording.
-
-    Not under ``no_grad``: eager registers no node there, so nothing calls
-    ``backward``, and the ops ``forward`` leaves are constants like any others.
-    """
-    if (
-        tracer.fold_constants
-        or tracer.grad_stopped
-        or not getattr(klass, "_traced_backward", False)
-    ):
+    """Where this call's ops start, if its ``backward`` may go into the recording."""
+    if tracer.fold_constants or not getattr(klass, "_traced_backward", False):
         return None
     for a in args:
         if isinstance(a, Tensor):
