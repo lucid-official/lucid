@@ -142,6 +142,15 @@ class _HookRunner:
     def __init__(self) -> None:
         self.hooks: list[Callable[..., object]] = []
 
+    def __len__(self) -> int:
+        """How many hooks the slot holds; the engine reads zero as no hook at all.
+
+        The runner stays installed on its slot once every hook is removed, so
+        ``_C_engine._has_tensor_hooks`` — the one test of whether a tensor is
+        hooked — asks the runner rather than its presence.
+        """
+        return len(self.hooks)
+
     def __call__(self, grad: _C_engine.TensorImpl) -> _C_engine.TensorImpl | None:
         """Run every hook on the gradient; the last tensor returned flows on.
 
@@ -190,11 +199,7 @@ def _register_tensor_hook(
 
 def _has_active_tensor_hooks(tensor: Tensor) -> bool:
     """Return ``True`` if *tensor* has at least one active gradient hook."""
-    impl = _unwrap(tensor)
-    if not _C_engine._has_tensor_hooks(impl):
-        return False
-    runner = _C_engine._tensor_hook_runner(impl, _HookRunner)
-    return bool(getattr(runner, "hooks", True))
+    return _C_engine._has_tensor_hooks(_unwrap(tensor))
 
 
 class _PostAccumulateGradHookRunner:

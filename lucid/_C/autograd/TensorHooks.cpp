@@ -428,16 +428,38 @@ py::object tensor_hook_runner(const TensorImplPtr& t, const py::object& make) {
     return slot->runner;
 }
 
+namespace {
+
+// Whether ``runner`` holds a hook: one is installed and Python calls it true.
+// A runner whose hooks were all removed stays installed on its slot (the next
+// registration reuses it), so it says so with ``__len__``; one that defines
+// neither ``__bool__`` nor ``__len__`` is always true.
+bool runner_holds_hooks(const py::object& runner) {
+    if (!runner)
+        return false;
+    const py::gil_scoped_acquire gil;
+    const int truth = PyObject_IsTrue(runner.ptr());
+    if (truth < 0) {
+        // A runner that cannot say is taken to hold one: the caller refuses
+        // what a hook would break rather than run it.
+        PyErr_Clear();
+        return true;
+    }
+    return truth != 0;
+}
+
+}  // namespace
+
 bool has_tensor_hooks(const TensorImpl& t) {
     if (t.is_leaf()) {
         const auto& slot = t.leaf_hooks();
-        return slot && slot->runner;
+        return slot && runner_holds_hooks(slot->runner);
     }
     const auto& fn = t.grad_fn();
     if (!fn || fn->tensor_hooks() == nullptr)
         return false;
     const auto slot = fn->tensor_hooks()->find(t.grad_output_nr());
-    return slot && slot->runner;
+    return slot && runner_holds_hooks(slot->runner);
 }
 
 py::object tensor_post_accumulate_grad_hook_runner(const TensorImplPtr& t, const py::object& make) {

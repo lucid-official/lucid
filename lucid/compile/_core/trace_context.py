@@ -128,17 +128,13 @@ def _scan_retained_values(tracer: Tracer) -> None:
     * Any non-leaf tensor created during the trace with ``retains_grad`` would
       have its ``.grad`` discarded by a compiled executable.
     """
-    from lucid.autograd._hooks import _HookRunner
-
     feeds = tracer.external_feeds
     feed_ids = {id(impl) for impl in feeds.values()}
     retained = tracer.retained_values
     for impl in (*feeds.values(), *retained.values()):
         if _C_engine._has_tensor_hooks(impl):
-            runner = _C_engine._tensor_hook_runner(impl, _HookRunner)
-            if getattr(runner, "hooks", True):
-                tracer.mark_unsupported(_TENSOR_HOOK_REASON)
-                return
+            tracer.mark_unsupported(_TENSOR_HOOK_REASON)
+            return
     for impl in retained.values():
         if impl.retains_grad and not impl.is_leaf and id(impl) not in feed_ids:
             tracer.mark_unsupported(_RETAIN_GRAD_REASON)
