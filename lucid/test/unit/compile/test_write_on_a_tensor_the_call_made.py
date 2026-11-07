@@ -358,7 +358,7 @@ class _Segmented(_Entry):
         return value
 
     def stayed_compiled(self) -> bool:
-        return not self.step.eager_only["flag"]
+        return not self.step.eager_only
 
 
 class _CompiledStep(_Entry):

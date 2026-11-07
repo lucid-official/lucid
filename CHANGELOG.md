@@ -45,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - walk the object a bound method or callable is bound to
 
+- key a segmented step's eager verdict to its signature
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

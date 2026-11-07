@@ -154,7 +154,7 @@ def _compiled(entry: str, owner: str, device: str) -> _Run:
     if entry == "segmented":
 
         def ran() -> bool:
-            return not step.eager_only["flag"]
+            return not step.eager_only
 
     else:
 

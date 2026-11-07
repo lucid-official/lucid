@@ -265,7 +265,7 @@ def test_a_value_crossing_segments_runs_eagerly_and_equals_eager(name: str, segm
     for i, (loss, want, worst) in enumerate(rows):
         assert loss == pytest.approx(want, rel=1e-4), f"{name} step {i}: loss"
         assert worst < 1e-4, f"{name} step {i}: gradient differs by {worst}"
-    assert step.eager_only["flag"], f"{name}: a frozen value must refuse the compile"
+    assert bool(step.eager_only), f"{name}: a frozen value must refuse the compile"
 
 
 @pytest.mark.parametrize(
@@ -278,7 +278,7 @@ def test_a_model_that_crosses_nothing_stays_compiled_and_equals_eager(
     for i, (loss, want, worst) in enumerate(rows):
         assert loss == pytest.approx(want, rel=1e-4), f"{name} step {i}: loss"
         assert worst < 1e-4, f"{name} step {i}: gradient differs by {worst}"
-    assert not step.eager_only["flag"], f"{name}: nothing crosses, the step must stay compiled"
+    assert not step.eager_only, f"{name}: nothing crosses, the step must stay compiled"
     assert any(seg_cache for seg_cache in step.cache)
 
 

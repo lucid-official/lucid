@@ -220,10 +220,10 @@ def _run_entry(
         optim.SGD(model.parameters(), lr=0.25).step()
         if kind == "segments_2":
             if expect_compiled:
-                assert not step_fn.eager_only["flag"]
+                assert not step_fn.eager_only
                 assert all(len(c) == 1 for c in step_fn.cache)
             else:
-                assert step_fn.eager_only["flag"]
+                assert bool(step_fn.eager_only)
         else:
             if expect_compiled:
                 assert len(step_fn.cache) == 1
@@ -330,7 +330,7 @@ def test_bn_relu_inplace_cnn_compiles_and_matches_eager(kind: str) -> None:
         got_loss.backward()
         optim.SGD(model.parameters(), lr=0.1).step()
         if kind == "segments_2":
-            assert not step_fn.eager_only["flag"]
+            assert not step_fn.eager_only
         else:
             assert len(step_fn.cache) == 1
 

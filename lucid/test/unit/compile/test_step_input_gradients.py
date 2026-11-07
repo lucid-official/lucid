@@ -84,7 +84,7 @@ def _ran_compiled(step: _Step, kind: str, device: str) -> None:
     if kind == "monolithic":
         assert not step.eager_only and step.cache
     else:
-        assert not step.eager_only["flag"]
+        assert not step.eager_only
 
 
 @pytest.mark.parametrize("kind", sorted(_STEPS))

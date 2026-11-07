@@ -150,7 +150,7 @@ def test_a_forward_that_draws_stays_compiled_and_one_without_stays_plain(segment
     x = metal_tensor(6, 6)
     drawing(x).backward()
     plain(x).backward()
-    assert not drawing.eager_only["flag"] and not plain.eager_only["flag"]
+    assert not drawing.eager_only and not plain.eager_only
     flags = [c.draws for cache in drawing.cache for c in cache.values()]
     assert flags and any(flags)
     assert not any(c.draws for cache in plain.cache for c in cache.values())
@@ -182,7 +182,7 @@ def test_a_backward_that_would_draw_otherwise_runs_eagerly(monkeypatch: pytest.M
         got = _run(step, compiled, x, 9)
     calls[0] = 5  # the twin draws exactly what the eager rerun did
     want = _run(lambda b: _loss(twin(b)), twin, x, 9)
-    assert step.eager_only["flag"]
+    assert bool(step.eager_only)
     assert got[0] == pytest.approx(want[0], rel=1e-5)
     for g, w in zip(got[1], want[1], strict=True):
         np.testing.assert_allclose(g, w, rtol=1e-4, atol=1e-6)

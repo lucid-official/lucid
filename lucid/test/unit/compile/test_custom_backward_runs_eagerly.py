@@ -223,7 +223,7 @@ def test_segmented_step_trains_as_eager(case: str, device: str) -> None:
     with _warns_on_metal(_CASES[case][0], device):
         got = _step_and_update(model, step, device)
     _assert_same(got, want)
-    assert step.eager_only["flag"]
+    assert bool(step.eager_only)
 
 
 @pytest.mark.parametrize("case", sorted(_CASES))

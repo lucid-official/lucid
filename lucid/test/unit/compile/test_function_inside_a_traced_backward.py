@@ -539,7 +539,7 @@ def _by_segments(case: _Case, device: str) -> list[list[float]]:
         _weight(model).grad = None
         step(x, t).backward()
         got.append(_gradient_of(model, "make_step(segments=3)"))
-    assert not step.eager_only["flag"]
+    assert not step.eager_only
     return got
 
 

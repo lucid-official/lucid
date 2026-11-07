@@ -90,7 +90,7 @@ def test_segmented_grads_match_eager_and_mono_mlp() -> None:
     seg = make_step(model, _ce, segments=3)
     _, g_seg = _grads(seg, model, x, t)
 
-    assert not seg.eager_only["flag"], "segmented step fell back to eager"
+    assert not seg.eager_only, "segmented step fell back to eager"
     assert seg.segments == 3
     assert _maxdiff(g_seg, g_eager) < 1e-4
     assert _maxdiff(g_seg, g_mono) < 1e-4
@@ -107,7 +107,7 @@ def test_segmented_grads_match_eager_conv_bn() -> None:
     seg = make_step(model, _ce, segments=3)
     _, g_seg = _grads(seg, model, x, t)
 
-    assert not seg.eager_only["flag"]
+    assert not seg.eager_only
     assert _maxdiff(g_seg, g_eager) < 1e-4
 
 

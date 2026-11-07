@@ -499,7 +499,7 @@ def test_a_segment_after_a_compiled_one_stands_for_its_own_call(write: str) -> N
             [float(want.item()), *_grads(twin), *_kept(twin, 1)],
         )
     assert [len(cache) for cache in step.cache] == [1, 0, 0]
-    assert step.eager_only["flag"]
+    assert bool(step.eager_only)
 
 
 def _one_call(model: nn.Sequential, x: Tensor, *, compiled: bool) -> list[float]:
@@ -552,6 +552,6 @@ def test_a_segment_that_stands_keeps_its_draws() -> None:
     after = lucid.randn(1).item()
     lucid.manual_seed(7)
     want = float(_loss(twin(x)).item())
-    assert step.eager_only["flag"]
+    assert bool(step.eager_only)
     assert lucid.randn(1).item() == after
     assert got == pytest.approx(want, rel=1e-5)

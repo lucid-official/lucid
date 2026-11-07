@@ -337,7 +337,7 @@ def test_a_segmented_step_trains_what_the_model_holds_now(
             np.testing.assert_allclose(p.grad.numpy(), rp.grad.numpy(), rtol=_TOL, atol=_TOL)
     if device == "metal":
         segment_caches = step.cache  # type: ignore[attr-defined]
-        eager = step.eager_only["flag"]  # type: ignore[attr-defined]
+        eager = bool(step.eager_only)  # type: ignore[attr-defined]
         _assert_compiled(all(segment_caches), eager)
 
 

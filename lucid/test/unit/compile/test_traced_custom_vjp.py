@@ -274,7 +274,7 @@ def test_traced_custom_vjp_segmented_step_compiles(device_gpu_only: str) -> None
     with warnings.catch_warnings():
         warnings.simplefilter("error", CompileFallbackWarning)
         step(x, t).backward()
-    assert not step.eager_only["flag"]
+    assert not step.eager_only
     _assert_close_dicts(_grads(model), want_grads)
 
 

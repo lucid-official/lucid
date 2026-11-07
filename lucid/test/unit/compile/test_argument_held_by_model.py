@@ -172,7 +172,7 @@ def test_make_step_keys_a_parameter_input_apart(
             assert len(step.cache) == 2 and not step.eager_only  # type: ignore[attr-defined]
         else:
             first = step.cache[0]  # type: ignore[attr-defined]
-            assert len(first) == 2 and not step.eager_only["flag"]  # type: ignore[attr-defined]
+            assert len(first) == 2 and not step.eager_only  # type: ignore[attr-defined]
 
 
 def _eager_step(step: Callable[..., lucid.Tensor]) -> _Run:

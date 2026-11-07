@@ -65,12 +65,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable, Sequence, cast, final, override
 
 from lucid._C import engine as _C_engine
-from lucid._factories._generator import _stream_states
+from lucid._factories._generator import _restore_stream_states, _stream_states
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.compile._core.bn_runstats import BnWriteback
 from lucid.compile._core.buffer_writes import TraceAnswer, eager_rerun
 from lucid.compile._core.call_values import CallValues
+from lucid.compile._core.fallback import EagerFallbackSet
 from lucid.compile._core.rng_replay import advance_since, replayed
 from lucid.compile._core.signature import CacheKey, outside_feeds, tree_tensors
 
@@ -552,9 +553,11 @@ def _compile_into(
 
 
 def _forward_segments(
-    seg_objs: Sequence[_Segment], cur: Tensor, fingerprint: ParamFingerprint
+    seg_objs: Sequence[_Segment], cur: Tensor, fingerprint: ParamFingerprint, key: CacheKey
 ) -> tuple[Tensor, bool]:
     """Run (and lazily compile) each segment in ``seg_objs`` on ``cur``.
+
+    ``key`` is ``cur``'s segment key, which the caller took to look the call up.
 
     Each segment run writes its BatchNorm state back, so a later segment that
     does not compile would leave the step half-applied, and the eager step
@@ -567,10 +570,9 @@ def _forward_segments(
     stood as its call (:func:`_trace_segment_forward`).  That ends the
     compiled part of the step: the segments after it run eagerly on the
     trace's output, every segment ran once and nothing is put back, and the
-    calls after this one run eagerly, as every entry point's do after a trace
-    stood.
+    caller marks the call's key eager, as every entry point does after a
+    trace stood.
     """
-    key = _segment_key(cur, fingerprint)
     restore = None if key in seg_objs[0].cache else _keep_buffers(fingerprint.model)
     values = CallValues()
     try:
@@ -590,6 +592,34 @@ def _forward_segments(
             restore()
         raise
     return cur, False
+
+
+def _forward_or_refuse(
+    seg_objs: Sequence[_Segment],
+    x: Tensor,
+    fingerprint: ParamFingerprint,
+    key: CacheKey,
+    eager_only: EagerFallbackSet,
+) -> Tensor | None:
+    """The last segment's output for ``x``, or ``None`` when the call must run eagerly.
+
+    Every segment of the input chain compiles on the first call: the forward
+    executables must run to know the next segment's input shape, so compile and
+    forward are interleaved, each segment an autograd node that ``loss.backward()``
+    unwinds in reverse.  A refused compile, or a forward trace that stood as its
+    segment's call, marks ``key`` eager: the key as the traces left it, which a
+    call that changes what the model reads (a slot it stored into) no longer has.
+    """
+    rng_before = _stream_states()
+    try:
+        cur, stood = _forward_segments(seg_objs, x, fingerprint, key)
+    except _SegmentCompileError:
+        _restore_stream_states(rng_before)
+        eager_only.add(fingerprint.rekey(key, (x,), {}))
+        return None
+    if stood:
+        eager_only.add(fingerprint.rekey(key, (x,), {}))
+    return cur
 
 
 def _run_eagerly(seg_objs: Sequence[_Segment], cur: Tensor) -> Tensor:
@@ -774,7 +804,10 @@ def make_segmented_step(
     if not all_params:
         raise ValueError("make_step(segments>1): model has no trainable parameters")
 
-    eager_only = {"flag": False}
+    # The signatures that run eagerly.  A refusal belongs to the call's key, which
+    # moves when the call changes what the model reads (a slot it stored into now
+    # holds a tensor), as the monolithic step's does: the step is not eager for good.
+    eager_only = EagerFallbackSet()
 
     def _run_eager(x_args: tuple[Tensor, ...]) -> Tensor:
         with eager_rerun():
@@ -782,26 +815,17 @@ def make_segmented_step(
 
     def step(*x_args: Tensor) -> Tensor:
         """Run one segmented compiled training step (or eager fallback)."""
-        fingerprint.get()  # rebuilds the segments if the model's were replaced
+        # Taking the key rebuilds the segments if the model's were replaced.
+        key = _segment_key(x_args[0], fingerprint)
         if (
-            eager_only["flag"]
+            key in eager_only
             or hooks_decline(model, "make_step(segments>1)")
             or tensors_have_active_hooks(leaf_tensors(x_args, {}))
         ):
             return _run_eager(x_args)
 
-        # Compile every segment for this input chain on the first call.  Forward
-        # exes must run to know the next segment's input shape, so compile +
-        # forward are interleaved.  Each segment is an autograd node;
-        # ``loss.backward()`` later unwinds them in reverse.
-        from lucid._factories._generator import _restore_stream_states, _stream_states
-
-        rng_before = _stream_states()
-        try:
-            cur, eager_only["flag"] = _forward_segments(seg_objs, x_args[0], fingerprint)
-        except _SegmentCompileError:
-            _restore_stream_states(rng_before)
-            eager_only["flag"] = True
+        cur = _forward_or_refuse(seg_objs, x_args[0], fingerprint, key, eager_only)
+        if cur is None:
             return _run_eager(x_args)
 
         # Eager loss on the final segment output.
@@ -815,7 +839,7 @@ def make_segmented_step(
         """Drop every cached executable for this segmented step callable."""
         for seg in seg_objs:
             seg.cache.clear()
-        eager_only["flag"] = False
+        eager_only.clear()
 
     step.clear_cache = clear_cache  # type: ignore[attr-defined]
     return step

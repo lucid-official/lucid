@@ -153,7 +153,7 @@ def test_interior_checkpoint_compiles_under_segmented_step_and_matches_eager(
         warnings.simplefilter("error", CompileFallbackWarning)
         step(x, t).backward()
 
-    assert not step.eager_only["flag"]
+    assert not step.eager_only
     _assert_close_maps(_grads(model), want_grads)
 
 

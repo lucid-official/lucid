@@ -264,8 +264,11 @@ NOT_REBINDING: dict[str, type[_Stateful]] = {
 }
 
 
-def _build(case: type[_Stateful]) -> nn.Module:
+def _build(case: type[_Stateful], last: bool = False) -> nn.Module:
+    """The case in the first segment of a three-segment model, or in the last."""
     lucid.manual_seed(0)
+    if last:
+        return nn.Sequential(nn.Linear(WIDTH, WIDTH), nn.Tanh(), case()).to(COMPILE_DEVICE)
     return nn.Sequential(case(), nn.Tanh(), nn.Linear(WIDTH, WIDTH)).to(COMPILE_DEVICE)
 
 
@@ -322,7 +325,7 @@ class _Segmented(_Entry):
         return value
 
     def compiled(self) -> bool:
-        return not self.step.eager_only["flag"]
+        return all(self.step.cache)
 
 
 class _CompiledStep(_Entry):
@@ -378,9 +381,9 @@ def _eager_call(model: nn.Module, x: Tensor, grad: bool) -> float:
     return value
 
 
-def _run(case: type[_Stateful], entry_name: str) -> _Entry:
+def _run(case: type[_Stateful], entry_name: str, last: bool = False) -> _Entry:
     """Run ``entry_name`` against an eager twin, comparing the loss after each call."""
-    model, twin = _build(case), _build(case)
+    model, twin = _build(case, last), _build(case, last)
     optimizer = optim.SGD(model.parameters(), lr=0.05)
     twin_optimizer = optim.SGD(twin.parameters(), lr=0.05)
     entry = ENTRIES[entry_name](model, optimizer)
@@ -403,19 +406,55 @@ def test_an_attribute_the_call_rebinds_is_read_as_it_is_now(case: str, entry: st
     _run(REBINDING[case], entry)
 
 
-#: A segmented step has one verdict for every later call.  It runs the two writes
-#: eagerly as it always did, and a tensor stored where there was none, whatever
-#: reads it, now too: from inside one trace a store nothing reads (``last``) is
-#: the same as one a branch on ``None`` reads (``h``).
-_SEGMENTED_EAGER = {"copies_into_the_old", "ema_in_place", "keeps_for_later"}
+#: The segmented step carries no write into a tensor the call did not make: a
+#: segment's executable runs again to take the gradient, and would read the
+#: tensor after the forward wrote it.  Both stay eager, every call; the
+#: monolithic entries carry the write and compile.
+_SEGMENTED_CANNOT_CARRY = {"copies_into_the_old", "ema_in_place"}
 
 
 @pytest.mark.parametrize("entry", ["make_step", "segmented", "fused_step", "module_no_grad"])
 @pytest.mark.parametrize("case", list(NOT_REBINDING))
 def test_what_is_not_a_rebinding_still_compiles(case: str, entry: str) -> None:
     ran = _run(NOT_REBINDING[case], entry)
-    if not (entry == "segmented" and case in _SEGMENTED_EAGER):
+    if not (entry == "segmented" and case in _SEGMENTED_CANNOT_CARRY):
         assert ran.compiled() in (True, None), "refusing every attribute would pass the comparison"
+
+
+#: ``previous_input`` keeps the output of the segment before it, graph and all, so
+#: no entry could differentiate the model twice when it is the last segment.
+_WHERE = [
+    (case, last)
+    for case in [*REBINDING, *NOT_REBINDING]
+    for last in (False, True)
+    if not (last and case == "previous_input")
+]
+
+
+@pytest.mark.parametrize(
+    "case, last",
+    _WHERE,
+    ids=[f"{case}-{'last' if last else 'first'}_segment" for case, last in _WHERE],
+)
+def test_a_segmented_step_recovers_as_the_monolithic_step_does(case: str, last: bool) -> None:
+    """A refused compile is the signature's, not the step's lifetime (LCD-908).
+
+    A tensor stored where there was none refuses the call that stores it and
+    changes the signature: the next call compiles.  A refusal that stays (a
+    rebinding the call reads, a write the segments cannot carry) leaves the
+    signature as it was, so the step runs it eagerly without tracing again.
+    Either way the segmented step ends where the monolithic one does, and
+    equals its eager twin after every call (``_run``).
+    """
+    classes = {**REBINDING, **NOT_REBINDING}
+    mono = _run(classes[case], "make_step", last)
+    segmented = _run(classes[case], "segmented", last)
+    if case in _SEGMENTED_CANNOT_CARRY:
+        assert mono.compiled() and not segmented.compiled()
+        assert len(segmented.step.eager_only) == 1, "one refusal, then eager without a trace"
+        return
+    assert segmented.compiled() == mono.compiled()
+    assert len(segmented.step.eager_only) == len(mono.step.eager_only)
 
 
 def test_a_state_that_keeps_its_graph() -> None:
