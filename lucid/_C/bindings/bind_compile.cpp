@@ -321,27 +321,40 @@ void bind_tracer_writes(py::class_<lucid::compile::Tracer>& tracer) {
              "back to its value from before the trace.");
 }
 
+// The switches a recording's owner sets: what the tracer does with a tensor it
+// cannot account for.
+void bind_tracer_flags(py::class_<lucid::compile::Tracer>& tracer) {
+    using lucid::compile::Tracer;
+
+    tracer.def_property("redraw_rng", &Tracer::redraw_rng, &Tracer::set_redraw_rng,
+                        "Whether default-generator draws become feeds drawn again on "
+                        "every run (compile) or stay ops in the recording (Core ML).");
+    tracer.def_property("fold_constants", &Tracer::fold_constants, &Tracer::set_fold_constants,
+                        "Whether an op whose inputs were all made inside the trace is left "
+                        "out, its output a constant feed (compile) or recorded (every other "
+                        "tracer).");
+    tracer.def_property("refuse_outside_reads", &Tracer::refuse_outside_reads,
+                        &Tracer::set_refuse_outside_reads,
+                        "Whether a host read of a tensor from outside the call marks the "
+                        "recording unsupported (compile) or reads it as a constant (Core ML).");
+    tracer.def_property("refuse_off_thread_values", &Tracer::refuse_off_thread_values,
+                        &Tracer::set_refuse_off_thread_values,
+                        "Whether a value another thread computes while the recording is "
+                        "open marks it unsupported when an op reads it (compile) or is "
+                        "taken as an outside tensor (Core ML).");
+    tracer.def_property("differentiated", &Tracer::differentiated, &Tracer::set_differentiated,
+                        "Whether a backward will differentiate this recording, so that what "
+                        "runs with grad mode off is a constant to it.");
+}
+
 void bind_tracer_class(py::module_& m) {
     using lucid::compile::Tracer;
 
     py::class_<Tracer> tracer(m, "Tracer");
     bind_tracer_writes(tracer);
+    bind_tracer_flags(tracer);
     tracer.def(py::init<>())
         .def_property_readonly("graph", &Tracer::graph, py::return_value_policy::reference_internal)
-        .def_property("redraw_rng", &Tracer::redraw_rng, &Tracer::set_redraw_rng,
-                      "Whether default-generator draws become feeds drawn again on "
-                      "every run (compile) or stay ops in the recording (Core ML).")
-        .def_property("fold_constants", &Tracer::fold_constants, &Tracer::set_fold_constants,
-                      "Whether an op whose inputs were all made inside the trace is left "
-                      "out, its output a constant feed (compile) or recorded (every other "
-                      "tracer).")
-        .def_property("refuse_outside_reads", &Tracer::refuse_outside_reads,
-                      &Tracer::set_refuse_outside_reads,
-                      "Whether a host read of a tensor from outside the call marks the "
-                      "recording unsupported (compile) or reads it as a constant (Core ML).")
-        .def_property("differentiated", &Tracer::differentiated, &Tracer::set_differentiated,
-                      "Whether a backward will differentiate this recording, so that what "
-                      "runs with grad mode off is a constant to it.")
         .def_property_readonly("grad_stopped", &Tracer::grad_stopped,
                                "Whether what runs now is a constant to that backward.")
         .def(

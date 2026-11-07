@@ -22,6 +22,7 @@
 #include "../autograd/TensorHooks.h"
 #include "../backend/Dispatcher.h"
 #include "../core/GradMode.h"
+#include "../core/OffThread.h"
 #include "../core/StridedCopy.h"
 #include "../core/TensorImpl.h"
 
@@ -99,6 +100,22 @@ void set_current_tracer(Tracer* t) {
 }
 
 Tracer::Tracer() : first_node_(next_sequence_nr()) {}
+
+Tracer::~Tracer() {
+    set_refuse_off_thread_values(false);
+}
+
+void Tracer::set_refuse_off_thread_values(bool on) {
+    if (on == (off_thread_epoch_ != 0))
+        return;
+    if (on) {
+        off_thread_opener_ = off_thread::thread_token();
+        off_thread_epoch_ = off_thread::open();
+    } else {
+        off_thread::close(off_thread_opener_);
+        off_thread_epoch_ = 0;
+    }
+}
 
 void Tracer::on_op_enter(std::string_view name, Device device, Dtype dtype, Shape shape) {
     // The op before this one is over; if it was held out, it stays out, and
@@ -686,10 +703,21 @@ TensorId Tracer::feed_id(const TensorImplPtr& impl) {
     return fresh;
 }
 
+bool Tracer::refuse_off_thread(const TensorImpl& feed) {
+    // The tracer is per thread: a value another thread computes during the trace
+    // is no op of it, and compiled would be this call's value on every call.  A
+    // grad node would show it, but there is none under ``no_grad``.
+    if (off_thread_epoch_ == 0 || !off_thread::made_since(&feed, off_thread_epoch_))
+        return false;
+    mark_unsupported("a value computed on another thread during the trace reached an op, "
+                     "so each call would reuse the first call's value");
+    return true;
+}
+
 void Tracer::refuse_computed_feed(const TensorImpl& feed) {
+    if (refuse_off_thread(feed))
+        return;
     // A leaf's node (``AccumulateGrad``) is made when something first asks for it.
-    // The tracer is per thread, so a value another thread computes during the
-    // trace is refused too: compiled, it would be this call's value on every call.
     if (feed.is_leaf() || !feed.grad_fn() || feed.grad_fn()->sequence_nr() < first_node_)
         return;
     mark_unsupported("a value computed during the trace reached an op under a tensor the trace "
@@ -896,8 +924,13 @@ void Tracer::on_derived(std::string_view name,
         const auto labels = [&](const TensorImplPtr& src) {
             return src && shares_bytes(*src, *out);
         };
-        if (std::any_of(srcs.begin(), srcs.end(), labels))
+        if (std::any_of(srcs.begin(), srcs.end(), labels)) {
+            // The label is a feed once an op reads it, as its source would be.
+            for (const auto& src : srcs)
+                if (src)
+                    refuse_off_thread(*src);
             return;
+        }
     }
     on_op_enter(name, out->device(), out->dtype(), out->shape());
     on_op_io(srcs, out);

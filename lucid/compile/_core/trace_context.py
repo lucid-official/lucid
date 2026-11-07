@@ -193,8 +193,15 @@ def recording(
         # the call would hand every later call the first one's value (LCD-910).
         # Core ML export, which holds such a tensor as a constant, leaves it off.
         tracer.refuse_outside_reads = True
-        yield tracer
-        _scan_retained_values(tracer)
+        # A value another thread computes during the call is no op of this
+        # thread's recording: fed in, it would be the first call's value for
+        # every later one (LCD-904).  The window closes with the call.
+        tracer.refuse_off_thread_values = True
+        try:
+            yield tracer
+            _scan_retained_values(tracer)
+        finally:
+            tracer.refuse_off_thread_values = False
 
 
 def is_tensor_hook_error(exc: BaseException) -> bool:

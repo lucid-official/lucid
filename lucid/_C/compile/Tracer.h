@@ -97,6 +97,7 @@ public:
     // ``graph_`` starts empty and ``impl_to_id_`` starts with no entries.  No
     // op hooks fire until the tracer is installed as the active TLS sink.
     Tracer();
+    ~Tracer();
 
     Tracer(const Tracer&) = delete;
     Tracer& operator=(const Tracer&) = delete;
@@ -241,6 +242,18 @@ public:
     // package.  ``recording`` (every compile entry) turns it on.
     bool refuse_outside_reads() const { return refuse_outside_reads_; }
     void set_refuse_outside_reads(bool on) { refuse_outside_reads_ = on; }
+
+    // Whether a value another thread computes while this recording is open marks
+    // it unsupported when an op reads it.  The tracer is per thread, so such a
+    // value is no op of the recording, and fed in it would be the first call's
+    // value for every later one; under ``no_grad`` nothing else in the tensor
+    // gives it away (:file:`OffThread.h`).  Off by default, and off for Core ML
+    // export, which holds every outside tensor as a constant of the package.
+    // Turning it on opens the recording's window on the calling thread; turning
+    // it off, or destroying the tracer, closes it.  ``recording`` (every compile
+    // entry) turns it on for its span.
+    bool refuse_off_thread_values() const { return off_thread_epoch_ != 0; }
+    void set_refuse_off_thread_values(bool on);
 
     // Whether a backward will differentiate this recording, so grad mode decides
     // what it reaches.  Off by default: a forward-only tracer, Core ML export and
@@ -555,6 +568,10 @@ private:
     // Whatever made it told the tracer nothing, and a compiled call would answer
     // with this call's value.
     void refuse_computed_feed(const TensorImpl& feed);
+    // The part of that which needs no node: ``feed`` was made on another thread
+    // while this recording was open (``refuse_off_thread_values``).  Marks the
+    // trace unsupported and answers true when it was.
+    bool refuse_off_thread(const TensorImpl& feed);
     // Marks the trace unsupported when ``target`` or a view of it holds a gradient
     // hook at the place in the graph the write about to land moves it from.
     void refuse_hooked_write(const TensorImplPtr& target);
@@ -698,6 +715,10 @@ private:
     bool redraw_rng_ = true;
     bool fold_constants_ = false;
     bool refuse_outside_reads_ = false;
+    // The epoch this recording opened under (``OffThread.h``), 0 when it is not
+    // watching other threads, and the thread it opened on.
+    std::uint64_t off_thread_epoch_ = 0;
+    std::uintptr_t off_thread_opener_ = 0;
     bool differentiated_ = false;
     // The open op's node while it is held out of the recording; it goes
     // back in if a later ``on_op_io`` of the same op names a non-constant

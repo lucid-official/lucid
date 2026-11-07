@@ -242,23 +242,8 @@ def _agree(got: _Seen, want: _Seen) -> None:
         assert _close(got.answers[i], want.answers[i]), f"call {i}: {got.answers} vs {want.answers}"
 
 
-#: LCD-904 is open: the tracer cannot tell a value another thread computed during
-#: the call from one made before it (no autograd node under ``no_grad``).  Strict, so
-#: the fix shows up as XPASS and these marks come off with it.
-_OPEN = pytest.mark.xfail(strict=True, reason="LCD-904: a worker thread's value is pinned")
-#: The sources a worker computes whole; the module-attribute one is refused already
-#: (the call rebinds a slot), and a grad-mode ``lucid.compile`` runs eagerly.
-_PINNED = ("worker thread", "thread pool", "worker value used by more ops")
-
-
-def _cases() -> Iterator[object]:
-    for source in SOURCES:
-        for entry in ENTRIES:
-            open_ = source in _PINNED and entry != "compile grad mode"
-            yield pytest.param(source, entry, marks=[_OPEN] if open_ else [], id=f"{source}-{entry}")
-
-
-@pytest.mark.parametrize(("source", "entry"), _cases())
+@pytest.mark.parametrize("entry", ENTRIES)
+@pytest.mark.parametrize("source", SOURCES)
 def test_a_value_computed_on_another_thread_follows_its_inputs(source: str, entry: str) -> None:
     run, run_eager, keeps = ENTRIES[entry]
     got = run(_net(source))
@@ -267,7 +252,6 @@ def test_a_value_computed_on_another_thread_follows_its_inputs(source: str, entr
         assert got.compiled, f"{source}: {entry} fell back to eager"
 
 
-@_OPEN
 def test_the_repro_of_the_report() -> None:
     """The case as filed: a worker thread's ``x * 2.0`` read by ``* 3.0``."""
 
@@ -282,7 +266,6 @@ def test_the_repro_of_the_report() -> None:
             assert _floats(compiled(x)) == [v * 6.0, v * 6.0]
 
 
-@_OPEN
 def test_it_says_why_it_runs_eagerly() -> None:
     class M(nn.Module):
         def forward(self, x: Tensor) -> Tensor:
@@ -304,3 +287,54 @@ def test_a_tensor_made_before_the_call_stays_compiled() -> None:
             assert _floats(compiled(_x(s))) == _floats(_x(s) * before)
     info = compiled.cache_info()
     assert info["entries"] == 1 and not info["eager_only"], info
+
+
+def test_only_the_compile_entries_watch_other_threads() -> None:
+    """Core ML export (``_tracing``) holds every outside tensor as a constant."""
+    from lucid.compile._core.trace_context import recording
+
+    with lucid.compile._tracing() as export_tracer:
+        assert not export_tracer.refuse_off_thread_values
+    with recording() as compile_tracer:
+        assert compile_tracer.refuse_off_thread_values
+    assert not compile_tracer.refuse_off_thread_values
+
+
+def test_a_recording_refuses_what_a_thread_made_after_it_opened_only() -> None:
+    """The window is the recording's: an older one's tensors are inputs of a newer one."""
+    from lucid.compile._core.trace_context import recording
+
+    opened, release = threading.Event(), threading.Event()
+
+    def lead() -> None:
+        with recording():
+            opened.set()
+            release.wait(timeout=30)
+
+    leader = threading.Thread(target=lead)
+    leader.start()
+    try:
+        assert opened.wait(timeout=30)
+        # Made while the leader's recording is open, before this one opens.
+        earlier = lucid.ones(WIDTH, device=COMPILE_DEVICE) * 2.0
+        with lucid.no_grad(), recording() as tracer:
+            _ = earlier * 3.0
+            assert not tracer.graph.unsupported
+            later = _on_a_thread(lambda: lucid.ones(WIDTH, device=COMPILE_DEVICE) * 2.0)
+            _ = later * 3.0
+        assert "another thread" in str(tracer.graph.unsupported)
+    finally:
+        release.set()
+        leader.join()
+
+
+def test_a_value_the_tracing_thread_made_inside_a_detached_scope_stays_an_input() -> None:
+    """A detached scope is still the tracing thread: what it makes is not another thread's."""
+    from lucid.compile._core.trace_context import recording
+    from lucid._engine_scope import untraced
+
+    with lucid.no_grad(), recording() as tracer:
+        with untraced():
+            made = lucid.ones(WIDTH, device=COMPILE_DEVICE) * 2.0
+        _ = made * 3.0
+    assert "another thread" not in str(tracer.graph.unsupported)

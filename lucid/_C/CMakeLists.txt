@@ -244,6 +244,7 @@ lucid_object_library(
     core/Profiler.cpp
     core/SchemaGuard.cpp
     core/TensorImpl.cpp
+    core/OffThread.cpp
     core/Validate.cpp)
 
 file(GLOB LUCID_CPU_BACKEND_METHODS CONFIGURE_DEPENDS backend/cpu/methods/*.cpp)

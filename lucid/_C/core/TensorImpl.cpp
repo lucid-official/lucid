@@ -35,6 +35,7 @@
 #include "../backend/gpu/SharedBufferWrites.h"
 #include "../compile/Tracer.h"
 #include "Allocator.h"
+#include "OffThread.h"
 #include "Error.h"
 #include "ErrorBuilder.h"
 #include "GpuStrided.h"
@@ -237,6 +238,7 @@ TensorImpl::TensorImpl(Storage storage, Shape shape, Dtype dtype, Device device,
         ph->dtype = dtype;
         ph->device = device;
     }
+    off_thread::on_construct(this);
 }
 
 const SharedStorage* TensorImpl::metal_shared() const {
