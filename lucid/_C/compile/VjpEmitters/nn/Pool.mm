@@ -196,6 +196,38 @@ MPSGraphTensor* local_argmax(MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* y,
     return [g castTensor:local toType:MPSDataTypeInt32 name:nil];
 }
 
+// The pooled value the gradient is routed by: the forward's own when the walk holds it,
+// which saves one pooling, else ``recompute()``.
+template <class Recompute>
+MPSGraphTensor* pooled_value(const BackwardContext& bctx,
+                             const OpNode& node,
+                             MPSDataType dtype,
+                             NSArray<NSNumber*>* shape,
+                             Recompute recompute) {
+    if (node.outputs.empty() || bctx.forward(node.outputs[0].id) == nullptr)
+        return recompute();
+    MPSGraph* g = (__bridge MPSGraph*)bctx.graph();
+    MPSGraphTensor* y = cast_if_needed(g, as_tensor(bctx.forward(node.outputs[0].id)), dtype);
+    return [g reshapeTensor:y withShape:shape name:nil];
+}
+
+// The gradient of a max pool: ``grad`` scattered to each window's first maximum.  ``nil`` if
+// the pooled value ``y`` is.
+MPSGraphTensor* max_pool_grad(MPSGraph* g,
+                              MPSGraphTensor* x,
+                              MPSGraphTensor* y,
+                              MPSGraphTensor* grad,
+                              NSArray<NSNumber*>* xs,
+                              NSArray<NSNumber*>* gs,
+                              const std::vector<std::int64_t>& kernel,
+                              const std::vector<std::int64_t>& stride,
+                              const std::vector<std::int64_t>& pad) {
+    if (y == nil)
+        return nil;
+    MPSGraphTensor* local = local_argmax(g, x, y, kernel, stride, pad);
+    return scatter_to_argmax(g, grad, local, xs, gs, kernel, stride, pad);
+}
+
 // One pool VJP for every rank: RANK is the number of pooled axes.
 template <int RANK, bool IS_MAX>
 class PoolVjp final : public VjpEmitter {
@@ -259,10 +291,10 @@ public:
             d.ceilMode = ceil;
             MPSGraphTensor* dx4 = nil;
             if (IS_MAX) {
-                MPSGraphTensor* y4 = [g maxPooling2DWithSourceTensor:xl descriptor:d name:nil];
-                if (y4 == nil) return false;
-                MPSGraphTensor* local = local_argmax(g, xl, y4, {kh, kw}, {sh, sw}, {ph, pw});
-                dx4 = scatter_to_argmax(g, gl, local, x4, g4, {kh, kw}, {sh, sw}, {ph, pw});
+                MPSGraphTensor* y4 = pooled_value(bctx, node, grad.dataType, g4, [&] {
+                    return [g maxPooling2DWithSourceTensor:xl descriptor:d name:nil];
+                });
+                dx4 = max_pool_grad(g, xl, y4, gl, x4, g4, {kh, kw}, {sh, sw}, {ph, pw});
             } else {
                 d.includeZeroPadToAverage = include_pad;
                 dx4 = [g avgPooling2DGradientWithGradientTensor:gl
@@ -290,13 +322,13 @@ public:
             d.ceilMode = ceil;
             MPSGraphTensor* dx6 = nil;
             if (IS_MAX) {
-                MPSGraphTensor* y6 = [g maxPooling4DWithSourceTensor:xl descriptor:d name:nil];
-                if (y6 == nil) return false;
                 const std::vector<std::int64_t> k4{1, (*K)[0], (*K)[1], (*K)[2]};
                 const std::vector<std::int64_t> s4{1, (*S)[0], (*S)[1], (*S)[2]};
                 const std::vector<std::int64_t> p4{0, (*P)[0], (*P)[1], (*P)[2]};
-                MPSGraphTensor* local = local_argmax(g, xl, y6, k4, s4, p4);
-                dx6 = scatter_to_argmax(g, gl, local, x6, g6, k4, s4, p4);
+                MPSGraphTensor* y6 = pooled_value(bctx, node, grad.dataType, g6, [&] {
+                    return [g maxPooling4DWithSourceTensor:xl descriptor:d name:nil];
+                });
+                dx6 = max_pool_grad(g, xl, y6, gl, x6, g6, k4, s4, p4);
             } else {
                 d.includeZeroPadToAverage = include_pad;
                 dx6 = [g avgPooling4DGradientWithGradientTensor:gl

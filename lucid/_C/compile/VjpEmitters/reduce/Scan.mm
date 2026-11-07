@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "../VjpEmitter.h"
+#include "../../OpEmitters/_NanPropagation.h"
 #include "../_VjpHelpers.h"
 
 namespace lucid::compile {
@@ -202,9 +203,18 @@ public:
                 } else {
                     MPSGraphTensor* head = [g sliceTensor:y dimension:axis start:0 length:n - 1 name:nil];
                     MPSGraphTensor* tail = [g sliceTensor:y dimension:axis start:1 length:n - 1 name:nil];
-                    MPSGraphTensor* changed = [g castTensor:[g notEqualWithPrimaryTensor:tail
-                                                                         secondaryTensor:head
-                                                                                    name:nil]
+                    MPSGraphTensor* moved = [g notEqualWithPrimaryTensor:tail
+                                                         secondaryTensor:head
+                                                                    name:nil];
+                    // A NaN is never overtaken (``nan != nan``): the scan stays on
+                    // the first one, which is where eager sends the gradient.
+                    if (holds_nan(y))
+                        moved = [g logicalANDWithPrimaryTensor:moved
+                                               secondaryTensor:[g notWithTensor:[g isNaNWithTensor:head
+                                                                                              name:nil]
+                                                                           name:nil]
+                                                          name:nil];
+                    MPSGraphTensor* changed = [g castTensor:moved
                                                      toType:MPSDataTypeInt32
                                                        name:nil];
                     NSMutableArray<NSNumber*>* first_shape = [shape mutableCopy];

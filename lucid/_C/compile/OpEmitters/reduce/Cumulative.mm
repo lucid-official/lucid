@@ -13,6 +13,7 @@
 #include <variant>
 
 #include "../OpEmitter.h"
+#include "../_NanPropagation.h"
 
 namespace lucid::compile {
 
@@ -60,22 +61,18 @@ public:
     }
 };
 
-class CummaxEmitter final : public OpEmitter {
+// cummax / cummin: a NaN poisons every later position of its scan, as eager's
+// does.  MPSGraph's scan skips it (``cummax([1, nan, 2])`` is ``[1, nan, 2]``),
+// so the NaN is put back through a running sum of the NaN carrier (LCD-873).
+template <bool IS_MAX>
+class CumExtremumEmitter final : public OpEmitter {
 public:
-    std::string_view op_name() const override { return "cummax"; }
+    std::string_view op_name() const override { return IS_MAX ? "cummax" : "cummin"; }
     bool emit(BuilderContext& ctx, const OpNode& node) override {
         return emit_scan(ctx, node, [](MPSGraph* g, MPSGraphTensor* x, NSInteger ax) {
-            return [g cumulativeMaximumWithTensor:x axis:ax name:@"cummax"];
-        });
-    }
-};
-
-class CumminEmitter final : public OpEmitter {
-public:
-    std::string_view op_name() const override { return "cummin"; }
-    bool emit(BuilderContext& ctx, const OpNode& node) override {
-        return emit_scan(ctx, node, [](MPSGraph* g, MPSGraphTensor* x, NSInteger ax) {
-            return [g cumulativeMinimumWithTensor:x axis:ax name:@"cummin"];
+            MPSGraphTensor* y = IS_MAX ? [g cumulativeMaximumWithTensor:x axis:ax name:@"cummax"]
+                                       : [g cumulativeMinimumWithTensor:x axis:ax name:@"cummin"];
+            return scan_keeping_nan(g, x, y, ax);
         });
     }
 };
@@ -84,8 +81,8 @@ struct CumulativeEmitterRegistrar {
     CumulativeEmitterRegistrar() {
         register_emitter(std::make_unique<CumsumEmitter>());
         register_emitter(std::make_unique<CumprodEmitter>());
-        register_emitter(std::make_unique<CummaxEmitter>());
-        register_emitter(std::make_unique<CumminEmitter>());
+        register_emitter(std::make_unique<CumExtremumEmitter<true>>());
+        register_emitter(std::make_unique<CumExtremumEmitter<false>>());
     }
 };
 

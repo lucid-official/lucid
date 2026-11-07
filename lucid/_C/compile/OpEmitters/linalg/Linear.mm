@@ -34,6 +34,7 @@
 
 #include "../OpEmitter.h"
 #include "../_GeluTanh.h"
+#include "../_NanPropagation.h"
 
 namespace lucid::compile {
 
@@ -94,7 +95,7 @@ public:
         if (pre == nil)
             return false;
         MPSGraph* graph = (__bridge MPSGraph*)ctx.graph();
-        MPSGraphTensor* y = [graph reLUWithTensor:pre name:@"fused_linear_relu"];
+        MPSGraphTensor* y = relu_keeping_nan(graph, pre, @"fused_linear_relu");
         ctx.bind(node.outputs[0].id, (__bridge void*)y);
         return true;
     }

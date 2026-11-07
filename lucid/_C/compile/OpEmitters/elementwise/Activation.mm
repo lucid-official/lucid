@@ -19,6 +19,7 @@
 #include "../OpEmitter.h"
 #include "../_AttrHelpers.h"
 #include "../_GeluTanh.h"
+#include "../_NanPropagation.h"
 
 namespace lucid::compile {
 
@@ -51,7 +52,7 @@ public:
     std::string_view op_name() const override { return "relu"; }
     bool emit(BuilderContext& ctx, const OpNode& node) override {
         return emit_unary(ctx, node, [](MPSGraph* g, MPSGraphTensor* x) {
-            return [g reLUWithTensor:x name:@"relu"];
+            return relu_keeping_nan(g, x, @"relu");
         });
     }
 };
@@ -270,9 +271,11 @@ public:
                 [g divisionWithPrimaryTensor:shifted secondaryTensor:six name:nil];
             MPSGraphTensor* clipped_lo =
                 [g maximumWithPrimaryTensor:scaled secondaryTensor:zero name:nil];
-            return [g minimumWithPrimaryTensor:clipped_lo
-                                secondaryTensor:one
-                                           name:@"hard_sigmoid"];
+            return keep_nan_of(g,
+                               [g minimumWithPrimaryTensor:clipped_lo
+                                           secondaryTensor:one
+                                                      name:@"hard_sigmoid"],
+                               x);
         });
     }
 };
@@ -311,11 +314,9 @@ public:
             MPSDataType dt = x.dataType;
             MPSGraphTensor* zero = [g constantWithScalar:0.0 dataType:dt];
             MPSGraphTensor* six = [g constantWithScalar:6.0 dataType:dt];
-            MPSGraphTensor* lo =
-                [g maximumWithPrimaryTensor:x secondaryTensor:zero name:nil];
-            return [g minimumWithPrimaryTensor:lo
-                                secondaryTensor:six
-                                           name:@"relu6"];
+            MPSGraphTensor* lo = [g maximumWithPrimaryTensor:x secondaryTensor:zero name:nil];
+            return keep_nan_of(
+                g, [g minimumWithPrimaryTensor:lo secondaryTensor:six name:@"relu6"], x);
         });
     }
 };

@@ -24,6 +24,7 @@
 #include <variant>
 
 #include "../_AttrHelpers.h"
+#include "../_NanPropagation.h"
 
 namespace lucid::compile {
 
@@ -501,7 +502,7 @@ public:
         MPSGraphTensor* norm = [g squareRootWithTensor:sum name:nil];
         MPSGraphTensor* eps_c = [g constantWithScalar:eps dataType:norm.dataType];
         MPSGraphTensor* denom =
-            [g maximumWithPrimaryTensor:norm secondaryTensor:eps_c name:nil];
+            keep_nan_of(g, [g maximumWithPrimaryTensor:norm secondaryTensor:eps_c name:nil], norm);
         ctx.bind(node.outputs[0].id, (__bridge void*)([g divisionWithPrimaryTensor:x
                                              secondaryTensor:denom
                                                         name:@"lp_normalize"]));

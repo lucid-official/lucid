@@ -22,6 +22,7 @@
 
 #include "../OpEmitter.h"
 #include "../_AttrHelpers.h"
+#include "../_NanPropagation.h"
 
 namespace lucid::compile {
 
@@ -427,19 +428,14 @@ public:
         }
         MPSGraphTensor* out = x_t;
         if (lo) {
-            MPSGraphTensor* c =
-                [graph constantWithScalar:*lo dataType:x_t.dataType];
-            out = [graph maximumWithPrimaryTensor:out
-                                   secondaryTensor:c
-                                              name:@"clip_lo"];
+            MPSGraphTensor* c = [graph constantWithScalar:*lo dataType:x_t.dataType];
+            out = [graph maximumWithPrimaryTensor:out secondaryTensor:c name:@"clip_lo"];
         }
         if (hi) {
-            MPSGraphTensor* c =
-                [graph constantWithScalar:*hi dataType:x_t.dataType];
-            out = [graph minimumWithPrimaryTensor:out
-                                   secondaryTensor:c
-                                              name:@"clip_hi"];
+            MPSGraphTensor* c = [graph constantWithScalar:*hi dataType:x_t.dataType];
+            out = [graph minimumWithPrimaryTensor:out secondaryTensor:c name:@"clip_hi"];
         }
+        out = keep_nan_of(graph, out, x_t);
         ctx.bind(node.outputs[0].id, (__bridge void*)(out));
         return true;
     }

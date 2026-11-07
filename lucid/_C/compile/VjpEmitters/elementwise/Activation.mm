@@ -23,7 +23,8 @@ namespace {
 // where ``body(graph, x, grad_out) → MPSGraphTensor*`` returns dx.
 
 // ────────────────────────────────────────────────────────────────────
-// ReLU: dA = grad * (x > 0).
+// ReLU: dA = grad where not (x <= 0), else 0.  Eager tests ``x <= 0``, so a
+// NaN input passes its gradient (``x > 0`` dropped it, LCD-873).
 //
 // All constants / casts derive from ``go.dataType`` (the chain dtype) —
 // ``x`` is pre-cast to that dtype by ``emit_unary_vjp``.
@@ -37,12 +38,12 @@ public:
             [](MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* go) {
                 MPSDataType dt = go.dataType;
                 MPSGraphTensor* zero = [g constantWithScalar:0.0 dataType:dt];
-                MPSGraphTensor* mask =
-                    [g greaterThanWithPrimaryTensor:x secondaryTensor:zero name:nil];
-                MPSGraphTensor* mask_f = [g castTensor:mask toType:dt name:nil];
-                return [g multiplicationWithPrimaryTensor:go
-                                          secondaryTensor:mask_f
-                                                     name:@"relu_vjp"];
+                MPSGraphTensor* dead =
+                    [g lessThanOrEqualToWithPrimaryTensor:x secondaryTensor:zero name:nil];
+                return [g selectWithPredicateTensor:dead
+                                truePredicateTensor:zero
+                               falsePredicateTensor:go
+                                               name:@"relu_vjp"];
             });
     }
 };

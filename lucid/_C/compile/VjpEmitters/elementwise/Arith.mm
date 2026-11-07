@@ -206,9 +206,12 @@ public:
 };
 
 // ────────────────────────────────────────────────────────────────────
-// maximum / minimum: the gradient goes to the input that was chosen.
-// Eager breaks a tie toward ``a`` — maximum masks (a ≥ b, a < b),
-// minimum (b ≥ a, b < a) — so exactly one side receives each element.
+// maximum / minimum: the winner takes the whole gradient and the loser none; a
+// tie splits it in half and an unordered pair (a NaN on either side) gives both
+// operands the whole of it — eager's rule (ops/bfunc/_Extremum.h), read off the
+// reference's kernels.  An operand's weight is 0 where it lost the comparison
+// (``p < q``), ½ where the two are equal (-0 and +0, inf and inf included) and
+// 1 otherwise, NaN included, since a NaN fails both tests (LCD-874).
 // CLIP clamps its learnt logit scale with ``minimum``; without this its
 // training step ran eager.
 // ────────────────────────────────────────────────────────────────────
@@ -223,19 +226,23 @@ public:
                 MPSGraphTensor* lhs = IS_MAX ? c.a : c.b;
                 MPSGraphTensor* rhs = IS_MAX ? c.b : c.a;
                 const MPSDataType dt = c.go.dataType;
-                MPSGraphTensor* take_a =
-                    [c.g castTensor:[c.g greaterThanOrEqualToWithPrimaryTensor:lhs
-                                                               secondaryTensor:rhs
-                                                                          name:nil]
-                             toType:dt
-                               name:nil];
-                MPSGraphTensor* take_b = [c.g castTensor:[c.g lessThanWithPrimaryTensor:lhs
-                                                                        secondaryTensor:rhs
-                                                                                   name:nil]
-                                                  toType:dt
-                                                    name:nil];
-                return {[c.g multiplicationWithPrimaryTensor:c.go secondaryTensor:take_a name:nil],
-                        [c.g multiplicationWithPrimaryTensor:c.go secondaryTensor:take_b name:nil]};
+                MPSGraphTensor* zero = [c.g constantWithScalar:0.0 dataType:dt];
+                MPSGraphTensor* one = [c.g constantWithScalar:1.0 dataType:dt];
+                MPSGraphTensor* half = [c.g constantWithScalar:0.5 dataType:dt];
+                MPSGraphTensor* tie = [c.g equalWithPrimaryTensor:lhs secondaryTensor:rhs name:nil];
+                MPSGraphTensor* unless_lost = [c.g selectWithPredicateTensor:tie
+                                                         truePredicateTensor:half
+                                                        falsePredicateTensor:one
+                                                                        name:nil];
+                auto share = [&](MPSGraphTensor* p, MPSGraphTensor* q) {
+                    MPSGraphTensor* lost = [c.g lessThanWithPrimaryTensor:p secondaryTensor:q name:nil];
+                    MPSGraphTensor* w = [c.g selectWithPredicateTensor:lost
+                                                   truePredicateTensor:zero
+                                                  falsePredicateTensor:unless_lost
+                                                                  name:nil];
+                    return [c.g multiplicationWithPrimaryTensor:c.go secondaryTensor:w name:nil];
+                };
+                return {share(lhs, rhs), share(rhs, lhs)};
             });
     }
 };

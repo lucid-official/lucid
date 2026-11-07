@@ -30,6 +30,7 @@
 #include "../../../core/Half.h"
 #include "../../MpsDtype.h"
 #include "../OpEmitter.h"
+#include "../_NanPropagation.h"
 #include "../_SignedZero.h"
 
 namespace lucid::compile {
@@ -635,7 +636,7 @@ public:
     std::string_view op_name() const override { return "maximum"; }
     bool emit(BuilderContext& ctx, const OpNode& node) override {
         return emit_binary(ctx, node, [](MPSGraph* g, MPSGraphTensor* a, MPSGraphTensor* b) {
-            return [g maximumWithPrimaryTensor:a secondaryTensor:b name:@"maximum"];
+            return maximum_keeping_nan(g, a, b, @"maximum");
         });
     }
 };
@@ -645,7 +646,7 @@ public:
     std::string_view op_name() const override { return "minimum"; }
     bool emit(BuilderContext& ctx, const OpNode& node) override {
         return emit_binary(ctx, node, [](MPSGraph* g, MPSGraphTensor* a, MPSGraphTensor* b) {
-            return [g minimumWithPrimaryTensor:a secondaryTensor:b name:@"minimum"];
+            return minimum_keeping_nan(g, a, b, @"minimum");
         });
     }
 };
