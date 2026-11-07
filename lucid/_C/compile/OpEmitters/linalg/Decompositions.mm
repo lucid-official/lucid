@@ -188,11 +188,43 @@ MPSGraphTensor* emit_cholesky_lower(MPSGraph* g, MPSGraphTensor* a, std::int64_t
     return concat_along(g, cols, c_dim);
 }
 
+// The kernels divide by the largest entry first.  They decide from squares of
+// the input's entries (the rotations' inner products, a Householder column's
+// norm), the square of its scale, which float32 loses to underflow near 1e-23 and
+// to overflow near 1e19.  The largest entry is taken over the last two axes, so a
+// column slice is scaled as one column.  A batch member holding a NaN or an inf
+// comes back all NaN: eager raises on one, and a compiled call cannot.
+std::pair<MPSGraphTensor*, MPSGraphTensor*> scale_to_unit(MPSGraph* g, MPSGraphTensor* a) {
+    const NSInteger rank = (NSInteger)a.shape.count;
+    MPSGraphTensor* largest =
+        [g reductionMaximumPropagateNaNWithTensor:[g absoluteWithTensor:a name:nil]
+                                             axes:@[ @(rank - 2), @(rank - 1) ]
+                                             name:nil];
+    MPSGraphTensor* nonzero =
+        [g selectWithPredicateTensor:[g equalWithPrimaryTensor:largest
+                                               secondaryTensor:[g constantWithScalar:0.0
+                                                                            dataType:a.dataType]
+                                                          name:nil]
+                 truePredicateTensor:[g constantWithScalar:1.0 dataType:a.dataType]
+                falsePredicateTensor:largest
+                                name:nil];
+    MPSGraphTensor* scale = [g selectWithPredicateTensor:[g isFiniteWithTensor:largest name:nil]
+                                     truePredicateTensor:nonzero
+                                    falsePredicateTensor:[g constantWithScalar:std::nan("")
+                                                                      dataType:a.dataType]
+                                                    name:nil];
+    return {[g divisionWithPrimaryTensor:a secondaryTensor:scale name:nil], scale};
+}
+
 // ── qr (Householder with LAPACK slarfg reflector sign) ───────────────
 
 std::pair<MPSGraphTensor*, MPSGraphTensor*>
-householder_reflector(MPSGraph* g, MPSGraphTensor* x, std::int64_t mk) {
-    const NSInteger r_dim = (NSInteger)x.shape.count - 2;
+householder_reflector(MPSGraph* g, MPSGraphTensor* column, std::int64_t mk) {
+    const NSInteger r_dim = (NSInteger)column.shape.count - 2;
+    // v and tau are ratios of the column's entries, so its unit-scaled copy gives
+    // the same reflector.  Each column takes its own scale: a graded matrix has
+    // columns decades apart, which one scale for the matrix would not cover.
+    MPSGraphTensor* x = scale_to_unit(g, column).first;
     MPSGraphTensor* x0 = [g sliceTensor:x dimension:r_dim start:0 length:1 name:nil];
     MPSGraphTensor* x_tail = [g sliceTensor:x dimension:r_dim start:1 length:mk - 1 name:nil];
     MPSGraphTensor* tail_sq = [g reductionSumWithTensor:[g squareWithTensor:x_tail name:nil]
@@ -412,32 +444,6 @@ void svd_one_sided_step(MPSGraph* g,
     auto [c, s] = jacobi_cs(g, app, aqq, apq);
     std::tie(w_cols[p], w_cols[q]) = rotate_pair(g, w_cols[p], w_cols[q], c, s);
     std::tie(v_cols[p], v_cols[q]) = rotate_pair(g, v_cols[p], v_cols[q], c, s);
-}
-
-// The kernels divide by the largest entry first.  The rotations decide from
-// inner products, the square of the input's scale, which float32 loses to
-// underflow near 1e-23 and to overflow near 1e19.  A batch member holding a NaN
-// or an inf comes back all NaN: eager raises on one, and a compiled call cannot.
-std::pair<MPSGraphTensor*, MPSGraphTensor*> scale_to_unit(MPSGraph* g, MPSGraphTensor* a) {
-    const NSInteger rank = (NSInteger)a.shape.count;
-    MPSGraphTensor* largest =
-        [g reductionMaximumPropagateNaNWithTensor:[g absoluteWithTensor:a name:nil]
-                                             axes:@[ @(rank - 2), @(rank - 1) ]
-                                             name:nil];
-    MPSGraphTensor* nonzero =
-        [g selectWithPredicateTensor:[g equalWithPrimaryTensor:largest
-                                               secondaryTensor:[g constantWithScalar:0.0
-                                                                            dataType:a.dataType]
-                                                          name:nil]
-                 truePredicateTensor:[g constantWithScalar:1.0 dataType:a.dataType]
-                falsePredicateTensor:largest
-                                name:nil];
-    MPSGraphTensor* scale = [g selectWithPredicateTensor:[g isFiniteWithTensor:largest name:nil]
-                                     truePredicateTensor:nonzero
-                                    falsePredicateTensor:[g constantWithScalar:std::nan("")
-                                                                      dataType:a.dataType]
-                                                    name:nil];
-    return {[g divisionWithPrimaryTensor:a secondaryTensor:scale name:nil], scale};
 }
 
 // The one Jacobi graph: rotations read and write single columns.  Rotating a
