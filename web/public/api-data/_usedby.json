@@ -240,11 +240,23 @@
     },
     {
       "kind": "module",
+      "module": "lucid.compile._core.call_values"
+    },
+    {
+      "kind": "module",
       "module": "lucid.compile._core.custom_backward"
     },
     {
       "kind": "module",
       "module": "lucid.compile._core.fallback"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.compile._core.rebound_slots"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.compile._core.rng_replay"
     },
     {
       "kind": "module",
@@ -15665,6 +15677,10 @@
     {
       "kind": "module",
       "module": "lucid.compile._core.module_state"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.compile._core.rebound_slots"
     },
     {
       "kind": "module",
