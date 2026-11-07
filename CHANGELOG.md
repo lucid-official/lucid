@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [3.16.4] — 2026-11-07
+
+Adds Drifting Models (arXiv 2602.04770), checked against the authors' running release: generator, MAE and ConvNeXt features, the drift loss and its gradient agree to float32 noise. Fixes a run of `lucid.compile` steps that trained on silently wrong gradients or losses: in-place writes on tensors the call made, `no_grad` regions inside a forward, dropout under a segmented step, batch-norm statistics, compiled `contiguous`, and traced Functions inside a traced backward. `lucid.set_grad_enabled` is a context manager and decorator, `lucid-audit --models` verifies the zoo on both Metal and CPU, and the engine ABI is 46.
+
 ### Added
 
 - `lucid.peft` / `lucid.quantization`: add QLoRA support — `QuantizedMatmulBackward` in `_C.engine` propagating `dX` gradients (including `create_graph=True` and `float16`/`bfloat16`/`float32` activations) through `quantized_matmul` on Metal, `lora.QuantizedLinear` adapting `QuantizedLinearMLX`, `nn.quantized.Linear`, and `nn.quantized.dynamic.Linear` with lossless `unmerge()` buffer restoration and `"all-linear"` discovery, and `prepare_model_for_kbit_training` support for quantized models (LCD-717).
@@ -6894,7 +6900,8 @@ across every public surface.
 
 ---
 
-[Unreleased]: https://github.com/lucid-official/lucid/compare/v3.16.3...HEAD
+[Unreleased]: https://github.com/lucid-official/lucid/compare/v3.16.4...HEAD
+[3.16.4]: https://github.com/lucid-official/lucid/releases/tag/v3.16.4
 [3.16.3]: https://github.com/lucid-official/lucid/releases/tag/v3.16.3
 [3.16.2]: https://github.com/lucid-official/lucid/releases/tag/v3.16.2
 [3.16.1]: https://github.com/lucid-official/lucid/releases/tag/v3.16.1
