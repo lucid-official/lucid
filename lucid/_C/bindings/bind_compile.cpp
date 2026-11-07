@@ -335,6 +335,10 @@ void bind_tracer_class(py::module_& m) {
                       "Whether an op whose inputs were all made inside the trace is left "
                       "out, its output a constant feed (compile) or recorded (every other "
                       "tracer).")
+        .def_property("refuse_outside_reads", &Tracer::refuse_outside_reads,
+                      &Tracer::set_refuse_outside_reads,
+                      "Whether a host read of a tensor from outside the call marks the "
+                      "recording unsupported (compile) or reads it as a constant (Core ML).")
         .def_property("differentiated", &Tracer::differentiated, &Tracer::set_differentiated,
                       "Whether a backward will differentiate this recording, so that what "
                       "runs with grad mode off is a constant to it.")

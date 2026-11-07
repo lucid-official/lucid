@@ -231,6 +231,17 @@ public:
     bool fold_constants() const { return fold_constants_; }
     void set_fold_constants(bool on) { fold_constants_ = on; }
 
+    // Whether a host read of a tensor from outside the call — one the trace
+    // has not seen and the call did not make — marks the recording unsupported.
+    // A compiled executable runs no Python, so what the host computed from such
+    // a tensor (``clo.item()``) is the first call's value for every later one,
+    // though the tensor is live and may have changed.  A tensor the call made
+    // (``lucid.tensor([...]).tolist()``) is a constant and stays readable.  Off
+    // by default: Core ML export holds every outside tensor as a constant of the
+    // package.  ``recording`` (every compile entry) turns it on.
+    bool refuse_outside_reads() const { return refuse_outside_reads_; }
+    void set_refuse_outside_reads(bool on) { refuse_outside_reads_ = on; }
+
     // Whether a backward will differentiate this recording, so grad mode decides
     // what it reaches.  Off by default: a forward-only tracer, Core ML export and
     // the optimizer's own recording run wholly under ``no_grad`` and answer no
@@ -281,7 +292,9 @@ public:
     // and so ``float(t)`` or ``if t > 0``).  What the host does with it is
     // invisible to the recording, which would bake this call's value into
     // every later one: the trace is marked unsupported.  A tensor the trace
-    // has not seen — a constant made on the spot — is left alone.
+    // has not seen is left alone when the call made it (a constant made on the
+    // spot), and refused when it came from outside and ``refuse_outside_reads``
+    // is on: it is an input.
     void on_host_read(const TensorImpl* impl);
 
     // ``impl`` is an argument of the traced call.  Its values are the call's
@@ -684,6 +697,7 @@ private:
     std::unordered_map<TensorImpl*, TensorImplPtr> watched_;
     bool redraw_rng_ = true;
     bool fold_constants_ = false;
+    bool refuse_outside_reads_ = false;
     bool differentiated_ = false;
     // The open op's node while it is held out of the recording; it goes
     // back in if a later ``on_op_io`` of the same op names a non-constant

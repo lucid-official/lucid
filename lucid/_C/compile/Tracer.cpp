@@ -845,6 +845,10 @@ void Tracer::on_host_read(const TensorImpl* impl) {
         mark_unsupported("a traced value was read on the host (item / tolist / numpy / "
                          "bytes / pickle / dlpack), so each call would reuse the first "
                          "call's value");
+    else if (refuse_outside_reads_ && impl != nullptr && !made_here(impl))
+        mark_unsupported("a tensor from outside the call was read on the host (item / tolist / "
+                         "numpy / bytes / pickle / dlpack), so each call would reuse the "
+                         "first call's value");
     else
         refuse_stale(impl);
 }

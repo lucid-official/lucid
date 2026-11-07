@@ -189,6 +189,10 @@ def recording(
     with mode_ctx, _tracing(watch=watch, module=module, fold_constants=fold_constants) as tracer:
         # After ``mode_ctx``: a call made under ``no_grad`` has no grad mode to leave.
         tracer.differentiated = _C_engine.grad_enabled()
+        # A compiled call replays no Python: a host read of a tensor from outside
+        # the call would hand every later call the first one's value (LCD-910).
+        # Core ML export, which holds such a tensor as a constant, leaves it off.
+        tracer.refuse_outside_reads = True
         yield tracer
         _scan_retained_values(tracer)
 
