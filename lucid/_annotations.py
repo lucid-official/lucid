@@ -316,6 +316,10 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("CacheKey", "lucid.compile._core.signature", "CacheKey"),
         ("Module", "lucid.nn.module", "Module"),
     ),
+    "lucid.compile._core.rng_replay": (
+        ("_C_engine", "lucid._C", "engine"),
+        ("_StreamState", "lucid._factories._generator", "_StreamState"),
+    ),
     "lucid.compile._core.signature": (
         ("Module", "lucid.nn.module", "Module"),
         ("Tensor", "lucid._tensor.tensor", "Tensor"),

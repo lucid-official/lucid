@@ -54,6 +54,10 @@ sequentially with only its own activations resident.
 
 Correctness: token-identical parameter gradients to the monolithic
 ``segments=1`` path (same emitters, same forward recompute, exact chain rule).
+A segment whose forward draws random values (a dropout mask, a sampler) is
+recomputed from the stream position its forward started at, so the backward
+differentiates the draws the forward applied and the stream ends where
+eager's does (``_core/rng_replay``, LCD-896).
 """
 
 import time
@@ -61,10 +65,12 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable, Sequence, cast, final, override
 
 from lucid._C import engine as _C_engine
+from lucid._factories._generator import _stream_states
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.compile._core.bn_runstats import BnWriteback
 from lucid.compile._core.buffer_writes import TraceAnswer, eager_rerun
+from lucid.compile._core.rng_replay import advance_since, replayed
 from lucid.compile._core.signature import CacheKey, outside_feeds, tree_tensors
 
 if TYPE_CHECKING:
@@ -122,6 +128,9 @@ class _SegCompiled:
     bn: BnWriteback = field(default_factory=BnWriteback)
     # Every tensor the traces were fed from outside, for ``ParamFingerprint.settle``.
     fed: tuple[_C_engine.TensorImpl, ...] = ()
+    # Whether the segment draws random values.  Both executables draw them anew
+    # on every run, so the backward replays the forward's draws (LCD-896).
+    draws: bool = False
 
 
 def _segment_key(x: Tensor, fingerprint: ParamFingerprint) -> CacheKey:
@@ -137,23 +146,19 @@ def _segment_key(x: Tensor, fingerprint: ParamFingerprint) -> CacheKey:
     return fingerprint.key_of((x,), {}, dynamic=False)
 
 
+def _feed_id(ext: dict[int, object], impl: object) -> int | None:
+    """The trace feed id of ``impl`` (by pointer identity), or ``None``."""
+    return next((tid for tid, held in ext.items() if held is impl), None)
+
+
 def _match_param_ids(ext: dict[int, object], param_impls: Sequence[object]) -> list[int] | None:
     """Map each parameter impl to its trace feed id (by pointer identity).
 
     Returns ``None`` if any parameter was not observed in the trace (segment
     forward did not use it) → the step falls back to eager.
     """
-    param_ids: list[int] = []
-    for p_impl in param_impls:
-        found: int | None = None
-        for tid, impl in ext.items():
-            if impl is p_impl:
-                found = tid
-                break
-        if found is None:
-            return None
-        param_ids.append(found)
-    return param_ids
+    found = [_feed_id(ext, p_impl) for p_impl in param_impls]
+    return None if None in found else [tid for tid in found if tid is not None]
 
 
 def _build_feed_plan(
@@ -273,13 +278,28 @@ def _trace_segment_forward(
     return (tracer, _wrap(answer[0])) if answer else None
 
 
-def _trace_segment_backward(seg: _Segment, x: Tensor, go: Tensor) -> Tracer | None:
+def _trace_segment_backward(
+    seg: _Segment, x: Tensor, go: Tensor, drew: dict[_C_engine.Generator, int]
+) -> Tracer | None:
     """Trace ``sum(seg.forward_fn(x) * go)``, the forward again: whatever it
-    writes was the forward trace's to stand for, so a write here refuses it."""
-    from lucid.compile._core.buffer_writes import held_writes, refuse
+    writes was the forward trace's to stand for, so a write here refuses it.
 
+    ``drew`` is what the forward trace drew from each stream.  The backward
+    replays the forward's draws from where it started, which is the forward's
+    only if it draws as much: otherwise the step refuses.
+    """
+    from lucid.compile._core.buffer_writes import held_writes, refuse
+    from lucid.compile._core.fallback import _fallback_notice
+
+    before = _stream_states()
     traced = _trace_segment_fn((x, seg.state), lambda: (seg.forward_fn(x) * go).sum())
     if traced is None:
+        return None
+    if advance_since(before) != drew:
+        _fallback_notice(
+            "rng-draws",
+            f"segment {seg.index} draws a different number of random values in its backward",
+        )
         return None
     refuse(traced[0], held_writes(traced[0], stands=False))
     return traced[0]
@@ -357,7 +377,9 @@ def _compile_segment(
     x_impl = _unwrap(x)
 
     # --- Trace 1: forward only (x -> y) -----------------------------------
+    rng_before = _stream_states()
     traced_fwd = _trace_segment_forward(seg, x, owner)
+    drew = advance_since(rng_before)
     if not isinstance(traced_fwd, tuple):
         return traced_fwd
     t_fwd, y = traced_fwd
@@ -368,11 +390,7 @@ def _compile_segment(
         return None
     y_id = int(found)
 
-    x_id_fwd: int | None = None
-    for tid, impl in ext_fwd.items():
-        if impl is x_impl:
-            x_id_fwd = tid
-            break
+    x_id_fwd = _feed_id(ext_fwd, x_impl)
     if x_id_fwd is None:
         return None
 
@@ -396,21 +414,15 @@ def _compile_segment(
     # ``grad_out`` is a fresh leaf feed shaped like ``y``; the backward feeds the
     # upstream cotangent into this slot.
     go = lucid.zeros(y.shape, dtype=y.dtype, device=y.device)
-    t_bwd = _trace_segment_backward(seg, x, go)
+    t_bwd = _trace_segment_backward(seg, x, go, drew)
     if t_bwd is None:
         return None
     g_bwd = t_bwd.graph
     ext_bwd = t_bwd.external_feeds
     loss_id = g_bwd.ops[-1].outputs[0].id
 
-    x_id_bwd: int | None = None
-    go_id_bwd: int | None = None
-    go_impl = _unwrap(go)
-    for tid, impl in ext_bwd.items():
-        if impl is x_impl:
-            x_id_bwd = tid
-        elif impl is go_impl:
-            go_id_bwd = tid
+    x_id_bwd = _feed_id(ext_bwd, x_impl)
+    go_id_bwd = _feed_id(ext_bwd, _unwrap(go))
     if x_id_bwd is None or go_id_bwd is None:
         return None
 
@@ -437,6 +449,7 @@ def _compile_segment(
         n_params=len(seg.params),
         bn=bn,
         fed=outside_feeds(t_fwd) + outside_feeds(t_bwd),
+        draws=bool(drew),
     )
 
 
@@ -538,6 +551,8 @@ class _SegmentFunction(Function):
         compiled = cast(_SegCompiled, holder[0])
         param_impls = [_unwrap(p) for p in params]
         feeds = _feed(compiled.fwd.feed_plan, _unwrap(x), None, param_impls)
+        # Where the streams stand before the forward draws, for the backward's replay.
+        ctx.rng = _stream_states() if compiled.draws else None
         outs = _C_engine.compile.run_executable(compiled.fwd.exe, feeds)
         y_impl = cast(_C_engine.TensorImpl, outs[0])
         compiled.bn.apply(outs[1:])
@@ -562,7 +577,11 @@ class _SegmentFunction(Function):
         param_impls = cast(list[object], ctx.param_impls)
 
         feeds = _feed(compiled.bwd.feed_plan, x_impl, _unwrap(grad_out), param_impls)
-        outs = _C_engine.compile.run_executable(compiled.bwd.exe, feeds)
+        # The recompute draws the values the forward applied, and the streams
+        # end where they stand: eager's backward draws nothing.
+        forward_rng = ctx.rng
+        with replayed(forward_rng if isinstance(forward_rng, tuple) else None):
+            outs = _C_engine.compile.run_executable(compiled.bwd.exe, feeds)
 
         # Output layout: [loss_seg, (grad_x?), *grad_params].
         idx = 1  # skip loss_seg
