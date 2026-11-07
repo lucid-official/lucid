@@ -19,6 +19,7 @@ to a tensor a gradient flows through refuses and runs eagerly.
 """
 
 from collections.abc import Callable, Iterator
+from contextlib import ExitStack
 
 import pytest
 
@@ -26,6 +27,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
+from lucid.autograd._grad_mode import _grad_mode_reads_refused
 from lucid.autograd.checkpoint import checkpoint
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.compile._core import fallback
@@ -518,17 +520,6 @@ def _branch_nonreentrant(s: _Holds, y: Tensor) -> Tensor:
     return checkpoint(_branches_on_grad_mode, y, use_reentrant=False)
 
 
-_READ_NOT_REFUSED = pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "LCD-907: a checkpointed function reading is_grad_enabled() is recorded as "
-        "the run backward makes, its loss wrong; the refusal waits on LCD-906's "
-        "_grad_mode.py"
-    ),
-)
-
-
-@_READ_NOT_REFUSED
 @pytest.mark.parametrize("entry", ["make_step", "fused_step"])
 @pytest.mark.parametrize(
     "body",
@@ -589,3 +580,37 @@ def test_the_cache_tells_a_block_from_the_same_ops_without_it() -> None:
         model.zero_grad()
         lucid.compile.make_step(model, _loss)(x).backward()
         assert float((model.p.grad - want).abs().max().item()) < 3e-4
+
+
+def _reads_inside(scopes: int) -> tuple[bool, str]:
+    """Open ``scopes`` nested refusals around one read, in a recording."""
+    x = lucid.ones(2, WIDTH, device=COMPILE_DEVICE)
+    with recording(watch=(x,)) as tracer, ExitStack() as stack:
+        for i in range(scopes):
+            stack.enter_context(_grad_mode_reads_refused(f"scope {i}"))
+        lucid.is_grad_enabled()
+    return bool(tracer.graph.unsupported), str(tracer.graph.unsupported)
+
+
+def test_a_read_of_the_grad_mode_marks_a_recording_only_inside_a_refusal() -> None:
+    assert _reads_inside(0)[0] is False
+    refused, why = _reads_inside(1)
+    assert refused and "scope 0" in why
+
+
+def test_the_innermost_refusal_gives_the_reason() -> None:
+    assert "scope 1" in _reads_inside(2)[1]
+
+
+def test_a_refusal_is_undone_when_its_body_raises() -> None:
+    with pytest.raises(ZeroDivisionError):
+        with _grad_mode_reads_refused("scope"):
+            1 / 0
+    assert _reads_inside(0)[0] is False
+
+
+def test_a_read_outside_any_recording_is_unchanged_by_a_refusal() -> None:
+    with _grad_mode_reads_refused("scope"):
+        assert lucid.is_grad_enabled() is True
+        with lucid.no_grad():
+            assert lucid.is_grad_enabled() is False

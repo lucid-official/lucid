@@ -56,8 +56,14 @@ from lucid._factories.creation import zeros
 from lucid._factories.random import get_rng_state, set_rng_state
 from lucid._tensor.tensor import Tensor
 from lucid.amp._state import AutocastState
-from lucid.autograd._grad_mode import no_grad, enable_grad
+from lucid.autograd._grad_mode import _grad_mode_reads_refused, enable_grad, no_grad
 from lucid.autograd.function import Function, FunctionCtx
+
+
+_READS_THE_MODE = (
+    "a checkpointed function read is_grad_enabled(), which differs between its forward "
+    "(no_grad) and its recompute (enable_grad): one recording cannot stand for both"
+)
 
 
 @final
@@ -178,8 +184,12 @@ def _make_checkpoint_fn(
             # a compile recording this one run stands for both, and the backward
             # differentiates it: it runs as the second run does, so a ``no_grad``
             # inside the segment is the only thing that stops a gradient there.
-            with enable_grad() if ctx._recorded_for_backward else no_grad():
-                output = fn(*real, **kw)
+            if ctx._recorded_for_backward:
+                with enable_grad(), _grad_mode_reads_refused(_READS_THE_MODE):
+                    output = fn(*real, **kw)
+            else:
+                with no_grad():
+                    output = fn(*real, **kw)
             return output
 
         @override

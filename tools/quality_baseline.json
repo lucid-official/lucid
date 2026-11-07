@@ -2221,7 +2221,6 @@
     "lucid/utils/rollout/_driver.py": 1
    },
    "RET504": {
-    "lucid/autograd/checkpoint.py": 1,
     "lucid/utils/transforms/functional.py": 1
    },
    "RET505": {

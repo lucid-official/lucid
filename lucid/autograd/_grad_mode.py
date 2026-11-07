@@ -3,7 +3,9 @@ Gradient mode context managers and decorators.
 """
 
 import functools
-from contextlib import AbstractContextManager
+import threading
+from collections.abc import Iterator
+from contextlib import AbstractContextManager, contextmanager
 from typing import Callable, Self, overload, override
 
 from lucid._C import engine as _C_engine
@@ -263,6 +265,33 @@ class set_grad_enabled(_GradScope):
         return super().__call__(fn)
 
 
+class _ReadsRefused(threading.local):
+    """The reasons, innermost last, a read of the grad mode is refused for on this thread."""
+
+    def __init__(self) -> None:
+        self.whys: list[str] = []
+
+
+_READS_REFUSED = _ReadsRefused()
+
+
+@contextmanager
+def _grad_mode_reads_refused(why: str) -> Iterator[None]:
+    """Make ``is_grad_enabled()`` refuse an active compile recording while the body runs.
+
+    A recording runs some functions once where eager runs them twice under
+    different modes (a checkpointed segment: forward under ``no_grad``, the
+    recompute under ``enable_grad``).  What such a function reads from the mode
+    cannot be one recorded answer, so a read marks the recording unsupported and
+    the call runs eagerly.  Outside a recording the read is unchanged.
+    """
+    _READS_REFUSED.whys.append(why)
+    try:
+        yield
+    finally:
+        _READS_REFUSED.whys.pop()
+
+
 def is_grad_enabled() -> bool:
     r"""Return whether autograd gradient tracking is currently enabled.
 
@@ -297,6 +326,10 @@ def is_grad_enabled() -> bool:
     ...     is_grad_enabled()
     False
     """
+    if _READS_REFUSED.whys:
+        tracer = _C_engine.compile.current_tracer()
+        if tracer is not None:
+            tracer.mark_unsupported(_READS_REFUSED.whys[-1])
     return _C_engine.raw_grad_enabled()
 
 
