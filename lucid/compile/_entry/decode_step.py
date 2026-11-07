@@ -25,6 +25,17 @@ no ``copy_`` kernel dispatch).  Because the cache buffers are fed per call from
 ``static_cache.key_cache`` / ``value_cache``, the next step reads the
 rolled-forward value directly.
 
+Writes to anything else
+-----------------------
+A forward that also updates a tensor it did not create (a running tally, a view
+of a buffer, a batch norm's running statistics) has that write carried like
+:func:`lucid.compile` carries it (:class:`CarriedWrites`): put back after the
+trace, asked of the executable as extra outputs, copied into the tensor after
+every run.  The cache's own buffers are not such a write — ``index_copy`` makes
+new buffers and the step rebinds them — so they stay on the rebind path.  A
+write that lands in one of the call's own arguments has nowhere to go, and the
+step runs eagerly (LCD-860).
+
 Under grad mode a step that reads a tensor requiring grad — the model's
 parameters included — runs ``forward_fn`` eagerly, as a :func:`lucid.compile`
 call does: the executable records no autograd graph (LCD-618).
@@ -37,8 +48,16 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Protocol, cast, final
 
 from lucid._C import engine as _C_engine
-from lucid.compile._core.buffer_writes import rebound_slots
+from lucid.compile._core.bn_runstats import model_has_cumulative_bn
+from lucid.compile._core.buffer_writes import (
+    CarriedWrites,
+    carried_writes,
+    eager_rerun,
+    held_writes,
+    refuse,
+)
 from lucid.compile._core.fallback import _fallback_notice
+from lucid.compile._core.rebound_slots import REBOUND_MARK
 from lucid.compile._core.signature import TraceReads, tree_requires_grad
 
 if TYPE_CHECKING:
@@ -110,6 +129,9 @@ class _DecodeEntry:
     cp_feed_indices: tuple[int, ...] = ()
     key_buf_feeds: tuple[tuple[int, int], ...] = ()
     val_buf_feeds: tuple[tuple[int, int], ...] = ()
+    # Outside tensors the call wrote and the batch norm statistics it handed
+    # out: the executable's outputs after the cache buffers (LCD-860).
+    carried: CarriedWrites = CarriedWrites()
 
 
 def _needs_gradients(
@@ -175,17 +197,37 @@ def _trace_decode_step(
     finally:
         _tls.tracing = False
 
-    # A replay runs no Python: a step that rebinds a tensor attribute it reads
-    # would be fed the trace's value for good (LCD-903).  Put back, for the eager
-    # call that follows.
-    rebound = rebound_slots(tracer)
-    if rebound is not None:
-        rebound.restore()
-        _fallback_notice("rebound-slot", rebound.why)
-    if rebound is not None or not tracer.graph.ops or not isinstance(out, Tensor):
+    if not tracer.graph.ops or not isinstance(out, Tensor):
         _restore_cache(static_cache, snap)
+        refuse(tracer)
         return None
     return tracer, out
+
+
+def _carry_writes(
+    tracer: Tracer, adapter: Module, call: tuple[Tensor, Tensor]
+) -> CarriedWrites | None:
+    """What the executable must write back besides the cache buffers, or ``None``
+    when the step has to run eagerly.
+
+    Puts every outside tensor the trace wrote back to its value from before it,
+    and the slots it rebound (LCD-903): the eager call that follows applies them
+    once, as a compiled run would.  Call with the trace's result held by the
+    tracer (``keep_answer``), not by Python: a result made and written in place
+    would otherwise count as a tensor the call kept.
+    """
+    from lucid._dispatch import _unwrap
+
+    held = held_writes(tracer, stands=False)
+    carried = carried_writes(tracer, adapter, [_unwrap(t) for t in call], held)
+    if held:
+        why = str(tracer.graph.unsupported)
+        _fallback_notice("rebound-slot" if why.startswith(REBOUND_MARK) else "held-write", why)
+        return None
+    if isinstance(carried, str):
+        _fallback_notice("uncarried-write", carried)
+        return None
+    return carried
 
 
 def _collect_cache_write_ids(
@@ -282,6 +324,14 @@ def _compile_decode_entry(
     from lucid._dispatch import _unwrap
     from lucid.compile._core.attention_probe import maybe_probe_for_graph
 
+    if model_has_cumulative_bn(adapter):
+        # Its update needs the batch count on the host: no executable carries it.
+        _fallback_notice(
+            "batch-norm-cumulative",
+            "a BatchNorm with momentum=None (cumulative average) cannot have its "
+            "statistics carried by a compiled decode step",
+        )
+        return None
     t0 = time.perf_counter()
     n_layers = len(static_cache.key_cache)
     snap = (
@@ -302,15 +352,20 @@ def _compile_decode_entry(
     ext = tracer.external_feeds
 
     collected = _collect_cache_write_ids(tracer, out, static_cache, orig_key, orig_val)
+    tracer.keep_answer([_unwrap(out)])
+    del traced, out
     _restore_cache(static_cache, snap)
-    if collected is None:
+    carried = _carry_writes(tracer, adapter, (input_ids, cache_position))
+    if collected is None or carried is None:
         return None
     write_ids, buf_slot = collected
 
     try:
-        exe = _C_engine.compile.compile_or_cached(graph, dict(ext), False, [], write_ids)
-    except RuntimeError:
-        return None
+        exe = _C_engine.compile.compile_or_cached(
+            graph, dict(ext), False, [], [*write_ids, *carried.out_ids]
+        )
+    except RuntimeError:  # an op with no emitter: this step runs eagerly
+        exe = None
     if exe is None:
         return None
 
@@ -335,6 +390,7 @@ def _compile_decode_entry(
         n_buffers=2 * n_layers,
         compile_ms=(time.perf_counter() - t0) * 1000.0,
         reads=TraceReads.of(tracer, exe.input_ids, list(input_source)),
+        carried=carried,
         feed_template=feed_template,
         ids_feed_indices=ids_feed_indices,
         cp_feed_indices=cp_feed_indices,
@@ -368,11 +424,13 @@ def _run_decode_entry(
     entry.n_hits += 1
 
     n_expected = 1 + entry.n_buffers
-    if len(outs) != n_expected:
+    if len(outs) != n_expected + len(entry.carried):
         raise RuntimeError(
             f"compiled_decode_step: executable returned {len(outs)} outputs, "
-            f"expected {n_expected} (1 output + {entry.n_buffers} cache buffers)"
+            f"expected {n_expected + len(entry.carried)} (1 output + {entry.n_buffers} cache "
+            f"buffers + {len(entry.carried)} batch norm statistics and outside writes)"
         )
+    entry.carried.apply(outs[n_expected:])
     n_layers = entry.n_buffers // 2
     for layer in range(n_layers):
         base = 1 + 2 * layer
@@ -473,7 +531,8 @@ def compiled_decode_step(
                 else:
                     cache[key] = entry
         if entry is None or _needs_gradients(call, self_cache, cross_cache, entry, adapter):
-            return forward_fn(input_ids, cache_position)
+            with eager_rerun():  # what a refused trace put back, written once
+                return forward_fn(input_ids, cache_position)
         return _run_decode_entry(entry, self_cache, input_ids, cache_position)
 
     step.cache = cache  # type: ignore[attr-defined]

@@ -58,11 +58,12 @@ def model_has_cumulative_bn(model: Module) -> bool:
     reference does, so it reads no count; matched by attribute it sent a
     compilable step to eager, and made ``compiled_step`` refuse it (LCD-521).
     """
+    from lucid.compile._core.signature import tree_modules
     from lucid.nn.modules.normalization import _BatchNormBase
 
     return any(
         isinstance(m, _BatchNormBase) and m.track_running_stats and m.momentum is None
-        for m in model.modules()
+        for m in tree_modules(model)
     )
 
 
@@ -180,6 +181,7 @@ def bn_counter_targets(model: Module, tracer: Tracer) -> list[tuple[Module, int]
         ``(module, call_count)`` pairs for observed layers with live counters.
     """
     from lucid._dispatch import _unwrap
+    from lucid.compile._core.signature import tree_modules
     from lucid.nn.modules.normalization import _BatchNormBase
 
     counts: dict[int, int] = {}
@@ -193,7 +195,7 @@ def bn_counter_targets(model: Module, tracer: Tracer) -> list[tuple[Module, int]
                 roots[int(node.outputs[1].id)] = root
     feeds = {id(impl): tid for tid, impl in tracer.external_feeds.items()}
     targets: list[tuple[Module, int]] = []
-    for module in model.modules():
+    for module in tree_modules(model):
         if not (isinstance(module, _BatchNormBase) and module.training):
             continue
         mean = module._buffers.get("running_mean")

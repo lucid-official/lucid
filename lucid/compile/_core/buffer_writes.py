@@ -108,11 +108,11 @@ class CarriedWrites:
     ``lucid.compile`` carried the in-place writes, and under ``no_grad`` a
     functional batch norm's statistics stayed where they were (LCD-875).
 
-    ``lucid.compile`` and the monolithic ``make_step`` carry this plan, and only
-    they.  A segmented step and ``compiled_step`` carry a :class:`BnWriteback` and
-    :func:`refuse` any in-place write; ``fused_step``'s executable writes the
-    statistics itself and carries the rest (:func:`require_outside_writes`).
-    ``compiled_decode_step`` has no part in it.
+    ``lucid.compile``, the monolithic ``make_step`` and ``compiled_decode_step``
+    carry this plan, and only they.  A segmented step and ``compiled_step`` carry a
+    :class:`BnWriteback` and :func:`refuse` any in-place write; ``fused_step``'s
+    executable writes the statistics itself and carries the rest
+    (:func:`require_outside_writes`).
 
     Attributes
     ----------

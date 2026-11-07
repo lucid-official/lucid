@@ -636,6 +636,17 @@ def _tree_walk(model: object) -> _TreeWalk:
     return walk
 
 
+def tree_modules(model: object) -> list[Module]:
+    """Every module of ``model``'s tree, each once: ``model`` itself and the
+    modules a wrapped callable is bound to, closes over or reads as a global.
+
+    ``model.modules()`` alone misses the latter: a callable wrapped by an entry
+    point is an adapter with no submodules, so anything that walks the tree for
+    what a call writes (a batch norm's counter) must come here.
+    """
+    return _iter_modules(_root_modules(model))
+
+
 def tree_tensors(model: object) -> tuple[Tensor, ...]:
     """Every parameter and buffer of ``model``'s tree, from the cached walk.
 
