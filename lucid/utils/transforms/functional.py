@@ -1075,9 +1075,17 @@ def equalize(img: Tensor, clip_limit: float | None = None) -> Tensor:
     -------
     Tensor
         Equalized image, same shape and dtype as ``img``.
+
+    Notes
+    -----
+    Not differentiable.  The result is a lookup of ``img`` quantised to
+    256 bins, so it is piecewise constant in the input.  The output
+    never carries a graph — including a channel too flat to remap, which
+    would otherwise hand a gradient back for that channel alone.
     """
     unbatched = img.ndim == 3
-    x = img[None] if unbatched else img
+    x = img.detach()
+    x = x[None] if unbatched else x
     b, c, h, w = (int(d) for d in x.shape)
     imgs = []
     for bi in range(b):
@@ -1398,6 +1406,12 @@ def posterize(img: Tensor, num_bits: int) -> Tensor:
     -------
     Tensor
         Quantised image, same shape and dtype as ``img``.
+
+    Notes
+    -----
+    Not differentiable for ``num_bits < 8``: the integer round-trip
+    leaves the result without a graph.  ``num_bits == 8`` returns
+    ``img`` unchanged, graph included.
     """
     if not 1 <= num_bits <= 8:
         raise ValueError(f"num_bits must be in [1, 8], got {num_bits}")

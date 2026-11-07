@@ -588,6 +588,10 @@ NOT_DIFFERENTIABLE: dict[str, str] = {
     "lucid.heaviside": "a step function the reference defines no derivative for",
     "lucid.nn.utils.clip_grad_norm": "rescales .grad in place; the norm is bookkeeping",
     "lucid.nn.utils.get_total_norm": "a norm of .grad tensors, read after backward",
+    "lucid.utils.transforms.functional.equalize": (
+        "a lookup of the image quantised to 256 bins: piecewise constant; the "
+        "reference's tensor path refuses a float image, its v2 path returns it detached"
+    ),
     "lucid.utils.transforms.functional.posterize": "bit-level quantisation of pixel values",
     "lucid.utils.transforms.functional.rotation_matrix": (
         "built from Python floats — an angle, a centre and a scale"
