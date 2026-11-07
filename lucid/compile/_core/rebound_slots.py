@@ -160,7 +160,9 @@ class SlotWatch:
 
     A slot is a module's attribute, an item of a ``dict`` or ``list`` held in one
     (to :attr:`MAX_DEPTH` levels, at most :attr:`MAX_ITEMS` items each), or a
-    closure cell or global of the callable.  Larger containers are data, not
+    closure cell or global of the callable.  Only the built-in ``dict``, ``list``
+    and ``tuple`` are opened: a subclass may override what reading or copying it
+    does, and that would run in the user's call.  Larger containers are data, not
     state, and are taken as one value.
 
     Each :meth:`rebound` compares the slots with how they were at the last one
@@ -201,17 +203,15 @@ class SlotWatch:
         containers: list[tuple[object, object]],
     ) -> None:
         index, name, keys = path
-        if (
-            len(keys) < self.MAX_DEPTH
-            and isinstance(value, (dict, list, tuple))
-            and len(value) <= self.MAX_ITEMS
-        ):
-            if not isinstance(value, tuple):
-                containers.append((value, value.copy()))
-            for key, item in value.items() if isinstance(value, dict) else enumerate(value):
-                self._open((index, name, (*keys, key)), item, leaves, containers)
-        else:
+        opened = _opened(value, self.MAX_ITEMS) if len(keys) < self.MAX_DEPTH else None
+        if opened is None:
             leaves[path] = value
+            return
+        items, copy = opened
+        if copy is not None:
+            containers.append((value, copy))
+        for key, item in items:
+            self._open((index, name, (*keys, key)), item, leaves, containers)
 
     def rebound(self, tracer: _C_engine.compile.Tracer) -> Rebinding | None:
         """What the traced call rebound that a compiled run would get wrong.
@@ -263,6 +263,18 @@ class SlotWatch:
                     yield _put(root, name, before.get(name, _ABSENT))
         for container, copy in base.containers:
             yield _refill(container, copy)
+
+
+def _opened(value: object, limit: int) -> tuple[list[tuple[object, object]], object | None] | None:
+    """``value``'s ``(key, item)`` pairs and a copy to restore it from (none for a
+    tuple), when it is exactly a ``dict``, ``list`` or ``tuple`` of at most ``limit`` items."""
+    if type(value) is dict and len(value) <= limit:
+        return list(value.items()), value.copy()
+    if type(value) is list and len(value) <= limit:
+        return list(enumerate(value)), value.copy()
+    if type(value) is tuple and len(value) <= limit:
+        return list(enumerate(value)), None
+    return None
 
 
 def _same_tensor(a: object, b: object) -> bool:

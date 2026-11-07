@@ -34,6 +34,7 @@ import lucid.nn as nn
 import lucid.optim as optim
 from lucid._C import engine as _C_engine
 from lucid.compile._core import fallback
+from lucid.compile._core.buffer_writes import _HELD
 from lucid.compile._entry.decode_step import compiled_decode_step
 from lucid.compile._entry.function import compiled_step
 from lucid.compile._entry.fused_step import fused_step
@@ -527,3 +528,35 @@ def _decode(compiled: bool) -> list[Tensor]:
 def test_a_decode_step_reads_the_attribute_it_rebinds() -> None:
     for i, (got, want) in enumerate(zip(_decode(True), _decode(False), strict=True)):
         assert float((got - want).abs().max().item()) < TOLERANCE, f"step {i}"
+
+
+@pytest.mark.parametrize("entry", list(ENTRIES))
+def test_no_watch_outlives_the_build(entry: str) -> None:
+    """The watch holds the model and the tensors it had; the attempt that took it drops it."""
+    _run(_Recurrent, entry)
+    assert _HELD.watch is None
+
+
+def test_no_watch_outlives_a_decode_build() -> None:
+    _decode(True)
+    assert _HELD.watch is None
+
+
+class _OddDict(dict[str, Tensor]):
+    """A subclass whose copy raises: opening it would run that in the user's call."""
+
+    def copy(self) -> _OddDict:
+        raise RuntimeError("copy of a cache is not supported")
+
+
+class _OddCache(_Stateful):
+    def __init__(self) -> None:
+        super().__init__()
+        self.cache = _OddDict()
+
+    def combine(self, y: Tensor, x: Tensor) -> Tensor:
+        return y + self.cache["h"] if "h" in self.cache else y
+
+
+def test_a_dict_subclass_is_not_opened() -> None:
+    _run(_OddCache, "module_no_grad")
