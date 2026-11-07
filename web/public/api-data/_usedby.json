@@ -196,6 +196,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.autograd._overwritten"
+    },
+    {
+      "kind": "module",
       "module": "lucid.autograd._python_node"
     },
     {
@@ -2954,6 +2958,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.models.generative.drifting._model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.models.generative.flow_matching._model"
     },
     {
@@ -3366,6 +3374,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.models.generative.drifting._model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.models.generative.flow_matching._model"
     },
     {
@@ -3397,6 +3409,10 @@
     {
       "kind": "module",
       "module": "lucid.models.generative.dit._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting._model"
     },
     {
       "kind": "module",
@@ -3641,6 +3657,10 @@
     {
       "kind": "module",
       "module": "lucid.models.generative.dreamer_v3._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting._model"
     },
     {
       "kind": "module",
@@ -3951,6 +3971,10 @@
     {
       "kind": "module",
       "module": "lucid.models.generative.dreamer_v3._pretrained"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting._pretrained"
     },
     {
       "kind": "module",
@@ -4927,6 +4951,104 @@
     {
       "kind": "module",
       "module": "lucid.models.generative.dreamer_v3"
+    }
+  ],
+  "lucid.models.generative.drifting": [
+    {
+      "kind": "module",
+      "module": "lucid.models"
+    }
+  ],
+  "lucid.models.generative.drifting._config.DriftingConfig": [
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting._feature_encoder"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting._pretrained"
+    }
+  ],
+  "lucid.models.generative.drifting._model.DriftingForImageGeneration": [
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting._pretrained"
+    }
+  ],
+  "lucid.models.generative.drifting._model.DriftingModel": [
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting._pretrained"
+    }
+  ],
+  "lucid.models.generative.drifting._model.DriftingOutput": [
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting"
+    }
+  ],
+  "lucid.models.generative.drifting._pretrained.drifting_base_16": [
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting"
+    }
+  ],
+  "lucid.models.generative.drifting._pretrained.drifting_base_16_gen": [
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting"
+    }
+  ],
+  "lucid.models.generative.drifting._pretrained.drifting_base_2": [
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting"
+    }
+  ],
+  "lucid.models.generative.drifting._pretrained.drifting_base_2_gen": [
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting"
+    }
+  ],
+  "lucid.models.generative.drifting._pretrained.drifting_large_16": [
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting"
+    }
+  ],
+  "lucid.models.generative.drifting._pretrained.drifting_large_16_gen": [
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting"
+    }
+  ],
+  "lucid.models.generative.drifting._pretrained.drifting_large_2": [
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting"
+    }
+  ],
+  "lucid.models.generative.drifting._pretrained.drifting_large_2_gen": [
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting"
     }
   ],
   "lucid.models.generative.flow_matching": [
@@ -8597,6 +8719,12 @@
       "module": "lucid.models.vision.efficientformer._pretrained"
     }
   ],
+  "lucid.models.vision.efficientformer._model.EfficientFormerOutput": [
+    {
+      "kind": "module",
+      "module": "lucid.models.vision.efficientformer"
+    }
+  ],
   "lucid.models.vision.efficientformer._pretrained.efficientformer_l1": [
     {
       "kind": "module",
@@ -9047,6 +9175,12 @@
     {
       "kind": "module",
       "module": "lucid.models.vision.fcn._pretrained"
+    }
+  ],
+  "lucid.models.vision.fcn._model.FCNOutput": [
+    {
+      "kind": "module",
+      "module": "lucid.models.vision.fcn"
     }
   ],
   "lucid.models.vision.fcn._pretrained.fcn_resnet101": [
@@ -12738,6 +12872,14 @@
     },
     {
       "kind": "module",
+      "module": "lucid.models.generative.drifting._feature_encoder"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting._model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.models.generative.flow_matching._model"
     },
     {
@@ -13577,6 +13719,14 @@
     {
       "kind": "module",
       "module": "lucid.models.generative.dreamer_v3._model"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting._feature_encoder"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting._model"
     },
     {
       "kind": "module",
@@ -15499,6 +15649,10 @@
     {
       "kind": "module",
       "module": "lucid.compile._core.bn_runstats"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.compile._core.buffer_writes"
     },
     {
       "kind": "module",
@@ -20846,6 +21000,10 @@
     }
   ],
   "lucid.utils.checkpoint.checkpoint": [
+    {
+      "kind": "module",
+      "module": "lucid.models.generative.drifting._model"
+    },
     {
       "kind": "module",
       "module": "lucid.utils"

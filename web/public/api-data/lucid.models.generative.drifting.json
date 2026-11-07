@@ -1,0 +1,2869 @@
+{
+  "slug": "lucid.models.generative.drifting",
+  "name": "drifting",
+  "path": "lucid.models.generative.drifting",
+  "kind": "module",
+  "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/__init__.py#L1",
+  "members": [
+    {
+      "name": "DriftingConfig",
+      "path": "lucid.models.generative.drifting._config.DriftingConfig",
+      "kind": "class",
+      "class_kind": "dataclass",
+      "bases": [
+        "GenerativeModelConfig"
+      ],
+      "labels": [],
+      "signature": "DriftingConfig(sample_size: int | tuple[int, int] = 32, in_channels: int = 4, out_channels: int = 4, act_fn: GenerativeActivation = 'silu', patch_size: int = 2, hidden_size: int = 768, depth: int = 12, num_heads: int = 12, mlp_ratio: float = 4.0, cond_dim: int = 768, num_classes: int = 1000, noise_classes: int = 64, noise_coords: int = 32, n_cls_tokens: int = 16, use_qknorm: bool = True, use_swiglu: bool = True, use_rope: bool = True, use_rmsnorm: bool = True, attn_fp32: bool = True, use_remat: bool = False, frequency_embedding_size: int = 256, temperatures: tuple[float, ...] = (0.2, 0.05, 0.02), gen_per_label: int = 64, cfg_min: float = 1.0, cfg_max: float = 4.0, neg_cfg_pw: float = 5.0, no_cfg_frac: float = 0.0, patch_mean_size: tuple[int, ...] = (2, 4), patch_std_size: tuple[int, ...] = (2, 4), use_mean: bool = True, use_std: bool = True, every_k_block: int | None = 2, pos_per_sample: int = 64, neg_per_sample: int = 32, positive_bank_size: int = 128, negative_bank_size: int = 1000, use_mae: bool = True, use_convnext: bool = False, mae_base_channels: int = 640, mae_layers: tuple[int, int, int, int] = (3, 4, 6, 3), mae_input_patch_size: int = 1)",
+      "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_config.py#L59",
+      "subcategory": "config",
+      "methods": [
+        {
+          "name": "grid_size",
+          "path": "lucid.models.generative.drifting._config.DriftingConfig.grid_size",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "grid_size: int",
+          "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_config.py#L274",
+          "summary": "Tokens per side of the patch grid.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "num_patches",
+          "path": "lucid.models.generative.drifting._config.DriftingConfig.num_patches",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "num_patches: int",
+          "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_config.py#L279",
+          "summary": "Image tokens — `(sample_size / patch_size)^2`, 256 for every release.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "head_dim",
+          "path": "lucid.models.generative.drifting._config.DriftingConfig.head_dim",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "head_dim: int",
+          "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_config.py#L284",
+          "summary": "Per-head width.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "swiglu_hidden_size",
+          "path": "lucid.models.generative.drifting._config.DriftingConfig.swiglu_hidden_size",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "swiglu_hidden_size: int",
+          "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_config.py#L289",
+          "summary": "SwiGLU inner width: two thirds of `hidden * mlp_ratio`, rounded up to 32.",
+          "extended": "The release computes `int(2/3 * int(hidden * mlp_ratio))` and then\nrounds up to a multiple of 32 — 2048 for `B`, 2752 for `L`.",
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "Configuration for the Drifting Model family.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "sample_size",
+          "annotation": "int",
+          "description": "Side of the generated field — the official `input_size`.  `32`\nfor the SD-VAE latent models, `256` for the pixel models.",
+          "default": "32"
+        },
+        {
+          "name": "in_channels",
+          "annotation": "int",
+          "description": "Channels of the noise and of the output.  The generator maps a\nnoise field to a sample of the same shape, so they must match.",
+          "default": "4, 4"
+        },
+        {
+          "name": "out_channels",
+          "annotation": "int",
+          "description": "Channels of the noise and of the output.  The generator maps a\nnoise field to a sample of the same shape, so they must match.",
+          "default": "4, 4"
+        },
+        {
+          "name": "patch_size",
+          "annotation": "int",
+          "description": "Tokenisation patch — `2` for `B/2` / `L/2`, `16` for\n`B/16` / `L/16`.  Both give 256 tokens.",
+          "default": "2"
+        },
+        {
+          "name": "hidden_size",
+          "annotation": "int",
+          "description": "Transformer width.",
+          "default": "768"
+        },
+        {
+          "name": "depth",
+          "annotation": "int",
+          "description": "Number of blocks.",
+          "default": "12"
+        },
+        {
+          "name": "num_heads",
+          "annotation": "int",
+          "description": "Attention heads.",
+          "default": "12"
+        },
+        {
+          "name": "mlp_ratio",
+          "annotation": "float",
+          "description": "Feed-forward expansion before the SwiGLU two-thirds rule.",
+          "default": "4.0"
+        },
+        {
+          "name": "cond_dim",
+          "annotation": "int",
+          "description": "Width of the conditioning vector that drives adaLN and the\nin-context tokens.  Every released model sets it equal to\n`hidden_size`.",
+          "default": "768"
+        },
+        {
+          "name": "num_classes",
+          "annotation": "int",
+          "description": "Class vocabulary.  There is no null class: guidance is trained in\nby conditioning on $\\alpha$, not by label dropout.",
+          "default": "1000"
+        },
+        {
+          "name": "noise_classes",
+          "annotation": "int",
+          "description": "Codebook size of the random *style embeddings* — the discrete half\nof the noise.  `0` disables them.",
+          "default": "64"
+        },
+        {
+          "name": "noise_coords",
+          "annotation": "int",
+          "description": "How many style indices are drawn per sample; their embeddings are\nsummed into the conditioning vector.",
+          "default": "32"
+        },
+        {
+          "name": "n_cls_tokens",
+          "annotation": "int",
+          "description": "In-context conditioning tokens prepended to the sequence.",
+          "default": "16"
+        },
+        {
+          "name": "use_qknorm",
+          "annotation": "bool",
+          "description": "The LightningDiT modernisations the paper adopts (A.2).",
+          "default": "True"
+        },
+        {
+          "name": "use_swiglu",
+          "annotation": "bool",
+          "description": "The LightningDiT modernisations the paper adopts (A.2).",
+          "default": "True"
+        },
+        {
+          "name": "use_rope",
+          "annotation": "bool",
+          "description": "The LightningDiT modernisations the paper adopts (A.2).",
+          "default": "True"
+        },
+        {
+          "name": "use_rmsnorm",
+          "annotation": "bool",
+          "description": "The LightningDiT modernisations the paper adopts (A.2).",
+          "default": "True"
+        },
+        {
+          "name": "attn_fp32",
+          "annotation": "bool",
+          "description": "Run attention in float32 when the model is in a narrower dtype.\n`False` for the released latent `B/2` and `L/2`.",
+          "default": "True"
+        },
+        {
+          "name": "use_remat",
+          "annotation": "bool",
+          "description": "Recompute each block on the backward pass instead of storing its\nactivations.  `True` for the released pixel models.",
+          "default": "False"
+        },
+        {
+          "name": "frequency_embedding_size",
+          "annotation": "int",
+          "description": "Width of the sinusoid the guidance scale is embedded through.",
+          "default": "256"
+        },
+        {
+          "name": "temperatures",
+          "annotation": "tuple of float",
+          "description": "Kernel temperatures $\\tau$ (the release's `R_list`).  One\nnormalised drift per temperature, summed.",
+          "default": "(0.2, 0.05, 0.02)"
+        },
+        {
+          "name": "gen_per_label",
+          "annotation": "int",
+          "description": "Generated samples per class label, $N_\\mathrm{neg}$.",
+          "default": "64"
+        },
+        {
+          "name": "cfg_min",
+          "annotation": "float",
+          "description": "Range of the training-time guidance scale $\\alpha$.",
+          "default": "1.0, 4.0"
+        },
+        {
+          "name": "cfg_max",
+          "annotation": "float",
+          "description": "Range of the training-time guidance scale $\\alpha$.",
+          "default": "1.0, 4.0"
+        },
+        {
+          "name": "neg_cfg_pw",
+          "annotation": "float",
+          "description": "Exponent of the power law $p(\\alpha) \\propto \\alpha^{-k}$ the\nscale is drawn from.",
+          "default": "5.0"
+        },
+        {
+          "name": "no_cfg_frac",
+          "annotation": "float",
+          "description": "Probability of replacing the drawn scale by `1` (no guidance).\n`0.5` for the released `L/2`.",
+          "default": "0.0"
+        },
+        {
+          "name": "patch_mean_size",
+          "annotation": "tuple of int",
+          "description": "Patch sides over which local feature means / stds are pooled (A.5).",
+          "default": "(2, 4)"
+        },
+        {
+          "name": "patch_std_size",
+          "annotation": "tuple of int",
+          "description": "Patch sides over which local feature means / stds are pooled (A.5).",
+          "default": "(2, 4)"
+        },
+        {
+          "name": "use_mean",
+          "annotation": "bool",
+          "description": "Whether each feature map also contributes its global mean / std.",
+          "default": "True"
+        },
+        {
+          "name": "use_std",
+          "annotation": "bool",
+          "description": "Whether each feature map also contributes its global mean / std.",
+          "default": "True"
+        },
+        {
+          "name": "every_k_block",
+          "annotation": "int or None",
+          "description": "Also take features from every `k`-th residual block of each\nstage.  `None` keeps only the stage outputs.",
+          "default": "2"
+        },
+        {
+          "name": "pos_per_sample",
+          "annotation": "int",
+          "description": "Positive (same-class) samples drawn per label, $N_\\mathrm{pos}$.",
+          "default": "64"
+        },
+        {
+          "name": "neg_per_sample",
+          "annotation": "int",
+          "description": "Unconditional real samples drawn per label, $N_\\mathrm{unc}$.\n`0` trains without guidance negatives.",
+          "default": "32"
+        },
+        {
+          "name": "positive_bank_size",
+          "annotation": "int",
+          "description": "Per-class sample-queue length.",
+          "default": "128"
+        },
+        {
+          "name": "negative_bank_size",
+          "annotation": "int",
+          "description": "Global unconditional queue length.",
+          "default": "1000"
+        },
+        {
+          "name": "use_mae",
+          "annotation": "bool",
+          "description": "Compute the loss in the latent- / pixel-MAE feature space.  No trained\nencoder is published, so see\n`DriftingForImageGeneration.load_feature_encoder`.",
+          "default": "True"
+        },
+        {
+          "name": "use_convnext",
+          "annotation": "bool",
+          "description": "Also use ConvNeXt-V2-Base (ImageNet-22k) features.  Pixel models only.",
+          "default": "False"
+        },
+        {
+          "name": "mae_base_channels",
+          "annotation": "int",
+          "description": "MAE ResNet base width $C$; stages are $C, 2C, 4C, 8C$.",
+          "default": "640"
+        },
+        {
+          "name": "mae_layers",
+          "annotation": "tuple of int",
+          "description": "Basic blocks per MAE stage — ResNet-34's.",
+          "default": "(3, 4, 6, 3)"
+        },
+        {
+          "name": "mae_input_patch_size",
+          "annotation": "int",
+          "description": "Space-to-depth patch applied before the MAE ResNet: `1` for the\n32x32x4 latent, `8` for 256x256x3 pixels (giving 32x32x192).",
+          "default": "1"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models.generative.drifting import DriftingConfig\n>>> config = DriftingConfig()\n>>> config.hidden_size, config.depth, config.patch_size\n(768, 12, 2)\n>>> config.num_patches, config.swiglu_hidden_size\n(256, 2048)"
+      ],
+      "notes": [
+        "Reference: Deng, Li, Li, Du, and He, *\"Generative Modeling via\nDrifting\"*, [arXiv:2602.04770](https://arxiv.org/abs/2602.04770), 2026.  Architecture: Appendix A.2 and\nTable 8.  Loss: Alg. 2 and Appendices A.5–A.7.\n\nWhere Table 8 and the released `configs/gen/*.yaml` disagree, the\nrelease wins, because the authors' checkpoints were trained by it: the\nlatent `B/2` uses 64 positives per label (Table 8 says 128)."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "DriftingForImageGeneration",
+      "path": "lucid.models.generative.drifting._model.DriftingForImageGeneration",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "ImageGenerationModel"
+      ],
+      "labels": [],
+      "signature": "DriftingForImageGeneration(config: DriftingConfig)",
+      "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_model.py#L878",
+      "subcategory": "model",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.models.generative.drifting._model.DriftingForImageGeneration.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(config: DriftingConfig)",
+          "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_model.py#L933",
+          "subcategory": "model",
+          "summary": "Initialise the model. See the class docstring for parameters.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "load_feature_encoder",
+          "path": "lucid.models.generative.drifting._model.DriftingForImageGeneration.load_feature_encoder",
+          "kind": "function",
+          "labels": [],
+          "signature": "load_feature_encoder(pretrained: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_model.py#L963",
+          "subcategory": "model",
+          "summary": "Build the frozen feature encoder, with random weights.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "pretrained",
+              "annotation": "bool",
+              "description": "No trained encoder is published, so `True` raises\n`NotImplementedError` before anything is allocated.",
+              "default": "False"
+            }
+          ],
+          "returns": {
+            "annotation": "_DriftingFeatureEncoder",
+            "description": "The encoder, also stored as `self.feature_encoder`, with every\nparameter frozen, on the generator's device and in its dtype.\nCalled on `(B, C, H, W)` samples it returns the feature sets\nthe loss is summed over, a dict of `(B, T, D)` tensors keyed by\nset name, `\"global\"` (the raw sample) first.  `forward`\nreads it from `self.feature_encoder`, so the return value is\nonly needed to look at the features."
+          },
+          "raises": [
+            {
+              "annotation": "NotImplementedError",
+              "description": "If `pretrained` is set."
+            }
+          ],
+          "examples": [],
+          "notes": [
+            "The paper's objective is the drifting loss in the feature space of\nan encoder trained as an MAE (A.3), and of ConvNeXt-V2 for pixels\n(A.4).  A random encoder is a different objective: training runs\nend to end against it, which exercises the pipeline, but do not\nexpect the paper's results from it.  `use_mae=False,\nuse_convnext=False` drifts in the raw space and needs no encoder."
+          ],
+          "attributes": [],
+          "warns": [
+            {
+              "annotation": "UserWarning",
+              "description": "If the config asks for a learned feature space, which this does\nnot deliver: see the Notes."
+            }
+          ],
+          "see_also": []
+        },
+        {
+          "name": "make_sample_queues",
+          "path": "lucid.models.generative.drifting._model.DriftingForImageGeneration.make_sample_queues",
+          "kind": "function",
+          "labels": [],
+          "signature": "make_sample_queues()",
+          "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_model.py#L1022",
+          "subcategory": "model",
+          "summary": "The two empty sample queues a training loop feeds (A.8's memory banks).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "_DriftingSampleQueue",
+            "description": "`num_classes` ring buffers of `positive_bank_size` real\nsamples each, one per class."
+          },
+          "raises": [],
+          "examples": [
+            ">>> import lucid\n>>> import lucid.models as models\n>>> model = models.create_model(\"drifting_base_2_gen\", pos_per_sample=3,\n...                             neg_per_sample=2, use_mae=False, sample_size=8,\n...                             hidden_size=32, cond_dim=32, depth=1, num_heads=4,\n...                             num_classes=10, gen_per_label=4)\n>>> positive_queue, unconditional_queue = model.make_sample_queues()\n>>> images, labels = lucid.randn(6, 4, 8, 8), lucid.tensor([0, 1, 0, 1, 0, 1])\n>>> positive_queue.add(images, labels)\n>>> unconditional_queue.add(images, lucid.zeros_like(labels))\n>>> step = lucid.tensor([0, 1])\n>>> positives, negatives = model.draw_training_batch(\n...     positive_queue, unconditional_queue, step)\n>>> positives.shape, negatives.shape\n((2, 3, 4, 8, 8), (2, 2, 4, 8, 8))\n>>> model(positives, step, negatives).loss.ndim\n0"
+          ],
+          "notes": [
+            "Each step, push the real batch into both with `add(samples,\nlabels)`: `(N, C, H, W)` samples and their `(N,)` integer\nlabels, all zeros for `unconditional_queue`.  A full buffer\noverwrites its oldest entry.  `draw_training_batch` then reads\n`pos_per_sample` positives per label and `neg_per_sample`\nunconditional negatives from them, which are the `images` and\n`negatives` of `forward`."
+          ],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "draw_training_batch",
+          "path": "lucid.models.generative.drifting._model.DriftingForImageGeneration.draw_training_batch",
+          "kind": "function",
+          "labels": [],
+          "signature": "draw_training_batch(positive_queue: _DriftingSampleQueue, unconditional_queue: _DriftingSampleQueue, labels: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_model.py#L1070",
+          "subcategory": "model",
+          "summary": "Draw what one training step reads from the two queues.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "positive_queue",
+              "annotation": "_DriftingSampleQueue",
+              "description": "The per-class queue `make_sample_queues` made.",
+              "default": null
+            },
+            {
+              "name": "unconditional_queue",
+              "annotation": "_DriftingSampleQueue",
+              "description": "The single-class queue `make_sample_queues` made.  With\n`neg_per_sample=0` it is not read, so it need not have been fed.",
+              "default": null
+            },
+            {
+              "name": "labels",
+              "annotation": "Tensor",
+              "description": "`(N_c,)` the classes to train on.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "Tensor",
+            "description": "`(N_c, pos_per_sample, ...)` samples of each label."
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "forward",
+          "path": "lucid.models.generative.drifting._model.DriftingForImageGeneration.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(images: Tensor, labels: Tensor, negatives: Tensor | None = None, guidance_scale: Tensor | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_model.py#L1152",
+          "subcategory": "model",
+          "summary": "One drifting training step.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "images",
+              "annotation": "Tensor",
+              "description": "Positives: `(N_c, N_pos, C, H, W)` real samples of each label,\nor `(N_c, C, H, W)` for one each.  At least one is required.",
+              "default": null
+            },
+            {
+              "name": "labels",
+              "annotation": "Tensor",
+              "description": "`(N_c,)` class labels.",
+              "default": null
+            },
+            {
+              "name": "negatives",
+              "annotation": "Tensor or None",
+              "description": "`(N_c, N_unc, C, H, W)` unconditional real samples (random\nclasses) — the extra negatives guidance trains with.  `None`,\nor `N_unc = 0`, trains without guidance.",
+              "default": "None"
+            },
+            {
+              "name": "guidance_scale",
+              "annotation": "Tensor or None",
+              "description": "`(N_c,)` guidance scales.  Drawn from the configured power law\nwhen `None` and negatives are given; `1` when neither is.",
+              "default": "None"
+            }
+          ],
+          "returns": {
+            "annotation": "DriftingOutput",
+            "description": "The loss, the generated batch, the scales and the per-feature\nterms."
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "If the batch is empty, or its tensors do not fit together."
+            },
+            {
+              "annotation": "RuntimeError",
+              "description": "If the config asks for a learned feature space and no encoder has\nbeen built."
+            }
+          ],
+          "examples": [],
+          "notes": [
+            "`gen_per_label` samples are generated per label.  Each feature set\ngets its own drifting loss, computed independently per label and\nlocation (rows `(label, location)`), against that label's\npositives, its own generated batch, and — weighted by\n$w = (\\alpha - 1)(N_\\mathrm{neg} - 1) / N_\\mathrm{unc}$ — the\nunconditional samples; the terms are summed (Eq. 14)."
+          ],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "generate",
+          "path": "lucid.models.generative.drifting._model.DriftingForImageGeneration.generate",
+          "kind": "function",
+          "labels": [],
+          "signature": "generate(n_samples: int = 1, labels: Tensor | None = None, guidance_scale: float | Tensor = 1.0, temperature: float = 1.0, noise: Tensor | None = None, style_indices: Tensor | None = None, device: str | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_model.py#L1256",
+          "subcategory": "model",
+          "summary": "Sample in one network evaluation.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "n_samples",
+              "annotation": "int",
+              "description": "How many to draw.",
+              "default": "1"
+            },
+            {
+              "name": "labels",
+              "annotation": "Tensor or None",
+              "description": "`(n_samples,)` class indices.  Drawn uniformly when `None` —\nthe model is class-conditional and has no null class.",
+              "default": "None"
+            },
+            {
+              "name": "guidance_scale",
+              "annotation": "float or Tensor",
+              "description": "Guidance scale $\\alpha$; any value in the trained range\nworks without retraining.  The paper's best: `1.0` for\n`L/2`, `B/16`, `L/16`; `1.1` for `B/2`.",
+              "default": "1.0"
+            },
+            {
+              "name": "temperature",
+              "annotation": "float",
+              "description": "Multiplier on the Gaussian noise (the release's `temp`).",
+              "default": "1.0"
+            },
+            {
+              "name": "noise",
+              "annotation": "Tensor or None",
+              "description": "`(n_samples, C, H, W)` noise; drawn when absent (and then\nscaled by `temperature`).",
+              "default": "None"
+            },
+            {
+              "name": "style_indices",
+              "annotation": "Tensor or None",
+              "description": "`(n_samples, noise_coords)` style indices; drawn when absent.",
+              "default": "None"
+            },
+            {
+              "name": "device",
+              "annotation": "str or None",
+              "description": "Where to draw.  Defaults to the model's device.",
+              "default": "None"
+            }
+          ],
+          "returns": {
+            "annotation": "GenerationOutput",
+            "description": "`samples` of shape `(n_samples, out_channels, H, W)` — an\nSD-VAE latent for the latent models, `[-1, 1]` RGB for the\npixel models."
+          },
+          "raises": [],
+          "examples": [
+            "A released configuration, shrunk by overrides so it builds quickly:\n>>> from lucid.models import create_model\n>>> model = create_model(\"drifting_base_2_gen\", sample_size=8, hidden_size=32,\n...                      cond_dim=32, depth=1, num_heads=4).eval()\n>>> model.generate(3, guidance_scale=1.5).samples.shape\n(3, 4, 8, 8)"
+          ],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "The drifting objective and its one-step sampler.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "config",
+          "annotation": "DriftingConfig",
+          "description": "The variant to build.",
+          "default": null
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.models.generative.drifting import (\n...     DriftingConfig, DriftingForImageGeneration)\n>>> config = DriftingConfig(sample_size=8, hidden_size=32, cond_dim=32, depth=1,\n...                         num_heads=4, num_classes=10, noise_classes=4,\n...                         noise_coords=2, n_cls_tokens=2, gen_per_label=4,\n...                         use_mae=False)\n>>> model = DriftingForImageGeneration(config)\n>>> model(lucid.randn(2, 3, 4, 8, 8), lucid.tensor([0, 1])).loss.ndim\n0\n>>> model.generate(2, labels=lucid.tensor([3, 7])).samples.shape\n(2, 4, 8, 8)"
+      ],
+      "notes": [
+        "Reference: Deng, Li, Li, Du, and He, *\"Generative Modeling via\nDrifting\"*, [arXiv:2602.04770](https://arxiv.org/abs/2602.04770), 2026.  Training is Alg. 1 with the\nfeature-space loss of Eq. (14) and the guidance of A.7; sampling is\none evaluation of $f_\\theta$.\n\nA checkpoint holds the generator alone: about 8.5 GB of encoder at real\nsize has no place in it, and `from_pretrained` loads strictly into\na model whose encoder is an empty shell.\n\nTrain under `lucid.amp.autocast` with `dtype=lucid.bfloat16`\nrather than casting the model, which loses optimizer updates (see\n`DriftingConfig`)."
+      ],
+      "attributes": [
+        {
+          "name": "drifting",
+          "annotation": "DriftingModel",
+          "description": "The generator — the only trainable network."
+        },
+        {
+          "name": "feature_encoder",
+          "annotation": "_DriftingFeatureEncoder",
+          "description": "The frozen $\\phi$.  Empty until\n`load_feature_encoder` builds it, unless the config drifts\nin the raw space (`use_mae=False, use_convnext=False`).  It moves\nand casts with the model but is not a child of it, so it is in no\n`state_dict`, `parameters()` or `train()` walk."
+        }
+      ],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "DriftingModel",
+      "path": "lucid.models.generative.drifting._model.DriftingModel",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "PretrainedModel"
+      ],
+      "labels": [],
+      "signature": "DriftingModel(config: DriftingConfig)",
+      "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_model.py#L242",
+      "subcategory": "model",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.models.generative.drifting._model.DriftingModel.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(config: DriftingConfig)",
+          "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_model.py#L302",
+          "subcategory": "model",
+          "summary": "Initialise the generator. See the class docstring for parameters.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "draw_style_indices",
+          "path": "lucid.models.generative.drifting._model.DriftingModel.draw_style_indices",
+          "kind": "function",
+          "labels": [],
+          "signature": "draw_style_indices(batch: int, device: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_model.py#L362",
+          "subcategory": "model",
+          "summary": "The discrete half of the noise: `(batch, noise_coords)` codebook indices.",
+          "extended": "Drawn uniformly, as the release does (`max(1, ·)` keeps the shape\nvalid when styles are disabled; the indices are then unused).",
+          "parameters": [
+            {
+              "name": "batch",
+              "annotation": "int",
+              "description": "Number of samples to draw indices for.",
+              "default": null
+            },
+            {
+              "name": "device",
+              "annotation": "str",
+              "description": "Device the indices are created on.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "Tensor",
+            "description": "`int64` indices of shape `(batch, max(1, noise_coords))`, each\nin `[0, max(1, noise_classes))`."
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "conditioning",
+          "path": "lucid.models.generative.drifting._model.DriftingModel.conditioning",
+          "kind": "function",
+          "labels": [],
+          "signature": "conditioning(labels: Tensor, guidance_scale: Tensor, style_indices: Tensor, dtype: lucid.dtype)",
+          "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_model.py#L390",
+          "subcategory": "model",
+          "summary": "Class, styles and guidance scale summed into `(B, cond_dim)`.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "labels",
+              "annotation": "Tensor",
+              "description": "`(B,)` class indices.",
+              "default": null
+            },
+            {
+              "name": "guidance_scale",
+              "annotation": "Tensor",
+              "description": "`(B,)` guidance scales $\\alpha$.",
+              "default": null
+            },
+            {
+              "name": "style_indices",
+              "annotation": "Tensor",
+              "description": "`(B, noise_coords)` style indices, unread when `noise_classes=0`.",
+              "default": null
+            },
+            {
+              "name": "dtype",
+              "annotation": "lucid.dtype",
+              "description": "The dtype of the result.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "Tensor",
+            "description": "The `(B, cond_dim)` conditioning vector."
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "If `style_indices` does not hold one column per style codebook."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "forward",
+          "path": "lucid.models.generative.drifting._model.DriftingModel.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(x: Tensor, labels: Tensor, guidance_scale: float | Tensor = 1.0, style_indices: Tensor | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_model.py#L430",
+          "subcategory": "model",
+          "summary": "Map noise to a sample in one evaluation.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "x",
+              "annotation": "Tensor",
+              "description": "`(B, in_channels, H, W)` Gaussian noise (already scaled by the\nsampling temperature, if any).",
+              "default": null
+            },
+            {
+              "name": "labels",
+              "annotation": "Tensor",
+              "description": "`(B,)` class indices.",
+              "default": null
+            },
+            {
+              "name": "guidance_scale",
+              "annotation": "float or Tensor",
+              "description": "Guidance scale $\\alpha$, a scalar or `(B,)`.  `1` is\nno guidance.",
+              "default": "1.0"
+            },
+            {
+              "name": "style_indices",
+              "annotation": "Tensor or None",
+              "description": "`(B, noise_coords)` style indices.  Drawn uniformly when\n`None`, as the release always does.",
+              "default": "None"
+            }
+          ],
+          "returns": {
+            "annotation": "DiffusionModelOutput",
+            "description": "`sample` of shape `(B, out_channels, H, W)`."
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "The one-step generator $f_\\theta(\\epsilon, c, \\alpha)$.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "config",
+          "annotation": "DriftingConfig",
+          "description": "The variant to build.",
+          "default": null
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.models.generative.drifting import DriftingConfig, DriftingModel\n>>> config = DriftingConfig(sample_size=8, hidden_size=32, cond_dim=32, depth=1,\n...                         num_heads=4, num_classes=10, noise_classes=4,\n...                         noise_coords=2, n_cls_tokens=2)\n>>> model = DriftingModel(config).eval()\n>>> model(lucid.randn(2, 4, 8, 8), lucid.tensor([0, 1])).sample.shape\n(2, 4, 8, 8)"
+      ],
+      "notes": [
+        "Reference: Deng, Li, Li, Du, and He, *\"Generative Modeling via\nDrifting\"*, [arXiv:2602.04770](https://arxiv.org/abs/2602.04770), 2026, Appendix A.2 and Table 8.\n\nThe conditioning vector is the release's `c_cfg_noise_to_cond`:\n\n\n\n$$\nc = E_\\mathrm{cls}[y] + \\sum_{i=1}^{32} E_i[s_i]\n    + 0.02\\,\\mathrm{RMSNorm}\\bigl(\\mathrm{MLP}(\\mathrm{sin}(\\alpha))\\bigr),\n$$\n\nand it drives both adaLN and the 16 in-context tokens, which are\n`Linear(c) + cls_embed` prepended before the first block.  RoPE runs\nover the flattened sequence, in-context tokens included, as in the\nrelease."
+      ],
+      "attributes": [
+        {
+          "name": "class_embed",
+          "annotation": "lucid.nn.Embedding",
+          "description": "Class table, `(num_classes, cond_dim)`."
+        },
+        {
+          "name": "noise_embeds",
+          "annotation": "lucid.nn.ModuleList",
+          "description": "`noise_coords` style codebooks, each `(noise_classes, cond_dim)`."
+        },
+        {
+          "name": "cfg_embedder",
+          "annotation": "_CFGEmbedder",
+          "description": "Embedding of the guidance scale $\\alpha$."
+        },
+        {
+          "name": "patch_embed",
+          "annotation": "lucid.nn.Linear",
+          "description": "Patch projection; its input is a `(p, p, C)`-ordered patch."
+        },
+        {
+          "name": "pos_embed",
+          "annotation": "lucid.nn.Parameter",
+          "description": "`(1, num_patches, hidden_size)` — *trainable*, initialised to the\n2-D sine-cosine table."
+        },
+        {
+          "name": "cls_embed",
+          "annotation": "lucid.nn.Parameter",
+          "description": "`(1, n_cls_tokens, hidden_size)` learnable in-context offsets."
+        },
+        {
+          "name": "blocks",
+          "annotation": "lucid.nn.ModuleList",
+          "description": "The transformer blocks."
+        },
+        {
+          "name": "final",
+          "annotation": "_FinalLayer",
+          "description": "Modulated norm and projection back to patches."
+        }
+      ],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "DriftingOutput",
+      "path": "lucid.models.generative.drifting._model.DriftingOutput",
+      "kind": "class",
+      "class_kind": "dataclass",
+      "bases": [
+        "ModelOutput"
+      ],
+      "labels": [],
+      "signature": "DriftingOutput(loss: Tensor, samples: Tensor, guidance_scale: Tensor, feature_losses: dict[str, Tensor])",
+      "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_model.py#L845",
+      "subcategory": "model",
+      "methods": [],
+      "summary": "What a drifting training step reports.",
+      "extended": null,
+      "parameters": [],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> from lucid.models.generative.drifting import DriftingOutput\n>>> out = DriftingOutput(loss=lucid.zeros(()), samples=lucid.zeros(4, 4, 8, 8),\n...                      guidance_scale=lucid.ones(1), feature_losses={})\n>>> out.samples.shape\n(4, 4, 8, 8)"
+      ],
+      "notes": [],
+      "attributes": [
+        {
+          "name": "loss",
+          "annotation": "Tensor",
+          "description": "Sum over feature sets of the mean drifting loss — a scalar whose\nvalue is the normalised drift energy $\\lVert\\tilde V\\rVert^2$."
+        },
+        {
+          "name": "samples",
+          "annotation": "Tensor",
+          "description": "`(N_c * gen_per_label, C, H, W)` — the generated batch, grouped\nlabel-major."
+        },
+        {
+          "name": "guidance_scale",
+          "annotation": "Tensor",
+          "description": "`(N_c,)` — the guidance scale $\\alpha$ each label trained at."
+        },
+        {
+          "name": "feature_losses",
+          "annotation": "dict of str to Tensor",
+          "description": "The per-feature-set loss terms, keyed as the encoder names them."
+        }
+      ],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "drifting_base_2",
+      "path": "lucid.models.generative.drifting._pretrained.drifting_base_2",
+      "kind": "function",
+      "labels": [],
+      "signature": "drifting_base_2(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_pretrained.py#L118",
+      "subcategory": "pretrained",
+      "summary": "Drifting `B/2` — the Base generator over the 32x32x4 SD-VAE latent.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "No checkpoint is published for `drifting_base_2`, so `True` raises\n`NotImplementedError` rather than return randomly initialised weights.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "`DriftingConfig` fields to change on the `latent_sota_B`\nrelease config.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "DriftingModel",
+        "description": "The `B/2` one-step generator; it emits an SD-VAE latent."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models import drifting_base_2\n>>> config = drifting_base_2().config\n>>> config.depth, config.hidden_size, config.patch_size\n(12, 768, 2)"
+      ],
+      "notes": [
+        "Reference: Deng, Li, Li, Du, and He, *\"Generative Modeling via\nDrifting\"*, [arXiv:2602.04770](https://arxiv.org/abs/2602.04770), 2026, Table 8 (`B/2, latent`) and\nTable 5 — 12 blocks, width 768, 12 heads, 16 in-context tokens,\n32 style tokens.  The paper reports FID 1.75 at one evaluation, guidance 1.1."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 133000000,
+      "model_summary": {
+        "name": "DriftingModel",
+        "type": "DriftingModel",
+        "params": 132708880,
+        "own_params": 208896,
+        "children": [
+          {
+            "name": "class_embed",
+            "type": "Embedding",
+            "params": 768000,
+            "own_params": 768000,
+            "children": []
+          },
+          {
+            "name": "noise_embeds",
+            "type": "ModuleList",
+            "params": 1572864,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "Embedding",
+                "params": 49152,
+                "own_params": 49152,
+                "children": [],
+                "repeat": 32
+              }
+            ]
+          },
+          {
+            "name": "cfg_embedder",
+            "type": "_CFGEmbedder",
+            "params": 787968,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "fc1",
+                "type": "Linear",
+                "params": 197376,
+                "own_params": 197376,
+                "children": []
+              },
+              {
+                "name": "fc2",
+                "type": "Linear",
+                "params": 590592,
+                "own_params": 590592,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "cfg_norm",
+            "type": "RMSNorm",
+            "params": 768,
+            "own_params": 768,
+            "children": []
+          },
+          {
+            "name": "patch_embed",
+            "type": "Linear",
+            "params": 13056,
+            "own_params": 13056,
+            "children": []
+          },
+          {
+            "name": "cls_proj",
+            "type": "Linear",
+            "params": 590592,
+            "own_params": 590592,
+            "children": []
+          },
+          {
+            "name": "rope",
+            "type": "RotaryEmbedding",
+            "params": 0,
+            "own_params": 0,
+            "children": []
+          },
+          {
+            "name": "blocks",
+            "type": "ModuleList",
+            "params": 127572480,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "_LightningDiTBlock",
+                "params": 10631040,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm1",
+                    "type": "RMSNorm",
+                    "params": 768,
+                    "own_params": 768,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "attn",
+                    "type": "_Attention",
+                    "params": 2362496,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "qkv",
+                        "type": "Linear",
+                        "params": 1771776,
+                        "own_params": 1771776,
+                        "children": []
+                      },
+                      {
+                        "name": "q_norm",
+                        "type": "RMSNorm",
+                        "params": 64,
+                        "own_params": 64,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "proj",
+                        "type": "Linear",
+                        "params": 590592,
+                        "own_params": 590592,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "mlp",
+                    "type": "_SwiGLU",
+                    "params": 4723456,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "w1",
+                        "type": "Linear",
+                        "params": 1574912,
+                        "own_params": 1574912,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "w2",
+                        "type": "Linear",
+                        "params": 1573632,
+                        "own_params": 1573632,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Linear",
+                    "params": 3543552,
+                    "own_params": 3543552,
+                    "children": []
+                  }
+                ],
+                "repeat": 12
+              }
+            ]
+          },
+          {
+            "name": "final",
+            "type": "_FinalLayer",
+            "params": 1194256,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "norm",
+                "type": "RMSNorm",
+                "params": 768,
+                "own_params": 768,
+                "children": []
+              },
+              {
+                "name": "ada_ln",
+                "type": "Linear",
+                "params": 1181184,
+                "own_params": 1181184,
+                "children": []
+              },
+              {
+                "name": "proj",
+                "type": "Linear",
+                "params": 12304,
+                "own_params": 12304,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "drifting_base_2_gen",
+      "path": "lucid.models.generative.drifting._pretrained.drifting_base_2_gen",
+      "kind": "function",
+      "labels": [],
+      "signature": "drifting_base_2_gen(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_pretrained.py#L294",
+      "subcategory": "pretrained",
+      "summary": "`drifting_base_2` with the drifting objective and the one-step sampler.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "No checkpoint is published for `drifting_base_2_gen`, so `True` raises\n`NotImplementedError` rather than return randomly initialised weights.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "`DriftingConfig` fields to change, the loss's and the\nsample queue's included.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "DriftingForImageGeneration",
+        "description": "The `B/2` training objective over latent-MAE features, and\n`DriftingForImageGeneration.generate`."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models import drifting_base_2_gen\n>>> model = drifting_base_2_gen()"
+      ],
+      "notes": [
+        "Reference: Deng, Li, Li, Du, and He, [arXiv:2602.04770](https://arxiv.org/abs/2602.04770), 2026, Table 8.\n\nTraining in the paper's feature space needs a trained encoder, and none is\npublished: `DriftingForImageGeneration.load_feature_encoder` builds a\nrandom one, which is not the paper's objective."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 133000000,
+      "model_summary": {
+        "name": "DriftingForImageGeneration",
+        "type": "DriftingForImageGeneration",
+        "params": 132708880,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "drifting",
+            "type": "DriftingModel",
+            "params": 132708880,
+            "own_params": 208896,
+            "children": [
+              {
+                "name": "class_embed",
+                "type": "Embedding",
+                "params": 768000,
+                "own_params": 768000,
+                "children": []
+              },
+              {
+                "name": "noise_embeds",
+                "type": "ModuleList",
+                "params": 1572864,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "Embedding",
+                    "params": 49152,
+                    "own_params": 49152,
+                    "children": [],
+                    "repeat": 32
+                  }
+                ]
+              },
+              {
+                "name": "cfg_embedder",
+                "type": "_CFGEmbedder",
+                "params": 787968,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "fc1",
+                    "type": "Linear",
+                    "params": 197376,
+                    "own_params": 197376,
+                    "children": []
+                  },
+                  {
+                    "name": "fc2",
+                    "type": "Linear",
+                    "params": 590592,
+                    "own_params": 590592,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "cfg_norm",
+                "type": "RMSNorm",
+                "params": 768,
+                "own_params": 768,
+                "children": []
+              },
+              {
+                "name": "patch_embed",
+                "type": "Linear",
+                "params": 13056,
+                "own_params": 13056,
+                "children": []
+              },
+              {
+                "name": "cls_proj",
+                "type": "Linear",
+                "params": 590592,
+                "own_params": 590592,
+                "children": []
+              },
+              {
+                "name": "rope",
+                "type": "RotaryEmbedding",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 127572480,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_LightningDiTBlock",
+                    "params": 10631040,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "norm1",
+                        "type": "RMSNorm",
+                        "params": 768,
+                        "own_params": 768,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "attn",
+                        "type": "_Attention",
+                        "params": 2362496,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "qkv",
+                            "type": "Linear",
+                            "params": 1771776,
+                            "own_params": 1771776,
+                            "children": []
+                          },
+                          {
+                            "name": "q_norm",
+                            "type": "RMSNorm",
+                            "params": 64,
+                            "own_params": 64,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "proj",
+                            "type": "Linear",
+                            "params": 590592,
+                            "own_params": 590592,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "mlp",
+                        "type": "_SwiGLU",
+                        "params": 4723456,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "w1",
+                            "type": "Linear",
+                            "params": 1574912,
+                            "own_params": 1574912,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "w2",
+                            "type": "Linear",
+                            "params": 1573632,
+                            "own_params": 1573632,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "ada_ln",
+                        "type": "Linear",
+                        "params": 3543552,
+                        "own_params": 3543552,
+                        "children": []
+                      }
+                    ],
+                    "repeat": 12
+                  }
+                ]
+              },
+              {
+                "name": "final",
+                "type": "_FinalLayer",
+                "params": 1194256,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm",
+                    "type": "RMSNorm",
+                    "params": 768,
+                    "own_params": 768,
+                    "children": []
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Linear",
+                    "params": 1181184,
+                    "own_params": 1181184,
+                    "children": []
+                  },
+                  {
+                    "name": "proj",
+                    "type": "Linear",
+                    "params": 12304,
+                    "own_params": 12304,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "drifting_base_16",
+      "path": "lucid.models.generative.drifting._pretrained.drifting_base_16",
+      "kind": "function",
+      "labels": [],
+      "signature": "drifting_base_16(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_pretrained.py#L207",
+      "subcategory": "pretrained",
+      "summary": "Drifting `B/16` — the Base generator directly in 256x256 pixel space.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "No checkpoint is published for `drifting_base_16`, so `True` raises\n`NotImplementedError` rather than return randomly initialised weights.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "`DriftingConfig` fields to change on the `pixel_sota_B`\nrelease config.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "DriftingModel",
+        "description": "The `B/16` one-step generator; it emits `[-1, 1]` RGB."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models import drifting_base_16\n>>> config = drifting_base_16().config\n>>> config.sample_size, config.patch_size, config.num_patches\n(256, 16, 256)"
+      ],
+      "notes": [
+        "Reference: Deng, Li, Li, Du, and He, [arXiv:2602.04770](https://arxiv.org/abs/2602.04770), 2026, Table 8\n(`B/16, pixel`) and Table 6 — the `B/2` backbone at patch 16, so\nthe sequence is again 256 tokens.  The paper reports FID 1.76, guidance 1.0."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 134000000,
+      "model_summary": {
+        "name": "DriftingModel",
+        "type": "DriftingModel",
+        "params": 133864704,
+        "own_params": 208896,
+        "children": [
+          {
+            "name": "class_embed",
+            "type": "Embedding",
+            "params": 768000,
+            "own_params": 768000,
+            "children": []
+          },
+          {
+            "name": "noise_embeds",
+            "type": "ModuleList",
+            "params": 1572864,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "Embedding",
+                "params": 49152,
+                "own_params": 49152,
+                "children": [],
+                "repeat": 32
+              }
+            ]
+          },
+          {
+            "name": "cfg_embedder",
+            "type": "_CFGEmbedder",
+            "params": 787968,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "fc1",
+                "type": "Linear",
+                "params": 197376,
+                "own_params": 197376,
+                "children": []
+              },
+              {
+                "name": "fc2",
+                "type": "Linear",
+                "params": 590592,
+                "own_params": 590592,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "cfg_norm",
+            "type": "RMSNorm",
+            "params": 768,
+            "own_params": 768,
+            "children": []
+          },
+          {
+            "name": "patch_embed",
+            "type": "Linear",
+            "params": 590592,
+            "own_params": 590592,
+            "children": [],
+            "repeat": 2
+          },
+          {
+            "name": "rope",
+            "type": "RotaryEmbedding",
+            "params": 0,
+            "own_params": 0,
+            "children": []
+          },
+          {
+            "name": "blocks",
+            "type": "ModuleList",
+            "params": 127572480,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "_LightningDiTBlock",
+                "params": 10631040,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm1",
+                    "type": "RMSNorm",
+                    "params": 768,
+                    "own_params": 768,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "attn",
+                    "type": "_Attention",
+                    "params": 2362496,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "qkv",
+                        "type": "Linear",
+                        "params": 1771776,
+                        "own_params": 1771776,
+                        "children": []
+                      },
+                      {
+                        "name": "q_norm",
+                        "type": "RMSNorm",
+                        "params": 64,
+                        "own_params": 64,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "proj",
+                        "type": "Linear",
+                        "params": 590592,
+                        "own_params": 590592,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "mlp",
+                    "type": "_SwiGLU",
+                    "params": 4723456,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "w1",
+                        "type": "Linear",
+                        "params": 1574912,
+                        "own_params": 1574912,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "w2",
+                        "type": "Linear",
+                        "params": 1573632,
+                        "own_params": 1573632,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Linear",
+                    "params": 3543552,
+                    "own_params": 3543552,
+                    "children": []
+                  }
+                ],
+                "repeat": 12
+              }
+            ]
+          },
+          {
+            "name": "final",
+            "type": "_FinalLayer",
+            "params": 1772544,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "norm",
+                "type": "RMSNorm",
+                "params": 768,
+                "own_params": 768,
+                "children": []
+              },
+              {
+                "name": "ada_ln",
+                "type": "Linear",
+                "params": 1181184,
+                "own_params": 1181184,
+                "children": []
+              },
+              {
+                "name": "proj",
+                "type": "Linear",
+                "params": 590592,
+                "own_params": 590592,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "drifting_base_16_gen",
+      "path": "lucid.models.generative.drifting._pretrained.drifting_base_16_gen",
+      "kind": "function",
+      "labels": [],
+      "signature": "drifting_base_16_gen(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_pretrained.py#L388",
+      "subcategory": "pretrained",
+      "summary": "`drifting_base_16` with the drifting objective and the one-step sampler.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "No checkpoint is published for `drifting_base_16_gen`, so `True` raises\n`NotImplementedError` rather than return randomly initialised weights.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "`DriftingConfig` fields to change on `pixel_sota_B` —\n`use_convnext=False` drops the ConvNeXt-V2 term.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "DriftingForImageGeneration",
+        "description": "The `B/16` pixel-space objective and one-step sampler."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models import drifting_base_16_gen\n>>> model = drifting_base_16_gen()"
+      ],
+      "notes": [
+        "Reference: Deng, Li, Li, Du, and He, [arXiv:2602.04770](https://arxiv.org/abs/2602.04770), 2026, Tables 8\nand 10.  Its loss reads MAE-640 (pixel) and ConvNeXt-V2-Base features.\n\nTraining in the paper's feature space needs a trained encoder, and none is\npublished: `DriftingForImageGeneration.load_feature_encoder` builds a\nrandom one, which is not the paper's objective."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 134000000,
+      "model_summary": {
+        "name": "DriftingForImageGeneration",
+        "type": "DriftingForImageGeneration",
+        "params": 133864704,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "drifting",
+            "type": "DriftingModel",
+            "params": 133864704,
+            "own_params": 208896,
+            "children": [
+              {
+                "name": "class_embed",
+                "type": "Embedding",
+                "params": 768000,
+                "own_params": 768000,
+                "children": []
+              },
+              {
+                "name": "noise_embeds",
+                "type": "ModuleList",
+                "params": 1572864,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "Embedding",
+                    "params": 49152,
+                    "own_params": 49152,
+                    "children": [],
+                    "repeat": 32
+                  }
+                ]
+              },
+              {
+                "name": "cfg_embedder",
+                "type": "_CFGEmbedder",
+                "params": 787968,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "fc1",
+                    "type": "Linear",
+                    "params": 197376,
+                    "own_params": 197376,
+                    "children": []
+                  },
+                  {
+                    "name": "fc2",
+                    "type": "Linear",
+                    "params": 590592,
+                    "own_params": 590592,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "cfg_norm",
+                "type": "RMSNorm",
+                "params": 768,
+                "own_params": 768,
+                "children": []
+              },
+              {
+                "name": "patch_embed",
+                "type": "Linear",
+                "params": 590592,
+                "own_params": 590592,
+                "children": [],
+                "repeat": 2
+              },
+              {
+                "name": "rope",
+                "type": "RotaryEmbedding",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 127572480,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_LightningDiTBlock",
+                    "params": 10631040,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "norm1",
+                        "type": "RMSNorm",
+                        "params": 768,
+                        "own_params": 768,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "attn",
+                        "type": "_Attention",
+                        "params": 2362496,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "qkv",
+                            "type": "Linear",
+                            "params": 1771776,
+                            "own_params": 1771776,
+                            "children": []
+                          },
+                          {
+                            "name": "q_norm",
+                            "type": "RMSNorm",
+                            "params": 64,
+                            "own_params": 64,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "proj",
+                            "type": "Linear",
+                            "params": 590592,
+                            "own_params": 590592,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "mlp",
+                        "type": "_SwiGLU",
+                        "params": 4723456,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "w1",
+                            "type": "Linear",
+                            "params": 1574912,
+                            "own_params": 1574912,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "w2",
+                            "type": "Linear",
+                            "params": 1573632,
+                            "own_params": 1573632,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "ada_ln",
+                        "type": "Linear",
+                        "params": 3543552,
+                        "own_params": 3543552,
+                        "children": []
+                      }
+                    ],
+                    "repeat": 12
+                  }
+                ]
+              },
+              {
+                "name": "final",
+                "type": "_FinalLayer",
+                "params": 1772544,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm",
+                    "type": "RMSNorm",
+                    "params": 768,
+                    "own_params": 768,
+                    "children": []
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Linear",
+                    "params": 1181184,
+                    "own_params": 1181184,
+                    "children": []
+                  },
+                  {
+                    "name": "proj",
+                    "type": "Linear",
+                    "params": 590592,
+                    "own_params": 590592,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "drifting_large_2",
+      "path": "lucid.models.generative.drifting._pretrained.drifting_large_2",
+      "kind": "function",
+      "labels": [],
+      "signature": "drifting_large_2(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_pretrained.py#L163",
+      "subcategory": "pretrained",
+      "summary": "Drifting `L/2` — the Large latent generator, the paper's headline model.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "No checkpoint is published for `drifting_large_2`, so `True` raises\n`NotImplementedError` rather than return randomly initialised weights.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "`DriftingConfig` fields to change on the `latent_sota_L`\nrelease config.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "DriftingModel",
+        "description": "The `L/2` one-step generator; it emits an SD-VAE latent."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models import drifting_large_2\n>>> config = drifting_large_2().config\n>>> config.depth, config.hidden_size, config.no_cfg_frac\n(24, 1024, 0.5)"
+      ],
+      "notes": [
+        "Reference: Deng, Li, Li, Du, and He, [arXiv:2602.04770](https://arxiv.org/abs/2602.04770), 2026, Table 8\n(`L/2, latent`) and Table 5 — 24 blocks, width 1024, 16 heads.\nThe paper reports FID 1.54 at one evaluation, guidance 1.0."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 463000000,
+      "model_summary": {
+        "name": "DriftingModel",
+        "type": "DriftingModel",
+        "params": 462909456,
+        "own_params": 278528,
+        "children": [
+          {
+            "name": "class_embed",
+            "type": "Embedding",
+            "params": 1024000,
+            "own_params": 1024000,
+            "children": []
+          },
+          {
+            "name": "noise_embeds",
+            "type": "ModuleList",
+            "params": 2097152,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "Embedding",
+                "params": 65536,
+                "own_params": 65536,
+                "children": [],
+                "repeat": 32
+              }
+            ]
+          },
+          {
+            "name": "cfg_embedder",
+            "type": "_CFGEmbedder",
+            "params": 1312768,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "fc1",
+                "type": "Linear",
+                "params": 263168,
+                "own_params": 263168,
+                "children": []
+              },
+              {
+                "name": "fc2",
+                "type": "Linear",
+                "params": 1049600,
+                "own_params": 1049600,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "cfg_norm",
+            "type": "RMSNorm",
+            "params": 1024,
+            "own_params": 1024,
+            "children": []
+          },
+          {
+            "name": "patch_embed",
+            "type": "Linear",
+            "params": 17408,
+            "own_params": 17408,
+            "children": []
+          },
+          {
+            "name": "cls_proj",
+            "type": "Linear",
+            "params": 1049600,
+            "own_params": 1049600,
+            "children": []
+          },
+          {
+            "name": "rope",
+            "type": "RotaryEmbedding",
+            "params": 0,
+            "own_params": 0,
+            "children": []
+          },
+          {
+            "name": "blocks",
+            "type": "ModuleList",
+            "params": 455012352,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "_LightningDiTBlock",
+                "params": 18958848,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm1",
+                    "type": "RMSNorm",
+                    "params": 1024,
+                    "own_params": 1024,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "attn",
+                    "type": "_Attention",
+                    "params": 4198528,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "qkv",
+                        "type": "Linear",
+                        "params": 3148800,
+                        "own_params": 3148800,
+                        "children": []
+                      },
+                      {
+                        "name": "q_norm",
+                        "type": "RMSNorm",
+                        "params": 64,
+                        "own_params": 64,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "proj",
+                        "type": "Linear",
+                        "params": 1049600,
+                        "own_params": 1049600,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "mlp",
+                    "type": "_SwiGLU",
+                    "params": 8460672,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "w1",
+                        "type": "Linear",
+                        "params": 2820800,
+                        "own_params": 2820800,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "w2",
+                        "type": "Linear",
+                        "params": 2819072,
+                        "own_params": 2819072,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Linear",
+                    "params": 6297600,
+                    "own_params": 6297600,
+                    "children": []
+                  }
+                ],
+                "repeat": 24
+              }
+            ]
+          },
+          {
+            "name": "final",
+            "type": "_FinalLayer",
+            "params": 2116624,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "norm",
+                "type": "RMSNorm",
+                "params": 1024,
+                "own_params": 1024,
+                "children": []
+              },
+              {
+                "name": "ada_ln",
+                "type": "Linear",
+                "params": 2099200,
+                "own_params": 2099200,
+                "children": []
+              },
+              {
+                "name": "proj",
+                "type": "Linear",
+                "params": 16400,
+                "own_params": 16400,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "drifting_large_2_gen",
+      "path": "lucid.models.generative.drifting._pretrained.drifting_large_2_gen",
+      "kind": "function",
+      "labels": [],
+      "signature": "drifting_large_2_gen(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_pretrained.py#L341",
+      "subcategory": "pretrained",
+      "summary": "`drifting_large_2` with the drifting objective and the one-step sampler.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "No checkpoint is published for `drifting_large_2_gen`, so `True` raises\n`NotImplementedError` rather than return randomly initialised weights.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "`DriftingConfig` fields to change on `latent_sota_L`; its\n`no_cfg_frac=0.5` is the half of the batch trained unguided.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "DriftingForImageGeneration",
+        "description": "The `L/2` objective and one-step sampler."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models import drifting_large_2_gen\n>>> model = drifting_large_2_gen()"
+      ],
+      "notes": [
+        "Reference: Deng, Li, Li, Du, and He, [arXiv:2602.04770](https://arxiv.org/abs/2602.04770), 2026, Table 8.\nThe configuration behind the 1.54 one-step FID.\n\nTraining in the paper's feature space needs a trained encoder, and none is\npublished: `DriftingForImageGeneration.load_feature_encoder` builds a\nrandom one, which is not the paper's objective."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 463000000,
+      "model_summary": {
+        "name": "DriftingForImageGeneration",
+        "type": "DriftingForImageGeneration",
+        "params": 462909456,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "drifting",
+            "type": "DriftingModel",
+            "params": 462909456,
+            "own_params": 278528,
+            "children": [
+              {
+                "name": "class_embed",
+                "type": "Embedding",
+                "params": 1024000,
+                "own_params": 1024000,
+                "children": []
+              },
+              {
+                "name": "noise_embeds",
+                "type": "ModuleList",
+                "params": 2097152,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "Embedding",
+                    "params": 65536,
+                    "own_params": 65536,
+                    "children": [],
+                    "repeat": 32
+                  }
+                ]
+              },
+              {
+                "name": "cfg_embedder",
+                "type": "_CFGEmbedder",
+                "params": 1312768,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "fc1",
+                    "type": "Linear",
+                    "params": 263168,
+                    "own_params": 263168,
+                    "children": []
+                  },
+                  {
+                    "name": "fc2",
+                    "type": "Linear",
+                    "params": 1049600,
+                    "own_params": 1049600,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "cfg_norm",
+                "type": "RMSNorm",
+                "params": 1024,
+                "own_params": 1024,
+                "children": []
+              },
+              {
+                "name": "patch_embed",
+                "type": "Linear",
+                "params": 17408,
+                "own_params": 17408,
+                "children": []
+              },
+              {
+                "name": "cls_proj",
+                "type": "Linear",
+                "params": 1049600,
+                "own_params": 1049600,
+                "children": []
+              },
+              {
+                "name": "rope",
+                "type": "RotaryEmbedding",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 455012352,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_LightningDiTBlock",
+                    "params": 18958848,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "norm1",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "attn",
+                        "type": "_Attention",
+                        "params": 4198528,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "qkv",
+                            "type": "Linear",
+                            "params": 3148800,
+                            "own_params": 3148800,
+                            "children": []
+                          },
+                          {
+                            "name": "q_norm",
+                            "type": "RMSNorm",
+                            "params": 64,
+                            "own_params": 64,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "proj",
+                            "type": "Linear",
+                            "params": 1049600,
+                            "own_params": 1049600,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "mlp",
+                        "type": "_SwiGLU",
+                        "params": 8460672,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "w1",
+                            "type": "Linear",
+                            "params": 2820800,
+                            "own_params": 2820800,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "w2",
+                            "type": "Linear",
+                            "params": 2819072,
+                            "own_params": 2819072,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "ada_ln",
+                        "type": "Linear",
+                        "params": 6297600,
+                        "own_params": 6297600,
+                        "children": []
+                      }
+                    ],
+                    "repeat": 24
+                  }
+                ]
+              },
+              {
+                "name": "final",
+                "type": "_FinalLayer",
+                "params": 2116624,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm",
+                    "type": "RMSNorm",
+                    "params": 1024,
+                    "own_params": 1024,
+                    "children": []
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Linear",
+                    "params": 2099200,
+                    "own_params": 2099200,
+                    "children": []
+                  },
+                  {
+                    "name": "proj",
+                    "type": "Linear",
+                    "params": 16400,
+                    "own_params": 16400,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "drifting_large_16",
+      "path": "lucid.models.generative.drifting._pretrained.drifting_large_16",
+      "kind": "function",
+      "labels": [],
+      "signature": "drifting_large_16(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_pretrained.py#L251",
+      "subcategory": "pretrained",
+      "summary": "Drifting `L/16` — the Large generator in pixel space.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "No checkpoint is published for `drifting_large_16`, so `True` raises\n`NotImplementedError` rather than return randomly initialised weights.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "`DriftingConfig` fields to change on the `pixel_sota_L`\nrelease config.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "DriftingModel",
+        "description": "The `L/16` one-step generator; it emits `[-1, 1]` RGB."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models import drifting_large_16\n>>> config = drifting_large_16().config\n>>> config.depth, config.hidden_size, config.use_convnext\n(24, 1024, True)"
+      ],
+      "notes": [
+        "Reference: Deng, Li, Li, Du, and He, [arXiv:2602.04770](https://arxiv.org/abs/2602.04770), 2026, Table 8\n(`L/16, pixel`) and Table 6.  The paper reports FID 1.61, guidance 1.0."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 464000000,
+      "model_summary": {
+        "name": "DriftingModel",
+        "type": "DriftingModel",
+        "params": 464450304,
+        "own_params": 278528,
+        "children": [
+          {
+            "name": "class_embed",
+            "type": "Embedding",
+            "params": 1024000,
+            "own_params": 1024000,
+            "children": []
+          },
+          {
+            "name": "noise_embeds",
+            "type": "ModuleList",
+            "params": 2097152,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "Embedding",
+                "params": 65536,
+                "own_params": 65536,
+                "children": [],
+                "repeat": 32
+              }
+            ]
+          },
+          {
+            "name": "cfg_embedder",
+            "type": "_CFGEmbedder",
+            "params": 1312768,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "fc1",
+                "type": "Linear",
+                "params": 263168,
+                "own_params": 263168,
+                "children": []
+              },
+              {
+                "name": "fc2",
+                "type": "Linear",
+                "params": 1049600,
+                "own_params": 1049600,
+                "children": []
+              }
+            ]
+          },
+          {
+            "name": "cfg_norm",
+            "type": "RMSNorm",
+            "params": 1024,
+            "own_params": 1024,
+            "children": []
+          },
+          {
+            "name": "patch_embed",
+            "type": "Linear",
+            "params": 787456,
+            "own_params": 787456,
+            "children": []
+          },
+          {
+            "name": "cls_proj",
+            "type": "Linear",
+            "params": 1049600,
+            "own_params": 1049600,
+            "children": []
+          },
+          {
+            "name": "rope",
+            "type": "RotaryEmbedding",
+            "params": 0,
+            "own_params": 0,
+            "children": []
+          },
+          {
+            "name": "blocks",
+            "type": "ModuleList",
+            "params": 455012352,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "0",
+                "type": "_LightningDiTBlock",
+                "params": 18958848,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm1",
+                    "type": "RMSNorm",
+                    "params": 1024,
+                    "own_params": 1024,
+                    "children": [],
+                    "repeat": 2
+                  },
+                  {
+                    "name": "attn",
+                    "type": "_Attention",
+                    "params": 4198528,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "qkv",
+                        "type": "Linear",
+                        "params": 3148800,
+                        "own_params": 3148800,
+                        "children": []
+                      },
+                      {
+                        "name": "q_norm",
+                        "type": "RMSNorm",
+                        "params": 64,
+                        "own_params": 64,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "proj",
+                        "type": "Linear",
+                        "params": 1049600,
+                        "own_params": 1049600,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "mlp",
+                    "type": "_SwiGLU",
+                    "params": 8460672,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "w1",
+                        "type": "Linear",
+                        "params": 2820800,
+                        "own_params": 2820800,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "w2",
+                        "type": "Linear",
+                        "params": 2819072,
+                        "own_params": 2819072,
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Linear",
+                    "params": 6297600,
+                    "own_params": 6297600,
+                    "children": []
+                  }
+                ],
+                "repeat": 24
+              }
+            ]
+          },
+          {
+            "name": "final",
+            "type": "_FinalLayer",
+            "params": 2887424,
+            "own_params": 0,
+            "children": [
+              {
+                "name": "norm",
+                "type": "RMSNorm",
+                "params": 1024,
+                "own_params": 1024,
+                "children": []
+              },
+              {
+                "name": "ada_ln",
+                "type": "Linear",
+                "params": 2099200,
+                "own_params": 2099200,
+                "children": []
+              },
+              {
+                "name": "proj",
+                "type": "Linear",
+                "params": 787200,
+                "own_params": 787200,
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "drifting_large_16_gen",
+      "path": "lucid.models.generative.drifting._pretrained.drifting_large_16_gen",
+      "kind": "function",
+      "labels": [],
+      "signature": "drifting_large_16_gen(pretrained: bool = False, overrides: object = {})",
+      "source": "https://github.com/lucid-official/lucid/blob/630709a/lucid/models/generative/drifting/_pretrained.py#L435",
+      "subcategory": "pretrained",
+      "summary": "`drifting_large_16` with the drifting objective and the one-step sampler.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "pretrained",
+          "annotation": "bool",
+          "description": "No checkpoint is published for `drifting_large_16_gen`, so `True` raises\n`NotImplementedError` rather than return randomly initialised weights.",
+          "default": "False"
+        },
+        {
+          "name": "**overrides",
+          "annotation": "object",
+          "description": "`DriftingConfig` fields to change on `pixel_sota_L`.",
+          "default": "{}"
+        }
+      ],
+      "returns": {
+        "annotation": "DriftingForImageGeneration",
+        "description": "The `L/16` objective — MAE-640 (pixel) plus ConvNeXt-V2-Base\nfeatures — and its one-step sampler."
+      },
+      "raises": [],
+      "examples": [
+        ">>> from lucid.models import drifting_large_16_gen\n>>> model = drifting_large_16_gen()"
+      ],
+      "notes": [
+        "Reference: Deng, Li, Li, Du, and He, [arXiv:2602.04770](https://arxiv.org/abs/2602.04770), 2026, Tables 8\nand 10.\n\nTraining in the paper's feature space needs a trained encoder, and none is\npublished: `DriftingForImageGeneration.load_feature_encoder` builds a\nrandom one, which is not the paper's objective."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": [],
+      "param_count": 464000000,
+      "model_summary": {
+        "name": "DriftingForImageGeneration",
+        "type": "DriftingForImageGeneration",
+        "params": 464450304,
+        "own_params": 0,
+        "children": [
+          {
+            "name": "drifting",
+            "type": "DriftingModel",
+            "params": 464450304,
+            "own_params": 278528,
+            "children": [
+              {
+                "name": "class_embed",
+                "type": "Embedding",
+                "params": 1024000,
+                "own_params": 1024000,
+                "children": []
+              },
+              {
+                "name": "noise_embeds",
+                "type": "ModuleList",
+                "params": 2097152,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "Embedding",
+                    "params": 65536,
+                    "own_params": 65536,
+                    "children": [],
+                    "repeat": 32
+                  }
+                ]
+              },
+              {
+                "name": "cfg_embedder",
+                "type": "_CFGEmbedder",
+                "params": 1312768,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "fc1",
+                    "type": "Linear",
+                    "params": 263168,
+                    "own_params": 263168,
+                    "children": []
+                  },
+                  {
+                    "name": "fc2",
+                    "type": "Linear",
+                    "params": 1049600,
+                    "own_params": 1049600,
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "cfg_norm",
+                "type": "RMSNorm",
+                "params": 1024,
+                "own_params": 1024,
+                "children": []
+              },
+              {
+                "name": "patch_embed",
+                "type": "Linear",
+                "params": 787456,
+                "own_params": 787456,
+                "children": []
+              },
+              {
+                "name": "cls_proj",
+                "type": "Linear",
+                "params": 1049600,
+                "own_params": 1049600,
+                "children": []
+              },
+              {
+                "name": "rope",
+                "type": "RotaryEmbedding",
+                "params": 0,
+                "own_params": 0,
+                "children": []
+              },
+              {
+                "name": "blocks",
+                "type": "ModuleList",
+                "params": 455012352,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "0",
+                    "type": "_LightningDiTBlock",
+                    "params": 18958848,
+                    "own_params": 0,
+                    "children": [
+                      {
+                        "name": "norm1",
+                        "type": "RMSNorm",
+                        "params": 1024,
+                        "own_params": 1024,
+                        "children": [],
+                        "repeat": 2
+                      },
+                      {
+                        "name": "attn",
+                        "type": "_Attention",
+                        "params": 4198528,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "qkv",
+                            "type": "Linear",
+                            "params": 3148800,
+                            "own_params": 3148800,
+                            "children": []
+                          },
+                          {
+                            "name": "q_norm",
+                            "type": "RMSNorm",
+                            "params": 64,
+                            "own_params": 64,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "proj",
+                            "type": "Linear",
+                            "params": 1049600,
+                            "own_params": 1049600,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "mlp",
+                        "type": "_SwiGLU",
+                        "params": 8460672,
+                        "own_params": 0,
+                        "children": [
+                          {
+                            "name": "w1",
+                            "type": "Linear",
+                            "params": 2820800,
+                            "own_params": 2820800,
+                            "children": [],
+                            "repeat": 2
+                          },
+                          {
+                            "name": "w2",
+                            "type": "Linear",
+                            "params": 2819072,
+                            "own_params": 2819072,
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "name": "ada_ln",
+                        "type": "Linear",
+                        "params": 6297600,
+                        "own_params": 6297600,
+                        "children": []
+                      }
+                    ],
+                    "repeat": 24
+                  }
+                ]
+              },
+              {
+                "name": "final",
+                "type": "_FinalLayer",
+                "params": 2887424,
+                "own_params": 0,
+                "children": [
+                  {
+                    "name": "norm",
+                    "type": "RMSNorm",
+                    "params": 1024,
+                    "own_params": 1024,
+                    "children": []
+                  },
+                  {
+                    "name": "ada_ln",
+                    "type": "Linear",
+                    "params": 2099200,
+                    "own_params": 2099200,
+                    "children": []
+                  },
+                  {
+                    "name": "proj",
+                    "type": "Linear",
+                    "params": 787200,
+                    "own_params": 787200,
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "summary": "Drifting Models — one-step generation by evolving the pushforward in training.",
+  "extended": "Deng, Li, Li, Du and He, [arXiv:2602.04770](https://arxiv.org/abs/2602.04770), 2026.  A generator is trained\ntoward a frozen, drifted copy of its own samples: attracted by the data,\nrepelled by the other samples, through an anti-symmetric field that\nvanishes exactly when the two distributions agree.  Inference is one\nnetwork evaluation, with guidance trained in rather than applied.",
+  "parameters": [],
+  "returns": null,
+  "raises": [],
+  "examples": [],
+  "notes": [],
+  "attributes": [],
+  "warns": [],
+  "see_also": [],
+  "canonical_name": "Drifting Model",
+  "citation": "Deng, Mingyang, He Li, Tianhong Li, Yilun Du, and Kaiming He. \"Generative Modeling via Drifting.\" arXiv preprint [arXiv:2602.04770](https://arxiv.org/abs/2602.04770), 2026.",
+  "theory": "A generator $f_\\theta$ maps noise to samples, $x = f_\\theta(\\epsilon)$,\nand induces the pushforward $q = f_{\\theta\\#}\\,p_\\epsilon$.  Training is a\nsequence of models, so it is also a sequence of pushforwards $\\{q_i\\}$; a\nDrifting Model governs that sequence directly with a **drifting field**\n$V_{p,q}$ that says how each sample should move:\n\n\n\n$$\nx_{i+1} = x_i + V_{p,q_i}(x_i).\n$$\n\nThe field is chosen **anti-symmetric**, $V_{p,q} = -V_{q,p}$, which is all\nit takes for $q = p \\Rightarrow V = 0$: matched distributions are an\nequilibrium.  The instantiation is mean-shift attraction toward the data and\nrepulsion from the current samples,\n\n\n\n$$\nV_{p,q}(x) = \\frac{1}{Z_p Z_q}\\,\n    \\mathbb{E}_{y^+\\sim p,\\; y^-\\sim q}\n    \\bigl[k(x, y^+)\\,k(x, y^-)\\,(y^+ - y^-)\\bigr],\n\\qquad k(x, y) = \\exp\\!\\Bigl(-\\tfrac{1}{\\tau}\\lVert x - y\\rVert\\Bigr),\n$$\n\nwith the normalisers $Z$ realised as a softmax over the $y$\nsamples (and, in practice, a second softmax over the batch of $x$).\n\nThe fixed point $f_\\theta(\\epsilon) = f_\\theta(\\epsilon) + V(f_\\theta(\\epsilon))$\nbecomes a regression onto a frozen target,\n\n\n\n$$\n\\mathcal{L} = \\mathbb{E}_\\epsilon\\Bigl\\lVert f_\\theta(\\epsilon) -\n    \\mathrm{sg}\\bigl(f_\\theta(\\epsilon) + V(f_\\theta(\\epsilon))\\bigr)\\Bigr\\rVert^2,\n$$\n\nwhose value is $\\mathbb{E}\\lVert V\\rVert^2$ but whose gradient never passes\nthrough $V$ — back-propagating through a distribution is what the\nstop-gradient avoids.\n\nFor images the loss is taken in the feature space of a frozen self-supervised\nencoder $\\phi$ (a ResNet-style MAE, plus ConvNeXt-V2 for pixels), one term\nper scale and location, each with its own distance and drift normalisation and\nsummed over temperatures $\\tau \\in \\{0.02, 0.05, 0.2\\}$.  Guidance is a\ntraining-time behaviour: real samples of other classes join the negatives with\na weight set by a sampled scale $\\alpha$, the generator is conditioned on\n$\\alpha$, and inference stays one evaluation.",
+  "tasks": [
+    "image-generation"
+  ]
+}
