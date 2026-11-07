@@ -508,10 +508,7 @@ _CONSTANT_SEGMENT = {
 # ``masked_fill`` here leaves the first Linear's parameters with no gradient, which a
 # segmented step used to report as zeros (LCD-899; the class is in
 # test_no_gradient_paths_stay_none.py).
-@pytest.mark.parametrize(
-    ("write", "entry"),
-    [(w, e) for w in WRITES for e in ENTRIES],
-)
+@pytest.mark.parametrize(("write", "entry"), [(w, e) for w in WRITES for e in ENTRIES])
 def test_a_write_on_a_factorys_tensor(write: str, entry: str) -> None:
     ran = _run(lambda: _Writes(WRITES[write], MADE["factory"]), entry)
     if (write, entry) not in _CONSTANT_SEGMENT:
