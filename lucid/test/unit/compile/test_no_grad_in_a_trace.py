@@ -354,21 +354,10 @@ def _parameter_detached(s: _Holds, y: Tensor) -> Tensor:
 
 #: A parameter reached only through a sink gets ``None`` in eager.
 _ONLY_THROUGH_IT: dict[str, Body] = {"no_grad": _body_on_a_parameter, "detach": _parameter_detached}
-_ZEROS_IN_A_SEGMENT = pytest.mark.xfail(
-    strict=True,
-    reason="LCD-899: segments=N hands a parameter off the path zeros, where eager has None",
-)
 
 
-@pytest.mark.parametrize(
-    "entry",
-    [
-        "make_step",
-        pytest.param("segmented", marks=_ZEROS_IN_A_SEGMENT),
-        "compiled_step",
-        "fused_step",
-    ],
-)
+# A segmented step used to hand such a parameter zeros (LCD-899).
+@pytest.mark.parametrize("entry", ["make_step", "segmented", "compiled_step", "fused_step"])
 @pytest.mark.parametrize("body", list(_ONLY_THROUGH_IT))
 def test_a_parameter_only_a_constant_reads_gets_no_gradient(body: str, entry: str) -> None:
     ran = _run(lambda: _Holds(_ONLY_THROUGH_IT[body]), entry)
