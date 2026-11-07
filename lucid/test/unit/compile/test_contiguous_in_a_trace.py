@@ -398,7 +398,7 @@ def test_an_export_reads_the_alias_after_the_write() -> None:
     model = _Apply(_read_the_alias_after_the_write).eval()
     graph, _feeds, _inputs, outputs, _values = cml_build.trace(model, _cpu_grid())
     assert not graph.unsupported
-    (_name, output_id, _tensor) = outputs[0]
+    _name, output_id, _tensor = outputs[0]
     assert graph.ops[-1].outputs[0].id == output_id
     assert graph.ops[-1].name == "mul"
 
@@ -415,7 +415,7 @@ def test_an_export_of_a_copy_keeps_the_value_from_before_the_write() -> None:
 
     graph, _feeds, _inputs, outputs, _values = cml_build.trace(_Apply(fn).eval(), _cpu_grid())
     assert not graph.unsupported
-    (_name, output_id, _tensor) = outputs[0]
+    _name, output_id, _tensor = outputs[0]
     made = next(op for op in graph.ops if op.outputs[0].id == output_id)
     assert made.name == "contiguous"
 

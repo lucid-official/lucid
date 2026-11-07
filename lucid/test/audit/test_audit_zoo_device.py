@@ -56,13 +56,7 @@ from lucid.test.audit._zoo_record import (
     render_note,
 )
 from lucid.test.audit._zoo_report import LineReporter
-from lucid.test.audit._zoo_stage import (
-    ZOO_WIDE,
-    CommandStage,
-    Stage,
-    StageResult,
-    ZooCatalog,
-)
+from lucid.test.audit._zoo_stage import ZOO_WIDE, CommandStage, Stage, StageResult, ZooCatalog
 from lucid.test.audit.__main__ import build_parser, main
 from lucid.test.audit.test_audit_zoo import SHA, _budget
 
@@ -332,11 +326,7 @@ class _TwoDeviceCatalog(ZooCatalog):
             f"bad = {self.fails!r};"
             f"sys.exit(1 if '{group}/{name}@' + dev in bad else 0)"
         )
-        return CommandStage(
-            name=name,
-            command=(sys.executable, "-c", code),
-            scope=scope,
-        )
+        return CommandStage(name=name, command=(sys.executable, "-c", code), scope=scope)
 
     @override
     def family_stages(self, family: str, temp: Path, budget: MachineBudget) -> list[Stage]:
@@ -476,9 +466,7 @@ def test_a_record_for_one_device_never_answers_for_the_other(tmp_path: Path) -> 
     assert not FamilyRecord(passed, 40.0, "metal").reusable_under(_budget(40.0), "cpu")
 
 
-def test_a_record_from_before_per_device_state_is_not_read_as_either_device(
-    tmp_path: Path,
-) -> None:
+def test_a_record_from_before_per_device_state_is_not_read_as_either_device(tmp_path: Path) -> None:
     """The single-device runs wrote ``<family>.json``; it must not stand for both devices."""
     state = ZooState(tmp_path, SHA, dirty=False, resume=True)
     legacy = [dataclasses.asdict(StageResult("build", "pass", 1.0, 1.0))]
@@ -592,7 +580,10 @@ def test_a_hand_made_record_and_note_say_where_each_row_ran() -> None:
 def test_notes_are_written_after_each_device_so_a_death_leaves_the_first(tmp_path: Path) -> None:
     state = ZooState(tmp_path / "s", SHA, dirty=False, resume=True)
     book = Notebook(
-        tmp_path / "n", state, {"alpha": "vision"}, RunFacts(SHA, "c", _budget(8.0), zoo_device="both")
+        tmp_path / "n",
+        state,
+        {"alpha": "vision"},
+        RunFacts(SHA, "c", _budget(8.0), zoo_device="both"),
     )
     state.save("alpha", [StageResult("build", "pass", 1.0, 1.0)], _budget(8.0), "metal")
     book.write("alpha")
@@ -634,9 +625,13 @@ def test_the_report_labels_what_was_adapted_with_its_device() -> None:
     assert report.adapted == [("lenet", "zoo-tests (cpu)", note)]
 
 
-def test_each_pass_counts_its_own_families(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_each_pass_counts_its_own_families(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     _Both(tmp_path).go(families=("alpha", "beta"))
     out = capsys.readouterr().out
     assert "── metal ── 2 group(s)" in out and "── cpu ── 2 group(s)" in out
     assert "[2/2] metal beta: pass" in out and "[2/2] cpu beta: pass" in out
-    assert "families ok 2" in out and "families ok 4" not in out, "the tally starts again per device"
+    assert (
+        "families ok 2" in out and "families ok 4" not in out
+    ), "the tally starts again per device"

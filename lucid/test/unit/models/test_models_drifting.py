@@ -930,10 +930,7 @@ class TestEncoderIsNotPersistentState:
 
     @staticmethod
     def _restore(
-        path: str,
-        source: DriftingForImageGeneration,
-        target_encoder: bool,
-        where: pathlib.Path,
+        path: str, source: DriftingForImageGeneration, target_encoder: bool, where: pathlib.Path
     ) -> DriftingForImageGeneration:
         if path == "save_pretrained":
             source.save_pretrained(str(where))

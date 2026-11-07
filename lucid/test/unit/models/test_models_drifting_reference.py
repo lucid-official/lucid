@@ -19,10 +19,7 @@ import pytest
 import lucid
 import lucid.nn as nn
 from lucid.models.generative.drifting import DriftingConfig, DriftingModel
-from lucid.models.generative.drifting._feature_encoder import (
-    _ConvNeXtV2,
-    _DriftingFeatureEncoder,
-)
+from lucid.models.generative.drifting._feature_encoder import _ConvNeXtV2, _DriftingFeatureEncoder
 
 
 def fixed_values(count: int, frequency: float, phase: float) -> list[float]:

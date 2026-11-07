@@ -170,10 +170,7 @@ def test_conclude_claims_only_what_was_read(
     word: str,
 ) -> None:
     got = cwf._conclude(
-        checked=checked,
-        declined=0,
-        unreachable=["  x"] * unreachable,
-        bad=["  y"] * bad,
+        checked=checked, declined=0, unreachable=["  x"] * unreachable, bad=["  y"] * bad
     )
     said = capsys.readouterr()
     assert got == code

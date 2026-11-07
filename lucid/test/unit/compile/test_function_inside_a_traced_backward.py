@@ -486,9 +486,9 @@ def _eager_gradient(case: _Case, device: str) -> list[float]:
 
 
 def _assert_same(got: list[float], want: list[float], what: str) -> None:
-    assert lucid.allclose(lucid.tensor(got), lucid.tensor(want), rtol=1e-3, atol=1e-5), (
-        f"{what}: compiled {got} != eager {want}"
-    )
+    assert lucid.allclose(
+        lucid.tensor(got), lucid.tensor(want), rtol=1e-3, atol=1e-5
+    ), f"{what}: compiled {got} != eager {want}"
 
 
 @pytest.fixture(autouse=True)
@@ -582,9 +582,9 @@ def test_the_step_compiles_and_matches_eager(name: str, entry: str, device_gpu_o
     for k, grad in enumerate(got):
         # The fused step's implied gradient is a difference of float32 weights.
         if entry == "fused_step":
-            assert lucid.allclose(lucid.tensor(grad), lucid.tensor(want), rtol=5e-2, atol=1e-2), (
-                f"fused_step: compiled {grad} != eager {want}"
-            )
+            assert lucid.allclose(
+                lucid.tensor(grad), lucid.tensor(want), rtol=5e-2, atol=1e-2
+            ), f"fused_step: compiled {grad} != eager {want}"
         else:
             _assert_same(grad, want, f"{entry} run {k}")
 

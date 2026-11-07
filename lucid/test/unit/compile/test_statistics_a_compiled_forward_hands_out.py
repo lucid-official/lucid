@@ -401,10 +401,7 @@ def test_a_layer_whose_statistic_is_written_in_place_still_counts(when: str, run
 
 LAZY: dict[str, Callable[[], nn.Module]] = {
     "lazy-linear-and-norm": lambda: nn.Sequential(
-        nn.LazyLinear(SHAPE[-1]),
-        nn.LazyBatchNorm1d(),
-        nn.ReLU(),
-        nn.Linear(SHAPE[-1], SHAPE[-1]),
+        nn.LazyLinear(SHAPE[-1]), nn.LazyBatchNorm1d(), nn.ReLU(), nn.Linear(SHAPE[-1], SHAPE[-1])
     ),
     "lazy-norm": lambda: nn.Sequential(
         nn.Linear(SHAPE[-1], SHAPE[-1]),
