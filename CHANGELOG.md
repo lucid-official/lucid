@@ -55,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a removed tensor hook counts as no hook
 
+- a node hook on a traced value sends the call to eager
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

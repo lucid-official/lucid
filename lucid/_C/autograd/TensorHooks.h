@@ -226,8 +226,10 @@ LUCID_API void run_node_post_hooks_for_graph(Node& node,
 //     ``t`` does not require grad, so no gradient will ever reach it.
 LUCID_API py::object tensor_hook_runner(const TensorImplPtr& t, const py::object& make);
 
-// Whether ``t``'s slot holds a hook: a runner is installed and Python calls it
-// true (a runner left empty by removing every hook is not a hook).
+// Whether a backward through ``t`` runs a hook that a compiled backward would
+// drop: a hook on ``t``'s slot, or a prehook or post-hook on the node that made
+// it.  A runner counts when it is installed and Python calls it true (one left
+// empty by removing every hook is not a hook).
 LUCID_API bool has_tensor_hooks(const TensorImpl& t);
 
 // The runner of ``t``'s post-accumulate-grad hooks (leaf tensors only).

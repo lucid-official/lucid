@@ -458,7 +458,12 @@ bool has_tensor_hooks(const TensorImpl& t) {
     const auto& fn = t.grad_fn();
     if (!fn || fn->tensor_hooks() == nullptr)
         return false;
-    const auto slot = fn->tensor_hooks()->find(t.grad_output_nr());
+    const NodeHooks& hooks = *fn->tensor_hooks();
+    // A hook on the node that made ``t`` runs in the backward through ``t``
+    // just as a hook on its slot does.
+    if (runner_holds_hooks(hooks.node_pre_runner) || runner_holds_hooks(hooks.node_post_runner))
+        return true;
+    const auto slot = hooks.find(t.grad_output_nr());
     return slot && runner_holds_hooks(slot->runner);
 }
 

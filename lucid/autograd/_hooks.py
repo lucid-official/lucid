@@ -128,13 +128,13 @@ class RemovableHandle:
         self.remove()
 
 
-class _HookRunner:
-    """The hooks of one gradient slot, run in registration order.
+class _Hooks:
+    """The hooks one engine runner holds, in registration order.
 
-    The engine holds one per slot and calls it with the slot's gradient.
-    It holds no reference to the tensor: the engine keeps it on the
-    producer node (or the leaf's autograd metadata), and a reference back
-    would be a cycle the collector cannot see through the engine.
+    A runner stays installed on its slot or node once every hook is removed (the
+    next registration reuses it), so ``_C_engine._has_tensor_hooks`` — the one
+    test of whether a tensor is hooked — asks the runner how many it holds
+    rather than whether it is there.
     """
 
     __slots__ = ("hooks",)
@@ -143,13 +143,20 @@ class _HookRunner:
         self.hooks: list[Callable[..., object]] = []
 
     def __len__(self) -> int:
-        """How many hooks the slot holds; the engine reads zero as no hook at all.
-
-        The runner stays installed on its slot once every hook is removed, so
-        ``_C_engine._has_tensor_hooks`` — the one test of whether a tensor is
-        hooked — asks the runner rather than its presence.
-        """
+        """How many hooks the runner holds; the engine reads zero as no hook at all."""
         return len(self.hooks)
+
+
+class _HookRunner(_Hooks):
+    """The hooks of one gradient slot, run in registration order.
+
+    The engine holds one per slot and calls it with the slot's gradient.
+    It holds no reference to the tensor: the engine keeps it on the
+    producer node (or the leaf's autograd metadata), and a reference back
+    would be a cycle the collector cannot see through the engine.
+    """
+
+    __slots__ = ()
 
     def __call__(self, grad: _C_engine.TensorImpl) -> _C_engine.TensorImpl | None:
         """Run every hook on the gradient; the last tensor returned flows on.
@@ -235,13 +242,10 @@ def _register_post_accumulate_grad_hook(
     return RemovableHandle(runner.hooks, hook)
 
 
-class _NodePreHookRunner:
+class _NodePreHookRunner(_Hooks):
     """The backward prehooks of a graph node, run in registration order."""
 
-    __slots__ = ("hooks",)
-
-    def __init__(self) -> None:
-        self.hooks: list[Callable[..., object]] = []
+    __slots__ = ()
 
     def __call__(self, grad_out: _C_engine.TensorImpl) -> _C_engine.TensorImpl | None:
         from lucid._tensor.tensor import Tensor
@@ -297,13 +301,10 @@ def _coerce_node_hook_return(res: object, n: int) -> tuple[Tensor | None, ...]:
     return tuple(new_gi)
 
 
-class _NodeHookRunner:
+class _NodeHookRunner(_Hooks):
     """The backward post-hooks of a graph node, run in registration order."""
 
-    __slots__ = ("hooks",)
-
-    def __init__(self) -> None:
-        self.hooks: list[Callable[..., object]] = []
+    __slots__ = ()
 
     def __call__(
         self, grad_inputs: list[_C_engine.TensorImpl | None], grad_out: _C_engine.TensorImpl | None
