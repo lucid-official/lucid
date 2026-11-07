@@ -12,7 +12,7 @@
     "Regenerate with:  lucid-audit --audit-only --update-coverage",
     "Do that only when the new state is the intended one."
   ],
-  "cells": 11817,
+  "cells": 11816,
   "answered": {
     "broadcast::F.gumbel_softmax": "pass",
     "broadcast::F.straight_through": "pass",
@@ -5452,7 +5452,6 @@
     "grad2::lucid.utils.transforms.functional.center_crop": "pass",
     "grad2::lucid.utils.transforms.functional.crop": "pass",
     "grad2::lucid.utils.transforms.functional.depthwise_conv2d": "pass",
-    "grad2::lucid.utils.transforms.functional.equalize": "pass",
     "grad2::lucid.utils.transforms.functional.gaussian_blur": "pass",
     "grad2::lucid.utils.transforms.functional.hflip": "pass",
     "grad2::lucid.utils.transforms.functional.hsv_to_rgb": "pass",
