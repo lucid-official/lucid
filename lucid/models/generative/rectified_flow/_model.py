@@ -1570,7 +1570,6 @@ class RectifiedFlowForImageGeneration(ImageGenerationModel):
         z0, z1 = self.rectified_flow.reflow_pairs(
             n_samples, steps=steps, device=device, noise=noise
         )
-        assert isinstance(z0, Tensor) and isinstance(z1, Tensor)
         return z0, z1
 
     @lucid.no_grad()

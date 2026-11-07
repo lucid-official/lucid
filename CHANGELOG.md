@@ -251,6 +251,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - give Drifting's feature encoder its own module
 - Drifting says guidance_scale like the zoo (LCD-891)
 - drop the no_grad guards nothing reaches
+- drop an assert the typed no_grad makes redundant
 
 ---
 
