@@ -53,7 +53,13 @@ class _ExecutableLike(Protocol):
 from lucid._C import engine as _C_engine
 
 from lucid.compile._core.buffer_writes import CarriedWrites, HeldWrites, TraceAnswer
-from lucid.compile._core.fallback import EagerFallbackSet, _fallback_notice, _narrate, run_eager
+from lucid.compile._core.fallback import (
+    EagerFallbackSet,
+    _fallback_notice,
+    _narrate,
+    run_eager,
+    run_or_answer_eagerly,
+)
 from lucid.compile._core.signature import (
     CacheKey,
     ParamFingerprint,
@@ -1029,17 +1035,17 @@ class CompiledModule[**P, R](_ModuleWrapper):
         declines: nothing was written yet, so the call is answered eagerly
         and the signature remembered.
         """
-        if entry.n_hits:
-            return self._run(entry, args, kwargs)
-        try:
-            return self._run(entry, args, kwargs)
-        except RuntimeError as why:
-            if "MPSGraph failed" not in str(why):
-                raise
-            _fallback_notice("first-run", str(why))
+        return run_or_answer_eagerly(
+            lambda: self._run(entry, args, kwargs),
+            warm=entry.n_hits > 0,
+            drop=lambda: self._drop(key),
+            eagerly=lambda: run_eager(self._model, args, kwargs),
+        )
+
+    def _drop(self, key: CacheKey) -> None:
+        """Forget ``key``'s executable and answer its signature eagerly from now on."""
         self._cache.pop(key, None)
         self._eager_only.add(key)
-        return run_eager(self._model, args, kwargs)
 
     # ── Internals ────────────────────────────────────────────────
 

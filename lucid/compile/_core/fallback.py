@@ -25,7 +25,7 @@ Three responsibilities:
 import os
 import sys
 import warnings
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, cast
 
 from lucid._C import engine as _C_engine
@@ -35,7 +35,14 @@ if TYPE_CHECKING:
     from lucid.compile._core.signature import CacheKey
     from lucid.nn.module import Module
 
-__all__ = ["run_eager", "EagerFallbackSet", "off_gpu_detail", "refuse_off_gpu"]
+__all__ = [
+    "run_eager",
+    "EagerFallbackSet",
+    "is_first_run_failure",
+    "run_or_answer_eagerly",
+    "off_gpu_detail",
+    "refuse_off_gpu",
+]
 
 
 class CompileFallbackWarning(UserWarning):
@@ -90,6 +97,67 @@ def _fallback_notice(reason_category: str, detail: str) -> None:
         stacklevel=2,
         skip_file_prefixes=(_PACKAGE_ROOT,),
     )
+
+
+def is_first_run_failure(why: BaseException) -> bool:
+    """Whether ``why`` is the engine failing an executable's first run.
+
+    MPSGraph specializes an executable inside its first run, and has gaps
+    there that compiling does not reveal.  A failure of that kind is the same
+    verdict as a compile that declines: the run wrote nothing yet, so the call
+    is answered eagerly and its signature remembered.  Every entry point that
+    can answer eagerly asks this one question of the error it caught, rather
+    than matching the engine's message itself.
+
+    Parameters
+    ----------
+    why : BaseException
+        What the first ``run_executable*`` of an entry raised.
+
+    Returns
+    -------
+    bool
+        ``True`` when the engine reported the run itself failing.
+    """
+    return "MPSGraph failed" in str(why)
+
+
+def run_or_answer_eagerly[T](
+    run: Callable[[], T], *, warm: bool, drop: Callable[[], None], eagerly: Callable[[], T]
+) -> T:
+    """Run a compiled entry, answering eagerly if its first run is the engine's to fail.
+
+    A first run writes nothing (the carried writes are applied only after a run
+    that succeeded), so an eager rerun is the answer a compile that declined
+    would have given: say so once, forget the executable, and let ``eagerly``
+    answer.  Anything else the run raises, and any failure of a ``warm`` entry
+    (one that has run before), is not a verdict about the signature and
+    propagates.
+
+    Parameters
+    ----------
+    run : callable
+        Executes the compiled entry; returns the call's result.
+    warm : bool
+        Whether the entry has run to the end before.
+    drop : callable
+        Forgets the entry and marks its signature eager-only.
+    eagerly : callable
+        The call, run eagerly.
+
+    Returns
+    -------
+    T
+        What ``run`` returned, or what ``eagerly`` did after a refused first run.
+    """
+    try:
+        return run()
+    except RuntimeError as why:
+        if warm or not is_first_run_failure(why):
+            raise
+        _fallback_notice("first-run", str(why))
+    drop()
+    return eagerly()
 
 
 def off_gpu_detail(tensors: Iterable[Tensor]) -> str | None:

@@ -76,6 +76,7 @@ from lucid._device import device as _device_cls
 from lucid._dtype import dtype as _dtype_cls
 from lucid.compile._core.bn_runstats import advance_bn_counters, bn_counter_targets
 from lucid.compile._core.buffer_writes import UncarriedWrite
+from lucid.compile._core.fallback import is_first_run_failure
 from lucid.compile._core.custom_backward import (
     GRADIENT_DTYPES,
     CustomBackwardInTrace,
@@ -340,7 +341,7 @@ def _fallback_category(why: Exception) -> str:
         return "cumulative-bn"
     if isinstance(why, UncarriedWrite):
         return "uncarried-write"
-    return "first-run" if "MPSGraph failed" in str(why) else "lowering"
+    return "first-run" if is_first_run_failure(why) else "lowering"
 
 
 def _loss_ancestors(graph: TraceGraph, loss_id: int) -> set[int]:

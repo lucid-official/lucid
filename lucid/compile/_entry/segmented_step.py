@@ -62,7 +62,7 @@ eager's does (``_core/rng_replay``, LCD-896).
 
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Sequence, cast, final, override
+from typing import TYPE_CHECKING, Callable, NoReturn, Sequence, cast, final, override
 
 from lucid._C import engine as _C_engine
 from lucid._factories._generator import _restore_stream_states, _stream_states
@@ -138,6 +138,9 @@ class _SegCompiled:
     # Whether the segment draws random values.  Both executables draw them anew
     # on every run, so the backward replays the forward's draws (LCD-896).
     draws: bool = False
+    # Whether the forward executable has run to the end once: MPSGraph specializes it
+    # in that first run, and a failure there is a refusal (:func:`_refuse_first_run`).
+    warm: bool = False
 
 
 def _segment_key(x: Tensor, fingerprint: ParamFingerprint) -> CacheKey:
@@ -552,6 +555,35 @@ def _compile_into(
     return compiled
 
 
+def _refuse_first_run(
+    seg: _Segment, compiled: _SegCompiled, why: RuntimeError, undoable: bool
+) -> NoReturn:
+    """Turn a failed first run of ``seg``'s forward into a refusal, or re-raise ``why``.
+
+    Nothing of ``seg`` was written (its BatchNorm write-back follows a run that
+    succeeded), but the segments before it have written theirs.  The eager step
+    that answers instead writes them again, so it is only taken when they can be
+    put back: ``undoable`` — the call kept the buffers, or ``seg`` is the first.
+    Otherwise the failure raises: a silent double update is worse than an error.
+
+    Raises
+    ------
+    _SegmentCompileError
+        ``why`` is a first-run failure and the call can be undone; the executable
+        is dropped so it is not found again.
+    RuntimeError
+        ``why`` itself, otherwise.
+    """
+    from lucid.compile._core.fallback import _fallback_notice, is_first_run_failure
+
+    if compiled.warm or not undoable or not is_first_run_failure(why):
+        raise why
+    _fallback_notice("first-run", str(why))
+    for key in [k for k, v in seg.cache.items() if v is compiled]:
+        del seg.cache[key]
+    raise _SegmentCompileError(seg.index) from why
+
+
 def _forward_segments(
     seg_objs: Sequence[_Segment], cur: Tensor, fingerprint: ParamFingerprint, key: CacheKey
 ) -> tuple[Tensor, bool]:
@@ -586,7 +618,10 @@ def _forward_segments(
                     return _run_eagerly(seg_objs[i + 1 :], built.value), True
                 compiled = built
             holder: list[object] = [compiled]
-            cur = cast(Tensor, _SegmentFunction.apply(holder, cur, *seg.params))
+            try:
+                cur = cast(Tensor, _SegmentFunction.apply(holder, cur, *seg.params))
+            except RuntimeError as why:
+                _refuse_first_run(seg, compiled, why, restore is not None or i == 0)
     except _SegmentCompileError:
         if restore is not None:
             restore()
@@ -657,6 +692,7 @@ class _SegmentFunction(Function):
         outs = _C_engine.compile.run_executable(compiled.fwd.exe, feeds)
         y_impl = cast(_C_engine.TensorImpl, outs[0])
         compiled.bn.apply(outs[1:])
+        compiled.warm = True
 
         ctx.compiled = compiled
         ctx.x_impl = _unwrap(x)

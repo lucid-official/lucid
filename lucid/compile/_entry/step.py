@@ -60,6 +60,8 @@ class _ExecutableLike(Protocol):
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
+    from lucid.compile._core.fallback import EagerFallbackSet
+    from lucid.compile._core.signature import CacheKey
     from lucid._tensor.tensor import Tensor
     from lucid.nn.module import Module
     from lucid.nn.parameter import Parameter
@@ -504,6 +506,15 @@ class _CompiledStepFunction(Function):
         return tuple(None if g is None else grad_loss * _wrap(g) for g in saved_grad_impls)
 
 
+def _drop_entry(
+    cache: dict[object, _StepEntry], eager_only: EagerFallbackSet, key: CacheKey | None
+) -> None:
+    """Forget ``key``'s executable and answer its signature eagerly from now on."""
+    if key is not None:
+        cache.pop(key, None)
+        eager_only.add(key)
+
+
 def _live_entry(cache: dict[object, _StepEntry], key: object) -> _StepEntry | None:
     """``key``'s cached entry, dropped instead when a tensor of the loss flipped its grad need."""
     entry = cache.get(key) if key is not None else None
@@ -517,7 +528,7 @@ def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Call
     """Build the monolithic (single-segment) compiled step callable."""
     from lucid._dispatch import _wrap
     from lucid._tensor.tensor import Tensor
-    from lucid.compile._core.fallback import EagerFallbackSet
+    from lucid.compile._core.fallback import EagerFallbackSet, run_or_answer_eagerly
     from lucid.compile._core.signature import (
         ParamFingerprint,
         leaf_tensors,
@@ -570,7 +581,16 @@ def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Call
                 cache[key] = entry
 
         loose = [_wrap(impl) for impl in entry.loose]
-        return cast(Tensor, _CompiledStepFunction.apply((entry, params), *leaves, *params, *loose))
+        # The first run of an executable is where MPSGraph specializes it, and it may
+        # fail in ways compiling did not reveal: that call is answered eagerly.
+        return run_or_answer_eagerly(
+            lambda: cast(
+                Tensor, _CompiledStepFunction.apply((entry, params), *leaves, *params, *loose)
+            ),
+            warm=entry.n_hits > 0,
+            drop=lambda: _drop_entry(cache, eager_only, key),
+            eagerly=lambda: _answered_or_eager(None, model, loss_fn, x_args),
+        )
 
     def clear_cache() -> None:
         """Drop every cached executable + eager-fallback blacklist for this step callable."""

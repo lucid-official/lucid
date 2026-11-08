@@ -56,13 +56,14 @@ from lucid.compile._core.buffer_writes import (
     held_writes,
     refuse,
 )
-from lucid.compile._core.fallback import _fallback_notice
+from lucid.compile._core.fallback import _fallback_notice, run_or_answer_eagerly
 from lucid.compile._core.rebound_slots import REBOUND_MARK
 from lucid.compile._core.signature import TraceReads, tree_requires_grad
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
     from lucid._tensor.tensor import Tensor
+    from lucid.compile._core.signature import CacheKey
     from lucid.nn.module import Module
     from lucid.utils.cache import DynamicCache, EncoderDecoderCache, StaticCache
 
@@ -468,6 +469,23 @@ def _unwrap_decode_caches(
     return self_cache, cross_cache
 
 
+def _drop_entry(
+    cache: dict[CacheKey, _DecodeEntry], eager_sigs: set[CacheKey], key: CacheKey | None
+) -> None:
+    """Forget ``key``'s executable and answer its signature eagerly from now on."""
+    if key is not None:
+        cache.pop(key, None)
+        eager_sigs.add(key)
+
+
+def _eagerly(
+    forward_fn: Callable[[Tensor, Tensor], Tensor], input_ids: Tensor, cache_position: Tensor
+) -> Tensor:
+    """The step's forward, run eagerly: what a refused trace put back is written once."""
+    with eager_rerun():
+        return forward_fn(input_ids, cache_position)
+
+
 def compiled_decode_step(
     forward_fn: Callable[[Tensor, Tensor], Tensor], static_cache: StaticCache | EncoderDecoderCache
 ) -> Callable[[Tensor, Tensor], Tensor]:
@@ -537,7 +555,12 @@ def compiled_decode_step(
         if entry is None or _needs_gradients(call, self_cache, cross_cache, entry, adapter):
             with eager_rerun():  # what a refused trace put back, written once
                 return forward_fn(input_ids, cache_position)
-        return _run_decode_entry(entry, self_cache, input_ids, cache_position)
+        return run_or_answer_eagerly(
+            lambda: _run_decode_entry(entry, self_cache, input_ids, cache_position),
+            warm=entry.n_hits > 0,
+            drop=lambda: _drop_entry(cache, eager_sigs, key),
+            eagerly=lambda: _eagerly(forward_fn, input_ids, cache_position),
+        )
 
     step.cache = cache  # type: ignore[attr-defined]
     return step

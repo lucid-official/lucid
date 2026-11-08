@@ -340,6 +340,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("TraceGraph", "lucid._C.engine.compile", "TraceGraph"),
     ),
     "lucid.compile._entry.decode_step": (
+        ("CacheKey", "lucid.compile._core.signature", "CacheKey"),
         ("DynamicCache", "lucid.utils.cache", "DynamicCache"),
         ("EncoderDecoderCache", "lucid.utils.cache", "EncoderDecoderCache"),
         ("Module", "lucid.nn.module", "Module"),
@@ -377,6 +378,8 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
     ),
     "lucid.compile._entry.step": (
+        ("CacheKey", "lucid.compile._core.signature", "CacheKey"),
+        ("EagerFallbackSet", "lucid.compile._core.fallback", "EagerFallbackSet"),
         ("Module", "lucid.nn.module", "Module"),
         ("Parameter", "lucid.nn.parameter", "Parameter"),
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
