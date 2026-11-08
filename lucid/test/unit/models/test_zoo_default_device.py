@@ -453,6 +453,12 @@ def test_a_model_with_no_parameters_samples_on_the_default_device(metal_default:
     assert resolve_generation_device(nn.Identity(), "cpu") == "cpu"
 
 
+def test_a_model_with_no_parameters_answers_a_device_type_string() -> None:
+    # get_default_device() is a device; the sampling helpers take its type.
+    got = resolve_generation_device(nn.Identity(), None)
+    assert isinstance(got, str) and got == lucid.get_default_device().type
+
+
 def test_no_helper_defaults_its_device_to_the_cpu() -> None:
     """A ``device`` left out means the default device, in every signature."""
     root = Path(lucid.__file__).parent
