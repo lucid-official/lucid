@@ -391,10 +391,12 @@ def _forward_ms(shape: tuple[int, ...]) -> float:
 @needs_metal
 @pytest.mark.usefixtures("inference")
 def test_a_rank_5_multiply_is_not_slower_than_its_rank_4_twin() -> None:
-    """Coarse on purpose: the unfixed graph ran ~14x the twin, the fixed one ~1x."""
+    """Coarse on purpose: the unfixed graph ran ~14x the twin, the fixed one ~1x on an
+    M1 Pro.  The hosted runner's virtual GPU measured 4.4x on 2b9dfa83b (LCD-935), so
+    the bound is 5x: still far under the unfixed graph."""
     rank5 = _forward_ms((6144, 16, 2, 16, 2))
     rank4 = _forward_ms((6144, 16, 2, 32))
-    assert rank5 < 3.0 * rank4 + 2.0, f"rank-5 {rank5:.1f} ms vs rank-4 {rank4:.1f} ms"
+    assert rank5 < 5.0 * rank4 + 2.0, f"rank-5 {rank5:.1f} ms vs rank-4 {rank4:.1f} ms"
 
 
 # ── every op the rule owns, wrapped on shapes far below the gate ───────────────────────
