@@ -21,6 +21,7 @@
 
 #include "../OpEmitter.h"
 #include "../_AttrHelpers.h"
+#include "../_MaxPool.h"
 
 namespace lucid::compile {
 
@@ -265,13 +266,49 @@ private:
 };
 
 
+// A max pool that keeps an all -inf window at -inf (LCD-916; the plain pool answers 0 there):
+// tries the stencil form first and hands the node to ``plain`` when it does not apply.
+class ExactMaxPoolEmitter final : public OpEmitter {
+public:
+    ExactMaxPoolEmitter(std::unique_ptr<OpEmitter> plain, std::size_t nd)
+        : plain_(std::move(plain)), nd_(nd) {}
+    std::string_view op_name() const override { return plain_->op_name(); }
+    bool emit(BuilderContext& ctx, const OpNode& node) override {
+        const auto* K = int_vec_attr(node, "kernel_size");
+        const auto* S = int_vec_attr(node, "stride");
+        const auto* P = int_vec_attr(node, "padding");
+        MPSGraph* g = (__bridge MPSGraph*)ctx.graph();
+        if (node.inputs.size() != 1 || node.inputs[0] < 0 || K == nullptr || S == nullptr ||
+            P == nullptr || g == nil || node.outputs.empty())
+            return plain_->emit(ctx, node);
+        MPSGraphTensor* x = (__bridge MPSGraphTensor*)ctx.resolve(node.inputs[0]);
+        const auto& shape = node.outputs[0].shape;
+        if (x == nil || shape.size() < nd_)
+            return plain_->emit(ctx, node);
+        const std::vector<std::int64_t> pooled(shape.end() - static_cast<std::ptrdiff_t>(nd_),
+                                               shape.end());
+        MPSGraphTensor* y = exact_max_pool(g, x, *K, *S, *P, pooled);
+        if (y == nil || !matches_recorded_shape(y, node))
+            return plain_->emit(ctx, node);
+        ctx.bind(node.outputs[0].id, (__bridge void*)y);
+        return true;
+    }
+
+private:
+    std::unique_ptr<OpEmitter> plain_;
+    std::size_t nd_;
+};
+
 struct PoolEmitterRegistrar {
     PoolEmitterRegistrar() {
-        register_emitter(std::make_unique<MaxPool2dEmitter>());
+        register_emitter(std::make_unique<ExactMaxPoolEmitter>(
+            std::make_unique<MaxPool2dEmitter>(), 2));
         register_emitter(std::make_unique<AvgPool2dEmitter>());
-        register_emitter(std::make_unique<Pool1dEmitterT<true>>("max_pool1d"));
+        register_emitter(std::make_unique<ExactMaxPoolEmitter>(
+            std::make_unique<Pool1dEmitterT<true>>("max_pool1d"), 1));
         register_emitter(std::make_unique<Pool1dEmitterT<false>>("avg_pool1d"));
-        register_emitter(std::make_unique<Pool3dEmitterT<true>>("max_pool3d"));
+        register_emitter(std::make_unique<ExactMaxPoolEmitter>(
+            std::make_unique<Pool3dEmitterT<true>>("max_pool3d"), 3));
         register_emitter(std::make_unique<Pool3dEmitterT<false>>("avg_pool3d"));
     }
 };

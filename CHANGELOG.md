@@ -57,6 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a node hook on a traced value sends the call to eager
 
+- a max pool keeps an all -inf window at -inf
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

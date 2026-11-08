@@ -221,7 +221,9 @@ inline bool result_is_a_host_constant(std::string_view name) {
 // sort, prod, tile, det, erfinv), which no caller can catch, or returns a
 // wrong gradient (arcsin, reciprocal, triu / tril off the diagonal).  So the
 // autodiff fallback is taken only for a trace made entirely of these, and
-// anything else fails the compile and runs eager.  ``tril`` and
+// anything else fails the compile and runs eager.  ``max_pool2d`` is left out since its
+// forward is a stencil with selects around it (an all -inf window stays -inf, LCD-916),
+// which autodiff aborts on.  ``tril`` and
 // ``broadcast_to`` are left out although their measured cases passed: an
 // off-diagonal ``tril`` and a ``broadcast_to`` of a slice did not.
 static const std::unordered_set<std::string_view> kAutodiffSafeOps{
@@ -271,7 +273,6 @@ static const std::unordered_set<std::string_view> kAutodiffSafeOps{
     "log_softmax",
     "lp_normalize",
     "matmul",
-    "max_pool2d",
     "maximum",
     "mean",
     "minimum",

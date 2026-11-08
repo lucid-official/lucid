@@ -40,6 +40,7 @@
 
 #include "../_VjpHelpers.h"
 #include "../../OpEmitters/_AttrHelpers.h"
+#include "../../OpEmitters/_MaxPool.h"
 
 namespace lucid::compile {
 
@@ -51,6 +52,14 @@ inline const std::vector<std::int64_t>* int_vec_attr_local(
     auto it = node.attrs.find(key);
     if (it == node.attrs.end()) return nullptr;
     return std::get_if<std::vector<std::int64_t>>(&it->second);
+}
+
+// The trailing ``nd`` extents of ``shape``.
+std::vector<std::int64_t> trailing_extent(NSArray<NSNumber*>* shape, std::size_t nd) {
+    std::vector<std::int64_t> out;
+    for (NSUInteger i = shape.count - nd; i < shape.count; ++i)
+        out.push_back(shape[i].longLongValue);
+    return out;
 }
 
 bool known(NSArray<NSNumber*>* shape) {
@@ -131,7 +140,7 @@ MPSGraphTensor* scatter_to_argmax(MPSGraph* g, MPSGraphTensor* grad, MPSGraphTen
 
 // Each window's arg-max as a flat index within the window (last axis
 // fastest), found without MPSGraph's pooling-with-indices kernel: the
-// source is padded with -inf, and for every kernel offset the strided slice
+// source is padded with NaN, and for every kernel offset the strided slice
 // it picks out is compared with the pooled value ``y``; the first offset
 // that matches wins, as eager's first-maximum rule has it.  The kernel is
 // avoided because it aborted on macOS 15 ("Multi destination pooling
@@ -152,8 +161,9 @@ MPSGraphTensor* local_argmax(MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* y,
         [left addObject:@(pad_front[a])];
         [right addObject:@(need > 0 ? need : 0)];
     }
-    MPSGraphTensor* xp =
-        pad_or_identity(g, x, left, right, MPSGraphPaddingModeConstant, -INFINITY);
+    // Padding is NaN, which equals nothing: with ``-inf`` it would match a window of ``-inf``
+    // (``y == -inf``) and the gradient would land on a padded position (LCD-916).
+    MPSGraphTensor* xp = pad_or_identity(g, x, left, right, MPSGraphPaddingModeConstant, NAN);
     long long offsets = 1;
     for (std::size_t a = 0; a < nd; ++a)
         offsets *= kernel[a];
@@ -209,6 +219,51 @@ MPSGraphTensor* pooled_value(const BackwardContext& bctx,
     MPSGraph* g = (__bridge MPSGraph*)bctx.graph();
     MPSGraphTensor* y = cast_if_needed(g, as_tensor(bctx.forward(node.outputs[0].id)), dtype);
     return [g reshapeTensor:y withShape:shape name:nil];
+}
+
+// The pooled value recomputed when the walk holds no forward one, shaped ``lifted`` as the
+// gradient kernels see it: the exact max pool the forward emitter builds over the unlifted ``x``
+// (an all -inf window stays -inf, LCD-916), else ``plain()``.
+template <class Plain>
+MPSGraphTensor* recomputed_max_pool(MPSGraph* g,
+                                    MPSGraphTensor* x,
+                                    const std::vector<std::int64_t>& kernel,
+                                    const std::vector<std::int64_t>& stride,
+                                    const std::vector<std::int64_t>& pad,
+                                    NSArray<NSNumber*>* pooled,
+                                    NSArray<NSNumber*>* lifted,
+                                    Plain plain) {
+    MPSGraphTensor* exact =
+        exact_max_pool(g, x, kernel, stride, pad, trailing_extent(pooled, kernel.size()));
+    return exact != nil ? [g reshapeTensor:exact withShape:lifted name:nil] : plain();
+}
+
+MPSGraphTensor* recomputed_max_pool2d(MPSGraph* g,
+                                      MPSGraphTensor* x,
+                                      MPSGraphTensor* lifted,
+                                      MPSGraphPooling2DOpDescriptor* d,
+                                      const std::vector<std::int64_t>& kernel,
+                                      const std::vector<std::int64_t>& stride,
+                                      const std::vector<std::int64_t>& pad,
+                                      NSArray<NSNumber*>* pooled,
+                                      NSArray<NSNumber*>* pooled_lifted) {
+    return recomputed_max_pool(g, x, kernel, stride, pad, pooled, pooled_lifted, [&] {
+        return [g maxPooling2DWithSourceTensor:lifted descriptor:d name:nil];
+    });
+}
+
+MPSGraphTensor* recomputed_max_pool4d(MPSGraph* g,
+                                      MPSGraphTensor* x,
+                                      MPSGraphTensor* lifted,
+                                      MPSGraphPooling4DOpDescriptor* d,
+                                      const std::vector<std::int64_t>& kernel,
+                                      const std::vector<std::int64_t>& stride,
+                                      const std::vector<std::int64_t>& pad,
+                                      NSArray<NSNumber*>* pooled,
+                                      NSArray<NSNumber*>* pooled_lifted) {
+    return recomputed_max_pool(g, x, kernel, stride, pad, pooled, pooled_lifted, [&] {
+        return [g maxPooling4DWithSourceTensor:lifted descriptor:d name:nil];
+    });
 }
 
 // The gradient of a max pool: ``grad`` scattered to each window's first maximum.  ``nil`` if
@@ -292,7 +347,7 @@ public:
             MPSGraphTensor* dx4 = nil;
             if (IS_MAX) {
                 MPSGraphTensor* y4 = pooled_value(bctx, node, grad.dataType, g4, [&] {
-                    return [g maxPooling2DWithSourceTensor:xl descriptor:d name:nil];
+                    return recomputed_max_pool2d(g, x, xl, d, *K, *S, *P, gs, g4);
                 });
                 dx4 = max_pool_grad(g, xl, y4, gl, x4, g4, {kh, kw}, {sh, sw}, {ph, pw});
             } else {
@@ -326,7 +381,7 @@ public:
                 const std::vector<std::int64_t> s4{1, (*S)[0], (*S)[1], (*S)[2]};
                 const std::vector<std::int64_t> p4{0, (*P)[0], (*P)[1], (*P)[2]};
                 MPSGraphTensor* y6 = pooled_value(bctx, node, grad.dataType, g6, [&] {
-                    return [g maxPooling4DWithSourceTensor:xl descriptor:d name:nil];
+                    return recomputed_max_pool4d(g, x, xl, d, *K, *S, *P, gs, g6);
                 });
                 dx6 = max_pool_grad(g, xl, y6, gl, x6, g6, k4, s4, p4);
             } else {
