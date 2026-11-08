@@ -3,7 +3,7 @@
   "name": "efficientdet",
   "path": "lucid.models.vision.efficientdet",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/20a5525/lucid/models/vision/efficientdet/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/2e92835/lucid/models/vision/efficientdet/__init__.py#L1",
   "members": [
     {
       "name": "EfficientDetConfig",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "EfficientDetConfig(num_classes: int = 80, in_channels: int = 3, phi: int = 0, backbone_in_channels: tuple[int, int, int] = (40, 112, 320), backbone_width_coeff: float = 1.0, backbone_depth_coeff: float = 1.0, fpn_channels: int = 64, fpn_repeats: int = 3, head_repeats: int = 3, anchor_scales: tuple[float, ...] = (1.0, 2.0 ** (1.0 / 3.0), 2.0 ** (2.0 / 3.0)), anchor_ratios: tuple[float, ...] = (0.5, 1.0, 2.0), anchor_base_sizes: tuple[int, ...] = (32, 64, 128, 256, 512), focal_alpha: float = 0.25, focal_gamma: float = 1.5, box_loss_weight: float = 50.0, focal_prior_prob: float = 0.01, iou_fg_thresh: float = 0.5, iou_bg_thresh: float = 0.4, image_size: int = 512, score_thresh: float = 0.05, nms_thresh: float = 0.5, max_detections: int = 100)",
-      "source": "https://github.com/lucid-official/lucid/blob/20a5525/lucid/models/vision/efficientdet/_config.py#L10",
+      "source": "https://github.com/lucid-official/lucid/blob/2e92835/lucid/models/vision/efficientdet/_config.py#L10",
       "subcategory": "config",
       "methods": [],
       "summary": "Configuration for EfficientDet.",
@@ -41,7 +41,7 @@
       ],
       "labels": [],
       "signature": "EfficientDetForObjectDetection(config: EfficientDetConfig)",
-      "source": "https://github.com/lucid-official/lucid/blob/20a5525/lucid/models/vision/efficientdet/_model.py#L524",
+      "source": "https://github.com/lucid-official/lucid/blob/2e92835/lucid/models/vision/efficientdet/_model.py#L524",
       "subcategory": "model",
       "methods": [
         {
@@ -50,7 +50,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(config: EfficientDetConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/20a5525/lucid/models/vision/efficientdet/_model.py#L608",
+          "source": "https://github.com/lucid-official/lucid/blob/2e92835/lucid/models/vision/efficientdet/_model.py#L608",
           "subcategory": "model",
           "summary": null,
           "extended": null,
@@ -72,7 +72,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor, targets: list[dict[str, Tensor]] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/20a5525/lucid/models/vision/efficientdet/_model.py#L691",
+          "source": "https://github.com/lucid-official/lucid/blob/2e92835/lucid/models/vision/efficientdet/_model.py#L691",
           "subcategory": "model",
           "summary": "Run EfficientDet.",
           "extended": null,
@@ -107,7 +107,7 @@
           "kind": "function",
           "labels": [],
           "signature": "postprocess(output: ObjectDetectionOutput)",
-          "source": "https://github.com/lucid-official/lucid/blob/20a5525/lucid/models/vision/efficientdet/_model.py#L922",
+          "source": "https://github.com/lucid-official/lucid/blob/2e92835/lucid/models/vision/efficientdet/_model.py#L922",
           "subcategory": "model",
           "summary": "Per-class NMS on raw sigmoid predictions.",
           "extended": "Returns list of per-image result dicts with \"boxes\", \"scores\", \"labels\".",
@@ -188,7 +188,7 @@
       "kind": "function",
       "labels": [],
       "signature": "efficientdet_d0(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/20a5525/lucid/models/vision/efficientdet/_pretrained.py#L9",
+      "source": "https://github.com/lucid-official/lucid/blob/2e92835/lucid/models/vision/efficientdet/_pretrained.py#L9",
       "subcategory": "pretrained",
       "summary": "EfficientDet-D0 ($\\varphi = 0$).",
       "extended": "Builds the smallest compound-scaled EfficientDet variant: EfficientNet-B0\nbackbone, BiFPN with 64 channels and 3 repeats, head depth 3, and a\n512x512 input resolution.  Approximately 3.9M parameters; COCO test-dev\nmAP of 33.8% (paper Table 2) at 2.5 BFLOPs.",
@@ -2104,7 +2104,7 @@
       "kind": "function",
       "labels": [],
       "signature": "efficientdet_d1(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/20a5525/lucid/models/vision/efficientdet/_pretrained.py#L64",
+      "source": "https://github.com/lucid-official/lucid/blob/2e92835/lucid/models/vision/efficientdet/_pretrained.py#L64",
       "subcategory": "pretrained",
       "summary": "EfficientDet-D1 ($\\varphi = 1$).",
       "extended": "Compound-scaled variant: EfficientNet-B1 backbone, BiFPN 88 channels\nwith 4 repeats, head depth 3, 640x640 input.  Approximately 6.6M\nparameters; COCO test-dev mAP of 39.6% (paper Table 2).",
@@ -4247,7 +4247,7 @@
       "kind": "function",
       "labels": [],
       "signature": "efficientdet_d2(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/20a5525/lucid/models/vision/efficientdet/_pretrained.py#L114",
+      "source": "https://github.com/lucid-official/lucid/blob/2e92835/lucid/models/vision/efficientdet/_pretrained.py#L114",
       "subcategory": "pretrained",
       "summary": "EfficientDet-D2 ($\\varphi = 2$).",
       "extended": "Compound-scaled variant: EfficientNet-B2 backbone, BiFPN 112 channels\nwith 5 repeats, head depth 3, 768x768 input.  Approximately 8.1M\nparameters; COCO test-dev mAP of 43.0% (paper Table 2).",
@@ -6390,7 +6390,7 @@
       "kind": "function",
       "labels": [],
       "signature": "efficientdet_d3(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/20a5525/lucid/models/vision/efficientdet/_pretrained.py#L164",
+      "source": "https://github.com/lucid-official/lucid/blob/2e92835/lucid/models/vision/efficientdet/_pretrained.py#L164",
       "subcategory": "pretrained",
       "summary": "EfficientDet-D3 ($\\varphi = 3$).",
       "extended": "Compound-scaled variant: EfficientNet-B3 backbone, BiFPN 160 channels\nwith 6 repeats, head depth 4, 896x896 input.  Approximately 12.0M\nparameters; COCO test-dev mAP of 45.8% (paper Table 2).",
@@ -8533,7 +8533,7 @@
       "kind": "function",
       "labels": [],
       "signature": "efficientdet_d4(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/20a5525/lucid/models/vision/efficientdet/_pretrained.py#L214",
+      "source": "https://github.com/lucid-official/lucid/blob/2e92835/lucid/models/vision/efficientdet/_pretrained.py#L214",
       "subcategory": "pretrained",
       "summary": "EfficientDet-D4 ($\\varphi = 4$).",
       "extended": "Compound-scaled variant: EfficientNet-B4 backbone, BiFPN 224 channels\nwith 7 repeats, head depth 4, 1024x1024 input.  Approximately 20.7M\nparameters; COCO test-dev mAP of 49.4% (paper Table 2).",
@@ -10676,7 +10676,7 @@
       "kind": "function",
       "labels": [],
       "signature": "efficientdet_d5(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/20a5525/lucid/models/vision/efficientdet/_pretrained.py#L264",
+      "source": "https://github.com/lucid-official/lucid/blob/2e92835/lucid/models/vision/efficientdet/_pretrained.py#L264",
       "subcategory": "pretrained",
       "summary": "EfficientDet-D5 ($\\varphi = 5$).",
       "extended": "Compound-scaled variant: EfficientNet-B5 backbone, BiFPN 288 channels\nwith 7 repeats, head depth 4, 1280x1280 input.  Approximately 33.7M\nparameters; COCO test-dev mAP of 50.7% (paper Table 2).",
@@ -12821,7 +12821,7 @@
       "kind": "function",
       "labels": [],
       "signature": "efficientdet_d6(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/20a5525/lucid/models/vision/efficientdet/_pretrained.py#L314",
+      "source": "https://github.com/lucid-official/lucid/blob/2e92835/lucid/models/vision/efficientdet/_pretrained.py#L314",
       "subcategory": "pretrained",
       "summary": "EfficientDet-D6 ($\\varphi = 6$).",
       "extended": "Compound-scaled variant: EfficientNet-B6 backbone, BiFPN 384 channels\nwith 8 repeats, head depth 5, 1280x1280 input.  Approximately 51.9M\nparameters; COCO test-dev mAP of 51.7% (paper Table 2).",
@@ -14966,7 +14966,7 @@
       "kind": "function",
       "labels": [],
       "signature": "efficientdet_d7(pretrained: bool = False, overrides: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/20a5525/lucid/models/vision/efficientdet/_pretrained.py#L364",
+      "source": "https://github.com/lucid-official/lucid/blob/2e92835/lucid/models/vision/efficientdet/_pretrained.py#L364",
       "subcategory": "pretrained",
       "summary": "EfficientDet-D7 ($\\varphi = 7$).",
       "extended": "The largest compound-scaled variant: EfficientNet-B6 backbone (shared\nwith D6), BiFPN 384 channels with 8 repeats, head depth 5, and a\n1536x1536 input.  Approximately 51.9M parameters; COCO test-dev mAP\nof 53.7% (paper Table 2) — the headline accuracy result.",
@@ -15002,33 +15002,33 @@
       "model_summary": {
         "name": "EfficientDetForObjectDetection",
         "type": "EfficientDetForObjectDetection",
-        "params": 74309468,
+        "params": 51508580,
         "own_params": 0,
         "children": [
           {
             "name": "backbone",
             "type": "_EfficientNetBackbone",
-            "params": 62143440,
+            "params": 39403992,
             "own_params": 0,
             "children": [
               {
                 "name": "stem",
                 "type": "Sequential",
-                "params": 1856,
+                "params": 1624,
                 "own_params": 0,
                 "children": [
                   {
                     "name": "0",
                     "type": "Conv2d",
-                    "params": 1728,
-                    "own_params": 1728,
+                    "params": 1512,
+                    "own_params": 1512,
                     "children": []
                   },
                   {
                     "name": "1",
                     "type": "BatchNorm2d",
-                    "params": 128,
-                    "own_params": 128,
+                    "params": 112,
+                    "own_params": 112,
                     "children": []
                   },
                   {
@@ -15043,33 +15043,33 @@
               {
                 "name": "stage0",
                 "type": "Sequential",
-                "params": 10920,
+                "params": 8094,
                 "own_params": 0,
                 "children": [
                   {
                     "name": "0",
                     "type": "_MBConv",
-                    "params": 4944,
+                    "params": 4110,
                     "own_params": 0,
                     "children": [
                       {
                         "name": "block",
                         "type": "Sequential",
-                        "params": 704,
+                        "params": 616,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 576,
-                            "own_params": 576,
+                            "params": 504,
+                            "own_params": 504,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 128,
-                            "own_params": 128,
+                            "params": 112,
+                            "own_params": 112,
                             "children": []
                           },
                           {
@@ -15084,7 +15084,7 @@
                       {
                         "name": "se",
                         "type": "Sequential",
-                        "params": 2128,
+                        "params": 1638,
                         "own_params": 0,
                         "children": [
                           {
@@ -15097,8 +15097,8 @@
                           {
                             "name": "1",
                             "type": "Conv2d",
-                            "params": 1040,
-                            "own_params": 1040,
+                            "params": 798,
+                            "own_params": 798,
                             "children": []
                           },
                           {
@@ -15111,8 +15111,8 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 1088,
-                            "own_params": 1088,
+                            "params": 840,
+                            "own_params": 840,
                             "children": []
                           },
                           {
@@ -15127,14 +15127,14 @@
                       {
                         "name": "project",
                         "type": "Sequential",
-                        "params": 2112,
+                        "params": 1856,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 2048,
-                            "own_params": 2048,
+                            "params": 1792,
+                            "own_params": 1792,
                             "children": []
                           },
                           {
@@ -15249,20 +15249,20 @@
                         ]
                       }
                     ],
-                    "repeat": 3
+                    "repeat": 2
                   }
                 ]
               },
               {
                 "name": "stage1",
                 "type": "Sequential",
-                "params": 253424,
+                "params": 156922,
                 "own_params": 0,
                 "children": [
                   {
                     "name": "0",
                     "type": "_MBConv",
-                    "params": 21224,
+                    "params": 19672,
                     "own_params": 0,
                     "children": [
                       {
@@ -15361,21 +15361,21 @@
                       {
                         "name": "project",
                         "type": "Sequential",
-                        "params": 9312,
+                        "params": 7760,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 9216,
-                            "own_params": 9216,
+                            "params": 7680,
+                            "own_params": 7680,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 96,
-                            "own_params": 96,
+                            "params": 80,
+                            "own_params": 80,
                             "children": []
                           }
                         ]
@@ -15385,27 +15385,27 @@
                   {
                     "name": "1",
                     "type": "_MBConv",
-                    "params": 38700,
+                    "params": 27450,
                     "own_params": 0,
                     "children": [
                       {
                         "name": "block",
                         "type": "Sequential",
-                        "params": 17568,
+                        "params": 12720,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 13824,
-                            "own_params": 13824,
+                            "params": 9600,
+                            "own_params": 9600,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 576,
-                            "own_params": 576,
+                            "params": 480,
+                            "own_params": 480,
                             "children": []
                           },
                           {
@@ -15418,15 +15418,15 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 2592,
-                            "own_params": 2592,
+                            "params": 2160,
+                            "own_params": 2160,
                             "children": []
                           },
                           {
                             "name": "4",
                             "type": "BatchNorm2d",
-                            "params": 576,
-                            "own_params": 576,
+                            "params": 480,
+                            "own_params": 480,
                             "children": []
                           },
                           {
@@ -15441,7 +15441,7 @@
                       {
                         "name": "se",
                         "type": "Sequential",
-                        "params": 7212,
+                        "params": 5050,
                         "own_params": 0,
                         "children": [
                           {
@@ -15454,8 +15454,8 @@
                           {
                             "name": "1",
                             "type": "Conv2d",
-                            "params": 3468,
-                            "own_params": 3468,
+                            "params": 2410,
+                            "own_params": 2410,
                             "children": []
                           },
                           {
@@ -15468,8 +15468,8 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 3744,
-                            "own_params": 3744,
+                            "params": 2640,
+                            "own_params": 2640,
                             "children": []
                           },
                           {
@@ -15484,60 +15484,60 @@
                       {
                         "name": "project",
                         "type": "Sequential",
-                        "params": 13920,
+                        "params": 9680,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 13824,
-                            "own_params": 13824,
+                            "params": 9600,
+                            "own_params": 9600,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 96,
-                            "own_params": 96,
+                            "params": 80,
+                            "own_params": 80,
                             "children": []
                           }
                         ]
                       }
                     ],
-                    "repeat": 6
+                    "repeat": 5
                   }
                 ]
               },
               {
                 "name": "stage2",
                 "type": "Sequential",
-                "params": 716068,
+                "params": 493444,
                 "own_params": 0,
                 "children": [
                   {
                     "name": "0",
                     "type": "_MBConv",
-                    "params": 52588,
+                    "params": 39034,
                     "own_params": 0,
                     "children": [
                       {
                         "name": "block",
                         "type": "Sequential",
-                        "params": 22176,
+                        "params": 16560,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 13824,
-                            "own_params": 13824,
+                            "params": 9600,
+                            "own_params": 9600,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 576,
-                            "own_params": 576,
+                            "params": 480,
+                            "own_params": 480,
                             "children": []
                           },
                           {
@@ -15550,15 +15550,15 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 7200,
-                            "own_params": 7200,
+                            "params": 6000,
+                            "own_params": 6000,
                             "children": []
                           },
                           {
                             "name": "4",
                             "type": "BatchNorm2d",
-                            "params": 576,
-                            "own_params": 576,
+                            "params": 480,
+                            "own_params": 480,
                             "children": []
                           },
                           {
@@ -15573,7 +15573,7 @@
                       {
                         "name": "se",
                         "type": "Sequential",
-                        "params": 7212,
+                        "params": 5050,
                         "own_params": 0,
                         "children": [
                           {
@@ -15586,8 +15586,8 @@
                           {
                             "name": "1",
                             "type": "Conv2d",
-                            "params": 3468,
-                            "own_params": 3468,
+                            "params": 2410,
+                            "own_params": 2410,
                             "children": []
                           },
                           {
@@ -15600,8 +15600,8 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 3744,
-                            "own_params": 3744,
+                            "params": 2640,
+                            "own_params": 2640,
                             "children": []
                           },
                           {
@@ -15616,21 +15616,21 @@
                       {
                         "name": "project",
                         "type": "Sequential",
-                        "params": 23200,
+                        "params": 17424,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 23040,
-                            "own_params": 23040,
+                            "params": 17280,
+                            "own_params": 17280,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 160,
-                            "own_params": 160,
+                            "params": 144,
+                            "own_params": 144,
                             "children": []
                           }
                         ]
@@ -15640,27 +15640,27 @@
                   {
                     "name": "1",
                     "type": "_MBConv",
-                    "params": 110580,
+                    "params": 90882,
                     "own_params": 0,
                     "children": [
                       {
                         "name": "block",
                         "type": "Sequential",
-                        "params": 52320,
+                        "params": 43632,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 38400,
-                            "own_params": 38400,
+                            "params": 31104,
+                            "own_params": 31104,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 960,
-                            "own_params": 960,
+                            "params": 864,
+                            "own_params": 864,
                             "children": []
                           },
                           {
@@ -15673,15 +15673,15 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 12000,
-                            "own_params": 12000,
+                            "params": 10800,
+                            "own_params": 10800,
                             "children": []
                           },
                           {
                             "name": "4",
                             "type": "BatchNorm2d",
-                            "params": 960,
-                            "own_params": 960,
+                            "params": 864,
+                            "own_params": 864,
                             "children": []
                           },
                           {
@@ -15696,7 +15696,7 @@
                       {
                         "name": "se",
                         "type": "Sequential",
-                        "params": 19700,
+                        "params": 16002,
                         "own_params": 0,
                         "children": [
                           {
@@ -15709,8 +15709,8 @@
                           {
                             "name": "1",
                             "type": "Conv2d",
-                            "params": 9620,
-                            "own_params": 9620,
+                            "params": 7794,
+                            "own_params": 7794,
                             "children": []
                           },
                           {
@@ -15723,8 +15723,8 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 10080,
-                            "own_params": 10080,
+                            "params": 8208,
+                            "own_params": 8208,
                             "children": []
                           },
                           {
@@ -15739,60 +15739,60 @@
                       {
                         "name": "project",
                         "type": "Sequential",
-                        "params": 38560,
+                        "params": 31248,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 38400,
-                            "own_params": 38400,
+                            "params": 31104,
+                            "own_params": 31104,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 160,
-                            "own_params": 160,
+                            "params": 144,
+                            "own_params": 144,
                             "children": []
                           }
                         ]
                       }
                     ],
-                    "repeat": 6
+                    "repeat": 5
                   }
                 ]
               },
               {
                 "name": "stage3",
                 "type": "Sequential",
-                "params": 3721660,
+                "params": 2379438,
                 "own_params": 0,
                 "children": [
                   {
                     "name": "0",
                     "type": "_MBConv",
-                    "params": 141460,
+                    "params": 115218,
                     "own_params": 0,
                     "children": [
                       {
                         "name": "block",
                         "type": "Sequential",
-                        "params": 44640,
+                        "params": 36720,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 38400,
-                            "own_params": 38400,
+                            "params": 31104,
+                            "own_params": 31104,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 960,
-                            "own_params": 960,
+                            "params": 864,
+                            "own_params": 864,
                             "children": []
                           },
                           {
@@ -15805,15 +15805,15 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 4320,
-                            "own_params": 4320,
+                            "params": 3888,
+                            "own_params": 3888,
                             "children": []
                           },
                           {
                             "name": "4",
                             "type": "BatchNorm2d",
-                            "params": 960,
-                            "own_params": 960,
+                            "params": 864,
+                            "own_params": 864,
                             "children": []
                           },
                           {
@@ -15828,7 +15828,7 @@
                       {
                         "name": "se",
                         "type": "Sequential",
-                        "params": 19700,
+                        "params": 16002,
                         "own_params": 0,
                         "children": [
                           {
@@ -15841,8 +15841,8 @@
                           {
                             "name": "1",
                             "type": "Conv2d",
-                            "params": 9620,
-                            "own_params": 9620,
+                            "params": 7794,
+                            "own_params": 7794,
                             "children": []
                           },
                           {
@@ -15855,8 +15855,8 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 10080,
-                            "own_params": 10080,
+                            "params": 8208,
+                            "own_params": 8208,
                             "children": []
                           },
                           {
@@ -15871,21 +15871,21 @@
                       {
                         "name": "project",
                         "type": "Sequential",
-                        "params": 77120,
+                        "params": 62496,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 76800,
-                            "own_params": 76800,
+                            "params": 62208,
+                            "own_params": 62208,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 320,
-                            "own_params": 320,
+                            "params": 288,
+                            "own_params": 288,
                             "children": []
                           }
                         ]
@@ -15895,27 +15895,27 @@
                   {
                     "name": "1",
                     "type": "_MBConv",
-                    "params": 397800,
+                    "params": 323460,
                     "own_params": 0,
                     "children": [
                       {
                         "name": "block",
                         "type": "Sequential",
-                        "params": 166080,
+                        "params": 135648,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 153600,
-                            "own_params": 153600,
+                            "params": 124416,
+                            "own_params": 124416,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 1920,
-                            "own_params": 1920,
+                            "params": 1728,
+                            "own_params": 1728,
                             "children": []
                           },
                           {
@@ -15928,15 +15928,15 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 8640,
-                            "own_params": 8640,
+                            "params": 7776,
+                            "own_params": 7776,
                             "children": []
                           },
                           {
                             "name": "4",
                             "type": "BatchNorm2d",
-                            "params": 1920,
-                            "own_params": 1920,
+                            "params": 1728,
+                            "own_params": 1728,
                             "children": []
                           },
                           {
@@ -15951,7 +15951,7 @@
                       {
                         "name": "se",
                         "type": "Sequential",
-                        "params": 77800,
+                        "params": 63108,
                         "own_params": 0,
                         "children": [
                           {
@@ -15964,8 +15964,8 @@
                           {
                             "name": "1",
                             "type": "Conv2d",
-                            "params": 38440,
-                            "own_params": 38440,
+                            "params": 31140,
+                            "own_params": 31140,
                             "children": []
                           },
                           {
@@ -15978,8 +15978,8 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 39360,
-                            "own_params": 39360,
+                            "params": 31968,
+                            "own_params": 31968,
                             "children": []
                           },
                           {
@@ -15994,60 +15994,60 @@
                       {
                         "name": "project",
                         "type": "Sequential",
-                        "params": 153920,
+                        "params": 124704,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 153600,
-                            "own_params": 153600,
+                            "params": 124416,
+                            "own_params": 124416,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 320,
-                            "own_params": 320,
+                            "params": 288,
+                            "own_params": 288,
                             "children": []
                           }
                         ]
                       }
                     ],
-                    "repeat": 9
+                    "repeat": 7
                   }
                 ]
               },
               {
                 "name": "stage4",
                 "type": "Sequential",
-                "params": 7615904,
+                "params": 4840930,
                 "own_params": 0,
                 "children": [
                   {
                     "name": "0",
                     "type": "_MBConv",
-                    "params": 474728,
+                    "params": 385780,
                     "own_params": 0,
                     "children": [
                       {
                         "name": "block",
                         "type": "Sequential",
-                        "params": 181440,
+                        "params": 149472,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 153600,
-                            "own_params": 153600,
+                            "params": 124416,
+                            "own_params": 124416,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 1920,
-                            "own_params": 1920,
+                            "params": 1728,
+                            "own_params": 1728,
                             "children": []
                           },
                           {
@@ -16060,15 +16060,15 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 24000,
-                            "own_params": 24000,
+                            "params": 21600,
+                            "own_params": 21600,
                             "children": []
                           },
                           {
                             "name": "4",
                             "type": "BatchNorm2d",
-                            "params": 1920,
-                            "own_params": 1920,
+                            "params": 1728,
+                            "own_params": 1728,
                             "children": []
                           },
                           {
@@ -16083,7 +16083,7 @@
                       {
                         "name": "se",
                         "type": "Sequential",
-                        "params": 77800,
+                        "params": 63108,
                         "own_params": 0,
                         "children": [
                           {
@@ -16096,8 +16096,8 @@
                           {
                             "name": "1",
                             "type": "Conv2d",
-                            "params": 38440,
-                            "own_params": 38440,
+                            "params": 31140,
+                            "own_params": 31140,
                             "children": []
                           },
                           {
@@ -16110,8 +16110,8 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 39360,
-                            "own_params": 39360,
+                            "params": 31968,
+                            "own_params": 31968,
                             "children": []
                           },
                           {
@@ -16126,21 +16126,21 @@
                       {
                         "name": "project",
                         "type": "Sequential",
-                        "params": 215488,
+                        "params": 173200,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 215040,
-                            "own_params": 215040,
+                            "params": 172800,
+                            "own_params": 172800,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 448,
-                            "own_params": 448,
+                            "params": 400,
+                            "own_params": 400,
                             "children": []
                           }
                         ]
@@ -16150,27 +16150,27 @@
                   {
                     "name": "1",
                     "type": "_MBConv",
-                    "params": 793464,
+                    "params": 636450,
                     "own_params": 0,
                     "children": [
                       {
                         "name": "block",
                         "type": "Sequential",
-                        "params": 340032,
+                        "params": 274800,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 301056,
-                            "own_params": 301056,
+                            "params": 240000,
+                            "own_params": 240000,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 2688,
-                            "own_params": 2688,
+                            "params": 2400,
+                            "own_params": 2400,
                             "children": []
                           },
                           {
@@ -16183,15 +16183,15 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 33600,
-                            "own_params": 33600,
+                            "params": 30000,
+                            "own_params": 30000,
                             "children": []
                           },
                           {
                             "name": "4",
                             "type": "BatchNorm2d",
-                            "params": 2688,
-                            "own_params": 2688,
+                            "params": 2400,
+                            "own_params": 2400,
                             "children": []
                           },
                           {
@@ -16206,7 +16206,7 @@
                       {
                         "name": "se",
                         "type": "Sequential",
-                        "params": 151928,
+                        "params": 121250,
                         "own_params": 0,
                         "children": [
                           {
@@ -16219,8 +16219,8 @@
                           {
                             "name": "1",
                             "type": "Conv2d",
-                            "params": 75320,
-                            "own_params": 75320,
+                            "params": 60050,
+                            "own_params": 60050,
                             "children": []
                           },
                           {
@@ -16233,8 +16233,8 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 76608,
-                            "own_params": 76608,
+                            "params": 61200,
+                            "own_params": 61200,
                             "children": []
                           },
                           {
@@ -16249,60 +16249,60 @@
                       {
                         "name": "project",
                         "type": "Sequential",
-                        "params": 301504,
+                        "params": 240400,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 301056,
-                            "own_params": 301056,
+                            "params": 240000,
+                            "own_params": 240000,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 448,
-                            "own_params": 448,
+                            "params": 400,
+                            "own_params": 400,
                             "children": []
                           }
                         ]
                       }
                     ],
-                    "repeat": 9
+                    "repeat": 7
                   }
                 ]
               },
               {
                 "name": "stage5",
                 "type": "Sequential",
-                "params": 28390712,
+                "params": 19186878,
                 "own_params": 0,
                 "children": [
                   {
                     "name": "0",
                     "type": "_MBConv",
-                    "params": 1008824,
+                    "params": 809538,
                     "own_params": 0,
                     "children": [
                       {
                         "name": "block",
                         "type": "Sequential",
-                        "params": 340032,
+                        "params": 274800,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 301056,
-                            "own_params": 301056,
+                            "params": 240000,
+                            "own_params": 240000,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 2688,
-                            "own_params": 2688,
+                            "params": 2400,
+                            "own_params": 2400,
                             "children": []
                           },
                           {
@@ -16315,15 +16315,15 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 33600,
-                            "own_params": 33600,
+                            "params": 30000,
+                            "own_params": 30000,
                             "children": []
                           },
                           {
                             "name": "4",
                             "type": "BatchNorm2d",
-                            "params": 2688,
-                            "own_params": 2688,
+                            "params": 2400,
+                            "own_params": 2400,
                             "children": []
                           },
                           {
@@ -16338,7 +16338,7 @@
                       {
                         "name": "se",
                         "type": "Sequential",
-                        "params": 151928,
+                        "params": 121250,
                         "own_params": 0,
                         "children": [
                           {
@@ -16351,8 +16351,8 @@
                           {
                             "name": "1",
                             "type": "Conv2d",
-                            "params": 75320,
-                            "own_params": 75320,
+                            "params": 60050,
+                            "own_params": 60050,
                             "children": []
                           },
                           {
@@ -16365,8 +16365,8 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 76608,
-                            "own_params": 76608,
+                            "params": 61200,
+                            "own_params": 61200,
                             "children": []
                           },
                           {
@@ -16381,21 +16381,21 @@
                       {
                         "name": "project",
                         "type": "Sequential",
-                        "params": 516864,
+                        "params": 413488,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 516096,
-                            "own_params": 516096,
+                            "params": 412800,
+                            "own_params": 412800,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 768,
-                            "own_params": 768,
+                            "params": 688,
+                            "own_params": 688,
                             "children": []
                           }
                         ]
@@ -16405,27 +16405,27 @@
                   {
                     "name": "1",
                     "type": "_MBConv",
-                    "params": 2281824,
+                    "params": 1837734,
                     "own_params": 0,
                     "children": [
                       {
                         "name": "block",
                         "type": "Sequential",
-                        "params": 951552,
+                        "params": 769872,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 884736,
-                            "own_params": 884736,
+                            "params": 710016,
+                            "own_params": 710016,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 4608,
-                            "own_params": 4608,
+                            "params": 4128,
+                            "own_params": 4128,
                             "children": []
                           },
                           {
@@ -16438,15 +16438,15 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 57600,
-                            "own_params": 57600,
+                            "params": 51600,
+                            "own_params": 51600,
                             "children": []
                           },
                           {
                             "name": "4",
                             "type": "BatchNorm2d",
-                            "params": 4608,
-                            "own_params": 4608,
+                            "params": 4128,
+                            "own_params": 4128,
                             "children": []
                           },
                           {
@@ -16461,7 +16461,7 @@
                       {
                         "name": "se",
                         "type": "Sequential",
-                        "params": 444768,
+                        "params": 357158,
                         "own_params": 0,
                         "children": [
                           {
@@ -16474,8 +16474,8 @@
                           {
                             "name": "1",
                             "type": "Conv2d",
-                            "params": 221280,
-                            "own_params": 221280,
+                            "params": 177590,
+                            "own_params": 177590,
                             "children": []
                           },
                           {
@@ -16488,8 +16488,8 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 223488,
-                            "own_params": 223488,
+                            "params": 179568,
+                            "own_params": 179568,
                             "children": []
                           },
                           {
@@ -16504,60 +16504,60 @@
                       {
                         "name": "project",
                         "type": "Sequential",
-                        "params": 885504,
+                        "params": 710704,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 884736,
-                            "own_params": 884736,
+                            "params": 710016,
+                            "own_params": 710016,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 768,
-                            "own_params": 768,
+                            "params": 688,
+                            "own_params": 688,
                             "children": []
                           }
                         ]
                       }
                     ],
-                    "repeat": 12
+                    "repeat": 10
                   }
                 ]
               },
               {
                 "name": "stage6",
                 "type": "Sequential",
-                "params": 21432896,
+                "params": 12336662,
                 "own_params": 0,
                 "children": [
                   {
                     "name": "0",
                     "type": "_MBConv",
-                    "params": 2835296,
+                    "params": 2284022,
                     "own_params": 0,
                     "children": [
                       {
                         "name": "block",
                         "type": "Sequential",
-                        "params": 914688,
+                        "params": 736848,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 884736,
-                            "own_params": 884736,
+                            "params": 710016,
+                            "own_params": 710016,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 4608,
-                            "own_params": 4608,
+                            "params": 4128,
+                            "own_params": 4128,
                             "children": []
                           },
                           {
@@ -16570,15 +16570,15 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 20736,
-                            "own_params": 20736,
+                            "params": 18576,
+                            "own_params": 18576,
                             "children": []
                           },
                           {
                             "name": "4",
                             "type": "BatchNorm2d",
-                            "params": 4608,
-                            "own_params": 4608,
+                            "params": 4128,
+                            "own_params": 4128,
                             "children": []
                           },
                           {
@@ -16593,7 +16593,7 @@
                       {
                         "name": "se",
                         "type": "Sequential",
-                        "params": 444768,
+                        "params": 357158,
                         "own_params": 0,
                         "children": [
                           {
@@ -16606,8 +16606,8 @@
                           {
                             "name": "1",
                             "type": "Conv2d",
-                            "params": 221280,
-                            "own_params": 221280,
+                            "params": 177590,
+                            "own_params": 177590,
                             "children": []
                           },
                           {
@@ -16620,8 +16620,8 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 223488,
-                            "own_params": 223488,
+                            "params": 179568,
+                            "own_params": 179568,
                             "children": []
                           },
                           {
@@ -16636,21 +16636,21 @@
                       {
                         "name": "project",
                         "type": "Sequential",
-                        "params": 1475840,
+                        "params": 1190016,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 1474560,
-                            "own_params": 1474560,
+                            "params": 1188864,
+                            "own_params": 1188864,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 1280,
-                            "own_params": 1280,
+                            "params": 1152,
+                            "own_params": 1152,
                             "children": []
                           }
                         ]
@@ -16660,27 +16660,27 @@
                   {
                     "name": "1",
                     "type": "_MBConv",
-                    "params": 6199200,
+                    "params": 5026320,
                     "own_params": 0,
                     "children": [
                       {
                         "name": "block",
                         "type": "Sequential",
-                        "params": 2507520,
+                        "params": 2035584,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 2457600,
-                            "own_params": 2457600,
+                            "params": 1990656,
+                            "own_params": 1990656,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 7680,
-                            "own_params": 7680,
+                            "params": 6912,
+                            "own_params": 6912,
                             "children": []
                           },
                           {
@@ -16693,15 +16693,15 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 34560,
-                            "own_params": 34560,
+                            "params": 31104,
+                            "own_params": 31104,
                             "children": []
                           },
                           {
                             "name": "4",
                             "type": "BatchNorm2d",
-                            "params": 7680,
-                            "own_params": 7680,
+                            "params": 6912,
+                            "own_params": 6912,
                             "children": []
                           },
                           {
@@ -16716,7 +16716,7 @@
                       {
                         "name": "se",
                         "type": "Sequential",
-                        "params": 1232800,
+                        "params": 998928,
                         "own_params": 0,
                         "children": [
                           {
@@ -16729,8 +16729,8 @@
                           {
                             "name": "1",
                             "type": "Conv2d",
-                            "params": 614560,
-                            "own_params": 614560,
+                            "params": 497808,
+                            "own_params": 497808,
                             "children": []
                           },
                           {
@@ -16743,8 +16743,8 @@
                           {
                             "name": "3",
                             "type": "Conv2d",
-                            "params": 618240,
-                            "own_params": 618240,
+                            "params": 501120,
+                            "own_params": 501120,
                             "children": []
                           },
                           {
@@ -16759,27 +16759,27 @@
                       {
                         "name": "project",
                         "type": "Sequential",
-                        "params": 2458880,
+                        "params": 1991808,
                         "own_params": 0,
                         "children": [
                           {
                             "name": "0",
                             "type": "Conv2d",
-                            "params": 2457600,
-                            "own_params": 2457600,
+                            "params": 1990656,
+                            "own_params": 1990656,
                             "children": []
                           },
                           {
                             "name": "1",
                             "type": "BatchNorm2d",
-                            "params": 1280,
-                            "own_params": 1280,
+                            "params": 1152,
+                            "own_params": 1152,
                             "children": []
                           }
                         ]
                       }
                     ],
-                    "repeat": 3
+                    "repeat": 2
                   }
                 ]
               }
@@ -16788,14 +16788,14 @@
           {
             "name": "p3_proj",
             "type": "Sequential",
-            "params": 31872,
+            "params": 28800,
             "own_params": 0,
             "children": [
               {
                 "name": "0",
                 "type": "Conv2d",
-                "params": 31104,
-                "own_params": 31104,
+                "params": 28032,
+                "own_params": 28032,
                 "children": []
               },
               {
@@ -16810,14 +16810,14 @@
           {
             "name": "p4_proj",
             "type": "Sequential",
-            "params": 87168,
+            "params": 77952,
             "own_params": 0,
             "children": [
               {
                 "name": "0",
                 "type": "Conv2d",
-                "params": 86400,
-                "own_params": 86400,
+                "params": 77184,
+                "own_params": 77184,
                 "children": []
               },
               {
@@ -16832,14 +16832,14 @@
           {
             "name": "p5_proj",
             "type": "Sequential",
-            "params": 246912,
+            "params": 222336,
             "own_params": 0,
             "children": [
               {
                 "name": "0",
                 "type": "Conv2d",
-                "params": 246144,
-                "own_params": 246144,
+                "params": 221568,
+                "own_params": 221568,
                 "children": []
               },
               {
