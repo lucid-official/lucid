@@ -72,6 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 
 - pool the MAE sets without rank-6 views
+- group_norm works at rank 2, not (N, G, C/G, H, W)
 
 ---
 

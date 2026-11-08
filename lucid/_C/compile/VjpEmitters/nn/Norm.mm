@@ -32,6 +32,7 @@
 
 #include "../VjpEmitter.h"
 #include "../_VjpHelpers.h"
+#include "../../OpEmitters/_GroupNormLayout.h"
 
 namespace lucid::compile {
 
@@ -586,7 +587,8 @@ public:
 //
 // Forward (see :file:`OpEmitters/nn/Norm.mm`):
 //   inputs = [x, gamma, beta];  attrs: num_groups, eps.
-//   x_grouped = reshape(x, (N, G, C/G, *spatial))
+//   x_grouped = reshape(x, (N, G, C/G, *spatial))  — or the rank-2
+//               (N*G, C/G*spatial) form, see _GroupNormLayout.h
 //   mean, var = per-group (axes 2+)
 //   normed_grouped = (x_grouped - mean) * rstd     (gamma=1, beta=0)
 //   normed = reshape(normed_grouped, (N, C, *spatial))
@@ -645,40 +647,27 @@ public:
             if (x_shape.size() < 2) return false;
         }
         const std::size_t rank = x_shape.size();
-        const std::int64_t N = x_shape[0];
+        const auto layout = group_norm_layout(x_shape, G);
+        if (!layout) return false;
         const std::int64_t C = x_shape[1];
-        if (C % G != 0) return false;
-        const std::int64_t C_per_G = C / G;
-
-        // Grouped shape: (N, G, C/G, *spatial)
-        std::vector<std::int64_t> grouped_shape;
-        grouped_shape.reserve(rank + 1);
-        grouped_shape.push_back(N);
-        grouped_shape.push_back(G);
-        grouped_shape.push_back(C_per_G);
-        double N_group = (double)C_per_G;
-        for (std::size_t i = 2; i < rank; ++i) {
-            grouped_shape.push_back(x_shape[i]);
+        double N_group = (double)(C / G);
+        for (std::size_t i = 2; i < rank; ++i)
             N_group *= (double)x_shape[i];
-        }
-        // Reduction axes within a group = [2, 3, …, grouped.rank()]
-        NSMutableArray<NSNumber*>* grp_axes =
-            [NSMutableArray arrayWithCapacity:grouped_shape.size() - 2];
-        for (std::size_t i = 2; i < grouped_shape.size(); ++i)
-            [grp_axes addObject:[NSNumber numberWithLongLong:(long long)i]];
+        NSArray<NSNumber*>* grp_axes = shape_to_ns(layout->work_axes);
+        // The layout the upstream gradient and the per-channel sums live in.
+        NSArray<NSNumber*>* chan_shape = shape_to_ns(layout->chan);
+        if (layout->canonical)
+            grad = [graph reshapeTensor:grad withShape:chan_shape name:nil];
 
-        // (1, C, 1, ...) broadcast for gamma/beta on the C axis.
-        std::vector<std::int64_t> affine(rank, 1);
-        affine[1] = C;
         MPSGraphTensor* gamma_b =
-            [graph reshapeTensor:gamma withShape:shape_to_ns(affine) name:nil];
+            [graph reshapeTensor:gamma withShape:shape_to_ns(layout->affine) name:nil];
 
         MPSDataType dt = chain_dt;
         MPSGraphTensor* eps_t = [graph constantWithScalar:eps dataType:dt];
 
         // Forward recomputation (in grouped layout): mean, var, rstd, x_hat.
         MPSGraphTensor* x_grouped =
-            [graph reshapeTensor:x withShape:shape_to_ns(grouped_shape) name:nil];
+            [graph reshapeTensor:x withShape:shape_to_ns(layout->work) name:nil];
         MPSGraphTensor* mean =
             [graph meanOfTensor:x_grouped axes:grp_axes name:nil];
         MPSGraphTensor* var =
@@ -693,17 +682,12 @@ public:
         MPSGraphTensor* x_hat_grp =
             [graph multiplicationWithPrimaryTensor:x_centered
                                     secondaryTensor:rstd name:nil];
-        // normed (un-grouped) for dgamma later.
+        // normed (channel layout) for dgamma later.
         MPSGraphTensor* normed =
-            [graph reshapeTensor:x_hat_grp withShape:shape_to_ns(x_shape) name:nil];
+            [graph reshapeTensor:x_hat_grp withShape:chan_shape name:nil];
 
-        // Channel-axes reduction list for dgamma / dbeta = all-except-1.
-        NSMutableArray<NSNumber*>* non_C =
-            [NSMutableArray arrayWithCapacity:rank - 1];
-        for (std::size_t i = 0; i < rank; ++i) {
-            if (i == 1) continue;
-            [non_C addObject:[NSNumber numberWithLongLong:(long long)i]];
-        }
+        // Channel-axes reduction list for dgamma / dbeta = all-except-C.
+        NSArray<NSNumber*>* non_C = shape_to_ns(layout->chan_sum_axes);
         NSArray<NSNumber*>* c_shape = @[ [NSNumber numberWithLongLong:C] ];
 
         // dbeta = sum_non_C(grad) → (C,)
@@ -730,7 +714,7 @@ public:
         // d_normed in grouped layout.
         MPSGraphTensor* d_normed_grp =
             [graph reshapeTensor:d_normed
-                       withShape:shape_to_ns(grouped_shape) name:nil];
+                       withShape:shape_to_ns(layout->work) name:nil];
 
         // s1 = sum_group(g_hat,          keepdim)
         // s2 = sum_group(g_hat * x_hat,  keepdim)

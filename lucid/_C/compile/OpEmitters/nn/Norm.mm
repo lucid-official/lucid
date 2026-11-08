@@ -24,6 +24,7 @@
 #include <variant>
 
 #include "../_AttrHelpers.h"
+#include "../_GroupNormLayout.h"
 #include "../_NanPropagation.h"
 
 namespace lucid::compile {
@@ -373,9 +374,9 @@ private:
 
 // GroupNorm — inputs (x, gamma, beta), splits channels into G groups,
 // reduces over (per-sample, per-group, all spatial).
-// Implementation: reshape x to (N, G, C/G, *spatial), reduce over
-// (G-index axis + spatial), normalize, reshape back, then apply
-// per-channel gamma/beta broadcast.
+// Implementation: reshape x to groups (see _GroupNormLayout.h), reduce over
+// each group, normalize, reshape back, then apply per-channel gamma/beta
+// broadcast.
 class GroupNormEmitter final : public OpEmitter {
 public:
     std::string_view op_name() const override { return "group_norm"; }
@@ -405,31 +406,19 @@ public:
             return false;
 
         NSArray<NSNumber*>* x_shape = x_t.shape;
-        NSUInteger rank = x_shape.count;
-        if (rank < 2)
+        std::vector<std::int64_t> x_dims;
+        x_dims.reserve(x_shape.count);
+        for (NSNumber* d in x_shape)
+            x_dims.push_back([d longLongValue]);
+        const auto layout = group_norm_layout(x_dims, static_cast<std::int64_t>(G));
+        if (!layout)
             return false;
-        const NSInteger N = [x_shape[0] integerValue];
-        const NSInteger C = [x_shape[1] integerValue];
-        if (C % G != 0)
-            return false;
-        const NSInteger C_per_G = C / G;
 
-        // Reshape x from (N, C, *spatial) → (N, G, C/G, *spatial).
-        NSMutableArray<NSNumber*>* grouped_shape =
-            [NSMutableArray arrayWithCapacity:rank + 1];
-        [grouped_shape addObject:@(N)];
-        [grouped_shape addObject:@(G)];
-        [grouped_shape addObject:@(C_per_G)];
-        for (NSUInteger i = 2; i < rank; ++i)
-            [grouped_shape addObject:x_shape[i]];
+        // Reshape x to the layout's work shape — (N, G, C/G, *spatial), or the
+        // rank-2 (N*G, C/G*spatial) when the shape is concrete (_GroupNormLayout.h).
         MPSGraphTensor* x_grouped =
-            [graph reshapeTensor:x_t withShape:grouped_shape name:nil];
-
-        // Reduction axes = [2, 3, …, rank] (C/G + spatial).  Group axis (1)
-        // and batch axis (0) are kept.
-        NSMutableArray<NSNumber*>* reduce_axes = [NSMutableArray array];
-        for (NSUInteger i = 2; i < grouped_shape.count; ++i)
-            [reduce_axes addObject:[NSNumber numberWithUnsignedInteger:i]];
+            [graph reshapeTensor:x_t withShape:shape_to_ns(layout->work) name:nil];
+        NSArray<NSNumber*>* reduce_axes = shape_to_ns(layout->work_axes);
         MPSGraphTensor* mean =
             [graph meanOfTensor:x_grouped axes:reduce_axes name:nil];
         MPSGraphTensor* var =
@@ -449,16 +438,10 @@ public:
                                    epsilon:static_cast<float>(eps)
                                       name:nil];
 
-        // Reshape back to original (N, C, *spatial).
+        // Back to the channel layout, where gamma/beta broadcast per channel.
         MPSGraphTensor* normed =
-            [graph reshapeTensor:normed_grouped withShape:x_shape name:nil];
-
-        // Apply per-channel gamma/beta broadcast.
-        NSMutableArray<NSNumber*>* affine_shape =
-            [NSMutableArray arrayWithCapacity:rank];
-        for (NSUInteger i = 0; i < rank; ++i)
-            [affine_shape addObject:[NSNumber numberWithLongLong:1]];
-        affine_shape[1] = x_shape[1];
+            [graph reshapeTensor:normed_grouped withShape:shape_to_ns(layout->chan) name:nil];
+        NSArray<NSNumber*>* affine_shape = shape_to_ns(layout->affine);
         MPSGraphTensor* gamma_r =
             [graph reshapeTensor:g_t withShape:affine_shape name:nil];
         MPSGraphTensor* beta_r =
@@ -471,6 +454,8 @@ public:
             [graph additionWithPrimaryTensor:scaled
                               secondaryTensor:beta_r
                                          name:@"group_norm"];
+        if (layout->canonical)
+            y = [graph reshapeTensor:y withShape:x_shape name:nil];
         ctx.bind(node.outputs[0].id, (__bridge void*)(y));
         return true;
     }
