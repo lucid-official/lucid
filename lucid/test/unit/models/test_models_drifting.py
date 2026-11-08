@@ -26,6 +26,7 @@ import lucid.nn as nn
 import lucid.optim as optim
 import lucid.weights
 from lucid.compile import make_step
+from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.models import DiffusionModelOutput, create_model, list_models
 from lucid.models._utils._generative import start_noise
 from lucid.models.generative.drifting import (
@@ -33,7 +34,11 @@ from lucid.models.generative.drifting import (
     DriftingForImageGeneration,
     DriftingModel,
 )
-from lucid.models.generative.drifting._feature_encoder import _DriftingFeatureEncoder
+from lucid.models.generative.drifting._feature_encoder import (
+    _add_feature_sets,
+    _DriftingFeatureEncoder,
+    _safe_std,
+)
 from lucid.models.generative.drifting._model import (
     _drift_loss,
     _DriftingSampleQueue,
@@ -770,6 +775,70 @@ class TestFeatureEncoder:
         feats = _DriftingFeatureEncoder(cfg)(lucid.randn(1, 3, 64, 64))
         assert tuple(feats["norm_x"].shape) == (1, 1, 192)
         assert tuple(feats["conv1"].shape) == (1, 64, 16)
+
+    @pytest.mark.parametrize("device", ["cpu", "metal"])
+    @pytest.mark.parametrize("shape", [(2, 3, 8, 8), (1, 5, 12, 8), (2, 4, 6, 6)])
+    @pytest.mark.parametrize("offset", [0.0, 50.0])
+    def test_pooled_sets_equal_the_grouped_formula(
+        self, device: str, shape: tuple[int, ...], offset: float
+    ) -> None:
+        # The pooled sets are built without the rank-6 grouped view that compiled 19x slower;
+        # this is that view's formula, which they must still equal.  The offset puts the
+        # mean far above the spread, where a one-pass variance would have lost digits.
+        feat = (_grid(shape, 0.37, 0.4) * 3.0 + offset).to(device)
+        b, c, h, w = shape
+        out: dict[str, lucid.Tensor] = {}
+        _add_feature_sets(
+            out, "f", feat, DriftingConfig(patch_mean_size=(2, 4), patch_std_size=(2, 3))
+        )
+        for size in (2, 4):
+            if h % size or w % size:
+                assert f"f_mean_{size}" not in out
+                continue
+            grouped = feat.reshape(b, c, h // size, size, w // size, size)
+            want = grouped.mean(dim=(3, 5)).reshape(b, c, -1).permute(0, 2, 1)
+            assert out[f"f_mean_{size}"].reshape(-1).tolist() == pytest.approx(
+                want.reshape(-1).tolist(), rel=1e-6, abs=1e-6
+            )
+        for size in (2, 3):
+            if h % size or w % size:
+                assert f"f_std_{size}" not in out
+                continue
+            grouped = feat.reshape(b, c, h // size, size, w // size, size)
+            want = _safe_std(grouped, (3, 5)).reshape(b, c, -1).permute(0, 2, 1)
+            assert out[f"f_std_{size}"].reshape(-1).tolist() == pytest.approx(
+                want.reshape(-1).tolist(), rel=1e-5, abs=1e-6
+            )
+
+    def test_a_compiled_step_through_the_pooled_sets_matches_eager(self) -> None:
+        # The sets are rank 4 throughout (a compiled step loops over the slices of anything
+        # above that), and the compiled pooling and upsample must agree with the eager ones.
+        feat = _grid((2, 4, 8, 8), 0.3, 0.1).to("metal")
+
+        class Sets(nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.scale = nn.Parameter(lucid.ones(1))
+
+            def forward(self, x: lucid.Tensor) -> tuple[lucid.Tensor, ...]:
+                out: dict[str, lucid.Tensor] = {}
+                _add_feature_sets(out, "f", x * self.scale, DriftingConfig())
+                return tuple(out.values())
+
+        def total(sets: tuple[lucid.Tensor, ...]) -> lucid.Tensor:
+            return lucid.stack([(s * s).mean() for s in sets]).sum()
+
+        model = Sets().to("metal")
+        eager = total(model(feat))
+        eager.backward()
+        want_grad = float(model.scale.grad.item())  # type: ignore[union-attr]
+        model.scale.grad = None
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", CompileFallbackWarning)
+            loss = make_step(model, total)(feat)
+            loss.backward()
+        assert float(loss.item()) == pytest.approx(float(eager.item()), rel=1e-5)
+        assert float(model.scale.grad.item()) == pytest.approx(want_grad, rel=1e-4)  # type: ignore[union-attr]
 
 
 class TestSampleQueue:

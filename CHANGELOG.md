@@ -67,6 +67,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - expose Tracer.is_constant for a value kept past the call
 
+### Performance
+
+- pool the MAE sets without rank-6 views
+
 ---
 
 ## [3.16.4] — 2026-11-07

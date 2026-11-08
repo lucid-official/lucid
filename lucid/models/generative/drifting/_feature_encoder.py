@@ -44,6 +44,22 @@ def _safe_std(x: Tensor, dims: tuple[int, ...], eps: float = 1e-6) -> Tensor:
     return lucid.sqrt(lucid.clamp(var, min=0.0) + eps)
 
 
+def _pooled_std(x: Tensor, size: int, eps: float = 1e-6) -> Tensor:
+    """``_safe_std`` of each ``size x size`` square tiling ``(B, C, H, W)``: ``(B, C, H/size, W/size)``.
+
+    Two-pass like ``_safe_std``, with the squares pooled by ``avg_pool2d``
+    and the pooled mean spread back by a nearest upsample.  The grouped
+    ``(B, C, H/s, s, W/s, s)`` view this replaces is rank 6, and a compiled
+    step runs every tensor above rank 4 as a loop over slices — a training
+    step through the MAE was 19x slower compiled than eager.
+    """
+    x = x.to(_float32_or_wider(x.dtype))
+    mean = F.avg_pool2d(x, size)
+    spread = F.interpolate(mean, scale_factor=size, mode="nearest")
+    var = F.avg_pool2d((x - spread) ** 2, size)
+    return lucid.sqrt(lucid.clamp(var, min=0.0) + eps)
+
+
 def _tokens(feat: Tensor) -> Tensor:
     """``(B, C, H, W) -> (B, H*W, C)``, row-major locations."""
     b, c, h, w = (int(s) for s in feat.shape)
@@ -68,7 +84,7 @@ def _add_feature_sets(
     means and stds pooled over each ``patch_mean_size`` / ``patch_std_size``
     square that tiles the map.
     """
-    b, c, h, w = (int(s) for s in feat.shape)
+    h, w = int(feat.shape[2]), int(feat.shape[3])
     out[name] = _tokens(feat)
     if config.use_mean:
         out[f"{name}_mean"] = feat.mean(dim=(2, 3)).unsqueeze(1)
@@ -76,12 +92,10 @@ def _add_feature_sets(
         out[f"{name}_std"] = _safe_std(feat, (2, 3)).unsqueeze(1)
     for size in config.patch_mean_size:
         if h % size == 0 and w % size == 0:
-            grouped = feat.reshape(b, c, h // size, size, w // size, size)
-            out[f"{name}_mean_{size}"] = _tokens(grouped.mean(dim=(3, 5)))
+            out[f"{name}_mean_{size}"] = _tokens(F.avg_pool2d(feat, size))
     for size in config.patch_std_size:
         if h % size == 0 and w % size == 0:
-            grouped = feat.reshape(b, c, h // size, size, w // size, size)
-            out[f"{name}_std_{size}"] = _tokens(_safe_std(grouped, (3, 5)))
+            out[f"{name}_std_{size}"] = _tokens(_pooled_std(feat, size))
 
 
 class _MAEBasicBlock(nn.Module):
