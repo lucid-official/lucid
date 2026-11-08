@@ -389,6 +389,72 @@ inline id<MTLBuffer> alias_buffer(bool alias_mode, const TensorImpl& target) {
     return (__bridge id<MTLBuffer>)lucid::gpu::mps::array_to_buffer(*gs.arr).mtl_buffer;
 }
 
+// The target shapes of the executable: ``targetTensors`` for one compiled in this
+// process, and for a package-loaded one (which has none) what
+// ``getOutputTypesWithDevice:`` reports for the input shapes it will run.  Nil
+// when neither is available.
+inline NSArray<NSArray<NSNumber*>*>* executable_target_shapes(CompiledExecutable* exe) {
+    const std::size_t n_out = exe->output_shapes.size();
+    NSMutableArray<NSArray<NSNumber*>*>* shapes = [NSMutableArray arrayWithCapacity:n_out];
+    NSArray<MPSGraphTensor*>* targets = exe->executable.targetTensors;
+    if (targets != nil) {
+        if (targets.count != n_out)
+            return nil;
+        for (MPSGraphTensor* t in targets)
+            [shapes addObject:t.shape != nil ? t.shape : @[]];
+        return shapes;
+    }
+    const std::size_t n_in = exe->input_shapes.size();
+    NSMutableArray<MPSGraphShapedType*>* in_types = [NSMutableArray arrayWithCapacity:n_in];
+    for (std::size_t k = 0; k < n_in; ++k) {
+        const std::size_t i = exe->feed_order.empty() ? k : exe->feed_order[k];
+        [in_types addObject:[[MPSGraphShapedType alloc]
+                                initWithShape:shape_to_nsarray(exe->input_shapes[i])
+                                     dataType:mps_dtype_or_throw(exe->input_dtypes[i])]];
+    }
+    id<MTLDevice> device = (__bridge id<MTLDevice>)lucid::gpu::mps::shared_mtl_device();
+    NSArray<MPSGraphShapedType*>* outs =
+        [exe->executable getOutputTypesWithDevice:[MPSGraphDevice deviceWithMTLDevice:device]
+                                       inputTypes:in_types
+                            compilationDescriptor:nil];
+    if (outs == nil || outs.count != n_out)
+        return nil;
+    for (MPSGraphShapedType* t in outs)
+        [shapes addObject:t.shape != nil ? t.shape : @[]];
+    return shapes;
+}
+
+// The shapes the executable's results are bound at: its own target shapes, which
+// may differ from the logical ``output_shapes`` in rank but never in numel.  A
+// rank-5+ output is named at rank 4 (``canonical_output`` in MpsBuilder.mm) so
+// its copy kernel avoids MPSGraph's slice loop, and a keepdim reduce emits
+// ``(1, 1)`` where the recorded loss is ``(1,)``.  A result bound at a rank
+// other than its target's forces an MPSNDArrayIdentity reshape that asserts
+// under F16 (or reads the buffer wrongly), so the ``MPSGraphTensorData`` is
+// always created at this shape and only the host wrap uses the logical one.
+// Nil when the target shapes are unknown, symbolic (a dynamic batch keeps its
+// targets as they are) or disagree with the logical numel: the caller then
+// binds every result at its logical shape.
+inline NSArray<NSArray<NSNumber*>*>* natural_result_shapes(CompiledExecutable* exe) {
+    NSArray<NSArray<NSNumber*>*>* shapes = executable_target_shapes(exe);
+    if (shapes == nil)
+        return nil;
+    for (std::size_t j = 0; j < shapes.count; ++j) {
+        std::int64_t natural_numel = 1;
+        for (NSNumber* d in shapes[j]) {
+            if (d.longLongValue < 0)
+                return nil;
+            natural_numel *= d.longLongValue;
+        }
+        std::int64_t logical_numel = 1;
+        for (std::int64_t d : exe->output_shapes[j])
+            logical_numel *= d;
+        if (natural_numel != logical_numel)
+            return nil;
+    }
+    return shapes;
+}
+
 // Lazily populate the per-executable ``NSArray<NSNumber*>*`` shape tables and
 // feed ``MPSGraphTensorData*`` cache slots.
 inline void ensure_runtime_caches(CompiledExecutable* exe) {
@@ -402,8 +468,9 @@ inline void ensure_runtime_caches(CompiledExecutable* exe) {
     }
     if (exe->cached_output_ns_shapes == nil || exe->cached_output_ns_shapes.count != n_out) {
         NSMutableArray<NSArray<NSNumber*>*>* out_ns = [NSMutableArray arrayWithCapacity:n_out];
+        NSArray<NSArray<NSNumber*>*>* natural = natural_result_shapes(exe);
         for (std::size_t j = 0; j < n_out; ++j)
-            [out_ns addObject:shape_to_nsarray(exe->output_shapes[j])];
+            [out_ns addObject:natural != nil ? natural[j] : shape_to_nsarray(exe->output_shapes[j])];
         exe->cached_output_ns_shapes = out_ns;
     }
     if (exe->cached_feed_td == nil || exe->cached_feed_td.count != n_in) {
@@ -774,24 +841,18 @@ run_executable_inplace_outputs(CompiledExecutable* exe,
         }();
 
         // Destination ndarrays are built at the executable's NATURAL output
-        // rank (``targetTensors[j].shape``), not the squeezed ``output_shapes``.
-        // A keepdim loss reduce emits e.g. ``(1,1)`` while the recorded loss
-        // shape is the squeezed ``(1,)``; writing the rank-2 output into a
-        // rank-1 destination forces an MPSNDArrayIdentity reshape that ASSERTS
-        // under F16 (``New rank: 2 should match destination ... : 1``). Matching
-        // the natural rank sidesteps the reshape entirely. Same numel ⟹ same
-        // buffer bytes, so the post-run swap into the squeezed-shape
-        // ``output_target`` stays valid. Falls back to the recorded shape if the
-        // executable doesn't expose a usable target-tensor shape.
-        NSArray<MPSGraphTensor*>* tgt_tensors = exe->executable.targetTensors;
+        // shape (``natural_result_shapes``, cached), not
+        // the logical ``output_shapes``.  A keepdim loss reduce emits e.g.
+        // ``(1,1)`` while the recorded loss shape is the squeezed ``(1,)``, and
+        // a rank-5+ output is named at rank 4; writing either into a destination
+        // of another rank forces an MPSNDArrayIdentity reshape that ASSERTS under
+        // F16 (``New rank: 2 should match destination ... : 1``).  Same numel =>
+        // same buffer bytes, so the post-run swap into the logical-shape
+        // ``output_target`` stays valid.
         NSMutableArray<MPSGraphTensorData*>* results =
             [NSMutableArray arrayWithCapacity:total_outs];
         for (std::size_t j = 0; j < total_outs; ++j) {
-            NSArray<NSNumber*>* ns_shape = nil;
-            if (tgt_tensors != nil && j < tgt_tensors.count && tgt_tensors[j].shape != nil)
-                ns_shape = tgt_tensors[j].shape;
-            else
-                ns_shape = exe->cached_output_ns_shapes[j];
+            NSArray<NSNumber*>* ns_shape = exe->cached_output_ns_shapes[j];
             MPSDataType ns_dt = mps_dtype_or_throw(exe->output_dtypes[j]);
 
             id<MTLBuffer> out_buf = detail::alias_buffer(alias_mode, *output_targets[j]);

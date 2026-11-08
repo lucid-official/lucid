@@ -406,6 +406,46 @@ inline NSArray<NSNumber*>* shape_to_nsarray(const Shape& shape) {
     return out;
 }
 
+// A graph output at rank 5+ is copied out by MPSGraph's slice-loop kernel (one
+// dispatch per slice over the dims above the last four) even when it is only the
+// result of a reshape.  So such a target is named through a view at the
+// canonical rank (leading axes merged until the rank is 4, numel unchanged): the
+// view is alias-only, the copy then runs at rank 4, and the host wraps the
+// buffer at the logical shape it already records (``output_shapes`` is
+// untouched; ``run_executable`` binds the result at the target's own shape).
+// The gate is :func:`rank_canon_wants`.
+inline MPSGraphTensor* canonical_output(MPSGraph* g, MPSGraphTensor* t) {
+    if (t == nil || t.shape == nil)
+        return t;
+    Shape natural;
+    natural.reserve(t.shape.count);
+    for (NSNumber* d in t.shape) {
+        const std::int64_t v = d.longLongValue;
+        if (v <= 0)
+            return t;  // symbolic or empty: nothing to merge safely
+        natural.push_back(v);
+    }
+    if (!rank_canon_wants(natural))
+        return t;
+    const std::size_t merged = natural.size() - 3;
+    std::int64_t lead = 1;
+    for (std::size_t i = 0; i < merged; ++i)
+        lead *= natural[i];
+    const Shape canonical{lead, natural[merged], natural[merged + 1], natural[merged + 2]};
+    return [g reshapeTensor:t withShape:shape_to_nsarray(canonical) name:nil];
+}
+
+// A symbolic batch substitutes the leading axis of a result at run time, which a
+// merged leading axis cannot follow, so its executable keeps every target as it
+// is.  The feeds say which: a symbolic batch is a negative dim on a feed.
+inline bool feeds_are_symbolic(NSDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feeds) {
+    for (MPSGraphShapedType* type in feeds.allValues)
+        for (NSNumber* d in type.shape)
+            if (d.longLongValue < 0)
+                return true;
+    return false;
+}
+
 // Builds a compile descriptor.
 //
 //   * Determinism ON (uncommon path): ``optimizationLevel = Level0``
@@ -546,6 +586,12 @@ MPSGraphExecutable* compile_graph(MPSGraph* graph,
                                   NSArray<MPSGraphTensor*>* targets,
                                   NSArray<MPSGraphOperation*>* target_ops,
                                   bool half_precision) {
+    if (!feeds_are_symbolic(feeds)) {
+        NSMutableArray<MPSGraphTensor*>* canonical = [NSMutableArray arrayWithCapacity:targets.count];
+        for (MPSGraphTensor* t in targets)
+            [canonical addObject:canonical_output(graph, t)];
+        targets = canonical;
+    }
     const CloneWalkGraph walk = reachable_ops(targets, target_ops);
     if (clone_walk_over_budget(walk))
         target_ops = ops_inputs_first(walk);

@@ -77,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - group_norm works at rank 2, not (N, G, C/G, H, W)
 - run rank-5+ elementwise ops behind rank<=4 views
 - run rank-5+ permute, softmax and matmul at rank<=4
+- materialise rank-5+ graph outputs at rank 4
 
 ---
 
