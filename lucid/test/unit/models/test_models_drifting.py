@@ -13,6 +13,7 @@ Fixed-input values of the generator and the encoders are in
 """
 
 import copy
+import hashlib
 import math
 import pathlib
 import warnings
@@ -24,6 +25,7 @@ import lucid
 import lucid.nn as nn
 import lucid.optim as optim
 import lucid.weights
+from lucid.compile import make_step
 from lucid.models import DiffusionModelOutput, create_model, list_models
 from lucid.models._utils._generative import start_noise
 from lucid.models.generative.drifting import (
@@ -46,6 +48,10 @@ from lucid.models.generative.drifting._pretrained import (
 )
 from lucid.nn._shadow import shadow_alloc
 from lucid.test.unit.models.test_models_drifting_reference import fill_parameters
+
+# The step of ``test_keeping_the_energies_does_not_change_the_loss``, hashed on the code from
+# before the energies were kept: ``loss``, ``samples`` and ``guidance_scale``, byte for byte.
+_LOSS_STEP_DIGEST = "ddd8969a9d679d69716a3a3b18a04ae7a87df6727dab6e4ecdf5f712b06b7b99"
 
 
 def _tiny(**overrides: object) -> DriftingConfig:
@@ -482,6 +488,116 @@ class TestObjective:
         out.loss.backward()
         assert all(p.grad is not None for p in model.parameters())
 
+    @pytest.mark.parametrize(
+        "scale", [2.0, 2, lucid.tensor(2.0), lucid.tensor([2.0]), lucid.tensor([2.0, 2.0, 2.0])]
+    )
+    def test_guidance_scale_takes_every_form_generate_takes(
+        self, scale: float | lucid.Tensor
+    ) -> None:
+        # A scalar form is every label's scale; for three labels a tensor of one used to
+        # fail deep in the embedder and a float on ``.to``.
+        model = self._trained_model()
+        out = model(
+            lucid.randn(3, 2, 4, 8, 8),
+            lucid.arange(3),
+            lucid.randn(3, 2, 4, 8, 8),
+            guidance_scale=scale,
+        )
+        assert out.guidance_scale.tolist() == [2.0, 2.0, 2.0]
+
+    @pytest.mark.parametrize(
+        ("scale", "error"),
+        [
+            (lucid.tensor([2.0, 3.0]), ValueError),
+            (lucid.tensor([[2.0, 2.0, 2.0]]), ValueError),
+            (lucid.zeros(0), ValueError),
+            ("2.0", TypeError),
+            ([2.0, 2.0, 2.0], TypeError),
+        ],
+    )
+    def test_a_guidance_scale_that_does_not_fit_is_refused_at_the_boundary(
+        self, scale: object, error: type[Exception]
+    ) -> None:
+        model = self._trained_model()
+        with pytest.raises(error, match="guidance_scale must be"):
+            model(
+                lucid.randn(3, 2, 4, 8, 8),
+                lucid.arange(3),
+                lucid.randn(3, 2, 4, 8, 8),
+                guidance_scale=scale,  # type: ignore[arg-type]  # the refusal under test
+            )
+
+    def test_the_generator_refuses_a_guidance_scale_of_the_wrong_length(self) -> None:
+        generator = DriftingForImageGeneration(_tiny()).drifting
+        with pytest.raises(ValueError, match="guidance_scale must be"):
+            generator(lucid.randn(3, 4, 8, 8), lucid.arange(3), lucid.tensor([1.0, 2.0]))
+
+    def test_the_raw_drift_energies_are_the_ones_the_loss_computed(self) -> None:
+        # ``loss`` is the normalised drift, one per temperature; the raw energy and the
+        # distance scale are what the release logs, and what goes to zero at the fixed point.
+        temperatures = (0.2, 0.05)
+        model = self._trained_model(temperatures=temperatures)
+        positives, negatives, labels = self._labelled_batch()
+        out = model(positives, labels, negatives, guidance_scale=lucid.tensor([2.0, 3.5]))
+        _, info = _drift_loss(
+            out.samples.reshape(2, 4, -1).detach(),
+            positives.reshape(2, 3, -1),
+            negatives.reshape(2, 2, -1),
+            lucid.tensor([[(a - 1.0) * (4 - 1) / 2] * 2 for a in (2.0, 3.5)]),
+            temperatures,
+        )
+        assert set(info) == {"scale", "loss_0.2", "loss_0.05"}
+        assert list(out.drift_energy) == [f"global/{name}" for name in info]
+        for name, want in info.items():
+            got = out.drift_energy[f"global/{name}"]
+            assert got.ndim == 0 and not got.requires_grad
+            assert float(got.item()) == pytest.approx(float(want.item()), rel=1e-5), name
+
+    def test_every_feature_set_reports_its_own_energies(self) -> None:
+        model = self._trained_model(use_mae=True, mae_base_channels=16, mae_layers=(1, 1, 1, 1))
+        _load_encoder(model)
+        positives, negatives, labels = self._labelled_batch()
+        out = model(positives, labels, negatives, guidance_scale=lucid.tensor([2.0, 3.5]))
+        for key in out.feature_losses:
+            assert {f"{key}/scale", f"{key}/loss_{model.config.temperatures[0]}"} <= set(
+                out.drift_energy
+            )
+        assert all(math.isfinite(float(v.item())) for v in out.drift_energy.values())
+
+    def test_keeping_the_energies_does_not_change_the_loss(self) -> None:
+        lucid.manual_seed(0)
+        model = DriftingForImageGeneration(_tiny(temperatures=(0.02, 0.05)))
+        out = model(
+            lucid.randn(2, 3, 4, 8, 8),
+            lucid.tensor([0, 1]),
+            lucid.randn(2, 2, 4, 8, 8),
+            guidance_scale=lucid.tensor([2.0, 3.5]),
+        )
+        digest = hashlib.sha256(
+            b"".join(t.numpy().tobytes() for t in (out.loss, out.samples, out.guidance_scale))
+        ).hexdigest()
+        assert digest == _LOSS_STEP_DIGEST
+
+    def test_a_compiled_step_trains_with_the_energies_in_the_output(self) -> None:
+        # ``make_step`` hands the traced forward's output to the loss, so the new field is in
+        # what it reads; the loss must still reach every generator parameter.
+        positives, negatives, labels = (t.to("metal") for t in self._labelled_batch())
+        model = self._trained_model().to("metal")
+
+        class Step(nn.Module):
+            def __init__(self, inner: DriftingForImageGeneration) -> None:
+                super().__init__()
+                self.inner = inner
+
+            def forward(self, images: lucid.Tensor) -> object:
+                return self.inner(images, labels, negatives, guidance_scale=2.0)
+
+        step = make_step(Step(model), lambda out: out.loss)
+        loss = step(positives)
+        loss.backward()
+        assert math.isfinite(float(loss.item()))
+        assert all(p.grad is not None for p in model.parameters())
+
 
 class TestGenerate:
     """Each argument of ``generate`` does what it says, shown against the generator itself."""
@@ -742,6 +858,24 @@ class TestSampleQueue:
         with pytest.raises(ValueError, match="holds samples of shape"):
             queue.add(lucid.ones(2, 5), lucid.zeros(2, dtype=lucid.int64))
         assert len(queue._items[0]) == 2
+
+    def test_a_sample_on_another_device_changes_nothing(self) -> None:
+        # It used to be accepted and fail later, in ``sample``, as a stack of mixed devices.
+        queue = _DriftingSampleQueue(num_classes=1, max_size=4)
+        queue.add(lucid.ones(2, 3), lucid.zeros(2, dtype=lucid.int64))
+        with pytest.raises(ValueError, match="holds samples on"):
+            queue.add(lucid.ones(2, 3, device="metal"), lucid.zeros(2, dtype=lucid.int64))
+        assert len(queue._items[0]) == 2
+        assert tuple(queue.sample(lucid.zeros(1, dtype=lucid.int64), 2).shape) == (1, 2, 3)
+
+    def test_a_sample_of_another_dtype_changes_nothing(self) -> None:
+        # It used to be accepted, and promoted when the entries were stacked.
+        queue = _DriftingSampleQueue(num_classes=1, max_size=4)
+        queue.add(lucid.ones(2, 3), lucid.zeros(2, dtype=lucid.int64))
+        with pytest.raises(TypeError, match="float32 samples"):
+            queue.add(lucid.ones(2, 3, dtype=lucid.float16), lucid.zeros(2, dtype=lucid.int64))
+        assert len(queue._items[0]) == 2
+        assert queue.sample(lucid.zeros(1, dtype=lucid.int64), 2).dtype == lucid.float32
 
     def test_labels_must_be_integers(self) -> None:
         with pytest.raises(TypeError, match="integer"):

@@ -38,7 +38,7 @@ training loop feeds.
 import math
 import warnings
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, Self, override
 
 import lucid
@@ -69,6 +69,40 @@ _CFG_EMBED_SCALE = 0.02
 # Added to a generated sample's distance to itself so it is never its own
 # neighbour (``mask_val`` in the release).
 _SELF_MASK = 100.0
+
+
+def _guidance_per_row(
+    guidance_scale: float | Tensor, rows: int, dtype: lucid.dtype, device: str
+) -> Tensor:
+    """The guidance scale as one value per row: ``(rows,)`` in ``dtype`` on ``device``.
+
+    Owns the form of ``guidance_scale`` for the generator and the training
+    step alike: a number or a one-element tensor is every row's scale, and
+    anything else must already be one per row — a tensor of another length
+    would otherwise fail deep in the embedder with a broadcast error that
+    names neither the argument nor the rows.
+
+    Raises
+    ------
+    TypeError
+        If ``guidance_scale`` is neither a number nor a tensor.
+    ValueError
+        If it is a tensor that is not 0-d, one element or ``(rows,)``.
+    """
+    if isinstance(guidance_scale, Tensor):
+        if guidance_scale.ndim > 1 or int(guidance_scale.numel()) not in (1, rows):
+            raise ValueError(
+                f"guidance_scale must be a float, a 0-d or one-element tensor, or shape "
+                f"({rows},) — one per row — got shape {tuple(guidance_scale.shape)}"
+            )
+        return guidance_scale.to(dtype).reshape(-1) + lucid.zeros(
+            (rows,), dtype=dtype, device=device
+        )
+    if not isinstance(guidance_scale, (int, float)):
+        raise TypeError(
+            f"guidance_scale must be a float or a Tensor, got {type(guidance_scale).__name__}"
+        )
+    return lucid.full((rows,), float(guidance_scale), dtype=dtype, device=device)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -462,12 +496,7 @@ class DriftingModel(PretrainedModel):
         check_latent_size(height, width, grid, p, "Drifting")
         device = x.device.type
 
-        if isinstance(guidance_scale, Tensor):
-            alpha = guidance_scale.to(x.dtype).reshape(-1) + lucid.zeros(
-                (b,), dtype=x.dtype, device=device
-            )
-        else:
-            alpha = lucid.full((b,), float(guidance_scale), dtype=x.dtype, device=device)
+        alpha = _guidance_per_row(guidance_scale, b, x.dtype, device)
         if style_indices is None:
             style_indices = self.draw_style_indices(b, device)
         cond = self.conditioning(labels, alpha, style_indices, x.dtype)
@@ -761,6 +790,31 @@ class _DriftingSampleQueue:
         lucid.eval(*copies)
         return copies
 
+    def _check_matches_queued(self, samples: Tensor) -> None:
+        """Refuse ``(N, ...)`` samples that could not be stacked with those already queued.
+
+        ``sample`` stacks entries across classes, so one differing in shape or
+        device fails there, far from the ``add`` that let it in, and one
+        differing in dtype is promoted without a word.
+        """
+        like = self._like
+        if like is None:
+            return
+        if samples.shape[1:] != like.shape:
+            raise ValueError(
+                f"the queue holds samples of shape {tuple(like.shape)}, "
+                f"got {tuple(samples.shape[1:])}"
+            )
+        if samples.device != like.device:
+            raise ValueError(
+                f"the queue holds samples on {like.device}, got samples on {samples.device}"
+            )
+        if samples.dtype != like.dtype:
+            raise TypeError(
+                f"the queue holds {like.dtype} samples, got {samples.dtype}; "
+                "cast them first, or stacking would promote the queue silently"
+            )
+
     def add(self, samples: Tensor, labels: Tensor) -> None:
         """Push ``(N, ...)`` samples into the queues named by ``(N,)`` labels.
 
@@ -773,9 +827,10 @@ class _DriftingSampleQueue:
             If a label is not a queue of this object.
         ValueError
             If ``samples`` and ``labels`` differ in length, or the samples
-            differ in shape from those already queued.
+            differ in shape or device from those already queued.
         TypeError
-            If ``labels`` is not a 1-D tensor of integers.
+            If ``labels`` is not a 1-D tensor of integers, or the samples
+            differ in dtype from those already queued.
         """
         ids = self._checked_labels(labels)
         if samples.ndim == 0 or int(samples.shape[0]) != len(ids):
@@ -783,11 +838,7 @@ class _DriftingSampleQueue:
                 f"expected one label per sample, got {len(ids)} labels "
                 f"for samples of shape {tuple(samples.shape)}"
             )
-        if self._like is not None and samples.shape[1:] != self._like.shape:
-            raise ValueError(
-                f"the queue holds samples of shape {tuple(self._like.shape)}, "
-                f"got {tuple(samples.shape[1:])}"
-            )
+        self._check_matches_queued(samples)
         if not ids:
             return
         for lbl, sample in zip(ids, self._copies(samples, len(ids)), strict=True):
@@ -858,6 +909,16 @@ class DriftingOutput(ModelOutput):
         ``(N_c,)`` — the guidance scale :math:`\alpha` each label trained at.
     feature_losses : dict of str to Tensor
         The per-feature-set loss terms, keyed as the encoder names them.
+    drift_energy : dict of str to Tensor
+        The release's logged diagnostics, one scalar per feature set and
+        quantity, keyed ``"<feature set>/<quantity>"``: ``scale`` is the mean
+        target distance the features are normalised by, and ``loss_<tau>`` is
+        the raw drift energy :math:`\lVert V_\tau\rVert^2` at temperature
+        :math:`\\tau`, before normalisation.  Detached.  ``loss`` is
+        scale-normalised and so nearly constant (one per temperature, summed);
+        these energies are what falls toward zero as the generator approaches
+        the fixed point, so they are the signal to watch for convergence.
+        Float32 or wider, whatever the batch's dtype.
 
     Examples
     --------
@@ -873,6 +934,7 @@ class DriftingOutput(ModelOutput):
     samples: Tensor
     guidance_scale: Tensor
     feature_losses: dict[str, Tensor]
+    drift_energy: dict[str, Tensor] = field(default_factory=dict)
 
 
 class DriftingForImageGeneration(ImageGenerationModel):
@@ -1155,7 +1217,7 @@ class DriftingForImageGeneration(ImageGenerationModel):
         images: Tensor,
         labels: Tensor,
         negatives: Tensor | None = None,
-        guidance_scale: Tensor | None = None,
+        guidance_scale: float | Tensor | None = None,
     ) -> DriftingOutput:
         r"""One drifting training step.
 
@@ -1170,20 +1232,24 @@ class DriftingForImageGeneration(ImageGenerationModel):
             ``(N_c, N_unc, C, H, W)`` unconditional real samples (random
             classes) — the extra negatives guidance trains with.  ``None``,
             or ``N_unc = 0``, trains without guidance.
-        guidance_scale : Tensor or None, optional
-            ``(N_c,)`` guidance scales.  Drawn from the configured power law
-            when ``None`` and negatives are given; ``1`` when neither is.
+        guidance_scale : float or Tensor or None, optional
+            Guidance scales: a float or 0-d tensor for every label, or
+            ``(N_c,)``.  Drawn from the configured power law when ``None``
+            and negatives are given; ``1`` when neither is.
 
         Returns
         -------
         DriftingOutput
-            The loss, the generated batch, the scales and the per-feature
-            terms.
+            The loss, the generated batch, the scales, the per-feature
+            terms and the raw drift energies.
 
         Raises
         ------
         ValueError
-            If the batch is empty, or its tensors do not fit together.
+            If the batch is empty, or its tensors do not fit together —
+            ``guidance_scale`` included.
+        TypeError
+            If ``guidance_scale`` is neither a number nor a tensor.
         RuntimeError
             If the config asks for a learned feature space and no encoder has
             been built.
@@ -1213,7 +1279,7 @@ class DriftingForImageGeneration(ImageGenerationModel):
                 else lucid.ones((n_c,), dtype=dtype, device=device)
             )
         else:
-            alpha = guidance_scale.to(dtype).reshape(-1)
+            alpha = _guidance_per_row(guidance_scale, n_c, dtype, device)
         uncond_w = (alpha - 1.0) * (g - 1) / max(1, n_unc)
 
         noise = lucid.randn(n_c * g, *sample_shape, dtype=dtype, device=device)
@@ -1229,8 +1295,37 @@ class DriftingForImageGeneration(ImageGenerationModel):
             real_feats = self.feature_encoder(real.reshape(n_c * n_real, *sample_shape))
         gen_feats = self.feature_encoder(gen)
 
+        total, feature_losses, drift_energy = self._feature_terms(
+            gen_feats, real_feats, uncond_w, (n_c, n_pos, n_unc), dtype
+        )
+        return DriftingOutput(
+            loss=total.to(dtype),
+            samples=gen,
+            guidance_scale=alpha,
+            feature_losses=feature_losses,
+            drift_energy=drift_energy,
+        )
+
+    def _feature_terms(
+        self,
+        gen_feats: dict[str, Tensor],
+        real_feats: dict[str, Tensor],
+        uncond_w: Tensor,
+        counts: tuple[int, int, int],
+        dtype: lucid.dtype,
+    ) -> tuple[Tensor, dict[str, Tensor], dict[str, Tensor]]:
+        """Each feature set's drifting loss, summed, with the terms and the release's diagnostics.
+
+        ``counts`` is ``(N_c, N_pos, N_unc)``.  Rows are ``(label, location)``,
+        so every location of a set drifts against its own label's positives.
+        The diagnostics are keyed ``"<feature set>/<quantity>"``.
+        """
+        n_c, n_pos, n_unc = counts
+        g = self.config.gen_per_label
+        n_real = n_pos + n_unc
         total: Tensor | None = None
         feature_losses: dict[str, Tensor] = {}
+        drift_energy: dict[str, Tensor] = {}
         for key, gen_feat in gen_feats.items():
             f, d = int(gen_feat.shape[1]), int(gen_feat.shape[2])
             rows = gen_feat.reshape(n_c, g, f, d).permute(0, 2, 1, 3).reshape(n_c * f, g, d)
@@ -1241,15 +1336,14 @@ class DriftingForImageGeneration(ImageGenerationModel):
             if n_unc > 0:
                 neg = real_feat[:, :, n_pos:].reshape(n_c * f, n_unc, d)
                 weight = uncond_w.reshape(n_c, 1, 1).expand(n_c, f, n_unc).reshape(n_c * f, n_unc)
-            loss, _ = _drift_loss(rows, pos, neg, weight, config.temperatures)
+            loss, info = _drift_loss(rows, pos, neg, weight, self.config.temperatures)
+            drift_energy.update({f"{key}/{name}": value for name, value in info.items()})
             term = loss.mean()
             feature_losses[key] = term.to(dtype)
             total = term if total is None else total + term
 
         assert total is not None
-        return DriftingOutput(
-            loss=total.to(dtype), samples=gen, guidance_scale=alpha, feature_losses=feature_losses
-        )
+        return total, feature_losses, drift_energy
 
     # ── sampling ─────────────────────────────────────────────────────────
 
