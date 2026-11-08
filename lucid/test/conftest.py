@@ -19,6 +19,9 @@ What you get for free in any test:
 * ``bench`` — ``pytest-benchmark``-compatible benchmark callable
   (degrades gracefully when the dep is missing).
 * Autouse ``manual_seed(0)`` per test.
+* Autouse clean compile-fallback notice set per test
+  (``_fixtures/compile_notices.py``) -- a notice is once per process, so no
+  test may inherit one an earlier test consumed.
 * Autouse wall-clock deadline for tests that reach a native graph compile
   (``_fixtures/deadline.py``); ``@pytest.mark.deadline(seconds)`` overrides.
 """
@@ -40,6 +43,7 @@ from lucid.test._fixtures.devices import (  # noqa: F401
     cross_device_pair,
     pytest_generate_tests,
 )
+from lucid.test._fixtures.compile_notices import _fresh_compile_notices  # noqa: F401
 from lucid.test._fixtures.deadline import (  # noqa: F401
     _deadline_stderr_fd,
     _native_compile_deadline,
