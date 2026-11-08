@@ -17,9 +17,9 @@
 // through a running sum is NaN exactly for the prefixes that held a NaN.  The carrier
 // is a half-width tensor, fused into the elementwise kernel it joins.
 //
-// Max pooling is left out on purpose: its carrier needs a second (average) pooling over
-// the whole input, which measured +58-65% on a compiled ``max_pool2d`` and +23% on a
-// small CNN step, so a compiled pool still skips a NaN (LCD-913).
+// Max pooling does not use this carrier: it would need a second (average) pooling over
+// the whole input (+58-65% on a compiled ``max_pool2d``).  It encodes the NaN in the
+// stencil's fused prologue and epilogue instead (``_MaxPool.h``, LCD-913).
 //
 // Why not MPSGraph's own ``maximumWithNaNPropagation`` / ``minimumWithNaNPropagation``,
 // ``select`` or ``isNaN``: the autodiff fallback (``kAutodiffSafeOps``,
