@@ -88,7 +88,9 @@ _CFG_CSPDARKNET_53 = CSPNetConfig(
     model_type="cspnet",
     model_class=CSPNet,
     default_config=_CFG_CSPRESNET_50,
-    params=21_620_000,
+    # Headless trunk: the published figure (21.62M) counts the 1000-way
+    # classifier too, which belongs to ``cspresnet_50_cls`` below.
+    params=20_591_168,
 )
 def cspresnet_50(pretrained: bool = False, **overrides: object) -> CSPNet:
     r"""CSPResNet-50 backbone — ResNet-50 with CSP-wrapped stages.
@@ -130,7 +132,9 @@ def cspresnet_50(pretrained: bool = False, **overrides: object) -> CSPNet:
     model_type="cspnet",
     model_class=CSPNet,
     default_config=_CFG_CSPRESNEXT_50,
-    params=20_570_000,
+    # Headless trunk: the published figure (20.57M) counts the 1000-way
+    # classifier too, which belongs to ``cspresnext_50_cls`` below.
+    params=18_520_896,
 )
 def cspresnext_50(pretrained: bool = False, **overrides: object) -> CSPNet:
     r"""CSPResNeXt-50 backbone — ResNeXt-50 (32x4d) with CSP wrap.
@@ -172,7 +176,9 @@ def cspresnext_50(pretrained: bool = False, **overrides: object) -> CSPNet:
     model_type="cspnet",
     model_class=CSPNet,
     default_config=_CFG_CSPDARKNET_53,
-    params=27_610_000,
+    # Headless trunk: the published figure (27.61M) counts the 1000-way
+    # classifier too, which belongs to ``cspdarknet_53_cls`` below.
+    params=26_617_184,
 )
 def cspdarknet_53(pretrained: bool = False, **overrides: object) -> CSPNet:
     r"""CSPDarknet-53 backbone — Darknet-53 (YOLOv3 base) with CSP wrap.

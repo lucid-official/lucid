@@ -85,6 +85,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - efficientdet_d7 uses the paper's B6 backbone (LCD-884)
 
+- cspnet backbones declare their headless count (LCD-884)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
