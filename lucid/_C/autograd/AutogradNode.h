@@ -17,8 +17,10 @@
 #include <optional>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 
 #include "../api.h"
+#include "../backend/GradMask.h"
 #include "../core/Device.h"
 #include "../core/Dtype.h"
 #include "../core/Shape.h"
@@ -232,6 +234,15 @@ public:
     bool needs_input_grad(std::size_t i) const noexcept {
         const auto& edges = next_edges();
         return i < edges.size() && edges[i].is_valid();
+    }
+
+    // :meth:`needs_input_grad` for every input at once, in the form a fused
+    // backward takes (:class:`backend::GradMask`).  The one place that turns
+    // "which inputs have an edge" into a mask.
+    backend::GradMask<N_IN> wanted_grads() const noexcept {
+        return [this]<std::size_t... I>(std::index_sequence<I...>) {
+            return backend::GradMask<N_IN>{needs_input_grad(I)...};
+        }(std::make_index_sequence<N_IN>{});
     }
 
     // Put back, for graph-mode backward, every saved tensor a write since

@@ -35,6 +35,13 @@ Enforces the C++ architecture invariants documented in ``obsidian/DEVELOPMENT.md
 6. ``goto``:
    Hard Rule H13 — ``goto`` statements are forbidden across ``lucid/_C/``.
 
+7. ``hand-grad-mask``:
+   Which gradients a backward wants is :class:`backend::GradMask`'s to say
+   (LCD-834, LCD-839).  A hand-written ``std::array<bool, N> grad_mask`` (any
+   mask-named flag array), or a brace list of two ``needs_input_grad(i)`` calls
+   built to be passed as one, is the second spelling of that decision; a node
+   asks ``wanted_grads()`` instead.
+
 Existing legacy violations are recorded in ``_ALLOWLIST`` with a date and issue
 citation. The allow-list is a strict ratchet: any new violation OR any stale
 allow-list entry whose violation has been resolved causes the check to fail.
@@ -229,6 +236,14 @@ _LAPACK = re.compile(
 )
 _GPU_CPU_LAPACK = re.compile(r"\b(?:cpu::\s*)?lapack_[A-Za-z0-9_]+\b")
 _GOTO = re.compile(r"\bgoto\b")
+# ``std::array<bool, N> <name containing mask>`` as a variable, member or parameter.
+_MASK_ARRAY = re.compile(
+    r"\bstd::array\s*<\s*bool\s*,[^;{}()]*>\s*&?\s*(?P<name>\w*[mM]ask\w*)\b"
+)
+# ``{needs_input_grad(0), needs_input_grad(1), ...}`` written out for one call.
+_NEEDS_GRAD_LIST = re.compile(
+    r"\{[^{};]*\bneeds_input_grad\(\s*\d+\s*\)\s*,[^{};]*\bneeds_input_grad\(\s*\d+\s*\)"
+)
 
 
 def _blank_match(m: re.Match[str]) -> str:
@@ -436,8 +451,35 @@ def _check_goto(rel_posix: str, code: str) -> list[Violation]:
     return out
 
 
+def _check_hand_grad_mask(rel_posix: str, code: str) -> list[Violation]:
+    out: list[Violation] = []
+    for m in _MASK_ARRAY.finditer(code):
+        out.append(
+            Violation(
+                rel_posix,
+                _line_of(code, m.start()),
+                "hand-grad-mask",
+                m.group("name"),
+                f"'std::array<bool, N> {m.group('name')}' spells the wanted-gradient mask by hand; "
+                "use backend::GradMask (a node's wanted_grads())",
+            )
+        )
+    for m in _NEEDS_GRAD_LIST.finditer(code):
+        out.append(
+            Violation(
+                rel_posix,
+                _line_of(code, m.start()),
+                "hand-grad-mask",
+                "needs_input_grad{...}",
+                "a brace list of needs_input_grad(i) calls builds the wanted-gradient mask by hand; "
+                "use the node's wanted_grads()",
+            )
+        )
+    return out
+
+
 def scan_file(path: Path, engine: Path = ENGINE) -> list[Violation]:
-    """Scan a single C++/ObjC++ file under ``engine`` for all 6 invariants."""
+    """Scan a single C++/ObjC++ file under ``engine`` for all 7 invariants."""
     rel_posix = path.resolve().relative_to(engine.resolve()).as_posix()
     raw = path.read_text(encoding="utf-8", errors="replace")
     code = _strip_code(raw)
@@ -448,6 +490,7 @@ def scan_file(path: Path, engine: Path = ENGINE) -> list[Violation]:
     violations.extend(_check_lapack(rel_posix, code))
     violations.extend(_check_gpu_lapack(rel_posix, code))
     violations.extend(_check_goto(rel_posix, code))
+    violations.extend(_check_hand_grad_mask(rel_posix, code))
     return violations
 
 
@@ -512,7 +555,7 @@ def check(
 
     print(
         f"[check_cpp_layers] all C++ layer rules OK "
-        f"(6 invariants checked, {len(allowed_hits)} legacy site(s) on _ALLOWLIST)"
+        f"(7 invariants checked, {len(allowed_hits)} legacy site(s) on _ALLOWLIST)"
     )
     return 0
 

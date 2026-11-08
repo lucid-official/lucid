@@ -113,6 +113,44 @@ nodes = [
     "lucid/test/unit/test_check_cpp_layers.py::test_allowlist_ratchet_detects_stale_and_duplicate_entries",
 ]
 
+# LCD-697 threaded std::array<bool, N> grad_mask through ten fused backwards and each kernel
+# re-spelled `mask[i] ? compute : Storage{}`; LCD-834 gave that decision one owner and LCD-839
+# moved the nodes onto it.  This keeps the hand-written form from coming back.
+[[rule]]
+id = "E-GRAD-MASK"
+statement = """
+Which gradients a backward wants is backend::GradMask's to say: no hand-written
+std::array<bool, N> mask, no brace list of needs_input_grad(i) calls; a node asks wanted_grads()."""
+why = "Two spellings of one decision drift: a kernel skips a gradient its caller still reads."
+scope = ["lucid/_C/**"]
+doc = "engine"
+gap = """
+A name-based scan: a mask array whose name has no `mask` in it, a bool[] or a vector<bool>, and a \
+needs_input_grad(i) spelled out one flag at a time in an `if` (the elementwise ops in ops/bfunc \
+and kernel/ do this) all pass.  It sees the two forms the fused-backward nodes used."""
+enforce = [
+    { level = "commit", check = "cpp-layers" },
+    { level = "push", check = "cpp-layers" },
+    { level = "test", check = "test-cpp-layers" },
+]
+
+[[rule.control]]
+kind = "seed"
+check = ["cpp-layers"]
+tree = ["lucid/_C"]
+path = "lucid/_C/nn/_Seed.cpp"
+clean = "void f(const std::array<bool, 3> saves) { (void)saves; }\n"
+text = "void f() { const std::array<bool, 3> grad_mask{true, true, true}; }\n"
+expect = '_Seed\.cpp:1: \[hand-grad-mask\]'
+
+[[rule.control]]
+kind = "pytest"
+check = ["test-cpp-layers"]
+nodes = [
+    "lucid/test/unit/test_check_cpp_layers.py::test_injected_violation_is_reported",
+    "lucid/test/unit/test_check_cpp_layers.py::test_canonical_owner_files_and_downward_includes_are_allowed",
+]
+
 # 578247379 put five virtuals on Node at ABI 40 and reached main; ABI 41 and 42 came as
 # follow-ups.  The backtest is in tools/README.md, "C++ at push".
 [[rule]]

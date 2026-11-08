@@ -159,8 +159,8 @@ GpuBackend::conv_transpose_nd_backward(const Storage& grad_out,
     const auto& gG = std::get<GpuStorage>(grad_out);
     const int N = opts.N;
     const int G = opts.groups;
-    const auto geo = gpu_conv_grad_geometry(N, G, B, Cin / G, Cout / G, S, K, O, opts.stride,
-                                            opts.pad, opts.dilation);
+    const auto geo = gpu_conv_grad_geometry(N, G, Cin / G, Cout / G, S, K, O, opts.stride, opts.pad,
+                                            opts.dilation);
     Storage db_out = grad_mask.make(
         2, [&] { return grad_storage(sum_widened(*gG.arr, non_channel_axes(N), false), dt); });
     if (gpu_conv_backward_is_empty(B, Cin, Cout, gG.arr->size(), S, K, O, N))
@@ -276,7 +276,7 @@ std::vector<Storage> GpuBackend::conv_nd_backward(const Storage& grad_out,
         return GradMask3::none();
     const auto& gG = std::get<GpuStorage>(grad_out);
     const int N = opts.N;
-    const auto geo = gpu_conv_grad_geometry(N, opts.groups, B, Cin_g, Cout_g, S, K, O, opts.stride,
+    const auto geo = gpu_conv_grad_geometry(N, opts.groups, Cin_g, Cout_g, S, K, O, opts.stride,
                                             opts.pad, opts.dilation);
     Storage db_out = grad_mask.make(
         2, [&] { return grad_storage(sum_widened(*gG.arr, non_channel_axes(N), false), dt); });
@@ -650,7 +650,6 @@ bool GpuBackend::gpu_conv_has_empty_operand(const ::mlx::core::array& x,
 
 GpuBackend::ConvGradGeometry GpuBackend::gpu_conv_grad_geometry(int N,
                                                                 int G,
-                                                                int B,
                                                                 int Cin_g,
                                                                 int Cout_g,
                                                                 const int* S,
@@ -660,8 +659,8 @@ GpuBackend::ConvGradGeometry GpuBackend::gpu_conv_grad_geometry(int N,
                                                                 const int* pad,
                                                                 const int* dilation) {
     const auto axes = [N](const int* p) { return std::vector<int>(p, p + N); };
-    return {
-        N, G, B, Cin_g, Cout_g, axes(S), axes(K), axes(O), axes(stride), axes(pad), axes(dilation)};
+    return {N,       G,       Cin_g,        Cout_g,    axes(S),
+            axes(K), axes(O), axes(stride), axes(pad), axes(dilation)};
 }
 
 ::mlx::core::Shape GpuBackend::gpu_conv_shape(int d0, int d1, const int* extents, int N) {

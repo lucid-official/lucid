@@ -244,10 +244,9 @@ std::vector<Storage> ConvNdBackward<N>::apply(Storage grad_out) {
     }
     auto& be = backend::Dispatcher::for_device(this->device_);
     // Returns [dx, dW, db].
-    return be.conv_nd_backward(
-        grad_out, this->saved_inputs_[0], this->saved_inputs_[1], B, Cin, Cout, Cin_g, Cout_g, S, K,
-        O, opts, this->dtype_,
-        {this->needs_input_grad(0), this->needs_input_grad(1), this->needs_input_grad(2)});
+    return be.conv_nd_backward(grad_out, this->saved_inputs_[0], this->saved_inputs_[1], B, Cin,
+                               Cout, Cin_g, Cout_g, S, K, O, opts, this->dtype_,
+                               this->wanted_grads());
 }
 
 template <int N>
@@ -328,7 +327,8 @@ std::vector<TensorImplPtr> ConvNdBackward<N>::apply_for_graph(const TensorImplPt
     // gradient summed over everything but the output channel.
     const auto& x = this->saved_impl_inputs_[0];
     const auto& W = this->saved_impl_inputs_[1];
-    if ((this->needs_input_grad(0) && !W) || (this->needs_input_grad(1) && !x))
+    const auto need = this->wanted_grads();
+    if ((need.want(0) && !W) || (need.want(1) && !x))
         ErrorBuilder("conv").fail("graph-mode backward is missing a saved input");
 
     const Shape& xs = this->input_shapes_[0];
@@ -343,7 +343,7 @@ std::vector<TensorImplPtr> ConvNdBackward<N>::apply_for_graph(const TensorImplPt
                                     2 * this->pad_[i] + this->dilation_[i] * (ws[2 + i] - 1) + 1));
 
     TensorImplPtr dx;
-    if (this->needs_input_grad(0)) {
+    if (need.want(0)) {
         auto no_bias = zeros_op(Shape{xs[1]}, this->dtype_, this->device_);
         dx = ConvTransposeNdBackward<N>::forward(grad_out, W, no_bias, this->stride_, this->pad_,
                                                  opad, this->dilation_, this->groups_);
@@ -352,12 +352,12 @@ std::vector<TensorImplPtr> ConvNdBackward<N>::apply_for_graph(const TensorImplPt
         // reference's convolution backward is an op of the input.
         dx = zero_derivative_through(dx, this->next_edges()[0]);
     }
-    TensorImplPtr dW = this->needs_input_grad(1)
-                           ? conv_weight_grad<N>(x, grad_out, this->stride_, this->pad_,
-                                                 this->dilation_, this->groups_, ws)
-                           : nullptr;
+    TensorImplPtr dW = need.make(1, [&] {
+        return conv_weight_grad<N>(x, grad_out, this->stride_, this->pad_, this->dilation_,
+                                   this->groups_, ws);
+    });
     TensorImplPtr db;
-    if (this->needs_input_grad(2)) {
+    if (need.want(2)) {
         std::vector<int> not_channel{0};
         for (int i = 0; i < N; ++i)
             not_channel.push_back(2 + i);

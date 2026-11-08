@@ -130,11 +130,9 @@ std::vector<Storage> BatchNormEvalBackward::apply(Storage grad_out) {
         spatial *= static_cast<int>(xs[i]);
     auto& be = backend::Dispatcher::for_device(this->device_);
     // saved_inputs_[3] is gamma (index 3 of the five saved tensors).
-    return be.batch_norm_eval_backward(
-        this->saved_inputs_[0], this->saved_inputs_[1], this->saved_inputs_[3], this->rstd_,
-        grad_out, xs, C, spatial, this->dtype_,
-        {this->needs_input_grad(0), this->needs_input_grad(1), this->needs_input_grad(2),
-         this->needs_input_grad(3), this->needs_input_grad(4)});
+    return be.batch_norm_eval_backward(this->saved_inputs_[0], this->saved_inputs_[1],
+                                       this->saved_inputs_[3], this->rstd_, grad_out, xs, C,
+                                       spatial, this->dtype_, this->wanted_grads());
 }
 
 std::vector<TensorImplPtr> BatchNormEvalBackward::apply_for_graph(const TensorImplPtr& grad_out) {
@@ -143,8 +141,7 @@ std::vector<TensorImplPtr> BatchNormEvalBackward::apply_for_graph(const TensorIm
     // is zero; the reference still keeps dx (and dbeta) in the graph — its
     // backward is an op of x — so both carry a zero derivative.
     const auto& edges = this->next_edges();
-    const auto has_edge = [&](std::size_t i) { return i < edges.size() && edges[i].is_valid(); };
-    const backend::GradMask5 need{has_edge(0), has_edge(1), has_edge(2), has_edge(3), has_edge(4)};
+    const auto need = this->wanted_grads();
     if (need.want(2))
         ErrorBuilder("batch_norm_eval")
             .not_implemented("create_graph=True through a running_var that requires grad: the "
@@ -153,7 +150,7 @@ std::vector<TensorImplPtr> BatchNormEvalBackward::apply_for_graph(const TensorIm
     const auto& x = this->saved_impl_inputs_[0];
     const auto& mean = this->saved_impl_inputs_[1];
     const auto& gamma = this->saved_impl_inputs_[3];
-    if ((need.want(3) && backend::any_null(x, mean)) || (need.want_any(0, 1) && !gamma))
+    if ((need.want(3) && (!x || !mean)) || (need.want_any(0, 1) && !gamma))
         ErrorBuilder("batch_norm_eval").fail("graph-mode backward is missing a saved input");
 
     const Shape& xs = this->input_shapes_[0];
@@ -381,8 +378,7 @@ std::vector<Storage> GlobalResponseNormBackward::apply(Storage grad_out) {
     // Returns [dx, d_gamma, d_beta].
     return be.global_response_norm_backward(
         this->saved_inputs_[0], this->saved_inputs_[1], this->saved_inputs_[2], this->saved_Nx_,
-        grad_out, this->input_shapes_[0], eps_, this->dtype_,
-        {this->needs_input_grad(0), this->needs_input_grad(1), this->needs_input_grad(2)});
+        grad_out, this->input_shapes_[0], eps_, this->dtype_, this->wanted_grads());
 }
 
 TensorImplPtr global_response_norm_op(const TensorImplPtr& x,

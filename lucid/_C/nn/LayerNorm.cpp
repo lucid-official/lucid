@@ -142,14 +142,14 @@ std::vector<Storage> LayerNormBackward::apply(Storage grad_out) {
     // Returns [dx, d_gamma, d_beta].
     return backend::Dispatcher::for_device(device_).layer_norm_backward(
         saved_inputs_[0], saved_inputs_[1], saved_mean_, saved_rstd_, grad_out, outer_, N_,
-        input_shapes_[0], input_shapes_[1], input_shapes_[2], dtype_,
-        {needs_input_grad(0), needs_input_grad(1), needs_input_grad(2)});
+        input_shapes_[0], input_shapes_[1], input_shapes_[2], dtype_, wanted_grads());
 }
 
 std::vector<TensorImplPtr> LayerNormBackward::apply_for_graph(const TensorImplPtr& grad_out) {
     const auto& x = saved_impl_inputs_[0];
     const auto& gamma = saved_impl_inputs_[1];
-    if (((needs_input_grad(0) || needs_input_grad(1)) && !x) || (needs_input_grad(0) && !gamma))
+    const auto need = wanted_grads();
+    if ((need.want_any(0, 1) && !x) || (need.want(0) && !gamma))
         ErrorBuilder("layer_norm").fail("graph-mode backward is missing a saved input");
 
     // The normalised axes are the trailing ones gamma spans.
@@ -163,7 +163,7 @@ std::vector<TensorImplPtr> LayerNormBackward::apply_for_graph(const TensorImplPt
         outer_dims.push_back(static_cast<int>(i));
 
     TensorImplPtr dx, d_gamma, d_beta;
-    if (needs_input_grad(0) || needs_input_grad(1)) {
+    if (need.want_any(0, 1)) {
         // Rebuild the normalisation rather than reusing the saved mean/rstd:
         // both depend on x, and a Storage stand-in would drop that path.
         auto mu = mean_op(x, dims, /*keepdims=*/true);
@@ -172,19 +172,19 @@ std::vector<TensorImplPtr> LayerNormBackward::apply_for_graph(const TensorImplPt
         auto rstd = rsqrt_op(add_op(var, full_like_op(var, eps_)));
         auto xhat = mul_op(xc, rstd);
 
-        if (needs_input_grad(0)) {
+        if (need.want(0)) {
             auto gg = mul_op(grad_out, gamma);
             auto term = sub_op(gg, mean_op(gg, dims, /*keepdims=*/true));
             term = sub_op(term, mul_op(xhat, mean_op(mul_op(gg, xhat), dims, /*keepdims=*/true)));
             dx = mul_op(rstd, term);
         }
-        if (needs_input_grad(1)) {
+        if (need.want(1)) {
             d_gamma = mul_op(grad_out, xhat);
             if (!outer_dims.empty())
                 d_gamma = sum_op(d_gamma, outer_dims, /*keepdims=*/false);
         }
     }
-    if (needs_input_grad(2)) {
+    if (need.want(2)) {
         d_beta = grad_out;
         if (!outer_dims.empty())
             d_beta = sum_op(d_beta, outer_dims, /*keepdims=*/false);

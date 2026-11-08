@@ -79,6 +79,29 @@ private:
     std::array<bool, N> bits_;
 };
 
+// The two promises every backend relies on, pinned at compile time: a mask a
+// caller did not pass wants every gradient (a default-argument ``GradMask3{}``
+// in :class:`IBackend` must never silently skip one), and the constructor's
+// flags land in slot order (``{dx, dW, db}`` is not ``{db, dW, dx}``).
+namespace detail {
+template <std::size_t N>
+constexpr bool default_wants_all() noexcept {
+    constexpr GradMask<N> mask{};
+    for (std::size_t i = 0; i < N; ++i)
+        if (!mask.want(i))
+            return false;
+    return true;
+}
+constexpr GradMask<3> kFlagOrderProbe{true, false, false};
+}  // namespace detail
+
+static_assert(detail::default_wants_all<2>() && detail::default_wants_all<3>() &&
+                  detail::default_wants_all<4>() && detail::default_wants_all<5>(),
+              "a default GradMask must want every gradient");
+static_assert(detail::kFlagOrderProbe.want(0) && !detail::kFlagOrderProbe.want(1) &&
+                  !detail::kFlagOrderProbe.want(2) && !detail::kFlagOrderProbe.want_any(1, 2),
+              "GradMask flags are stored in the order they are written");
+
 // Arity-named spellings keep a backward's signature to one token per mask.
 using GradMask2 = GradMask<2>;
 using GradMask3 = GradMask<3>;
@@ -96,12 +119,6 @@ constexpr bool any_set(const Ptr*... p) noexcept {
 template <typename... Ptr>
 constexpr bool none_set(const Ptr*... p) noexcept {
     return ((p == nullptr) && ...);
-}
-
-// True when any of the pointer-like arguments is empty.
-template <typename... Ptr>
-constexpr bool any_null(const Ptr&... p) noexcept {
-    return (!p || ...);
 }
 
 // ``base + off``, or ``nullptr`` when ``base`` is (arithmetic on a null

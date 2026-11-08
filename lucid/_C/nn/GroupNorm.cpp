@@ -109,14 +109,14 @@ std::vector<Storage> GroupNormBackward::apply(Storage grad_out) {
     // Returns [dx, d_gamma, d_beta].
     return backend::Dispatcher::for_device(device_).group_norm_backward(
         saved_inputs_[0], saved_inputs_[1], saved_mean_, saved_rstd_, grad_out, B_, C_,
-        spatial_total, G_, spatial_dims_, input_shapes_[0], dtype_,
-        {needs_input_grad(0), needs_input_grad(1), needs_input_grad(2)});
+        spatial_total, G_, spatial_dims_, input_shapes_[0], dtype_, wanted_grads());
 }
 
 std::vector<TensorImplPtr> GroupNormBackward::apply_for_graph(const TensorImplPtr& grad_out) {
     const auto& x = saved_impl_inputs_[0];
     const auto& gamma = saved_impl_inputs_[1];
-    if (((needs_input_grad(0) || needs_input_grad(1)) && !x) || (needs_input_grad(0) && !gamma))
+    const auto need = wanted_grads();
+    if ((need.want_any(0, 1) && !x) || (need.want(0) && !gamma))
         ErrorBuilder("group_norm").fail("graph-mode backward is missing a saved input");
 
     // Group normalisation is layer normalisation over a reshaped view: fold
@@ -140,7 +140,7 @@ std::vector<TensorImplPtr> GroupNormBackward::apply_for_graph(const TensorImplPt
             reduce.push_back(static_cast<int>(i));
 
     TensorImplPtr dx, d_gamma, d_beta;
-    if (needs_input_grad(0) || needs_input_grad(1)) {
+    if (need.want_any(0, 1)) {
         auto xg = reshape_op(x, grouped);
         auto mu = mean_op(xg, dims, /*keepdims=*/true);
         auto xc = sub_op(xg, mu);
@@ -149,7 +149,7 @@ std::vector<TensorImplPtr> GroupNormBackward::apply_for_graph(const TensorImplPt
         auto xhat_g = mul_op(xc, rstd);
         auto xhat = reshape_op(xhat_g, original);
 
-        if (needs_input_grad(0)) {
+        if (need.want(0)) {
             // gamma is per-channel: (C,) broadcast over batch and spatial.
             std::vector<std::int64_t> chan(xs.size(), 1);
             chan[1] = static_cast<std::int64_t>(C_);
@@ -161,10 +161,10 @@ std::vector<TensorImplPtr> GroupNormBackward::apply_for_graph(const TensorImplPt
                 sub_op(term, mul_op(xhat_g, mean_op(mul_op(gg, xhat_g), dims, /*keepdims=*/true)));
             dx = reshape_op(mul_op(rstd, term), original);
         }
-        if (needs_input_grad(1))
+        if (need.want(1))
             d_gamma = sum_op(mul_op(grad_out, xhat), reduce, /*keepdims=*/false);
     }
-    if (needs_input_grad(2))
+    if (need.want(2))
         d_beta = sum_op(grad_out, reduce, /*keepdims=*/false);
     return {dx, d_gamma, d_beta};
 }

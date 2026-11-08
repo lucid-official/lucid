@@ -134,8 +134,7 @@ std::vector<Storage> LinearBackward::apply(Storage grad_out) {
     // On a complex dtype the fused real-dtype formula runs between two
     // conjugations (autograd/ComplexGrad.h): dx = g conj(W), dW = g^H x.
     grad_out = conj_if_complex(grad_out, out_shape_, dtype_, device_);
-    const backend::GradMask3 grad_mask{needs_input_grad(0), needs_input_grad(1),
-                                       needs_input_grad(2)};
+    const backend::GradMask3 grad_mask = wanted_grads();
     std::vector<Storage> grads = backend::Dispatcher::for_device(device_).linear_backward(
         grad_out, saved_inputs_[0], saved_inputs_[1], input_shapes_[0], input_shapes_[1],
         input_shapes_[2], dtype_, grad_mask);
@@ -154,7 +153,8 @@ std::vector<TensorImplPtr> LinearBackward::apply_for_graph(const TensorImplPtr& 
     const auto& x = saved_impl_inputs_[0];
     const auto& W = saved_impl_inputs_[1];
     const auto& b = saved_impl_inputs_[2];
-    if ((needs_input_grad(0) && !W) || (needs_input_grad(1) && !x) || !grad_out)
+    const auto need = wanted_grads();
+    if ((need.want(0) && !W) || (need.want(1) && !x) || !grad_out)
         ErrorBuilder("linear").fail("graph-mode backward is missing a saved input");
 
     const FlatX flat = flatten_x(input_shapes_[0]);
@@ -169,18 +169,18 @@ std::vector<TensorImplPtr> LinearBackward::apply_for_graph(const TensorImplPtr& 
 
     // dx = g W, back to x's original shape.
     TensorImplPtr dx;
-    if (needs_input_grad(0)) {
+    if (need.want(0)) {
         std::vector<std::int64_t> x_shape(input_shapes_[0].begin(), input_shapes_[0].end());
         dx = reshape_op(matmul_op(g_flat, W), x_shape);
     }
     // dW = g^T x.
     TensorImplPtr dW =
-        needs_input_grad(1) ? matmul_op(transpose_op(g_flat), reshape_op(x, {M, K})) : nullptr;
+        need.make(1, [&] { return matmul_op(transpose_op(g_flat), reshape_op(x, {M, K})); });
     // db = the gradient summed over every row.  A caller that passed an
     // empty bias (the C++ unbiased form) gets a matching empty gradient
     // rather than a length-N one it has no slot for.
     TensorImplPtr db;
-    if (needs_input_grad(2)) {
+    if (need.want(2)) {
         db = shape_numel(input_shapes_[2]) == 0
                  ? zeros_like_op(b)
                  : sum_op(g_flat, std::vector<int>{0}, /*keepdims=*/false);

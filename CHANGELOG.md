@@ -122,6 +122,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - record that 1055fa3b9 moves no binary interface
 
+### Changed
+
+- one spelling for which grads backward wants (LCD-839)
+
 ---
 
 ## [3.16.4] — 2026-11-07

@@ -194,10 +194,9 @@ std::vector<Storage> BilinearLayerBackward::apply(Storage grad_out) {
     const bool has_bias = !input_shapes_[3].empty();
 
     auto& be = backend::Dispatcher::for_device(device_);
-    return be.bilinear_layer_backward(
-        grad_out, saved_inputs_[0], saved_inputs_[1], saved_inputs_[2], orig_x1_shape_,
-        orig_x2_shape_, input_shapes_[2], has_bias, dtype_,
-        {needs_input_grad(0), needs_input_grad(1), needs_input_grad(2), needs_input_grad(3)});
+    return be.bilinear_layer_backward(grad_out, saved_inputs_[0], saved_inputs_[1],
+                                      saved_inputs_[2], orig_x1_shape_, orig_x2_shape_,
+                                      input_shapes_[2], has_bias, dtype_, wanted_grads());
 }
 
 std::vector<TensorImplPtr> BilinearLayerBackward::apply_for_graph(const TensorImplPtr& grad_out) {
@@ -208,8 +207,7 @@ std::vector<TensorImplPtr> BilinearLayerBackward::apply_for_graph(const TensorIm
     const auto& x1 = saved_impl_inputs_[0];
     const auto& x2 = saved_impl_inputs_[1];
     const auto& W = saved_impl_inputs_[2];
-    const backend::GradMask4 need{needs_input_grad(0), needs_input_grad(1), needs_input_grad(2),
-                                  needs_input_grad(3)};
+    const auto need = wanted_grads();
     const bool need_x1 = need.want_any(1, 2);
     const bool need_x2 = need.want_any(0, 2);
     const bool need_W = need.want_any(0, 1);

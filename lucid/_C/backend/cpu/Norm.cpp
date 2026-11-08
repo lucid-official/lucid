@@ -133,9 +133,18 @@ void layer_norm_forward(const T* x,
     });
 }
 
-// The row only owes the bias gradient: no x, no gamma, no dx are read.
-template <bool NeedDx, bool NeedDg, bool NeedDb>
-inline constexpr bool kBiasGradOnly = !NeedDx && !NeedDg && NeedDb;
+// A row that owes only the bias gradient reads no x, no gamma and no dx.
+template <typename T>
+inline void
+layer_norm_bwd_row_bias_only(const T* __restrict gb, T* __restrict db, std::size_t N) noexcept {
+    using S = NormSimd<T>;
+    constexpr std::size_t W = S::kWidth;
+    std::size_t i = 0;
+    for (; i + W <= N; i += W)
+        S::store(db + i, S::add(S::load(db + i), S::load(gb + i)));
+    for (; i < N; ++i)
+        db[i] += gb[i];
+}
 
 template <typename T, bool NeedDx, bool NeedDg, bool NeedDb>
 inline void layer_norm_bwd_row(const T* __restrict xb,
@@ -150,14 +159,6 @@ inline void layer_norm_bwd_row(const T* __restrict xb,
                                std::size_t N) noexcept {
     using S = NormSimd<T>;
     constexpr std::size_t W = S::kWidth;
-    if constexpr (kBiasGradOnly<NeedDx, NeedDg, NeedDb>) {
-        std::size_t i = 0;
-        for (; i + W <= N; i += W)
-            S::store(db + i, S::add(S::load(db + i), S::load(gb + i)));
-        for (; i < N; ++i)
-            db[i] += gb[i];
-        return;
-    }
     const auto vm = S::dup(m);
     const auto vr = S::dup(r);
     auto v_sdxn = S::zero();
@@ -282,8 +283,7 @@ void layer_norm_backward(const T* x,
             });
         } else {
             reduce_norm_bwd_rows(dbeta, N, outer, N, [&](std::size_t o, T* buf) {
-                layer_norm_bwd_row<T, false, false, true>(nullptr, g + o * N, nullptr, nullptr,
-                                                          nullptr, buf, T{0}, T{0}, inv_N, N);
+                layer_norm_bwd_row_bias_only(g + o * N, buf, N);
             });
         }
         return;

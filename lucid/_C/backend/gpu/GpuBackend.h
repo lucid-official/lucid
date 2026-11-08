@@ -1908,7 +1908,6 @@ private:
     struct ConvGradGeometry {
         int N;
         int G;
-        int B;
         int Cin_g;
         int Cout_g;
         std::vector<int> S;
@@ -1921,7 +1920,6 @@ private:
 
     static ConvGradGeometry gpu_conv_grad_geometry(int N,
                                                    int G,
-                                                   int B,
                                                    int Cin_g,
                                                    int Cout_g,
                                                    const int* S,
