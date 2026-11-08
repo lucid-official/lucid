@@ -73,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - an empty Parameter or Buffer takes the default dtype (LCD-924)
 
+- Episode keeps tuple len, step count is num_steps (LCD-869)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

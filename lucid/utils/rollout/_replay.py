@@ -90,7 +90,7 @@ class SequenceReplay:
         ValueError
             If the episode's fields disagree on length, or it is empty.
         """
-        length = len(episode)
+        length = episode.num_steps
         if length == 0:
             raise ValueError("cannot store an empty episode")
         for name, field in (
@@ -106,7 +106,7 @@ class SequenceReplay:
         self.episodes.append(episode)
         self._steps += length
         while self._steps > self.capacity and len(self.episodes) > 1:
-            self._steps -= len(self.episodes.pop(0))
+            self._steps -= self.episodes.pop(0).num_steps
 
     def sample(self, batch_size: int, length: int) -> Episode:
         r"""Draw contiguous chunks.
@@ -136,9 +136,9 @@ class SequenceReplay:
         if length < 1:
             raise ValueError(f"length must be at least 1, got {length}")
 
-        usable = [e for e in self.episodes if len(e) >= length]
+        usable = [e for e in self.episodes if e.num_steps >= length]
         if not usable:
-            longest = max((len(e) for e in self.episodes), default=0)
+            longest = max((e.num_steps for e in self.episodes), default=0)
             raise ValueError(
                 f"no stored episode is {length} steps long "
                 f"(longest is {longest}, {len(self.episodes)} stored)"
@@ -147,7 +147,7 @@ class SequenceReplay:
         observations, actions, rewards, discounts = [], [], [], []
         for _ in range(batch_size):
             episode = usable[self._randint(len(usable))]
-            start = self._randint(len(episode) - length + 1)
+            start = self._randint(episode.num_steps - length + 1)
             stop = start + length
             observations.append(episode.observations[start:stop])
             actions.append(episode.actions[start:stop])
@@ -461,9 +461,9 @@ class PrioritizedSequenceReplay(SequenceReplay):
         """
         if batch_size < 1:
             raise ValueError(f"batch_size must be at least 1, got {batch_size}")
-        usable = [i for i, e in enumerate(self.episodes) if len(e) >= length]
+        usable = [i for i, e in enumerate(self.episodes) if e.num_steps >= length]
         if not usable:
-            longest = max((len(e) for e in self.episodes), default=0)
+            longest = max((e.num_steps for e in self.episodes), default=0)
             raise ValueError(
                 f"no stored episode is {length} steps long "
                 f"(longest is {longest}, {len(self.episodes)} stored)"
@@ -491,7 +491,7 @@ class PrioritizedSequenceReplay(SequenceReplay):
         observations, actions, rewards, discounts = [], [], [], []
         for i in indices:
             episode = self.episodes[i]
-            start = self._randint(len(episode) - length + 1)
+            start = self._randint(episode.num_steps - length + 1)
             stop = start + length
             observations.append(episode.observations[start:stop])
             actions.append(episode.actions[start:stop])

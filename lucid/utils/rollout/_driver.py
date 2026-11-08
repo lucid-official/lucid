@@ -314,7 +314,7 @@ def rollout(
     ...         self.t += 1
     ...         return StepResult(lucid.zeros((3, 4, 4)), 1.0, False, self.t >= 5)
     >>> episode, total = rollout(Trivial(), RandomPolicy(2))
-    >>> len(episode), total
+    >>> episode.num_steps, total
     (5, 5.0)
     """
     if action_repeat < 1:

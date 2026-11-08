@@ -143,10 +143,38 @@ class TestEnvironmentProtocol:
         assert not isinstance(Broken(), Environment)
 
 
+class TestEpisodeRecord:
+    """``Episode`` is a four-field record; ``len`` is its arity, not its step count."""
+
+    @staticmethod
+    def _episode(steps: int = 5) -> Episode:
+        return Episode(
+            lucid.zeros((steps, 3, 4, 4)),
+            lucid.zeros((steps, 2)),
+            lucid.zeros((steps,)),
+            lucid.ones((steps,)),
+        )
+
+    def test_len_is_arity_and_num_steps_counts_transitions(self) -> None:
+        episode = self._episode(5)
+        assert len(episode) == len(Episode._fields) == 4
+        assert episode.num_steps == 5
+
+    def test_replace_and_make_round_trip(self) -> None:
+        episode = self._episode(5)
+        rewards = lucid.ones((5,))
+        replaced = episode._replace(rewards=rewards)
+        assert replaced.rewards is rewards
+        assert replaced.observations is episode.observations
+        rebuilt = Episode._make(tuple(episode))
+        assert rebuilt.num_steps == 5
+        assert all(a is b for a, b in zip(rebuilt, episode, strict=True))
+
+
 class TestRollout:
     def test_shapes_and_alignment(self) -> None:
         episode, total = rollout(_Counter(length=6), RandomPolicy(2))
-        assert len(episode) == 6
+        assert episode.num_steps == 6
         assert episode.observations.shape == (6, 1, 2, 2)
         assert episode.actions.shape == (6, 2)
         assert episode.rewards.shape == (6,)
@@ -174,14 +202,14 @@ class TestRollout:
 
     def test_max_steps_truncates_rather_than_terminates(self) -> None:
         episode, _ = rollout(_Counter(length=100), RandomPolicy(2), max_steps=5)
-        assert len(episode) == 5
+        assert episode.num_steps == 5
         assert all(float(x) == 1.0 for x in episode.discounts)
 
     @pytest.mark.parametrize("repeat", [1, 2, 3])
     def test_action_repeat_records_at_the_environment_rate(self, repeat: int) -> None:
         """One decision, several steps — but every step is stored."""
         episode, _ = rollout(_Counter(length=6), RandomPolicy(2), action_repeat=repeat)
-        assert len(episode) == 6
+        assert episode.num_steps == 6
 
     def test_action_repeat_holds_the_action(self) -> None:
         episode, _ = rollout(_Counter(length=6), RandomPolicy(2), action_repeat=3)
@@ -266,7 +294,7 @@ class TestDiscreteAgentRollout:
         ).eval()
         policy = LatentPolicy(model.encode, model.rssm, lambda s: model.act(s, sample=False), 4)
         episode, _ = rollout(_Buttons(5), policy)
-        assert len(episode) == 5
+        assert episode.num_steps == 5
         assert episode.actions.shape == (5, 4)
         # The zero placeholder at index 0 is the convention; everything
         # after it must still be a one-hot when it reaches the buffer.
@@ -452,7 +480,7 @@ class TestLatentPolicy:
         model = self._model()
         policy = self._policy(model)
         episode, _ = rollout(_Counter64(length=4), policy)
-        assert len(episode) == 4
+        assert episode.num_steps == 4
         assert bool((episode.actions[0] == 0).all().item())
 
 

@@ -720,7 +720,7 @@ def test_dreamer_rollout_stays_on_device(device):
     )
 
     episode, total = rollout(_Tiny(), policy)
-    assert len(episode) == 4
+    assert episode.num_steps == 4
     assert str(episode.observations.device) == f"device('{device}')"
     assert str(episode.actions.device) == f"device('{device}')"
     assert np.all(np.abs(episode.actions.to("cpu").numpy()) <= 1.0)

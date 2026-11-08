@@ -7,7 +7,7 @@ to have, so the replay buffer and the rollout driver can be written against
 something concrete and a user's own environment can slot in.
 """
 
-from typing import NamedTuple, Protocol, override, runtime_checkable
+from typing import NamedTuple, Protocol, runtime_checkable
 
 from lucid._tensor.tensor import Tensor
 
@@ -78,9 +78,14 @@ class Episode(NamedTuple):
     rewards: Tensor
     discounts: Tensor
 
-    @override
-    def __len__(self) -> int:
-        """Number of transitions in the episode."""
+    @property
+    def num_steps(self) -> int:
+        """Number of transitions in the episode (``observations.shape[0]``).
+
+        A named accessor rather than ``__len__``: the record unpacks into
+        four fields, so ``len`` has to stay four for ``_replace`` / ``_make``
+        / ``copy`` to keep working.
+        """
         return int(self.observations.shape[0])
 
 
