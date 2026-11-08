@@ -11,7 +11,7 @@ reads no count, yet it took the same road — eager steps, and a
 With a non-zero momentum, ``instance_norm`` folds each batch's statistics into
 its running buffers in place (LCD-529): ``make_step`` carries those buffer
 writes back from the compiled executable, ``fused_step`` falls back to eager,
-and ``compiled_step`` refuses the trace without dirtying the buffers.
+and ``compiled_step`` carries them back as ``make_step`` does (LCD-877).
 """
 
 from collections.abc import Callable
@@ -102,7 +102,7 @@ def _run(entry: str, device: str, norm: str) -> tuple[nn.Module, nn.Module, bool
     return model[1], eager[1], ran_eager()
 
 
-_DIRECT_REFUSED = ("batch-none", "instance-0.1")
+_DIRECT_REFUSED = ("batch-none",)
 
 _CELLS = [
     (entry, device, norm)
@@ -133,15 +133,10 @@ def test_the_step_matches_eager_and_only_a_cumulative_batch_norm_runs_eager(
 # Metal only: on the CPU there is no executable to refuse, and ``compiled_step``
 # runs the eager step (test_cpu_entry_points.py).
 @pytest.mark.parametrize("device", ["metal"])
-@pytest.mark.parametrize(
-    "norm, match", [("batch-none", "momentum=None"), ("instance-0.1", "wrote in place")]
-)
-def test_compiled_step_refuses_unlowerable_running_stats(
-    device: str, norm: str, match: str
-) -> None:
-    model = nn.Sequential(nn.Linear(5, 5), _NORMS[norm]()).to(device).train()
+def test_compiled_step_refuses_unlowerable_running_stats(device: str) -> None:
+    model = nn.Sequential(nn.Linear(5, 5), _NORMS["batch-none"]()).to(device).train()
     x = lucid.randn(4, 3, 5, device=device)
-    with pytest.raises(RuntimeError, match=match):
+    with pytest.raises(RuntimeError, match="momentum=None"):
         compiled_step(model, x, _loss)
     assert lucid.allclose(model[1].running_mean, lucid.zeros(3, device=device))
     assert lucid.allclose(model[1].running_var, lucid.ones(3, device=device))

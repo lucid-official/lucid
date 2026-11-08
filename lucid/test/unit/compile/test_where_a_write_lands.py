@@ -664,13 +664,6 @@ def _flat(value: object) -> list[float]:
     return [float(cast(float, value))]
 
 
-#: (norm, entry) pairs that end apart from eager on main too, the same model
-#: measured there: not this branch's, and each pinned until it is fixed.
-_MAIN_GETS_WRONG: dict[tuple[str, str], str] = {
-    ("instance", "compiled_step"): "LCD-877: compiled_step refuses an instance norm that "
-    "tracks running statistics, loudly (it wrote in place to a tensor it did not create)"
-}
-
 #: Refused by design, with a message: :func:`test_a_compiled_step_refuses_a_cumulative_batch_norm`.
 _REFUSED = {("batch1d-cumulative", "compiled_step")}
 
@@ -681,9 +674,7 @@ def _review_params(entries: list[str]) -> list[object]:
         for entry in entries:
             if (norm, entry) in _REFUSED:
                 continue
-            why = _MAIN_GETS_WRONG.get((norm, entry))
-            marks = [pytest.mark.xfail(strict=True, reason=why)] if why else []
-            params.append(pytest.param(norm, entry, marks=marks, id=f"{norm}-{entry}"))
+            params.append(pytest.param(norm, entry, id=f"{norm}-{entry}"))
     return params
 
 
@@ -738,19 +729,19 @@ def test_what_an_attempt_put_back_goes_to_the_call_after_it_and_nowhere_if_it_ra
     assert kept.tolist() == [1.0] * 4
 
 
-def test_a_compiled_step_keeps_the_write_to_a_kept_tensor_and_refuses_the_next() -> None:
+def test_a_compiled_step_keeps_the_write_to_a_kept_tensor_and_carries_the_next() -> None:
     """``compiled_step`` traces every call, and the trace's writes are the call's:
     the first call is eager's, the kept tensor included.  The next call's trace
-    finds that tensor from outside and refuses the write, loudly, as on main."""
+    finds that tensor from outside, and the executable carries the write back."""
     model, twin = _two_parts("read-modify-write", "none"), _two_parts("read-modify-write", "none")
-    first, second = _inputs()[:2]
-    got = lucid.compile.compiled_step(model, first, _loss)
-    want = _loss(twin(first))
-    want.backward()
-    assert _close([float(got.item()), *_grads(model)], [float(want.item()), *_grads(twin)])
-    assert cast(_Part, model[0]).box["h"].tolist() == cast(_Part, twin[0]).box["h"].tolist()
-    with pytest.raises(RuntimeError, match="did not create"):
-        lucid.compile.compiled_step(model, second, _loss)
+    for x in _inputs():
+        model.zero_grad()
+        twin.zero_grad()
+        got = lucid.compile.compiled_step(model, x, _loss)
+        want = _loss(twin(x))
+        want.backward()
+        assert _close([float(got.item()), *_grads(model)], [float(want.item()), *_grads(twin)])
+        assert cast(_Part, model[0]).box["h"].tolist() == cast(_Part, twin[0]).box["h"].tolist()
 
 
 def _rebuilds_its_total_every_call(model: nn.Module, x: Tensor) -> Tensor:
@@ -1291,11 +1282,16 @@ def test_a_step_that_cannot_write_back_runs_eager_and_writes_once_per_call() -> 
         assert model[0].b.tolist() == ref[0].b.tolist()
 
 
-def test_a_step_with_no_eager_path_refuses_and_leaves_the_buffer_alone() -> None:
-    model = _two_segments()
-    with pytest.raises(RuntimeError, match="wrote in place"):
-        lucid.compile.compiled_step(model, _inputs()[0], _loss)
-    assert model[0].b.tolist() == [[0.0] * 4] * 3
+def test_a_step_with_no_eager_path_carries_the_write_once_per_call() -> None:
+    """``compiled_step`` has no eager call to hand a buffer's write to: the executable
+    writes it back, through a view of the buffer too (LCD-877)."""
+    model, ref = _two_segments(), _two_segments()
+    for x in _inputs():
+        got = lucid.compile.compiled_step(model, x, _loss)
+        want = _loss(ref(x))
+        want.backward()
+        assert _close([float(got.item()), *_grads(model)], [float(want.item()), *_grads(ref)])
+        assert model[0].b.tolist() == ref[0].b.tolist()
 
 
 # -- what the call computed itself owes nobody ---------------------------------

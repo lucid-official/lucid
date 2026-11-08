@@ -1953,7 +1953,7 @@
     "lucid/autograd/_backward.py": 80,
     "lucid/autograd/gradcheck.py": 30,
     "lucid/compile/__init__.py": 34,
-    "lucid/compile/_entry/function.py": 30,
+    "lucid/compile/_entry/function.py": 24,
     "lucid/compile/_entry/module.py": 26,
     "lucid/compile/_entry/segmented_step.py": 5,
     "lucid/compile/_optim/compiler.py": 1,

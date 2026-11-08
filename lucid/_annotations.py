@@ -349,6 +349,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
     ),
     "lucid.compile._entry.function": (
+        ("CarriedWrites", "lucid.compile._core.buffer_writes", "CarriedWrites"),
         ("Module", "lucid.nn.module", "Module"),
         ("Parameter", "lucid.nn.parameter", "Parameter"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),

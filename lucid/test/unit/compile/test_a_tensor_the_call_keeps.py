@@ -645,16 +645,16 @@ def _one_call(model: nn.Sequential, x: Tensor, *, compiled: bool) -> list[float]
 @pytest.mark.parametrize(
     "write", [*READS_IT, *READ_BEHIND_AN_OVERWRITE, *OVERWRITES_IT, "a-constant"]
 )
-def test_a_compiled_step_keeps_the_first_write_and_refuses_the_next(write: str) -> None:
+def test_a_compiled_step_keeps_the_first_write_and_carries_the_next(write: str) -> None:
     """``compiled_step`` traces every call, and the trace's writes are the call's:
     the first is right, a read behind a partial overwrite too.  The next call's
-    trace finds the tensor from outside and refuses a write to it, as to any
-    buffer, loudly."""
+    trace finds the tensor from outside, and the executable carries the write
+    back as it does a buffer's (LCD-877)."""
     model, twin = _model(write, "closure-cell"), _model(write, "closure-cell")
-    first, second = _inputs()[:2]
-    assert _close(_one_call(model, first, compiled=True), _one_call(twin, first, compiled=False))
-    with pytest.raises(RuntimeError, match="did not create"):
-        lucid.compile.compiled_step(model, second, _loss)
+    for x in _inputs():
+        model.zero_grad()
+        twin.zero_grad()
+        assert _close(_one_call(model, x, compiled=True), _one_call(twin, x, compiled=False))
 
 
 @pytest.mark.parametrize("write", FIRST_CALL)

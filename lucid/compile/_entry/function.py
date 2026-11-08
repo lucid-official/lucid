@@ -34,6 +34,7 @@ from lucid.compile._entry.step import _ExecutableLike, _GradTargets, _grad_slots
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
+    from lucid.compile._core.buffer_writes import CarriedWrites
     from lucid.nn.module import Module
     from lucid.nn.parameter import Parameter
 
@@ -138,6 +139,46 @@ def _trace_loss(
     return tracer, loss_t
 
 
+def _refuse_cumulative_norm(model: Module) -> None:
+    """Raise for a cumulative-average norm in training, before anything is traced.
+
+    ``momentum=None`` reads the batch count on the host, so the layer traces without
+    its buffers, and ``compiled_step`` has no eager path to hand the update to: it
+    must not drop it silently.  An evaluating one reads its buffers and updates
+    nothing.
+    """
+    from lucid.compile._core.bn_runstats import model_has_cumulative_bn
+
+    if model_has_cumulative_bn(model, training_only=True):
+        raise RuntimeError(
+            "compiled_step: BatchNorm with momentum=None (cumulative moving "
+            "average) in training mode can't have its running-stats lowered into "
+            "the compiled graph, and compiled_step has no eager fallback. Use "
+            "lucid.compile.make_step or a momentum-based BatchNorm."
+        )
+
+
+def _carried_writes(tracer: Tracer, model: Module, x: Tensor) -> CarriedWrites:
+    """What the executable writes back after a run: statistics, counters, in-place writes.
+
+    The same plan the other entries carry (:func:`carried_writes`).  Nothing is held
+    over from an earlier trace: every call here traces afresh, so the trace's writes
+    are the call's.  A write with nowhere to go raises, there being no eager call to
+    run instead.
+    """
+    from lucid._dispatch import _unwrap
+    from lucid.compile._core.buffer_writes import HeldWrites, carried_writes
+
+    carried = carried_writes(tracer, model, [_unwrap(x)], HeldWrites())
+    if not isinstance(carried, str):
+        return carried
+    raise RuntimeError(
+        "compiled_step: running statistics and in-place writes to tensors "
+        f"from outside the call can't all be carried here ({carried}); "
+        "compiled_step has no eager fallback. Use lucid.compile.make_step."
+    )
+
+
 def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor]) -> Tensor:
     """Run one compiled training step: forward + backward + grad accumulation.
 
@@ -164,11 +205,22 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
     NotImplementedError
         A gradient passes through a custom ``Function``, whose ``backward``
         the executable cannot run (:func:`make_step` runs such a step eagerly).
+    RuntimeError
+        A BatchNorm with ``momentum=None`` is in training mode (its cumulative
+        average reads the batch count on the host), or the call's running
+        statistics or in-place writes have no tensor for the executable to write
+        back to.  There is no eager path to run instead.
 
     Notes
     -----
     Parameters on the CPU have nothing to compile (Metal only): the step runs
     eagerly, with a one-time ``CompileFallbackWarning``.
+
+    A norm's tracked running statistics (BatchNorm's, an InstanceNorm's) and its
+    ``num_batches_tracked`` advance once per call, as in an eager step: the
+    executable returns them and they are written back into the buffers after the
+    run, as in :func:`make_step`.  So is any in-place write to a tensor from
+    outside the call.
 
     A trace it cannot lower raises, there being no eager path, as does one reading
     a value computed on another thread (the tracer is per thread).
@@ -200,8 +252,6 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
     # Local imports to avoid circulars during package init.
     from lucid._dispatch import _unwrap, _wrap
     from lucid.compile._core.attention_probe import maybe_probe_for_graph
-    from lucid.compile._core.bn_runstats import BnWriteback, model_has_cumulative_bn
-    from lucid.compile._core.buffer_writes import refuse
     from lucid.compile._core.fallback import off_gpu_detail
     from lucid.compile._core.trace_context import compile_attempt
 
@@ -210,12 +260,13 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
         raise ValueError("compiled_step: model has no trainable parameters")
     if (off_gpu := off_gpu_detail(params)) is not None:
         return _eager_step(model, x, loss_fn, off_gpu)
+    _refuse_cumulative_norm(model)
 
     with compile_attempt():
         tracer, loss_t = _trace_loss(model, x, loss_fn)
         g = tracer.graph
         ext = tracer.external_feeds
-        refuse(tracer)
+        carried = _carried_writes(tracer, model, x)
         if not g.ops:
             raise RuntimeError("compiled_step: empty trace (model produced no ops)")
         maybe_probe_for_graph(g)
@@ -228,24 +279,8 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
         grad_ids = targets.ids
         refuse_custom_backward(tracer, loss_id, grad_ids)
 
-        # 3.5 BatchNorm running-stats. compiled_step has no eager fallback (it raises
-        # on any uncompilable trace), so a cumulative-MA BN (momentum=None) is a hard
-        # error. A track_running_stats=False BN keeps no buffers and compiles
-        # unchanged. A fused-momentum BN traces 5-input; surface its EMA outputs as
-        # extra executable outputs and copy_ them into the live module buffers after
-        # the run, else the running stats freeze at trace time and eval() reads stale
-        # stats (the eager EMA is skipped under a tracer).
-        if model_has_cumulative_bn(model):
-            raise RuntimeError(
-                "compiled_step: BatchNorm with momentum=None (cumulative moving "
-                "average) can't have its running-stats lowered into the compiled "
-                "graph, and compiled_step has no eager fallback. Use "
-                "lucid.compile.make_step or a momentum-based BatchNorm."
-            )
-        bn = BnWriteback.of(model, tracer)
-
         exe = _C_engine.compile.compile_trace_with_backward(
-            g, ext, loss_id, grad_ids, extra_output_ids=list(bn.out_ids)
+            g, ext, loss_id, grad_ids, extra_output_ids=carried.out_ids
         )
         if exe is None:
             raise RuntimeError(
@@ -256,15 +291,15 @@ def compiled_step(model: Module, x: Tensor, loss_fn: Callable[[Tensor], Tensor])
     feed_impls = [ext[tid] for tid in exe.input_ids]
     outs = _C_engine.compile.run_executable(exe, feed_impls)
 
-    # Output order is [loss, *param grads, *input grads, *bn_running_stats].
+    # Output order is [loss, *param grads, *input grads, *carried writes].
     n_loss_grad = 1 + len(grad_ids)
-    if len(outs) != n_loss_grad + len(bn.out_ids):
+    if len(outs) != n_loss_grad + len(carried):
         raise RuntimeError(
             f"compiled_step: executable produced {len(outs)} outputs but expected "
-            f"{n_loss_grad + len(bn.out_ids)} (loss + {len(grad_ids)} grads + "
-            f"{len(bn.out_ids)} BN running-stats)"
+            f"{n_loss_grad + len(carried)} (loss + {len(grad_ids)} grads + "
+            f"{len(carried)} carried writes)"
         )
-    bn.apply(outs[n_loss_grad:])
+    carried.apply(outs[n_loss_grad:])
 
     _accumulate_grads(exe, list(outs[1:n_loss_grad]), params, [x], targets)
     return _wrap(outs[0])
