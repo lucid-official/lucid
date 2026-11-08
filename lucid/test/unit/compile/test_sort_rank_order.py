@@ -29,14 +29,7 @@ from lucid.compile import make_step
 from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.test._fixtures.devices import metal_available
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
-from lucid.test.unit.compile.test_sort_order_compiled import (
-    FLOATS,
-    INF,
-    INTS,
-    ROWS,
-    _same,
-    _wide,
-)
+from lucid.test.unit.compile.test_sort_order_compiled import FLOATS, INF, INTS, ROWS, _same, _wide
 
 pytestmark = [
     pytest.mark.skipif(not metal_available(), reason="compile needs Metal"),
