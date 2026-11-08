@@ -90,6 +90,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - norm and pool3d emitters follow rank-canon (LCD-927)
 - rank short sort axes, not MPSGraph argSort (LCD-926)
 
+### Tooling
+
+- record that 1055fa3b9 moves no binary interface
+
 ---
 
 ## [3.16.4] — 2026-11-07
