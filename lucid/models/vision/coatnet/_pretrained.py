@@ -104,6 +104,10 @@ _CFG_7 = CoAtNetConfig(
 
 # ---------------------------------------------------------------------------
 # Backbone registrations (task="base")
+#
+# ``params`` here is the exact headless count.  The paper's figures (Table 4,
+# Table 5) are for the classifier, so they are declared on the ``_cls``
+# factories, which count within 0.6% of them for CoAtNet-0..5 and 7.
 # ---------------------------------------------------------------------------
 
 
@@ -113,7 +117,7 @@ _CFG_7 = CoAtNetConfig(
     model_type="coatnet",
     model_class=CoAtNet,
     default_config=_CFG_0,
-    params=25_000_000,
+    params=23_677_996,
 )
 def coatnet_0(pretrained: bool = False, **overrides: object) -> CoAtNet:
     r"""CoAtNet-0 backbone (Dai et al., 2021).
@@ -235,7 +239,7 @@ def coatnet_0_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForIm
     model_type="coatnet",
     model_class=CoAtNet,
     default_config=_CFG_1,
-    params=42_000_000,
+    params=40_866_952,
 )
 def coatnet_1(pretrained: bool = False, **overrides: object) -> CoAtNet:
     r"""CoAtNet-1 backbone (Dai et al., 2021).
@@ -326,7 +330,7 @@ def coatnet_1_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForIm
     model_type="coatnet",
     model_class=CoAtNet,
     default_config=_CFG_2,
-    params=75_000_000,
+    params=72_627_680,
 )
 def coatnet_2(pretrained: bool = False, **overrides: object) -> CoAtNet:
     r"""CoAtNet-2 backbone (Dai et al., 2021).
@@ -412,7 +416,7 @@ def coatnet_2_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForIm
     model_type="coatnet",
     model_class=CoAtNet,
     default_config=_CFG_3,
-    params=168_000_000,
+    params=163_107_024,
 )
 def coatnet_3(pretrained: bool = False, **overrides: object) -> CoAtNet:
     r"""CoAtNet-3 backbone (Dai et al., 2021).
@@ -499,7 +503,7 @@ def coatnet_3_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForIm
     model_type="coatnet",
     model_class=CoAtNet,
     default_config=_CFG_4,
-    params=275_000_000,
+    params=271_566_048,
 )
 def coatnet_4(pretrained: bool = False, **overrides: object) -> CoAtNet:
     r"""CoAtNet-4 backbone (Dai et al., 2021).
@@ -586,7 +590,7 @@ def coatnet_4_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForIm
     model_type="coatnet",
     model_class=CoAtNet,
     default_config=_CFG_5,
-    params=688_000_000,
+    params=680_810_160,
 )
 def coatnet_5(pretrained: bool = False, **overrides: object) -> CoAtNet:
     r"""CoAtNet-5 backbone (Dai et al., 2021).
@@ -681,7 +685,7 @@ def coatnet_5_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForIm
     model_type="coatnet",
     model_class=CoAtNet,
     default_config=_CFG_6,
-    params=1_470_000_000,
+    params=1_345_771_832,
 )
 def coatnet_6(pretrained: bool = False, **overrides: object) -> CoAtNet:
     r"""CoAtNet-6 backbone (Dai et al., 2021).
@@ -696,7 +700,8 @@ def coatnet_6(pretrained: bool = False, **overrides: object) -> CoAtNet:
     - S3 *mixed*: MBConv L=8 D=768  →  expand→1536  →  TFMRel L=42 D=1536
     - S4 TFMRel: L=2, D=2048
 
-    Approximately **1.5B parameters** — only meaningful with very large
+    **1.35B parameters** built from Table 12's sizes (Table 5 states 1.47B)
+    — only meaningful with very large
     pretraining (the paper's headline 88.4-89.0% ImageNet numbers come
     from JFT-3B pretraining + 512×512 finetune).
 
@@ -738,12 +743,17 @@ def coatnet_6(pretrained: bool = False, **overrides: object) -> CoAtNet:
     model_type="coatnet",
     model_class=CoAtNetForImageClassification,
     default_config=_CFG_6,
+    # Paper Table 5.  The architecture below follows Table 12 exactly and
+    # counts 1.352B (-8.0%): the two tables disagree.  Giving S4 D=3072 instead
+    # of Table 12's 2048 would count 1.46B, but that is a guess, so the layout
+    # stays the stated one and the label stays the stated figure; the 9%
+    # tolerance for it is in ``test_declared_params.py``.
     params=1_470_000_000,
 )
 def coatnet_6_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForImageClassification:
     r"""CoAtNet-6 image classifier (Dai et al., 2021).
 
-    Mixed-S3 variant.  Approximately **1.5B parameters**.
+    Mixed-S3 variant.  **1.35B parameters** (Table 5 states 1.47B).
 
     Parameters
     ----------
@@ -781,7 +791,7 @@ def coatnet_6_cls(pretrained: bool = False, **overrides: object) -> CoAtNetForIm
     model_type="coatnet",
     model_class=CoAtNet,
     default_config=_CFG_7,
-    params=2_440_000_000,
+    params=2_435_759_120,
 )
 def coatnet_7(pretrained: bool = False, **overrides: object) -> CoAtNet:
     r"""CoAtNet-7 backbone (Dai et al., 2021).
