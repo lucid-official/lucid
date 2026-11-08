@@ -51,11 +51,17 @@
 // view de-duplication, region index remapping — so a rule is pure shape
 // arithmetic.
 //
-// Two ops are left as recorded by the rules that would otherwise own them: a
-// ``softmax`` whose weights a ``matmul`` reads (``MatmulEmitter`` finds the
-// weights by id for its fused-attention workaround, see
-// :func:`RankEnv::attention_weight`), and a ``permute`` of a feed (MPSGraph
-// transposes a feed in place at full speed; the rewrite made it 14-80% slower).
+// A permute of a feed is left as recorded (MPSGraph transposes a feed in place at
+// full speed; the rewrite made it 14-80% slower).
+//
+// A rewrite is also dropped when a consumer of its result outside the reshape family
+// would still read it at rank 5+ (an op no rule owns, one a rule declined, a
+// custom-backward region): MPSGraph then materialises the view, and the rewrite costs
+// more than it saves.  A result flows on only to rewritten ops, views, reductions (which
+// read a view for free) and graph outputs.
+//
+// Attention needs no exemption: ``MpsBuilder``'s fused-attention workaround
+// (``collect_softmax_outputs``) runs on the rewritten graph and follows the views.
 //
 // Pure C++: no MPSGraph types here, so the pass is testable from Python.
 
@@ -67,7 +73,6 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "../api.h"
@@ -145,27 +150,13 @@ public:
     const RankOperand* find(TensorId id) const;
     // Name of the op that produced ``id``; empty for a feed.
     const std::string& producer(TensorId id) const;
-    // Whether ``id`` is attention weights: a ``softmax`` output, or a value derived
-    // from one through an inference-mode ``dropout``.  ``MatmulEmitter`` emits a
-    // matmul that reads one transposed (the fused-attention miscompile workaround),
-    // and it finds the marker by the id — so a node that reads or makes one keeps
-    // its operands as recorded.  Mirrors ``collect_softmax_outputs`` in
-    // MpsBuilder.mm, which cannot be shared yet.
-    bool attention_weight(TensorId id) const { return attention_weights_.count(id) != 0; }
-    // Whether ``id`` is attention weights that some matmul reads, directly or
-    // through a ``dropout``: the softmax that makes it has to stay as recorded.
-    bool feeds_attention_matmul(TensorId id) const { return matmul_weights_.count(id) != 0; }
     bool dynamic_batch() const { return dynamic_batch_; }
     // Largest id seen anywhere (feeds, ops, regions) — new ids start above it.
     TensorId max_id() const { return max_id_; }
 
 private:
-    void note_attention_weights(const TraceGraph& graph);
-
     std::unordered_map<TensorId, RankOperand> operands_;
     std::unordered_map<TensorId, std::string> producers_;
-    std::unordered_set<TensorId> attention_weights_;
-    std::unordered_set<TensorId> matmul_weights_;
     bool dynamic_batch_;
     TensorId max_id_ = -1;
 };

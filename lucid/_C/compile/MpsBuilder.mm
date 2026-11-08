@@ -605,8 +605,10 @@ MPSGraphExecutable* compile_graph(MPSGraph* graph,
 
 // Collect the trace ids that carry attention weights — a ``softmax`` output,
 // or a value transitively derived from one through an (inference-mode identity)
-// ``dropout`` (the ``softmax → attn_drop → @V`` pattern of ViT / GPT-2).  A
-// matmul that reads such an id is an attention value-projection; the
+// ``dropout`` (the ``softmax → attn_drop → @V`` pattern of ViT / GPT-2), or
+// a ``reshape`` of either — the views RankCanon puts around a rank-5+ softmax
+// (the graph handed in is the rewritten one, so the weights reach the matmul
+// through them).  A matmul that reads such an id is an attention value-projection; the
 // MatmulEmitter emits those transposed so MPSGraph does not pattern-match
 // ``softmax(...) @ V`` onto its fused-attention kernel, which silently
 // miscompiles for some shapes (sequence length in [17,24] with batch>=3 on
@@ -625,7 +627,7 @@ inline std::unordered_set<TensorId> collect_softmax_outputs(const TraceGraph& gr
             if (n.name == "softmax") {
                 for (const auto& meta : n.outputs)
                     derived.insert(meta.id);
-            } else if (n.name == "dropout" && input_is_derived(n)) {
+            } else if ((n.name == "dropout" || n.name == "reshape") && input_is_derived(n)) {
                 for (const auto& meta : n.outputs)
                     derived.insert(meta.id);
             }

@@ -206,65 +206,6 @@ RankEnv::RankEnv(const TraceGraph& graph,
         for (const OpNode& node : r.bwd_ops)
             note_node(node);
     }
-    note_attention_weights(graph);
-}
-
-namespace {
-
-using IdSet = std::unordered_set<TensorId>;
-using NodeList = std::vector<const OpNode*>;
-
-bool reads_any(const IdSet& ids, const std::vector<TensorId>& inputs) {
-    return std::any_of(inputs.begin(), inputs.end(),
-                       [&](TensorId id) { return id >= 0 && ids.count(id) != 0; });
-}
-
-bool makes_any(const IdSet& ids, const std::vector<TensorMeta>& outputs) {
-    return std::any_of(outputs.begin(), outputs.end(),
-                       [&](const TensorMeta& m) { return ids.count(m.id) != 0; });
-}
-
-// Softmax outputs and what flows from them through a ``dropout``, in trace order.
-IdSet attention_weights_of(const NodeList& nodes) {
-    IdSet weights;
-    for (const OpNode* n : nodes) {
-        const bool makes =
-            n->name == "softmax" || (n->name == "dropout" && reads_any(weights, n->inputs));
-        for (const TensorMeta& m : n->outputs) {
-            if (makes)
-                weights.insert(m.id);
-        }
-    }
-    return weights;
-}
-
-// The weights a matmul reads, directly or through the dropouts between.
-IdSet weights_read_by_matmuls(const NodeList& nodes, const IdSet& weights) {
-    IdSet read;
-    for (auto it = nodes.rbegin(); it != nodes.rend(); ++it) {
-        const OpNode& n = **it;
-        const bool reads =
-            n.name == "matmul" || (n.name == "dropout" && makes_any(read, n.outputs));
-        for (TensorId id : n.inputs) {
-            if (reads && id >= 0 && weights.count(id) != 0)
-                read.insert(id);
-        }
-    }
-    return read;
-}
-
-}  // namespace
-
-void RankEnv::note_attention_weights(const TraceGraph& graph) {
-    NodeList nodes;
-    for (const OpNode& node : graph.ops)
-        nodes.push_back(&node);
-    for (const VjpRegion& r : graph.vjp_regions) {
-        for (const OpNode& node : r.bwd_ops)
-            nodes.push_back(&node);
-    }
-    attention_weights_ = attention_weights_of(nodes);
-    matmul_weights_ = weights_read_by_matmuls(nodes, attention_weights_);
 }
 
 const RankOperand* RankEnv::find(TensorId id) const {
@@ -643,7 +584,10 @@ public:
 // ────────────────────────────────────────────────────────────────────
 
 // A softmax's rows: the axes before ``dim`` merged, ``dim`` itself, the axes after it
-// merged; ``dim`` is where it landed.
+// merged; ``dim`` is where it landed.  Over the last axis the one before it stays apart
+// (``(lead, M, N)``): that is the layout a ``matmul`` of merged batch axes produces and
+// reads, so ``q @ kT -> softmax -> @ v`` runs without a reshape between its ops, and
+// MPSGraph can still match the chain onto its fused-attention kernel.
 struct SoftmaxLayout {
     Dims shape;
     std::int64_t dim = 0;
@@ -659,12 +603,17 @@ SoftmaxLayout softmax_layout(const Dims& shape, std::size_t axis, bool pin_batch
         if (rows != 1 || keep)
             layout.shape.push_back(rows);
     };
+    // The axis before ``dim`` stays apart when ``dim`` is last and a lead axis is left.
+    const bool keep_rows = axis + 1 == shape.size() && axis >= (pin_batch ? 2U : 1U);
+    const std::size_t rows_begin = keep_rows ? axis - 1 : axis;
     if (pin_batch) {
         merge(0, 1, true);
-        merge(1, axis, false);
+        merge(1, rows_begin, false);
     } else {
-        merge(0, axis, false);
+        merge(0, rows_begin, false);
     }
+    if (keep_rows)
+        layout.shape.push_back(shape[rows_begin]);
     layout.dim = static_cast<std::int64_t>(layout.shape.size());
     layout.shape.push_back(shape[axis]);
     merge(axis + 1, shape.size(), false);
@@ -680,9 +629,6 @@ const std::int64_t* softmax_dim(const OpNode& node, std::size_t rank) {
 
 // ``softmax`` / ``log_softmax`` over axis ``dim``: the axes before it merge into one
 // and so do the axes after it, so the op runs at rank <= 4 on the same rows.
-//
-// Attention weights a matmul reads stay as recorded: the matmul's workaround finds
-// them by id (see RankEnv::attention_weight).
 class SoftmaxRule final : public RankRule {
 public:
     bool handles(const OpNode& node) const override {
@@ -695,8 +641,7 @@ public:
             return std::nullopt;
         const TensorMeta& out = node.outputs[0];
         const std::int64_t* dim = softmax_dim(node, out.shape.size());
-        if (dim == nullptr || operand->shape != out.shape || !rank_canon_wants(out.shape) ||
-            env.feeds_attention_matmul(out.id))
+        if (dim == nullptr || operand->shape != out.shape || !rank_canon_wants(out.shape))
             return std::nullopt;
         const auto axis = static_cast<std::size_t>(*dim);
         const SoftmaxLayout layout =
@@ -717,16 +662,14 @@ public:
 // ────────────────────────────────────────────────────────────────────
 
 // The shapes of a matmul's two operands, or nullopt when the rule must leave it: an
-// operand is unknown, complex, a vector, attention weights (the workaround needs the
-// operand as the softmax made it) or, under a symbolic batch, not of the output's
+// operand is unknown, complex, a vector or, under a symbolic batch, not of the output's
 // rank (axis 0 has to stay in place).
 std::optional<std::vector<Dims>>
 matmul_operands(const OpNode& node, const TensorMeta& out, const RankEnv& env) {
     std::vector<Dims> shapes;
     for (TensorId id : node.inputs) {
         const RankOperand* operand = id >= 0 ? env.find(id) : nullptr;
-        if (operand == nullptr || is_complex(operand->dtype) || operand->shape.size() < 2 ||
-            env.attention_weight(id))
+        if (operand == nullptr || is_complex(operand->dtype) || operand->shape.size() < 2)
             return std::nullopt;
         if (env.dynamic_batch() && operand->shape.size() != out.shape.size())
             return std::nullopt;
@@ -826,6 +769,163 @@ bool is_pure_view(const OpNode& node) {
     static const std::unordered_set<std::string_view> names{"reshape", "view", "flatten", "squeeze",
                                                             "unsqueeze"};
     return names.count(node.name) != 0 && node.inputs.size() == 1 && node.outputs.size() == 1;
+}
+
+// Ops that hand their input on unchanged: a pure view, and ``dropout`` as the
+// emitter binds it (identity in eval or at p == 0; a training dropout is a mask
+// multiply by the time it is recorded).
+bool passes_through(const OpNode& node) {
+    return (is_pure_view(node) ||
+            (node.name == "dropout" && node.inputs.size() == 1 && node.outputs.size() == 1));
+}
+
+// Reductions read the view of a canonical result for free: ``(x * w).sum()`` over a
+// rank-5 ``x`` runs at 1.3 ms wrapped against 29 ms unwrapped (LCD-920a), and a
+// reduction has no producer to fuse into that the view would end.
+bool reads_views_for_free(const OpNode& node) {
+    static const std::unordered_set<std::string_view> names{"sum", "mean", "max",
+                                                            "min", "prod", "var"};
+    return names.count(node.name) != 0;
+}
+
+using Plans = std::vector<std::optional<RankRewrite>>;
+
+// An elementwise op over operands of one shape computes the same values at any layout,
+// so it takes the layout of the rewritten result it reads rather than a flat one.  A
+// chain such as ``matmul -> * scale -> softmax -> matmul`` then runs at one shape with
+// no reshape between its ops, which is what lets MPSGraph match it onto its fused
+// attention kernel (a reshape in the chain keeps it out: 5.5 ms against 18 ms at
+// lead 1024).  Skipped under a symbolic batch, where each layout pins axis 0 its own way.
+class LayoutFollower {
+public:
+    LayoutFollower(const TraceGraph& graph, const RankEnv& env, Plans& plans)
+        : graph_(graph), env_(env), plans_(plans) {}
+
+    void run() {
+        if (env_.dynamic_batch())
+            return;
+        for (std::size_t i = 0; i < graph_.ops.size(); ++i) {
+            if (!plans_[i])
+                continue;
+            const OpNode& node = graph_.ops[i];
+            RankRewrite& plan = *plans_[i];
+            if (const Dims* adopt = adoptable(node, plan); adopt != nullptr)
+                adopt_layout(node, plan, Dims(*adopt));
+            layout_[node.outputs[0].id] =
+                plan.then.empty() ? plan.out_shape : plan.then.back().out_shape;
+        }
+    }
+
+private:
+    // Every operand is a scalar or of the output's shape.
+    bool uniform_operands(const OpNode& node) const {
+        return std::all_of(node.inputs.begin(), node.inputs.end(), [&](TensorId id) {
+            const RankOperand* operand = id >= 0 ? env_.find(id) : nullptr;
+            return operand != nullptr &&
+                   (operand->shape.empty() || operand->shape == node.outputs[0].shape);
+        });
+    }
+
+    // The layout of the first operand a rewrite produced, when ``node`` can take it.
+    const Dims* adoptable(const OpNode& node, const RankRewrite& plan) const {
+        if (elementwise_ops().count(node.name) == 0 || !plan.then.empty() || plan.attrs ||
+            plan.input_shapes.size() != node.inputs.size() || !uniform_operands(node))
+            return nullptr;
+        for (TensorId id : node.inputs) {
+            const auto it = layout_.find(id);
+            if (it != layout_.end())
+                return it->second == plan.out_shape ? nullptr : &it->second;
+        }
+        return nullptr;
+    }
+
+    void adopt_layout(const OpNode& node, RankRewrite& plan, const Dims& shape) const {
+        for (std::size_t k = 0; k < node.inputs.size(); ++k)
+            plan.input_shapes[k] = env_.find(node.inputs[k])->shape.empty() ? Dims{} : shape;
+        plan.out_shape = shape;
+    }
+
+    const TraceGraph& graph_;
+    const RankEnv& env_;
+    Plans& plans_;
+    std::unordered_map<TensorId, Dims> layout_;
+};
+
+// Drops every rewrite whose result a consumer outside the reshape family would still
+// read at rank 5+.  The pass puts a view between the canonical result and the original
+// one; an op that reads that view as a rank-5+ operand makes MPSGraph copy the data
+// into it, and an op that would have fused with the producer (a layer norm over an
+// ``add``) loses the fusion too.  A rewritten result is wanted only by rewritten ops,
+// by views and pass-throughs (followed to their consumers while their result is
+// still rank 5+) and by graph outputs (rewritten at the boundary).
+//
+// A consumer always comes after its producer, so one pass from the back settles
+// every decision a node depends on.
+class WideReads {
+public:
+    WideReads(const TraceGraph& graph, const std::vector<bool>& inside, const Plans& plans)
+        : graph_(graph), inside_(inside), plans_(plans) {
+        for (std::size_t i = 0; i < graph.ops.size(); ++i) {
+            for (TensorId id : graph.ops[i].inputs) {
+                if (id >= 0)
+                    readers_[id].push_back(i);
+            }
+        }
+        for (const VjpRegion& r : graph.vjp_regions)
+            note_region(r);
+    }
+
+    // Whether anything reads ``id`` at rank 5+ in the graph as it will be emitted.
+    bool read_wide(TensorId id) const {
+        if (region_reads_.count(id) != 0)
+            return true;
+        const auto it = readers_.find(id);
+        return it != readers_.end() && std::any_of(it->second.begin(), it->second.end(),
+                                                   [&](std::size_t c) { return reader_wide(c); });
+    }
+
+private:
+    void note_region(const VjpRegion& r) {
+        region_reads_.insert(r.input_ids.begin(), r.input_ids.end());
+        region_reads_.insert(r.cotangent_ids.begin(), r.cotangent_ids.end());
+        for (const OpNode& node : r.bwd_ops) {
+            for (TensorId id : node.inputs) {
+                if (id >= 0)
+                    region_reads_.insert(id);
+            }
+        }
+    }
+
+    // Whether op ``c``, reading a result, makes it be read at rank 5+.
+    bool reader_wide(std::size_t c) const {
+        if (plans_[c])
+            return false;
+        const OpNode& node = graph_.ops[c];
+        if (inside_[c])
+            return true;
+        if (reads_views_for_free(node))
+            return false;
+        if (!passes_through(node))
+            return true;
+        const TensorMeta& out = node.outputs[0];
+        return out.shape.size() >= kRankCanonMinRank && read_wide(out.id);
+    }
+
+    const TraceGraph& graph_;
+    const std::vector<bool>& inside_;
+    const Plans& plans_;
+    std::unordered_map<TensorId, std::vector<std::size_t>> readers_;
+    std::unordered_set<TensorId> region_reads_;
+};
+
+void drop_rewrites_read_wide(const TraceGraph& graph,
+                             const std::vector<bool>& inside,
+                             Plans& plans) {
+    const WideReads reads(graph, inside, plans);
+    for (std::size_t i = graph.ops.size(); i-- > 0;) {
+        if (plans[i] && reads.read_wide(graph.ops[i].outputs[0].id))
+            plans[i].reset();
+    }
 }
 
 // The views the pass inserts.  MPSGraph does not fold every ``reshape`` chain (a
@@ -975,6 +1075,12 @@ RankCanon::RankCanon(const TraceGraph& graph,
             any_plan = any_plan || plans[i].has_value();
             break;
         }
+    }
+    if (any_plan) {
+        drop_rewrites_read_wide(graph, inside, plans);
+        LayoutFollower(graph, env, plans).run();
+        any_plan = std::any_of(plans.begin(), plans.end(),
+                               [](const auto& plan) { return plan.has_value(); });
     }
     if (any_plan)
         rewrite(env, plans, inside);

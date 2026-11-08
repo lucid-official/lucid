@@ -14,7 +14,7 @@ Three guards, as for the elementwise rule:
 
 * the pass's IR, read through ``canonicalize_rank`` with no GPU: which nodes are rewritten, at
   which shapes, with which axis attribute, and what is left alone (below the gate, a symbolic
-  batch axis, attention weights a matmul reads);
+  batch axis);
 * a value table on Metal: forward and ``make_step`` gradients of the rewritten graph equal
   eager's, and equal the *unrewritten* compiled graph's to the last bit, at float32, float16 and
   bfloat16;
@@ -257,7 +257,8 @@ _SOFT = (64, 4, 2, 3, 2)
 @pytest.mark.parametrize(
     "dim,shape,canonical_dim",
     [
-        (-1, (64 * 4 * 2 * 3, 2), 1),
+        (-1, (64 * 4 * 2, 3, 2), 2),
+        (4, (64 * 4 * 2, 3, 2), 2),
         (0, (64, 4 * 2 * 3 * 2), 0),
         (2, (64 * 4, 2, 6), 1),
         (1, (64, 4, 12), 1),
@@ -288,8 +289,8 @@ def test_a_symbolic_batch_is_not_merged_into_the_rows_of_a_softmax() -> None:
     assert node.attrs["dim"] == 2
 
 
-def test_attention_weights_a_matmul_reads_are_left_as_recorded() -> None:
-    """``MatmulEmitter`` finds a softmax output by id, so neither op may be wrapped."""
+def test_attention_weights_a_matmul_reads_are_rewritten_too() -> None:
+    """Attention has no exemption: ``MpsBuilder`` finds the weights through the views."""
 
     def attention(q: lucid.Tensor, v: lucid.Tensor) -> lucid.Tensor:
         weights = F.softmax(q @ q.permute(0, 1, 2, 4, 3), dim=-1)
@@ -297,12 +298,8 @@ def test_attention_weights_a_matmul_reads_are_left_as_recorded() -> None:
 
     q = _filled((64, 4, 2, 8, 16))
     ops = _canon(attention, q, _filled((64, 4, 2, 8, 16), 1.0))
-    soft = _named(ops, "softmax")
-    assert len(soft) == 1 and len(soft[0].outputs[0].shape) == 5
-    last = _named(ops, "matmul")[-1]
-    assert len(last.outputs[0].shape) == 5
-    # The weights feed the matmul directly, with no view in between.
-    assert last.inputs[0] == soft[0].outputs[0].id
+    assert _widest(ops, "softmax") <= 3
+    assert all(len(n.outputs[0].shape) <= 3 for n in _named(ops, "matmul"))
 
 
 def test_a_softmax_that_no_matmul_reads_is_wrapped_even_beside_one() -> None:
