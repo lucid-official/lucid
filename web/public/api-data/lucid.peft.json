@@ -9445,24 +9445,24 @@
   "notes": [],
   "attributes": [
     {
-      "name": "TRANSFORMERS_MODELS_TO_PREFIX_TUNING_POSTPROCESS_MAPPING",
-      "annotation": "dict[str, Callable[[tuple[Tensor, ...]], tuple[tuple[Tensor, Tensor], ...]]]",
-      "description": "A model family's `model_type` -> the function that turns a prefix-tuning prompt into that family's cache layout.  A plain dict, as the reference's: add a family by assigning to it."
-    },
-    {
       "name": "MODEL_TYPE_TO_PEFT_MODEL_MAPPING",
       "annotation": "Final[Mapping[TaskType, type[PeftModel]]]",
       "description": "Wrapper class by the task it serves, as the reference's table of the same name.  Read-only."
     },
     {
-      "name": "PEFT_TYPE_TO_TUNER_MAPPING",
-      "annotation": "Mapping[PeftType, type[_AdapterHost]]",
-      "description": "The tuner (the model class that puts a method's adapters into a model) of each method, by `PeftType`: a read-only view of the tuner registry, like `PEFT_TYPE_TO_CONFIG_MAPPING`."
+      "name": "TRANSFORMERS_MODELS_TO_PREFIX_TUNING_POSTPROCESS_MAPPING",
+      "annotation": "dict[str, Callable[[tuple[Tensor, ...]], tuple[tuple[Tensor, Tensor], ...]]]",
+      "description": "A model family's `model_type` -> the function that turns a prefix-tuning prompt into that family's cache layout.  A plain dict, as the reference's: add a family by assigning to it."
     },
     {
       "name": "PEFT_TYPE_TO_CONFIG_MAPPING",
       "annotation": "Mapping[PeftType, type[PeftConfig]]",
       "description": "The config class of each method, by `PeftType`: a read-only view of the registry that `PeftConfig` subclasses join as they are defined, so a method added later appears here."
+    },
+    {
+      "name": "PEFT_TYPE_TO_TUNER_MAPPING",
+      "annotation": "Mapping[PeftType, type[_AdapterHost]]",
+      "description": "The tuner (the model class that puts a method's adapters into a model) of each method, by `PeftType`: a read-only view of the tuner registry, like `PEFT_TYPE_TO_CONFIG_MAPPING`."
     }
   ],
   "warns": [],
