@@ -7,11 +7,6 @@ For each op, measures:
   C) Raw MLX    (lower-bound reference — Lucid layer overhead = B - MLX)
 """
 
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import lucid
 import lucid.nn.functional as F
 from lucid.benchmarks._core import (

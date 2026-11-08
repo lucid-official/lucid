@@ -9,12 +9,9 @@ Covers:
      eager StaticCache vs compiled_decode_step.
 """
 
-import os
-import sys
 import time
 from collections.abc import Callable
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import lucid
 import lucid.nn as nn

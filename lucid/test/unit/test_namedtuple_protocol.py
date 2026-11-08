@@ -15,11 +15,16 @@ import pytest
 import lucid
 
 
+_PATH_ADDED: list[str] = []
+
+
 def _namedtuple_classes() -> list[type[tuple[object, ...]]]:
+    before = list(sys.path)
     for info in pkgutil.walk_packages(lucid.__path__, "lucid."):
         if ".test" in info.name or "._C" in info.name or info.name.endswith("__main__"):
             continue
         importlib.import_module(info.name)
+    _PATH_ADDED.extend(p for p in sys.path if p not in before)
     found: dict[str, type[tuple[object, ...]]] = {}
     for module_name, module in list(sys.modules.items()):
         if not module_name.startswith("lucid") or ".test" in module_name:
@@ -51,3 +56,10 @@ def test_namedtuple_does_not_override_tuple_protocol(
         f"{cls.__qualname__} overrides {method}; a record's tuple protocol "
         "must match its fields (use a named property instead)"
     )
+
+
+def test_importing_a_lucid_module_leaves_sys_path_alone() -> None:
+    """An import that puts ``lucid/`` on ``sys.path`` makes ``import einops`` find
+    ``lucid.einops`` (the benchmark scripts did, until LCD-931), so the walk above must
+    end with the path it started with."""
+    assert not _PATH_ADDED, _PATH_ADDED

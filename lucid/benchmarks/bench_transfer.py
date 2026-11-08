@@ -13,11 +13,6 @@ Also compares the two transfer paths:
 Every size takes the same path; there is no size threshold.
 """
 
-import sys
-import os
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import lucid
 import lucid.metal as metal
 from lucid.benchmarks._core import BenchResult, bench_cpu, metal_available

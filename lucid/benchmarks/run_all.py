@@ -22,8 +22,6 @@ import subprocess
 import sys
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from lucid.benchmarks import bench_models, bench_ops, bench_train, bench_transfer
 
 _BASELINE_DIR = os.path.join(os.path.dirname(__file__), "baseline")

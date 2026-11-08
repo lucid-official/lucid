@@ -77,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - extremum half tie share and zero max/min sign (LCD-879)
 
+- stop putting lucid/ on sys.path at import (LCD-931)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
