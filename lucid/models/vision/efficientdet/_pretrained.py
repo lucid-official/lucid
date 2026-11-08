@@ -367,6 +367,7 @@ def efficientdet_d6(
     model_type="efficientdet",
     model_class=EfficientDetForObjectDetection,
     default_config=_efficientdet_config(phi=7),
+    # Paper Table 2: D6 and D7 are both 52M (same B6 backbone, BiFPN and head).
     params=51900000,
     summary="auto",
 )

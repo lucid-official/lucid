@@ -145,7 +145,7 @@ class EfficientDetConfig(ModelConfig):
     backbone_in_channels: tuple[int, int, int] = (40, 112, 320)
     # EfficientNet compound coefficients for the backbone.  D{phi} uses
     # B{phi}: (1.0,1.0) (1.0,1.1) (1.1,1.2) (1.2,1.4) (1.4,1.8) (1.6,2.2)
-    # (1.8,2.6) (2.0,3.1).  These have to agree with
+    # (1.8,2.6) (D7 reuses B6; B7's (2.0,3.1) belongs to D7x).  These have to agree with
     # ``backbone_in_channels`` — the projections are built from the latter
     # and fed by the former.
     backbone_width_coeff: float = 1.0
@@ -212,9 +212,11 @@ _COMPOUND_PARAMS: dict[
     4: (224, 7, 4, (56, 160, 448), 1.4, 1.8, 1024, 4.0),
     5: (288, 7, 4, (64, 176, 512), 1.6, 2.2, 1280, 4.0),
     6: (384, 8, 5, (72, 200, 576), 1.8, 2.6, 1280, 4.0),
-    # D7 is the one variant the reference overrides: anchor_scale 5.0, so the
+    # D7 shares D6's EfficientNet-B6 backbone, BiFPN and head (paper Table 1:
+    # D7 = B6 / 1536 / 384 / 8 / 5; the B7 backbone is the separate D7x, 77M).
+    # It is also the one variant the reference gives anchor_scale 5.0, so the
     # base sizes become 40/80/160/320/640 rather than 4*stride.
-    7: (384, 8, 5, (80, 224, 640), 2.0, 3.1, 1536, 5.0),
+    7: (384, 8, 5, (72, 200, 576), 1.8, 2.6, 1536, 5.0),
 }
 
 
