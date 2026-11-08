@@ -90,4 +90,4 @@ def device_of(module: nn.Module) -> str:
     Metal default.
     """
     held = next(itertools.chain(module.parameters(), module.buffers()), None)
-    return lucid.get_default_device() if held is None else held.device.type
+    return lucid.get_default_device().type if held is None else held.device.type

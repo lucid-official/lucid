@@ -108,7 +108,7 @@ class PointMass:
         self.start = start
         self.step_size = step_size
         self.sigma = sigma
-        self.device = lucid.get_default_device() if device is None else device
+        self.device = lucid.get_default_device().type if device is None else device
         self.random_target = random_target
 
         axis = lucid.linspace(-1.0, 1.0, size, device=self.device)

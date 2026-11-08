@@ -115,15 +115,24 @@ def set_default_device(device: _dev | str) -> None:
     _d_inv()
 
 
-def get_default_device() -> str:
-    """Return the default device string used by factory functions.
+def get_default_device() -> _dev:
+    """Return the default device used by factory functions.
 
-    Mirror of :func:`get_default_dtype` for placement.
+    Mirror of :func:`get_default_dtype` for placement.  The result is a
+    :class:`~lucid._device.device`, so it round-trips through
+    :func:`set_default_device` and can be passed straight to ``.to`` or a
+    ``device=`` argument.
 
     Returns
     -------
-    str
-        Either ``"cpu"`` or ``"metal"``.  Initialised to ``"cpu"``;
+    device
+        ``device("cpu")`` or ``device("metal")``.  Initialised to the CPU;
         mutated by :func:`set_default_device`.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.get_default_device()
+    device('cpu')
     """
-    return _default_device_str
+    return _dev(_default_device_str)

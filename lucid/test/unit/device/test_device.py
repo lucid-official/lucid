@@ -104,7 +104,8 @@ class TestDeviceConstructorAcceptsEveryForm:
 class TestDefaultDevice:
     def test_get_default_returns_device(self) -> None:
         d = lucid.get_default_device()
-        assert d is not None
+        assert isinstance(d, lucid.device)
+        assert d == lucid.device("cpu")
 
     def test_set_default_round_trip(self) -> None:
         prev = lucid.get_default_device()
@@ -112,7 +113,36 @@ class TestDefaultDevice:
             lucid.set_default_device("cpu")
             assert "cpu" in str(lucid.get_default_device()).lower()
         finally:
-            lucid.set_default_device(str(prev))
+            lucid.set_default_device(prev)
+
+    @pytest.mark.parametrize("name", ["cpu", "metal"])
+    def test_getter_reports_the_device_that_was_set(self, name: str) -> None:
+        if name == "metal" and not metal_available():
+            pytest.skip("Metal not available")
+        prev = lucid.get_default_device()
+        try:
+            lucid.set_default_device(name)
+            got = lucid.get_default_device()
+            assert isinstance(got, lucid.device)
+            assert got == lucid.device(name)
+            assert got.is_metal == (name == "metal")
+            lucid.set_default_device(got)
+            assert lucid.get_default_device() == got
+        finally:
+            lucid.set_default_device(prev)
+
+    @pytest.mark.parametrize("name", ["cpu", "metal"])
+    def test_empty_parameter_and_buffer_follow_the_default(self, name: str) -> None:
+        if name == "metal" and not metal_available():
+            pytest.skip("Metal not available")
+        prev = lucid.get_default_device()
+        try:
+            lucid.set_default_device(name)
+            assert lucid.zeros(0).device == lucid.device(name)
+            assert lucid.nn.Parameter().device == lucid.device(name)
+            assert lucid.nn.Buffer().device == lucid.device(name)
+        finally:
+            lucid.set_default_device(prev)
 
 
 class TestCrossDevicePair:

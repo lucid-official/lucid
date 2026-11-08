@@ -115,7 +115,7 @@ def _wrong(answer: Any, dtype: lucid.dtype) -> list[str]:
 
 def _holding(dtype: lucid.dtype) -> str:
     """The default device, or the CPU for a dtype Metal cannot hold (float64)."""
-    device = lucid.get_default_device()
+    device = lucid.get_default_device().type
     return device if device_supports(device, dtype) else "cpu"
 
 

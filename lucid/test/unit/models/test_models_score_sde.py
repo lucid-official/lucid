@@ -149,7 +149,7 @@ class TestSamplersAgainstAnAnalyticScore:
         lucid.manual_seed(0)
         sde = _make_sde(kind)
         steps = 300
-        x = sde.prior_sampling((self.COUNT, 1), lucid.get_default_device())
+        x = sde.prior_sampling((self.COUNT, 1), lucid.get_default_device().type)
         times = lucid.linspace(1.0, sde.t_min, steps)
         step = (1.0 - sde.t_min) / (steps - 1)
         for i in range(steps):
@@ -172,7 +172,7 @@ class TestSamplersAgainstAnAnalyticScore:
             g = sde.diffusion(t).reshape(self.COUNT, 1)
             return (sde.drift(x, t) - 0.5 * g**2 * self._score(sde, x, t)).reshape(-1)
 
-        start = sde.prior_sampling((self.COUNT, 1), lucid.get_default_device()).reshape(-1)
+        start = sde.prior_sampling((self.COUNT, 1), lucid.get_default_device().type).reshape(-1)
         path = odeint(rhs, start, lucid.linspace(1.0, sde.t_min, 150), method="rk4")
         x = path[-1]
         assert abs(float(x.mean().item()) - self.MU) < 0.12
@@ -188,7 +188,7 @@ class TestSamplersAgainstAnAnalyticScore:
         lucid.manual_seed(0)
         sde = _make_sde("vp")
         steps = 300
-        x = sde.prior_sampling((self.COUNT, 1), lucid.get_default_device())
+        x = sde.prior_sampling((self.COUNT, 1), lucid.get_default_device().type)
         times = lucid.linspace(1.0, sde.t_min, steps)
         step = (1.0 - sde.t_min) / (steps - 1)
         for i in range(steps):

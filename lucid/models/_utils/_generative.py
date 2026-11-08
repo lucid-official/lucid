@@ -1081,7 +1081,7 @@ def resolve_generation_device(model: nn.Module, device: str | None) -> str:
         return device
     for param in model.parameters():
         return str(param.device.type)
-    return get_default_device()
+    return get_default_device().type
 
 
 def model_dtype(model: nn.Module) -> lucid.dtype:

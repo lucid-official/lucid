@@ -187,7 +187,7 @@ class Pendulum:
         self.gravity = 9.81
         # The peak gravitational torque, at the horizontal.
         self.max_torque = torque * self.mass * self.gravity * self.length / 2.0
-        self.device = lucid.get_default_device() if device is None else device
+        self.device = lucid.get_default_device().type if device is None else device
         self._ys, self._xs = _grid(self.device)
         self.theta = math.pi
         self.omega = 0.0
