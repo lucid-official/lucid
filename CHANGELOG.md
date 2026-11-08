@@ -88,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - materialise rank-5+ graph outputs at rank 4
 - rank-5+ attention, wide-consumer guard (LCD-923, 925)
 - norm and pool3d emitters follow rank-canon (LCD-927)
+- rank short sort axes, not MPSGraph argSort (LCD-926)
 
 ---
 

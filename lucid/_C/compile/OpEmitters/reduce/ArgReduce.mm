@@ -41,7 +41,10 @@ public:
         if (g == nil || x == nil) return false;
         // Values gathered by the stable order, not ``sortWithTensor``: the
         // same order eager takes, -0.0 kept where it was (``_SortOrder.h``).
+        // nil: a shape MPSGraph sorts far slower than eager, so the graph
+        // runs eager (``graph_sort_order``).
         MPSGraphTensor* order = graph_sort_order(g, x, (NSInteger)ax, false);
+        if (order == nil) return false;
         MPSGraphTensor* sorted = graph_gather_sorted(g, x, order, (NSInteger)ax);
         if (sorted == nil) return false;
         ctx.bind(node.outputs[0].id, (__bridge void*)sorted);
@@ -60,7 +63,9 @@ public:
         MPSGraph* g = (__bridge MPSGraph*)ctx.graph();
         MPSGraphTensor* x = (__bridge MPSGraphTensor*)ctx.resolve(x_id);
         if (g == nil || x == nil) return false;
-        ctx.bind(node.outputs[0].id, (__bridge void*)graph_sort_order(g, x, (NSInteger)ax, false));
+        MPSGraphTensor* order = graph_sort_order(g, x, (NSInteger)ax, false);
+        if (order == nil) return false;
+        ctx.bind(node.outputs[0].id, (__bridge void*)order);
         return true;
     }
 };

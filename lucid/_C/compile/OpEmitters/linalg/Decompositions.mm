@@ -484,7 +484,7 @@ one_sided_jacobi(MPSGraph* g, MPSGraphTensor* a, MPSGraphTensor* scale, std::int
 std::pair<MPSGraphTensor*, MPSGraphTensor*>
 sort_values_and_cols(MPSGraph* g, MPSGraphTensor* vals, MPSGraphTensor* mat, bool descending) {
     const NSInteger rank = (NSInteger)mat.shape.count;
-    MPSGraphTensor* order = graph_sort_order(g, vals, rank - 2, descending);
+    MPSGraphTensor* order = graph_sort_order(g, vals, rank - 2, descending, /*always=*/true);
     MPSGraphTensor* sorted_vals = graph_gather_sorted(g, vals, order, rank - 2);
     MPSGraphTensor* order_exp = [g expandDimsOfTensor:order axes:@[ @(rank - 2) ] name:nil];
     MPSGraphTensor* order_full = [g broadcastTensor:order_exp toShape:mat.shape name:nil];

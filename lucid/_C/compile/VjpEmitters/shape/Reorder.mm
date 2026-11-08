@@ -120,6 +120,8 @@ public:
                 if (!known(x) || !norm_axis(a, x.shape.count, axis))
                     return nil;
                 MPSGraphTensor* perm = graph_sort_order(g, x, axis, false);
+                if (perm == nil)
+                    return nil;
                 perm = [g castTensor:perm toType:MPSDataTypeInt32 name:nil];
                 MPSGraphTensor* zeros = [g constantWithScalar:0.0 shape:x.shape dataType:go.dataType];
                 return [g scatterAlongAxis:axis
