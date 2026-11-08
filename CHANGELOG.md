@@ -63,6 +63,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - validate guidance_scale and queue, keep drift energy
 
+- reduce a rank-5+ tensor at its fused lower rank
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

@@ -189,6 +189,27 @@ promote_to_float_output(MPSGraph* g, MPSGraphTensor* x, const OpNode& node) {
     return a;
 }
 
+// Lift a ``Shape`` (``std::vector<int64_t>``) to an ``NSArray<NSNumber*>``.
+[[maybe_unused]] inline NSArray<NSNumber*>* shape_to_ns(const std::vector<std::int64_t>& s) {
+    NSMutableArray<NSNumber*>* out = [NSMutableArray arrayWithCapacity:s.size()];
+    for (std::int64_t d : s)
+        [out addObject:[NSNumber numberWithLongLong:d]];
+    return out;
+}
+
+// Extract the int64 vector at ``shape`` from an MPSGraphTensor's
+// ``.shape`` NSArray<NSNumber*>.  Convenient when only the live
+// MPSGraph shape is available (e.g. forward-feed placeholders).
+[[maybe_unused]] inline std::vector<std::int64_t> shape_of_mps(MPSGraphTensor* t) {
+    std::vector<std::int64_t> out;
+    if (t == nil || t.shape == nil)
+        return out;
+    out.reserve(t.shape.count);
+    for (NSNumber* n in t.shape)
+        out.push_back((std::int64_t)n.longLongValue);
+    return out;
+}
+
 // ── Dynamic-batch shape helpers ──────────────────────────────────────
 //
 // Under ``dynamic_batch`` (lucid.compile(..., dynamic=True) with the symbolic

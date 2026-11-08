@@ -89,14 +89,6 @@ cast_if_needed(MPSGraph* g, MPSGraphTensor* t, MPSDataType target) {
            (b_t.dataType == target_dt && is_0d_f32(a_t));
 }
 
-// Lift a ``Shape`` (``std::vector<int64_t>``) to an ``NSArray<NSNumber*>``.
-[[maybe_unused]] inline NSArray<NSNumber*>* shape_to_ns(const std::vector<std::int64_t>& s) {
-    NSMutableArray<NSNumber*>* out = [NSMutableArray arrayWithCapacity:s.size()];
-    for (std::int64_t d : s)
-        [out addObject:[NSNumber numberWithLongLong:d]];
-    return out;
-}
-
 // ``[graph constantWithScalar:1.0 shape:loss_shape dataType:dt]``.
 //
 // Used by the walker to seed ``∂loss/∂loss = 1`` before iterating the
@@ -112,19 +104,6 @@ ones_like_loss(MPSGraph* graph, const std::vector<std::int64_t>& loss_shape, Dty
         return [graph constantWithScalar:1.0 shape:shape_to_ns(loss_shape) dataType:dt];
     // A scalar constant's rank is up to MPSGraph; pin it to 0-d.
     return [graph reshapeTensor:[graph constantWithScalar:1.0 dataType:dt] withShape:@[] name:nil];
-}
-
-// Extract the int64 vector at ``shape`` from an MPSGraphTensor's
-// ``.shape`` NSArray<NSNumber*>.  Convenient when only the live
-// MPSGraph shape is available (e.g. forward-feed placeholders).
-[[maybe_unused]] inline std::vector<std::int64_t> shape_of_mps(MPSGraphTensor* t) {
-    std::vector<std::int64_t> out;
-    if (t == nil || t.shape == nil)
-        return out;
-    out.reserve(t.shape.count);
-    for (NSNumber* n in t.shape)
-        out.push_back((std::int64_t)n.longLongValue);
-    return out;
 }
 
 // Compute the axes that need to be reduce-summed in order to go from

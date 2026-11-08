@@ -20,6 +20,7 @@
 #include <variant>
 #include <vector>
 
+#include "../../OpEmitters/_ReduceCanon.h"
 #include "../VjpEmitter.h"
 #include "../_VjpHelpers.h"
 
@@ -49,6 +50,36 @@ MPSGraphTensor* unsqueeze_reduced(MPSGraph* g, MPSGraphTensor* grad,
         [shape addObject:[NSNumber numberWithLongLong:s]];
     }
     return [g reshapeTensor:grad withShape:shape name:nil];
+}
+
+// ``grad`` (the reduction's output, ``keepdim`` or squeezed) spread back over
+// the reduced axes of ``in_shape``, scaled by ``scale`` first when it is not 1.
+// A rank-5+ input is spread at its canonical lower rank and reshaped back, so
+// the broadcast never runs on a rank-5+ tensor.
+MPSGraphTensor* spread_over_reduced(MPSGraph* g,
+                                    MPSGraphTensor* grad,
+                                    const std::vector<std::int64_t>& in_shape,
+                                    const std::vector<std::int64_t>& dims,
+                                    bool keepdim,
+                                    double scale,
+                                    NSString* name) {
+    const ReduceWork work(in_shape,
+                          reduce_canon_mask(in_shape.size(), dims)
+                              .value_or(std::vector<bool>(in_shape.size(), false)));
+    MPSGraphTensor* grad_keep = work.canonical()
+                                    ? work.keep(g, grad)
+                                    : (keepdim ? grad : unsqueeze_reduced(g, grad, in_shape, dims));
+    if (scale != 1.0) {
+        grad_keep = [g multiplicationWithPrimaryTensor:grad_keep
+                                       secondaryTensor:[g constantWithScalar:scale
+                                                                    dataType:grad_keep.dataType]
+                                                  name:nil];
+    }
+    MPSGraphTensor* spread = [g broadcastTensor:grad_keep
+                                        toShape:shape_to_ns(work.work_shape())
+                                           name:work.canonical() ? nil : name];
+    return work.canonical() ? [g reshapeTensor:spread withShape:shape_to_ns(in_shape) name:name]
+                            : spread;
 }
 
 // Common ``dims`` + ``keepdim`` attr extraction for reduction VJPs.
@@ -82,11 +113,7 @@ public:
                 // decline, and any trace summing a scalar — a loss built
                 // from ``det`` or any other scalar — fell back.
                 if (in_shape.empty()) return [g reshapeTensor:grad withShape:@[] name:@"sum_vjp"];
-                MPSGraphTensor* grad_keep =
-                    *a.keepdim ? grad : unsqueeze_reduced(g, grad, in_shape, *a.dims);
-                return [g broadcastTensor:grad_keep
-                                  toShape:shape_to_ns(in_shape)
-                                     name:@"sum_vjp"];
+                return spread_over_reduced(g, grad, in_shape, *a.dims, *a.keepdim, 1.0, @"sum_vjp");
             });
     }
 };
@@ -109,16 +136,8 @@ public:
                     if (ax >= 0 && ax < (std::int64_t)in_shape.size())
                         N *= (double)in_shape[ax];
                 }
-                MPSGraphTensor* grad_keep =
-                    *a.keepdim ? grad : unsqueeze_reduced(g, grad, in_shape, *a.dims);
-                MPSGraphTensor* inv_n = [g constantWithScalar:(1.0 / N)
-                                                     dataType:grad_keep.dataType];
-                MPSGraphTensor* scaled =
-                    [g multiplicationWithPrimaryTensor:grad_keep
-                                       secondaryTensor:inv_n name:nil];
-                return [g broadcastTensor:scaled
-                                  toShape:shape_to_ns(in_shape)
-                                     name:@"mean_vjp"];
+                return spread_over_reduced(
+                    g, grad, in_shape, *a.dims, *a.keepdim, 1.0 / N, @"mean_vjp");
             });
     }
 };
@@ -131,16 +150,7 @@ std::optional<std::vector<bool>> reduced_axes(const OpNode& node, std::size_t ra
         it == node.attrs.end() ? nullptr : std::get_if<std::vector<std::int64_t>>(&it->second);
     if (dims == nullptr || dims->empty())
         return std::vector<bool>(rank, true);
-    std::vector<bool> reduced(rank, false);
-    const auto r = static_cast<std::int64_t>(rank);
-    for (std::int64_t d : *dims) {
-        if (d < 0)
-            d += r;
-        if (d < 0 || d >= r)
-            return std::nullopt;
-        reduced[static_cast<std::size_t>(d)] = true;
-    }
-    return reduced;
+    return reduce_canon_mask(rank, *dims);
 }
 
 // How a NaN slice's gradient is shaped: eager's ``ExtremumNanGrad``
@@ -228,27 +238,26 @@ public:
         const auto reduced = reduced_axes(node, x_shape.size());
         if (!reduced)
             return false;
-        // Result and grad in keepdim form, so both broadcast against x.
-        std::vector<std::int64_t> kept(x_shape);
-        NSMutableArray<NSNumber*>* axes = [NSMutableArray arrayWithCapacity:x_shape.size()];
-        for (std::size_t d = 0; d < kept.size(); ++d) {
-            if (!(*reduced)[d])
-                continue;
-            kept[d] = 1;
-            [axes addObject:[NSNumber numberWithUnsignedLong:d]];
-        }
-        MPSGraphTensor* y_k = [g reshapeTensor:cast_if_needed(g, y, x.dataType)
-                                     withShape:shape_to_ns(kept)
-                                          name:nil];
-        MPSGraphTensor* go_k = [g reshapeTensor:go withShape:shape_to_ns(kept) name:nil];
-        MPSGraphTensor* mask = [g castTensor:[g equalWithPrimaryTensor:x
+        // Result and grad in keepdim form, so both broadcast against x.  A rank-5+
+        // input is worked at its canonical lower rank (LCD-918): the mask, the
+        // tie count and the share are all elementwise over rank-5+ tensors
+        // otherwise.
+        const ReduceWork work(x_shape, *reduced);
+        MPSGraphTensor* x_e = work.enter(g, x);
+        MPSGraphTensor* y_k = work.keep(g, cast_if_needed(g, y, x.dataType));
+        MPSGraphTensor* go_k = work.keep(g, go);
+        MPSGraphTensor* mask = [g castTensor:[g equalWithPrimaryTensor:x_e
                                                        secondaryTensor:y_k
                                                                   name:nil]
                                       toType:go.dataType
                                         name:nil];
-        MPSGraphTensor* dx = [g multiplicationWithPrimaryTensor:go_k
-                                                secondaryTensor:share_among_ties(g, mask, axes, nan_grad_of(node), x, y_k)
-                                                           name:IS_MAX ? @"max_vjp" : @"min_vjp"];
+        MPSGraphTensor* share =
+            share_among_ties(g, mask, work.axes_ns(), nan_grad_of(node), x_e, y_k);
+        MPSGraphTensor* dx = work.leave(
+            g,
+            [g multiplicationWithPrimaryTensor:go_k
+                               secondaryTensor:share
+                                          name:IS_MAX ? @"max_vjp" : @"min_vjp"]);
         bctx.accumulate_grad(node.inputs[0], from_tensor(dx));
         return true;
     }

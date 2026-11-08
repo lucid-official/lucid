@@ -24,6 +24,7 @@
 
 #include "../VjpEmitter.h"
 #include "../../OpEmitters/_NanPropagation.h"
+#include "../../OpEmitters/_ReduceCanon.h"
 #include "../_VjpHelpers.h"
 
 namespace lucid::compile {
@@ -62,21 +63,11 @@ bool axis_attr(const OpNode& node, std::size_t rank, NSInteger& axis) {
     return true;
 }
 
-// ``t`` — a reduction's output or gradient — reshaped so every reduced
-// axis is 1, ready to broadcast back over the input.
-MPSGraphTensor* keep_reduced(MPSGraph* g, MPSGraphTensor* t,
-                             const std::vector<std::int64_t>& in_shape,
-                             const std::vector<std::int64_t>& dims) {
-    NSMutableArray<NSNumber*>* shape = [NSMutableArray arrayWithCapacity:in_shape.size()];
-    std::vector<bool> reduced(in_shape.size(), dims.empty());
-    for (std::int64_t d : dims) {
-        const std::int64_t ax = d < 0 ? d + (std::int64_t)in_shape.size() : d;
-        if (ax >= 0 && ax < (std::int64_t)in_shape.size())
-            reduced[(std::size_t)ax] = true;
-    }
-    for (std::size_t i = 0; i < in_shape.size(); ++i)
-        [shape addObject:@(reduced[i] ? 1 : in_shape[i])];
-    return [g reshapeTensor:t withShape:shape name:nil];
+// The axes ``dims`` names, every axis when it names none; an out-of-range one is
+// ignored.  Only a rank-5+ input is rewritten (``ReduceWork``).
+std::vector<bool> reduced_mask_or_all(std::size_t rank, const std::vector<std::int64_t>& dims) {
+    return dims.empty() ? std::vector<bool>(rank, true)
+                        : reduce_canon_mask(rank, dims).value_or(std::vector<bool>(rank, false));
 }
 
 class ProdVjp final : public VjpEmitter {
@@ -93,15 +84,16 @@ public:
         return emit_unary_vjp(bctx, node, grad_outs,
             [&](MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* go) -> MPSGraphTensor* {
                 const auto in_shape = shape_of_mps(x);
-                NSArray<NSNumber*>* full = shape_to_ns(in_shape);
-                MPSGraphTensor* yk = keep_reduced(g, cast_if_needed(g, y, go.dataType), in_shape, *dims);
-                MPSGraphTensor* gk = keep_reduced(g, go, in_shape, *dims);
+                const ReduceWork work(in_shape, reduced_mask_or_all(in_shape.size(), *dims));
+                NSArray<NSNumber*>* full = shape_to_ns(work.work_shape());
+                MPSGraphTensor* yk = work.keep(g, cast_if_needed(g, y, go.dataType));
+                MPSGraphTensor* gk = work.keep(g, go);
                 MPSGraphTensor* ratio = [g divisionWithPrimaryTensor:[g broadcastTensor:yk toShape:full name:nil]
-                                                     secondaryTensor:x
+                                                     secondaryTensor:work.enter(g, x)
                                                                 name:nil];
-                return [g multiplicationWithPrimaryTensor:[g broadcastTensor:gk toShape:full name:nil]
-                                          secondaryTensor:ratio
-                                                     name:@"prod_vjp"];
+                return work.leave(g, [g multiplicationWithPrimaryTensor:[g broadcastTensor:gk toShape:full name:nil]
+                                                        secondaryTensor:ratio
+                                                                   name:@"prod_vjp"]);
             });
     }
 };
@@ -118,30 +110,26 @@ public:
         return emit_unary_vjp(bctx, node, grad_outs,
             [&](MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* go) -> MPSGraphTensor* {
                 const auto in_shape = shape_of_mps(x);
+                const auto reduced = reduced_mask_or_all(in_shape.size(), *dims);
                 double n = 1.0;
-                NSMutableArray<NSNumber*>* axes = [NSMutableArray array];
                 for (std::size_t i = 0; i < in_shape.size(); ++i) {
-                    bool reduced = dims->empty();
-                    for (std::int64_t d : *dims)
-                        if ((d < 0 ? d + (std::int64_t)in_shape.size() : d) == (std::int64_t)i)
-                            reduced = true;
-                    if (reduced) {
+                    if (reduced[i])
                         n *= (double)in_shape[i];
-                        [axes addObject:@(i)];
-                    }
                 }
                 const double divisor = n - (unbiased ? 1.0 : 0.0);
                 if (divisor <= 0.0)
                     return nil;
-                MPSGraphTensor* mean = [g meanOfTensor:x axes:axes name:nil];
-                MPSGraphTensor* centred = [g subtractionWithPrimaryTensor:x secondaryTensor:mean name:nil];
-                MPSGraphTensor* gk = keep_reduced(g, go, in_shape, *dims);
+                const ReduceWork work(in_shape, reduced);
+                MPSGraphTensor* x_e = work.enter(g, x);
+                MPSGraphTensor* mean = [g meanOfTensor:x_e axes:work.axes_ns() name:nil];
+                MPSGraphTensor* centred = [g subtractionWithPrimaryTensor:x_e secondaryTensor:mean name:nil];
+                MPSGraphTensor* gk = work.keep(g, go);
                 MPSGraphTensor* scale = [g constantWithScalar:2.0 / divisor dataType:go.dataType];
-                return [g multiplicationWithPrimaryTensor:[g multiplicationWithPrimaryTensor:centred
-                                                                             secondaryTensor:scale
-                                                                                        name:nil]
-                                          secondaryTensor:gk
-                                                     name:@"var_vjp"];
+                return work.leave(g, [g multiplicationWithPrimaryTensor:[g multiplicationWithPrimaryTensor:centred
+                                                                                          secondaryTensor:scale
+                                                                                                     name:nil]
+                                                        secondaryTensor:gk
+                                                                   name:@"var_vjp"]);
             });
     }
 };

@@ -26,11 +26,37 @@
 
 #include "../OpEmitter.h"
 #include "../_AttrHelpers.h"
+#include "../_ReduceCanon.h"
 #include "../_SignedZero.h"
 
 namespace lucid::compile {
 
 namespace {
+
+// A rank-5+ input is reduced at its canonical lower rank (LCD-918): the
+// reduction runs over fused blocks and one reshape lands the result on the
+// trace's output shape, so no rank-5+ tensor is left for MPSGraph to run.
+template <class BuilderBlock>
+inline bool emit_canonical_reduce(BuilderContext& ctx,
+                                  MPSGraph* graph,
+                                  MPSGraphTensor* x_t,
+                                  const OpNode& node,
+                                  const ReduceLayout& layout,
+                                  BuilderBlock builder) {
+    MPSGraphTensor* fused = [graph reshapeTensor:x_t
+                                       withShape:shape_to_ns(layout.merged_in)
+                                            name:@"reduce_canon_in"];
+    MPSGraphTensor* result = builder(graph, fused, shape_to_ns(layout.merged_axes));
+    if (result == nil)
+        return false;
+    NSMutableArray<NSNumber*>* target =
+        [NSMutableArray arrayWithArray:shape_to_ns(node.outputs[0].shape)];
+    if (layout.symbolic_lead_kept && target.count > 0)
+        target[0] = @(-1);
+    result = [graph reshapeTensor:result withShape:target name:@"reduce_canon_out"];
+    ctx.bind(node.outputs[0].id, (__bridge void*)(result));
+    return true;
+}
 
 template <class BuilderBlock>
 inline bool emit_reduce(BuilderContext& ctx, const OpNode& node, BuilderBlock builder) {
@@ -62,6 +88,10 @@ inline bool emit_reduce(BuilderContext& ctx, const OpNode& node, BuilderBlock bu
         [axes addObject:[NSNumber numberWithLongLong:d]];
 
     x_t = promote_to_float_output(graph, x_t, node);
+
+    if (auto layout = canonical_reduce_layout(shape_of_mps(x_t), *dims))
+        return emit_canonical_reduce(ctx, graph, x_t, node, *layout, builder);
+
     MPSGraphTensor* reduced = builder(graph, x_t, axes);
 
     // MPSGraph's reductions keep the reduced axes at size 1, so with
