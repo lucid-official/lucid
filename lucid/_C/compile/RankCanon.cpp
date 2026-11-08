@@ -779,12 +779,15 @@ bool passes_through(const OpNode& node) {
             (node.name == "dropout" && node.inputs.size() == 1 && node.outputs.size() == 1));
 }
 
-// Reductions read the view of a canonical result for free: ``(x * w).sum()`` over a
-// rank-5 ``x`` runs at 1.3 ms wrapped against 29 ms unwrapped (LCD-920a), and a
-// reduction has no producer to fuse into that the view would end.
+// Consumers that read the view of a canonical result for free.  Reductions:
+// ``(x * w).sum()`` over a rank-5 ``x`` runs at 1.3 ms wrapped against 29 ms unwrapped
+// (LCD-920a), and a reduction has no producer to fuse into that the view would end.  The
+// norm and pool3d emitters (LCD-927) reshape a rank-5+ input to a rank <= 4 layout of
+// their own, so for them the view folds into that reshape.
 bool reads_views_for_free(const OpNode& node) {
-    static const std::unordered_set<std::string_view> names{"sum", "mean", "max",
-                                                            "min", "prod", "var"};
+    static const std::unordered_set<std::string_view> names{
+        "sum",        "mean",     "max",        "min",        "prod",      "var",
+        "layer_norm", "rms_norm", "group_norm", "max_pool3d", "avg_pool3d"};
     return names.count(node.name) != 0;
 }
 

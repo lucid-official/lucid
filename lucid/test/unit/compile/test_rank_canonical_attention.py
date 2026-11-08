@@ -90,9 +90,16 @@ def test_the_block_stays_as_recorded_below_the_gate() -> None:
 # ── LCD-925: a rewrite whose consumer reads rank 5+ ───────────────────────────────────
 
 
+# ``topk`` has no rule and builds no canonical layout of its own: it reads its operand at
+# the rank it was recorded at.  (``layer_norm`` and the pool3d ops canonicalise internally
+# since LCD-927, so a view in front of them is free: see the last test of this block.)
+def _topk(x: lucid.Tensor) -> lucid.Tensor:
+    return lucid.topk(x, 2, dim=-1)[0].sum()
+
+
 def test_a_producer_read_by_an_op_no_rule_owns_is_left_alone() -> None:
     def fn(x: lucid.Tensor) -> lucid.Tensor:
-        return F.layer_norm(x + x, (16,)).sum()
+        return _topk(x + x)
 
     ops = _canon(fn, _filled((8, 4, 2, 4, 16)), gate="0")
     assert "reshape" not in [n.name for n in ops]
@@ -101,7 +108,7 @@ def test_a_producer_read_by_an_op_no_rule_owns_is_left_alone() -> None:
 
 def test_a_chain_ending_at_such_a_consumer_is_left_alone_back_to_its_start() -> None:
     def fn(x: lucid.Tensor) -> lucid.Tensor:
-        return F.layer_norm(((x + x) * 2.0).exp(), (16,)).sum()
+        return _topk(((x + x) * 2.0).exp())
 
     ops = _canon(fn, _filled((8, 4, 2, 4, 16)), gate="0")
     assert "reshape" not in [n.name for n in ops]
@@ -110,7 +117,7 @@ def test_a_chain_ending_at_such_a_consumer_is_left_alone_back_to_its_start() -> 
 def test_a_producer_read_through_a_view_by_such_a_consumer_is_left_alone() -> None:
     def fn(x: lucid.Tensor) -> lucid.Tensor:
         y = (x + x).reshape(8, 4, 2, 16, 4)
-        return F.layer_norm(y, (4,)).sum()
+        return _topk(y)
 
     ops = _canon(fn, _filled((8, 4, 2, 4, 16)), gate="0")
     assert list(_named(ops, "add")[0].outputs[0].shape) == [8, 4, 2, 4, 16]
@@ -299,3 +306,25 @@ def test_the_pass_is_no_slower_than_off(case: str) -> None:
         args = (_filled((64, 8, 16, 16, 96)).to(COMPILE_DEVICE),)
     off, on = _best_of((fn, args, "-1"), (fn, args, _DEFAULT_GATE))
     assert on <= 1.1 * off, f"{case}: on {on:.2f} ms vs off {off:.2f} ms"
+
+
+@pytest.mark.parametrize(
+    "consumer",
+    [
+        lambda y: F.layer_norm(y, (16,)),
+        lambda y: F.rms_norm(y, (16,)),
+        lambda y: F.group_norm(y, 2),
+    ],
+    ids=["layer_norm", "rms_norm", "group_norm"],
+)
+def test_a_norm_consumer_reads_the_producers_view_for_free(
+    consumer: Callable[[lucid.Tensor], lucid.Tensor],
+) -> None:
+    """The norm emitters build a rank <= 4 layout themselves (LCD-927), so the producer is
+    rewritten as for a reduction: 3.70 ms against 2.15 when the guard dropped it."""
+
+    def fn(x: lucid.Tensor) -> lucid.Tensor:
+        return consumer(x * 1.5).sum()
+
+    ops = _canon(fn, _filled((8, 4, 2, 8, 16)), gate="0")
+    assert len(_named(ops, "mul")[0].outputs[0].shape) < 5
