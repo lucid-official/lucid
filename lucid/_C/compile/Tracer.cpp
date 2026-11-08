@@ -549,7 +549,12 @@ bool Tracer::keeps_operand(const OpNode& node, std::size_t i, ConstantWalk& walk
                                                             "squeeze", "unsqueeze", "flatten"};
     // Each takes (base, positions, values): the base passes into the result
     // where the positions leave it, and those are the same every call only
-    // when the positions are constants.
+    // when the positions are constants.  Not redundant: only
+    // ``compiled_decode_step`` can see it, by letting an executable traced on
+    // the call that built a held table answer the calls after it, each from a
+    // table rebuilt with that call's overwrite alone (LCD-934,
+    // ``test_decode_step_held_overwrite``).  Every other entry point either
+    // stands on the trace or reruns the same call on the same input.
     static const std::unordered_set<std::string_view> overwrites{"scatter_set", "masked_fill"};
     if (views.count(node.name) != 0)
         return true;
