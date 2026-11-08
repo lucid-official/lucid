@@ -70,9 +70,10 @@ reduce_canon_mask(std::size_t rank, const std::vector<std::int64_t>& dims) {
 // block's kind and fills ``merged`` with its size.  A size-1 axis is neutral —
 // it joins whichever block surrounds it — and a tensor of nothing else is one
 // reduced block of 1.
-[[maybe_unused]] inline std::vector<bool> reduce_canon_blocks(const std::vector<std::int64_t>& in_shape,
-                                                             const std::vector<bool>& reduced,
-                                                             std::vector<std::int64_t>& merged) {
+[[maybe_unused]] inline std::vector<bool>
+reduce_canon_blocks(const std::vector<std::int64_t>& in_shape,
+                    const std::vector<bool>& reduced,
+                    std::vector<std::int64_t>& merged) {
     std::vector<bool> block_reduced;
     for (std::size_t i = 0; i < in_shape.size(); ++i) {
         const std::int64_t s = in_shape[i];
