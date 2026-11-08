@@ -1255,7 +1255,6 @@
     "lucid/_C/ops/gfunc/Gfunc.cpp": 3,
     "lucid/_C/ops/ufunc/Discrete.h": 1,
     "lucid/_C/ops/ufunc/Predicate.cpp": 1,
-    "lucid/_C/ops/ufunc/Reductions.cpp": 1,
     "lucid/_C/ops/ufunc/Scan.cpp": 3,
     "lucid/_C/ops/utils/Concat.cpp": 5,
     "lucid/_C/ops/utils/Histogram.cpp": 1,

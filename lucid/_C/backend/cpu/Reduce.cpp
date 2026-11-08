@@ -51,6 +51,27 @@ void axis_reduce(const T* in,
     }
 }
 
+// The extreme of two non-NaN values, with -0 below +0: ``max`` of a signed-zero
+// tie is +0 and ``min`` is -0, whichever came first.  ``a > b ? a : b`` keeps
+// the first of a tie, so the sign of a zero result followed the element order;
+// NEON's FMAX / FMIN (the vector body of ``extreme_*`` below) already rank the
+// zeros, and this is the scalar form of the same rule.
+template <bool kMax, typename T>
+inline T extreme_of(T a, T b) {
+    if constexpr (kMax)
+        return a > b ? a : (b > a ? b : (std::signbit(a) ? b : a));
+    else
+        return a < b ? a : (b < a ? b : (std::signbit(a) ? a : b));
+}
+
+// ``extreme_of`` that propagates NaN: the combine step of the strided reductions.
+template <bool kMax, typename T>
+inline T extreme_nan(T a, T b) {
+    if (std::isnan(a) || std::isnan(b))
+        return std::numeric_limits<T>::quiet_NaN();
+    return extreme_of<kMax>(a, b);
+}
+
 // The max or min of ``n`` contiguous values, NaN if any is NaN.
 //
 // NEON's FMAX / FMIN (and the across-lane FMAXV / FMINV) propagate NaN —
@@ -82,7 +103,7 @@ float extreme_f32(const float* p, std::size_t n) {
     for (; i < n; ++i) {
         if (std::isnan(p[i]) || std::isnan(acc))
             return std::numeric_limits<float>::quiet_NaN();
-        acc = (kMax ? p[i] > acc : p[i] < acc) ? p[i] : acc;
+        acc = extreme_of<kMax>(acc, p[i]);
     }
     return acc;
 }
@@ -112,9 +133,67 @@ double extreme_f64(const double* p, std::size_t n) {
     for (; i < n; ++i) {
         if (std::isnan(p[i]) || std::isnan(acc))
             return std::numeric_limits<double>::quiet_NaN();
-        acc = (kMax ? p[i] > acc : p[i] < acc) ? p[i] : acc;
+        acc = extreme_of<kMax>(acc, p[i]);
     }
     return acc;
+}
+
+// The strided reductions, ``inner`` contiguous lanes folded one row at a time.
+// NEON's FMAX / FMIN are NaN-propagating and rank the zeros, so a full
+// register of lanes is one instruction; the scalar ``extreme_nan`` only
+// finishes the lanes that do not fill one.
+template <bool kMax>
+void extreme_axis_f32(
+    const float* in, float* out, std::size_t outer, std::size_t reduce_dim, std::size_t inner) {
+    constexpr float kStart =
+        kMax ? -std::numeric_limits<float>::infinity() : std::numeric_limits<float>::infinity();
+    for (std::size_t o = 0; o < outer; ++o) {
+        float* __restrict acc = out + o * inner;
+        std::fill_n(acc, inner, kStart);
+        for (std::size_t r = 0; r < reduce_dim; ++r) {
+            const float* __restrict row = in + (o * reduce_dim + r) * inner;
+            std::size_t i = 0;
+            for (; i + 16 <= inner; i += 16) {
+                for (std::size_t k = 0; k < 16; k += 4) {
+                    const float32x4_t a = vld1q_f32(acc + i + k), b = vld1q_f32(row + i + k);
+                    vst1q_f32(acc + i + k, kMax ? vmaxq_f32(a, b) : vminq_f32(a, b));
+                }
+            }
+            for (; i + 4 <= inner; i += 4) {
+                const float32x4_t a = vld1q_f32(acc + i), b = vld1q_f32(row + i);
+                vst1q_f32(acc + i, kMax ? vmaxq_f32(a, b) : vminq_f32(a, b));
+            }
+            for (; i < inner; ++i)
+                acc[i] = extreme_nan<kMax>(acc[i], row[i]);
+        }
+    }
+}
+
+template <bool kMax>
+void extreme_axis_f64(
+    const double* in, double* out, std::size_t outer, std::size_t reduce_dim, std::size_t inner) {
+    constexpr double kStart =
+        kMax ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
+    for (std::size_t o = 0; o < outer; ++o) {
+        double* __restrict acc = out + o * inner;
+        std::fill_n(acc, inner, kStart);
+        for (std::size_t r = 0; r < reduce_dim; ++r) {
+            const double* __restrict row = in + (o * reduce_dim + r) * inner;
+            std::size_t i = 0;
+            for (; i + 8 <= inner; i += 8) {
+                for (std::size_t k = 0; k < 8; k += 2) {
+                    const float64x2_t a = vld1q_f64(acc + i + k), b = vld1q_f64(row + i + k);
+                    vst1q_f64(acc + i + k, kMax ? vmaxq_f64(a, b) : vminq_f64(a, b));
+                }
+            }
+            for (; i + 2 <= inner; i += 2) {
+                const float64x2_t a = vld1q_f64(acc + i), b = vld1q_f64(row + i);
+                vst1q_f64(acc + i, kMax ? vmaxq_f64(a, b) : vminq_f64(a, b));
+            }
+            for (; i < inner; ++i)
+                acc[i] = extreme_nan<kMax>(acc[i], row[i]);
+        }
+    }
 }
 
 }  // namespace
@@ -163,12 +242,7 @@ void max_axis_f32(
             out[o] = extreme_f32<true>(in + o * reduce_dim, reduce_dim);
         return;
     }
-    constexpr float NEG_INF = -std::numeric_limits<float>::infinity();
-    axis_reduce<float>(in, out, outer, reduce_dim, inner, NEG_INF, [](float a, float b) {
-        if (std::isnan(a) || std::isnan(b))
-            return std::numeric_limits<float>::quiet_NaN();
-        return a > b ? a : b;
-    });
+    extreme_axis_f32<true>(in, out, outer, reduce_dim, inner);
 }
 
 void max_axis_f64(
@@ -178,12 +252,7 @@ void max_axis_f64(
             out[o] = extreme_f64<true>(in + o * reduce_dim, reduce_dim);
         return;
     }
-    constexpr double NEG_INF = -std::numeric_limits<double>::infinity();
-    axis_reduce<double>(in, out, outer, reduce_dim, inner, NEG_INF, [](double a, double b) {
-        if (std::isnan(a) || std::isnan(b))
-            return std::numeric_limits<double>::quiet_NaN();
-        return a > b ? a : b;
-    });
+    extreme_axis_f64<true>(in, out, outer, reduce_dim, inner);
 }
 
 void min_axis_f32(
@@ -193,12 +262,7 @@ void min_axis_f32(
             out[o] = extreme_f32<false>(in + o * reduce_dim, reduce_dim);
         return;
     }
-    constexpr float POS_INF = std::numeric_limits<float>::infinity();
-    axis_reduce<float>(in, out, outer, reduce_dim, inner, POS_INF, [](float a, float b) {
-        if (std::isnan(a) || std::isnan(b))
-            return std::numeric_limits<float>::quiet_NaN();
-        return a < b ? a : b;
-    });
+    extreme_axis_f32<false>(in, out, outer, reduce_dim, inner);
 }
 
 void min_axis_f64(
@@ -208,12 +272,7 @@ void min_axis_f64(
             out[o] = extreme_f64<false>(in + o * reduce_dim, reduce_dim);
         return;
     }
-    constexpr double POS_INF = std::numeric_limits<double>::infinity();
-    axis_reduce<double>(in, out, outer, reduce_dim, inner, POS_INF, [](double a, double b) {
-        if (std::isnan(a) || std::isnan(b))
-            return std::numeric_limits<double>::quiet_NaN();
-        return a < b ? a : b;
-    });
+    extreme_axis_f64<false>(in, out, outer, reduce_dim, inner);
 }
 
 void prod_axis_f32(

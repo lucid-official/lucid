@@ -30,6 +30,37 @@ inline vDSP_Length L(std::size_t n) {
     return static_cast<vDSP_Length>(n);
 }
 
+// Clamp to ``[lo, hi]``; a zero that ties a zero bound takes the sign the
+// extremum rule gives it (max of a signed-zero tie is +0, min is -0, as
+// ``maximum`` / ``minimum``): a +0 floor also takes -0 (``<=``), a -0 cap also
+// takes +0 (``>=``).  The comparison is chosen once, outside the loop, so the
+// plain loops stay vectorised.  NaN fails every comparison and passes through.
+template <bool kLoTies, bool kHiTies, typename T>
+void clip_run(const T* src, T* dst, std::size_t n, T lo, T hi) {
+    for (std::size_t i = 0; i < n; ++i) {
+        T v = src[i];
+        if (kLoTies ? v <= lo : v < lo)
+            v = lo;
+        else if (kHiTies ? v >= hi : v > hi)
+            v = hi;
+        dst[i] = v;
+    }
+}
+
+template <typename T>
+void clip_dispatch(const T* src, T* dst, std::size_t n, T lo, T hi) {
+    const bool lo_ties = lo == T(0) && !std::signbit(lo);
+    const bool hi_ties = hi == T(0) && std::signbit(hi);
+    if (lo_ties && hi_ties)
+        clip_run<true, true>(src, dst, n, lo, hi);
+    else if (lo_ties)
+        clip_run<true, false>(src, dst, n, lo, hi);
+    else if (hi_ties)
+        clip_run<false, true>(src, dst, n, lo, hi);
+    else
+        clip_run<false, false>(src, dst, n, lo, hi);
+}
+
 }  // namespace
 
 void vadd_f32(const float* a, const float* b, float* out, std::size_t n) {
@@ -138,14 +169,24 @@ void vsma_f64(const double* a, double scalar, const double* b, double* out, std:
 // NaN passes through) and measured *faster* than vDSP_vthres on 4M
 // floats: 0.54 ms against 0.73 ms, with vDSP_vmax against a zero buffer
 // slowest at 0.88 ms.
+// ``<=`` rather than ``<``: relu(-0) is +0 (max(-0, +0) of the reference), and a NaN
+// still fails both and passes through.
 void vrelu_f32(const float* in, float* out, std::size_t n) {
     for (std::size_t i = 0; i < n; ++i)
-        out[i] = (in[i] < 0.0f) ? 0.0f : in[i];
+        out[i] = (in[i] <= 0.0f) ? 0.0f : in[i];
 }
 
 void vrelu_f64(const double* in, double* out, std::size_t n) {
     for (std::size_t i = 0; i < n; ++i)
-        out[i] = (in[i] < 0.0) ? 0.0 : in[i];
+        out[i] = (in[i] <= 0.0) ? 0.0 : in[i];
+}
+
+void vclip_f32(const float* in, float* out, std::size_t n, float lo, float hi) {
+    clip_dispatch(in, out, n, lo, hi);
+}
+
+void vclip_f64(const double* in, double* out, std::size_t n, double lo, double hi) {
+    clip_dispatch(in, out, n, lo, hi);
 }
 
 void vmax_f32(const float* a, const float* b, float* out, std::size_t n) {

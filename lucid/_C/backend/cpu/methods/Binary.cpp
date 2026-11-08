@@ -497,27 +497,13 @@ CpuBackend::clip(const Storage& a, const Shape& shape, Dtype dt, double min_v, d
         auto* dst = reinterpret_cast<float*>(ptr.get());
         const float lo = static_cast<float>(min_v);
         const float hi = static_cast<float>(max_v);
-        for (std::size_t i = 0; i < numel; ++i) {
-            float v = src[i];
-            if (v < lo)
-                v = lo;
-            else if (v > hi)
-                v = hi;
-            dst[i] = v;
-        }
+        cpu::vclip_f32(src, dst, numel, lo, hi);
         break;
     }
     case Dtype::F64: {
         const auto* src = reinterpret_cast<const double*>(cs.ptr.get());
         auto* dst = reinterpret_cast<double*>(ptr.get());
-        for (std::size_t i = 0; i < numel; ++i) {
-            double v = src[i];
-            if (v < min_v)
-                v = min_v;
-            else if (v > max_v)
-                v = max_v;
-            dst[i] = v;
-        }
+        cpu::vclip_f64(src, dst, numel, min_v, max_v);
         break;
     }
     default:

@@ -117,6 +117,7 @@
 #include "Pow.h"
 #include "SdpaHeadDim.h"
 #include "Shift.h"
+#include "SignedZero.h"
 #include "SortOrder.h"
 
 namespace lucid {

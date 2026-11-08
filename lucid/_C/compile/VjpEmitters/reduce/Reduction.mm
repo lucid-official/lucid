@@ -166,8 +166,14 @@ NanGrad nan_grad_of(const OpNode& node) {
     return static_cast<NanGrad>(*v);
 }
 
+// Float16 / bfloat16 count exactly only to 2048 / 256 tied elements, so the share
+// is built in float32 (LCD-879).
+MPSDataType tie_count_dtype(MPSDataType dt) {
+    return (dt == MPSDataTypeFloat16 || dt == MPSDataTypeBFloat16) ? MPSDataTypeFloat32 : dt;
+}
+
 // ``mask / denom`` with ``ties`` the sum of ``mask`` over ``axes``: eager's
-// ``extremum_share``.  ``Slice`` divides by ``ties`` itself, so a slice nothing
+// ``extremum_share_counted``.  ``Slice`` divides by ``ties`` itself, so a slice nothing
 // matches (a NaN extremum) is 0 / 0 = NaN at every element; ``Element`` first
 // widens ``mask`` to the NaN elements of a NaN-extremum slice; ``Zero`` divides
 // by ``ties + 1 - mask``, so that slice gets zeros.  ``x`` and ``y`` (the
@@ -205,10 +211,10 @@ MPSGraphTensor* share_among_ties(MPSGraph* g,
 // ────────────────────────────────────────────────────────────────────
 // max / min: a slice's gradient is shared evenly among the elements tied
 // for its extremum, ``mask / (ties + 1 - mask)`` with ``mask = (x == y)``
-// — eager's ``share_among_ties`` (ops/ufunc/Reductions.cpp), in the same
-// order of operations so a half-precision share rounds as eager's does while
-// the tie count is exact in that dtype (bfloat16 up to 256, float16 up to
-// 2048); past that eager's ``ties + 1`` rounds and the two differ.
+// — eager's ``extremum_grad`` (ops/ufunc/Reductions.cpp).  A half dtype's tie
+// count is exact only to 256 (bfloat16) / 2048 (float16), so the mask, the count
+// and the share are taken in float32 and the product rounds once, as eager's
+// does (LCD-879).
 // A slice holding a NaN is shaped by the forward's ``nan_grad`` attr (see
 // ``share_among_ties``): NaN everywhere (``amax``), the NaN elements
 // (``max()``) or zeros (``vector_norm(inf)``).  Giving every tie the whole gradient made a step on a tie — a
@@ -246,18 +252,19 @@ public:
         MPSGraphTensor* x_e = work.enter(g, x);
         MPSGraphTensor* y_k = work.keep(g, cast_if_needed(g, y, x.dataType));
         MPSGraphTensor* go_k = work.keep(g, go);
+        const MPSDataType count_dt = tie_count_dtype(go.dataType);
         MPSGraphTensor* mask = [g castTensor:[g equalWithPrimaryTensor:x_e
                                                        secondaryTensor:y_k
                                                                   name:nil]
-                                      toType:go.dataType
+                                      toType:count_dt
                                         name:nil];
         MPSGraphTensor* share =
             share_among_ties(g, mask, work.axes_ns(), nan_grad_of(node), x_e, y_k);
-        MPSGraphTensor* dx = work.leave(
-            g,
-            [g multiplicationWithPrimaryTensor:go_k
+        MPSGraphTensor* scaled =
+            [g multiplicationWithPrimaryTensor:cast_if_needed(g, go_k, count_dt)
                                secondaryTensor:share
-                                          name:IS_MAX ? @"max_vjp" : @"min_vjp"]);
+                                          name:IS_MAX ? @"max_vjp" : @"min_vjp"];
+        MPSGraphTensor* dx = work.leave(g, cast_if_needed(g, scaled, go.dataType));
         bctx.accumulate_grad(node.inputs[0], from_tensor(dx));
         return true;
     }

@@ -295,13 +295,13 @@ bool nan_rule_applies(ExtremumNanGrad rule, Dtype dt) {
 //   Slice   — ties, so 0 / 0 = NaN at every element.
 //   Element — ``mask`` is widened to the NaN elements, which split it.
 //   Zero    — ties + 1 - mask, so an empty ``mask`` divides by 1 and gives 0.
-Storage extremum_share(const Storage& x,
-                       const Storage& out_bcast,
-                       const Shape& in_shape,
-                       const std::vector<int>& axes,
-                       Dtype dt,
-                       Device device,
-                       ExtremumNanGrad rule) {
+Storage extremum_share_counted(const Storage& x,
+                               const Storage& out_bcast,
+                               const Shape& in_shape,
+                               const std::vector<int>& axes,
+                               Dtype dt,
+                               Device device,
+                               ExtremumNanGrad rule) {
     const std::size_t n = shape_numel(in_shape);
     // a == b iff a >= b AND b >= a, avoiding a separate equality kernel.
     Storage mask = multiply_storages(ge_mask_storage(x, out_bcast, n, dt, device),
@@ -333,7 +333,42 @@ Storage extremum_share(const Storage& x,
     return divide_storages(mask, denom, n, dt, device);
 }
 
-// Graph-mode counterpart of :func:`extremum_share`, built from ops so a
+// Counting ties in a half dtype stops being exact where the format's integers
+// do (bfloat16 at 256, float16 at 2048), so a tie group past that shared a
+// gradient that no longer summed to one.  The count — and so every share — is
+// taken in float32 (exact to 2^24), as the reference's ``grad / count`` is.
+constexpr Dtype count_dtype(Dtype dt) {
+    return is_half_float(dt) ? Dtype::F32 : dt;
+}
+
+// dL/dx of max / min: ``grad_out`` broadcast over each slice and split among
+// the positions tied for the extremum.  Half inputs widen once, share and
+// multiply in float32, and round once on the way out.
+Storage extremum_grad(const Storage& x,
+                      const Storage& out,
+                      const Storage& grad_out,
+                      const Shape& out_shape,
+                      const Shape& in_shape,
+                      const std::vector<int>& axes,
+                      bool keepdims,
+                      Dtype dt,
+                      Device device,
+                      ExtremumNanGrad rule) {
+    const std::size_t n = shape_numel(in_shape);
+    const Dtype cdt = count_dtype(dt);
+    auto& be = backend::Dispatcher::for_device(device);
+    const Shape flat{static_cast<std::int64_t>(n)};
+    auto widen = [&](const Storage& s) { return cdt == dt ? s : be.astype(s, flat, dt, cdt); };
+    Storage out_bcast =
+        widen(broadcast_back_for_reduce(out, out_shape, in_shape, axes, keepdims, dt, device));
+    Storage g_bcast =
+        widen(broadcast_back_for_reduce(grad_out, out_shape, in_shape, axes, keepdims, dt, device));
+    Storage share = extremum_share_counted(widen(x), out_bcast, in_shape, axes, cdt, device, rule);
+    Storage grad = multiply_storages(g_bcast, share, n, cdt, device);
+    return cdt == dt ? grad : be.astype(grad, flat, cdt, dt);
+}
+
+// Graph-mode counterpart of :func:`extremum_grad`, built from ops so a
 // second derivative passes through it (the shares are piecewise constant
 // in ``x``, so they contribute nothing of their own).
 TensorImplPtr extremum_share_graph(const TensorImplPtr& x,
@@ -341,14 +376,17 @@ TensorImplPtr extremum_share_graph(const TensorImplPtr& x,
                                    const std::vector<int>& axes,
                                    Dtype dt,
                                    ExtremumNanGrad rule) {
-    auto mask = astype_op(equal_op(x, out_bcast), dt);
+    const Dtype cdt = count_dtype(dt);  // see the note on count_dtype
+    auto mask = astype_op(equal_op(x, out_bcast), cdt);
     const bool nan_aware = nan_rule_applies(rule, dt);
     if (nan_aware && rule == ExtremumNanGrad::Element)
-        mask = add_op(mask, mul_op(astype_op(isnan_op(x), dt), astype_op(isnan_op(out_bcast), dt)));
+        mask =
+            add_op(mask, mul_op(astype_op(isnan_op(x), cdt), astype_op(isnan_op(out_bcast), cdt)));
     auto ties = broadcast_to_op(sum_op(mask, axes, /*keepdims=*/true), x->shape());
-    if (nan_aware && rule == ExtremumNanGrad::Slice)
-        return div_op(mask, ties);
-    return div_op(mask, sub_op(add_op(ties, ones_like_op(mask)), mask));
+    auto share = (nan_aware && rule == ExtremumNanGrad::Slice)
+                     ? div_op(mask, ties)
+                     : div_op(mask, sub_op(add_op(ties, ones_like_op(mask)), mask));
+    return cdt == dt ? share : astype_op(share, dt);
 }
 }  // namespace
 
@@ -568,19 +606,11 @@ LUCID_REGISTER_OP(ProdBackward)
 const OpSchema MaxBackward::schema_v1{"max", 1, AmpPolicy::KeepInput, true};
 
 // dL/dx = dL/dy * (x == max_val), broadcast back to the input shape, with the
-// slice's gradient split among the tied positions (``extremum_share``).
+// slice's gradient split among the tied positions (``extremum_grad``).
 Storage MaxBackward::grad_formula(const Storage& grad_out) {
-    const std::size_t in_numel = shape_numel(this->full_input_shape_);
-    Storage out_bcast =
-        broadcast_back_for_reduce(this->saved_output_, this->out_shape_, this->full_input_shape_,
-                                  this->reduce_axes_, this->keepdims_, this->dtype_, this->device_);
-    Storage share =
-        extremum_share(this->saved_inputs_[0], out_bcast, this->full_input_shape_,
-                       this->reduce_axes_, this->dtype_, this->device_, this->nan_grad_);
-    Storage g_bcast =
-        broadcast_back_for_reduce(grad_out, this->out_shape_, this->full_input_shape_,
-                                  this->reduce_axes_, this->keepdims_, this->dtype_, this->device_);
-    return multiply_storages(g_bcast, share, in_numel, this->dtype_, this->device_);
+    return extremum_grad(this->saved_inputs_[0], this->saved_output_, grad_out, this->out_shape_,
+                         this->full_input_shape_, this->reduce_axes_, this->keepdims_, this->dtype_,
+                         this->device_, this->nan_grad_);
 }
 
 // Graph-mode max backward: the same shares as ``grad_formula``, from ops.
@@ -623,17 +653,9 @@ const OpSchema MinBackward::schema_v1{"min", 1, AmpPolicy::KeepInput, true};
 
 // dL/dx = dL/dy * (x == min_val), broadcast back to the input shape.
 Storage MinBackward::grad_formula(const Storage& grad_out) {
-    const std::size_t in_numel = shape_numel(this->full_input_shape_);
-    Storage out_bcast =
-        broadcast_back_for_reduce(this->saved_output_, this->out_shape_, this->full_input_shape_,
-                                  this->reduce_axes_, this->keepdims_, this->dtype_, this->device_);
-    Storage share =
-        extremum_share(this->saved_inputs_[0], out_bcast, this->full_input_shape_,
-                       this->reduce_axes_, this->dtype_, this->device_, this->nan_grad_);
-    Storage g_bcast =
-        broadcast_back_for_reduce(grad_out, this->out_shape_, this->full_input_shape_,
-                                  this->reduce_axes_, this->keepdims_, this->dtype_, this->device_);
-    return multiply_storages(g_bcast, share, in_numel, this->dtype_, this->device_);
+    return extremum_grad(this->saved_inputs_[0], this->saved_output_, grad_out, this->out_shape_,
+                         this->full_input_shape_, this->reduce_axes_, this->keepdims_, this->dtype_,
+                         this->device_, this->nan_grad_);
 }
 
 // Graph-mode min backward — the mirror of :meth:`MaxBackward::scale_graph_grad`.

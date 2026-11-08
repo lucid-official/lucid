@@ -223,11 +223,33 @@ def _assert_close(got: lucid.Tensor, want: lucid.Tensor, tol: float, why: str) -
     for p, q in zip(g, w, strict=True):
         same = math.isnan(p) if math.isnan(q) else math.isclose(p, q, rel_tol=tol, abs_tol=tol)
         assert same, f"{why}: compiled {g} != eager {w}"
+        # ``isclose`` cannot see the sign of a zero; the rule (max of a tie is +0, min is -0)
+        # is a property of the value, so it is held element by element (LCD-879).
+        if not math.isnan(q) and q == 0.0 and p == 0.0:
+            assert math.copysign(1.0, p) == math.copysign(1.0, q), (
+                f"{why}: compiled {g} != eager {w} in the sign of a zero"
+            )
+
+
+#: A compiled element-wise ``maximum`` / ``minimum`` hands a signed-zero tie to its second
+#: operand (MPSGraph's plain op), where eager's answer is +0 / -0 whichever operand held it.
+#: A select-free fix-up that keeps the NaN carrier is not known: both ops sit on the
+#: autodiff-safe list, and MPSGraph's autodiff aborts on a select.  Documented in
+#: ``op-compile-extremum-nan-ties``; the strict xfail turns the fix into an XPASS.
+_ZERO_SIGN_UNFIXED = {"maximum-signed-zero", "minimum-signed-zero"}
 
 
 def _forward_cases() -> list[object]:
+    unfixed = pytest.mark.xfail(
+        strict=True, reason="LCD-930: compiled maximum/minimum keep the second operand's zero"
+    )
     return [
-        pytest.param(name, dtype, id=f"{name}-{dt}")
+        pytest.param(
+            name,
+            dtype,
+            id=f"{name}-{dt}",
+            marks=[unfixed] if name in _ZERO_SIGN_UNFIXED else [],
+        )
         for name in _CASES
         for dtype, dt in _DTYPE_IDS.items()
     ]
@@ -430,3 +452,134 @@ def test_max_pool_top_code_is_shared_with_infinity(
     with lucid.no_grad():
         got = [compiled(x) for _ in range(2)][-1]
     assert got.to(lucid.float32).reshape(-1).tolist() == [_INF, 3.0, _INF]
+
+
+# ── the sign of a zero extremum, and the tie share past a half dtype's exact range (LCD-879) ──
+
+_NEG0, _POS0 = -0.0, 0.0
+_ZERO_ROWS = {
+    "neg-pos": [_NEG0, _POS0],
+    "pos-neg": [_POS0, _NEG0],
+    "all-neg": [_NEG0] * 5,
+    "all-pos": [_POS0] * 5,
+    "below": [-1.0, _NEG0, _POS0, -2.0, _POS0, _NEG0],
+    "above": [1.0, _NEG0, _POS0, 2.0, _NEG0, _POS0],
+    "wide": [(_NEG0, _POS0)[(i * 7 + i // 3) % 2] for i in range(64)],
+}
+
+
+def _ranked(values: list[float], is_max: bool) -> float:
+    """max of a signed-zero tie is +0, min is -0; any other extremum is the value."""
+    best = max(values) if is_max else min(values)
+    if best != 0.0:
+        return best
+    signs = {math.copysign(1.0, v) for v in values if v == 0.0}
+    return (0.0 if 1.0 in signs else -0.0) if is_max else (-0.0 if -1.0 in signs else 0.0)
+
+
+def _signed_equal(got: float, want: float) -> bool:
+    return got == want and math.copysign(1.0, got) == math.copysign(1.0, want)
+
+
+_REDUCTION_ZERO_REASON = (
+    "LCD-930: Metal and compiled max/min reductions keep the backend's zero order "
+    "(exact form costs one more pass, +47-77%)"
+)
+
+
+@pytest.mark.parametrize("dtype", list(_DTYPE_IDS), ids=list(_DTYPE_IDS.values()))
+@pytest.mark.parametrize("row", ["all-neg", "all-pos"])
+@pytest.mark.parametrize("name", ["max", "min", "amax", "amin"])
+def test_compiled_reduction_of_one_signed_zero_keeps_its_sign(
+    dtype: lucid.dtype, row: str, name: str, device_gpu_only: str
+) -> None:
+    """No tie between the two zeros, so no order to follow: the sign is the input's."""
+    v = _ZERO_ROWS[row]
+    x = lucid.tensor(v, dtype=dtype, device=device_gpu_only)
+    op: Callable[[lucid.Tensor], lucid.Tensor] = (
+        (lambda t: getattr(t, name)()) if name in ("max", "min") else getattr(lucid, name)
+    )
+    compiled = lucid.compile(_Apply(op))
+    with lucid.no_grad():
+        got = [compiled(x) for _ in range(2)][-1].item()
+    assert _signed_equal(got, v[0])
+
+
+@pytest.mark.xfail(strict=True, reason=_REDUCTION_ZERO_REASON)
+@pytest.mark.parametrize("dtype", list(_DTYPE_IDS), ids=list(_DTYPE_IDS.values()))
+@pytest.mark.parametrize(
+    ("name", "row", "is_max"),
+    [
+        ("max", "pos-neg", True),
+        ("amax", "pos-neg", True),
+        ("min", "neg-pos", False),
+        ("amin", "neg-pos", False),
+    ],
+)
+# (the compiled reduction hands a tie to its last element, eager Metal's to its first)
+def test_compiled_reduction_zero_order_is_a_known_difference(
+    dtype: lucid.dtype, name: str, row: str, is_max: bool, device_gpu_only: str
+) -> None:
+    v = _ZERO_ROWS[row]
+    x = lucid.tensor(v, dtype=dtype, device=device_gpu_only)
+    op: Callable[[lucid.Tensor], lucid.Tensor] = (
+        (lambda t: getattr(t, name)()) if name in ("max", "min") else getattr(lucid, name)
+    )
+    compiled = lucid.compile(_Apply(op))
+    with lucid.no_grad():
+        got = [compiled(x) for _ in range(2)][-1].item()
+    assert _signed_equal(got, _ranked(v, is_max))
+
+
+@pytest.mark.xfail(
+    strict=True, reason="LCD-930: compiled clip gives a zero tie to its bound (eager ranks it)"
+)
+@pytest.mark.parametrize(
+    ("op", "bound", "is_max"),
+    [
+        pytest.param(lambda a: a.clamp(min=-0.0), -0.0, True, id="floor-minus-zero"),
+        pytest.param(lambda a: a.clamp(max=0.0), 0.0, False, id="cap-plus-zero"),
+    ],
+)
+def test_compiled_clamp_to_the_opposite_zero_is_a_known_difference(
+    op: Callable[[lucid.Tensor], lucid.Tensor], bound: float, is_max: bool, device_gpu_only: str
+) -> None:
+    v = [_POS0, _POS0, _NEG0, _NEG0]
+    x = lucid.tensor(v, device=device_gpu_only)
+    want = [_ranked([e, bound], is_max) for e in v]
+    assert all(map(_signed_equal, op(x).tolist(), want))  # eager holds the rule
+    compiled = lucid.compile(_Apply(op))
+    with lucid.no_grad():
+        got = [compiled(x) for _ in range(2)][-1].tolist()
+    assert all(map(_signed_equal, got, want)), f"compiled {got} != rule {want}"
+
+
+@pytest.mark.parametrize("op_name", ["max", "min", "amax", "amin"])
+@pytest.mark.parametrize(("dtype", "n"), [(lucid.bfloat16, 257), (lucid.float16, 2049)])
+def test_compiled_tie_share_is_one_over_the_true_count(
+    op_name: str, dtype: lucid.dtype, n: int, device_gpu_only: str
+) -> None:
+    """The compiled VJP already counted past the half dtype's exact range; eager now does too."""
+    ops: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
+        "max": lambda p: p.max(),
+        "min": lambda p: p.min(),
+        "amax": lambda p: lucid.amax(p),
+        "amin": lambda p: lucid.amin(p),
+    }
+
+    class _Ties(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.p = nn.Parameter(lucid.ones(n, dtype=dtype, device=device_gpu_only))
+
+        def forward(self, x: lucid.Tensor) -> lucid.Tensor:
+            return (ops[op_name](self.p) * x).sum().reshape(1)
+
+    one = lucid.ones(1, dtype=dtype, device=device_gpu_only)
+    want = lucid.tensor([1.0 / n], dtype=dtype).to(lucid.float32).item()
+    model = _Ties()
+    step = make_step(model, _loss)
+    step(one, one).backward()
+    assert not step.eager_only
+    assert model.p.grad is not None
+    assert model.p.grad.to(lucid.float32).cpu().tolist() == [want] * n

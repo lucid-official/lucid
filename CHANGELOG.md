@@ -75,6 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Episode keeps tuple len, step count is num_steps (LCD-869)
 
+- extremum half tie share and zero max/min sign (LCD-879)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

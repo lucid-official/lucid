@@ -641,6 +641,13 @@ LUCID_INTERNAL float vmean_f32(const float* in, std::size_t n);
 // Accelerate.framework ``vDSP_meanvD``.
 LUCID_INTERNAL double vmean_f64(const double* in, std::size_t n);
 
+// Clamp to ``[lo, hi]``, ``min(max(x, lo), hi)`` with NaN passed through.  A zero
+// that ties a zero bound takes the sign the extremum rule gives it (max of a
+// signed-zero tie is +0, min is -0, as ``vmax`` / ``vmin``), so a +0 floor also
+// takes -0 and a -0 cap also takes +0.
+LUCID_INTERNAL void vclip_f32(const float* in, float* out, std::size_t n, float lo, float hi);
+LUCID_INTERNAL void vclip_f64(const double* in, double* out, std::size_t n, double lo, double hi);
+
 // Single-precision maximum-value reduction.
 //
 // Computes $\max_i \text{in}_i$ via ``vDSP_maxv``.

@@ -61,12 +61,24 @@ GpuBackend::compare_binary(const Storage& a, const Storage& b, const Shape& shap
     });
 }
 
+// A float pair is ranked in one fused kernel (see SignedZero.h); integers and
+// bool have no signed zero and keep the plain primitive.
 Storage GpuBackend::maximum(const Storage& a, const Storage& b, const Shape& shape, Dtype dt) {
-    return mlx_binary(a, b, shape, dt, [](auto& x, auto& y) { return ::mlx::core::maximum(x, y); });
+    if (!gpu::has_signed_zero(gpu::to_mlx_dtype(dt)))
+        return mlx_binary(a, b, shape, dt,
+                          [](auto& x, auto& y) { return ::mlx::core::maximum(x, y); });
+    return mlx_binary_fused(a, b, dt, [](const ::mlx::core::array& x, const ::mlx::core::array& y) {
+        return gpu::rank_zero_pair(x, y, ::mlx::core::maximum(x, y), /*is_max=*/true);
+    });
 }
 
 Storage GpuBackend::minimum(const Storage& a, const Storage& b, const Shape& shape, Dtype dt) {
-    return mlx_binary(a, b, shape, dt, [](auto& x, auto& y) { return ::mlx::core::minimum(x, y); });
+    if (!gpu::has_signed_zero(gpu::to_mlx_dtype(dt)))
+        return mlx_binary(a, b, shape, dt,
+                          [](auto& x, auto& y) { return ::mlx::core::minimum(x, y); });
+    return mlx_binary_fused(a, b, dt, [](const ::mlx::core::array& x, const ::mlx::core::array& y) {
+        return gpu::rank_zero_pair(x, y, ::mlx::core::minimum(x, y), /*is_max=*/false);
+    });
 }
 
 Storage GpuBackend::where_branch(
@@ -104,6 +116,13 @@ Storage GpuBackend::clip(const Storage& a, const Shape&, Dtype dt, double min_v,
     const auto& gs = std::get<GpuStorage>(a);
     auto lo = gpu::mlx_scalar(min_v, gpu::to_mlx_dtype(dt));
     auto hi = gpu::mlx_scalar(max_v, gpu::to_mlx_dtype(dt));
+    // The primitive hands a tie to the bound, which is the rule only for a +0 floor
+    // and a -0 cap; the opposite zero bound has to be ranked.
+    const bool bound_ties_wrongly =
+        (min_v == 0.0 && std::signbit(min_v)) || (max_v == 0.0 && !std::signbit(max_v));
+    if (gpu::has_signed_zero(gs.arr->dtype()) && bound_ties_wrongly)
+        return Storage{
+            gpu::wrap_mlx_array(::mlx::core::contiguous(gpu::clip_ranked(*gs.arr, lo, hi)), dt)};
     auto result = ::mlx::core::clip(*gs.arr, lo, hi);
     return Storage{gpu::wrap_mlx_array(::mlx::core::contiguous(result), dt)};
 }
