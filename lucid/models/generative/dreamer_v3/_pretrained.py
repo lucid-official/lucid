@@ -24,11 +24,16 @@ DMLab, ProcGen, Atari, Atari100K and BSuite; ``12m`` for both Control
 Suites, where it reports the small model matching the large one at a
 fraction of the cost.
 
-The registered ``params`` are the paper's labels.  They are met because
-the recurrence is block-diagonal — measured at 12.03M, 26.90M, 47.67M,
-106.93M, 189.81M and 426.41M against labels of 12M, 25M, 50M, 100M, 200M
-and 400M.  A dense GRU at the same widths costs 26.8M where the label
-says 12M, which is why the block structure is not optional.
+The registered ``params`` are the paper's labels.  Table 3 names its columns
+"12M" ... "400M" and gives no exact count: the sizes are fixed by the model
+dimension, and the label is a rounded name for what that dimension costs.
+The configuration here is Table 3's own, so the count is what it is —
+12.03M, 26.90M, 47.67M, 106.93M, 189.81M and 426.41M against labels of 12M,
+25M, 50M, 100M, 200M and 400M, up to 7.6% off.  The labels are kept as the
+paper states them, and the tolerance that lets them differ from the build
+is written down per factory in ``test_declared_params.py`` rather than
+passed over.  The block-diagonal recurrence is what keeps them this close:
+a dense GRU at the same widths costs 26.8M where the label says 12M.
 
 Set ``action_dim`` for your environment at ``create_model`` time, and
 ``action_space="discrete"`` when the actions are buttons rather than a
