@@ -914,7 +914,8 @@ class DriftingOutput(ModelOutput):
         quantity, keyed ``"<feature set>/<quantity>"``: ``scale`` is the mean
         target distance the features are normalised by, and ``loss_<tau>`` is
         the raw drift energy :math:`\lVert V_\tau\rVert^2` at temperature
-        :math:`\\tau`, before normalisation.  Detached.  ``loss`` is
+        :math:`\\tau`, before normalisation.  Detached, in the model's
+        dtype like ``loss`` (computed in float32 at least).  ``loss`` is
         scale-normalised and so nearly constant (one per temperature, summed);
         these energies are what falls toward zero as the generator approaches
         the fixed point, so they are the signal to watch for convergence.
@@ -1337,7 +1338,7 @@ class DriftingForImageGeneration(ImageGenerationModel):
                 neg = real_feat[:, :, n_pos:].reshape(n_c * f, n_unc, d)
                 weight = uncond_w.reshape(n_c, 1, 1).expand(n_c, f, n_unc).reshape(n_c * f, n_unc)
             loss, info = _drift_loss(rows, pos, neg, weight, self.config.temperatures)
-            drift_energy.update({f"{key}/{name}": value for name, value in info.items()})
+            drift_energy.update({f"{key}/{name}": value.to(dtype) for name, value in info.items()})
             term = loss.mean()
             feature_losses[key] = term.to(dtype)
             total = term if total is None else total + term

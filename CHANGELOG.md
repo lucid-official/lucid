@@ -67,6 +67,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - reduce alternating-axis rank-5+ sum/mean/max/min blockwise
 
+- answer drift_energy in the model's dtype
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
