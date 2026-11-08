@@ -354,6 +354,6 @@ def test_a_rank_5_output_is_not_slower_than_its_rank_4_twin() -> None:
         if best["out5"] <= 1.3 * best["twin5"] and best["via_reshape"] <= 1.3 * best["twin4"]:
             return
     assert best["out5"] <= 1.3 * best["twin5"], f"{best['out5']:.2f} vs {best['twin5']:.2f} ms"
-    assert best["via_reshape"] <= 1.3 * best["twin4"], (
-        f"{best['via_reshape']:.2f} vs {best['twin4']:.2f} ms"
-    )
+    assert (
+        best["via_reshape"] <= 1.3 * best["twin4"]
+    ), f"{best['via_reshape']:.2f} vs {best['twin4']:.2f} ms"

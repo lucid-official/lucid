@@ -6,11 +6,7 @@ from typing import ClassVar, override
 
 from lucid._tensor.tensor import Tensor
 from lucid._C import engine as _C_engine
-from lucid._dispatch import (
-    _default_device_enum_cached,
-    _default_dtype_enum_cached,
-    _impl_with_grad,
-)
+from lucid._dispatch import _default_device_enum_cached, _default_dtype_enum_cached, _impl_with_grad
 from lucid._factories.converters import _to_impl
 
 
