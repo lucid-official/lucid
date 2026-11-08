@@ -18,7 +18,6 @@ it used to be — hooks that never fire, a ``p`` that never changes.
 
 import copy
 import pickle
-import time
 from collections import OrderedDict
 from collections.abc import Callable
 from enum import Enum
@@ -32,7 +31,7 @@ from lucid.compile._core import signature as sig
 from lucid.compile._core.module_state import StateContract
 from lucid.nn._tree_version import _TrackedDict
 from lucid.nn.utils import parametrize
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_ratio_within, metal_tensor
 
 # Compiled forwards under grad mode run eagerly (LCD-582); these test them.
 pytestmark = pytest.mark.usefixtures("inference")
@@ -212,21 +211,25 @@ def test_keying_a_call_no_longer_costs_a_walk(monkeypatch: pytest.MonkeyPatch) -
     x = lucid.randn(2, 4)
     fp = sig._param_fingerprint(model)
 
-    def keying() -> float:
-        best = float("inf")
-        for _ in range(5):
-            t0 = time.perf_counter()
-            for _ in range(20):
-                sig.signature_of(model, (x,), {}, dynamic=False, param_fingerprint=fp)
-                sig.model_has_active_hooks(model)
-            best = min(best, time.perf_counter() - t0)
-        return best
+    def keying() -> None:
+        for _ in range(20):
+            sig.signature_of(model, (x,), {}, dynamic=False, param_fingerprint=fp)
+            sig.model_has_active_hooks(model)
 
-    cached = keying()
     versions = iter(range(10**9, 2 * 10**9))
-    monkeypatch.setattr(tree_version, "_tree_version", lambda: next(versions))
-    walking = keying()
-    assert cached * 10 < walking, f"cached {cached:.6f}s vs walking {walking:.6f}s"
+
+    def keying_each_call_a_new_version() -> None:
+        # The version is patched inside the call, so the other side keeps its cache.
+        with monkeypatch.context() as patch:
+            patch.setattr(tree_version, "_tree_version", lambda: next(versions))
+            keying()
+
+    assert_ratio_within(
+        {"cached": keying, "walking": keying_each_call_a_new_version},
+        "cached",
+        "walking",
+        bound=0.1,
+    )
 
 
 # ── what the walk keys a module's attributes by (LCD-704) ────────────────

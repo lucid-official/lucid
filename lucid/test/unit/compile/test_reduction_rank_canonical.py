@@ -15,7 +15,6 @@ reduction.  The graph cannot be inspected from Python, so the guard is
   than the same elements reduced as a rank-3 view, both compiled (the bug was 30x).
 """
 
-import time
 from collections.abc import Callable
 
 import pytest
@@ -24,7 +23,13 @@ import lucid
 import lucid.nn as nn
 from lucid.compile import make_step
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_cache_hit, to_metal
+from lucid.test.unit.compile._helpers import (
+    COMPILE_DEVICE,
+    assert_cache_hit,
+    assert_ratio_within,
+    step_call,
+    to_metal,
+)
 
 pytestmark = [
     pytest.mark.skipif(not metal_available(), reason="compile needs Metal"),
@@ -235,24 +240,22 @@ def test_a_symbolic_batch_survives_the_fused_reduction() -> None:
     assert_cache_hit(cm, 1)
 
 
-def _step_ms(shape: tuple[int, ...], fn: Callable[[lucid.Tensor], lucid.Tensor]) -> float:
-    x = _input(shape)
-    step = make_step(to_metal(_Scaled(shape)), fn)
-    for _ in range(2):
-        step(x).backward()
-    best = float("inf")
-    for _ in range(5):
-        t0 = time.perf_counter()
-        loss = step(x)
-        loss.backward()
-        float(loss.item())
-        best = min(best, time.perf_counter() - t0)
-    return best * 1e3
+def _step_of(
+    shape: tuple[int, ...], fn: Callable[[lucid.Tensor], lucid.Tensor]
+) -> Callable[[], float]:
+    return step_call(make_step(to_metal(_Scaled(shape)), fn), _input(shape))
 
 
 def test_a_rank_5_reduction_is_not_slower_than_its_rank_3_twin() -> None:
     """Coarse on purpose: the unfixed graph was ~30x the twin's time, the fixed one ~1.3x."""
     shape = (96, 64, 32, 32)  # the view is made inside the loss; an input is rank 4 either way
-    rank5 = _step_ms(shape, lambda y: y.reshape(6144, 16, 2, 16, 2).sum(dim=2).sum())
-    rank3 = _step_ms(shape, lambda y: y.reshape(6144 * 16, 2, 32).sum(dim=1).sum())
-    assert rank5 < 8.0 * rank3 + 5.0, f"rank-5 {rank5:.1f} ms vs rank-3 {rank3:.1f} ms"
+    assert_ratio_within(
+        lambda: {
+            "rank-5": _step_of(shape, lambda y: y.reshape(6144, 16, 2, 16, 2).sum(dim=2).sum()),
+            "rank-3": _step_of(shape, lambda y: y.reshape(6144 * 16, 2, 32).sum(dim=1).sum()),
+        },
+        "rank-5",
+        "rank-3",
+        bound=8.0,
+        slack_ms=5.0,
+    )

@@ -16,7 +16,6 @@ and declined paths — ties, NaN, signed zeros, wide int64, descending, every ax
 to the same answer, their gradients, and the speed.
 """
 
-import time
 import warnings
 from collections.abc import Callable
 
@@ -28,7 +27,7 @@ from lucid._C import engine as _C_engine
 from lucid.compile import make_step
 from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_ratio_within
 from lucid.test.unit.compile.test_sort_order_compiled import FLOATS, INF, INTS, ROWS, _same, _wide
 
 pytestmark = [
@@ -217,17 +216,6 @@ def _fill(shape: tuple[int, ...]) -> lucid.Tensor:
     return (lucid.sin(lucid.arange(n, dtype=lucid.float32) * 0.37) + 1.5).reshape(*shape)
 
 
-def _best_ms(call: Callable[[], lucid.Tensor], reps: int = 15) -> float:
-    for _ in range(3):
-        float(call().item())
-    best = float("inf")
-    for _ in range(reps):
-        t0 = time.perf_counter()
-        float(call().item())
-        best = min(best, time.perf_counter() - t0)
-    return best * 1e3
-
-
 _OPS: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
     "sort": lambda t: lucid.sort(t * 1.0, dim=-1)[0].reshape(-1).sum(),
     "sort_descending": lambda t: lucid.sort(t * 1.0, dim=-1, descending=True)[0].reshape(-1).sum(),
@@ -246,18 +234,14 @@ _OPS: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
 def test_a_compiled_sort_is_not_slower_than_eager(name: str, shape: tuple[int, ...]) -> None:
     fn = _OPS[name]
     x = _fill(shape).to(COMPILE_DEVICE)
-    ratios: list[float] = []
-    with lucid.no_grad():
-        for _ in range(3):  # a loaded machine times eager and compiled unevenly: retry
-            _C_engine.compile.session_cache_clear()
-            compiled = lucid.compile(fn)
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", CompileFallbackWarning)
-                got = _best_ms(lambda: compiled(x))
-            want = _best_ms(lambda: fn(x))
-            ratios.append(got / want)
-            # The guard is for the per-row argSort cost (~100x, LCD-926).  The ranked
-            # path runs 1.7-2.6x eager at rank 5 under load (topk smallest), so 3x flaked.
-            if ratios[-1] <= 5.0:
-                return
-    pytest.fail(f"compiled {name} {shape} ran {min(ratios):.1f}x eager (best of {len(ratios)})")
+
+    def build() -> dict[str, Callable[[], float]]:
+        _C_engine.compile.session_cache_clear()
+        compiled = lucid.compile(fn)
+        return {"compiled": lambda: float(compiled(x).item()), "eager": lambda: float(fn(x).item())}
+
+    # The guard is for the per-row argSort cost (~100x, LCD-926).  The ranked path runs
+    # 1.7-2.6x eager at rank 5 under load (topk smallest), so 3x flaked.
+    with lucid.no_grad(), warnings.catch_warnings():
+        warnings.simplefilter("ignore", CompileFallbackWarning)
+        assert_ratio_within(build, "compiled", "eager", bound=5.0, what=f"{name} {shape}")

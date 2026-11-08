@@ -16,7 +16,6 @@ it runs at the lowest rank its operands' broadcast pattern allows.  Three guards
 """
 
 import os
-import time
 from collections.abc import Callable, Iterator
 from unittest import mock
 
@@ -29,7 +28,12 @@ from lucid.autograd import Function
 from lucid.compile import _tracing, make_step
 from lucid.compile._core.trace_context import recording
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_cache_hit, to_metal
+from lucid.test.unit.compile._helpers import (
+    COMPILE_DEVICE,
+    assert_cache_hit,
+    assert_ratio_within,
+    to_metal,
+)
 
 ENV = "LUCID_COMPILE_RANK_CANON_MIN_LEAD"
 
@@ -374,18 +378,11 @@ class _Scaled(nn.Module):
         return (x * self.w).sum(dim=-1)
 
 
-def _forward_ms(shape: tuple[int, ...]) -> float:
+def _forward_call(shape: tuple[int, ...]) -> Callable[[], float]:
     m = to_metal(_Scaled(shape)).eval()
     x = _filled(shape).to(COMPILE_DEVICE)
     cm = lucid.compile(m)
-    for _ in range(3):
-        cm(x)
-    best = float("inf")
-    for _ in range(15):
-        t0 = time.perf_counter()
-        float(cm(x)[0].sum().item())
-        best = min(best, time.perf_counter() - t0)
-    return best * 1e3
+    return lambda: float(cm(x)[0].sum().item())
 
 
 @needs_metal
@@ -394,9 +391,16 @@ def test_a_rank_5_multiply_is_not_slower_than_its_rank_4_twin() -> None:
     """Coarse on purpose: the unfixed graph ran ~14x the twin, the fixed one ~1x on an
     M1 Pro.  The hosted runner's virtual GPU measured 4.4x on 2b9dfa83b (LCD-935), so
     the bound is 5x: still far under the unfixed graph."""
-    rank5 = _forward_ms((6144, 16, 2, 16, 2))
-    rank4 = _forward_ms((6144, 16, 2, 32))
-    assert rank5 < 5.0 * rank4 + 2.0, f"rank-5 {rank5:.1f} ms vs rank-4 {rank4:.1f} ms"
+    assert_ratio_within(
+        lambda: {
+            "rank-5": _forward_call((6144, 16, 2, 16, 2)),
+            "rank-4": _forward_call((6144, 16, 2, 32)),
+        },
+        "rank-5",
+        "rank-4",
+        bound=5.0,
+        slack_ms=2.0,
+    )
 
 
 # ── every op the rule owns, wrapped on shapes far below the gate ───────────────────────

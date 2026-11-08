@@ -17,7 +17,6 @@ canonical weights.
 """
 
 import os
-import time
 from collections.abc import Callable, Iterator
 from unittest import mock
 
@@ -29,7 +28,12 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 from lucid.compile import make_step
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE
+from lucid.test.unit.compile._helpers import (
+    COMPILE_DEVICE,
+    assert_ratio_within,
+    compiled_call,
+    with_env,
+)
 from lucid.test.unit.compile.test_rank_canonical_layout import (
     _DTYPES,
     ENV,
@@ -239,30 +243,10 @@ def test_a_training_dropout_attention_step_runs_with_finite_gradients() -> None:
 # ── time ──────────────────────────────────────────────────────────────────────────────
 
 
-def _ms(fn: Callable[..., lucid.Tensor], args: tuple[lucid.Tensor, ...], gate: str) -> float:
-    with mock.patch.dict(os.environ, {ENV: gate}):
-        cm = lucid.compile(fn)
-        for _ in range(3):
-            cm(*args)
-        best = float("inf")
-        for _ in range(15):
-            t0 = time.perf_counter()
-            float(cm(*args).sum().item())
-            best = min(best, time.perf_counter() - t0)
-    return best * 1e3
-
-
-Run = tuple[Callable[..., lucid.Tensor], tuple[lucid.Tensor, ...], str]
-
-
-def _best_of(a: Run, b: Run, rounds: int = 4) -> tuple[float, float]:
-    """The best time of each, taken in alternation: a single compile is at the mercy of
-    whatever else is on the GPU, and alternating shares the bad stretches between them."""
-    best_a = best_b = float("inf")
-    for _ in range(rounds):
-        best_a = min(best_a, _ms(*a))
-        best_b = min(best_b, _ms(*b))
-    return best_a, best_b
+def _gated(
+    fn: Callable[..., lucid.Tensor], args: tuple[lucid.Tensor, ...], gate: str
+) -> Callable[[], float]:
+    return with_env(compiled_call(fn, *args), ENV, gate)
 
 
 _DEFAULT_GATE = "64"
@@ -274,10 +258,15 @@ def test_a_rank_5_attention_runs_within_1_5x_of_its_rank_4_twin(attention_state:
     # Lead 1024; the twin merges the two head axes: same elements, rank 4.
     five = tuple(_filled((1024, 2, 8, 49, 32), ph).to(COMPILE_DEVICE) for ph in (0.0, 1.0, 2.0))
     four = tuple(t.reshape(1024, 16, 49, 32) for t in five)
-    on, twin = _best_of(
-        (_scaled_attention, five, _DEFAULT_GATE), (_scaled_attention, four, _DEFAULT_GATE)
+    assert_ratio_within(
+        lambda: {
+            "rank-5": _gated(_scaled_attention, five, _DEFAULT_GATE),
+            "rank-4 twin": _gated(_scaled_attention, four, _DEFAULT_GATE),
+        },
+        "rank-5",
+        "rank-4 twin",
+        bound=1.5,
     )
-    assert on <= 1.5 * twin, f"rank-5 {on:.2f} ms vs rank-4 twin {twin:.2f} ms"
 
 
 def _scaled_attention(q: lucid.Tensor, k: lucid.Tensor, v: lucid.Tensor) -> lucid.Tensor:
@@ -301,8 +290,13 @@ def test_the_pass_is_no_slower_than_off(case: str) -> None:
     else:
         fn = _norm_after_add
         args = (_filled((64, 8, 16, 16, 96)).to(COMPILE_DEVICE),)
-    off, on = _best_of((fn, args, "-1"), (fn, args, _DEFAULT_GATE))
-    assert on <= 1.1 * off, f"{case}: on {on:.2f} ms vs off {off:.2f} ms"
+    assert_ratio_within(
+        lambda: {"off": _gated(fn, args, "-1"), "on": _gated(fn, args, _DEFAULT_GATE)},
+        "on",
+        "off",
+        bound=1.1,
+        what=case,
+    )
 
 
 @pytest.mark.parametrize(

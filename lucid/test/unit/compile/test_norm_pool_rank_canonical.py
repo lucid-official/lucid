@@ -24,7 +24,6 @@ keeps its native form otherwise.  The graph cannot be inspected from Python, so 
   environment (LCD-922), so the cache is cleared around every change of it.
 """
 
-import time
 from collections.abc import Callable, Iterator
 
 import pytest
@@ -35,7 +34,14 @@ import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 from lucid.compile import make_step
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE, to_metal
+from lucid.test.unit.compile._helpers import (
+    COMPILE_DEVICE,
+    assert_ratio_within,
+    compiled_call,
+    step_call,
+    to_metal,
+    with_env,
+)
 
 pytestmark = [
     pytest.mark.skipif(not metal_available(), reason="compile needs Metal"),
@@ -365,65 +371,26 @@ def test_group_norm_layout_follows_the_policy(monkeypatch: pytest.MonkeyPatch) -
 # ── timing ───────────────────────────────────────────────────────────────────────────
 
 
-def _best_ms(
-    calls: dict[str, Callable[[], lucid.Tensor]], rounds: int = 6, reps: int = 5
-) -> dict[str, float]:
-    """Min over interleaved rounds per variant: a load spike hits every variant alike."""
-    for call in calls.values():
-        for _ in range(3):
-            float(call().sum().item())
-    best = dict.fromkeys(calls, float("inf"))
-    for _ in range(rounds):
-        for name, call in calls.items():
-            for _ in range(reps):
-                t0 = time.perf_counter()
-                float(call().sum().item())
-                best[name] = min(best[name], time.perf_counter() - t0)
-    return {k: v * 1e3 for k, v in best.items()}
-
-
-def _fwd_call(
-    fn: Callable[[lucid.Tensor], lucid.Tensor], x: lucid.Tensor
-) -> Callable[[], lucid.Tensor]:
-    cm = lucid.compile(fn)
-
-    def call() -> lucid.Tensor:
-        with lucid.no_grad():
-            return cm(x)
-
-    return call
+def _fwd_call(fn: Callable[[lucid.Tensor], lucid.Tensor], x: lucid.Tensor) -> Callable[[], float]:
+    return compiled_call(fn, x)
 
 
 def _step_call(
     fn: Callable[[lucid.Tensor], lucid.Tensor], shape: tuple[int, ...], x: lucid.Tensor
-) -> Callable[[], lucid.Tensor]:
-    step = make_step(_PoolNet(fn, shape), lambda y: (y * y).sum())
-
-    def call() -> lucid.Tensor:
-        loss = step(x)
-        loss.backward()
-        return loss
-
-    return call
+) -> Callable[[], float]:
+    return step_call(make_step(_PoolNet(fn, shape), lambda y: (y * y).sum()), x)
 
 
 def _ratio_within(
-    build: Callable[[], dict[str, Callable[[], lucid.Tensor]]],
-    num: str,
-    den: str,
-    bound: float,
-    attempts: int = 3,
+    build: Callable[[], dict[str, Callable[[], float]]], num: str, den: str, bound: float
 ) -> None:
-    """``num / den <= bound`` on any of ``attempts`` fresh measurements (a loaded machine
-    can spoil one)."""
-    seen = []
-    for _ in range(attempts):
+    """``num / den <= bound``: a fresh build and measurement per attempt."""
+
+    def fresh() -> dict[str, Callable[[], float]]:
         _C_engine.compile.session_cache_clear()
-        t = _best_ms(build())
-        seen.append(t)
-        if t[num] <= bound * t[den]:
-            return
-    pytest.fail(f"{num} / {den} > {bound} on every attempt: {seen}")
+        return build()
+
+    assert_ratio_within(fresh, num, den, bound=bound)
 
 
 def _hand_view_norm(kind: str, k: int) -> Callable[[lucid.Tensor], lucid.Tensor]:
@@ -475,7 +442,7 @@ def test_a_rank_5_norm_step_is_not_slower_than_the_same_elements_at_rank_2(kind:
     )
 
 
-def test_the_canonical_norm_beats_the_native_rank_5_form(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_canonical_norm_beats_the_native_rank_5_form() -> None:
     """The same graph with the policy off (the old rank-5 spelling) against on."""
     shape = (1024, 4, 8, 16, 16)
     x = _input(shape, lucid.float32)
@@ -483,15 +450,16 @@ def test_the_canonical_norm_beats_the_native_rank_5_form(monkeypatch: pytest.Mon
     def fn(t: lucid.Tensor) -> lucid.Tensor:
         return F.layer_norm(t * 1.5, (16,)) * 2.0
 
-    for attempt in range(3):
-        times = {}
-        for label, value in (("off", "-1"), ("on", None)):
-            _set_policy(monkeypatch, value)
-            times[label] = _best_ms({label: _fwd_call(fn, x)})[label]
-        if times["on"] <= 0.6 * times["off"]:
-            break
-    else:
-        pytest.fail(f"canonical layer_norm is not at least 1.7x the native form: {times}")
+    assert_ratio_within(
+        lambda: {
+            "off": with_env(_fwd_call(fn, x), _ENV, "-1"),
+            "on": with_env(_fwd_call(fn, x), _ENV, None),
+        },
+        "on",
+        "off",
+        bound=0.6,
+        what="canonical layer_norm is not 1.7x the native form",
+    )
 
 
 def test_a_rank_5_avg_pool3d_is_not_slower_than_its_rank_4_view() -> None:

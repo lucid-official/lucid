@@ -19,7 +19,9 @@ because they only make sense for the compile suite.
 
 import contextlib
 import os
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass
 from unittest import mock
 
 import lucid
@@ -174,3 +176,168 @@ def assert_no_eager_fallback(compiled_model: object) -> None:
     assert not eager_only, (
         f"expected zero eager-fallback signatures, got {len(eager_only)}: " f"{eager_only}"
     )
+
+
+# ── wall-clock guards ─────────────────────────────────────────────────────────────────
+#
+# A timing guard compares one variant against another (rank-5 against its rank-4 twin,
+# compiled against eager).  One wall-clock sample per side flakes under machine load: a
+# spike that lands on one side reads as a regression.  Every such guard goes through
+# ``compare_ms`` instead (``test_timing_guards_use_the_helper.py`` rejects a raw
+# ``perf_counter`` in a test file): both sides are measured in alternation, so a load
+# spike hits both, each side keeps its minimum over every round, and a measurement that
+# still misses the bound is retried from a fresh build before it is reported.
+
+Calls = Mapping[str, Callable[[], object]]
+
+
+@dataclass(frozen=True)
+class Timing:
+    """The best comparison ``compare_ms`` saw: the first to hold, else the lowest ratio."""
+
+    ratio: float
+    ms: Mapping[str, float]
+    attempts: int
+    within: bool
+    report: str
+
+
+def read_sum(out: Tensor) -> float:
+    """Force ``out`` with a full reduction (the cost lands on every side alike)."""
+    return float(out.sum().item())
+
+
+def read_first(out: Tensor) -> float:
+    """Force ``out`` through one element, so a rank-5 output's copy-out is measured."""
+    return float(out.reshape(-1)[0].item())
+
+
+def compiled_call(
+    fn: Callable[..., Tensor], *args: Tensor, read: Callable[[Tensor], float] = read_sum
+) -> Callable[[], float]:
+    """A self-synchronising call of ``lucid.compile(fn)`` on ``args``, for ``compare_ms``."""
+    cm = lucid.compile(fn)
+
+    def call() -> float:
+        with lucid.no_grad():
+            return read(cm(*args))
+
+    return call
+
+
+def step_call(step: Callable[..., Tensor], *args: Tensor) -> Callable[[], float]:
+    """A self-synchronising forward + backward of a ``make_step`` step, for ``compare_ms``."""
+
+    def call() -> float:
+        loss = step(*args)
+        loss.backward()
+        return float(loss.item())
+
+    return call
+
+
+def with_env[T](call: Callable[[], T], name: str, value: str | None) -> Callable[[], T]:
+    """``call`` with ``name`` set to ``value`` (unset when ``None``) while it runs.
+
+    A compile setting is read when the cache key is made, on *every* call
+    (``compile_policy``), so a side measured under a setting has to run each call under it:
+    setting the variable once around the warm-up would time a recompile under the other.
+    """
+
+    def wrapped() -> T:
+        before = os.environ.get(name)
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+        try:
+            return call()
+        finally:
+            if before is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = before
+
+    return wrapped
+
+
+def _measure(calls: Calls, rounds: int, reps: int, warmup: int) -> dict[str, float]:
+    for call in calls.values():
+        for _ in range(warmup):
+            call()
+    best = dict.fromkeys(calls, float("inf"))
+    names = list(calls)
+    for rnd in range(rounds):
+        for name in names if rnd % 2 == 0 else reversed(names):
+            for _ in range(reps):
+                t0 = time.perf_counter()
+                calls[name]()
+                best[name] = min(best[name], time.perf_counter() - t0)
+    return {name: t * 1e3 for name, t in best.items()}
+
+
+def compare_ms(
+    calls: Calls | Callable[[], Calls],
+    num: str,
+    den: str,
+    *,
+    bound: float,
+    slack_ms: float = 0.0,
+    attempts: int = 3,
+    rounds: int = 4,
+    reps: int = 5,
+    warmup: int = 3,
+) -> Timing:
+    """Hold ``calls[num]`` to ``bound * calls[den] + slack_ms``, on a loaded machine too.
+
+    ``calls`` maps a name to a callable that does its own work *and* waits for it (the
+    device runs asynchronously).  Pass a zero-argument factory instead of the mapping when
+    each attempt needs a fresh build (a cache clear, a recompile under an environment).
+    Each attempt warms every callable, then times them in rounds that alternate the order,
+    ``reps`` calls apiece, and keeps each side's minimum.  The first attempt to hold ends
+    the search; otherwise the lowest-ratio attempt is returned with ``within=False``.
+    """
+    best: Timing | None = None
+    for attempt in range(1, attempts + 1):
+        ms = _measure(calls if isinstance(calls, Mapping) else calls(), rounds, reps, warmup)
+        ratio = ms[num] / ms[den]
+        within = ms[num] <= bound * ms[den] + slack_ms
+        report = (
+            f"{num} {ms[num]:.3f} ms vs {den} {ms[den]:.3f} ms = {ratio:.2f}x "
+            f"(bound {bound}x + {slack_ms} ms, attempt {attempt}/{attempts})"
+        )
+        if best is None or within or ratio < best.ratio:
+            best = Timing(ratio, ms, attempt, within, report)
+        if within:
+            break
+    assert best is not None, "attempts must be at least 1"
+    return best
+
+
+def assert_ratio_within(
+    calls: Calls | Callable[[], Calls],
+    num: str,
+    den: str,
+    *,
+    bound: float,
+    slack_ms: float = 0.0,
+    attempts: int = 3,
+    rounds: int = 4,
+    reps: int = 5,
+    warmup: int = 3,
+    what: str = "",
+) -> Timing:
+    """``compare_ms`` that fails the test with the report when no attempt held."""
+    timing = compare_ms(
+        calls,
+        num,
+        den,
+        bound=bound,
+        slack_ms=slack_ms,
+        attempts=attempts,
+        rounds=rounds,
+        reps=reps,
+        warmup=warmup,
+    )
+    assert timing.within, f"{what + ': ' if what else ''}{timing.report}"
+    return timing

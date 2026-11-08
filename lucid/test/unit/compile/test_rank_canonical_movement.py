@@ -28,7 +28,6 @@ Three guards, as for the earlier rules:
 """
 
 import os
-import time
 from collections.abc import Callable, Iterator
 from unittest import mock
 
@@ -40,7 +39,13 @@ import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 from lucid.compile import _tracing, make_step
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE, to_metal
+from lucid.test.unit.compile._helpers import (
+    COMPILE_DEVICE,
+    assert_ratio_within,
+    compiled_call,
+    to_metal,
+    with_env,
+)
 
 ENV = "LUCID_COMPILE_RANK_CANON_MIN_LEAD"
 
@@ -326,7 +331,9 @@ def _same(got: lucid.Tensor, want: lucid.Tensor, why: str) -> None:
     g, w = _values(got), _values(want)
     assert len(g) == len(w), why
     bad = [i for i, (a, b) in enumerate(zip(g, w, strict=True)) if not _alike(a, b)]
-    assert not bad, f"{why}: {len(bad)} values differ, first at {bad[0]}: {g[bad[0]]} != {w[bad[0]]}"
+    assert (
+        not bad
+    ), f"{why}: {len(bad)} values differ, first at {bad[0]}: {g[bad[0]]} != {w[bad[0]]}"
 
 
 def _close(got: lucid.Tensor, want: lucid.Tensor, tol: float, why: str) -> None:
@@ -353,7 +360,9 @@ def _on_metal(t: lucid.Tensor, dtype: lucid.dtype) -> lucid.Tensor:
     return t.to(COMPILE_DEVICE).to(dtype)
 
 
-def _forward(fn: Callable[..., lucid.Tensor], args: tuple[lucid.Tensor, ...], gate: str) -> lucid.Tensor:
+def _forward(
+    fn: Callable[..., lucid.Tensor], args: tuple[lucid.Tensor, ...], gate: str
+) -> lucid.Tensor:
     with mock.patch.dict(os.environ, {ENV: gate}):
         _C_engine.compile.session_cache_clear()
         return lucid.compile(fn)(*args)
@@ -521,18 +530,6 @@ def test_a_symbolic_batch_survives_the_movement_rewrites() -> None:
 # ── time ──────────────────────────────────────────────────────────────────────────────
 
 
-def _forward_ms(fn: Callable[..., lucid.Tensor], *args: lucid.Tensor) -> float:
-    cm = lucid.compile(fn)
-    for _ in range(3):
-        cm(*args)
-    best = float("inf")
-    for _ in range(15):
-        t0 = time.perf_counter()
-        float(cm(*args).sum().item())
-        best = min(best, time.perf_counter() - t0)
-    return best * 1e3
-
-
 def _metal(shape: Shape, phase: float = 0.0) -> lucid.Tensor:
     return _filled(shape, phase).to(COMPILE_DEVICE)
 
@@ -592,9 +589,15 @@ _TWINS: dict[str, tuple[Op, Op]] = {
 def test_a_rank_5_movement_op_is_not_slower_than_its_rank_4_twin(name: str) -> None:
     """Held to 1.5x the twin; the unfixed graphs ran 2x to 15x it."""
     wide_fn, twin_fn = _TWINS[name]
-    _C_engine.compile.session_cache_clear()
-    wide, twin = _forward_ms(wide_fn, _metal(_S5)), _forward_ms(twin_fn, _metal(_S4))
-    assert wide <= 1.5 * twin + 0.3, f"{name}: rank-5 {wide:.2f} ms vs twin {twin:.2f} ms"
+
+    def build() -> dict[str, Callable[[], float]]:
+        _C_engine.compile.session_cache_clear()
+        return {
+            "rank-5": compiled_call(wide_fn, _metal(_S5)),
+            "twin": compiled_call(twin_fn, _metal(_S4)),
+        }
+
+    assert_ratio_within(build, "rank-5", "twin", bound=1.5, slack_ms=0.3, what=name)
 
 
 @needs_metal
@@ -605,9 +608,11 @@ def test_a_space_to_depth_of_a_feed_is_not_slower_than_its_rank_4_twin() -> None
     def fn(t: lucid.Tensor) -> lucid.Tensor:
         return _space_to_depth(t).sum()
 
-    _C_engine.compile.session_cache_clear()
-    on = _forward_ms(fn, _metal((96, 64, 32, 64)))
-    with mock.patch.dict(os.environ, {ENV: "0"}):
+    def build() -> dict[str, Callable[[], float]]:
         _C_engine.compile.session_cache_clear()
-        always = _forward_ms(fn, _metal((96, 64, 32, 64)))
-    assert on <= 1.5 * always + 0.3, f"gate default {on:.2f} ms vs always-on {always:.2f} ms"
+        return {
+            "gate default": with_env(compiled_call(fn, _metal((96, 64, 32, 64))), ENV, None),
+            "always-on": with_env(compiled_call(fn, _metal((96, 64, 32, 64))), ENV, "0"),
+        }
+
+    assert_ratio_within(build, "gate default", "always-on", bound=1.5, slack_ms=0.3)

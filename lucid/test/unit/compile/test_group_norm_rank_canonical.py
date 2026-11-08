@@ -15,16 +15,19 @@ The graph cannot be inspected from Python, so the guard is
 * a coarse timing bound against the rank-2 twin the layout is meant to reach.
 """
 
-import time
-from collections.abc import Callable
-
 import pytest
 
 import lucid
 import lucid.nn as nn
 from lucid.compile import make_step
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_cache_hit, to_metal
+from lucid.test.unit.compile._helpers import (
+    COMPILE_DEVICE,
+    assert_cache_hit,
+    assert_ratio_within,
+    step_call,
+    to_metal,
+)
 
 pytestmark = [
     pytest.mark.skipif(not metal_available(), reason="compile needs Metal"),
@@ -198,22 +201,6 @@ def test_a_symbolic_batch_keeps_the_grouped_form() -> None:
     assert_cache_hit(cm, 1)
 
 
-def _step_ms(
-    model: nn.Module, x: lucid.Tensor, fn: Callable[[lucid.Tensor], lucid.Tensor]
-) -> float:
-    step = make_step(model, fn)
-    for _ in range(2):
-        step(x).backward()
-    best = float("inf")
-    for _ in range(5):
-        t0 = time.perf_counter()
-        loss = step(x)
-        loss.backward()
-        float(loss.item())
-        best = min(best, time.perf_counter() - t0)
-    return best * 1e3
-
-
 class _Twin(nn.Module):
     """Layer-norm over the same ``(N*G, C/G * H*W)`` rows a group-norm normalises."""
 
@@ -234,6 +221,13 @@ def test_a_group_norm_is_not_slower_than_its_rank_2_twin() -> None:
     """Coarse on purpose: the grouped rank-5 form ran ~6x the twin at N = 256, the fix ~1.3x."""
     shape = (256, 64, 16, 16)
     x = _input(shape, lucid.float32)
-    gn = _step_ms(_module(shape, 8, True, lucid.float32), x, _loss)
-    twin = _step_ms(to_metal(_Twin(shape, 8)), x, _loss)
-    assert gn < 2.0 * twin + 1.0, f"group_norm {gn:.1f} ms vs rank-2 twin {twin:.1f} ms"
+    assert_ratio_within(
+        lambda: {
+            "group_norm": step_call(make_step(_module(shape, 8, True, lucid.float32), _loss), x),
+            "rank-2 twin": step_call(make_step(to_metal(_Twin(shape, 8)), _loss), x),
+        },
+        "group_norm",
+        "rank-2 twin",
+        bound=2.0,
+        slack_ms=1.0,
+    )

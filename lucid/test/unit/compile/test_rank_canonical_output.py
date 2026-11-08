@@ -22,7 +22,6 @@ Guards:
 """
 
 import os
-import time
 from collections.abc import Callable, Iterator
 from unittest import mock
 
@@ -34,7 +33,13 @@ import lucid.nn as nn
 import lucid.optim as optim
 from lucid.compile import compile_optimizer, fused_step, make_step
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE, to_metal
+from lucid.test.unit.compile._helpers import (
+    COMPILE_DEVICE,
+    assert_ratio_within,
+    compiled_call,
+    read_first,
+    to_metal,
+)
 
 ENV = "LUCID_COMPILE_RANK_CANON_MIN_LEAD"
 
@@ -313,18 +318,6 @@ def test_a_dynamic_batch_rank_5_output_is_unchanged(gate: str | None) -> None:
 # ── time ──────────────────────────────────────────────────────────────────────────────
 
 
-def _ms(fn: Callable[[lucid.Tensor], lucid.Tensor], x: lucid.Tensor) -> float:
-    cm = lucid.compile(fn)
-    for _ in range(3):
-        cm(x)
-    best = float("inf")
-    for _ in range(15):
-        t0 = time.perf_counter()
-        float(cm(x).reshape(-1)[0].item())
-        best = min(best, time.perf_counter() - t0)
-    return best * 1e3
-
-
 @pytest.mark.usefixtures("inference")
 def test_a_rank_5_output_is_not_slower_than_its_rank_4_twin() -> None:
     """Unfixed: 26 ms against 2 ms.  Each rank-5 output is held to its own rank-4 twin.
@@ -336,24 +329,32 @@ def test_a_rank_5_output_is_not_slower_than_its_rank_4_twin() -> None:
     r4 = (6144, 16, 2, 32)
     x5, x4 = _filled(r5).to(COMPILE_DEVICE), _filled(r4).to(COMPILE_DEVICE)
 
-    # Wall-clock on a shared GPU: keep each case's best over up to five rounds and stop at
-    # the first round where both ratios hold.  The unfixed output is ~10x its twin, so a
-    # noisy round cannot hide the defect.
-    cases: dict[str, tuple[Callable[[lucid.Tensor], lucid.Tensor], lucid.Tensor]] = {
-        "twin5": (lambda a: (a + 1.0).reshape(*r4), x5),
-        "out5": (lambda a: a + 1.0, x5),
-        # A graph output that is a reshape of a computed value costs a rank-4 reshape too
-        # (+25% here, whatever the rank), so the twin is a rank-4 reshape.
-        "twin4": (lambda a: (a + 1.0).reshape(98304, 2, 16, 2), x4),
-        "via_reshape": (lambda a: (a + 1.0).reshape(*r5), x4),
-    }
-    best = dict.fromkeys(cases, float("inf"))
-    for _ in range(5):
-        for name, (fn, x) in cases.items():
-            best[name] = min(best[name], _ms(fn, x))
-        if best["out5"] <= 1.3 * best["twin5"] and best["via_reshape"] <= 1.3 * best["twin4"]:
-            return
-    assert best["out5"] <= 1.3 * best["twin5"], f"{best['out5']:.2f} vs {best['twin5']:.2f} ms"
-    assert (
-        best["via_reshape"] <= 1.3 * best["twin4"]
-    ), f"{best['via_reshape']:.2f} vs {best['twin4']:.2f} ms"
+    def pair(
+        case: tuple[Callable[[lucid.Tensor], lucid.Tensor], lucid.Tensor],
+        twin: tuple[Callable[[lucid.Tensor], lucid.Tensor], lucid.Tensor],
+    ) -> Callable[[], dict[str, Callable[[], float]]]:
+        return lambda: {
+            "case": compiled_call(case[0], case[1], read=read_first),
+            "twin": compiled_call(twin[0], twin[1], read=read_first),
+        }
+
+    # The unfixed output is ~10x its twin, so a noisy attempt cannot hide the defect.
+    assert_ratio_within(
+        pair((lambda a: a + 1.0, x5), (lambda a: (a + 1.0).reshape(*r4), x5)),
+        "case",
+        "twin",
+        bound=1.3,
+        what="rank-5 output",
+    )
+    # A graph output that is a reshape of a computed value costs a rank-4 reshape too
+    # (+25% here, whatever the rank), so the twin is a rank-4 reshape.
+    assert_ratio_within(
+        pair(
+            (lambda a: (a + 1.0).reshape(*r5), x4),
+            (lambda a: (a + 1.0).reshape(98304, 2, 16, 2), x4),
+        ),
+        "case",
+        "twin",
+        bound=1.3,
+        what="reshape to rank 5",
+    )

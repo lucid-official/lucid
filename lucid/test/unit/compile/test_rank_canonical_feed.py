@@ -21,7 +21,6 @@ What is held here:
 """
 
 import os
-import time
 from collections.abc import Callable, Iterator
 from unittest import mock
 
@@ -33,7 +32,13 @@ import lucid.nn as nn
 from lucid._C import engine as _C_engine
 from lucid.compile import make_step
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE, to_metal
+from lucid.test.unit.compile._helpers import (
+    COMPILE_DEVICE,
+    assert_ratio_within,
+    compiled_call,
+    read_first,
+    to_metal,
+)
 
 ENV = "LUCID_COMPILE_RANK_CANON_MIN_LEAD"
 
@@ -77,7 +82,9 @@ def _same(got: lucid.Tensor, want: lucid.Tensor, why: str) -> None:
     g, w = _values(got), _values(want)
     assert len(g) == len(w), why
     bad = [i for i, (a, b) in enumerate(zip(g, w, strict=True)) if not _alike(a, b)]
-    assert not bad, f"{why}: {len(bad)} values differ, first at {bad[0]}: {g[bad[0]]} != {w[bad[0]]}"
+    assert (
+        not bad
+    ), f"{why}: {len(bad)} values differ, first at {bad[0]}: {g[bad[0]]} != {w[bad[0]]}"
 
 
 def _close(got: lucid.Tensor, want: lucid.Tensor, tol: float, why: str) -> None:
@@ -94,7 +101,9 @@ R5: Shape = (6, 4, 2, 3, 2)
 R6: Shape = (3, 2, 2, 3, 2, 2)
 
 
-def _compiled(fn: Callable[..., lucid.Tensor], gate: str | None = None) -> Callable[..., lucid.Tensor]:
+def _compiled(
+    fn: Callable[..., lucid.Tensor], gate: str | None = None
+) -> Callable[..., lucid.Tensor]:
     with mock.patch.dict(os.environ):
         if gate is None:
             os.environ.pop(ENV, None)
@@ -262,18 +271,6 @@ def test_an_aot_round_trip_binds_a_declared_feed_at_its_declared_shape(
 # ── time ──────────────────────────────────────────────────────────────────────────────
 
 
-def _ms(fn: Callable[..., lucid.Tensor], *args: lucid.Tensor) -> float:
-    cm = lucid.compile(fn)
-    for _ in range(3):
-        cm(*args)
-    best = float("inf")
-    for _ in range(15):
-        t0 = time.perf_counter()
-        float(cm(*args).reshape(-1)[0].item())
-        best = min(best, time.perf_counter() - t0)
-    return best * 1e3
-
-
 #: ``(case, twin)``: the rank-5 feeds and the same elements fed at rank 4.
 _TWINS: dict[str, tuple[Callable[..., lucid.Tensor], Shape, Shape]] = {
     "mul": (lambda x, w: (x * w).sum(), (6144, 16, 2, 16, 2), (6144 * 16, 2, 16, 2)),
@@ -293,11 +290,12 @@ def test_a_rank_5_feed_is_not_slower_than_its_rank_4_twin(name: str) -> None:
     fn, wide, twin = _TWINS[name]
     xs5 = (_on(_filled(wide, 0.1)), _on(_filled(wide, 0.9)))
     xs4 = (_on(_filled(twin, 0.1)), _on(_filled(twin, 0.9)))
-    best5, best4 = float("inf"), float("inf")
-    for _ in range(5):
+
+    def build() -> dict[str, Callable[[], float]]:
         _C_engine.compile.session_cache_clear()
-        best5 = min(best5, _ms(fn, *xs5))
-        best4 = min(best4, _ms(fn, *xs4))
-        if best5 <= 1.3 * best4 + 0.1:
-            return
-    assert best5 <= 1.3 * best4 + 0.1, f"{name}: rank-5 {best5:.2f} ms vs twin {best4:.2f} ms"
+        return {
+            "rank-5": compiled_call(fn, *xs5, read=read_first),
+            "rank-4 twin": compiled_call(fn, *xs4, read=read_first),
+        }
+
+    assert_ratio_within(build, "rank-5", "rank-4 twin", bound=1.3, slack_ms=0.1, what=name)

@@ -22,7 +22,6 @@ Three guards, as for the elementwise rule:
 """
 
 import os
-import time
 from collections.abc import Callable, Iterator
 from unittest import mock
 
@@ -34,7 +33,12 @@ import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 from lucid.compile import _tracing, make_step
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE, to_metal
+from lucid.test.unit.compile._helpers import (
+    COMPILE_DEVICE,
+    assert_ratio_within,
+    compiled_call,
+    to_metal,
+)
 
 ENV = "LUCID_COMPILE_RANK_CANON_MIN_LEAD"
 
@@ -677,18 +681,6 @@ def test_a_matmul_step_matches_eager_and_the_unrewritten_graph(
 Case = tuple[Callable[..., lucid.Tensor], tuple[lucid.Tensor, ...]]
 
 
-def _forward_ms(fn: Callable[..., lucid.Tensor], *args: lucid.Tensor) -> float:
-    cm = lucid.compile(fn)
-    for _ in range(3):
-        cm(*args)
-    best = float("inf")
-    for _ in range(15):
-        t0 = time.perf_counter()
-        float(cm(*args).sum().item())
-        best = min(best, time.perf_counter() - t0)
-    return best * 1e3
-
-
 def _metal(shape: Shape, phase: float = 0.0) -> lucid.Tensor:
     return _filled(shape, phase).to(COMPILE_DEVICE)
 
@@ -763,6 +755,12 @@ _TWINS: dict[str, Callable[[], tuple[Case, Case]]] = {
 def test_a_rank_5_case_is_not_slower_than_its_rank_4_twin(name: str) -> None:
     """Held to 1.5x the twin; the unfixed graphs ran 2x to 20x it."""
     wide_case, twin_case = _TWINS[name]()
-    _C_engine.compile.session_cache_clear()
-    wide, twin = _forward_ms(wide_case[0], *wide_case[1]), _forward_ms(twin_case[0], *twin_case[1])
-    assert wide <= 1.5 * twin + 0.3, f"{name}: rank-5+ {wide:.2f} ms vs twin {twin:.2f} ms"
+
+    def build() -> dict[str, Callable[[], float]]:
+        _C_engine.compile.session_cache_clear()
+        return {
+            "rank-5+": compiled_call(wide_case[0], *wide_case[1]),
+            "twin": compiled_call(twin_case[0], *twin_case[1]),
+        }
+
+    assert_ratio_within(build, "rank-5+", "twin", bound=1.5, slack_ms=0.3, what=name)
