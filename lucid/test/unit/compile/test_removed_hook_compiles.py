@@ -22,7 +22,6 @@ import lucid.nn as nn
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap
 from lucid.autograd._hooks import RemovableHandle
-from lucid.compile._core import fallback
 from lucid.test.unit.compile.test_write_on_a_tensor_the_call_made import (
     ENTRIES,
     _metal_ok,
@@ -163,8 +162,7 @@ def _build(middle: Callable[[], nn.Module]) -> nn.Module:
 
 
 @pytest.fixture(autouse=True)
-def _fresh_session(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setattr(fallback, "_NOTICED", set())
+def _fresh_session() -> Iterator[None]:
     _C_engine.compile.session_cache_clear()
     yield
 

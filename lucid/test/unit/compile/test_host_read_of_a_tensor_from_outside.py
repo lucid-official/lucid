@@ -54,8 +54,7 @@ _GLOBAL: dict[str, Tensor] = {}
 
 
 @pytest.fixture(autouse=True)
-def _fresh_session(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setattr(fallback, "_NOTICED", set())
+def _fresh_session() -> Iterator[None]:
     _C_engine.compile.session_cache_clear()
     yield
     _GLOBAL.clear()

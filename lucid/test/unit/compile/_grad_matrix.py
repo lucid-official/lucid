@@ -19,6 +19,7 @@ import numpy as np
 import lucid
 import lucid.nn as nn
 
+from lucid.test.unit.compile._helpers import verbose_compile_notices
 from lucid.test.unit.compile._op_matrix import CASES, DEV, Case, _leaves, make_input
 
 
@@ -179,19 +180,17 @@ MANUAL_VJP_GAPS: dict[str, str] = {}
 
 
 def _main() -> None:  # pragma: no cover — manual triage
-    import os
-
-    os.environ["LUCID_COMPILE_VERBOSE"] = "1"
     only = set(sys.argv[1:])
     counts: dict[str, int] = {}
-    for case in GRAD_CASES:
-        if only and case.name not in only:
-            continue
-        print(f"RUN {case.name}", file=sys.stderr, flush=True)
-        o = run_grad(case)
-        counts[o.status] = counts.get(o.status, 0) + 1
-        if o.status not in ("ok",):
-            print(f"{o.status:7s} {case.name:18s} {o.detail}", flush=True)
+    with verbose_compile_notices():
+        for case in GRAD_CASES:
+            if only and case.name not in only:
+                continue
+            print(f"RUN {case.name}", file=sys.stderr, flush=True)
+            o = run_grad(case)
+            counts[o.status] = counts.get(o.status, 0) + 1
+            if o.status not in ("ok",):
+                print(f"{o.status:7s} {case.name:18s} {o.detail}", flush=True)
     print("counts", counts)
 
 

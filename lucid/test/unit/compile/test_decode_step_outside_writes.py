@@ -60,8 +60,7 @@ pytestmark = [
 
 
 @pytest.fixture(autouse=True)
-def _fresh_session(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(fallback, "_NOTICED", set())
+def _fresh_session() -> None:
     _C_engine.compile.session_cache_clear()
 
 

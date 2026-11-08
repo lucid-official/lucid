@@ -26,7 +26,7 @@ import pytest
 import lucid
 import lucid.nn as nn
 from lucid._C import engine as _C_engine
-from lucid.compile._core.fallback import _NOTICED, CompileFallbackWarning
+from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.compile._entry.module import CompiledModule
 from lucid.test._fixtures.devices import metal_available
 
@@ -390,7 +390,6 @@ def test_a_first_run_mpsgraph_refuses_answers_eagerly(
         raise RuntimeError("run_executable: MPSGraph failed: simulated first run")
 
     monkeypatch.setattr(_C_engine.compile, "run_executable", refusing)
-    monkeypatch.setattr("lucid.compile._core.fallback._NOTICED", set())
     compiled = lucid.compile(function)
     x = _data((6, 4), "metal", seed=1)
     if first_call == "grad":
@@ -438,9 +437,7 @@ def test_a_call_that_runs_eagerly_anyway_checks_no_gradients(
     assert walks == (1 if why == "eager-only" else 0)
 
 
-def test_warning_names_the_way_out_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
-    monkeypatch.setattr("lucid.compile._core.fallback._NOTICED", set(_NOTICED) - {"autograd"})
+def test_warning_names_the_way_out_once() -> None:
     device = "metal" if metal_available() else "cpu"
     first, second = lucid.compile(_mlp(device)), lucid.compile(_conv(device))
     with warnings.catch_warnings(record=True) as caught:

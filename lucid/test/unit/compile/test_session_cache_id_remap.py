@@ -24,7 +24,6 @@ import pytest
 
 import lucid
 from lucid._C import engine as _C_engine
-from lucid.compile._core import fallback
 from lucid.compile._core.fallback import CompileFallbackWarning
 import lucid.nn as nn
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor
@@ -46,10 +45,8 @@ pytestmark = [
 
 
 @pytest.fixture(autouse=True)
-def _clean_session_cache_and_notices(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+def _clean_session_cache_and_notices() -> Iterator[None]:
     _C_engine.compile.session_cache_clear()
-    monkeypatch.setattr(fallback, "_NOTICED", set())
-    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
     yield
     _C_engine.compile.session_cache_clear()
 

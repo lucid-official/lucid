@@ -13,16 +13,10 @@ import lucid.optim as optim
 from lucid._C import engine as _C_engine
 from lucid.amp import GradScaler
 from lucid.compile import fused_step
-from lucid.compile._core.fallback import _NOTICED, CompileFallbackWarning
+from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.test._fixtures.devices import metal_available
 
 pytestmark = pytest.mark.skipif(not metal_available(), reason="Metal unavailable")
-
-
-@pytest.fixture(autouse=True)
-def _clean_compile_verbose(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensure ``LUCID_COMPILE_VERBOSE`` left by ``_op_matrix.run`` does not suppress warnings."""
-    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
 
 
 @pytest.mark.parametrize("dtype", [lucid.int64, lucid.int32])
@@ -145,7 +139,6 @@ def test_fused_step_falls_back_to_eager_on_uncompilable_op() -> None:
     eager_opt = optim.Adam(eager_model.parameters(), lr=0.02)
     step = fused_step(comp_model, loss_fn, comp_opt)
 
-    _NOTICED.discard("lowering")
     with pytest.warns(CompileFallbackWarning, match="running eagerly"):
         x0 = lucid.randn(4, 6, device="metal")
         y0 = lucid.randn(4, 3, device="metal")
@@ -204,7 +197,6 @@ def test_fused_step_falls_back_on_cumulative_bn_and_grad_scaler() -> None:
 
     step = fused_step(comp_model, F.mse_loss, comp_opt, grad_scaler=comp_scaler)
 
-    _NOTICED.discard("cumulative-bn")
     with pytest.warns(CompileFallbackWarning, match="momentum=None"):
         for _ in range(3):
             x = lucid.randn(8, 4, device="metal")
@@ -254,7 +246,6 @@ def test_fused_step_falls_back_on_first_run_mpsgraph_failure(
         orig_run_inplace(exe, feeds, targets)
 
     monkeypatch.setattr(_C_engine.compile, "run_executable_inplace", _fail_fused_inplace)
-    _NOTICED.discard("first-run")
 
     x = lucid.randn(3, 4, device="metal")
     t = lucid.randn(3, 2, device="metal")

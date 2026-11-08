@@ -30,7 +30,6 @@ import lucid
 import lucid.nn as nn
 import lucid.optim as optim
 from lucid._C import engine as _C_engine
-from lucid.compile._core import fallback
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
 
 
@@ -52,8 +51,7 @@ CALLS = ((1.0, 0.0), (-0.5, 0.2), (0.5, -0.6), (0.25, 0.4))
 
 
 @pytest.fixture(autouse=True)
-def _fresh_session(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setattr(fallback, "_NOTICED", set())
+def _fresh_session() -> Iterator[None]:
     _C_engine.compile.session_cache_clear()
     yield
 

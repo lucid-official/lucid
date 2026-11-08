@@ -43,7 +43,6 @@ import inspect
 import io
 import json
 import math
-import os
 import subprocess
 import sys
 from collections.abc import Callable, Mapping
@@ -54,7 +53,7 @@ import numpy as np
 import lucid
 from lucid.models._registry import _REGISTRY
 
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, verbose_compile_notices
 
 DEV = COMPILE_DEVICE
 BATCH = 2
@@ -951,9 +950,9 @@ def main() -> None:  # pragma: no cover — triage driver
         if args[:1] == ["--shard"]:
             shard, args = _shard(args[1]), args[2:]
         sys.exit(1 if sweep(tuple(args) or TASKS, shard) else 0)
-    os.environ["LUCID_COMPILE_VERBOSE"] = "1"
     family, task = sys.argv[1], sys.argv[2]
-    rec = run_family(family, task)
+    with verbose_compile_notices():
+        rec = run_family(family, task)
     print("RESULT " + json.dumps(rec, default=str))
 
 

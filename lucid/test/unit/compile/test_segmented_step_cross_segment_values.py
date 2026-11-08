@@ -282,9 +282,7 @@ def test_a_model_that_crosses_nothing_stays_compiled_and_equals_eager(
     assert any(seg_cache for seg_cache in step.cache)
 
 
-def test_the_refusal_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
-    monkeypatch.setattr("lucid.compile._core.fallback._NOTICED", set())
+def test_the_refusal_is_reported() -> None:
     with pytest.warns(UserWarning, match="segment 2 reads a value segment 0 computed"):
         _step_against_twin(_dict_stash, 3)
 

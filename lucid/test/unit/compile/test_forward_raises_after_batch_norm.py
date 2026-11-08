@@ -25,7 +25,6 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
-from lucid.compile._core import fallback
 from lucid.compile._core.buffer_writes import completes_on_raise
 from lucid.compile._core.trace_context import recording
 from lucid.compile._entry.decode_step import compiled_decode_step
@@ -55,8 +54,7 @@ pytestmark = [
 
 
 @pytest.fixture(autouse=True)
-def _fresh_session(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setattr(fallback, "_NOTICED", set())
+def _fresh_session() -> Iterator[None]:
     _C_engine.compile.session_cache_clear()
     yield
 

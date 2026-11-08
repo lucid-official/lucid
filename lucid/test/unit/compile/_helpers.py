@@ -17,15 +17,28 @@ to bottom.  They live in this folder (not ``lucid/test/_helpers``)
 because they only make sense for the compile suite.
 """
 
+import contextlib
+import os
+from collections.abc import Iterator
+from unittest import mock
+
 import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
+from lucid.test._fixtures.compile_notices import VERBOSE_ENV
 
 # Compile path is Metal-only — MPSGraph is the only emit backend in
 # 3.5.  Tests must put both model and inputs on the ``metal`` device
 # before calling ``lucid.compile``; CPU traces are auto-routed to
 # eager-fallback (the cache stays empty and ``eager_only`` grows).
 COMPILE_DEVICE = "metal"
+
+
+@contextlib.contextmanager
+def verbose_compile_notices() -> Iterator[None]:
+    """``LUCID_COMPILE_VERBOSE=1`` for the ``with`` block, the old environment after it."""
+    with mock.patch.dict(os.environ, {VERBOSE_ENV: "1"}):
+        yield
 
 
 def to_metal(model: nn.Module) -> nn.Module:

@@ -26,7 +26,7 @@ import lucid.optim as optim
 import lucid.quantization as Q
 from lucid.autograd import Function
 from lucid.compile import fused_step, make_step
-from lucid.compile._core.fallback import _NOTICED, CompileFallbackWarning
+from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.compile._entry.function import compiled_step
 
 
@@ -175,7 +175,6 @@ def _warns_on_metal(function: str, device: str):
     """The fallback's warning, naming ``function``, where the step compiles."""
     if device != "metal":
         return warnings.catch_warnings()
-    _NOTICED.discard("custom-backward")
     return pytest.warns(CompileFallbackWarning, match=function)
 
 

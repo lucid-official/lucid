@@ -30,7 +30,6 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 import lucid.optim as optim
 from lucid._C import engine as _C_engine
-from lucid.compile._core import fallback
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
 
 
@@ -64,8 +63,7 @@ kernel void twice(device const float* x [[buffer(0)]],
 
 
 @pytest.fixture(autouse=True)
-def _fresh_session(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setattr(fallback, "_NOTICED", set())
+def _fresh_session() -> Iterator[None]:
     _C_engine.compile.session_cache_clear()
     _OUTSIDE["weight"] = lucid.eye(WIDTH, device=COMPILE_DEVICE) * 2.0
     yield

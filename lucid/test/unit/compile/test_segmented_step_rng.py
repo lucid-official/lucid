@@ -156,7 +156,7 @@ def test_a_forward_that_draws_stays_compiled_and_one_without_stays_plain(segment
     assert not any(c.draws for cache in plain.cache for c in cache.values())
 
 
-def test_a_backward_that_would_draw_otherwise_runs_eagerly(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_backward_that_would_draw_otherwise_runs_eagerly() -> None:
     """A forward that draws a different amount the second time it is traced
     cannot have its draws replayed: the step refuses, and is eager's."""
     calls = [0]
@@ -171,10 +171,6 @@ def test_a_backward_that_would_draw_otherwise_runs_eagerly(monkeypatch: pytest.M
         lucid.manual_seed(0)
         return nn.Sequential(nn.Linear(6, 8), _Lambda(uneven), nn.Linear(8, 3)).to(COMPILE_DEVICE)
 
-    # A notice is given once per process and category, and not at all under a
-    # verbose environment that an earlier matrix import left behind.
-    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
-    monkeypatch.setattr("lucid.compile._core.fallback._NOTICED", set())
     compiled, twin = build(), build()
     step = make_step(compiled, _loss, segments=2)
     x = metal_tensor(6, 6)

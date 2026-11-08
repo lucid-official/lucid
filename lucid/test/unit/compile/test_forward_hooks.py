@@ -24,7 +24,6 @@ import pytest
 import lucid
 import lucid.nn as nn
 from lucid._C import engine as _C_engine
-from lucid.compile._core import fallback
 from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.compile._core.hook_contract import HookContract, traceable_hook
 from lucid.compile._core.signature import hook_block, model_has_active_hooks, signature_of
@@ -361,7 +360,6 @@ class TestOnlyDeclaredHooksAreTraced:
         reason = hook_block(m)
         assert reason is not None and "hook" in reason
         compiled = lucid.compile(m)
-        fallback._NOTICED.discard("hooks")
         with pytest.warns(CompileFallbackWarning, match="forward hook"):
             got = compiled(x)
         before = len(calls) if name != "item-store" else calls[0]
@@ -382,7 +380,6 @@ class TestOnlyDeclaredHooksAreTraced:
         reason = hook_block(m)
         assert reason is not None and "not declared" in reason
         compiled = lucid.compile(m)
-        fallback._NOTICED.discard("hooks")
         with pytest.warns(CompileFallbackWarning, match="not declared"):
             assert _close(compiled(x), m(x))
         assert compiled.cache_info()["entries"] == 0

@@ -19,15 +19,9 @@ import pytest
 
 import lucid
 from lucid._tensor.tensor import Tensor
-from lucid.compile._core.fallback import _NOTICED, CompileFallbackWarning
+from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.compile._core.trace_context import recording
 import lucid.nn as nn
-
-
-@pytest.fixture(autouse=True)
-def _clear_verbose(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensure ``LUCID_COMPILE_VERBOSE`` left by earlier matrix runs does not suppress warnings."""
-    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
 
 
 class _FrozenGradBranchModel(nn.Module):
@@ -131,7 +125,6 @@ def test_refused_forward_restores_default_and_generator_rng_streams() -> None:
         want_default_state = lucid.get_rng_state().numpy().copy()
         want_gen_state = gen_e.get_state().numpy().copy()
 
-        _NOTICED.discard("lowering")
         lucid.manual_seed(555)
         gen_c = lucid.Generator(999)
         with pytest.warns(CompileFallbackWarning):

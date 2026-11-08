@@ -21,7 +21,6 @@ import pytest
 
 import lucid
 from lucid._C import engine as _C_engine
-from lucid.compile._core import fallback
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
 
 
@@ -41,8 +40,7 @@ CALLS = 5
 
 
 @pytest.fixture(autouse=True)
-def _fresh_session(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(fallback, "_NOTICED", set())
+def _fresh_session() -> None:
     _C_engine.compile.session_cache_clear()
 
 

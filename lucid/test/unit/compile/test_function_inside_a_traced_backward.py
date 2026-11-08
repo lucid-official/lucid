@@ -27,7 +27,7 @@ import lucid.nn as nn
 import lucid.optim as optim
 from lucid.autograd import Function, checkpoint
 from lucid.compile import fused_step, make_step
-from lucid.compile._core.fallback import _NOTICED, CompileFallbackWarning
+from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.compile._core.trace_context import recording
 from lucid.compile._entry.function import compiled_step
 
@@ -489,13 +489,6 @@ def _assert_same(got: list[float], want: list[float], what: str) -> None:
     assert lucid.allclose(
         lucid.tensor(got), lucid.tensor(want), rtol=1e-3, atol=1e-5
     ), f"{what}: compiled {got} != eager {want}"
-
-
-@pytest.fixture(autouse=True)
-def _loud(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A fallback warns again, whatever an earlier test's did, and a warning fails the row."""
-    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
-    _NOTICED.clear()
 
 
 def _gradient_of(model: nn.Module, what: str) -> list[float]:

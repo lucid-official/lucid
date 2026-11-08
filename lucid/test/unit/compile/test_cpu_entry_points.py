@@ -14,7 +14,7 @@ that could not step on the CPU.  The table below classifies *every* name in
 """
 
 import warnings
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -43,14 +43,6 @@ NOT_AN_ENTRY = (
     "DiagnosisReport",
     "OpInfo",
 )
-
-
-@pytest.fixture(autouse=True)
-def _fresh_notices(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Each test starts as a process that has announced nothing yet."""
-    monkeypatch.setattr(fallback, "_NOTICED", set())
-    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
-    yield
 
 
 def _model() -> nn.Sequential:

@@ -10,7 +10,6 @@ so on every call.
 """
 
 import warnings
-from collections.abc import Iterator
 
 import pytest
 
@@ -29,14 +28,6 @@ def _metal_ok() -> bool:
     except Exception:  # noqa: BLE001 — any failure means no Metal here
         return False
     return True
-
-
-@pytest.fixture(autouse=True)
-def _fresh_notices(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Each test starts as a process that has announced nothing yet."""
-    monkeypatch.setattr(fallback, "_NOTICED", set())
-    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
-    yield
 
 
 def _fallback_warnings(caught: list[warnings.WarningMessage]) -> list[str]:

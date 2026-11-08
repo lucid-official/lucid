@@ -34,7 +34,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.compile._core import attention_probe
 from lucid.compile._core.custom_backward import CustomBackwardInTrace
-from lucid.compile._core.fallback import _NOTICED, CompileFallbackWarning
+from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.compile._core.trace_context import (
     compile_attempt,
     is_tensor_hook_error,
@@ -45,12 +45,6 @@ from lucid.compile._core.trace_context import (
 from lucid.compile._debug.diagnose import diagnose
 from lucid.compile._entry.function import compiled_step
 import lucid.nn as nn
-
-
-@pytest.fixture(autouse=True)
-def _clear_verbose(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensure ``LUCID_COMPILE_VERBOSE`` left by earlier matrix runs does not suppress warnings."""
-    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
 
 
 class _RoundSTE(Function):
@@ -149,7 +143,6 @@ def test_tensor_hook_error_helpers() -> None:
     err = exc_info.value
     assert is_tensor_hook_error(err)
     assert not is_tensor_hook_error(RuntimeError("unrelated failure"))
-    _NOTICED.discard("tensor-hook")
     with pytest.warns(CompileFallbackWarning, match="register_hook"):
         assert notice_if_tensor_hook_error(err)
     assert not notice_if_tensor_hook_error(RuntimeError("unrelated failure"))

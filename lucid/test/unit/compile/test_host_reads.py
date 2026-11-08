@@ -50,9 +50,7 @@ pytestmark = pytest.mark.skipif(not _metal_ok(), reason="Metal unavailable")
 
 
 @pytest.fixture(autouse=True)
-def _fresh_notices(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    monkeypatch.setattr(fallback, "_NOTICED", set())
-    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
+def _fresh_notices() -> Iterator[None]:
     _C_engine.compile.session_cache_clear()
     yield
 

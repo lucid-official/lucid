@@ -33,16 +33,10 @@ import lucid.nn as nn
 from lucid.autograd import Function
 from lucid.compile import make_step
 from lucid.compile._core import custom_backward
-from lucid.compile._core.fallback import _NOTICED, CompileFallbackWarning
+from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.compile._core.trace_context import recording
 
 _LA = lucid.linalg
-
-
-@pytest.fixture(autouse=True)
-def _clear_verbose(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensure ``LUCID_COMPILE_VERBOSE`` left by earlier matrix runs does not suppress warnings."""
-    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
 
 
 _OPS: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
@@ -512,7 +506,6 @@ def _assert_runs_eagerly_as_eager(fn: type[Function], why: str, device: str) -> 
     t = lucid.ones(1, device=device)
     model = _FirstOutputOnly(fn, device)
     step = make_step(model, _loss)
-    _NOTICED.discard("custom-backward")
     match = rf"{fn.__name__}'s backward could not be traced into the compiled step: .*{why}"
     with pytest.warns(CompileFallbackWarning, match=match):
         step(x, t).backward()
@@ -533,7 +526,6 @@ def test_a_demand_eager_refuses_is_not_compiled(device_gpu_only: str) -> None:
         _loss(eager(x), t).backward()
     model = _FirstOutputOnly(_EveryOutputOrRaise, device_gpu_only)
     step = make_step(model, _loss)
-    _NOTICED.discard("custom-backward")
     with pytest.warns(CompileFallbackWarning, match="_EveryOutputOrRaise's backward"):
         loss = step(x, t)
     with pytest.raises(TypeError):
@@ -631,7 +623,6 @@ def test_a_demand_no_region_was_traced_for_is_refused_loudly(
 
     model = build()
     step = make_step(model, _loss)
-    _NOTICED.discard("lowering")
     match = (
         r"no traced VJP variant of the custom Function at ops \[\d+, \d+\) for the outputs "
         r"that receive a gradient \{1\} \(traced: \{0\} \{2\} \{0, 1\} \{0, 2\} \{1, 2\} "

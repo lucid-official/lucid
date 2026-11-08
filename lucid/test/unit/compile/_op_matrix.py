@@ -35,7 +35,7 @@ import lucid
 import lucid.nn.functional as F
 
 from lucid._C import engine as _C_engine
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, verbose_compile_notices
 
 DEV = COMPILE_DEVICE
 DTYPES = {"f32": lucid.float32, "i64": lucid.int64, "i32": lucid.int32, "bool": lucid.bool_}
@@ -116,9 +116,11 @@ def _reached(fn: Callable[[lucid.Tensor], object], x: lucid.Tensor) -> set[str]:
 
 
 def run(case: Case, dtype: str) -> Outcome:
-    import os
+    with verbose_compile_notices():  # the fallback reason is printed only then
+        return _run(case, dtype)
 
-    os.environ["LUCID_COMPILE_VERBOSE"] = "1"  # the fallback reason is printed only then
+
+def _run(case: Case, dtype: str) -> Outcome:
     x1 = make_input(case.kind, dtype, case.shape, 1)
     x2 = make_input(case.kind, dtype, case.shape, 2)
     try:

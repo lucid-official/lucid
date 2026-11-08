@@ -29,7 +29,7 @@ import lucid.optim as optim
 from lucid.autograd import Function
 from lucid.autograd.checkpoint import checkpoint
 from lucid.compile import fused_step
-from lucid.compile._core.fallback import _NOTICED, CompileFallbackWarning
+from lucid.compile._core.fallback import CompileFallbackWarning
 
 
 class _PassThrough(Function):
@@ -82,7 +82,6 @@ _FUNCTIONS = {
 
 
 def _says_it_ran_eagerly(block: str):
-    _NOTICED.discard("custom-backward")
     return pytest.warns(CompileFallbackWarning, match=_FUNCTIONS[block])
 
 
@@ -134,7 +133,6 @@ def test_make_step_gradients_match_eager(block: str, device: str) -> None:
             step(x, t).backward()  # the first call traces
     else:
         step(x, t).backward()
-        _NOTICED.discard("lowering")
     for p in model.parameters():
         p.grad = None
     step(x, t).backward()

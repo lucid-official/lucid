@@ -31,18 +31,12 @@ import lucid.nn.functional as F
 import lucid.optim as optim
 from lucid.autograd import Function, FunctionCtx, checkpoint
 from lucid.compile import fused_step, make_step
-from lucid.compile._core.fallback import _NOTICED, CompileFallbackWarning
+from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.test._fixtures.devices import metal_available
 
 pytestmark = pytest.mark.skipif(not metal_available(), reason="Metal unavailable")
 
 _ENTRY_KINDS = ("make_step", "segments_2", "fused_step")
-
-
-@pytest.fixture(autouse=True)
-def _clear_verbose(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Ensure ``LUCID_COMPILE_VERBOSE`` left by earlier matrix runs does not suppress warnings."""
-    monkeypatch.delenv("LUCID_COMPILE_VERBOSE", raising=False)
 
 
 class _RoundSTE(Function):
@@ -183,7 +177,6 @@ def _run_entry(
 
     # Compiled step under the requested entry point
     model = model_factory()
-    _NOTICED.clear()
     if kind == "fused_step":
         opt = optim.SGD(model.parameters(), lr=0.25)
         step = fused_step(model, F.mse_loss, opt)
