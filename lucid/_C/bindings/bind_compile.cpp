@@ -33,6 +33,7 @@
 #include "../compile/ExecutableCache.h"
 #include "../compile/MpsBuilder.h"
 #include "../compile/OpEmitters/OpEmitter.h"
+#include "../compile/RankCanon.h"
 #include "../compile/RngFeeds.h"
 #include "../compile/Tracer.h"
 #include "../compile/VjpEmitters/VjpEmitter.h"
@@ -203,6 +204,32 @@ private:
     lucid::compile::SharedExecutable exe_;
 };
 
+// The rank-canonical form of a trace (RankCanon.h) as the emit path sees it: a
+// rank-5+ elementwise op wrapped in views that run it at rank <= 4.  Lets a test
+// read the rewritten IR without a GPU.
+void bind_rank_canon(py::module_& m) {
+    m.def(
+        "canonicalize_rank",
+        [](const lucid::compile::TraceGraph& graph, const py::dict& external_feeds_py,
+           bool dynamic_batch) {
+            std::unordered_map<lucid::compile::TensorId, lucid::TensorImplPtr> feeds;
+            feeds.reserve(external_feeds_py.size());
+            for (auto item : external_feeds_py) {
+                feeds.emplace(py::cast<lucid::compile::TensorId>(item.first),
+                              py::cast<lucid::TensorImplPtr>(item.second));
+            }
+            return lucid::compile::RankCanon(graph, feeds, dynamic_batch).graph();
+        },
+        py::arg("graph"), py::arg("external_feeds"), py::arg("dynamic_batch") = false,
+        "Return the TraceGraph the builder emits for ``graph``: rank-5+ elementwise ops "
+        "run behind reshape views at rank <= 4, above the lead threshold "
+        "(``LUCID_COMPILE_RANK_CANON_MIN_LEAD``, read on every call). The graph itself "
+        "when nothing qualifies.");
+    m.def("rank_canon_min_lead", &lucid::compile::rank_canon_min_lead,
+          "The lead threshold in force: 64 by default, 0 rewrites every rank-5+ op, a "
+          "negative value turns the pass off.");
+}
+
 void bind_trace_nodes(py::module_& m) {
     using lucid::compile::OpNode;
     using lucid::compile::TensorMeta;
@@ -246,6 +273,8 @@ void bind_trace_nodes(py::module_& m) {
         .def_readonly("unsupported", &TraceGraph::unsupported)
         .def_readonly("vjp_regions", &TraceGraph::vjp_regions)
         .def("__len__", [](const TraceGraph& g) { return g.ops.size(); });
+
+    bind_rank_canon(m);
 }
 
 void commit_tracer_vjp_region(lucid::compile::Tracer& t,

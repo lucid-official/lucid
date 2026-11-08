@@ -514,6 +514,7 @@ lucid_object_library(
     lucid_compile
     compile/Tracer.cpp
     compile/RngFeeds.cpp
+    compile/RankCanon.cpp
     compile/ExecutableCache.cpp
     compile/CompiledExecutable.mm
     compile/MpsBuilder.mm

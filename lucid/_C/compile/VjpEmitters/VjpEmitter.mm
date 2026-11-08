@@ -19,6 +19,7 @@
 
 #include "../../core/Dtype.h"
 #include "../OpEmitters/_SignedZero.h"
+#include "../RankCanon.h"
 #include "VjpEmitter.h"
 #include "_VjpHelpers.h"
 
@@ -411,6 +412,50 @@ ManualVjpStatus try_manual_vjp_grads(void* graph_void,
 // BackwardContext
 // ────────────────────────────────────────────────────────────────────
 
+namespace {
+
+// The rank-1 (or, under a symbolic batch, rank-2) shape holding the same
+// elements as ``shape``; empty when ``shape`` has a symbolic dim anywhere but
+// axis 0, which no single reshape can name.
+std::vector<std::int64_t> flat_shape_of(const std::vector<std::int64_t>& shape) {
+    std::int64_t trailing = 1;
+    for (std::size_t i = 1; i < shape.size(); ++i) {
+        if (shape[i] < 0)
+            return {};
+        trailing *= shape[i];
+    }
+    if (shape[0] < 0)
+        return {-1, trailing};
+    return {shape[0] * trailing};
+}
+
+// ``a + b`` for two gradients of one tensor.  MPSGraph adds a rank-5+ pair as a
+// loop over the dims above the last four, so the pair is added flat and
+// restored — the same elements, one dispatch (RankCanon.h).  Gradients that
+// differ in shape broadcast as before.
+MPSGraphTensor* add_grads(MPSGraph* g, MPSGraphTensor* a, MPSGraphTensor* b) {
+    if (a.shape != nil && b.shape != nil && [a.shape isEqualToArray:b.shape]) {
+        const std::vector<std::int64_t> shape = shape_of_mps(a);
+        if (rank_canon_wants(shape)) {
+            const std::vector<std::int64_t> flat = flat_shape_of(shape);
+            if (!flat.empty()) {
+                MPSGraphTensor* sum =
+                    [g additionWithPrimaryTensor:[g reshapeTensor:a
+                                                        withShape:shape_to_ns(flat)
+                                                             name:@"grad_accum_flat_a"]
+                                 secondaryTensor:[g reshapeTensor:b
+                                                        withShape:shape_to_ns(flat)
+                                                             name:@"grad_accum_flat_b"]
+                                            name:@"grad_accum"];
+                return [g reshapeTensor:sum withShape:shape_to_ns(shape) name:@"grad_accum_back"];
+            }
+        }
+    }
+    return [g additionWithPrimaryTensor:a secondaryTensor:b name:@"grad_accum"];
+}
+
+}  // namespace
+
 BackwardContext::BackwardContext(void* graph_void, BuilderContext& fwd)
     : graph_(graph_void), fwd_(fwd) {}
 
@@ -446,8 +491,7 @@ void BackwardContext::accumulate_grad(TensorId tid, void* grad) {
     if (a != nil && b != nil && a.dataType != b.dataType) {
         b = cast_mps_tensor(g, b, a.dataType, @"grad_accum_cast");
     }
-    MPSGraphTensor* s = [g additionWithPrimaryTensor:a secondaryTensor:b name:@"grad_accum"];
-    it->second = (__bridge void*)s;
+    it->second = (__bridge void*)add_grads(g, a, b);
 }
 
 void* BackwardContext::unreduce(void* grad,

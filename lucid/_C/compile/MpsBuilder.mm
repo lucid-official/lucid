@@ -28,6 +28,7 @@
 #include "MpsDtype.h"
 #include "OpEmitters/OpEmitter.h"
 #include "OpEmitters/_SignedZero.h"
+#include "RankCanon.h"
 #include "VjpEmitters/VjpEmitter.h"
 
 namespace lucid::compile {
@@ -2719,7 +2720,8 @@ CompiledExecutable* compile_trace(const TraceGraph& graph,
                                   bool dynamic_batch,
                                   const std::vector<TensorId>& param_ids,
                                   const std::vector<TensorId>& explicit_outputs) {
-    return MpsBuilder(graph, external_feeds, error_msg)
+    const RankCanon canon(graph, external_feeds, dynamic_batch);
+    return MpsBuilder(canon.graph(), external_feeds, error_msg)
         .compile_trace(dynamic_batch, param_ids, explicit_outputs);
 }
 
@@ -2731,7 +2733,8 @@ compile_trace_with_backward(const TraceGraph& graph,
                             std::string* error_msg,
                             bool dynamic_batch,
                             const std::vector<TensorId>& extra_output_ids) {
-    return MpsBuilder(graph, external_feeds, error_msg)
+    const RankCanon canon(graph, external_feeds, dynamic_batch);
+    return MpsBuilder(canon.graph(), external_feeds, error_msg)
         .compile_trace_with_backward(loss_id, param_ids, dynamic_batch, extra_output_ids);
 }
 
@@ -2744,7 +2747,8 @@ compile_fused_training_step(const TraceGraph& graph,
                             const std::vector<std::vector<TensorId>>& state_buf_ids_per_param,
                             const std::vector<TensorId>& scalar_input_ids,
                             std::string* error_msg) {
-    return MpsBuilder(graph, external_feeds, error_msg)
+    const RankCanon canon(graph, external_feeds, false);
+    return MpsBuilder(canon.graph(), external_feeds, error_msg)
         .compile_fused_training_step(loss_id, param_ids, opt_spec, state_buf_ids_per_param,
                                      scalar_input_ids);
 }
@@ -2757,7 +2761,8 @@ compile_generic_fused_step(const TraceGraph& graph,
                            const std::vector<TensorId>& ghost_grad_ids,
                            const std::vector<TensorId>& output_target_ids,
                            std::string* error_msg) {
-    return MpsBuilder(graph, external_feeds, error_msg)
+    const RankCanon canon(graph, external_feeds, false);
+    return MpsBuilder(canon.graph(), external_feeds, error_msg)
         .compile_generic_fused_step(loss_id, param_ids, ghost_grad_ids, output_target_ids);
 }
 
@@ -2770,7 +2775,8 @@ CompiledExecutable* compile_generic_fused_step_with_vars(
     const std::vector<TensorId>& output_target_ids,
     const std::vector<std::pair<TensorId, TensorId>>& variable_pairs,
     std::string* error_msg) {
-    return MpsBuilder(graph, external_feeds, error_msg)
+    const RankCanon canon(graph, external_feeds, false);
+    return MpsBuilder(canon.graph(), external_feeds, error_msg)
         .compile_generic_fused_step_with_vars(loss_id, param_ids, ghost_grad_ids, output_target_ids,
                                               variable_pairs);
 }
