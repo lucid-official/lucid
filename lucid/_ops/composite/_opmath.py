@@ -112,3 +112,25 @@ def _in_float32(fn: Callable[..., Tensor], *operands: Tensor) -> Tensor:
     if common not in (lucid.float16, lucid.bfloat16):
         return fn(*operands)
     return fn(*(t.to(lucid.float32) for t in operands)).to(common)
+
+
+def _nan_quiet_pick(input: Tensor, other: Tensor, take_first: Tensor, is_max: bool) -> Tensor:
+    """``where(take_first | isnan(other), input, other)`` with the signed-zero rule.
+
+    The reference ranks a zero tie: the max is ``+0`` unless both are ``-0``, the min is
+    ``-0`` unless both are ``+0``.  A plain ``where`` keeps the first operand's zero, so a
+    tie of zeros takes ``input + other`` (``-(-input + -other)`` for the min), the sum whose
+    sign is the ranked one.  ``other`` is detached there: a tie's gradient goes to the first
+    operand only, as ``take_first`` already decides everywhere else.  Integers have no signed
+    zero and skip the extra work.
+    """
+    picked = lucid.where(lucid.logical_or(take_first, lucid.isnan(other)), input, other)
+    if not input.is_floating_point():
+        return picked
+    other_value = other.detach()
+    if is_max:
+        ranked = input + other_value
+    else:
+        ranked = lucid.negative(lucid.negative(input) + lucid.negative(other_value))
+    zero_tie = lucid.logical_and(input == 0, other == 0)
+    return lucid.where(zero_tie, ranked, picked)

@@ -22,7 +22,7 @@ from lucid._dispatch import _float_input
 from lucid._ops.composite import _bessel
 from lucid._ops.composite._expm1 import _erfc_double, _erfc_single, _expm1, _logaddexp2, _sgn
 from lucid._ops.composite._gamma import _LogGamma, _polygamma
-from lucid._ops.composite._opmath import _promote_pair, _real
+from lucid._ops.composite._opmath import _nan_quiet_pick, _promote_pair, _real
 from lucid._ops.composite._pow2 import _copysign, _frexp, _ldexp_dtype, _ldexp_to, _signbit
 from lucid._ops.composite._shared import _is_tensor
 from lucid._types import Scalar, TensorOrScalar
@@ -1133,7 +1133,7 @@ def fmax(input: TensorOrScalar, other: TensorOrScalar) -> Tensor:
     tensor([2., 2., 3.])
     """
     input, other = _promote_pair(input, other)
-    return lucid.where(lucid.logical_or(input >= other, lucid.isnan(other)), input, other)
+    return _nan_quiet_pick(input, other, input >= other, True)
 
 
 def fmin(input: TensorOrScalar, other: TensorOrScalar) -> Tensor:
@@ -1180,7 +1180,7 @@ def fmin(input: TensorOrScalar, other: TensorOrScalar) -> Tensor:
     tensor([1., 2., 3.])
     """
     input, other = _promote_pair(input, other)
-    return lucid.where(lucid.logical_or(input <= other, lucid.isnan(other)), input, other)
+    return _nan_quiet_pick(input, other, input <= other, False)
 
 
 # ── Special math functions ─────────────────────────────────────────────────

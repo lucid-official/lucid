@@ -79,6 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - stop putting lucid/ on sys.path at import (LCD-931)
 
+- fmax/fmin rank a signed-zero tie (LCD-929)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
