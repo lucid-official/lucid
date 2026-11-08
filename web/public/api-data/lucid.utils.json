@@ -3,7 +3,7 @@
   "name": "utils",
   "path": "lucid.utils",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/3ea93a4/lucid/utils/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/b3a2e39/lucid/utils/__init__.py#L1",
   "members": [
     {
       "name": "checkpoint",
@@ -11,7 +11,7 @@
       "kind": "function",
       "labels": [],
       "signature": "checkpoint(function: Callable[..., Tensor | tuple[Tensor, ...]], args: Tensor = (), use_reentrant: bool = False, kwargs: object = {})",
-      "source": "https://github.com/lucid-official/lucid/blob/3ea93a4/lucid/utils/checkpoint.py#L9",
+      "source": "https://github.com/lucid-official/lucid/blob/b3a2e39/lucid/utils/checkpoint.py#L9",
       "subcategory": "checkpoint",
       "summary": "Run `function` without saving its intermediates; recompute them on backward.",
       "extended": "Memory-for-compute tradeoff used to fit larger models / longer\nsequences in fixed VRAM.  In a normal forward pass autograd stashes\nevery intermediate activation needed by the backward pass — for a\ndeep transformer block this is the dominant memory cost.  Wrapping\nthe block in `checkpoint` runs forward under `no_grad`,\nsaves *only the inputs*, and re-executes the block from scratch\nduring backward to recompute the intermediates on demand.\n\nNet effect: peak memory drops from \"all activations\" to \"inputs +\none block's intermediates at backward time\"; wall-clock grows by\nroughly the cost of one extra forward pass per checkpointed block.",
@@ -67,7 +67,7 @@
       "kind": "function",
       "labels": [],
       "signature": "rollout(env: Environment, policy: Policy, action_repeat: int = 1, max_steps: int | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/3ea93a4/lucid/utils/rollout/_driver.py#L268",
+      "source": "https://github.com/lucid-official/lucid/blob/b3a2e39/lucid/utils/rollout/_driver.py#L268",
       "subcategory": "rollout/driver",
       "summary": "Run one episode and return it, ready for the replay buffer.",
       "extended": null,
@@ -103,7 +103,7 @@
       },
       "raises": [],
       "examples": [
-        ">>> import lucid\n>>> from lucid.utils.rollout import RandomPolicy, StepResult, rollout\n>>> class Trivial:\n...     def reset(self):\n...         self.t = 0\n...         return lucid.zeros((3, 4, 4))\n...     def step(self, action):\n...         self.t += 1\n...         return StepResult(lucid.zeros((3, 4, 4)), 1.0, False, self.t >= 5)\n>>> episode, total = rollout(Trivial(), RandomPolicy(2))\n>>> len(episode), total\n(5, 5.0)"
+        ">>> import lucid\n>>> from lucid.utils.rollout import RandomPolicy, StepResult, rollout\n>>> class Trivial:\n...     def reset(self):\n...         self.t = 0\n...         return lucid.zeros((3, 4, 4))\n...     def step(self, action):\n...         self.t += 1\n...         return StepResult(lucid.zeros((3, 4, 4)), 1.0, False, self.t >= 5)\n>>> episode, total = rollout(Trivial(), RandomPolicy(2))\n>>> episode.num_steps, total\n(5, 5.0)"
       ],
       "notes": [
         "A repeated action is recorded once per environment step, not once per\ndecision, so the stored sequence is at the environment's own rate and\na model trained on it predicts single steps."
