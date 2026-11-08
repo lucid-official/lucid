@@ -71,6 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - get_default_device returns a device (LCD-857)
 
+- an empty Parameter or Buffer takes the default dtype (LCD-924)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

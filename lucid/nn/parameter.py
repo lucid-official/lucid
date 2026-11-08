@@ -6,7 +6,11 @@ from typing import ClassVar, override
 
 from lucid._tensor.tensor import Tensor
 from lucid._C import engine as _C_engine
-from lucid._dispatch import _default_device_enum_cached, _impl_with_grad
+from lucid._dispatch import (
+    _default_device_enum_cached,
+    _default_dtype_enum_cached,
+    _impl_with_grad,
+)
 from lucid._factories.converters import _to_impl
 
 
@@ -30,7 +34,7 @@ class Parameter(Tensor):
     ----------
     data : Tensor | list | None, optional
         Initial values.  ``None`` (default) yields a zero-sized
-        placeholder F32 parameter on the default device, useful when the
+        placeholder parameter in the default dtype on the default device, useful when the
         actual shape is deferred until first ``forward`` (lazy modules).  A ``Tensor``
         is wrapped without a copy: the parameter shares the tensor's
         storage, as in the reference, so an in-place write through one is
@@ -95,7 +99,7 @@ class Parameter(Tensor):
             Fresh instance ready to be bound as a Module attribute.
         """
         if data is None:
-            impl = _C_engine.zeros([0], _C_engine.F32, _default_device_enum_cached())
+            impl = _C_engine.zeros([0], _default_dtype_enum_cached(), _default_device_enum_cached())
             impl = _impl_with_grad(impl, requires_grad)
         elif isinstance(data, Tensor):
             impl = _impl_with_grad(data._impl, requires_grad)
@@ -169,7 +173,7 @@ class Buffer(Tensor):
     def __new__(cls, data: Tensor | None = None, *, persistent: bool = True) -> Buffer:
         """Allocate a new :class:`Buffer` aliasing ``data``'s storage."""
         if data is None:
-            impl = _C_engine.zeros([0], _C_engine.F32, _default_device_enum_cached())
+            impl = _C_engine.zeros([0], _default_dtype_enum_cached(), _default_device_enum_cached())
         else:
             impl = _impl_with_grad(data._impl, data.requires_grad)
         obj = object.__new__(cls)

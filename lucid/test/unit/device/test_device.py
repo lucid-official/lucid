@@ -144,6 +144,17 @@ class TestDefaultDevice:
         finally:
             lucid.set_default_device(prev)
 
+    @pytest.mark.parametrize("dtype", [lucid.float64, lucid.float16])
+    def test_empty_parameter_and_buffer_follow_the_default_dtype(self, dtype: lucid.dtype) -> None:
+        prev = lucid.get_default_dtype()
+        try:
+            lucid.set_default_dtype(dtype)
+            assert lucid.empty(0).dtype == dtype
+            assert lucid.nn.Parameter().dtype == dtype
+            assert lucid.nn.Buffer().dtype == dtype
+        finally:
+            lucid.set_default_dtype(prev)
+
 
 class TestCrossDevicePair:
     def test_cpu_gpu_value_match_zeros(self, cross_device_pair: tuple[str, str]) -> None:
