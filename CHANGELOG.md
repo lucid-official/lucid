@@ -89,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - coatnet base counts and coatnet_6 label (LCD-884)
 
+- efficientformer base declares headless counts (LCD-884)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

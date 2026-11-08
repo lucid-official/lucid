@@ -57,7 +57,9 @@ _CFG_L7 = EfficientFormerConfig(
     model_type="efficientformer",
     model_class=EfficientFormer,
     default_config=_CFG_L1,
-    params=12300000,
+    # Headless trunk, exact.  The paper's 12.3M / 31.3M / 82.1M count the
+    # classification heads too, which is what the ``_cls`` factories declare.
+    params=11391928,
     summary="auto",
 )
 def efficientformer_l1(pretrained: bool = False, **overrides: object) -> EfficientFormer:
@@ -113,7 +115,7 @@ def efficientformer_l1(pretrained: bool = False, **overrides: object) -> Efficie
     model_type="efficientformer",
     model_class=EfficientFormer,
     default_config=_CFG_L3,
-    params=31300000,
+    params=30380000,
     summary="auto",
 )
 def efficientformer_l3(pretrained: bool = False, **overrides: object) -> EfficientFormer:
@@ -164,7 +166,7 @@ def efficientformer_l3(pretrained: bool = False, **overrides: object) -> Efficie
     model_type="efficientformer",
     model_class=EfficientFormer,
     default_config=_CFG_L7,
-    params=82100000,
+    params=80691328,
     summary="auto",
 )
 def efficientformer_l7(pretrained: bool = False, **overrides: object) -> EfficientFormer:
