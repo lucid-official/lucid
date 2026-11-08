@@ -33,10 +33,72 @@
 #include "../VjpEmitter.h"
 #include "../_VjpHelpers.h"
 #include "../../OpEmitters/_GroupNormLayout.h"
+#include "../../OpEmitters/_NormLayout.h"
 
 namespace lucid::compile {
 
 namespace {
+
+// What layer_norm / rms_norm's backward works on.  ``x`` / ``grad`` / ``gamma`` are the
+// operands as given, or — for a concrete rank-5+ input — their rank-2 canonical view
+// (_NormLayout.h), as the forward runs.  ``norm_axes`` are the axes the statistics reduce,
+// ``lead_axes`` the ones dgamma / dbeta sum over, ``N`` the size of one normalised row.
+struct TrailingNormGrad {
+    MPSGraphTensor* x = nil;
+    MPSGraphTensor* grad = nil;
+    MPSGraphTensor* gamma = nil;
+    NSMutableArray<NSNumber*>* norm_axes = nil;
+    NSMutableArray<NSNumber*>* lead_axes = nil;
+    std::vector<std::int64_t> x_shape;
+    std::vector<std::int64_t> g_shape;
+    double N = 1.0;
+    bool canonical = false;
+};
+
+// ``false`` when the shapes do not describe a norm over the trailing axes ``gamma`` spans.
+bool trailing_norm_grad(MPSGraph* graph,
+                        MPSGraphTensor* x,
+                        MPSGraphTensor* grad,
+                        MPSGraphTensor* gamma,
+                        TrailingNormGrad& out) {
+    out.x_shape = shape_of_mps(x);
+    out.g_shape = shape_of_mps(gamma);
+    if (out.x_shape.empty() || out.g_shape.empty() || out.g_shape.size() > out.x_shape.size())
+        return false;
+    const std::size_t x_rank = out.x_shape.size();
+    const std::size_t lead = x_rank - out.g_shape.size();
+    out.norm_axes = [NSMutableArray arrayWithCapacity:out.g_shape.size()];
+    for (std::size_t i = lead; i < x_rank; ++i) {
+        [out.norm_axes addObject:[NSNumber numberWithLongLong:(long long)i]];
+        out.N *= (double)out.x_shape[i];
+    }
+    out.lead_axes = [NSMutableArray arrayWithCapacity:lead];
+    for (std::size_t i = 0; i < lead; ++i)
+        [out.lead_axes addObject:[NSNumber numberWithLongLong:(long long)i]];
+
+    out.x = x;
+    out.grad = grad;
+    out.gamma = gamma;
+    const auto layout = trailing_norm_layout(out.x_shape, out.g_shape.size());
+    if (layout) {
+        out.canonical = true;
+        NSArray<NSNumber*>* work = shape_to_ns(layout->work);
+        out.x = [graph reshapeTensor:x withShape:work name:nil];
+        out.grad = [graph reshapeTensor:grad withShape:work name:nil];
+        out.gamma = [graph reshapeTensor:gamma withShape:shape_to_ns(layout->affine) name:nil];
+        out.norm_axes = [NSMutableArray arrayWithObject:@1];
+        out.lead_axes = [NSMutableArray arrayWithObject:@0];
+    }
+    return true;
+}
+
+// ``dx`` back at the input's shape when the backward ran on the canonical view.
+MPSGraphTensor* trailing_norm_dx(MPSGraph* graph,
+                                 MPSGraphTensor* dx,
+                                 const TrailingNormGrad& t,
+                                 NSString* name) {
+    return t.canonical ? [graph reshapeTensor:dx withShape:shape_to_ns(t.x_shape) name:name] : dx;
+}
 
 class LayerNormVjp final : public VjpEmitter {
 public:
@@ -68,40 +130,22 @@ public:
         x = cast_if_needed(graph, x, chain_dt);
         gamma = cast_if_needed(graph, gamma, chain_dt);
 
-        std::vector<std::int64_t> x_shape = shape_of_mps(x);
-        std::vector<std::int64_t> g_shape = shape_of_mps(gamma);
-        if (x_shape.empty() || g_shape.empty() || g_shape.size() > x_shape.size())
+        TrailingNormGrad t;
+        if (!trailing_norm_grad(graph, x, grad, gamma, t))
             return false;
-
-        const std::size_t x_rank = x_shape.size();
-        const std::size_t g_rank = g_shape.size();
-        const std::size_t lead = x_rank - g_rank;  // # leading non-norm dims
-
-        // Normalization axes = trailing K dims of x.
-        NSMutableArray<NSNumber*>* norm_axes =
-            [NSMutableArray arrayWithCapacity:g_rank];
-        for (std::size_t i = lead; i < x_rank; ++i)
-            [norm_axes addObject:[NSNumber numberWithLongLong:(long long)i]];
-
-        // Leading axes (for reducing grad / grad*x_hat → gamma/beta shape).
-        NSMutableArray<NSNumber*>* lead_axes =
-            [NSMutableArray arrayWithCapacity:lead];
-        for (std::size_t i = 0; i < lead; ++i)
-            [lead_axes addObject:[NSNumber numberWithLongLong:(long long)i]];
-
-        // N = ∏ x.shape[norm_axes].
-        double N = 1.0;
-        for (std::size_t i = lead; i < x_rank; ++i)
-            N *= (double)x_shape[i];
+        x = t.x;
+        grad = t.grad;
+        gamma = t.gamma;
+        const double N = t.N;
 
         MPSDataType dt = chain_dt;
         MPSGraphTensor* eps_t = [graph constantWithScalar:eps dataType:dt];
 
         // mean, var, x_centered, rstd, x_hat.
-        MPSGraphTensor* mean = [graph meanOfTensor:x axes:norm_axes name:nil];
+        MPSGraphTensor* mean = [graph meanOfTensor:x axes:t.norm_axes name:nil];
         MPSGraphTensor* x_centered =
             [graph subtractionWithPrimaryTensor:x secondaryTensor:mean name:nil];
-        MPSGraphTensor* var = [graph varianceOfTensor:x axes:norm_axes name:nil];
+        MPSGraphTensor* var = [graph varianceOfTensor:x axes:t.norm_axes name:nil];
         MPSGraphTensor* var_eps =
             [graph additionWithPrimaryTensor:var secondaryTensor:eps_t name:nil];
         MPSGraphTensor* std_t = [graph squareRootWithTensor:var_eps name:nil];
@@ -122,13 +166,13 @@ public:
         // sum1 = sum_norm(g_hat, keepdim=true),
         // sum2 = sum_norm(g_hat * x_hat, keepdim=true).
         MPSGraphTensor* sum1 =
-            [graph reductionSumWithTensor:g_hat axes:norm_axes name:nil];
+            [graph reductionSumWithTensor:g_hat axes:t.norm_axes name:nil];
         MPSGraphTensor* gh_xh =
             [graph multiplicationWithPrimaryTensor:g_hat
                                     secondaryTensor:x_hat
                                                name:nil];
         MPSGraphTensor* sum2 =
-            [graph reductionSumWithTensor:gh_xh axes:norm_axes name:nil];
+            [graph reductionSumWithTensor:gh_xh axes:t.norm_axes name:nil];
 
         // dx = rstd * (g_hat - (sum1 + x_hat * sum2) / N).
         MPSGraphTensor* inv_N =
@@ -151,6 +195,7 @@ public:
             [graph multiplicationWithPrimaryTensor:rstd
                                     secondaryTensor:g_hat_minus_avg
                                                name:@"layer_norm_vjp_dx"];
+        dx = trailing_norm_dx(graph, dx, t, @"layer_norm_vjp_dx");
         bctx.accumulate_grad(x_id, from_tensor(dx));
 
         // dgamma = sum_leading(grad * x_hat), reshape to gamma_shape.
@@ -159,18 +204,18 @@ public:
                                     secondaryTensor:x_hat
                                                name:nil];
         MPSGraphTensor* dgamma_raw = g_xh;
-        if (lead_axes.count > 0)
-            dgamma_raw = [graph reductionSumWithTensor:dgamma_raw axes:lead_axes name:nil];
+        if (t.lead_axes.count > 0)
+            dgamma_raw = [graph reductionSumWithTensor:dgamma_raw axes:t.lead_axes name:nil];
         // dgamma_raw has shape (1,1,...,1, gamma_shape...).  Reshape to gamma_shape.
-        NSArray<NSNumber*>* g_shape_ns = shape_to_ns(g_shape);
+        NSArray<NSNumber*>* g_shape_ns = shape_to_ns(t.g_shape);
         MPSGraphTensor* dgamma =
             [graph reshapeTensor:dgamma_raw withShape:g_shape_ns name:@"layer_norm_vjp_dgamma"];
         bctx.accumulate_grad(g_id, from_tensor(dgamma));
 
         // dbeta = sum_leading(grad), reshape to gamma_shape.
         MPSGraphTensor* dbeta_raw = grad;
-        if (lead_axes.count > 0)
-            dbeta_raw = [graph reductionSumWithTensor:dbeta_raw axes:lead_axes name:nil];
+        if (t.lead_axes.count > 0)
+            dbeta_raw = [graph reductionSumWithTensor:dbeta_raw axes:t.lead_axes name:nil];
         MPSGraphTensor* dbeta =
             [graph reshapeTensor:dbeta_raw withShape:g_shape_ns name:@"layer_norm_vjp_dbeta"];
         bctx.accumulate_grad(b_id, from_tensor(dbeta));
@@ -502,27 +547,13 @@ public:
         x = cast_if_needed(graph, x, chain_dt);
         gamma = cast_if_needed(graph, gamma, chain_dt);
 
-        std::vector<std::int64_t> x_shape = shape_of_mps(x);
-        std::vector<std::int64_t> g_shape = shape_of_mps(gamma);
-        if (x_shape.empty() || g_shape.empty() || g_shape.size() > x_shape.size())
+        TrailingNormGrad t;
+        if (!trailing_norm_grad(graph, x, grad, gamma, t))
             return false;
-
-        const std::size_t x_rank = x_shape.size();
-        const std::size_t g_rank = g_shape.size();
-        const std::size_t lead = x_rank - g_rank;
-
-        NSMutableArray<NSNumber*>* norm_axes =
-            [NSMutableArray arrayWithCapacity:g_rank];
-        for (std::size_t i = lead; i < x_rank; ++i)
-            [norm_axes addObject:[NSNumber numberWithLongLong:(long long)i]];
-        NSMutableArray<NSNumber*>* lead_axes =
-            [NSMutableArray arrayWithCapacity:lead];
-        for (std::size_t i = 0; i < lead; ++i)
-            [lead_axes addObject:[NSNumber numberWithLongLong:(long long)i]];
-
-        double N = 1.0;
-        for (std::size_t i = lead; i < x_rank; ++i)
-            N *= (double)x_shape[i];
+        x = t.x;
+        grad = t.grad;
+        gamma = t.gamma;
+        const double N = t.N;
 
         MPSDataType dt = chain_dt;
         MPSGraphTensor* eps_t = [graph constantWithScalar:eps dataType:dt];
@@ -531,7 +562,7 @@ public:
         MPSGraphTensor* x_sq =
             [graph multiplicationWithPrimaryTensor:x secondaryTensor:x name:nil];
         MPSGraphTensor* mean_sq =
-            [graph meanOfTensor:x_sq axes:norm_axes name:nil];
+            [graph meanOfTensor:x_sq axes:t.norm_axes name:nil];
         MPSGraphTensor* var_eps =
             [graph additionWithPrimaryTensor:mean_sq secondaryTensor:eps_t name:nil];
         MPSGraphTensor* rstd =
@@ -548,7 +579,7 @@ public:
             [graph multiplicationWithPrimaryTensor:g_hat
                                     secondaryTensor:norm_x name:nil];
         MPSGraphTensor* s =
-            [graph reductionSumWithTensor:gh_nx axes:norm_axes name:nil];
+            [graph reductionSumWithTensor:gh_nx axes:t.norm_axes name:nil];
         // dx = rstd * (g_hat - norm_x * s / N)
         MPSGraphTensor* inv_N =
             [graph constantWithScalar:(1.0 / N) dataType:dt];
@@ -564,6 +595,7 @@ public:
             [graph multiplicationWithPrimaryTensor:rstd
                                     secondaryTensor:diff
                                                name:@"rms_norm_vjp_dx"];
+        dx = trailing_norm_dx(graph, dx, t, @"rms_norm_vjp_dx");
         bctx.accumulate_grad(x_id, from_tensor(dx));
 
         // dgamma = sum_leading(grad * norm_x) → gamma_shape.
@@ -571,11 +603,11 @@ public:
             [graph multiplicationWithPrimaryTensor:grad
                                     secondaryTensor:norm_x name:nil];
         MPSGraphTensor* dg_raw = g_nx;
-        if (lead_axes.count > 0)
-            dg_raw = [graph reductionSumWithTensor:dg_raw axes:lead_axes name:nil];
+        if (t.lead_axes.count > 0)
+            dg_raw = [graph reductionSumWithTensor:dg_raw axes:t.lead_axes name:nil];
         MPSGraphTensor* dgamma =
             [graph reshapeTensor:dg_raw
-                       withShape:shape_to_ns(g_shape)
+                       withShape:shape_to_ns(t.g_shape)
                             name:@"rms_norm_vjp_dgamma"];
         bctx.accumulate_grad(g_id, from_tensor(dgamma));
         return true;

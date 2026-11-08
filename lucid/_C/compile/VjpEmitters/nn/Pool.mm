@@ -15,7 +15,8 @@
 // ignore ceil mode, so once the forward honoured both, a compiled step
 // through ``count_include_pad=False`` took its gradient with the wrong
 // divisor.  1-D pools are 2-D pools of height 1 and 3-D pools 4-D pools of
-// a leading length-1 axis, exactly as the forward lifts them; neither had
+// the volume with N and C merged (or, for a small N*C, of a leading length-1
+// axis), exactly as the forward lifts them (_Pool3dLayout.h); neither had
 // a VJP, and a U-Net in 3-D or a 1-D audio net trained eager.
 //
 //   avg: MPSGraph's pooling-gradient kernel, same descriptor.
@@ -41,6 +42,7 @@
 #include "../_VjpHelpers.h"
 #include "../../OpEmitters/_AttrHelpers.h"
 #include "../../OpEmitters/_MaxPool.h"
+#include "../../OpEmitters/_Pool3dLayout.h"
 
 namespace lucid::compile {
 
@@ -302,6 +304,116 @@ MPSGraphTensor* max_pool_grad(MPSGraph* g,
     return scatter_to_argmax(g, grad, local, xs, gs, kernel, stride, pad);
 }
 
+// What a 3-D pool's gradient is built from.
+struct Pool3dGradArgs {
+    const BackwardContext& bctx;
+    const OpNode& node;
+    MPSGraphTensor* x;
+    MPSGraphTensor* grad;
+    const std::vector<std::int64_t>& K;
+    const std::vector<std::int64_t>& S;
+    const std::vector<std::int64_t>& P;
+    bool ceil;
+    bool include_pad;
+
+    MPSGraph* graph() const { return (__bridge MPSGraph*)bctx.graph(); }
+};
+
+// The 4-D pooling descriptor of a 3-D pool: a window of 1 on the leading axis of the 4-D
+// operation's source, then the three pooled axes.  ``nil`` if MPSGraph rejects it.
+MPSGraphPooling4DOpDescriptor* pool3d_descriptor(const Pool3dGradArgs& a) {
+    MPSGraphPooling4DOpDescriptor* d = [MPSGraphPooling4DOpDescriptor
+        descriptorWithKernelSizes:@[ @1, @(a.K[0]), @(a.K[1]), @(a.K[2]) ]
+                          strides:@[ @1, @(a.S[0]), @(a.S[1]), @(a.S[2]) ]
+                    dilationRates:@[ @1, @1, @1, @1 ]
+                    paddingValues:@[
+                        @0, @0, @(a.P[0]), @(a.P[0]), @(a.P[1]), @(a.P[1]), @(a.P[2]), @(a.P[2])
+                    ]
+                     paddingStyle:MPSGraphPaddingStyleExplicit];
+    d.ceilMode = a.ceil;
+    return d;
+}
+
+// ``t`` as the 4-D operation takes it, in the lift the forward chose (_Pool3dLayout.h).
+MPSGraphTensor* pool3d_lifted(MPSGraph* g, MPSGraphTensor* t, bool canonical) {
+    return [g reshapeTensor:t
+                  withShape:shape_to_ns(pool3d_lift(shape_of_mps(t), canonical))
+                       name:nil];
+}
+
+// An average pool's gradient: the gradient kernel reads the 4-D operation's source.
+MPSGraphTensor* pool3d_avg_grad(const Pool3dGradArgs& a, bool canonical) {
+    MPSGraph* g = a.graph();
+    MPSGraphPooling4DOpDescriptor* d = pool3d_descriptor(a);
+    if (d == nil)
+        return nil;
+    d.includeZeroPadToAverage = a.include_pad;
+    MPSGraphTensor* dx = [g avgPooling4DGradientWithGradientTensor:pool3d_lifted(g, a.grad, canonical)
+                                                      sourceTensor:pool3d_lifted(g, a.x, canonical)
+                                                        descriptor:d
+                                                              name:nil];
+    return dx == nil ? nil : [g reshapeTensor:dx withShape:a.x.shape name:nil];
+}
+
+// A max pool's gradient on ``(1, N*C, D, H, W)`` (the merged lift): the argmax and scatter
+// want a batch and a channel axis in front of the pooled ones, and a batch of 1 costs nothing.
+MPSGraphTensor* pool3d_max_grad_merged(const Pool3dGradArgs& a) {
+    MPSGraph* g = a.graph();
+    MPSGraphPooling4DOpDescriptor* d = pool3d_descriptor(a);
+    if (d == nil)
+        return nil;
+    NSArray<NSNumber*>* x5 = shape_to_ns(pool3d_fold_batch(shape_of_mps(a.x)));
+    NSArray<NSNumber*>* g5 = shape_to_ns(pool3d_fold_batch(shape_of_mps(a.grad)));
+    MPSGraphTensor* y5 = pooled_value(a.bctx, a.node, a.grad.dataType, g5, [&] {
+        // The exact pool reads ``x`` as the volume it is; only the plain 4-D pool wants the lift.
+        return recomputed_max_pool(g, a.x, a.K, a.S, a.P, a.grad.shape, g5, [&] {
+            MPSGraphTensor* plain =
+                [g maxPooling4DWithSourceTensor:pool3d_lifted(g, a.x, true) descriptor:d name:nil];
+            return [g reshapeTensor:plain withShape:g5 name:nil];
+        });
+    });
+    MPSGraphTensor* dx = max_pool_grad(g,
+                                       [g reshapeTensor:a.x withShape:x5 name:nil],
+                                       y5,
+                                       [g reshapeTensor:a.grad withShape:g5 name:nil],
+                                       x5,
+                                       g5,
+                                       a.K,
+                                       a.S,
+                                       a.P);
+    return dx == nil ? nil : [g reshapeTensor:dx withShape:a.x.shape name:nil];
+}
+
+// A max pool's gradient on the rank-6 lift ``(N, C, 1, D, H, W)``: the form of a pool whose
+// ``N * C`` is too small for the merged one to matter.
+MPSGraphTensor* pool3d_max_grad_lifted(const Pool3dGradArgs& a) {
+    MPSGraph* g = a.graph();
+    MPSGraphPooling4DOpDescriptor* d = pool3d_descriptor(a);
+    if (d == nil)
+        return nil;
+    MPSGraphTensor* xl = pool3d_lifted(g, a.x, false);
+    NSArray<NSNumber*>* x6 = xl.shape;
+    NSArray<NSNumber*>* g6 = shape_to_ns(pool3d_lift(shape_of_mps(a.grad), false));
+    const std::vector<std::int64_t> k4{1, a.K[0], a.K[1], a.K[2]};
+    const std::vector<std::int64_t> s4{1, a.S[0], a.S[1], a.S[2]};
+    const std::vector<std::int64_t> p4{0, a.P[0], a.P[1], a.P[2]};
+    MPSGraphTensor* y6 = pooled_value(a.bctx, a.node, a.grad.dataType, g6, [&] {
+        return recomputed_max_pool4d(g, a.x, xl, d, a.K, a.S, a.P, a.grad.shape, g6);
+    });
+    MPSGraphTensor* dx = max_pool_grad(
+        g, xl, y6, [g reshapeTensor:a.grad withShape:g6 name:nil], x6, g6, k4, s4, p4);
+    return dx == nil ? nil : [g reshapeTensor:dx withShape:a.x.shape name:nil];
+}
+
+// A 3-D pool's gradient in the form the forward emitter chose (_Pool3dLayout.h).
+template <bool IS_MAX>
+MPSGraphTensor* pool3d_grad(const Pool3dGradArgs& a) {
+    const bool canonical = pool3d_canonical(shape_of_mps(a.x));
+    if (!IS_MAX)
+        return pool3d_avg_grad(a, canonical);
+    return canonical ? pool3d_max_grad_merged(a) : pool3d_max_grad_lifted(a);
+}
+
 // One pool VJP for every rank: RANK is the number of pooled axes.
 template <int RANK, bool IS_MAX>
 class PoolVjp final : public VjpEmitter {
@@ -378,39 +490,7 @@ public:
             }
             dx = [g reshapeTensor:dx4 withShape:xs name:nil];
         } else {
-            // 3-D: (B, C, D, H, W) pooled as (B, C, 1, D, H, W) by the 4-D op.
-            NSArray<NSNumber*>* x6 = @[ xs[0], xs[1], @1, xs[2], xs[3], xs[4] ];
-            NSArray<NSNumber*>* g6 = @[ gs[0], gs[1], @1, gs[2], gs[3], gs[4] ];
-            MPSGraphTensor* xl = [g reshapeTensor:x withShape:x6 name:nil];
-            MPSGraphTensor* gl = [g reshapeTensor:grad withShape:g6 name:nil];
-            MPSGraphPooling4DOpDescriptor* d = [MPSGraphPooling4DOpDescriptor
-                descriptorWithKernelSizes:@[ @1, @((*K)[0]), @((*K)[1]), @((*K)[2]) ]
-                                  strides:@[ @1, @((*S)[0]), @((*S)[1]), @((*S)[2]) ]
-                            dilationRates:@[ @1, @1, @1, @1 ]
-                            paddingValues:@[
-                                @0, @0, @((*P)[0]), @((*P)[0]), @((*P)[1]), @((*P)[1]),
-                                @((*P)[2]), @((*P)[2])
-                            ]
-                             paddingStyle:MPSGraphPaddingStyleExplicit];
-            if (d == nil) return false;
-            d.ceilMode = ceil;
-            MPSGraphTensor* dx6 = nil;
-            if (IS_MAX) {
-                const std::vector<std::int64_t> k4{1, (*K)[0], (*K)[1], (*K)[2]};
-                const std::vector<std::int64_t> s4{1, (*S)[0], (*S)[1], (*S)[2]};
-                const std::vector<std::int64_t> p4{0, (*P)[0], (*P)[1], (*P)[2]};
-                MPSGraphTensor* y6 = pooled_value(bctx, node, grad.dataType, g6, [&] {
-                    return recomputed_max_pool4d(g, x, xl, d, *K, *S, *P, gs, g6);
-                });
-                dx6 = max_pool_grad(g, xl, y6, gl, x6, g6, k4, s4, p4);
-            } else {
-                d.includeZeroPadToAverage = include_pad;
-                dx6 = [g avgPooling4DGradientWithGradientTensor:gl
-                                                   sourceTensor:xl
-                                                     descriptor:d
-                                                           name:nil];
-            }
-            dx = [g reshapeTensor:dx6 withShape:xs name:nil];
+            dx = pool3d_grad<IS_MAX>({bctx, node, x, grad, *K, *S, *P, ceil, include_pad});
         }
         if (dx == nil) return false;
         bctx.accumulate_grad(x_id, from_tensor(dx));

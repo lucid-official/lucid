@@ -26,6 +26,7 @@
 #include "../_AttrHelpers.h"
 #include "../_GroupNormLayout.h"
 #include "../_NanPropagation.h"
+#include "../_NormLayout.h"
 
 namespace lucid::compile {
 
@@ -58,6 +59,40 @@ inline NSArray<NSNumber*>* trailing_axes(NSUInteger rank, NSUInteger K) {
     return axes;
 }
 
+// The input of a layer_norm / rms_norm over the trailing axes ``gamma`` spans: ``x`` as it
+// is, or its rank-2 canonical view (_NormLayout.h) with gamma / beta reshaped to broadcast on
+// it.  ``beta`` is nil for an op without one.
+struct TrailingNormInput {
+    MPSGraphTensor* src;
+    MPSGraphTensor* gamma;
+    MPSGraphTensor* beta;
+    NSArray<NSNumber*>* axes;
+    bool canonical;
+};
+
+inline TrailingNormInput trailing_norm_input(MPSGraph* graph,
+                                             MPSGraphTensor* x_t,
+                                             MPSGraphTensor* g_t,
+                                             MPSGraphTensor* b_t) {
+    const NSUInteger x_rank = x_t.shape.count;
+    const NSUInteger g_rank = g_t.shape.count;
+    const auto layout = trailing_norm_layout(shape_of_mps(x_t), g_rank);
+    if (!layout)
+        return {x_t, g_t, b_t, trailing_axes(x_rank, g_rank), false};
+    NSArray<NSNumber*>* affine = shape_to_ns(layout->affine);
+    return {[graph reshapeTensor:x_t withShape:shape_to_ns(layout->work) name:nil],
+            [graph reshapeTensor:g_t withShape:affine name:nil],
+            b_t == nil ? nil : [graph reshapeTensor:b_t withShape:affine name:nil],
+            @[ @1 ],
+            true};
+}
+
+// ``y`` back at ``x_t``'s shape when the norm ran on the canonical view.
+inline MPSGraphTensor*
+trailing_norm_output(MPSGraph* graph, MPSGraphTensor* y, MPSGraphTensor* x_t, bool canonical) {
+    return canonical ? [graph reshapeTensor:y withShape:x_t.shape name:nil] : y;
+}
+
 class LayerNormEmitter final : public OpEmitter {
 public:
     std::string_view op_name() const override { return "layer_norm"; }
@@ -84,18 +119,19 @@ public:
         NSUInteger g_rank = g_t.shape.count;
         if (g_rank == 0 || g_rank > x_rank)
             return false;
-        NSArray<NSNumber*>* axes = trailing_axes(x_rank, g_rank);
+        const TrailingNormInput in = trailing_norm_input(graph, x_t, g_t, b_t);
 
-        MPSGraphTensor* mean = [graph meanOfTensor:x_t axes:axes name:nil];
-        MPSGraphTensor* var = [graph varianceOfTensor:x_t axes:axes name:nil];
+        MPSGraphTensor* mean = [graph meanOfTensor:in.src axes:in.axes name:nil];
+        MPSGraphTensor* var = [graph varianceOfTensor:in.src axes:in.axes name:nil];
         MPSGraphTensor* y =
-            [graph normalizationWithTensor:x_t
+            [graph normalizationWithTensor:in.src
                                 meanTensor:mean
                             varianceTensor:var
-                               gammaTensor:g_t
-                                betaTensor:b_t
+                               gammaTensor:in.gamma
+                                betaTensor:in.beta
                                    epsilon:static_cast<float>(eps)
                                       name:@"layer_norm"];
+        y = trailing_norm_output(graph, y, x_t, in.canonical);
         ctx.bind(node.outputs[0].id, (__bridge void*)(y));
         return true;
     }
@@ -125,7 +161,9 @@ public:
         NSUInteger g_rank = g_t.shape.count;
         if (g_rank == 0 || g_rank > x_rank)
             return false;
-        NSArray<NSNumber*>* axes = trailing_axes(x_rank, g_rank);
+        const TrailingNormInput in = trailing_norm_input(graph, x_t, g_t, nil);
+        NSArray<NSNumber*>* axes = in.axes;
+        MPSGraphTensor* src = in.src;
 
         MPSDataType dt = x_t.dataType;
         MPSGraphTensor* eps_t =
@@ -133,18 +171,19 @@ public:
 
         // RMS: rstd = 1 / sqrt(mean(x²) + eps)
         MPSGraphTensor* x_sq =
-            [graph multiplicationWithPrimaryTensor:x_t secondaryTensor:x_t name:nil];
+            [graph multiplicationWithPrimaryTensor:src secondaryTensor:src name:nil];
         MPSGraphTensor* mean_sq = [graph meanOfTensor:x_sq axes:axes name:nil];
         MPSGraphTensor* var_plus_eps =
             [graph additionWithPrimaryTensor:mean_sq secondaryTensor:eps_t name:nil];
         MPSGraphTensor* rstd =
             [graph reciprocalSquareRootWithTensor:var_plus_eps name:nil];
         MPSGraphTensor* x_scaled =
-            [graph multiplicationWithPrimaryTensor:x_t secondaryTensor:rstd name:nil];
+            [graph multiplicationWithPrimaryTensor:src secondaryTensor:rstd name:nil];
         MPSGraphTensor* y =
             [graph multiplicationWithPrimaryTensor:x_scaled
-                                   secondaryTensor:g_t
+                                   secondaryTensor:in.gamma
                                               name:@"rms_norm"];
+        y = trailing_norm_output(graph, y, x_t, in.canonical);
         ctx.bind(node.outputs[0].id, (__bridge void*)(y));
         return true;
     }

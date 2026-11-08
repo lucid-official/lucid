@@ -22,6 +22,7 @@
 #include "../OpEmitter.h"
 #include "../_AttrHelpers.h"
 #include "../_MaxPool.h"
+#include "../_Pool3dLayout.h"
 
 namespace lucid::compile {
 
@@ -180,14 +181,37 @@ private:
     std::string name_;
 };
 
+// The volume ``x`` as the 4-D pooling operation takes it, and the pooled result back as
+// ``(N, C, *pooled)`` (nil when the operation did not answer at the rank its source had).
+MPSGraphTensor* pool3d_lift_input(MPSGraph* g, MPSGraphTensor* x, bool canonical) {
+    return [g reshapeTensor:x
+                  withShape:shape_to_ns(pool3d_lift(shape_of_mps(x), canonical))
+                       name:nil];
+}
+
+MPSGraphTensor* pool3d_restore(MPSGraph* g,
+                               MPSGraphTensor* pooled,
+                               NSArray<NSNumber*>* x_shape,
+                               bool canonical) {
+    NSArray<NSNumber*>* out = pooled.shape;
+    if (out.count != (canonical ? 4u : 6u))
+        return nil;
+    NSArray<NSNumber*>* back = canonical
+                                   ? @[ x_shape[0], x_shape[1], out[1], out[2], out[3] ]
+                                   : @[ out[0], out[1], out[3], out[4], out[5] ];
+    return [g reshapeTensor:pooled withShape:back name:@"pool3d"];
+}
+
 // ── 3-D pooling, through the SDK's 4-D operation.
 //
 // MPSGraph ships 2-D and 4-D pooling and nothing between, and Lucid's
-// 3-D pool is a rank-5 tensor — which is why this was a stub. The gap is
-// a reshape: a length-1 spatial axis in front makes the volume rank 6,
-// the 4-D operation pools it with a kernel of 1 on that axis, and the
-// axis comes back out. The descriptor takes four of everything, so every
-// list is the 3-D one with a leading identity entry.
+// 3-D pool is a rank-5 tensor — which is why this was a stub. The 4-D
+// operation pools the last four axes of its source with a window each, so
+// the volume is merged to ``(N*C, D, H, W)`` and pooled with a window of 1
+// on the first axis, or — when ``N*C`` is too small for the rank-4 form to
+// matter (_Pool3dLayout.h) — lifted to ``(N, C, 1, D, H, W)``. The
+// descriptor takes four of everything, so every list is the 3-D one with a
+// leading identity entry.
 template <bool IsMax>
 class Pool3dEmitterT final : public OpEmitter {
 public:
@@ -215,10 +239,8 @@ public:
         if (sh.count != 5)
             return false;
 
-        MPSGraphTensor* lifted =
-            [g reshapeTensor:x
-                   withShape:@[ sh[0], sh[1], @1, sh[2], sh[3], sh[4] ]
-                        name:nil];
+        const bool canonical = pool3d_canonical(shape_of_mps(x));
+        MPSGraphTensor* lifted = pool3d_lift_input(g, x, canonical);
 
         MPSGraphPooling4DOpDescriptor* d = [MPSGraphPooling4DOpDescriptor
             descriptorWithKernelSizes:@[ @1, @((*K)[0]), @((*K)[1]), @((*K)[2]) ]
@@ -248,14 +270,9 @@ public:
         if (pooled == nil)
             return false;
 
-        // Drop the axis that was only there to reach the 4-D operation.
-        NSArray<NSNumber*>* out = pooled.shape;
-        if (out.count != 6)
-            return false;
-        MPSGraphTensor* y = [g reshapeTensor:pooled
-                                   withShape:@[ out[0], out[1], out[3], out[4], out[5] ]
-                                        name:@"pool3d"];
-        if (!matches_recorded_shape(y, node))
+        // Back to (N, C, *pooled): split the merged axis, or drop the unit one.
+        MPSGraphTensor* y = pool3d_restore(g, pooled, sh, canonical);
+        if (y == nil || !matches_recorded_shape(y, node))
             return false;
         ctx.bind(node.outputs[0].id, (__bridge void*)y);
         return true;

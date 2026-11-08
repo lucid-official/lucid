@@ -11,7 +11,8 @@
 // axis 1, and the per-channel affine runs on ``(N, C, prod(spatial))`` (rank 3
 // whatever the input rank).  A symbolic dim keeps the legacy grouped form: its
 // batch survives the reshape only as a ``-1``, and a product with it is
-// unknowable here.
+// unknowable here.  So does a grouped form the RankCanon policy leaves alone
+// (``rank_canon_wants``: a small lead, or ``LUCID_COMPILE_RANK_CANON_MIN_LEAD=-1``).
 //
 // Pure C++ — include from ``.mm`` files only.
 
@@ -20,9 +21,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <utility>
 #include <vector>
 
-#include "_ReduceCanon.h"
+#include "../RankCanon.h"
 
 namespace lucid::compile {
 
@@ -60,8 +62,11 @@ group_norm_layout(const std::vector<std::int64_t>& x_shape, std::int64_t num_gro
         if (i >= 2 && x_shape[i] > 0)
             spatial *= x_shape[i];
     }
-    // The grouped form has rank + 1 axes; the same threshold as the reductions.
-    if (concrete && rank + 1 >= kReduceCanonMinRank) {
+    // The legacy grouped form, which the canonical one replaces when it would run at rank 5+
+    // with a lead worth a reshape.
+    std::vector<std::int64_t> grouped = {x_shape[0], num_groups, per_group};
+    grouped.insert(grouped.end(), x_shape.begin() + 2, x_shape.end());
+    if (concrete && rank_canon_wants(grouped)) {
         out.canonical = true;
         out.work = {x_shape[0] * num_groups, per_group * spatial};
         out.work_axes = {1};
@@ -71,8 +76,7 @@ group_norm_layout(const std::vector<std::int64_t>& x_shape, std::int64_t num_gro
         return out;
     }
 
-    out.work = {x_shape[0], num_groups, per_group};
-    out.work.insert(out.work.end(), x_shape.begin() + 2, x_shape.end());
+    out.work = std::move(grouped);
     for (std::size_t i = 2; i < out.work.size(); ++i)
         out.work_axes.push_back(static_cast<std::int64_t>(i));
     out.chan = x_shape;

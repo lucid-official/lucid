@@ -85,6 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - run rank-5+ permute, softmax and matmul at rank<=4
 - materialise rank-5+ graph outputs at rank 4
 - rank-5+ attention, wide-consumer guard (LCD-923, 925)
+- norm and pool3d emitters follow rank-canon (LCD-927)
 
 ---
 
