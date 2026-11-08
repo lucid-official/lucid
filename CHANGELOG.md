@@ -59,6 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a max pool keeps an all -inf window at -inf
 
+- a compiled max pool carries a NaN to its output
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

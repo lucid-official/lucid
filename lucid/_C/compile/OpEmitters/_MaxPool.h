@@ -1,36 +1,45 @@
 // lucid/_C/compile/OpEmitters/_MaxPool.h
 //
-// A max pool that keeps a window of nothing but ``-inf`` at ``-inf`` (LCD-916).
+// A max pool that keeps a window of nothing but ``-inf`` at ``-inf`` (LCD-916) and carries a
+// NaN to the output as eager does (LCD-913).
 //
 // MPSGraph's pooling kernel starts its running maximum at the dtype's lowest
 // finite value and only takes an element that is *greater*, so a window whose
 // every element is ``-inf`` (or exactly the lowest finite value) is an empty
 // window to it and comes back ``0`` — eager, and the reference, say ``-inf``.
 // A masked attention score or a log-probability pooled over a masked span is
-// exactly such a window.
+// exactly such a window.  It also skips a NaN (every comparison with it is false),
+// where eager makes any window holding one NaN.
 //
 // ``stencil`` with a Max reduction is the same pool but its empty window comes
 // back as that start value, ``lowest``, which no real window answers (see the
-// one exception below).  That is what makes it usable: the empty window is
-// recognisable at the *output*, where one ``select`` per output element (fused
+// first exception below).  That is what makes it usable: the empty window is
+// recognisable at the *output*, where a ``select`` per output element (fused
 // into the stencil, measured free) turns it into ``-inf``.  The stencil also
-// fuses a producer into itself, which the pooling kernel does not.
+// fuses a producer (a relu, a bias add) into itself, which the pooling kernel does not.
 //
-// The one value the kernel cannot tell from an empty window is an element equal
-// to ``lowest`` itself.  A prologue moves it one step toward zero (``next``) and
-// the epilogue moves a result of ``next`` back, so genuine ``lowest`` windows
-// stay exact; the cost is that a window whose true maximum is exactly ``next``
-// (the second-lowest finite value, ``-3.4028233e38`` in float32) answers
-// ``lowest``, one step off.  Pigeonhole: nothing in one dtype can keep every
-// value and add an "empty" code, so the unavoidable collision sits where no
-// data lives.
+// Encoding, all inside the stencil's fused prologue / epilogue, so no pass over the data:
 //
-// Padding is ``-inf`` and never contributes.  A NaN is still skipped, as it is
-// by every MPSGraph extremum (LCD-913); a window of nothing but NaN reads as
-// ``-inf`` here.
+//   bottom  ``lowest`` -> ``next`` (one step toward zero) before the pool, ``next`` -> ``lowest``
+//           and ``<= lowest`` -> ``-inf`` after it.  Genuine ``lowest`` windows stay exact.
+//   top     ``+inf`` -> ``top`` (the largest finite value), then ``minimum(., +inf)`` — which
+//           skips a NaN, so a NaN becomes ``+inf`` — before the pool; ``+inf`` -> NaN and
+//           ``top`` -> ``+inf`` after it.  A NaN is then the largest value in its window and
+//           the stencil's Max carries it out.
+//
+// A dtype has no spare code for "empty" or "NaN", so by pigeonhole two windows answer one step
+// off, both documented: a window whose true maximum is exactly ``next`` (the second-lowest
+// finite value, ``-3.4028233e38`` in float32) reads ``lowest``; and one whose true maximum is
+// exactly ``top`` (``3.4028235e38`` / ``65504`` / bfloat16's maximum) reads ``+inf`` — ``top``
+// and a real ``+inf`` share a code.  Giving ``top`` its own code costs two more fused
+// elementwise ops, which pushes the stencil past MPSGraph's fusion budget as soon as any producer
+// is fused into it (relu -> max_pool2d 1.9 -> 6.7 ms, measured), so the second collision was
+// taken instead.
+//
+// Padding is ``-inf`` and never contributes.
 //
 // Measured (MacBook M1 Pro, Metal, GPU-serial, 32x64x112x112 float32, standalone
-// MPSGraph): plain pool 0.705 / 0.879 ms (k2 s2 / k3 s2 p1), this form 0.736 /
+// MPSGraph): plain pool 0.705 / 0.879 ms (k2 s2 / k3 s2 p1), the LCD-916 form 0.736 /
 // 0.861 ms.  A separate ``select`` after the plain pool is +60% instead: only the
 // stencil fuses it.
 //
@@ -122,6 +131,30 @@ inline MPSGraphStencilOpDescriptor* descriptor(NSArray<NSNumber*>* xs,
                                                     paddingConstant:-INFINITY];
 }
 
+// ``select(t == key, then, otherwise)``.
+inline MPSGraphTensor* select_eq(MPSGraph* g,
+                                 MPSGraphTensor* t,
+                                 MPSGraphTensor* key,
+                                 MPSGraphTensor* then,
+                                 MPSGraphTensor* otherwise) {
+    return [g selectWithPredicateTensor:[g equalWithPrimaryTensor:t secondaryTensor:key name:nil]
+                    truePredicateTensor:then
+                   falsePredicateTensor:otherwise
+                                   name:nil];
+}
+
+// The top of the encoding on ``held`` (``t`` with the bottom already encoded): ``+inf`` of ``t``
+// becomes ``top`` and a NaN of ``t`` becomes ``+inf`` (``minimum`` skips a NaN).
+inline MPSGraphTensor*
+encode_top(MPSGraph* g, MPSGraphTensor* t, MPSGraphTensor* held, const Range& r) {
+    const MPSDataType dt = t.dataType;
+    MPSGraphTensor* pinf = [g constantWithScalar:INFINITY dataType:dt];
+    MPSGraphTensor* top = [g constantWithScalar:-r.lowest dataType:dt];
+    return [g minimumWithPrimaryTensor:select_eq(g, t, pinf, top, held)
+                       secondaryTensor:pinf
+                                  name:nil];
+}
+
 }  // namespace max_pool_detail
 
 // ``x`` max-pooled over its trailing ``kernel.size()`` axes, an all-``-inf`` window
@@ -151,31 +184,42 @@ exact_max_pool(MPSGraph* g,
     const MPSDataType dt = x.dataType;
     MPSGraphTensor* lo = [g constantWithScalar:range.lowest dataType:dt];
     MPSGraphTensor* next = [g constantWithScalar:range.lowest + range.ulp dataType:dt];
-    MPSGraphTensor* ninf = [g constantWithScalar:-INFINITY dataType:dt];
+    MPSGraphTensor* ulp = [g constantWithScalar:range.ulp dataType:dt];
+    MPSGraphTensor* top = [g constantWithScalar:-range.lowest dataType:dt];
     MPSGraphTensor* ones = [g constantWithScalar:1.0 shape:window dataType:dt];
 
     NSArray<NSNumber*>* lifted = max_pool_detail::lifted_shape(xs, nd);
     MPSGraphTensor* src = lifted != nil ? [g reshapeTensor:x withShape:lifted name:nil] : x;
-    MPSGraphTensor* is_lowest = [g equalWithPrimaryTensor:src secondaryTensor:lo name:nil];
-    MPSGraphTensor* held = [g selectWithPredicateTensor:is_lowest
-                                    truePredicateTensor:next
-                                   falsePredicateTensor:src
-                                                   name:nil];
+
+    // 5 elementwise ops before the stencil, 8 after it: 13 in all, the most that still fuses
+    // with a producer (see the header).
+    MPSGraphTensor* held = max_pool_detail::select_eq(g, src, lo, next, src);
+    held = max_pool_detail::encode_top(g, src, held, range);
     MPSGraphTensor* y = [g stencilWithSourceTensor:held weightsTensor:ones descriptor:d name:nil];
     if (y == nil)
         return nil;
 
-    // ``<= lowest`` is an empty window (an fp16 / bf16 stencil may round its start value to
-    // ``-inf`` or keep it as a float); ``next`` is a held ``lowest``.
-    MPSGraphTensor* empty = [g lessThanOrEqualToWithPrimaryTensor:y secondaryTensor:lo name:nil];
-    MPSGraphTensor* was_lowest = [g equalWithPrimaryTensor:y secondaryTensor:next name:nil];
-    MPSGraphTensor* restored = [g selectWithPredicateTensor:was_lowest
-                                        truePredicateTensor:lo
-                                       falsePredicateTensor:y
-                                                       name:nil];
-    MPSGraphTensor* out = [g selectWithPredicateTensor:empty
-                                   truePredicateTensor:ninf
-                                  falsePredicateTensor:restored
+    // One ``ulp`` step each way.  ``y <= next`` moves down: ``next`` (a held ``lowest``) becomes
+    // ``lowest``, and ``lowest`` (an empty window) overflows to ``-inf``.  ``y >= top`` moves
+    // up: ``top`` overflows to ``+inf`` and ``+inf`` — a NaN in the window — meets
+    // ``y - y = NaN``.
+    MPSGraphTensor* down = [g selectWithPredicateTensor:[g lessThanOrEqualToWithPrimaryTensor:y
+                                                                              secondaryTensor:next
+                                                                                         name:nil]
+                                    truePredicateTensor:[g subtractionWithPrimaryTensor:y
+                                                                        secondaryTensor:ulp
+                                                                                   name:nil]
+                                   falsePredicateTensor:y
+                                                   name:nil];
+    MPSGraphTensor* up =
+        [g additionWithPrimaryTensor:[g additionWithPrimaryTensor:y secondaryTensor:ulp name:nil]
+                     secondaryTensor:[g subtractionWithPrimaryTensor:y secondaryTensor:y name:nil]
+                                name:nil];
+    MPSGraphTensor* out = [g selectWithPredicateTensor:[g greaterThanOrEqualToWithPrimaryTensor:y
+                                                                                secondaryTensor:top
+                                                                                           name:nil]
+                                   truePredicateTensor:up
+                                  falsePredicateTensor:down
                                                   name:nil];
     if (lifted == nil)
         return out;

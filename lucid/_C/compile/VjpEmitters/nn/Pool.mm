@@ -142,10 +142,12 @@ MPSGraphTensor* scatter_to_argmax(MPSGraph* g, MPSGraphTensor* grad, MPSGraphTen
 // fastest), found without MPSGraph's pooling-with-indices kernel: the
 // source is padded with NaN, and for every kernel offset the strided slice
 // it picks out is compared with the pooled value ``y``; the first offset
-// that matches wins, as eager's first-maximum rule has it.  The kernel is
-// avoided because it aborted on macOS 15 ("Multi destination pooling
-// encode has no non-nil destinations") under a fused, float16 training
-// step — and it had already miscounted once MPSGraph folded a pad into it.
+// that matches wins, as eager's first-maximum rule has it (the offsets are walked last to
+// first, each match overwriting the index, so one ``select`` per offset does it).  A window
+// holding a NaN pools to NaN (LCD-913), which equals nothing, so there the match is the first
+// NaN element, as in eager.  The kernel is avoided because it aborted on macOS 15
+// ("Multi destination pooling encode has no non-nil destinations") under a fused, float16
+// training step — and it had already miscounted once MPSGraph folded a pad into it.
 MPSGraphTensor* local_argmax(MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* y,
                              const std::vector<std::int64_t>& kernel,
                              const std::vector<std::int64_t>& stride,
@@ -162,15 +164,23 @@ MPSGraphTensor* local_argmax(MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* y,
         [right addObject:@(need > 0 ? need : 0)];
     }
     // Padding is NaN, which equals nothing: with ``-inf`` it would match a window of ``-inf``
-    // (``y == -inf``) and the gradient would land on a padded position (LCD-916).
+    // (``y == -inf``) and the gradient would land on a padded position (LCD-916).  A NaN
+    // element is itself a match (of a NaN window), so a padded position is told apart by
+    // ``in_bounds``, a (1, 1, spatial...) mask padded with 0 — a few elements, not the batch.
     MPSGraphTensor* xp = pad_or_identity(g, x, left, right, MPSGraphPaddingModeConstant, NAN);
+    NSMutableArray<NSNumber*>* mask_shape = [NSMutableArray arrayWithArray:@[ @1, @1 ]];
+    for (std::size_t a = 0; a < nd; ++a)
+        [mask_shape addObject:xs[a + 2]];
+    MPSGraphTensor* ones = [g constantWithScalar:1.0 shape:mask_shape dataType:MPSDataTypeFloat32];
+    MPSGraphTensor* padded_mask =
+        pad_or_identity(g, ones, left, right, MPSGraphPaddingModeConstant, 0.0);
+    MPSGraphTensor* in_bounds =
+        padded_mask == ones ? nil : [g castTensor:padded_mask toType:MPSDataTypeBool name:nil];
     long long offsets = 1;
     for (std::size_t a = 0; a < nd; ++a)
         offsets *= kernel[a];
-    MPSGraphTensor* found = [g constantWithScalar:0.0 shape:ys dataType:MPSDataTypeFloat32];
-    MPSGraphTensor* local = [g constantWithScalar:0.0 shape:ys dataType:MPSDataTypeFloat32];
-    MPSGraphTensor* one = [g constantWithScalar:1.0 dataType:MPSDataTypeFloat32];
-    for (long long t = 0; t < offsets; ++t) {
+    MPSGraphTensor* local = [g constantWithScalar:0.0 shape:ys dataType:MPSDataTypeInt32];
+    for (long long t = offsets; t-- > 0;) {
         std::vector<long long> off(nd, 0);
         long long rem = t;
         for (std::size_t a = nd; a-- > 0;) {
@@ -187,23 +197,32 @@ MPSGraphTensor* local_argmax(MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* y,
             [steps addObject:@(stride[a])];
         }
         MPSGraphTensor* xt = [g sliceTensor:xp starts:starts ends:ends strides:steps name:nil];
-        MPSGraphTensor* eq = [g castTensor:[g equalWithPrimaryTensor:xt secondaryTensor:y name:nil]
-                                    toType:MPSDataTypeFloat32
-                                      name:nil];
-        MPSGraphTensor* hit = [g multiplicationWithPrimaryTensor:eq
-                                                 secondaryTensor:[g subtractionWithPrimaryTensor:one
-                                                                                 secondaryTensor:found
-                                                                                            name:nil]
-                                                            name:nil];
-        found = [g additionWithPrimaryTensor:found secondaryTensor:hit name:nil];
-        local = [g additionWithPrimaryTensor:local
-                             secondaryTensor:[g multiplicationWithPrimaryTensor:hit
-                                                                secondaryTensor:[g constantWithScalar:(double)t
-                                                                                             dataType:MPSDataTypeFloat32]
-                                                                           name:nil]
+        MPSGraphTensor* hit = [g logicalORWithPrimaryTensor:[g equalWithPrimaryTensor:xt
+                                                                      secondaryTensor:y
+                                                                                 name:nil]
+                                            secondaryTensor:[g notEqualWithPrimaryTensor:xt
+                                                                         secondaryTensor:xt
+                                                                                    name:nil]
+                                                       name:nil];
+        if (in_bounds != nil) {
+            NSMutableArray<NSNumber*>* mask_ends = [NSMutableArray arrayWithArray:@[ @1, @1 ]];
+            for (NSUInteger i = 2; i < ends.count; ++i)
+                [mask_ends addObject:ends[i]];
+            hit = [g logicalANDWithPrimaryTensor:hit
+                                 secondaryTensor:[g sliceTensor:in_bounds
+                                                         starts:starts
+                                                           ends:mask_ends
+                                                        strides:steps
+                                                           name:nil]
+                                            name:nil];
+        }
+        local = [g selectWithPredicateTensor:hit
+                         truePredicateTensor:[g constantWithScalar:(double)t
+                                                          dataType:MPSDataTypeInt32]
+                        falsePredicateTensor:local
                                         name:nil];
     }
-    return [g castTensor:local toType:MPSDataTypeInt32 name:nil];
+    return local;
 }
 
 // The pooled value the gradient is routed by: the forward's own when the walk holds it,

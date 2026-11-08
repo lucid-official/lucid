@@ -17,15 +17,14 @@ eager's element by element; the gradient through the three training entry points
 eager's, for two SGD steps, in float32, float16 and bfloat16.  Integer inputs keep the
 plain operations and are controls.
 
-A max pool holding a NaN is the exception: its compiled forward still skips the NaN, because
-the NaN-propagating pool costs +58-65% on ``max_pool2d`` (a second pooling over the whole
-input).  Those cases are strict xfails (LCD-913); the pool's tie and ordinary cases are held.
+A max pool carries a NaN as eager does (LCD-913): the stencil pool encodes NaN as ``+inf``
+before it and decodes it after, inside the fused prologue / epilogue (no second pass).
 """
 
 import math
 import warnings
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 import pytest
 
@@ -56,9 +55,6 @@ class _Case:
     #: Entries beyond ``make_step`` the gradient test also runs: maximum and minimum are
     #: held to all three, everything else to ``make_step`` alone.
     every_entry: bool = False
-    #: A max pool holding a NaN: the compiled pool skips it, the NaN-propagating one measured
-    #: +58-65% on ``max_pool2d`` and is left out, so these cases are expected to differ.
-    pool_skips_nan: bool = False
 
 
 def _unary(op: Callable[[lucid.Tensor], lucid.Tensor], *rows: list[float]) -> list[_Case]:
@@ -163,6 +159,14 @@ _register(
         "nan-overlap": _Case(
             ([1.0, 2.0, _NAN, 3.0, 4.0, 0.0],), _pooled((1, 1, 6), F.max_pool1d, 3, 1)
         ),
+        "all-nan": _Case(([_NAN, _NAN, 2.0, 3.0],), _pooled((1, 1, 4), F.max_pool1d, 2)),
+        "nan-in-a-ceil-window": _Case(
+            ([1.0, 2.0, 3.0, 4.0, _NAN],), _pooled((1, 1, 5), F.max_pool1d, 2, 2, 0, 1, True)
+        ),
+        "nan-beside-inf": _Case(
+            ([_INF, _NAN, _NAN, _INF, 1.0, 2.0],), _pooled((1, 1, 6), F.max_pool1d, 2)
+        ),
+        "inf": _Case(([_INF, 1.0, _INF, _INF, -_INF, -_INF],), _pooled((1, 1, 6), F.max_pool1d, 2)),
         "tie": _Case(([2.0, 2.0, 3.0, 3.0],), _pooled((1, 1, 4), F.max_pool1d, 2)),
         "ordinary": _Case(([1.0, 2.0, 5.0, 3.0],), _pooled((1, 1, 4), F.max_pool1d, 2)),
     },
@@ -187,23 +191,6 @@ _register(
         "tie": _Case((_TIE_GRID,), _pooled((1, 1, 2, 2, 4), F.max_pool3d, 2)),
     },
 )
-_POOLS_THAT_SKIP_NAN = (
-    "max_pool1d-nan-window",
-    "max_pool1d-nan-overlap",
-    "max_pool2d-nan-windows",
-    "max_pool2d-two-nans-in-a-window",
-    "max_pool2d-nan-padded",
-    "max_pool2d-adaptive",
-    "max_pool3d-nan-windows",
-)
-for _name in _POOLS_THAT_SKIP_NAN:
-    _CASES[_name] = replace(_CASES[_name], pool_skips_nan=True)
-
-_POOL_SKIPS_NAN = pytest.mark.xfail(
-    strict=True,
-    reason="LCD-913: pooling skips NaN; the NaN-propagating form costs +58-65%",
-)
-
 _register(
     "normalize",
     {
@@ -244,7 +231,6 @@ def _forward_cases() -> list[object]:
             name,
             dtype,
             id=f"{name}-{dt}",
-            marks=[_POOL_SKIPS_NAN] if _CASES[name].pool_skips_nan else [],
         )
         for name in _CASES
         for dtype, dt in _DTYPE_IDS.items()
@@ -386,8 +372,7 @@ def _train_cases() -> list[object]:
         )
         for entry in entries:
             for dtype, dt in _DTYPE_IDS.items():
-                marks = [_POOL_SKIPS_NAN] if case.pool_skips_nan else []
-                out.append(pytest.param(name, entry, dtype, id=f"{name}-{entry}-{dt}", marks=marks))
+                out.append(pytest.param(name, entry, dtype, id=f"{name}-{entry}-{dt}"))
     return out
 
 
@@ -432,3 +417,20 @@ def test_a_tie_splits_the_gradient_and_a_nan_pair_gives_all_of_it(device_gpu_onl
     a, b = (p.grad.cpu() for p in both.ps if p.grad is not None)
     _assert_close(a, lucid.tensor([1.0, 2.0, 3.0]), 1e-6, "NaN pair: a")
     _assert_close(b, lucid.tensor([1.0, 2.0, 3.0]), 1e-6, "NaN pair: b")
+
+
+@pytest.mark.parametrize("dtype", list(_DTYPE_IDS), ids=list(_DTYPE_IDS.values()))
+def test_max_pool_top_code_is_shared_with_infinity(
+    dtype: lucid.dtype, device_gpu_only: str
+) -> None:
+    """The one window that reads off, besides the second-lowest (LCD-913): a true maximum of
+    exactly the dtype's largest finite value comes back ``+inf``, because NaN needed a code
+    above ``+inf`` and ``+inf`` took the largest finite value's.  Pinned so a change is seen."""
+    top = {lucid.float32: 3.4028234663852886e38, lucid.float16: 65504.0}.get(
+        dtype, 3.3895313892515355e38
+    )
+    x = lucid.tensor([[[top, 1.0, 2.0, 3.0, _INF, 1.0]]], dtype=dtype, device=device_gpu_only)
+    compiled = lucid.compile(_Apply(lambda a: F.max_pool1d(a, 2)))
+    with lucid.no_grad():
+        got = [compiled(x) for _ in range(2)][-1]
+    assert got.to(lucid.float32).reshape(-1).tolist() == [_INF, 3.0, _INF]
