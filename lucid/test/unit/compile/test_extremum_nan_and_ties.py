@@ -227,11 +227,7 @@ def _assert_close(got: lucid.Tensor, want: lucid.Tensor, tol: float, why: str) -
 
 def _forward_cases() -> list[object]:
     return [
-        pytest.param(
-            name,
-            dtype,
-            id=f"{name}-{dt}",
-        )
+        pytest.param(name, dtype, id=f"{name}-{dt}")
         for name in _CASES
         for dtype, dt in _DTYPE_IDS.items()
     ]

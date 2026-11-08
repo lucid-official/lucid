@@ -34,13 +34,12 @@ def _grad_pair(
     out, want = op(lucid, x), op(ref, want_x)
     n = math.prod(want.shape)
     weights = [1.0 + k for k in range(n)]
-    (out * lucid.tensor(weights, dtype=out.dtype, device=device).reshape(out.shape)).sum().backward()
+    (
+        out * lucid.tensor(weights, dtype=out.dtype, device=device).reshape(out.shape)
+    ).sum().backward()
     (want * ref.tensor(weights, dtype=want.dtype).reshape(want.shape)).sum().backward()
     assert x.grad is not None and want_x.grad is not None
-    return (
-        x.grad.to(lucid.float32).reshape(-1).tolist(),
-        want_x.grad.float().reshape(-1).tolist(),
-    )
+    return (x.grad.to(lucid.float32).reshape(-1).tolist(), want_x.grad.float().reshape(-1).tolist())
 
 
 def _assert_same(got: list[float], want: list[float], tol: float) -> None:
