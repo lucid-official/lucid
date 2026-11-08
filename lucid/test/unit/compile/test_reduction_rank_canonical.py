@@ -184,7 +184,7 @@ def test_a_nan_in_a_fused_reduction_stays_nan(
 
 @pytest.mark.xfail(
     strict=True,
-    reason="LCD-918 FOUND: MPSGraph's NaN-propagating max over alternating kept/reduced "
+    reason="LCD-921: MPSGraph's NaN-propagating max over alternating kept/reduced "
     "axes that do not fuse below rank 5 drops the NaN (also on main before LCD-918)",
 )
 def test_a_nan_over_axes_that_do_not_fuse_below_rank_5_stays_nan() -> None:
