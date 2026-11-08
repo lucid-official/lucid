@@ -256,6 +256,8 @@ def test_a_compiled_sort_is_not_slower_than_eager(name: str, shape: tuple[int, .
                 got = _best_ms(lambda: compiled(x))
             want = _best_ms(lambda: fn(x))
             ratios.append(got / want)
-            if ratios[-1] <= 3.0:
+            # The guard is for the per-row argSort cost (~100x, LCD-926).  The ranked
+            # path runs 1.7-2.6x eager at rank 5 under load (topk smallest), so 3x flaked.
+            if ratios[-1] <= 5.0:
                 return
     pytest.fail(f"compiled {name} {shape} ran {min(ratios):.1f}x eager (best of {len(ratios)})")
