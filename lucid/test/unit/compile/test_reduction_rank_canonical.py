@@ -51,6 +51,13 @@ _CASES: list[tuple[tuple[int, ...], tuple[int, ...]]] = [
     ((2, 3, 2, 3, 2, 2), (4, 5)),
     ((2, 3, 2, 3, 2, 2), (2,)),
     ((2, 3, 2, 3, 2, 2), (0, 1, 2, 3, 4, 5)),
+    # Fused layout still rank >= 5 (LCD-921): reduced one block at a time.
+    ((2, 3, 2, 3, 2, 2), (1, 3, 5)),
+    ((2, 3, 2, 3, 2, 2), (0, 2, 4)),
+    ((2, 2, 3, 2, 3, 2), (0, 2, 4)),
+    ((2, 2, 3, 2, 3, 2), (1, 3, 5)),
+    ((2, 2, 2, 3, 2, 2, 3), (0, 2, 4, 6)),
+    ((2, 2, 2, 3, 2, 2, 3), (1, 3, 5)),
 ]
 
 _KINDS: dict[str, Callable[[lucid.Tensor, tuple[int, ...], bool], lucid.Tensor]] = {
@@ -151,7 +158,8 @@ def test_a_compiled_reduction_of_every_kind_matches_eager(
     _same(cg, eg, f"{kind} grad")
 
 
-#: Rank-5+ cases whose fused layout is rank <= 4.
+#: Rank-5+ cases: the first seven fuse below rank 5; the rest stay K R K R K (LCD-921) and
+#: are reduced one block at a time.
 _NAN_CASES: list[tuple[tuple[int, ...], tuple[int, ...]]] = [
     ((2, 3, 2, 3, 2), (0, 1)),
     ((2, 3, 2, 3, 2), (2,)),
@@ -160,6 +168,11 @@ _NAN_CASES: list[tuple[tuple[int, ...], tuple[int, ...]]] = [
     ((2, 3, 2, 3, 2, 2), (3, 5)),
     ((2, 3, 2, 3, 2, 2), (4, 5)),
     ((2, 3, 2, 3, 2, 2), (1, 2)),
+    ((2, 3, 2, 3, 2), (0, 2, 4)),
+    ((2, 3, 2, 3, 2), (1, 3)),
+    ((2, 3, 2, 3, 2, 2), (1, 3, 5)),
+    ((2, 3, 2, 3, 2, 2), (0, 2, 4)),
+    ((2, 2, 2, 3, 2, 2, 3), (0, 2, 4, 6)),
 ]
 
 
@@ -182,13 +195,26 @@ def test_a_nan_in_a_fused_reduction_stays_nan(
     _nan_check(case, kind)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-921: MPSGraph's NaN-propagating max over alternating kept/reduced "
-    "axes that do not fuse below rank 5 drops the NaN (also on main before LCD-918)",
-)
-def test_a_nan_over_axes_that_do_not_fuse_below_rank_5_stays_nan() -> None:
-    _nan_check(((2, 3, 2, 3, 2), (0, 2, 4)), "amax")
+@pytest.mark.parametrize("kind", ["amax", "amin"])
+@pytest.mark.parametrize("case", _NAN_CASES[7:], ids=_ids)
+def test_every_nan_and_every_tie_survive_a_blockwise_reduction(
+    case: tuple[tuple[int, ...], tuple[int, ...]], kind: str
+) -> None:
+    """Several NaNs (one slice all NaN) and a tied extremum: the value and the gradient share."""
+    shape, dims = case
+    n = 1
+    for s in shape:
+        n *= s
+    # Quantised values repeat, so a slice's extremum is shared by several elements.
+    x = (lucid.sin(lucid.arange(n, dtype=lucid.float32) * 1.7) * 3.0).round().reshape(*shape)
+    flat = x.reshape(-1)
+    for i in (0, n // 4, n // 4 + 1, n - 1):
+        flat[i] = float("nan")
+    x = flat.reshape(*shape).to(COMPILE_DEVICE)
+    fn = _loss_fn(kind, dims, False)
+    el, cl, eg, cg = _eager_and_compiled(shape, fn, x)
+    _same(cl, el, f"{kind} loss")
+    _same(cg, eg, f"{kind} grad")
 
 
 class _Reduce(nn.Module):

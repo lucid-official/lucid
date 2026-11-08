@@ -94,12 +94,13 @@ reduce_canon_blocks(const std::vector<std::int64_t>& in_shape,
     return block_reduced;
 }
 
-// The canonical layout of reducing ``dims`` of an ``in_shape`` tensor, or
-// nullopt when the legacy form should stand: input rank under the threshold, no
-// axes named, an axis out of range, an empty tensor, or nothing to fuse.
+// Fused layout of reducing ``dims`` of an ``in_shape`` tensor, or nullopt when
+// the legacy form should stand: input rank under the threshold, no axes named,
+// an axis out of range or an empty tensor.  The layout may be as high as the
+// input (``K R K R K`` fuses nothing).
 [[maybe_unused]] inline std::optional<ReduceLayout>
-canonical_reduce_layout(const std::vector<std::int64_t>& in_shape,
-                        const std::vector<std::int64_t>& dims) {
+fused_reduce_layout(const std::vector<std::int64_t>& in_shape,
+                    const std::vector<std::int64_t>& dims) {
     if (in_shape.size() < kReduceCanonMinRank || dims.empty() ||
         std::find(in_shape.begin(), in_shape.end(), 0) != in_shape.end())
         return std::nullopt;
@@ -108,8 +109,6 @@ canonical_reduce_layout(const std::vector<std::int64_t>& in_shape,
         return std::nullopt;
     ReduceLayout out;
     const std::vector<bool> block_reduced = reduce_canon_blocks(in_shape, *reduced, out.merged_in);
-    if (out.merged_in.size() >= in_shape.size())
-        return std::nullopt;
     out.symbolic_lead_kept = in_shape[0] < 0 && !(*reduced)[0];
     out.merged_keep = out.merged_in;
     for (std::size_t i = 0; i < block_reduced.size(); ++i) {
@@ -119,6 +118,52 @@ canonical_reduce_layout(const std::vector<std::int64_t>& in_shape,
         out.merged_axes.push_back(static_cast<std::int64_t>(i));
     }
     return out;
+}
+
+// The canonical layout, or nullopt when there is nothing to fuse (the fused
+// layout is as high as the input) or the legacy form should stand.
+[[maybe_unused]] inline std::optional<ReduceLayout>
+canonical_reduce_layout(const std::vector<std::int64_t>& in_shape,
+                        const std::vector<std::int64_t>& dims) {
+    auto out = fused_reduce_layout(in_shape, dims);
+    if (!out || out->merged_in.size() >= in_shape.size())
+        return std::nullopt;
+    return out;
+}
+
+// A fused layout that still has rank >= 5 (``K R K R K``: kept and reduced axes
+// alternate five or more times) cannot be reduced in one MPSGraph op.  At that
+// rank MPSGraph's NaN-propagating max / min drops the NaN (LCD-921) and every op
+// loops over the leading slices.  It is reduced one reduced block at a time
+// instead, each step seeing the other reduced blocks as kept ones: ``pre``
+// (everything before the block), the block, ``post`` (everything after) — rank 3.
+// Only valid for a reduction that composes over equal-sized groups — sum, mean,
+// max, min; a variance does not.
+struct ReduceStep {
+    std::int64_t pre;
+    std::int64_t size;
+    std::int64_t post;
+};
+
+[[maybe_unused]] inline std::int64_t reduce_dim_product(std::int64_t a, std::int64_t b) {
+    return (a < 0 || b < 0) ? -1 : a * b;
+}
+
+[[maybe_unused]] inline std::vector<ReduceStep> reduce_block_steps(const ReduceLayout& layout) {
+    std::vector<ReduceStep> steps;
+    // The shape the next step sees: blocks reduced by an earlier step are 1.
+    std::vector<std::int64_t> cur = layout.merged_in;
+    for (std::int64_t axis : layout.merged_axes) {
+        const auto a = static_cast<std::size_t>(axis);
+        ReduceStep step{1, cur[a], 1};
+        for (std::size_t i = 0; i < a; ++i)
+            step.pre = reduce_dim_product(step.pre, cur[i]);
+        for (std::size_t i = a + 1; i < cur.size(); ++i)
+            step.post = reduce_dim_product(step.post, cur[i]);
+        steps.push_back(step);
+        cur[a] = 1;
+    }
+    return steps;
 }
 
 // The shapes a reduction VJP works in: the input's own, or — for a rank-5+

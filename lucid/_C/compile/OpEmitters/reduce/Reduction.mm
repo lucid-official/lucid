@@ -33,6 +33,25 @@ namespace lucid::compile {
 
 namespace {
 
+// ``result`` (a reduction at a fused rank, reduced axes kept at 1) bound to the
+// node's output on the trace's shape.  The leading dim stays symbolic when the
+// batch survives the reduction.
+inline bool bind_reduced_to_output(BuilderContext& ctx,
+                                   MPSGraph* graph,
+                                   MPSGraphTensor* result,
+                                   const OpNode& node,
+                                   const ReduceLayout& layout) {
+    if (result == nil)
+        return false;
+    NSMutableArray<NSNumber*>* target =
+        [NSMutableArray arrayWithArray:shape_to_ns(node.outputs[0].shape)];
+    if (layout.symbolic_lead_kept && target.count > 0)
+        target[0] = @(-1);
+    result = [graph reshapeTensor:result withShape:target name:@"reduce_fused_out"];
+    ctx.bind(node.outputs[0].id, (__bridge void*)(result));
+    return true;
+}
+
 // A rank-5+ input is reduced at its canonical lower rank (LCD-918): the
 // reduction runs over fused blocks and one reshape lands the result on the
 // trace's output shape, so no rank-5+ tensor is left for MPSGraph to run.
@@ -46,67 +65,59 @@ inline bool emit_canonical_reduce(BuilderContext& ctx,
     MPSGraphTensor* fused = [graph reshapeTensor:x_t
                                        withShape:shape_to_ns(layout.merged_in)
                                             name:@"reduce_canon_in"];
-    MPSGraphTensor* result = builder(graph, fused, shape_to_ns(layout.merged_axes));
-    if (result == nil)
-        return false;
-    NSMutableArray<NSNumber*>* target =
-        [NSMutableArray arrayWithArray:shape_to_ns(node.outputs[0].shape)];
-    if (layout.symbolic_lead_kept && target.count > 0)
-        target[0] = @(-1);
-    result = [graph reshapeTensor:result withShape:target name:@"reduce_canon_out"];
-    ctx.bind(node.outputs[0].id, (__bridge void*)(result));
-    return true;
+    return bind_reduced_to_output(
+        ctx, graph, builder(graph, fused, shape_to_ns(layout.merged_axes)), node, layout);
 }
 
+// A reduction whose fused layout is still rank >= 5 runs one reduced block at a
+// time, each at rank 3 (LCD-921; ``reduce_block_steps`` in ``_ReduceCanon.h``).
+// ``builder`` must compose over equal-sized groups (sum, mean, max, min).
 template <class BuilderBlock>
-inline bool emit_reduce(BuilderContext& ctx, const OpNode& node, BuilderBlock builder) {
-    if (node.inputs.size() != 1 || node.outputs.empty())
-        return false;
-    TensorId x_id = node.inputs[0];
-    if (x_id < 0)
-        return false;
+inline bool emit_blockwise_reduce(BuilderContext& ctx,
+                                  MPSGraph* graph,
+                                  MPSGraphTensor* x_t,
+                                  const OpNode& node,
+                                  const ReduceLayout& layout,
+                                  BuilderBlock builder) {
+    MPSGraphTensor* cur = x_t;
+    for (const ReduceStep& step : reduce_block_steps(layout)) {
+        cur = [graph reshapeTensor:cur
+                         withShape:shape_to_ns({step.pre, step.size, step.post})
+                              name:@"reduce_block_in"];
+        cur = builder(graph, cur, @[ @1 ]);
+        if (cur == nil)
+            return false;
+    }
+    return bind_reduced_to_output(ctx, graph, cur, node, layout);
+}
 
-    // Required attrs.
-    auto dims_it = node.attrs.find("dims");
-    auto kd_it = node.attrs.find("keepdim");
-    if (dims_it == node.attrs.end() || kd_it == node.attrs.end())
-        return false;
-    const auto* dims =
-        std::get_if<std::vector<std::int64_t>>(&dims_it->second);
-    const auto* keepdim = std::get_if<bool>(&kd_it->second);
-    if (dims == nullptr || keepdim == nullptr)
-        return false;
+// Whether a reduction may be applied one reduced block at a time.
+enum class Composes : bool { No = false, Yes = true };
 
-    MPSGraph* graph = (__bridge MPSGraph*)ctx.graph();
-    MPSGraphTensor* x_t = (__bridge MPSGraphTensor*)ctx.resolve(x_id);
-    if (x_t == nil || graph == nil)
-        return false;
-
-    NSMutableArray<NSNumber*>* axes =
-        [NSMutableArray arrayWithCapacity:dims->size()];
-    for (std::int64_t d : *dims)
-        [axes addObject:[NSNumber numberWithLongLong:d]];
-
-    x_t = promote_to_float_output(graph, x_t, node);
-
-    if (auto layout = canonical_reduce_layout(shape_of_mps(x_t), *dims))
-        return emit_canonical_reduce(ctx, graph, x_t, node, *layout, builder);
-
-    MPSGraphTensor* reduced = builder(graph, x_t, axes);
-
-    // MPSGraph's reductions keep the reduced axes at size 1, so with
-    // ``keepdim=false`` the result is reshaped to the trace's output shape:
-    // a tensor bound to a trace id must have exactly that shape, or the first
-    // op that broadcasts it against a lower-rank operand promotes its result
-    // (``(4,) + (1,1)`` is ``(1,4)``) and everything downstream is built from
-    // the wrong rank.
-    //
-    // A full reduction (empty trace shape) used to stay ``(1,..,1)`` so that
-    // ``gradientForPrimaryTensor:`` could chain through a loss; that
-    // differentiation now goes through a rank-1 alias made where the loss is
-    // handed to it (``autodiff_primary`` in ``MpsBuilder.mm``).
+// The reduction as the trace recorded it, at the input's own rank.
+//
+// MPSGraph's reductions keep the reduced axes at size 1, so with
+// ``keepdim=false`` the result is reshaped to the trace's output shape:
+// a tensor bound to a trace id must have exactly that shape, or the first
+// op that broadcasts it against a lower-rank operand promotes its result
+// (``(4,) + (1,1)`` is ``(1,4)``) and everything downstream is built from
+// the wrong rank.
+//
+// A full reduction (empty trace shape) used to stay ``(1,..,1)`` so that
+// ``gradientForPrimaryTensor:`` could chain through a loss; that
+// differentiation now goes through a rank-1 alias made where the loss is
+// handed to it (``autodiff_primary`` in ``MpsBuilder.mm``).
+template <class BuilderBlock>
+inline bool emit_plain_reduce(BuilderContext& ctx,
+                              MPSGraph* graph,
+                              MPSGraphTensor* x_t,
+                              const OpNode& node,
+                              const std::vector<std::int64_t>& dims,
+                              bool keepdim,
+                              BuilderBlock builder) {
+    MPSGraphTensor* reduced = builder(graph, x_t, shape_to_ns(dims));
     const auto& out_shape = node.outputs[0].shape;
-    if (!*keepdim) {
+    if (!keepdim) {
         if (out_shape.empty()) {
             reduced = [graph reshapeTensor:reduced withShape:@[] name:@"reduce_scalar"];
         } else {
@@ -116,11 +127,45 @@ inline bool emit_reduce(BuilderContext& ctx, const OpNode& node, BuilderBlock bu
             // symbolic batch not provably at dim 0 → bail (compile falls back).
             reduced = reshape_dynamic_aware(graph, reduced, out_shape, @"reduce_squeeze");
         }
-        if (reduced == nil)
-            return false;
     }
+    if (reduced == nil)
+        return false;
     ctx.bind(node.outputs[0].id, (__bridge void*)(reduced));
-        return true;
+    return true;
+}
+
+template <class BuilderBlock>
+inline bool emit_reduce(BuilderContext& ctx,
+                        const OpNode& node,
+                        BuilderBlock builder,
+                        Composes composes = Composes::No) {
+    if (node.inputs.size() != 1 || node.outputs.empty() || node.inputs[0] < 0)
+        return false;
+
+    // Required attrs.
+    auto dims_it = node.attrs.find("dims");
+    auto kd_it = node.attrs.find("keepdim");
+    if (dims_it == node.attrs.end() || kd_it == node.attrs.end())
+        return false;
+    const auto* dims = std::get_if<std::vector<std::int64_t>>(&dims_it->second);
+    const auto* keepdim = std::get_if<bool>(&kd_it->second);
+    if (dims == nullptr || keepdim == nullptr)
+        return false;
+
+    MPSGraph* graph = (__bridge MPSGraph*)ctx.graph();
+    MPSGraphTensor* x_t = (__bridge MPSGraphTensor*)ctx.resolve(node.inputs[0]);
+    if (x_t == nil || graph == nil)
+        return false;
+
+    x_t = promote_to_float_output(graph, x_t, node);
+
+    if (auto layout = fused_reduce_layout(shape_of_mps(x_t), *dims)) {
+        if (composes == Composes::Yes && layout->merged_in.size() >= kReduceCanonMinRank)
+            return emit_blockwise_reduce(ctx, graph, x_t, node, *layout, builder);
+        if (layout->merged_in.size() < shape_of_mps(x_t).size())
+            return emit_canonical_reduce(ctx, graph, x_t, node, *layout, builder);
+    }
+    return emit_plain_reduce(ctx, graph, x_t, node, *dims, *keepdim, builder);
 }
 
 class SumEmitter final : public OpEmitter {
@@ -130,7 +175,7 @@ public:
         return emit_reduce(ctx, node, [](MPSGraph* g, MPSGraphTensor* x,
                                           NSArray<NSNumber*>* axes) {
             return [g reductionSumWithTensor:x axes:axes name:@"sum"];
-        });
+        }, Composes::Yes);
     }
 };
 
@@ -145,7 +190,7 @@ public:
                 m = sub_pos_zero(g, m, [g constantWithScalar:0.0 dataType:m.dataType]);
             }
             return m;
-        });
+        }, Composes::Yes);
     }
 };
 
@@ -166,7 +211,7 @@ public:
                               : [g reductionMinimumWithTensor:x axes:axes name:name];
             return IS_MAX ? [g reductionMaximumPropagateNaNWithTensor:x axes:axes name:name]
                           : [g reductionMinimumPropagateNaNWithTensor:x axes:axes name:name];
-        });
+        }, Composes::Yes);
     }
 };
 
