@@ -735,6 +735,22 @@ def _run_rotation_chain() -> None:
     print("ok rotation chain", flush=True)
 
 
+def _passthrough_chain(x: Tensor, rounds: int) -> Tensor:
+    """LCD-847, minimal: one element scaled, both sides passed through as slices."""
+    for _ in range(rounds):
+        x = lucid.cat([x[:3], 0.8 * x[3:4], x[4:]], dim=0)
+    return x
+
+
+def _run_passthrough_chain() -> None:
+    x = _rand(8, 1, 0).reshape(8)
+    rounds = 240
+    with lucid.no_grad():
+        y = lucid.compile(lambda t: _passthrough_chain(t, rounds))(x)
+        _assert_close(y, _passthrough_chain(x, rounds), _max_abs(x), "passthrough chain")
+    print("ok passthrough chain", flush=True)
+
+
 _GROUPS: dict[str, Callable[[], list[_Probe]]] = {
     "eigen": _eigen_group,
     "triangle": _triangle_group,
@@ -753,6 +769,7 @@ _SCRIPTS: dict[str, Callable[[], None]] = {
     "quotient": _run_quotient_accuracy,
     "small_beside_large": _run_small_beside_large,
     "rotation_chain": _run_rotation_chain,
+    "passthrough_chain": _run_passthrough_chain,
 }
 
 GROUP_NAMES = (*_GROUPS, "step", "svd_step", "poison", "batch_isolation", "quotient")

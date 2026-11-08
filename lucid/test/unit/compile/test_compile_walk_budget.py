@@ -123,3 +123,18 @@ def test_small_eigenpairs_beside_a_large_entry(device_gpu_only: str) -> None:
 def test_long_rotation_chain_returns(device_gpu_only: str) -> None:
     del device_gpu_only
     _run_group("rotation_chain", ceiling_s=_PINNED_HANG_CEILING_S)
+
+
+# The smallest form found: no arithmetic between neighbours, about 4 ops a round.  Still the
+# same pass.  On a MacBook M1 Pro first-call time is deterministic but not monotonic in the
+# round count (24 rounds 4.0 s, 64 rounds 2.0 s, 96 rounds 17 s, 128 rounds 3.8 s, 144 rounds
+# 23 s; 192 and 240 do not return in 45 s), so no op or round count predicts it.
+@pytest.mark.xfail(
+    strict=False,
+    raises=_NoReturn,
+    reason="LCD-847: cat(head view, computed middle, tail view) chains reach the same "
+    "MemrefDeallocationPass walk",
+)
+def test_passthrough_chain_returns(device_gpu_only: str) -> None:
+    del device_gpu_only
+    _run_group("passthrough_chain", ceiling_s=_PINNED_HANG_CEILING_S)
