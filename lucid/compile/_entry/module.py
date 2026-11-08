@@ -1210,25 +1210,20 @@ class CompiledModule[**P, R](_ModuleWrapper):
         """
         # Local imports keep ``lucid.compile`` import-cheap.
         from lucid._dispatch import _unwrap
-        from lucid.compile._core.bn_runstats import model_has_tracking_bn
+        from lucid.compile._core.bn_runstats import model_has_cumulative_bn
         from lucid.compile._core.buffer_writes import carried_writes
 
-        # A norm module tracking running statistics in training mode runs
-        # eagerly: its kernel skips the update under a tracer and hands the new
-        # values out.  The executable could carry them, as it does a functional
-        # batch norm's (``carried_writes``), but that is not proven for this
-        # entry: a forward that raises after the norm, a tracked instance norm,
-        # a cumulative average (LCD-882).  In eval mode the norm runs the
-        # distinct ``batch_norm_eval`` op, which updates nothing, and compiles;
-        # one that keeps no statistics is likewise unaffected.
-        if model_has_tracking_bn(self._model) and any(
-            getattr(m, "training", False) and getattr(m, "track_running_stats", False)
-            for m in self._model.modules()
-        ):
+        # A cumulative average (``momentum=None``) in training is the one
+        # running-statistics update the trace cannot carry: its factor is read
+        # from the count on the host, so the layer traces without its buffers,
+        # a plain batch norm to the trace.  Every other norm hands its new
+        # statistics out and the executable writes them back (``carried_writes``).
+        if model_has_cumulative_bn(self._model, training_only=True):
             _fallback_notice(
-                "batch-norm-training",
-                "a BatchNorm in training mode runs eagerly under lucid.compile "
-                "(use make_step or fused_step for compiled training)",
+                "batch-norm-cumulative",
+                "a BatchNorm with momentum=None (cumulative average) in training "
+                "mode runs eagerly under lucid.compile: its update reads the batch "
+                "count on the host (use momentum=0.1-style averaging to compile)",
             )
             return None
 

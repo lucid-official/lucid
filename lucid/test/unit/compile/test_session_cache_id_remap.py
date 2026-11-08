@@ -233,12 +233,13 @@ class TestNoSilentEagerOnlyTransitions:
         assert len(fn.cache_info()["eager_only"]) == 1
 
     def test_training_batchnorm_forward_only_emits_compile_fallback_warning(self) -> None:
-        """Forward-only ``lucid.compile`` on a training-mode BatchNorm warns on fallback."""
-        bn = nn.BatchNorm1d(4).to(COMPILE_DEVICE).train()
+        """Forward-only ``lucid.compile`` on a cumulative training-mode BatchNorm (the one
+        update a trace cannot carry, LCD-882) warns on fallback."""
+        bn = nn.BatchNorm1d(4, momentum=None).to(COMPILE_DEVICE).train()
         compiled_bn = lucid.compile.compile(bn)
         x = metal_tensor(8, 4)
 
-        with pytest.warns(CompileFallbackWarning, match="BatchNorm"):
+        with lucid.no_grad(), pytest.warns(CompileFallbackWarning, match="BatchNorm"):
             _ = compiled_bn(x)
 
         assert len(compiled_bn.cache_info()["eager_only"]) == 1

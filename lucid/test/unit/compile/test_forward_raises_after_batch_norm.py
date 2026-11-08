@@ -46,11 +46,7 @@ def _metal_ok() -> bool:
     return True
 
 
-pytestmark = [
-    pytest.mark.skipif(not _metal_ok(), reason="Metal unavailable"),
-    # A norm module in training mode runs eagerly under the module entry, by notice.
-    pytest.mark.filterwarnings("ignore::lucid.compile._core.fallback.CompileFallbackWarning"),
-]
+pytestmark = pytest.mark.skipif(not _metal_ok(), reason="Metal unavailable")
 
 
 @pytest.fixture(autouse=True)

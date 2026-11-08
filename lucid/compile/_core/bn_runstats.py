@@ -36,50 +36,49 @@ __all__ = [
     "BnWriteback",
     "bn_statistics_lost",
     "model_has_cumulative_bn",
-    "model_has_tracking_bn",
     "bn_writeback_targets",
 ]
 
 _BN_NAMES: tuple[str, ...] = ("batch_norm", "batch_norm1d", "batch_norm3d")
 
 
-def model_has_cumulative_bn(model: Module) -> bool:
-    """Return ``True`` if any submodule keeps running stats via cumulative moving
-    average: a BatchNorm-family layer with ``track_running_stats=True`` and
-    ``momentum is None``.
+def model_has_cumulative_bn(model: Module, *, training_only: bool = False) -> bool:
+    """Whether any submodule keeps running stats by a cumulative moving average.
 
-    Such a layer's running-stats update can't be lowered into the compiled graph
-    (it reads ``num_batches_tracked`` as a host scalar), so the caller must fall
-    back to eager (``make_step`` / ``CompiledModule``) or raise (``fused_step`` /
-    ``compiled_step``).
+    That is a BatchNorm-family layer with ``track_running_stats=True`` and
+    ``momentum is None``.  Its running-stats update can't be lowered into the
+    compiled graph (it reads ``num_batches_tracked`` as a host scalar), so the
+    caller must fall back to eager (``make_step`` / ``CompiledModule``) or raise
+    (``fused_step`` / ``compiled_step``).
 
     The test is the layer's update rule, not the shape of its attributes.  An
     InstanceNorm with ``momentum=None`` passes no weight to its update, as the
     reference does, so it reads no count; matched by attribute it sent a
     compilable step to eager, and made ``compiled_step`` refuse it (LCD-521).
+
+    Parameters
+    ----------
+    model : Module
+        The tree to search.
+    training_only : bool, keyword-only, optional
+        Count only a layer in training mode.  An evaluating one reads its buffers
+        and updates nothing, which the module entry compiles.
+
+    Returns
+    -------
+    bool
+        ``True`` when such a layer is in the tree.
     """
     from lucid.compile._core.signature import tree_modules
     from lucid.nn.modules.normalization import _BatchNormBase
 
     return any(
-        isinstance(m, _BatchNormBase) and m.track_running_stats and m.momentum is None
+        isinstance(m, _BatchNormBase)
+        and m.track_running_stats
+        and m.momentum is None
+        and (m.training or not training_only)
         for m in tree_modules(model)
     )
-
-
-def model_has_tracking_bn(model: Module) -> bool:
-    """Return ``True`` if any submodule tracks running stats
-    (``track_running_stats=True``, any momentum).
-
-    Used by :class:`CompiledModule`, which runs a norm module in training mode
-    eagerly: carrying its statistics, as it does a functional batch norm's, is
-    not proven for that entry (LCD-882).  (In eval mode BatchNorm dispatches the
-    distinct ``batch_norm_eval`` op, which is unaffected.)
-    """
-    for m in model.modules():
-        if getattr(m, "track_running_stats", False):
-            return True
-    return False
 
 
 def bn_writeback_targets(

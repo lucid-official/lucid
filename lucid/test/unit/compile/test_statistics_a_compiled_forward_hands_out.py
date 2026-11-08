@@ -7,11 +7,10 @@ but not those: a functional ``F.batch_norm(..., training=True)`` on a model's
 buffers compiled, and its statistics stayed at their first values under
 ``no_grad``, with no error.  With grad on it ran eagerly and was right.
 
-A norm module in training mode still runs eagerly through the module entry,
-by refusal (LCD-882 would carry its statistics instead): these cases guard
-that the refusal holds.  Each case runs four calls on inputs of different
-mean and spread against a twin running eagerly, and compares the answer and
-every buffer after each.
+A norm module in training mode compiles through the module entry the same way
+(LCD-882): the decision comes from the trace, not the module tree.  Each case
+runs four calls on inputs of different mean and spread against a twin running
+eagerly, and compares the answer and every buffer after each.
 
 The rest are the statistics a compiled run cannot carry, across the entry points:
 ones given as arguments, which a later run would write into the first call's
@@ -125,10 +124,6 @@ MODULES: dict[str, Callable[[], nn.Module]] = {
     "batch3d": lambda: nn.BatchNorm3d(SHAPE[-1]),
 }
 
-#: A norm module in training mode: the module entry refuses it, by design.
-REFUSED = {"batch1d", "batch1d-twice", "batch2d", "batch3d"}
-
-
 def _frozen(model: nn.Module) -> None:
     for p in model.parameters():
         p.requires_grad_(False)
@@ -189,7 +184,7 @@ def test_a_compiled_forward_moves_the_statistics_as_eager_does(norm: str, mode: 
     for i, (g, w) in enumerate(zip(got, want, strict=True)):
         assert _close(g, w), f"call {i}: {g} vs {w}"
     info = compiled.cache_info()
-    runs_compiled = mode != "grad" and norm not in REFUSED
+    runs_compiled = mode != "grad"
     assert (info["entries"] == 1 and not info["eager_only"]) is runs_compiled, info
 
 

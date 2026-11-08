@@ -99,6 +99,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - expose Tracer.is_constant for a value kept past the call
 
+- compile training-mode batch norm through lucid.compile
+
 ### Performance
 
 - pool the MAE sets without rank-6 views
