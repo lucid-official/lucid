@@ -303,6 +303,63 @@ def _a_constant(_o: nn.Module, t: Tensor, _x: Tensor, _new: bool) -> None:
     t[0] = 2.0
 
 
+def _constant_mask() -> Tensor:
+    return lucid.arange(12.0, device=COMPILE_DEVICE).reshape(*SHAPE) > 6.0
+
+
+def _constant_rows() -> Tensor:
+    return (lucid.arange(SHAPE[0] * 1.0, device=COMPILE_DEVICE) > 0.5).long() * 2
+
+
+def _mul_then_setitem(_o: nn.Module, t: Tensor, _x: Tensor, _new: bool) -> None:
+    t.mul_(2.0)
+    t[1] = 0.0
+
+
+def _add_then_slice_setitem(_o: nn.Module, t: Tensor, _x: Tensor, _new: bool) -> None:
+    t.add_(1.0)
+    t[:2] = 0.5
+
+
+def _mul_then_masked_fill(_o: nn.Module, t: Tensor, _x: Tensor, _new: bool) -> None:
+    t.mul_(2.0)
+    t.masked_fill_(_constant_mask(), 7.0)
+
+
+def _mul_then_scatter(_o: nn.Module, t: Tensor, _x: Tensor, _new: bool) -> None:
+    t.mul_(2.0)
+    t.scatter_(1, _constant_mask().long() * 3, lucid.full(SHAPE, 9.0, device=COMPILE_DEVICE))
+
+
+def _mul_then_index_put(_o: nn.Module, t: Tensor, _x: Tensor, _new: bool) -> None:
+    t.mul_(2.0)
+    t.index_put_((_constant_rows(),), lucid.full((SHAPE[-1],), 3.0, device=COMPILE_DEVICE))
+
+
+def _mul_then_two_overwrites(_o: nn.Module, t: Tensor, _x: Tensor, _new: bool) -> None:
+    t.mul_(2.0)
+    t.masked_fill_(_constant_mask(), 7.0)
+    t[1] = 0.0
+
+
+def _constant_masked_fill(_o: nn.Module, t: Tensor, _x: Tensor, _new: bool) -> None:
+    t.masked_fill_(_constant_mask(), 7.0)
+
+
+def _constant_scatter(_o: nn.Module, t: Tensor, _x: Tensor, _new: bool) -> None:
+    t.scatter_(1, _constant_mask().long() * 3, lucid.full(SHAPE, 9.0, device=COMPILE_DEVICE))
+
+
+def _constant_index_put(_o: nn.Module, t: Tensor, _x: Tensor, _new: bool) -> None:
+    t.index_put_((_constant_rows(),), lucid.full((SHAPE[-1],), 3.0, device=COMPILE_DEVICE))
+
+
+def _constant_overwrites_in_a_row(_o: nn.Module, t: Tensor, _x: Tensor, _new: bool) -> None:
+    t.masked_fill_(_constant_mask(), 7.0)
+    t[1] = 0.0
+    t.scatter_(1, _constant_mask().long() * 3, lucid.full(SHAPE, 9.0, device=COMPILE_DEVICE))
+
+
 #: Every call, reading what the tensor held: the reruns count.  The last four
 #: hide the read behind a partial overwrite, whose positions are read off the
 #: input or leave the rest of an earlier value in place.
@@ -317,11 +374,40 @@ READS_IT: dict[str, Write] = {
     "index_put_": _index_put,
 }
 
+#: Every call, reading what the tensor held with nothing but constants to write:
+#: an overwrite at constant positions follows (or several), and it keeps the
+#: tensor's value as the write before it left it.  The tensor still reads its own
+#: value, so the walk back from the last write has to go on past each earlier
+#: value, and through the base of ``masked_fill`` and ``scatter_set`` (what
+#: ``masked_fill_``, ``scatter_``, ``index_put_`` and a setitem record) where the
+#: positions are constants.  From constants alone the last write looks like a
+#: table the call built; a walk that stops early compiles it, and the tensor
+#: starts over on every call.
+READ_BEHIND_AN_OVERWRITE: dict[str, Write] = {
+    "mul_-then-setitem": _mul_then_setitem,
+    "add_-then-slice-setitem": _add_then_slice_setitem,
+    "mul_-then-masked_fill_": _mul_then_masked_fill,
+    "mul_-then-scatter_": _mul_then_scatter,
+    "mul_-then-index_put_": _mul_then_index_put,
+    "mul_-then-two-overwrites": _mul_then_two_overwrites,
+}
+
 #: Every call, overwriting all of it (or what a constant position picks).
 OVERWRITES_IT: dict[str, Write] = {
     "copy_-of-the-input": _copy_of_the_input,
     "copy_-of-the-state": _copy_of_the_state,
     "setitem": _setitem,
+}
+
+#: Every call, overwriting only, at constant positions with constant values, as
+#: another write may follow one: the tensor holds the same values however often
+#: this runs, so a trace that stands for it still compiles the call.
+CONSTANT_OVERWRITES: dict[str, Write] = {
+    "setitem": _a_constant,
+    "masked_fill_": _constant_masked_fill,
+    "scatter_": _constant_scatter,
+    "index_put_": _constant_index_put,
+    "overwrites-in-a-row": _constant_overwrites_in_a_row,
 }
 
 #: The first call only: a buffer filled from the first batch (``mu``), a cache
@@ -334,7 +420,14 @@ FIRST_CALL: dict[str, Write] = {
     "first-a-constant": _first_a_constant,
 }
 
-WRITES: dict[str, Write] = {**READS_IT, **OVERWRITES_IT, **FIRST_CALL, "a-constant": _a_constant}
+WRITES: dict[str, Write] = {
+    **READS_IT,
+    **READ_BEHIND_AN_OVERWRITE,
+    **OVERWRITES_IT,
+    **CONSTANT_OVERWRITES,
+    **FIRST_CALL,
+    "a-constant": _a_constant,
+}
 
 
 class _Keeps(nn.Module):
@@ -462,6 +555,48 @@ def test_a_held_tensor_ends_each_call_as_eager_ends(write: str, holder: str, ent
     _ends_as_eager_ends(STANDING[entry], write, holder)
 
 
+SEGMENTS = {"make_step": 1, "make_step-segments": 2}
+
+
+def _went_eager(entry: str, model: nn.Sequential) -> bool:
+    """Whether ``entry`` ran any call of the four eagerly."""
+    if entry == "module":
+        run = lucid.compile(model)
+        with lucid.no_grad():
+            for x in _inputs():
+                run(x)
+        return bool(run.cache_info()["eager_only"])
+    if entry == "fused_step":
+        fused = lucid.compile.fused_step(model, _loss, optim.SGD(model.parameters(), lr=1e-2))
+        for x in _inputs():
+            fused(x)
+        return bool(fused.cache_info()["eager_only"])
+    step = lucid.compile.make_step(model, _loss, segments=SEGMENTS[entry])
+    for x in _inputs():
+        step(x).backward()
+    return bool(step.eager_only)
+
+
+#: Not the segmented step: its backward trace runs the forward again and meets
+#: the held tensor as one from outside, which it refuses a write to, so every
+#: such write sends that step eager (``compile_trace_with_backward: the traced
+#: call wrote in place to a tensor it did not create``).
+COMPILES_AN_OVERWRITE = [entry for entry in STANDING if entry != "make_step-segments"]
+
+
+@pytest.mark.parametrize("entry", COMPILES_AN_OVERWRITE)
+@pytest.mark.parametrize("holder", ["box", "buffer", "closure-cell"])
+@pytest.mark.parametrize("write", CONSTANT_OVERWRITES)
+def test_an_overwrite_from_constants_alone_stays_compiled(
+    write: str, holder: str, entry: str
+) -> None:
+    """The walk back through an overwrite's base, and through the views a setitem
+    goes by, finds nothing the tensor read: it is not owed to anyone, so the
+    held tensor is left as the trace made it and the call is not run eagerly."""
+    assert not _went_eager(entry, _model(write, holder))
+    _ends_as_eager_ends(STANDING[entry], write, holder)
+
+
 class _KeepsBehindATrunk(_Keeps):
     """Writes from its input's values: the input requires grad, and a tensor kept
     across calls must not keep the graph of the call that wrote it."""
@@ -507,7 +642,9 @@ def _one_call(model: nn.Sequential, x: Tensor, *, compiled: bool) -> list[float]
     return [float(loss.item()), *_grads(model), *_kept(model)]
 
 
-@pytest.mark.parametrize("write", [*READS_IT, *OVERWRITES_IT, "a-constant"])
+@pytest.mark.parametrize(
+    "write", [*READS_IT, *READ_BEHIND_AN_OVERWRITE, *OVERWRITES_IT, "a-constant"]
+)
 def test_a_compiled_step_keeps_the_first_write_and_refuses_the_next(write: str) -> None:
     """``compiled_step`` traces every call, and the trace's writes are the call's:
     the first is right, a read behind a partial overwrite too.  The next call's
