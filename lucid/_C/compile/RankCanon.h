@@ -63,6 +63,15 @@
 // Attention needs no exemption: ``MpsBuilder``'s fused-attention workaround
 // (``collect_softmax_outputs``) runs on the rewritten graph and follows the views.
 //
+// Feeds
+// -----
+// A placeholder read through an in-graph ``reshape`` is materialised by MPSGraph (a
+// rank-5 feed read flat costs 1.24 ms against 0.65 for the same elements fed flat), where
+// the same ``reshape`` of a computed tensor is an alias.  :func:`canonical_feed_shapes`
+// names the rank-5+ feeds the builder may declare at the shape their views want instead;
+// the executable binds the caller's buffer at that shape (the logical one stays everywhere
+// outside it, as for a rank-5+ output).
+//
 // Pure C++: no MPSGraph types here, so the pass is testable from Python.
 
 #pragma once
@@ -73,6 +82,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "../api.h"
@@ -175,7 +185,9 @@ struct RankStage {
 
 // How one node is to be rewritten.  ``input_shapes[k]`` is the canonical shape
 // to view input ``k`` at; empty leaves the input as it is (a scalar, or already
-// canonical).  ``out_shape`` is the canonical shape of the node's only output.
+// canonical).  ``out_shape`` is the canonical shape of the node's first output and
+// ``extra_outputs`` those of the others (a ``split_at`` has one per piece; each is
+// viewed back under its original id).
 // ``attrs`` replaces the node's attributes when an axis attribute moves with the
 // layout (``dim``, ``permutation``).  ``then`` lists the nodes that follow the
 // first one when the op is split; the last node's result is viewed back at the
@@ -183,6 +195,7 @@ struct RankStage {
 struct RankRewrite {
     std::vector<std::vector<std::int64_t>> input_shapes;
     std::vector<std::int64_t> out_shape;
+    std::vector<std::vector<std::int64_t>> extra_outputs;
     std::optional<RankAttrs> attrs;
     std::vector<RankStage> then;
 };
@@ -226,5 +239,16 @@ private:
     std::size_t views_added_ = 0;
     std::size_t nodes_rewritten_ = 0;
 };
+
+// The shapes to declare feed placeholders at, by feed id: only a feed that is rank 5+
+// above the lead gate and is read by nothing but pure views (``reshape`` family) of the
+// rewritten graph ``graph``, and is not in ``kept`` (an id the builder reads or returns
+// as it is: parameters, state, outputs).  The shape is the rank <= 4 shape most of its
+// views produce, so those views become identity reshapes.  A symbolic batch is excluded
+// by the caller.  Not exported: an executable records the result, nothing else reads it.
+using FeedShapes = std::unordered_map<TensorId, std::vector<std::int64_t>>;
+FeedShapes canonical_feed_shapes(const TraceGraph& graph,
+                                 const std::unordered_map<TensorId, TensorImplPtr>& external_feeds,
+                                 const std::unordered_set<TensorId>& kept);
 
 }  // namespace lucid::compile

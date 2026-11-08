@@ -40,6 +40,11 @@ namespace lucid::compile {
 // plan minted by :class:`MpsBuilder`.
 class CompiledExecutable {
 public:
+    // The shape each feed placeholder was declared at when it differs from the logical
+    // ``input_shapes`` (a rank-5+ feed read only through views, ``canonical_feed_shapes``):
+    // the caller's buffer is bound at it.  Empty = every slot is bound at ``input_shapes``;
+    // otherwise one entry per slot, empty for a slot bound at its logical shape.
+    std::vector<Shape> feed_target_shapes;
     MPSGraphExecutable* executable = nil;  // ARC strong
 
     // When the executable was compiled from a graph that contains
@@ -190,6 +195,7 @@ CompiledExecutable* relabel_executable(const CompiledExecutable* exe,
     copy->dynamic_batch = exe->dynamic_batch;
     copy->static_feed_slots = exe->static_feed_slots;
     copy->feed_order = exe->feed_order;
+    copy->feed_target_shapes = exe->feed_target_shapes;
     return copy;
 }
 
@@ -389,6 +395,14 @@ inline id<MTLBuffer> alias_buffer(bool alias_mode, const TensorImpl& target) {
     return (__bridge id<MTLBuffer>)lucid::gpu::mps::array_to_buffer(*gs.arr).mtl_buffer;
 }
 
+// The shape slot ``i``'s buffer is bound at: the one its placeholder was declared at
+// (``feed_target_shapes``, a rank-5+ feed read only through views) or its logical shape.
+inline const Shape& bound_input_shape(const CompiledExecutable* exe, std::size_t i) {
+    if (i < exe->feed_target_shapes.size() && !exe->feed_target_shapes[i].empty())
+        return exe->feed_target_shapes[i];
+    return exe->input_shapes[i];
+}
+
 // The target shapes of the executable: ``targetTensors`` for one compiled in this
 // process, and for a package-loaded one (which has none) what
 // ``getOutputTypesWithDevice:`` reports for the input shapes it will run.  Nil
@@ -409,7 +423,7 @@ inline NSArray<NSArray<NSNumber*>*>* executable_target_shapes(CompiledExecutable
     for (std::size_t k = 0; k < n_in; ++k) {
         const std::size_t i = exe->feed_order.empty() ? k : exe->feed_order[k];
         [in_types addObject:[[MPSGraphShapedType alloc]
-                                initWithShape:shape_to_nsarray(exe->input_shapes[i])
+                                initWithShape:shape_to_nsarray(bound_input_shape(exe, i))
                                      dataType:mps_dtype_or_throw(exe->input_dtypes[i])]];
     }
     id<MTLDevice> device = (__bridge id<MTLDevice>)lucid::gpu::mps::shared_mtl_device();
@@ -463,14 +477,15 @@ inline void ensure_runtime_caches(CompiledExecutable* exe) {
     if (exe->cached_input_ns_shapes == nil || exe->cached_input_ns_shapes.count != n_in) {
         NSMutableArray<NSArray<NSNumber*>*>* in_ns = [NSMutableArray arrayWithCapacity:n_in];
         for (std::size_t i = 0; i < n_in; ++i)
-            [in_ns addObject:shape_to_nsarray(exe->input_shapes[i])];
+            [in_ns addObject:shape_to_nsarray(bound_input_shape(exe, i))];
         exe->cached_input_ns_shapes = in_ns;
     }
     if (exe->cached_output_ns_shapes == nil || exe->cached_output_ns_shapes.count != n_out) {
         NSMutableArray<NSArray<NSNumber*>*>* out_ns = [NSMutableArray arrayWithCapacity:n_out];
         NSArray<NSArray<NSNumber*>*>* natural = natural_result_shapes(exe);
         for (std::size_t j = 0; j < n_out; ++j)
-            [out_ns addObject:natural != nil ? natural[j] : shape_to_nsarray(exe->output_shapes[j])];
+            [out_ns
+                addObject:natural != nil ? natural[j] : shape_to_nsarray(exe->output_shapes[j])];
         exe->cached_output_ns_shapes = out_ns;
     }
     if (exe->cached_feed_td == nil || exe->cached_feed_td.count != n_in) {
@@ -487,10 +502,8 @@ inline void ensure_runtime_caches(CompiledExecutable* exe) {
 // reusing cached ``MPSGraphTensorData*`` objects for static-shape feeds whose
 // underlying MLX array and ``MTLBuffer`` have not changed since the previous
 // execution.
-inline NSMutableArray<MPSGraphTensorData*>*
-build_feeds_array(CompiledExecutable* exe,
-                  const std::vector<TensorImplPtr>& input_feeds,
-                  const char* who) {
+inline NSMutableArray<MPSGraphTensorData*>* build_feeds_array(
+    CompiledExecutable* exe, const std::vector<TensorImplPtr>& input_feeds, const char* who) {
     // Every run fills and reads ``exe``'s feed caches here, with the GIL
     // released by the bindings, so concurrent runs serialise on it (LCD-655).
     static std::recursive_mutex feeds_mutex;
@@ -561,8 +574,8 @@ std::vector<std::string> executable_feed_names(const CompiledExecutable* exe) {
 //
 // Defined here rather than in MpsBuilder.mm because all the
 // MPSGraph-side machinery is in this translation unit already.
-LUCID_API std::vector<TensorImplPtr> run_executable(CompiledExecutable* exe,
-                                                    const std::vector<TensorImplPtr>& traced_feeds) {
+LUCID_API std::vector<TensorImplPtr>
+run_executable(CompiledExecutable* exe, const std::vector<TensorImplPtr>& traced_feeds) {
     // Draws the trace made are made again — see RngFeeds.h.
     const std::vector<TensorImplPtr> input_feeds = redraw_rng_feeds(traced_feeds);
     if (exe == nullptr)
@@ -960,7 +973,7 @@ LUCID_API void run_executable_inplace(CompiledExecutable* exe,
 // Binary metadata format (.meta sidecar), all little-endian:
 //
 //   byte  0:        magic = 'L', 'M', 'P', 'S' (4 bytes)
-//   byte  4:        format version = 1 (1 byte)
+//   byte  4:        format version = 2 (1 byte; a version-1 file has no trailer)
 //   byte  5:        device (1 byte; 0=CPU, 1=GPU)
 //   byte  6:        dynamic_batch (1 byte; 0=false, 1=true)
 //   byte  7:        padding (1 byte, zero)
@@ -973,13 +986,17 @@ LUCID_API void run_executable_inplace(CompiledExecutable* exe,
 //     vec<u8> input_dtypes           (u32 count + count × u8)
 //     vec<u8> output_dtypes
 //     vec<u64> static_feed_slots     (u32 count + count × u64)
+//     vec<vec<int64>> feed_target_shapes   (version 2: the shape each feed placeholder
+//                                           was declared at; an empty entry, or no
+//                                           entries, means the slot's input_shape)
 //
 // Hand-rolled to avoid pulling in protobuf / json deps.  Bumping
 // the version byte lets future Lucid releases reject incompatible
 // caches without crashing.
 
 namespace {
-constexpr uint8_t kMetaFormatVersion = 1;
+constexpr uint8_t kMetaFormatVersion = 2;
+constexpr uint8_t kMetaFirstVersion = 1;
 constexpr char kMetaMagic[4] = {'L', 'M', 'P', 'S'};
 
 template <typename T>
@@ -1038,6 +1055,33 @@ inline bool read_vec_vec_i64(const uint8_t*& p, const uint8_t* end, std::vector<
         for (uint32_t j = 0; j < m; ++j)
             if (!read_pod(p, end, vv[i][j]))
                 return false;
+    }
+    return true;
+}
+
+// The version-2 trailer: the shape each feed placeholder was declared at.  A version-1
+// file has none (every slot is bound at its input shape).  The error text, or nullptr.
+inline const char* read_feed_target_shapes(uint8_t version,
+                                           const uint8_t*& p,
+                                           const uint8_t* end,
+                                           std::size_t n_inputs,
+                                           std::vector<Shape>& out) {
+    if (version < 2)
+        return nullptr;
+    if (!read_vec_vec_i64(p, end, out))
+        return "truncated feed_target_shapes";
+    if (!out.empty() && out.size() != n_inputs)
+        return "load_executable: feed_target_shapes does not match the inputs";
+    return nullptr;
+}
+
+// Whether every feed of ``exe`` is bound at the shape and dtype of the first: the one case a
+// reloaded package keeps its feed order, because there is no order to lose.
+inline bool feeds_share_shape_and_dtype(const CompiledExecutable& exe) {
+    for (std::size_t i = 1; i < exe.input_ids.size(); ++i) {
+        if (detail::bound_input_shape(&exe, i) != detail::bound_input_shape(&exe, 0) ||
+            exe.input_dtypes[i] != exe.input_dtypes[0])
+            return false;
     }
     return true;
 }
@@ -1126,6 +1170,7 @@ bool save_executable(const CompiledExecutable* exe, const std::string& path) {
         std::vector<uint64_t> static_slots(exe->static_feed_slots.begin(),
                                            exe->static_feed_slots.end());
         write_vec<uint64_t>(meta, static_slots);
+        write_vec_vec_i64(meta, exe->feed_target_shapes);
 
         const std::string meta_path = path + ".meta";
         return atomic_write(meta_path, meta);
@@ -1156,7 +1201,7 @@ CompiledExecutable* load_executable(const std::string& path, std::string* error_
     uint8_t version, device_byte, dynamic_byte, pad;
     if (!read_pod(p, end, version))
         return fail("truncated version");
-    if (version != kMetaFormatVersion)
+    if (version < kMetaFirstVersion || version > kMetaFormatVersion)
         return fail("load_executable: meta format version mismatch");
     if (!read_pod(p, end, device_byte))
         return fail("truncated device");
@@ -1169,6 +1214,7 @@ CompiledExecutable* load_executable(const std::string& path, std::string* error_
     std::vector<Shape> input_shapes, output_shapes;
     std::vector<uint8_t> input_dt_raw, output_dt_raw;
     std::vector<uint64_t> static_slots;
+    std::vector<Shape> feed_target_shapes;
 
     if (!read_vec(p, end, input_ids))
         return fail("truncated input_ids");
@@ -1186,6 +1232,10 @@ CompiledExecutable* load_executable(const std::string& path, std::string* error_
         return fail("truncated output_dtypes");
     if (!read_vec(p, end, static_slots))
         return fail("truncated static_feed_slots");
+    if (const char* bad =
+            read_feed_target_shapes(version, p, end, input_shapes.size(), feed_target_shapes);
+        bad != nullptr)
+        return fail(bad);
 
     @autoreleasepool {
         const std::string pkg_path = path + ".mpsgraphpackage";
@@ -1229,6 +1279,7 @@ CompiledExecutable* load_executable(const std::string& path, std::string* error_
         result->output_ids = wrap_ids(std::move(output_ids));
         result->grad_output_ids = wrap_ids(std::move(grad_output_ids));
         result->input_shapes = std::move(input_shapes);
+        result->feed_target_shapes = std::move(feed_target_shapes);
         result->output_shapes = std::move(output_shapes);
         result->input_dtypes.resize(input_dt_raw.size());
         for (std::size_t i = 0; i < input_dt_raw.size(); ++i)
@@ -1257,12 +1308,7 @@ CompiledExecutable* load_executable(const std::string& path, std::string* error_
         // clear error for ``load_compiled`` — never a crash.
         result->feed_order = detail::derive_feed_order(exec, result->input_ids);
         if (result->feed_order.empty() && result->input_ids.size() > 1) {
-            bool uniform = true;
-            for (std::size_t i = 1; i < result->input_ids.size() && uniform; ++i) {
-                uniform = (result->input_shapes[i] == result->input_shapes[0]) &&
-                          (result->input_dtypes[i] == result->input_dtypes[0]);
-            }
-            if (!uniform) {
+            if (!feeds_share_shape_and_dtype(*result)) {
                 delete result;
                 return fail("load_executable: this artifact has feeds of differing "
                             "shape/dtype, and a reloaded MPSGraph package does not "

@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
+#include <initializer_list>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -51,7 +52,8 @@ MPSGraphTensor* autodiff_primary(MPSGraph* graph, MPSGraphTensor* loss) {
 // The shape a value was bound at must be the shape the trace recorded for it:
 // every emitter after it reads the trace.  A dynamic (-1) axis in the graph
 // stands for any trace-time size.  Empty when they agree.
-std::string bound_shape_mismatch(MPSGraphTensor* bound, const OpNode& node, const TensorMeta& meta) {
+std::string
+bound_shape_mismatch(MPSGraphTensor* bound, const OpNode& node, const TensorMeta& meta) {
     if (bound.shape == nil)
         return {};
     const NSUInteger rank = bound.shape.count;
@@ -435,6 +437,70 @@ inline MPSGraphTensor* canonical_output(MPSGraph* g, MPSGraphTensor* t) {
     return [g reshapeTensor:t withShape:shape_to_nsarray(canonical) name:nil];
 }
 
+// The shapes the feed placeholders of an executable are declared at (LCD-928): a rank-5+
+// feed read only through views is declared at the rank <= 4 shape they want, so MPSGraph
+// does not materialise the view.  ``kept`` are the ids the builder reads or returns
+// whole (parameters, outputs); a symbolic batch keeps every feed as it is.
+inline FeedShapes declared_feed_shapes(const TraceGraph& graph,
+                                       const std::unordered_map<TensorId, TensorImplPtr>& feeds,
+                                       bool dynamic_batch,
+                                       std::initializer_list<const std::vector<TensorId>*> kept) {
+    if (dynamic_batch)
+        return {};
+    std::unordered_set<TensorId> keep;
+    for (const std::vector<TensorId>* ids : kept)
+        keep.insert(ids->begin(), ids->end());
+    return canonical_feed_shapes(graph, feeds, keep);
+}
+
+// The shape ``tid``'s placeholder is declared at.
+inline const Shape&
+declared_shape_of(const FeedShapes& declared, TensorId tid, const Shape& logical) {
+    const auto it = declared.find(tid);
+    return it == declared.end() ? logical : it->second;
+}
+
+// ``compileWithDevice:feeds:``'s dictionary: each placeholder with the shape it is declared at.
+inline NSDictionary<MPSGraphTensor*, MPSGraphShapedType*>*
+make_feed_dict(const std::vector<MPSGraphTensor*>& placeholders,
+               const std::vector<Dtype>& dtypes,
+               const std::vector<Shape>& shapes) {
+    NSMutableDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feeds =
+        [NSMutableDictionary dictionaryWithCapacity:placeholders.size()];
+    for (std::size_t i = 0; i < placeholders.size(); ++i) {
+        feeds[placeholders[i]] =
+            [[MPSGraphShapedType alloc] initWithShape:shape_to_nsarray(shapes[i])
+                                             dataType:mps_dtype_or_throw(dtypes[i])];
+    }
+    return feeds;
+}
+
+// The shape each feed slot is declared at, in slot order.
+inline std::vector<Shape> declared_per_slot(const std::vector<TensorId>& slots,
+                                            const std::vector<Shape>& logical,
+                                            const FeedShapes& declared) {
+    std::vector<Shape> shapes;
+    shapes.reserve(slots.size());
+    for (std::size_t i = 0; i < slots.size(); ++i)
+        shapes.push_back(declared_shape_of(declared, slots[i], logical[i]));
+    return shapes;
+}
+
+// What an executable records of the declared shapes: one entry per feed slot, empty for
+// a slot bound at its logical shape; no entries at all when every slot is.
+inline std::vector<Shape> feed_target_shapes(const std::vector<Shape>& logical,
+                                             const std::vector<Shape>& declared) {
+    std::vector<Shape> targets(logical.size());
+    bool any = false;
+    for (std::size_t i = 0; i < logical.size(); ++i) {
+        if (declared[i] != logical[i]) {
+            targets[i] = declared[i];
+            any = true;
+        }
+    }
+    return any ? targets : std::vector<Shape>{};
+}
+
 // A symbolic batch substitutes the leading axis of a result at run time, which a
 // merged leading axis cannot follow, so its executable keeps every target as it
 // is.  The feeds say which: a symbolic batch is a negative dim on a feed.
@@ -587,7 +653,8 @@ MPSGraphExecutable* compile_graph(MPSGraph* graph,
                                   NSArray<MPSGraphOperation*>* target_ops,
                                   bool half_precision) {
     if (!feeds_are_symbolic(feeds)) {
-        NSMutableArray<MPSGraphTensor*>* canonical = [NSMutableArray arrayWithCapacity:targets.count];
+        NSMutableArray<MPSGraphTensor*>* canonical =
+            [NSMutableArray arrayWithCapacity:targets.count];
         for (MPSGraphTensor* t in targets)
             [canonical addObject:canonical_output(graph, t)];
         targets = canonical;
@@ -668,6 +735,11 @@ namespace lucid::compile {
 // read/write the same fields without breaking the ABI.
 class CompiledExecutable {
 public:
+    // The shape each feed placeholder was declared at when it differs from the logical
+    // ``input_shapes`` (a rank-5+ feed read only through views, ``canonical_feed_shapes``):
+    // the caller's buffer is bound at it.  Empty = every slot is bound at ``input_shapes``;
+    // otherwise one entry per slot, empty for a slot bound at its logical shape.
+    std::vector<Shape> feed_target_shapes;
     MPSGraphExecutable* executable = nil;  // ARC strong (matches .mm)
     // Phase 1.9: retained source MPSGraph for variable-bearing
     // executables — keeps the variable storage live for the executable's
@@ -803,6 +875,9 @@ CompiledExecutable* MpsBuilder::compile_trace(bool dynamic_batch,
         input_shapes.reserve(ordered_feed_ids.size());
         input_dtypes.reserve(ordered_feed_ids.size());
 
+        const FeedShapes declared = declared_feed_shapes(graph, external_feeds, dynamic_batch,
+                                                         {&param_ids, &explicit_outputs});
+
         for (TensorId tid : ordered_feed_ids) {
             const auto& impl = external_feeds.at(tid);
             if (!impl)
@@ -823,7 +898,7 @@ CompiledExecutable* MpsBuilder::compile_trace(bool dynamic_batch,
                     [dyn addObject:[NSNumber numberWithLongLong:feed_shape[k]]];
                 ns_shape = dyn;
             } else {
-                ns_shape = shape_to_nsarray(feed_shape);
+                ns_shape = shape_to_nsarray(declared_shape_of(declared, tid, feed_shape));
             }
             MPSDataType ns_dt;
             try {
@@ -1073,15 +1148,10 @@ CompiledExecutable* MpsBuilder::compile_trace(bool dynamic_batch,
 
         // Build the feed dictionary for compileWithDevice:feeds: — maps
         // each placeholder to a shape descriptor.
-        NSMutableDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feed_dict =
-            [NSMutableDictionary dictionaryWithCapacity:feed_tensors.size()];
-        for (std::size_t i = 0; i < feed_tensors.size(); ++i) {
-            MPSDataType ns_dt = mps_dtype_or_throw(input_dtypes[i]);
-            NSArray<NSNumber*>* ns_shape = shape_to_nsarray(input_shapes[i]);
-            MPSGraphShapedType* st = [[MPSGraphShapedType alloc] initWithShape:ns_shape
-                                                                      dataType:ns_dt];
-            feed_dict[feed_tensors[i]] = st;
-        }
+        const std::vector<Shape> declared_shapes =
+            declared_per_slot(ordered_feed_ids, input_shapes, declared);
+        NSDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feed_dict =
+            make_feed_dict(feed_tensors, input_dtypes, declared_shapes);
         NSMutableArray<MPSGraphTensor*>* target_arr =
             [NSMutableArray arrayWithCapacity:target_tensors.size()];
         for (MPSGraphTensor* t : target_tensors)
@@ -1096,6 +1166,7 @@ CompiledExecutable* MpsBuilder::compile_trace(bool dynamic_batch,
         exe->executable = compiled;
         exe->input_ids = ordered_feed_ids;
         exe->output_ids = target_ids;
+        exe->feed_target_shapes = feed_target_shapes(input_shapes, declared_shapes);
         exe->input_shapes = std::move(input_shapes);
         exe->input_dtypes = std::move(input_dtypes);
         exe->output_shapes = std::move(output_shapes);
@@ -1233,6 +1304,10 @@ MpsBuilder::compile_trace_with_backward(TensorId loss_id,
         input_shapes.reserve(ordered_feed_ids.size());
         input_dtypes.reserve(ordered_feed_ids.size());
 
+        const std::vector<TensorId> loss{loss_id};
+        const FeedShapes declared = declared_feed_shapes(graph, external_feeds, dynamic_batch,
+                                                         {&param_ids, &loss, &extra_output_ids});
+
         for (TensorId tid : ordered_feed_ids) {
             const auto& impl = external_feeds.at(tid);
             if (!impl)
@@ -1254,7 +1329,7 @@ MpsBuilder::compile_trace_with_backward(TensorId loss_id,
                     [dyn addObject:[NSNumber numberWithLongLong:feed_shape[k]]];
                 ns_shape = dyn;
             } else {
-                ns_shape = shape_to_nsarray(feed_shape);
+                ns_shape = shape_to_nsarray(declared_shape_of(declared, tid, feed_shape));
             }
             MPSDataType ns_dt;
             try {
@@ -1386,10 +1461,11 @@ MpsBuilder::compile_trace_with_backward(TensorId loss_id,
                 if (ancestors.count(param_ids[i]) != 0)
                     [reach_arr addObject:param_arr[i]];
             NSDictionary<MPSGraphTensor*, MPSGraphTensor*>* grad_map =
-                reach_arr.count == 0 ? @{}
-                                     : [graph_obj gradientForPrimaryTensor:autodiff_primary(graph_obj, loss_t)
-                                                               withTensors:reach_arr
-                                                                      name:@"lucid_grads"];
+                reach_arr.count == 0
+                    ? @{}
+                    : [graph_obj gradientForPrimaryTensor:autodiff_primary(graph_obj, loss_t)
+                                              withTensors:reach_arr
+                                                     name:@"lucid_grads"];
             if (grad_map == nil)
                 return fail("compile_trace_with_backward: gradientForPrimaryTensor returned nil");
 
@@ -1444,14 +1520,10 @@ MpsBuilder::compile_trace_with_backward(TensorId loss_id,
         }
 
         // Build feed dict.
-        NSMutableDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feed_dict =
-            [NSMutableDictionary dictionaryWithCapacity:feed_tensors.size()];
-        for (std::size_t i = 0; i < feed_tensors.size(); ++i) {
-            MPSDataType ns_dt = mps_dtype_or_throw(input_dtypes[i]);
-            NSArray<NSNumber*>* ns_shape = shape_to_nsarray(input_shapes[i]);
-            feed_dict[feed_tensors[i]] = [[MPSGraphShapedType alloc] initWithShape:ns_shape
-                                                                          dataType:ns_dt];
-        }
+        const std::vector<Shape> declared_shapes =
+            declared_per_slot(ordered_feed_ids, input_shapes, declared);
+        NSDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feed_dict =
+            make_feed_dict(feed_tensors, input_dtypes, declared_shapes);
 
         MPSGraphExecutable* compiled =
             compile_graph(graph_obj, feed_dict, target_arr, nil, carries_half_precision(graph));
@@ -1510,6 +1582,7 @@ MpsBuilder::compile_trace_with_backward(TensorId loss_id,
         exe->input_ids = ordered_feed_ids;
         exe->output_ids = std::vector<TensorId>{loss_id};
         exe->grad_output_ids = std::move(grad_output_ids);
+        exe->feed_target_shapes = feed_target_shapes(input_shapes, declared_shapes);
         exe->input_shapes = std::move(input_shapes);
         exe->input_dtypes = std::move(input_dtypes);
         exe->output_shapes = std::move(output_shapes);
@@ -1902,14 +1975,8 @@ CompiledExecutable* MpsBuilder::compile_fused_training_step(
                 [target_arr addObject:t];
 
         // Build feed dict.
-        NSMutableDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feed_dict =
-            [NSMutableDictionary dictionaryWithCapacity:feed_tensors.size()];
-        for (std::size_t i = 0; i < feed_tensors.size(); ++i) {
-            MPSDataType ns_dt = mps_dtype_or_throw(input_dtypes[i]);
-            NSArray<NSNumber*>* ns_shape = shape_to_nsarray(input_shapes[i]);
-            feed_dict[feed_tensors[i]] = [[MPSGraphShapedType alloc] initWithShape:ns_shape
-                                                                          dataType:ns_dt];
-        }
+        NSDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feed_dict =
+            make_feed_dict(feed_tensors, input_dtypes, input_shapes);
 
         MPSGraphExecutable* compiled =
             compile_graph(graph_obj, feed_dict, target_arr, nil, carries_half_precision(graph));
@@ -2281,14 +2348,8 @@ MpsBuilder::compile_generic_fused_step(TensorId loss_id,
         }
 
         // Feed dict.
-        NSMutableDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feed_dict =
-            [NSMutableDictionary dictionaryWithCapacity:feed_tensors.size()];
-        for (std::size_t i = 0; i < feed_tensors.size(); ++i) {
-            MPSDataType ns_dt = mps_dtype_or_throw(input_dtypes[i]);
-            NSArray<NSNumber*>* ns_shape = shape_to_nsarray(input_shapes[i]);
-            feed_dict[feed_tensors[i]] = [[MPSGraphShapedType alloc] initWithShape:ns_shape
-                                                                          dataType:ns_dt];
-        }
+        NSDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feed_dict =
+            make_feed_dict(feed_tensors, input_dtypes, input_shapes);
 
         MPSGraphExecutable* compiled =
             compile_graph(graph_obj, feed_dict, target_arr, nil, carries_half_precision(graph));
@@ -2717,14 +2778,8 @@ CompiledExecutable* MpsBuilder::compile_generic_fused_step_with_vars(
         }
 
         // Feed dict only includes non-variable feeds.
-        NSMutableDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feed_dict =
-            [NSMutableDictionary dictionaryWithCapacity:feed_tensors.size()];
-        for (std::size_t i = 0; i < feed_tensors.size(); ++i) {
-            MPSDataType ns_dt = mps_dtype_or_throw(input_dtypes[i]);
-            NSArray<NSNumber*>* ns_shape = shape_to_nsarray(input_shapes[i]);
-            feed_dict[feed_tensors[i]] = [[MPSGraphShapedType alloc] initWithShape:ns_shape
-                                                                          dataType:ns_dt];
-        }
+        NSDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feed_dict =
+            make_feed_dict(feed_tensors, input_dtypes, input_shapes);
 
         MPSGraphExecutable* compiled = compile_graph(
             graph_obj, feed_dict, target_arr, [target_ops_arr count] > 0 ? target_ops_arr : nil,

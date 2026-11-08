@@ -243,8 +243,8 @@ const std::unordered_set<std::string_view>& elementwise_ops() {
         "add", "sub", "mul", "div", "pow", "maximum", "minimum", "floordiv", "remainder", "fmod",
         "nextafter", "equal", "not_equal", "greater", "greater_equal", "less", "less_equal",
         "bitwise_and", "bitwise_or", "bitwise_xor", "bitwise_left_shift", "bitwise_right_shift",
-        // ternary
-        "where"};
+        // ternary; ``masked_fill`` is a select of (mask, constant attribute, value)
+        "where", "masked_fill"};
     return names;
 }
 
@@ -525,12 +525,17 @@ const Perm* permutation_attr(const OpNode& node, std::size_t rank) {
 }
 
 // The permutes that stand for ``merged``: itself when it is rank <= 4, else the block
-// moves that reach it — a pass over the data each, so only at the costly lead.
-std::vector<PermuteLayout>
-permute_steps(const PermuteLayout& merged, const TensorMeta& out, bool pin_first) {
+// moves that reach it — a pass over the data each, so only at the costly lead.  The lead
+// is the larger of the input's and the output's: MPSGraph loops over the slices of
+// whichever view is rank 5+, and a space-to-depth reads a (6144-slice) rank-6 view into
+// an output whose own lead is 192.
+std::vector<PermuteLayout> permute_steps(const PermuteLayout& merged,
+                                         const Dims& in_shape,
+                                         const TensorMeta& out,
+                                         bool pin_first) {
     if (merged.perm.size() <= 4)
         return {merged};
-    if (!rank_canon_wants_costly(out.shape))
+    if (!rank_canon_wants_costly(out.shape) && !rank_canon_wants_costly(in_shape))
         return {};
     const Order target(merged.perm.begin(), merged.perm.end());
     return split_permute(merged.in, target, pin_first);
@@ -562,7 +567,7 @@ public:
     std::optional<RankRewrite> plan(const OpNode& node, const RankEnv& env) const override {
         const RankOperand* operand = sole_operand(node, env);
         if (operand == nullptr || env.producer(node.inputs[0]).empty() ||
-            !rank_canon_wants(node.outputs[0].shape))
+            !(rank_canon_wants(node.outputs[0].shape) || rank_canon_wants(operand->shape)))
             return std::nullopt;
         const Perm* perm = permutation_attr(node, operand->shape.size());
         // A symbolic batch has to stay the leading axis for its views to follow it.
@@ -572,7 +577,7 @@ public:
         const auto merged = coalesce_permute(operand->shape, *perm, pin);
         if (!merged)
             return std::nullopt;
-        const auto steps = permute_steps(*merged, node.outputs[0], pin);
+        const auto steps = permute_steps(*merged, operand->shape, node.outputs[0], pin);
         if (steps.empty())
             return std::nullopt;
         return permute_rewrite(node, steps);
@@ -722,6 +727,553 @@ public:
     }
 };
 
+// ────────────────────────────────────────────────────────────────────
+// Data-movement rules (LCD-928)
+// ────────────────────────────────────────────────────────────────────
+//
+// An op that moves values along the axes an attribute names (flip, roll, a scan, a pad,
+// a tile, a concatenation, a triangle mask) leaves the axes it does not name alone, so
+// those merge — and the op runs at the rank the named axes need, which is at most
+// twice their count plus one.  An axis the op resizes or reorders is *solo*; the rest
+// are *plain* (or, for flip, of one of two classes) and merge with a neighbour of the
+// same class.  The attribute then names the run its axis landed in.
+
+// How an axis takes part in a merge: axes of one non-negative key that sit next to each
+// other (size-1 axes between them aside) move together, so they merge; a solo axis is
+// one an attribute names or the op resizes, and stays a run of its own at any size.
+constexpr int kPlainAxis = 0;
+constexpr int kSoloAxis = -1;
+constexpr std::size_t kDropped = std::numeric_limits<std::size_t>::max();
+
+struct AxisRuns {
+    // The run each axis went into; ``kDropped`` for a size-1 axis that carries nothing.
+    std::vector<std::size_t> run_of;
+    std::size_t count = 0;
+};
+
+// ``shape``'s axes grouped into runs by ``key`` (``pin_first`` keeps axis 0 a run of its
+// own whatever its size: a symbolic batch has to stay the leading axis).
+AxisRuns axis_runs(const Dims& shape, const std::vector<int>& key, bool pin_first) {
+    AxisRuns runs;
+    runs.run_of.assign(shape.size(), kDropped);
+    std::optional<std::size_t> last;
+    for (std::size_t a = 0; a < shape.size(); ++a) {
+        const bool pinned = pin_first && a == 0;
+        if (key[a] != kSoloAxis && shape[a] == 1 && !pinned)
+            continue;
+        const bool joins = last && !pinned && !(pin_first && *last == 0) && key[a] != kSoloAxis &&
+                           key[a] == key[*last];
+        if (!joins)
+            ++runs.count;
+        runs.run_of[a] = runs.count - 1;
+        last = a;
+    }
+    return runs;
+}
+
+// ``shape`` read as the runs: each run's size is the product of its axes.
+Dims shape_in_runs(const Dims& shape, const AxisRuns& runs) {
+    Dims sizes(runs.count, 1);
+    for (std::size_t a = 0; a < shape.size(); ++a) {
+        if (runs.run_of[a] != kDropped)
+            sizes[runs.run_of[a]] *= shape[a];
+    }
+    return sizes;
+}
+
+std::int64_t element_count(const Dims& shape) {
+    std::int64_t n = 1;
+    for (std::int64_t d : shape)
+        n *= d;
+    return n;
+}
+
+bool concrete_and_nonempty(const Dims& shape) {
+    return std::all_of(shape.begin(), shape.end(), [](std::int64_t d) { return d > 0; });
+}
+
+// ``axis`` (negative counts from the end) as an index into ``rank`` axes.
+std::optional<std::size_t> axis_index(std::int64_t axis, std::size_t rank) {
+    const auto r = static_cast<std::int64_t>(rank);
+    if (axis < 0)
+        axis += r;
+    if (axis < 0 || axis >= r)
+        return std::nullopt;
+    return static_cast<std::size_t>(axis);
+}
+
+const Perm* list_attr(const OpNode& node, const char* key) {
+    const auto it = node.attrs.find(key);
+    return it == node.attrs.end() ? nullptr : std::get_if<Perm>(&it->second);
+}
+
+const std::int64_t* int_attr_of(const OpNode& node, const char* key) {
+    const auto it = node.attrs.find(key);
+    return it == node.attrs.end() ? nullptr : std::get_if<std::int64_t>(&it->second);
+}
+
+// The rewrite of a merged layout: the shapes the runs give the input(s) and the output,
+// or nullopt when the runs do not fit rank <= 4 below the original rank.
+std::optional<AxisRuns> fitting_runs(const Dims& shape, const std::vector<int>& key, bool pin) {
+    if (pin && key[0] == kSoloAxis)
+        return std::nullopt;
+    AxisRuns runs = axis_runs(shape, key, pin);
+    if (runs.count == 0 || runs.count > 4 || runs.count >= shape.size())
+        return std::nullopt;
+    return runs;
+}
+
+// A rule for a one-input op whose result has the input's rank and whose attributes name
+// axes: ``axis_keys`` says which axes are solo, ``remap_attrs`` re-points the attributes
+// at the runs.
+class AxisRule : public RankRule {
+public:
+    std::optional<RankRewrite> plan(const OpNode& node, const RankEnv& env) const final {
+        const RankOperand* operand = sole_operand(node, env);
+        if (operand == nullptr)
+            return std::nullopt;
+        const TensorMeta& out = node.outputs[0];
+        const Dims& in = operand->shape;
+        if (in.size() != out.shape.size() || !rank_canon_wants(out.shape) ||
+            !concrete_and_nonempty(in) || !concrete_and_nonempty(out.shape))
+            return std::nullopt;
+        const auto key = axis_keys(node, in);
+        if (!key)
+            return std::nullopt;
+        const auto runs = fitting_runs(in, *key, env.dynamic_batch());
+        if (!runs)
+            return std::nullopt;
+
+        RankRewrite rewrite;
+        rewrite.input_shapes = {shape_in_runs(in, *runs)};
+        rewrite.out_shape = shape_in_runs(out.shape, *runs);
+        if (element_count(rewrite.input_shapes[0]) != element_count(in) ||
+            element_count(rewrite.out_shape) != element_count(out.shape) ||
+            !remap_attrs(node, *runs, in, rewrite))
+            return std::nullopt;
+        return rewrite;
+    }
+
+protected:
+    // One key per axis of the input, or nullopt when the attributes do not name axes of it.
+    virtual std::optional<std::vector<int>> axis_keys(const OpNode& node, const Dims& in) const = 0;
+    // Point the attributes at the runs; false leaves the node alone.
+    virtual bool remap_attrs(const OpNode&, const AxisRuns&, const Dims&, RankRewrite&) const {
+        return true;
+    }
+};
+
+// ``flip`` over ``dims``: adjacent axes that are both flipped (or both not) merge — a
+// flip of the merged axis is the flip of each.
+class FlipRule final : public AxisRule {
+public:
+    bool handles(const OpNode& node) const override { return node.name == "flip"; }
+
+protected:
+    std::optional<std::vector<int>> axis_keys(const OpNode& node, const Dims& in) const override {
+        const Perm* dims = list_attr(node, "dims");
+        if (dims == nullptr || dims->empty())
+            return std::nullopt;
+        std::vector<int> key(in.size(), kPlainAxis);
+        for (std::int64_t d : *dims) {
+            const auto axis = axis_index(d, in.size());
+            if (!axis)
+                return std::nullopt;
+            key[*axis] = 1;
+        }
+        return key;
+    }
+
+    bool remap_attrs(const OpNode& node,
+                     const AxisRuns& runs,
+                     const Dims& in,
+                     RankRewrite& rewrite) const override {
+        std::vector<bool> flipped(runs.count, false);
+        for (std::int64_t d : *list_attr(node, "dims")) {
+            const std::size_t run = runs.run_of[*axis_index(d, in.size())];
+            if (run != kDropped)
+                flipped[run] = true;
+        }
+        Perm dims;
+        for (std::size_t r = 0; r < flipped.size(); ++r) {
+            if (flipped[r])
+                dims.push_back(static_cast<std::int64_t>(r));
+        }
+        if (dims.empty())
+            return false;
+        rewrite.attrs = with_attr(node.attrs, "dims", std::move(dims));
+        return true;
+    }
+};
+
+// ``roll`` by ``shifts`` along ``axes``: an axis that really moves is solo (a merged
+// axis would roll by another amount).
+class RollRule final : public AxisRule {
+public:
+    bool handles(const OpNode& node) const override { return node.name == "roll"; }
+
+protected:
+    std::optional<std::vector<int>> axis_keys(const OpNode& node, const Dims& in) const override {
+        const auto moves = effective_moves(node, in);
+        if (!moves || moves->empty())
+            return std::nullopt;
+        std::vector<int> key(in.size(), kPlainAxis);
+        for (const auto& [axis, shift] : *moves)
+            key[axis] = kSoloAxis;
+        return key;
+    }
+
+    bool remap_attrs(const OpNode& node,
+                     const AxisRuns& runs,
+                     const Dims& in,
+                     RankRewrite& rewrite) const override {
+        Perm axes;
+        Perm shifts;
+        const auto moves = effective_moves(node, in);
+        for (const auto& [axis, shift] : *moves) {
+            axes.push_back(static_cast<std::int64_t>(runs.run_of[axis]));
+            shifts.push_back(shift);
+        }
+        RankAttrs attrs = with_attr(node.attrs, "axes", std::move(axes));
+        attrs["shifts"] = std::move(shifts);
+        rewrite.attrs = std::move(attrs);
+        return true;
+    }
+
+private:
+    // ``(axis, shift)`` for each axis rolled by a non-zero amount modulo its size, the
+    // shifts of a repeated axis added.
+    static std::optional<std::vector<std::pair<std::size_t, std::int64_t>>>
+    effective_moves(const OpNode& node, const Dims& in) {
+        const Perm* axes = list_attr(node, "axes");
+        const Perm* shifts = list_attr(node, "shifts");
+        if (axes == nullptr || shifts == nullptr || axes->size() != shifts->size())
+            return std::nullopt;
+        std::map<std::size_t, std::int64_t> total;
+        for (std::size_t i = 0; i < axes->size(); ++i) {
+            const auto axis = axis_index((*axes)[i], in.size());
+            if (!axis)
+                return std::nullopt;
+            const std::int64_t size = in[*axis];
+            total[*axis] = ((total[*axis] + (*shifts)[i]) % size + size) % size;
+        }
+        std::vector<std::pair<std::size_t, std::int64_t>> moves;
+        for (const auto& [axis, shift] : total) {
+            if (shift != 0)
+                moves.emplace_back(axis, shift);
+        }
+        return moves;
+    }
+};
+
+// A scan (``cumsum`` and kin) or ``repeat`` along one axis: the axes before it merge,
+// the axes after it merge, ``axis`` is re-pointed at the middle run.
+class SingleAxisRule final : public AxisRule {
+public:
+    explicit SingleAxisRule(std::vector<std::string_view> names) : names_(std::move(names)) {}
+    bool handles(const OpNode& node) const override {
+        return std::find(names_.begin(), names_.end(), node.name) != names_.end();
+    }
+
+protected:
+    std::optional<std::vector<int>> axis_keys(const OpNode& node, const Dims& in) const override {
+        const std::int64_t* axis = int_attr_of(node, "axis");
+        const auto at = axis == nullptr ? std::nullopt : axis_index(*axis, in.size());
+        if (!at)
+            return std::nullopt;
+        std::vector<int> key(in.size(), kPlainAxis);
+        key[*at] = kSoloAxis;
+        return key;
+    }
+
+    bool remap_attrs(const OpNode& node,
+                     const AxisRuns& runs,
+                     const Dims& in,
+                     RankRewrite& rewrite) const override {
+        const std::size_t at = *axis_index(*int_attr_of(node, "axis"), in.size());
+        rewrite.attrs = with_attr(node.attrs, "axis", static_cast<std::int64_t>(runs.run_of[at]));
+        return true;
+    }
+
+private:
+    std::vector<std::string_view> names_;
+};
+
+// ``pad`` (``pads`` is a (before, after) pair per axis): an unpadded axis is plain.
+class PadRule final : public AxisRule {
+public:
+    bool handles(const OpNode& node) const override { return node.name == "pad"; }
+
+protected:
+    std::optional<std::vector<int>> axis_keys(const OpNode& node, const Dims& in) const override {
+        const Perm* pads = list_attr(node, "pads");
+        if (pads == nullptr || pads->size() != 2 * in.size())
+            return std::nullopt;
+        std::vector<int> key(in.size(), kPlainAxis);
+        bool padded = false;
+        for (std::size_t a = 0; a < in.size(); ++a) {
+            if ((*pads)[2 * a] != 0 || (*pads)[2 * a + 1] != 0) {
+                key[a] = kSoloAxis;
+                padded = true;
+            }
+        }
+        return padded ? std::optional(key) : std::nullopt;
+    }
+
+    bool remap_attrs(const OpNode& node,
+                     const AxisRuns& runs,
+                     const Dims& in,
+                     RankRewrite& rewrite) const override {
+        const Perm& pads = *list_attr(node, "pads");
+        Perm moved(2 * runs.count, 0);
+        for (std::size_t a = 0; a < in.size(); ++a) {
+            if (runs.run_of[a] == kDropped || (pads[2 * a] == 0 && pads[2 * a + 1] == 0))
+                continue;
+            moved[2 * runs.run_of[a]] = pads[2 * a];
+            moved[2 * runs.run_of[a] + 1] = pads[2 * a + 1];
+        }
+        rewrite.attrs = with_attr(node.attrs, "pads", std::move(moved));
+        return true;
+    }
+};
+
+// ``tile``: an axis repeated once is plain.
+class TileRule final : public AxisRule {
+public:
+    bool handles(const OpNode& node) const override { return node.name == "tile"; }
+
+protected:
+    std::optional<std::vector<int>> axis_keys(const OpNode& node, const Dims& in) const override {
+        const Perm* reps = list_attr(node, "reps");
+        if (reps == nullptr || reps->size() != in.size())
+            return std::nullopt;
+        std::vector<int> key(in.size(), kPlainAxis);
+        bool tiled = false;
+        for (std::size_t a = 0; a < in.size(); ++a) {
+            if ((*reps)[a] <= 0)
+                return std::nullopt;
+            if ((*reps)[a] != 1) {
+                key[a] = kSoloAxis;
+                tiled = true;
+            }
+        }
+        return tiled ? std::optional(key) : std::nullopt;
+    }
+
+    bool remap_attrs(const OpNode& node,
+                     const AxisRuns& runs,
+                     const Dims& in,
+                     RankRewrite& rewrite) const override {
+        const Perm& reps = *list_attr(node, "reps");
+        Perm moved(runs.count, 1);
+        for (std::size_t a = 0; a < in.size(); ++a) {
+            if (runs.run_of[a] != kDropped && reps[a] != 1)
+                moved[runs.run_of[a]] = reps[a];
+        }
+        rewrite.attrs = with_attr(node.attrs, "reps", std::move(moved));
+        return true;
+    }
+};
+
+// ``tril`` / ``triu`` mask the last two axes; every axis before them is plain.
+class TriRule final : public AxisRule {
+public:
+    bool handles(const OpNode& node) const override {
+        return node.name == "tril" || node.name == "triu";
+    }
+
+protected:
+    std::optional<std::vector<int>> axis_keys(const OpNode&, const Dims& in) const override {
+        if (in.size() < 2)
+            return std::nullopt;
+        std::vector<int> key(in.size(), kPlainAxis);
+        key[in.size() - 1] = kSoloAxis;
+        key[in.size() - 2] = kSoloAxis;
+        return key;
+    }
+};
+
+// ``concatenate`` along ``dim``: every input shares the other axes, so they merge the
+// same way in each, and ``dim`` is the middle run.
+class ConcatRule final : public RankRule {
+public:
+    bool handles(const OpNode& node) const override { return node.name == "concatenate"; }
+
+    std::optional<RankRewrite> plan(const OpNode& node, const RankEnv& env) const override {
+        if (node.outputs.size() != 1 || node.inputs.empty() || reads_fused_producer(node, env))
+            return std::nullopt;
+        const TensorMeta& out = node.outputs[0];
+        const std::int64_t* dim = int_attr_of(node, "dim");
+        const auto at = dim == nullptr ? std::nullopt : axis_index(*dim, out.shape.size());
+        if (!at || is_complex(out.dtype) || !rank_canon_wants(out.shape) ||
+            !concrete_and_nonempty(out.shape))
+            return std::nullopt;
+        std::vector<int> key(out.shape.size(), kPlainAxis);
+        key[*at] = kSoloAxis;
+        const auto runs = fitting_runs(out.shape, key, env.dynamic_batch());
+        if (!runs)
+            return std::nullopt;
+
+        RankRewrite rewrite;
+        if (!view_inputs(node, env, *runs, rewrite))
+            return std::nullopt;
+        rewrite.out_shape = shape_in_runs(out.shape, *runs);
+        rewrite.attrs = with_attr(node.attrs, "dim", static_cast<std::int64_t>(runs->run_of[*at]));
+        return rewrite;
+    }
+
+private:
+    // Each input at the runs; false when one is unknown, of another rank or empty.
+    static bool view_inputs(const OpNode& node,
+                            const RankEnv& env,
+                            const AxisRuns& runs,
+                            RankRewrite& rewrite) {
+        for (TensorId id : node.inputs) {
+            const RankOperand* operand = id >= 0 ? env.find(id) : nullptr;
+            if (operand == nullptr || operand->shape.size() != runs.run_of.size() ||
+                !concrete_and_nonempty(operand->shape))
+                return false;
+            Dims canonical = shape_in_runs(operand->shape, runs);
+            if (element_count(canonical) != element_count(operand->shape))
+                return false;
+            rewrite.input_shapes.push_back(std::move(canonical));
+        }
+        return true;
+    }
+};
+
+// ``split_at`` / ``split`` cut one tensor along ``axis`` into pieces (every slice
+// ``x[:, a:b]`` is one): the axes around ``axis`` merge, the source is read at the merged
+// layout and each piece is viewed back at its own shape.  The node lists the source once
+// per piece, so every input is viewed alike.
+class SplitRule final : public RankRule {
+public:
+    bool handles(const OpNode& node) const override {
+        return node.name == "split_at" || node.name == "split";
+    }
+
+    std::optional<RankRewrite> plan(const OpNode& node, const RankEnv& env) const override {
+        const RankOperand* source = shared_source(node, env);
+        const std::int64_t* axis = int_attr_of(node, "axis");
+        const auto at = axis == nullptr || source == nullptr
+                            ? std::nullopt
+                            : axis_index(*axis, source->shape.size());
+        if (!at || is_complex(source->dtype) || !rank_canon_wants(source->shape) ||
+            !concrete_and_nonempty(source->shape))
+            return std::nullopt;
+        std::vector<int> key(source->shape.size(), kPlainAxis);
+        key[*at] = kSoloAxis;
+        const auto runs = fitting_runs(source->shape, key, env.dynamic_batch());
+        if (!runs)
+            return std::nullopt;
+
+        RankRewrite rewrite;
+        rewrite.input_shapes.assign(node.inputs.size(), shape_in_runs(source->shape, *runs));
+        if (!view_pieces(node, source->shape.size(), *runs, rewrite))
+            return std::nullopt;
+        rewrite.attrs = with_attr(node.attrs, "axis", static_cast<std::int64_t>(runs->run_of[*at]));
+        return rewrite;
+    }
+
+private:
+    // The one tensor every input names (the node lists the source once per piece), or
+    // nullptr when it is not that shape of node or the source is unknown.
+    static const RankOperand* shared_source(const OpNode& node, const RankEnv& env) {
+        if (node.outputs.size() < 2 || node.inputs.empty() || node.inputs[0] < 0 ||
+            reads_fused_producer(node, env))
+            return nullptr;
+        const bool same = std::all_of(node.inputs.begin(), node.inputs.end(),
+                                      [&](TensorId id) { return id == node.inputs[0]; });
+        return same ? env.find(node.inputs[0]) : nullptr;
+    }
+
+    // Each piece at the runs; false when one has another rank or is empty.
+    static bool
+    view_pieces(const OpNode& node, std::size_t rank, const AxisRuns& runs, RankRewrite& rewrite) {
+        for (std::size_t j = 0; j < node.outputs.size(); ++j) {
+            const Dims& piece = node.outputs[j].shape;
+            if (piece.size() != rank || !concrete_and_nonempty(piece))
+                return false;
+            Dims canonical = shape_in_runs(piece, runs);
+            if (j == 0)
+                rewrite.out_shape = std::move(canonical);
+            else
+                rewrite.extra_outputs.push_back(std::move(canonical));
+        }
+        return true;
+    }
+};
+
+// ``stack`` along ``axis``: every input is read as ``(rows before axis, the rest)`` and the
+// result is ``(rows, count, rest)`` — rank 3 whatever the rank.
+class StackRule final : public RankRule {
+public:
+    bool handles(const OpNode& node) const override { return node.name == "stack"; }
+
+    std::optional<RankRewrite> plan(const OpNode& node, const RankEnv& env) const override {
+        if (node.outputs.size() != 1 || node.inputs.empty() || env.dynamic_batch() ||
+            reads_fused_producer(node, env))
+            return std::nullopt;
+        const TensorMeta& out = node.outputs[0];
+        const std::int64_t* axis = int_attr_of(node, "axis");
+        const auto at = axis == nullptr ? std::nullopt : axis_index(*axis, out.shape.size());
+        if (!at || is_complex(out.dtype) || !rank_canon_wants(out.shape) ||
+            !concrete_and_nonempty(out.shape))
+            return std::nullopt;
+        Dims in_shape = out.shape;
+        in_shape.erase(in_shape.begin() + static_cast<std::ptrdiff_t>(*at));
+        if (!inputs_have_shape(node, env, in_shape))
+            return std::nullopt;
+        std::int64_t rows = 1;
+        std::int64_t rest = 1;
+        for (std::size_t a = 0; a < in_shape.size(); ++a)
+            (a < *at ? rows : rest) *= in_shape[a];
+
+        RankRewrite rewrite;
+        rewrite.input_shapes.assign(node.inputs.size(), Dims{rows, rest});
+        rewrite.out_shape = {rows, out.shape[*at], rest};
+        rewrite.attrs = with_attr(node.attrs, "axis", std::int64_t{1});
+        return rewrite;
+    }
+
+private:
+    static bool inputs_have_shape(const OpNode& node, const RankEnv& env, const Dims& shape) {
+        return std::all_of(node.inputs.begin(), node.inputs.end(), [&](TensorId id) {
+            const RankOperand* operand = id >= 0 ? env.find(id) : nullptr;
+            return operand != nullptr && operand->shape == shape;
+        });
+    }
+};
+
+// ``broadcast_to`` (and so ``expand``): the target's axes merge where the operand treats
+// them alike, exactly as for a binary op's operand.
+class BroadcastRule final : public RankRule {
+public:
+    bool handles(const OpNode& node) const override { return node.name == "broadcast_to"; }
+
+    std::optional<RankRewrite> plan(const OpNode& node, const RankEnv& env) const override {
+        const RankOperand* operand = sole_operand(node, env);
+        if (operand == nullptr || !rank_canon_wants(node.outputs[0].shape))
+            return std::nullopt;
+        const TensorMeta& out = node.outputs[0];
+        if (!concrete_and_nonempty(out.shape) || !concrete_and_nonempty(operand->shape))
+            return std::nullopt;
+        if (env.dynamic_batch() && !operand->shape.empty() &&
+            operand->shape.size() != out.shape.size())
+            return std::nullopt;
+        const auto layout = coalesce_broadcast({operand->shape}, out.shape, env.dynamic_batch());
+        if (!layout || layout->out.size() > 4 || layout->out.size() >= out.shape.size())
+            return std::nullopt;
+
+        RankRewrite rewrite;
+        rewrite.out_shape = layout->out;
+        rewrite.input_shapes.resize(1);
+        if (!layout->operands[0].empty() && layout->operands[0] != operand->shape)
+            rewrite.input_shapes[0] = layout->operands[0];
+        return rewrite;
+    }
+};
+
 }  // namespace
 
 const std::vector<std::unique_ptr<RankRule>>& rank_rules() {
@@ -731,6 +1283,17 @@ const std::vector<std::unique_ptr<RankRule>>& rank_rules() {
         v.push_back(std::make_unique<PermuteRule>());
         v.push_back(std::make_unique<SoftmaxRule>());
         v.push_back(std::make_unique<MatmulRule>());
+        v.push_back(std::make_unique<FlipRule>());
+        v.push_back(std::make_unique<RollRule>());
+        v.push_back(std::make_unique<SingleAxisRule>(
+            std::vector<std::string_view>{"cumsum", "cumprod", "cummax", "cummin", "repeat"}));
+        v.push_back(std::make_unique<PadRule>());
+        v.push_back(std::make_unique<TileRule>());
+        v.push_back(std::make_unique<TriRule>());
+        v.push_back(std::make_unique<ConcatRule>());
+        v.push_back(std::make_unique<SplitRule>());
+        v.push_back(std::make_unique<StackRule>());
+        v.push_back(std::make_unique<BroadcastRule>());
         return v;
     }();
     return rules;
@@ -807,6 +1370,7 @@ public:
     void run() {
         if (env_.dynamic_batch())
             return;
+        lead_producers();
         for (std::size_t i = 0; i < graph_.ops.size(); ++i) {
             if (!plans_[i])
                 continue;
@@ -820,6 +1384,58 @@ public:
     }
 
 private:
+    // The converse: an elementwise producer takes the layout the rewritten ops that read it
+    // all ask for, so ``x * 2 -> concatenate`` runs the multiply at the shape the
+    // concatenation reads instead of flat with a reshape in between (which costs 2.2x the
+    // twin at lead 16384).  Walked from the back so a chain of them follows too; a result
+    // two readers want differently keeps its own layout.
+    void lead_producers() {
+        Wanted wanted;
+        for (std::size_t i = graph_.ops.size(); i-- > 0;) {
+            if (!plans_[i])
+                continue;
+            const OpNode& node = graph_.ops[i];
+            RankRewrite& plan = *plans_[i];
+            if (elementwise_ops().count(node.name) == 0)
+                ask_for_inputs(node, plan, wanted);
+            else if (const auto it = wanted.find(node.outputs[0].id); it != wanted.end())
+                follow_readers(node, plan, it->second, wanted);
+        }
+    }
+
+    // ``nullopt``: two readers want a result at different shapes.
+    using Wanted = std::unordered_map<TensorId, std::optional<Dims>>;
+
+    static void want(Wanted& wanted, TensorId id, const Dims& shape) {
+        const auto [it, fresh] = wanted.try_emplace(id, shape);
+        if (!fresh && it->second && *it->second != shape)
+            it->second.reset();
+    }
+
+    // A rule op reads each input at the shape its plan names.
+    static void ask_for_inputs(const OpNode& node, const RankRewrite& plan, Wanted& wanted) {
+        for (std::size_t k = 0; k < node.inputs.size(); ++k) {
+            if (!plan.input_shapes[k].empty())
+                want(wanted, node.inputs[k], plan.input_shapes[k]);
+        }
+    }
+
+    // An elementwise producer runs at the shape its readers agree on, and asks the same of
+    // its own operands.
+    void follow_readers(const OpNode& node,
+                        RankRewrite& plan,
+                        const std::optional<Dims>& shape,
+                        Wanted& wanted) const {
+        if (!shape || *shape == plan.out_shape || !plan.then.empty() || plan.attrs ||
+            plan.input_shapes.size() != node.inputs.size() || !uniform_operands(node))
+            return;
+        adopt_layout(node, plan, Dims(*shape));
+        for (TensorId id : node.inputs) {
+            if (id >= 0 && !env_.find(id)->shape.empty())
+                want(wanted, id, *shape);
+        }
+    }
+
     // Every operand is a scalar or of the output's shape.
     bool uniform_operands(const OpNode& node) const {
         return std::all_of(node.inputs.begin(), node.inputs.end(), [&](TensorId id) {
@@ -860,7 +1476,7 @@ private:
 // into it, and an op that would have fused with the producer (a layer norm over an
 // ``add``) loses the fusion too.  A rewritten result is wanted only by rewritten ops,
 // by views and pass-throughs (followed to their consumers while their result is
-// still rank 5+) and by graph outputs (rewritten at the boundary).
+// still above the lead gate) and by graph outputs (rewritten at the boundary).
 //
 // A consumer always comes after its producer, so one pass from the back settles
 // every decision a node depends on.
@@ -911,7 +1527,7 @@ private:
         if (!passes_through(node))
             return true;
         const TensorMeta& out = node.outputs[0];
-        return out.shape.size() >= kRankCanonMinRank && read_wide(out.id);
+        return rank_canon_wants(out.shape) && read_wide(out.id);
     }
 
     const TraceGraph& graph_;
@@ -926,7 +1542,14 @@ void drop_rewrites_read_wide(const TraceGraph& graph,
                              Plans& plans) {
     const WideReads reads(graph, inside, plans);
     for (std::size_t i = graph.ops.size(); i-- > 0;) {
-        if (plans[i] && reads.read_wide(graph.ops[i].outputs[0].id))
+        if (!plans[i])
+            continue;
+        const auto& outputs = graph.ops[i].outputs;
+        // A piece below the lead gate costs next to nothing to read at rank 5+ (a slice
+        // loop of a few iterations), so only the pieces above it count.
+        if (std::any_of(outputs.begin(), outputs.end(), [&](const TensorMeta& m) {
+                return rank_canon_wants(m.shape) && reads.read_wide(m.id);
+            }))
             plans[i].reset();
     }
 }
@@ -1031,6 +1654,9 @@ void emit_rewritten(const OpNode& node, const RankRewrite& plan, ViewBook& book,
         canonical.attrs = *plan.attrs;
     TensorMeta last = book.mint(result, plan.out_shape);
     canonical.outputs[0] = last;
+    for (std::size_t j = 0; j < plan.extra_outputs.size(); ++j)
+        canonical.outputs[j + 1] = book.mint(node.outputs[j + 1], plan.extra_outputs[j]);
+    const std::vector<TensorMeta> pieces(canonical.outputs.begin() + 1, canonical.outputs.end());
     out.ops.push_back(std::move(canonical));
 
     // A split op: each further node reads the previous result, viewed at the shape it
@@ -1048,6 +1674,10 @@ void emit_rewritten(const OpNode& node, const RankRewrite& plan, ViewBook& book,
     }
     book.reshape(out.ops, last.id, result);
     book.note_canonical(result.id, last.id);
+    for (std::size_t j = 0; j < pieces.size(); ++j) {
+        book.reshape(out.ops, pieces[j].id, node.outputs[j + 1]);
+        book.note_canonical(node.outputs[j + 1].id, pieces[j].id);
+    }
 }
 
 }  // namespace
@@ -1124,6 +1754,103 @@ void RankCanon::rewrite(const RankEnv& env,
     out->next_id = book.next_id();
     views_added_ = book.added();
     rewritten_ = std::move(out);
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Feeds
+// ────────────────────────────────────────────────────────────────────
+
+namespace {
+
+// Feeds a builder may re-declare: rank 5+, over the gate, concrete, not kept.
+std::unordered_set<TensorId>
+wide_feeds(const std::unordered_map<TensorId, TensorImplPtr>& external_feeds,
+           const std::unordered_set<TensorId>& kept) {
+    std::unordered_set<TensorId> wide;
+    for (const auto& [id, impl] : external_feeds) {
+        if (impl && kept.count(id) == 0 && rank_canon_wants(impl->shape()) &&
+            concrete_and_nonempty(impl->shape()))
+            wide.insert(id);
+    }
+    return wide;
+}
+
+// Drops from ``feeds`` every id something other than a pure view reads: an op of the
+// graph, or a custom-backward region (its backward reads the forward ids by name).
+void drop_feeds_read_by_more_than_views(const TraceGraph& graph,
+                                        std::unordered_set<TensorId>& feeds) {
+    for (const OpNode& node : graph.ops) {
+        if (is_pure_view(node))
+            continue;
+        for (TensorId id : node.inputs)
+            feeds.erase(id);
+    }
+    for (const VjpRegion& r : graph.vjp_regions) {
+        for (TensorId id : r.input_ids)
+            feeds.erase(id);
+        for (TensorId id : r.cotangent_ids)
+            feeds.erase(id);
+        for (const OpNode& node : r.bwd_ops) {
+            for (TensorId id : node.inputs)
+                feeds.erase(id);
+        }
+    }
+}
+
+// How many ops that compute (everything but a slice) read each id.
+std::unordered_map<TensorId, int> compute_reader_counts(const TraceGraph& graph) {
+    std::unordered_map<TensorId, int> counts;
+    for (const OpNode& node : graph.ops) {
+        if (node.name == "split_at" || node.name == "split")
+            continue;
+        for (TensorId id : node.inputs)
+            ++counts[id];
+    }
+    return counts;
+}
+
+}  // namespace
+
+FeedShapes canonical_feed_shapes(const TraceGraph& graph,
+                                 const std::unordered_map<TensorId, TensorImplPtr>& external_feeds,
+                                 const std::unordered_set<TensorId>& kept) {
+    FeedShapes shapes;
+    if (rank_canon_min_lead() < 0)
+        return shapes;
+    std::unordered_set<TensorId> feeds = wide_feeds(external_feeds, kept);
+    if (feeds.empty())
+        return shapes;
+    drop_feeds_read_by_more_than_views(graph, feeds);
+
+    // The rank <= 4 shapes the surviving feeds' views produce, in first-seen order, each
+    // weighed by the ops that compute from it: a slice of the view is a cut of the
+    // placeholder's own buffer, whereas an elementwise op reading a reshape of a
+    // placeholder pays a copy of the whole tensor.
+    const std::unordered_map<TensorId, int> compute_readers = compute_reader_counts(graph);
+    std::unordered_map<TensorId, std::vector<std::pair<Dims, int>>> wanted;
+    for (const OpNode& node : graph.ops) {
+        if (!is_pure_view(node) || feeds.count(node.inputs[0]) == 0)
+            continue;
+        const Dims& shape = node.outputs[0].shape;
+        if (shape.size() >= kRankCanonMinRank || !concrete_and_nonempty(shape))
+            continue;
+        const auto readers = compute_readers.find(node.outputs[0].id);
+        const int weight = readers == compute_readers.end() ? 0 : readers->second;
+        auto& seen = wanted[node.inputs[0]];
+        const auto at =
+            std::find_if(seen.begin(), seen.end(), [&](const auto& s) { return s.first == shape; });
+        if (at == seen.end())
+            seen.emplace_back(shape, weight);
+        else
+            at->second += weight;
+    }
+    for (const auto& [id, seen] : wanted) {
+        const auto best =
+            std::max_element(seen.begin(), seen.end(),
+                             [](const auto& a, const auto& b) { return a.second < b.second; });
+        shapes[id] = best->first;
+    }
+    return shapes;
 }
 
 }  // namespace lucid::compile
