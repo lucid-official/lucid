@@ -5,7 +5,7 @@
 #
 # In parts, so CI can run them as parallel jobs (ci.yml ``phase-gate``):
 #
-#   core      the fast tier's main process
+#   core      the fast tier's main process (core:compile / core:rest: its two halves)
 #   coreml    the Core ML tests and the family export smoke
 #   checks    the parity / integration / perf tiers, every validator, the
 #             audit and doctest stages, the zoo's contract and checkpoints,
@@ -38,12 +38,14 @@ if [ "${#PARTS[@]}" -eq 0 ]; then
     PARTS=(core coreml checks zoo native)
 fi
 ZOO_SHARD=""
+CORE_SPLIT=""
 for part in "${PARTS[@]}"; do
     case "$part" in
         core | coreml | checks | zoo | native) ;;
+        core:compile | core:rest) CORE_SPLIT="${part#core:}" ;;
         zoo:*/*) ZOO_SHARD="${part#zoo:}" ;;
         *)
-            echo "unknown part: $part (core, coreml, checks, zoo[:K/N], native)" >&2
+            echo "unknown part: $part (core[:compile|:rest], coreml, checks, zoo[:K/N], native)" >&2
             exit 2
             ;;
     esac
@@ -99,10 +101,29 @@ EXPORT_SMOKE=$COREML_TESTS/test_family_export_smoke.py
 # worth reading on; the cap keeps a red run near its green length.
 FAST_TIER_FAILURES=(--maxfail=50 --continue-on-collection-errors)
 
+# core:compile and core:rest split core in two jobs: the compile tests had
+# grown to half of it, and core alone reached the job's 60-minute cap on the
+# hosted runner (52, 59, then cancelled at 61 on 2026-11-08).  Together they
+# select exactly what core does.
+COMPILE_TESTS=lucid/test/unit/compile
+
 part_core() {
-    echo "==> Python fast tier (non-models)"
-    "$PYTHON_BIN" -m pytest lucid/test/ "${FAST_TIER_IGNORES[@]}" --ignore="$COREML_TESTS" \
-        "${FAST_TIER_FAILURES[@]}" -q
+    case "$CORE_SPLIT" in
+        compile)
+            echo "==> Python fast tier (compile)"
+            "$PYTHON_BIN" -m pytest "$COMPILE_TESTS" "${FAST_TIER_FAILURES[@]}" -q
+            ;;
+        rest)
+            echo "==> Python fast tier (non-models, non-compile)"
+            "$PYTHON_BIN" -m pytest lucid/test/ "${FAST_TIER_IGNORES[@]}" --ignore="$COREML_TESTS" \
+                --ignore="$COMPILE_TESTS" "${FAST_TIER_FAILURES[@]}" -q
+            ;;
+        *)
+            echo "==> Python fast tier (non-models)"
+            "$PYTHON_BIN" -m pytest lucid/test/ "${FAST_TIER_IGNORES[@]}" --ignore="$COREML_TESTS" \
+                "${FAST_TIER_FAILURES[@]}" -q
+            ;;
+    esac
 }
 
 part_coreml() {

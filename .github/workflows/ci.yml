@@ -47,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        part: ${{ fromJSON(github.event_name == 'push' && '["core", "coreml", "checks"]' || '["core", "coreml", "checks", "native", "zoo:1/2", "zoo:2/2"]') }}
+        part: ${{ fromJSON(github.event_name == 'push' && '["core:compile", "core:rest", "coreml", "checks"]' || '["core:compile", "core:rest", "coreml", "checks", "native", "zoo:1/2", "zoo:2/2"]') }}
 
     steps:
       - uses: actions/checkout@v4
@@ -81,7 +81,7 @@ jobs:
         with:
           key: ${{ matrix.part == 'native' && 'phase-gate-native' || 'phase-gate-py3.14' }}
           restore-keys: phase-gate-py3.14
-          save: ${{ matrix.part == 'core' || matrix.part == 'native' }}
+          save: ${{ matrix.part == 'core:rest' || matrix.part == 'native' }}
           max-size: 600M
 
       # The MLX build the engine links ([tool.lucid.mlx]): cached, and its
