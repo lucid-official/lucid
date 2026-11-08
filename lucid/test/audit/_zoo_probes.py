@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from lucid.test._default_device import apply_default_device
+from lucid.test.audit._declared_params import judge
 from lucid.test.audit._zoo_budget import build_size, fits_build, weights_gb
 
 if TYPE_CHECKING:
@@ -116,12 +117,11 @@ def build_family(family: str, budget_gb: float) -> int:
         built_count += 1
         built = sum(int(param.numel()) for param in model.parameters())
         print(
-            f"built {name}: {built:,} params, declared {declared}, "
-            f"{time.monotonic() - began:.1f}s",
+            f"built {name}: {built:,} params, declared {declared}, {time.monotonic() - began:.1f}s",
             flush=True,
         )
-        if declared and built != declared:
-            print(f"CHECK {name}: built {built:,} params, declared {declared:,}", flush=True)
+        if declared and not (verdict := judge(name, built, declared)).within:
+            print(f"CHECK {name}: {verdict.describe()}", flush=True)
         del model
         gc.collect()
         lucid.metal.empty_cache()

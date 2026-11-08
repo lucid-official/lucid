@@ -21,6 +21,7 @@ from lucid.models import _registry, create_model
 from lucid.nn._shadow import is_shadow, shadow_alloc
 from lucid.test._default_device import default_device, metal_available
 from lucid.test.audit import _zoo_budget, _zoo_probes
+from lucid.test.audit._declared_params import DEFAULT_TOLERANCE, PAPER_FIGURE_TOLERANCE, judge
 from lucid.test.audit._zoo_budget import BuildSize, MachineBudget, build_size, shadow_params
 from lucid.test.audit._zoo_stage import CommandStage, read_result
 
@@ -226,3 +227,44 @@ def test_every_registered_factory_has_a_count() -> None:
         if size.source != "shadow" or not size.params:
             uncounted[name] = size.note or "a model with no parameters"
     assert not uncounted, uncounted
+
+
+# ── the declared-params CHECK is held to the unit test's tolerance (LCD-933) ──
+
+
+def test_a_gap_inside_the_default_tolerance_is_no_check_and_one_outside_is() -> None:
+    assert judge("plain", 104, 100).within
+    assert judge("plain", 95, 100).within, "the bound itself is inside"
+    assert not judge("plain", 106, 100).within
+    assert not judge("plain", 94, 100).within
+    assert judge("plain", 106, 100).tolerance == DEFAULT_TOLERANCE
+
+
+def test_a_table_entry_overrides_the_default_and_names_its_reason() -> None:
+    name = "dreamer_v3_25m"
+    tolerance, why = PAPER_FIGURE_TOLERANCE[name]
+    assert tolerance > DEFAULT_TOLERANCE and why
+    with_entry = judge(name, 106, 100)
+    assert with_entry.within and with_entry.why == why and why in with_entry.describe()
+    assert not judge("plain", 106, 100).within, "the same gap is a CHECK without the entry"
+    assert not judge(name, 100 + round(tolerance * 100) + 1, 100).within
+
+
+def test_the_probe_prints_a_check_only_past_the_tolerance(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Every fake factory builds 100 parameters; they differ in what they declare."""
+    monkeypatch.setattr(_Param, "numel", lambda self: 100)
+    declared = {
+        "exact": 100,
+        "rounded": 103,  # 2.9 %: inside the default
+        "plain": 107,  # 6.5 %: outside the default, no table entry
+        "dreamer_v3_25m": 107,  # the same gap, inside its 8 % entry
+        "dreamer_v3_100m": 110,  # 9.1 %: outside even the entry
+    }
+    _fake_zoo(monkeypatch, dict.fromkeys(declared, 100), declared, [])
+    assert _zoo_probes.build_family("fake", budget_gb=22.4) == 0
+    checks = [line for line in capsys.readouterr().out.splitlines() if line.startswith("CHECK")]
+    assert [line.split(":")[0] for line in checks] == ["CHECK plain", "CHECK dreamer_v3_100m"]
+    assert "tolerance 5% from the default" in checks[0]
+    assert "tolerance 8% from its table entry" in checks[1]
