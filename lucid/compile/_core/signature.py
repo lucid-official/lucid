@@ -213,6 +213,12 @@ class CacheKey:
         Whether the call is made inside an ``autocast`` region, and its
         dtype.  A trace records the region's casts: one traced outside it
         answered float32 inside a float16 region, and the other way round.
+    policy : tuple of int
+        The environment settings the engine reads at each compile
+        (``compile_policy``: the rank-canonical lead gate, the manual-VJP
+        switches).  They decide what a compile emits for the same trace, so
+        an executable built under one setting must not answer a call made
+        under another (LCD-922).
 
     Examples
     --------
@@ -257,6 +263,8 @@ class CacheKey:
     grad: bool = False
     # The autocast region the call is made in; see ``autocast`` above.
     autocast: tuple[bool, object] = (False, None)
+    # The engine's compile settings; see ``policy`` above.
+    policy: tuple[int, ...] = ()
 
 
 def _autocast_state() -> tuple[bool, object]:
@@ -1475,4 +1483,5 @@ def signature_of(
         module_state=module_state,
         grad_mode=bool(_C_engine.grad_enabled()),
         autocast=_autocast_state(),
+        policy=_C_engine.compile.compile_policy(),
     )

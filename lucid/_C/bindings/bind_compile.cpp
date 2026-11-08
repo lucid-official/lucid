@@ -18,6 +18,7 @@
 #include <pybind11/stl.h>
 
 #include <algorithm>
+#include <format>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -228,6 +229,18 @@ void bind_rank_canon(py::module_& m) {
     m.def("rank_canon_min_lead", &lucid::compile::rank_canon_min_lead,
           "The lead threshold in force: 64 by default, 0 rewrites every rank-5+ op, a "
           "negative value turns the pass off.");
+    m.def(
+        "compile_policy",
+        [] {
+            const auto policy = lucid::compile::compile_policy();
+            py::tuple out(policy.size());
+            for (std::size_t i = 0; i < policy.size(); ++i)
+                out[i] = py::int_(policy[i]);
+            return out;
+        },
+        "The environment settings read at each compile that change what it emits "
+        "(rank-canonical lead gate, manual-VJP switches), as a tuple of ints. "
+        "Part of the executable cache key; Python's per-module cache keys on it too.");
 }
 
 void bind_trace_nodes(py::module_& m) {
@@ -700,10 +713,9 @@ void register_compile(py::module_& m) {
                 (void)::mkdir(dir.c_str(), 0755);
                 lucid::compile::CacheKeyHash h;
                 std::size_t hashv = h(key);
-                char buf[128];
-                std::snprintf(buf, sizeof(buf), "%slucid_abi%d_%016zx", dir.c_str(),
-                              static_cast<int>(LUCID_ABI_VERSION), hashv);
-                disk_path = buf;
+                // Not a fixed buffer: a long directory cut every name to one prefix.
+                disk_path = dir + std::format("lucid_abi{}_{:016x}",
+                                              static_cast<int>(LUCID_ABI_VERSION), hashv);
 
                 std::string load_err;
                 lucid::compile::CompiledExecutable* disk_hit =

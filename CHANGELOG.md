@@ -81,6 +81,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - fmax/fmin rank a signed-zero tie (LCD-929)
 
+- executable cache key covers the compile policy (LCD-922)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

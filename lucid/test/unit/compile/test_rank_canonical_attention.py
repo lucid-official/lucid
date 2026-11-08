@@ -162,7 +162,6 @@ def test_a_rank_5_attention_in_the_miscompile_window_matches_numpy(shape: Shape)
     arrs = [rng.standard_normal(shape).astype(np.float32) for _ in range(3)]
     args = tuple(lucid.tensor(a.copy(), device=COMPILE_DEVICE) for a in arrs)
     with mock.patch.dict(os.environ, {ENV: "0"}):
-        _C_engine.compile.session_cache_clear()
         got = lucid.compile(lambda a, b, c: _attention(a, b, c))(*args).numpy()
     assert float(np.abs(got - _np_attention(*arrs)).max()) < 1e-3
 
@@ -229,7 +228,6 @@ def test_a_training_dropout_attention_step_runs_with_finite_gradients() -> None:
     """The mask is drawn per run, so the values cannot be held to eager's: only to sanity."""
     model = _Attention(_BLOCK, lucid.float32, 0.1, True).to(COMPILE_DEVICE)
     with mock.patch.dict(os.environ, {ENV: "0"}):
-        _C_engine.compile.session_cache_clear()
         loss = make_step(model, lambda y: (y * y).sum())(_on_metal(lucid.ones(1), lucid.float32))
         loss.backward()
     assert abs(float(loss.item())) < float("inf")
@@ -243,7 +241,6 @@ def test_a_training_dropout_attention_step_runs_with_finite_gradients() -> None:
 
 def _ms(fn: Callable[..., lucid.Tensor], args: tuple[lucid.Tensor, ...], gate: str) -> float:
     with mock.patch.dict(os.environ, {ENV: gate}):
-        _C_engine.compile.session_cache_clear()
         cm = lucid.compile(fn)
         for _ in range(3):
             cm(*args)

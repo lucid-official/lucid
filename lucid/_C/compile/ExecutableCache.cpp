@@ -14,6 +14,10 @@
 #include <cstdlib>
 #include <utility>
 
+#include "OpEmitters/OpEmitter.h"
+#include "RankCanon.h"
+#include "VjpEmitters/VjpEmitter.h"
+
 namespace lucid::compile {
 
 namespace {
@@ -180,8 +184,9 @@ inline bool remap_to_raw(std::vector<TensorId>& ids, const TraceIdMap& id_map) {
 }  // namespace
 
 bool CacheKey::operator==(const CacheKey& other) const noexcept {
-    return device == other.device && op_names == other.op_names && op_inputs == other.op_inputs &&
-           output_shapes == other.output_shapes && output_dtypes == other.output_dtypes &&
+    return device == other.device && policy == other.policy && op_names == other.op_names &&
+           op_inputs == other.op_inputs && output_shapes == other.output_shapes &&
+           output_dtypes == other.output_dtypes &&
            std::equal(op_attrs.begin(), op_attrs.end(), other.op_attrs.begin(),
                       other.op_attrs.end(), same_op_attrs) &&
            feeds == other.feeds && outputs == other.outputs;
@@ -224,8 +229,14 @@ std::size_t CacheKeyHash::operator()(const CacheKey& key) const noexcept {
     }
     for (auto o : key.outputs)
         hash_combine(h, std::hash<std::int64_t>{}(o));
+    for (auto p : key.policy)
+        hash_combine(h, std::hash<std::int64_t>{}(p));
     hash_combine(h, 0x0B7B075ULL);
     return h;
+}
+
+std::vector<std::int64_t> compile_policy() {
+    return {rank_canon_min_lead(), use_manual_vjp() ? 1 : 0, use_manual_vjp_require() ? 1 : 0};
 }
 
 CacheKey make_cache_key(const TraceGraph& graph,
@@ -246,6 +257,8 @@ CacheKey make_cache_key(const TraceGraph& graph,
     for (const auto& r : graph.vjp_regions)
         append_vjp_region_to_key(key, local_map, r);
     key.device = device;
+    key.policy = compile_policy();
+    key.policy.push_back(attention_workaround_state());
 
     // Requested outputs in the same numbering; an id the walk never saw
     // (a feed returned as-is) still gets a stable number before ``feed_meta``

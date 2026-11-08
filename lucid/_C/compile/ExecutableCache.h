@@ -89,6 +89,14 @@ namespace lucid::compile {
 // device : Device
 //     Device on which the executable was compiled (all ops in a trace
 //     must agree on one device — Phase 1.2 builder enforces this).
+// policy : std::vector<std::int64_t>
+//     The process settings that change what a compile emits for the same
+//     trace (see :func:`compile_policy`).  They are read when the key is
+//     made, so an executable built under one setting never answers a
+//     lookup made under another: toggling ``LUCID_COMPILE_RANK_CANON_MIN_LEAD``
+//     mid-process used to hand back the executable built under the old
+//     value, and the pass looked as if it had not run (LCD-922).  The disk
+//     cache names its files by this key's hash, so it follows.
 struct LUCID_API FeedSig {
     std::int64_t canonical_id = 0;
     Shape shape;
@@ -107,6 +115,7 @@ struct LUCID_API CacheKey {
     std::vector<FeedSig> feeds;
     std::vector<std::int64_t> outputs;
     Device device = Device::CPU;
+    std::vector<std::int64_t> policy;
 
     // Structural equality — every field above must match element-wise.
     // Used as the unordered_map bucket-equality predicate.
@@ -120,6 +129,20 @@ struct LUCID_API CacheKeyHash {
     // device.  Two structurally-equal keys produce the same hash.
     std::size_t operator()(const CacheKey& key) const noexcept;
 };
+
+// The environment settings, read now, that change what a compile emits: every
+// one that is resolved at each compile rather than once per process.
+//   [0] ``rank_canon_min_lead()``    (``LUCID_COMPILE_RANK_CANON_MIN_LEAD``)
+//   [1] ``use_manual_vjp()``         (``LUCID_MANUAL_VJP``)
+//   [2] ``use_manual_vjp_require()`` (``LUCID_MANUAL_VJP_REQUIRE``)
+// Logging switches (``LUCID_COMPILE_VERBOSE``, ``LUCID_MANUAL_VJP_DEBUG``) are not
+// here, nor are the settings latched at first read (``LUCID_COMPILE_ASYNC``,
+// ``LUCID_COMPILE_ALIAS_INPLACE``, ``LUCID_COMPILE_FUSED_SDPA``): those cannot
+// change inside a process, or change how an executable runs, not what is in it.
+// Python's per-module cache keys on this too (``signature_of``).  The attention
+// workaround state is not part of it: the probe flips it once, after the first
+// Python key of a process has been made.  ``make_cache_key`` appends it.
+LUCID_API std::vector<std::int64_t> compile_policy();
 
 // Bidirectional mapping between a trace's raw :type:`TensorId` values and
 // the canonical first-appearance numbering minted by :func:`make_cache_key`.

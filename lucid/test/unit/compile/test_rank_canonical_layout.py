@@ -403,9 +403,8 @@ def _same(got: lucid.Tensor, want: lucid.Tensor, why: str) -> None:
 def _forward(
     fn: Callable[..., lucid.Tensor], args: tuple[lucid.Tensor, ...], gate: str
 ) -> lucid.Tensor:
-    """``fn`` compiled with the pass at lead gate ``gate`` (a fresh executable each time)."""
+    """``fn`` compiled with the pass at lead gate ``gate``."""
     with mock.patch.dict(os.environ, {ENV: gate}):
-        _C_engine.compile.session_cache_clear()
         return lucid.compile(fn)(*args)
 
 
@@ -488,7 +487,6 @@ def _step(
 ) -> tuple[lucid.Tensor, dict[str, lucid.Tensor]]:
     model = to_metal(make())
     with mock.patch.dict(os.environ, {ENV: gate}):
-        _C_engine.compile.session_cache_clear()
         loss = make_step(model, _loss)(arg)
         loss.backward()
     return loss, {n: p.grad for n, p in model.named_parameters() if p.grad is not None}
@@ -546,7 +544,6 @@ def test_a_symbolic_batch_survives_the_permute_rewrite() -> None:
         return ((t * 1.5).permute(0, 2, 4, 1, 3) * 2.0).sum(dim=-1)
 
     with mock.patch.dict(os.environ, {ENV: "0"}):
-        _C_engine.compile.session_cache_clear()
         compiled = lucid.compile(fn, dynamic=True)
         for batch in (3, 3, 3):
             x = _on_metal(_filled((batch, 4, 2, 3, 2), 0.2 * batch), lucid.float32)

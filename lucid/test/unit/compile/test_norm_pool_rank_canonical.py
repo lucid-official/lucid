@@ -51,7 +51,6 @@ def _set_policy(monkeypatch: pytest.MonkeyPatch, value: str | None) -> None:
         monkeypatch.delenv(_ENV, raising=False)
     else:
         monkeypatch.setenv(_ENV, value)
-    _C_engine.compile.session_cache_clear()
 
 
 @pytest.fixture(params=["0", None, "-1"], ids=["canon-always", "canon-default", "canon-off"])
@@ -59,14 +58,12 @@ def policy(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> I
     """The rank-canon threshold: always on, the default (64), and off."""
     _set_policy(monkeypatch, request.param)
     yield request.param
-    _C_engine.compile.session_cache_clear()
 
 
 @pytest.fixture
 def canon_always(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     _set_policy(monkeypatch, "0")
     yield
-    _C_engine.compile.session_cache_clear()
 
 
 def _numel(shape: tuple[int, ...]) -> int:
@@ -362,7 +359,6 @@ def test_group_norm_layout_follows_the_policy(monkeypatch: pytest.MonkeyPatch) -
         m = _GroupNet(shape, groups).eval()
         with lucid.no_grad():
             outs.append(lucid.compile(m)(x))
-    _C_engine.compile.session_cache_clear()
     _same(outs[0], outs[1], "legacy vs canonical layout", 5e-4)
 
 
@@ -496,7 +492,6 @@ def test_the_canonical_norm_beats_the_native_rank_5_form(monkeypatch: pytest.Mon
             break
     else:
         pytest.fail(f"canonical layer_norm is not at least 1.7x the native form: {times}")
-    _C_engine.compile.session_cache_clear()
 
 
 def test_a_rank_5_avg_pool3d_is_not_slower_than_its_rank_4_view() -> None:
