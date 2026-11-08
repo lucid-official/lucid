@@ -93,6 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - dreamer_v3 says its sizes are Table 3's labels (LCD-884)
 
+- optimizer plans key on the compile policy (LCD-932)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

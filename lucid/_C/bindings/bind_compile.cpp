@@ -18,6 +18,7 @@
 #include <pybind11/stl.h>
 
 #include <algorithm>
+#include <filesystem>
 #include <format>
 #include <memory>
 #include <stdexcept>
@@ -473,6 +474,16 @@ void bind_tracer_class(py::module_& m) {
     m.def("current_tracer", &lucid::compile::current_tracer, py::return_value_policy::reference);
 }
 
+// ``$LUCID_COMPILE_DISK_CACHE_DIR``, else ``<TMPDIR>/lucid_mpsgraph_cache``.  The join is
+// explicit: ``$TMPDIR`` ends in '/' on macOS by habit, not by contract.
+std::string disk_cache_dir() {
+    const char* dir_env = std::getenv("LUCID_COMPILE_DISK_CACHE_DIR");
+    if (dir_env && *dir_env)
+        return dir_env;
+    const char* tmp = std::getenv("TMPDIR");
+    return (std::filesystem::path(tmp && *tmp ? tmp : "/tmp") / "lucid_mpsgraph_cache").string();
+}
+
 }  // namespace
 
 // Registers the compile-time tracing surface as a sub-module of `_C.engine`.
@@ -697,14 +708,7 @@ void register_compile(py::module_& m) {
             }();
             std::string disk_path;
             if (disk_cache_enabled) {
-                const char* dir_env = std::getenv("LUCID_COMPILE_DISK_CACHE_DIR");
-                std::string dir;
-                if (dir_env && *dir_env) {
-                    dir = dir_env;
-                } else {
-                    const char* tmp = std::getenv("TMPDIR");
-                    dir = std::string(tmp ? tmp : "/tmp") + "lucid_mpsgraph_cache";
-                }
+                std::string dir = disk_cache_dir();
                 // Ensure trailing slash + create directory if missing.
                 if (!dir.empty() && dir.back() != '/')
                     dir.push_back('/');

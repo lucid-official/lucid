@@ -25,7 +25,9 @@ import pytest
 import lucid
 import lucid.nn as nn
 from lucid._C import engine as _C_engine
+from lucid.compile import compile_optimizer
 from lucid.compile._core.signature import signature_of
+from lucid.optim import SGD
 from lucid.test._fixtures.devices import metal_available
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
 
@@ -111,6 +113,43 @@ def test_one_compiled_function_recompiles_when_the_gate_flips_and_not_when_it_re
         again = compiled(x)
     assert len(compiled._cache) == 2
     assert off.tolist() == want.tolist() == again.tolist()
+
+
+# ── the compiled optimizer's plans ────────────────────────────────────────────────────
+
+
+@needs_metal
+@pytest.mark.usefixtures("inference")
+@pytest.mark.parametrize(
+    "name,value", [(_LEAD, "0"), (_LEAD, "-1"), (_VJP, "0"), (_VJP_REQUIRE, "1")]
+)
+def test_a_compiled_optimizer_replans_when_the_policy_flips_and_not_when_it_returns(
+    name: str, value: str
+) -> None:
+    p = nn.Parameter(lucid.ones(4, 3).to(COMPILE_DEVICE))
+    copt = compile_optimizer(SGD([p], lr=0.1))
+
+    def step() -> None:
+        p.grad = lucid.ones(4, 3).to(COMPILE_DEVICE)
+        copt.step()
+
+    step()
+    assert len(copt._plans) == 1
+    built = _C_engine.compile.session_cache_size()
+    step()
+    assert len(copt._plans) == 1
+    assert _C_engine.compile.session_cache_size() == built
+
+    with mock.patch.dict(os.environ, {name: value}):
+        step()
+        assert len(copt._plans) == 2
+        assert _C_engine.compile.session_cache_size() == built + 1
+        step()
+        assert len(copt._plans) == 2
+
+    step()
+    assert len(copt._plans) == 2
+    assert _C_engine.compile.session_cache_size() == built + 1
 
 
 # ── the session cache ─────────────────────────────────────────────────────────────────
@@ -216,3 +255,40 @@ def test_the_disk_cache_files_one_executable_per_gate(tmp_path: Path) -> None:
     assert first >= 1
     assert flipped > first, "the flipped gate reused the file built under the other value"
     assert back == flipped, "the first gate's file was not found again"
+
+
+_DEFAULT_DIR_PROBE = textwrap.dedent(
+    """
+    import lucid
+
+    if __name__ == "__main__":
+        x = lucid.ones(4, 4).to("metal")
+        with lucid.no_grad():
+            lucid.compile(lambda t: t * 2.0 + 1.0)(x)
+    """
+)
+
+
+@needs_metal
+def test_the_default_disk_dir_is_joined_to_tmpdir_with_a_separator(tmp_path: Path) -> None:
+    """``$TMPDIR`` ends in ``/`` on macOS only by habit: without one, the directory
+    was ``<tmpdir>lucid_mpsgraph_cache``, a sibling of ``$TMPDIR`` rather than a child."""
+    script = tmp_path / "probe.py"
+    script.write_text(_DEFAULT_DIR_PROBE)
+    tmpdir = tmp_path / "tmp"
+    tmpdir.mkdir()
+    env = {**os.environ, "LUCID_COMPILE_DISK_CACHE": "1", "TMPDIR": str(tmpdir)}
+    env.pop("LUCID_COMPILE_DISK_CACHE_DIR", None)
+    done = subprocess.run(
+        [sys.executable, "-I", str(script)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    cache_dir = tmpdir / "lucid_mpsgraph_cache"
+    assert cache_dir.is_dir(), sorted(p.name for p in tmp_path.iterdir())
+    assert any(p.name.startswith("lucid_abi") for p in cache_dir.iterdir())
+    assert not [p for p in tmp_path.iterdir() if p.name.startswith("tmplucid")]

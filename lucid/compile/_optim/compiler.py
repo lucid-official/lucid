@@ -808,8 +808,6 @@ class _CompiledStepBase:
         if self._initialized[i]:
             self._ensure_state(i, flags[gi].own, group)
             return
-        from lucid.autograd._grad_mode import no_grad
-
         state = self._state[i]
         for name in self._state_names(flags[gi].own):
             fresh = self._init_state(i, name, group)
@@ -834,7 +832,9 @@ class _CompiledStepBase:
 
     def _plan_for(self, active: tuple[int, ...], flags: _PlanFlags) -> _Plan:
         """The executable for this step's active set (see the class docstring)."""
-        key: tuple[object, ...] = (active, False, flags, self._partition(active))
+        # A setting read at compile time (rank-canon gate, manual VJP) must not replay an old plan.
+        policy =_C_engine.compile.compile_policy()
+        key: tuple[object, ...] = (active, False, flags, self._partition(active), policy)
         plan = self._plans.get(key)
         if plan is not None:
             return plan
@@ -844,7 +844,7 @@ class _CompiledStepBase:
             self._remember(key, plan)
             return plan
         everyone = tuple(range(len(self._params)))
-        mkey: tuple[object, ...] = (everyone, True, flags)
+        mkey: tuple[object, ...] = (everyone, True, flags, policy)
         plan = self._plans.get(mkey)
         if plan is None:
             plan = self._build_plan(everyone, True, flags)
@@ -860,7 +860,6 @@ class _CompiledStepBase:
     def _build_plan(self, members: tuple[int, ...], masked: bool, flags: _PlanFlags) -> _Plan:
         """Trace + compile the update of ``members``."""
         from lucid._dispatch import _unwrap
-        from lucid.autograd._grad_mode import no_grad
         from lucid.compile import _tracing
 
         groups = self._opt.param_groups
