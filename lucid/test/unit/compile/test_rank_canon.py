@@ -118,10 +118,14 @@ def test_a_scalar_operand_is_left_alone() -> None:
 
 def test_a_unary_chain_shares_one_view_per_value() -> None:
     x = _filled(_BIG)
-    ops, _ = _canon(lambda a: lucid.exp(lucid.sin(a)), x)
+    ops, out = _canon(lambda a: lucid.exp(lucid.sin(a)), x)
+    out_ops = list(out.ops)
     names = [name for name, _ in ops]
-    # sin and exp each wrap their input in a view of the previous result.
-    assert names == ["reshape", "sin", "reshape", "reshape", "exp", "reshape"]
+    # sin wraps its input in a view; exp reads sin's flat result directly rather than a view
+    # of the view that restores the recorded shape.
+    assert names == ["reshape", "sin", "reshape", "exp", "reshape"]
+    flat = [n for n in out_ops if n.name in ("sin", "exp")]
+    assert flat[1].inputs[0] == flat[0].outputs[0].id
 
 
 def test_a_value_read_by_two_ops_at_one_layout_is_viewed_once() -> None:
@@ -129,9 +133,10 @@ def test_a_value_read_by_two_ops_at_one_layout_is_viewed_once() -> None:
     graph, feeds = _trace(lambda p, q, r: p * q + p * r, x, a, b)
     out = _C_engine.compile.canonicalize_rank(graph, feeds, False)
     views = [n for n in out.ops if n.name == "reshape" and len(n.outputs[0].shape) == 1]
-    # x, a and b once each (x is shared by both muls), then the two products into the add.
-    assert len(views) == 5
-    assert len({n.inputs[0] for n in views}) == 5
+    # x, a and b once each (x is shared by both muls); the two products reach the add as the
+    # flat results they are, with no view of a view in between.
+    assert len(views) == 3
+    assert len({n.inputs[0] for n in views}) == 3
 
 
 def test_every_original_id_survives_with_its_shape() -> None:

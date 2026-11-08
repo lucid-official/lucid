@@ -26,6 +26,12 @@
 //   which flattens them through :func:`rank_canon_wants`.
 // * A view of one id at one shape is made once, so every consumer of ``a``
 //   that agrees on a layout shares ``a'``.
+// * A view is never made of a view.  MPSGraph does not fold every ``reshape``
+//   chain (a permute between a rank-6 view and another costs a pass over the
+//   data: 1.5 -> 3.9 ms at 12.8M elements), so a view reads the root: the feed
+//   behind a recorded ``reshape``, or the canonical ``y'`` a rewritten ``y`` came
+//   from.  A recorded ``reshape``-family op that reads a rewritten ``y`` reads
+//   ``y'`` for the same reason; ``y`` itself stays for everything else.
 // * ``dynamic_batch`` never merges axis 0: the symbolic batch stays its own
 //   axis, which is what ``reshape_dynamic_aware`` can follow.
 //
@@ -37,11 +43,19 @@
 //
 // Layout of the pass
 // ------------------
-// :class:`RankRule` is the unit a later card adds (permute splits, softmax,
-// matmul batch dims, reductions): ``handles`` names the ops it owns and
-// ``plan`` returns the canonical shape of each input and of the output.  The
-// driver, :class:`RankCanon`, owns everything else — id minting, view
-// de-duplication, region index remapping — so a rule is pure shape arithmetic.
+// :class:`RankRule` is the unit a card adds — elementwise, permute, softmax and
+// matmul batch dims so far, reductions next: ``handles`` names the ops it owns
+// and ``plan`` returns the canonical shape of each input and of the output (and
+// the axis attributes that move with it, and the further nodes of an op split in
+// steps).  The driver, :class:`RankCanon`, owns everything else — id minting,
+// view de-duplication, region index remapping — so a rule is pure shape
+// arithmetic.
+//
+// Two ops are left as recorded by the rules that would otherwise own them: a
+// ``softmax`` whose weights a ``matmul`` reads (``MatmulEmitter`` finds the
+// weights by id for its fused-attention workaround, see
+// :func:`RankEnv::attention_weight`), and a ``permute`` of a feed (MPSGraph
+// transposes a feed in place at full speed; the rewrite made it 14-80% slower).
 //
 // Pure C++: no MPSGraph types here, so the pass is testable from Python.
 
@@ -53,6 +67,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "../api.h"
@@ -66,6 +81,11 @@ inline constexpr std::size_t kRankCanonMinRank = 5;
 
 // Default lead (product of the dims above the last four) a free rewrite needs.
 inline constexpr std::int64_t kRankCanonMinLead = 64;
+
+// Default lead a rewrite that adds a pass over the data needs (a permute split into
+// several permutes).  Scales with the override: ``kRankCanonCostlyFactor`` times it.
+inline constexpr std::int64_t kRankCanonMinLeadCostly = 256;
+inline constexpr std::int64_t kRankCanonCostlyFactor = kRankCanonMinLeadCostly / kRankCanonMinLead;
 
 // Environment override, read at every compile.  ``0`` rewrites every rank-5+
 // op (for tests), a negative value turns the pass off.
@@ -84,6 +104,10 @@ LUCID_API std::int64_t rank_lead(const std::vector<std::int64_t>& shape);
 // threshold.  The single place the policy lives; the pass and the backward's
 // gradient accumulation both ask it.
 LUCID_API bool rank_canon_wants(const std::vector<std::int64_t>& shape);
+
+// Like :func:`rank_canon_wants`, against the costly threshold: a rewrite that
+// costs an extra pass over the data pays for itself only at a larger lead.
+LUCID_API bool rank_canon_wants_costly(const std::vector<std::int64_t>& shape);
 
 // The result of coalescing the axes of an op's operands: the output's shape and
 // each operand's, all at one lower rank.  A rank-0 operand keeps ``{}``.
@@ -121,23 +145,55 @@ public:
     const RankOperand* find(TensorId id) const;
     // Name of the op that produced ``id``; empty for a feed.
     const std::string& producer(TensorId id) const;
+    // Whether ``id`` is attention weights: a ``softmax`` output, or a value derived
+    // from one through an inference-mode ``dropout``.  ``MatmulEmitter`` emits a
+    // matmul that reads one transposed (the fused-attention miscompile workaround),
+    // and it finds the marker by the id — so a node that reads or makes one keeps
+    // its operands as recorded.  Mirrors ``collect_softmax_outputs`` in
+    // MpsBuilder.mm, which cannot be shared yet.
+    bool attention_weight(TensorId id) const { return attention_weights_.count(id) != 0; }
+    // Whether ``id`` is attention weights that some matmul reads, directly or
+    // through a ``dropout``: the softmax that makes it has to stay as recorded.
+    bool feeds_attention_matmul(TensorId id) const { return matmul_weights_.count(id) != 0; }
     bool dynamic_batch() const { return dynamic_batch_; }
     // Largest id seen anywhere (feeds, ops, regions) — new ids start above it.
     TensorId max_id() const { return max_id_; }
 
 private:
+    void note_attention_weights(const TraceGraph& graph);
+
     std::unordered_map<TensorId, RankOperand> operands_;
     std::unordered_map<TensorId, std::string> producers_;
+    std::unordered_set<TensorId> attention_weights_;
+    std::unordered_set<TensorId> matmul_weights_;
     bool dynamic_batch_;
     TensorId max_id_ = -1;
+};
+
+// An op's attributes, as recorded.
+using RankAttrs = std::unordered_map<std::string, AttributeValue>;
+
+// A further node of the same op, reading the previous node's result: the next step
+// of a permute that does not fit in one rank <= 4 permute.
+struct RankStage {
+    // The shape the previous result is read at (a view is inserted when it differs).
+    std::vector<std::int64_t> in_shape;
+    std::vector<std::int64_t> out_shape;
+    RankAttrs attrs;
 };
 
 // How one node is to be rewritten.  ``input_shapes[k]`` is the canonical shape
 // to view input ``k`` at; empty leaves the input as it is (a scalar, or already
 // canonical).  ``out_shape`` is the canonical shape of the node's only output.
+// ``attrs`` replaces the node's attributes when an axis attribute moves with the
+// layout (``dim``, ``permutation``).  ``then`` lists the nodes that follow the
+// first one when the op is split; the last node's result is viewed back at the
+// shape the original node produced.
 struct RankRewrite {
     std::vector<std::vector<std::int64_t>> input_shapes;
     std::vector<std::int64_t> out_shape;
+    std::optional<RankAttrs> attrs;
+    std::vector<RankStage> then;
 };
 
 // A per-op-family rule of the pass.
@@ -170,7 +226,9 @@ public:
     std::size_t nodes_rewritten() const { return nodes_rewritten_; }
 
 private:
-    void rewrite(const RankEnv& env, const std::vector<std::optional<RankRewrite>>& plans);
+    void rewrite(const RankEnv& env,
+                 const std::vector<std::optional<RankRewrite>>& plans,
+                 const std::vector<bool>& inside);
 
     const TraceGraph* original_;
     std::unique_ptr<TraceGraph> rewritten_;
