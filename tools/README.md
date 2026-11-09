@@ -121,8 +121,8 @@ minutes, so the run and the check are apart:
     .venv/bin/python3 -m tools.rules attest --verify   # what pre-push asks; instant
 
 `attest` refuses (exit 2) when `lucid/`, `pyproject.toml`, `setup.py` or
-`tools/fetch_mlx.py` holds anything uncommitted; when `tools/agent_ws.py` calls the engine
-stale; when the checkout's python imports lucid or its engine from anywhere else; when a
+`tools/fetch_mlx.py` holds anything uncommitted; when the engine has no build stamp, or a
+stamp that is not this tree's digest (below); when the checkout's python imports lucid or its engine from anywhere else; when a
 suite ran no test, every one skipped, or skipped more than 5 % (a sound run skips 0.17 %;
 the memory governor's summary in the output says why, so run it again when memory is free);
 and when HEAD or what the suites read moved during the run. It runs each suite in its own
@@ -137,6 +137,18 @@ is checked out and the engine is built, in a checkout whose `.git` the pushing o
 or syncs with, or copy the one file. In the Studio's main checkout run `git reset -q`
 first: `.git/index` is not synced, so a stale index reads as uncommitted edits (the
 working tree is left alone).
+
+**The engine build stamp** (LCD-881). "This engine was built from this tree" cannot be
+read off mtimes: `unison` keeps times, and a `cp -c` of an `.so` is "now". An in-place
+build leaves `build/.engine_stamp`, one digest of `lucid/_C` (sources and CMake files),
+`setup.py`, `tools/fetch_mlx.py` and `[tool.lucid.mlx]`, computed by `tools/engine_stamp.py`
+alone. Every build path writes it through the CMake target `lucid_engine_stamp`, which
+runs after each `cmake --build`: `uv pip install -e .` (main), `python3 tools/agent_ws.py
+build` (a worktree), and a plain `cmake --build build/temp.macosx-*/lucid__C_engine/`.
+`agent_ws._engine_is_stale` reads the stamp first and falls to mtimes only for a checkout
+with none; `attest` takes no fallback. `python3 tools/engine_stamp.py check` says whether a
+checkout's stamp matches. The stamp is local (`build/` is not synced): a checkout that
+received its engine by sync or copy has none until it builds.
 
 ## Quality gate
 

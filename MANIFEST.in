@@ -7,7 +7,7 @@ recursive-include lucid/_C/cmake *
 recursive-include lucid *.pyi
 
 # setup.py stages the pinned MLX build ([tool.lucid.mlx]) with this script.
-include tools/fetch_mlx.py
+include tools/fetch_mlx.py tools/engine_stamp.py
 
 # The sdist builds and installs Lucid; it does not test it.  lucid.test* and
 # lucid.benchmarks* are not packages (pyproject packages.find), so their .py

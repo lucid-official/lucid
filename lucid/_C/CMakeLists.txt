@@ -642,6 +642,35 @@ set_target_properties(
         # add an unintended third entry pointing into the build directory.
         INSTALL_RPATH_USE_LINK_PATH OFF)
 
+# ── Build stamp (LCD-881) ────────────────────────────────────────────────────
+# Which sources this engine binary was built from, in build/.engine_stamp.  An mtime
+# cannot say it: a sync keeps times, and a copied .so is "now".  This target runs after
+# every `cmake --build`, so setup.py, agent_ws.py build and a plain `cmake --build` of an
+# unchanged tree (nothing relinked) all leave the stamp.  What "the sources" are lives in
+# tools/engine_stamp.py alone; it stamps only a binary built into this tree's lucid/_C.
+find_program(LUCID_STAMP_PYTHON NAMES python3 python)
+set(_lucid_stamp_tool "${LUCID_REPO_ROOT}/tools/engine_stamp.py")
+if(LUCID_STAMP_PYTHON AND EXISTS "${_lucid_stamp_tool}")
+    execute_process(
+        COMMAND "${LUCID_STAMP_PYTHON}" -c "import tomllib"
+        RESULT_VARIABLE _lucid_stamp_py_res
+        OUTPUT_QUIET ERROR_QUIET)
+endif()
+if(_lucid_stamp_py_res EQUAL 0)
+    add_custom_target(
+        lucid_engine_stamp ALL
+        COMMAND "${LUCID_STAMP_PYTHON}" "${_lucid_stamp_tool}" write
+                --engine-dir "$<TARGET_FILE_DIR:lucid_engine>"
+        COMMENT "Stamping the engine with the sources it was built from"
+        VERBATIM)
+    add_dependencies(lucid_engine_stamp lucid_engine)
+else()
+    message(WARNING
+        "Lucid: no build stamp will be written (needs tools/engine_stamp.py and a "
+        "Python >= 3.11: -DLUCID_STAMP_PYTHON=<it>); `tools.rules attest` will refuse "
+        "this engine.")
+endif()
+
 # ── Optional C++ unit tests (Google Test) ────────────────────────────────────
 option(BUILD_TESTING "Build C++ unit tests using Google Test" OFF)
 if(BUILD_TESTING)

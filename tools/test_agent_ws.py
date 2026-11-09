@@ -27,6 +27,8 @@ from pathlib import Path
 
 import pytest
 
+from tools.engine_stamp import EngineTree
+
 AGENT_WS = Path(__file__).resolve().with_name("agent_ws.py")
 MODES = ("staged", "partial")
 
@@ -360,7 +362,7 @@ def test_doctor_trusts_matching_source_stamp_or_abi_over_mtime(tmp_path: Path) -
 
     done = agent_ws.bootstrap(wt_root, main_root)
     assert f"cloned {so_rel}" in done
-    assert agent_ws._engine_stamp_path(wt_root).is_file()
+    assert EngineTree(wt_root).stamp_path.is_file()
 
     # Simulate a git rebase touching C++ mtimes without changing source bytes:
     wt_so = wt_root / so_rel
@@ -376,7 +378,7 @@ def test_doctor_trusts_matching_source_stamp_or_abi_over_mtime(tmp_path: Path) -
     # Without a stamp, a matching ABI_VERSION does NOT override mtime (LCD-536
     # regression: a prior version treated "no stamp + ABI match" as fresh,
     # false-negativing this still-stale .cpp-newer-than-.so state):
-    agent_ws._engine_stamp_path(wt_root).unlink()
+    EngineTree(wt_root).stamp_path.unlink()
     version_h = wt_root / "lucid" / "_C" / "version.h"
     cpp = wt_root / "lucid" / "_C" / "foo.cpp"
     os.utime(version_h, (future, future))  # writes below must not leak wall-clock times

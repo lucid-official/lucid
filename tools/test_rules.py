@@ -22,6 +22,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -29,6 +30,7 @@ from pathlib import Path
 import pytest
 
 from tools import check_source_rules
+from tools.engine_stamp import STAMP, EngineTree
 from tools.rules import attest
 from tools.rules.__main__ import main
 from tools.rules.audit import Audit
@@ -2074,7 +2076,7 @@ def _attest_repo(s: Scratch, suite: str = "def test_ok():\n    pass\n") -> None:
         ".venv/bin/python3", f'#!/bin/sh\nPYTHONPATH="{site}" exec "{sys.executable}" -S "$@"\n'
     )
     (s.root / ".venv/bin/python3").chmod(0o755)
-    s.write(".gitignore", ".venv/\n__pycache__/\n*.so\n")
+    s.write(".gitignore", ".venv/\n__pycache__/\n*.so\nbuild/\n")
     s.write("lucid/__init__.py", _FAKE_ENGINE.format(abi=7, where=str(s.root / "lucid/_C")))
     s.write("lucid/_C/version.h", _ABI.format(7))
     s.write("lucid/_C/core/Thing.cpp", "int thing() { return 1; }\n")
@@ -2085,6 +2087,7 @@ def _attest_repo(s: Scratch, suite: str = "def test_ok():\n    pass\n") -> None:
         s.write(f"{path}/test_suite.py", suite)
     s.commit_all("chore: base")
     s.write(_SO, "")  # newer than every source, as a build leaves it
+    assert EngineTree(s.root).write()  # and the stamp the build leaves beside it
 
 
 def _rules_in(
@@ -2146,6 +2149,18 @@ def _stale(s: Scratch) -> None:
     s.commit_all("fix: C++ the engine was not built from")
     later = (s.root / _SO).stat().st_mtime + 5
     os.utime(s.root / "lucid/_C/core/Thing.cpp", (later, later))
+
+
+def _copied_engine(s: Scratch) -> None:
+    """The C++ moved, and an engine from elsewhere was copied in: newer than every source."""
+    s.write("lucid/_C/core/Thing.cpp", "int thing() { return 3; }\n")
+    s.commit_all("fix: C++ the engine was not built from")
+    later = time.time() + 60
+    os.utime(s.root / _SO, (later, later))
+
+
+def _no_stamp(s: Scratch) -> None:
+    (s.root / STAMP).unlink()
 
 
 def _no_engine(s: Scratch) -> None:
@@ -2222,8 +2237,10 @@ _ATTEMPTS = {
     "untracked": Attempt(_untracked, 2, "not committed"),
     "dirty-pyproject": Attempt(_dirty_pyproject, 2, "not committed"),
     "dirty-setup": Attempt(_dirty_setup, 2, "not committed"),
-    "stale-engine": Attempt(_stale, 2, "missing or older than lucid/_C"),
-    "no-engine": Attempt(_no_engine, 2, "missing or older than lucid/_C"),
+    "stale-engine": Attempt(_stale, 2, "built from other sources than this tree holds"),
+    "copied-engine": Attempt(_copied_engine, 2, "built from other sources than this tree holds"),
+    "no-stamp": Attempt(_no_stamp, 2, "has no build stamp"),
+    "no-engine": Attempt(_no_engine, 2, "the engine here is missing"),
     "engine-elsewhere": Attempt(_engine_elsewhere, 2, "and its engine from /elsewhere/lucid/_C"),
     "no-tests": Attempt(_suite("import pytest\n", both=True), 2, "ran no test (0 selected"),
     "all-skipped": Attempt(_suite(_SKIPPED), 2, "ran no test (1 selected, 1 skipped)"),
@@ -2296,6 +2313,19 @@ def test_attest_runs_the_suites_as_committed(scratch: Scratch, name: str) -> Non
     assert record["suites"][0]["failures"] == int(name == "deselected")
 
 
+def test_attest_takes_an_engine_rebuilt_after_the_cpp_moved(scratch: Scratch) -> None:
+    """The main flow: land C++, build, attest.  The stamp the build leaves is what it reads."""
+    _attest_repo(scratch)
+    scratch.write("lucid/_C/core/Thing.cpp", "int thing() { return 2; }\n")
+    scratch.commit_all("fix: the C++")
+    refused = _rules_in(scratch, "attest")
+    assert refused.returncode == 2 and "uv pip install -e ." in refused.stderr, refused.stderr
+    assert EngineTree(scratch.root).write()  # what a build does after it links
+    done = _rules_in(scratch, "attest")
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert _rules_in(scratch, "attest", "--verify").returncode == 0
+
+
 @pytest.mark.parametrize("name", ["setup-moved", "version-moved"])
 def test_attest_keys_what_builds_the_engine(scratch: Scratch, name: str) -> None:
     done = _attempt(scratch, name)
@@ -2363,7 +2393,8 @@ def test_a_line_broken_in_attest_is_seen(
     shutil.copytree(
         REPO / "tools/rules", home / "tools/rules", ignore=shutil.ignore_patterns("__pycache__")
     )
-    shutil.copy(REPO / "tools/agent_ws.py", home / "tools/agent_ws.py")
+    for module in ("agent_ws.py", "engine_stamp.py"):
+        shutil.copy(REPO / "tools" / module, home / "tools" / module)
     source = home / "tools/rules/attest.py"
     assert line in source.read_text(), line
     source.write_text(source.read_text().replace(line, new, 1))

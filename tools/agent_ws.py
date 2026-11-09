@@ -51,6 +51,7 @@ import fcntl
 import fnmatch
 import functools
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -60,6 +61,7 @@ import sys
 import tempfile
 import time
 import tomllib
+import types
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -543,6 +545,21 @@ def main_root_of(trees: list[Worktree]) -> Path:
     return trees[0].path
 
 
+def _load_sibling(name: str) -> types.ModuleType:
+    """Import ``tools/<name>.py`` by path: this file runs as a script, tools/ is no package here."""
+    key = f"_lucid_{name}"
+    if key in sys.modules:
+        return sys.modules[key]
+    path = Path(__file__).resolve().parent / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(key, path)
+    if spec is None or spec.loader is None:
+        raise WorkspaceError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[key] = module  # dataclasses and enums resolve their module by name
+    spec.loader.exec_module(module)
+    return module
+
+
 def _newest_cpp_mtime(root: Path) -> float:
     """Newest mtime across ``lucid/_C/**/*.{cpp,h,mm}``, or ``0.0`` if none."""
     c_dir = root / "lucid" / "_C"
@@ -558,29 +575,6 @@ def _newest_cpp_mtime(root: Path) -> float:
             if mt > newest:
                 newest = mt
     return newest
-
-
-def _cpp_source_hash(root: Path) -> str:
-    """SHA-256 over relative path and bytes across ``lucid/_C/**/*.{cpp,h,mm,def}``."""
-    c_dir = root / "lucid" / "_C"
-    if not c_dir.is_dir():
-        return ""
-    files = sorted(
-        p for pat in ("*.cpp", "*.h", "*.mm", "*.def") for p in c_dir.rglob(pat) if p.is_file()
-    )
-    if not files:
-        return ""
-    digest = hashlib.sha256()
-    for p in files:
-        try:
-            rel = p.relative_to(root).as_posix()
-            data = p.read_bytes()
-        except OSError:
-            continue
-        digest.update(f"{rel}\0".encode())
-        digest.update(data)
-        digest.update(b"\0")
-    return digest.hexdigest()
 
 
 def _header_abi_version(root: Path) -> int | None:
@@ -614,31 +608,17 @@ def _so_abi_version(root: Path) -> int | None:
     return int(out) if out.isdigit() else None
 
 
-def _engine_stamp_path(root: Path) -> Path:
-    return root / "build" / ".engine_stamp"
-
-
-def _write_engine_stamp(root: Path, src_hash: str) -> None:
-    if not src_hash:
-        return
-    stamp = _engine_stamp_path(root)
-    stamp.parent.mkdir(parents=True, exist_ok=True)
-    stamp.write_text(f"{src_hash}\n")
-
-
 def _engine_is_stale(root: Path) -> bool:
-    """True when ``root``'s ``engine.cpython-*.so`` does not match its ``lucid/_C`` sources.
+    """True when ``root``'s ``engine.cpython-*.so`` does not match its sources.
 
-    A mismatched ``LUCID_ABI_VERSION`` vs. ``_C_engine.ABI_VERSION`` always means
-    stale. Otherwise the recorded ``build/.engine_stamp`` source digest, when
-    present, is authoritative (a ``git rebase`` or checkout that bumps file
-    mtimes without changing C++ source bytes must not false-positive on mtime
-    alone). A matching ABI_VERSION is *not* by itself proof of freshness — the
-    ABI only bumps on layout-breaking changes, so two different C++ sources can
-    share one ABI_VERSION. Without a stamp, mtime comparison is the only signal
-    left and is always consulted (LCD-536: a prior version returned "fresh"
-    whenever ABI matched and no stamp existed, false-negativing a genuinely
-    stale .so after a rebase into a stamp-less worktree).
+    A ``LUCID_ABI_VERSION`` that differs from ``_C_engine.ABI_VERSION`` always means
+    stale.  Otherwise the build stamp (``tools/engine_stamp.py``: a digest of ``lucid/_C``,
+    ``setup.py`` and the MLX pin, left by the build) is authoritative: a rebase or a sync
+    that moves mtimes without changing a byte must not read as stale, and a ``cp -c`` that
+    makes an ``.so`` newer than every source must not read as fresh.  A matching ABI is not
+    proof either: it only bumps on layout-breaking changes.  Mtimes are the fallback for a
+    checkout whose build left no stamp (LCD-536: "no stamp, ABI matches" once read as fresh
+    and hid a stale ``.so``).  ``attest`` takes no fallback: it wants a matching stamp.
     """
     sos = list(root.glob("lucid/_C/engine.cpython-*.so"))
     cpp_mtime = _newest_cpp_mtime(root)
@@ -648,13 +628,11 @@ def _engine_is_stale(root: Path) -> bool:
     so_abi = _so_abi_version(root)
     if hdr_abi is not None and so_abi is not None and hdr_abi != so_abi:
         return True
-    stamp = _engine_stamp_path(root)
-    if stamp.is_file():
-        recorded = stamp.read_text().strip()
-        current = _cpp_source_hash(root)
-        if recorded and current:
-            return recorded != current
-    return any(cpp_mtime > so.stat().st_mtime for so in sos)
+    stamp = _load_sibling("engine_stamp")
+    state = stamp.EngineTree(root).freshness()
+    if state is stamp.Freshness.MISSING:
+        return any(cpp_mtime > so.stat().st_mtime for so in sos)
+    return bool(state is stamp.Freshness.MISMATCH)
 
 
 def bootstrap(root: Path, main_root: Path) -> list[str]:
@@ -673,7 +651,8 @@ def bootstrap(root: Path, main_root: Path) -> list[str]:
             done.append(f"cloned {dst.relative_to(root)}")
             cloned_so = True
     if cloned_so and not _engine_is_stale(main_root):
-        _write_engine_stamp(root, _cpp_source_hash(main_root))
+        stamp = _load_sibling("engine_stamp")
+        stamp.EngineTree(root).adopt(stamp.EngineTree(main_root))
     if _engine_is_stale(root) and list(root.glob("lucid/_C/engine.cpython-*.so")):
         done.append(
             "⚠ engine .so is older than lucid/_C sources — run: python3 tools/agent_ws.py build"
@@ -1264,11 +1243,9 @@ def cmd_build(args: argparse.Namespace) -> int:
         "--build-temp",
         "build/agent",
     ]
+    # setup.py's CMake build leaves build/.engine_stamp (tools/engine_stamp.py).
     with held_lock(HEAVY_LOCK, f"build {root.name}", wait=True):
-        rc = subprocess.call(command, cwd=root, env=env)
-    if rc == 0:
-        _write_engine_stamp(root, _cpp_source_hash(root))
-    return rc
+        return subprocess.call(command, cwd=root, env=env)
 
 
 def ensure_merge_drivers(root: Path) -> list[str]:

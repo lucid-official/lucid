@@ -64,10 +64,10 @@ def _macos_sdkroot() -> str:
     return subprocess.check_output(["xcrun", "--show-sdk-path"], text=True).strip()
 
 
-def _load_fetch_mlx() -> types.ModuleType:
-    """Import tools/fetch_mlx.py by path: tools/ is not a package in an sdist."""
-    path = Path(__file__).resolve().parent / "tools" / "fetch_mlx.py"
-    spec = importlib.util.spec_from_file_location("_lucid_fetch_mlx", path)
+def _load_tool(name: str) -> types.ModuleType:
+    """Import tools/<name>.py by path: tools/ is not a package in an sdist."""
+    path = Path(__file__).resolve().parent / "tools" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"_lucid_{name}", path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"cannot load {path}")
     module = importlib.util.module_from_spec(spec)
@@ -137,6 +137,10 @@ class CMakeBuildExt(build_ext):
         # MLX (shared per machine) instead of copying ~210 MB into the tree.
         self._lucid_in_tree = bool(self.inplace or self.editable_mode)
         super().run()
+        if self._lucid_in_tree:
+            # The engine is in lucid/_C only now: an in-place build copies it there after
+            # CMake linked it into staging.  The stamp says what it was built from.
+            _load_tool("engine_stamp").EngineTree(Path(__file__).resolve().parent).write()
 
     def build_extension(self, ext: Extension) -> None:
         if not isinstance(ext, CMakeExtension):
@@ -146,7 +150,7 @@ class CMakeBuildExt(build_ext):
         _enforce_apple_silicon_only()
 
         cmake = _cmake_executable()
-        fetch_mlx = _load_fetch_mlx()
+        fetch_mlx = _load_tool("fetch_mlx")
         mlx_pin = fetch_mlx.read_pin()
         mlx_dir = fetch_mlx.stage(mlx_pin)
         mlx_include_dir, mlx_library_dir = mlx_dir / "include", mlx_dir / "lib"
@@ -182,6 +186,8 @@ class CMakeBuildExt(build_ext):
             f"-DLUCID_MLX_BUNDLED={'OFF' if self._lucid_in_tree else 'ON'}",
             f"-DLUCID_PYTHON_EXTENSION_SUFFIX={sysconfig.get_config_var('EXT_SUFFIX')}",
             f"-DLUCID_EXTENSION_OUTPUT_DIR={ext_dir}",
+            # The CMake target that stamps the engine runs this interpreter.
+            f"-DLUCID_STAMP_PYTHON={sys.executable}",
         ]
         _maybe_enable_ccache(cmake_args)
 

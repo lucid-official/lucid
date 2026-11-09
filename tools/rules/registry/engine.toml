@@ -213,12 +213,13 @@ scope = ["lucid/_C/**", "setup.py", "tools/fetch_mlx.py", "pyproject.toml"]
 doc = "engine"
 gap = """
 A record is trusted as written: a hand-made file in the ledger passes.  The key covers \
-lucid/_C, setup.py, tools/fetch_mlx.py and [tool.lucid.mlx], but "the engine is built from \
-them" is tools/agent_ws.py's freshness rule (the ABI the engine reports, then a digest of \
-lucid/_C's .cpp/.h/.mm/.def or, with no build/.engine_stamp, mtimes), which a CMakeLists, \
-setup.py or MLX pin change alone does not stale.  A main checkout or a scratch clone has no \
-stamp, so mtimes are all it reads there.  Python that changes after the record does not void \
-it.  The engine-dependent checks of design section 9 step 5 do not run in it yet.  Push only."""
+lucid/_C, setup.py, tools/fetch_mlx.py and [tool.lucid.mlx]; "the engine is built from \
+them" is the build stamp (build/.engine_stamp, tools/engine_stamp.py: a digest of those, \
+left by every in-place build), which attest requires to equal the tree's.  The stamp is \
+local and trusts the build: it says what the tree held when the build finished, so an \
+edit during a build, or a binary swapped in after one, is not seen.  Python that changes \
+after the record does not void it.  The engine-dependent checks of design section 9 step 5 \
+do not run in it yet.  Push only."""
 enforce = [{ level = "push", check = "cpp-attested" }]
 
 [[rule.control]]
@@ -231,5 +232,8 @@ nodes = [
     "tools/test_rules.py::test_attest_a_record_that_does_not_read_is_none",
     "tools/test_rules.py::test_attest_runs_the_suites_as_committed",
     "tools/test_rules.py::test_attest_keys_what_builds_the_engine",
+    "tools/test_rules.py::test_attest_takes_an_engine_rebuilt_after_the_cpp_moved",
+    "tools/test_engine_stamp.py::test_a_copied_engine_with_a_fresh_mtime_cannot_outvote_a_stale_stamp",
+    "tools/test_engine_stamp.py::test_the_stamp_covers_what_builds_the_engine_and_only_that",
     "tools/test_rules.py::test_a_cpp_push_is_judged_through_real_git",
 ]
