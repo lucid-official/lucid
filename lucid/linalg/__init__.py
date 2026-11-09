@@ -1319,7 +1319,7 @@ class _Eigh(_AutogradFunction):
 
 def _uplo(UPLO: str) -> str:
     """``UPLO`` upper-cased, so ``"u"`` / ``"l"`` read as the reference reads them."""
-    return UPLO.upper() if isinstance(UPLO, str) else UPLO
+    return str.upper(UPLO)
 
 
 def eigh(input: Tensor, UPLO: str = "L") -> tuple[Tensor, Tensor]:

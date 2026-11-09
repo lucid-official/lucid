@@ -26,6 +26,7 @@ def _t(a: np.ndarray, device: str = "cpu", **kw: object) -> lucid.Tensor:
 # ── vector_norm / matrix_norm('fro') at tiny and huge magnitudes ─────────────
 
 
+@pytest.mark.parity
 @pytest.mark.parametrize("magnitude", [1e-20, 1e-30, 1e-35, 1e15])
 def test_entrywise_norms_agree_with_reference_at_extreme_magnitudes(
     ref: ModuleType, device: str, magnitude: float
@@ -46,6 +47,7 @@ def test_entrywise_norms_do_not_overflow(device: str, magnitude: float) -> None:
         assert got.item() == pytest.approx(want, rel=1e-5)
 
 
+@pytest.mark.parity
 @pytest.mark.parametrize("ord_", [1, 2, 3.5, 0.5])
 def test_vector_norm_orders_survive_tiny_magnitudes(
     ref: ModuleType, device: str, ord_: float
@@ -55,6 +57,7 @@ def test_vector_norm_orders_survive_tiny_magnitudes(
     assert LA.vector_norm(_t(arr, device), ord_).item() == pytest.approx(want, rel=1e-4)
 
 
+@pytest.mark.parity
 def test_rescale_is_per_slice(ref: ModuleType, device: str) -> None:
     """A tiny row beside a normal one is not rescaled by the normal row's scale."""
     arr = np.array([[1e-20, 2e-20, 2e-20], [1.0, 2.0, 2.0]], dtype=np.float32)
@@ -110,6 +113,7 @@ def test_compiled_vector_norm_still_rescales_after_tracing_normal_input() -> Non
 # ── eigh / eigvalsh: UPLO is case-insensitive ────────────────────────────────
 
 
+@pytest.mark.parity
 @pytest.mark.parametrize("uplo", ["U", "L", "u", "l"])
 def test_eigh_and_eigvalsh_accept_either_case_of_uplo(
     ref: ModuleType, device: str, uplo: str
@@ -153,6 +157,7 @@ def _reflectors(m: int, n: int, k: int, *, batch: tuple[int, ...] = ()) -> tuple
     )
 
 
+@pytest.mark.parity
 @pytest.mark.parametrize("k", [0, 1, 2, 3])
 @pytest.mark.parametrize("batch", [(), (2,)])
 def test_householder_product_accepts_fewer_reflectors_than_columns(
@@ -171,6 +176,7 @@ def test_householder_product_without_reflectors_is_the_identity_columns(device: 
     np.testing.assert_array_equal(got.numpy(), np.eye(5, 3, dtype=np.float32))
 
 
+@pytest.mark.parity
 def test_householder_product_square_with_fewer_reflectors(ref: ModuleType, device: str) -> None:
     h, tau = _reflectors(4, 4, 2)
     got = LA.householder_product(_t(h, device), _t(tau, device))
@@ -178,6 +184,7 @@ def test_householder_product_square_with_fewer_reflectors(ref: ModuleType, devic
     np.testing.assert_allclose(got.numpy(), np.asarray(want.tolist()), atol=1e-5)
 
 
+@pytest.mark.parity
 def test_householder_product_refuses_more_reflectors_than_columns(
     ref: ModuleType, device: str
 ) -> None:
@@ -204,6 +211,7 @@ def test_householder_product_gradcheck_float64(k: int) -> None:
 # ── qr(mode='complete'): Q's extra columns are not differentiable ────────────
 
 
+@pytest.mark.parity
 @pytest.mark.parametrize("shape", [(5, 3), (4, 1), (2, 5, 3)])
 def test_complete_qr_backward_through_q_is_refused_when_tall(
     ref: ModuleType, device: str, shape: tuple[int, ...]
@@ -255,6 +263,7 @@ def test_complete_qr_forward_unchanged_without_grad(device: str) -> None:
 _LU_SHAPES = [(5, 3), (3, 5), (4, 4), (1, 4), (4, 1), (2, 5, 3), (2, 3, 5)]
 
 
+@pytest.mark.parity
 @pytest.mark.parametrize("shape", _LU_SHAPES)
 def test_lu_factors_match_reference(ref: ModuleType, device: str, shape: tuple[int, ...]) -> None:
     arr = np.random.default_rng(sum(shape)).standard_normal(shape).astype(np.float32)
@@ -291,6 +300,7 @@ def test_lu_refuses_a_vector() -> None:
         LA.lu(lucid.randn(4))
 
 
+@pytest.mark.parity
 @pytest.mark.parametrize("shape", _LU_SHAPES)
 def test_lu_gradient_matches_reference(ref: ModuleType, shape: tuple[int, ...]) -> None:
     rng = np.random.default_rng(100 + sum(shape))
