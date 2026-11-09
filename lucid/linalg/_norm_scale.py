@@ -1,10 +1,10 @@
 """The rescaling the norms of :mod:`lucid.linalg` share.
 
-``vector_norm`` is the one place a norm reduces entries, ``matrix_norm``'s
-entry-wise orders and ``norm``'s dispatch go through it, so the guard against
-a power leaving the floating-point range lives here and nowhere else
-(:func:`_scaled_p_norm`); the singular-value orders have their own
-(:func:`_scaled_by_max`).
+``vector_norm`` is the one place a norm reduces entries, and ``matrix_norm``'s
+entry-wise orders go through it, so the guard against a power leaving the
+floating-point range on the CPU lives here (:func:`_scaled_p_norm`).  ``norm``
+additionally rescales whatever it dispatches by the largest magnitude
+(:func:`_scaled`), on every device, as it always has.
 """
 
 import math
@@ -26,44 +26,42 @@ _HALF = frozenset({_C_engine.F16, _C_engine.BF16})
 
 
 def _scaled_p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
-    """``(sum |r|^p)^(1/p)`` over ``axes`` for a real ``r``, safe from underflow.
+    """``(sum |r|^p)^(1/p)`` over ``axes`` for a real ``r``; CPU safe from underflow.
 
     The norm is absolutely homogeneous, so each slice's largest magnitude can
     be divided out first and multiplied back: every ratio lands in [0, 1] and
-    nothing powers out of range.  ``norm([1e-20, 1e-20])`` in float32 is
-    2e-20, an ordinary number, and the direct evaluation squares to 1e-40 and
-    answers 0 on Metal.
+    nothing powers out of range.  ``vector_norm([1e-20, 1e-20])`` in float32 is
+    2e-20, an ordinary number, and the direct evaluation squares to 1e-40.
 
     The rescale costs several passes over the input, and only a slice whose
     magnitude is outside the window where ``|x|^p`` is representable needs it.
     On the CPU the reduction therefore runs plain first and its answers are
     read: when every one is inside the window the plain result stands, bit for
-    bit what it was before the rescale existed, and only an underflowed,
-    overflowed or all-zero slice has the call redone rescaled.  The read is one
-    boolean of the *result*, and costs nothing there — the CPU is eager.  On
-    Metal the same read would be a device sync per norm (about 200 us, against
-    a norm that is queued in a few), so there the rescale is recorded
-    unconditionally, with the divisor 1 for any slice that is inside the window
-    — the same bits, no sync.  A compile trace or a phantom tensor has no value
-    to read either, and records the rescaled form, which is right for any later
-    input.
+    bit what it was before, and only an underflowed, overflowed or all-zero
+    slice has the call redone rescaled.  The read is one boolean of the
+    *result*, and costs nothing there — the CPU is eager.
+
+    Metal, a compile trace and a phantom tensor take the plain reduction.  On
+    Metal the same read is a device sync (~200 us) and the unconditional form
+    several extra kernels per call, on the path of ``F.normalize``, for a
+    corner-case magnitude; a trace or a phantom has no value to read.  All
+    three therefore agree with each other, and with the plain evaluation.
+    ``norm`` still rescales on every device.
 
     The divisor is a constant of the call — computed without the graph — so
     the gradient is the plain norm's, and an all-zero, ``nan`` or infinite
     slice takes the unscaled evaluation, which is right there already.  A
     half input reduces in float32, as :func:`_p_norm` does.
     """
+    # ``p == 0`` counts entries and ``±inf`` picks one: neither powers anything.
+    # An empty tensor has no largest magnitude (``max`` refuses it).
+    if not _readable(r) or p == 0 or math.isinf(p) or r.numel() == 0:
+        return _p_norm(r, p, axes, keepdim)
     if r.dtype in _HALF:
         out = _scaled_p_norm(_C_engine.astype(r, _C_engine.F32), p, axes, keepdim)
         return _C_engine.astype(out, r.dtype)
-    # ``p == 0`` counts entries and ``±inf`` picks one: neither powers anything.
-    # An empty tensor has no largest magnitude (``max`` refuses it).
-    if p == 0 or math.isinf(p) or r.numel() == 0:
-        return _p_norm(r, p, axes, keepdim)
-    exponent = _RANGE_EXPONENT[r.dtype] / max(abs(p), 1.0)
-    if not _readable(r):
-        return _rescaled_p_norm(r, p, axes, keepdim, exponent)
     out = _p_norm(r, p, axes, keepdim)
+    exponent = _RANGE_EXPONENT[r.dtype] / max(abs(p), 1.0)
     with lucid.no_grad():
         outside = _C_engine.any(
             _C_engine.logical_or(
@@ -110,14 +108,23 @@ def _rescaled_p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool, exponen
     return _C_engine.mul(out, divisor)
 
 
-def _scaled_by_max(x: Tensor, compute: Callable[[Tensor], Tensor]) -> Tensor:
-    """Run ``compute`` on ``x`` divided by its largest magnitude, then undo it.
+def _scaled(
+    x: Tensor, ord: int | float | str | None, compute: Callable[[Tensor], Tensor]
+) -> Tensor:
+    """Run ``compute`` on a rescaled ``x`` and undo the scaling.
 
-    The singular-value orders of :func:`matrix_norm` are absolutely
-    homogeneous — ``‖αx‖ = |α|‖x‖`` — and an SVD of entries near the float
-    range's edges loses them to overflow or underflow, so they are taken on
-    ratios in [0, 1].  The entry-wise orders rescale per slice, and only where
-    a power would leave the range, in :func:`_scaled_p_norm`.
+    Every norm order here is absolutely homogeneous — ``‖αx‖ = |α|‖x‖`` —
+    so the largest magnitude can be divided out first and multiplied back
+    at the end.  Every order but one: ``ord=0`` counts non-zero entries,
+    which no positive scaling changes, so multiplying the scale back in
+    inflates the count by it — ``norm([1, -2, 3], ord=0)`` answered 9
+    instead of 3.  It also cannot overflow, so it skips the rescaling
+    rather than being corrected for it.  That matters because the squaring in a 2-norm reaches
+    infinity before the answer does: ``norm([1e200, 1e200])`` is 1.41e200,
+    an ordinary double, and the direct evaluation says ``inf``.  The other
+    end underflows to zero.  Dividing by the largest magnitude puts every
+    ratio in [0, 1], so nothing squares out of range.  BLAS's ``nrm2`` has
+    rescaled for the same reason since the seventies.
 
     The scale is only used when it is finite and positive.  An all-zero
     input has scale 0, and an input containing an infinity has scale inf —
@@ -125,6 +132,8 @@ def _scaled_by_max(x: Tensor, compute: Callable[[Tensor], Tensor]) -> Tensor:
     version of this rescaling reported ``norm([inf, 1])``.  Both fall back
     to 1, where the unscaled evaluation is already right.
     """
+    if ord == 0 and not isinstance(ord, str):
+        return compute(x)
     # Nothing to rescale, and no largest magnitude to find: ``max`` of an
     # empty tensor is refused, as it has no identity.
     if x.numel() == 0:

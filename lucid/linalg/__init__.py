@@ -16,7 +16,7 @@ from lucid._ops._reduce import _reduction_axes, _require_normable, _truth_mask
 from lucid._promotion import try_unwrap as _try_unwrap
 from lucid._tensor._indexing import broadcast_shapes as _broadcast_batch
 from lucid._tensor.tensor import Tensor
-from lucid.linalg._norm_scale import _scaled_p_norm
+from lucid.linalg._norm_scale import _scaled, _scaled_p_norm
 
 _la = _C_engine.linalg
 
@@ -448,11 +448,11 @@ def _norm_body(
 
     if axes is None:
         if ord is None:
-            return vector_norm(x, 2, None, keepdim)
+            return _scaled(x, ord, lambda t: vector_norm(t, 2, None, keepdim))
         if rank == 2:
-            return matrix_norm(x, ord, (0, 1), keepdim)
+            return _scaled(x, ord, lambda t: matrix_norm(t, ord, (0, 1), keepdim))
         if rank == 1 and not isinstance(ord, str):
-            return vector_norm(x, ord, 0, keepdim)
+            return _scaled(x, ord, lambda t: vector_norm(t, ord, 0, keepdim))
         if rank == 1:
             raise ValueError(
                 f"norm: ord={ord!r} is a matrix order and needs at least " "2 dimensions, got 1-D"
@@ -469,10 +469,10 @@ def _norm_body(
             )
         pair = (axes[0], axes[1])
         m_ord: int | float | str = "fro" if ord is None else ord
-        return matrix_norm(x, m_ord, pair, keepdim)
+        return _scaled(x, ord, lambda t: matrix_norm(t, m_ord, pair, keepdim))
     if len(axes) == 1:
         v_ord: int | float = 2 if ord is None else ord
-        return vector_norm(x, v_ord, [axes[0]], keepdim)
+        return _scaled(x, ord, lambda t: vector_norm(t, v_ord, [axes[0]], keepdim))
     raise ValueError(f"norm: dim must name one or two axes, got {dim!r}")
 
 
@@ -1946,11 +1946,11 @@ def vector_norm(
 
     Notes
     -----
-    Gradients flow for non-integer :math:`p` too.  A slice whose
-    :math:`p`-th powers would over- or underflow is rescaled by its largest
-    entry first, so ``float32`` entries near ``1e-20`` give ``2e-20``, not
-    ``0``.  Where the norm is zero the gradient is zero — the subgradient
-    the reference picks — rather than the ``nan`` the root's infinite slope
+    Gradients flow for non-integer :math:`p` too.  On the CPU a slice whose
+    :math:`p`-th powers leave the float range is rescaled by its largest
+    entry first (``float32`` near ``1e-20`` gives ``2e-20``); Metal reduces
+    plain, only :func:`norm` rescales there.  A zero norm has a zero
+    gradient — the subgradient the reference picks — rather than the ``nan``
     there would give; so is a zero entry's for :math:`p < 1`.
 
     A ``float16`` or ``bfloat16`` input is reduced in ``float32`` and the
