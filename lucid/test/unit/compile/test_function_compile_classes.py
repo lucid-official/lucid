@@ -78,6 +78,8 @@ CUSTOM: frozenset[str] = frozenset(
         "_AdjointSolve",
         # ``once_differentiable``'s tail: a node whose backward only raises
         "_DelayedError",
+        # complete-mode QR's extra columns: a backward that reaches them raises (LCD-940)
+        "_QrCompleteTail",
     }
 )
 
