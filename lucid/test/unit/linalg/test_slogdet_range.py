@@ -184,7 +184,9 @@ def test_the_empty_matrix_and_the_empty_batch() -> None:
     assert tuple(sign.shape) == (0,) and tuple(logabs.shape) == (0,)
 
 
-@pytest.mark.parametrize("bad", [lucid.zeros(2, 3), lucid.zeros(3), lucid.zeros(2, 2, dtype=lucid.int64)])
+@pytest.mark.parametrize(
+    "bad", [lucid.zeros(2, 3), lucid.zeros(3), lucid.zeros(2, 2, dtype=lucid.int64)]
+)
 def test_an_invalid_input_is_refused_as_det_refuses_it(bad: lucid.Tensor) -> None:
     with pytest.raises(Exception) as via_det:
         lucid.linalg.det(bad)
