@@ -35,6 +35,7 @@ from lucid._ops._registry import _REGISTRY
 from lucid._tensor.tensor import Tensor
 import lucid.nn.functional as F
 from lucid.test._fixtures.devices import metal_available
+from lucid.test._fixtures.tolerance_guard import noise_when_below
 
 _METAL = pytest.mark.skipif(not metal_available(), reason="needs Metal")
 
@@ -364,7 +365,10 @@ def _compare(
         if got is None:
             continue
         for k, (g, w) in enumerate(zip(got, want, strict=True)):
-            if not np.allclose(g, w, **tol):
+            # A grad of ~1e-16 on both sides is the cancellation of terms that sum to zero.
+            with noise_when_below(w, tol["atol"], "a gradient that cancels analytically"):
+                close = np.allclose(g, w, **tol)
+            if not close:
                 return f"sample {arrays[0].shape} grad {k}: lucid {np.round(g.ravel()[:2], 4)} ref {np.round(w.ravel()[:2], 4)}"
         verdict = "compared"
     return verdict

@@ -33,6 +33,7 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
+from lucid.test._helpers.compare import assert_close_to_scale
 from tools import check_saved_versions
 
 
@@ -912,5 +913,5 @@ def test_fused_backward_skips_unneeded_input_gradients(op: str, active: str, dev
 
     alloc_all, grad_all = run_step(True)
     alloc_partial, grad_partial = run_step(False)
-    np.testing.assert_allclose(grad_partial, grad_all, rtol=1e-5, atol=1e-6)
+    assert_close_to_scale(grad_partial, grad_all, rtol=1e-5)
     assert alloc_partial < alloc_all, f"{op} ({active}, {device}): {alloc_partial} >= {alloc_all}"

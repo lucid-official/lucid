@@ -23,6 +23,7 @@ import pytest
 
 import lucid
 import lucid.distributions as D
+from lucid.test._fixtures.tolerance_guard import noise_when_below
 
 
 def _T(*values: float) -> lucid.Tensor:
@@ -407,7 +408,10 @@ def _agree(ours: np.ndarray | type, theirs: np.ndarray | type) -> bool:
         return ours is theirs
     if ours.shape != theirs.shape:
         return False
-    return bool(np.allclose(ours, theirs, rtol=1e-3, atol=1e-4, equal_nan=True))
+    # An entropy that is 0 in closed form comes back as 1e-5 from the reference's clamping
+    # and 5e-7 from float32 roundoff: that is the comparison, not a small value being missed.
+    with noise_when_below(theirs, 1e-4, "moments that are 0 in closed form"):
+        return bool(np.allclose(ours, theirs, rtol=1e-3, atol=1e-4, equal_nan=True))
 
 
 @pytest.mark.parity

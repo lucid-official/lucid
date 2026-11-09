@@ -89,7 +89,7 @@ def test_the_rates_and_the_public_state_are_the_references(
 ) -> None:
     _, got = _run(lucid, **kwargs)
     _, want = _run(ref, **kwargs)
-    assert got.get_last_lr() == pytest.approx(want.get_last_lr())
+    assert got.get_last_lr() == pytest.approx(want.get_last_lr(), abs=0)
     for name in ("best", "num_bad_epochs", "cooldown_counter", "last_epoch", "min_lrs"):
         assert getattr(got, name) == getattr(want, name), name
     assert sorted(got.state_dict()) == sorted(want.state_dict())

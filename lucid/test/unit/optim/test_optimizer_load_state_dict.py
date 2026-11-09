@@ -34,6 +34,7 @@ import lucid.optim as optim
 from lucid._C import engine as _C_engine
 from lucid.compile import compile_optimizer
 from lucid.test._fixtures.devices import device_dtype_params, metal_available
+from lucid.test._helpers.compare import assert_close_to_scale
 
 # A matrix and a vector: two parameters, so a checkpoint can cover one of them.
 _SHAPES = ((3, 4), (4,))
@@ -168,12 +169,11 @@ class _Pair:
             assert set(state[idx]) == set(ref_entry), f"{what}: entry {idx}"
             for key, want in ref_entry.items():
                 got = _as_array(state[idx][key])
-                np.testing.assert_allclose(
+                assert_close_to_scale(
                     got.astype(np.float64),
                     want.detach().numpy().astype(np.float64),
                     rtol=_TOL,
-                    atol=_TOL,
-                    err_msg=f"{what}: state {idx}/{key}",
+                    msg=f"{what}: state {idx}/{key}",
                 )
 
 
@@ -363,19 +363,22 @@ def test_state_saved_in_another_precision_follows_its_parameter(
 
     state, ref_state = live.state_dict()["state"], ref_live.state_dict()["state"]
     assert sorted(state) == sorted(ref_state)
-    tol = 1e-2 if lucid.float16 in (saved_dtype, live_dtype) else 1e-5
+    half = lucid.float16 in (saved_dtype, live_dtype)
+    tol = 1e-2 if half else 1e-5
+    # Adadelta's state is ~1e-6: float16 subnormals, which move in steps of 2**-24.
+    step = 2.0**-23 if half else 0.0
     for idx, ref_entry in ref_state.items():
         assert set(state[idx]) == set(ref_entry)
         for key, want in ref_entry.items():
             got = _as_array(state[idx][key])
             if key != "step":
                 assert got.dtype == _NP[live_dtype] or got.ndim == 0, (key, got.dtype)
-            np.testing.assert_allclose(
+            assert_close_to_scale(
                 got.astype(np.float64),
                 want.detach().numpy().astype(np.float64),
                 rtol=tol,
-                atol=tol,
-                err_msg=f"{key}",
+                floor=step,
+                msg=f"{key}",
             )
 
     g = _arrays(200)[0].astype(_NP[live_dtype])

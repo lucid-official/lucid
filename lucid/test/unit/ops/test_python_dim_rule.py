@@ -18,6 +18,7 @@ import lucid.linalg
 import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 from lucid._ops._dims import _wrap_dim, _wrap_dims
+from lucid.test._fixtures.tolerance_guard import noise_when_below
 
 
 @pytest.mark.parametrize("ndim", [0, 1, 2, 3])
@@ -140,7 +141,10 @@ def _compare(ref, device, shape, call, rtol=1e-5):
     weights = _values(tuple(want.shape))
     (got * lucid.tensor(weights, device=device)).sum().backward()
     (want * ref.tensor(weights)).sum().backward()
-    np.testing.assert_allclose(x.grad.numpy(), xr.grad.numpy(), rtol=rtol, atol=1e-6)
+    with noise_when_below(
+        xr.grad.numpy(), 1e-6, "a reduction that is scale-invariant has a roundoff gradient"
+    ):
+        np.testing.assert_allclose(x.grad.numpy(), xr.grad.numpy(), rtol=rtol, atol=1e-6)
 
 
 _ROLLS = {

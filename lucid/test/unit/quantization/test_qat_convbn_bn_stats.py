@@ -26,6 +26,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.intrinsic.qat as nniqat
 import lucid.quantization as Q
+from lucid.test._fixtures.tolerance_guard import noise_when_below
 from lucid.test._helpers.compare import assert_close
 
 _IN, _OUT, _K = 3, 8, 3
@@ -243,7 +244,11 @@ def _assert_step(
     if conv_bias:
         grads.append((lm.conv.bias.grad, rm.bias.grad, "conv.bias"))
     for lucid_grad, ref_grad, what in grads:
-        assert_close(lucid_grad, ref_grad, atol=1e-4, msg=f"{step} {what}.grad")
+        # The batch norm that follows removes a conv bias's effect: its gradient is roundoff.
+        with noise_when_below(
+            ref_grad.detach().numpy(), 1e-4, "a conv bias ahead of a batch norm has no gradient"
+        ):
+            assert_close(lucid_grad, ref_grad, atol=1e-4, msg=f"{step} {what}.grad")
 
 
 def _side_by_side(

@@ -302,13 +302,13 @@ def test_swalr_trajectory_matches_the_reference(
         ref_opt, swa, anneal_epochs=anneal_epochs, anneal_strategy=strategy
     )
     assert [g["lr"] for g in opt.param_groups] == pytest.approx(
-        [g["lr"] for g in ref_opt.param_groups], rel=1e-12
+        [g["lr"] for g in ref_opt.param_groups], rel=1e-12, abs=0
     )
     ours = _drive(opt, sched, 15)
     theirs = _drive(ref_opt, ref_sched, 15)
     np.testing.assert_allclose(ours, theirs, rtol=1e-12, atol=1e-12)
     assert [g["swa_lr"] for g in opt.param_groups] == [g["swa_lr"] for g in ref_opt.param_groups]
-    assert sched.get_last_lr() == pytest.approx(ref_sched.get_last_lr(), rel=1e-12)
+    assert sched.get_last_lr() == pytest.approx(ref_sched.get_last_lr(), rel=1e-12, abs=0)
 
 
 @pytest.mark.parity

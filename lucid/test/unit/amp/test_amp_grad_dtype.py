@@ -26,6 +26,7 @@ import pytest
 import lucid
 import lucid.nn.functional as F
 from lucid.test._fixtures.devices import metal_available
+from lucid.test._helpers.compare import assert_close_to_scale
 
 _DTYPES = {"bfloat16": lucid.bfloat16, "float16": lucid.float16}
 
@@ -195,7 +196,7 @@ def test_half_operand_gradient_keeps_half_dtype(
     assert all(g.dtype == half for g in seen), [g.dtype for g in seen]
     used = x.detach().float().numpy()[_used(path)].astype(np.float64)
     want = {"exp": np.exp(used), "prod": np.prod(used) / used, "mul": 2 * used}[op]
-    np.testing.assert_allclose(x.grad.float().numpy()[_used(path)], want, rtol=2e-2, atol=2e-2)
+    assert_close_to_scale(x.grad.float().numpy()[_used(path)], want, rtol=2e-2)
 
 
 def _used(path: str) -> tuple[slice, ...]:
