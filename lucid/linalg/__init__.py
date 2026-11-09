@@ -599,12 +599,12 @@ def svd(
 
     Notes
     -----
-    Backward is implemented via the multi-output ``_SVD`` ``Function``
-    wrapper so gradients from :math:`U`, :math:`S`, and :math:`V^\top`
-    accumulate into the input via Giles' (2008) formula using the
-    Loewner matrix :math:`F_{ij} = \sigma_i / (\sigma_i^2 - \sigma_j^2)`.
-    Gradients blow up when singular values are nearly repeated —
-    degenerate or rank-deficient inputs are not differentiation-friendly.
+    Backward goes through the multi-output ``_SVD`` ``Function`` (Giles 2008,
+    Loewner matrix :math:`F_{ij} = \sigma_i / (\sigma_i^2 - \sigma_j^2)`), so it
+    blows up for nearly repeated singular values.  With ``full_matrices=True``
+    the gradient with respect to ``U[..., :, min(m, n):]`` and ``Vh[..., min(m, n):, :]``
+    is ignored, as in the reference framework: they are an arbitrary null-space
+    basis, not a function of :math:`A`, so a loss reading only them gets zero.
 
     Cost is :math:`O(\min(m,n)^2 \cdot \max(m,n))`.
 
