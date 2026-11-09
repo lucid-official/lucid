@@ -506,7 +506,11 @@ jobs:
           python -m lucid.benchmarks.run_all --quiet --json perf/run_all.json
           python -m pytest lucid/test/perf/ -q --benchmark-json=perf/pytest_benchmark.json
 
+      # Even when a ceiling failed: the timings of a red run are the data
+      # tools/record_perf_ceilings.py needs (LCD-867 — nothing was uploaded
+      # after the ceilings started failing, so the history stopped).
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
         with:
           name: perf-history-${{ github.run_number }}
           path: perf/
