@@ -1,19 +1,24 @@
-"""``lstsq``: QR for a full-rank ``A``, the SVD otherwise.
+"""``lstsq``: QR for a matrix estimated full rank, the SVD otherwise.
 
-The reference's default driver (``gelsy``) solves a full-rank system through
-a QR factorisation and spends the rank-revealing work only on a matrix that
-needs it.  ``gels`` and ``gelsy`` (so the default) do the same: the QR route
-is taken only when ``A`` is *certified* full rank, and answers the same
-``A⁺ b`` the SVD route does — ``R⁻¹ Qᵀ b`` for ``m ≥ n``, ``Q R⁻ᵀ b`` from the
-QR of ``Aᵀ`` for ``m < n``.  A matrix the certificate does not clear (rank
-deficient, ill-conditioned, non-finite) goes to the SVD route, so a rank
-decision is never made by the cheap route.  ``gelsd`` / ``gelss`` return the
-singular values and always take the SVD route.
+The reference's default driver (``gelsy``) solves through a QR factorisation
+and decides the rank from an incremental *condition estimate*.  ``gels`` and
+``gelsy`` (so the default) do the same: a matrix whose estimated condition
+number sits well inside the rank cutoff takes the QR route, which answers the
+same ``A⁺ b`` the SVD route does — ``R⁻¹ Qᵀ b`` for ``m ≥ n``, ``Q R⁻ᵀ b``
+from the QR of ``Aᵀ`` for ``m < n``.  A matrix the estimate does not clear
+(rank deficient, ill-conditioned, non-finite) goes to the SVD route, which
+ranks it exactly.  An estimate can miss: a matrix built so that its smallest
+right singular vector is orthogonal to both start vectors of the estimate is
+taken for better conditioned than it is, and with a user ``rcond`` near its
+smallest singular value it is solved at full rank where ``gelsd`` would drop
+a direction.  ``gelsd`` / ``gelss`` return the singular values and always take
+the SVD route.
 
 Re-exported by :mod:`lucid.linalg`, which owns ``qr``, ``svd`` and the
 triangular solves this reads.
 """
 
+import math
 from typing import NamedTuple, Self
 
 import lucid
@@ -111,21 +116,24 @@ def _non_finite_batches(a: Tensor) -> Tensor:
 # ── The QR route ─────────────────────────────────────────────────────────────
 
 #: Power / inverse iterations of the conditioning estimate.  The estimate is a
-#: lower bound on the true condition number that tightens with each, and four
-#: from a fixed generic vector land within a small factor on the matrices a
-#: least-squares solve meets.
+#: lower bound on the true condition number that tightens with each step.
 _ESTIMATE_STEPS = 4
 
 #: A matrix goes to the QR route only when its estimated condition number is
 #: this many times *inside* the rank cutoff.  The estimate undershoots the true
-#: number (measured on Gaussian, graded, Kahan, Hilbert and near-duplicate-column
-#: matrices: 0.66-1.05 of it), so a factor of two keeps an under-converged one
-#: from calling a deficient matrix full rank; a matrix in the band between goes
-#: to the SVD route, which decides it.
+#: number (0.66-1.05 of it on generic inputs: Gaussian, graded, Kahan, Hilbert
+#: and near-duplicate-column matrices), so a factor of two keeps an
+#: under-converged one from calling a deficient matrix full rank; a matrix in
+#: the band between goes to the SVD route, which decides it.
 _ESTIMATE_MARGIN = 2.0
 
-#: Start vector of both iterations: generic, deterministic, and cheap.
+#: The two start vectors, each deterministic and with its own structure: a
+#: cosine ramp and an alternating-sign ramp.  An iteration converges to the
+#: smallest singular direction only if its start has a component along it, so
+#: the estimate is the larger of the two; a matrix whose smallest right
+#: singular vector is orthogonal to both is the estimate's blind spot.
 _START_PHASE = 1.618033988749895
+_ALTERNATING_PHASE = 2.718281828459045
 
 
 def _unit_columns(v: Tensor) -> Tensor:
@@ -133,23 +141,32 @@ def _unit_columns(v: Tensor) -> Tensor:
     return v / lucid.sqrt((v * v).sum(dim=-2, keepdim=True))
 
 
+def _start_vectors(k: int, like: Tensor) -> Tensor:
+    """The ``(k, 2)`` start columns, expanded over ``like``'s batch."""
+    index = lucid.arange(k, dtype=like.dtype, device=like.device)
+    ramp = lucid.cos(index * _START_PHASE + 1.0)
+    alternating = lucid.cos(index * math.pi) * (1.0 + 0.5 * lucid.sin(index * _ALTERNATING_PHASE))
+    both = lucid.stack([ramp, alternating], dim=-1)
+    return both.expand(*tuple(like.shape[:-2]), k, 2)
+
+
 def _estimate_condition(R: Tensor) -> Tensor:
     """Estimate ``σ_max / σ_min`` of each triangular ``R`` of the batch.
 
     Both extremes come from a few power steps on ``RᵀR`` (``σ_max``) and on its
-    inverse through two triangular solves (``σ_min``), so the cost is
-    ``O(k²)`` per step against the factorisation's ``O(k³)``.  ``R`` is scaled
-    to unit magnitude first, so a matrix of ``1e±20`` entries neither
-    underflows the inverse step nor overflows it.  A singular ``R`` divides by
-    its zero diagonal and comes out ``inf`` / ``nan``, which no comparison
-    against a cutoff passes.
+    inverse through two triangular solves (``σ_min``), run from two start
+    vectors at once as two columns, so the cost is ``O(k²)`` per step against
+    the factorisation's ``O(k³)``.  The larger estimate of each extreme is
+    kept.  ``R`` is scaled to unit magnitude first, so a matrix of ``1e±20``
+    entries neither underflows the inverse step nor overflows it.  A singular
+    ``R`` divides by its zero diagonal and comes out ``inf`` / ``nan``, which no
+    comparison against a cutoff passes.
     """
     k = int(R.shape[-1])
     scale = R.abs().amax(dim=(-2, -1), keepdim=True)
     Rn = R / scale
-    phase = lucid.arange(k, dtype=R.dtype, device=R.device) * _START_PHASE + 1.0
-    start = lucid.cos(phase).reshape(k, 1).expand(*tuple(R.shape[:-2]), k, 1)
     Rt = Rn.mT
+    start = _start_vectors(k, R)
     inv_v = _unit_columns(start)
     inv_gain = lucid.ones_like(scale)
     for _ in range(_ESTIMATE_STEPS):
@@ -162,7 +179,12 @@ def _estimate_condition(R: Tensor) -> Tensor:
         z = lucid.matmul(Rt, lucid.matmul(Rn, fwd_v))
         fwd_gain = lucid.sqrt((z * z).sum(dim=-2, keepdim=True))
         fwd_v = z / fwd_gain
-    return lucid.sqrt(inv_gain * fwd_gain).reshape(tuple(R.shape[:-2]))
+    kappa = lucid.sqrt(inv_gain.amax(dim=-1) * fwd_gain.amax(dim=-1)).reshape(tuple(R.shape[:-2]))
+    # ``amax`` may skip a NaN column; a non-finite gain in either is no estimate.
+    finite = lucid.isfinite(inv_gain).all(dim=(-2, -1)) & lucid.isfinite(fwd_gain).all(dim=(-2, -1))
+    return lucid.where(
+        finite.reshape(tuple(R.shape[:-2])), kappa, lucid.full_like(kappa, float("inf"))
+    )
 
 
 class _QrLeastSquares:
@@ -190,8 +212,8 @@ class _QrLeastSquares:
             self._tall, self._q.index_select(0, index), self._r.index_select(0, index)
         )
 
-    def certified(self, rtol: float) -> list[bool]:
-        """Which matrices of the flattened batch are certified full rank.
+    def full_rank(self, rtol: float) -> list[bool]:
+        """Which matrices of the flattened batch are estimated to be full rank.
 
         The cutoff keeps ``σ`` above ``rtol · σ_max``, so full rank is
         ``κ < 1 / rtol``.  The estimate is made on the host: the answer is one
@@ -216,6 +238,7 @@ class _QrLeastSquares:
         """``A⁺`` itself, for a solve that must differentiate."""
         with lucid.no_grad():
             P = solve_triangular(self._r, self._q.mT, upper=True)
+            # contiguous: works around the double-backward defect under investigation.
             return P if self._tall else P.mT.contiguous()
 
 
@@ -246,9 +269,9 @@ def _index(rows: list[int], like: Tensor) -> Tensor:
 def _qr_route(
     A: Tensor, b_mat: Tensor, rcond: float | None, batch: tuple[int, ...]
 ) -> tuple[Tensor, Tensor] | None:
-    """``(A⁺ b, rank)`` by QR where ``A`` is certified full rank, else ``None``.
+    """``(A⁺ b, rank)`` by QR where ``A`` is estimated full rank, else ``None``.
 
-    A batch is split by the certificate: the matrices it clears take the QR
+    A batch is split by the estimate: the matrices it clears take the QR
     route, the rest take the SVD route, and the two are put back in order.  One
     ill-conditioned matrix in a batch of hundreds then costs one SVD, not the
     whole batch's.  ``None`` means the SVD route should answer everything — no
@@ -259,7 +282,7 @@ def _qr_route(
     if min(m, n) == 0 or k == 0 or 0 in batch or A.dtype not in (lucid.float32, lucid.float64):
         return None
     route = _QrLeastSquares.of(A)
-    ok = route.certified(_default_rtol(A, rcond))
+    ok = route.full_rank(_default_rtol(A, rcond))
     full = min(m, n)
     if all(ok):
         sol = _qr_solve(route, A, b_mat)

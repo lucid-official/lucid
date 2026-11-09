@@ -2,12 +2,12 @@
 
 The reference's default driver solves a full-rank system through a QR
 factorisation; Lucid answered every matrix through the pseudo-inverse (two
-SVDs) and was 4-17x slower.  ``gels`` and ``gelsy`` now try QR first, certify
-the matrix full rank with a conditioning estimate, and send what the
-certificate does not clear to the SVD route.  What must not change is the
+SVDs) and was 4-17x slower.  ``gels`` and ``gelsy`` now try QR first, decide
+full rank from a conditioning estimate, and send what the estimate does
+not clear to the SVD route.  What must not change is the
 answer — the minimum-norm solution, the residuals / rank / singular values
-each driver returns, the derivative in both operands — and the rank decision,
-which only the SVD route makes.
+each driver returns, the derivative in both operands — and the rank of a
+rank-deficient matrix, which the SVD route decides.
 """
 
 from types import ModuleType
@@ -195,7 +195,7 @@ def test_a_rcond_above_the_condition_number_sends_a_full_rank_matrix_to_the_svd(
     assert int(got.rank.item()) == 2
 
 
-# ── a batch splits by the certificate, and comes back in order ───────────────
+# ── a batch splits by the estimate, and comes back in order ───────────────
 
 
 @pytest.mark.parity
@@ -275,7 +275,7 @@ def test_gradcheck_through_the_qr_route() -> None:
     assert lucid.autograd.gradcheck(lambda x, y: LA.lstsq(x, y).solution.sum(), [a, b])
 
 
-# ── the certificate ──────────────────────────────────────────────────────────
+# ── the condition estimate ───────────────────────────────────────────────────────
 
 
 def _kappa(a: np.ndarray) -> float:
@@ -306,7 +306,7 @@ def test_the_condition_estimate_stays_within_the_margin_of_the_truth(kind: str) 
             np.triu(-c * np.ones((n, n)), 1) + np.eye(n)
         )
     ratio = _estimate(a) / _kappa(a)
-    # Below 1/_ESTIMATE_MARGIN the certificate could clear a deficient matrix.
+    # Below 1/_ESTIMATE_MARGIN the certificate could clear a rank-deficient matrix.
     assert 1.0 / _lstsq._ESTIMATE_MARGIN < ratio < 1.5
 
 
@@ -324,3 +324,57 @@ def test_the_condition_estimate_does_not_depend_on_scale(scale: float) -> None:
 def test_a_singular_triangle_has_no_finite_estimate() -> None:
     r = lucid.tensor(np.triu(np.ones((4, 4))) * np.array([1.0, 1.0, 0.0, 1.0]))
     assert not np.isfinite(float(_lstsq._estimate_condition(r).item()))
+
+
+# ── the estimate's blind spot ────────────────────────────────────────────────
+#
+# An inverse iteration finds the smallest singular direction only from a start
+# with a component along it.  Two starts of different structure make that a
+# matter of construction; a matrix whose smallest right singular vector is
+# orthogonal to the ones in use is the case no start choice removes.
+
+
+def _starts(n: int) -> np.ndarray:
+    return _lstsq._start_vectors(n, lucid.zeros(n, n, dtype=lucid.float64)).numpy()
+
+
+def _near_deficient(n: int, rcond: float, orthogonal_to: np.ndarray) -> np.ndarray:
+    """``σ = (1, …, 1, 10 s, s)`` with ``s = 0.4 rcond``; ``V``'s last column avoids ``orthogonal_to``."""
+    rng = np.random.default_rng(5)
+    basis, _ = np.linalg.qr(orthogonal_to)
+    w = rng.standard_normal(n)
+    w -= basis @ (basis.T @ w)
+    w /= np.linalg.norm(w)
+    q, _ = np.linalg.qr(np.concatenate([w[:, None], rng.standard_normal((n, n - 1))], axis=1))
+    v = np.concatenate([q[:, 1:], q[:, :1]], axis=1)
+    s = 0.4 * rcond
+    u, _ = np.linalg.qr(rng.standard_normal((n + 5, n)))
+    return (u * np.concatenate([np.ones(n - 2), [10 * s, s]])) @ v.T
+
+
+def _ranks(a: np.ndarray, rcond: float) -> tuple[int, int]:
+    b = lucid.tensor(np.random.default_rng(6).standard_normal((a.shape[0], 1)))
+    default = LA.lstsq(lucid.tensor(a), b, rcond=rcond)
+    exact = LA.lstsq(lucid.tensor(a), b, rcond=rcond, driver="gelsd")
+    return int(default.rank.item()), int(exact.rank.item())
+
+
+def test_a_start_orthogonal_to_one_of_the_two_is_still_ranked_right() -> None:
+    n, rcond = 20, 1e-6
+    ramp = _starts(n)[:, :1]
+    a = _near_deficient(n, rcond, ramp)
+    assert _ranks(a, rcond) == (n - 1, n - 1)
+    alternating = _starts(n)[:, 1:]
+    a = _near_deficient(n, rcond, alternating)
+    assert _ranks(a, rcond) == (n - 1, n - 1)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="LCD-945: a smallest singular vector orthogonal to both estimate starts is missed",
+)
+def test_a_matrix_orthogonal_to_both_starts_is_ranked_like_gelsd() -> None:
+    n, rcond = 20, 1e-6
+    a = _near_deficient(n, rcond, _starts(n))
+    default, exact = _ranks(a, rcond)
+    assert default == exact == n - 1
