@@ -1,4 +1,4 @@
-"""A first run MPSGraph fails is answered eagerly by every compile entry (LCD-936).
+"""A first run MPSGraph fails is answered eagerly by every compile entry (LCD-936, LCD-938).
 
 MPSGraph specializes an executable inside its first run, and has gaps there that
 compiling does not reveal.  Two entries (``compile``, ``fused_step``) used to
@@ -13,6 +13,12 @@ The natural trigger is gone (``392240a28`` fixed the int64 ``square`` gap), so
 each test injects the failure at ``run_executable`` / ``run_executable_inplace``
 and compares the answer, and the BatchNorm statistics where the model has them,
 with a twin model run eagerly.
+
+A segmented step's backward executables first run inside the caller's
+``loss.backward()``, after the forward chain has run and written its BatchNorm
+statistics.  A refusal there recomputes that one segment's gradients eagerly
+from its saved input and the upstream cotangent (LCD-938); the statistics and
+the random draws it recomputes over are put back and replayed.
 """
 
 import warnings
@@ -36,11 +42,17 @@ from lucid.utils.cache import StaticCache
 _TOL = 1e-5
 
 
-def _inject(monkeypatch: pytest.MonkeyPatch, runner: str, fail_calls: set[int]) -> list[int]:
+def _inject(
+    monkeypatch: pytest.MonkeyPatch,
+    runner: str,
+    fail_calls: set[int],
+    failed: list[object] | None = None,
+) -> list[int]:
     """Make the ``fail_calls``-th (0-based) call of ``compile.<runner>`` raise as MPSGraph does.
 
     Returns the list that grows by one per call, failed or not: its length is how
-    many times the engine was asked to run an executable.
+    many times the engine was asked to run an executable.  ``failed`` collects the
+    executable each failed call was given.
     """
     real: Callable[..., object] = getattr(_C_engine.compile, runner)
     calls: list[int] = []
@@ -49,6 +61,8 @@ def _inject(monkeypatch: pytest.MonkeyPatch, runner: str, fail_calls: set[int]) 
         n = len(calls)
         calls.append(n)
         if n in fail_calls:
+            if failed is not None:
+                failed.append(args[0])
             raise RuntimeError(f"{runner}: MPSGraph failed: injected")
         return real(*args)
 
@@ -176,6 +190,108 @@ def test_segmented_step_answers_eagerly(monkeypatch: pytest.MonkeyPatch, fails_a
     _assert_announced_once(caught)
     assert len(calls) == fails_at + 1  # the failing run was the last the engine saw
     assert len(step.eager_only) == 1  # type: ignore[attr-defined]
+
+
+def _noisy_trunk() -> nn.Sequential:
+    """Three segments of two children: BatchNorm in the first, dropout in the second."""
+    return nn.Sequential(
+        nn.Linear(4, 6),
+        nn.BatchNorm1d(6),
+        nn.Dropout(0.3),
+        nn.Linear(6, 6),
+        nn.ReLU(),
+        nn.Linear(6, 2),
+    ).to(COMPILE_DEVICE)
+
+
+def _bwd_executables(step: Callable[..., lucid.Tensor]) -> list[object]:
+    """Every segment's backward executable the step has compiled so far."""
+    caches: list[dict[object, object]] = step.cache  # type: ignore[attr-defined]
+    return [c.bwd.exe for cache in caches for c in cache.values()]  # type: ignore[attr-defined]
+
+
+# Engine calls of a first step of N segments: N forward runs, then the backward runs
+# from the last segment to the first.  (segments, model builder, failing call, segment).
+_BACKWARD_REFUSALS = [
+    pytest.param(2, _bn_trunk, 2, id="2seg-last-segment"),
+    pytest.param(2, _bn_trunk, 3, id="2seg-first-segment"),
+    pytest.param(3, _noisy_trunk, 3, id="3seg-last-segment"),
+    pytest.param(3, _noisy_trunk, 4, id="3seg-middle-segment-draws"),
+    pytest.param(3, _noisy_trunk, 5, id="3seg-first-segment-batchnorm"),
+]
+
+
+@pytest.mark.parametrize(("segments", "build", "fails_at"), _BACKWARD_REFUSALS)
+def test_segmented_backward_answers_eagerly(
+    monkeypatch: pytest.MonkeyPatch,
+    segments: int,
+    build: Callable[[], nn.Sequential],
+    fails_at: int,
+) -> None:
+    """A backward executable refused in its first run leaves the gradients eager's."""
+    lucid.manual_seed(6)
+    model = build()
+    eager = build()
+    eager.load_state_dict(model.state_dict())
+    step = make_step(model, F.mse_loss, segments=segments)
+    failed: list[object] = []
+    calls = _inject(monkeypatch, "run_executable", {fails_at}, failed)
+    batches = [
+        (lucid.randn(5, 4, device=COMPILE_DEVICE), lucid.randn(5, 2, device=COMPILE_DEVICE))
+        for _ in range(3)
+    ]
+
+    after_first = 0
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        for i, (x, t) in enumerate(batches):
+            for p in (*model.parameters(), *eager.parameters()):
+                p.grad = None
+            lucid.manual_seed(100 + i)
+            got = step(x, t)
+            if i == 0:
+                bwd = _bwd_executables(step)
+            got.backward()
+            lucid.manual_seed(100 + i)
+            want = F.mse_loss(eager(x), t)
+            want.backward()
+            _same(got, want)
+            for p_c, p_e in zip(model.parameters(), eager.parameters(), strict=True):
+                assert p_c.grad is not None and p_e.grad is not None
+                _same(p_c.grad, p_e.grad)
+            for b_c, b_e in zip(model.buffers(), eager.buffers(), strict=True):
+                _same(b_c.float(), b_e.float())
+            if i == 0:
+                after_first = len(calls)
+    _assert_announced_once(caught)
+    # The injected call ran a backward executable, not a forward one.
+    assert len(failed) == 1 and any(failed[0] is exe for exe in bwd)
+    # The other segments' backward ran compiled in that step; no call after it
+    # reached the engine, so the refused executable was not retried.
+    assert after_first == 2 * segments and len(calls) == after_first
+    assert len(step.eager_only) == 1  # type: ignore[attr-defined]
+
+
+@pytest.mark.filterwarnings("ignore::lucid.compile._core.fallback.CompileFallbackWarning")
+def test_segmented_backward_keeps_a_parameter_input_whole(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An input that is the first segment's own weight counts both its uses (LCD-629)."""
+
+    def build() -> nn.Sequential:
+        lucid.manual_seed(7)
+        return nn.Sequential(nn.Linear(4, 4), nn.Tanh(), nn.Linear(4, 4)).to(COMPILE_DEVICE)
+
+    model, eager = build(), build()
+    step = make_step(model, F.mse_loss, segments=2)
+    _inject(monkeypatch, "run_executable", {3})  # segment 0's backward
+    t = lucid.randn(4, 4, device=COMPILE_DEVICE)
+    got = step(model[0].weight, t)
+    got.backward()
+    want = F.mse_loss(eager(eager[0].weight), t)
+    want.backward()
+    _same(got, want)
+    for p_c, p_e in zip(model.parameters(), eager.parameters(), strict=True):
+        assert p_c.grad is not None and p_e.grad is not None
+        _same(p_c.grad, p_e.grad)
 
 
 def test_decode_step_answers_eagerly(monkeypatch: pytest.MonkeyPatch) -> None:

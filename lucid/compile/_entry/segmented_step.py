@@ -71,12 +71,13 @@ from lucid.autograd.function import Function, FunctionCtx
 from lucid.compile._core.bn_runstats import BnWriteback
 from lucid.compile._core.buffer_writes import TraceAnswer, eager_rerun
 from lucid.compile._core.call_values import CallValues
-from lucid.compile._core.fallback import EagerFallbackSet
+from lucid.compile._core.fallback import EagerFallbackSet, run_or_answer_eagerly
 from lucid.compile._core.rng_replay import advance_since, replayed
 from lucid.compile._core.signature import CacheKey, outside_feeds, tree_tensors
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import CompiledExecutable, Tracer
+    from lucid._factories._generator import _StreamState
     from lucid.compile._core.signature import ParamFingerprint
     from lucid.nn.module import Module
     from lucid.nn.modules.container import Sequential
@@ -141,6 +142,26 @@ class _SegCompiled:
     # Whether the forward executable has run to the end once: MPSGraph specializes it
     # in that first run, and a failure there is a refusal (:func:`_refuse_first_run`).
     warm: bool = False
+    # The same for the backward executable, whose first run happens inside the
+    # caller's ``loss.backward()`` (:func:`_SegmentFunction.backward`).
+    bwd_warm: bool = False
+
+
+@final
+@dataclass(frozen=True, slots=True)
+class _SegCall:
+    """What one segment's autograd node needs beyond its tensors.
+
+    ``mark_eager`` makes the call's signature eager-only: a backward executable
+    that fails in its first run is the call's verdict, and it is found out
+    after the forward chain has run, so the step that raised could not take it
+    back.  ``owner`` is the model, whose buffers an eager recompute puts back.
+    """
+
+    compiled: _SegCompiled
+    seg: _Segment
+    owner: Module
+    mark_eager: Callable[[], None]
 
 
 def _segment_key(x: Tensor, fingerprint: ParamFingerprint) -> CacheKey:
@@ -579,17 +600,28 @@ def _refuse_first_run(
     if compiled.warm or not undoable or not is_first_run_failure(why):
         raise why
     _fallback_notice("first-run", str(why))
-    for key in [k for k, v in seg.cache.items() if v is compiled]:
-        del seg.cache[key]
+    _forget(seg, compiled)
     raise _SegmentCompileError(seg.index) from why
 
 
+def _forget(seg: _Segment, compiled: _SegCompiled) -> None:
+    """Drop ``compiled`` from ``seg``'s cache, so no later call finds it."""
+    for key in [k for k, v in seg.cache.items() if v is compiled]:
+        del seg.cache[key]
+
+
 def _forward_segments(
-    seg_objs: Sequence[_Segment], cur: Tensor, fingerprint: ParamFingerprint, key: CacheKey
+    seg_objs: Sequence[_Segment],
+    cur: Tensor,
+    fingerprint: ParamFingerprint,
+    key: CacheKey,
+    mark_eager: Callable[[], None],
 ) -> tuple[Tensor, bool]:
     """Run (and lazily compile) each segment in ``seg_objs`` on ``cur``.
 
-    ``key`` is ``cur``'s segment key, which the caller took to look the call up.
+    ``key`` is ``cur``'s segment key, which the caller took to look the call up;
+    ``mark_eager`` is what each segment's backward calls if its executable is
+    refused (:class:`_SegCall`).
 
     Each segment run writes its BatchNorm state back, so a later segment that
     does not compile would leave the step half-applied, and the eager step
@@ -617,7 +649,7 @@ def _forward_segments(
                 if isinstance(built, TraceAnswer):
                     return _run_eagerly(seg_objs[i + 1 :], built.value), True
                 compiled = built
-            holder: list[object] = [compiled]
+            holder: list[object] = [_SegCall(compiled, seg, fingerprint.model, mark_eager)]
             try:
                 cur = cast(Tensor, _SegmentFunction.apply(holder, cur, *seg.params))
             except RuntimeError as why:
@@ -646,8 +678,12 @@ def _forward_or_refuse(
     call that changes what the model reads (a slot it stored into) no longer has.
     """
     rng_before = _stream_states()
+
+    def mark_eager() -> None:
+        eager_only.add(fingerprint.rekey(key, (x,), {}))
+
     try:
-        cur, stood = _forward_segments(seg_objs, x, fingerprint, key)
+        cur, stood = _forward_segments(seg_objs, x, fingerprint, key, mark_eager)
     except _SegmentCompileError:
         _restore_stream_states(rng_before)
         eager_only.add(fingerprint.rekey(key, (x,), {}))
@@ -664,12 +700,58 @@ def _run_eagerly(seg_objs: Sequence[_Segment], cur: Tensor) -> Tensor:
     return cur
 
 
+def _eager_segment_grads(
+    call: _SegCall,
+    x: Tensor,
+    param_impls: Sequence[object],
+    grad_out: Tensor,
+    rng: tuple[_StreamState, ...] | None,
+) -> tuple[Tensor | None, ...]:
+    """``call``'s segment differentiated eagerly: ``(grad_x, *grad_params)``.
+
+    The forward ran compiled and wrote its BatchNorm statistics once, so the
+    eager recompute puts the buffers back as it found them; its draws are the
+    forward's (``rng``).  The input is a detached copy, so the recompute never
+    runs on into whatever computed it: an earlier segment's own backward does
+    that.  An input that is one of the segment's parameters is that parameter,
+    whose gradient then counts both uses, as in the executable (LCD-629).
+    """
+    from lucid._dispatch import _unwrap
+    from lucid.autograd import enable_grad, grad
+
+    seg = call.seg
+    restore = _keep_buffers(call.owner)
+    x_impl = _unwrap(x)
+    as_param = next(
+        (p for p, impl in zip(seg.params, param_impls, strict=True) if impl is x_impl), None
+    )
+    wants_x = call.compiled.produce_input_grad
+    found: dict[int, Tensor | None] = {}
+    try:
+        with replayed(rng), enable_grad():
+            x_in = as_param if as_param is not None else x.detach().requires_grad_(wants_x)
+            out = seg.forward_fn(x_in)
+            wrt = [p for p in seg.params if p.requires_grad]
+            if wants_x:
+                wrt.insert(0, x_in)
+            if wrt:
+                found = {
+                    id(t): g
+                    for t, g in zip(
+                        wrt, grad(out, wrt, grad_outputs=grad_out, allow_unused=True), strict=True
+                    )
+                }
+    finally:
+        restore()
+    return (found.get(id(x_in)) if wants_x else None, *(found.get(id(p)) for p in seg.params))
+
+
 @final
 class _SegmentFunction(Function):
     """autograd.Function wrapping one compiled segment.
 
     ``apply(holder, x, *params)`` — ``holder`` is a 1-element list owning the
-    compiled :class:`_SegCompiled` (a non-Tensor positional, given no autograd
+    segment's :class:`_SegCall` (a non-Tensor positional, given no autograd
     edge, like ``make_step``'s ``_StepEntry`` holder).  ``x`` + ``params`` are
     the Tensor inputs; backward returns one cotangent per Tensor input.
     """
@@ -684,7 +766,8 @@ class _SegmentFunction(Function):
         """Run the segment's forward executable; stash state for backward."""
         from lucid._dispatch import _unwrap, _wrap
 
-        compiled = cast(_SegCompiled, holder[0])
+        call = cast(_SegCall, holder[0])
+        compiled = call.compiled
         param_impls = [_unwrap(p) for p in params]
         feeds = _feed(compiled.fwd.feed_plan, _unwrap(x), None, param_impls)
         # Where the streams stand before the forward draws, for the backward's replay.
@@ -694,7 +777,7 @@ class _SegmentFunction(Function):
         compiled.bn.apply(outs[1:])
         compiled.warm = True
 
-        ctx.compiled = compiled
+        ctx.call = call
         ctx.x_impl = _unwrap(x)
         ctx.param_impls = param_impls
         return _wrap(y_impl)
@@ -707,26 +790,43 @@ class _SegmentFunction(Function):
         """Run the segment's backward executable; return (grad_x, *grad_params)."""
         from lucid._dispatch import _unwrap, _wrap
 
-        compiled = cast(_SegCompiled, ctx.compiled)
+        call = cast(_SegCall, ctx.call)
+        compiled = call.compiled
         x_impl = cast(_C_engine.TensorImpl, ctx.x_impl)
         param_impls = cast(list[object], ctx.param_impls)
-
-        feeds = _feed(compiled.bwd.feed_plan, x_impl, _unwrap(grad_out), param_impls)
         # The recompute draws the values the forward applied, and the streams
         # end where they stand: eager's backward draws nothing.
         forward_rng = ctx.rng
-        with replayed(forward_rng if isinstance(forward_rng, tuple) else None):
-            outs = _C_engine.compile.run_executable(compiled.bwd.exe, feeds)
+        rng = forward_rng if isinstance(forward_rng, tuple) else None
 
-        # Output layout: [loss_seg, (grad_x?), *grad_params]; a gradient the
-        # loss does not reach is a zero slot, which eager leaves None.
-        grads: list[Tensor | None] = [
-            _wrap(cast(_C_engine.TensorImpl, out)) if reached else None
-            for out, reached in zip(outs[1:], compiled.reached, strict=True)
-        ]
-        if not compiled.produce_input_grad:
-            grads.insert(0, None)
-        return tuple(grads)
+        def run() -> tuple[Tensor | None, ...]:
+            feeds = _feed(compiled.bwd.feed_plan, x_impl, _unwrap(grad_out), param_impls)
+            with replayed(rng):
+                outs = _C_engine.compile.run_executable(compiled.bwd.exe, feeds)
+            compiled.bwd_warm = True
+            # Output layout: [loss_seg, (grad_x?), *grad_params]; a gradient the
+            # loss does not reach is a zero slot, which eager leaves None.
+            grads: list[Tensor | None] = [
+                _wrap(cast(_C_engine.TensorImpl, out)) if reached else None
+                for out, reached in zip(outs[1:], compiled.reached, strict=True)
+            ]
+            if not compiled.produce_input_grad:
+                grads.insert(0, None)
+            return tuple(grads)
+
+        def drop() -> None:
+            _forget(call.seg, compiled)
+            call.mark_eager()
+
+        # The backward executable's first run happens here, in the caller's
+        # ``loss.backward()``, and writes nothing: a refusal is answered with
+        # this segment's gradients taken eagerly, from the same inputs.
+        return run_or_answer_eagerly(
+            run,
+            warm=compiled.bwd_warm,
+            drop=drop,
+            eagerly=lambda: _eager_segment_grads(call, _wrap(x_impl), param_impls, grad_out, rng),
+        )
 
 
 def _group_fn(mods: list[Module]) -> Callable[[Tensor], Tensor]:

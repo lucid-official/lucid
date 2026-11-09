@@ -377,6 +377,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("ParamFingerprint", "lucid.compile._core.signature", "ParamFingerprint"),
         ("Sequential", "lucid.nn.modules.container", "Sequential"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
+        ("_StreamState", "lucid._factories._generator", "_StreamState"),
     ),
     "lucid.compile._entry.step": (
         ("CacheKey", "lucid.compile._core.signature", "CacheKey"),
