@@ -46,7 +46,19 @@ namespace {
 // own ``ptr.use_count()`` stays equal to its view-family count so an in-place
 // op on ``t`` reaches the version check instead of refusing ``t`` as storage
 // shared outside its views.
+//
+// Only a dense ``t`` has a split to take.  For any other layout (a transposed,
+// strided, expanded or offset view) ``saved_output_storage()`` is the packed
+// copy ``storage()`` makes — a different allocation from the one the alias
+// reads through ``t``'s strides — so re-owning the alias onto it would leave
+// the alias reading a buffer nothing keeps alive once ``t`` is gone.  Such an
+// alias keeps ``t``'s own control block.
 std::shared_ptr<TensorImpl> make_saved_output_alias(const std::shared_ptr<TensorImpl>& t) {
+    if (!t->is_dense()) {
+        auto alias = TensorImpl::make_view(t, t->shape(), t->stride(), 0, /*join_family=*/false);
+        alias->set_detached_alias(true);
+        return alias;
+    }
     Storage split = t->saved_output_storage();
     auto alias = TensorImpl::make_view(t, t->shape(), t->stride(), 0, /*join_family=*/false);
     alias->set_detached_alias(true);

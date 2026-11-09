@@ -119,6 +119,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - slogdet's backward is traced into a compiled step (LCD-939)
 
+- saved non-dense Function output keeps its buffer alive (LCD-948)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
