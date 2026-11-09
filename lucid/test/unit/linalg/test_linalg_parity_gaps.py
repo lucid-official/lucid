@@ -199,3 +199,139 @@ def test_householder_product_gradcheck_float64(k: int) -> None:
         lambda a, *rest: (LA.householder_product(a, rest[0] if rest else tt.detach()) * w).sum(),
         inputs,
     )
+
+
+# ── qr(mode='complete'): Q's extra columns are not differentiable ────────────
+
+
+@pytest.mark.parametrize("shape", [(5, 3), (4, 1), (2, 5, 3)])
+def test_complete_qr_backward_through_q_is_refused_when_tall(
+    ref: ModuleType, device: str, shape: tuple[int, ...]
+) -> None:
+    arr = np.random.default_rng(5).standard_normal(shape).astype(np.float32)
+    with pytest.raises(RuntimeError, match="not differentiable"):
+        rq, _ = ref.linalg.qr(ref.tensor(arr, requires_grad=True), mode="complete")
+        rq.sum().backward()
+    x = _t(arr, device, requires_grad=True)
+    q, _ = LA.qr(x, mode="complete")
+    with pytest.raises(RuntimeError, match="not differentiable when mode='complete'"):
+        q.sum().backward()
+    # Reading only the thin columns still leads through the refused node.
+    x = _t(arr, device, requires_grad=True)
+    q, _ = LA.qr(x, mode="complete")
+    with pytest.raises(RuntimeError, match="not differentiable"):
+        q[..., :, : shape[-1]].sum().backward()
+
+
+@pytest.mark.parametrize("shape", [(3, 3), (3, 5), (2, 3, 5)])
+def test_complete_qr_is_differentiable_when_q_has_no_extra_columns(
+    device: str, shape: tuple[int, ...]
+) -> None:
+    arr = np.random.default_rng(6).standard_normal(shape).astype(np.float32)
+    x = _t(arr, device, requires_grad=True)
+    q, r = LA.qr(x, mode="complete")
+    (q.sum() + r.sum()).backward()
+    assert x.grad is not None and np.isfinite(x.grad.numpy()).all()
+
+
+def test_complete_qr_r_alone_stays_differentiable_float64() -> None:
+    """The reference refuses this too; the gradient is right, so it is kept."""
+    arr = np.random.default_rng(7).standard_normal((5, 3))
+    x = _t(arr, dtype=lucid.float64, requires_grad=True)
+    w = _t(np.random.default_rng(8).standard_normal((5, 3)), dtype=lucid.float64)
+    assert lucid.autograd.gradcheck(lambda a: (LA.qr(a, mode="complete")[1] * w).sum(), [x])
+
+
+def test_complete_qr_forward_unchanged_without_grad(device: str) -> None:
+    arr = np.random.default_rng(9).standard_normal((5, 3)).astype(np.float32)
+    q, r = LA.qr(_t(arr, device), mode="complete")
+    assert tuple(q.shape) == (5, 5) and tuple(r.shape) == (5, 3)
+    np.testing.assert_allclose((q.mT @ q).numpy(), np.eye(5), atol=1e-5)
+    np.testing.assert_allclose((q @ r).numpy(), arr, atol=1e-5)
+
+
+# ── lu: any shape, differentiable in any shape ───────────────────────────────
+
+_LU_SHAPES = [(5, 3), (3, 5), (4, 4), (1, 4), (4, 1), (2, 5, 3), (2, 3, 5)]
+
+
+@pytest.mark.parametrize("shape", _LU_SHAPES)
+def test_lu_factors_match_reference(ref: ModuleType, device: str, shape: tuple[int, ...]) -> None:
+    arr = np.random.default_rng(sum(shape)).standard_normal(shape).astype(np.float32)
+    got = LA.lu(_t(arr, device))
+    want = ref.linalg.lu(ref.tensor(arr))
+    for g, w in zip(got, want, strict=True):
+        assert tuple(g.shape) == tuple(w.shape)
+        np.testing.assert_allclose(g.numpy(), np.asarray(w.tolist()), atol=1e-5)
+    m, n = shape[-2:]
+    k = min(m, n)
+    assert [tuple(t.shape) for t in got] == [
+        (*shape[:-2], m, m),
+        (*shape[:-2], m, k),
+        (*shape[:-2], k, n),
+    ]
+    P, L, U = got
+    np.testing.assert_allclose((P @ L @ U).numpy(), arr, atol=1e-5)
+
+
+def test_lu_documented_shapes_for_tall_and_wide(device: str) -> None:
+    tall = LA.lu(lucid.randn(5, 3, device=device))
+    wide = LA.lu(lucid.randn(3, 5, device=device))
+    assert [tuple(t.shape) for t in tall] == [(5, 5), (5, 3), (3, 3)]
+    assert [tuple(t.shape) for t in wide] == [(3, 3), (3, 3), (3, 5)]
+
+
+def test_lu_without_pivoting_is_still_refused() -> None:
+    with pytest.raises(NotImplementedError):
+        LA.lu(lucid.randn(3, 3), pivot=False)
+
+
+def test_lu_refuses_a_vector() -> None:
+    with pytest.raises(ValueError, match="matrix"):
+        LA.lu(lucid.randn(4))
+
+
+@pytest.mark.parametrize("shape", _LU_SHAPES)
+def test_lu_gradient_matches_reference(ref: ModuleType, shape: tuple[int, ...]) -> None:
+    rng = np.random.default_rng(100 + sum(shape))
+    arr = rng.standard_normal(shape)
+    x = _t(arr, dtype=lucid.float64, requires_grad=True)
+    _, L, U = LA.lu(x)
+    wl = rng.standard_normal(tuple(L.shape))
+    wu = rng.standard_normal(tuple(U.shape))
+    ((L * _t(wl, dtype=lucid.float64)).sum() + (U * _t(wu, dtype=lucid.float64)).sum()).backward()
+    rx = ref.tensor(arr, requires_grad=True)
+    _, rL, rU = ref.linalg.lu(rx)
+    ((rL * ref.tensor(wl)).sum() + (rU * ref.tensor(wu)).sum()).backward()
+    assert x.grad is not None
+    np.testing.assert_allclose(x.grad.numpy(), np.asarray(rx.grad.tolist()), atol=1e-10)
+
+
+@pytest.mark.parametrize("shape", [(5, 3), (3, 5), (4, 4), (2, 4, 3)])
+def test_lu_gradcheck_float64(shape: tuple[int, ...]) -> None:
+    rng = np.random.default_rng(200 + sum(shape))
+    x = _t(rng.standard_normal(shape), dtype=lucid.float64, requires_grad=True)
+    _, L0, U0 = LA.lu(x)
+    wl = _t(rng.standard_normal(tuple(L0.shape)), dtype=lucid.float64)
+    wu = _t(rng.standard_normal(tuple(U0.shape)), dtype=lucid.float64)
+
+    def loss(a: lucid.Tensor) -> lucid.Tensor:
+        _, L, U = LA.lu(a)
+        return (L * wl).sum() + (U * wu).sum()
+
+    assert lucid.autograd.gradcheck(loss, [x])
+
+
+@pytest.mark.parametrize("shape", [(5, 3), (3, 5)])
+def test_lu_factor_rectangular_is_differentiable(shape: tuple[int, ...]) -> None:
+    """The packed factor's backward no longer refuses a non-square input."""
+    x = _t(np.random.default_rng(1).standard_normal(shape), dtype=lucid.float64, requires_grad=True)
+    LU, _ = LA.lu_factor(x)
+    LU.sum().backward()
+    assert x.grad is not None and np.isfinite(x.grad.numpy()).all()
+
+
+def test_rectangular_lu_second_derivative_runs() -> None:
+    x = _t(np.random.default_rng(2).standard_normal((4, 3)), dtype=lucid.float64)
+    w = _t(np.random.default_rng(3).standard_normal((4, 3)), dtype=lucid.float64)
+    assert lucid.autograd.gradgradcheck(lambda a: (LA.lu(a)[1] * w).sum(), [x.requires_grad_()])

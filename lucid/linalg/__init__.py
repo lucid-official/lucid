@@ -838,7 +838,10 @@ def qr(A: Tensor, mode: str = "reduced") -> tuple[Tensor, Tensor]:
     Stiefel-manifold tangent projection.  A wide input
     (:math:`m < n`) splits as :math:`A = [X \mid Y]`, :math:`R = [U \mid
     V]`: :math:`X = QU` is differentiated as a square QR and
-    :math:`V = Q^\top Y` carries the rest.
+    :math:`V = Q^\top Y` carries the rest.  With ``mode="complete"`` and
+    :math:`m > n`, the extra columns of :math:`Q` are not a function of
+    :math:`A`, so a backward that reaches :math:`Q` raises ``RuntimeError``
+    (as the reference does); :math:`R` alone still differentiates.
 
     Examples
     --------
@@ -1507,64 +1510,6 @@ def lu_factor(A: Tensor, *, pivot: bool = True) -> tuple[Tensor, Tensor]:
         raise NotImplementedError("lu_factor: pivot=False is not supported")
     LU, pivots, _ = _lu_factor_ex(A, check_errors=True, op="lu_factor")
     return _LuFactorResult(LU, pivots)
-
-
-def _lu_factor_packed(A: Tensor) -> tuple[Tensor, Tensor, Tensor]:
-    """``getrf``'s packed factor (differentiable in square ``A``), pivots and
-    ``info``.  A singular matrix is factored and reported, never raised;
-    whether that is an error is the caller's call."""
-    lu, pivots, info = _la.lu_factor(_unwrap(A))
-    LU, piv = _wrap(lu), _wrap(pivots)
-    if A.requires_grad and _C_engine.grad_enabled():
-        n = int(A.shape[-1])
-        if int(A.shape[-2]) != n:
-            raise NotImplementedError(
-                "lu_factor: the gradient of a non-square factorization is not "
-                "implemented — factor a square matrix, or call it under "
-                "lucid.no_grad()"
-            )
-        P = _build_permutation_matrix(piv, n, A.dtype, A.device)
-        LU = cast(Tensor, _LUFactorGrad.apply(A, LU, P))
-    return LU, piv, _wrap(info)
-
-
-@final
-class _LUFactorGrad(_AutogradFunction):
-    """The packed factor of ``A = P L U``, differentiable in square ``A``.
-
-    The kernel recorded no gradient, so a loss through ``lu_factor`` — or
-    through ``lu``, ``det`` written by hand from it — trained nothing.  With
-    ``dL = tril(G, -1)`` and ``dU = triu(G)`` read off the packed gradient,
-    the reference framework's backward is::
-
-        dA = P · L⁻ᵀ · (tril(Lᵀ dL, -1) + triu(dU Uᵀ)) · U⁻ᵀ
-
-    Both triangular solves go through the differentiable solve, and ``L``
-    and ``U`` are read from this Function's own output, so the result
-    differentiates again.
-    """
-
-    @override
-    @staticmethod
-    def forward(ctx: FunctionCtx, A: Tensor, LU: Tensor, P: Tensor) -> Tensor:
-        out = LU.detach()
-        ctx.save_for_backward(out, P)
-        return out
-
-    @override
-    @staticmethod
-    def backward(ctx: FunctionCtx, grad_out: Tensor) -> tuple[Tensor, None, None]:
-        LU, P = ctx.saved_tensors
-        n = int(LU.shape[-1])
-        eye = lucid.eye(n, dtype=LU.dtype, device=LU.device)
-        L = lucid.tril(LU, -1) + eye
-        U = lucid.triu(LU)
-        M = lucid.tril(lucid.matmul(L.mT, lucid.tril(grad_out, -1)), -1) + lucid.triu(
-            lucid.matmul(lucid.triu(grad_out), U.mT)
-        )
-        X = solve_triangular(U.mT, M, upper=False, left=False)
-        Y = solve_triangular(L.mT, X, upper=True, unitriangular=True)
-        return lucid.matmul(P, Y), None, None
 
 
 # ── Pure-Python compositions ───────────────────────────────────────────────────
@@ -2525,84 +2470,6 @@ def lu_solve(
     return _lu_solve_general(LU, pivots, B, left=left, adjoint=adjoint)
 
 
-# ── Full LU decomposition (P, L, U) ────────────────────────────────────────
-
-
-def lu(A: Tensor, *, pivot: bool = True) -> tuple[Tensor, Tensor, Tensor]:
-    r"""Full LU decomposition with explicit factors :math:`(P, L, U)`.
-
-    Decomposes a square matrix :math:`A` as
-
-    .. math::
-
-        A \,=\, P\,L\,U,
-
-    where :math:`P` is a row permutation, :math:`L` is unit-lower
-    triangular (ones on the diagonal), and :math:`U` is upper
-    triangular.  Unlike :func:`lu_factor` (which returns a packed
-    factor + integer pivots), this routine returns the three factors
-    as explicit dense tensors — convenient for inspection or for
-    re-using :math:`P,L,U` in downstream linear-algebra expressions.
-
-    Parameters
-    ----------
-    A : Tensor
-        Square matrix of shape ``(*, n, n)`` (batch dims allowed).
-    pivot : bool, keyword-only, optional
-        Must be ``True`` (the default).  ``False`` would request an
-        unpivoted LU; Lucid does not currently ship that kernel and
-        raises ``NotImplementedError``.
-
-    Returns
-    -------
-    P : Tensor
-        Permutation matrix of shape ``(*, n, n)``.
-    L : Tensor
-        Unit-lower-triangular factor of shape ``(*, n, n)``.
-    U : Tensor
-        Upper-triangular factor of shape ``(*, n, n)``.
-
-    Notes
-    -----
-    Implemented as a Python composite over :func:`lu_factor` followed
-    by explicit triangular masking and pivot-to-matrix conversion.
-    Cost is :math:`O(\tfrac{2}{3} n^3)`, dominated by the underlying
-    :math:`LU` factorization.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> from lucid.linalg import lu
-    >>> A = lucid.tensor([[2.0, 1.0], [4.0, 7.0]])
-    >>> P, L, U = lu(A)
-    >>> (P @ L @ U).numpy()
-    array([[2., 1.],
-           [4., 7.]], dtype=float32)
-    """
-    if not pivot:
-        raise NotImplementedError("lu: pivot=False is not supported")
-    sh = tuple(_unwrap(A).shape)
-    if len(sh) < 2 or sh[-1] != sh[-2]:
-        raise ValueError(f"lu requires a square matrix in the last two dims, got {sh}")
-    n = int(sh[-1])
-
-    # A singular matrix has an LU factorization; only lu_factor refuses it.
-    LU, pivots, _ = _lu_factor_packed(A)
-
-    # Split the packed LU into L (unit-lower, by index mask so a non-finite
-    # diagonal entry does not poison L via inf * 0) and U (upper).
-    L = lucid.tril(LU, -1) + lucid.eye(n, dtype=A.dtype, device=A.device)
-    U = lucid.triu(LU)
-
-    # Reconstruct the permutation matrix from the LAPACK pivot vector.
-    # LAPACK pivots are 1-based: ``pivots[i]`` holds the row swapped with
-    # row ``i`` during step ``i``.  We start from the identity and apply
-    # the swap sequence in reverse to recover ``P`` such that ``P · A``
-    # equals the *unpermuted* LU product.
-    P = _build_permutation_matrix(pivots, n, A.dtype, A.device)
-    return _LuResult(P, L, U)
-
-
 def _check_pivots(pivots: Tensor, factor: Tensor, op: str) -> Tensor:
     """Validate a LAPACK pivot vector and return it at the width LAPACK reads.
 
@@ -3124,6 +2991,7 @@ def diagonal(A: Tensor, *, offset: int = 0, dim1: int = -2, dim2: int = -1) -> T
 
 # The ``*_ex`` family reads LAPACK's ``info``; ``lu_factor`` and
 # ``ldl_factor`` above are its checked forms.
+from lucid.linalg._lu import _LuResult, _lu_factor_packed, lu, lu_unpack
 from lucid.linalg._ex import (
     _check_matrix_norm_dims,
     _complete_qr_factors,
@@ -3137,7 +3005,6 @@ from lucid.linalg._ex import (
     _lu_factor_ex,
     _lu_solve_general,
     _LuFactorResult,
-    _LuResult,
     _matrix_norm_sv,
     _pinv_with_tol,
     _QrResult,
@@ -3148,7 +3015,6 @@ from lucid.linalg._ex import (
     ldl_factor,
     ldl_factor_ex,
     lu_factor_ex,
-    lu_unpack,
     solve_ex,
     tensorinv,
     tensorsolve,

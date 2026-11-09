@@ -71,12 +71,6 @@ class _LuFactorExResult(NamedTuple):
     info: Tensor
 
 
-class _LuResult(NamedTuple):
-    P: Tensor
-    L: Tensor
-    U: Tensor
-
-
 class _InvExResult(NamedTuple):
     inverse: Tensor
     info: Tensor
@@ -831,6 +825,32 @@ def _complete_svd_factors(
     return _SvdResult(U, S, Vh)
 
 
+@final
+class _QrCompleteTail(Function):
+    """The ``m - n`` extra columns of a complete QR's ``Q``, undifferentiable.
+
+    They span the null space of ``Q``'s thin part and are not a function of
+    ``A``: any orthonormal basis of it is as good, and the one returned jumps
+    with the input, so a loss that reads them has no gradient — the finite
+    difference and the analytic answer disagreed by 1e6.  Reaching this node
+    on the way back is the loss reading them, so it is refused, in the words
+    and the class the reference uses.
+    """
+
+    @override
+    @staticmethod
+    def forward(ctx: FunctionCtx, Q: Tensor, tail: Tensor) -> Tensor:
+        return tail.detach()
+
+    @override
+    @staticmethod
+    def backward(ctx: FunctionCtx, grad_out: Tensor) -> tuple[Tensor, None]:
+        raise RuntimeError(
+            "linalg.qr: the QR decomposition is not differentiable when "
+            "mode='complete' and nrows > ncols; use mode='reduced'"
+        )
+
+
 def _complete_qr_factors(A: Tensor, Q: Tensor, R: Tensor, mode: str) -> _QrResult:
     """Return ``(Q, R)`` shaped according to ``mode`` (``'reduced'``, ``'complete'``, ``'r'``)."""
     if mode not in ("reduced", "complete", "r"):
@@ -845,7 +865,10 @@ def _complete_qr_factors(A: Tensor, Q: Tensor, R: Tensor, mode: str) -> _QrResul
     if mode == "complete":
         m, n = int(A.shape[-2]), int(A.shape[-1])
         if m > n:
+            Q_thin = Q
             Q = _complete_svd_basis(Q, m, n, columns=True)
+            if Q_thin.requires_grad and _C_engine.grad_enabled():
+                Q = lucid.cat([Q_thin, _QrCompleteTail.apply(Q_thin, Q.detach()[..., n:])], dim=-1)
             pad = lucid.zeros(
                 *tuple(int(s) for s in A.shape[:-2]), m - n, n, dtype=R.dtype, device=R.device
             )
@@ -1402,37 +1425,3 @@ def cholesky_inverse(L: Tensor, upper: bool = False) -> Tensor:
     return solve_triangular(L.mH, y, upper=True)
 
 
-def lu_unpack(
-    LU_data: Tensor, LU_pivots: Tensor, unpack_data: bool = True, unpack_pivots: bool = True
-) -> tuple[Tensor, Tensor, Tensor]:
-    """Unpack the packed LU factorization `(LU_data, LU_pivots)` into `(P, L, U)`.
-
-    Parameters
-    ----------
-    LU_data : Tensor
-        Packed LU matrix from `lu_factor`.
-    LU_pivots : Tensor
-        1-based pivot indices from `lu_factor`.
-    unpack_data : bool, optional
-        Whether to unpack `L` and `U`.
-    unpack_pivots : bool, optional
-        Whether to unpack `P`.
-    """
-    sh = tuple(int(s) for s in LU_data.shape)
-    if len(sh) < 2:
-        raise ValueError(f"lu_unpack: LU_data must have at least 2 dimensions, got {sh}")
-    m, n = sh[-2], sh[-1]
-    k = min(m, n)
-    piv = _check_pivots(LU_pivots, LU_data, "lu_unpack")
-    if unpack_pivots:
-        P = _build_permutation_matrix(piv, m, LU_data.dtype, LU_data.device)
-    else:
-        P = lucid.empty(0, dtype=LU_data.dtype, device=LU_data.device)
-    if unpack_data:
-        eye = lucid.eye(m, k, dtype=LU_data.dtype, device=LU_data.device)
-        L = lucid.tril(LU_data[..., :, :k], -1) + eye
-        U = lucid.triu(LU_data[..., :k, :])
-    else:
-        L = lucid.empty(0, dtype=LU_data.dtype, device=LU_data.device)
-        U = lucid.empty(0, dtype=LU_data.dtype, device=LU_data.device)
-    return _LuResult(P, L, U)

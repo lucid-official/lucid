@@ -290,8 +290,14 @@ def test_qr_complete_and_r_modes_match_reference(
     eye = np.broadcast_to(np.eye(m, dtype=np.float32), (*shape[:-2], m, m))
     np.testing.assert_allclose((q_c.mT @ q_c).detach().numpy(), eye, atol=1e-5)
     np.testing.assert_allclose((q_c @ r_c).detach().numpy(), a_np, atol=1e-5)
-    (q_c.sum() + r_c.sum()).backward()
-    assert a.grad is not None and np.isfinite(a.grad.numpy()).all()
+    if shape[-2] > shape[-1]:
+        # ``Q``'s extra columns are no function of ``A``: the reference refuses
+        # the backward, and so does this (``test_linalg_parity_gaps``).
+        with pytest.raises(RuntimeError, match="not differentiable"):
+            (q_c.sum() + r_c.sum()).backward()
+    else:
+        (q_c.sum() + r_c.sum()).backward()
+        assert a.grad is not None and np.isfinite(a.grad.numpy()).all()
 
     q_r, r_r = LA.qr(a.detach(), mode="r")
     rq_r, rr_r = ref.linalg.qr(ra, mode="r")  # type: ignore[attr-defined]

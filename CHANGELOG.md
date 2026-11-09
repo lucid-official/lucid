@@ -107,6 +107,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - UPLO case-insensitive; householder_product takes k <= n (LCD-940)
 
+- lu takes any shape with its gradient; complete QR refuses Q's tail (LCD-940)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
