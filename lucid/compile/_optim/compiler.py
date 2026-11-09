@@ -833,7 +833,7 @@ class _CompiledStepBase:
     def _plan_for(self, active: tuple[int, ...], flags: _PlanFlags) -> _Plan:
         """The executable for this step's active set (see the class docstring)."""
         # A setting read at compile time (rank-canon gate, manual VJP) must not replay an old plan.
-        policy =_C_engine.compile.compile_policy()
+        policy = _C_engine.compile.compile_policy()
         key: tuple[object, ...] = (active, False, flags, self._partition(active), policy)
         plan = self._plans.get(key)
         if plan is not None:

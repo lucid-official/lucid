@@ -124,6 +124,7 @@ MODULES: dict[str, Callable[[], nn.Module]] = {
     "batch3d": lambda: nn.BatchNorm3d(SHAPE[-1]),
 }
 
+
 def _frozen(model: nn.Module) -> None:
     for p in model.parameters():
         p.requires_grad_(False)

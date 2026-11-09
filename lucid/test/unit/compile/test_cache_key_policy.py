@@ -196,8 +196,7 @@ def test_a_manual_vjp_switch_flips_the_key() -> None:
 
 # ── the disk cache ────────────────────────────────────────────────────────────────────
 
-_DISK_PROBE = textwrap.dedent(
-    """
+_DISK_PROBE = textwrap.dedent("""
     import os
     import sys
 
@@ -221,8 +220,7 @@ _DISK_PROBE = textwrap.dedent(
 
     if __name__ == "__main__":
         main(sys.argv[1])
-    """
-)
+    """)
 
 
 @needs_metal
@@ -257,16 +255,14 @@ def test_the_disk_cache_files_one_executable_per_gate(tmp_path: Path) -> None:
     assert back == flipped, "the first gate's file was not found again"
 
 
-_DEFAULT_DIR_PROBE = textwrap.dedent(
-    """
+_DEFAULT_DIR_PROBE = textwrap.dedent("""
     import lucid
 
     if __name__ == "__main__":
         x = lucid.ones(4, 4).to("metal")
         with lucid.no_grad():
             lucid.compile(lambda t: t * 2.0 + 1.0)(x)
-    """
-)
+    """)
 
 
 @needs_metal

@@ -226,9 +226,9 @@ def _assert_close(got: lucid.Tensor, want: lucid.Tensor, tol: float, why: str) -
         # ``isclose`` cannot see the sign of a zero; the rule (max of a tie is +0, min is -0)
         # is a property of the value, so it is held element by element (LCD-879).
         if not math.isnan(q) and q == 0.0 and p == 0.0:
-            assert math.copysign(1.0, p) == math.copysign(1.0, q), (
-                f"{why}: compiled {g} != eager {w} in the sign of a zero"
-            )
+            assert math.copysign(1.0, p) == math.copysign(
+                1.0, q
+            ), f"{why}: compiled {g} != eager {w} in the sign of a zero"
 
 
 #: A compiled element-wise ``maximum`` / ``minimum`` hands a signed-zero tie to its second
@@ -245,10 +245,7 @@ def _forward_cases() -> list[object]:
     )
     return [
         pytest.param(
-            name,
-            dtype,
-            id=f"{name}-{dt}",
-            marks=[unfixed] if name in _ZERO_SIGN_UNFIXED else [],
+            name, dtype, id=f"{name}-{dt}", marks=[unfixed] if name in _ZERO_SIGN_UNFIXED else []
         )
         for name in _CASES
         for dtype, dt in _DTYPE_IDS.items()

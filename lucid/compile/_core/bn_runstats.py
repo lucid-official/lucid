@@ -32,12 +32,7 @@ if TYPE_CHECKING:
     from lucid._C.engine.compile import TraceGraph, Tracer
     from lucid.nn.module import Module
 
-__all__ = [
-    "BnWriteback",
-    "bn_statistics_lost",
-    "model_has_cumulative_bn",
-    "bn_writeback_targets",
-]
+__all__ = ["BnWriteback", "bn_statistics_lost", "model_has_cumulative_bn", "bn_writeback_targets"]
 
 _BN_NAMES: tuple[str, ...] = ("batch_norm", "batch_norm1d", "batch_norm3d")
 

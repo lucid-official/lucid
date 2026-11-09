@@ -14,7 +14,6 @@ import pytest
 
 import lucid
 
-
 _PATH_ADDED: list[str] = []
 
 
