@@ -127,6 +127,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - lu_factor emitter; slogdet and det compile (LCD-942)
 
+- record perf ceilings from many hosted runs (LCD-867)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views
