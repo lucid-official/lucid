@@ -5,7 +5,7 @@ Covers:
    - ``_FakeQuantizeAffine`` (``Q.fake_quantize`` and ``Q.prepare_qat``)
    - ``_StandardGamma`` (``Gamma.rsample``)
    - ``_StandardLogGamma`` (``Beta.rsample``, ``Dirichlet.rsample``, ``FisherSnedecor.rsample``)
-   - ``lucid.linalg.slogdet`` (runs eagerly since LCD-939: ``lu_factor`` has no emitter, LCD-942)
+   - ``_SlogdetFromLU`` (``lucid.linalg.slogdet``, through the ``lu_factor`` emitter, LCD-942)
    - ``_MatrixPowerZero`` (``lucid.linalg.matrix_power(A, 0)``)
 2. User-defined ``Function`` subclasses with ``_traced_backward = True``:
    - Identity STE (``return grad_output``, 0 ops in ``bwd_ops``)
@@ -180,14 +180,7 @@ def _assert_close_dicts(got: dict[str, list | None], want: dict[str, list | None
         "scaled_reversal",
         "mask_and_unused",
         "fake_quantize",
-        pytest.param(
-            "slogdet",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="LCD-942: slogdet reads the LU diagonal since LCD-939 and lu_factor has no "
-                "compile emitter, so a compiled step runs it eagerly",
-            ),
-        ),
+        "slogdet",
         "matrix_power_zero",
         "cholesky_solve",
         "qr",
@@ -507,9 +500,7 @@ def test_complex_vjp_region_topologies_and_mixed_args(device_gpu_only: str) -> N
 
 
 def test_degenerate_and_mode_r_linalg_compile_and_match_eager(device_gpu_only: str) -> None:
-    """1x1 / 3x1 SVD, QR (including mode='r') and negative matrix_power compile and match eager.
-
-    slogdet is left out: it runs eagerly since LCD-939 (LCD-942)."""
+    """1x1 / 3x1 SVD, QR (including mode='r'), slogdet, and negative matrix_power compile and match eager."""
     device = device_gpu_only
 
     class _DegenerateLinalgModel(nn.Module):
@@ -525,6 +516,7 @@ def test_degenerate_and_mode_r_linalg_compile_and_match_eager(device_gpu_only: s
             q31, r31 = lucid.linalg.qr(m31, mode="reduced")
             u11, s11, vh11 = lucid.linalg.svd(m11, full_matrices=False)
             u31, s31, vh31 = lucid.linalg.svd(m31, full_matrices=True)
+            sign11, lad11 = lucid.linalg.slogdet(m11)
             inv11 = lucid.linalg.matrix_power(m11, -1)
             rec31 = (u31[:, :1] * s31.unsqueeze(-2)) @ vh31[:1, :]
             total = (
@@ -532,6 +524,7 @@ def test_degenerate_and_mode_r_linalg_compile_and_match_eager(device_gpu_only: s
                 + ((q31 @ r31) * 0.5).sum()
                 + ((u11 * s11) @ vh11).sum()
                 + (rec31 * 0.8).sum()
+                + (sign11 * lad11).sum()
                 + (inv11 * 0.4).sum()
             )
             return total.reshape(1)

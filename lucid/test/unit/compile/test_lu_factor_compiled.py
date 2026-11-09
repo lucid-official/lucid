@@ -22,7 +22,7 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid.compile import make_step
 from lucid.compile._core.fallback import CompileFallbackWarning
-from lucid.linalg import _slogdet
+from lucid.linalg._lu import _lu_factor_packed
 
 _LA = lucid.linalg
 _MAX_LU_DIM = 32
@@ -41,7 +41,7 @@ def _compiled(fn: object, *args: lucid.Tensor) -> tuple[object, object]:
 
 
 def _lu(a: lucid.Tensor) -> tuple[lucid.Tensor, lucid.Tensor, lucid.Tensor]:
-    return _LA._lu_factor_packed(a)
+    return _lu_factor_packed(a)
 
 
 def _assert_lu_matches_eager(a: lucid.Tensor, *, tol: float = 5e-6) -> None:
@@ -247,15 +247,9 @@ class _SlogdetNet(nn.Module):
         return self.out(h) + (sign * logabs).sum() * 0.1
 
 
-@pytest.fixture
-def slogdet_traced_backward(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The marker LCD-939 dropped; the tests below are about what is behind it."""
-    monkeypatch.setattr(_slogdet._SlogdetFromLU, "_traced_backward", True)
-
-
 @pytest.mark.parametrize("n, batch", [(3, None), (4, None), (4, 3), (8, 5)])
 def test_a_training_step_through_slogdet_falls_back_with_the_eager_gradient(
-    n: int, batch: int | None, slogdet_traced_backward: None, device_gpu_only: str
+    n: int, batch: int | None, device_gpu_only: str
 ) -> None:
     """``DetVjp`` compiles only an unbatched matrix up to 3x3, and the singular
     matrix's gradient goes through it, so the step answers eagerly: warned, and
