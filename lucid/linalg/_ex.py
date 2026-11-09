@@ -36,6 +36,7 @@ from lucid.linalg import (
     solve_triangular,
     svd,
 )
+from lucid.linalg._norm_scale import _scaled_by_max
 
 
 class _EighResult(NamedTuple):
@@ -1300,6 +1301,17 @@ def _check_matrix_norm_dims(rank: int, dim: tuple[int, int]) -> tuple[int, int]:
 
 
 def _matrix_norm_sv(
+    xi: _C_engine.TensorImpl,
+    d0: int,
+    d1: int,
+    keepdim: bool,
+    sv_reduce: Callable[[_C_engine.TensorImpl, list[int], bool], _C_engine.TensorImpl],
+) -> Tensor:
+    """:func:`_sv_reduced` of ``xi`` taken on ratios to its largest magnitude."""
+    return _scaled_by_max(_wrap(xi), lambda t: _sv_reduced(_unwrap(t), d0, d1, keepdim, sv_reduce))
+
+
+def _sv_reduced(
     xi: _C_engine.TensorImpl,
     d0: int,
     d1: int,

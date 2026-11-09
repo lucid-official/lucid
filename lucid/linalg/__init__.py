@@ -12,10 +12,11 @@ from lucid._dtype import _ENGINE_TO_DTYPE, to_engine_dtype
 from lucid._ops._adapters import _outer_adapter
 from lucid._ops._autocast import _autocast_entry
 from lucid._ops._dims import _wrap_dim
-from lucid._ops._reduce import _p_norm, _reduction_axes, _require_normable, _truth_mask
+from lucid._ops._reduce import _reduction_axes, _require_normable, _truth_mask
 from lucid._promotion import try_unwrap as _try_unwrap
 from lucid._tensor._indexing import broadcast_shapes as _broadcast_batch
 from lucid._tensor.tensor import Tensor
+from lucid.linalg._norm_scale import _scaled_p_norm
 
 _la = _C_engine.linalg
 
@@ -447,11 +448,11 @@ def _norm_body(
 
     if axes is None:
         if ord is None:
-            return _scaled(x, ord, lambda t: vector_norm(t, 2, None, keepdim))
+            return vector_norm(x, 2, None, keepdim)
         if rank == 2:
-            return _scaled(x, ord, lambda t: matrix_norm(t, ord, (0, 1), keepdim))
+            return matrix_norm(x, ord, (0, 1), keepdim)
         if rank == 1 and not isinstance(ord, str):
-            return _scaled(x, ord, lambda t: vector_norm(t, ord, 0, keepdim))
+            return vector_norm(x, ord, 0, keepdim)
         if rank == 1:
             raise ValueError(
                 f"norm: ord={ord!r} is a matrix order and needs at least " "2 dimensions, got 1-D"
@@ -468,47 +469,11 @@ def _norm_body(
             )
         pair = (axes[0], axes[1])
         m_ord: int | float | str = "fro" if ord is None else ord
-        return _scaled(x, ord, lambda t: matrix_norm(t, m_ord, pair, keepdim))
+        return matrix_norm(x, m_ord, pair, keepdim)
     if len(axes) == 1:
         v_ord: int | float = 2 if ord is None else ord
-        return _scaled(x, ord, lambda t: vector_norm(t, v_ord, [axes[0]], keepdim))
+        return vector_norm(x, v_ord, [axes[0]], keepdim)
     raise ValueError(f"norm: dim must name one or two axes, got {dim!r}")
-
-
-def _scaled(
-    x: Tensor, ord: int | float | str | None, compute: Callable[[Tensor], Tensor]
-) -> Tensor:
-    """Run ``compute`` on a rescaled ``x`` and undo the scaling.
-
-    Every norm order here is absolutely homogeneous — ``‖αx‖ = |α|‖x‖`` —
-    so the largest magnitude can be divided out first and multiplied back
-    at the end.  Every order but one: ``ord=0`` counts non-zero entries,
-    which no positive scaling changes, so multiplying the scale back in
-    inflates the count by it — ``norm([1, -2, 3], ord=0)`` answered 9
-    instead of 3.  It also cannot overflow, so it skips the rescaling
-    rather than being corrected for it.  That matters because the squaring in a 2-norm reaches
-    infinity before the answer does: ``norm([1e200, 1e200])`` is 1.41e200,
-    an ordinary double, and the direct evaluation says ``inf``.  The other
-    end underflows to zero.  Dividing by the largest magnitude puts every
-    ratio in [0, 1], so nothing squares out of range.  BLAS's ``nrm2`` has
-    rescaled for the same reason since the seventies.
-
-    The scale is only used when it is finite and positive.  An all-zero
-    input has scale 0, and an input containing an infinity has scale inf —
-    dividing by either turns the answer into NaN, which is how the first
-    version of this rescaling reported ``norm([inf, 1])``.  Both fall back
-    to 1, where the unscaled evaluation is already right.
-    """
-    if ord == 0 and not isinstance(ord, str):
-        return compute(x)
-    # Nothing to rescale, and no largest magnitude to find: ``max`` of an
-    # empty tensor is refused, as it has no identity.
-    if x.numel() == 0:
-        return compute(x)
-    scale = lucid.max(lucid.abs(x))
-    usable = lucid.isfinite(scale) & (scale > lucid.zeros_like(scale))
-    safe = lucid.where(usable, scale, lucid.ones_like(scale))
-    return compute(x / safe) * safe
 
 
 # ── SVD with backward ─────────────────────────────────────────────────────────
@@ -2028,12 +1993,12 @@ def vector_norm(
 
     Notes
     -----
-    All operations are routed through autograd-aware engine kernels, so
-    gradients flow naturally even for non-integer :math:`p` (via
-    :math:`p`-power and root).  Where the norm is zero the gradient is
-    zero — the subgradient the reference picks — rather than the ``nan``
-    the root's infinite slope there would give; so is a zero entry's for
-    :math:`p < 1`.
+    Gradients flow for non-integer :math:`p` too.  A slice whose
+    :math:`p`-th powers would over- or underflow is rescaled by its largest
+    entry first, so ``float32`` entries near ``1e-20`` give ``2e-20``, not
+    ``0``.  Where the norm is zero the gradient is zero — the subgradient
+    the reference picks — rather than the ``nan`` the root's infinite slope
+    there would give; so is a zero entry's for :math:`p < 1`.
 
     A ``float16`` or ``bfloat16`` input is reduced in ``float32`` and the
     result cast back, so a norm that fits the input dtype is not lost to
@@ -2071,7 +2036,7 @@ def vector_norm(
         if ord == 0:
             nz = _truth_mask(xi)
             return _wrap(_C_engine.astype(_C_engine.sum(nz, axes, keepdim), r.dtype))
-        return _wrap(_p_norm(r, float(ord), axes, keepdim))
+        return _wrap(_scaled_p_norm(r, float(ord), axes, keepdim))
 
 
 def cross(input: Tensor, other: Tensor, *, dim: int = -1) -> Tensor:

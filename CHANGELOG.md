@@ -103,6 +103,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - slogdet reads the LU diagonal, not det (LCD-939)
 
+- vector_norm and fro share one tiny-magnitude rescale (LCD-940)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
