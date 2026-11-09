@@ -47,7 +47,6 @@ FUNCTION_ENTRY: dict[str, str] = {
     "_StandardGamma": "dist:Gamma",
     "_StandardLogGamma": "dist:Beta",
     "_MatrixPowerZero": "fn:matrix_power0",
-    "_LogAbsDet": "fn:slogdet",
     "_FakeQuantizeAffine": "fn:fake_quantize",
     "_CholeskyAutograd": "fn:cholesky",
     "_SVD": "fn:svd",
@@ -63,7 +62,6 @@ def _spd() -> Tensor:
 
 FUNCTIONS: dict[str, Draw] = {
     "matrix_power0": lambda w: LA.matrix_power(_spd() * w, 0),
-    "slogdet": lambda w: LA.slogdet(_spd() * w)[1],
     "fake_quantize": lambda w: lucid.quantization.fake_quantize(
         lucid.linspace(-1.0, 1.0, 6, device=DEVICE) * w, 0.05, 0, -128, 127
     ),

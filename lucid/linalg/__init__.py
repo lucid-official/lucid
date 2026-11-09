@@ -271,8 +271,9 @@ def cholesky(input: Tensor, *, upper: bool = False) -> Tensor:
         return cast(Tensor, _CholeskyAutograd.apply(_wrap(x_impl), upper))
 
 
-from lucid.autograd.function import Function as _AutogradFunction, FunctionCtx
 from lucid._unsupported import unsupported_if
+from lucid.autograd.function import Function as _AutogradFunction
+from lucid.autograd.function import FunctionCtx
 
 
 @final
@@ -1594,82 +1595,6 @@ class _LUFactorGrad(_AutogradFunction):
 
 
 # ── Pure-Python compositions ───────────────────────────────────────────────────
-
-
-def slogdet(A: Tensor) -> tuple[Tensor, Tensor]:
-    r"""Sign and natural log of the absolute determinant.
-
-    Returns the pair :math:`(\mathrm{sign},\, \log|\det A|)` such that
-
-    .. math::
-
-        \det(A) \,=\, \mathrm{sign} \cdot \exp(\log|\det A|).
-
-    Numerically stable for matrices whose determinant would overflow
-    or underflow if computed directly — for instance, large covariance
-    matrices in log-likelihood calculations.
-
-    Parameters
-    ----------
-    A : Tensor
-        Square matrix of shape ``(*, n, n)``.
-
-    Returns
-    -------
-    sign : Tensor
-        :math:`\pm 1` (or :math:`0` for singular matrices), shape
-        ``(*,)``.
-    logabsdet : Tensor
-        :math:`\log|\det A|`, shape ``(*,)``.  Returns :math:`-\infty`
-        for singular inputs.
-
-    Notes
-    -----
-    Computed via LU as :math:`\log|\det A| = \sum_i \log|U_{ii}|` with
-    the sign accumulated from row swaps.  Cost is :math:`O(n^3)`.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> from lucid.linalg import slogdet
-    >>> sign, logabs = slogdet(lucid.tensor([[1.0, 2.0], [3.0, 4.0]]))
-    >>> sign, logabs
-    (tensor(-1.), tensor(0.6931))
-    """
-    d = det(A)
-    di, z, ai = _unwrap(d), _C_engine.zeros_like(_unwrap(d)), _unwrap(A)
-    with _C_engine.NoGradGuard():
-        ds = _unwrap(det(_wrap(_C_engine.add(ai, _C_engine.zeros_like(ai)))))
-    eq = _C_engine.equal(di, z)
-    sign = _wrap(_C_engine.where(eq, _C_engine.mul(ds, z), _C_engine.sign(di)))
-    return _SlogdetResult(sign, cast(Tensor, _LogAbsDet.apply(d)))
-
-
-@final
-class _LogAbsDet(_AutogradFunction):
-    """``log|d|`` of a determinant, with derivative ``1 / d``.
-
-    Composed as ``log(abs(d))`` the chain rule read ``sign(d) / |d|``, and
-    at a singular matrix that is ``0 · inf`` — a NaN gradient where the
-    reference answers ``±inf``.  ``1 / d`` is the same derivative wherever
-    ``d ≠ 0`` and keeps the sign of a signed zero, so through ``det``'s own
-    backward the gradient is ``g · cof(A) / det(A)``: ``g · A⁻ᵀ`` for an
-    invertible ``A`` and ``±inf`` along the adjugate of a singular one.
-    """
-
-    _traced_backward = True
-
-    @override
-    @staticmethod
-    def forward(ctx: FunctionCtx, d: Tensor) -> Tensor:
-        ctx.save_for_backward(d)
-        return _wrap(_C_engine.log(_C_engine.abs(_unwrap(d))))
-
-    @override
-    @staticmethod
-    def backward(ctx: FunctionCtx, grad_out: Tensor) -> Tensor:
-        (d,) = ctx.saved_tensors
-        return grad_out / d
 
 
 def matrix_rank(
@@ -3283,8 +3208,8 @@ from lucid.linalg._ex import (
     _EighResult,
     _EigResult,
     _householder_product,
-    _LstsqResult,
     _lstsq_solution,
+    _LstsqResult,
     _lu_factor_ex,
     _lu_solve_general,
     _LuFactorResult,
@@ -3292,7 +3217,6 @@ from lucid.linalg._ex import (
     _matrix_norm_sv,
     _pinv_with_tol,
     _QrResult,
-    _SlogdetResult,
     _sv_cutoff,
     cholesky_ex,
     cholesky_inverse,
@@ -3305,6 +3229,7 @@ from lucid.linalg._ex import (
     tensorinv,
     tensorsolve,
 )
+from lucid.linalg._slogdet import slogdet
 
 __all__ = [
     "LinAlgError",

@@ -38,11 +38,6 @@ from lucid.linalg import (
 )
 
 
-class _SlogdetResult(NamedTuple):
-    sign: Tensor
-    logabsdet: Tensor
-
-
 class _EighResult(NamedTuple):
     eigenvalues: Tensor
     eigenvectors: Tensor

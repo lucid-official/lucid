@@ -46,7 +46,6 @@ EXACT: frozenset[str] = frozenset({"_CheckpointFn"})
 TRACED_BACKWARD: frozenset[str] = frozenset(
     {
         "_MatrixPowerZero",
-        "_LogAbsDet",
         "_StandardGamma",
         "_StandardLogGamma",
         "_FakeQuantizeAffine",
@@ -67,6 +66,8 @@ CUSTOM: frozenset[str] = frozenset(
         # Linalg (complex / pivot-table factorizations without MPSGraph emitter)
         "_Eig",
         "_LUFactorGrad",
+        # slogdet reads the LU diagonal (LCD-939), which has no emitter
+        "_SlogdetFromLU",
         "_LDLFactorGrad",
         # nn: the reference's hand-written backward, not its forward's derivative
         "_CrossMapLRN2d",
