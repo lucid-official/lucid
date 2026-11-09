@@ -117,6 +117,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - lstsq estimates condition from two starts (LCD-941)
 
+- slogdet's backward is traced into a compiled step (LCD-939)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

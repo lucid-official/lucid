@@ -135,6 +135,10 @@ class _SlogdetFromLU(Function):
     ``n - 1``, the sign of the infinity that of the signed zero ``d`` is.
     """
 
+    # A compiled step runs this ``backward``, not the derivative of ``forward``'s
+    # (which only returns what was computed outside it).
+    _traced_backward = True
+
     @override
     @staticmethod
     def forward(
