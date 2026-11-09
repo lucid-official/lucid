@@ -1291,6 +1291,10 @@ def _check_householder_shapes(
         )
     m, n, r = h_shape[-2], h_shape[-1], t_shape[-1]
     k = min(m, n)
+    if m < n:
+        raise ValueError(
+            f"householder_product: input.shape[-2] must be >= input.shape[-1], got H {h_shape}"
+        )
     if r > n:
         raise ValueError(
             f"householder_product: tau has {r} reflectors but H {h_shape} has only "
@@ -1333,7 +1337,8 @@ def householder_product(input: Tensor, tau: Tensor) -> Tensor:
     Notes
     -----
     Raises ``DtypeMismatch`` if ``tau``'s dtype differs from ``input``'s,
-    and ``ValueError`` if ``tau`` is longer than ``n``, as the reference does.
+    and ``ValueError`` if ``input`` is wide (``m < n``) or ``tau`` is longer
+    than ``n``, as the reference does.
 
     Backed by LAPACK ``orgqr``.  Cost is :math:`O(m k^2)`.  Useful
     when a routine returns the packed Householder form (cheaper to

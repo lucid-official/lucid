@@ -64,7 +64,7 @@ def test_more_reflectors_than_columns_are_refused() -> None:
         LA.householder_product(_matrix(4, 3), lucid.randn(4, dtype=lucid.float64))
 
 
-@pytest.mark.parametrize(("m", "n"), [(4, 3), (3, 3), (5, 2), (2, 5)])
+@pytest.mark.parametrize(("m", "n"), [(4, 3), (3, 3), (5, 2)])
 def test_a_well_formed_call_still_works(m: int, n: int) -> None:
     """The guard must not cost the supported case.
 

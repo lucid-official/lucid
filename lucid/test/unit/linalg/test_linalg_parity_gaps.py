@@ -469,3 +469,18 @@ def test_same_dtype_calls_are_unchanged(device: str) -> None:
     b = lucid.ones(3, 2, dtype=dt, device=device)
     assert LA.solve(a, b).tolist() == [[0.5, 0.5]] * 3
     assert LA.solve_triangular(a, b, upper=True).dtype is dt
+
+
+# ── householder_product refuses a wide H ─────────────────────────────────────
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("batch", [(), (2,)])
+def test_householder_product_refuses_a_wide_input(
+    ref: ModuleType, device: str, batch: tuple[int, ...]
+) -> None:
+    h, tau = _reflectors(3, 5, 3, batch=batch)
+    with pytest.raises(RuntimeError, match="must be greater than or equal"):
+        ref.linalg.householder_product(ref.tensor(h), ref.tensor(tau))
+    with pytest.raises(ValueError, match=r"input\.shape\[-2\] must be >= input\.shape\[-1\]"):
+        LA.householder_product(_t(h, device), _t(tau, device))

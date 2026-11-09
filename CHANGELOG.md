@@ -113,6 +113,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - solve and householder_product refuse mixed dtypes (LCD-940)
 
+- householder_product refuses a wide input (LCD-940)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
