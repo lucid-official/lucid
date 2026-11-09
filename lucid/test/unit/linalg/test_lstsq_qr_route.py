@@ -307,7 +307,7 @@ def test_the_condition_estimate_stays_within_the_margin_of_the_truth(kind: str) 
         )
     ratio = _estimate(a) / _kappa(a)
     # Below 1/_ESTIMATE_MARGIN the certificate could clear a rank-deficient matrix.
-    assert 1.0 / _lstsq._ESTIMATE_MARGIN < ratio < 1.5
+    assert 1.0 / _lstsq._RANK_MARGIN < ratio < 1.5
 
 
 @pytest.mark.parametrize("scale", [1e-20, 1.0, 1e20])
@@ -318,7 +318,8 @@ def test_the_condition_estimate_does_not_depend_on_scale(scale: float) -> None:
     est = lambda t: float(
         _lstsq._estimate_condition(_lstsq._QrLeastSquares.of(t)._r).item()
     )  # noqa: E731
-    assert est(lo) == pytest.approx(est(hi), rel=1e-3)
+    # The start block is seeded by the matrix, so two scales differ by their rounding.
+    assert est(lo) == pytest.approx(est(hi), rel=0.1)
 
 
 def test_a_singular_triangle_has_no_finite_estimate() -> None:
@@ -326,21 +327,29 @@ def test_a_singular_triangle_has_no_finite_estimate() -> None:
     assert not np.isfinite(float(_lstsq._estimate_condition(r).item()))
 
 
-# ── the estimate's blind spot ────────────────────────────────────────────────
+# ── the rank decision cannot be built around ────────────────────────────────
 #
 # An inverse iteration finds the smallest singular direction only from a start
-# with a component along it.  Two starts of different structure make that a
-# matter of construction; a matrix whose smallest right singular vector is
-# orthogonal to the ones in use is the case no start choice removes.
+# with a component along it, so an estimate from fixed starts has a blind spot:
+# a matrix whose smallest right singular vector is orthogonal to them is taken
+# for better conditioned than it is.  A batch small enough is ranked from the
+# singular values of R, which has no blind spot; a larger one by the estimate,
+# whose start block is seeded by the matrix itself.
 
 
-def _starts(n: int) -> np.ndarray:
-    return _lstsq._start_vectors(n, lucid.zeros(n, n, dtype=lucid.float64)).numpy()
+def _fixed_starts(n: int) -> np.ndarray:
+    """The two fixed starts the estimate used before LCD-945: a ramp and an alternating ramp."""
+    i = np.arange(n)
+    ramp = np.cos(i * 1.618033988749895 + 1.0)
+    alternating = np.cos(i * np.pi) * (1.0 + 0.5 * np.sin(i * 2.718281828459045))
+    return np.stack([ramp, alternating], axis=1)
 
 
-def _near_deficient(n: int, rcond: float, orthogonal_to: np.ndarray) -> np.ndarray:
-    """``σ = (1, …, 1, 10 s, s)`` with ``s = 0.4 rcond``; ``V``'s last column avoids ``orthogonal_to``."""
-    rng = np.random.default_rng(5)
+def _near_deficient(
+    n: int, rcond: float, orthogonal_to: np.ndarray, seed: int = 5, gap: float = 10.0
+) -> np.ndarray:
+    """``σ = (1, …, 1, gap · s, s)`` with ``s = 0.4 rcond``; ``V``'s last column avoids ``orthogonal_to``."""
+    rng = np.random.default_rng(seed)
     basis, _ = np.linalg.qr(orthogonal_to)
     w = rng.standard_normal(n)
     w -= basis @ (basis.T @ w)
@@ -349,7 +358,7 @@ def _near_deficient(n: int, rcond: float, orthogonal_to: np.ndarray) -> np.ndarr
     v = np.concatenate([q[:, 1:], q[:, :1]], axis=1)
     s = 0.4 * rcond
     u, _ = np.linalg.qr(rng.standard_normal((n + 5, n)))
-    return (u * np.concatenate([np.ones(n - 2), [10 * s, s]])) @ v.T
+    return (u * np.concatenate([np.ones(n - 2), [gap * s, s]])) @ v.T
 
 
 def _ranks(a: np.ndarray, rcond: float) -> tuple[int, int]:
@@ -359,22 +368,110 @@ def _ranks(a: np.ndarray, rcond: float) -> tuple[int, int]:
     return int(default.rank.item()), int(exact.rank.item())
 
 
-def test_a_start_orthogonal_to_one_of_the_two_is_still_ranked_right() -> None:
-    n, rcond = 20, 1e-6
-    ramp = _starts(n)[:, :1]
-    a = _near_deficient(n, rcond, ramp)
-    assert _ranks(a, rcond) == (n - 1, n - 1)
-    alternating = _starts(n)[:, 1:]
-    a = _near_deficient(n, rcond, alternating)
-    assert _ranks(a, rcond) == (n - 1, n - 1)
+class _Tier:
+    """Which rank decision ran: ``exact`` is ``svdvals(R)``, ``estimate`` the iteration."""
+
+    exact = 0
+    estimate = 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-945: a smallest singular vector orthogonal to both estimate starts is missed",
-)
-def test_a_matrix_orthogonal_to_both_starts_is_ranked_like_gelsd() -> None:
-    n, rcond = 20, 1e-6
-    a = _near_deficient(n, rcond, _starts(n))
+@pytest.fixture
+def tier_calls(monkeypatch: pytest.MonkeyPatch) -> type[_Tier]:
+    _Tier.exact = _Tier.estimate = 0
+    exact, estimate = _lstsq._full_rank_exact, _lstsq._estimate_condition
+
+    def counted_exact(*args: lucid.Tensor, **kwargs: float) -> lucid.Tensor:
+        _Tier.exact += 1
+        return exact(*args, **kwargs)
+
+    def counted_estimate(*args: lucid.Tensor) -> lucid.Tensor:
+        _Tier.estimate += 1
+        return estimate(*args)
+
+    monkeypatch.setattr(_lstsq, "_full_rank_exact", counted_exact)
+    monkeypatch.setattr(_lstsq, "_estimate_condition", counted_estimate)
+    return _Tier
+
+
+@pytest.mark.parametrize("n", [6, 20, 40, 80, 150])
+@pytest.mark.parametrize("seed", [5, 6, 7])
+@pytest.mark.parametrize("gap", [4.0, 10.0, 1e3])
+def test_a_matrix_orthogonal_to_the_old_fixed_starts_is_ranked_like_gelsd(
+    n: int, seed: int, gap: float
+) -> None:
+    rcond = 1e-6
+    a = _near_deficient(n, rcond, _fixed_starts(n), seed, gap)
     default, exact = _ranks(a, rcond)
     assert default == exact == n - 1
+
+
+@pytest.mark.parametrize("n", [20, 150])
+def test_a_matrix_orthogonal_to_one_fixed_start_alone_is_ranked_right(n: int) -> None:
+    for column in (0, 1):
+        a = _near_deficient(n, 1e-6, _fixed_starts(n)[:, column : column + 1])
+        assert _ranks(a, 1e-6) == (n - 1, n - 1)
+
+
+@pytest.mark.parametrize("n", [20, 150])
+@pytest.mark.parametrize("scale", [0.3, 0.45, 0.7, 3.0])
+def test_a_matrix_straddling_the_cutoff_is_ranked_like_gelsd(n: int, scale: float) -> None:
+    # σ_min = scale · rcond: the matrix is deficient below 1 and the band of
+    # the margin sends it to the SVD, so the rank is gelsd's on both sides.
+    rcond = 1e-6
+    rng = np.random.default_rng(int(scale * 100))
+    u, _ = np.linalg.qr(rng.standard_normal((n + 5, n)))
+    v, _ = np.linalg.qr(rng.standard_normal((n, n)))
+    sig = np.concatenate([np.ones(n - 1), [scale * rcond]])
+    default, exact = _ranks((u * sig) @ v.T, rcond)
+    assert default == exact
+
+
+def test_a_single_small_matrix_is_ranked_exactly_and_a_large_batch_by_the_estimate(
+    tier_calls: type[_Tier],
+) -> None:
+    LA.lstsq(lucid.tensor(_system((25, 20))[0]), lucid.tensor(_system((25, 20))[1]))
+    assert (tier_calls.exact, tier_calls.estimate) == (1, 0)
+    a_np, b_np = _system((256, 8, 8))
+    LA.lstsq(lucid.tensor(a_np), lucid.tensor(b_np))
+    assert (tier_calls.exact, tier_calls.estimate) == (1, 1)
+
+
+def test_the_estimate_start_block_follows_the_matrix() -> None:
+    r = _lstsq._QrLeastSquares.of(lucid.tensor(_system((30, 30))[0]))._r
+    first = _lstsq._start_vectors(r).numpy()
+    np.testing.assert_array_equal(first, _lstsq._start_vectors(r).numpy())
+    other = _lstsq._start_vectors(r * (1.0 + 1e-6)).numpy()
+    assert not np.allclose(first, other)
+    assert first.shape == (30, _lstsq._START_COLUMNS)
+
+
+@pytest.mark.parametrize("kind", ["nan", "inf", "zero"])
+def test_the_exact_decision_refuses_a_non_finite_or_singular_triangle(kind: str) -> None:
+    r = np.triu(np.ones((4, 4))) + 3.0 * np.eye(4)
+    r[1, 2] = {"nan": np.nan, "inf": np.inf, "zero": 0.0}[kind]
+    if kind == "zero":
+        r[2, 2] = 0.0
+    ok = _lstsq._full_rank_exact(lucid.tensor(np.stack([r, np.eye(4)])), 1e-8)
+    assert ok.tolist() == [False, True]
+
+
+@pytest.mark.parametrize("shape", [(3, 6), (2, 3, 6)])
+def test_a_wide_matrix_differentiates_twice_like_the_svd_route_on_every_device(
+    device: str, shape: tuple[int, ...]
+) -> None:
+    # The wide route hands the autograd engine a transposed view of its factor;
+    # the view's buffer must live as long as the gradient that reads it (LCD-948).
+    dt, tol = _dtype(device)
+    a_np, b_np = _system(shape)
+    w = np.random.default_rng(10).standard_normal((*shape[:-2], shape[-1], 2))
+    out = []
+    for driver in ("gelsy", "gelsd"):
+        a = lucid.tensor(a_np, dtype=dt, device=device, requires_grad=True)
+        b = lucid.tensor(b_np, dtype=dt, device=device)
+        weight = lucid.tensor(w, dtype=dt, device=device)
+        loss = (LA.lstsq(a, b, driver=driver).solution * weight).sum()
+        (g,) = grad(loss, [a], create_graph=True)
+        (h,) = grad((g * g).sum(), [a])
+        out.append((g.numpy(), h.numpy()))
+    for qr_side, svd_side in zip(out[0], out[1], strict=True):
+        np.testing.assert_allclose(qr_side, svd_side, rtol=tol, atol=tol)

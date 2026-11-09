@@ -1,24 +1,30 @@
-"""``lstsq``: QR for a matrix estimated full rank, the SVD otherwise.
+"""``lstsq``: QR for a matrix ranked full rank, the SVD otherwise.
 
 The reference's default driver (``gelsy``) solves through a QR factorisation
-and decides the rank from an incremental *condition estimate*.  ``gels`` and
-``gelsy`` (so the default) do the same: a matrix whose estimated condition
-number sits well inside the rank cutoff takes the QR route, which answers the
-same ``A⁺ b`` the SVD route does — ``R⁻¹ Qᵀ b`` for ``m ≥ n``, ``Q R⁻ᵀ b``
-from the QR of ``Aᵀ`` for ``m < n``.  A matrix the estimate does not clear
-(rank deficient, ill-conditioned, non-finite) goes to the SVD route, which
-ranks it exactly.  An estimate can miss: a matrix built so that its smallest
-right singular vector is orthogonal to both start vectors of the estimate is
-taken for better conditioned than it is, and with a user ``rcond`` near its
-smallest singular value it is solved at full rank where ``gelsd`` would drop
-a direction.  ``gelsd`` / ``gelss`` return the singular values and always take
-the SVD route.
+and decides the rank from a condition estimate.  ``gels`` and ``gelsy`` (so
+the default) do the same: a matrix whose condition number sits well inside the
+rank cutoff takes the QR route, which answers the same ``A⁺ b`` the SVD route
+does — ``R⁻¹ Qᵀ b`` for ``m ≥ n``, ``Q R⁻ᵀ b`` from the QR of ``Aᵀ`` for
+``m < n``.  A matrix the test does not clear (rank deficient, ill-conditioned,
+non-finite) goes to the SVD route, which ranks it exactly.
+
+The test reads ``R`` alone, never the singular values of ``A``.  A batch small
+enough that the singular values of the ``n x n`` triangle cost no more than an
+estimate is ranked from them, exactly.  A larger one is ranked by an inverse
+power iteration from a start block seeded by a digest of ``R``: an estimate
+from fixed starts is blind to a matrix whose smallest right singular vector is
+orthogonal to them, and a matrix built before the block is known cannot target
+a block that follows the matrix.  That estimate is still probabilistic — a
+search for a matrix orthogonal to the block its own digest picks is not ruled
+out — so a rank that must be exact takes ``driver="gelsd"``.  ``gelsd`` /
+``gelss`` return the singular values and always take the SVD route.
 
 Re-exported by :mod:`lucid.linalg`, which owns ``qr``, ``svd`` and the
 triangular solves this reads.
 """
 
-import math
+import functools
+import random
 from typing import NamedTuple, Self
 
 import lucid
@@ -28,7 +34,7 @@ from lucid._dtype import finfo as _finfo
 from lucid._ops._autocast import _autocast_entry
 from lucid._tensor._indexing import broadcast_shapes as _broadcast_batch
 from lucid._tensor.tensor import Tensor
-from lucid.linalg import _Pinv, qr, solve_triangular
+from lucid.linalg import _Pinv, qr, solve_triangular, svdvals
 from lucid.linalg._ex import _pinv_with_tol, _sv_cutoff
 
 
@@ -119,21 +125,32 @@ def _non_finite_batches(a: Tensor) -> Tensor:
 #: lower bound on the true condition number that tightens with each step.
 _ESTIMATE_STEPS = 4
 
-#: A matrix goes to the QR route only when its estimated condition number is
-#: this many times *inside* the rank cutoff.  The estimate undershoots the true
-#: number (0.66-1.05 of it on generic inputs: Gaussian, graded, Kahan, Hilbert
-#: and near-duplicate-column matrices), so a factor of two keeps an
-#: under-converged one from calling a deficient matrix full rank; a matrix in
-#: the band between goes to the SVD route, which decides it.
-_ESTIMATE_MARGIN = 2.0
+#: A matrix goes to the QR route only when its condition number is this many
+#: times *inside* the rank cutoff.  An estimate undershoots the true number
+#: (0.66-1.05 of it on generic inputs: Gaussian, graded, Kahan, Hilbert and
+#: near-duplicate-column matrices), and even the exact singular values of ``R``
+#: carry an error of ``eps · κ`` ~ ``1 / n`` relative near the cutoff, so a
+#: factor of two keeps a rounded or under-converged number from calling a
+#: deficient matrix full rank; a matrix in the band between goes to the SVD
+#: route, which decides it.
+_RANK_MARGIN = 2.0
 
-#: The two start vectors, each deterministic and with its own structure: a
-#: cosine ramp and an alternating-sign ramp.  An iteration converges to the
-#: smallest singular direction only if its start has a component along it, so
-#: the estimate is the larger of the two; a matrix whose smallest right
-#: singular vector is orthogonal to both is the estimate's blind spot.
-_START_PHASE = 1.618033988749895
-_ALTERNATING_PHASE = 2.718281828459045
+#: Columns of the estimate's start block.  The estimate follows every column
+#: and keeps the best, so it misses a direction only if all of them do.
+_START_COLUMNS = 2
+
+#: Fixed probe frequencies for the digest that seeds the start block.
+_DIGEST_PHASES = (0.7390851332151607, 1.2020569031595942, 1.618033988749895, 2.718281828459045)
+
+#: A batch whose exact singular values cost no more than the estimate is ranked
+#: exactly: ``batch * (n**2 + _SVD_FLOOR)`` at most ``_EXACT_COST``.  Measured on
+#: the CPU (float32, ``n <= 200``), ``svdvals`` of an ``n x n`` triangle costs
+#: ``7e-5 · n² + 6e-3`` ms per matrix; the estimate costs ``0.3 + 1.1e-5 · batch
+#: · n²`` ms.  They break even at ``n = 70`` for one matrix, ``n = 33`` for four,
+#: ``n = 14`` for sixteen; a batch of 256 pays 22 ms (``n = 32``) for the
+#: estimate's 3.
+_SVD_FLOOR = 100
+_EXACT_COST = 5_000
 
 
 def _unit_columns(v: Tensor) -> Tensor:
@@ -141,32 +158,52 @@ def _unit_columns(v: Tensor) -> Tensor:
     return v / lucid.sqrt((v * v).sum(dim=-2, keepdim=True))
 
 
-def _start_vectors(k: int, like: Tensor) -> Tensor:
-    """The ``(k, 2)`` start columns, expanded over ``like``'s batch."""
-    index = lucid.arange(k, dtype=like.dtype, device=like.device)
-    ramp = lucid.cos(index * _START_PHASE + 1.0)
-    alternating = lucid.cos(index * math.pi) * (1.0 + 0.5 * lucid.sin(index * _ALTERNATING_PHASE))
-    both = lucid.stack([ramp, alternating], dim=-1)
-    return both.expand(*tuple(like.shape[:-2]), k, 2)
+@functools.lru_cache(maxsize=8)
+def _digest_probes(k: int, dtype: lucid.dtype, device: lucid.device) -> tuple[Tensor, Tensor]:
+    """The fixed ``(4, k)`` row and column probes whose bilinear form with ``R`` is its digest."""
+    index = lucid.arange(k, dtype=dtype, device=device).unsqueeze(-1)
+    phases = lucid.tensor(_DIGEST_PHASES, dtype=dtype, device=device)
+    return lucid.cos(index * phases + 0.3).mT, lucid.cos(index * phases + 1.1)
+
+
+def _start_vectors(R: Tensor) -> Tensor:
+    """The ``(k, _START_COLUMNS)`` random start block seeded by ``R``'s digest.
+
+    An iteration converges to the smallest singular direction only from a start
+    with a component along it, so a fixed start is a blind spot an input can be
+    built around.  The seed is a hash of a few probes of ``R`` itself, so the
+    same matrix always gets the same block (the rank never changes between
+    calls) while a matrix built before the block is known cannot target it.
+    This is still a probabilistic estimate: a construction that searches for a
+    matrix orthogonal to the block its own digest picks is not ruled out, it
+    only costs about ``δ ** -_START_COLUMNS`` trials to hit a component of size
+    ``δ``.
+    """
+    k = int(R.shape[-1])
+    rows, cols = _digest_probes(k, R.dtype, R.device)
+    digest = lucid.matmul(lucid.matmul(rows, R.reshape(-1, k, k)), cols).sum(dim=0)
+    rng = random.Random(repr(digest.reshape(-1).tolist()))
+    noise = lucid.tensor(list(rng.randbytes(k * _START_COLUMNS)), dtype=R.dtype)
+    return (noise - 127.5).reshape(k, _START_COLUMNS).to(R.device)
 
 
 def _estimate_condition(R: Tensor) -> Tensor:
     """Estimate ``σ_max / σ_min`` of each triangular ``R`` of the batch.
 
     Both extremes come from a few power steps on ``RᵀR`` (``σ_max``) and on its
-    inverse through two triangular solves (``σ_min``), run from two start
-    vectors at once as two columns, so the cost is ``O(k²)`` per step against
-    the factorisation's ``O(k³)``.  The larger estimate of each extreme is
-    kept.  ``R`` is scaled to unit magnitude first, so a matrix of ``1e±20``
-    entries neither underflows the inverse step nor overflows it.  A singular
-    ``R`` divides by its zero diagonal and comes out ``inf`` / ``nan``, which no
-    comparison against a cutoff passes.
+    inverse through two triangular solves (``σ_min``), run from
+    :data:`_START_COLUMNS` start vectors at once as columns, so the cost is
+    ``O(k²)`` per step against the factorisation's ``O(k³)``.  The larger
+    estimate of each extreme is kept.  ``R`` is scaled to unit magnitude first,
+    so a matrix of ``1e±20`` entries neither underflows the inverse step nor
+    overflows it.  A singular ``R`` divides by its zero diagonal and comes out
+    ``inf`` / ``nan``, which no comparison against a cutoff passes.
     """
     k = int(R.shape[-1])
     scale = R.abs().amax(dim=(-2, -1), keepdim=True)
     Rn = R / scale
     Rt = Rn.mT
-    start = _start_vectors(k, R)
+    start = _start_vectors(Rn).expand(*tuple(R.shape[:-2]), k, _START_COLUMNS)
     inv_v = _unit_columns(start)
     inv_gain = lucid.ones_like(scale)
     for _ in range(_ESTIMATE_STEPS):
@@ -185,6 +222,19 @@ def _estimate_condition(R: Tensor) -> Tensor:
     return lucid.where(
         finite.reshape(tuple(R.shape[:-2])), kappa, lucid.full_like(kappa, float("inf"))
     )
+
+
+def _full_rank_exact(R: Tensor, rtol: float) -> Tensor:
+    """Whether each triangular ``R`` of the batch clears the rank cutoff by the margin.
+
+    ``R`` has ``A``'s singular values, so this is the rank test of the SVD
+    route on a ``k x k`` matrix.  A non-finite ``R`` is no rank at all, and is
+    swapped for the identity around the factorisation.
+    """
+    finite = lucid.isfinite(R).all(dim=(-2, -1))
+    eye = lucid.eye(int(R.shape[-1]), dtype=R.dtype, device=R.device)
+    sv = svdvals(lucid.where(finite.reshape(-1, 1, 1), R, eye))
+    return finite & (sv.amin(dim=-1) > sv.amax(dim=-1) * (rtol * _RANK_MARGIN))
 
 
 class _QrLeastSquares:
@@ -213,17 +263,22 @@ class _QrLeastSquares:
         )
 
     def full_rank(self, rtol: float) -> list[bool]:
-        """Which matrices of the flattened batch are estimated to be full rank.
+        """Which matrices of the flattened batch are full rank under ``rtol``.
 
         The cutoff keeps ``σ`` above ``rtol · σ_max``, so full rank is
-        ``κ < 1 / rtol``.  The estimate is made on the host: the answer is one
+        ``κ < 1 / rtol``.  A batch small enough that the singular values of
+        ``R`` cost no more than the estimate decides it exactly; a larger one
+        by the estimate.  The decision is made on the host: the answer is one
         data-dependent bit per matrix, and a Metal tensor would pay a device
         round trip for each of the dozen small solves.
         """
         with lucid.no_grad():
             r = self._r if self._r.device.type == "cpu" else self._r.to("cpu")
-            kappa = _estimate_condition(r.reshape(-1, *tuple(r.shape[-2:])))
-            flags = (kappa * (rtol * _ESTIMATE_MARGIN) < 1.0).tolist()
+            flat = r.reshape(-1, *tuple(r.shape[-2:]))
+            if int(flat.shape[0]) * (int(flat.shape[-1]) ** 2 + _SVD_FLOOR) <= _EXACT_COST:
+                flags = _full_rank_exact(flat, rtol).tolist()
+            else:
+                flags = (_estimate_condition(flat) * (rtol * _RANK_MARGIN) < 1.0).tolist()
         assert isinstance(flags, list)
         return [bool(v) for v in flags]
 
@@ -238,8 +293,7 @@ class _QrLeastSquares:
         """``A⁺`` itself, for a solve that must differentiate."""
         with lucid.no_grad():
             P = solve_triangular(self._r, self._q.mT, upper=True)
-            # contiguous: works around the double-backward defect under investigation.
-            return P if self._tall else P.mT.contiguous()
+            return P if self._tall else P.mT
 
 
 def _qr_solve(route: _QrLeastSquares, A: Tensor, b: Tensor) -> Tensor:
@@ -430,7 +484,8 @@ def lstsq(
 
     ``"gels"`` and ``"gelsy"`` (so the default) factor a full-rank ``input``
     with a QR decomposition, as the reference's default driver does.  Every
-    matrix is first checked for full rank with a condition-number estimate; one
+    matrix is first checked for full rank from ``R`` (the singular values of the
+    triangle for a small batch, a condition-number estimate otherwise); one
     that does not pass — rank deficient, ill-conditioned, non-finite — takes the
     SVD route, which decides the rank.  ``"gelsd"`` and ``"gelss"`` return the
     singular values and always take the SVD route.

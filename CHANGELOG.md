@@ -121,6 +121,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - saved non-dense Function output keeps its buffer alive (LCD-948)
 
+- lstsq rank test has no fixed-start blind spot (LCD-945)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
