@@ -27,7 +27,6 @@ from lucid.linalg import (
     _build_permutation_matrix,
     _check_pivots,
     _la,
-    _lu_factor_packed,
     _Pinv,
     cholesky,
     eigh,
@@ -36,6 +35,7 @@ from lucid.linalg import (
     solve_triangular,
     svd,
 )
+from lucid.linalg._lu import _lu_factor_packed
 from lucid.linalg._norm_scale import _scaled_by_max
 
 
@@ -868,7 +868,9 @@ def _complete_qr_factors(A: Tensor, Q: Tensor, R: Tensor, mode: str) -> _QrResul
             Q_thin = Q
             Q = _complete_svd_basis(Q, m, n, columns=True)
             if Q_thin.requires_grad and _C_engine.grad_enabled():
-                Q = lucid.cat([Q_thin, _QrCompleteTail.apply(Q_thin, Q.detach()[..., n:])], dim=-1)
+                tail = _QrCompleteTail.apply(Q_thin, Q.detach()[..., n:])
+                assert isinstance(tail, Tensor)
+                Q = lucid.cat([Q_thin, tail], dim=-1)
             pad = lucid.zeros(
                 *tuple(int(s) for s in A.shape[:-2]), m - n, n, dtype=R.dtype, device=R.device
             )

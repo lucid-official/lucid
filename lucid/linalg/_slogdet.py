@@ -12,7 +12,8 @@ from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
-from lucid.linalg import _la, _lu_factor_packed, det, diagonal, inv
+from lucid.linalg import _la, det, diagonal, inv
+from lucid.linalg._lu import _lu_factor_packed
 
 
 class _SlogdetResult(NamedTuple):

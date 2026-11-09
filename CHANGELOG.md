@@ -135,6 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - one spelling for which grads backward wants (LCD-839)
+- import the LU helpers from their module; type the QR tail (LCD-940)
 
 ---
 

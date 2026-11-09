@@ -2989,9 +2989,9 @@ def diagonal(A: Tensor, *, offset: int = 0, dim1: int = -2, dim2: int = -1) -> T
     return lucid.diagonal(A, offset=offset, dim1=dim1, dim2=dim2)
 
 
+from lucid.linalg._lu import lu, lu_unpack
 # The ``*_ex`` family reads LAPACK's ``info``; ``lu_factor`` and
 # ``ldl_factor`` above are its checked forms.
-from lucid.linalg._lu import _LuResult, _lu_factor_packed, lu, lu_unpack
 from lucid.linalg._ex import (
     _check_matrix_norm_dims,
     _complete_qr_factors,
