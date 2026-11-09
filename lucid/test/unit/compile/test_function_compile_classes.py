@@ -54,6 +54,7 @@ TRACED_BACKWARD: frozenset[str] = frozenset(
         "_QR",
         "_Pinv",
         "_Eigh",
+        "_SlogdetFromLU",
     }
 )
 
@@ -66,8 +67,6 @@ CUSTOM: frozenset[str] = frozenset(
         # Linalg (complex / pivot-table factorizations without MPSGraph emitter)
         "_Eig",
         "_LUFactorGrad",
-        # slogdet reads the LU diagonal (LCD-939), which has no emitter
-        "_SlogdetFromLU",
         "_LDLFactorGrad",
         # nn: the reference's hand-written backward, not its forward's derivative
         "_CrossMapLRN2d",
