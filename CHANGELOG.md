@@ -134,6 +134,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - rank-canon data movement and rank-5 feeds (LCD-928)
 
+- lstsq solves a full-rank matrix by QR (LCD-941)
+
 ### Tooling
 
 - record that 1055fa3b9 moves no binary interface

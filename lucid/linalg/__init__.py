@@ -2359,74 +2359,6 @@ def matrix_norm(
         return _matrix_norm_sv(xi, d0, d1, keepdim, sv_reduce)
 
 
-def lstsq(
-    input: Tensor, b: Tensor, rcond: float | None = None, *, driver: str | None = None
-) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-    r"""Solve a least-squares linear system.
-
-    Finds :math:`X` minimising the squared residual
-
-    .. math::
-
-        \min_X \,\|A\,X - B\|_2^2,
-
-    where :math:`A \in \mathbb{R}^{m \times n}` may be over- or
-    underdetermined.  For full-rank :math:`A` and :math:`m \ge n` the
-    solution is unique:
-
-    .. math::
-
-        X \,=\, (A^\top A)^{-1} A^\top B,
-
-    obtained more stably via QR or SVD without forming the normal
-    equations.
-
-    Parameters
-    ----------
-    input : Tensor
-        Coefficient matrix of shape ``(*, m, n)``.
-    b : Tensor
-        Right-hand side of shape ``(*, m, k)`` (or ``(*, m)``).
-    rcond : float or None, optional
-        Cutoff for small singular values (passed to the underlying
-        driver).  ``None`` selects the default driver heuristic.
-    driver : str or None, keyword-only, optional
-        Solver choice (``"gels"``, ``"gelsy"``, ``"gelsd"``, ``"gelss"``).
-        ``None`` selects ``"gelsy"`` on CPU and ``"gels"`` on Metal.
-
-    Returns
-    -------
-    solution : Tensor
-        Least-squares solution of shape ``(*, n, k)`` (or ``(*, n)``).
-    residuals : Tensor
-        Sum of squared residuals of shape ``(*, k)`` when :math:`m > n` and full
-        rank (or ``driver == "gels"``); empty ``(0,)`` otherwise or for ``"gelsy"``.
-    rank : Tensor
-        Effective rank of :math:`A` (``int64``, shape ``(*)``), or empty ``(0,)``
-        when ``driver == "gels"``.
-    singular_values : Tensor
-        Singular values of :math:`A` of shape ``(*, min(m, n))`` for ``"gelsd"``
-        and ``"gelss"``; empty ``(0,)`` for ``"gels"`` and ``"gelsy"``.
-
-    Notes
-    -----
-    The solution is :math:`A^+ B`, the minimum-norm least-squares solution for
-    every shape and rank, and differentiates in ``input`` and ``b`` (twice).
-
-    Examples
-    --------
-    >>> import lucid
-    >>> from lucid.linalg import lstsq
-    >>> A = lucid.tensor([[1.0, 1.0], [1.0, 2.0], [1.0, 3.0]])
-    >>> b = lucid.tensor([[6.0], [9.0], [12.0]])
-    >>> sol, *_ = lstsq(A, b)
-    >>> sol
-    tensor([[3.], [3.]])
-    """
-    with _autocast_entry("lstsq", _unwrap(input), _unwrap(b)) as (ai, bi):
-        return _lstsq_solution(_wrap(ai), _wrap(bi), _broadcast_batch, rcond, driver)
-
-
 def lu_solve(
     LU: Tensor, pivots: Tensor, B: Tensor, *, left: bool = True, adjoint: bool = False
 ) -> Tensor:
@@ -2899,6 +2831,7 @@ def diagonal(A: Tensor, *, offset: int = 0, dim1: int = -2, dim2: int = -1) -> T
     return lucid.diagonal(A, offset=offset, dim1=dim1, dim2=dim2)
 
 
+from lucid.linalg._lstsq import lstsq
 from lucid.linalg._lu import lu, lu_unpack
 from lucid.linalg._matrix_exp import matrix_exp
 # The ``*_ex`` family reads LAPACK's ``info``; ``lu_factor`` and
@@ -2911,8 +2844,6 @@ from lucid.linalg._ex import (
     _EighResult,
     _EigResult,
     householder_product,
-    _lstsq_solution,
-    _LstsqResult,
     _lu_factor_ex,
     _lu_solve_general,
     _LuFactorResult,
