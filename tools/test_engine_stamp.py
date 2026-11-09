@@ -144,7 +144,7 @@ def test_the_command_line_stamps_and_checks_the_tree_it_sits_in(
     monkeypatch.setattr(engine_stamp, "HERE", tree)
     assert engine_stamp.main(["check"]) == 1 and "missing" in capsys.readouterr().out
     assert engine_stamp.main(["write", "--engine-dir", str(tmp_path / "elsewhere")]) == 0
-    assert "not written" in capsys.readouterr().out and not tree.stamp_path.exists()
+    assert "skipped" in capsys.readouterr().out and not tree.stamp_path.exists()
     assert engine_stamp.main(["write", "--engine-dir", str(tree.engine_dir)]) == 0
     assert tree.digest()[:12] in capsys.readouterr().out
     assert engine_stamp.main(["check"]) == 0 and "match" in capsys.readouterr().out

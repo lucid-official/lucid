@@ -21,17 +21,14 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Final, Self
 
-# One rule for "is this engine built from these sources", shared with the workspace tool.
-from tools.agent_ws import _engine_is_stale, _header_abi_version
-from tools.engine_stamp import ENGINE as ENGINE_DIR
-from tools.engine_stamp import INPUTS, STAMP, EngineTree, Freshness, mlx_pin
+# One rule for "is this engine built from these sources": the build stamp, which the
+# workspace tool reads too.
+from tools.agent_ws import _header_abi_version
+from tools.engine_stamp import ENGINE, NATIVE, EngineTree, mlx_pin
 from tools.rules.checks import CannotMeasure, Workspace
 from tools.rules.model import Exit, read
 from tools.rules.push import _git
 
-ENGINE: Final = ENGINE_DIR.as_posix()
-# What builds the engine besides lucid/_C; pyproject.toml's [tool.lucid.mlx] pins the MLX.
-NATIVE: Final = INPUTS
 # The suites that see what the C++ does to a traced graph and what each op costs.
 SUITES: Final = ("lucid/test/unit/compile", "lucid/test/unit/cost")
 # What the suites read: an edit there that is not committed is not what a record names.
@@ -158,36 +155,12 @@ class Ledger:
             return None
 
 
-def _build_command(root: Path) -> str:
-    """The command that builds this checkout's engine in place, and so stamps it."""
-    if (root / ".git").is_file():  # a linked worktree: an editable install would hijack the venv
-        return "python3 tools/agent_ws.py build"
-    return "uv pip install -e ."
-
-
 def _engine_problem(ws: Workspace) -> str | None:
-    """Why the suites here would not run this tree's C++, or None.
-
-    The stamp the build leaves (tools/engine_stamp.py) must equal this tree's digest: an
-    engine without one, or with one for other sources, may be a ``cp -c`` or a sync of a
-    binary that nobody built from here (LCD-881), and mtimes cannot tell.
-    """
-    tree, build = EngineTree(ws.root), _build_command(ws.root)
-    if not list(ws.root.glob(f"{ENGINE}/engine.cpython-*.so")):
-        return f"the engine here is missing: build it with  {build}"
-    state = tree.freshness()
-    if state is Freshness.MISSING:
-        return (
-            f"the engine here has no build stamp ({STAMP}), so it is not known to be built "
-            f"from this tree: build it with  {build}"
-        )
-    if state is Freshness.MISMATCH:
-        return (
-            f"the engine here was built from other sources than this tree holds (stamp "
-            f"{tree.recorded()[:9]}, tree {tree.digest()[:9]}): rebuild it with  {build}"
-        )
-    if _engine_is_stale(ws.root):
-        return f"the engine here does not match {ENGINE}'s ABI: rebuild it with  {build}"
+    """Why the suites here would not run this tree's C++, or None."""
+    # The stamp its build leaves, equal to this tree's digest: an engine without one may be
+    # a ``cp -c`` or a sync of a binary nobody built from here, and mtimes cannot tell.
+    if why := EngineTree(ws.root).unfit():
+        return why
     done = ws.spawn([ws.python, "-c", _PROBE])
     found = done.stdout.splitlines()
     if done.returncode != 0 or len(found) != 3:

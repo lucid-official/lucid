@@ -28,9 +28,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Self
 
-ENGINE: Final = Path("lucid/_C")
+ENGINE: Final = "lucid/_C"
 # What builds the engine besides lucid/_C; pyproject.toml's [tool.lucid.mlx] pins the MLX.
-INPUTS: Final = ("setup.py", "tools/fetch_mlx.py")
+NATIVE: Final = ("setup.py", "tools/fetch_mlx.py")
 # The files under lucid/_C that make up the binary; its .py stubs and the .so are not sources.
 SOURCES: Final = ("*.cpp", "*.h", "*.hpp", "*.mm", "*.def", "*.metal", "*.cmake", "CMakeLists.txt")
 STAMP: Final = Path("build/.engine_stamp")
@@ -64,7 +64,7 @@ class EngineTree:
 
     def sources(self) -> list[Path]:
         found = {p for pattern in SOURCES for p in self.engine_dir.rglob(pattern) if p.is_file()}
-        return sorted(found | {p for name in INPUTS if (p := self.root / name).is_file()})
+        return sorted(found | {p for name in NATIVE if (p := self.root / name).is_file()})
 
     def _pin(self) -> str:
         pyproject = self.root / "pyproject.toml"
@@ -94,6 +94,32 @@ class EngineTree:
         if not recorded or not current:
             return Freshness.MISSING
         return Freshness.MATCH if recorded == current else Freshness.MISMATCH
+
+    @property
+    def build_command(self) -> str:
+        """The command that builds this checkout's engine in place, and so stamps it."""
+        # A linked worktree's .git is a file; an editable install there would hijack the venv.
+        if (self.root / ".git").is_file():
+            return "python3 tools/agent_ws.py build"
+        return "uv pip install -e ."
+
+    def unfit(self) -> str | None:
+        """Why this checkout's engine cannot be taken as built from its sources, or None."""
+        if not any(self.engine_dir.glob("engine.cpython-*.so")):
+            return f"the engine here is missing: build it: {self.build_command}"
+        state = self.freshness()
+        if state is Freshness.MISSING:
+            return (
+                f"the engine here has no build stamp ({STAMP}), so it is not known to be built "
+                f"from this tree: build it: {self.build_command}"
+            )
+        if state is Freshness.MISMATCH:
+            return (
+                f"the engine here was built from other sources than this tree holds (stamp "
+                f"{self.recorded()[:9]}, tree {self.digest()[:9]}): rebuild it: "
+                f"{self.build_command}"
+            )
+        return None
 
     def write(self, engine_dir: Path | None = None) -> bool:
         """Record the tree's digest, for a binary just built into ``engine_dir`` (default here).
