@@ -2782,7 +2782,7 @@ def test_the_real_records_say_what_the_inventory_says() -> None:
     rules = _real().rules
     verdicts = {name: rule.verdict for name, rule in rules.items()}
     enforced = dict.fromkeys(("H1", "H5", "H7", "H13", "S22"), Verdict.ENFORCED)
-    partly = dict.fromkeys(("H4", "E-ABI-BUMP", "E-VERIFY-CPP"), Verdict.PARTLY)
+    partly = dict.fromkeys(("H4", "E-ABI-BUMP", "E-VERIFY-CPP", "E-GRAD-MASK"), Verdict.PARTLY)
     assert verdicts == {**enforced, **partly}
     # The C++ at push: judged where it leaves, and nowhere a worker could not satisfy it.
     for name in ("E-ABI-BUMP", "E-VERIFY-CPP"):
