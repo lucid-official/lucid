@@ -158,7 +158,7 @@ def test_a_batch_mixing_singular_regular_and_overflowing(device: str) -> None:
     logabs.sum().backward()
     assert A.grad is not None
     g = A.grad.to("cpu")
-    assert g[0].diagonal().tolist() == pytest.approx([1e-20] * 3, rel=1e-4)
+    assert g[0].diagonal().tolist() == pytest.approx([1e-20] * 3, rel=1e-4, abs=0)
     want_reg = lucid.linalg.inv(reg.to("cpu")).mT
     assert float((g[2] - want_reg).abs().max().item()) < 1e-5
     # The singular matrix keeps its infinite, signed-by-the-zero gradient.

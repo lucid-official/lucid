@@ -356,7 +356,7 @@ def test_log1p_edges_value_and_gradient(dev: str) -> None:
     v, g = out.to("cpu").tolist(), y.grad.to("cpu").tolist()
     assert v[0] == _INF and v[1] == -_INF and math.isnan(v[2])
     assert v[3] == 0.0 and math.copysign(1.0, v[3]) == -1.0
-    assert v[4] == pytest.approx(1e-30, rel=1e-6)
+    assert v[4] == pytest.approx(1e-30, rel=1e-6, abs=0)
     assert v[5] == pytest.approx(math.log1p(1e38), rel=1e-6)
     assert g[0] == 0.0 and g[1] == _INF and g[2] == -1.0
     assert g[3] == 1.0 and g[4] == 1.0

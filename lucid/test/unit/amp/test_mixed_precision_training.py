@@ -476,6 +476,18 @@ def test_unscale_clip_step_matches_the_reference(
 # ── checkpoint / resume ──────────────────────────────────────────────────────
 
 
+def _assert_close_to_scale(
+    actual: np.ndarray, desired: np.ndarray, *, rtol: float, err_msg: str
+) -> None:
+    """``assert_allclose`` with the floor taken from ``desired``'s own magnitude.
+
+    Optimizer state spans many decades (Adam's second moment is ~1e-8 early on), so
+    a fixed ``atol`` of 1e-7 would swamp it and let a lost or zeroed state pass.
+    """
+    scale = float(np.max(np.abs(desired), initial=0.0))
+    np.testing.assert_allclose(actual, desired, rtol=rtol, atol=rtol * scale, err_msg=err_msg)
+
+
 @pytest.mark.parametrize("model, device, dtype, opt, path", _cells(models=("mlp", "conv")))
 def test_checkpoint_resume_is_identical(
     model: str, device: str, dtype: lucid.dtype, opt: str, path: str
@@ -499,7 +511,7 @@ def test_checkpoint_resume_is_identical(
     for pa, pb in zip(a.params(), b.params(), strict=True):
         np.testing.assert_allclose(pa, pb, rtol=1e-6, atol=1e-7, err_msg="params")
     for sa, sb in zip(a.opt_state(), b.opt_state(), strict=True):
-        np.testing.assert_allclose(sa, sb, rtol=1e-6, atol=1e-7, err_msg="optimizer state")
+        _assert_close_to_scale(sa, sb, rtol=1e-6, err_msg="optimizer state")
 
 
 # ── no leak across steps ─────────────────────────────────────────────────────

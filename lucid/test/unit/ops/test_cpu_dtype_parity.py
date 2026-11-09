@@ -630,7 +630,7 @@ def test_hypot_matches_across_magnitudes(pair) -> None:
     """Guard the instrument: the scaling must not disturb ordinary values."""
     a = lucid.tensor(np.array([pair[0]]), dtype=lucid.float64)
     b = lucid.tensor(np.array([pair[1]]), dtype=lucid.float64)
-    assert np.allclose(lucid.hypot(a, b).numpy(), np.hypot(*pair), rtol=1e-12)
+    assert np.allclose(lucid.hypot(a, b).numpy(), np.hypot(*pair), rtol=1e-12, atol=0)
 
 
 @pytest.mark.parametrize("name", ["cummax", "cummin"])

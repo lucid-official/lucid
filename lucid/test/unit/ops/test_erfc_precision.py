@@ -16,7 +16,7 @@ _XS = [-6.0, -2.0, -0.5, 0.0, 0.3, 1.0, 2.5, 4.0, 6.0, 9.0]
 def test_erfc_matches_double_precision_relatively() -> None:
     got = lucid.erfc(lucid.tensor(_XS)).tolist()
     for x, value in zip(_XS, got):
-        assert value == pytest.approx(math.erfc(x), rel=3e-6), x
+        assert value == pytest.approx(math.erfc(x), rel=3e-6, abs=0), x
 
 
 def test_erfc_gradient_is_the_gaussian_slope() -> None:
@@ -34,4 +34,4 @@ def test_erfc_in_float64_is_double_precision() -> None:
     # a continued fraction above it.
     got = lucid.erfc(lucid.tensor(_XS, dtype=lucid.float64)).tolist()
     for x, value in zip(_XS, got):
-        assert value == pytest.approx(math.erfc(x), rel=1e-10), x
+        assert value == pytest.approx(math.erfc(x), rel=1e-10, abs=0), x

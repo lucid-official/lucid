@@ -1681,7 +1681,7 @@ class TestAdamsCoefficients:
     )
     def test_bashforth_matches_the_published_table(self, order: int, expected: list[float]) -> None:
         got = _multistep.coefficients(order, implicit=False)
-        assert list(got) == pytest.approx(expected, rel=1e-14)
+        assert list(got) == pytest.approx(expected, rel=1e-14, abs=0)
 
     @pytest.mark.parametrize(
         ("order", "expected"),
@@ -1695,7 +1695,7 @@ class TestAdamsCoefficients:
     )
     def test_moulton_matches_the_published_table(self, order: int, expected: list[float]) -> None:
         got = _multistep.coefficients(order, implicit=True)
-        assert list(got) == pytest.approx(expected, rel=1e-14)
+        assert list(got) == pytest.approx(expected, rel=1e-14, abs=0)
 
     def test_weights_are_memoised(self) -> None:
         # The exact-rational derivation is slow enough that recomputing it per
