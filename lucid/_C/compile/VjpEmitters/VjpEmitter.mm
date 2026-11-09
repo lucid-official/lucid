@@ -87,6 +87,9 @@ const std::unordered_set<std::string>& no_grad_ops() {
         // argmax / argmin produce integer indices — also grad-sinks.
         "argmax",
         "argmin",
+        // lu_factor — a factorisation the engine records no gradient for; the
+        // differentiable one is the Python Function wrapped around it.
+        "lu_factor",
         // detach — the value, cut from its input's gradient.  A sink
         // rather than a no-op VJP so fused_step's reach test, which reads
         // this set through ``vjp_registration_status``, leaves a parameter

@@ -5,7 +5,7 @@
 //
 //   - ``norm``           — vector / matrix p-norm with ord=1/2/inf fast paths
 //   - ``matrix_power``   — repeated matmul via binary exponentiation
-//   - ``det``            — 2×2 / 3×3 closed-form (eager fallback for N>3)
+//   - ``det``            — 2×2 / 3×3 closed-form; the LU pivot product otherwise
 //   - ``inv``            — 2×2 closed-form via adjugate / det
 //   - ``tensordot``      — permute + reshape + matmul
 //   - ``inner``          — last-axis contraction: reshape + matmul with bᵀ
@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "../_AttrHelpers.h"
+#include "Decompositions.h"
 
 namespace lucid::compile {
 
@@ -148,7 +149,7 @@ public:
     }
 };
 
-// ── det — 2×2 / 3×3 closed-form, eager fallback for N>3.
+// ── det — 2×2 / 3×3 closed-form, the LU pivot product for batched or larger.
 class DetEmitter final : public OpEmitter {
 public:
     std::string_view op_name() const override { return "det"; }
@@ -160,9 +161,17 @@ public:
         MPSGraphTensor* x = (__bridge MPSGraphTensor*)ctx.resolve(x_id);
         if (g == nil || x == nil) return false;
         NSArray<NSNumber*>* sh = x.shape;
-        if (sh.count != 2) return false;
-        std::int64_t N = sh[0].longLongValue;
-        if (sh[1].longLongValue != N) return false;
+        if (sh.count < 2) return false;
+        std::int64_t N = sh[sh.count - 2].longLongValue;
+        if (sh[sh.count - 1].longLongValue != N) return false;
+        if (sh.count != 2 || N > 3) {
+            // Batched or past 3x3: the product of the LU pivots, which is what
+            // eager's ``linalg_det`` multiplies too.
+            LuGraph lu = emit_lu_mps(g, x);
+            if (lu.det == nil) return false;
+            ctx.bind(node.outputs[0].id, (__bridge void*)lu.det);
+            return true;
+        }
         auto el = [&](NSInteger r, NSInteger c) -> MPSGraphTensor* {
             MPSGraphTensor* row =
                 [g sliceTensor:x dimension:0 start:r length:1 name:nil];
@@ -212,7 +221,7 @@ public:
                                                              name:@"det3"]));
         return true;
         }
-        return false;  // N > 3 — fall back to eager LAPACK.
+        return false;
     }
 };
 

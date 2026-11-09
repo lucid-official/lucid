@@ -43,7 +43,7 @@ the offending op + a sample shape::
 
 import dataclasses
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, override
 
 from lucid._C import engine as _C_engine
@@ -137,6 +137,22 @@ class DiagnosisReport:
         return "\n".join(lines)
 
 
+def _gradient_carrying_ops(ops: Iterable[_C_engine.compile.OpNode]) -> set[str]:
+    """Names of the ops with a floating or complex result.
+
+    Eager never tracks an integer or bool value, so an op that makes only those
+    has no gradient to cover — the walker's ``carries_gradient`` rule.
+    """
+    from lucid.compile._core.custom_backward import GRADIENT_DTYPES
+
+    return {node.name for node in ops if any(om.dtype in GRADIENT_DTYPES for om in node.outputs)}
+
+
+def _is_grad_sink(status: object, carries_gradient: bool) -> bool:
+    """Whether the walker stops at an op by design, or it has no gradient to carry."""
+    return status == _C_engine.compile.VjpRegistration.GradSink or not carries_gradient
+
+
 def diagnose(fn: Callable[..., object], *example_inputs: Tensor) -> DiagnosisReport:
     """Trace ``fn(*example_inputs)`` and report manual-VJP coverage.
 
@@ -202,6 +218,7 @@ def diagnose(fn: Callable[..., object], *example_inputs: Tensor) -> DiagnosisRep
     registered: list[OpInfo] = []
     grad_sinks: list[OpInfo] = []
     uncovered: list[OpInfo] = []
+    carries_gradient = _gradient_carrying_ops(tracer.graph.ops)
     Reg = _C_engine.compile.VjpRegistration
     for name, count in sorted(op_counts.items()):
         sample = op_samples.get(name)
@@ -209,7 +226,7 @@ def diagnose(fn: Callable[..., object], *example_inputs: Tensor) -> DiagnosisRep
         status = _C_engine.compile.vjp_registration_status(name)
         if status == Reg.Registered or (status == Reg.Missing and name not in outside_region_names):
             registered.append(info)
-        elif status == Reg.GradSink:
+        elif _is_grad_sink(status, name in carries_gradient):
             grad_sinks.append(info)
         else:
             uncovered.append(info)

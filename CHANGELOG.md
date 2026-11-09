@@ -123,6 +123,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - compile training-mode batch norm through lucid.compile
 
+- lu_factor emitter; slogdet and det compile (LCD-942)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

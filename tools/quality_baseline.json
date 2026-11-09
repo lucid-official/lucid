@@ -1202,7 +1202,7 @@
     "lucid/_C/compile/OpEmitters/elementwise/Trig.mm": 1,
     "lucid/_C/compile/OpEmitters/index/Gather.mm": 1,
     "lucid/_C/compile/OpEmitters/linalg/Matmul.mm": 1,
-    "lucid/_C/compile/OpEmitters/linalg/MatrixOps.mm": 3,
+    "lucid/_C/compile/OpEmitters/linalg/MatrixOps.mm": 2,
     "lucid/_C/compile/OpEmitters/nn/Conv.mm": 14,
     "lucid/_C/compile/OpEmitters/nn/Loss.mm": 3,
     "lucid/_C/compile/OpEmitters/nn/Norm.mm": 3,

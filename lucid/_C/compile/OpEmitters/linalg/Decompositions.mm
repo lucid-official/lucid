@@ -8,6 +8,7 @@
 //   - ``eigh``             — one-sided Jacobi on the matrix shifted to positive definite
 //   - ``svd``              — one-sided Hestenes-Jacobi singular value decomposition
 //   - ``pinv``             — Moore-Penrose pseudoinverse via one-sided Jacobi SVD
+//   - ``lu_factor``        — unrolled row-per-step partial-pivoting elimination (``det`` too)
 
 #import <Metal/Metal.h>
 #import <MetalPerformanceShadersGraph/MetalPerformanceShadersGraph.h>
@@ -576,6 +577,182 @@ emit_eigh_factors(MPSGraph* g, MPSGraphTensor* a, std::int64_t n, bool upper) {
     return sort_values_and_cols(g, w, v_mat, false);
 }
 
+// ── lu_factor (partial pivoting, ``getrf`` conventions) ──────────────
+
+MPSGraphTensor* broadcast_to(MPSGraph* g, MPSGraphTensor* t, MPSShape* shape) {
+    return [g broadcastTensor:t toShape:shape name:nil];
+}
+
+MPSGraphTensor* int32_const(MPSGraph* g, double v) {
+    return [g constantWithScalar:v dataType:MPSDataTypeInt32];
+}
+
+// What the pivots say once every step has chosen: ``(*, 1, steps)`` pieces of
+// the one-based row each step swapped in and the pivot it divided by.  Read
+// together, after the loop, so a step does not carry the bookkeeping: the first
+// zero pivot (``info``), the determinant (the pivots' product, signed by the
+// parity of the swaps — the order eager's ``linalg_det`` multiplies in) and the
+// pivots as ``getrf`` returns them.
+void emit_lu_summary(MPSGraph* g,
+                     const std::vector<MPSGraphTensor*>& rows_at,
+                     const std::vector<MPSGraphTensor*>& diagonal,
+                     NSArray<NSNumber*>* batch,
+                     MPSDataType dt,
+                     LuGraph& out) {
+    const NSInteger c_dim = (NSInteger)batch.count + 1;
+    const std::int64_t steps = (std::int64_t)diagonal.size();
+    MPSGraphTensor* at = concat_along(g, rows_at, c_dim);
+    MPSGraphTensor* d = concat_along(g, diagonal, c_dim);
+    MPSGraphTensor* step_number =
+        [g additionWithPrimaryTensor:[g coordinateAlongAxis:c_dim withShape:at.shape name:nil]
+                     secondaryTensor:int32_const(g, 1)
+                                name:nil];
+    MPSGraphTensor* one_based = [g additionWithPrimaryTensor:at secondaryTensor:step_number name:nil];
+    MPSGraphTensor* is_zero = [g castTensor:[g equalWithPrimaryTensor:d
+                                                      secondaryTensor:[g constantWithScalar:0.0
+                                                                                   dataType:dt]
+                                                                 name:nil]
+                                     toType:MPSDataTypeInt32
+                                       name:nil];
+    MPSGraphTensor* any_zero = [g reductionMaximumWithTensor:is_zero axes:@[ @(c_dim) ] name:nil];
+    MPSGraphTensor* first_zero = [g reductionArgMaximumWithTensor:is_zero axis:c_dim name:nil];
+    MPSGraphTensor* info = [g selectWithPredicateTensor:[g greaterThanWithPrimaryTensor:any_zero
+                                                                        secondaryTensor:int32_const(g, 0)
+                                                                                   name:nil]
+                                    truePredicateTensor:[g additionWithPrimaryTensor:
+                                                               [g castTensor:first_zero
+                                                                      toType:MPSDataTypeInt32
+                                                                        name:nil]
+                                                                     secondaryTensor:int32_const(g, 1)
+                                                                                name:nil]
+                                   falsePredicateTensor:int32_const(g, 0)
+                                                   name:nil];
+    MPSGraphTensor* swaps =
+        [g reductionSumWithTensor:[g castTensor:[g notEqualWithPrimaryTensor:at
+                                                             secondaryTensor:int32_const(g, 0)
+                                                                        name:nil]
+                                         toType:dt
+                                           name:nil]
+                             axes:@[ @(c_dim) ]
+                             name:nil];
+    // Both are small integers, exact in float32 up to kMaxLuDim.
+    MPSGraphTensor* parity = [g moduloWithPrimaryTensor:swaps
+                                        secondaryTensor:[g constantWithScalar:2.0 dataType:dt]
+                                                   name:nil];
+    MPSGraphTensor* sign =
+        [g subtractionWithPrimaryTensor:[g constantWithScalar:1.0 dataType:dt]
+                        secondaryTensor:[g multiplicationWithPrimaryTensor:parity
+                                                           secondaryTensor:[g constantWithScalar:2.0
+                                                                                        dataType:dt]
+                                                                      name:nil]
+                                   name:nil];
+    MPSGraphTensor* det = [g multiplicationWithPrimaryTensor:sign
+                                             secondaryTensor:[g reductionProductWithTensor:d
+                                                                                      axes:@[ @(c_dim) ]
+                                                                                      name:nil]
+                                                        name:nil];
+    NSMutableArray<NSNumber*>* pivot_shape = [batch mutableCopy];
+    [pivot_shape addObject:@(steps)];
+    out.pivots = [g reshapeTensor:one_based withShape:pivot_shape name:nil];
+    out.info = [g reshapeTensor:info withShape:batch name:nil];
+    out.det = [g reshapeTensor:det withShape:batch name:nil];
+}
+
+// One row of the factorisation per step, never an element, so the graph grows
+// with the shorter side and not its square.  Step ``k`` takes the first row of
+// the remaining block whose column ``k`` is largest (``idamax``), swaps it to the
+// top whole — the multipliers already stored before column ``k`` travel with it,
+// as ``laswp`` moves them — divides the column below by the pivot, and takes the
+// outer product off the columns after ``k``.  A zero pivot leaves its column
+// alone (it is all zeros, so dividing by one keeps it) and the factorisation
+// goes on, as ``getrf`` does: eager reports it in ``info``, and a compiled call
+// has nothing to raise.
+LuGraph emit_lu_eliminate(MPSGraph* g, MPSGraphTensor* a, std::int64_t m, std::int64_t n) {
+    const NSInteger rank = (NSInteger)a.shape.count;
+    const NSInteger r_dim = rank - 2;
+    const NSInteger c_dim = rank - 1;
+    const std::int64_t steps = std::min(m, n);
+    MPSGraphTensor* zero = [g constantWithScalar:0.0 dataType:a.dataType];
+    MPSGraphTensor* one = [g constantWithScalar:1.0 dataType:a.dataType];
+
+    MPSGraphTensor* rem = a;
+    std::vector<MPSGraphTensor*> finished;
+    std::vector<MPSGraphTensor*> rows_at;
+    std::vector<MPSGraphTensor*> diagonal;
+    finished.reserve((std::size_t)steps + 1);
+    rows_at.reserve((std::size_t)steps);
+    diagonal.reserve((std::size_t)steps);
+    for (std::int64_t k = 0; k < steps; ++k) {
+        const std::int64_t rows = m - k;
+        MPSGraphTensor* col = [g sliceTensor:rem dimension:c_dim start:k length:1 name:nil];
+        MPSGraphTensor* at = [g castTensor:graph_first_extreme(
+                                               g, [g absoluteWithTensor:col name:nil], r_dim, true)
+                                    toType:MPSDataTypeInt32
+                                      name:nil];
+        MPSGraphTensor* row_index = [g coordinateAlongAxis:r_dim withShape:col.shape name:nil];
+        MPSGraphTensor* is_pivot = broadcast_to(
+            g, [g equalWithPrimaryTensor:row_index secondaryTensor:at name:nil], rem.shape);
+        MPSGraphTensor* pivot_row = graph_gather_along_axis(
+            g, r_dim, rem, broadcast_to(g, at, make_batch_shape(a, 1, n)));
+        MPSGraphTensor* top_row = [g sliceTensor:rem dimension:r_dim start:0 length:1 name:nil];
+        MPSGraphTensor* d = [g sliceTensor:pivot_row dimension:c_dim start:k length:1 name:nil];
+        rows_at.push_back(at);
+        diagonal.push_back(d);
+        finished.push_back(pivot_row);
+
+        if (rows == 1) {
+            rem = nil;
+            continue;
+        }
+        MPSGraphTensor* swapped =
+            [g selectWithPredicateTensor:is_pivot
+                     truePredicateTensor:broadcast_to(g, top_row, rem.shape)
+                    falsePredicateTensor:rem
+                                    name:nil];
+        MPSGraphTensor* tail = [g sliceTensor:swapped
+                                    dimension:r_dim
+                                        start:1
+                                       length:rows - 1
+                                         name:nil];
+        MPSGraphTensor* below = [g sliceTensor:tail dimension:c_dim start:k length:1 name:nil];
+        MPSGraphTensor* safe_d =
+            [g selectWithPredicateTensor:[g equalWithPrimaryTensor:d secondaryTensor:zero name:nil]
+                     truePredicateTensor:one
+                    falsePredicateTensor:d
+                                    name:nil];
+        MPSGraphTensor* multiplier = [g divisionWithPrimaryTensor:below
+                                                  secondaryTensor:safe_d
+                                                             name:nil];
+        std::vector<MPSGraphTensor*> parts;
+        if (k > 0)
+            parts.push_back([g sliceTensor:tail dimension:c_dim start:0 length:k name:nil]);
+        parts.push_back(multiplier);
+        if (k + 1 < n) {
+            MPSGraphTensor* right =
+                [g sliceTensor:tail dimension:c_dim start:k + 1 length:n - k - 1 name:nil];
+            MPSGraphTensor* pivot_right =
+                [g sliceTensor:pivot_row dimension:c_dim start:k + 1 length:n - k - 1 name:nil];
+            parts.push_back(
+                [g subtractionWithPrimaryTensor:right
+                                secondaryTensor:[g multiplicationWithPrimaryTensor:multiplier
+                                                                   secondaryTensor:pivot_right
+                                                                              name:nil]
+                                           name:nil]);
+        }
+        rem = concat_along(g, parts, c_dim);
+    }
+    if (rem != nil)
+        finished.push_back(rem);
+
+    NSMutableArray<NSNumber*>* batch = [NSMutableArray arrayWithCapacity:(NSUInteger)rank];
+    for (NSInteger d = 0; d < rank - 2; ++d)
+        [batch addObject:a.shape[(NSUInteger)d]];
+    LuGraph out;
+    out.lu = concat_along(g, finished, r_dim);
+    emit_lu_summary(g, rows_at, diagonal, batch, a.dataType, out);
+    return out;
+}
+
 // ── svd & pinv (One-sided Hestenes-Jacobi) ───────────────────────────
 
 MPSGraphTensor* column_lengths(MPSGraph* g, MPSGraphTensor* cols) {
@@ -747,6 +924,14 @@ MPSGraphTensor* emit_solve_triangular_mps(
     return from_f32(g, out, orig_dt);
 }
 
+LuGraph emit_lu_mps(MPSGraph* g, MPSGraphTensor* a) {
+    if (g == nil || !valid_matrix_tensor(a, kMaxLuDim) || a.dataType != MPSDataTypeFloat32)
+        return {};
+    const NSUInteger rank = a.shape.count;
+    return emit_lu_eliminate(
+        g, a, a.shape[rank - 2].longLongValue, a.shape[rank - 1].longLongValue);
+}
+
 namespace {
 
 class SolveTriangularEmitter final : public OpEmitter {
@@ -841,6 +1026,26 @@ public:
     }
 };
 
+class LuFactorEmitter final : public OpEmitter {
+public:
+    std::string_view op_name() const override { return "lu_factor"; }
+    bool emit(BuilderContext& ctx, const OpNode& node) override {
+        if (node.inputs.empty() || node.outputs.size() < 3 || node.inputs[0] < 0)
+            return false;
+        MPSGraph* g = (__bridge MPSGraph*)ctx.graph();
+        MPSGraphTensor* x = (__bridge MPSGraphTensor*)ctx.resolve(node.inputs[0]);
+        if (x == nil)
+            return false;
+        LuGraph lu = emit_lu_mps(g, x);
+        if (lu.lu == nil)
+            return false;
+        ctx.bind(node.outputs[0].id, (__bridge void*)lu.lu);
+        ctx.bind(node.outputs[1].id, (__bridge void*)lu.pivots);
+        ctx.bind(node.outputs[2].id, (__bridge void*)lu.info);
+        return true;
+    }
+};
+
 class SvdEmitter final : public OpEmitter {
 public:
     std::string_view op_name() const override { return "svd"; }
@@ -926,6 +1131,7 @@ struct DecompositionsRegistrar {
         register_emitter(std::make_unique<EighEmitter>());
         register_emitter(std::make_unique<SvdEmitter>());
         register_emitter(std::make_unique<PinvEmitter>());
+        register_emitter(std::make_unique<LuFactorEmitter>());
     }
 };
 
