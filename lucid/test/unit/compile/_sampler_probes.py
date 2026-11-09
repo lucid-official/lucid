@@ -53,6 +53,7 @@ FUNCTION_ENTRY: dict[str, str] = {
     "_QR": "fn:qr",
     "_Pinv": "fn:pinv",
     "_Eigh": "fn:eigh",
+    "_SlogdetFromLU": "fn:slogdet",
 }
 
 
@@ -70,6 +71,8 @@ FUNCTIONS: dict[str, Draw] = {
     "qr": lambda w: LA.qr(_spd() * w)[1],
     "pinv": lambda w: LA.pinv(_spd() * w),
     "eigh": lambda w: LA.eigh(_spd() * w)[0],
+    # 2x2: the size whose slogdet backward compiles (LCD-946)
+    "slogdet": lambda w: LA.slogdet(_spd()[:2, :2] * w)[1],
 }
 
 # ── top-level random ops ─────────────────────────────────────────────────────
