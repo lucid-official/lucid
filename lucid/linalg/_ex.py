@@ -35,6 +35,7 @@ from lucid.linalg import (
     solve_triangular,
     svd,
 )
+from lucid.linalg._dtype_guard import _require_same_dtype
 from lucid.linalg._lu import _lu_factor_packed
 
 
@@ -1331,6 +1332,9 @@ def householder_product(input: Tensor, tau: Tensor) -> Tensor:
 
     Notes
     -----
+    Raises ``DtypeMismatch`` if ``tau``'s dtype differs from ``input``'s,
+    and ``ValueError`` if ``tau`` is longer than ``n``, as the reference does.
+
     Backed by LAPACK ``orgqr``.  Cost is :math:`O(m k^2)`.  Useful
     when a routine returns the packed Householder form (cheaper to
     store) but the explicit :math:`Q` is needed downstream.
@@ -1346,6 +1350,7 @@ def householder_product(input: Tensor, tau: Tensor) -> Tensor:
     >>> Q.shape
     (4, 3)
     """
+    _require_same_dtype("linalg.householder_product", input, tau, ("input", "tau"))
     k, r = _check_householder_shapes(
         tuple(int(s) for s in input.shape), tuple(int(s) for s in tau.shape)
     )

@@ -371,3 +371,101 @@ def test_rectangular_lu_second_derivative_runs() -> None:
     x = _t(np.random.default_rng(2).standard_normal((4, 3)), dtype=lucid.float64)
     w = _t(np.random.default_rng(3).standard_normal((4, 3)), dtype=lucid.float64)
     assert lucid.autograd.gradgradcheck(lambda a: (LA.lu(a)[1] * w).sum(), [x.requires_grad_()])
+
+
+# ── mixed dtypes: solve / tensorsolve / householder_product refuse ───────────
+#    solve_triangular reads B in A's dtype and answers in it
+# Metal has no float64, so the mixed pair there is (float32, float16).
+
+_MIXED_PAIRS_CPU = [(lucid.float32, lucid.float64), (lucid.float64, lucid.float32)]
+_MIXED_PAIRS_GPU = [(lucid.float32, lucid.float16), (lucid.float16, lucid.float32)]
+
+
+def _mixed(device: str) -> list[tuple[lucid.dtype, lucid.dtype]]:
+    return _MIXED_PAIRS_CPU if device == "cpu" else _MIXED_PAIRS_GPU
+
+
+def _spd(n: int, dtype: lucid.dtype, device: str) -> lucid.Tensor:
+    return (lucid.eye(n, dtype=dtype, device=device) * 3.0).triu() + lucid.ones(
+        n, n, dtype=dtype, device=device
+    ).triu(1)
+
+
+@pytest.mark.parity
+def test_solve_and_tensorsolve_refuse_mixed_dtypes(ref: ModuleType, device: str) -> None:
+    ref_dtypes = {
+        lucid.float32: ref.float32,
+        lucid.float64: ref.float64,
+        lucid.float16: ref.float16,
+    }
+    for da, db in _mixed(device):
+        with pytest.raises(RuntimeError):
+            ref.linalg.solve(ref.eye(3, dtype=ref_dtypes[da]), ref.ones(3, 2, dtype=ref_dtypes[db]))
+        a = lucid.eye(3, dtype=da, device=device) * 2
+        b = lucid.ones(3, 2, dtype=db, device=device)
+        with pytest.raises(lucid._C.engine.DtypeMismatch, match="same dtype"):
+            LA.solve(a, b)
+        with pytest.raises(TypeError):  # DtypeMismatch is a TypeError
+            LA.solve_ex(a, b)
+        ta = lucid.eye(6, dtype=da, device=device).reshape(2, 3, 6)
+        tb = lucid.ones(2, 3, dtype=db, device=device)
+        with pytest.raises(lucid._C.engine.DtypeMismatch):
+            LA.tensorsolve(ta, tb)
+
+
+@pytest.mark.parity
+def test_householder_product_refuses_mixed_dtypes(ref: ModuleType, device_cpu_only: str) -> None:
+    for da, db in _MIXED_PAIRS_CPU:
+        h = lucid.randn(4, 3, dtype=da)
+        tau = lucid.randn(3, dtype=db)
+        rd = {lucid.float32: ref.float32, lucid.float64: ref.float64}
+        with pytest.raises(RuntimeError):
+            ref.linalg.householder_product(
+                ref.randn(4, 3, dtype=rd[da]), ref.randn(3, dtype=rd[db])
+            )
+        with pytest.raises(lucid._C.engine.DtypeMismatch, match="same dtype"):
+            LA.householder_product(h, tau)
+
+
+@pytest.mark.parity
+def test_solve_triangular_answers_in_the_matrix_dtype(
+    ref: ModuleType, device_cpu_only: str
+) -> None:
+    for da, db in _MIXED_PAIRS_CPU:
+        rd = {lucid.float32: ref.float32, lucid.float64: ref.float64}
+        a = _spd(3, da, "cpu")
+        b = lucid.ones(3, 2, dtype=db) / 3
+        got = LA.solve_triangular(a, b, upper=True)
+        want = ref.linalg.solve_triangular(
+            (ref.eye(3, dtype=rd[da]) * 3).triu() + ref.ones(3, 3, dtype=rd[da]).triu(1),
+            ref.ones(3, 2, dtype=rd[db]) / 3,
+            upper=True,
+        )
+        assert got.dtype is da and want.dtype == rd[da]
+        np.testing.assert_allclose(got.numpy(), np.asarray(want.tolist()), rtol=1e-6)
+
+
+def test_solve_triangular_mixed_dtype_runs_on_metal_and_keeps_gradients(
+    device_gpu_only: str,
+) -> None:
+    a = _spd(3, lucid.float32, device_gpu_only).requires_grad_()
+    b = lucid.ones(3, 2, dtype=lucid.float16, device=device_gpu_only)
+    out = LA.solve_triangular(a, b, upper=True)
+    assert out.dtype is lucid.float32
+    out.sum().backward()
+    assert a.grad is not None
+
+
+def test_solve_triangular_mixed_dtype_gradient_reaches_b_in_its_own_dtype() -> None:
+    a = _spd(3, lucid.float32, "cpu")
+    b = (lucid.ones(3, 2, dtype=lucid.float64)).requires_grad_()
+    LA.solve_triangular(a, b, upper=True).sum().backward()
+    assert b.grad is not None and b.grad.dtype is lucid.float64
+
+
+def test_same_dtype_calls_are_unchanged(device: str) -> None:
+    dt = lucid.float32
+    a = lucid.eye(3, dtype=dt, device=device) * 2
+    b = lucid.ones(3, 2, dtype=dt, device=device)
+    assert LA.solve(a, b).tolist() == [[0.5, 0.5]] * 3
+    assert LA.solve_triangular(a, b, upper=True).dtype is dt

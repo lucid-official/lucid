@@ -1031,7 +1031,7 @@
     "lucid/coreml/_build.py": 1096,
     "lucid/coreml/_emit.py": 1024,
     "lucid/fft/__init__.py": 339,
-    "lucid/linalg/__init__.py": 1572,
+    "lucid/linalg/__init__.py": 1483,
     "lucid/models/_utils/_detection.py": 1218,
     "lucid/models/generative/diamond/_model.py": 627,
     "lucid/models/generative/rectified_flow/_model.py": 128,

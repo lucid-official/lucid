@@ -111,6 +111,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - vector_norm rescale is CPU-only; Metal stays plain (LCD-940)
 
+- solve and householder_product refuse mixed dtypes (LCD-940)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
