@@ -1292,5 +1292,3 @@ def cholesky_inverse(L: Tensor, upper: bool = False) -> Tensor:
         return solve_triangular(L, z, upper=True)
     y = solve_triangular(L, eye, upper=False)
     return solve_triangular(L.mH, y, upper=True)
-
-

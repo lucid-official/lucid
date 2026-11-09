@@ -2834,6 +2834,7 @@ def diagonal(A: Tensor, *, offset: int = 0, dim1: int = -2, dim2: int = -1) -> T
 from lucid.linalg._lstsq import lstsq
 from lucid.linalg._lu import lu, lu_unpack
 from lucid.linalg._matrix_exp import matrix_exp
+
 # The ``*_ex`` family reads LAPACK's ``info``; ``lu_factor`` and
 # ``ldl_factor`` above are its checked forms.
 from lucid.linalg._ex import (

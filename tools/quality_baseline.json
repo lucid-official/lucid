@@ -141,6 +141,11 @@
    "date": "2026-11-04",
    "reason": "TEMPORARY, tracked by LCD-834: jscpd is cross-file, so 12 cells from 48f57990e and a0ab1d21c block every C++ commit, including the fix for the pinv stall that keeps main CI from running. Lowered again by the grad_mask and fft cards.",
    "by": "chanlee"
+  },
+  {
+   "date": "2026-11-09",
+   "reason": "user's format-only reformat of lucid/linalg/__init__.py after LCD-940/941 (AST-identical) adds one line: file-loc 1414 -> 1415",
+   "by": "chanlee"
   }
  ],
  "counts": {
@@ -1031,7 +1036,7 @@
     "lucid/coreml/_build.py": 1096,
     "lucid/coreml/_emit.py": 1024,
     "lucid/fft/__init__.py": 339,
-    "lucid/linalg/__init__.py": 1414,
+    "lucid/linalg/__init__.py": 1415,
     "lucid/models/_utils/_detection.py": 1218,
     "lucid/models/generative/diamond/_model.py": 627,
     "lucid/models/generative/rectified_flow/_model.py": 128,
