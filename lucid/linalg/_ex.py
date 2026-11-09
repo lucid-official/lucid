@@ -1236,6 +1236,11 @@ def _householder_product_ops(H: Tensor, tau: Tensor) -> Tensor:
     if 0 in q_shape:
         return lucid.zeros(*q_shape, dtype=H.dtype, device=H.device)
     eye = lucid.eye(m, k, dtype=H.dtype, device=H.device)
+    if r == 0:
+        # No reflector: the identity's leading columns, still a function of ``H``
+        # (a zero-gradient one, as the reference's) so backward through it runs.
+        never = lucid.zeros(*q_shape, dtype=lucid.bool_, device=H.device)
+        return lucid.where(never, H[..., :, :k], eye)
     V = lucid.tril(H[..., :, :k], -1) + eye
     Q = eye if H.ndim == 2 else lucid.broadcast_to(eye, q_shape).contiguous()
     for i in range(r - 1, -1, -1):
@@ -1261,21 +1266,66 @@ def _check_householder_shapes(
         )
     m, n, r = h_shape[-2], h_shape[-1], t_shape[-1]
     k = min(m, n)
-    bad = r < k if len(h_shape) == 2 else (m < n or r > n)
-    if bad:
+    if r > n:
         raise ValueError(
-            f"householder_product: invalid shapes H {h_shape} "
-            f"(at least min(m, n) = {k}) and tau {t_shape}"
+            f"householder_product: tau has {r} reflectors but H {h_shape} has only "
+            f"{n} columns to hold them; expected tau.shape[-1] <= H.shape[-1]"
         )
     return k, r
 
 
-def _householder_product(H: Tensor, tau: Tensor) -> Tensor:
-    """Validate ``(H, tau)`` and compute ``householder_product(H, tau)``."""
+def householder_product(input: Tensor, tau: Tensor) -> Tensor:
+    r"""Reconstruct an orthogonal matrix from Householder reflectors.
+
+    Computes the implicit product
+
+    .. math::
+
+        Q \,=\, H_1\,H_2\,\cdots\,H_r,
+        \qquad H_i \,=\, I - \tau_i\, v_i\, v_i^\top,
+
+    where each :math:`v_i` is a Householder vector stored in the
+    :math:`i`-th column of the packed input ``input`` and :math:`\tau_i`
+    is its scalar factor.  This is the standard way to materialise the
+    :math:`Q` factor from a packed QR (``geqrf``) result.
+
+    Parameters
+    ----------
+    input : Tensor
+        Packed reflector matrix of shape ``(*, m, k)`` — columns
+        contain the Householder vectors (typically the output of an
+        unpacked ``geqrf``).
+    tau : Tensor
+        Scalar factors of shape ``(*, r)`` with ``r <= n``.  Fewer than
+        ``n`` reflectors multiply only the leading columns of the
+        identity — none at all gives its first ``n`` columns.
+
+    Returns
+    -------
+    Tensor
+        Orthogonal matrix :math:`Q` of shape ``(*, m, k)``.
+
+    Notes
+    -----
+    Backed by LAPACK ``orgqr``.  Cost is :math:`O(m k^2)`.  Useful
+    when a routine returns the packed Householder form (cheaper to
+    store) but the explicit :math:`Q` is needed downstream.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> from lucid.linalg import qr, householder_product
+    >>> A = lucid.randn(4, 3)
+    >>> Q, R = qr(A, mode="reduced")
+    >>> # The same Q can be reconstructed from packed Householder reflectors
+    >>> # returned by lower-level geqrf-style factorisations.
+    >>> Q.shape
+    (4, 3)
+    """
     k, r = _check_householder_shapes(
-        tuple(int(s) for s in H.shape), tuple(int(s) for s in tau.shape)
+        tuple(int(s) for s in input.shape), tuple(int(s) for s in tau.shape)
     )
-    with _autocast_entry("householder_product", _unwrap(H), _unwrap(tau)) as (h_impl, t_impl):
+    with _autocast_entry("householder_product", _unwrap(input), _unwrap(tau)) as (h_impl, t_impl):
         H_cast, tau_cast = _wrap(h_impl), _wrap(t_impl)
         use_ops = (
             H_cast.ndim > 2

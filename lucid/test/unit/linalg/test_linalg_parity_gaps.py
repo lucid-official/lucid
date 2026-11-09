@@ -105,3 +105,97 @@ def test_compiled_vector_norm_still_rescales_after_tracing_normal_input() -> Non
     fn(lucid.randn(4, 5, device="metal"))
     tiny = lucid.full((4, 5), 1e-25, device="metal")
     assert fn(tiny).tolist() == pytest.approx([np.sqrt(5) * 1e-25] * 4, rel=1e-4)
+
+
+# ── eigh / eigvalsh: UPLO is case-insensitive ────────────────────────────────
+
+
+@pytest.mark.parametrize("uplo", ["U", "L", "u", "l"])
+def test_eigh_and_eigvalsh_accept_either_case_of_uplo(
+    ref: ModuleType, device: str, uplo: str
+) -> None:
+    # Not symmetric: the answer depends on which triangle is read.
+    arr = np.random.default_rng(3).standard_normal((2, 4, 4)).astype(np.float32)
+    x = _t(arr, device)
+    want_w, want_v = ref.linalg.eigh(ref.tensor(arr), uplo)
+    w, v = LA.eigh(x, uplo)
+    want = np.asarray(want_w.tolist())
+    np.testing.assert_allclose(w.numpy(), want, atol=1e-4)
+    np.testing.assert_allclose(LA.eigvalsh(x, uplo).numpy(), want, atol=1e-4)
+    # Eigenvectors are sign-ambiguous: compare their squares.
+    np.testing.assert_allclose(v.numpy() ** 2, np.asarray(want_v.tolist()) ** 2, atol=1e-3)
+
+
+def test_uplo_lowercase_equals_uppercase_under_grad(device: str) -> None:
+    arr = np.random.default_rng(4).standard_normal((3, 3)).astype(np.float32)
+    grads = []
+    for uplo in ("u", "U"):
+        x = _t(arr, device, requires_grad=True)
+        LA.eigvalsh(x, uplo).sum().backward()
+        assert x.grad is not None
+        grads.append(x.grad.tolist())
+    assert grads[0] == grads[1]
+
+
+def test_unknown_uplo_is_still_refused(device: str) -> None:
+    with pytest.raises((ValueError, RuntimeError)):
+        LA.eigvalsh(_t(np.eye(3, dtype=np.float32), device), "x")
+
+
+# ── householder_product: any number of reflectors up to the column count ─────
+
+
+def _reflectors(m: int, n: int, k: int, *, batch: tuple[int, ...] = ()) -> tuple[np.ndarray, ...]:
+    rng = np.random.default_rng(10 * m + n + k)
+    return (
+        rng.standard_normal((*batch, m, n)).astype(np.float32) * 0.5,
+        rng.standard_normal((*batch, k)).astype(np.float32) * 0.5,
+    )
+
+
+@pytest.mark.parametrize("k", [0, 1, 2, 3])
+@pytest.mark.parametrize("batch", [(), (2,)])
+def test_householder_product_accepts_fewer_reflectors_than_columns(
+    ref: ModuleType, device: str, k: int, batch: tuple[int, ...]
+) -> None:
+    h, tau = _reflectors(5, 3, k, batch=batch)
+    got = LA.householder_product(_t(h, device), _t(tau, device))
+    want = ref.linalg.householder_product(ref.tensor(h), ref.tensor(tau))
+    assert tuple(got.shape) == tuple(want.shape) == (*batch, 5, 3)
+    np.testing.assert_allclose(got.numpy(), np.asarray(want.tolist()), atol=1e-5)
+
+
+def test_householder_product_without_reflectors_is_the_identity_columns(device: str) -> None:
+    h, tau = _reflectors(5, 3, 0)
+    got = LA.householder_product(_t(h, device), _t(tau, device))
+    np.testing.assert_array_equal(got.numpy(), np.eye(5, 3, dtype=np.float32))
+
+
+def test_householder_product_square_with_fewer_reflectors(ref: ModuleType, device: str) -> None:
+    h, tau = _reflectors(4, 4, 2)
+    got = LA.householder_product(_t(h, device), _t(tau, device))
+    want = ref.linalg.householder_product(ref.tensor(h), ref.tensor(tau))
+    np.testing.assert_allclose(got.numpy(), np.asarray(want.tolist()), atol=1e-5)
+
+
+def test_householder_product_refuses_more_reflectors_than_columns(
+    ref: ModuleType, device: str
+) -> None:
+    h, tau = _reflectors(5, 3, 4)
+    with pytest.raises(RuntimeError):
+        ref.linalg.householder_product(ref.tensor(h), ref.tensor(tau))
+    with pytest.raises(ValueError, match="tau.shape"):
+        LA.householder_product(_t(h, device), _t(tau, device))
+
+
+@pytest.mark.parametrize("k", [0, 1, 2, 3])
+def test_householder_product_gradcheck_float64(k: int) -> None:
+    h, tau = _reflectors(5, 3, k)
+    hh = _t(h.astype(np.float64), dtype=lucid.float64, requires_grad=True)
+    tt = _t(tau.astype(np.float64), dtype=lucid.float64, requires_grad=True)
+    w = lucid.tensor(np.random.default_rng(1).standard_normal((5, 3)), dtype=lucid.float64)
+    inputs = [hh, tt] if k else [hh]
+    assert lucid.autograd.gradcheck(
+        lambda a, *rest: (LA.householder_product(a, rest[0] if rest else tt.detach()) * w).sum(),
+        inputs,
+    )

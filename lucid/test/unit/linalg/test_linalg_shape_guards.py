@@ -58,10 +58,10 @@ def test_a_non_vector_tau_is_refused() -> None:
         LA.householder_product(_matrix(4, 3), lucid.randn(2, 3, dtype=lucid.float64))
 
 
-def test_too_few_reflectors_are_refused() -> None:
-    """``tau`` shorter than ``min(m, n)`` is an over-read waiting to happen."""
-    with pytest.raises(ValueError, match="at least min"):
-        LA.householder_product(_matrix(4, 3), lucid.randn(2, dtype=lucid.float64))
+def test_more_reflectors_than_columns_are_refused() -> None:
+    """``tau`` longer than ``H`` has columns is an over-read waiting to happen."""
+    with pytest.raises(ValueError, match="tau.shape"):
+        LA.householder_product(_matrix(4, 3), lucid.randn(4, dtype=lucid.float64))
 
 
 @pytest.mark.parametrize(("m", "n"), [(4, 3), (3, 3), (5, 2), (2, 5)])
@@ -84,8 +84,8 @@ def test_a_well_formed_call_still_works(m: int, n: int) -> None:
     assert np.isfinite(q.numpy()).all()
 
 
-def test_a_longer_tau_is_accepted() -> None:
-    """Only *too few* reflectors are an error; extras are ignored by LAPACK."""
+def test_a_tau_as_long_as_H_is_wide_is_accepted() -> None:
+    """``tau`` may have any length up to ``H.shape[-1]``; see ``test_linalg_parity_gaps``."""
     lucid.manual_seed(0)
     q = LA.householder_product(
         lucid.randn(4, 3, dtype=lucid.float64), lucid.randn(3, dtype=lucid.float64) * 0.1

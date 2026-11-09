@@ -1314,6 +1314,11 @@ class _Eigh(_AutogradFunction):
         return dA
 
 
+def _uplo(UPLO: str) -> str:
+    """``UPLO`` upper-cased, so ``"u"`` / ``"l"`` read as the reference reads them."""
+    return UPLO.upper() if isinstance(UPLO, str) else UPLO
+
+
 def eigh(input: Tensor, UPLO: str = "L") -> tuple[Tensor, Tensor]:
     r"""Eigendecomposition of a Hermitian / symmetric matrix.
 
@@ -1335,7 +1340,7 @@ def eigh(input: Tensor, UPLO: str = "L") -> tuple[Tensor, Tensor]:
         Square Hermitian / symmetric matrix of shape ``(*, n, n)``.
     UPLO : str, optional
         ``"L"`` (default) reads only the lower triangle of ``input``;
-        ``"U"`` reads only the upper triangle.  The other triangle is
+        ``"U"`` reads only the upper triangle; case does not matter.  The other triangle is
         ignored, so a non-Hermitian input is accepted as long as the
         chosen triangle holds the correct values.
 
@@ -1376,6 +1381,7 @@ def eigh(input: Tensor, UPLO: str = "L") -> tuple[Tensor, Tensor]:
     >>> w
     tensor([1.382, 3.618])
     """
+    UPLO = _uplo(UPLO)
     with _autocast_entry("eigh", _unwrap(input)) as (a_impl,):
         A_cast = _wrap(a_impl)
         if not _C_engine.grad_enabled() or not A_cast.requires_grad:
@@ -1400,7 +1406,8 @@ def eigvalsh(input: Tensor, UPLO: str = "L") -> Tensor:
     input : Tensor
         Symmetric / Hermitian matrix of shape ``(*, n, n)``.
     UPLO : str, optional
-        ``"L"`` reads the lower triangle (default), ``"U"`` the upper.
+        ``"L"`` reads the lower triangle (default), ``"U"`` the upper;
+        case does not matter.
 
     Returns
     -------
@@ -1420,6 +1427,7 @@ def eigvalsh(input: Tensor, UPLO: str = "L") -> Tensor:
     >>> eigvalsh(lucid.tensor([[2.0, 1.0], [1.0, 3.0]]))
     tensor([1.382, 3.618])
     """
+    UPLO = _uplo(UPLO)
     with _autocast_entry("eigvalsh", _unwrap(input)) as (a_impl,):
         A_cast = _wrap(a_impl)
         if _C_engine.grad_enabled() and A_cast.requires_grad:
@@ -2517,55 +2525,6 @@ def lu_solve(
     return _lu_solve_general(LU, pivots, B, left=left, adjoint=adjoint)
 
 
-def householder_product(input: Tensor, tau: Tensor) -> Tensor:
-    r"""Reconstruct an orthogonal matrix from Householder reflectors.
-
-    Computes the implicit product
-
-    .. math::
-
-        Q \,=\, H_1\,H_2\,\cdots\,H_k,
-        \qquad H_i \,=\, I - \tau_i\, v_i\, v_i^\top,
-
-    where each :math:`v_i` is a Householder vector stored in the
-    :math:`i`-th column of the packed input ``input`` and :math:`\tau_i`
-    is its scalar factor.  This is the standard way to materialise the
-    :math:`Q` factor from a packed QR (``geqrf``) result.
-
-    Parameters
-    ----------
-    input : Tensor
-        Packed reflector matrix of shape ``(*, m, k)`` — columns
-        contain the Householder vectors (typically the output of an
-        unpacked ``geqrf``).
-    tau : Tensor
-        Scalar factors of shape ``(*, k)``.
-
-    Returns
-    -------
-    Tensor
-        Orthogonal matrix :math:`Q` of shape ``(*, m, k)``.
-
-    Notes
-    -----
-    Backed by LAPACK ``orgqr``.  Cost is :math:`O(m k^2)`.  Useful
-    when a routine returns the packed Householder form (cheaper to
-    store) but the explicit :math:`Q` is needed downstream.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> from lucid.linalg import qr, householder_product
-    >>> A = lucid.randn(4, 3)
-    >>> Q, R = qr(A, mode="reduced")
-    >>> # The same Q can be reconstructed from packed Householder reflectors
-    >>> # returned by lower-level geqrf-style factorisations.
-    >>> Q.shape
-    (4, 3)
-    """
-    return _householder_product(input, tau)
-
-
 # ── Full LU decomposition (P, L, U) ────────────────────────────────────────
 
 
@@ -3172,7 +3131,7 @@ from lucid.linalg._ex import (
     _cond_compute,
     _EighResult,
     _EigResult,
-    _householder_product,
+    householder_product,
     _lstsq_solution,
     _LstsqResult,
     _lu_factor_ex,
