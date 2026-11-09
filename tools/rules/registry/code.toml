@@ -50,6 +50,11 @@ trigger = ["lucid/**", "tools/quality_gate/**", "tools/quality_baseline.json"]
 run = ["{py}", "-m", "tools.quality_gate", "--full", "--allow-slack"]
 trigger = ["lucid/**", "tools/quality_gate/**", "tools/quality_baseline.json"]
 
+[check.test-tolerance-guard]
+kind = "pytest"
+nodes = ["lucid/test/unit/test_tolerance_guard.py::test_the_guard_is_installed_in_this_run"]
+trigger = ["lucid/test/**"]
+
 # web/scripts/{build-api-data,build-cpp-data,build-usedby}.py hold the import: outside this scope.
 [[rule]]
 id = "H1"
@@ -211,3 +216,33 @@ nodes = [
 kind = "pytest"
 check = ["quality-gate-full"]
 nodes = ["tools/test_quality_gate.py::test_mypy_counts_an_error_in_a_tools_module_lucid_imports"]
+
+# LCD-949: approx(4.1e-37, rel=1e-10) == 0.0 and np.allclose(0.0, 1.4e-200, rtol=1e-12) are both
+# true, so six regression guards for "this tail value came back 0" could not fail.
+[[rule]]
+id = "T-TOLERANCE-FLOOR"
+statement = """
+A tolerance in a test cannot swamp the value it checks: pytest.approx names abs= when its 1e-12 floor is 10x
+looser than rel * |expected|; np.allclose keeps its default atol under a tenth of max|expected|, and no atol accepts zero."""
+why = "A default absolute floor over a tiny expected value passes 0.0 and a 10x-wrong value alike."
+scope = ["lucid/test/**"]
+doc = "tests"
+gap = """
+Dynamic, so only a comparison that runs is judged.  np.isclose, math.isclose with abs_tol and a \
+hand-written `abs(a - b) < 1e-8` are not seen, and an atol that rejects zero but swamps a tenth of the \
+value (half precision bands) is allowed."""
+enforce = [
+    { level = "test", check = "test-tolerance-guard" },
+]
+
+[[rule.control]]
+kind = "pytest"
+check = ["test-tolerance-guard"]
+nodes = [
+    "lucid/test/unit/test_tolerance_guard.py::test_approx_without_abs_refuses_a_floor_that_swamps_the_relative_term",
+    "lucid/test/unit/test_tolerance_guard.py::test_allclose_refuses_a_default_atol_over_a_tiny_expected",
+    "lucid/test/unit/test_tolerance_guard.py::test_an_explicit_atol_is_refused_when_an_all_zeros_result_would_pass",
+    "lucid/test/unit/test_tolerance_guard.py::test_approx_legitimate_forms_are_left_alone",
+    "lucid/test/unit/test_tolerance_guard.py::test_allclose_legitimate_forms_are_left_alone",
+    "lucid/test/unit/test_tolerance_guard.py::test_expects_noise_declares_a_comparison_of_roundoff",
+]

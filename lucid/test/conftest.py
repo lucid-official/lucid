@@ -22,6 +22,9 @@ What you get for free in any test:
 * Autouse clean compile-fallback notice set per test
   (``_fixtures/compile_notices.py``) -- a notice is once per process, so no
   test may inherit one an earlier test consumed.
+* A guard on ``pytest.approx`` / ``np.allclose`` / ``np.testing.assert_allclose``:
+  a default absolute floor (``abs=1e-12``, ``atol=1e-8``) that swamps the expected
+  value raises ``VacuousToleranceError`` (``_fixtures/tolerance_guard.py``).
 * Autouse wall-clock deadline for tests that reach a native graph compile
   (``_fixtures/deadline.py``); ``@pytest.mark.deadline(seconds)`` overrides.
 """
@@ -52,10 +55,15 @@ from lucid.test._fixtures.dtypes import float_dtype, float_dtype_extended, int_d
 from lucid.test._fixtures.ref_framework import ref  # noqa: F401
 from lucid.test._fixtures.tensors import tensor_factory  # noqa: F401
 from lucid.test._fixtures.perf import bench  # noqa: F401
+from lucid.test._fixtures.tolerance_guard import install as _install_tolerance_guard
 
 # ``lucid-audit --models`` runs the zoo's tests on the device it was asked for
 # (Metal by default) by exporting it; a process nobody asked anything of is untouched.
 apply_default_device()
+
+# Wraps ``pytest.approx`` / ``np.allclose`` / ``np.testing.assert_allclose`` so a
+# tolerance that cannot fail raises (LCD-949).  Before any test module is imported.
+_install_tolerance_guard()
 
 _GOVERNOR = _memory.Governor()
 

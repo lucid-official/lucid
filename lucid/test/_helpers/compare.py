@@ -51,6 +51,30 @@ def assert_close(
     np.testing.assert_allclose(a, e, atol=atol, rtol=rtol, err_msg=msg or "values do not match")
 
 
+def assert_close_to_scale(
+    actual: Any, expected: Any, *, rtol: float, floor: float = 0.0, msg: str = ""
+) -> None:
+    """``assert_close`` with the absolute floor taken from ``expected``'s own magnitude.
+
+    For values that span decades, optimizer state above all (Adam's second moment is
+    ~1e-8 early on): a fixed ``atol`` of 1e-7 would swamp it and let a lost or zeroed
+    state pass.  ``atol = rtol * max|expected|`` keeps the small entries of an array
+    comparable to its large ones without ever exceeding what ``rtol`` allows the largest.
+    ``floor`` is the least absolute error the values can carry -- a half-precision
+    subnormal step (2**-24) for state held in float16 -- and only ever raises ``atol``.
+    """
+    a = _to_numpy(actual)
+    e = _to_numpy(expected)
+    if a.shape != e.shape:
+        raise AssertionError(
+            f"{msg + ': ' if msg else ''}shape mismatch — actual={a.shape} expected={e.shape}"
+        )
+    scale = float(np.max(np.abs(e), initial=0.0, where=np.isfinite(e)))
+    np.testing.assert_allclose(
+        a, e, rtol=rtol, atol=max(rtol * scale, floor), err_msg=msg or "values do not match"
+    )
+
+
 def assert_equal_int(actual: Any, expected: Any, *, msg: str = "") -> None:
     """Exact equality for integer / boolean operands (no tolerance)."""
     a = _to_numpy(actual)
