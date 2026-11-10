@@ -380,7 +380,27 @@
     },
     {
       "kind": "module",
+      "module": "lucid.linalg._dtype_guard"
+    },
+    {
+      "kind": "module",
       "module": "lucid.linalg._ex"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.linalg._lstsq"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.linalg._lu"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.linalg._norm_scale"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.linalg._slogdet"
     },
     {
       "kind": "module",
@@ -1032,6 +1052,14 @@
     },
     {
       "kind": "module",
+      "module": "lucid.linalg._lu"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.linalg._slogdet"
+    },
+    {
+      "kind": "module",
       "module": "lucid.nn.modules.cross_map_lrn"
     }
   ],
@@ -1107,6 +1135,14 @@
     {
       "kind": "module",
       "module": "lucid.linalg._ex"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.linalg._lu"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.linalg._slogdet"
     },
     {
       "kind": "module",
@@ -2432,6 +2468,22 @@
     },
     {
       "kind": "module",
+      "module": "lucid.linalg._lstsq"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.linalg._lu"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.linalg._matrix_exp"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.linalg._slogdet"
+    },
+    {
+      "kind": "module",
       "module": "lucid.models.generative.tvm._model"
     },
     {
@@ -2511,6 +2563,12 @@
       "module": "lucid.linalg"
     }
   ],
+  "lucid.linalg._ex.householder_product": [
+    {
+      "kind": "module",
+      "module": "lucid.linalg"
+    }
+  ],
   "lucid.linalg._ex.inv_ex": [
     {
       "kind": "module",
@@ -2535,12 +2593,6 @@
       "module": "lucid.linalg"
     }
   ],
-  "lucid.linalg._ex.lu_unpack": [
-    {
-      "kind": "module",
-      "module": "lucid.linalg"
-    }
-  ],
   "lucid.linalg._ex.solve_ex": [
     {
       "kind": "module",
@@ -2559,10 +2611,52 @@
       "module": "lucid.linalg"
     }
   ],
+  "lucid.linalg._lstsq.lstsq": [
+    {
+      "kind": "module",
+      "module": "lucid.linalg"
+    }
+  ],
+  "lucid.linalg._lu.lu": [
+    {
+      "kind": "module",
+      "module": "lucid.linalg"
+    }
+  ],
+  "lucid.linalg._lu.lu_unpack": [
+    {
+      "kind": "module",
+      "module": "lucid.linalg"
+    }
+  ],
+  "lucid.linalg._matrix_exp.matrix_exp": [
+    {
+      "kind": "module",
+      "module": "lucid.linalg"
+    }
+  ],
+  "lucid.linalg._slogdet.slogdet": [
+    {
+      "kind": "module",
+      "module": "lucid.linalg"
+    }
+  ],
   "lucid.linalg.cholesky": [
     {
       "kind": "module",
       "module": "lucid.linalg._ex"
+    }
+  ],
+  "lucid.linalg.det": [
+    {
+      "kind": "module",
+      "module": "lucid.linalg._slogdet"
+    }
+  ],
+  "lucid.linalg.diagonal": [
+    {
+      "kind": "module",
+      "module": "lucid.linalg._slogdet"
     }
   ],
   "lucid.linalg.eigh": [
@@ -2571,25 +2665,25 @@
       "module": "lucid.linalg._ex"
     }
   ],
-  "lucid.linalg.householder_product": [
-    {
-      "kind": "module",
-      "module": "lucid.nn.utils.parametrizations"
-    }
-  ],
   "lucid.linalg.inv": [
     {
       "kind": "module",
       "module": "lucid.linalg._ex"
-    }
-  ],
-  "lucid.linalg.matrix_exp": [
+    },
     {
       "kind": "module",
-      "module": "lucid.nn.utils.parametrizations"
+      "module": "lucid.linalg._matrix_exp"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.linalg._slogdet"
     }
   ],
   "lucid.linalg.qr": [
+    {
+      "kind": "module",
+      "module": "lucid.linalg._lstsq"
+    },
     {
       "kind": "module",
       "module": "lucid.nn.utils.parametrizations"
@@ -2609,12 +2703,26 @@
     {
       "kind": "module",
       "module": "lucid.linalg._ex"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.linalg._lstsq"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.linalg._lu"
     }
   ],
   "lucid.linalg.svd": [
     {
       "kind": "module",
       "module": "lucid.linalg._ex"
+    }
+  ],
+  "lucid.linalg.svdvals": [
+    {
+      "kind": "module",
+      "module": "lucid.linalg._lstsq"
     }
   ],
   "lucid.linalg.vector_norm": [
