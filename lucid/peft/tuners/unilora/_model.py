@@ -11,7 +11,6 @@ from lucid.peft.tuners._layer import _tuner_layers
 from lucid.peft.tuners._plan import _Placement, _Target
 from lucid.peft.tuners._shared import _base_linear, _SharedTablesTuner
 from lucid.peft.tuners._support import _adapter_dtype, _ConfigTuner, _reset_fan_in_fan_out
-from lucid.peft.tuners.unilora._common import _refuse_bias
 from lucid.peft.tuners.unilora._config import UniLoraConfig
 from lucid.peft.tuners.unilora._indices import assign, generate_index
 from lucid.peft.tuners.unilora._layer import _PROJECTION, UniLoraLayer, _new_theta_d
@@ -55,7 +54,7 @@ class UniLoraModel(_SharedTablesTuner, _ConfigTuner, peft_type=PeftType.UNILORA)
         No module matches ``target_modules``, a match is not an ``nn.Linear`` or
         ``modules_to_save`` matches nothing.
     NotImplementedError
-        The model already holds adapter layers of another method, or ``bias`` is not ``"none"``.
+        The model already holds adapter layers of another method.
 
     Examples
     --------
@@ -126,7 +125,6 @@ class UniLoraModel(_SharedTablesTuner, _ConfigTuner, peft_type=PeftType.UNILORA)
     @classmethod
     def _prepare_config(cls, config: _TargetedConfig, model: nn.Module) -> _TargetedConfig:
         stored = _as_unilora(super()._prepare_config(config, model))
-        _refuse_bias("Uni-LoRA", stored.bias)
         _reset_fan_in_fan_out(stored)
         return stored
 

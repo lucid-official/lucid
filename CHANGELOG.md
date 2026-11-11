@@ -175,6 +175,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Uni-LoRA, every LoRA factor read out of one vector (LCD-824)
 
+- PVeRA, VeRA with a sampled Gaussian latent (LCD-824)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

@@ -79,8 +79,13 @@ class UniLoraConfig(_TargetedConfig, peft_type=PeftType.UNILORA):
     projection is drawn from ``proj_seed`` by this library's generator, so an adapter file written
     with ``save_indices=False`` by another library reads its indices back as this one draws them;
     ``save_indices=True`` carries them (and their scales) in the file.  ``bias`` other than ``"none"``
-    is refused by the tuner with ``NotImplementedError``.
+    raises ``NotImplementedError``.  The tuner is :class:`~lucid.peft.UniLoraModel`; it adapts
+    ``nn.Linear`` modules.
     """
+
+    _unsupported: ClassVar[dict[str, str]] = {
+        "bias": "a Uni-LoRA adapter trains its own tensors only (bias='none')"
+    }
 
     _field_checks: ClassVar[dict[str, _Check]] = {
         "r": _check_rank,

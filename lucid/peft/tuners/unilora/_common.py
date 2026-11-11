@@ -1,4 +1,4 @@
-"""What the shared-vector methods add to ``tuners._shared``: shared tables that train, and the bias refusal.
+"""What the shared-vector methods add to ``tuners._shared``: shared tables whose parameters train with the adapter.
 
 Uni-LoRA and TinyLoRA read every adapted layer's update out of a vector (or a group of vectors) the
 tuner holds once for the whole model.  That vector is the adapter's only trainable tensor, so it
@@ -14,15 +14,6 @@ from lucid.nn.parameter import Parameter
 from lucid.peft._slots import _as_names
 from lucid.peft.tuners._layer import _entry_parameters
 from lucid.peft.tuners._shared import _SharingLayer
-
-
-def _refuse_bias(method: str, bias: str) -> None:
-    """Raise ``NotImplementedError`` unless ``bias`` is ``"none"``: these adapters train their own tensors only."""
-    if bias != "none":
-        raise NotImplementedError(
-            f"bias={bias!r}: a {method} adapter in lucid.peft trains its own tensors only "
-            "(bias='none')"
-        )
 
 
 class _TrainedSharedLayer(_SharingLayer):

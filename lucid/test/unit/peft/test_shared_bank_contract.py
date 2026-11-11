@@ -13,7 +13,8 @@ from collections.abc import Callable
 import pytest
 
 import lucid
-from lucid.peft import PeftType, UniLoraConfig, UniLoraModel
+from lucid.peft import PeftType, PveraConfig, PveraModel, UniLoraConfig, UniLoraModel
+from lucid.peft.tuners.pvera import PveraLayer
 from lucid.peft.tuners.unilora import UniLoraLayer
 from lucid.peft.tuners.unilora._indices import assign
 from lucid.test.unit.peft import _bank_forms as forms
@@ -116,6 +117,39 @@ def _unilora_file(save_indices: bool) -> dict[str, tuple[int, ...]]:
     return file
 
 
+def _pvera(targets: tuple[str, ...], random: bool, **kw: object) -> PveraConfig:
+    return PveraConfig.from_dict(
+        {"r": 3, "target_modules": list(targets), "init_weights": not random, **kw}
+    )
+
+
+def _pvera_forward(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
+    """``W' = W + (lambda_b * B)(lambda_d_mu * A_mu)``: the latent at its mean, the projections cut to each layer."""
+    net = _mlp()
+    proj_a, proj_b = t["base_model.pvera_A"].tolist(), t["base_model.pvera_B"].tolist()
+    weights = []
+    for index, (out, inn) in _SIZES.items():
+        delta = forms.pvera_mean_delta(
+            [row[:inn] for row in proj_a],
+            proj_b[:out],
+            t[f"{_PREFIX}{index}.pvera_lambda_d"].tolist(),
+            t[f"{_PREFIX}{index}.pvera_lambda_b"].tolist(),
+            (out, inn),
+        )
+        weights.append(net[index].weight + lucid.tensor(delta))
+    return _run(weights, [net[0].bias, net[2].bias], x)
+
+
+_PVERA_FILE = {
+    f"{_PREFIX}0.pvera_lambda_b": (8,),
+    f"{_PREFIX}0.pvera_lambda_d": (6,),
+    f"{_PREFIX}2.pvera_lambda_b": (4,),
+    f"{_PREFIX}2.pvera_lambda_d": (6,),
+    "base_model.pvera_A": (6, 8),
+    "base_model.pvera_B": (8, 3),
+}
+
+
 #: Method rows in the order the methods landed.
 _METHODS = [
     _Method(
@@ -137,9 +171,11 @@ _METHODS = [
         starts_at_base=False,
         tensors=_unilora_tensors,
     ),
+    _Method("pvera", PeftType.PVERA, _pvera, PveraModel, PveraLayer, _PVERA_FILE),
 ]
 
 CLOSED_FORMS["unilora"] = CLOSED_FORMS["unilora_indices"] = _unilora_forward
+CLOSED_FORMS["pvera"] = _pvera_forward
 _UNILORA_REFERENCE = {
     "auto_mapping": None,
     "base_model_name_or_path": "tiny",
@@ -164,9 +200,43 @@ _UNILORA_REFERENCE = {
 }
 _REFERENCE_CONFIGS["unilora"] = _UNILORA_REFERENCE
 _REFERENCE_CONFIGS["unilora_indices"] = {**_UNILORA_REFERENCE, "save_indices": True}
+_REFERENCE_CONFIGS["pvera"] = {
+    "auto_mapping": None,
+    "base_model_name_or_path": "tiny",
+    "bias": "none",
+    "d_initial": 0.1,
+    "fan_in_fan_out": False,
+    "generator_seed": None,
+    "inference_mode": True,
+    "init_weights": True,
+    "layers_pattern": None,
+    "layers_to_transform": None,
+    "modules_to_save": None,
+    "peft_type": "PVERA",
+    "peft_version": "0.21.2",
+    "projection_prng_key": 0,
+    "pvera_dropout": 0.0,
+    "r": 3,
+    "revision": None,
+    "sample_at_inference": False,
+    "save_projection": True,
+    "target_modules": ["0", "2"],
+    "task_type": None,
+}
 
 
 @pytest.fixture(params=_METHODS, ids=lambda m: m.name)
 def method(request: pytest.FixtureRequest) -> _Method:
     assert isinstance(request.param, _Method)
     return request.param
+
+
+@pytest.fixture(autouse=True)
+def _the_latent_is_its_mean(method: _Method, monkeypatch: pytest.MonkeyPatch) -> None:
+    """PVeRA samples its latent while training, so two passes of a model in training mode differ.
+
+    The contract compares passes (merged against adapted, a loaded file against the model that wrote
+    it), which is what the latent at its mean gives; ``test_pvera`` holds the sampling to the paper.
+    """
+    if method.peft_type is PeftType.PVERA:
+        monkeypatch.setattr(PveraLayer, "_latent", lambda self, adapter, mu, logvar: mu)

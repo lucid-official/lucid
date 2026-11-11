@@ -1,7 +1,8 @@
 """``PveraConfig``: the PVeRA hyper-parameters on top of the shared targeting fields."""
 
+import warnings
 from dataclasses import dataclass
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, override
 
 from lucid.peft._config import (
     PeftType,
@@ -69,12 +70,18 @@ class PveraConfig(_TargetedConfig, peft_type=PeftType.PVERA):
 
     Notes
     -----
-    PVeRA's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``r`` is not positive, or ``layers_pattern`` is
-    given without ``layers_to_transform``.  No tuner applies it yet: ``get_peft_model`` raises
-    ``NotImplementedError`` naming LCD-824, which tracks it.
+    The config reads and writes ``adapter_config.json`` as the reference library's does: every field,
+    in its order and with its defaults.  A field of the wrong type raises ``TypeError``;
+    ``ValueError`` is raised when ``r`` is not positive or ``layers_pattern`` is given without
+    ``layers_to_transform``; ``bias`` other than ``"none"`` raises ``NotImplementedError``.  The
+    projections are drawn by this library's generator from ``projection_prng_key``, so an adapter file
+    written by another library without them (``save_projection=False``) restores them as this one
+    draws them.  The tuner is :class:`~lucid.peft.PveraModel`; it adapts ``nn.Linear`` modules.
     """
+
+    _unsupported: ClassVar[dict[str, str]] = {
+        "bias": "a PVeRA adapter trains its own tensors only (bias='none')"
+    }
 
     _field_checks: ClassVar[dict[str, _Check]] = {
         "r": _check_rank,
@@ -88,6 +95,18 @@ class PveraConfig(_TargetedConfig, peft_type=PeftType.PVERA):
         "sample_at_inference": _check_bool,
         "generator_seed": _nullable(_check_int),
     }
+
+    @override
+    def _check_fields(self) -> None:
+        super()._check_fields()
+        if not self.save_projection:
+            warnings.warn(
+                "Specified to not save pvera_A and pvera_B within the state dictionary, instead "
+                "they will be restored using the PRNG key store in `config.projection_prng_key`. "
+                "Consider setting `config.save_projection` to `True` to guarantee restoring the "
+                "checkpoint correctly on all system configurations.",
+                stacklevel=2,
+            )
 
     r: int = 256
     target_modules: str | list[str] | set[str] | None = None

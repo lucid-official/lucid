@@ -1,19 +1,21 @@
-"""``lucid.peft.tuners.pvera`` — PVeRA: VeRA whose rank-r latent is a sampled Gaussian.
+r"""``lucid.peft.tuners.pvera`` — PVeRA: VeRA whose rank-r latent is a sampled Gaussian.
 
-PVeRA (Fillioux et al., 2025, arXiv:2512.07703) makes VeRA probabilistic: shared frozen random
-projections and two learned vectors per layer, with the rank-r latent between them the mean and log-
-variance of a Gaussian.  Pick it for VeRA-sized adapters with a learned uncertainty over the update.
+PVeRA (Fillioux et al., 2025, arXiv:2512.07703) makes VeRA probabilistic: two frozen random
+projections shared by every layer and two learned vectors per layer, with the rank-``r`` latent
+between them the mean and log-variance of a Gaussian, sampled while training and taken at its mean
+for inference (which then folds into the weight).  Pick it for VeRA-sized adapters with a learned
+uncertainty over the update.
 
-Not implemented yet.  ``PveraConfig`` is complete: it has every field of the reference library's
-config, in its order and with its defaults, and reads and writes ``adapter_config.json``, so an
-adapter file of this method loads as a config.  ``PveraModel`` is the tuner's place in the registry:
-building one, through ``get_peft_model``, ``PeftModel.from_pretrained`` or the class itself, raises
-``NotImplementedError`` naming LCD-824, which tracks it, before any model is touched.  Importing the
-package registers the config under ``PeftType.PVERA`` and the placeholder tuner; both are exported
-from ``lucid.peft``.
+Where the reference library keeps them, so ``isinstance(m, PveraLayer)`` and ``from
+lucid.peft.tuners.pvera import PveraConfig, Linear`` read as they do there.  One layer type for the
+one module the method adapts, ``nn.Linear``.  ``PveraConfig`` and ``PveraModel`` (which holds the
+shared projections) are here and exported from ``lucid.peft``.  Importing the package registers the
+method (its config under ``PeftType.PVERA``, its tuner and layer), which is what makes
+``get_peft_model`` and ``PeftModel.from_pretrained`` know it.
 """
 
 from lucid.peft.tuners.pvera._config import PveraConfig
+from lucid.peft.tuners.pvera._layer import Linear, PveraLayer
 from lucid.peft.tuners.pvera._model import PveraModel
 
-__all__ = ["PveraConfig", "PveraModel"]
+__all__ = ["Linear", "PveraConfig", "PveraLayer", "PveraModel"]

@@ -20,7 +20,7 @@ from typing import ClassVar, NamedTuple, override
 import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
-from lucid.nn.parameter import Parameter
+from lucid.nn import Parameter
 from lucid.peft.tuners._delta import _DeltaLayer, _Home
 from lucid.peft.tuners._layer import _parameter_at
 from lucid.peft.tuners._shared import _BufferDict
