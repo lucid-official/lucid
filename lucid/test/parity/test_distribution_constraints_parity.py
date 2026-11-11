@@ -53,6 +53,7 @@ import pytest
 
 import lucid
 import lucid.distributions as D
+from lucid.test._fixtures.tolerance_guard import noise_when_below
 
 pytestmark = [
     pytest.mark.parity,
@@ -678,7 +679,9 @@ def _ref_at(ref: Any, dtype: Any) -> Callable[[Any], Any]:
     return lambda v: ref.tensor(np.asarray(v, dtype=dtype))
 
 
-def _close(ours: tuple[str, Any], theirs: tuple[str, Any], dtype: Any) -> bool:
+def _close(
+    ours: tuple[str, Any], theirs: tuple[str, Any], dtype: Any, *, gradient: bool = False
+) -> bool:
     if ours[0] != theirs[0]:
         return False
     if ours[0] != "ok":
@@ -689,6 +692,17 @@ def _close(ours: tuple[str, Any], theirs: tuple[str, Any], dtype: Any) -> bool:
     # of the incomplete gamma takes pi in single precision (1e-9), and
     # Lucid's agree with the exact values in both.
     rtol, atol = (1e-7, 1e-10) if dtype == np.float64 else (1e-4, 1e-5)
+    # The floor is for answers that are 0 up to roundoff.  A tail quantile of 6e-7 is a value:
+    # under atol=1e-5 a 0 would match it.
+    if gradient:
+        # The points are a median and a mode, where many slopes are 0 in closed form and come
+        # back as the 1e-6 of float32 roundoff.
+        with noise_when_below(b, atol, "a gradient that is 0 in closed form"):
+            return a.shape == b.shape and bool(
+                np.allclose(a, b, rtol=rtol, atol=atol, equal_nan=True)
+            )
+    scale = float(np.max(np.abs(b), initial=0.0, where=np.isfinite(b)))
+    atol = min(atol, rtol * scale) if scale > 0 else atol
     return a.shape == b.shape and bool(np.allclose(a, b, rtol=rtol, atol=atol, equal_nan=True))
 
 
@@ -878,7 +892,8 @@ def test_method_gradients(name: str, method: str, param: str, device: str, ref: 
     )
     if "absent" in (ours[0], theirs[0]):
         return  # presence is test_method_presence's question
-    differences = [] if _close(ours, theirs, ref_dtype) else [(param, ours, theirs)]
+    same = _close(ours, theirs, ref_dtype, gradient=True)
+    differences = [] if same else [(param, ours, theirs)]
     _judge(name, f"grad:{method}", differences)
 
 
