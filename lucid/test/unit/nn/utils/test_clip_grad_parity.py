@@ -18,6 +18,7 @@ import lucid
 import lucid.nn as nn
 from lucid.nn import utils as U
 from lucid.test._fixtures.devices import metal_available
+from lucid.test._helpers.compare import assert_close_to_scale
 
 _METAL = pytest.param(
     "metal", marks=pytest.mark.skipif(not metal_available(), reason="needs Metal")
@@ -46,9 +47,8 @@ def _f32(t: lucid.Tensor) -> np.ndarray:
 
 def _assert_close(ours: lucid.Tensor, theirs, dtype: str) -> None:
     tol = {"float32": 1e-5, "float16": 2e-3, "bfloat16": 2e-2}[dtype]
-    np.testing.assert_allclose(
-        _f32(ours), theirs.detach().float().numpy(), rtol=tol, atol=tol, equal_nan=True
-    )
+    # Clipped to a norm of 1 these are as small as 6e-3, under bfloat16's 2e-2 floor.
+    assert_close_to_scale(_f32(ours), theirs.detach().float().numpy(), rtol=tol, equal_nan=True)
 
 
 def _same_dtype(ours: lucid.Tensor, theirs) -> bool:

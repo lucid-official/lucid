@@ -52,7 +52,13 @@ def assert_close(
 
 
 def assert_close_to_scale(
-    actual: Any, expected: Any, *, rtol: float, floor: float = 0.0, msg: str = ""
+    actual: Any,
+    expected: Any,
+    *,
+    rtol: float,
+    floor: float = 0.0,
+    equal_nan: bool = False,
+    msg: str = "",
 ) -> None:
     """``assert_close`` with the absolute floor taken from ``expected``'s own magnitude.
 
@@ -71,7 +77,12 @@ def assert_close_to_scale(
         )
     scale = float(np.max(np.abs(e), initial=0.0, where=np.isfinite(e)))
     np.testing.assert_allclose(
-        a, e, rtol=rtol, atol=max(rtol * scale, floor), err_msg=msg or "values do not match"
+        a,
+        e,
+        rtol=rtol,
+        atol=max(rtol * scale, floor),
+        equal_nan=equal_nan,
+        err_msg=msg or "values do not match",
     )
 
 
