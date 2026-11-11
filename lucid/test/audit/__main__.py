@@ -780,6 +780,28 @@ def _removed_cells(report: Report, unanswered: set[str]) -> dict[str, str]:
     return out
 
 
+def _moved_cells(unanswered: set[str], current: dict[str, str]) -> dict[str, str]:
+    """The unanswered cells whose symbol the sweep now lists under another spelling.
+
+    ``old key -> new key``.  The sweep lists an object once, under the
+    shallowest module that exports it, so exporting a class from ``lucid.peft``
+    as well as from ``lucid.peft.tuners.lora`` moves its cells to the first
+    spelling.  The second still names the class, so :func:`_removed_cells`
+    does not take it for gone and the cells read as LOST, holding the gate red
+    over a deliberate promotion (LCD-959).  A cell moved only if the same axis
+    answered under the new spelling: a symbol the sweep reaches no more is
+    still LOST, and one that now reaches another object nobody lists stays so.
+    """
+    spelling = _surface.moved(key.partition("::")[2] for key in unanswered)
+    out: dict[str, str] = {}
+    for key in unanswered:
+        axis, _, symbol = key.partition("::")
+        new = f"{axis}::{spelling.get(symbol, symbol)}"
+        if new != key and new in current:
+            out[key] = new
+    return out
+
+
 def _capped(console: Console, label: str, colour: str, lines: list[str]) -> None:
     for line in lines[:20]:
         console.always("  " + console.paint(label, colour) + f" {line}")
@@ -799,15 +821,16 @@ def report_coverage_diff(report: Report, recorded: dict[str, str], console: Cons
     current = _answered(report)
     unanswered = set(recorded) - set(current)
     removed = _removed_cells(report, unanswered)
-    lost = sorted(unanswered - set(removed))
-    gained = sorted(set(current) - set(recorded))
+    moved = _moved_cells(unanswered - set(removed), current)
+    lost = sorted(unanswered - set(removed) - set(moved))
+    gained = sorted(set(current) - set(recorded) - set(moved.values()))
+    # A moved cell is judged by the verdict it has under its new spelling.
+    now = {**current, **{old: current[new] for old, new in moved.items()}}
     worsened = sorted(
-        key
-        for key in set(recorded) & set(current)
-        if recorded[key] == "pass" and current[key] != "pass"
+        key for key in set(recorded) & set(now) if recorded[key] == "pass" and now[key] != "pass"
     )
 
-    if not (lost or gained or worsened or removed):
+    if not (lost or gained or worsened or removed or moved):
         console.always("")
         console.always(console.paint("  coverage unchanged against the baseline", "green"))
         return 0
@@ -822,7 +845,7 @@ def report_coverage_diff(report: Report, recorded: dict[str, str], console: Cons
             )
         for key in worsened:
             console.always(
-                "  " + console.paint("WORSE", "red", "bold") + f" {key}  (pass -> {current[key]})"
+                "  " + console.paint("WORSE", "red", "bold") + f" {key}  (pass -> {now[key]})"
             )
     if removed:
         console.always("")
@@ -833,11 +856,20 @@ def report_coverage_diff(report: Report, recorded: dict[str, str], console: Cons
             "grey",
             [f"{key}  (was {recorded[key]}; {why})" for key, why in sorted(removed.items())],
         )
+    if moved:
+        console.always("")
+        console.rule(f"listed under another spelling · {len(moved)}", "grey")
+        _capped(
+            console,
+            "MOVED",
+            "grey",
+            [f"{key}  ->  {new}" for key, new in sorted(moved.items())],
+        )
     if gained:
         console.always("")
         console.rule(f"newly answered · {len(gained)}", "green")
         _capped(console, "NEW  ", "green", gained)
-    if removed or gained:
+    if removed or moved or gained:
         console.always(
             console.paint(
                 "  run `lucid-audit --audit-only --update-coverage` to record the new floor", "grey"

@@ -22,6 +22,7 @@ import json
 
 import pytest
 
+import lucid
 from lucid.test.audit.__main__ import (
     _answered,
     _scoped_coverage,
@@ -287,6 +288,91 @@ def test_an_entry_cell_with_no_removed_spelling_stays_lost(public_probe, capsys)
     now = _report(("entry", f"F.{_PROBE}", Status.NOT_APPLICABLE))
     assert report_coverage_diff(now, recorded, _quiet()) == 1
     assert "LOST" in capsys.readouterr().out
+
+
+# ── a symbol exported from a shallower module ────────────────────────────────
+#
+# LCD-959: the sweep lists an object once, under the shallowest module that
+# exports it, so exporting ``LoraRuntimeConfig`` from ``lucid.peft`` as well as
+# ``lucid.peft.tuners.lora`` moved its cells to the first spelling.  The second
+# still resolves, so it was not "removed", and its cells were LOST.  The probe
+# is published in ``lucid`` and in ``lucid.special`` — one object, two spellings.
+
+_DEEP = f"lucid.special.{_PROBE}"
+_TOP = f"lucid.{_PROBE}"
+
+
+@pytest.fixture
+def promotion(monkeypatch: pytest.MonkeyPatch):
+    """The probe exported from ``lucid`` too; ``lucid.special``'s spelling is the old one."""
+    special = importlib.import_module("lucid.special")
+
+    def probe(x: object) -> object:
+        return x
+
+    probe.__module__ = "lucid"
+    for module in (lucid, special):
+        monkeypatch.setattr(module, _PROBE, probe, raising=False)
+        monkeypatch.setattr(module, "__all__", [*module.__all__, _PROBE])
+    return special
+
+
+def test_a_cell_moved_to_a_shallower_spelling_is_moved_not_lost(promotion, capsys) -> None:
+    recorded = {f"grad::{_DEEP}": "pass"}
+    now = _report(("grad", _TOP, Status.PASS))
+    assert report_coverage_diff(now, recorded, _quiet()) == 0
+    out = capsys.readouterr().out
+    assert "another spelling" in out and f"MOVED grad::{_DEEP}  ->  grad::{_TOP}" in out
+    assert "LOST" not in out and "NEW" not in out  # the new spelling is not progress
+    assert "update-coverage" in out
+
+
+def test_a_moved_cell_that_no_longer_passes_is_a_regression(promotion, capsys) -> None:
+    recorded = {f"grad::{_DEEP}": "pass"}
+    now = _report(("grad", _TOP, Status.FAIL))
+    assert report_coverage_diff(now, recorded, _quiet()) == 1
+    assert "WORSE" in capsys.readouterr().out
+
+
+def test_a_moved_cell_the_new_spelling_does_not_answer_is_lost(promotion, capsys) -> None:
+    """The old spelling's cell is only carried by an answer under the new one."""
+    recorded = {f"grad::{_DEEP}": "pass"}
+    now = _report(("grad", _TOP, Status.UNSUPPORTED))
+    assert report_coverage_diff(now, recorded, _quiet()) == 1
+    out = capsys.readouterr().out
+    assert "LOST" in out and "another spelling" not in out
+
+
+def test_a_cell_answered_on_another_axis_does_not_carry_this_one(promotion, capsys) -> None:
+    recorded = {f"grad::{_DEEP}": "pass"}
+    now = _report(("smoke", _TOP, Status.PASS))
+    assert report_coverage_diff(now, recorded, _quiet()) == 1
+    assert "LOST" in capsys.readouterr().out
+
+
+def test_a_spelling_that_now_reaches_an_unlisted_object_stays_lost(
+    promotion, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """``lucid.special`` still has the name, but of a helper nobody exports."""
+    monkeypatch.setattr(promotion, _PROBE, _probe_fn)
+    monkeypatch.setattr(promotion, "__all__", [n for n in promotion.__all__ if n != _PROBE])
+    recorded = {f"grad::{_DEEP}": "pass"}
+    now = _report(("grad", _TOP, Status.PASS))
+    assert report_coverage_diff(now, recorded, _quiet()) == 1
+    out = capsys.readouterr().out
+    assert "LOST" in out and "another spelling" not in out
+
+
+def test_a_cell_whose_spelling_reaches_nothing_is_still_removed(
+    promotion, monkeypatch, capsys
+) -> None:
+    monkeypatch.delattr(promotion, _PROBE)
+    monkeypatch.setattr(promotion, "__all__", [n for n in promotion.__all__ if n != _PROBE])
+    recorded = {f"grad::{_DEEP}": "pass"}
+    now = _report(("grad", _TOP, Status.PASS))
+    assert report_coverage_diff(now, recorded, _quiet()) == 0
+    out = capsys.readouterr().out
+    assert "REMOVED" in out and "another spelling" not in out and "LOST" not in out
 
 
 # ── the checked-in baseline ───────────────────────────────────────────────────

@@ -637,6 +637,18 @@ spellings and now only one is left. Nothing counts as removed while any
 module fails to import, since the sweep skips an unimportable module
 without a word.
 
+What the released-surface gate counts as removed is a *spelling* that no
+longer reaches anything public, not a spelling the walk no longer lists. The
+walk keeps one spelling per object, the shallowest, so exporting a class from
+`lucid.peft` as well as `lucid.peft.tuners.lora` lists only the first. The
+second still works for every caller, and the gate (`_released.collect(released=…)`)
+reads it as that object under its new spelling: it passes by the signature
+rules, `--update` writes it back so later releases keep holding it, and it
+fails when the attribute is gone, when it reaches something the walk does not
+list, or when the object it reaches no longer binds the calls it did (LCD-959).
+A promotion moves the audit's own cells to the new spelling too; this file
+sees them as `LOST` under the old one until `--update-coverage` records the new.
+
 Newly answered cells are reported too, as progress rather than failure.
 When the new state is the intended one:
 

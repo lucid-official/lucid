@@ -26,7 +26,7 @@ import lucid.nn.functional as F
 from lucid._tensor._free_fn_methods import FREE_FN_METHODS
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Iterable, Iterator, Mapping, Sequence
 
 #: Subsystem name -> (module path, kind).  ``kind`` selects how symbols
 #: are probed: ``"op"`` are functions over tensors, ``"module"`` are
@@ -724,9 +724,95 @@ def removed(qualnames: Iterable[str]) -> set[str]:
     return {name for name in wanted - present if _names_nothing(name, modules)}
 
 
+def namespace_roots() -> dict[str, object]:
+    """The module each qualname prefix (``lucid``, ``nn``, ``F``) stands for, imported."""
+    return {head: importlib.import_module(path) for head, path in _ROOTS.items()}
+
+
+def reach(qualname: str, roots: Mapping[str, object]) -> object | None:
+    """What attribute access from ``qualname``'s root finds there — ``None`` when nothing.
+
+    Plain attribute access, the way ``from lucid.peft.tuners.lora import X``
+    finds ``X``: a name that is a function and a package at once
+    (``lucid.compile``) resolves to the function, so a spelling under the
+    package is not reached and reads as gone.  That errs toward failing.
+    """
+    head, _, rest = qualname.partition(".")
+    obj = roots.get(head)
+    for part in rest.split(".") if rest else ():
+        if obj is None:
+            return None
+        obj = getattr(obj, part, None)
+    return obj
+
+
+def moved(
+    qualnames: Iterable[str],
+    symbols: Sequence[tuple[str, object]] | None = None,
+    roots: Mapping[str, object] | None = None,
+) -> dict[str, str]:
+    """The spelling the walk lists, for each name in ``qualnames`` that it does not.
+
+    The walk lists an object once, under the shallowest module that exports
+    it, so exporting a class from ``lucid.peft`` as well as from
+    ``lucid.peft.tuners.lora`` leaves only the first listed.  The second
+    still names that class for every caller; this maps it to the first.  A
+    member of a listed class maps to the same member of the class's spelling.
+
+    Only names that reach an object the walk lists count.  One that reaches
+    nothing was removed (:func:`removed`), and one that reaches something the
+    walk does not list — a helper that took over a name — is neither: it is
+    left out, for the caller to treat as what it was.
+
+    Parameters
+    ----------
+    qualnames : iterable of str
+        Spellings to look up, as a record keeps them.
+    symbols : sequence of (str, object), optional
+        What the walk lists, as ``(qualname, object)``.  Defaults to
+        :func:`enumerate_surface`.
+    roots : mapping, optional
+        Where each qualname's first component starts.  Defaults to
+        :func:`namespace_roots`.
+
+    Returns
+    -------
+    dict
+        ``name -> the spelling the walk lists it under``.
+    """
+    if symbols is None:
+        symbols = [(symbol.qualname, symbol.obj) for symbol in enumerate_surface()]
+    roots = namespace_roots() if roots is None else roots
+    spelled = {qualname for qualname, _ in symbols}
+    listed: dict[int, str] = {}
+    for qualname, obj in symbols:
+        listed.setdefault(id(obj), qualname)
+
+    def home(name: str) -> str | None:
+        # A member is looked for on its class first: methods are listed under the
+        # class's spelling, and what attribute access returns for one — a bound
+        # ``classmethod``, a property's value — is not an object the walk listed.
+        owner, _, member = name.rpartition(".")
+        cls = reach(owner, roots)
+        if isinstance(cls, type) and id(cls) in listed:
+            return f"{listed[id(cls)]}.{member}"
+        obj = reach(name, roots)
+        return None if obj is None else listed.get(id(obj))
+
+    found: dict[str, str] = {}
+    for name in qualnames:
+        spelling = None if name in spelled else home(name)
+        if spelling is not None and spelling != name:
+            found[name] = spelling
+    return found
+
+
 __all__ = [
     "EXCLUDED",
     "independent_walk",
+    "moved",
+    "namespace_roots",
+    "reach",
     "STATEFUL",
     "STATEFUL_EXACT",
     "STATEFUL_PREFIX",

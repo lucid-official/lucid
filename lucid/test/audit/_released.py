@@ -16,6 +16,22 @@ changing a default or an annotation, which no call site spells.  A name
 marked with :func:`lucid._deprecation.deprecated` may leave once the release
 it was marked to leave in has come — and so may everything under it.
 
+A name is a spelling, and the snapshot holds one per object: the walk lists
+an object once, under the shallowest module that exports it.  Exporting
+``LoraRuntimeConfig`` from ``lucid.peft`` as well as ``lucid.peft.tuners.lora``
+would therefore list only the first, and the second — which every
+``from lucid.peft.tuners.lora import LoraRuntimeConfig`` still reaches — would
+read as removed.  So a released spelling the walk no longer lists is looked up
+instead: if attribute access from its root still reaches an object the walk
+lists, it is that object's entry under the spelling the walk kept (a member
+of a class, the same member of the class's kept spelling), and a break only by
+the signature rules above.  Nothing else makes it pass: a spelling that
+reaches nothing, or something the walk does not list, is removed, and one
+rebound to a different public object keeps only the calls that object still
+binds.  :func:`collect` takes the released names to do this for, and
+``--update`` writes them back, so a promotion does not drop the old spelling
+from what later releases hold.
+
 Only the release commit rewrites the snapshot, after bumping the version::
 
     python -m lucid.test.audit._released --update
@@ -27,7 +43,7 @@ import annotationlib
 import inspect
 import json
 import sys
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -121,16 +137,28 @@ def _symbols() -> list[tuple[str, object]]:
     return found
 
 
-def collect(*, inherited: bool = True) -> Surface:
-    """Every public name and what a caller could pass it, today.
+def _promoted(
+    names: Collection[str],
+    out: Surface,
+    symbols: Sequence[tuple[str, object]],
+    roots: Mapping[str, object],
+) -> Surface:
+    """The ``names`` ``out`` lacks that still reach something it lists, with that entry."""
+    absent = [name for name in names if name not in out]
+    return {
+        name: out[home]
+        for name, home in _surface.moved(absent, symbols, roots).items()
+        if home in out
+    }
 
-    ``inherited`` also lists, under each class, the members it inherits
-    from another public class — ``nn.Linear.state_dict`` beside
-    ``nn.Module.state_dict``.  The check reads them, so that pulling a
-    method up into a public base is not a removal; the snapshot leaves them
-    out and holds each such method once, under the class that defines it.
-    """
-    symbols = _symbols()
+
+def _collect(
+    symbols: Sequence[tuple[str, object]],
+    roots: Mapping[str, object],
+    *,
+    inherited: bool,
+    released: Collection[str],
+) -> Surface:
     classes = {
         obj for _, obj in symbols if isinstance(obj, type) and obj.__module__.startswith("lucid.")
     }
@@ -141,7 +169,24 @@ def collect(*, inherited: bool = True) -> Surface:
         # ``Tensor``'s methods are enumerated by the audit itself, as ``Tensor.*``.
         if isinstance(obj, type) and obj in classes and obj is not lucid.Tensor:
             _members(qualname, obj, out, held)
+    out.update(_promoted(released, out, symbols, roots))
     return dict(sorted(out.items()))
+
+
+def collect(*, inherited: bool = True, released: Collection[str] = ()) -> Surface:
+    """Every public name and what a caller could pass it, today.
+
+    ``inherited`` also lists, under each class, the members it inherits
+    from another public class — ``nn.Linear.state_dict`` beside
+    ``nn.Module.state_dict``.  The check reads them, so that pulling a
+    method up into a public base is not a removal; the snapshot leaves them
+    out and holds each such method once, under the class that defines it.
+
+    ``released`` names spellings an earlier release held.  Each one the walk
+    no longer lists but that still reaches an object it does — the object
+    was promoted to a shallower module — is listed too, as that object.
+    """
+    return _collect(_symbols(), _surface.namespace_roots(), inherited=inherited, released=released)
 
 
 def _split(params: list[str]) -> list[tuple[str, str, bool]]:
@@ -242,14 +287,15 @@ def main(argv: list[str]) -> int:
     if argv != ["--update"]:
         print("usage: python -m lucid.test.audit._released --update", file=sys.stderr)
         return 2
-    if SNAPSHOT.exists():
-        problems = breaks(load()["symbols"], collect(), lucid.__version__)
+    released: Mapping[str, dict[str, Any]] = load()["symbols"] if SNAPSHOT.exists() else {}
+    if released:
+        problems = breaks(released, collect(released=released), lucid.__version__)
         if problems:
             print(f"{len(problems)} released call(s) would break:", file=sys.stderr)
             for problem in problems:
                 print(f"  {problem}", file=sys.stderr)
             return 1
-    current = collect(inherited=False)
+    current = collect(inherited=False, released=released)
     _write(lucid.__version__, current)
     print(f"{SNAPSHOT.name}: {len(current)} names at {lucid.__version__}")
     return 0

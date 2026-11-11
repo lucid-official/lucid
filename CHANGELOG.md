@@ -147,6 +147,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - RoAd and PSOFT satisfy mypy strict (LCD-825)
 
+- a promoted spelling is not a removal or lost cell (LCD-959)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
