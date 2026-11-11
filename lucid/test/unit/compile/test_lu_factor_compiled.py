@@ -91,9 +91,7 @@ def test_lu_factor_singular_tied_and_permuted(
     _assert_lu_matches_eager(lucid.tensor(rows, device=device_gpu_only))
 
 
-def test_lu_factor_reports_the_first_zero_pivot_of_each_batch_member(
-    device_gpu_only: str,
-) -> None:
+def test_lu_factor_reports_the_first_zero_pivot_of_each_batch_member(device_gpu_only: str) -> None:
     ok = [[2.0, 1.0, 0.0], [1.0, 3.0, 1.0], [0.0, 1.0, 4.0]]
     late = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]]
     early = [[0.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
@@ -188,9 +186,7 @@ def test_slogdet_of_a_singular_matrix_keeps_its_signed_zero(device_gpu_only: str
     _assert_slogdet_matches_eager(a)
 
 
-def test_slogdet_of_a_batch_mixing_singular_regular_and_overflowing(
-    device_gpu_only: str,
-) -> None:
+def test_slogdet_of_a_batch_mixing_singular_regular_and_overflowing(device_gpu_only: str) -> None:
     big = lucid.eye(3, device=device_gpu_only) * 1e20
     sing = lucid.tensor([[1.0, 2.0, 0.0], [2.0, 4.0, 0.0], [0.0, 0.0, 1.0]], device=device_gpu_only)
     reg = lucid.tensor([[3.0, 1.0, 0.0], [1.0, 2.0, 0.0], [0.0, 0.0, 1.0]], device=device_gpu_only)
@@ -219,9 +215,7 @@ def test_logdet_is_nan_only_for_a_negative_determinant(device_gpu_only: str) -> 
     assert got[0] == pytest.approx(want[0]) and math.isnan(got[1]) and got[2] == -math.inf
 
 
-def test_slogdet_past_the_unroll_bound_runs_eagerly_and_stays_right(
-    device_gpu_only: str,
-) -> None:
+def test_slogdet_past_the_unroll_bound_runs_eagerly_and_stays_right(device_gpu_only: str) -> None:
     a = lucid.eye(_MAX_LU_DIM + 8, device=device_gpu_only) * 10
     cf = lucid.compile(_slogdet_pair)
     with pytest.warns(CompileFallbackWarning):
