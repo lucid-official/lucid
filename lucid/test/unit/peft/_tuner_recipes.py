@@ -17,6 +17,7 @@ import lucid.nn as nn
 from lucid.models import create_model
 from lucid.peft import (
     AdaLoraConfig,
+    CartridgeConfig,
     CPTConfig,
     IA3Config,
     LoHaConfig,
@@ -217,6 +218,9 @@ RECIPES: dict[PeftType, Recipe] = {
     ),
     PeftType.CPT: _text_recipe(
         lambda: CPTConfig(cpt_token_ids=[1, 2], cpt_tokens_type_mask=[1, 4], task_type="CAUSAL_LM")
+    ),
+    PeftType.CARTRIDGE: _text_recipe(
+        lambda: CartridgeConfig(num_virtual_tokens=2, task_type="CAUSAL_LM")
     ),
     PeftType.ADAPTION_PROMPT: _text_recipe(
         lambda: AdaptionPromptConfig(adapter_len=2, adapter_layers=1, task_type="CAUSAL_LM"),

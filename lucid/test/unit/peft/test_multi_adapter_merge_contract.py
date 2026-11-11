@@ -50,6 +50,7 @@ _REFUSED: dict[PeftType, tuple[str, type[Exception], str]] = {
     PeftType.P_TUNING: ("activate", ValueError, _ONE_AT_A_TIME),
     PeftType.MULTITASK_PROMPT_TUNING: ("activate", ValueError, _ONE_AT_A_TIME),
     PeftType.CPT: ("activate", ValueError, _ONE_AT_A_TIME),
+    PeftType.CARTRIDGE: ("activate", ValueError, _ONE_AT_A_TIME),
     PeftType.XLORA: ("add", NotImplementedError, "holds one adapter"),
 }
 

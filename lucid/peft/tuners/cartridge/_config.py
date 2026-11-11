@@ -37,11 +37,12 @@ class CartridgeConfig(PromptLearningConfig, peft_type=PeftType.CARTRIDGE):
 
     Notes
     -----
-    Cartridge's config is complete: every field of the reference library's, in its order and with
-    its defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
+    Every field of the reference library's config is here, in its order and with its defaults, and
+    the config is read and written as ``adapter_config.json``.  A field of the wrong type raises
     ``TypeError``.  ``ValueError`` is raised when ``num_frozen_tokens`` is negative or exceeds
-    ``num_virtual_tokens``.  No tuner applies it yet: ``get_peft_model`` raises
-    ``NotImplementedError`` naming LCD-826, which tracks it.
+    ``num_virtual_tokens``.  The cache starts as a random draw; ``initialize_kv_prefix_from_text`` and
+    ``initialize_kv_prefix_from_past_key_values`` (``lucid.peft``) replace it with the keys and values
+    of a document the model has read.
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {"num_frozen_tokens": _check_count}

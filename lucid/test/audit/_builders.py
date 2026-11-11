@@ -88,6 +88,7 @@ from lucid.peft.tuners.adaption_prompt import (
     AdaptionPromptConfig,
     AdaptionPromptModel,
 )
+from lucid.peft.tuners.cartridge import CartridgeConfig, CartridgeEncoder, CartridgeModel
 from lucid.peft.tuners.gralora import GraloraLayer
 from lucid.peft.tuners.ia3 import IA3Layer
 from lucid.peft.tuners.loha import LoHaLayer
@@ -333,6 +334,12 @@ BUILDERS: dict[type, Callable[[], Any]] = {
     ),
     PrefixEncoder: lambda: PrefixEncoder(
         PrefixTuningConfig(num_virtual_tokens=2, encoder_hidden_size=4, **_PROMPT_SIZES)
+    ),
+    CartridgeModel: lambda: CartridgeModel(
+        _text_model(), CartridgeConfig(num_virtual_tokens=2, task_type="CAUSAL_LM")
+    ),
+    CartridgeEncoder: lambda: CartridgeEncoder(
+        CartridgeConfig(num_virtual_tokens=2, num_frozen_tokens=1, **_PROMPT_SIZES)
     ),
     MultitaskPromptTuningModel: lambda: MultitaskPromptTuningModel(
         _text_model(),

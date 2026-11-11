@@ -92,14 +92,14 @@ a loss over the examples' outputs::
     config = PromptTuningConfig(num_virtual_tokens=20, task_type="CAUSAL_LM")
     model = get_peft_model(base_model, config)
 
-Twenty more methods that the reference library has added are here as configs, with no adapter yet:
-DeLoRA, GraLoRA, HiRA, GLoRA, DEFT and PEANuT (``DeloraConfig`` …), Uni-LoRA, PVeRA, TinyLoRA and
-Lily, RoAd, PSOFT, OSF and FRoD, Super-Tuning, WaveFT, BEFT and Cartridge, and AdaMSS.  Each config has
-every field of the reference's, in its order and with its defaults, and reads and writes
-``adapter_config.json``; building an adapter with one raises ``NotImplementedError`` naming the issue
-that tracks it, and ``PEFT_TYPE_TO_TUNER_MAPPING`` has a tuner class that raises it for each.  The
-twentieth, ShadowPEFT, is refused for good — it needs the base model's decoder loop and a second
-backbone beside it.  The option classes of LoRA's extensions (``ArrowConfig``, ``BdLoraConfig``,
+The methods the reference library has added since have an adapter too: DeLoRA, GraLoRA, HiRA, GLoRA,
+DEFT and PEANuT (``DeloraConfig`` …), Uni-LoRA, PVeRA, TinyLoRA and Lily, RoAd, PSOFT, OSF and FRoD,
+Super-Tuning, WaveFT, BEFT and Cartridge (``CartridgeConfig``, ``CartridgeEncoder`` and the four
+``initialize_kv_prefix_*`` / ``compose_cartridge_adapters`` utilities).  AdaMSS has a config with every
+field of the reference's, in its order and with its defaults, and no adapter yet: building one raises
+``NotImplementedError`` naming the issue that tracks it, and ``PEFT_TYPE_TO_TUNER_MAPPING`` has a class
+for it that raises it.  ShadowPEFT is refused for good — it needs the base model's decoder loop and a
+second backbone beside it.  The option classes of LoRA's extensions (``ArrowConfig``, ``BdLoraConfig``,
 ``KasaConfig``, ``MontecloraConfig``, ``VeloraConfig``) are here too, for the ``LoraConfig`` fields
 that hold them; a ``LoraConfig`` that sets one of those extensions is refused.
 
@@ -239,7 +239,14 @@ from lucid.peft.tuners.beft import BeftConfig, BeftModel
 from lucid.peft.tuners.boft import BOFTConfig, BOFTModel
 from lucid.peft.tuners.bone import BoneConfig, BoneModel
 from lucid.peft.tuners.c3a import C3AConfig, C3AModel
-from lucid.peft.tuners.cartridge import CartridgeConfig
+from lucid.peft.tuners.cartridge import (
+    CartridgeConfig,
+    CartridgeEncoder,
+    compose_cartridge_adapters,
+    initialize_kv_prefix_from_past_key_values,
+    initialize_kv_prefix_from_text,
+    prompt_embeddings_from_past_key_values,
+)
 from lucid.peft.tuners.cpt import CPTConfig, CPTEmbedding, CPTModel
 from lucid.peft.tuners.deft import DeftConfig, DeftModel
 from lucid.peft.tuners.delora import DeloraConfig, DeloraModel
@@ -368,6 +375,7 @@ __all__ = [
     "BdLoraConfig",
     "BeftConfig",
     "CartridgeConfig",
+    "CartridgeEncoder",
     "DeftConfig",
     "DeloraConfig",
     "FrodConfig",
@@ -444,6 +452,7 @@ __all__ = [
     "PeftModelForTokenClassification",
     "bloom_model_postprocess_past_key_value",
     "cast_mixed_precision_params",
+    "compose_cartridge_adapters",
     "find_kappa_target_modules",
     "get_base_model_state_dict",
     "get_layer_status",
@@ -452,7 +461,10 @@ __all__ = [
     "get_peft_model",
     "inject_adapter_in_model",
     "get_peft_model_state_dict",
+    "initialize_kv_prefix_from_past_key_values",
+    "initialize_kv_prefix_from_text",
     "load_peft_weights",
+    "prompt_embeddings_from_past_key_values",
     "prepare_model_for_kbit_training",
     "set_base_model_state_dict",
     "convert_to_lora",
