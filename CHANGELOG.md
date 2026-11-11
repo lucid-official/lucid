@@ -201,6 +201,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the Super-Tuning tuner, top-magnitude entries (LCD-826)
 
+- the WaveFT tuner, wavelet-basis update (LCD-826)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

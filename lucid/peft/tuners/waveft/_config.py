@@ -1,7 +1,7 @@
 """``WaveFTConfig``: the WaveFT hyper-parameters on top of the shared targeting fields."""
 
 from dataclasses import dataclass, field
-from typing import ClassVar, Literal
+from typing import ClassVar, Final, Literal, override
 
 from lucid.peft._config import (
     PeftType,
@@ -15,6 +15,15 @@ from lucid.peft._config import (
     _keyed,
     _nullable,
     _TargetedConfig,
+)
+
+
+#: The wavelet names a config accepts, the reference's: Daubechies ``db1`` to ``db38``, symlets ``sym2`` to
+#: ``sym20`` and coiflets ``coif1`` to ``coif17``.  Filters exist for fewer (``_filters.WAVELET_FAMILIES``).
+KNOWN_WAVELETS: Final[tuple[str, ...]] = (
+    *(f"db{n}" for n in range(1, 39)),
+    *(f"sym{n}" for n in range(2, 21)),
+    *(f"coif{n}" for n in range(1, 18)),
 )
 
 
@@ -73,11 +82,13 @@ class WaveFTConfig(_TargetedConfig, peft_type=PeftType.WAVEFT):
 
     Notes
     -----
-    WaveFT's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``n_frequency`` is not positive, or a field is out
-    of range.  No tuner applies it yet: ``get_peft_model`` raises ``NotImplementedError`` naming
-    LCD-826, which tracks it.
+    Every field of the reference library's config is here, in its order and with its defaults, and the
+    config is read and written as ``adapter_config.json``.  A field of the wrong type raises
+    ``TypeError``.  ``ValueError`` is raised when ``n_frequency`` is not positive, or ``wavelet_family``
+    is not a name the reference accepts (``db1`` to ``db38``, ``sym2`` to ``sym20``, ``coif1`` to
+    ``coif17``).  The filters of ``db1`` to ``db10``, ``sym2`` to ``sym10`` and ``coif1`` to ``coif5``
+    are built in; a layer with ``use_idwt=True`` and another family raises ``ValueError`` when it is
+    built, and one with ``use_idwt=False`` never reads the family.
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {
@@ -92,6 +103,15 @@ class WaveFTConfig(_TargetedConfig, peft_type=PeftType.WAVEFT):
         "proportional_parameters": _check_bool,
         "init_weights": _check_bool,
     }
+
+    @override
+    def _check_fields(self) -> None:
+        super()._check_fields()
+        if self.wavelet_family not in KNOWN_WAVELETS:
+            raise ValueError(
+                f"Wavelet family {self.wavelet_family} not supported. "
+                f"Supported wavelet families are: {list(KNOWN_WAVELETS)}"
+            )
 
     n_frequency: int = 2592
     scaling: float = 25.0

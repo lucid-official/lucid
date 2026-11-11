@@ -20,10 +20,15 @@ from lucid.peft import (
     PeftType,
     SupertuningConfig,
     SupertuningModel,
+    WaveFTConfig,
+    WaveFTModel,
     get_peft_model,
 )
 from lucid.peft.tuners.beft import BeftLayer
+from lucid.peft.tuners.fourierft._locations import _spectrum_positions
 from lucid.peft.tuners.supertuning import SupertuningLayer
+from lucid.peft.tuners.waveft import WaveFTLayer
+from lucid.peft.tuners.waveft._filters import _filter_bank
 from lucid.test.unit.peft import _sparse_forms as forms
 from lucid.test.unit.peft import test_tuner_contract as contract
 from lucid.test.unit.peft._closed_forms import CLOSED_FORMS, _PREFIX, _mlp, _run
@@ -86,7 +91,7 @@ def _supertuning(targets: tuple[str, ...], random: bool, **kw: object) -> Supert
 
 #: Trained entries of the tiny MLP at sparsity 0.5: half of the 48 and of the 32 entries of its two weights.
 _SUPER_COUNTS = {0: 24, 2: 16}
-_SUPER_SIZES = {0: (8, 6), 2: (4, 8)}
+_WEIGHT_SIZES = {0: (8, 6), 2: (4, 8)}
 
 
 def _supertuning_tensors(rank: int) -> Callable[[], dict[str, lucid.Tensor]]:
@@ -96,7 +101,7 @@ def _supertuning_tensors(rank: int) -> Callable[[], dict[str, lucid.Tensor]]:
         lucid.manual_seed(7)
         made: dict[str, lucid.Tensor] = {}
         for index, count in _SUPER_COUNTS.items():
-            out, inn = _SUPER_SIZES[index]
+            out, inn = _WEIGHT_SIZES[index]
             p = f"{_PREFIX}{index}."
             made[p + "supertuning_values"] = lucid.randint(-2, 3, (count,)).to(lucid.float32) * 0.5
             made[p + "supertuning_indices"] = lucid.tensor(
@@ -117,7 +122,7 @@ def _supertuning_tensors(rank: int) -> Callable[[], dict[str, lucid.Tensor]]:
 def _supertuning_file(rank: int) -> dict[str, tuple[int, ...]]:
     file: dict[str, tuple[int, ...]] = {}
     for index, count in _SUPER_COUNTS.items():
-        out, inn = _SUPER_SIZES[index]
+        out, inn = _WEIGHT_SIZES[index]
         p = f"{_PREFIX}{index}."
         file[p + "supertuning_values"] = (count,)
         file[p + "supertuning_indices"] = (count,)
@@ -152,6 +157,49 @@ def _supertuning_forward(rank: int, alpha: float) -> Callable[..., lucid.Tensor]
     return forward
 
 
+def _waveft(family: str, idwt: bool) -> Callable[..., WaveFTConfig]:
+    def config(targets: tuple[str, ...], random: bool, **kw: object) -> WaveFTConfig:
+        return WaveFTConfig.from_dict(
+            {
+                "n_frequency": 6,
+                "wavelet_family": family,
+                "use_idwt": idwt,
+                "target_modules": list(targets),
+                "init_weights": not random,
+                **kw,
+            }
+        )
+
+    return config
+
+
+def _waveft_forward(family: str, idwt: bool) -> Callable[..., lucid.Tensor]:
+    def forward(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
+        """``W' = W + s IDWT(C)``: the file's coefficients at the seeded permutation's positions, inverse-transformed by the plain sums."""
+        net = _mlp()
+        bank = _filter_bank(family)
+        weights = []
+        for index in (0, 2):
+            out, inn = _WEIGHT_SIZES[index]
+            flat = _spectrum_positions(out * inn, 6, 777)
+            delta = forms.waveft_delta(
+                (out, inn),
+                [p // inn for p in flat],
+                [p % inn for p in flat],
+                t[f"{_PREFIX}{index}.waveft_spectrum"].tolist(),
+                (bank.rec_lo, bank.rec_hi),
+                25.0,
+                idwt,
+            )
+            weights.append(net[index].weight + lucid.tensor(delta))
+        return _run(weights, [net[0].bias, net[2].bias], x)
+
+    return forward
+
+
+_WAVEFT_FILE = {f"{_PREFIX}0.waveft_spectrum": (6,), f"{_PREFIX}2.waveft_spectrum": (6,)}
+
+
 #: Method rows in the order the methods landed.
 _METHODS: list[_Method] = [
     _Method(
@@ -180,9 +228,31 @@ _METHODS: list[_Method] = [
         _supertuning_file(2),
         tensors=_supertuning_tensors(2),
     ),
+    _Method(
+        "waveft", PeftType.WAVEFT, _waveft("db1", True), WaveFTModel, WaveFTLayer, _WAVEFT_FILE
+    ),
+    _Method(
+        "waveft_sym2",
+        PeftType.WAVEFT,
+        _waveft("sym2", True),
+        WaveFTModel,
+        WaveFTLayer,
+        _WAVEFT_FILE,
+    ),
+    _Method(
+        "waveft_direct",
+        PeftType.WAVEFT,
+        _waveft("db1", False),
+        WaveFTModel,
+        WaveFTLayer,
+        _WAVEFT_FILE,
+    ),
 ]
 
 CLOSED_FORMS["beft"] = _beft_forward
+CLOSED_FORMS["waveft"] = _waveft_forward("db1", True)
+CLOSED_FORMS["waveft_sym2"] = _waveft_forward("sym2", True)
+CLOSED_FORMS["waveft_direct"] = _waveft_forward("db1", False)
 CLOSED_FORMS["supertuning"] = _supertuning_forward(0, 0.0)
 CLOSED_FORMS["supertuning_supra"] = _supertuning_forward(2, 4.0)
 _REFERENCE_CONFIGS["beft"] = {
@@ -215,6 +285,33 @@ _SUPERTUNING_REFERENCE = {
     "target_modules": ["0", "2"],
     "task_type": None,
 }
+_WAVEFT_REFERENCE = {
+    "auto_mapping": None,
+    "base_model_name_or_path": "tiny",
+    "bias": "none",
+    "exclude_modules": None,
+    "fan_in_fan_out": False,
+    "inference_mode": True,
+    "init_weights": True,
+    "layers_pattern": None,
+    "layers_to_transform": None,
+    "modules_to_save": None,
+    "n_frequency": 6,
+    "n_frequency_pattern": {},
+    "peft_type": "WAVEFT",
+    "peft_version": "0.21.2",
+    "proportional_parameters": False,
+    "random_loc_seed": 777,
+    "revision": None,
+    "scaling": 25.0,
+    "target_modules": ["0", "2"],
+    "task_type": None,
+    "use_idwt": True,
+    "wavelet_family": "db1",
+}
+_REFERENCE_CONFIGS["waveft"] = _WAVEFT_REFERENCE
+_REFERENCE_CONFIGS["waveft_sym2"] = {**_WAVEFT_REFERENCE, "wavelet_family": "sym2"}
+_REFERENCE_CONFIGS["waveft_direct"] = {**_WAVEFT_REFERENCE, "use_idwt": False}
 _REFERENCE_CONFIGS["supertuning"] = _SUPERTUNING_REFERENCE
 _REFERENCE_CONFIGS["supertuning_supra"] = {**_SUPERTUNING_REFERENCE, "r": 2, "lora_alpha": 4}
 
