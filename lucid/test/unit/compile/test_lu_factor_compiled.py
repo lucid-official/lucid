@@ -26,6 +26,7 @@ from lucid.linalg._lu import _lu_factor_packed
 
 _LA = lucid.linalg
 _MAX_LU_DIM = 32
+_MAX_COFACTOR_DIM = 24
 
 
 def _compiled(fn: object, *args: lucid.Tensor) -> tuple[object, object]:
@@ -241,27 +242,63 @@ class _SlogdetNet(nn.Module):
         return self.out(h) + (sign * logabs).sum() * 0.1
 
 
-@pytest.mark.parametrize("n, batch", [(3, None), (4, None), (4, 3), (8, 5)])
-def test_a_training_step_through_slogdet_falls_back_with_the_eager_gradient(
-    n: int, batch: int | None, device_gpu_only: str
-) -> None:
-    """``DetVjp`` compiles only an unbatched matrix up to 3x3, and the singular
-    matrix's gradient goes through it, so the step answers eagerly: warned, and
-    with the eager value and gradients."""
+def _slogdet_step_gradients(
+    n: int, batch: int | None, device: str
+) -> tuple[lucid.Tensor, lucid.Tensor, list[lucid.Tensor], list[lucid.Tensor]]:
+    """Eager and compiled ``(loss, parameter gradients)`` of the same ``_SlogdetNet`` step.
+
+    The second compiled call is the executable's own run; the first one traces."""
     lucid.manual_seed(0)
-    x = lucid.randn(6, 8, device=device_gpu_only)
-    t = lucid.randn(6, 8, device=device_gpu_only)
+    x = lucid.randn(6, 8, device=device)
+    t = lucid.randn(6, 8, device=device)
     lucid.manual_seed(1)
-    ref = _SlogdetNet(n, batch).to(device_gpu_only)
+    ref = _SlogdetNet(n, batch).to(device)
     lucid.manual_seed(1)
-    net = _SlogdetNet(n, batch).to(device_gpu_only)
+    net = _SlogdetNet(n, batch).to(device)
     want_loss = F.mse_loss(ref(x), t)
     want_loss.backward()
     step = make_step(net, F.mse_loss)
-    with pytest.warns(CompileFallbackWarning):
-        loss = step(x, t)
-        loss.backward()
-    assert loss.item() == pytest.approx(want_loss.item(), rel=1e-5)
+    step(x, t).backward()
+    for p in net.parameters():
+        p.grad = None
+    loss = step(x, t)
+    loss.backward()
+    grads: list[lucid.Tensor] = []
+    want: list[lucid.Tensor] = []
     for p, q in zip(net.parameters(), ref.parameters(), strict=True):
         assert p.grad is not None and q.grad is not None
-        assert lucid.allclose(p.grad.to("cpu"), q.grad.to("cpu"), rtol=1e-4, atol=1e-5)
+        grads.append(p.grad)
+        want.append(q.grad)
+    return loss, want_loss, grads, want
+
+
+@pytest.mark.parametrize(
+    "n, batch", [(3, None), (4, None), (4, 3), (8, 5), (16, None), (16, 3), (24, None), (24, 2)]
+)
+def test_a_training_step_through_slogdet_compiles_with_the_eager_gradient(
+    n: int, batch: int | None, device_gpu_only: str
+) -> None:
+    """The backward's inverse and the singular matrix's cofactor both compile, for a
+    batch and for any matrix up to ``kMaxCofactorDim``: no fallback, the eager value
+    and gradients."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", CompileFallbackWarning)
+        loss, want_loss, grads, want = _slogdet_step_gradients(n, batch, device_gpu_only)
+    assert loss.item() == pytest.approx(want_loss.item(), rel=1e-5)
+    for g, w in zip(grads, want, strict=True):
+        assert lucid.allclose(g.to("cpu"), w.to("cpu"), rtol=2e-4, atol=1e-5)
+
+
+@pytest.mark.parametrize("n", [_MAX_COFACTOR_DIM + 1, _MAX_LU_DIM, _MAX_LU_DIM + 1])
+def test_a_training_step_through_slogdet_past_the_cofactor_bound_falls_back(
+    n: int, device_gpu_only: str
+) -> None:
+    """Past ``kMaxCofactorDim`` the inverse and the cofactor decline (a longer chain
+    costs the compiled step more than the eager fallback saves), and past ``kMaxLuDim``
+    the factorisation itself does: the step answers eagerly, warned, with the eager
+    value and gradients."""
+    with pytest.warns(CompileFallbackWarning):
+        loss, want_loss, grads, want = _slogdet_step_gradients(n, None, device_gpu_only)
+    assert loss.item() == pytest.approx(want_loss.item(), rel=1e-5)
+    for g, w in zip(grads, want, strict=True):
+        assert lucid.allclose(g.to("cpu"), w.to("cpu"), rtol=1e-4, atol=1e-5)
