@@ -37,10 +37,11 @@ class BeftConfig(_TargetedConfig, peft_type=PeftType.BEFT):
 
     Notes
     -----
-    BEFT's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  ``TypeError`` is raised when a field
-    holds a value of the wrong type.  No tuner applies it yet: ``get_peft_model`` raises
-    ``NotImplementedError`` naming LCD-826, which tracks it.
+    Every field of the reference library's config is here, in its order and with its defaults, and
+    the config is read and written as ``adapter_config.json``.  ``TypeError`` is raised when a field
+    holds a value of the wrong type.  ``target_modules=None`` takes the value projection of the
+    model types the reference's table covers (``bert``, ``t5`` among the zoo's); any other model
+    type must name its modules.
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {"init_weights": _check_bool}

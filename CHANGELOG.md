@@ -197,6 +197,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - export LoraRuntimeConfig from lucid.peft (LCD-959)
 
+- the BEFT tuner, a trained output bias (LCD-826)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views
