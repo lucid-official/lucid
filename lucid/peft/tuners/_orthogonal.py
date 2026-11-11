@@ -13,6 +13,14 @@ applies the active adapters in turn to the weight, so it equals the merged
 layer's for any number of adapters, and a method with a cheaper way to apply its
 matrix (OFT rotates the input block by block) overrides ``_adapted``.
 
+**The order of several adapters** is the order they are listed in (the active
+adapters, or ``adapter_names`` of a merge): the weight is rewritten by the first,
+then the second, :math:`W D_1 D_2 \cdots D_n`.  Rotations do not commute, so a
+layer that turns the input instead of the weight must turn it by the *last*
+adapter first, :math:`x D_n^\top \cdots D_1^\top`, to be the same function
+(``_input_order``).  The weight route and the merge walk the list as given and
+never decide this; ``_input_order`` is where it is decided.
+
 A method supplies the matrix: ``_right_factor`` (and ``get_delta_weight``, the
 matrix the reference calls by that name) and, for a scale, ``_row_scale``.
 """
@@ -104,6 +112,16 @@ class _OrthogonalLayer(_ConfigLayer, _WeightRewrite):
         return self._restored(weight, adapter)
 
     # ── the forward pass ──────────────────────────────────────────────────
+
+    @staticmethod
+    def _input_order(adapters: list[str]) -> list[str]:
+        """``adapters`` in the order a layer that turns the *input* applies them: the last listed first.
+
+        :math:`W D_1 D_2` is the weight the adapters ``[1, 2]`` make, and
+        :math:`x (W D_1 D_2)^\\top = (x D_2^\\top D_1^\\top) W^\\top` turns ``x`` by adapter 2
+        before adapter 1.
+        """
+        return adapters[::-1]
 
     def _adapted(self, x: Tensor, adapters: list[str]) -> Tensor:
         """The layer's output with ``adapters`` applied, computed from the weight."""

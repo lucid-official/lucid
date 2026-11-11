@@ -228,6 +228,11 @@ class Linear(OFTLayer, base_type=nn.Linear):
     :math:`O(n\,d\,b)` for :math:`n` rows of width :math:`d` and blocks of size
     :math:`b` instead of the :math:`O(d_{out}\,d^2)` of building :math:`W R^\top`.
 
+    With several active adapters the weight is :math:`W R_1^\top R_2^\top` for the adapters
+    listed ``[1, 2]``, which merging writes, so the input is turned by the *last* one listed
+    first.  Rotations do not commute: the order the adapters are listed in matters, and the
+    adapted layer equals the merged one in each.
+
     Parameters
     ----------
     base_layer : nn.Linear
@@ -260,7 +265,7 @@ class Linear(OFTLayer, base_type=nn.Linear):
     @override
     def _adapted(self, x: Tensor, adapters: list[str]) -> Tensor:
         turned = x
-        for adapter in adapters:
+        for adapter in self._input_order(adapters):
             turned = self._rotate(turned, adapter)
         out: Tensor = self.base_layer(turned.to(x.dtype))
         return out

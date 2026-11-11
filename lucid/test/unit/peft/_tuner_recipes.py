@@ -33,6 +33,7 @@ from lucid.peft import (
     XLoraConfig,
     get_peft_model,
 )
+from lucid.peft.tuners._layer import _tuner_layers
 from lucid.peft.tuners.adaption_prompt import AdaptionPromptConfig
 from lucid.test.audit._builders import _EXAMPLE_CONFIGS
 
@@ -242,3 +243,12 @@ def perturb(model: nn.Module, seed: int = 3) -> None:
     with lucid.no_grad():
         for p in trainable(model):
             p.copy_(p + 0.3 * lucid.randn(*p.shape, device=p.device))
+
+
+def perturb_adapter(model: nn.Module, name: str, seed: int) -> None:
+    """Move the parameters of adapter ``name``, trainable or not, well off their starting values."""
+    lucid.manual_seed(seed)
+    with lucid.no_grad():
+        for _, layer in _tuner_layers(model):
+            for p in layer._adapter_parameters(name):
+                p.copy_(p + 0.3 * lucid.randn(*p.shape, device=p.device))
