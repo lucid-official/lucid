@@ -52,8 +52,8 @@ class UniLoraConfig(_TargetedConfig, peft_type=PeftType.UNILORA):
     init_weights : bool, default=True
         Use the default initialisation of the vector (``True``) or leave it random.
     save_indices : bool, default=False
-        Also save the index and scale buffers, so an adapter does not depend on later changes to
-        how they are drawn.
+        Also save the index and scale buffers of each layer, so an adapter does not depend on how
+        they are drawn.
     target_modules : str or list of str, optional
         The modules Uni-LoRA adapts, matched as ``LoraConfig.target_modules`` is.
     fan_in_fan_out : bool, default=False
@@ -73,11 +73,13 @@ class UniLoraConfig(_TargetedConfig, peft_type=PeftType.UNILORA):
 
     Notes
     -----
-    Uni-LoRA's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``r``, ``theta_d_length`` or
-    ``init_theta_d_bound`` is not positive.  No tuner applies it yet: ``get_peft_model`` raises
-    ``NotImplementedError`` naming LCD-824, which tracks it.
+    The config reads and writes ``adapter_config.json`` as the reference library's does: every field,
+    in its order and with its defaults.  A field of the wrong type raises ``TypeError``; ``ValueError``
+    is raised when ``r``, ``theta_d_length`` or ``init_theta_d_bound`` is not positive.  The fixed
+    projection is drawn from ``proj_seed`` by this library's generator, so an adapter file written
+    with ``save_indices=False`` by another library reads its indices back as this one draws them;
+    ``save_indices=True`` carries them (and their scales) in the file.  ``bias`` other than ``"none"``
+    is refused by the tuner with ``NotImplementedError``.
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {

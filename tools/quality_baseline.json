@@ -2355,7 +2355,6 @@
     "lucid/peft/tuners/shadow/_config.py": 4,
     "lucid/peft/tuners/supertuning/_config.py": 2,
     "lucid/peft/tuners/tinylora/_config.py": 3,
-    "lucid/peft/tuners/unilora/_config.py": 5,
     "lucid/peft/tuners/waveft/_config.py": 3
    }
   }

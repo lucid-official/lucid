@@ -173,6 +173,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the PEANuT tuner, a network that reads the weight (LCD-823)
 
+- Uni-LoRA, every LoRA factor read out of one vector (LCD-824)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views
