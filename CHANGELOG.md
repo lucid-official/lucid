@@ -179,6 +179,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - TinyLoRA, a trained vector beside the frozen SVD (LCD-824)
 
+- Lily, shared low-rank adapters mixed by a router (LCD-824)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

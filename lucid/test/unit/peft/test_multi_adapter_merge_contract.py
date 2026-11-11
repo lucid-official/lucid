@@ -43,6 +43,7 @@ _ONE_AT_A_TIME = "one adapter at a time"
 _REFUSED: dict[PeftType, tuple[str, type[Exception], str]] = {
     PeftType.LN_TUNING: ("forward", ValueError, "more than one adapter at a time"),
     PeftType.POLY: ("merge", NotImplementedError, "cannot be folded"),
+    PeftType.LILY: ("merge", NotImplementedError, "cannot be folded"),
     PeftType.ADAPTION_PROMPT: ("activate", ValueError, _ONE_AT_A_TIME),
     PeftType.PROMPT_TUNING: ("activate", ValueError, _ONE_AT_A_TIME),
     PeftType.PREFIX_TUNING: ("activate", ValueError, _ONE_AT_A_TIME),
@@ -150,10 +151,7 @@ class TestOrthogonalComposition:
     def _two_oft(device: str) -> tuple[PeftModel, lucid.Tensor]:
         def config() -> OFTConfig:
             return OFTConfig(
-                oft_block_size=4,
-                target_modules=["0"],
-                use_cayley_neumann=False,
-                init_weights=False,
+                oft_block_size=4, target_modules=["0"], use_cayley_neumann=False, init_weights=False
             )
 
         lucid.manual_seed(0)

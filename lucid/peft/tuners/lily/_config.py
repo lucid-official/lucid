@@ -59,11 +59,11 @@ class LilyConfig(_TargetedConfig, peft_type=PeftType.LILY):
 
     Notes
     -----
-    Lily's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``r`` or ``stride_A`` is not positive, or
-    ``num_B`` is below 2.  No tuner applies it yet: ``get_peft_model`` raises
-    ``NotImplementedError`` naming LCD-824, which tracks it.
+    The config reads and writes ``adapter_config.json`` as the reference library's does: every field,
+    in its order and with its defaults.  A field of the wrong type raises ``TypeError``;
+    ``ValueError`` is raised when ``r`` or ``stride_A`` is not positive or ``num_B`` is below 2.  The
+    tuner is :class:`~lucid.peft.LilyModel`; it adapts ``nn.Linear`` modules, and its layers cannot be
+    merged.
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {

@@ -81,9 +81,9 @@ class TestConfig:
         config = _config(save_indices=True, proj_seed=7)
         assert UniLoraConfig.from_dict(config.to_dict()) == config
 
-    def test_a_bias_the_adapter_does_not_train_is_refused_by_the_tuner(self) -> None:
+    def test_a_bias_the_adapter_does_not_train_is_refused(self) -> None:
         with pytest.raises(NotImplementedError, match="bias='all'"):
-            get_peft_model(_mlp(), _config(bias="all"))
+            _config(bias="all")
 
 
 class TestProjection:

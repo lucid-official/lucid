@@ -9,7 +9,7 @@ tests loudly instead of being left out.
 """
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import lucid
@@ -198,6 +198,8 @@ RECIPES: dict[PeftType, Recipe] = {
         )
         for peft_type, make in _EXAMPLE_CONFIGS.items()
     },
+    # A Lily layer mixes its up-projections by the batch's router average: no weight holds the update.
+    PeftType.LILY: replace(_module_recipe(_EXAMPLE_CONFIGS[PeftType.LILY]), mergeable=False),
     PeftType.PROMPT_TUNING: _text_recipe(
         lambda: PromptTuningConfig(num_virtual_tokens=2, task_type="CAUSAL_LM")
     ),
