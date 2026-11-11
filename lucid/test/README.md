@@ -105,6 +105,28 @@ The devices read the one stream differently — a Metal `rand(4)` advances it
 one Philox block, a CPU `rand(4)` four — so one seed gives each device
 different samples. Across devices compare deterministic ops, or statistics.
 
+## Tolerances that can fail
+
+`pytest.approx(x, rel=R)` still has a 1e-12 absolute floor and `np.allclose` an
+`atol` of 1e-8, so over a tiny expected value the floor *is* the tolerance:
+`approx(4e-37, rel=1e-10) == 0.0` is true, and a guard for "this tail value came
+back 0" cannot fail (LCD-949). `conftest.py` installs
+`_fixtures/tolerance_guard.py`, which raises `VacuousToleranceError` at the
+comparison when:
+
+- `approx` has no `abs=` and its floor is 10x looser than `rel * |expected|` — give
+  `abs=0` for an exact expectation, an explicit `abs=` (and a comment) when the value
+  is genuinely ~0;
+- `np.allclose` keeps its default `atol` against an expected operand within 10x of it;
+- any `atol` on `np.allclose` / `np.testing.assert_allclose` would accept an all-zeros
+  result. Take `atol` from the operand's own scale (`_helpers.compare.assert_close_to_scale`),
+  or, when the expected operand is roundoff of an analytic zero, declare it:
+  `with expects_noise("why it is 0"):` / `noise_when_below(expected, atol, "why")`
+  for a sweep that is noise in only some cells.
+
+`LUCID_TEST_TOLERANCE_GUARD=warn` reports instead of raising (triage a tree), `off`
+disables it. The numpy checks apply only to calls made from inside `lucid/test`.
+
 ## CPU + GPU coverage
 
 The `device` fixture parametrizes over `["cpu", "metal"]` whenever
