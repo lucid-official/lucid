@@ -102,3 +102,29 @@ def gralora_delta(
     if general is not None:
         delta = add(delta, matmul(general[1], general[0]))
     return scaled(delta, scaling)
+
+
+# ── HiRA (Huang et al., 2025) ────────────────────────────────────────────────
+
+
+def hira_delta(weight: Matrix, a: Matrix, b: Matrix) -> Matrix:
+    r""":math:`\Delta W = W \odot (B A)` for ``a`` of shape ``(r, in)`` and ``b`` of shape ``(out, r)``."""
+    return hadamard(weight, matmul(b, a))
+
+
+def hira_conv_delta(weight: list[Matrix], a: list[Matrix], b: Matrix) -> list[Matrix]:
+    r""":math:`\Delta W_{o,i,k} = W_{o,i,k} \sum_s B_{o,s} A_{s,i,k}`.
+
+    ``weight`` is ``(out, in, K)``, ``a`` is ``(r, in, K)`` (the kernel's axes flattened to ``K``) and
+    ``b`` is ``(out, r)`` (its trailing ones dropped).
+    """
+    return [
+        [
+            [
+                weight[o][i][k] * sum(b[o][s] * a[s][i][k] for s in range(len(a)))
+                for k in range(len(weight[o][i]))
+            ]
+            for i in range(len(weight[o]))
+        ]
+        for o in range(len(weight))
+    ]

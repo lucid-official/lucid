@@ -45,8 +45,10 @@ class HiraConfig(_TargetedConfig, peft_type=PeftType.HIRA):
     hira_dropout : float, default=0.0
         Dropout on the update's input, in ``[0, 1)``.
     init_weights : {True, False, "gaussian"}, optional
-        ``True``: :math:`B` starts at zero, so the update does.  ``False``: both factors start
-        random (for tests).  ``"gaussian"``: a Gaussian start scaled by the rank.
+        ``True``: :math:`B` starts at zero, so the update does.  ``False`` (or ``None``): both
+        factors start random (for tests).  ``"gaussian"``: :math:`A` starts Gaussian with standard
+        deviation ``1 / r``, :math:`B` at zero.  A lookup table starts :math:`A` at zero and
+        :math:`B` Gaussian for any value but ``False``.
     rank_pattern : dict of str to int, optional
         Per-module rank overrides, keyed by name or regex suffix.
     target_modules : str or list of str, optional
@@ -54,8 +56,8 @@ class HiraConfig(_TargetedConfig, peft_type=PeftType.HIRA):
     exclude_modules : str or list of str, optional
         Modules HiRA never adapts, matched like ``target_modules``.
     fan_in_fan_out : bool, default=False
-        Set for a base that stores its weight as ``(in, out)``; a HiRA layer follows that
-        layout.
+        For a base that stores its weight as ``(in, out)``.  The modules adapted here store
+        ``(out, in)``, so ``True`` warns and is set back to ``False`` when the adapter is made.
     modules_to_save, layers_to_transform, layers_pattern
         As in :class:`~lucid.peft.LoraConfig`.
 
@@ -70,11 +72,11 @@ class HiraConfig(_TargetedConfig, peft_type=PeftType.HIRA):
 
     Notes
     -----
-    HiRA's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``r`` is not positive, or ``init_weights`` is not
-    one of its values.  No tuner applies it yet: ``get_peft_model`` raises ``NotImplementedError``
-    naming LCD-823, which tracks it.
+    Every field of the reference library's config is here, in its order and with its defaults, read
+    and written as ``adapter_config.json``.  A field of the wrong type raises ``TypeError``.
+    ``ValueError`` is raised when ``r`` is not positive, or ``init_weights`` is not one of its
+    values.  The tuner is :class:`~lucid.peft.HiraModel`; it adapts ``nn.Linear``, ``nn.Embedding``
+    and ``nn.Conv1d`` / ``Conv2d`` / ``Conv3d`` modules.
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {
