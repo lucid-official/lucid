@@ -40,6 +40,14 @@ comparison's downloads when done, and never sweeps shared user caches.
 Only sources whose reference package is installed can be checked; the
 rest are reported as unreachable rather than skipped silently.
 
+**A dropped network is not a finding.**  A comparison that fails because a
+download did — a resolver gone for seconds, a reset connection, a 503 — is
+tried again after 5, 15 and 45 seconds (one 10-minute allowance for the
+whole run).  If it still fails it is reported as ``unreachable (network)``
+and left out of the verdict.  A numeric mismatch, or a failure that is not
+the network's (a loader that raises, a wrong shape), is never retried and
+always fails the run.
+
 Run::
 
     python -m tools.check_pretrained_parity --limit 5
@@ -51,9 +59,13 @@ Run::
 
 Exit codes
 ----------
-0 — every checkpoint that could be compared agrees.
-1 — at least one disagrees beyond tolerance.
-2 — nothing could be compared (no reference installed).
+0 — every checkpoint that could be compared agrees.  Checkpoints that stayed
+    unreachable (network) after the retries are listed in the summary, and as
+    a warning under GitHub Actions, but are not failures.
+1 — at least one disagrees beyond tolerance, or failed for a reason other
+    than the network.
+2 — nothing could be compared (no reference installed, or every selection
+    unreachable).
 """
 
 import argparse
@@ -95,6 +107,7 @@ from lucid.weights._hub import _cache_dir as _lucid_weight_cache
 from lucid.weights._registry import _WEIGHTS_BY_MODEL
 from lucid.test._fixtures.ref_framework import ref_module, ref_vision_module, zoo_module
 from tools import _darknet_release
+from tools._network_retry import Backoff, is_network_failure
 
 #: Outputs agreeing to this are the same computation in a different order.
 _ATOL = 1e-4
@@ -109,6 +122,11 @@ _MIN_SCALE = 1e-3
 #: Larger than this is reported, not loaded.  Two float32 copies of a
 #: 774M-parameter model are over 6 GB before any activation.
 _MAX_PARAMS = 500_000_000
+
+#: Waits out a network that drops for seconds.  One instance for the whole
+#: run: its allowance is shared, so an outage that never ends cannot spend
+#: more than ten minutes of the job's two hours.
+_NETWORK = Backoff()
 
 #: The transformers class that reproduces each Lucid class, and the output
 #: fields the two share.  A Lucid class not listed here is reported as
@@ -241,6 +259,53 @@ def _build_reference(kind: str, identifier: str) -> object:
     )
 
 
+def _failure(exc: Exception) -> dict[str, object]:
+    """The verdict for a comparison that raised: the one place it is decided.
+
+    A failure the network caused is ``unreachable``, marked so that
+    :func:`_compare` tries again and :func:`main` keeps it out of the
+    verdict; anything else is an ``error`` and fails the run.  Every
+    comparison reports its exceptions through here — a handler that built
+    its own ``error`` would bring back the week a DNS blip read as a
+    conversion defect.
+    """
+    if is_network_failure(exc):
+        return {
+            "unreachable": f"unreachable (network): {type(exc).__name__}: {exc}"[:200],
+            "network": True,
+        }
+    return {"error": f"{type(exc).__name__}: {exc}"[:200]}
+
+
+def _smooth_image(shape: tuple[int, ...], seed: int = 0) -> np.ndarray:
+    """A deterministic image of low spatial frequencies, unit variance per plane.
+
+    White noise is an unlucky input for a detector: DETR's decoder
+    cross-attention scores reach about 90 on it, so the softmax turns a
+    1e-6 float32 rounding difference into a 1e-4 one.  Seed 0's noise put
+    DETR-R50's boxes 1.212e-4 apart from the reference (tolerance 1e-4) on
+    unchanged weights, and the same checkpoint on seeds 0-3 ranged over
+    6e-6 to 1.2e-4.  A few low-frequency cosines per channel, which is
+    nearer what the model was trained on, put every seed of both DETRs
+    under 1e-5 (worst 9.0e-6), while a 1% error in one decoder weight
+    still reads 9e-4.
+    """
+    *lead, height, width = shape
+    rng = np.random.default_rng(seed)
+    rows, cols = np.meshgrid(np.linspace(0, 1, height), np.linspace(0, 1, width), indexing="ij")
+    planes = np.empty((math.prod(lead), height, width))
+    for plane in planes:
+        field = np.zeros((height, width))
+        for _ in range(4):
+            freq_y, freq_x = rng.integers(1, 4, size=2)
+            phase_y, phase_x = rng.uniform(0.0, 2.0 * np.pi, size=2)
+            field += np.cos(2.0 * np.pi * freq_y * rows + phase_y) * np.cos(
+                2.0 * np.pi * freq_x * cols + phase_x
+            )
+        plane[...] = field / field.std()
+    return planes.reshape(shape).astype(np.float32)
+
+
 def _compare_arrays(wanted: np.ndarray, got: np.ndarray) -> dict[str, object]:
     """Reject invalid comparisons before a NaN can make ``diff > tol`` false."""
     if got.shape != wanted.shape:
@@ -265,6 +330,24 @@ def _compare(
     shape: tuple[int, ...],
     params: int | None,
     max_params: float = _MAX_PARAMS,
+) -> dict[str, object]:
+    """One checkpoint against its source, trying again while the network drops.
+
+    Every download either side makes — Lucid's checkpoint, the reference's —
+    happens inside :func:`_compare_once`, so retrying that retries both.  What
+    was fetched before the drop is already on disk and is not fetched again.
+    """
+    result = _compare_once(model_name, source, shape, params, max_params)
+    retry = 0
+    while result.get("network") and _NETWORK.wait(retry):
+        retry += 1
+        print(f"  {model_name}: {result['unreachable']}; retry {retry}", flush=True)
+        result = _compare_once(model_name, source, shape, params, max_params)
+    return result
+
+
+def _compare_once(
+    model_name: str, source: str, shape: tuple[int, ...], params: int | None, max_params: float
 ) -> dict[str, object]:
     resolved = _reference_for(source)
     if resolved is None:
@@ -299,7 +382,7 @@ def _compare(
         ours = create_model(model_name, pretrained=True).eval()
         theirs = _build_reference(kind, identifier)
     except Exception as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
+        return _failure(exc)
 
     x = np.random.default_rng(0).standard_normal(shape).astype(np.float32)
     if kind == "vision" and identifier.startswith(("FasterRCNN_", "MaskRCNN_")):
@@ -309,7 +392,7 @@ def _compare(
             reference_out = theirs(ref.from_numpy(x.copy()))
             answer = ours(lucid.from_numpy(x.copy()))
     except Exception as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
+        return _failure(exc)
 
     # Segmenters and detectors answer with a mapping, and the two sides
     # do not agree on its keys — a detector's output is a list of boxes
@@ -418,7 +501,7 @@ def _compare_detection_components(
         )
         return result
     except Exception as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
+        return _failure(exc)
 
 
 def _compare_transformers(
@@ -461,7 +544,7 @@ def _compare_transformers(
         ours = create_model(model_name, pretrained=True).eval()
         theirs = getattr(transformers, auto_name).from_pretrained(repo).eval()
     except Exception as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
+        return _failure(exc)
 
     rng = np.random.default_rng(0)
     ours_args: list[lucid.Tensor] = []
@@ -495,7 +578,7 @@ def _compare_transformers(
             reference_out = theirs(**theirs_kwargs)
             answer = ours(*ours_args)
     except Exception as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
+        return _failure(exc)
 
     pairs = []
     for field in fields:
@@ -556,7 +639,7 @@ def _compare_vjepa2(model_name: str, repo: str) -> dict[str, object]:
         ours = create_model(model_name, pretrained=True, num_frames=2).eval()
         theirs = getattr(transformers, "AutoModel").from_pretrained(repo).eval()
     except Exception as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
+        return _failure(exc)
 
     side = int(getattr(ours.config, "image_size"))
     video = np.random.default_rng(0).standard_normal((1, 2, 3, side, side)).astype(np.float32)
@@ -585,7 +668,7 @@ def _compare_vjepa2(model_name: str, repo: str) -> dict[str, object]:
                 "numpy",
             )()
     except Exception as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
+        return _failure(exc)
     return _compare_fields(
         [
             ("encoder", reference.last_hidden_state.numpy(), encoded.numpy()),
@@ -654,7 +737,7 @@ def _compare_diffusers(model_name: str, identifier: str) -> dict[str, object]:
         result["scope"] = "single deterministic denoising step; no sampling or image-quality claim"
         return result
     except Exception as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
+        return _failure(exc)
 
 
 def _compare_latent_diffusion(model_name: str, kind: str, identifier: str) -> dict[str, object]:
@@ -751,7 +834,7 @@ def _compare_latent_diffusion(model_name: str, kind: str, identifier: str) -> di
         )
         return result
     except Exception as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
+        return _failure(exc)
 
 
 def _dit_original_frequencies(model: object) -> None:
@@ -784,7 +867,7 @@ def _compare_detr(model_name: str, identifier: str, shape: tuple[int, ...]) -> d
         theirs = ref.hub.load(
             f"facebookresearch/detr:{revision}", identifier, pretrained=True, trust_repo=True
         ).eval()
-        values = np.random.default_rng(0).standard_normal(shape).astype(np.float32)
+        values = _smooth_image(shape)
         with ref.no_grad(), lucid.no_grad():
             wanted = theirs(ref.from_numpy(values.copy()))
             got = ours(lucid.from_numpy(values.copy()))
@@ -795,10 +878,11 @@ def _compare_detr(model_name: str, identifier: str, shape: tuple[int, ...]) -> d
             ]
         )
         result["reference_revision"] = revision
+        result["input"] = "smooth deterministic image; white noise is ill-conditioned for DETR"
         result["scope"] = "raw query logits and normalized boxes; no detection metric"
         return result
     except Exception as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
+        return _failure(exc)
 
 
 @contextmanager
@@ -949,7 +1033,7 @@ def _compare_diamond(model_name: str, identifier: str) -> dict[str, object]:
         )
         return result
     except Exception as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
+        return _failure(exc)
 
 
 def _darknet_oracle_blob(path: Path, convolutions: list[tuple[int, int, bool]]) -> np.ndarray:
@@ -1066,7 +1150,7 @@ def _compare_darknet(model_name: str, shape: tuple[int, ...]) -> dict[str, objec
         )
         return result
     except Exception as exc:
-        return {"error": f"{type(exc).__name__}: {exc}"[:200]}
+        return _failure(exc)
 
 
 def _download_roots() -> list[Path]:
@@ -1291,6 +1375,7 @@ def main() -> int:
 
     print(f"comparing {len(targets)} published checkpoints against their sources")
     bad: list[str] = []
+    offline: list[str] = []
     unreachable = 0
     checked = 0
     evidence: list[dict[str, object]] = []
@@ -1350,6 +1435,8 @@ def main() -> int:
         freed += _remove_new(before, roots)
         if "unreachable" in report:
             unreachable += 1
+            if report.get("network"):
+                offline.append(name)
             print(f"  [{index}/{len(targets)}] {name:26s} — {report['unreachable']}")
             continue
         if "unsupported" in report:
@@ -1384,6 +1471,17 @@ def main() -> int:
     write_report(finished=True)
     if args.clean_downloads:
         print(f"removed {freed / 1e9:.2f} GB of downloads along the way")
+    if offline:
+        # Not a parity result either way: said plainly so that a green run is
+        # not read as having covered these, and surfaced on the run's page
+        # where nobody opens the log.
+        listing = ", ".join(offline)
+        print(f"\n{len(offline)} unreachable (network) after retries: {listing}", file=sys.stderr)
+        if os.environ.get("GITHUB_ACTIONS") == "true":
+            print(
+                f"::warning title=Pretrained parity::{len(offline)} checkpoint(s) unreachable "
+                f"(network), not compared: {listing}"
+            )
     if bad:
         print(f"\n{len(bad)} problem(s):", file=sys.stderr)
         for line in bad:

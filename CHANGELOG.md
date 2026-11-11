@@ -131,6 +131,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - keep tiny and huge float32 distances in cdist p=2 (LCD-952)
 
+- retry network drops, feed DETR a smooth image (LCD-953)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
