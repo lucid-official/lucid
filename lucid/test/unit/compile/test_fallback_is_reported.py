@@ -39,6 +39,10 @@ def _metal_ok() -> bool:
 pytestmark = pytest.mark.skipif(not _metal_ok(), reason="Metal unavailable")
 
 
+#: The inverse emitter takes a matrix up to 24 rows; 40 (also written into ``PROGRAM``) is
+#: one it registers for and declines.
+_TOO_BIG = 40
+
 PROGRAM = textwrap.dedent("""
     import lucid, lucid.nn as nn, lucid.nn.functional as F
     from lucid._C import engine as _C_engine
@@ -50,10 +54,10 @@ PROGRAM = textwrap.dedent("""
     model = Inverse().eval().to("metal")
     _C_engine.compile.session_cache_clear()
     compiled = lucid.compile.compile(model)
-    compiled(lucid.randn(4, 4).to("metal"))
-    compiled(lucid.randn(4, 4).to("metal"))
+    compiled(lucid.randn(40, 40).to("metal"))
+    compiled(lucid.randn(40, 40).to("metal"))
     # Another model with the same gap: the same kind of reason, already told.
-    lucid.compile.compile(Inverse().eval().to("metal"))(lucid.randn(4, 4).to("metal"))
+    lucid.compile.compile(Inverse().eval().to("metal"))(lucid.randn(40, 40).to("metal"))
     print("CACHE", _C_engine.compile.session_cache_size())
     """)
 
@@ -117,5 +121,5 @@ class TestRegistrationIsNotCompilation:
         model = Inverse().eval().to("metal")
         _C_engine.compile.session_cache_clear()
         compiled = lucid.compile.compile(model)
-        compiled(lucid.randn(4, 4).to("metal"))
+        compiled(lucid.randn(_TOO_BIG, _TOO_BIG).to("metal"))
         assert _C_engine.compile.session_cache_size() == 0
