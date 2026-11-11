@@ -30,9 +30,10 @@ from lucid.peft.tuners._host import _AdapterHost
 from lucid.peft.tuners._layer import _check_adapter_name
 from lucid.peft.tuners._plan import _plan_modules_to_save, _set_submodule
 from lucid.peft.tuners._files import _FileContext, _FileFormat
-from lucid.peft.tuners._prompt._encoder import _PromptEncoder
+from lucid.peft.tuners._prompt._encoder import _Injection, _PromptEncoder
 from lucid.peft.tuners._prompt._layout import _Layout
 from lucid.peft.tuners._prompt._sites import _Applied
+from lucid.utils.cache import Cache
 
 #: The key an adapter file stores the prompt under, whatever the method.
 _PROMPT_KEY: Final = "prompt_embeddings"
@@ -163,6 +164,32 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
         Prompt learning applies one at a time.
         """
         return _as_names(self.active_adapter)
+
+    def _prompt(
+        self,
+        adapter_name: str,
+        batch_size: int,
+        task_ids: Tensor | None = None,
+        dtype: lucid.dtype | None = None,
+    ) -> Tensor | Cache:
+        """What the adapter puts in front of ``batch_size`` rows: the prompt rows, or a cache holding its prefix.
+
+        The rows are ``(batch_size, rows, token_dim)`` for a method that goes in front of the input
+        embeddings; a method that goes in the attention gives the key/value cache (in ``dtype`` when
+        given) a decoder starts from.
+        """
+        self._require_known([adapter_name])
+        config = self.peft_config[adapter_name]
+        assert isinstance(config, PromptLearningConfig)  # add_adapter admits no other
+        encoder = self.prompt_encoder[adapter_name]
+        if encoder.injection == _Injection.KEY_VALUES:
+            return _Applied(config, encoder, task_ids).cache(batch_size, dtype)
+        return encoder.prompts(batch_size, task_ids)
+
+    def _prompt_to_save(self, adapter_name: str) -> Tensor:
+        """The adapter's prompt as its file stores it, on the CPU."""
+        self._require_known([adapter_name])
+        return self.prompt_encoder[adapter_name].prompt_embeddings().cpu()
 
     # ── building an adapter ───────────────────────────────────────────────
 

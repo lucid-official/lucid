@@ -54,16 +54,34 @@ class _Applied:
         """The prompt as ``(batch, rows, token_dim)`` rows to put before input embeddings."""
         return self.encoder.prompts(batch, self.tasks).to(dtype)
 
-    def key_values(self, batch: int, dtype: lucid.dtype) -> list[tuple[Tensor, Tensor]]:
-        """The prefix as one ``(key, value)`` pair per layer, each ``(batch, heads, virtual, head_dim)``."""
+    def key_values(
+        self, batch: int, dtype: lucid.dtype | None = None
+    ) -> list[tuple[Tensor, Tensor]]:
+        """The prefix as one ``(key, value)`` pair per layer, each ``(batch, heads, virtual, head_dim)``.
+
+        In ``dtype`` when given, as the encoder made them otherwise.
+        """
         config = self.config
         assert config.num_attention_heads is not None and config.token_dim is not None
         assert config.num_layers is not None
         heads, virtual = config.num_attention_heads, self.virtual
         rows = self.encoder.prompts(batch, self.tasks)
         rows = rows.reshape(batch, virtual, config.num_layers * 2, heads, config.token_dim // heads)
-        planes = rows.permute(2, 0, 3, 1, 4).to(dtype).unbind(0)
-        return [(planes[i], planes[i + 1]) for i in range(0, len(planes), 2)]
+        planes = rows.permute(2, 0, 3, 1, 4)
+        if dtype is not None:
+            planes = planes.to(dtype)
+        stacked = planes.unbind(0)
+        return [(stacked[i], stacked[i + 1]) for i in range(0, len(stacked), 2)]
+
+    def cache(self, batch: int, dtype: lucid.dtype | None = None) -> Cache:
+        """The prefix in a fresh cache: a decoder's, or the self-attention half of an encoder-decoder's."""
+        cache: Cache = (
+            EncoderDecoderCache(DynamicCache(), DynamicCache())
+            if self.config.num_transformer_submodules == 2
+            else DynamicCache()
+        )
+        _put_prefix(cache, self.key_values(batch, dtype), self.virtual)
+        return cache
 
 
 class _Prompting(Protocol):

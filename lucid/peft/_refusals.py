@@ -8,6 +8,7 @@ default changes nothing; passing anything else is refused with
 """
 
 from collections.abc import Mapping
+from typing import NoReturn
 
 
 def refuse_value(where: str, name: str, value: object, default: object, why: str) -> None:
@@ -29,6 +30,23 @@ def refuse_value(where: str, name: str, value: object, default: object, why: str
     if value is default or value == default:
         return
     raise NotImplementedError(f"{where}: `{name}={value!r}` is not supported by lucid.peft: {why}")
+
+
+def refuse_method(where: str, why: str) -> NoReturn:
+    """Raise ``NotImplementedError`` for a reference method that has no meaning here.
+
+    For a member the reference offers whose whole job is a feature this library lacks (a hub model
+    card).  The member stays, with the reference's signature, so that code which probes for it
+    finds it and is told why calling it cannot work, rather than meeting an ``AttributeError``.
+
+    Parameters
+    ----------
+    where : str
+        The method (``"PeftModel.create_or_update_model_card"``).
+    why : str
+        One clause saying what it would do and why it cannot here.
+    """
+    raise NotImplementedError(f"{where}() is not supported by lucid.peft: {why}")
 
 
 def refuse_kwargs(where: str, kwargs: Mapping[str, object], why: str) -> None:
@@ -62,6 +80,11 @@ NO_FLOAT_AUTOCAST_OFF = "a half-precision base always gets a float32 adapter"
 NO_OFFLOAD = "adapter layers are never offloaded between devices"
 NO_HUB = "adapters are read from a local directory; there is no hub download"
 NO_MISMATCH_SKIPPING = "a tensor whose shape does not fit the model raises; it is never skipped"
+NO_MODEL_CARD = (
+    "a model card is the README of a hub repository, which an adapter saved to a local directory "
+    "does not have"
+)
+NO_HYBRID_CACHE = "a prompt's cache grows with the sequence; there is no fixed-size cache to size"
 
 
 def reject_unexpected(where: str, kwargs: Mapping[str, object]) -> None:

@@ -21,10 +21,10 @@ from lucid.peft._config import PeftConfig, PeftType, PromptLearningConfig, _outp
 from lucid.peft._load_weights import load_peft_weights
 from lucid.peft._peft_model import _WEIGHTS_NAME, PeftModel
 from lucid.peft._refusals import refuse_value
-from lucid.peft.tuners._prompt._encoder import _PromptEncoder
 from lucid.peft.tuners._prompt._tuner import _PROMPT_KEY, _PromptLearningTuner
 from lucid.peft.tuners.cartridge._config import CartridgeConfig
 from lucid.peft.tuners.cartridge._model import CartridgeEncoder
+from lucid.peft.tuners.prefix_tuning._model import PrefixEncoder
 from lucid.peft.tuners.prompt_tuning._model import _TextEncoder
 from lucid.serialization import save_safetensors
 
@@ -149,7 +149,7 @@ def prompt_embeddings_from_past_key_values(
 
 def _cache_adapter(
     model: PeftModel, adapter_name: str | None
-) -> tuple[str, PromptLearningConfig, _PromptEncoder]:
+) -> tuple[str, PromptLearningConfig, PrefixEncoder | CartridgeEncoder]:
     """The adapter a cache is loaded into, its config and its encoder, after checking it can hold one."""
     active = model.active_adapters
     if adapter_name is None and len(active) != 1:
@@ -166,21 +166,9 @@ def _cache_adapter(
         )
     holder = model.base_model
     assert isinstance(holder, _PromptLearningTuner)  # a cache type is a prompt-learning adapter
-    return name, config, holder.prompt_encoder[name]
-
-
-def _load_cache(encoder: _PromptEncoder, prompt: Tensor) -> None:
-    """Copy ``prompt`` into the encoder's rows: a Cartridge splits it into frozen and trained, a prefix's table takes it whole."""
-    if isinstance(encoder, CartridgeEncoder):
-        encoder.load_prompt_embeddings(prompt)
-        return
-    table = encoder.embedding.weight
-    if tuple(prompt.shape) != tuple(table.shape):
-        raise ValueError(
-            f"Invalid `prompt_embeddings` shape. Expected {tuple(table.shape)}, got {tuple(prompt.shape)}."
-        )
-    with lucid.no_grad():
-        table.copy_(prompt)
+    encoder = holder.prompt_encoder[name]
+    assert isinstance(encoder, PrefixEncoder | CartridgeEncoder)  # what a cache type builds
+    return name, config, encoder
 
 
 def initialize_kv_prefix_from_past_key_values(
@@ -222,7 +210,7 @@ def initialize_kv_prefix_from_past_key_values(
     count = config.num_virtual_tokens if num_virtual_tokens is None else num_virtual_tokens
     assert count is not None  # the tuner resolved it
     prompt = prompt_embeddings_from_past_key_values(past_key_values, num_virtual_tokens=count)
-    _load_cache(encoder, prompt)
+    encoder.load_prompt_embeddings(prompt)
     return prompt
 
 

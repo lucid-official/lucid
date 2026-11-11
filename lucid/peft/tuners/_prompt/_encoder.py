@@ -76,6 +76,12 @@ class _PromptEncoder(nn.Module, ABC):
         return prompt
 
     def prompt_embeddings(self) -> Tensor:
-        """The prompt as an adapter file stores it: ``(rows, width)``, one row per virtual token."""
+        """The prompt as an adapter file stores it: ``(rows, width)``, one row per virtual token.
+
+        A per-task encoder's is the shared prompt its tasks scale, which is what the file holds.
+        """
+        if self.per_task:
+            shared: Tensor = self.embedding(self.indices())[0]
+            return shared.detach()
         prompt: Tensor = self(self.indices())[0]
         return prompt.detach()

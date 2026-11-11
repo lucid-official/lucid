@@ -213,6 +213,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the AdaMSS tuner and its subspace allocation (LCD-828)
 
+- PeftModel's missing reference members, and a gate (LCD-958)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

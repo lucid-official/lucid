@@ -8,6 +8,7 @@ from contextlib import AbstractContextManager, nullcontext
 from types import TracebackType
 from typing import ClassVar, Final, Literal, Self, override
 
+import lucid
 import lucid.nn as nn
 from lucid.nn._incompatible_keys import _IncompatibleKeys
 from lucid._tensor.tensor import Tensor
@@ -21,17 +22,23 @@ from lucid.peft._config import (
 )
 from lucid.peft._convert import AdapterFile, ConversionContext, ConvertMode, convert_adapter
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
+from lucid.peft._model_prep import _enable_input_require_grads, _is_quantized_model
 from lucid.peft._refusals import (
     NO_HUB,
+    NO_HYBRID_CACHE,
     NO_MISMATCH_SKIPPING,
+    NO_MODEL_CARD,
     refuse_build_options,
     refuse_kwargs,
+    refuse_method,
     refuse_value,
 )
 from lucid.peft._status import TunerLayerStatus, TunerModelStatus, _parameter_counts
 from lucid.peft._state_dict import get_peft_model_state_dict, set_peft_model_state_dict
 from lucid.peft._targeting import _config_for_model, _with_heads
 from lucid.peft.tuners._host import _AdapterHost, _tuner_for
+from lucid.peft.tuners._prompt._tuner import _PromptLearningTuner
+from lucid.utils.cache import Cache
 from lucid.serialization import load_safetensors, save_safetensors
 
 _WEIGHTS_NAME: Final = "adapter_model.safetensors"
@@ -272,6 +279,194 @@ class PeftModel(_ForwardsAttributes):
     def get_base_model(self) -> nn.Module:
         """Return the adapted model itself — the one passed in, now holding adapter layers."""
         return self.base_model.model
+
+    def _sole_adapter(self) -> str:
+        """The name of the one adapter in use; ``ValueError`` if there is none or several."""
+        names = self.active_adapters
+        if len(names) != 1:
+            raise ValueError(f"the model has no single adapter in use (active: {names})")
+        return names[0]
+
+    @property
+    def active_peft_config(self) -> PeftConfig:
+        """The config of the adapter in use.
+
+        Raises
+        ------
+        ValueError
+            No adapter is in use, or several are (``active_adapter`` is a list).
+        """
+        return self.peft_config[self._sole_adapter()]
+
+    @property
+    def has_active_enabled_adapter(self) -> bool:
+        """Whether the adapters are enabled — the reference's rule, as it computes it.
+
+        For a prompt-learning adapter: ``True`` unless inside ``disable_adapter()``.  For the other
+        methods the reference also answers ``True`` when no adapter is in use, so inside
+        ``disable_adapter()`` the answer is ``False`` only while an adapter is in use.
+        """
+        disabled = self._disable_depth > 0
+        if self.active_peft_config.is_prompt_learning:
+            return not disabled
+        return not disabled or not self.active_adapters
+
+    @property
+    def modules_to_save(self) -> set[str] | None:
+        """The names of the modules trained in full beside the adapters, over every adapter; ``None`` if there are none."""
+        names: set[str] = set()
+        for config in self.peft_config.values():
+            names.update(getattr(config, "modules_to_save", None) or ())
+        return names or None
+
+    @property
+    def base_model_dtype(self) -> lucid.dtype | None:
+        """The dtype of the base model: its first floating-point parameter's; ``None`` if it has none.
+
+        The reference spells this member with its framework's name; that spelling cannot appear
+        in this library's source.
+        """
+        for parameter in self.get_base_model().parameters():
+            if parameter.is_floating_point():
+                return parameter.dtype
+        return None
+
+    def prepare_model_for_gradient_checkpointing(self, model: nn.Module) -> nn.Module:
+        """Make a model's embedding output require a gradient, so a checkpointed stack trains.
+
+        What ``use_reentrant=True`` checkpointing needs when the embeddings are frozen: the segment
+        has an input that requires a gradient.  A model with ``enable_input_require_grads`` is asked
+        to; otherwise a forward hook on its input embeddings (or, with none, a pre-hook on the model
+        itself) marks the first floating-point tensor.  A quantized model is left as it is.  Unlike
+        the reference, the constructor does not call this: no Lucid model reports
+        ``is_gradient_checkpointing``, and the default ``use_reentrant=False`` needs nothing.
+
+        Parameters
+        ----------
+        model : nn.Module
+            The model to prepare.
+
+        Returns
+        -------
+        nn.Module
+            ``model``, prepared.
+
+        Examples
+        --------
+        >>> import lucid.nn as nn
+        >>> from lucid.peft import LoraConfig, get_peft_model
+        >>> net = nn.Sequential(nn.Embedding(10, 4), nn.Linear(4, 4))
+        >>> peft = get_peft_model(net, LoraConfig(r=2, target_modules=["1"]))
+        >>> peft.prepare_model_for_gradient_checkpointing(net) is net
+        True
+        """
+        if not _is_quantized_model(model):
+            _enable_input_require_grads(model)
+        return model
+
+    def _prompt_host(self, where: str) -> _PromptLearningTuner:
+        """The tuner that holds the prompts; ``TypeError`` unless the model's adapters are prompt learning."""
+        host = self.base_model
+        if not isinstance(host, _PromptLearningTuner):
+            raise TypeError(
+                f"PeftModel.{where}: only a prompt-learning adapter has a prompt; this model's "
+                f"adapters are {type(host).__name__}'s"
+            )
+        return host
+
+    def get_prompt_embedding_to_save(self, adapter_name: str) -> Tensor:
+        """The adapter's prompt as ``save_pretrained`` writes it: ``(rows, width)``, on the CPU.
+
+        Only for a prompt-learning method.  The rows are what the method's encoder makes of its
+        virtual tokens — the finished prompt, whether the adapter trains through a projection or
+        holds the rows directly.
+
+        Parameters
+        ----------
+        adapter_name : str
+            An adapter the model holds.
+
+        Returns
+        -------
+        Tensor
+            One row per virtual token.
+
+        Raises
+        ------
+        TypeError
+            The model's adapters are not prompt learning.
+        ValueError
+            The model has no adapter of that name.
+
+        Examples
+        --------
+        >>> from lucid.models import create_model
+        >>> from lucid.peft import PrefixTuningConfig, get_peft_model
+        >>> lm = create_model("gpt2_small_lm", vocab_size=32, hidden_size=8, num_hidden_layers=1,
+        ...                   num_attention_heads=2, intermediate_size=16, max_position_embeddings=16)
+        >>> prefix = PrefixTuningConfig(num_virtual_tokens=2, task_type="CAUSAL_LM")
+        >>> get_peft_model(lm, prefix).get_prompt_embedding_to_save("default").shape
+        (2, 16)
+        """
+        return self._prompt_host("get_prompt_embedding_to_save")._prompt_to_save(adapter_name)
+
+    def get_prompt(
+        self, batch_size: int, task_ids: Tensor | None = None, max_cache_len: int | None = None
+    ) -> Tensor | Cache:
+        """The virtual prompt the model is given, for ``batch_size`` rows.
+
+        Only for a prompt-learning method.  A method that goes in front of the input embeddings
+        gives the rows, ``(batch_size, rows, token_dim)``; a method that goes in the attention
+        (prefix tuning, Cartridge) gives a key/value cache holding the prefix, in the model's dtype,
+        that a decoder starts from (an encoder-decoder's carries the decoder's half).
+
+        Parameters
+        ----------
+        batch_size : int
+            The number of rows.
+        task_ids : Tensor, optional
+            For multitask prompt tuning: the task of each row, ``(batch_size,)``.
+        max_cache_len : int, optional
+            The reference sizes a fixed-capacity cache with it; this library's cache grows, so
+            any value but ``None`` raises ``NotImplementedError``.
+
+        Returns
+        -------
+        Tensor or Cache
+            The prompt rows, or the cache.
+
+        Raises
+        ------
+        TypeError
+            The model's adapters are not prompt learning.
+        NotImplementedError
+            ``max_cache_len`` is given.
+
+        Examples
+        --------
+        >>> from lucid.models import create_model
+        >>> from lucid.peft import PromptTuningConfig, get_peft_model
+        >>> lm = create_model("gpt2_small_lm", vocab_size=32, hidden_size=16, num_hidden_layers=1,
+        ...                   num_attention_heads=2, intermediate_size=32, max_position_embeddings=16)
+        >>> peft = get_peft_model(lm, PromptTuningConfig(num_virtual_tokens=3, task_type="CAUSAL_LM"))
+        >>> peft.get_prompt(batch_size=2).shape
+        (2, 3, 16)
+        """
+        refuse_value("PeftModel.get_prompt", "max_cache_len", max_cache_len, None, NO_HYBRID_CACHE)
+        return self._prompt_host("get_prompt")._prompt(
+            self._sole_adapter(), batch_size, task_ids, self.base_model_dtype
+        )
+
+    def create_or_update_model_card(self, output_dir: str) -> None:
+        """Refused: the reference writes a hub model card, which this library has no use for.
+
+        Raises
+        ------
+        NotImplementedError
+            Always.
+        """
+        del output_dir
+        refuse_method("PeftModel.create_or_update_model_card", NO_MODEL_CARD)
 
     def add_adapter(
         self,
