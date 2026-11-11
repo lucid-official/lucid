@@ -130,9 +130,11 @@ class _SlogdetFromLU(Function):
 
     A matrix with a zero pivot has no inverse.  It is flagged ``singular``,
     handed the identity in the inverse's place, and its gradient comes through
-    ``d = det(A)`` instead: ``g / d`` into ``det``'s own backward, which is
+    ``d = det(A)`` instead: ``g / sign`` into ``det``'s own backward, which is
     ``g · cof(A) / det(A)`` — ``±inf`` along the adjugate of a matrix of rank
-    ``n - 1``, the sign of the infinity that of the signed zero ``d`` is.
+    ``n - 1``, the sign of the infinity that of the signed zero ``det`` is.  That
+    zero is read from ``sign``, which the factorisation fixes the same way on every
+    path, and not from ``d``: a compiled ``det``'s zero can be the other one.
     """
 
     # A compiled step runs this ``backward``, not the derivative of ``forward``'s
@@ -152,7 +154,7 @@ class _SlogdetFromLU(Function):
         if d is None:
             ctx.save_for_backward(A, singular)
             return sign, logabs
-        ctx.save_for_backward(A, singular, d)
+        ctx.save_for_backward(A, singular, sign)
         return sign, lucid.where(singular, lucid.log(d.abs()), logabs)
 
     @override
