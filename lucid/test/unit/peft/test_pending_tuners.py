@@ -126,7 +126,7 @@ class TestDeclaring:
     def test_a_pending_tuner_without_an_issue_is_a_type_error(self) -> None:
         before = dict(_PENDING_TUNERS)
         with pytest.raises(TypeError, match="issue"):
-            types.new_class("_NoIssue", (_PendingTuner,), {"peft_type": PeftType.DELORA})
+            types.new_class("_NoIssue", (_PendingTuner,), {"peft_type": PeftType.SHADOW})
         assert _PENDING_TUNERS == before
 
     def test_a_refused_tuner_without_a_reason_is_a_type_error(self) -> None:
@@ -136,11 +136,17 @@ class TestDeclaring:
         assert _REFUSED_TUNERS == before
 
     def test_a_declaration_registers_under_its_own_table(self) -> None:
-        class _Again(_PendingTuner, peft_type=PeftType.DELORA, issue="LCD-1"):
+        # Whichever method is still pending: a method card turns its own into a
+        # working tuner, so no one name stays pending through phase B4.
+        peft_type = next(iter(_PENDING_TUNERS), None)
+        if peft_type is None:
+            pytest.skip("no method is pending any more")
+
+        class _Again(_PendingTuner, peft_type=peft_type, issue="LCD-1"):
             pass
 
-        assert _PENDING_TUNERS[PeftType.DELORA] is _Again
-        assert PeftType.DELORA not in _TUNERS and PeftType.DELORA not in _REFUSED_TUNERS
+        assert _PENDING_TUNERS[peft_type] is _Again
+        assert peft_type not in _TUNERS and peft_type not in _REFUSED_TUNERS
         assert "LCD-1" in _Again._refusal()
 
     def test_a_refusal_carries_its_reason(self) -> None:
