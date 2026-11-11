@@ -27,7 +27,7 @@ class _Assignment(NamedTuple):
     scale_b: Tensor
 
 
-def generate_index(lora_param_count: int, theta_d_length: int, proj_seed: int) -> Tensor:
+def _generate_index(lora_param_count: int, theta_d_length: int, proj_seed: int) -> Tensor:
     """The slot of ``theta_d`` each of ``lora_param_count`` LoRA parameters reads, balanced and shuffled by ``proj_seed``.
 
     Parameters
@@ -62,7 +62,7 @@ def generate_index(lora_param_count: int, theta_d_length: int, proj_seed: int) -
     return slots[lucid.randperm(lora_param_count, generator=generator)]
 
 
-def assign(
+def _assign(
     shapes: Sequence[tuple[tuple[int, int], tuple[int, int]]], theta_d_length: int, proj_seed: int
 ) -> list[_Assignment]:
     """The projection of layers whose ``(A, B)`` shapes are ``shapes``, laid end to end in that order, ``A`` then ``B`` of each.
@@ -85,7 +85,7 @@ def assign(
         One per layer, on the CPU.
     """
     sizes = [(a[0] * a[1], b[0] * b[1]) for a, b in shapes]
-    indices = generate_index(sum(n_a + n_b for n_a, n_b in sizes), theta_d_length, proj_seed)
+    indices = _generate_index(sum(n_a + n_b for n_a, n_b in sizes), theta_d_length, proj_seed)
     counts = lucid.bincount(indices, minlength=theta_d_length)
     # A slot nothing reads has no scale to speak of; one keeps the division defined.
     inverse = counts.to(lucid.float32).clamp(min=1.0).rsqrt()

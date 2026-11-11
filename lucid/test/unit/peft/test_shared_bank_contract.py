@@ -25,7 +25,7 @@ from lucid.peft import (
 from lucid.peft.tuners.pvera import PveraLayer
 from lucid.peft.tuners.tinylora import TinyLoraLayer
 from lucid.peft.tuners.unilora import UniLoraLayer
-from lucid.peft.tuners.unilora._indices import assign
+from lucid.peft.tuners.unilora._indices import _assign
 from lucid.test.unit.peft import _bank_forms as forms
 from lucid.test.unit.peft._closed_forms import _PREFIX, _SIZES, CLOSED_FORMS, _mlp, _run
 from lucid.test.unit.peft.test_low_rank_delta_contract import TestForward
@@ -73,7 +73,7 @@ def _unilora(save_indices: bool) -> Callable[..., UniLoraConfig]:
 def _unilora_projection() -> dict[int, tuple[list[list[int]], ...]]:
     """The file's indices and scales of each layer of the MLP (targets ``0`` and ``2``), the draw the library makes."""
     shapes = [((2, inn), (out, 2)) for out, inn in _SIZES.values()]
-    drawn = assign(shapes, _UNILORA_LENGTH, 42)
+    drawn = _assign(shapes, _UNILORA_LENGTH, 42)
     return {
         index: (a.tolist(), b.tolist(), sa.tolist(), sb.tolist())
         for index, (a, b, sa, sb) in zip(_SIZES, drawn, strict=True)

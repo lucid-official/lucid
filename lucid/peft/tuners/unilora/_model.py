@@ -13,7 +13,7 @@ from lucid.peft.tuners._shared import _base_linear, _SharedTablesTuner
 from lucid.peft.tuners._support import _adapter_dtype, _ConfigTuner, _reset_fan_in_fan_out
 from lucid.peft.tuners.unilora._common import _SettlingTuner
 from lucid.peft.tuners.unilora._config import UniLoraConfig
-from lucid.peft.tuners.unilora._indices import assign, generate_index
+from lucid.peft.tuners.unilora._indices import _assign, _generate_index
 from lucid.peft.tuners.unilora._layer import _PROJECTION, UniLoraLayer, _new_theta_d
 
 
@@ -120,7 +120,7 @@ class UniLoraModel(_SettlingTuner, _SharedTablesTuner, _ConfigTuner, peft_type=P
         ValueError
             ``lora_param_count`` is negative or ``theta_d_length`` is not positive.
         """
-        return generate_index(lora_param_count, theta_d_length, proj_seed)
+        return _generate_index(lora_param_count, theta_d_length, proj_seed)
 
     @override
     @classmethod
@@ -156,7 +156,7 @@ class UniLoraModel(_SettlingTuner, _SharedTablesTuner, _ConfigTuner, peft_type=P
             for _, layer in _tuner_layers(self.model)
             if isinstance(layer, UniLoraLayer) and adapter_name in layer._adapter_names()
         ]
-        drawn = assign(
+        drawn = _assign(
             [layer.factor_shapes(adapter_name) for layer in layers],
             unilora.theta_d_length,
             unilora.proj_seed,

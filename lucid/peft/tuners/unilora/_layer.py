@@ -27,7 +27,7 @@ from lucid.peft.tuners._shared import _BufferDict
 from lucid.peft.tuners._support import _LinearSized, _ResidualUpdate, _SpecField
 from lucid.peft.tuners.unilora._common import _TrainedSharedLayer
 from lucid.peft.tuners.unilora._config import UniLoraConfig
-from lucid.peft.tuners.unilora._indices import _Assignment, assign
+from lucid.peft.tuners.unilora._indices import _Assignment, _assign
 
 #: The per-layer tables of a layer's projection, in the order ``_Assignment`` lists its tensors.
 _PROJECTION: tuple[str, ...] = (
@@ -183,7 +183,7 @@ class UniLoraLayer(
         drawn = self._unbound.get(adapter)
         if drawn is None:
             spec = self._spec(adapter)
-            (drawn,) = assign([self.factor_shapes(adapter)], spec.theta_d_length, spec.proj_seed)
+            (drawn,) = _assign([self.factor_shapes(adapter)], spec.theta_d_length, spec.proj_seed)
             self._unbound[adapter] = drawn
         return drawn
 
