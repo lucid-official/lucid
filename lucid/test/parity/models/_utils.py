@@ -210,6 +210,16 @@ def _run_parity(spec: ParitySpec) -> None:
             f"the depth, and the numbers no longer describe the model"
         )
 
+    if scale <= spec.atol:
+        # The other end of the same problem: the randomised buffers can also drive the
+        # reference's answer to zero (mobilenet_v2/v3 answer with |logits| ~1e-9), and an
+        # atol of 1e-3 then accepts a model that answers all zeros.
+        pytest.skip(
+            f"the reference answers with |logits| up to {scale:.3g}, under the "
+            f"{spec.atol:g} tolerance — the signal has vanished through the depth, so "
+            f"an all-zeros answer would pass"
+        )
+
     # Absolute error is roughly even across the logits while their
     # magnitudes span three orders, so an element-wise atol judges the
     # near-zero entries and nothing else: se_resnet_101 failed on 15 of
