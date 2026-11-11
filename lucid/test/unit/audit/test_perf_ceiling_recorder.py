@@ -43,6 +43,16 @@ def test_ceiling_puts_the_checked_limit_at_the_quantile() -> None:
     assert ceiling * 1.25 == pytest.approx(limit, rel=1e-2)
 
 
+def test_headroom_lifts_the_limit_above_the_slowest_run() -> None:
+    runs = [{"fft_cpu": float(v)} for v in range(1, 22)]
+    got = rec.record(
+        runs, {"fft_cpu": 0.5}, re.compile("fft"), q=1.0, tolerance=0.25, headroom=1.15
+    )
+    n, slowest, ceiling = got["fft_cpu"]
+    assert (n, slowest) == (21, 21.0)
+    assert ceiling * 1.25 == pytest.approx(21.0 * 1.15, rel=1e-2)
+
+
 def test_only_selected_cases_present_in_the_file_are_recorded() -> None:
     runs = [{"fft_cpu": 1.0, "add_cpu": 1.0, "new_cpu": 1.0}] * 3
     got = rec.record(
@@ -70,8 +80,8 @@ def test_write_records_ceilings_with_provenance_and_keeps_the_rest(tmp_path: Pat
     assert rec.main(args) == 0
     out = json.loads(thresholds.read_text())
     assert out["_comment"] == "kept" and out["add_cpu"] == 5.0
-    assert out["fft_cpu"] == pytest.approx(0.00955 / 1.25, rel=1e-2)
-    assert out["_provenance"]["fft_cpu"].startswith("LCD-867: p95 of 10 hosted runs")
+    assert out["fft_cpu"] == pytest.approx(0.010 * 1.15 / 1.25, rel=1e-2)
+    assert out["_provenance"]["fft_cpu"].startswith("LCD-867: p100 of 10 hosted runs")
     # a second pass over the same runs is stable
     assert rec.main(args) == 0
     assert json.loads(thresholds.read_text()) == out

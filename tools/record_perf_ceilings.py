@@ -7,7 +7,11 @@ machine (LCD-867: six FFT and signal ceilings taken from one fast sample failed 
 later runs, while the engine had not changed).  This tool takes the ``pytest_benchmark.json``
 of several runs (the nightly uploads one per run as ``perf-history-<n>``), reduces each case to
 one value per run (the plugin's median), and sets the ceiling so the checked limit
-(``ceiling * (1 + tolerance)``) sits at a chosen quantile of those values.
+(``ceiling * (1 + tolerance)``) sits ``headroom`` above a chosen quantile of those values.
+
+The default is the slowest run seen plus 15%.  A limit *at* a quantile fails by construction:
+at p95 each case is red in one run of twenty, and six such cases made the nightly red in one
+run of four (the first nightly after LCD-867 failed at 3.939 ms against a 3.938 ms limit).
 
     gh run download <run-id> -n perf-history-<n> -D runs/<n>      # once per run
     python3 -m tools.record_perf_ceilings lucid/test/perf/microbench/_thresholds.json \\
@@ -25,7 +29,8 @@ import sys
 from pathlib import Path
 
 DEFAULT_TOLERANCE = 0.25  # assert_no_regression's default band
-DEFAULT_QUANTILE = 0.95
+DEFAULT_QUANTILE = 1.0  # the slowest run seen
+DEFAULT_HEADROOM = 1.15  # how far above it the checked limit sits
 DEFAULT_MIN_RUNS = 10
 _NAME = re.compile(r"^test_(?P<case>\w+?)\[(?P<device>\w+)\]$")
 
@@ -67,8 +72,12 @@ def record(
     *,
     q: float,
     tolerance: float,
+    headroom: float = 1.0,
 ) -> dict[str, tuple[int, float, float]]:
-    """{case: (runs seen, quantile value, new ceiling)} for every selected case in ``old``."""
+    """{case: (runs seen, quantile value, new ceiling)} for every selected case in ``old``.
+
+    The checked limit, ``ceiling * (1 + tolerance)``, is ``headroom`` times the quantile value.
+    """
     chosen: dict[str, tuple[int, float, float]] = {}
     for key in old:
         if not cases.search(key):
@@ -77,7 +86,7 @@ def record(
         if not values:
             continue
         limit = quantile(values, q)
-        chosen[key] = (len(values), limit, sig3(limit / (1.0 + tolerance)))
+        chosen[key] = (len(values), limit, sig3(limit * headroom / (1.0 + tolerance)))
     return chosen
 
 
@@ -88,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--cases", required=True, help="regex over the case keys to re-record")
     ap.add_argument("--issue", required=True, help="tracking issue, written into the provenance")
     ap.add_argument("--quantile", type=float, default=DEFAULT_QUANTILE)
+    ap.add_argument("--headroom", type=float, default=DEFAULT_HEADROOM)
     ap.add_argument("--tolerance", type=float, default=DEFAULT_TOLERANCE)
     ap.add_argument("--min-runs", type=int, default=DEFAULT_MIN_RUNS)
     ap.add_argument("--write", action="store_true", help="update the thresholds file")
@@ -108,6 +118,7 @@ def main(argv: list[str] | None = None) -> int:
         re.compile(args.cases),
         q=args.quantile,
         tolerance=args.tolerance,
+        headroom=args.headroom,
     )
     if not chosen:
         print(f"no case in {args.thresholds} matches {args.cases!r} in these runs", file=sys.stderr)
@@ -125,7 +136,8 @@ def main(argv: list[str] | None = None) -> int:
         raw[key] = ceiling
         provenance[key] = (
             f"{args.issue}: p{pct} of {n} hosted runs = {limit * 1e3:.3f} ms; "
-            f"ceiling {ceiling * 1e3:.3f} ms * (1 + {args.tolerance}) puts the limit there"
+            f"ceiling {ceiling * 1e3:.3f} ms * (1 + {args.tolerance}) puts the limit "
+            f"{args.headroom}x above it"
         )
     args.thresholds.write_text(json.dumps(raw, indent=2) + "\n")
     return 0
