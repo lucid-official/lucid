@@ -298,10 +298,14 @@ def _assert_outputs_match(
         if np.issubdtype(r_np.dtype, np.floating) or np.issubdtype(r_np.dtype, np.complexfloating):
             l_f = l_np.astype(np.float32) if l_np.dtype != np.complex64 else l_np
             r_f = r_np.astype(np.float32) if r_np.dtype != np.complex64 else r_np
+            # The dtype's absolute floor is sized for O(1) outputs; an output a tenth of it
+            # (a reduced kl_div in bfloat16 is 0.017 against 2e-2) would pass as zeros.
+            finite = np.abs(r_f[np.isfinite(r_f)])
+            scale = float(finite.max(initial=0.0))
             assert_close(
                 l_f,
                 r_f,
-                atol=atol,
+                atol=min(atol, rtol * scale) if scale > 0 else atol,
                 rtol=rtol,
                 msg=f"{op.name}[{sample_name}] out[{idx}] ({device}, {dtype_name})",
             )

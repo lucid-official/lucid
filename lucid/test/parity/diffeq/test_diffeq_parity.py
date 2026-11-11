@@ -735,7 +735,9 @@ class TestImplicitParity:
             return_trajectory=False,
         )
         want = _stability_step(ref, method, rate * dt) ** steps
-        assert float(got.item()) == pytest.approx(want, rel=1e-9)
+        # At rate -50 the state decays from 1 to ~1e-20: below the nonlinear solve's roundoff
+        # (~1e-14 against y0), so there the absolute floor is the comparison, stated here.
+        assert float(got.item()) == pytest.approx(want, rel=1e-9, abs=1e-12)
 
     @pytest.mark.parametrize("method", IMPLICIT_METHODS)
     def test_matches_the_closed_form_on_a_coupled_system(self, ref: Any, method: str) -> None:

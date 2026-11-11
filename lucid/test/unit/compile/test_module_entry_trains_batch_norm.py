@@ -35,6 +35,7 @@ import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.compile._entry.module import CompiledModule
+from lucid.test._fixtures.tolerance_guard import noise_when_below
 from lucid.test.unit.compile import _zoo_matrix as zoo
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
 
@@ -87,10 +88,12 @@ def _assert_close(
 ) -> None:
     assert got.keys() == want.keys(), f"{what}: {sorted(got.keys() ^ want.keys())}"
     for name, value in want.items():
-        assert np.allclose(got[name], value, rtol=rtol, atol=atol), (
-            f"{what} {name}: worst {np.abs(got[name] - value).max()} "
-            f"(value scale {np.abs(value).max()})"
-        )
+        # A conv bias ahead of a batch norm has an analytically zero gradient: roundoff both sides.
+        with noise_when_below(value, atol, "a bias ahead of a batch norm has no gradient"):
+            assert np.allclose(got[name], value, rtol=rtol, atol=atol), (
+                f"{what} {name}: worst {np.abs(got[name] - value).max()} "
+                f"(value scale {np.abs(value).max()})"
+            )
 
 
 def _compare(

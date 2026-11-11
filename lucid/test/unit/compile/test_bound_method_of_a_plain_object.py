@@ -61,7 +61,9 @@ class _Rig(_Plain):
         return self.bn(self.lin(hidden)) * 1.0
 
     def decode(self, hidden: lucid.Tensor, cache_position: lucid.Tensor) -> lucid.Tensor:
-        key = (self.body(hidden).mean(0) * 1.0).reshape(1, 1, 1, _W)
+        # One row, not the batch mean: a training batch norm's output has a zero mean per
+        # feature, so a mean here would make every cached key roundoff and the check vacuous.
+        key = (self.body(hidden)[0] * 1.0).reshape(1, 1, 1, _W)
         keys, _ = self.cache.update(key, key, 0, {"cache_position": cache_position})
         return keys * 1.0
 
