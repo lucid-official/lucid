@@ -69,8 +69,9 @@ def _projection_from_weights(matrices: Sequence[Tensor], regularization_alpha: f
         return vh.mT
     q, r = linalg.qr(stacked)
     dim = int(r.shape[1])
-    eye = lucid.eye(dim, dtype=r.dtype)
-    gram = lucid.zeros(dim, dim, dtype=r.dtype)
+    # Where the stack is, not where the default device is: the sum below mixes them with its pieces.
+    eye = lucid.eye(dim, dtype=r.dtype, device=r.device)
+    gram = lucid.zeros(dim, dim, dtype=r.dtype, device=r.device)
     start = 0
     for matrix in matrices:
         rows = int(matrix.shape[0])

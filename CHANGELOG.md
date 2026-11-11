@@ -155,6 +155,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - OSF hooks hold the frozen factors, not the layer (LCD-963)
 
+- FRoD builds its basis where the weights are (LCD-963)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

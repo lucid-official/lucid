@@ -24,6 +24,7 @@ from lucid.peft import (
 from lucid.peft.tuners import frod
 from lucid.peft.tuners.fourierft._locations import _spectrum_positions
 from lucid.peft.tuners.frod import _basis
+from lucid.test._default_device import default_device, metal_available
 from lucid.test.unit.peft import _spectral_forms as forms
 from lucid.test.unit.peft._parity import adapter_library, gap
 from lucid.test.unit.peft._tuner_recipes import magnitude, span
@@ -173,6 +174,17 @@ class TestBasis:
         lucid.manual_seed(0)
         basis = _basis._projection_from_weights([lucid.randn(3, 6)], 1e-3)
         assert span(basis.mT @ basis, lucid.eye(6)) <= _TOLERANCE
+
+    @pytest.mark.skipif(not metal_available(), reason="needs a default device that is not the CPU")
+    @pytest.mark.parametrize("rows", [3, 8], ids=["fewer-rows", "more-rows"])
+    def test_the_basis_is_made_where_the_weights_are_whatever_the_default_device(
+        self, rows: int
+    ) -> None:
+        lucid.manual_seed(0)
+        weights = [lucid.randn(rows, 6), lucid.randn(rows, 6)]
+        with default_device("metal"):
+            basis = _basis._projection_from_weights(weights, 1e-3)
+        assert basis.device.type == "cpu"
 
     def test_a_basis_and_a_start_rebuild_the_weight(self) -> None:
         lucid.manual_seed(0)
