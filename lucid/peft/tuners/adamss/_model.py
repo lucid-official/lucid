@@ -70,7 +70,7 @@ class AdamssModel(_FileFormat, _ConfigTuner[AdamssConfig], peft_type=PeftType.AD
     >>> adamss = AdamssModel(net, AdamssConfig(r=4, num_subspaces=2, target_modules=["0"]), "default")
     >>> adamss.targeted_module_names, net[0].num_subspaces["default"]
     (['0'], 2)
-    >>> net[0].base_layer.weight.requires_grad, net[0].adamss_B["default"]["0"].requires_grad
+    >>> net[0].base_layer.weight.requires_grad, net[0].adamss_B["default"][0].requires_grad
     (False, True)
     >>> adamss.unload() is net, type(net[0]) is nn.Linear
     (True, True)

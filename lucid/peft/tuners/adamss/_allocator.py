@@ -71,7 +71,7 @@ class SubspaceAllocator:
     ...                       init_warmup=1, final_warmup=5, mask_interval=1, target_modules=["0", "1"])
     >>> allocator = AdamssModel(net, config, "default").allocator("default")
     >>> allocator.total, [allocator.target(step) for step in range(1, 6)]
-    ([5, 4, 3, 2, 2][0], [5, 3, 2, 2, 2])
+    (5, [5, 3, 2, 2, 2])
     """
 
     def __init__(self, model: nn.Module, config: AdamssConfig, adapter_name: str) -> None:
