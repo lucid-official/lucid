@@ -18,7 +18,7 @@ from lucid.peft._slots import _as_names
 from lucid.peft.tuners._host import _AdapterHost
 from lucid.peft.tuners._layer import _adapter_dtype, _check_adapter_name, _tuner_layers
 from lucid.peft.tuners._files import _FileContext, _FileFormat
-from lucid.peft.tuners._prompt._tuner import _model_size
+from lucid.peft.tuners._prompt._geometry import _model_size
 from lucid.peft.tuners.lora import Linear, LoraLayer
 from lucid.peft.tuners.xlora._classifier import XLoraClassifier
 from lucid.peft.tuners.xlora._config import XLoraConfig

@@ -31,33 +31,13 @@ from lucid.peft.tuners._layer import _check_adapter_name
 from lucid.peft.tuners._plan import _plan_modules_to_save, _set_submodule
 from lucid.peft.tuners._files import _FileContext, _FileFormat
 from lucid.peft.tuners._prompt._encoder import _Injection, _PromptEncoder
+from lucid.peft.tuners._prompt._geometry import _fill_sizes
 from lucid.peft.tuners._prompt._layout import _Layout
 from lucid.peft.tuners._prompt._sites import _Applied
 from lucid.utils.cache import Cache
 
 #: The key an adapter file stores the prompt under, whatever the method.
 _PROMPT_KEY: Final = "prompt_embeddings"
-
-#: Where a model's config keeps each size, by the names the families use.
-_SIZE_NAMES: Final[Mapping[str, tuple[str, ...]]] = {
-    "token_dim": ("hidden_size", "n_embd", "d_model"),
-    "num_layers": ("num_hidden_layers", "num_layers", "n_layer"),
-    "num_attention_heads": (
-        "num_attention_heads",
-        "n_head",
-        "num_heads",
-        "encoder_attention_heads",
-    ),
-}
-
-
-def _model_size(model: nn.Module, field: str) -> int:
-    config = getattr(model, "config", None)
-    for name in _SIZE_NAMES[field]:
-        value = getattr(config, name, None)
-        if isinstance(value, int) and not isinstance(value, bool):
-            return value
-    raise ValueError(f"Please specify `{field}` in `peft_config`")
 
 
 class _PromptLearningTuner(_FileFormat, _AdapterHost):
@@ -198,9 +178,8 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
         if config.num_virtual_tokens is None:
             raise ValueError("`num_virtual_tokens` must be set to build a prompt")
         stored = copy.deepcopy(config)
-        for field in _SIZE_NAMES:
-            if getattr(stored, field) is None:
-                setattr(stored, field, _model_size(self.model, field))
+        injection = type(self)._encoder_class.injection
+        _fill_sizes(self.model, stored, key_values=injection == _Injection.KEY_VALUES)
         if stored.num_transformer_submodules is None:
             two = stored.task_type == TaskType.SEQ_2_SEQ_LM
             stored.num_transformer_submodules = 2 if two else 1

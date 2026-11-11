@@ -43,6 +43,11 @@ class CartridgeConfig(PromptLearningConfig, peft_type=PeftType.CARTRIDGE):
     ``num_virtual_tokens``.  The cache starts as a random draw; ``initialize_kv_prefix_from_text`` and
     ``initialize_kv_prefix_from_past_key_values`` (``lucid.peft``) replace it with the keys and values
     of a document the model has read.
+
+    The cache is as wide as the model's attention: ``token_dim`` left out is ``num_attention_heads``
+    times the head width the model's config declares (``head_dim``, ``num_key_value_heads``), which is
+    the hidden size for most models and not for one whose heads are wider (T5-3B).  Where the model
+    declares them, a ``token_dim`` or ``num_attention_heads`` that disagrees raises ``ValueError``.
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {"num_frozen_tokens": _check_count}

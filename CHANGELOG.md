@@ -157,6 +157,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - FRoD builds its basis where the weights are (LCD-963)
 
+- a key/value prefix is as wide as the attention (LCD-958)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

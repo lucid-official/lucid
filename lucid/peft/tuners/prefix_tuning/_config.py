@@ -33,7 +33,13 @@ class PrefixTuningConfig(PromptLearningConfig, peft_type=PeftType.PREFIX_TUNING)
     task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
         As in :class:`~lucid.peft.PeftConfig`.
     num_virtual_tokens, token_dim, num_transformer_submodules, num_attention_heads, num_layers, modules_to_save
-        As in :class:`~lucid.peft.PromptLearningConfig`.
+        As in :class:`~lucid.peft.PromptLearningConfig`, except that ``token_dim`` is the width of
+        the model's attention — ``num_attention_heads`` times the head width its config declares
+        (``head_dim``, ``num_key_value_heads``) — which is the hidden size for most models and not
+        for one whose heads are wider (T5-3B, T5-11B).  Left out, it is read that way; given, it
+        must agree with a declared attention, or ``ValueError`` names both widths.  (The reference
+        library reads the hidden size, and fails on such a model unless ``token_dim`` is set to
+        this width, the config derived here.)
     init_weights : {"zero"} or None, default=None
         ``"zero"`` starts the prefix at zeros (the output layer of the
         projection, when there is one) so the keys and values it adds are null.
