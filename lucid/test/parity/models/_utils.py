@@ -211,13 +211,14 @@ def _run_parity(spec: ParitySpec) -> None:
         )
 
     if scale <= spec.atol:
-        # The other end of the same problem: the randomised buffers can also drive the
-        # reference's answer to zero (mobilenet_v2/v3 answer with |logits| ~1e-9), and an
-        # atol of 1e-3 then accepts a model that answers all zeros.
+        # The other end of the same problem: the reference's answer can be 0 -- the
+        # mobilenets' 1e-9 after randomised buffers shrink it through the depth, or a
+        # zero-initialised head (vit_base_16/32: exactly 0) -- and an atol of 1e-3 then
+        # accepts a model that answers all zeros whatever its body computes.
         pytest.skip(
-            f"the reference answers with |logits| up to {scale:.3g}, under the "
-            f"{spec.atol:g} tolerance — the signal has vanished through the depth, so "
-            f"an all-zeros answer would pass"
+            f"the reference answers with |logits| up to {scale:.3g}, within the "
+            f"{spec.atol:g} tolerance of zero, so an all-zeros answer would pass; "
+            f"compare features ahead of the head instead"
         )
 
     # Absolute error is roughly even across the logits while their
