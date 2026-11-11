@@ -281,11 +281,14 @@ class TestKMeans:
         assert set(_kmeans_labels(points, 1).tolist()) == {0}
 
     def test_a_cluster_that_loses_its_rows_is_given_the_farthest_row(self) -> None:
-        # Seeds land on rows 1 and 4 of these five points; the first iteration leaves a seed with
-        # only itself and the algorithm must not end with an empty cluster.
-        points = lucid.tensor([[0.0], [0.1], [0.2], [10.0], [10.1]])
-        labels = _kmeans_labels(points, 2).tolist()
-        assert set(labels) == {0, 1}
+        # Both seeds fall on equal rows, so a cluster is empty after the first round and takes the row
+        # farthest from its center.  The labels are scikit-learn's for the same rows.
+        cases = (
+            ([[3.0], [3.0], [3.0], [0.0]], [0, 0, 0, 1]),
+            ([[0.0], [1.0], [1.0], [1.0]], [1, 0, 0, 0]),
+        )
+        for rows, expected in cases:
+            assert _kmeans_labels(lucid.tensor(rows), 2).tolist() == expected
 
 
 class TestStarts:
