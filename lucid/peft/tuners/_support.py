@@ -4,7 +4,7 @@ import warnings
 from abc import abstractmethod
 from collections.abc import Mapping, MutableMapping
 from types import MappingProxyType
-from typing import ClassVar, Final, Protocol, Self, overload, override
+from typing import ClassVar, Protocol, Self, overload, override
 
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
@@ -14,8 +14,6 @@ from lucid.peft.tuners._layer import _adapter_dtype as _adapter_dtype  # the fam
 from lucid.peft.tuners._layer import _BaseTunerLayer, _check_adapter_name
 from lucid.peft.tuners._plan import _NO_PARAMETERS, _Target
 from lucid.peft.tuners._tuner import _BaseTuner
-
-_WEIGHT: Final = "base_layer.weight"
 
 
 class _Specced(Protocol):
@@ -70,16 +68,16 @@ class _WeightRewrite(_BaseTunerLayer):
 
     @override
     def _merge_targets(self) -> dict[str, Parameter]:
-        return {_WEIGHT: self.weight}
+        return {self._base_key("weight"): self.weight}
 
     @override
     def _merged_values(self, adapter: str) -> dict[str, Tensor]:
         weight = self.weight
-        return {_WEIGHT: self._rewritten(weight, adapter).to(weight.dtype)}
+        return {self._base_key("weight"): self._rewritten(weight, adapter).to(weight.dtype)}
 
     @override
     def _fold(self, adapter: str) -> None:
-        self.weight.copy_(self._merged_values(adapter)[_WEIGHT])
+        self.weight.copy_(self._merged_values(adapter)[self._base_key("weight")])
 
     @override
     def _unfold(self) -> None:

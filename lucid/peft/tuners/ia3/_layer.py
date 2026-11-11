@@ -32,8 +32,6 @@ from lucid.peft.tuners._layer import (
 )
 from lucid.peft.tuners.ia3._config import IA3Config
 
-_WEIGHT = "base_layer.weight"
-_BIAS = "base_layer.bias"
 #: Added to a vector before dividing a merged weight by it, so a zero entry does not divide by zero.
 _UNMERGE_EPS = 1e-8
 
@@ -218,20 +216,20 @@ class IA3Layer(_BaseTunerLayer):
 
     @override
     def _merge_targets(self) -> dict[str, Parameter]:
-        targets = {_WEIGHT: self.weight}
+        targets = {self._base_key("weight"): self.weight}
         bias = self.bias
         if isinstance(bias, Parameter) and not self.is_feedforward:
-            targets[_BIAS] = bias
+            targets[self._base_key("bias")] = bias
         return targets
 
     @override
     def _merged_values(self, adapter: str) -> dict[str, Tensor]:
         vector = self._vector(adapter)
         weight = self.weight
-        values = {_WEIGHT: (weight * self._weight_scale(vector)).to(weight.dtype)}
+        values = {self._base_key("weight"): (weight * self._weight_scale(vector)).to(weight.dtype)}
         bias = self.bias
         if bias is not None and not self.is_feedforward:
-            values[_BIAS] = (bias * vector.reshape(*bias.shape)).to(bias.dtype)
+            values[self._base_key("bias")] = (bias * vector.reshape(*bias.shape)).to(bias.dtype)
         return values
 
     @override
@@ -250,12 +248,13 @@ class IA3Layer(_BaseTunerLayer):
         """
         warnings.warn("Unmerge result can be inaccurate for (IA)^3.", stacklevel=4)
         targets = self._merge_targets()
+        bias_key = self._base_key("bias")
         for adapter in reversed(self.merged_adapters):
             vector = self._vector(adapter)
-            weight = targets[_WEIGHT]
+            weight = targets[self._base_key("weight")]
             weight.copy_(weight / (self._weight_scale(vector) + _UNMERGE_EPS))
-            if _BIAS in targets:
-                bias = targets[_BIAS]
+            if bias_key in targets:
+                bias = targets[bias_key]
                 bias.copy_(bias / (vector.reshape(*bias.shape) + _UNMERGE_EPS))
 
 
@@ -265,6 +264,9 @@ class Linear(IA3Layer, base_type=nn.Linear):
     The vector is ``(out_features, 1)`` for an output-side layer and ``(1, in_features)`` for a
     feed-forward one, as in the reference; merging multiplies it into the weight's rows or
     columns.
+
+    Stackable: the vector scales the output (or input) of whatever layer it stands on, and
+    merging multiplies it into the weight the layers below have already folded.
 
     Parameters
     ----------
@@ -292,11 +294,12 @@ class Linear(IA3Layer, base_type=nn.Linear):
     True
     """
 
-    base_layer: nn.Linear
+    _stackable = True
 
     @override
     def _features(self) -> tuple[int, int]:
-        return self.base_layer.in_features, self.base_layer.out_features
+        out, inn = self.weight.shape
+        return int(inn), int(out)
 
     @override
     def _vector_shape(self, size: int) -> tuple[int, ...]:

@@ -37,6 +37,11 @@ def _join(prefix: str, name: str) -> str:
     return f"{prefix}.{name}" if prefix else name
 
 
+def _named(layer: type) -> str:
+    """``layer`` as ``family._module.Class``: every family has a ``Linear``, so the bare name says nothing."""
+    return f"{layer.__module__.removeprefix('lucid.peft.tuners.')}.{layer.__qualname__}"
+
+
 @functools.cache
 def _module_dict_attributes() -> frozenset[str]:
     return frozenset(dir(nn.ModuleDict()))
@@ -107,6 +112,15 @@ class _BaseTunerLayer(nn.Module, ABC):
     none of them runs its base alone.  They change only through
     ``set_adapter``, ``delete_adapter``, ``enable_adapters``, ``merge``
     and ``unmerge``.
+
+    ``base_layer`` is the user's module, or — for a class that declares
+    ``_stackable`` — another tuner layer standing on it, so the layers of two
+    methods compose on one module.  A class that does not declare it is refused a
+    layer as its base: one that computes from the weight would drop the layer
+    below it, and one that reads the weight would read the wrong one.  A layer reads the
+    module's type, geometry and parameters off ``_root()``, calls
+    ``self.base_layer(x)`` once, merges after the layers below it and unmerges
+    before them (``_unwrap`` does the latter).
     """
 
     #: The per-adapter table attributes (``ModuleDict`` / ``ParameterDict``).
@@ -115,6 +129,12 @@ class _BaseTunerLayer(nn.Module, ABC):
     _layer_types: ClassVar[dict[type[nn.Module], type[_BaseTunerLayer]]] = {}
     #: The module type (or tuple of module types) this layer wraps, from ``base_type=``.
     _base_type: ClassVar[type[nn.Module] | tuple[type[nn.Module], ...]] = nn.Module
+    #: Whether a layer of this class may be built on another tuner layer, not on the user's module.
+    #: Opt-in, refused by default: a layer that reads the base weight, or computes from it
+    #: without calling ``base_layer``, would drop the layer below it (or count it twice), and
+    #: nothing in its signature says so.  A class sets it only once every pair with the other
+    #: stackable classes has passed ``test_layer_stacking``.
+    _stackable: ClassVar[bool] = False
 
     @override
     def __init_subclass__(
@@ -129,21 +149,41 @@ class _BaseTunerLayer(nn.Module, ABC):
             cls._base_type = base_type
             cls._layer_types[base_type] = cls
 
+    @classmethod
+    def _stands_on(cls, layer: _BaseTunerLayer) -> bool:
+        """Whether a layer of this class may be built around ``layer``, another tuner layer.
+
+        Only a ``_stackable`` class may.  The exception is a class that joined no
+        ``base_type=`` table (``ParamWrapper``): it adapts one parameter of whichever module
+        holds it, so a module with several adapted parameters is wrapped once per parameter,
+        each wrapper around the last.
+        """
+        return cls._stackable or (cls._base_type is nn.Module and type(layer) is cls)
+
     def __init__(self, base_layer: nn.Module) -> None:
+        root = base_layer
+        if isinstance(base_layer, _BaseTunerLayer):
+            if not type(self)._stands_on(base_layer):
+                raise TypeError(
+                    f"{_named(type(self))} cannot be built on {_named(type(base_layer))}: it "
+                    "computes from, or reads, the base weight, so the layer below would be "
+                    "dropped or counted twice; only a class declared stackable may stand on "
+                    "another tuner layer"
+                )
+            root = base_layer._root()
         kind = type(self)._base_type
-        if not isinstance(base_layer, kind):
+        if not isinstance(root, kind):
             shown = (
                 ", ".join(f"nn.{k.__name__}" for k in kind)
                 if isinstance(kind, tuple)
                 else f"nn.{kind.__name__}"
             )
             raise TypeError(
-                f"{type(self).__name__} adapts {shown} in lucid.peft, "
-                f"got {type(base_layer).__name__}"
+                f"{type(self).__name__} adapts {shown} in lucid.peft, got {type(root).__name__}"
             )
-        if base_layer.has_uninitialized_parameters():
+        if root.has_uninitialized_parameters():
             raise ValueError(
-                f"{type(base_layer).__name__} builds its parameters on its first input; "
+                f"{type(root).__name__} builds its parameters on its first input; "
                 "run it once before adapting it"
             )
         super().__init__()
@@ -162,8 +202,34 @@ class _BaseTunerLayer(nn.Module, ABC):
         return [name for name in _as_names(self.active_adapter) if name]
 
     def get_base_layer(self) -> nn.Module:
-        """Return the wrapped module, whose parameters are the base model's own."""
+        """Return the wrapped module, whose parameters are the base model's own.
+
+        One step down: where another tuner layer stands between, that layer, not the user's
+        module (``_root`` goes all the way).
+        """
         return self.base_layer
+
+    def _root(self) -> nn.Module:
+        """The module at the bottom of the stack: the user's own, whatever tuner layers stand on it.
+
+        What a layer reads its type, geometry and parameters off, as ``base_layer`` may be a
+        layer of another method (``_stackable``).  The module itself when nothing stands on it.
+        """
+        module = self.base_layer
+        while isinstance(module, _BaseTunerLayer):
+            module = module.base_layer
+        return module
+
+    def _base_path(self) -> str:
+        """The dotted path from this layer to the module at the bottom: ``base_layer``, with one more for each layer between."""
+        below = self.base_layer
+        if isinstance(below, _BaseTunerLayer):
+            return _dotted("base_layer", below._base_path())
+        return "base_layer"
+
+    def _base_key(self, name: str) -> str:
+        """The merge-target key of the parameter ``name`` of the module at the bottom: its path under this layer."""
+        return _dotted(self._base_path(), name)
 
     @property
     def weight(self) -> Parameter:
@@ -334,7 +400,9 @@ class _BaseTunerLayer(nn.Module, ABC):
     def _unwrap(self, keep_trained: bool) -> nn.Module:
         if self.merged and not keep_trained:
             self.unmerge()
-        return self.base_layer
+        below = self.base_layer
+        # Outer first: an inner layer's unmerge reads the weight this layer's has put back.
+        return below._unwrap(keep_trained) if isinstance(below, _BaseTunerLayer) else below
 
     # ``update_layer`` — creating an adapter — is each family's own, not an
     # abstract method here: its parameters are the method's hyper-parameters,

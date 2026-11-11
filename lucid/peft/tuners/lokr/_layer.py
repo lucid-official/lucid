@@ -192,6 +192,8 @@ class LoKrLayer(_LycorisLayer, family=True):
 class Linear(LoKrLayer, base_type=nn.Linear):
     r"""An ``nn.Linear`` with a LoKr update: :math:`y = W x + b + s\,(W_1 \otimes W_2)\,x`.
 
+    Stackable: the Kronecker update runs beside the layer below and merges after it.
+
     Parameters
     ----------
     base_layer : nn.Linear
@@ -212,7 +214,7 @@ class Linear(LoKrLayer, base_type=nn.Linear):
     True
     """
 
-    base_layer: nn.Linear
+    _stackable = True
 
     @override
     def supports_lora_conversion(self, adapter_name: str = "default") -> bool:

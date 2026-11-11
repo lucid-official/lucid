@@ -14,19 +14,19 @@ depends on the input, so ``get_delta_weight`` is zero and the change is ``get_de
 
 import warnings
 from collections.abc import Mapping
-from typing import ClassVar, override
+from typing import ClassVar, Final, override
 
 import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
-from lucid.nn.parameter import Parameter
 from lucid.peft.tuners._delta import _DeltaLayer
-from lucid.peft.tuners._layer import _dotted, _parameter_at
+from lucid.peft.tuners._layer import _parameter_at
 from lucid.peft.tuners._stash import _PristineMerge
 from lucid.peft.tuners._support import _LinearSized
 from lucid.peft.tuners.beft._config import BeftConfig
 
-_BIAS = _dotted("base_layer", "bias")
+#: The one parameter of the base BEFT changes, by its name under the module at the bottom.
+_BIAS: Final = "bias"
 
 
 class BeftLayer(_DeltaLayer[BeftConfig], _LinearSized, _PristineMerge, family=True):
@@ -53,7 +53,7 @@ class BeftLayer(_DeltaLayer[BeftConfig], _LinearSized, _PristineMerge, family=Tr
     """
 
     adapter_layer_names: ClassVar[tuple[str, ...]] = ("beft_bias",)
-    _merged_names: ClassVar[tuple[str, ...]] = ("bias",)
+    _merged_names: ClassVar[tuple[str, ...]] = (_BIAS,)
     beft_bias: nn.ParameterDict
 
     @override
@@ -71,7 +71,7 @@ class BeftLayer(_DeltaLayer[BeftConfig], _LinearSized, _PristineMerge, family=Tr
             if config.init_weights
             else lucid.randn(*shape, device=home.device, dtype=home.dtype)
         )
-        self.beft_bias[adapter_name] = Parameter(start)
+        self.beft_bias[adapter_name] = nn.Parameter(start)
 
     def get_delta_bias(self, adapter: str) -> Tensor:
         """The change ``adapter`` makes to the base bias: its ``out`` numbers, in the adapter's dtype.
@@ -108,7 +108,7 @@ class BeftLayer(_DeltaLayer[BeftConfig], _LinearSized, _PristineMerge, family=Tr
     @override
     def _changes(self, adapter: str, base: Mapping[str, Tensor]) -> dict[str, Tensor]:
         del base  # the added bias does not depend on the bias it is added to
-        return {_BIAS: self.get_delta_bias(adapter)}
+        return {self._base_key(_BIAS): self.get_delta_bias(adapter)}
 
     @override
     def _pending_merges(self, adapter_names: list[str] | None) -> list[str]:
@@ -128,6 +128,9 @@ class BeftLayer(_DeltaLayer[BeftConfig], _LinearSized, _PristineMerge, family=Tr
 
 class Linear(BeftLayer, base_type=nn.Linear):
     r"""An ``nn.Linear`` with a BEFT bias: :math:`y = W x + b + \beta`.
+
+    Stackable: the bias reads nothing of the weight, so the layer may stand on another method's
+    layer (and one may stand on it).
 
     Parameters
     ----------
@@ -149,4 +152,4 @@ class Linear(BeftLayer, base_type=nn.Linear):
     True
     """
 
-    base_layer: nn.Linear
+    _stackable = True

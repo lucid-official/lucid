@@ -91,13 +91,14 @@ class ShiraLayer(_ConfigLayer, _LinearSized, _ResidualUpdate, family=True):
                 f"mask_type={cfg.mask_type!r} needs a mask function: set `config.mask_fn`"
             )
         options = {"random_seed": cfg.random_seed} if cfg.mask_type == "random" else {}
-        mask = cfg.mask_fn(self.base_layer, cfg.r, **options)
+        root = self._root()  # the user's module, which a mask function is written for
+        mask = cfg.mask_fn(root, cfg.r, **options)
         positions = mask.nonzero()  # (K, 2), row-major
         count = cfg.r * (self.in_features + self.out_features)
         if positions.shape[0] != count:
             raise ValueError(
                 f"The SHiRA indices and weights are not the same dimensions for adapter "
-                f"{adapter_name} in layer {self.base_layer}: the mask holds {positions.shape[0]} "
+                f"{adapter_name} in layer {root}: the mask holds {positions.shape[0]} "
                 f"entries, r={cfg.r} needs {count}"
             )
         anchor = self.weight
@@ -168,6 +169,8 @@ class ShiraLayer(_ConfigLayer, _LinearSized, _ResidualUpdate, family=True):
 class Linear(ShiraLayer, base_type=nn.Linear):
     r"""An ``nn.Linear`` with a SHiRA update: :math:`y = (W + s\,\Delta)\,x + b`.
 
+    Stackable: the sparse update runs beside the layer below and merges after it.
+
     Parameters
     ----------
     base_layer : nn.Linear
@@ -187,4 +190,4 @@ class Linear(ShiraLayer, base_type=nn.Linear):
     True
     """
 
-    base_layer: nn.Linear
+    _stackable = True

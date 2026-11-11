@@ -109,12 +109,12 @@ class _PristineMerge(_ResidualUpdate):
 
     @override
     def _merge_targets(self) -> dict[str, Parameter]:
-        base = self.get_base_layer()
+        base = self._root()
         targets: dict[str, Parameter] = {}
         for name in self._merged_names:
             held = getattr(base, name, None)
             if isinstance(held, Parameter):
-                targets[_dotted(_BASE, name)] = held
+                targets[self._base_key(name)] = held
         return targets
 
     @override

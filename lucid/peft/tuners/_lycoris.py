@@ -45,7 +45,6 @@ from lucid.peft.tuners._tuner import _BaseTuner
 from lucid.peft.tuners._kinds import _Geometry, _Kind
 from lucid.peft.tuners._support import _adapter_dtype, _AdditiveWeight, _SpecField
 
-_WEIGHT: Final = "base_layer.weight"
 #: Below this a mean of kept rows counts as "none kept": scaling by it would not make a number.
 _TINY: Final = 1e-12
 
@@ -236,7 +235,8 @@ class _LycorisLayer(_AdditiveWeight):
 
     @property
     def _geometry(self) -> _Geometry:
-        return _Kind.of(type(self.base_layer)).geometry(self.base_layer)
+        root = self._root()
+        return _Kind.of(type(root)).geometry(root)
 
     @override
     def __repr__(self) -> str:
@@ -368,7 +368,8 @@ class _LycorisLayer(_AdditiveWeight):
         result: Tensor = self.base_layer(x)
         if self.disable_adapters or self.merged:
             return result
-        kind = _Kind.of(type(self.base_layer))
+        root = self._root()
+        kind = _Kind.of(type(root))
         out = result
         for adapter in self.active_adapters:
             if adapter not in self._specs or self._skips(adapter):
@@ -378,7 +379,7 @@ class _LycorisLayer(_AdditiveWeight):
                 apply_rank_dropout=self.training and bool(self._specs[adapter].rank_dropout),
             )
             # A half-precision base has a float32 delta: the product runs in it, the sum returns.
-            out = out + kind.apply(self.base_layer, x.to(delta.dtype), delta)
+            out = out + kind.apply(root, x.to(delta.dtype), delta)
         return out if out.dtype == result.dtype else out.to(result.dtype)
 
     # ── merging ───────────────────────────────────────────────────────────

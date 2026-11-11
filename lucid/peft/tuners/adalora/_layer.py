@@ -118,7 +118,8 @@ class AdaLoraLayer(_ResidualUpdate, family=True):
 
     @property
     def _geometry(self) -> _Geometry:
-        return _Kind.of(type(self.base_layer)).geometry(self.base_layer)
+        root = self._root()
+        return _Kind.of(type(root)).geometry(root)
 
     @property
     def in_features(self) -> int:
@@ -362,7 +363,8 @@ class SVDLinear(AdaLoraLayer, base_type=nn.Linear):
     r"""An ``nn.Linear`` with an SVD-parameterised update: :math:`y = W x + b + \tfrac{\alpha}{\mathrm{ranknum}}\,P\,\mathrm{diag}(\lambda)\,Q\,\mathrm{drop}(x)`.
 
     The update is applied as three small products, never as an ``(out, in)``
-    matrix, so a layer pruned to a few triplets costs a few triplets.
+    matrix, so a layer pruned to a few triplets costs a few triplets.  Stackable: the triplets'
+    update is added to the output of whichever layer it stands on.
 
     Parameters
     ----------
@@ -392,7 +394,7 @@ class SVDLinear(AdaLoraLayer, base_type=nn.Linear):
     True
     """
 
-    base_layer: nn.Linear
+    _stackable = True
 
     @override
     def _contribution(self, adapter: str, x: Tensor) -> Tensor:

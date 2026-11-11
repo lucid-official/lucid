@@ -45,7 +45,8 @@ class _OrthogonalLayer(_ConfigLayer, _WeightRewrite):
 
     @property
     def _geometry(self) -> _Geometry:
-        return _Kind.of(type(self.base_layer)).geometry(self.base_layer)
+        root = self._root()
+        return _Kind.of(type(root)).geometry(root)
 
     @property
     def in_features(self) -> int:
@@ -58,10 +59,11 @@ class _OrthogonalLayer(_ConfigLayer, _WeightRewrite):
         return self._geometry.out
 
     def _check_ungrouped(self) -> None:
-        groups = getattr(self.base_layer, "groups", 1)
+        root = self._root()
+        groups = getattr(root, "groups", 1)
         if groups > 1:
             raise NotImplementedError(
-                f"{type(self).__name__} does not support {type(self.base_layer).__name__} layers "
+                f"{type(self).__name__} does not support {type(root).__name__} layers "
                 f"with groups > 1 (got groups={groups})."
             )
 

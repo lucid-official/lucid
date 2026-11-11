@@ -22,14 +22,13 @@ import lucid.nn as nn
 import lucid.nn.init as init
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
-from lucid.peft.tuners._layer import _dotted, _parameter_at
+from lucid.peft.tuners._layer import _parameter_at
 from lucid.peft.tuners._support import _adapter_dtype, _ConfigLayer, _LinearSized, _SpecField
 from lucid.peft.tuners.road._config import RoadConfig
 from lucid.peft.tuners.road._rotation import _Rotation
 
 #: The standard deviations of the ``init_weights=False`` start (angles about zero, scales about one), the reference's.
 _RANDOM_STD = 0.5
-_BASE = "base_layer"
 
 
 class _RoadSpec(NamedTuple):
@@ -151,10 +150,10 @@ class RoadLayer(_ConfigLayer[RoadConfig], _LinearSized, family=True):
 
     @override
     def _merge_targets(self) -> dict[str, Parameter]:
-        targets = {_dotted(_BASE, "weight"): self.weight}
+        targets = {self._base_key("weight"): self.weight}
         bias = self.bias
         if isinstance(bias, Parameter):
-            targets[_dotted(_BASE, "bias")] = bias
+            targets[self._base_key("bias")] = bias
         return targets
 
     @staticmethod
@@ -190,6 +189,8 @@ class RoadLayer(_ConfigLayer[RoadConfig], _LinearSized, family=True):
 class Linear(RoadLayer, base_type=nn.Linear):
     r"""An ``nn.Linear`` whose output a RoAd rotation turns: :math:`y = R\,(W x + b)`.
 
+    Stackable: the rotation turns the output of whatever layer it stands on.
+
     Parameters
     ----------
     base_layer : nn.Linear
@@ -210,4 +211,4 @@ class Linear(RoadLayer, base_type=nn.Linear):
     True
     """
 
-    base_layer: nn.Linear
+    _stackable = True

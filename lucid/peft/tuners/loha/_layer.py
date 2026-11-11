@@ -103,6 +103,8 @@ class LoHaLayer(_LycorisLayer, family=True):
 class Linear(LoHaLayer, base_type=nn.Linear):
     r"""An ``nn.Linear`` with a LoHa update: :math:`y = W x + b + s\,((W_{1a}W_{1b}) \odot (W_{2a}W_{2b}))\,x`.
 
+    Stackable: the Hadamard update runs beside the layer below and merges after it.
+
     Parameters
     ----------
     base_layer : nn.Linear
@@ -123,7 +125,7 @@ class Linear(LoHaLayer, base_type=nn.Linear):
     True
     """
 
-    base_layer: nn.Linear
+    _stackable = True
 
     @override
     def supports_lora_conversion(self, adapter_name: str = "default") -> bool:

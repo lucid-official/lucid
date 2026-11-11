@@ -275,10 +275,6 @@ class LoraLayer(_BaseTunerLayer):
             {name: spec.variant == "dora" for name, spec in self._specs.items()}
         )
 
-    def _base_path(self) -> str:
-        """The dotted path from this layer to the module holding the base parameters."""
-        return "base_layer"
-
     @override
     def __repr__(self) -> str:
         """The module's repr, led by ``lora.`` so a printed model names the method."""
@@ -390,7 +386,7 @@ class LoraLayer(_BaseTunerLayer):
         if self.bias is None:
             warnings.warn(
                 f"`lora_bias=True` was passed but the targeted layer of type "
-                f"{type(self.get_base_layer()).__name__} has no bias. This means that merging "
+                f"{type(self._root()).__name__} has no bias. This means that merging "
                 "LoRA weights won't be possible.",
                 stacklevel=3,
             )
@@ -455,8 +451,10 @@ class _Plan(NamedTuple):
     gain: Tensor | None
 
 
-_WEIGHT: Final = "base_layer.weight"
-_BIAS: Final = "base_layer.bias"
+#: What a plan's shifts are keyed by: the names of the base module's parameters (``_merge_targets``
+#: keys them by their path under the layer, which says how many layers stand on the module).
+_WEIGHT: Final = "weight"
+_BIAS: Final = "bias"
 
 
 def _added(param: Tensor, shift: Tensor) -> Tensor:
@@ -537,7 +535,18 @@ class _Residual(LoraLayer):
         return result if bias is None else result - self._output_vector(bias)
 
     def _check_weight_norm(self) -> None:
-        """Raise if the per-unit weight norm DoRA needs cannot be formed for this base layer."""
+        """Raise if the per-unit weight norm DoRA needs cannot be formed for this base layer.
+
+        It is the norm of the weight the layer reads (the module at the bottom), while its
+        forward pass adds to the output of every layer beneath, so with one standing between
+        the gain is the norm of a weight those layers have not (or have) changed: a merge then
+        differs from the forward pass.
+        """
+        if self.base_layer is not self._root():
+            raise ValueError(
+                "use_dora=True reads the base weight, which the layers it stands on change: "
+                "DoRA must be built on the user's own module, below every other method's layer"
+            )
 
     def _bias_delta(self, adapter: str) -> Tensor | None:
         """What merging ``adapter`` adds to the base bias, or ``None``."""
@@ -548,8 +557,8 @@ class _Residual(LoraLayer):
         return _Variant.named(self._specs[adapter].variant)
 
     def _site(self) -> _WeightSite:
-        """Where the base layer keeps its weight: the one thing a merge reads and writes it through."""
-        return _WeightSite.of(self.base_layer)
+        """Where the module at the bottom keeps its weight: the one thing a merge reads and writes it through."""
+        return _WeightSite.of(self._root())
 
     def _base_weight(self) -> Tensor:
         """The weight the base layer computes with now (a weight norm's derived one included)."""
@@ -594,10 +603,10 @@ class _Residual(LoraLayer):
 
     @override
     def _merge_targets(self) -> dict[str, Parameter]:
-        targets = {f"base_layer.{name}": p for name, p in self._site().parameters().items()}
+        targets = {self._base_key(name): p for name, p in self._site().parameters().items()}
         bias = self.bias
         if isinstance(bias, Parameter) and any(spec.lora_bias for spec in self._specs.values()):
-            targets[_BIAS] = bias
+            targets[self._base_key(_BIAS)] = bias
         return targets
 
     def _bias_target(self) -> Tensor:
@@ -609,9 +618,9 @@ class _Residual(LoraLayer):
     @override
     def _merged_values(self, adapter: str) -> dict[str, Tensor]:
         shifts = self._plan(adapter).shifts
-        values = {_WEIGHT: _added(self._base_weight(), shifts[_WEIGHT])}
+        values = {self._base_key(_WEIGHT): _added(self._base_weight(), shifts[_WEIGHT])}
         if _BIAS in shifts:
-            values[_BIAS] = _added(self._bias_target(), shifts[_BIAS])
+            values[self._base_key(_BIAS)] = _added(self._bias_target(), shifts[_BIAS])
         return values
 
     @override
@@ -709,6 +718,9 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
     :math:`s B A` into :math:`W` in place, so a merged layer costs what
     the base costs; ``unmerge`` takes it out again.
 
+    Stackable: the update is added beside whatever layer it stands on, which the layer calls once.
+    ``QuantizedLinear`` is not (it is built on the quantized buffers themselves).
+
     Parameters
     ----------
     base_layer : nn.Linear
@@ -762,11 +774,12 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
     """
 
     _dense_weight = True
+    _stackable = True
     base_layer: nn.Module
 
     def __init__(
         self,
-        base_layer: nn.Linear,
+        base_layer: nn.Module,
         adapter_name: str,
         r: int = 0,
         lora_alpha: float = 1,
@@ -806,7 +819,7 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
 
     @override
     def _setup(self) -> None:
-        base = self.base_layer
+        base = self._root()
         assert isinstance(base, (nn.Linear, *_QUANTIZED_LINEAR_TYPES))
         self.in_features = base.in_features
         self.out_features = base.out_features
@@ -815,7 +828,7 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
 
     @override
     def _anchor(self) -> Tensor:
-        weight = self.base_layer.weight
+        weight = self._root().weight
         assert isinstance(weight, Tensor)
         return weight
 
@@ -870,6 +883,7 @@ class QuantizedLinear(Linear):
 
     _base_type = _QUANTIZED_LINEAR_TYPES
     _dense_weight = False
+    _stackable = False  # merging re-quantizes the buffers it stands on: nothing may stand beneath
     base_layer: _QuantizedBase
 
     @override

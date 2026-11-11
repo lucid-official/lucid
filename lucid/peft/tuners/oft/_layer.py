@@ -233,6 +233,9 @@ class Linear(OFTLayer, base_type=nn.Linear):
     first.  Rotations do not commute: the order the adapters are listed in matters, and the
     adapted layer equals the merged one in each.
 
+    Stackable: it rotates the input and then calls the layer below it, once.  The
+    convolution does not (``Conv2d`` computes from the weight and may not stand on a layer).
+
     Parameters
     ----------
     base_layer : nn.Linear
@@ -253,7 +256,7 @@ class Linear(OFTLayer, base_type=nn.Linear):
     True
     """
 
-    base_layer: nn.Linear
+    _stackable = True
 
     def _rotate(self, x: Tensor, adapter: str) -> Tensor:
         """``x R``: each width-``b`` slice of the last axis turned by its block."""
