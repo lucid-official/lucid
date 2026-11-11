@@ -646,8 +646,13 @@ reads it as that object under its new spelling: it passes by the signature
 rules, `--update` writes it back so later releases keep holding it, and it
 fails when the attribute is gone, when it reaches something the walk does not
 list, or when the object it reaches no longer binds the calls it did (LCD-959).
-A promotion moves the audit's own cells to the new spelling too; this file
-sees them as `LOST` under the old one until `--update-coverage` records the new.
+A promotion moves the audit's own cells to the new spelling too. They are
+reported as `MOVED old -> new`, judged by the verdict under the new spelling
+(a pass that stops passing there is `WORSE`, one the new spelling does not
+answer is `LOST`), and `--update-coverage` records the new key. The same
+lookup (`_surface.moved`) serves both gates; a spelling that reaches nothing is
+`REMOVED` as before, and one that reaches an object the sweep does not list
+stays `LOST`.
 
 Newly answered cells are reported too, as progress rather than failure.
 When the new state is the intended one:
