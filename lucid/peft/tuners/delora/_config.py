@@ -41,8 +41,9 @@ class DeloraConfig(_TargetedConfig, peft_type=PeftType.DELORA):
     module_dropout : float, default=0.0
         Probability of disabling the module during training, in ``[0, 1)``.
     bias : {"none", "all", "delora_only"}, default="none"
-        Which biases also train with DeLoRA: none, all of them, or only those of the adapted
-        layers.
+        The reference trains none, all, or only the adapted layers' biases.  A DeLoRA adapter
+        here trains its own tensors only, so ``"all"`` and ``"delora_only"`` raise
+        ``NotImplementedError``.
     init_weights : bool, default=True
         ``True``: the update is zero at the start.  ``False``: both factors start random (for
         tests).
@@ -68,12 +69,16 @@ class DeloraConfig(_TargetedConfig, peft_type=PeftType.DELORA):
 
     Notes
     -----
-    DeLoRA's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``r`` is not positive, a field is out of range or
-    two fields conflict.  No tuner applies it yet: ``get_peft_model`` raises ``NotImplementedError``
-    naming LCD-823, which tracks it.
+    Every field of the reference library's config is here, in its order and with its defaults, read
+    and written as ``adapter_config.json``.  A field of the wrong type raises ``TypeError``.
+    ``ValueError`` is raised when ``r`` is not positive, a field is out of range or two fields
+    conflict.  ``bias`` other than ``"none"`` raises ``NotImplementedError``.  The tuner is
+    :class:`~lucid.peft.DeloraModel`; it adapts ``nn.Linear`` modules.
     """
+
+    _unsupported: ClassVar[dict[str, str]] = {
+        "bias": "a DeLoRA adapter trains its own tensors only (bias='none')"
+    }
 
     _field_checks: ClassVar[dict[str, _Check]] = {
         "r": _check_rank,

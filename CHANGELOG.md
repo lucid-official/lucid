@@ -159,6 +159,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - time the first run of an executable (LCD-847)
 
+- the DeLoRA tuner, a bounded low-rank update (LCD-823)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views
