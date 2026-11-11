@@ -136,9 +136,7 @@ class TestFormula:
         _randomise(layer)
         probe = lucid.eye(6, device=device)
         applied = layer(probe) - base(probe)
-        assert bool(
-            lucid.allclose(applied, layer.get_delta_weight("default").mT, atol=1e-5)
-        )
+        assert bool(lucid.allclose(applied, layer.get_delta_weight("default").mT, atol=1e-5))
 
     def test_the_update_stays_inside_the_boundary(self) -> None:
         # |dW diag(1 / w_norm)|_F <= lambda, whatever the factors are (Eq. 6-7).
@@ -191,9 +189,7 @@ class TestMerging:
         delta = layer.get_delta_weight("default").tolist()
         layer.merge()
         merged = base.weight
-        assert bool(
-            lucid.allclose(merged, lucid.tensor(forms.add(weight, delta)), atol=1e-6)
-        )
+        assert bool(lucid.allclose(merged, lucid.tensor(forms.add(weight, delta)), atol=1e-6))
         assert layer.merged
 
     def test_the_merged_layer_is_the_adapted_one(self, device: str) -> None:
@@ -223,7 +219,9 @@ class TestMerging:
     def test_two_active_adapters_equal_their_merge_in_either_order(self) -> None:
         lucid.manual_seed(3)
         net = nn.Sequential(nn.Linear(6, 8), nn.ReLU(), nn.Linear(8, 4))
-        peft = get_peft_model(net, DeloraConfig(r=2, target_modules=["0", "2"], init_weights=False), adapter_name="a")
+        peft = get_peft_model(
+            net, DeloraConfig(r=2, target_modules=["0", "2"], init_weights=False), adapter_name="a"
+        )
         peft.add_adapter("b", DeloraConfig(r=3, target_modules=["0", "2"], init_weights=False))
         x = lucid.randn(5, 6)
         peft.set_adapter(["a", "b"])
@@ -280,7 +278,9 @@ class TestHalfPrecision:
     def test_the_adapter_is_float32_beside_a_half_base(self, dtype: lucid.dtype) -> None:
         lucid.manual_seed(1)
         base = nn.Linear(6, 4).to(dtype)
-        layer = delora.Linear(base, "default", DeloraConfig(r=2, target_modules=["x"], init_weights=False))
+        layer = delora.Linear(
+            base, "default", DeloraConfig(r=2, target_modules=["x"], init_weights=False)
+        )
         assert {p.dtype for p in layer._adapter_parameters("default")} == {lucid.float32}
         assert layer.delora_w_norm["default"].dtype == lucid.float32
         out = layer(lucid.randn(3, 6).to(dtype))

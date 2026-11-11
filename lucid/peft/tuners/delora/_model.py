@@ -29,19 +29,18 @@ class DeloraModel(_ConfigTuner[DeloraConfig], peft_type=PeftType.DELORA):
     Each module ``config`` selects becomes a :class:`~lucid.peft.tuners.delora.Linear` that adds a
     normalised low-rank update, bounded by a learned :math:`\lambda`, to the module's output; the
     rest of the model is frozen.  A module's rank and :math:`\lambda` are the config's unless
-    ``rank_pattern`` / ``lambda_pattern`` name it.  The model is edited in place (it stays
-    reachable as ``model``, and public names this wrapper lacks are read from it), and
-    ``peft_config`` keeps ``config`` with its default targets spelled out.  Adapters coexist under
-    names (``add_adapter``, ``set_adapter``, ``delete_adapter``).
+    ``rank_pattern`` / ``lambda_pattern`` name it.  The model is edited in place and stays
+    reachable as ``model``; several adapters coexist (``add_adapter``, ``set_adapter``,
+    ``delete_adapter``).
 
     Parameters
     ----------
     model : nn.Module
-        The model to adapt.
+        The model to put DeLoRA layers into.
     peft_config : DeloraConfig
-        What to adapt and how.
+        Ranks, boundaries, dropout and which modules.
     adapter_name : str
-        Name of the adapter, the key in every ``delora_A``.
+        Name of the first adapter, the key in every ``delora_A``.
     low_cpu_mem_usage, state_dict
         As in :class:`~lucid.peft.LoraModel`.
 
@@ -74,7 +73,9 @@ class DeloraModel(_ConfigTuner[DeloraConfig], peft_type=PeftType.DELORA):
     def _create_new_module(
         cls, config: DeloraConfig, adapter_name: str, target: _Target
     ) -> nn.Module:
-        return super()._create_new_module(_for_module(config, target.full_name), adapter_name, target)
+        return super()._create_new_module(
+            _for_module(config, target.full_name), adapter_name, target
+        )
 
     @override
     @classmethod

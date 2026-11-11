@@ -60,9 +60,9 @@ class DeloraLayer(_DeltaLayer[DeloraConfig], _LinearSized, _ResidualUpdate, fami
     Parameters
     ----------
     base_layer : nn.Module
-        The ``nn.Linear`` to adapt; kept as ``base_layer``, its parameters shared.
+        The ``nn.Linear`` the update is added beside; its parameters stay shared.
     adapter_name : str
-        Name of the adapter created at once.
+        Name of the first adapter.
     config : DeloraConfig
         ``r``, ``delora_lambda``, ``module_dropout`` and ``init_weights`` (the per-module patterns
         are the tuner's to resolve).
@@ -70,9 +70,9 @@ class DeloraLayer(_DeltaLayer[DeloraConfig], _LinearSized, _ResidualUpdate, fami
     Raises
     ------
     TypeError
-        ``base_layer`` is not the module type the layer class adapts.
+        ``base_layer`` is another module type.
     ValueError
-        ``base_layer`` builds its parameters on its first input.
+        ``base_layer`` is lazy and has not run yet.
     """
 
     adapter_layer_names: ClassVar[tuple[str, ...]] = ("delora_A", "delora_B", "delora_lambda")
@@ -119,7 +119,8 @@ class DeloraLayer(_DeltaLayer[DeloraConfig], _LinearSized, _ResidualUpdate, fami
     @override
     def _adapter_keys(self, adapter_name: str) -> dict[str, str]:
         keys = super()._adapter_keys(adapter_name)
-        if adapter_name in self.delora_w_norm:  # a buffer table: the file holds it as the reference's does
+        # A buffer table, which ``_tables`` does not list: the file holds it as the reference's does.
+        if adapter_name in self.delora_w_norm:
             keys[_dotted(_W_NORM, adapter_name)] = _W_NORM
         return keys
 

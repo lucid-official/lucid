@@ -73,7 +73,9 @@ class _DeltaLayer[C: _TargetedConfig = _TargetedConfig](_ConfigLayer[C]):
 
     def _enter_dropout(self, adapter_name: str, probability: float) -> None:
         """Keep a dropout of ``probability`` for ``adapter_name`` (the identity when it is zero)."""
-        self._dropouts[adapter_name] = nn.Dropout(p=probability) if probability > 0.0 else nn.Identity()
+        self._dropouts[adapter_name] = (
+            nn.Dropout(p=probability) if probability > 0.0 else nn.Identity()
+        )
 
     def _dropped(self, adapter: str, x: Tensor) -> Tensor:
         """``x`` through ``adapter``'s dropout."""

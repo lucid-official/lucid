@@ -71,3 +71,34 @@ def delora_delta(a: Matrix, b: Matrix, boundary: float, w_norm: list[float]) -> 
             for i in range(inn):
                 delta[o][i] += boundary / r * b[o][k] * a[k][i] / (a_norm * b_norm)
     return [[delta[o][i] * w_norm[i] for i in range(inn)] for o in range(out)]
+
+
+# ── GraLoRA (Jung et al., 2025, Eq. 5) ───────────────────────────────────────
+
+
+def gralora_delta(
+    a: list[Matrix],
+    b: list[Matrix],
+    scaling: float,
+    general: tuple[Matrix, Matrix] | None = None,
+) -> Matrix:
+    r"""The block grid of the paper: block ``(j, n)`` of the update is :math:`B_{j,n} A_{j,n}^\top`.
+
+    ``a[n]`` is ``(in / k, r)`` and ``b[j]`` is ``(r, out / k)``, as the layer keeps them; the
+    paper's :math:`A_{j,n}` is the ``j``-th run of ``r / k`` columns of ``a[n]`` and
+    :math:`B_{j,n}^\top` the ``n``-th run of ``r / k`` rows of ``b[j]``.  ``general`` is the hybrid
+    LoRA pair ``(A, B)`` of shapes ``(h, in)`` and ``(out, h)``; the whole sum is scaled.
+    """
+    k, sub_in, r = len(a), len(a[0]), len(a[0][0])
+    sub_out, s = len(b[0][0]), r // k
+    delta = [[0.0] * (k * sub_in) for _ in range(k * sub_out)]
+    for j in range(k):
+        for n in range(k):
+            for o in range(sub_out):
+                for i in range(sub_in):
+                    delta[j * sub_out + o][n * sub_in + i] = sum(
+                        b[j][n * s + t][o] * a[n][i][j * s + t] for t in range(s)
+                    )
+    if general is not None:
+        delta = add(delta, matmul(general[1], general[0]))
+    return scaled(delta, scaling)

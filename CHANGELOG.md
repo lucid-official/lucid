@@ -161,6 +161,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the DeLoRA tuner, a bounded low-rank update (LCD-823)
 
+- the GraLoRA tuner, block-wise low-rank updates (LCD-823)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

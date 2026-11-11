@@ -42,15 +42,17 @@ class GraloraConfig(_TargetedConfig, peft_type=PeftType.GRALORA):
     gralora_k : int, default=2
         Number of sub-blocks along each side of the grid; positive.
     bias : {"none", "all", "gralora_only"}, default="none"
-        Which biases also train with GraLoRA: none, all of them, or only those of the adapted
-        layers.
+        The reference trains none, all, or only the adapted layers' biases.  A GraLoRA adapter
+        here trains its own tensors only, so ``"all"`` and ``"gralora_only"`` raise
+        ``NotImplementedError``.
     init_weights : bool, default=True
-        Initialise the factors with their default scheme.
+        ``True``: the update is zero at the start.  ``False``: every factor starts random (for
+        tests).
     target_modules : str or list of str, optional
         The modules GraLoRA adapts, matched as ``LoraConfig.target_modules`` is.
     fan_in_fan_out : bool, default=False
-        Set for a base that stores its weight as ``(in, out)``; a GraLoRA layer follows that
-        layout.
+        For a base that stores its weight as ``(in, out)``.  An ``nn.Linear`` stores ``(out, in)``,
+        so ``True`` warns and is set back to ``False`` when the adapter is made.
     modules_to_save, layers_to_transform, layers_pattern
         As in :class:`~lucid.peft.LoraConfig`.
 
@@ -65,12 +67,17 @@ class GraloraConfig(_TargetedConfig, peft_type=PeftType.GRALORA):
 
     Notes
     -----
-    GraLoRA's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``r`` is not divisible by ``gralora_k``, or a
-    field is out of range.  No tuner applies it yet: ``get_peft_model`` raises
-    ``NotImplementedError`` naming LCD-823, which tracks it.
+    Every field of the reference library's config is here, in its order and with its defaults, read
+    and written as ``adapter_config.json``.  A field of the wrong type raises ``TypeError``.
+    ``ValueError`` is raised when ``r`` is not divisible by ``gralora_k``, or a field is out of
+    range.  ``bias`` other than ``"none"`` raises ``NotImplementedError``.  The tuner is
+    :class:`~lucid.peft.GraloraModel`; it adapts ``nn.Linear`` modules whose input and output
+    sizes ``gralora_k`` divides.
     """
+
+    _unsupported: ClassVar[dict[str, str]] = {
+        "bias": "a GraLoRA adapter trains its own tensors only (bias='none')"
+    }
 
     _field_checks: ClassVar[dict[str, _Check]] = {
         "r": _check_rank,
