@@ -18,9 +18,12 @@
 #include <pybind11/stl.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <format>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -33,6 +36,7 @@
 #include "../backend/gpu/mps/MpsBridge.h"
 #include "../compile/CompiledExecutable.h"
 #include "../compile/ExecutableCache.h"
+#include "../compile/FirstRunWatchdog.h"
 #include "../compile/MpsBuilder.h"
 #include "../compile/OpEmitters/OpEmitter.h"
 #include "../compile/RankCanon.h"
@@ -199,12 +203,139 @@ public:
     std::vector<std::string> feed_names() const {
         return lucid::compile::executable_feed_names(exe_.get());
     }
+    std::string first_run_state() const {
+        return lucid::compile::first_run_state_name(
+            lucid::compile::executable_first_run_state(exe_.get()));
+    }
 
 private:
     // Shared with the session cache: eviction there no longer frees an
     // executable a module still runs.
     lucid::compile::SharedExecutable exe_;
 };
+
+// What a caller waiting on a first run does between waits: let Python deliver a
+// Ctrl-C.  Without it the wait is a C++ condition wait with the GIL released, and a
+// signal would be seen only when it ends.  Only the main thread's check does anything
+// (``PyErr_CheckSignals`` is a no-op elsewhere).  The run itself keeps going: the next
+// call to the same executable joins it.
+lucid::compile::FirstRunPoll signal_poll() {
+    return [] {
+        py::gil_scoped_acquire gil;
+        if (PyErr_CheckSignals() != 0)
+            throw py::error_already_set();
+    };
+}
+
+// The first-run watchdog (FirstRunWatchdog.h): its error type, its budget, what it has
+// given up on, and the test seam.
+void bind_first_run_watchdog(py::module_& m) {
+    using lucid::compile::FirstRunWatchdog;
+
+    auto& timeout = py::register_exception<lucid::compile::FirstRunTimeout>(m, "FirstRunTimeout",
+                                                                            PyExc_RuntimeError);
+    timeout.attr("__doc__") =
+        "The first run of a compiled executable did not finish inside its budget "
+        "(LUCID_COMPILE_FIRST_RUN_TIMEOUT_S), was given up on earlier in this process, or "
+        "too many first runs were given up on for another to be started.  A RuntimeError whose "
+        "message "
+        "starts '<who>: MPSGraph failed:', as every failure of a first run does.";
+
+    m.def(
+        "first_run_budget_s", [] { return FirstRunWatchdog::instance().budget_s(); },
+        "The time a first run of an executable may take, in seconds; 0 means the guard "
+        "is off.  Read from LUCID_COMPILE_FIRST_RUN_TIMEOUT_S at first use (default 120).");
+    m.def(
+        "set_first_run_budget_s",
+        [](std::optional<double> seconds) {
+            if (seconds.has_value() && (std::isnan(*seconds) || *seconds < 0.0))
+                throw std::invalid_argument(
+                    "set_first_run_budget_s: seconds must be a number >= 0 (0 turns the guard "
+                    "off)");
+            FirstRunWatchdog::instance().set_budget_s(seconds);
+        },
+        py::arg("seconds").none(true),
+        "Replace the first-run budget for this process; None reads the environment again.");
+    m.def(
+        "first_run_status",
+        [] {
+            auto& watchdog = FirstRunWatchdog::instance();
+            py::dict status;
+            status["budget_s"] = watchdog.budget_s();
+            status["abandoned"] = watchdog.abandoned();
+            status["abandon_limit"] = FirstRunWatchdog::kAbandonLimit;
+            status["breaker_open"] = watchdog.breaker_open();
+            return status;
+        },
+        "What the first-run watchdog has done so far: its budget, how many first runs it "
+        "gave up on (each left a thread running until the process exits), and whether the "
+        "circuit breaker is open.");
+    // A test seam.  A held worker waits before it runs, so a test makes a first run last
+    // as long as it needs without depending on how slow MPSGraph is.  It only ever
+    // delays a first run, so a caller who reaches it by accident gets a timeout and an
+    // eager answer, never a wrong value; holding is still refused unless the process
+    // says it is under test.
+    m.def(
+        "_hold_first_run_workers",
+        [](bool hold) {
+            const char* guard = std::getenv("LUCID_COMPILE_TEST_HOOKS");
+            if (hold && (guard == nullptr || std::string(guard) != "1"))
+                throw std::runtime_error(
+                    "_hold_first_run_workers: a test hook; set LUCID_COMPILE_TEST_HOOKS=1 to "
+                    "hold first runs");
+            FirstRunWatchdog::instance().hold_workers(hold);
+        },
+        py::arg("hold"), "Test seam: hold (or release) every worker before it starts its run.");
+}
+
+// Running a compiled executable: fresh outputs, or written into the caller's tensors.
+void bind_run_executable(py::module_& m) {
+    // Run a compiled executable with feed-order input tensors. Returns a
+    // list of fresh GPU-backed TensorImpls in the executable's target
+    // order.  Forward declaration of run_executable lives in
+    // CompiledExecutable.mm.
+    m.def(
+        "run_executable",
+        [](const std::shared_ptr<PyCompiledExecutable>& wrapper,
+           const std::vector<lucid::TensorImplPtr>& inputs) -> std::vector<lucid::TensorImplPtr> {
+            if (!wrapper)
+                throw std::invalid_argument("run_executable: null wrapper");
+            const auto feeds = resolve_feeds(inputs);
+            // The run waits for the GPU; other Python threads need not.
+            py::gil_scoped_release release;
+            return lucid::compile::run_executable(wrapper->raw(), feeds, signal_poll());
+        },
+        py::arg("executable"), py::arg("inputs"),
+        "Execute a CompiledExecutable; inputs in input_ids order, "
+        "outputs in output_ids order.");
+
+    m.def(
+        "run_executable_inplace",
+        [](const std::shared_ptr<PyCompiledExecutable>& wrapper,
+           const std::vector<lucid::TensorImplPtr>& inputs,
+           const std::vector<lucid::TensorImplPtr>& output_targets) -> void {
+            if (!wrapper)
+                throw std::invalid_argument("run_executable_inplace: null wrapper");
+            const auto feeds = resolve_feeds(inputs, output_targets);
+            std::vector<lucid::GpuStorage> fresh_outputs;
+            {
+                py::gil_scoped_release release;
+                fresh_outputs = lucid::compile::run_executable_inplace_outputs(
+                    wrapper->raw(), feeds, output_targets, signal_poll());
+            }
+            // The swap replaces a Metal view family's root and drops its
+            // members' cached views: run it with the GIL held again so no
+            // Python thread reading a sibling races it.
+            lucid::compile::swap_executable_inplace_targets(output_targets, fresh_outputs);
+        },
+        py::arg("executable"), py::arg("inputs"), py::arg("output_targets"),
+        "Execute a CompiledExecutable, writing each output directly into "
+        "the corresponding pre-allocated tensor in ``output_targets`` "
+        "instead of returning fresh tensors.  Used by the compiled-"
+        "optimizer step path — avoids the per-output allocation + copy_ "
+        "round-trip when the targets are parameters / state buffers "
+        "that already live on the GPU.");
+}
 
 // The rank-canonical form of a trace (RankCanon.h) as the emit path sees it: a
 // rank-5+ elementwise op wrapped in views that run it at rank <= 4.  Lets a test
@@ -496,6 +627,7 @@ void register_compile(py::module_& m) {
 
     bind_trace_nodes(m);
     bind_tracer_class(m);
+    bind_first_run_watchdog(m);
 
     // ── Phase 1.2 step 1: compile / run / cache surface ──────────────────
 
@@ -531,7 +663,13 @@ void register_compile(py::module_& m) {
                                "populated after load_executable().")
         .def_property_readonly("feed_names", &PyCompiledExecutable::feed_names,
                                "Placeholder names MPSGraph reports for the feed tensors, "
-                               "in its own order.  Diagnostic.");
+                               "in its own order.  Diagnostic.")
+        .def_property_readonly("first_run_state", &PyCompiledExecutable::first_run_state,
+                               "Where the executable's first run stands: 'cold' (never "
+                               "run), 'running', 'warm' (a first run finished) or "
+                               "'refused' (one was given up on, and is not tried again). "
+                               "Across a dynamic-batch executable's signatures, the "
+                               "most telling of them.");
 
     // Compile a TraceGraph into an MPSGraph executable.
     // Returns None on any abort condition (unsupported op, mixed-device,
@@ -561,51 +699,7 @@ void register_compile(py::module_& m) {
         "Lower a TraceGraph to a compiled MPSGraph executable; "
         "returns None when any op in the trace is unsupported.");
 
-    // Run a compiled executable with feed-order input tensors. Returns a
-    // list of fresh GPU-backed TensorImpls in the executable's target
-    // order.  Forward declaration of run_executable lives in
-    // CompiledExecutable.mm.
-    m.def(
-        "run_executable",
-        [](const std::shared_ptr<PyCompiledExecutable>& wrapper,
-           const std::vector<lucid::TensorImplPtr>& inputs) -> std::vector<lucid::TensorImplPtr> {
-            if (!wrapper)
-                throw std::invalid_argument("run_executable: null wrapper");
-            const auto feeds = resolve_feeds(inputs);
-            // The run waits for the GPU; other Python threads need not.
-            py::gil_scoped_release release;
-            return lucid::compile::run_executable(wrapper->raw(), feeds);
-        },
-        py::arg("executable"), py::arg("inputs"),
-        "Execute a CompiledExecutable; inputs in input_ids order, "
-        "outputs in output_ids order.");
-
-    m.def(
-        "run_executable_inplace",
-        [](const std::shared_ptr<PyCompiledExecutable>& wrapper,
-           const std::vector<lucid::TensorImplPtr>& inputs,
-           const std::vector<lucid::TensorImplPtr>& output_targets) -> void {
-            if (!wrapper)
-                throw std::invalid_argument("run_executable_inplace: null wrapper");
-            const auto feeds = resolve_feeds(inputs, output_targets);
-            std::vector<lucid::GpuStorage> fresh_outputs;
-            {
-                py::gil_scoped_release release;
-                fresh_outputs = lucid::compile::run_executable_inplace_outputs(
-                    wrapper->raw(), feeds, output_targets);
-            }
-            // The swap replaces a Metal view family's root and drops its
-            // members' cached views: run it with the GIL held again so no
-            // Python thread reading a sibling races it.
-            lucid::compile::swap_executable_inplace_targets(output_targets, fresh_outputs);
-        },
-        py::arg("executable"), py::arg("inputs"), py::arg("output_targets"),
-        "Execute a CompiledExecutable, writing each output directly into "
-        "the corresponding pre-allocated tensor in ``output_targets`` "
-        "instead of returning fresh tensors.  Used by the compiled-"
-        "optimizer step path — avoids the per-output allocation + copy_ "
-        "round-trip when the targets are parameters / state buffers "
-        "that already live on the GPU.");
+    bind_run_executable(m);
 
     // Session cache surface — `find` / `insert` are internal (Phase 1.4 will
     // wrap them inside CompiledModule); for Phase 1.2 we expose only size +

@@ -22,6 +22,15 @@ compile, param drift < 5e-3) the minimal surface is a direct
      downstream ``optimizer.step()`` works like an eager training step.
 
 The loss returned carries no graph: the backward has already run.
+
+The first run of the executable is timed (``LUCID_COMPILE_FIRST_RUN_TIMEOUT_S``,
+default 120 s, ``0`` turns the guard off) because MPSGraph can fail to finish
+preparing a graph there.  Every other compile entry answers a first run the
+engine gave up on eagerly; ``compiled_step`` has no eager path and raises the
+engine's ``FirstRunTimeout`` (a ``RuntimeError``).  Each call traces a new
+executable, so each call that meets such a graph spends the budget and leaves
+MPSGraph's thread behind; after four, no further first run is attempted in the
+process.  :func:`make_step` answers such a call eagerly instead.
 """
 
 from collections.abc import Callable

@@ -340,6 +340,15 @@ class CompiledModule[**P, R](_ModuleWrapper):
       attributes (since 2026-05-24), so ``dropout(p=0)`` and
       ``dropout(p=0.5)`` no longer collide.
 
+    A signature's first run is timed.  MPSGraph finishes preparing a graph
+    inside it, and for a few graphs (a long chain of ``cat`` of slices of its
+    own previous value) that step does not end.  A first run that takes longer
+    than ``LUCID_COMPILE_FIRST_RUN_TIMEOUT_S`` seconds (default 120, ``0``
+    turns the guard off) is given up on and the call runs eagerly, with a
+    one-time notice; the signature stays eager.  MPSGraph's thread cannot be
+    stopped, so it keeps one core until the process exits, and after four such
+    runs no further first run is attempted in the process.
+
     Attributes
     ----------
     model : nn.Module

@@ -516,6 +516,7 @@ lucid_object_library(
     compile/RngFeeds.cpp
     compile/RankCanon.cpp
     compile/ExecutableCache.cpp
+    compile/FirstRunWatchdog.cpp
     compile/CompiledExecutable.mm
     compile/MpsBuilder.mm
     ${LUCID_OP_EMITTERS}

@@ -211,6 +211,11 @@ LUCID_API SharedExecutable localize_executable(const CompiledExecutable* exe,
 // executable on eviction, so a module holding one — every CompiledModule
 // keeps its executables — called freed memory once more than
 // ``max_entries`` signatures had been compiled in the process.
+//
+// An executable whose first run was given up on (:file:`FirstRunWatchdog.h`) is never
+// the one evicted, so the refusal is remembered for every later hit; the watchdog's
+// circuit breaker keeps their number small (its limit plus the first runs in flight
+// when it opened).
 class LUCID_API ExecutableCache {
 public:
     // Construct an empty cache with the default LRU cap (32 entries).

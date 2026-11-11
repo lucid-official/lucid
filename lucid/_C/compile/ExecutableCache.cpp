@@ -334,11 +334,20 @@ SharedExecutable ExecutableCache::insert(CacheKey key, SharedExecutable exec) {
         lru_order_.erase(vit);
     lru_order_.push_back(std::move(key));
 
-    // Evict from the front until back at capacity.
+    // Evict from the front until back at capacity.  An executable whose first run was
+    // given up on stays: forgetting it would let the next module that meets the same
+    // graph spend the whole budget again, and leave one more thread running.  The
+    // watchdog's circuit breaker keeps their number small (its limit plus the first runs
+    // in flight when it opened).
     while (lru_order_.size() > max_entries_) {
-        const CacheKey victim = std::move(lru_order_.front());
-        lru_order_.erase(lru_order_.begin());
-        map_.erase(victim);
+        const auto victim_it =
+            std::find_if(lru_order_.begin(), lru_order_.end(), [&](const CacheKey& k) {
+                return executable_first_run_state(map_.at(k).get()) != FirstRunState::Refused;
+            });
+        if (victim_it == lru_order_.end())
+            break;
+        map_.erase(*victim_it);
+        lru_order_.erase(victim_it);
     }
     return exec;
 }

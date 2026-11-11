@@ -8,12 +8,9 @@ writes its outputs directly back into the parameter / state buffers via
 
 Why in-place
 ------------
-A first revision routed the update through ``lucid.compile(update_fn)``
-and ``param.copy_(new_param)`` per parameter.  That version compiled
-correctly (bit-exact parity) but ran ~50 % SLOWER than the eager C++
-optim, because the per-output ``copy_`` calls each forced an
-``mlx::copy`` sync.  The current implementation runs one executable whose
-outputs replace the parameter and state buffers directly.
+A first revision ran the update through ``lucid.compile(update_fn)`` and a ``param.copy_`` per
+parameter: bit-exact, but ~50 % SLOWER than the eager C++ optim, as each ``copy_`` forced an
+``mlx::copy`` sync.  One executable now writes the parameter and state buffers directly.
 
 What the executable reads
 -------------------------
@@ -715,6 +712,9 @@ class _CompiledStepBase:
     @_counts_as_step  # so ``opt.step = self.step`` is no override to a scheduler
     def step(self, closure: Callable[..., Tensor] | None = None) -> Tensor | None:
         """Run one compiled update step in place (Metal only); returns ``closure()``'s loss.
+
+        There is no eager step to fall back to: a first run MPSGraph does not finish within
+        ``LUCID_COMPILE_FIRST_RUN_TIMEOUT_S`` raises the engine's ``FirstRunTimeout``.
 
         Parameters
         ----------

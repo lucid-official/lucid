@@ -23,6 +23,7 @@
 
 #include "../api.h"
 #include "../core/fwd.h"  // TensorImplPtr (used by run_executable)
+#include "FirstRunWatchdog.h"
 #include "TraceIR.h"
 
 namespace lucid::compile {
@@ -78,6 +79,13 @@ LUCID_API std::vector<std::size_t> executable_feed_order(const CompiledExecutabl
 // (``feed_<tid>`` as minted by the builder).  Diagnostic only.
 LUCID_API std::vector<std::string> executable_feed_names(const CompiledExecutable* exe);
 
+// Where the first run of ``exe`` stands (see :file:`FirstRunWatchdog.h`): Cold until it
+// runs, Warm once a first run has finished, Refused once one was given up on, Running
+// while a worker holds one.  For an executable with several feed-shape signatures (a
+// dynamic-batch one) the most telling of them: Refused, else Running, else Warm.  Cold
+// for ``nullptr``.  Never creates the record.
+LUCID_API FirstRunState executable_first_run_state(const CompiledExecutable* exe);
+
 // Release a previously-built executable.  Safe to call with
 // ``nullptr``.  Defined in :file:`CompiledExecutable.mm`; releases the
 // ARC-strong reference held on the wrapped ``MPSGraphExecutable*``.
@@ -116,8 +124,16 @@ LUCID_API CompiledExecutable* relabel_executable(const CompiledExecutable* exe,
 // -----
 // Implementation lives in :file:`CompiledExecutable.mm` (Objective-C++)
 // so all MPSGraph types stay in one translation unit.
+//
+// The first run of an executable (per feed-shape signature) is the one MPSGraph
+// specializes in, and it has no bound of its own: it runs on a worker thread under the
+// first-run budget (:class:`FirstRunWatchdog`) and throws :class:`FirstRunTimeout` when
+// that runs out.  ``poll`` is called while the caller waits for it (see
+// :type:`FirstRunPoll`).  ``LUCID_COMPILE_ASYNC=1`` encodes on the caller's thread and
+// is outside the guard.
 LUCID_API std::vector<TensorImplPtr> run_executable(CompiledExecutable* exe,
-                                                    const std::vector<TensorImplPtr>& input_feeds);
+                                                    const std::vector<TensorImplPtr>& input_feeds,
+                                                    const FirstRunPoll& poll = {});
 
 // In-place variant: instead of allocating fresh MTLBuffers per output
 // and returning new TensorImpls, write each output directly into the
@@ -150,17 +166,23 @@ LUCID_API std::vector<TensorImplPtr> run_executable(CompiledExecutable* exe,
 // dependency state.
 LUCID_API void run_executable_inplace(CompiledExecutable* exe,
                                       const std::vector<TensorImplPtr>& input_feeds,
-                                      const std::vector<TensorImplPtr>& output_targets);
+                                      const std::vector<TensorImplPtr>& output_targets,
+                                      const FirstRunPoll& poll = {});
 
 // Execute ``exe`` for :func:`run_executable_inplace` and return one fresh
 // :class:`GpuStorage` per slot in ``output_targets`` (with ``arr`` null in
 // alias mode), without mutating the targets' storage or versions.  Safe to
 // run with the Python GIL released once feeds have been resolved; follow with
 // :func:`swap_executable_inplace_targets` under the GIL.
+//
+// Under ``LUCID_COMPILE_ALIAS_INPLACE=1`` an executable that has not finished a first run
+// still gets fresh result buffers: a first run given up on may complete later, and must
+// not write into a target the caller has since updated.
 LUCID_API std::vector<GpuStorage>
 run_executable_inplace_outputs(CompiledExecutable* exe,
                                const std::vector<TensorImplPtr>& input_feeds,
-                               const std::vector<TensorImplPtr>& output_targets);
+                               const std::vector<TensorImplPtr>& output_targets,
+                               const FirstRunPoll& poll = {});
 
 // Install the outputs returned by :func:`run_executable_inplace_outputs` into
 // ``output_targets``' own elements (``write_elements``) and bump each target's

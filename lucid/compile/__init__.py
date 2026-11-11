@@ -217,7 +217,8 @@ def load_compiled(path: str) -> object:
     RuntimeError
         The ``.meta`` sidecar is corrupted, the SDK ABI mismatches,
         or the saved executable references engine internals that no
-        longer exist.
+        longer exist.  Calling the wrapper raises the engine's ``FirstRunTimeout`` when MPSGraph's
+        first run outlasts ``LUCID_COMPILE_FIRST_RUN_TIMEOUT_S`` (120 s), with no eager path.
 
     Examples
     --------
@@ -253,9 +254,8 @@ def load_compiled(path: str) -> object:
             f"{pkg_path!r} and {meta_path!r}."
         )
 
-    # Engine-level executable handle — its attributes are pybind11
-    # objects, untyped at the Python boundary.  Narrow via a small
-    # Protocol so the wrapper class stays type-checked.
+    # Engine-level executable handle: its attributes are pybind11 objects, untyped at the Python
+    # boundary.  Narrowed by a small Protocol so the wrapper class stays type-checked.
     class _ExecutableHandle(Protocol):
         num_inputs: int
         input_ids: list[int]

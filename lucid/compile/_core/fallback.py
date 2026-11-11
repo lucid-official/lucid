@@ -103,11 +103,14 @@ def is_first_run_failure(why: BaseException) -> bool:
     """Whether ``why`` is the engine failing an executable's first run.
 
     MPSGraph specializes an executable inside its first run, and has gaps
-    there that compiling does not reveal.  A failure of that kind is the same
-    verdict as a compile that declines: the run wrote nothing yet, so the call
-    is answered eagerly and its signature remembered.  Every entry point that
-    can answer eagerly asks this one question of the error it caught, rather
-    than matching the engine's message itself.
+    there that compiling does not reveal: a failure it reports, and a pass that
+    never returns (the engine's first-run watchdog gives up on that one after
+    ``LUCID_COMPILE_FIRST_RUN_TIMEOUT_S`` and raises ``FirstRunTimeout``, also
+    when it refuses to start a first run at all).  A failure of that kind is
+    the same verdict as a compile that declines: the run wrote nothing yet, so
+    the call is answered eagerly and its signature remembered.  Every entry
+    point that can answer eagerly asks this one question of the error it
+    caught, rather than matching the engine's message itself.
 
     Parameters
     ----------
@@ -117,9 +120,10 @@ def is_first_run_failure(why: BaseException) -> bool:
     Returns
     -------
     bool
-        ``True`` when the engine reported the run itself failing.
+        ``True`` when the engine reported the run itself failing, or gave up
+        on it.
     """
-    return "MPSGraph failed" in str(why)
+    return isinstance(why, _C_engine.compile.FirstRunTimeout) or "MPSGraph failed" in str(why)
 
 
 def run_or_answer_eagerly[T](
@@ -133,6 +137,14 @@ def run_or_answer_eagerly[T](
     answer.  Anything else the run raises, and any failure of a ``warm`` entry
     (one that has run before), is not a verdict about the signature and
     propagates.
+
+    The one exception is the engine giving up on a first run (``FirstRunTimeout``)
+    of a ``warm`` entry.  The engine times each feed-shape signature on its own,
+    so a dynamic-batch entry that has run at one batch size has a first run still
+    to come at the next, and that is the same verdict about the new size.  The
+    entry keeps the sizes it has: the call is answered eagerly and nothing is
+    dropped, since the refusal is remembered by the executable and the same size
+    fails fast on the next call.
 
     Parameters
     ----------
@@ -153,10 +165,14 @@ def run_or_answer_eagerly[T](
     try:
         return run()
     except RuntimeError as why:
-        if warm or not is_first_run_failure(why):
+        gave_up_on = isinstance(why, _C_engine.compile.FirstRunTimeout)
+        if not is_first_run_failure(why) or (warm and not gave_up_on):
             raise
         _fallback_notice("first-run", str(why))
-    drop()
+    # Answered outside the handler: an eager failure is its own error, not chained to the
+    # timeout, and the timeout's traceback is not kept alive for the length of the call.
+    if not warm:
+        drop()
     return eagerly()
 
 

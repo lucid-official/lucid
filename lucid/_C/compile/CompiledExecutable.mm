@@ -7,6 +7,7 @@
 
 #import <Metal/Metal.h>
 #import <MetalPerformanceShadersGraph/MetalPerformanceShadersGraph.h>
+#import <objc/runtime.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -30,10 +31,29 @@
 #include "../core/Storage.h"
 #include "../core/TensorImpl.h"
 #include "CompiledExecutable.h"
+#include "FirstRunWatchdog.h"
 #include "MpsDtype.h"
 #include "RngFeeds.h"
 
+// The first-run ledger of one MPSGraphExecutable (FirstRunWatchdog.h), hung on it as an
+// associated object.  Every relabelled or cached CompiledExecutable shares the
+// executable, so they share the ledger too, without a new field in the class below (it
+// is defined twice, here and in MpsBuilder.mm, and the two must agree).
+@interface LucidFirstRunLedgerBox : NSObject {
+@public
+    std::shared_ptr<lucid::compile::FirstRunLedger> ledger;
+}
+@end
+
+@implementation LucidFirstRunLedgerBox
+@end
+
 namespace lucid::compile {
+
+namespace {
+// Its address is the association key.
+const char kFirstRunLedgerKey = 0;
+}  // namespace
 
 // Class definition (visible only inside .mm callers).  Holds the
 // ARC-strong reference to the MPSGraphExecutable plus the I/O ordering
@@ -161,6 +181,16 @@ std::vector<Dtype> executable_input_dtypes(const CompiledExecutable* exe) {
 
 std::vector<std::size_t> executable_feed_order(const CompiledExecutable* exe) {
     return exe ? exe->feed_order : std::vector<std::size_t>{};
+}
+
+FirstRunState executable_first_run_state(const CompiledExecutable* exe) {
+    if (exe == nullptr || exe->executable == nil)
+        return FirstRunState::Cold;
+    @autoreleasepool {
+        LucidFirstRunLedgerBox* box =
+            objc_getAssociatedObject(exe->executable, &kFirstRunLedgerKey);
+        return box == nil ? FirstRunState::Cold : box->ledger->summary();
+    }
 }
 
 void destroy_executable(CompiledExecutable* exe) {
@@ -361,15 +391,61 @@ inline std::vector<std::string> feed_tensor_names(MPSGraphExecutable* exec) {
     return out;
 }
 
-// Run ``exe`` synchronously.  MPSGraph reports a failure by throwing an
+// The first-run ledger of ``exec``, made on first use.  The reference is into the
+// association's box, which lives as long as ``exec``: valid for any call that holds it.
+// An association on nil is a no-op, so a nil ``exec`` would be handed a box that dies
+// with this call.
+inline const std::shared_ptr<FirstRunLedger>& ledger_of(MPSGraphExecutable* exec) {
+    if (exec == nil)
+        throw std::invalid_argument("first-run ledger: the executable has no MPSGraphExecutable");
+    static std::mutex creation_mutex;
+    LucidFirstRunLedgerBox* box = objc_getAssociatedObject(exec, &kFirstRunLedgerKey);
+    if (box == nil) {
+        const std::lock_guard<std::mutex> lock(creation_mutex);
+        box = objc_getAssociatedObject(exec, &kFirstRunLedgerKey);
+        if (box == nil) {
+            box = [[LucidFirstRunLedgerBox alloc] init];
+            box->ledger = std::make_shared<FirstRunLedger>();
+            objc_setAssociatedObject(exec, &kFirstRunLedgerKey, box,
+                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+    }
+    return box->ledger;
+}
+
+// What MPSGraph specializes an executable for: nothing varies on a static one, and a
+// dynamic-batch one specializes once per batch size (the leading axis of every feed that
+// is not a parameter).  Never ``FirstRunLedger::kStaticSignature`` for the latter.
+inline std::uint64_t first_run_signature(const CompiledExecutable* exe,
+                                         const std::vector<TensorImplPtr>& feeds) {
+    if (!exe->dynamic_batch)
+        return FirstRunLedger::kStaticSignature;
+    std::uint64_t hash = 0xcbf29ce484222325ULL;
+    for (std::size_t i = 0; i < feeds.size(); ++i) {
+        if (exe->static_feed_slots.find(i) != exe->static_feed_slots.end() || !feeds[i] ||
+            feeds[i]->shape().empty())
+            continue;
+        hash = (hash ^ static_cast<std::uint64_t>(feeds[i]->shape()[0])) * 0x100000001b3ULL;
+    }
+    return hash | 1;
+}
+
+// Whether ``signature`` has nothing left to prove, or the guard is off: only then may a
+// result slot be bound to a live buffer of the caller's (``LUCID_COMPILE_ALIAS_INPLACE``).
+// A first run given up on can still finish later and would write into it.
+inline bool first_run_settled(CompiledExecutable* exe, std::uint64_t signature) {
+    return !FirstRunWatchdog::instance().engaged() ||
+           ledger_of(exe->executable)->state(signature) == FirstRunState::Warm;
+}
+
+// One synchronous run on this thread.  MPSGraph reports a failure by throwing an
 // Objective-C exception, which pybind11 can only call "Caught an unknown
-// exception!"; this hands Python the reason instead.  Every synchronous run
-// goes through here.
-inline void run_or_throw(MPSGraphExecutable* exe,
-                         id<MTLCommandQueue> queue,
-                         NSArray<MPSGraphTensorData*>* feeds,
-                         NSArray<MPSGraphTensorData*>* results,
-                         const char* who) {
+// exception!"; this hands Python the reason instead.
+inline void run_now(MPSGraphExecutable* exe,
+                    id<MTLCommandQueue> queue,
+                    NSArray<MPSGraphTensorData*>* feeds,
+                    NSArray<MPSGraphTensorData*>* results,
+                    const char* who) {
     MPSGraphExecutableExecutionDescriptor* desc =
         [[MPSGraphExecutableExecutionDescriptor alloc] init];
     desc.waitUntilCompleted = YES;
@@ -382,6 +458,42 @@ inline void run_or_throw(MPSGraphExecutable* exe,
         throw std::runtime_error(std::string(who) + ": MPSGraph failed: " +
                                  (e.reason ? e.reason.UTF8String : e.name.UTF8String));
     }
+}
+
+// Run ``exe`` synchronously.  Every synchronous run goes through here.
+//
+// MPSGraph specializes the executable inside its first run, with no bound of its own,
+// so a signature that has not finished one runs on a worker under the first-run budget
+// (FirstRunWatchdog.h).  After that, and with the guard off, the run is on the caller's
+// thread as it always was; the check costs one ledger lookup.
+inline void run_or_throw(MPSGraphExecutable* exe,
+                         id<MTLCommandQueue> queue,
+                         NSArray<MPSGraphTensorData*>* feeds,
+                         NSArray<MPSGraphTensorData*>* results,
+                         const char* who,
+                         std::uint64_t signature,
+                         const FirstRunPoll& poll) {
+    FirstRunWatchdog& watchdog = FirstRunWatchdog::instance();
+    if (!watchdog.engaged()) {
+        run_now(exe, queue, feeds, results, who);
+        return;
+    }
+    const std::shared_ptr<FirstRunLedger>& ledger = ledger_of(exe);
+    if (ledger->state(signature) == FirstRunState::Warm) {
+        run_now(exe, queue, feeds, results, who);
+        return;
+    }
+    // What the worker holds are ARC references to the executable, the queue and the
+    // buffers: a worker given up on outlives this call, and the CompiledExecutable and
+    // the caller's tensors may not.
+    watchdog.run(
+        ledger, signature, who,
+        [exe, queue, feeds, results, who] {
+            @autoreleasepool {
+                run_now(exe, queue, feeds, results, who);
+            }
+        },
+        poll);
 }
 
 // The target's own MTLBuffer, for ``LUCID_COMPILE_ALIAS_INPLACE`` to bind as
@@ -465,6 +577,41 @@ inline NSArray<NSArray<NSNumber*>*>* natural_result_shapes(CompiledExecutable* e
             logical_numel *= d;
         if (natural_numel != logical_numel)
             return nil;
+    }
+    return shapes;
+}
+
+// The leading axis of the first entry of ``shapes`` that is not a parameter, or -1.
+inline std::int64_t first_batch_axis(const CompiledExecutable* exe,
+                                     const std::vector<Shape>& shapes) {
+    for (std::size_t i = 0; i < shapes.size(); ++i) {
+        if (exe->static_feed_slots.find(i) == exe->static_feed_slots.end() && !shapes[i].empty())
+            return shapes[i][0];
+    }
+    return -1;
+}
+
+// The shape each output takes for this call: ``exe->output_shapes``, except that on a
+// dynamic-batch executable (Phase 1.6) an output whose leading axis is the *traced* batch
+// size (the first non-parameter input's recorded one) is batch-shaped and takes this call's
+// batch size, the leading axis of the first non-parameter feed.  Scalar reductions over
+// the batch stay 0-D, and outputs unrelated to the batch stay static.
+inline std::vector<Shape> output_shapes_for_call(const CompiledExecutable* exe,
+                                                 const std::vector<TensorImplPtr>& feeds) {
+    std::vector<Shape> shapes = exe->output_shapes;
+    if (!exe->dynamic_batch)
+        return shapes;
+    std::vector<Shape> fed;
+    fed.reserve(feeds.size());
+    for (const auto& impl : feeds)
+        fed.push_back(impl ? impl->shape() : Shape{});
+    const std::int64_t batch_size = first_batch_axis(exe, fed);
+    const std::int64_t traced_batch_size = first_batch_axis(exe, exe->input_shapes);
+    if (batch_size < 0 || traced_batch_size < 0)
+        return shapes;
+    for (Shape& s : shapes) {
+        if (!s.empty() && s[0] == traced_batch_size)
+            s[0] = batch_size;
     }
     return shapes;
 }
@@ -574,8 +721,9 @@ std::vector<std::string> executable_feed_names(const CompiledExecutable* exe) {
 //
 // Defined here rather than in MpsBuilder.mm because all the
 // MPSGraph-side machinery is in this translation unit already.
-LUCID_API std::vector<TensorImplPtr>
-run_executable(CompiledExecutable* exe, const std::vector<TensorImplPtr>& traced_feeds) {
+LUCID_API std::vector<TensorImplPtr> run_executable(CompiledExecutable* exe,
+                                                    const std::vector<TensorImplPtr>& traced_feeds,
+                                                    const FirstRunPoll& poll) {
     // Draws the trace made are made again — see RngFeeds.h.
     const std::vector<TensorImplPtr> input_feeds = redraw_rng_feeds(traced_feeds);
     if (exe == nullptr)
@@ -596,26 +744,10 @@ run_executable(CompiledExecutable* exe, const std::vector<TensorImplPtr>& traced
 
     id<MTLDevice> device = (__bridge id<MTLDevice>)lucid::gpu::mps::shared_mtl_device();
     id<MTLCommandQueue> queue = (__bridge id<MTLCommandQueue>)lucid::gpu::mps::shared_mtl_queue();
+    const std::uint64_t signature = detail::first_run_signature(exe, input_feeds);
 
     std::vector<TensorImplPtr> outputs;
     outputs.reserve(exe->output_ids.size());
-
-    // Phase 1.6: in dynamic-batch mode the actual batch size for this
-    // call is pulled off the first non-parameter feed.  We then use
-    // that BS to rewrite the leading axis of (a) input MPSGraphTensorData
-    // shapes and (b) output buffer allocations.
-    std::int64_t dyn_batch_size = -1;
-    if (exe->dynamic_batch) {
-        for (std::size_t i = 0; i < input_feeds.size(); ++i) {
-            if (exe->static_feed_slots.find(i) != exe->static_feed_slots.end())
-                continue;
-            const auto& impl = input_feeds[i];
-            if (!impl || impl->shape().empty())
-                continue;
-            dyn_batch_size = impl->shape()[0];
-            break;
-        }
-    }
 
     @autoreleasepool {
         NSMutableArray<MPSGraphTensorData*>* feeds =
@@ -626,35 +758,8 @@ run_executable(CompiledExecutable* exe, const std::vector<TensorImplPtr>& traced
         std::vector<id<MTLBuffer>> out_bufs;
         out_bufs.reserve(total_outs);
 
-        // Per-output shape decision: in dynamic-batch mode we replace
-        // the leading axis with the call-time BS for any output whose
-        // first dim matches the trace-time BS (i.e. it inherits the
-        // batch axis).  Scalar reductions over the batch axis stay
-        // 0-D; intermediate outputs unrelated to BS stay static.
-        std::vector<Shape> realized_output_shapes;
-        realized_output_shapes.reserve(total_outs);
-        for (std::size_t j = 0; j < total_outs; ++j) {
-            Shape s = exe->output_shapes[j];
-            if (exe->dynamic_batch && dyn_batch_size >= 0 && !s.empty()) {
-                // Heuristic: any output whose first dim matches the
-                // *traced* batch size is itself batch-shaped.  Look
-                // up the first non-parameter input's trace BS as the
-                // reference value.
-                std::int64_t trace_bs = -1;
-                for (std::size_t i = 0; i < exe->input_shapes.size(); ++i) {
-                    if (exe->static_feed_slots.find(i) != exe->static_feed_slots.end())
-                        continue;
-                    if (!exe->input_shapes[i].empty()) {
-                        trace_bs = exe->input_shapes[i][0];
-                        break;
-                    }
-                }
-                if (trace_bs >= 0 && s[0] == trace_bs) {
-                    s[0] = dyn_batch_size;
-                }
-            }
-            realized_output_shapes.push_back(std::move(s));
-        }
+        const std::vector<Shape> realized_output_shapes =
+            detail::output_shapes_for_call(exe, input_feeds);
 
         for (std::size_t j = 0; j < total_outs; ++j) {
             const std::size_t nbytes =
@@ -719,7 +824,8 @@ run_executable(CompiledExecutable* exe, const std::vector<TensorImplPtr>& traced
                                      executionDescriptor:desc];
             [mps_cb commit];
         } else {
-            detail::run_or_throw(exe->executable, queue, feeds, results, "run_executable");
+            detail::run_or_throw(exe->executable, queue, feeds, results, "run_executable",
+                                 signature, poll);
         }
 
         // Wrap each output MTLBuffer back into a GpuStorage-backed
@@ -790,7 +896,8 @@ run_executable(CompiledExecutable* exe, const std::vector<TensorImplPtr>& traced
 LUCID_API std::vector<GpuStorage>
 run_executable_inplace_outputs(CompiledExecutable* exe,
                                const std::vector<TensorImplPtr>& traced_feeds,
-                               const std::vector<TensorImplPtr>& output_targets) {
+                               const std::vector<TensorImplPtr>& output_targets,
+                               const FirstRunPoll& poll) {
     const std::vector<TensorImplPtr> input_feeds = redraw_rng_feeds(traced_feeds);
     if (exe == nullptr)
         throw std::invalid_argument("run_executable_inplace: null executable");
@@ -848,10 +955,15 @@ run_executable_inplace_outputs(CompiledExecutable* exe,
         // (``assignVariable``), not aliasing — variables move state
         // inside the executable and remove the param/state I/O
         // entirely.  See ``obsidian/engine/engine-compile-stateful-variables.md``.
-        static const bool alias_mode = []() {
+        static const bool alias_requested = []() {
             const char* s = std::getenv("LUCID_COMPILE_ALIAS_INPLACE");
             return s && std::string(s) == "1";
         }();
+        // Not on a first run: one given up on may finish after the caller has updated
+        // the target some other way, and would then write over it.  Dynamic-batch
+        // executables are refused above, so the signature is the static one.
+        const std::uint64_t signature = FirstRunLedger::kStaticSignature;
+        const bool alias_mode = alias_requested && detail::first_run_settled(exe, signature);
 
         // Destination ndarrays are built at the executable's NATURAL output
         // shape (``natural_result_shapes``, cached), not
@@ -900,7 +1012,8 @@ run_executable_inplace_outputs(CompiledExecutable* exe,
         // dance correct.  Cost: ~30-100μs/step for the host sync;
         // still cheap relative to the executable's GPU work for
         // anything bigger than a toy MLP.
-        detail::run_or_throw(exe->executable, queue, feeds, results, "run_executable_inplace");
+        detail::run_or_throw(exe->executable, queue, feeds, results, "run_executable_inplace",
+                             signature, poll);
 
         // Wrap each fresh MTLBuffer as a leaf MLX array while still
         // inside the autoreleasepool.  The actual target storage swap +
@@ -962,9 +1075,10 @@ LUCID_API void swap_executable_inplace_targets(const std::vector<TensorImplPtr>&
 
 LUCID_API void run_executable_inplace(CompiledExecutable* exe,
                                       const std::vector<TensorImplPtr>& traced_feeds,
-                                      const std::vector<TensorImplPtr>& output_targets) {
+                                      const std::vector<TensorImplPtr>& output_targets,
+                                      const FirstRunPoll& poll) {
     std::vector<GpuStorage> fresh_outputs =
-        run_executable_inplace_outputs(exe, traced_feeds, output_targets);
+        run_executable_inplace_outputs(exe, traced_feeds, output_targets, poll);
     swap_executable_inplace_targets(output_targets, fresh_outputs);
 }
 
