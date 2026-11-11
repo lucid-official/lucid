@@ -117,6 +117,12 @@ class _Init(ABC):
         """Raise ``ValueError`` if ``layer`` cannot be initialised this way at rank ``r``."""
         if not self.factorises:
             return
+        if layer.base_layer is not layer._root():
+            raise ValueError(
+                f"init_lora_weights={self.value!r} factorises the base weight and writes the "
+                "residual back into it, which would change the weight the layers beneath this "
+                "one read; use True, False or 'gaussian' on a layer standing on another layer"
+            )
         if not layer._dense_weight:
             raise ValueError(
                 f"init_lora_weights={self.value!r} factorises the base weight, which "

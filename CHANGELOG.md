@@ -163,6 +163,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the class-name helper no longer shares a facade name
 
+- a factorising LoRA init is refused on a stacked layer
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

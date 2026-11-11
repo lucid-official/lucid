@@ -19,6 +19,7 @@ the end reads the whole package.
 """
 
 import copy
+import inspect
 import itertools
 import re
 from collections.abc import Callable
@@ -37,6 +38,7 @@ from lucid.peft import (
     HiraConfig,
     HRAConfig,
     IA3Config,
+    LNTuningConfig,
     LoHaConfig,
     LoKrConfig,
     MissConfig,
@@ -52,6 +54,7 @@ from lucid.peft.tuners import (
     hira,
     hra,
     ia3,
+    ln_tuning,
     loha,
     lokr,
     lora,
@@ -61,6 +64,7 @@ from lucid.peft.tuners import (
     shira,
 )
 from lucid.peft.tuners._layer import _BaseTunerLayer, _qualified, _tuner_layers
+from lucid.peft.tuners.lora._inits import _Init
 from lucid.test.unit.peft._tuner_recipes import finite, perturb_adapter, same, span
 
 _IN, _OUT = 8, 6
@@ -498,8 +502,39 @@ class TestAStackableClassKeepsItsOtherChecks:
             lora.Linear(below, "o", r=2, use_dora=True)
         assert lora.Linear(base, "d", r=2, use_dora=True).use_dora == {"d": True}
 
-    def test_the_quantized_linear_does_not_inherit_the_linears_declaration(self) -> None:
-        assert lora.Linear._stackable and lora.QuantizedLinear._stackable is False
+    def test_a_subclass_of_a_stackable_class_is_refused_until_it_declares_itself(self) -> None:
+        class Plain(lora.Linear):
+            pass
+
+        class Declared(lora.Linear):
+            _stackable = True
+
+        assert lora.Linear._stackable and Declared._stackable
+        assert not Plain._stackable and not lora.QuantizedLinear._stackable
+        assert not Plain._stands_on(lora.Linear(nn.Linear(_IN, _OUT), "i", r=2))
+
+    @pytest.mark.parametrize(
+        "spelling", [cls.spelling for cls in _Init._strategies.values() if cls.factorises]
+    )
+    @pytest.mark.parametrize("inner", _INNERS, ids=lambda m: m.name)
+    def test_a_factorising_init_would_rewrite_the_weight_beneath_so_it_is_refused(
+        self, spelling: str, inner: _Method, device: str
+    ) -> None:
+        base = nn.Linear(_IN, _OUT).to(device)
+        base.requires_grad_(False)
+        below = inner.build(base, "i")
+        perturb_adapter(below, "i", seed=1)
+        weight, bias = base.weight.detach().clone(), base.bias.detach().clone()
+        state = {key: value.detach().clone() for key, value in below.state_dict().items()}
+        with pytest.raises(ValueError, match="writes the residual back"):
+            lora.Linear(below, "o", r=2, init_lora_weights=spelling)
+        assert same(base.weight, weight) and same(base.bias, bias)
+        assert list(below.state_dict()) == list(state)
+        assert all(same(value, state[key]) for key, value in below.state_dict().items())
+
+    def test_the_init_registry_has_factorising_spellings_to_hold_to_that(self) -> None:
+        spellings = [cls.spelling for cls in _Init._strategies.values() if cls.factorises]
+        assert {"pissa", "olora", "lora_ga"} <= set(spellings)
 
 
 # ── nothing changes for a layer on the user's own module ─────────────────
@@ -550,6 +585,12 @@ class TestWrappersOfOneModuleNestAsBefore:
         with pytest.raises(TypeError, match=re.escape(_qualified(lora.ParamWrapper))):
             lora.ParamWrapper(below, "o", "weight", r=2, lora_alpha=4)
 
+    def test_a_layer_that_adapts_any_module_is_no_wrapper_and_may_not_nest(self) -> None:
+        config = LNTuningConfig(target_modules=_TARGETS)
+        below = ln_tuning.LNTuningLayer(nn.LayerNorm(_OUT), "a", config)
+        with pytest.raises(TypeError, match=re.escape(_qualified(ln_tuning.LNTuningLayer))):
+            ln_tuning.LNTuningLayer(below, "b", config)
+
 
 # ── the sweep: no class is left undecided ─────────────────────────────────
 
@@ -586,4 +627,15 @@ class TestEveryLayerClassIsDecided:
         below = lora.Linear(nn.Linear(_IN, _OUT), "i", r=2)
         declared = _qualified(cls) in _DECLARED
         assert cls._stackable is declared
-        assert cls._stands_on(below) is declared
+        assert cls._stands_on(below) is declared  # a layer of another class
+
+    @pytest.mark.parametrize(
+        "cls", [c for c in _CLASSES if not inspect.isabstract(c)], ids=_qualified
+    )
+    def test_a_class_is_refused_a_layer_of_its_own_class_too(
+        self, cls: type[_BaseTunerLayer]
+    ) -> None:
+        """Only ``ParamWrapper`` nests on its own kind (a wrapper per parameter); a class that is not abstract is probed with an instance made without its constructor."""
+        own = object.__new__(cls)
+        nests = cls is lora.ParamWrapper
+        assert cls._stands_on(own) is (_qualified(cls) in _DECLARED or nests)
