@@ -17,7 +17,7 @@
 //   inv(A) = Y           dA = −Yᵀ G Yᵀ
 //   det(A)               dA = g · cof(A): closed form for an unbatched 1×1 to
 //                        3×3, the LU elimination's adjugate for the rest
-//                        (batched, up to kMaxLuDim)
+//                        (batched, up to kMaxCofactorDim)
 
 #import <Metal/Metal.h>
 #import <MetalPerformanceShadersGraph/MetalPerformanceShadersGraph.h>

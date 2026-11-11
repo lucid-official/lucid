@@ -5,7 +5,7 @@
 //
 //   - ``norm``           — vector / matrix p-norm with ord=1/2/inf fast paths
 //   - ``matrix_power``   — repeated matmul via binary exponentiation
-//   - ``det``            — 2×2 / 3×3 closed-form; the LU pivot product otherwise
+//   - ``det``            — the pivot product of the LU of Aᵀ (eager's form)
 //   - ``inv``            — 2×2 closed-form via adjugate / det; the LU elimination otherwise
 //   - ``tensordot``      — permute + reshape + matmul
 //   - ``inner``          — last-axis contraction: reshape + matmul with bᵀ
@@ -175,79 +175,31 @@ resolve_square_operand(BuilderContext& ctx, const OpNode& node, std::int64_t clo
     return {g, x, n, sh.count != 2 || n > closed_form_max};
 }
 
-// ── det — 2×2 / 3×3 closed-form, the LU pivot product for batched or larger.
+// ── det — the 1×1 element; otherwise the pivot product of the LU of Aᵀ, which is
+// how eager's ``linalg_det`` forms it, so a singular matrix ends on the same signed
+// zero.  A closed form for 2×2 / 3×3 is cheaper (0.36 ms against 0.7 ms a call) but
+// leaves whichever zero its arithmetic does, and ``slogdet``'s gradient takes the
+// sign of its infinity from it.
 class DetEmitter final : public OpEmitter {
 public:
     std::string_view op_name() const override { return "det"; }
     bool emit(BuilderContext& ctx, const OpNode& node) override {
-        const SquareOperand in = resolve_square_operand(ctx, node, 3);
+        const SquareOperand in = resolve_square_operand(ctx, node, 1);
         if (in.x == nil) return false;
-        MPSGraph* g = in.g;
-        MPSGraphTensor* x = in.x;
-        const std::int64_t N = in.n;
         if (in.use_lu) {
-            // Batched or past 3x3: the product of the LU pivots, which is what
-            // eager's ``linalg_det`` multiplies too.
-            LuGraph lu = emit_lu_mps(g, x);
-            if (lu.det == nil) return false;
-            ctx.bind(node.outputs[0].id, (__bridge void*)lu.det);
+            MPSGraphTensor* det = emit_det_mps(in.g, in.x);
+            if (det == nil) return false;
+            ctx.bind(node.outputs[0].id, (__bridge void*)det);
             return true;
         }
-        auto el = [&](NSInteger r, NSInteger c) -> MPSGraphTensor* {
-            MPSGraphTensor* row =
-                [g sliceTensor:x dimension:0 start:r length:1 name:nil];
-            MPSGraphTensor* cel =
-                [g sliceTensor:row dimension:1 start:c length:1 name:nil];
-            return [g reshapeTensor:cel withShape:@[] name:nil];
-        };
-        if (N == 1) {
-            ctx.bind(node.outputs[0].id,
-                     (__bridge void*)([g reshapeTensor:x withShape:@[] name:@"det1"]));
-            return true;
-        }
-        if (N == 2) {
-            MPSGraphTensor* a = el(0, 0), *b = el(0, 1);
-            MPSGraphTensor* c = el(1, 0), *d = el(1, 1);
-            MPSGraphTensor* ad = [g multiplicationWithPrimaryTensor:a secondaryTensor:d name:nil];
-            MPSGraphTensor* bc = [g multiplicationWithPrimaryTensor:b secondaryTensor:c name:nil];
-            ctx.bind(node.outputs[0].id, (__bridge void*)([g subtractionWithPrimaryTensor:ad
-                                                    secondaryTensor:bc
-                                                               name:@"det2"]));
+        ctx.bind(node.outputs[0].id,
+                 (__bridge void*)([in.g reshapeTensor:in.x withShape:@[] name:@"det1"]));
         return true;
-        }
-        if (N == 3) {
-            MPSGraphTensor* a00 = el(0, 0), *a01 = el(0, 1), *a02 = el(0, 2);
-            MPSGraphTensor* a10 = el(1, 0), *a11 = el(1, 1), *a12 = el(1, 2);
-            MPSGraphTensor* a20 = el(2, 0), *a21 = el(2, 1), *a22 = el(2, 2);
-            auto sub_pair = ^MPSGraphTensor*(MPSGraphTensor* p1, MPSGraphTensor* p2,
-                                              MPSGraphTensor* p3, MPSGraphTensor* p4) {
-                MPSGraphTensor* m1 =
-                    [g multiplicationWithPrimaryTensor:p1 secondaryTensor:p2 name:nil];
-                MPSGraphTensor* m2 =
-                    [g multiplicationWithPrimaryTensor:p3 secondaryTensor:p4 name:nil];
-                return [g subtractionWithPrimaryTensor:m1 secondaryTensor:m2 name:nil];
-            };
-            MPSGraphTensor* cof0 = sub_pair(a11, a22, a12, a21);
-            MPSGraphTensor* cof1 = sub_pair(a10, a22, a12, a20);
-            MPSGraphTensor* cof2 = sub_pair(a10, a21, a11, a20);
-            MPSGraphTensor* t0 =
-                [g multiplicationWithPrimaryTensor:a00 secondaryTensor:cof0 name:nil];
-            MPSGraphTensor* t1 =
-                [g multiplicationWithPrimaryTensor:a01 secondaryTensor:cof1 name:nil];
-            MPSGraphTensor* t2 =
-                [g multiplicationWithPrimaryTensor:a02 secondaryTensor:cof2 name:nil];
-            MPSGraphTensor* d01 = [g subtractionWithPrimaryTensor:t0 secondaryTensor:t1 name:nil];
-            ctx.bind(node.outputs[0].id, (__bridge void*)([g additionWithPrimaryTensor:d01
-                                                  secondaryTensor:t2
-                                                             name:@"det3"]));
-        return true;
-        }
-        return false;
     }
 };
 
 // ── inv — 1×1 / 2×2 closed-form via adjugate / det; the LU elimination with the
-// identity carried along for a batch or anything larger, up to ``kMaxLuDim``.
+// identity carried along for a batch or anything larger, up to ``kMaxCofactorDim``.
 class InvEmitter final : public OpEmitter {
 public:
     std::string_view op_name() const override { return "inv"; }

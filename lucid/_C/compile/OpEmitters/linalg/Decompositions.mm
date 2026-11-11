@@ -893,7 +893,7 @@ MPSGraphTensor* adjugate_of_upper(MPSGraph* g, MPSGraphTensor* u, std::int64_t n
 }
 
 bool takes_square_float32(MPSGraph* g, MPSGraphTensor* a) {
-    if (g == nil || !valid_matrix_tensor(a, kMaxLuDim) || a.dataType != MPSDataTypeFloat32)
+    if (g == nil || !valid_matrix_tensor(a, kMaxCofactorDim) || a.dataType != MPSDataTypeFloat32)
         return false;
     const NSUInteger rank = a.shape.count;
     return a.shape[rank - 1].longLongValue == a.shape[rank - 2].longLongValue;
@@ -1076,6 +1076,12 @@ LuGraph emit_lu_mps(MPSGraph* g, MPSGraphTensor* a) {
     const NSUInteger rank = a.shape.count;
     const std::int64_t cols = a.shape[rank - 1].longLongValue;
     return emit_lu_eliminate(g, a, a.shape[rank - 2].longLongValue, cols, cols);
+}
+
+MPSGraphTensor* emit_det_mps(MPSGraph* g, MPSGraphTensor* a) {
+    if (g == nil || a == nil || a.shape.count < 2)
+        return nil;
+    return emit_lu_mps(g, swap_last_two(g, a)).det;
 }
 
 MPSGraphTensor* emit_inverse_mps(MPSGraph* g, MPSGraphTensor* a) {
