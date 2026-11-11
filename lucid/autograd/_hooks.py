@@ -7,14 +7,17 @@ consumer's contribution has arrived and before the producer runs; for a
 leaf, just before the gradient is added into ``.grad``.  What a hook
 returns is the gradient that flows on.  The engine owns where and when
 (``_C_engine._tensor_hook_runner``); this module owns what a slot's hooks
-are — their list, their order, their removal, and the check that each one
-returned a tensor or ``None``.
+are — their list, their order, their removal, the check that each one
+returned a tensor or ``None``, and that a leaf's hooks follow it when its data
+is swapped (``t.data = v``, ``Module.to``).
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 import weakref
 
+from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 
@@ -240,6 +243,68 @@ def _register_post_accumulate_grad_hook(
     runner.hooks.append(hook)
     _HOOK_VERSION += 1
     return RemovableHandle(runner.hooks, hook)
+
+
+@contextmanager
+def _gradient_slot_open(impl: _C_engine.TensorImpl) -> Iterator[None]:
+    """Let the engine hand out a hook slot on ``impl`` even while it is frozen.
+
+    The engine installs a leaf's runner only on a tensor that requires grad,
+    but a hook registered before ``requires_grad_(False)`` stays on the frozen
+    leaf and runs again once it is unfrozen — so a frozen leaf's hooks have to
+    be reachable, and re-homeable, through that same door.
+    """
+    frozen = not impl.requires_grad
+    if frozen:
+        impl._set_requires_grad(True)
+    try:
+        yield
+    finally:
+        if frozen:
+            impl._set_requires_grad(False)
+
+
+def _carry_leaf_hooks(old: _C_engine.TensorImpl, new: _C_engine.TensorImpl) -> None:
+    """Give the leaf ``new`` the gradient hooks of the leaf ``old`` it replaces.
+
+    A leaf's hook runners live in the engine, on its ``TensorImpl``, so a swap
+    of the tensor's data (:func:`lucid._dispatch._swap_data` — ``t.data = v``,
+    ``Module.to``) that puts a new impl under the same Python tensor would
+    leave them on the discarded one.  ``new`` takes the very runners ``old``
+    held, so the hook lists, their order and every handle already handed out
+    follow: a hook removed through its handle after the swap is removed from
+    the slot ``new`` runs.  A hook removed before the swap is not there to
+    carry.
+
+    Neither impl can hold a gradient hook when its dtype is bool or integral
+    (it cannot require grad), so nothing is carried for one.
+    """
+    if _HOOK_VERSION == 0:
+        # No runner has ever been installed in this process, and this runs on
+        # every ``.data =`` — a manual update loop's per-step cost.
+        return
+    if _promotion.is_integral(old.dtype) or _promotion.is_integral(new.dtype):
+        return
+    with _gradient_slot_open(old):
+        # An empty runner counts as no hook (``_has_tensor_hooks``), so there is
+        # nothing to carry from one.  The engine has no query for the
+        # post-accumulate runner, so asking for it installs an empty one on
+        # ``old`` when it had none — on an impl that is about to be dropped.
+        runner = (
+            _C_engine._tensor_hook_runner(old, _HookRunner)
+            if _C_engine._has_tensor_hooks(old)
+            else None
+        )
+        post = _C_engine._tensor_post_accumulate_grad_hook_runner(
+            old, _PostAccumulateGradHookRunner
+        )
+    if runner is None and not post.hooks:
+        return
+    with _gradient_slot_open(new):
+        if runner is not None:
+            _C_engine._tensor_hook_runner(new, lambda: runner)
+        if post.hooks:
+            _C_engine._tensor_post_accumulate_grad_hook_runner(new, lambda: post)
 
 
 class _NodePreHookRunner(_Hooks):

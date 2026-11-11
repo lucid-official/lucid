@@ -616,7 +616,9 @@ def _swap_data(old: _C_engine.TensorImpl, value: _C_engine.TensorImpl) -> _C_eng
     The one home of that swap (``Tensor.data``'s setter, and ``Module._apply``
     through it).  The result aliases ``value``'s storage — its shape, dtype
     and device — and carries what ``old`` is to autograd: its
-    ``requires_grad``, and its gradient while that still fits the new data.
+    ``requires_grad``, its gradient while that still fits the new data, and
+    its gradient hooks (:func:`~lucid.autograd._hooks._carry_leaf_hooks`:
+    the runners live on the engine impl, so a new impl has to be given them).
     It has no ``grad_fn``, so the swap records nothing in a graph, and
     ``value``'s own flag and graph stay with ``value``.  When ``old`` is a
     tensor's current ``.grad`` handle, the owner's gradient slot is updated
@@ -637,6 +639,9 @@ def _swap_data(old: _C_engine.TensorImpl, value: _C_engine.TensorImpl) -> _C_eng
     if not old.is_phantom and value.is_phantom:
         raise _C_engine.LucidError("phantom tensor has no values: .data")
     new = _impl_with_grad(value, old.requires_grad)
+    from lucid.autograd._hooks import _carry_leaf_hooks
+
+    _carry_leaf_hooks(old, new)
     grad = old.grad_to_tensor()
     # The reference keeps any gradient; here a gradient must match its
     # tensor, so one of the old shape, dtype or device is dropped.
