@@ -1,4 +1,4 @@
-"""Pieces the layer and tuner families share: spec views, dtype, additive weight updates, ``fan_in_fan_out``."""
+"""Pieces the layer and tuner families share: spec views, additive weight updates, ``fan_in_fan_out``."""
 
 import warnings
 from abc import abstractmethod
@@ -6,23 +6,16 @@ from collections.abc import Mapping, MutableMapping
 from types import MappingProxyType
 from typing import ClassVar, Final, Protocol, Self, overload, override
 
-import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
-from lucid._types import DTypeLike
 from lucid.nn.parameter import Parameter
 from lucid.peft._config import PeftConfig, _TargetedConfig
+from lucid.peft.tuners._layer import _adapter_dtype as _adapter_dtype  # the family code's import
 from lucid.peft.tuners._layer import _BaseTunerLayer, _check_adapter_name
 from lucid.peft.tuners._plan import _NO_PARAMETERS, _Target
 from lucid.peft.tuners._tuner import _BaseTuner
 
-_HALF: Final = (lucid.float16, lucid.bfloat16)
 _WEIGHT: Final = "base_layer.weight"
-
-
-def _adapter_dtype(anchor: Tensor) -> DTypeLike:
-    """The dtype an adapter's tensors take beside ``anchor``: its own, widened to float32 if half."""
-    return lucid.float32 if anchor.dtype in _HALF else anchor.dtype
 
 
 class _Specced(Protocol):

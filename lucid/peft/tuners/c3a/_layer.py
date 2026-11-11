@@ -1,8 +1,9 @@
 r"""The C3A layers: a frozen base module beside a block-circulant update stored as its kernels.
 
 ``C3ALayer`` is the family root.  An adapter holds one parameter, ``c3a_kernel``
-(``(d_out / b, d_in / b, b)``, float32 whatever the base's dtype), so a state dict reads
-``....c3a_kernel.default`` and an adapter file ``....c3a_kernel``, the reference's key.
+(``(d_out / b, d_in / b, b)``, in the base's dtype, or float32 beside a half-precision one), so a
+state dict reads ``....c3a_kernel.default`` and an adapter file ``....c3a_kernel``, the
+reference's key.
 The update is the block-circulant matrix of the kernels divided by ``d_in``
 (``lucid.peft.tuners.c3a._circulant``); the forward pass applies it by FFT, merging
 builds the dense matrix.
@@ -16,7 +17,7 @@ import lucid.nn as nn
 import lucid.nn.init as init
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
-from lucid.peft.tuners._layer import _parameter_at
+from lucid.peft.tuners._layer import _adapter_dtype, _parameter_at
 from lucid.peft._config import _TargetedConfig
 from lucid.peft.tuners._support import (
     _config_as,
@@ -79,13 +80,12 @@ class C3ALayer(_ConfigLayer, _LinearSized, _ResidualUpdate, family=True):
                     f"The block size should be a factor of the {label} size. However, the "
                     f"{label} size is {features} and the block size is {size}"
                 )
-        # FFTs run in float32 only, so the kernels do whatever the base's dtype is.
         kernel = lucid.zeros(
             self.out_features // size,
             self.in_features // size,
             size,
             device=self.weight.device,
-            dtype=lucid.float32,
+            dtype=_adapter_dtype(self.weight),
         )
         self._sample(kernel, cfg.init_weights)
         self._specs[adapter_name] = _C3ASpec(size)

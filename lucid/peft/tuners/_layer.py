@@ -11,13 +11,26 @@ import functools
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import ClassVar, override
+from typing import ClassVar, Final, override
 
 import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
+from lucid._types import DTypeLike
 from lucid.nn.parameter import Parameter
 from lucid.peft._slots import _as_names, _SlotState
+
+_HALF: Final = (lucid.float16, lucid.bfloat16)
+
+
+def _adapter_dtype(anchor: Tensor) -> DTypeLike:
+    """The dtype an adapter's tensors take beside ``anchor``: its own, widened to float32 if half.
+
+    The one rule for it.  An update of 1e-4 vanishes under a float16 weight near 1 and Adam's
+    second moment overflows in half precision, so an adapter that trains is held in float32
+    while the base it adapts stays small; the layers compute in float32 and cast back.
+    """
+    return lucid.float32 if anchor.dtype in _HALF else anchor.dtype
 
 
 def _join(prefix: str, name: str) -> str:
@@ -281,6 +294,30 @@ class _BaseTunerLayer(nn.Module, ABC):
             if adapter_name in table
             for p in _entry_parameters(table[adapter_name])
         ]
+
+    def _widen_adapter(self, adapter_name: str) -> None:
+        """Bring the half-precision tensors of ``adapter_name`` to float32, in place (``_adapter_dtype`` says why).
+
+        The tuner calls it on every layer once the adapter is built, whatever dtype the
+        layer's own code allocated, so a method cannot leave its adapter in half precision
+        by building it beside the base's dtype.  The ``Parameter`` objects stay, so an
+        optimizer made afterwards sees the float32 tensors; a layer that does not hold the
+        adapter, and a tensor that is not half, are left alone.
+
+        Parameters
+        ----------
+        adapter_name : str
+            The adapter whose table entries are widened.
+        """
+        for table in self._tables():
+            if adapter_name not in table:
+                continue
+            entry = table[adapter_name]
+            if isinstance(entry, nn.Module):
+                if any(t.dtype in _HALF for t in (*entry.parameters(), *entry.buffers())):
+                    entry.to(lucid.float32)
+            elif entry is not None and entry.dtype in _HALF:
+                entry.data = entry.data.to(lucid.float32)
 
     def _disk_table(self, table_name: str) -> str:
         """The name an adapter file gives the table ``table_name``; the reference's layout."""

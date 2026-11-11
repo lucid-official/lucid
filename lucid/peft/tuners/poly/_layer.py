@@ -112,7 +112,7 @@ class PolyLayer(_LinearSized, _ConfigLayer, _Unmergeable, family=True):
         shape_b = (cfg.n_splits, cfg.n_skills, cfg.r, self.out_features // cfg.n_splits)
         a = Parameter(lucid.empty(*shape_a, device=anchor.device, dtype=dtype))
         b = Parameter(lucid.empty(*shape_b, device=anchor.device, dtype=dtype))
-        router = _Router.of(cfg).to(anchor.device)
+        router = _Router.of(cfg).to(device=anchor.device, dtype=dtype)
         self._reset(a, b, router, cfg)
         self._specs[adapter_name] = _PolySpec(
             cfg.r, cfg.n_tasks, cfg.n_skills, cfg.n_splits, cfg.poly_type

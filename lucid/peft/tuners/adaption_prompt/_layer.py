@@ -103,17 +103,19 @@ class AdaptedAttention(_ConfigLayer, _Unmergeable, family=True, base_type=nn.Mod
         num_heads, head_dim = kind.heads(attention)
         prompt = _parameter_at(self.adaption_prompt, adapter)
         length = int(prompt.shape[1])
-        key, value = kind.keys_values(attention, prompt)
+        # The module's projections are in its own dtype, the prompt and the gate in the adapter's.
+        key, value = kind.keys_values(attention, prompt.to(kind.anchor(attention).dtype))
         key = key.reshape(1, length, num_heads, head_dim).transpose(1, 2)
         value = value.reshape(1, length, num_heads, head_dim).transpose(1, 2)
         batch, tokens = int(hidden.shape[0]), int(hidden.shape[1])
         query = kind.queries(attention, hidden).reshape(batch, tokens, num_heads, head_dim)
         query = query.transpose(1, 2)
         scores = (query @ key.to(query.dtype).transpose(2, 3)) / math.sqrt(head_dim)
+        gate = _parameter_at(self.adaption_gate, adapter)
         # The softmax runs in float32, as the reference does, whatever the model's dtype.
-        weights = F.softmax(scores.float(), dim=-1).to(query.dtype)
-        gated = _parameter_at(self.adaption_gate, adapter) * weights
-        return (gated @ value.to(query.dtype)).transpose(1, 2).reshape(batch, tokens, -1)
+        weights = F.softmax(scores.float(), dim=-1).to(gate.dtype)
+        gated = gate * weights
+        return (gated @ value.to(gated.dtype)).transpose(1, 2).reshape(batch, tokens, -1)
 
     @override
     def forward(self, hidden: Tensor, *args: object, **kwargs: object) -> Tensor:

@@ -329,6 +329,10 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
             # A slot new to the tree began with its one adapter active.
             for _, slot in _adapter_slots(model):
                 slot._activate(self.active_adapter)
+            # The one place an adapter's dtype is settled, whatever its layer allocated: a
+            # method cannot leave half precision on a half-precision base by accident.
+            for _, layer in _tuner_layers(model):
+                layer._widen_adapter(adapter_name)
         except BaseException:
             self._rollback(adapter_name, injected)
             raise

@@ -24,7 +24,12 @@ import lucid.nn as nn
 import lucid.nn.init as init
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
-from lucid.peft.tuners._layer import _BaseTunerLayer, _check_adapter_name, _parameter_at
+from lucid.peft.tuners._layer import (
+    _adapter_dtype,
+    _BaseTunerLayer,
+    _check_adapter_name,
+    _parameter_at,
+)
 from lucid.peft.tuners.ia3._config import IA3Config
 
 _WEIGHT = "base_layer.weight"
@@ -130,9 +135,10 @@ class IA3Layer(_BaseTunerLayer):
     def update_layer(self, adapter_name: str, config: IA3Config) -> None:
         """Create adapter ``adapter_name``: one vector, ones unless ``config.init_ia3_weights`` is off.
 
-        The vector lives on the base weight's device and has its dtype.  A layer that holds an
-        adapter already keeps applying the adapters it applied: the new one is inactive until
-        ``set_adapter`` names it.  A layer with none starts applying this one.
+        The vector lives on the base weight's device, in its dtype — float32 for a half-precision
+        base.  A layer that holds an adapter already keeps applying the adapters it applied: the
+        new one is inactive until ``set_adapter`` names it.  A layer with none starts applying
+        this one.
 
         Parameters
         ----------
@@ -152,7 +158,9 @@ class IA3Layer(_BaseTunerLayer):
         size = self.in_features if self.is_feedforward else self.out_features
         anchor = self.weight
         vector = Parameter(
-            lucid.randn(*self._vector_shape(size), device=anchor.device, dtype=anchor.dtype)
+            lucid.randn(
+                *self._vector_shape(size), device=anchor.device, dtype=_adapter_dtype(anchor)
+            )
         )
         if config.init_ia3_weights:
             init.ones_(vector)
@@ -203,7 +211,7 @@ class IA3Layer(_BaseTunerLayer):
         Returns
         -------
         Tensor
-            Shaped like the base weight.
+            Shaped like the base weight, in the vector's dtype.
         """
         weight = self.weight
         return weight * self._weight_scale(self._vector(adapter)) - weight
@@ -219,10 +227,11 @@ class IA3Layer(_BaseTunerLayer):
     @override
     def _merged_values(self, adapter: str) -> dict[str, Tensor]:
         vector = self._vector(adapter)
-        values = {_WEIGHT: self.weight * self._weight_scale(vector)}
+        weight = self.weight
+        values = {_WEIGHT: (weight * self._weight_scale(vector)).to(weight.dtype)}
         bias = self.bias
         if bias is not None and not self.is_feedforward:
-            values[_BIAS] = bias * vector.reshape(*bias.shape)
+            values[_BIAS] = (bias * vector.reshape(*bias.shape)).to(bias.dtype)
         return values
 
     @override

@@ -43,7 +43,7 @@ from lucid.peft.tuners._layer import _check_adapter_name, _parameter_at
 from lucid.peft.tuners._plan import _NO_PARAMETERS, _Target
 from lucid.peft.tuners._tuner import _BaseTuner
 from lucid.peft.tuners._kinds import _Geometry, _Kind
-from lucid.peft.tuners._support import _AdditiveWeight, _SpecField
+from lucid.peft.tuners._support import _adapter_dtype, _AdditiveWeight, _SpecField
 
 _WEIGHT: Final = "base_layer.weight"
 #: Below this a mean of kept rows counts as "none kept": scaling by it would not make a number.
@@ -265,10 +265,10 @@ class _LycorisLayer(_AdditiveWeight):
     def update_layer(self, adapter_name: str, r: int, alpha: float, config: _LycorisConfig) -> None:
         r"""Create adapter ``adapter_name``: its factors, initialised, and its scale :math:`\alpha / r`.
 
-        The factors live on the base weight's device, in its dtype.  A layer
-        that holds an adapter already keeps applying the adapters it applied:
-        the new one is inactive until ``set_adapter`` names it.  A layer
-        with none starts applying this one.
+        The factors are on the base weight's device and in its dtype, widened to float32
+        when that is half precision.  A layer that holds an adapter already keeps
+        applying the adapters it applied: the new one is inactive until
+        ``set_adapter`` names it.  A layer with none starts applying this one.
 
         Parameters
         ----------
@@ -296,9 +296,10 @@ class _LycorisLayer(_AdditiveWeight):
             r, self._geometry, config, self._effective(self._geometry, config)
         )
         anchor = self.weight
+        dtype = _adapter_dtype(anchor)
         # Built first, entered together: an allocation that fails leaves no half adapter.
         factors = {
-            name: Parameter(lucid.zeros(*shape, device=anchor.device, dtype=anchor.dtype))
+            name: Parameter(lucid.zeros(*shape, device=anchor.device, dtype=dtype))
             for name, shape in shapes.items()
         }
         self._specs[adapter_name] = _LycorisSpec(
@@ -347,7 +348,7 @@ class _LycorisLayer(_AdditiveWeight):
         Returns
         -------
         Tensor
-            Shaped like the base weight, in its dtype.
+            Shaped like the base weight, in the factors' dtype.
         """
         delta = self._scaled_delta(adapter).reshape(*self.weight.shape)
         return delta * self._row_mask(adapter, delta) if apply_rank_dropout else delta
@@ -376,7 +377,8 @@ class _LycorisLayer(_AdditiveWeight):
                 adapter,
                 apply_rank_dropout=self.training and bool(self._specs[adapter].rank_dropout),
             )
-            out = out + kind.apply(self.base_layer, x, delta)
+            # A half-precision base has a float32 delta: the product runs in it, the sum returns.
+            out = out + kind.apply(self.base_layer, x.to(delta.dtype), delta)
         return out if out.dtype == result.dtype else out.to(result.dtype)
 
     # ── merging ───────────────────────────────────────────────────────────

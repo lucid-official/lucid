@@ -8,16 +8,22 @@ the trained copy in place (so the base keeps its ``Parameter`` objects, as every
 tuner promises); the copy then holds the original values, and unmerging
 exchanges them back.  A state dict reads ``....ln_tuning_layers.default.weight``
 and an adapter file ``....ln_tuning_layers.weight``, the reference's key.
+
+The copy of a half-precision module is float32 and the layer runs it there, returning the
+input's dtype.  A merge writes the copy's values, rounded to the base's dtype, into the base;
+an unmerge puts the base's own values back exactly and the copy keeps the rounded ones.
 """
 
 import copy
 import warnings
 from typing import ClassVar, override
 
+import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
 from lucid.peft._config import _TargetedConfig
+from lucid.peft.tuners._layer import _HALF
 from lucid.peft.tuners._support import _config_as, _ConfigLayer
 from lucid.peft.tuners.ln_tuning._config import LNTuningConfig
 
@@ -75,6 +81,7 @@ class LNTuningLayer(_ConfigLayer, base_type=nn.Module):
     def _enter(self, adapter_name: str, config: _TargetedConfig) -> None:
         _config_as(LNTuningConfig, config)
         self.ln_tuning_layers[adapter_name] = copy.deepcopy(self._original())
+        self._widen_adapter(adapter_name)  # the copy of a half-precision norm trains in float32
 
     # ── merging: exchange the values of the base and the copy ─────────────
 
@@ -105,7 +112,11 @@ class LNTuningLayer(_ConfigLayer, base_type=nn.Module):
     @override
     def _merged_values(self, adapter: str) -> dict[str, Tensor]:
         tuned = self.ln_tuning_layers[adapter]
-        return {f"{_BASE}{name}": p for name, p in tuned.named_parameters()}
+        targets = self._merge_targets()
+        return {
+            f"{_BASE}{name}": p.to(targets[f"{_BASE}{name}"].dtype)
+            for name, p in tuned.named_parameters()
+        }
 
     def _exchange(self, adapter: str) -> None:
         """Swap the values of the base and of ``adapter``'s copy, in place."""
@@ -175,5 +186,8 @@ class LNTuningLayer(_ConfigLayer, base_type=nn.Module):
                 f"Trying to run forward with {len(held)} active adapters, but LN tuning does "
                 "not allow inference with more than one adapter at a time"
             )
-        tuned: Tensor = self.ln_tuning_layers[held[0]](x)
-        return tuned
+        # The copy of a half-precision norm is float32: it computes there and returns in the input's dtype.
+        tuned: Tensor = self.ln_tuning_layers[held[0]](
+            x.to(lucid.float32) if x.dtype in _HALF else x
+        )
+        return tuned if tuned.dtype == x.dtype else tuned.to(x.dtype)

@@ -22,7 +22,6 @@ from collections.abc import Callable, Mapping
 from types import MappingProxyType
 from typing import ClassVar, Final, NamedTuple, override
 
-import lucid
 import lucid.nn as nn
 import lucid.nn.init as init
 import lucid.nn.quantized as nnq
@@ -31,12 +30,15 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike
 from lucid.nn.parameter import Parameter
 from lucid.peft._config import _check_dropout, _check_number, _check_rank
-from lucid.peft.tuners._layer import _BaseTunerLayer, _check_adapter_name, _entry_parameters
+from lucid.peft.tuners._layer import (
+    _adapter_dtype,
+    _BaseTunerLayer,
+    _check_adapter_name,
+    _entry_parameters,
+)
 from lucid.peft.tuners.lora._inits import _check_init, _Init
 from lucid.peft.tuners.lora._variants import MAGNITUDE_TABLE, _Magnitude, _rows_view, _Variant
 from lucid.peft.tuners.lora._weight_site import _WeightSite
-
-_HALF: Final = (lucid.float16, lucid.bfloat16)
 
 
 class _AdapterSpec(NamedTuple):
@@ -366,9 +368,8 @@ class LoraLayer(_BaseTunerLayer):
         self._check_rank_fits(r)
         self._check_dropout(p)
         anchor = self._anchor()
-        dtype = lucid.float32 if anchor.dtype in _HALF else anchor.dtype
         # Built first, entered together: an allocation that fails leaves no half adapter.
-        factors = self._build_factors(r, _Place(anchor.device, dtype, lora_bias))
+        factors = self._build_factors(r, _Place(anchor.device, _adapter_dtype(anchor), lora_bias))
         self._specs[adapter_name] = _AdapterSpec(
             r, lora_alpha, lora_alpha / (math.sqrt(r) if use_rslora else r), lora_bias, variant.name
         )

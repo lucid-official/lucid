@@ -6,6 +6,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
+from lucid._types import DTypeLike
 from lucid.peft.tuners.xlora._config import XLoraConfig
 
 
@@ -29,7 +30,8 @@ class XLoraClassifier(nn.Module):
     n_layers : int
         How many adapted layers the weights are for.
     dtype : lucid.dtype
-        The dtype of its parameters (the base model's).
+        The dtype of its parameters and of the weights it returns (the adapter's: the base
+        model's, float32 for a half-precision one).
     device : str
         The device it lives on (the base model's).
 
@@ -52,7 +54,7 @@ class XLoraClassifier(nn.Module):
     """
 
     def __init__(
-        self, config: XLoraConfig, n_classes: int, n_layers: int, dtype: lucid.dtype, device: str
+        self, config: XLoraConfig, n_classes: int, n_layers: int, dtype: DTypeLike, device: str
     ) -> None:
         """Build the layers for ``config`` and move them to ``device`` as ``dtype``."""
         super().__init__()
@@ -85,7 +87,7 @@ class XLoraClassifier(nn.Module):
     def forward(self, hidden: Tensor) -> Tensor:
         """The ``(batch, tokens, n_layers, n_classes)`` weights of the experts for ``hidden``."""
         batch, tokens = int(hidden.shape[0]), int(hidden.shape[1])
-        logits = self.layers(hidden)
+        logits = self.layers(hidden.to(self._dtype))
         if not self.config.layerwise_scalings:
             # One set of weights, shared by every adapted layer.
             logits = logits.unsqueeze(2).expand(batch, tokens, self.n_layers, self.n_classes)

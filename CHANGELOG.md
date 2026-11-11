@@ -139,6 +139,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - slogdet's gradient comes from its own LU (LCD-954)
 
+- float32 adapters on half bases, one owner (LCD-956)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
