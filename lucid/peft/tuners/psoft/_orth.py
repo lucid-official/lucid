@@ -12,6 +12,8 @@ left of :math:`R`, and ``vector_a`` is :math:`\alpha`, on its right: this is the
 ``out x in`` layout, the transpose of the paper's ``d x n`` one, where :math:`\alpha` is the one on the left.
 """
 
+from typing import override
+
 import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
@@ -132,11 +134,13 @@ class OrthLayer(nn.Module):
             matrix = matrix * self.vector_a.unsqueeze(0)
         return matrix
 
+    @override
     def forward(self, input: Tensor) -> Tensor:
         r""":math:`x\,C^\top`, with ``input`` of width ``r`` on its last axis."""
         matrix = self.get_matrix()
         return input.to(matrix.dtype) @ matrix.mT
 
+    @override
     def extra_repr(self) -> str:
         """The size and the options that shape the matrix."""
         return (

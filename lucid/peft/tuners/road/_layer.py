@@ -85,9 +85,9 @@ class RoadLayer(_ConfigLayer[RoadConfig], _LinearSized, family=True):
             )
         size = {"road_1": 1, "road_2": 2, "road_4": 4}[config.variant] * self.out_features // 2
         anchor = self.weight
-        home = {"device": anchor.device, "dtype": _adapter_dtype(anchor)}
-        theta = Parameter(lucid.zeros(size, **home))
-        alpha = Parameter(lucid.ones(size, **home))
+        device, dtype = anchor.device, _adapter_dtype(anchor)
+        theta = Parameter(lucid.zeros(size, device=device, dtype=dtype))
+        alpha = Parameter(lucid.ones(size, device=device, dtype=dtype))
         if not config.init_weights:
             init.normal_(theta, mean=0.0, std=_RANDOM_STD)
             init.normal_(alpha, mean=1.0, std=_RANDOM_STD)

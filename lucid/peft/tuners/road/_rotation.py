@@ -63,7 +63,7 @@ class _Rotation(NamedTuple):
         r""":math:`R y` along the last axis of ``y``, whose width is ``groups x group_size``."""
         half = self.first.shape[-1]
         grouped = y.reshape(*y.shape[:-1], -1, 2, half)
-        turned = lucid.stack((-grouped[..., 1, :], grouped[..., 0, :]), dim=-2)
+        turned = lucid.stack([-grouped[..., 1, :], grouped[..., 0, :]], dim=-2)
         return (grouped * self.first + turned * self.second).reshape(*y.shape)
 
     def inverse(self) -> _Rotation:
@@ -83,7 +83,7 @@ class _Rotation(NamedTuple):
                 "the rotation has a singular block (a scale of zero) and cannot be undone"
             )
         scale = determinant.unsqueeze(1)
-        return _Rotation(lucid.stack((f_j, f_i), dim=1) / scale, -self.second / scale)
+        return _Rotation(lucid.stack([f_j, f_i], dim=1) / scale, -self.second / scale)
 
     def matrix(self) -> Tensor:
         r"""The dense :math:`R`, ``(out, out)``: the diagonal :math:`f` and each pair's two :math:`\mp s`."""
