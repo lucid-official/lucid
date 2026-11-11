@@ -8,7 +8,7 @@ weight, or the matrix that multiplies it, is.
 
 import math
 
-from lucid.test.unit.peft._delta_forms import Matrix, matmul
+from lucid.test.unit.peft._delta_forms import Matrix, add, eye, matmul, sub
 
 # ── RoAd (Liao and Monz, 2024, section 3.2, Eq. 3 and Table 1) ───────────────
 
@@ -70,3 +70,74 @@ def road_adapted(
     rotation = road_matrix(variant, group_size, theta, alpha)
     column = matmul(rotation, [[b] for b in bias])
     return matmul(rotation, weight), [row[0] for row in column]
+
+
+# ── PSOFT (Wu et al., 2025, section 4, Eq. 6-8 and Appendix C) ───────────────
+
+
+def invert(a: Matrix) -> Matrix:
+    """``a^-1`` by Gauss-Jordan elimination with partial pivoting."""
+    n = len(a)
+    work = [list(row) + eye(n)[i] for i, row in enumerate(a)]
+    for col in range(n):
+        pivot = max(range(col, n), key=lambda r: abs(work[r][col]))
+        work[col], work[pivot] = work[pivot], work[col]
+        divisor = work[col][col]
+        work[col] = [v / divisor for v in work[col]]
+        for r in range(n):
+            if r != col:
+                factor = work[r][col]
+                work[r] = [v - factor * w for v, w in zip(work[r], work[col], strict=True)]
+    return [row[n:] for row in work]
+
+
+def skew(upper: list[float], size: int) -> Matrix:
+    """The skew-symmetric :math:`Q` with ``upper`` on its entries above the diagonal, row by row."""
+    q = [[0.0] * size for _ in range(size)]
+    entries = iter(upper)
+    for i in range(size):
+        for j in range(i + 1, size):
+            q[i][j] = next(entries)
+            q[j][i] = -q[i][j]
+    return q
+
+
+def cayley(upper: list[float], size: int) -> Matrix:
+    r""":math:`(I + Q)(I - Q)^{-1}` of the skew-symmetric :math:`Q` that ``upper`` fills.
+
+    The paper writes the transform :math:`(I - Q)(I + Q)^{-1}` (section 4.2); the reference's, which a
+    saved adapter was trained with, is the same family of matrices with :math:`Q` negated.
+    """
+    q = skew(upper, size)
+    return matmul(add(eye(size), q), invert(sub(eye(size), q)))
+
+
+def psoft_inner(rotation: Matrix, mag_b: list[float] | None, mag_a: list[float] | None) -> Matrix:
+    r""":math:`\operatorname{diag}(\beta)\,R\,\operatorname{diag}(\alpha)` (Eq. 8): ``mag_b`` on the left of ``rotation``, ``mag_a`` on its right.
+
+    ``None`` is a vector of ones.
+    """
+    size = len(rotation)
+    return [
+        [
+            (mag_b[i] if mag_b else 1.0) * rotation[i][j] * (mag_a[j] if mag_a else 1.0)
+            for j in range(size)
+        ]
+        for i in range(size)
+    ]
+
+
+def psoft_delta(
+    u: Matrix, s: list[float], vt: Matrix, inner: Matrix, rank: int, init: str
+) -> Matrix:
+    r""":math:`\Delta W = U_r\Sigma_r\,(C - I)\,V_r^\top` (Eq. 6-8, in the weight's ``out x in`` layout), from the SVD ``u diag(s) vt``.
+
+    The paper writes the weight as ``d x n`` and the layer as :math:`h = W^\top x`; transposed, its
+    :math:`A' (\cdot) B'` with :math:`B' = \Sigma V^\top` becomes :math:`U\Sigma\,(\cdot)^\top V^\top`:
+    the singular values sit on the output side of :math:`C`.  ``"pissa_init"`` splits them,
+    :math:`U\sqrt\Sigma\,(C - I)\sqrt\Sigma V^\top` (Eq. 3).  ``inner`` is :math:`C`.
+    """
+    power = 0.5 if init == "pissa_init" else 0.0
+    left = [[u[i][k] * s[k] ** (1.0 - power) for k in range(rank)] for i in range(len(u))]
+    right = [[vt[k][j] * s[k] ** power for j in range(len(vt[0]))] for k in range(rank)]
+    return matmul(matmul(left, sub(inner, eye(rank))), right)

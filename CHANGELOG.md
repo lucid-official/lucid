@@ -183,6 +183,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the RoAd tuner, rotating pairs of output features (LCD-825)
 
+- the PSOFT tuner, orthogonal tuning of the principal subspace (LCD-825)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

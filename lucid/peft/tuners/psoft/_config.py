@@ -1,5 +1,6 @@
 """``PsoftConfig``: the PSOFT hyper-parameters on top of the shared targeting fields."""
 
+import warnings
 from dataclasses import dataclass
 from typing import ClassVar, Literal, override
 
@@ -23,7 +24,7 @@ class PsoftConfig(_TargetedConfig, peft_type=PeftType.PSOFT):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with PSOFT.
 
     PSOFT (Wu et al., 2025, arXiv:2505.11235 — Efficient Orthogonal Fine-Tuning with Principal Subspace
-    Adaptation) rotates a weight inside its principal subspace only.  An SVD of the weight gives its top-``r``
+    Adaptation, section 4) rotates a weight inside its principal subspace only.  An SVD of the weight gives its top-``r``
     directions as frozen factors :math:`A` and :math:`B`, and only an :math:`r \times r` matrix :math:`R` between them
     is trained:
 
@@ -90,11 +91,12 @@ class PsoftConfig(_TargetedConfig, peft_type=PeftType.PSOFT):
 
     Notes
     -----
-    PSOFT's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``r`` is not positive, a choice field is unknown,
-    or the Cayley-Neumann options are out of range.  No tuner applies it yet: ``get_peft_model``
-    raises ``NotImplementedError`` naming LCD-825, which tracks it.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference library's.  A
+    field of the wrong type raises ``TypeError``.  ``ValueError`` is raised when ``r`` is not
+    positive, a choice field is unknown, or the Cayley-Neumann options are out of range; an option
+    that the chosen SVD backend or transform does not read (``psoft_svd_lowrank_niter`` without
+    ``psoft_svd="lowrank"``, the Neumann options without ``use_cayley_neumann``) warns that it is
+    ignored.  ``PsoftModel`` also needs ``r`` to be at most the smaller side of each adapted weight.
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {
@@ -118,6 +120,18 @@ class PsoftConfig(_TargetedConfig, peft_type=PeftType.PSOFT):
     @override
     def _check_fields(self) -> None:
         super()._check_fields()
+        fields = type(self).__dataclass_fields__
+        if (
+            self.psoft_svd != "lowrank"
+            and self.psoft_svd_lowrank_niter != fields["psoft_svd_lowrank_niter"].default
+        ):
+            warnings.warn(
+                "`psoft_svd_lowrank_niter` is only used when `psoft_svd='lowrank'`. "
+                f"Got psoft_svd={self.psoft_svd!r}, so psoft_svd_lowrank_niter="
+                f"{self.psoft_svd_lowrank_niter} will be ignored.",
+                UserWarning,
+                stacklevel=3,
+            )
         if self.use_cayley_neumann:
             if self.num_cayley_neumann_terms <= 0:
                 raise ValueError(
@@ -126,6 +140,22 @@ class PsoftConfig(_TargetedConfig, peft_type=PeftType.PSOFT):
             eps = self.cayley_neumann_eps
             if eps is not None and not 0.0 < eps < 1.0:
                 raise ValueError(f"`cayley_neumann_eps` must be in (0, 1) when set; got {eps}.")
+            return
+        if self.num_cayley_neumann_terms != fields["num_cayley_neumann_terms"].default:
+            warnings.warn(
+                "`num_cayley_neumann_terms` is only used when `use_cayley_neumann=True`. Since "
+                f"`use_cayley_neumann=False`, `num_cayley_neumann_terms={self.num_cayley_neumann_terms}` "
+                "will be ignored.",
+                UserWarning,
+                stacklevel=3,
+            )
+        if self.cayley_neumann_eps is not None:
+            warnings.warn(
+                "`cayley_neumann_eps` is only used when `use_cayley_neumann=True`. Since "
+                f"`use_cayley_neumann=False`, `cayley_neumann_eps={self.cayley_neumann_eps}` will be ignored.",
+                UserWarning,
+                stacklevel=3,
+            )
 
     r: int = 32
     target_modules: str | list[str] | set[str] | None = None
