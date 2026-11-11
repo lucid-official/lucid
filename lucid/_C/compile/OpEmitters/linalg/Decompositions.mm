@@ -656,6 +656,7 @@ void emit_lu_summary(MPSGraph* g,
     out.pivots = [g reshapeTensor:one_based withShape:pivot_shape name:nil];
     out.info = [g reshapeTensor:info withShape:batch name:nil];
     out.det = [g reshapeTensor:det withShape:batch name:nil];
+    out.sign = [g reshapeTensor:sign withShape:batch name:nil];
 }
 
 // One row of the factorisation per step, never an element, so the graph grows
@@ -667,11 +668,15 @@ void emit_lu_summary(MPSGraph* g,
 // alone (it is all zeros, so dividing by one keeps it) and the factorisation
 // goes on, as ``getrf`` does: eager reports it in ``info``, and a compiled call
 // has nothing to raise.
-LuGraph emit_lu_eliminate(MPSGraph* g, MPSGraphTensor* a, std::int64_t m, std::int64_t n) {
+//
+// ``pivot_cols`` of the ``n`` columns are factored; the rest ride along, taking
+// every swap and elimination the factored columns do (a right-hand side).
+LuGraph emit_lu_eliminate(
+    MPSGraph* g, MPSGraphTensor* a, std::int64_t m, std::int64_t n, std::int64_t pivot_cols) {
     const NSInteger rank = (NSInteger)a.shape.count;
     const NSInteger r_dim = rank - 2;
     const NSInteger c_dim = rank - 1;
-    const std::int64_t steps = std::min(m, n);
+    const std::int64_t steps = std::min(m, pivot_cols);
     MPSGraphTensor* zero = [g constantWithScalar:0.0 dataType:a.dataType];
     MPSGraphTensor* one = [g constantWithScalar:1.0 dataType:a.dataType];
 
@@ -751,6 +756,147 @@ LuGraph emit_lu_eliminate(MPSGraph* g, MPSGraphTensor* a, std::int64_t m, std::i
     out.lu = concat_along(g, finished, r_dim);
     emit_lu_summary(g, rows_at, diagonal, batch, a.dataType, out);
     return out;
+}
+
+// ── inverse and cofactor from the elimination ────────────────────────
+
+MPSGraphTensor* batch_identity(MPSGraph* g, MPSGraphTensor* like, std::int64_t n) {
+    MPSShape* square = @[ @(n), @(n) ];
+    MPSGraphTensor* on =
+        [g equalWithPrimaryTensor:[g coordinateAlongAxis:0 withShape:square name:nil]
+                  secondaryTensor:[g coordinateAlongAxis:1 withShape:square name:nil]
+                             name:nil];
+    MPSGraphTensor* eye = [g castTensor:on toType:like.dataType name:nil];
+    if (like.shape.count == 2)
+        return eye;
+    NSMutableArray<NSNumber*>* lead = [NSMutableArray arrayWithCapacity:like.shape.count];
+    for (NSUInteger d = 0; d + 2 < like.shape.count; ++d)
+        [lead addObject:@1];
+    [lead addObject:@(n)];
+    [lead addObject:@(n)];
+    return [g broadcastTensor:[g reshapeTensor:eye withShape:lead name:nil]
+                      toShape:make_batch_shape(like, n, n)
+                         name:nil];
+}
+
+// ``[A | I]`` eliminated in one pass: ``u`` is U (L's multipliers sit below its
+// diagonal, unread), ``y = L^-1 P`` is what the identity became.
+struct EliminatedWithIdentity {
+    LuGraph lu;
+    MPSGraphTensor* u = nil;
+    MPSGraphTensor* y = nil;
+};
+
+EliminatedWithIdentity eliminate_with_identity(MPSGraph* g, MPSGraphTensor* a) {
+    const NSInteger c_dim = (NSInteger)a.shape.count - 1;
+    const std::int64_t n = a.shape[(NSUInteger)c_dim].longLongValue;
+    MPSGraphTensor* aug = concat_along(g, {a, batch_identity(g, a, n)}, c_dim);
+    EliminatedWithIdentity out;
+    out.lu = emit_lu_eliminate(g, aug, n, 2 * n, n);
+    out.u = [g sliceTensor:out.lu.lu dimension:c_dim start:0 length:n name:nil];
+    out.y = [g sliceTensor:out.lu.lu dimension:c_dim start:n length:n name:nil];
+    return out;
+}
+
+// ``U^-1 Y`` over the upper triangle of ``u``: one matmul per row against the
+// rows already solved, where ``emit_solve_triangular_mps`` subtracts term by term.
+MPSGraphTensor*
+back_substitute_upper(MPSGraph* g, MPSGraphTensor* u, MPSGraphTensor* y, std::int64_t n) {
+    const NSInteger r_dim = (NSInteger)u.shape.count - 2;
+    const NSInteger c_dim = r_dim + 1;
+    MPSGraphTensor* solved = nil;  // rows i+1 .. n-1
+    for (std::int64_t i = n - 1; i >= 0; --i) {
+        MPSGraphTensor* row = [g sliceTensor:u dimension:r_dim start:i length:1 name:nil];
+        MPSGraphTensor* rhs = [g sliceTensor:y dimension:r_dim start:i length:1 name:nil];
+        if (solved != nil) {
+            MPSGraphTensor* tail =
+                [g sliceTensor:row dimension:c_dim start:i + 1 length:n - i - 1 name:nil];
+            rhs = [g subtractionWithPrimaryTensor:rhs
+                                  secondaryTensor:[g matrixMultiplicationWithPrimaryTensor:tail
+                                                                           secondaryTensor:solved
+                                                                                      name:nil]
+                                             name:nil];
+        }
+        MPSGraphTensor* diag = [g sliceTensor:row dimension:c_dim start:i length:1 name:nil];
+        MPSGraphTensor* x_row = [g divisionWithPrimaryTensor:rhs secondaryTensor:diag name:nil];
+        solved = solved == nil ? x_row : concat_along(g, {x_row, solved}, r_dim);
+    }
+    return solved;
+}
+
+// adj(U) of an upper-triangular U.  With ``d`` its diagonal and ``n_im`` its
+// entries above it, ``adj(U)_ij`` (i <= j) is the sum over increasing chains
+// i = m0 < m1 < ... < mq = j of ``(-1)^q  prod n_{m_t m_{t+1}}`` times the
+// diagonal entries off the chain, so every term is a product of entries and a
+// zero (or tiny) pivot is just a factor.  Row by row from the bottom:
+//
+//   adj(U)_i = D_i * G_i,    D_i = prod_{l<i} d_l
+//   G_i      = e_i * S_i  -  sum_{m>i} U_im P_im G_m,
+//   S_i = prod_{l>i} d_l,    P_im = prod_{i<l<m} d_l
+//
+// (``e_i S_i`` is a row of zeros with S_i at column i).  One matmul and one
+// cumulative product per row; no division.
+MPSGraphTensor* adjugate_of_upper(MPSGraph* g, MPSGraphTensor* u, std::int64_t n) {
+    const NSInteger r_dim = (NSInteger)u.shape.count - 2;
+    const NSInteger c_dim = r_dim + 1;
+    std::vector<MPSGraphTensor*> diagonal;
+    diagonal.reserve((std::size_t)n);
+    for (std::int64_t l = 0; l < n; ++l) {
+        MPSGraphTensor* row = [g sliceTensor:u dimension:r_dim start:l length:1 name:nil];
+        diagonal.push_back([g sliceTensor:row dimension:c_dim start:l length:1 name:nil]);
+    }
+    MPSGraphTensor* d = concat_along(g, diagonal, c_dim);  // (*, 1, n)
+    MPSGraphTensor* before = [g cumulativeProductWithTensor:d
+                                                       axis:c_dim
+                                                  exclusive:YES
+                                                    reverse:NO
+                                                       name:nil];
+    MPSGraphTensor* after = [g cumulativeProductWithTensor:d
+                                                      axis:c_dim
+                                                 exclusive:YES
+                                                   reverse:YES
+                                                      name:nil];
+    MPSGraphTensor* g_rows = nil;  // rows i+1 .. n-1 of G
+    for (std::int64_t i = n - 1; i >= 0; --i) {
+        std::vector<MPSGraphTensor*> pieces;
+        if (i > 0)
+            pieces.push_back(batch_const(g, u, 0.0, 1, i));
+        pieces.push_back([g sliceTensor:after dimension:c_dim start:i length:1 name:nil]);
+        if (i + 1 < n)
+            pieces.push_back(batch_const(g, u, 0.0, 1, n - i - 1));
+        MPSGraphTensor* g_row = concat_along(g, pieces, c_dim);
+        if (g_rows != nil) {
+            MPSGraphTensor* row = [g sliceTensor:u dimension:r_dim start:i length:1 name:nil];
+            MPSGraphTensor* tail =
+                [g sliceTensor:row dimension:c_dim start:i + 1 length:n - i - 1 name:nil];
+            MPSGraphTensor* d_tail =
+                [g sliceTensor:d dimension:c_dim start:i + 1 length:n - i - 1 name:nil];
+            MPSGraphTensor* between = [g cumulativeProductWithTensor:d_tail
+                                                                axis:c_dim
+                                                           exclusive:YES
+                                                             reverse:NO
+                                                                name:nil];
+            MPSGraphTensor* w = [g multiplicationWithPrimaryTensor:tail
+                                                   secondaryTensor:between
+                                                              name:nil];
+            g_row = [g subtractionWithPrimaryTensor:g_row
+                                    secondaryTensor:[g matrixMultiplicationWithPrimaryTensor:w
+                                                                             secondaryTensor:g_rows
+                                                                                        name:nil]
+                                               name:nil];
+        }
+        g_rows = g_rows == nil ? g_row : concat_along(g, {g_row, g_rows}, r_dim);
+    }
+    return [g multiplicationWithPrimaryTensor:swap_last_two(g, before)
+                              secondaryTensor:g_rows
+                                         name:nil];
+}
+
+bool takes_square_float32(MPSGraph* g, MPSGraphTensor* a) {
+    if (g == nil || !valid_matrix_tensor(a, kMaxLuDim) || a.dataType != MPSDataTypeFloat32)
+        return false;
+    const NSUInteger rank = a.shape.count;
+    return a.shape[rank - 1].longLongValue == a.shape[rank - 2].longLongValue;
 }
 
 // ── svd & pinv (One-sided Hestenes-Jacobi) ───────────────────────────
@@ -928,8 +1074,31 @@ LuGraph emit_lu_mps(MPSGraph* g, MPSGraphTensor* a) {
     if (g == nil || !valid_matrix_tensor(a, kMaxLuDim) || a.dataType != MPSDataTypeFloat32)
         return {};
     const NSUInteger rank = a.shape.count;
-    return emit_lu_eliminate(
-        g, a, a.shape[rank - 2].longLongValue, a.shape[rank - 1].longLongValue);
+    const std::int64_t cols = a.shape[rank - 1].longLongValue;
+    return emit_lu_eliminate(g, a, a.shape[rank - 2].longLongValue, cols, cols);
+}
+
+MPSGraphTensor* emit_inverse_mps(MPSGraph* g, MPSGraphTensor* a) {
+    if (!takes_square_float32(g, a))
+        return nil;
+    const std::int64_t n = a.shape[a.shape.count - 1].longLongValue;
+    EliminatedWithIdentity e = eliminate_with_identity(g, a);
+    return back_substitute_upper(g, e.u, e.y, n);
+}
+
+MPSGraphTensor* emit_cofactor_mps(MPSGraph* g, MPSGraphTensor* a) {
+    if (!takes_square_float32(g, a))
+        return nil;
+    const std::int64_t n = a.shape[a.shape.count - 1].longLongValue;
+    EliminatedWithIdentity e = eliminate_with_identity(g, a);
+    MPSGraphTensor* sign = [g reshapeTensor:e.lu.sign withShape:make_batch_shape(a, 1, 1) name:nil];
+    MPSGraphTensor* adj = [g multiplicationWithPrimaryTensor:sign
+                                             secondaryTensor:[g matrixMultiplicationWithPrimaryTensor:
+                                                                    adjugate_of_upper(g, e.u, n)
+                                                                                     secondaryTensor:e.y
+                                                                                                name:nil]
+                                                        name:nil];
+    return swap_last_two(g, adj);
 }
 
 namespace {

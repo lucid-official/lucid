@@ -22,16 +22,33 @@ constexpr std::int64_t kMaxLuDim = 32;
 
 // ``getrf`` of a float32 ``(*, m, n)`` tensor: the packed factor, the one-based
 // pivots (int32, ``(*, min(m, n))``), ``info`` (int32, ``(*)``), and the
-// determinant it implies (``(*)``, meaningful for a square matrix).  ``lu`` is
-// nil for a tensor the unrolled elimination does not take.
+// determinant it implies (``(*)``, meaningful for a square matrix) and the sign
+// of the row permutation (``(*)``, +-1).  ``lu`` is nil for a tensor the unrolled
+// elimination does not take.
 struct LuGraph {
     MPSGraphTensor* lu = nil;
     MPSGraphTensor* pivots = nil;
     MPSGraphTensor* info = nil;
     MPSGraphTensor* det = nil;
+    MPSGraphTensor* sign = nil;
 };
 
 LuGraph emit_lu_mps(MPSGraph* g, MPSGraphTensor* a);
+
+// The inverse of a float32 ``(*, n, n)`` tensor, ``n <= kMaxLuDim``: one
+// elimination carries the identity along (``L^-1 P``) and a back substitution
+// finishes it.  A singular matrix divides by its zero pivot, so the result is
+// inf / nan there -- eager's ``inv`` raises, which a compiled call cannot.
+// Nil for a tensor the elimination does not take.
+MPSGraphTensor* emit_inverse_mps(MPSGraph* g, MPSGraphTensor* a);
+
+// ``cof(A)``, the adjugate's transpose, of a float32 ``(*, n, n)`` tensor,
+// ``n <= kMaxLuDim``.  Valid at every rank: ``adj(A) = sgn(P) adj(U) L^-1 P``
+// with ``adj(U)`` built from products of U's entries and never a division by a
+// pivot, so a zero pivot (an exactly singular matrix, the rank n-1 case whose
+// cofactor is the only nonzero gradient) costs nothing.  ``det(A) A^-T`` is
+// wrong there.  Nil for a tensor the elimination does not take.
+MPSGraphTensor* emit_cofactor_mps(MPSGraph* g, MPSGraphTensor* a);
 
 MPSGraphTensor* emit_solve_triangular_mps(
     MPSGraph* g, MPSGraphTensor* a, MPSGraphTensor* b, bool upper, bool unitriangular);

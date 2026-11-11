@@ -6,7 +6,7 @@
 //   - ``norm``           — vector / matrix p-norm with ord=1/2/inf fast paths
 //   - ``matrix_power``   — repeated matmul via binary exponentiation
 //   - ``det``            — 2×2 / 3×3 closed-form; the LU pivot product otherwise
-//   - ``inv``            — 2×2 closed-form via adjugate / det
+//   - ``inv``            — 2×2 closed-form via adjugate / det; the LU elimination otherwise
 //   - ``tensordot``      — permute + reshape + matmul
 //   - ``inner``          — last-axis contraction: reshape + matmul with bᵀ
 //   - ``outer``          — broadcast multiply of two 1-D vectors
@@ -149,22 +149,43 @@ public:
     }
 };
 
+// The operand of ``det`` / ``inv``: its graph, tensor and square size, and whether
+// the LU elimination takes it -- a batch, or a matrix past the ``closed_form_max``
+// the op has a written-out form for.  ``x`` is nil for a node that does not take
+// one (no input, not square).
+struct SquareOperand {
+    MPSGraph* g = nil;
+    MPSGraphTensor* x = nil;
+    std::int64_t n = 0;
+    bool use_lu = false;
+};
+
+SquareOperand
+resolve_square_operand(BuilderContext& ctx, const OpNode& node, std::int64_t closed_form_max) {
+    if (node.inputs.empty() || node.outputs.empty() || node.inputs[0] < 0)
+        return {};
+    MPSGraph* g = (__bridge MPSGraph*)ctx.graph();
+    MPSGraphTensor* x = (__bridge MPSGraphTensor*)ctx.resolve(node.inputs[0]);
+    if (g == nil || x == nil || x.shape.count < 2)
+        return {};
+    NSArray<NSNumber*>* sh = x.shape;
+    const std::int64_t n = sh[sh.count - 2].longLongValue;
+    if (sh[sh.count - 1].longLongValue != n)
+        return {};
+    return {g, x, n, sh.count != 2 || n > closed_form_max};
+}
+
 // ── det — 2×2 / 3×3 closed-form, the LU pivot product for batched or larger.
 class DetEmitter final : public OpEmitter {
 public:
     std::string_view op_name() const override { return "det"; }
     bool emit(BuilderContext& ctx, const OpNode& node) override {
-        if (node.inputs.empty() || node.outputs.empty()) return false;
-        TensorId x_id = node.inputs[0];
-        if (x_id < 0) return false;
-        MPSGraph* g = (__bridge MPSGraph*)ctx.graph();
-        MPSGraphTensor* x = (__bridge MPSGraphTensor*)ctx.resolve(x_id);
-        if (g == nil || x == nil) return false;
-        NSArray<NSNumber*>* sh = x.shape;
-        if (sh.count < 2) return false;
-        std::int64_t N = sh[sh.count - 2].longLongValue;
-        if (sh[sh.count - 1].longLongValue != N) return false;
-        if (sh.count != 2 || N > 3) {
+        const SquareOperand in = resolve_square_operand(ctx, node, 3);
+        if (in.x == nil) return false;
+        MPSGraph* g = in.g;
+        MPSGraphTensor* x = in.x;
+        const std::int64_t N = in.n;
+        if (in.use_lu) {
             // Batched or past 3x3: the product of the LU pivots, which is what
             // eager's ``linalg_det`` multiplies too.
             LuGraph lu = emit_lu_mps(g, x);
@@ -225,22 +246,23 @@ public:
     }
 };
 
-// ── inv — 2×2 closed-form via adjugate / det.  3×3 is too verbose
-// and N > 3 needs LU; both fall through to nullptr → eager.
+// ── inv — 1×1 / 2×2 closed-form via adjugate / det; the LU elimination with the
+// identity carried along for a batch or anything larger, up to ``kMaxLuDim``.
 class InvEmitter final : public OpEmitter {
 public:
     std::string_view op_name() const override { return "inv"; }
     bool emit(BuilderContext& ctx, const OpNode& node) override {
-        if (node.inputs.empty() || node.outputs.empty()) return false;
-        TensorId x_id = node.inputs[0];
-        if (x_id < 0) return false;
-        MPSGraph* g = (__bridge MPSGraph*)ctx.graph();
-        MPSGraphTensor* x = (__bridge MPSGraphTensor*)ctx.resolve(x_id);
-        if (g == nil || x == nil) return false;
-        NSArray<NSNumber*>* sh = x.shape;
-        if (sh.count != 2) return false;
-        std::int64_t N = sh[0].longLongValue;
-        if (sh[1].longLongValue != N) return false;
+        const SquareOperand in = resolve_square_operand(ctx, node, 2);
+        if (in.x == nil) return false;
+        MPSGraph* g = in.g;
+        MPSGraphTensor* x = in.x;
+        const std::int64_t N = in.n;
+        if (in.use_lu) {
+            MPSGraphTensor* inverse = emit_inverse_mps(g, x);
+            if (inverse == nil) return false;
+            ctx.bind(node.outputs[0].id, (__bridge void*)inverse);
+            return true;
+        }
         if (N == 1) {
             MPSGraphTensor* one = [g constantWithScalar:1.0 dataType:x.dataType];
             ctx.bind(node.outputs[0].id,

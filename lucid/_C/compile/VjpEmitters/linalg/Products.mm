@@ -15,8 +15,9 @@
 //   trace(A)             dA = g · I
 //   diagonal(A, k)       dA = g placed back on the k-th diagonal
 //   inv(A) = Y           dA = −Yᵀ G Yᵀ
-//   det(A)               dA = g · cof(A), for the 2×2 / 3×3 the forward
-//                        lowers (a larger det runs eager already)
+//   det(A)               dA = g · cof(A): closed form for an unbatched 1×1 to
+//                        3×3, the LU elimination's adjugate for the rest
+//                        (batched, up to kMaxLuDim)
 
 #import <Metal/Metal.h>
 #import <MetalPerformanceShadersGraph/MetalPerformanceShadersGraph.h>
@@ -378,7 +379,9 @@ public:
     }
 };
 
-// cof(A) = det(A) · A⁻ᵀ, written out for the sizes the forward lowers.
+// cof(A), the adjugate's transpose: written out for an unbatched matrix up to 3×3,
+// from the LU elimination (valid at every rank, so at a singular matrix too) for
+// a batch or a larger one.  ``det(A) · A⁻ᵀ`` is wrong where A is singular.
 class DetVjp final : public VjpEmitter {
 public:
     std::string_view op_name() const override { return "det"; }
@@ -387,11 +390,26 @@ public:
         return emit_unary_vjp(
             bctx, node, grad_outs,
             [](MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* go) -> MPSGraphTensor* {
-                if (x.shape.count != 2 || !known(x))
+                if (x.shape.count < 2 || !known(x))
                     return nil;
-                const long long n = x.shape[0].longLongValue;
-                if (x.shape[1].longLongValue != n || (n != 1 && n != 2 && n != 3))
+                const long long n = x.shape[x.shape.count - 1].longLongValue;
+                if (x.shape[x.shape.count - 2].longLongValue != n)
                     return nil;
+                if (x.shape.count != 2 || n > 3) {
+                    MPSGraphTensor* cof = emit_cofactor_mps(g, x);
+                    if (cof == nil)
+                        return nil;
+                    NSMutableArray<NSNumber*>* per_matrix = [NSMutableArray array];
+                    for (NSUInteger d = 0; d + 2 < x.shape.count; ++d)
+                        [per_matrix addObject:x.shape[d]];
+                    [per_matrix addObject:@1];
+                    [per_matrix addObject:@1];
+                    return [g multiplicationWithPrimaryTensor:cof
+                                              secondaryTensor:[g reshapeTensor:go
+                                                                     withShape:per_matrix
+                                                                          name:nil]
+                                                         name:nil];
+                }
                 if (n == 1)
                     return [g reshapeTensor:go withShape:@[ @1, @1 ] name:nil];
                 auto el = [&](NSInteger r, NSInteger c) {

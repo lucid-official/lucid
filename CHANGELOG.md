@@ -143,6 +143,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - record perf ceilings from many hosted runs (LCD-867)
 
+- batched inv and rank-safe det cofactor to 32 (LCD-946)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views
