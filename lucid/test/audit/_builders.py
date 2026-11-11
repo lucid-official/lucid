@@ -88,6 +88,7 @@ from lucid.peft.tuners.adaption_prompt import (
     AdaptionPromptConfig,
     AdaptionPromptModel,
 )
+from lucid.peft.tuners.gralora import GraloraLayer
 from lucid.peft.tuners.ia3 import IA3Layer
 from lucid.peft.tuners.loha import LoHaLayer
 from lucid.peft.tuners.lokr import LoKrLayer
@@ -226,6 +227,8 @@ _LAYER_CONFIGS: dict[type[_BaseTunerLayer], Callable[[], PeftConfig]] = {
     LoKrLayer: lambda: LoKrConfig(target_modules=["x"]),
     AdaLoraLayer: lambda: AdaLoraConfig(total_step=10, target_modules=["x"]),
     VeraLayer: lambda: VeraConfig(target_modules=["x"]),
+    # The layer builder's base is nn.Linear(4, 3) and gralora_k must divide both sides; k=1 only has to build.
+    GraloraLayer: lambda: GraloraConfig(r=2, gralora_k=1, target_modules=["x"]),
 }
 
 
