@@ -15,6 +15,7 @@ import lucid
 import lucid.linalg as LA
 import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
+from lucid.test._fixtures.tolerance_guard import noise_when_below
 
 #: Metal flushes float32 subnormal operands, so 1.18e-38 is the floor.
 TINY = [1e-20, 1e-30, 1e-37]
@@ -194,7 +195,9 @@ def test_second_derivative_agrees_with_the_cpu(device_gpu_only: str, p: float) -
         (g,) = lucid.autograd.grad(LA.vector_norm(x, p, dim=1).sum(), x, create_graph=True)
         (h,) = lucid.autograd.grad((g * g).sum(), x)
         out.append(h.numpy())
-    np.testing.assert_allclose(out[1], out[0], rtol=2e-4, atol=1e-6)
+    # For p=2 the gradient is a unit vector, so (g * g).sum() is constant: both h are roundoff.
+    with noise_when_below(out[0], 1e-6, "the second derivative of a constant is 0"):
+        np.testing.assert_allclose(out[1], out[0], rtol=2e-4, atol=1e-6)
 
 
 def test_pdist_and_cdist_keep_tiny_distances(device_gpu_only: str) -> None:
