@@ -883,7 +883,6 @@ class QuantizedLinear(Linear):
 
     _base_type = _QUANTIZED_LINEAR_TYPES
     _dense_weight = False
-    _stackable = False  # merging re-quantizes the buffers it stands on: nothing may stand beneath
     base_layer: _QuantizedBase
 
     @override

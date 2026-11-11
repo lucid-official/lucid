@@ -5,6 +5,7 @@ from typing import override
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
+from lucid.peft.tuners._layer import _BaseTunerLayer
 from lucid.peft.tuners.lora._layer import _Factors, _Place
 from lucid.peft.tuners.lora._weight_space import _WeightSpace
 
@@ -105,25 +106,21 @@ class ParamWrapper(_WeightSpace[object]):
         )
 
     @override
+    @classmethod
+    def _stands_on(cls, layer: _BaseTunerLayer) -> bool:
+        # A module with several adapted parameters is wrapped once per parameter, each wrapper
+        # around the last; a wrapper stands on nothing else.
+        return type(layer) is cls
+
+    @override
     def get_base_layer(self) -> nn.Module:
-        """Return the module holding the parameter, through any wrappers nested around it."""
+        """Return the module holding the parameter: through every wrapper nested around it, down to the module itself.
+
+        The base class goes one step down (``_root`` is the whole way); the wrappers of one
+        module are all this layer's own, so here the two agree.
+        """
         base = self.base_layer
         return base.get_base_layer() if isinstance(base, ParamWrapper) else base
-
-    @override
-    def _base_path(self) -> str:
-        base = self.base_layer
-        inner = f".{base._base_path()}" if isinstance(base, ParamWrapper) else ""
-        return f"base_layer{inner}"
-
-    @override
-    def _unwrap(self, keep_trained: bool) -> nn.Module:
-        base = self.base_layer
-        if isinstance(base, ParamWrapper):
-            if self.merged and not keep_trained:
-                self.unmerge()
-            return base._unwrap(keep_trained)
-        return super()._unwrap(keep_trained)
 
     @override
     def extra_repr(self) -> str:

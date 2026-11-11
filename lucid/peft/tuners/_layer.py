@@ -133,7 +133,8 @@ class _BaseTunerLayer(nn.Module, ABC):
     #: Opt-in, refused by default: a layer that reads the base weight, or computes from it
     #: without calling ``base_layer``, would drop the layer below it (or count it twice), and
     #: nothing in its signature says so.  A class sets it only once every pair with the other
-    #: stackable classes has passed ``test_layer_stacking``.
+    #: stackable classes has passed ``test_layer_stacking``.  It is not inherited: every
+    #: subclass is refused again unless its own body declares it.
     _stackable: ClassVar[bool] = False
 
     @override
@@ -141,6 +142,9 @@ class _BaseTunerLayer(nn.Module, ABC):
         cls, *, base_type: type[nn.Module] | None = None, family: bool = False, **kwargs: object
     ) -> None:
         super().__init_subclass__(**kwargs)
+        if "_stackable" not in cls.__dict__:
+            cls._stackable = False
+
         # A direct subclass starts a table; ``family=True`` starts one for a
         # class that shares a base with other methods (the LyCORIS layers).
         if family or _BaseTunerLayer in cls.__bases__:
@@ -153,12 +157,11 @@ class _BaseTunerLayer(nn.Module, ABC):
     def _stands_on(cls, layer: _BaseTunerLayer) -> bool:
         """Whether a layer of this class may be built around ``layer``, another tuner layer.
 
-        Only a ``_stackable`` class may.  The exception is a class that joined no
-        ``base_type=`` table (``ParamWrapper``): it adapts one parameter of whichever module
-        holds it, so a module with several adapted parameters is wrapped once per parameter,
-        each wrapper around the last.
+        Only a ``_stackable`` class may; a class with a rule of its own overrides this
+        (``ParamWrapper`` nests around wrappers of its own kind).
         """
-        return cls._stackable or (cls._base_type is nn.Module and type(layer) is cls)
+        del layer  # the declaration is the class's, whatever it stands on
+        return cls._stackable
 
     def __init__(self, base_layer: nn.Module) -> None:
         root = base_layer
@@ -166,9 +169,9 @@ class _BaseTunerLayer(nn.Module, ABC):
             if not type(self)._stands_on(base_layer):
                 raise TypeError(
                     f"{_qualified(type(self))} cannot be built on "
-                    f"{_qualified(type(base_layer))}: it computes from, or reads, the base "
-                    "weight, so the layer below would be dropped or counted twice; only a class "
-                    "declared stackable may stand on another tuner layer"
+                    f"{_qualified(type(base_layer))}: it has not declared that it can sit on "
+                    "another tuner layer (_stackable); a layer that computes from, or reads, "
+                    "the base weight would drop the layer below it or read the wrong weight"
                 )
             root = base_layer._root()
         kind = type(self)._base_type
