@@ -15,8 +15,8 @@ from typing import NamedTuple
 
 import lucid
 from lucid._tensor.tensor import Tensor
-from lucid.nn.parameter import Parameter
 import lucid.nn as nn
+from lucid.peft.tuners._importance import _decayed_budget, _Sensitivity
 from lucid.peft.tuners._layer import _parameter_at, _tuner_layers
 from lucid.peft.tuners.adalora._checks import _check_rank_pattern
 from lucid.peft.tuners.adalora._config import AdaLoraConfig
@@ -28,44 +28,6 @@ class _Budget(NamedTuple):
 
     triplets: int
     mask: bool
-
-
-class _Sensitivity:
-    """The moving averages of one parameter's sensitivity :math:`|w\\,g|` and of its uncertainty.
-
-    ``score`` — their product — is what ranks the entries.  The state is
-    allocated on first use and again if the parameter's shape changes
-    (a layer was pruned or resized under it).
-    """
-
-    __slots__ = ("_mean", "_spread")
-
-    def __init__(self) -> None:
-        self._mean: Tensor | None = None
-        self._spread: Tensor | None = None
-
-    def update(self, parameter: Parameter, beta1: float, beta2: float) -> None:
-        """Fold in the sensitivity of ``parameter`` at its current value and gradient."""
-        grad = parameter.grad
-        if grad is None:
-            raise RuntimeError(
-                "update_and_allocate needs the gradients of the adapter: call it after "
-                "loss.backward() and before the gradients are cleared"
-            )
-        with lucid.no_grad():
-            sensitivity = (parameter * grad).abs()
-            mean, spread = self._mean, self._spread
-            if mean is None or spread is None or mean.shape != sensitivity.shape:
-                mean, spread = lucid.zeros_like(sensitivity), lucid.zeros_like(sensitivity)
-            self._mean = mean = beta1 * mean + (1 - beta1) * sensitivity
-            self._spread = beta2 * spread + (1 - beta2) * (sensitivity - mean).abs()
-
-    @property
-    def score(self) -> Tensor:
-        """Smoothed sensitivity times smoothed uncertainty, shaped like the parameter."""
-        if self._mean is None or self._spread is None:
-            raise RuntimeError("no sensitivity has been recorded yet")
-        return self._mean * self._spread
 
 
 class RankAllocator:
@@ -188,7 +150,7 @@ class RankAllocator:
         if step > final:
             return _Budget(self.target_bgt, True)
         remaining = 1 - (step - tinit) / (final - tinit)
-        budget = int((self.init_bgt - self.target_bgt) * remaining**3 + self.target_bgt)
+        budget = _decayed_budget(self.init_bgt, self.target_bgt, remaining, 3)
         return _Budget(budget, step % config.deltaT == 0)
 
     # ── recording and masking ─────────────────────────────────────────────
