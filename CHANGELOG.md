@@ -159,6 +159,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a key/value prefix is as wide as the attention (LCD-958)
 
+- a decoder prefix has the decoder's layer count (LCD-958)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

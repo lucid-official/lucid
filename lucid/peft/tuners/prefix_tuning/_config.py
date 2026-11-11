@@ -23,7 +23,8 @@ class PrefixTuningConfig(PromptLearningConfig, peft_type=PeftType.PREFIX_TUNING)
     ``prefix_projection`` the vectors are produced from a smaller embedding by a
     two-layer MLP while training, which the paper found steadier; the file
     still stores the finished vectors.  An encoder-decoder model gets the prefix
-    on the decoder's self-attention.
+    on the decoder's self-attention, so ``num_layers`` left out is the decoder's
+    layer count when the model's config declares one (``num_decoder_layers``).
 
     Field names, their order, defaults and ``adapter_config.json`` are the reference adapter
     library's.

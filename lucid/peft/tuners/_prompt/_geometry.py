@@ -28,6 +28,8 @@ _SIZE_NAMES: Final[Mapping[str, tuple[str, ...]]] = {
 #: What a config says about its attention when the keys and values are not ``hidden / heads`` wide.
 _KEY_VALUE_HEADS: Final = "num_key_value_heads"
 _HEAD_DIM: Final = "head_dim"
+#: How an encoder-decoder's config counts the decoder's layers, which the prefix goes into.
+_DECODER_LAYERS: Final = "num_decoder_layers"
 
 
 def _first_int(config: object, names: tuple[str, ...]) -> int | None:
@@ -51,11 +53,16 @@ def _fill_sizes(model: nn.Module, config: PromptLearningConfig, *, key_values: b
     """Fill in ``config``'s sizes the caller left out, from ``model``'s config.
 
     ``key_values`` is whether the method's prompt is a key/value prefix (``_Injection.KEY_VALUES``),
-    which is sized to the attention, not to the hidden size.
+    which is sized to the attention, not to the hidden size, and has a layer for every layer of the
+    stack it is cached for: an encoder-decoder's prefix goes to the decoder, whose layer count its
+    config declares separately (``num_decoder_layers``), as T5's does.
     """
     if key_values:
         if config.num_layers is None:
-            config.num_layers = _model_size(model, "num_layers")
+            decoder_layers = _first_int(getattr(model, "config", None), (_DECODER_LAYERS,))
+            config.num_layers = (
+                decoder_layers if decoder_layers is not None else _model_size(model, "num_layers")
+            )
         _fit_key_values(model, config)
         return
     for field in _SIZE_NAMES:

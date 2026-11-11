@@ -139,6 +139,31 @@ class TestAWideT5:
         assert tuple(own[0][0].shape) == (2, 2, _V, 8)
 
 
+@pytest.mark.parametrize("method", list(_KEY_VALUE_METHODS))
+class TestADeeperDecoder:
+    """The prefix goes into the decoder, so it has a layer for each of the decoder's, not the encoder's."""
+
+    def _peft(self, method: str, device: str) -> PeftModelForSeq2SeqLM:
+        lucid.manual_seed(0)
+        model = create_model("t5_small_seq2seq", **{**_WIDE, "num_decoder_layers": 3})
+        peft = get_peft_model(model.eval().to(device), _KEY_VALUE_METHODS[method])
+        assert isinstance(peft, PeftModelForSeq2SeqLM)
+        return peft
+
+    def test_the_prefix_has_a_layer_for_each_decoder_layer(self, method: str, device: str) -> None:
+        peft = self._peft(method, device)
+        config = peft.active_peft_config
+        assert isinstance(config, PromptLearningConfig) and config.num_layers == 3
+        cache = peft.get_prompt(batch_size=1)
+        assert isinstance(cache, EncoderDecoderCache) and len(cache) == 3
+
+    def test_the_forward_and_the_backward_run(self, method: str, device: str) -> None:
+        peft = self._peft(method, device).train()
+        out = peft(_ids(device, (2, 5)), labels=_ids(device, (2, 4), seed=3))
+        assert tuple(out.logits.shape) == (2, 4, 50)
+        out.loss.backward()
+
+
 class TestOtherMethodsKeepTheHiddenSize:
     def test_a_prompt_in_front_of_the_embeddings_is_as_wide_as_the_embeddings(
         self, device: str
@@ -207,6 +232,15 @@ class TestWhereTheModelDeclaresItsAttention:
         config.token_dim, config.num_attention_heads = 12, 3
         _fit_key_values(model, config)
         assert _fitted(config) == (12, 3)
+
+    def test_the_decoders_layer_count_is_the_prefixs_and_a_given_one_is_kept(self) -> None:
+        model, config = _model_and_config(hidden_size=16, num_attention_heads=2)
+        model.config.num_decoder_layers = 5
+        _fill_sizes(model, config, key_values=True)
+        assert config.num_layers == 5
+        given = PrefixTuningConfig(num_virtual_tokens=_V, num_layers=4)
+        _fill_sizes(model, given, key_values=True)
+        assert given.num_layers == 4
 
     def test_a_model_with_no_layer_count_is_asked_for_it(self) -> None:
         model = nn.Module()
