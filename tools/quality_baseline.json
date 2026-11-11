@@ -2346,12 +2346,7 @@
   "vulture": {
    "unused-variable": {
     "lucid/peft/tuners/adamss/_config.py": 6,
-    "lucid/peft/tuners/deft/_config.py": 3,
-    "lucid/peft/tuners/delora/_config.py": 2,
     "lucid/peft/tuners/frod/_config.py": 3,
-    "lucid/peft/tuners/glora/_config.py": 3,
-    "lucid/peft/tuners/gralora/_config.py": 2,
-    "lucid/peft/tuners/hira/_config.py": 1,
     "lucid/peft/tuners/lily/_config.py": 1,
     "lucid/peft/tuners/lora/_subconfigs.py": 7,
     "lucid/peft/tuners/osf/_config.py": 1,
