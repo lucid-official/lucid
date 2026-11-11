@@ -1,5 +1,6 @@
 """``SupertuningConfig``: the Super-Tuning hyper-parameters on top of the shared targeting fields."""
 
+import warnings
 from dataclasses import dataclass
 from typing import ClassVar, override
 
@@ -63,11 +64,13 @@ class SupertuningConfig(_TargetedConfig, peft_type=PeftType.SUPERTUNING):
 
     Notes
     -----
-    Super-Tuning's config is complete: every field of the reference library's, in its order and with
-    its defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``sparsity`` is outside ``[0, 1)``, or
-    ``lora_alpha`` is given without ``r``.  No tuner applies it yet: ``get_peft_model`` raises
-    ``NotImplementedError`` naming LCD-826, which tracks it.
+    Every field of the reference library's config is here, in its order and with its defaults, and the
+    config is read and written as ``adapter_config.json``.  A field of the wrong type raises
+    ``TypeError``.  ``ValueError`` is raised when ``sparsity`` is outside ``[0, 1)``, or ``lora_alpha``
+    is given without ``r``.  ``save_precomputed_indices=False`` warns: the positions are then chosen
+    again from the base weight when the adapter is loaded, which assumes the weight is the one the
+    adapter was trained on.  A weight with few entries needs ``sparsity`` low enough that
+    ``floor(entries * (1 - sparsity))`` is at least one; the layer raises ``ValueError`` otherwise.
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {
@@ -87,9 +90,18 @@ class SupertuningConfig(_TargetedConfig, peft_type=PeftType.SUPERTUNING):
             raise ValueError(f"sparsity must be in [0.0, 1.0), got {self.sparsity}")
         if self.r is None:
             if self.lora_alpha is not None:
-                raise ValueError("lora_alpha is set but r is None: Supra mode needs an explicit r.")
+                raise ValueError(
+                    "lora_alpha is set but r is None — Supra mode requires an explicit r."
+                )
         elif self.lora_alpha is None:
             self.lora_alpha = 2 * self.r
+        if not self.save_precomputed_indices:
+            warnings.warn(
+                "save_precomputed_indices=False: sparse-support indices will be recomputed from base "
+                "weight magnitudes at load time. This assumes the base model is identical to training "
+                "time; numerical drift can cause topk tie-breaks to differ.",
+                stacklevel=3,
+            )
 
     target_modules: str | list[str] | set[str] | None = None
     modules_to_save: list[str] | None = None

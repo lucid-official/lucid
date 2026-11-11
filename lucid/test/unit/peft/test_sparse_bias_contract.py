@@ -7,14 +7,24 @@ adapter files are written by hand in the reference's layout, and what a loaded f
 worked out from the papers' formulas with plain loops (``_sparse_forms``), never through the layers.
 """
 
+from collections.abc import Callable
 from typing import override
 
 import pytest
 
 import lucid
 import lucid.nn as nn
-from lucid.peft import BeftConfig, BeftModel, PeftType, get_peft_model
+from lucid.peft import (
+    BeftConfig,
+    BeftModel,
+    PeftType,
+    SupertuningConfig,
+    SupertuningModel,
+    get_peft_model,
+)
 from lucid.peft.tuners.beft import BeftLayer
+from lucid.peft.tuners.supertuning import SupertuningLayer
+from lucid.test.unit.peft import _sparse_forms as forms
 from lucid.test.unit.peft import test_tuner_contract as contract
 from lucid.test.unit.peft._closed_forms import CLOSED_FORMS, _PREFIX, _mlp, _run
 from lucid.test.unit.peft.test_orthogonal_spectral_contract import TestForward
@@ -68,6 +78,80 @@ def _beft_forward(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
     return _run(weights, biases, x)
 
 
+def _supertuning(targets: tuple[str, ...], random: bool, **kw: object) -> SupertuningConfig:
+    return SupertuningConfig.from_dict(
+        {"sparsity": 0.5, "target_modules": list(targets), "init_weights": not random, **kw}
+    )
+
+
+#: Trained entries of the tiny MLP at sparsity 0.5: half of the 48 and of the 32 entries of its two weights.
+_SUPER_COUNTS = {0: 24, 2: 16}
+_SUPER_SIZES = {0: (8, 6), 2: (4, 8)}
+
+
+def _supertuning_tensors(rank: int) -> Callable[[], dict[str, lucid.Tensor]]:
+    """A file a person could have written: distinct positions (a stride coprime with the weight's size), any values."""
+
+    def tensors() -> dict[str, lucid.Tensor]:
+        lucid.manual_seed(7)
+        made: dict[str, lucid.Tensor] = {}
+        for index, count in _SUPER_COUNTS.items():
+            out, inn = _SUPER_SIZES[index]
+            p = f"{_PREFIX}{index}."
+            made[p + "supertuning_values"] = lucid.randint(-2, 3, (count,)).to(lucid.float32) * 0.5
+            made[p + "supertuning_indices"] = lucid.tensor(
+                [(5 * k) % (out * inn) for k in range(count)], dtype=lucid.int32
+            )
+            if rank:
+                made[p + "supertuning_lora_A.weight"] = (
+                    lucid.randint(-2, 3, (rank, inn)).to(lucid.float32) * 0.5
+                )
+                made[p + "supertuning_lora_B.weight"] = (
+                    lucid.randint(-2, 3, (out, rank)).to(lucid.float32) * 0.5
+                )
+        return made
+
+    return tensors
+
+
+def _supertuning_file(rank: int) -> dict[str, tuple[int, ...]]:
+    file: dict[str, tuple[int, ...]] = {}
+    for index, count in _SUPER_COUNTS.items():
+        out, inn = _SUPER_SIZES[index]
+        p = f"{_PREFIX}{index}."
+        file[p + "supertuning_values"] = (count,)
+        file[p + "supertuning_indices"] = (count,)
+        if rank:
+            file[p + "supertuning_lora_A.weight"] = (rank, inn)
+            file[p + "supertuning_lora_B.weight"] = (out, rank)
+    return file
+
+
+def _supertuning_forward(rank: int, alpha: float) -> Callable[..., lucid.Tensor]:
+    def forward(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
+        """``W' = W + Delta + (alpha / r) B A``: the file's values laid at its positions, its LoRA pair added."""
+        net = _mlp()
+        weights = []
+        for index in (0, 2):
+            p = f"{_PREFIX}{index}."
+            weight = forms.scattered(
+                net[index].weight.tolist(),
+                [int(v) for v in t[p + "supertuning_indices"].tolist()],
+                t[p + "supertuning_values"].tolist(),
+            )
+            if rank:
+                weight = forms.low_rank_added(
+                    weight,
+                    t[p + "supertuning_lora_A.weight"].tolist(),
+                    t[p + "supertuning_lora_B.weight"].tolist(),
+                    alpha / rank,
+                )
+            weights.append(lucid.tensor(weight))
+        return _run(weights, [net[0].bias, net[2].bias], x)
+
+    return forward
+
+
 #: Method rows in the order the methods landed.
 _METHODS: list[_Method] = [
     _Method(
@@ -78,9 +162,29 @@ _METHODS: list[_Method] = [
         BeftLayer,
         {f"{_PREFIX}0.beft_bias": (1, 8), f"{_PREFIX}2.beft_bias": (1, 4)},
     ),
+    _Method(
+        "supertuning",
+        PeftType.SUPERTUNING,
+        _supertuning,
+        SupertuningModel,
+        SupertuningLayer,
+        _supertuning_file(0),
+        tensors=_supertuning_tensors(0),
+    ),
+    _Method(
+        "supertuning_supra",
+        PeftType.SUPERTUNING,
+        lambda targets, random, **kw: _supertuning(targets, random, r=2, **kw),
+        SupertuningModel,
+        SupertuningLayer,
+        _supertuning_file(2),
+        tensors=_supertuning_tensors(2),
+    ),
 ]
 
 CLOSED_FORMS["beft"] = _beft_forward
+CLOSED_FORMS["supertuning"] = _supertuning_forward(0, 0.0)
+CLOSED_FORMS["supertuning_supra"] = _supertuning_forward(2, 4.0)
 _REFERENCE_CONFIGS["beft"] = {
     "auto_mapping": None,
     "base_model_name_or_path": "tiny",
@@ -93,6 +197,26 @@ _REFERENCE_CONFIGS["beft"] = {
     "target_modules": ["0", "2"],
     "task_type": None,
 }
+_SUPERTUNING_REFERENCE = {
+    "auto_mapping": None,
+    "base_model_name_or_path": "tiny",
+    "inference_mode": True,
+    "init_weights": True,
+    "lora_alpha": None,
+    "lora_dropout": 0.0,
+    "modules_to_save": None,
+    "peft_type": "SUPERTUNING",
+    "peft_version": "0.21.2",
+    "r": None,
+    "revision": None,
+    "save_precomputed_indices": True,
+    "select_top": True,
+    "sparsity": 0.5,
+    "target_modules": ["0", "2"],
+    "task_type": None,
+}
+_REFERENCE_CONFIGS["supertuning"] = _SUPERTUNING_REFERENCE
+_REFERENCE_CONFIGS["supertuning_supra"] = {**_SUPERTUNING_REFERENCE, "r": 2, "lora_alpha": 4}
 
 
 @pytest.fixture(params=_METHODS, ids=lambda m: m.name)
