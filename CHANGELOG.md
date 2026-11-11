@@ -193,6 +193,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the FRoD tuner, sparse rotation on a shared basis (LCD-825)
 
+- export LoraRuntimeConfig from lucid.peft (LCD-959)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

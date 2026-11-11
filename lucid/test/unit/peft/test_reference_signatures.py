@@ -386,10 +386,6 @@ _OWED: dict[str, str] = {
     "PEFT_TYPE_TO_MIXED_MODEL_MAPPING": "LCD-828",
     # LCD-827 shipped LoRA's extensions without Arrow, whose library builder is this.
     "create_arrow_model": "LCD-827",
-    # The class exists (``lucid.peft.tuners.lora``).  Naming it in ``lucid.peft.__all__`` would move
-    # its released path (the released surface keeps one spelling per object, the shallowest), which
-    # ``test_released_surface`` reads as a removal: it waits for that rule to accept a promotion.
-    "LoraRuntimeConfig": "LCD-822",
 }
 
 

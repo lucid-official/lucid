@@ -262,6 +262,7 @@ from lucid.peft.tuners.lora._config import (
     LoftQConfig,
     LoraConfig,
     LoraGAConfig,
+    LoraRuntimeConfig,
     replace_lora_weights_loftq,
 )
 from lucid.peft.tuners.lora._conversion import convert_to_lora, save_as_lora
@@ -352,6 +353,7 @@ __all__ = [
     "LoKrConfig",
     "LoraConfig",
     "LoraGAConfig",
+    "LoraRuntimeConfig",
     "MissConfig",
     "OFTConfig",
     "PolyConfig",
