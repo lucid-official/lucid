@@ -38,6 +38,15 @@ def _lu_factor_packed(A: Tensor) -> tuple[Tensor, Tensor, Tensor]:
     return LU, piv, _wrap(info)
 
 
+def _lu_solve_packed(LU: Tensor, pivots: Tensor, B: Tensor) -> Tensor:
+    """``getrs`` on a packed factor and pivots :func:`_lu_factor_packed` returned.
+
+    Not :func:`lucid.linalg.lu_solve`: those pivots are the engine's own, so the
+    range check it runs on a caller's would read them back to the host for nothing.
+    """
+    return _wrap(_la.lu_solve(_unwrap(LU), _unwrap(pivots), _unwrap(B)))
+
+
 def _square_lu_backward(L: Tensor, U: Tensor, gL: Tensor, gU: Tensor) -> Tensor:
     """``L⁻ᵀ · (tril(Lᵀ gL, -1) + triu(gU Uᵀ)) · U⁻ᵀ`` for square, triangular ``L``, ``U``."""
     M = lucid.tril(lucid.matmul(L.mT, gL), -1) + lucid.triu(lucid.matmul(gU, U.mT))

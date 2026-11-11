@@ -68,6 +68,9 @@ CUSTOM: frozenset[str] = frozenset(
         "_Eig",
         "_LUFactorGrad",
         "_LDLFactorGrad",
+        # ``lu_solve`` has no emitter; ``slogdet``'s traced backward takes ``inv`` of
+        # ``Aᵀ`` instead and reaches this only in eager (LCD-954)
+        "_InverseTransposeFromLU",
         # nn: the reference's hand-written backward, not its forward's derivative
         "_CrossMapLRN2d",
         # Special (host loop in forward)

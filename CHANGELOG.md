@@ -137,6 +137,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - det forms eager's zero; bound the cofactor at 24 (LCD-946)
 
+- slogdet's gradient comes from its own LU (LCD-954)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

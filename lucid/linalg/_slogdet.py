@@ -13,7 +13,7 @@ from lucid._dispatch import _unwrap
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.linalg import _la, det, diagonal, inv
-from lucid.linalg._lu import _lu_factor_packed
+from lucid.linalg._lu import _lu_factor_packed, _lu_solve_packed
 
 
 class _SlogdetResult(NamedTuple):
@@ -59,11 +59,13 @@ def slogdet(A: Tensor) -> tuple[Tensor, Tensor]:
     the signed zero :math:`\det A` would be, and ``logabsdet`` is
     :math:`-\infty`.
 
-    The gradient of ``logabsdet`` is :math:`A^{-\top}`, taken from an
-    inverse of :math:`A` rather than as :math:`\mathrm{cof}(A)/\det(A)`, so
-    it stays finite wherever the matrix is invertible.  At a singular matrix
-    it is :math:`\mathrm{cof}(A)/\det(A)` — :math:`\pm\infty` along the
-    adjugate of a matrix of rank :math:`n-1`.
+    The gradient of ``logabsdet`` is :math:`A^{-\top}`, solved from the LU
+    factors of :math:`A^\top` the value was read from rather than formed as
+    :math:`\mathrm{cof}(A)/\det(A)`, so it stays finite wherever the matrix is
+    invertible — and a matrix the factorisation found a nonzero last pivot
+    for, however small, has a (large) gradient instead of an error.  At a
+    singular matrix it is :math:`\mathrm{cof}(A)/\det(A)` —
+    :math:`\pm\infty` along the adjugate of a matrix of rank :math:`n-1`.
 
     Examples
     --------
@@ -101,7 +103,7 @@ def slogdet(A: Tensor) -> tuple[Tensor, Tensor]:
         # its cofactor form lives.  Every other matrix of the batch enters it
         # as the identity, so it adds nothing there.
         d = det(lucid.where(_matrix_mask(singular), A, _batched_eye(A)))
-    out = _SlogdetFromLU.apply(A, d, sign, logabs, singular)
+    out = _SlogdetFromLU.apply(A, d, sign, logabs, singular, LU, pivots)
     assert isinstance(out, tuple)  # two outputs, so ``apply`` returns the tuple
     sign, logabs = out
     return _SlogdetResult(sign, logabs)
@@ -119,6 +121,40 @@ def _matrix_mask(per_matrix: Tensor) -> Tensor:
 
 
 @final
+class _InverseTransposeFromLU(Function):
+    """``A⁻ᵀ`` of each matrix, solved from the LU factors of ``Aᵀ`` that ``slogdet`` read.
+
+    ``Aᵀ = P L U`` makes ``A⁻ᵀ = (P L U)⁻¹``, a solve against the identity with
+    the factors in hand.  They are the ones the value and the ``singular`` flag
+    came from, so a matrix counted regular has a nonzero last pivot here and this
+    never meets the zero that a fresh inverse of ``A`` would: a factorisation of
+    ``A`` is a different one, and rounding can leave it an exact zero where ``Aᵀ``'s
+    has noise (a duplicated row).  A flagged matrix gets the identity.
+
+    The derivative is the inverse's own, ``dA = -A⁻ᵀ (dY)ᵀ A⁻ᵀ``, read off the
+    saved output, so a gradient built from this differentiates again without a
+    second factorisation.
+    """
+
+    @override
+    @staticmethod
+    def forward(
+        ctx: FunctionCtx, A: Tensor, LU: Tensor, pivots: Tensor, singular: Tensor
+    ) -> Tensor:
+        eye = _batched_eye(A)
+        out = lucid.where(_matrix_mask(singular), eye, _lu_solve_packed(LU, pivots, eye))
+        ctx.save_for_backward(out, singular)
+        return out
+
+    @override
+    @staticmethod
+    def backward(ctx: FunctionCtx, grad_out: Tensor) -> tuple[Tensor, None, None, None]:
+        inverse_t, singular = ctx.saved_tensors
+        grad_A = -lucid.matmul(inverse_t, lucid.matmul(grad_out.mT, inverse_t))
+        return lucid.where(_matrix_mask(singular), 0.0, grad_A), None, None, None
+
+
+@final
 class _SlogdetFromLU(Function):
     """``(sign, log|det A|)`` read off an LU factorisation, differentiable in ``A``.
 
@@ -127,6 +163,11 @@ class _SlogdetFromLU(Function):
     ``A⁻ᵀ``, an inverse, where ``cof(A) / det(A)``'s cofactor overflows exactly
     where this exists.  The sign has no derivative but rides on the same node,
     so both outputs are tracked as the reference's are.
+
+    One factorisation decides both the answer and the gradient: the inverse is
+    solved from the factors the forward holds (:class:`_InverseTransposeFromLU`),
+    not from a second, independent one that could meet a zero pivot the first did
+    not — which raised from ``backward`` for an input ``forward`` had answered.
 
     A matrix with a zero pivot has no inverse.  It is flagged ``singular``,
     handed the identity in the inverse's place, and its gradient comes through
@@ -150,22 +191,32 @@ class _SlogdetFromLU(Function):
         sign: Tensor,
         logabs: Tensor,
         singular: Tensor,
+        LU: Tensor,
+        pivots: Tensor,
     ) -> tuple[Tensor, Tensor]:
         if d is None:
-            ctx.save_for_backward(A, singular)
+            ctx.save_for_backward(A, singular, LU, pivots)
             return sign, logabs
-        ctx.save_for_backward(A, singular, sign)
+        ctx.save_for_backward(A, singular, LU, pivots, sign)
         return sign, lucid.where(singular, lucid.log(d.abs()), logabs)
 
     @override
     @staticmethod
     def backward(
         ctx: FunctionCtx, grad_sign: Tensor, grad_logabs: Tensor
-    ) -> tuple[Tensor, Tensor | None, None, None, None]:
+    ) -> tuple[Tensor, Tensor | None, None, None, None, None, None]:
         del grad_sign  # the sign is piecewise constant
-        A, singular, *rest = ctx.saved_tensors
-        mask = _matrix_mask(singular)
-        invertible = lucid.where(mask, _batched_eye(A), A)
-        grad_A = _matrix_mask(grad_logabs) * inv(invertible).mT
+        A, singular, LU, pivots, *rest = ctx.saved_tensors
+        if _C_engine.compile.current_tracer() is not None:
+            # ``lu_solve`` has no compile emitter, so a recording cannot reuse the
+            # factors.  Its ``inv`` and ``lu_factor`` run one elimination in the
+            # graph, though: ``inv`` of ``Aᵀ`` (not of ``A``, which that elimination
+            # would meet at a different matrix) sees the pivots the flag came from.
+            inverse_t = inv(lucid.where(_matrix_mask(singular), _batched_eye(A), A.mT))
+        else:
+            solved = _InverseTransposeFromLU.apply(A, LU, pivots, singular)
+            assert isinstance(solved, Tensor)  # one output, so ``apply`` returns it
+            inverse_t = solved
+        grad_A = _matrix_mask(grad_logabs) * inverse_t
         grad_d = lucid.where(singular, grad_logabs / rest[0], 0.0) if rest else None
-        return grad_A, grad_d, None, None, None
+        return grad_A, grad_d, None, None, None, None, None
