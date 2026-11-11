@@ -10,20 +10,23 @@ from lucid.peft._config import (
     _check_count,
     _check_number,
     _check_rank,
-    _check_str,
     _TargetedConfig,
 )
+from lucid.peft.tuners.peanut._activations import _check_act_fn
 
 
 @dataclass
 class PeanutConfig(_TargetedConfig, peft_type=PeftType.PEANUT):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with PEANuT.
 
-    PEANuT (Zhong et al., 2024, arXiv:2410.01870 — Parameter-Efficient Adaptation with Weight-aware
-    Neural Tweakers) produces the weight update from the frozen weight itself through a small trained network,
-    not a fixed low-rank product: an input projection to ``r`` hidden units, ``depth`` further hidden layers
-    with the non-linearity ``act_fn``, and an output projection that starts at zero.  The layer adds
-    ``scaling * (x @ delta_w)`` to the base output.
+    PEANuT (Zhong et al., 2024, arXiv:2410.01870, section 3.3; later versions of the paper call it
+    Neat) writes the update as a function of the frozen weight, :math:`W' = W + f(W; \theta)`, where
+    :math:`f` is a small trained network, not a fixed low-rank product.  At depth zero
+    :math:`f(W) = s\,\sigma(W^\top A^\top)\,B` with :math:`A \in \mathbb{R}^{r \times d_{out}}` and
+    :math:`B \in \mathbb{R}^{d_{out} \times r}` (transposed back to the shape of :math:`W`); each
+    unit of ``depth`` puts an encoder layer :math:`r \to r` before and a decoder layer after the
+    middle, joined by residuals (appendix F), with the non-linearity ``act_fn`` between all of
+    them.  :math:`B` is zero when training begins, which makes the first update zero too.
 
     Parameters
     ----------
@@ -34,7 +37,10 @@ class PeanutConfig(_TargetedConfig, peft_type=PeftType.PEANUT):
     depth : int, default=0
         Hidden layers per side, beyond the input and output projections; not negative.
     act_fn : str, default="relu"
-        Name of the non-linearity between the layers.
+        Name of the non-linearity between the layers: ``"relu"``, ``"gelu"``, ``"tanh"``,
+        ``"silu"``, ``"leaky_relu"``, ``"mish"``, ``"sigmoid"``, ``"linear"`` or another name of the
+        reference's activation table (an unknown name raises ``ValueError``; ``"xielu"``, whose slopes
+        are parameters of the activation, raises ``NotImplementedError``).
     scaling : float, default=1.0
         Multiplier on the adapter's output before it is added to the base output.
     init_weights : bool, default=True
@@ -57,17 +63,16 @@ class PeanutConfig(_TargetedConfig, peft_type=PeftType.PEANUT):
 
     Notes
     -----
-    PEANuT's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``r`` is not positive or ``depth`` is negative.
-    No tuner applies it yet: ``get_peft_model`` raises ``NotImplementedError`` naming LCD-823, which
-    tracks it.
+    Every field of the reference library's config is here, in its order and with its defaults, read
+    and written as ``adapter_config.json``.  A field of the wrong type raises ``TypeError``.
+    ``ValueError`` is raised when ``r`` is not positive, ``depth`` is negative or ``act_fn`` names no
+    activation.  The tuner is :class:`~lucid.peft.PeanutModel`; it adapts ``nn.Linear`` modules.
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {
         "r": _check_rank,
         "depth": _check_count,
-        "act_fn": _check_str,
+        "act_fn": _check_act_fn,
         "scaling": _check_number,
         "init_weights": _check_bool,
     }

@@ -169,6 +169,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the DEFT tuner, a residual subspace projection (LCD-823)
 
+- the PEANuT tuner, a network that reads the weight (LCD-823)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

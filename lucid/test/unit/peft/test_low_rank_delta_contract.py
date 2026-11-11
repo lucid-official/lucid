@@ -24,6 +24,8 @@ from lucid.peft import (
     GraloraModel,
     HiraConfig,
     HiraModel,
+    PeanutConfig,
+    PeanutModel,
     PeftType,
     get_peft_model,
 )
@@ -32,6 +34,7 @@ from lucid.peft.tuners.delora import DeloraLayer
 from lucid.peft.tuners.glora import GloraLayer
 from lucid.peft.tuners.gralora import GraloraLayer
 from lucid.peft.tuners.hira import HiraLayer
+from lucid.peft.tuners.peanut import PeanutLayer
 from lucid.test.unit.peft import _delta_forms as forms
 from lucid.test.unit.peft._closed_forms import CLOSED_FORMS, _PREFIX, _mlp, _run
 from lucid.test.unit.peft import test_tuner_contract as contract
@@ -289,6 +292,49 @@ _DEFT_FILE = {
 }
 _DEFT_PARA_FILE = {k: v for k, v in _DEFT_FILE.items() if k.endswith("deft_P")}
 
+
+def _peanut(**fixed: object) -> Callable[..., PeanutConfig]:
+    def config(targets: tuple[str, ...], random: bool, **kw: object) -> PeanutConfig:
+        return PeanutConfig.from_dict(
+            {"r": 2, "target_modules": list(targets), "init_weights": not random, **fixed, **kw}
+        )
+
+    return config
+
+
+def _peanut_forward(depth: int, act: str, scaling: float) -> Callable[..., lucid.Tensor]:
+    def forward(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
+        """``W' = W + f(W)``: the network of the paper, from the layer weights the file holds."""
+        net = _mlp()
+        weights = []
+        for index in (0, 2):
+            p = f"{_PREFIX}{index}."
+            delta = forms.peanut_delta(
+                net[index].weight.tolist(),
+                t[p + "peanut_A.weight"].tolist(),
+                t[p + "peanut_B.weight"].tolist(),
+                [t[f"{p}peanut_encoders.{i}.weight"].tolist() for i in range(depth)],
+                [t[f"{p}peanut_decoders.{i}.weight"].tolist() for i in range(depth)],
+                act=forms.ACTIVATIONS[act],
+                scaling=scaling,
+            )
+            weights.append(net[index].weight + lucid.tensor(delta))
+        return _run(weights, [net[0].bias, net[2].bias], x)
+
+    return forward
+
+
+def _peanut_file(depth: int) -> dict[str, tuple[int, ...]]:
+    file: dict[str, tuple[int, ...]] = {}
+    for index, out in {0: 8, 2: 4}.items():
+        p = f"{_PREFIX}{index}."
+        file[p + "peanut_A.weight"], file[p + "peanut_B.weight"] = (2, out), (out, 2)
+        for i in range(depth):
+            file[f"{p}peanut_encoders.{i}.weight"] = (2, 2)
+            file[f"{p}peanut_decoders.{i}.weight"] = (2, 2)
+    return file
+
+
 #: Method rows in the order the methods landed.
 _METHODS = [
     _Method("delora", PeftType.DELORA, _delora, DeloraModel, DeloraLayer, _DELORA_FILE),
@@ -355,11 +401,24 @@ _METHODS = [
         _DEFT_PARA_FILE,
         starts_at_base=False,
     ),
+    _Method(
+        "peanut", PeftType.PEANUT, _peanut(scaling=2.0), PeanutModel, PeanutLayer, _peanut_file(0)
+    ),
+    _Method(
+        "peanut_deep",
+        PeftType.PEANUT,
+        _peanut(depth=2, act_fn="tanh", scaling=0.5),
+        PeanutModel,
+        PeanutLayer,
+        _peanut_file(2),
+    ),
 ]
 
 CLOSED_FORMS["delora"] = _delora_forward
 CLOSED_FORMS["gralora"] = CLOSED_FORMS["gralora_hybrid"] = _gralora_forward
 CLOSED_FORMS["hira"] = _hira_forward
+CLOSED_FORMS["peanut"] = _peanut_forward(0, "relu", 2.0)
+CLOSED_FORMS["peanut_deep"] = _peanut_forward(2, "tanh", 0.5)
 CLOSED_FORMS["deft"] = _deft_forward("relu", 2.0, False)
 CLOSED_FORMS["deft_qr"] = _deft_forward("qr", 2.0, False)
 CLOSED_FORMS["deft_para"] = _deft_forward("qr", 1.0, True)
@@ -487,6 +546,34 @@ _REFERENCE_CONFIGS["deft_para"] = {
     "alpha": None,
     "decomposition_method": "qr",
     "para": True,
+}
+
+
+_PEANUT_REFERENCE = {
+    "act_fn": "relu",
+    "auto_mapping": None,
+    "base_model_name_or_path": "tiny",
+    "depth": 0,
+    "exclude_modules": None,
+    "inference_mode": True,
+    "init_weights": True,
+    "layers_pattern": None,
+    "layers_to_transform": None,
+    "modules_to_save": None,
+    "peft_type": "PEANUT",
+    "peft_version": "0.21.2",
+    "r": 2,
+    "revision": None,
+    "scaling": 2.0,
+    "target_modules": ["0", "2"],
+    "task_type": None,
+}
+_REFERENCE_CONFIGS["peanut"] = _PEANUT_REFERENCE
+_REFERENCE_CONFIGS["peanut_deep"] = {
+    **_PEANUT_REFERENCE,
+    "act_fn": "tanh",
+    "depth": 2,
+    "scaling": 0.5,
 }
 
 

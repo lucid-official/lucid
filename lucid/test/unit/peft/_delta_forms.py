@@ -6,6 +6,7 @@ holds them and returns what the paper says the update (or the adapted weight) is
 """
 
 import math
+from collections.abc import Callable
 
 type Matrix = list[list[float]]
 
@@ -230,3 +231,59 @@ def deft_delta(
     removed = matmul(transpose(right), weight)
     inner = scaled(removed, -1.0) if injection is None else sub(scaled(injection, scaling), removed)
     return matmul(basis, inner)
+
+
+# ── PEANuT (Zhong et al., 2024, section 3.3, appendix F) ─────────────────────
+
+_TANH_GELU = math.sqrt(2.0 / math.pi)
+
+#: Each activation of the table PEANuT's ``act_fn`` names, from its definition.
+ACTIVATIONS: dict[str, Callable[[float], float]] = {
+    "gelu": lambda v: 0.5 * v * (1.0 + math.erf(v / math.sqrt(2.0))),
+    "gelu_new": lambda v: 0.5 * v * (1.0 + math.tanh(_TANH_GELU * (v + 0.044715 * v**3))),
+    "gelu_fast": lambda v: 0.5 * v * (1.0 + math.tanh(v * 0.7978845608 * (1.0 + 0.044715 * v * v))),
+    "quick_gelu": lambda v: v / (1.0 + math.exp(-1.702 * v)),
+    "laplace": lambda v: 0.5 * (1.0 + math.erf((v - 0.707107) / (0.282095 * math.sqrt(2.0)))),
+    "leaky_relu": lambda v: v if v >= 0 else 0.01 * v,
+    "prelu": lambda v: v if v >= 0 else 0.25 * v,
+    "linear": lambda v: v,
+    "relu": lambda v: max(v, 0.0),
+    "relu2": lambda v: max(v, 0.0) ** 2,
+    "relu6": lambda v: min(max(v, 0.0), 6.0),
+    "silu": lambda v: v / (1.0 + math.exp(-v)),
+    "hardswish": lambda v: v * min(max(v + 3.0, 0.0), 6.0) / 6.0,
+    "mish": lambda v: v * math.tanh(math.log1p(math.exp(v))),
+    "sqrtsoftplus": lambda v: math.sqrt(math.log1p(math.exp(v))),
+    "sigmoid": lambda v: 1.0 / (1.0 + math.exp(-v)),
+    "tanh": math.tanh,
+}
+
+
+def _apply(act: Callable[[float], float], a: Matrix) -> Matrix:
+    return [[act(v) for v in row] for row in a]
+
+
+def peanut_delta(
+    weight: Matrix,
+    down: Matrix,
+    up: Matrix,
+    encoders: list[Matrix],
+    decoders: list[Matrix],
+    *,
+    act: Callable[[float], float],
+    scaling: float,
+) -> Matrix:
+    r""":math:`f(W) = s\,(h\,B^\top)^\top`, ``h`` the network of the paper applied to :math:`W^\top A^\top`.
+
+    ``down`` is ``A`` of the layer (``r x out``), ``up`` ``B`` (``out x r``), ``encoders`` and
+    ``decoders`` the ``r x r`` weights of the layers in order; a linear layer applies its weight
+    transposed (``h @ M^T``).
+    """
+    hidden = _apply(act, matmul(transpose(weight), transpose(down)))
+    shortcuts = []
+    for encoder in encoders:
+        shortcuts.append(hidden)
+        hidden = _apply(act, matmul(hidden, transpose(encoder)))
+    for decoder, shortcut in zip(decoders, reversed(shortcuts), strict=True):
+        hidden = add(_apply(act, matmul(hidden, transpose(decoder))), shortcut)
+    return scaled(transpose(matmul(hidden, transpose(up))), scaling)
