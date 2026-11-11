@@ -460,6 +460,17 @@ std::vector<Storage> GpuBackend::batch_norm_eval_backward(const Storage& x,
         grad_mask.make(4, [&] { return wrap_narrow(*sum_g, dt); })};
 }
 
+Storage GpuBackend::p_norm_forward(const Storage& a,
+                                   const Shape&,
+                                   double p,
+                                   const std::vector<int>& axes,
+                                   bool keepdims,
+                                   Dtype dt) {
+    const auto& ga = std::get<GpuStorage>(a);
+    const auto raw = pnorm::scaled_p_norm(widen_half(*ga.arr), p, axes, keepdims);
+    return Storage{gpu::wrap_mlx_array(narrow_half(raw, ga.arr->dtype()), dt)};
+}
+
 std::vector<Storage> GpuBackend::lp_normalize_forward(
     const Storage& x, const Shape& x_shape, double ord, int axis, double eps, Dtype dt) {
     const auto& gx = std::get<GpuStorage>(x);
@@ -467,9 +478,18 @@ std::vector<Storage> GpuBackend::lp_normalize_forward(
     // The p-norm is taken in float32 for a half input (see
     // ``widen_half``) — a float16 |x|^2 overflows past 256 and the norm
     // came back inf, normalising the row to zeros — and rounded back.
-    auto abs_w = widen_half(::mlx::core::abs(*gx.arr));
-    auto sum_p = ::mlx::core::sum(gpu_pow(abs_w, ord), std::vector<int>{axis}, true);
-    auto N = narrow_half(gpu_pow(sum_p, 1.0 / ord), mlx_dt);
+    // An order above 1 takes the range-safe kernel, so a row at 1e-20 keeps
+    // its norm rather than flushing to the ``eps`` floor (``sum(|x|^p)`` of it
+    // underflows) and one at 1e25 does not overflow.
+    auto N = [&] {
+        if (ord > 1.0)
+            return narrow_half(
+                pnorm::scaled_p_norm(widen_half(*gx.arr), ord, std::vector<int>{axis}, true),
+                mlx_dt);
+        auto abs_w = widen_half(::mlx::core::abs(*gx.arr));
+        auto sum_p = ::mlx::core::sum(gpu_pow(abs_w, ord), std::vector<int>{axis}, true);
+        return narrow_half(gpu_pow(sum_p, 1.0 / ord), mlx_dt);
+    }();
     auto eps_arr = ::mlx::core::astype(::mlx::core::array(static_cast<float>(eps)), mlx_dt);
     auto N_clip = ::mlx::core::maximum(N, eps_arr);
     auto saved_norm = N_clip;

@@ -127,6 +127,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a ceiling's limit sits above the slowest hosted run (LCD-867, LCD-947)
 
+- range-safe scaled p-norm kernel on the GPU stream (LCD-944)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

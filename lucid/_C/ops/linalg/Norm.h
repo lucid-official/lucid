@@ -148,6 +148,48 @@ private:
     grad_from(const TensorImplPtr& A, const TensorImplPtr& N, const TensorImplPtr& dN) const;
 };
 
+// Autograd node of :func:`p_norm_op`.
+//
+// For $N = \|A\|_p$ with a finite $p > 1$ the gradient is
+// $$
+//   \frac{\partial L}{\partial A}
+//     = \mathrm{sign}(A)\,\Bigl(\frac{|A|}{N}\Bigr)^{p-1}
+//       \odot \mathrm{expand}(\partial L/\partial N),
+// $$
+// zero where $N = 0$ (the subgradient the reference picks).  The ratio
+// $|A|/N$ is in $[0, 1]$, so the slope is as range-safe as the forward: a
+// slice at 1e-20 gets the same gradient as one at 1.
+class LUCID_API PNormBackward : public FuncOp<PNormBackward, 1> {
+public:
+    static const OpSchema schema_v1;
+
+    double p_ = 2.0;
+    std::vector<int> axis_;
+    bool keepdims_ = false;
+
+    std::vector<Storage> apply(Storage grad_out) override;
+    std::vector<TensorImplPtr> apply_for_graph(const TensorImplPtr& grad_out) override;
+
+private:
+    TensorImplPtr
+    grad_from(const TensorImplPtr& A, const TensorImplPtr& N, const TensorImplPtr& dN) const;
+};
+
+// The entrywise p-norm $(\sum |a_i|^p)^{1/p}$ over ``axis`` for a finite
+// $p > 1$, on the GPU stream, accumulated relative to each slice's largest
+// magnitude (``backend/gpu/PNorm.h``) so a slice at 1e-20 or 1e25 does not
+// flush to 0 or overflow to inf the way ``sum(a * a)`` does.
+//
+// ``axis`` empty reduces every axis, as in :func:`norm_op`.  A half input
+// reduces in float32 and answers in its own dtype.  The CPU stream and an
+// active compile trace refuse it: the CPU's accumulation does not flush, and
+// the Python reduction that owns the choice (``_p_norm``) never sends either
+// here.
+LUCID_API TensorImplPtr p_norm_op(const TensorImplPtr& a,
+                                  double p,
+                                  std::vector<int> axis,
+                                  bool keepdims);
+
 // Compute the p-norm of a float tensor over the specified axes.
 //
 // Parameters

@@ -2,7 +2,8 @@
 
 ``vector_norm`` is the one place a norm reduces entries, and ``matrix_norm``'s
 entry-wise orders go through it, so the guard against a power leaving the
-floating-point range on the CPU lives here (:func:`_scaled_p_norm`).  ``norm``
+floating-point range on the CPU lives here (:func:`_scaled_p_norm`); on Metal
+the reduction itself is range-safe (``backend/gpu/PNorm.h``).  ``norm``
 additionally rescales whatever it dispatches by the largest magnitude
 (:func:`_scaled`), on every device, as it always has.
 """
@@ -41,12 +42,12 @@ def _scaled_p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
     slice has the call redone rescaled.  The read is one boolean of the
     *result*, and costs nothing there — the CPU is eager.
 
-    Metal, a compile trace and a phantom tensor take the plain reduction.  On
-    Metal the same read is a device sync (~200 us) and the unconditional form
-    several extra kernels per call, on the path of ``F.normalize``, for a
-    corner-case magnitude; a trace or a phantom has no value to read.  All
-    three therefore agree with each other, and with the plain evaluation.
-    ``norm`` still rescales on every device.
+    Metal, a compile trace and a phantom tensor take :func:`_p_norm` as it is.
+    On Metal that is the reduction's own scaled kernel, which keeps a running
+    largest magnitude in the pass that reads the data, so no read of the result
+    (a ~200 us device sync) and no extra pass is needed; a trace or a phantom
+    has no value to read and takes the plain graph.  ``norm`` still rescales on
+    every device.
 
     The divisor is a constant of the call — computed without the graph — so
     the gradient is the plain norm's, and an all-zero, ``nan`` or infinite

@@ -446,6 +446,10 @@ public:
         const Storage&, const Shape&, double, const std::vector<int>&, bool, Dtype dt) override {
         return phantom(dt);
     }
+    Storage p_norm_forward(
+        const Storage&, const Shape&, double, const std::vector<int>&, bool, Dtype dt) override {
+        return phantom(dt);
+    }
     Storage linalg_cholesky(const Storage&, const Shape&, bool, Dtype dt) override {
         return phantom(dt);
     }

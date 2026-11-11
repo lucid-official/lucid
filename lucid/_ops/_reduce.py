@@ -158,6 +158,36 @@ def _require_normable(impl: _Impl, op: str) -> _Impl:
 _ABS_EXTREMA = {math.inf: _C_engine.max, -math.inf: _C_engine.min}
 
 
+#: The kernel views the input as a matrix of 32-bit dimensions, so a larger
+#: tensor takes the plain graph.
+_MAX_KERNEL_NUMEL = 2**31
+
+
+def _takes_scaled_kernel(r: _Impl, p: float, axes: list[int]) -> bool:
+    """Whether the GPU stream's range-safe p-norm kernel computes this reduction.
+
+    It serves a float32 Metal reduction of a finite ``p > 1`` — the orders that
+    power the entries.  ``sum(r * r)`` flushes a float32 slice below ~1e-19 to
+    zero on Metal and overflows one above ~1.8e19, though the norm is an
+    ordinary number; the kernel keeps a running largest magnitude and divides
+    it out in the same pass that reads the data (``backend/gpu/PNorm.h``).
+    ``p <= 1`` powers nothing that can leave the range, and the extrema of
+    ``p = ±inf`` power nothing at all.  A compile trace and a phantom tensor have
+    no kernel to run and take the plain graph, as does the CPU stream, whose
+    accumulation does not flush.
+    """
+    return (
+        p > 1.0
+        and not math.isinf(p)
+        and r.dtype == _C_engine.F32
+        and r.device == _C_engine.Device.GPU
+        and not r.is_phantom
+        and 0 < r.numel() < _MAX_KERNEL_NUMEL
+        and bool(axes)
+        and _C_engine.compile.current_tracer() is None
+    )
+
+
 def _p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
     """``(sum |r|^p)^(1/p)`` over ``axes`` for a real ``r`` and ``p != 0``.
 
@@ -178,9 +208,16 @@ def _p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
         return _ABS_EXTREMA[p](_C_engine.abs(r), axes, keepdim, _C_engine.ExtremumNanGrad.ZERO)
     if p == 1:
         return _C_engine.sum(_C_engine.abs(r), axes, keepdim)
+    if _takes_scaled_kernel(r, p, axes):
+        return _C_engine.linalg.p_norm(r, p, axes, keepdim)
     if p == 2:
         # r² = |x|² for a real r, one product cheaper than ``abs`` first.
         return _zero_safe_root(_C_engine.sum(_C_engine.mul(r, r), axes, keepdim), 2)
+    return _general_p_norm(r, p, axes, keepdim)
+
+
+def _general_p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
+    """:func:`_p_norm` for an order that is none of ``±inf``, 1 or 2: powers, a sum, a root."""
     magnitude = _C_engine.abs(r)
     if p > 1 or not magnitude.requires_grad:
         powered = _C_engine.pow_scalar(magnitude, p)

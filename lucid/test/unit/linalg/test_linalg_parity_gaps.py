@@ -26,9 +26,7 @@ def _t(a: np.ndarray, device: str = "cpu", **kw: object) -> lucid.Tensor:
 # ── vector_norm / matrix_norm('fro') at tiny and huge magnitudes (CPU) ───────
 #
 # The CPU reduction rescales a slice whose powers would leave the float range.
-# Metal takes the plain reduction (the rescale there costs a device sync or
-# several kernels on ``F.normalize``'s path), so its tiny-magnitude answer is a
-# known gap, pinned below as a strict xfail.
+# Metal's own range-safe kernel is covered by ``test_p_norm_scaled_gpu.py``.
 
 
 @pytest.mark.parity
@@ -61,19 +59,6 @@ def test_norm_still_rescales_on_every_device(device: str, magnitude: float) -> N
     assert LA.norm(x.reshape(6)).item() == pytest.approx(want, rel=1e-5, abs=0)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-944: engine: one scaled-norm reduction kernel (nrm2-style) on the GPU stream",
-)
-@pytest.mark.parametrize("kind", ["vector_norm", "matrix_norm_fro"])
-def test_metal_entrywise_norm_at_tiny_magnitude_is_a_known_gap(
-    device_gpu_only: str, kind: str
-) -> None:
-    x = _t(np.full((2, 3), 1e-20, dtype=np.float32), device_gpu_only)
-    got = LA.vector_norm(x) if kind == "vector_norm" else LA.matrix_norm(x, "fro")
-    assert got.item() == pytest.approx(float(np.sqrt(6.0)) * 1e-20, rel=1e-5, abs=0)
-
-
 @pytest.mark.parametrize("ord_", [1, 2, 3.5, 0.5])
 def test_vector_norm_orders_survive_tiny_magnitudes(device_cpu_only: str, ord_: float) -> None:
     base = np.array([3.0, -4.0, 1.0, 2.0])
@@ -91,13 +76,22 @@ def test_rescale_is_per_slice(ref: ModuleType, device_cpu_only: str) -> None:
     assert got == pytest.approx(want, rel=1e-5, abs=0)
 
 
-def test_normal_magnitudes_are_bit_identical(device: str) -> None:
-    """Inside the window the reduction is the plain one, so prune & friends see no change."""
+def test_normal_magnitudes_match_the_plain_reduction(device: str) -> None:
+    """Inside the window the CPU reduction is the plain one, bit for bit.
+
+    Metal's kernel accumulates relative to the running largest magnitude (LCD-944),
+    so its rounding differs from ``sqrt(sum(x * x))``'s by an ulp or two: it is
+    faithful, not identical, and the test allows 4 ulp there.
+    """
     rng = np.random.default_rng(0)
     arr = rng.standard_normal((64, 33)).astype(np.float32)
     x = _t(arr, device)
     plain = lucid.sqrt((x * x).sum(dim=1))
-    assert LA.vector_norm(x, 2, 1).tolist() == plain.tolist()
+    got = LA.vector_norm(x, 2, 1)
+    if device == "cpu":
+        assert got.tolist() == plain.tolist()
+    else:
+        assert got.tolist() == pytest.approx(plain.tolist(), rel=4 * 1.1920929e-07, abs=0)
 
 
 def test_zero_nan_inf_slices_are_not_rescaled_into_nan(device_cpu_only: str) -> None:
@@ -127,13 +121,30 @@ def test_tiny_float64_and_half_inputs(device_cpu_only: str) -> None:
     assert LA.vector_norm(x16).dtype is lucid.float16
 
 
-def test_compiled_metal_vector_norm_records_the_plain_form(device_gpu_only: str) -> None:
-    """A trace and eager Metal run the same reduction, tiny input or not."""
+@pytest.mark.parametrize(
+    "scale",
+    [
+        1.0,
+        pytest.param(
+            1e-25,
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason=(
+                    "LCD-944: eager Metal runs the range-safe p-norm kernel, which "
+                    "lucid.compile has no emitter for; a trace records the plain form"
+                ),
+            ),
+        ),
+    ],
+)
+def test_compiled_metal_vector_norm_records_the_plain_form(
+    device_gpu_only: str, scale: float
+) -> None:
+    """A trace runs the plain reduction: it agrees with eager Metal at normal magnitudes."""
     fn = lucid.compile(lambda t: LA.vector_norm(t, 2, -1))
     fn(lucid.randn(4, 5, device="metal"))
-    for scale in (1.0, 1e-25):
-        x = lucid.randn(4, 5, device="metal") * scale
-        assert fn(x).tolist() == pytest.approx(LA.vector_norm(x, 2, -1).tolist(), rel=1e-6, abs=0)
+    x = lucid.randn(4, 5, device="metal") * scale
+    assert fn(x).tolist() == pytest.approx(LA.vector_norm(x, 2, -1).tolist(), rel=1e-6, abs=0)
 
 
 # ── eigh / eigvalsh: UPLO is case-insensitive ────────────────────────────────

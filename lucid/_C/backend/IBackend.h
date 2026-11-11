@@ -1108,6 +1108,27 @@ public:
                                 bool keepdims,
                                 Dtype dt) = 0;
 
+    // Entrywise ``(sum |a|^p)^(1/p)`` over ``axes`` (distinct, in range; empty
+    // means every axis) for a finite ``p > 1``, accumulated relative to each
+    // slice's largest magnitude so no power leaves the float range.  Only the
+    // GPU stream has the kernel; the default throws not_implemented.
+    virtual Storage p_norm_forward(const Storage& a,
+                                   const Shape& shape,
+                                   double p,
+                                   const std::vector<int>& axes,
+                                   bool keepdims,
+                                   Dtype dt) {
+        (void)a;
+        (void)shape;
+        (void)p;
+        (void)axes;
+        (void)keepdims;
+        (void)dt;
+        ErrorBuilder("IBackend::p_norm_forward")
+            .not_implemented("the scaled p-norm is only implemented on the GPU backend");
+        return {};
+    }
+
     // Cholesky decomposition.  upper=true returns the upper triangular factor.
     virtual Storage linalg_cholesky(const Storage& a, const Shape& shape, bool upper, Dtype dt) = 0;
 

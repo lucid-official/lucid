@@ -51,6 +51,8 @@ void register_linalg(py::module_& m) {
         py::arg("a"), py::arg("ord") = 2.0, py::arg("dim") = std::vector<int>{},
         py::arg("keepdims") = false);
 
+    m.def("p_norm", &p_norm_op, py::arg("a"), py::arg("p"), py::arg("dim"), py::arg("keepdims"));
+
     // qr returns (Q, R); the C++ op returns a 2-element vector.
     m.def(
         "qr",

@@ -24,6 +24,7 @@
 #include "Norm.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <variant>
 #include <vector>
@@ -43,12 +44,15 @@
 #include "../../core/TensorImpl.h"
 #include "../../core/Validate.h"
 #include "../../kernel/NaryKernel.h"
+#include "../../ops/bfunc/Compare.h"
 #include "../../ops/bfunc/Div.h"
 #include "../../ops/bfunc/Mul.h"
+#include "../../ops/gfunc/Gfunc.h"
 #include "../../ops/ufunc/Arith.h"
 #include "../../ops/ufunc/Astype.h"
 #include "../../ops/ufunc/ScalarParam.h"
 #include "../../ops/utils/Layout.h"
+#include "../../ops/utils/Select.h"
 #include "../../ops/utils/View.h"
 #include "_Detail.h"
 
@@ -58,40 +62,60 @@ namespace lucid {
 // the backward does not silently lose precision through AMP downcasting.
 const OpSchema NormBackward::schema_v1{"norm", 1, AmpPolicy::KeepInput, true, "", true};
 
+namespace {
+
+// ``t`` — shaped like a reduction over ``axis`` of a ``full``-shaped tensor —
+// broadcast back to ``full``, re-inserting the reduced axes first.  Two cases:
+//   - keepdims or a full reduction (axis empty): the dimensions are all
+//     present (possibly all-ones), so a broadcast is enough.
+//   - otherwise the missing axes are re-inserted.  Indices are normalised
+//     (negative -> positive) and sorted ascending so that each unsqueeze_op
+//     call inserts at the right logical position even as previously inserted
+//     axes shift subsequent dimension indices.
+TensorImplPtr expand_reduced(const TensorImplPtr& t,
+                             const Shape& full,
+                             const std::vector<int>& axis,
+                             bool keepdims) {
+    if (keepdims || axis.empty())
+        return broadcast_to_op(t, full);
+    const int ndim = static_cast<int>(full.size());
+    std::vector<int> sorted_axes;
+    for (int a : axis)
+        sorted_axes.push_back(a < 0 ? a + ndim : a);
+    std::sort(sorted_axes.begin(), sorted_axes.end());
+    auto result = t;
+    for (int a : sorted_axes)
+        result = unsqueeze_op(result, a);
+    return broadcast_to_op(result, full);
+}
+
+// The eager gradient of a norm node: ``grad_from`` over detached views of the
+// saved input ``a``, the saved norm ``n`` and the incoming gradient.
+template <class GradFrom>
+std::vector<Storage> detached_norm_grad(const Storage& a,
+                                        const Shape& a_shape,
+                                        const Storage& n,
+                                        const Shape& n_shape,
+                                        Storage grad_out,
+                                        Dtype dt,
+                                        Device device,
+                                        GradFrom&& grad_from) {
+    NoGradGuard ng;
+    using ::lucid::helpers::fresh;
+    auto A = fresh(Storage{a}, a_shape, dt, device);
+    auto N = fresh(Storage{n}, n_shape, dt, device);
+    auto dN = fresh(std::move(grad_out), n_shape, dt, device);
+    return {grad_from(A, N, dN)->storage()};
+}
+
+}  // namespace
+
 // Backward pass for norm_op.
-//
-// expand_back re-inserts the reduced axes so the scalar (batch) gradient can
-// be broadcast back to the full input shape.  Two cases:
-//   - keepdims_=true or a full reduction (axis_.empty()): the output already
-//     has the right number of dimensions (possibly all-ones), so we broadcast
-//     directly.
-//   - keepdims_=false and a partial reduction: we must re-insert the missing
-//     axes.  Indices are normalised (negative -> positive) and sorted ascending
-//     so that each unsqueeze_op call inserts at the right logical position even
-//     as previously inserted axes shift subsequent dimension indices.
 TensorImplPtr NormBackward::grad_from(const TensorImplPtr& A,
                                       const TensorImplPtr& N,
                                       const TensorImplPtr& dN) const {
-    const int ndim = static_cast<int>(input_shapes_[0].size());
-
-    // Lambda: expand a reduced-shaped tensor back to the full input shape.
-    auto expand_back = [&](const TensorImplPtr& t) -> TensorImplPtr {
-        if (keepdims_ || axis_.empty()) {
-            // All dimensions are already present (either kept as 1 or as a
-            // scalar); broadcast is sufficient.
-            return broadcast_to_op(t, input_shapes_[0]);
-        }
-        // Normalise negative axis indices and sort in ascending order.
-        // Ascending sort matters: inserting axis i first preserves the correct
-        // index for axis j > i on subsequent unsqueeze calls.
-        std::vector<int> sorted_axes;
-        for (int a : axis_)
-            sorted_axes.push_back(a < 0 ? a + ndim : a);
-        std::sort(sorted_axes.begin(), sorted_axes.end());
-        auto result = t;
-        for (int i = 0; i < static_cast<int>(sorted_axes.size()); ++i)
-            result = unsqueeze_op(result, sorted_axes[i]);
-        return broadcast_to_op(result, input_shapes_[0]);
+    auto expand_back = [&](const TensorImplPtr& t) {
+        return expand_reduced(t, input_shapes_[0], axis_, keepdims_);
     };
 
     if (ord_ == 2.0) {
@@ -111,12 +135,10 @@ TensorImplPtr NormBackward::grad_from(const TensorImplPtr& A,
 }
 
 std::vector<Storage> NormBackward::apply(Storage grad_out) {
-    NoGradGuard ng;
-    using ::lucid::helpers::fresh;
-    auto A = fresh(Storage{saved_inputs_[0]}, input_shapes_[0], dtype_, device_);
-    auto N = fresh(Storage{saved_output_}, out_shape_, dtype_, device_);
-    auto dN = fresh(std::move(grad_out), out_shape_, dtype_, device_);
-    return {grad_from(A, N, dN)->storage()};
+    return detached_norm_grad(
+        saved_inputs_[0], input_shapes_[0], saved_output_, out_shape_, std::move(grad_out), dtype_,
+        device_,
+        [this](const auto& A, const auto& N, const auto& dN) { return grad_from(A, N, dN); });
 }
 
 std::vector<TensorImplPtr> NormBackward::apply_for_graph(const TensorImplPtr& grad_out) {
@@ -216,6 +238,82 @@ TensorImplPtr norm_op(const TensorImplPtr& a_in, double ord, std::vector<int> ax
     bwd->keep_output(out->storage());
     // save_inputs=true: NormBackward reads A from saved_inputs_[0] for ord=2.
     kernel::NaryKernel<NormBackward, 1>::wire_autograd(std::move(bwd), {a}, out, true);
+    return out;
+}
+
+// ``internal``: ``lucid.linalg.vector_norm`` is the one public entry, and it
+// reaches this kernel only through ``_p_norm`` (H8: one canonical path).
+const OpSchema PNormBackward::schema_v1{"p_norm", 1,   AmpPolicy::KeepInput, true, "", 1, 1, {},
+                                        true,     true};
+
+TensorImplPtr PNormBackward::grad_from(const TensorImplPtr& A,
+                                       const TensorImplPtr& N,
+                                       const TensorImplPtr& dN) const {
+    const Shape& full = input_shapes_[0];
+    auto N_exp = expand_reduced(N, full, axis_, keepdims_);
+    auto dN_exp = expand_reduced(dN, full, axis_, keepdims_);
+    auto ratio = div_op(abs_op(A), N_exp);
+    auto slope = p_ == 2.0 ? ratio : pow_scalar_op(ratio, p_ - 1.0);
+    auto grad = mul_op(mul_op(sign_op(A), slope), dN_exp);
+    // A zero norm has the subgradient 0 (its ratio is 0 / 0); a NaN norm is not
+    // zero and keeps its NaN.
+    auto live = not_equal_op(N_exp, zeros_like_op(N_exp));
+    return where_op(live, grad, zeros_like_op(grad));
+}
+
+std::vector<Storage> PNormBackward::apply(Storage grad_out) {
+    return detached_norm_grad(
+        saved_inputs_[0], input_shapes_[0], saved_output_, out_shape_, std::move(grad_out), dtype_,
+        device_,
+        [this](const auto& A, const auto& N, const auto& dN) { return grad_from(A, N, dN); });
+}
+
+std::vector<TensorImplPtr> PNormBackward::apply_for_graph(const TensorImplPtr& grad_out) {
+    // The norm is recomputed from the tracked input, so the ratio |A| / N
+    // carries N's own dependence on A into the second derivative.
+    const auto& A = saved_impl_inputs_[0];
+    if (!A)
+        ErrorBuilder("p_norm").fail("graph-mode backward is missing its saved input");
+    auto N = p_norm_op(A, p_, axis_, keepdims_);
+    return {zero_derivative_through(grad_from(A, N, grad_out), next_edges()[0])};
+}
+
+LUCID_REGISTER_OP(PNormBackward)
+
+TensorImplPtr p_norm_op(const TensorImplPtr& a_in, double p, std::vector<int> axis, bool keepdims) {
+    using namespace linalg_detail;
+    Validator::input(a_in, "p_norm.a").non_null();
+    if (!(p > 1.0) || !std::isfinite(p))
+        ErrorBuilder("p_norm").invalid_argument("p must be finite and greater than 1, got " +
+                                                std::to_string(p));
+    SchemaGuard sg{PNormBackward::schema_v1, a_in->dtype(), a_in->device()};
+    const TensorImplPtr a = astype_op(a_in, sg.effective_dtype());
+    require_float(a->dtype(), "p_norm");
+    if (a->device() != Device::GPU)
+        ErrorBuilder("p_norm").not_implemented(
+            "the scaled p-norm kernel runs on the GPU stream only");
+    if (::lucid::compile::current_tracer() != nullptr)
+        ErrorBuilder("p_norm").not_implemented("the scaled p-norm cannot be traced");
+    axis = normalize_axes(axis, static_cast<int>(a->shape().size()), "p_norm");
+    const Shape out_shape = reduced_shape(a->shape(), axis, keepdims);
+    OpScopeFull scope{"p_norm", a->device(), a->dtype(), out_shape};
+    scope.set_attr("p", p);
+    {
+        std::vector<std::int64_t> ax_v(axis.begin(), axis.end());
+        scope.set_attr("axis_list", std::move(ax_v));
+    }
+    scope.set_attr("keepdims", keepdims);
+
+    Storage out_storage =
+        backend::Dispatcher::for_device(a->device())
+            .p_norm_forward(a->storage(), a->shape(), p, axis, keepdims, a->dtype());
+    auto out = fresh(std::move(out_storage), out_shape, a->dtype(), a->device());
+    auto bwd = std::make_shared<PNormBackward>();
+    bwd->p_ = p;
+    bwd->axis_ = axis;
+    bwd->keepdims_ = keepdims;
+    bwd->keep_output(out->storage());
+    kernel::NaryKernel<PNormBackward, 1>::wire_autograd(std::move(bwd), {a}, out, true);
     return out;
 }
 

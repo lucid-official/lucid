@@ -114,6 +114,7 @@
 #include "MetalAllocator.h"
 #include "MetalKernelRunner.h"
 #include "MlxBridge.h"
+#include "PNorm.h"
 #include "Pow.h"
 #include "SdpaHeadDim.h"
 #include "Shift.h"
@@ -1138,6 +1139,15 @@ public:
                         const std::vector<int>& axes,
                         bool keepdims,
                         Dtype dt) override;
+
+    // The scaled p-norm kernel of ``backend/gpu/PNorm.h`` (a half input
+    // accumulates in float32, as ``linalg_norm`` does).
+    Storage p_norm_forward(const Storage& a,
+                           const Shape& shape,
+                           double p,
+                           const std::vector<int>& axes,
+                           bool keepdims,
+                           Dtype dt) override;
 
     // Cholesky factorisation $A = L L^T$ (or $U^T U$ if ``upper``), on
     // MLX's CPU linalg stream.
