@@ -16,7 +16,8 @@ import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike, DTypeLike
 from lucid.peft._config import _TargetedConfig
-from lucid.peft.tuners._support import _adapter_dtype, _ConfigLayer
+from lucid.peft.tuners._layer import _adapter_dtype
+from lucid.peft.tuners._support import _ConfigLayer
 
 
 class _Home(NamedTuple):
