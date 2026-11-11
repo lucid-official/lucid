@@ -9,6 +9,8 @@ merged weight and the projected gradients with the reference library's layer.
 """
 
 import copy
+import gc
+import weakref
 from types import ModuleType
 
 import pytest
@@ -288,6 +290,22 @@ class TestGradientProjection:
             (model(x) ** 2).sum().backward()
             u = model.osf_svd_params["default"]["U_low"]
             assert magnitude(high.mT @ u.grad) <= _TOLERANCE * magnitude(u.grad)
+
+    def test_the_hooks_of_a_pass_do_not_hold_the_layer_that_made_them(self, device: str) -> None:
+        """The engine keeps a tensor hook where the collector cannot see (LCD-302): a hook that held
+        the layer would keep it alive as long as the graph is, and the projection must not need it."""
+        layer, base = _layer(init_weights=False)
+        u_high, _, _ = _top(base.weight, 2)
+        layer.to(device)
+        u = layer.osf_svd_params["default"]["U_low"]
+        loss = self._loss(layer, lucid.randn(5, 8, device=device))
+        alive = weakref.ref(layer)
+        del layer
+        gc.collect()
+        assert alive() is None
+        loss.backward()
+        assert u.grad is not None
+        assert magnitude(u_high.to(device).mT @ u.grad) <= _TOLERANCE * magnitude(u.grad)
 
     def test_nothing_is_hooked_without_a_backward_pass_to_come(self) -> None:
         layer, _ = _layer(init_weights=False)

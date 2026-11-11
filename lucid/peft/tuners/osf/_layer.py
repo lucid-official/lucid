@@ -18,6 +18,7 @@ them, ``_osf_U_high`` and ``_osf_V_high``; the buffers are not in an adapter fil
 the base weight.
 """
 
+from functools import partial
 from typing import ClassVar, NamedTuple, override
 
 import lucid
@@ -163,14 +164,6 @@ class OSFLayer(_ConfigLayer[OSFConfig], _LinearSized, _ResidualUpdate, family=Tr
         except KeyError:
             return None
 
-    def _left_gradient(self, adapter: str, grad: Tensor) -> Tensor:
-        high = self._kept(self._osf_U_high, adapter)
-        return _Complement.left(grad, self._osf_U_low_init[adapter], high)
-
-    def _right_gradient(self, adapter: str, grad: Tensor) -> Tensor:
-        high = self._kept(self._osf_V_high, adapter)
-        return _Complement.right(grad, self._osf_V_low_init[adapter], high)
-
     def _guarded(self, adapter: str) -> tuple[Tensor, Tensor, Tensor]:
         """``(U_low, S_low, V_low)`` as the forward pass reads them: ``U`` and ``V`` seen through the gradient projections.
 
@@ -179,6 +172,9 @@ class OSFLayer(_ConfigLayer[OSFConfig], _LinearSized, _ResidualUpdate, family=Tr
         one that reached the alias, as the reference's hooks on the parameters make it.  The hook belongs
         to the graph of this forward pass, not to the parameter, so it is there after ``.to()`` and after a
         copy of the model, neither of which a hook on the parameter survives.
+
+        The hook holds the frozen factors it projects through and not this layer: the engine keeps it where
+        the garbage collector cannot see, and a layer it held would be held by the graph as well.
         """
         left, singular, right = self._trained(adapter)
         if not lucid.is_grad_enabled():
@@ -186,11 +182,15 @@ class OSFLayer(_ConfigLayer[OSFConfig], _LinearSized, _ResidualUpdate, family=Tr
         seen_left: Tensor = left
         seen_right: Tensor = right
         if left.requires_grad:
+            u_init = self._osf_U_low_init[adapter]
+            u_high = self._kept(self._osf_U_high, adapter)
             seen_left = left.view(*left.shape)
-            seen_left.register_hook(lambda grad: self._left_gradient(adapter, grad))
+            seen_left.register_hook(partial(_Complement.left, u_init=u_init, u_high=u_high))
         if right.requires_grad:
+            v_init = self._osf_V_low_init[adapter]
+            v_high = self._kept(self._osf_V_high, adapter)
             seen_right = right.view(*right.shape)
-            seen_right.register_hook(lambda grad: self._right_gradient(adapter, grad))
+            seen_right.register_hook(partial(_Complement.right, v_init=v_init, v_high=v_high))
         return seen_left, singular, seen_right
 
     @staticmethod
