@@ -176,3 +176,57 @@ def glora_changes(
         for o in range(out)
     ]
     return delta_w, delta_bias
+
+
+# ── DEFT (Kumar et al., 2025, Eq. 1, 2) ──────────────────────────────────────
+
+
+def householder_q(a: Matrix) -> Matrix:
+    """The first ``r`` columns of ``Q`` of the QR decomposition of the ``m x r`` matrix ``a`` by Householder reflections.
+
+    The reflector of each column maps it onto ``-sign(x_0) |x|`` times a basis vector, which is
+    the sign convention of LAPACK's ``geqrf`` and so of the reference's QR: the injection ``Q_P R``
+    depends on the sign of every column of ``Q_P``.
+    """
+    m, r = len(a), len(a[0])
+    work = [list(row) for row in a]
+    q = eye(m)
+    for j in range(r):
+        x = [work[i][j] for i in range(j, m)]
+        norm = math.sqrt(sum(v * v for v in x))
+        if norm == 0.0:
+            continue
+        v = list(x)
+        v[0] -= -math.copysign(norm, x[0])  # x - beta e_0, beta = -sign(x_0) |x|
+        scale = sum(c * c for c in v)
+        for k in range(j, r):  # H applied to the trailing columns
+            dot = sum(v[i - j] * work[i][k] for i in range(j, m))
+            for i in range(j, m):
+                work[i][k] -= 2.0 * v[i - j] * dot / scale
+        for row in q:  # Q <- Q H
+            dot = sum(row[j + i] * v[i] for i in range(len(v)))
+            for i in range(len(v)):
+                row[j + i] -= 2.0 * dot * v[i] / scale
+    return [row[:r] for row in q]
+
+
+def deft_delta(
+    weight: Matrix,
+    direction: Matrix,
+    injection: Matrix | None,
+    *,
+    method: str,
+    scaling: float,
+) -> Matrix:
+    r""":math:`\Delta W = Q_P\,(s R - \mathrm{right}^\top W)`, or :math:`-Q_P\,\mathrm{right}^\top W` without an injection.
+
+    ``direction`` is ``P`` (``out x r``), ``injection`` ``R`` (``r x in``); ``method`` is ``"relu"``
+    (``Q_P = P``, ``right = relu(P)``) or ``"qr"`` (``Q_P = right = Q`` of ``P``).
+    """
+    if method == "relu":
+        basis, right = direction, [[max(v, 0.0) for v in row] for row in direction]
+    else:
+        basis = right = householder_q(direction)
+    removed = matmul(transpose(right), weight)
+    inner = scaled(removed, -1.0) if injection is None else sub(scaled(injection, scaling), removed)
+    return matmul(basis, inner)

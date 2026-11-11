@@ -52,15 +52,16 @@ class DeftConfig(_TargetedConfig, peft_type=PeftType.DEFT):
     init_weights : bool, default=True
         Start the adapter as the identity (``True``) or at random.
     bias : {"none", "all", "deft_only"}, default="none"
-        Which biases also train with DEFT: none, all of them, or only those of the adapted
-        layers.
+        The reference trains none, all, or only the adapted layers' biases.  A DEFT adapter
+        here trains its own tensors only, so ``"all"`` and ``"deft_only"`` raise
+        ``NotImplementedError``.
     target_modules : str or list of str, optional
         The modules DEFT adapts, matched as ``LoraConfig.target_modules`` is.
     exclude_modules : str or list of str, optional
         Modules DEFT never adapts, matched like ``target_modules``.
     fan_in_fan_out : bool, default=False
-        Set for a base that stores its weight as ``(in, out)``; a DEFT layer follows that
-        layout.
+        For a base that stores its weight as ``(in, out)``.  An ``nn.Linear`` stores ``(out, in)``,
+        so ``True`` warns and is set back to ``False`` when the adapter is made.
     layers_to_transform, layers_pattern, modules_to_save
         As in :class:`~lucid.peft.LoraConfig`.
 
@@ -75,12 +76,17 @@ class DeftConfig(_TargetedConfig, peft_type=PeftType.DEFT):
 
     Notes
     -----
-    DEFT's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``r`` is not positive, or ``decomposition_method``
-    is not one of its two values.  No tuner applies it yet: ``get_peft_model`` raises
-    ``NotImplementedError`` naming LCD-823, which tracks it.
+    Every field of the reference library's config is here, in its order and with its defaults, read
+    and written as ``adapter_config.json``.  A field of the wrong type raises ``TypeError``.
+    ``ValueError`` is raised when ``r`` is not positive, or ``decomposition_method`` is not one of
+    its two values.  ``bias`` other than ``"none"`` raises ``NotImplementedError``.  The tuner is
+    :class:`~lucid.peft.DeftModel`; it adapts ``nn.Linear`` modules, capping the rank at a module's
+    output size.
     """
+
+    _unsupported: ClassVar[dict[str, str]] = {
+        "bias": "a DEFT adapter trains its own tensors only (bias='none')"
+    }
 
     _field_checks: ClassVar[dict[str, _Check]] = {
         "r": _check_rank,

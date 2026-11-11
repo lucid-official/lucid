@@ -14,6 +14,8 @@ import pytest
 
 import lucid
 from lucid.peft import (
+    DeftConfig,
+    DeftModel,
     DeloraConfig,
     DeloraModel,
     GloraConfig,
@@ -25,6 +27,7 @@ from lucid.peft import (
     PeftType,
     get_peft_model,
 )
+from lucid.peft.tuners.deft import DeftLayer
 from lucid.peft.tuners.delora import DeloraLayer
 from lucid.peft.tuners.glora import GloraLayer
 from lucid.peft.tuners.gralora import GraloraLayer
@@ -248,6 +251,44 @@ def _glora_file(a_b: str, c: str, d_e: str) -> dict[str, tuple[int, ...]]:
     return file
 
 
+def _deft(**fixed: object) -> Callable[..., DeftConfig]:
+    def config(targets: tuple[str, ...], random: bool, **kw: object) -> DeftConfig:
+        return DeftConfig.from_dict(
+            {"r": 2, "target_modules": list(targets), "init_weights": not random, **fixed, **kw}
+        )
+
+    return config
+
+
+def _deft_forward(method: str, scaling: float, para: bool) -> Callable[..., lucid.Tensor]:
+    def forward(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
+        """``W' = (I - P_proj) W + Q_P R``, the projector and basis of ``P`` as the method says."""
+        net = _mlp()
+        weights = []
+        for index in (0, 2):
+            p = f"{_PREFIX}{index}."
+            injection = None if para else t[p + "deft_R"].tolist()
+            delta = forms.deft_delta(
+                net[index].weight.tolist(),
+                t[p + "deft_P"].tolist(),
+                injection,
+                method=method,
+                scaling=scaling,
+            )
+            weights.append(net[index].weight + lucid.tensor(delta))
+        return _run(weights, [net[0].bias, net[2].bias], x)
+
+    return forward
+
+
+_DEFT_FILE = {
+    f"{_PREFIX}0.deft_P": (8, 2),
+    f"{_PREFIX}0.deft_R": (2, 6),
+    f"{_PREFIX}2.deft_P": (4, 2),
+    f"{_PREFIX}2.deft_R": (2, 8),
+}
+_DEFT_PARA_FILE = {k: v for k, v in _DEFT_FILE.items() if k.endswith("deft_P")}
+
 #: Method rows in the order the methods landed.
 _METHODS = [
     _Method("delora", PeftType.DELORA, _delora, DeloraModel, DeloraLayer, _DELORA_FILE),
@@ -285,11 +326,43 @@ _METHODS = [
         GloraLayer,
         _glora_file("constant", "none", "vector"),
     ),
+    # A ReLU projector of the 0.02-scale direction matrix barely moves the output until it is trained.
+    _Method(
+        "deft",
+        PeftType.DEFT,
+        _deft(alpha=4.0),
+        DeftModel,
+        DeftLayer,
+        _DEFT_FILE,
+        random_start=False,
+        exact_start=False,
+    ),
+    _Method(
+        "deft_qr",
+        PeftType.DEFT,
+        _deft(decomposition_method="qr", alpha=4.0),
+        DeftModel,
+        DeftLayer,
+        _DEFT_FILE,
+        exact_start=False,
+    ),
+    _Method(
+        "deft_para",
+        PeftType.DEFT,
+        _deft(para=True, decomposition_method="qr"),
+        DeftModel,
+        DeftLayer,
+        _DEFT_PARA_FILE,
+        starts_at_base=False,
+    ),
 ]
 
 CLOSED_FORMS["delora"] = _delora_forward
 CLOSED_FORMS["gralora"] = CLOSED_FORMS["gralora_hybrid"] = _gralora_forward
 CLOSED_FORMS["hira"] = _hira_forward
+CLOSED_FORMS["deft"] = _deft_forward("relu", 2.0, False)
+CLOSED_FORMS["deft_qr"] = _deft_forward("qr", 2.0, False)
+CLOSED_FORMS["deft_para"] = _deft_forward("qr", 1.0, True)
 CLOSED_FORMS["glora"] = CLOSED_FORMS["glora_vector"] = CLOSED_FORMS["glora_mixed"] = _glora_forward
 _REFERENCE_CONFIGS["delora"] = {
     "auto_mapping": None,
@@ -383,6 +456,37 @@ _REFERENCE_CONFIGS["glora_mixed"] = {
     "config_A_B": "constant",
     "config_C": "none",
     "config_D_E": "vector",
+}
+_DEFT_REFERENCE = {
+    "alpha": 4.0,
+    "auto_mapping": None,
+    "base_model_name_or_path": "tiny",
+    "bias": "none",
+    "decomposition_method": "relu",
+    "deft_dropout": 0.0,
+    "exclude_modules": None,
+    "fan_in_fan_out": False,
+    "inference_mode": True,
+    "init_scale": 1.0,
+    "init_weights": True,
+    "layers_pattern": None,
+    "layers_to_transform": None,
+    "modules_to_save": None,
+    "para": False,
+    "peft_type": "DEFT",
+    "peft_version": "0.21.2",
+    "r": 2,
+    "revision": None,
+    "target_modules": ["0", "2"],
+    "task_type": None,
+}
+_REFERENCE_CONFIGS["deft"] = _DEFT_REFERENCE
+_REFERENCE_CONFIGS["deft_qr"] = {**_DEFT_REFERENCE, "decomposition_method": "qr"}
+_REFERENCE_CONFIGS["deft_para"] = {
+    **_DEFT_REFERENCE,
+    "alpha": None,
+    "decomposition_method": "qr",
+    "para": True,
 }
 
 
