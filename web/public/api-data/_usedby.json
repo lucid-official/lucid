@@ -84,6 +84,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid._ops.composite._euclidean"
+    },
+    {
+      "kind": "module",
       "module": "lucid._ops.composite._expm1"
     },
     {
