@@ -83,6 +83,8 @@ from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft.tuners import lora
 from lucid.peft.tuners._base import _TUNERS, _BaseTuner, _BaseTunerLayer
 from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraLayer, AdaLoraModel
+from lucid.peft.tuners.adamss import AdamssLayer, AdamssModel
+from lucid.peft.tuners.adamss import Linear as AdamssLinear
 from lucid.peft.tuners.adaption_prompt import (
     AdaptedAttention,
     AdaptionPromptConfig,
@@ -425,4 +427,21 @@ BUILDERS.update(
         and issubclass(cls, PeftModel)
         and cls is not PeftModel
     }
+)
+
+
+def _same_weights[T](build: Callable[[], T]) -> Callable[[], T]:
+    """``build`` with the default generator started at zero, so that two instances are made on the same weights."""
+
+    def built() -> T:
+        lucid.manual_seed(0)
+        return build()
+
+    return built
+
+
+# AdaMSS's tensors are shaped by its base weights (the subspaces the rows fall into), so a state
+# dict loads only into an instance built on the same weights: its builders start from a fixed seed.
+BUILDERS.update(
+    {cls: _same_weights(BUILDERS[cls]) for cls in (AdamssModel, AdamssLayer, AdamssLinear)}
 )
