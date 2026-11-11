@@ -130,7 +130,7 @@
       {
         "id": "prompt-learning",
         "title": "Prompt learning",
-        "summary": "An input learned instead of a weight, with no layer added to the model: virtual tokens in front of the embeddings, virtual keys and values in every attention layer, tokens an encoder produces, or one prompt shared across tasks, or a prompt of in-context examples with a bounded learned offset (CPT). A Cartridge, a trained key-value cache that stands in for a long document, is listed here too; it has a config and no adapter yet.",
+        "summary": "An input learned instead of a weight, with no layer added to the model: virtual tokens in front of the embeddings, virtual keys and values in every attention layer, tokens an encoder produces, or one prompt shared across tasks, or a prompt of in-context examples with a bounded learned offset (CPT). A Cartridge, a trained key-value cache that stands in for a long document, is listed here too, with the utilities that start one from a text and join several.",
         "packages": [
           {
             "slug": "lucid.peft.tuners.prompt_tuning",
@@ -209,7 +209,7 @@
       {
         "id": "structured-updates",
         "title": "Structured and sparse updates",
-        "summary": "A weight update with a fixed structure other than low rank: a few frequency-domain coefficients (FourierFT), block-circulant blocks (C3A), shared shards (MiSS, and Bone, the method it replaced) or a sparse subset of the weight itself (SHiRA).  Super-Tuning (sparse, by magnitude) and WaveFT (wavelet coefficients) have a config and no adapter yet.",
+        "summary": "A weight update with a fixed structure other than low rank: a few frequency-domain coefficients (FourierFT), block-circulant blocks (C3A), shared shards (MiSS, and Bone, the method it replaced) or a sparse subset of the weight itself (SHiRA).  Super-Tuning (the entries of largest magnitude, with an optional LoRA beside them) and WaveFT (a few coefficients of an inverse wavelet transform) are here too.",
         "packages": [
           {
             "slug": "lucid.peft.tuners.fourierft",
@@ -280,7 +280,7 @@
       {
         "id": "selective-tuning",
         "title": "Scaling and selective tuning",
-        "summary": "Methods that train a small part of the model itself: a learned rescaling vector per layer (IA3), a trainable copy of each chosen normalisation layer (LN tuning), a few rows of an embedding table (trainable tokens), or, without an adapter yet, a bias added to the value projections (BEFT).",
+        "summary": "Methods that train a small part of the model itself: a learned rescaling vector per layer (IA3), a trainable copy of each chosen normalisation layer (LN tuning), a few rows of an embedding table (trainable tokens), or one bias added to the value projections (BEFT).",
         "packages": [
           {
             "slug": "lucid.peft.tuners.ia3",
