@@ -5,18 +5,16 @@ The code lives in the module of its concern; this one re-exports it so
 
 * ``lucid.peft.tuners._layer`` — the layer base and its table helpers;
 * ``lucid.peft.tuners._plan`` — targets, the config to store, ``modules_to_save``;
-* ``lucid.peft.tuners._host`` — the host a ``PeftModel`` drives, ``_TUNERS``, and the stand-ins of
-  the methods that have no adapter yet (``_PendingTuner``) or never will (``_RefusedTuner``);
+* ``lucid.peft.tuners._host`` — the host a ``PeftModel`` drives, ``_TUNERS``, and the stand-in of
+  a method that will never have an adapter (``_RefusedTuner``);
 * ``lucid.peft.tuners._tuner`` — the generic ``_BaseTuner``.
 """
 
 from lucid.peft.tuners._host import (
     _ALL_TUNERS,
-    _PENDING_TUNERS,
     _REFUSED_TUNERS,
     _TUNERS,
     _AdapterHost,
-    _PendingTuner,
     _RefusedTuner,
     _tuner_for,
     _WithheldTuner,
@@ -51,7 +49,6 @@ __all__ = [
     "_ALL_TUNERS",
     "_FLAGS_KEY",
     "_NO_PARAMETERS",
-    "_PENDING_TUNERS",
     "_REFUSED_TUNERS",
     "_TUNERS",
     "_AdapterHost",
@@ -59,7 +56,6 @@ __all__ = [
     "_BaseTunerLayer",
     "_Injected",
     "_NamesParameters",
-    "_PendingTuner",
     "_Placement",
     "_RefusedTuner",
     "_Target",

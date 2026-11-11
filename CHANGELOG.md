@@ -241,6 +241,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - attest asks the stamp why an engine is unfit (LCD-881)
 - _delta imports the adapter dtype from its owner (LCD-823)
 - lift AdaLoRA's importance and budget curve (LCD-828)
+- remove the pending-tuner stand-in machinery (LCD-828)
 
 ---
 

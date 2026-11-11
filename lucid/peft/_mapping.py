@@ -18,8 +18,8 @@ PEFT_TYPE_TO_CONFIG_MAPPING: Mapping[PeftType, type[PeftConfig]] = MappingProxyT
 
 #: The tuner (the model class that puts a method's adapters into a model) of each method, by
 #: ``PeftType``: a read-only view of the tuner registries, like ``PEFT_TYPE_TO_CONFIG_MAPPING``.
-#: A method whose adapter is not written yet, or is refused, has a tuner class here too: it
-#: raises ``NotImplementedError`` when built, saying why.
+#: A method whose adapter is refused has a tuner class here too: it raises
+#: ``NotImplementedError`` when built, saying why.
 PEFT_TYPE_TO_TUNER_MAPPING: Mapping[PeftType, type[_AdapterHost] | type[_WithheldTuner]] = (
     MappingProxyType(_ALL_TUNERS)
 )

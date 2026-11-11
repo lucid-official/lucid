@@ -190,9 +190,9 @@ _EXAMPLE_CONFIGS: dict[PeftType, Callable[[], PeftConfig]] = {
     PeftType.TRAINABLE_TOKENS: lambda: TrainableTokensConfig(
         token_indices=[1], target_modules=["0", "2"]
     ),
-    # The methods whose tuner is still a stand-in (``_PENDING_TUNERS``) have their row already: the
-    # loop below builds a tuner once it is in ``_TUNERS``, and the card that writes it edits no
-    # file here.  CARTRIDGE (a prompt host) and SHADOW (refused) are not built from module targets.
+    # The methods of the reference's later releases: the loop below builds a tuner from the row of
+    # each one in ``_TUNERS``.  CARTRIDGE (a prompt host) and SHADOW (refused) are not built from
+    # module targets.
     PeftType.DELORA: lambda: DeloraConfig(r=2, target_modules=["0", "2"]),
     PeftType.GRALORA: lambda: GraloraConfig(r=2, gralora_k=2, target_modules=["0", "2"]),
     PeftType.HIRA: lambda: HiraConfig(r=2, target_modules=["0", "2"]),

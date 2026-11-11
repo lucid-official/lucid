@@ -14,10 +14,10 @@ A method is three classes, each registered as it is defined:
 ``get_peft_model``, ``PeftModel.from_pretrained`` and the state-dict
 functions dispatch through ``_TUNERS``, so a new method is subclasses only.
 
-A method can have its config before it has its adapter: ``_PendingTuner`` stands in for the
-tuner of a method that is not written yet (``_PENDING_TUNERS``) and ``_RefusedTuner`` for one
-that cannot be (``_REFUSED_TUNERS``).  Neither is in ``_TUNERS``, so what loops over the
-working tuners never meets them; building one raises ``NotImplementedError`` saying why.
+A method can have its config and no adapter: ``_RefusedTuner`` stands in for the tuner of a
+method this library will not build adapters for (``_REFUSED_TUNERS``).  It is not in ``_TUNERS``,
+so what loops over the working tuners never meets it; building one raises
+``NotImplementedError`` saying why.
 """
 
 from abc import ABC, abstractmethod
@@ -35,8 +35,6 @@ from lucid.peft.tuners._layer import _check_adapter_name
 
 #: ``PeftType`` → the tuner that applies it, filled as each is defined.
 _TUNERS: dict[PeftType, type[_AdapterHost]] = {}
-#: ``PeftType`` → the stand-in of a method whose tuner is not written yet, filled as each is defined.
-_PENDING_TUNERS: dict[PeftType, type[_PendingTuner]] = {}
 #: ``PeftType`` → the stand-in of a method this library will not build adapters for.
 _REFUSED_TUNERS: dict[PeftType, type[_RefusedTuner]] = {}
 
@@ -55,14 +53,14 @@ def _tuner_for(config: PeftConfig) -> type[_AdapterHost]:
     Raises
     ------
     NotImplementedError
-        The method has no tuner: it is still to be written, is refused, or is unknown.
+        The method has no tuner: it is refused, or is unknown.
     """
     tuner = _registered(_TUNERS, config)
     if tuner is not None:
         return tuner
-    withheld = _registered(_PENDING_TUNERS, config) or _registered(_REFUSED_TUNERS, config)
-    if withheld is not None:
-        raise NotImplementedError(withheld._refusal())
+    refused = _registered(_REFUSED_TUNERS, config)
+    if refused is not None:
+        raise NotImplementedError(refused._refusal())
     raise NotImplementedError(f"lucid.peft has no tuner for {config.peft_type} adapters")
 
 
@@ -249,7 +247,7 @@ class _AdapterHost(_ForwardsAttributes, ABC):
 
 
 class _WithheldTuner:
-    """The stand-in of a method that has a config and no adapter that can be built.
+    """The stand-in of a method that has a config and an adapter that will not be built.
 
     Not a host: nothing about a model is changed, held or saved.  It is registered under
     the method's ``PeftType`` so the method has a tuner class to name (``PEFT_TYPE_TO_TUNER_MAPPING``,
@@ -304,69 +302,17 @@ class _WithheldTuner:
         Raises
         ------
         NotImplementedError
-            Always, with the reason: the issue that tracks the method, or why it is refused.
+            Always, with the reason the method is refused.
         """
         del model, peft_config, adapter_name, low_cpu_mem_usage, state_dict
         raise NotImplementedError(self._refusal())
-
-
-class _ConfigKeyword(_WithheldTuner):
-    """A stand-in whose constructor calls its config ``config``, as the reference's does for a few tuners.
-
-    Most reference tuners take ``(model, peft_config, adapter_name, ...)``; ``AdaMSS``, ``OSF`` and
-    ``Uni-LoRA`` take ``(model, config, adapter_name, ...)``, and the signatures are held to the
-    reference's name for name.  List this before the stand-in's own base:
-    ``class XModel(_ConfigKeyword, _PendingTuner, peft_type=..., issue=...)``.
-    """
-
-    @override
-    def __init__(
-        self,
-        model: nn.Module,
-        config: PeftConfig,
-        adapter_name: str,
-        low_cpu_mem_usage: bool = False,
-        state_dict: dict[str, Tensor] | None = None,
-    ) -> None:
-        """Refuse, as ``_WithheldTuner`` does, with the config named ``config``."""
-        super().__init__(model, config, adapter_name, low_cpu_mem_usage, state_dict)
-
-
-class _PendingTuner(_WithheldTuner):
-    """The stand-in of a method whose tuner is still to be written.
-
-    A method's package defines ``class XModel(_PendingTuner, peft_type=PeftType.X,
-    issue="LCD-n")`` beside its config, which registers it in ``_PENDING_TUNERS`` and not in
-    ``_TUNERS``.  The card that writes the tuner replaces this base with a real one
-    (``_ConfigTuner`` and the like), which registers the class in ``_TUNERS`` instead; no
-    other file changes.  ``issue`` names the tracker entry the refusal points to.
-    """
-
-    _issue: ClassVar[str]
-
-    @override
-    def __init_subclass__(cls, *, peft_type: PeftType, issue: str, **kwargs: object) -> None:
-        super().__init_subclass__(**kwargs)
-        cls._enrol(peft_type)
-        cls._issue = issue
-        _PENDING_TUNERS[peft_type] = cls
-
-    @override
-    @classmethod
-    def _refusal(cls) -> str:
-        return (
-            f"{cls._peft_type} adapters are not implemented yet in lucid.peft (tracked as "
-            f"{cls._issue}): {cls._config_class.__name__} reads and writes adapter_config.json, "
-            "but no adapter of this method can be built"
-        )
 
 
 class _RefusedTuner(_WithheldTuner):
     """The stand-in of a method this library will not build adapters for.
 
     ``class XModel(_RefusedTuner, peft_type=PeftType.X, reason="...")``: ``reason`` is one
-    clause saying why.  Registered in ``_REFUSED_TUNERS``; it stays there, so it does not
-    count as work left (``_PENDING_TUNERS``).
+    clause saying why.  Registered in ``_REFUSED_TUNERS``.
     """
 
     _reason: ClassVar[str]
@@ -388,25 +334,22 @@ class _RefusedTuner(_WithheldTuner):
 
 
 class _TunerTable(Mapping[PeftType, type[_AdapterHost] | type[_WithheldTuner]]):
-    """Every method's tuner class, working or not: a live read-only view of the three registries."""
+    """Every method's tuner class, working or refused: a live read-only view of the two registries."""
 
     @override
     def __getitem__(self, key: PeftType) -> type[_AdapterHost] | type[_WithheldTuner]:
         if key in _TUNERS:
             return _TUNERS[key]
-        if key in _PENDING_TUNERS:
-            return _PENDING_TUNERS[key]
         return _REFUSED_TUNERS[key]
 
     @override
     def __iter__(self) -> Iterator[PeftType]:
         yield from _TUNERS
-        yield from _PENDING_TUNERS
         yield from _REFUSED_TUNERS
 
     @override
     def __len__(self) -> int:
-        return len(_TUNERS) + len(_PENDING_TUNERS) + len(_REFUSED_TUNERS)
+        return len(_TUNERS) + len(_REFUSED_TUNERS)
 
 
 #: ``PEFT_TYPE_TO_TUNER_MAPPING``'s source.
