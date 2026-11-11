@@ -156,6 +156,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - lstsq solves a full-rank matrix by QR (LCD-941)
 
+- skip cdist's scale on in-range CPU magnitudes (LCD-952)
+
 ### Tooling
 
 - record that 1055fa3b9 moves no binary interface

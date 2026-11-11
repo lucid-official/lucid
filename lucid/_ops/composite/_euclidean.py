@@ -23,17 +23,20 @@ its operands by a magnitude first and multiplies the root by it afterwards:
 
 The divisor is a constant of the call — no gradient flows through it — and is 1
 wherever the magnitude is inside ``2^±E`` (:data:`_RANGE_EXPONENT`), or is
-zero, ``nan`` or infinite.  Inside the window the division and the product are
-by 1 and the result is bit for bit the unscaled form's; a ``nan`` or infinite
-entry leaves its batch entry (matmul form) or pair (difference form) to the
-unscaled evaluation, whose answer there is the same ``nan`` / ``inf`` it always
-was.  Because it is a constant, every derivative is the unscaled form's: the
-distance equals ``s * |x / s|`` for any constant ``s``, so scaling changes the
-rounding and nothing else.
+``nan`` or infinite.  Inside the window the division and the product are by 1
+and the result is bit for bit the unscaled form's; a ``nan`` or infinite entry
+leaves its batch entry (matmul form) or pair (difference form) to the unscaled
+evaluation, whose answer there is the same ``nan`` / ``inf`` it always was.
+Because it is a constant, every derivative is the unscaled form's: the distance
+equals ``s * |x / s|`` for any constant ``s``, so scaling changes the rounding
+and nothing else.
 
-The graph is branch-free (the scale is computed on the device, never read back),
-so a compile trace and a lazy Metal tensor take the same route as eager.  Half
-precision is not scaled: its range ends near ``6.5e4``, far below any window.
+An eager CPU tensor reads whether any magnitude is outside the window (free
+there: nothing is queued) and, when none is, skips the division and the product
+altogether.  Metal, a compile trace and a phantom tensor have no value to read
+cheaply, so their graph is branch-free — the divisor is computed on the device
+and is simply 1 — and they take the same route as eager.  Half precision is not
+scaled: its range ends near ``6.5e4``, far below any window.
 """
 
 from typing import TYPE_CHECKING
@@ -81,48 +84,47 @@ def _euclidean_cdist(x1: Tensor, x2: Tensor, compute_mode: str) -> Tensor:
     return _wrap(_difference_form(x1, x2))
 
 
-def _divisor(top: _Impl, exponent: int) -> _Impl:
-    """``top`` where it is finite, positive and outside ``2^±exponent``, else 1.
+def _readable(x: _Impl) -> bool:
+    """Whether reading a value of ``x`` is free: an eager CPU tensor."""
+    return (
+        x.device == _C_engine.Device.CPU
+        and not x.is_phantom
+        and _C_engine.compile.current_tracer() is None
+    )
 
-    ``top`` holds largest magnitudes.  Zero (nothing to divide by), ``nan`` and
-    infinity (dividing would turn every finite entry into 0 or ``nan``) stay
-    with the unscaled evaluation.  The result is a constant of the call.
+
+def _divisor(top: _Impl, exponent: int) -> _Impl | None:
+    """The divisor for the largest magnitudes ``top``, or ``None`` when all are in range.
+
+    ``top`` where it is outside ``2^±exponent``, else 1.  A ``nan`` or infinite
+    one is 1 too (dividing would turn every finite entry into 0 or ``nan``), and a
+    zero is a tiny positive number — there is nothing to divide, so any positive
+    divisor leaves the zeros and gives the root a factor ``0 * floor = 0``.
+
+    Call under ``no_grad``: the divisor is a constant of the call.
     """
-    with lucid.no_grad():
-
-        def constant(value: float) -> _Impl:
-            return _C_engine.full([], value, top.dtype, top.device)
-
-        outside = _C_engine.logical_or(
-            _C_engine.less(top, constant(2.0**-exponent)),
-            _C_engine.greater(top, constant(2.0**exponent)),
-        )
-        usable = _C_engine.logical_and(
-            _C_engine.logical_and(_C_engine.isfinite(top), _C_engine.greater(top, constant(0.0))),
-            outside,
-        )
-        return _C_engine.where(usable, top, _C_engine.ones_like(top))
+    inside = _C_engine.equal(top, _C_engine.clip(top, 2.0**-exponent, 2.0**exponent))
+    # A zero needs no divisor either: a coincident pair is a zero largest entry.
+    if _readable(top):
+        settled = _C_engine.logical_or(inside, _C_engine.equal(top, _C_engine.zeros_like(top)))
+        if _C_engine.all(settled).item():
+            return None
+    divisor = _C_engine.where(inside, _C_engine.ones_like(top), top)
+    divisor = _C_engine.nan_to_num(divisor, 1.0, 1.0, 1.0)
+    floor = _C_engine.full([], 2.0 ** -(3 * exponent + 10), top.dtype, top.device)
+    return _C_engine.maximum(divisor, floor)
 
 
 def _largest(x: _Impl, axes: list[int]) -> _Impl:
     """The largest ``|x|`` over ``axes``, each kept as a size-1 axis."""
-    with lucid.no_grad():
-        return _C_engine.max(_C_engine.abs(x), axes, True)
+    return _C_engine.max(_C_engine.abs(x), axes, True)
 
 
 def _matmul_form(x1: Tensor, x2: Tensor) -> Tensor:
     """The matmul form, over operands divided by the batch entry's largest magnitude."""
     a, b = _unwrap(x1), _unwrap(x2)
-    exponent = _RANGE_EXPONENT.get(a.dtype)
-    nd_a, nd_b = len(a.shape), len(b.shape)
-    scale: _Impl | None = None
-    # A 1-D operand has no row axis to reduce, and an empty one no largest entry.
-    if exponent is not None and min(nd_a, nd_b) >= 2 and a.numel() > 0 and b.numel() > 0:
-        with lucid.no_grad():
-            top = _C_engine.maximum(
-                _largest(a, [nd_a - 2, nd_a - 1]), _largest(b, [nd_b - 2, nd_b - 1])
-            )
-        scale = _divisor(top, exponent)
+    scale = _matmul_scale(a, b)
+    if scale is not None:
         x1, x2 = _wrap(_C_engine.div(a, scale)), _wrap(_C_engine.div(b, scale))
     # ||a - b||² = ||a||² + ||b||² − 2 a·bᵀ, which never materialises the
     # (..., P, R, M) difference.
@@ -138,14 +140,31 @@ def _matmul_form(x1: Tensor, x2: Tensor) -> Tensor:
     return _wrap(root if scale is None else _C_engine.mul(root, scale))
 
 
+def _matmul_scale(a: _Impl, b: _Impl) -> _Impl | None:
+    """The ``(..., 1, 1)`` divisor of a batch entry's two operands, or ``None``."""
+    exponent = _RANGE_EXPONENT.get(a.dtype)
+    nd_a, nd_b = len(a.shape), len(b.shape)
+    # A 1-D operand has no row axis to reduce, and an empty one no largest entry.
+    if exponent is None or min(nd_a, nd_b) < 2 or a.numel() == 0 or b.numel() == 0:
+        return None
+    with lucid.no_grad():
+        top = _C_engine.maximum(
+            _largest(a, [nd_a - 2, nd_a - 1]), _largest(b, [nd_b - 2, nd_b - 1])
+        )
+        return _divisor(top, exponent)
+
+
 def _difference_form(x1: Tensor, x2: Tensor) -> _Impl:
     """The difference form: each pair's difference divided by its largest entry."""
     diff = _unwrap(x1.unsqueeze(-2) - x2.unsqueeze(-3))  # (..., P, R, M)
     last = [len(diff.shape) - 1]
     exponent = _RANGE_EXPONENT.get(diff.dtype)
-    if exponent is None or diff.numel() == 0:
+    scale = None
+    if exponent is not None and diff.numel() > 0:
+        with lucid.no_grad():
+            scale = _divisor(_largest(diff, last), exponent)  # (..., P, R, 1)
+    if scale is None:
         return _p_norm(diff, 2.0, last, False)
-    scale = _divisor(_largest(diff, last), exponent)  # (..., P, R, 1)
     scaled = _C_engine.div(diff, scale)
     root = _zero_safe_root(_C_engine.sum(_C_engine.mul(scaled, scaled), last, False), 2)
     return _C_engine.mul(root, _C_engine.reshape(scale, list(root.shape)))
