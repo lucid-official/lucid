@@ -1,4 +1,4 @@
-"""What the shared-vector methods add to ``tuners._shared``: shared tables whose parameters train with the adapter.
+"""What the methods that read their update from tensors shared across layers add to ``tuners._shared``.
 
 Uni-LoRA and TinyLoRA read every adapted layer's update out of a vector (or a group of vectors) the
 tuner holds once for the whole model.  That vector is the adapter's only trainable tensor, so it
@@ -6,14 +6,54 @@ trains and freezes with the adapter of each layer that reads it, though no layer
 bank is the same kind of table; its layer carries a copy of the two overrides below.
 """
 
+from abc import abstractmethod
 from collections.abc import Sequence
 from typing import override
 
 import lucid.nn as nn
 from lucid.nn.parameter import Parameter
+from lucid.peft._config import _TargetedConfig
 from lucid.peft._slots import _as_names
 from lucid.peft.tuners._layer import _entry_parameters
+from lucid.peft.tuners._plan import _Placement, _Target
 from lucid.peft.tuners._shared import _SharingLayer
+from lucid.peft.tuners._tuner import _BaseTuner
+
+
+class _SettlingTuner(_BaseTuner):
+    """A tuner that finishes an adapter once its layers are in the model.
+
+    What a layer needs to know about the others — the slice of one draw it takes (Uni-LoRA), the group
+    whose vector it reads (TinyLoRA), the projections it shares with its neighbours (Lily) — cannot be
+    known while layers are made one at a time.  ``_settle`` runs after every layer of the adapter is in
+    place, inside the injection that rolls back if it raises.
+    """
+
+    @override
+    def _attach_adapter(
+        self,
+        config: _TargetedConfig,
+        adapter_name: str,
+        targets: list[_Target],
+        saved: list[str],
+        placements: list[_Placement],
+    ) -> None:
+        super()._attach_adapter(config, adapter_name, targets, saved, placements)
+        self._settle(config, adapter_name, targets)
+
+    @abstractmethod
+    def _settle(self, config: _TargetedConfig, adapter_name: str, targets: list[_Target]) -> None:
+        """Bind ``adapter_name``'s layers to one another, now that all of them are in the tree.
+
+        Parameters
+        ----------
+        config : _TargetedConfig
+            The adapter's stored config.
+        adapter_name : str
+            The adapter just attached.
+        targets : list of _Target
+            Everything the adapter targets, in the order the model lists it.
+        """
 
 
 class _TrainedSharedLayer(_SharingLayer):

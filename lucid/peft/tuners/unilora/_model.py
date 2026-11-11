@@ -8,9 +8,10 @@ from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
 from lucid.peft.tuners._delta import _Home
 from lucid.peft.tuners._files import _FileContext
 from lucid.peft.tuners._layer import _tuner_layers
-from lucid.peft.tuners._plan import _Placement, _Target
+from lucid.peft.tuners._plan import _Target
 from lucid.peft.tuners._shared import _base_linear, _SharedTablesTuner
 from lucid.peft.tuners._support import _adapter_dtype, _ConfigTuner, _reset_fan_in_fan_out
+from lucid.peft.tuners.unilora._common import _SettlingTuner
 from lucid.peft.tuners.unilora._config import UniLoraConfig
 from lucid.peft.tuners.unilora._indices import assign, generate_index
 from lucid.peft.tuners.unilora._layer import _PROJECTION, UniLoraLayer, _new_theta_d
@@ -22,7 +23,7 @@ def _as_unilora(config: PeftConfig) -> UniLoraConfig:
     return config
 
 
-class UniLoraModel(_SharedTablesTuner, _ConfigTuner, peft_type=PeftType.UNILORA):
+class UniLoraModel(_SettlingTuner, _SharedTablesTuner, _ConfigTuner, peft_type=PeftType.UNILORA):
     r"""A model with Uni-LoRA layers put into it, the vector they all read, and the tools to take them out.
 
     Construction replaces each ``nn.Linear`` ``config`` selects with a Uni-LoRA layer around it and
@@ -146,15 +147,8 @@ class UniLoraModel(_SharedTablesTuner, _ConfigTuner, peft_type=PeftType.UNILORA)
         )
 
     @override
-    def _attach_adapter(
-        self,
-        config: _TargetedConfig,
-        adapter_name: str,
-        targets: list[_Target],
-        saved: list[str],
-        placements: list[_Placement],
-    ) -> None:
-        super()._attach_adapter(config, adapter_name, targets, saved, placements)
+    def _settle(self, config: _TargetedConfig, adapter_name: str, targets: list[_Target]) -> None:
+        del targets  # the layers that hold the adapter are what it reads
         unilora = _as_unilora(config)
         # The reference's order: the layers as the model lists them.
         layers = [

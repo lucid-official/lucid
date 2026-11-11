@@ -13,8 +13,17 @@ from collections.abc import Callable
 import pytest
 
 import lucid
-from lucid.peft import PeftType, PveraConfig, PveraModel, UniLoraConfig, UniLoraModel
+from lucid.peft import (
+    PeftType,
+    PveraConfig,
+    PveraModel,
+    TinyLoraConfig,
+    TinyLoraModel,
+    UniLoraConfig,
+    UniLoraModel,
+)
 from lucid.peft.tuners.pvera import PveraLayer
+from lucid.peft.tuners.tinylora import TinyLoraLayer
 from lucid.peft.tuners.unilora import UniLoraLayer
 from lucid.peft.tuners.unilora._indices import assign
 from lucid.test.unit.peft import _bank_forms as forms
@@ -150,6 +159,50 @@ _PVERA_FILE = {
 }
 
 
+def _tinylora(tying: float) -> Callable[..., TinyLoraConfig]:
+    def config(targets: tuple[str, ...], random: bool, **kw: object) -> TinyLoraConfig:
+        return TinyLoraConfig.from_dict(
+            {
+                "r": 2,
+                "u": 3,
+                "weight_tying": tying,
+                "init_v_bound": 1.0,  # the paper's 0.02 moves the output by less than a test can see
+                "target_modules": list(targets),
+                "init_weights": "uniform" if random else True,
+                **kw,
+            }
+        )
+
+    return config
+
+
+def _tinylora_forward(groups: dict[int, str]) -> Callable[..., lucid.Tensor]:
+    def forward(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
+        """``W' = W + B R A``, ``R = sum_i v_i P_i`` of the vector of the layer's group."""
+        net = _mlp()
+        weights = []
+        for index in (0, 2):
+            where = f"{_PREFIX}{index}.tinylora_"
+            delta = forms.tinylora_delta(
+                t[where + "A"].tolist(),
+                t[where + "B"].tolist(),
+                t[where + "P"].tolist(),
+                t[f"base_model.tinylora_v.{groups[index]}"].tolist(),
+            )
+            weights.append(net[index].weight + lucid.tensor(delta))
+        return _run(weights, [net[0].bias, net[2].bias], x)
+
+    return forward
+
+
+def _tinylora_file(groups: tuple[str, ...]) -> dict[str, tuple[int, ...]]:
+    file: dict[str, tuple[int, ...]] = {}
+    for index, (out, inn) in _SIZES.items():
+        where = f"{_PREFIX}{index}.tinylora_"
+        file |= {where + "A": (2, inn), where + "B": (out, 2), where + "P": (3, 2, 2)}
+    return file | {f"base_model.tinylora_v.{group}": (3,) for group in groups}
+
+
 #: Method rows in the order the methods landed.
 _METHODS = [
     _Method(
@@ -172,10 +225,28 @@ _METHODS = [
         tensors=_unilora_tensors,
     ),
     _Method("pvera", PeftType.PVERA, _pvera, PveraModel, PveraLayer, _PVERA_FILE),
+    _Method(
+        "tinylora",
+        PeftType.TINYLORA,
+        _tinylora(0.0),
+        TinyLoraModel,
+        TinyLoraLayer,
+        _tinylora_file(("0", "1")),
+    ),
+    _Method(
+        "tinylora_tied",
+        PeftType.TINYLORA,
+        _tinylora(1.0),
+        TinyLoraModel,
+        TinyLoraLayer,
+        _tinylora_file(("0",)),
+    ),
 ]
 
 CLOSED_FORMS["unilora"] = CLOSED_FORMS["unilora_indices"] = _unilora_forward
 CLOSED_FORMS["pvera"] = _pvera_forward
+CLOSED_FORMS["tinylora"] = _tinylora_forward({0: "0", 2: "1"})
+CLOSED_FORMS["tinylora_tied"] = _tinylora_forward({0: "0", 2: "0"})
 _UNILORA_REFERENCE = {
     "auto_mapping": None,
     "base_model_name_or_path": "tiny",
@@ -223,6 +294,31 @@ _REFERENCE_CONFIGS["pvera"] = {
     "target_modules": ["0", "2"],
     "task_type": None,
 }
+_TINYLORA_REFERENCE = {
+    "auto_mapping": None,
+    "base_model_name_or_path": "tiny",
+    "bias": "none",
+    "fan_in_fan_out": False,
+    "inference_mode": True,
+    "init_v_bound": 1.0,
+    "init_weights": "uniform",
+    "layers_pattern": None,
+    "layers_to_transform": None,
+    "modules_to_save": None,
+    "peft_type": "TINYLORA",
+    "peft_version": "0.21.2",
+    "projection_seed": 42,
+    "r": 2,
+    "revision": None,
+    "save_projection": True,
+    "target_modules": ["0", "2"],
+    "task_type": None,
+    "tinylora_dropout": 0.0,
+    "u": 3,
+    "weight_tying": 0.0,
+}
+_REFERENCE_CONFIGS["tinylora"] = _TINYLORA_REFERENCE
+_REFERENCE_CONFIGS["tinylora_tied"] = {**_TINYLORA_REFERENCE, "weight_tying": 1.0}
 
 
 @pytest.fixture(params=_METHODS, ids=lambda m: m.name)

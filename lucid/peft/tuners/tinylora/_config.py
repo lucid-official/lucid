@@ -58,7 +58,7 @@ class TinyLoraConfig(_TargetedConfig, peft_type=PeftType.TINYLORA):
         layers.
     init_weights : {True, False, "uniform"}, default=True
         ``True``: :math:`v` starts at zero, so the update does.  ``"uniform"``: uniform in
-        ``[-init_v_bound, init_v_bound]``.  ``False``: left uninitialised.
+        ``[-init_v_bound, init_v_bound]``.  ``False``: standard normal.
     target_modules : str or list of str, optional
         The modules TinyLoRA adapts, matched as ``LoraConfig.target_modules`` is.
     fan_in_fan_out : bool, default=False
@@ -78,12 +78,20 @@ class TinyLoraConfig(_TargetedConfig, peft_type=PeftType.TINYLORA):
 
     Notes
     -----
-    TinyLoRA's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``r`` or ``u`` is not positive, or
-    ``weight_tying`` is outside ``[0, 1]``.  No tuner applies it yet: ``get_peft_model`` raises
-    ``NotImplementedError`` naming LCD-824, which tracks it.
+    The config reads and writes ``adapter_config.json`` as the reference library's does: every field,
+    in its order and with its defaults.  A field of the wrong type raises ``TypeError``;
+    ``ValueError`` is raised when ``r`` or ``u`` is not positive, ``weight_tying`` is outside
+    ``[0, 1]`` or ``init_weights`` is none of ``True``, ``False`` and ``"uniform"``; ``bias`` other
+    than ``"none"`` raises ``NotImplementedError``.  ``init_weights=False`` draws the vector from the
+    standard normal (the reference leaves it uninitialised).  The projection is drawn from
+    ``projection_seed`` by this library's generator, so an adapter file written by another library
+    without it (``save_projection=False``) restores it as this one draws it.  The tuner is
+    :class:`~lucid.peft.TinyLoraModel`; it adapts ``nn.Linear`` and ``nn.Embedding`` modules.
     """
+
+    _unsupported: ClassVar[dict[str, str]] = {
+        "bias": "a TinyLoRA adapter trains its own tensors only (bias='none')"
+    }
 
     _field_checks: ClassVar[dict[str, _Check]] = {
         "r": _check_rank,
