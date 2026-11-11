@@ -1,4 +1,4 @@
-"""``lucid.peft.tuners`` — one sub-package per parameter-efficient method, 26 in all.
+"""``lucid.peft.tuners`` — one sub-package per parameter-efficient method, 46 in all.
 
 A method is a config class, a tuner (the model-level host that injects, switches, merges and
 saves its adapters) and, for the methods that adapt weights, the layer types that wrap the
@@ -35,20 +35,41 @@ The methods, by family:
   per layer), ``ln_tuning`` (a trainable copy of each chosen normalisation layer) and
   ``trainable_tokens`` (a few rows of an embedding table).
 
+Twenty more methods have a config and no adapter yet: each package holds the complete config
+(every field of the reference library's, with its defaults, reading and writing
+``adapter_config.json``) and a stand-in tuner that raises ``NotImplementedError`` naming the issue
+that tracks it, until the tuner is written.  They are ``delora``, ``gralora``, ``hira``, ``glora``,
+``deft`` and ``peanut`` (a weight update of low-rank or projection form), ``unilora``, ``pvera``,
+``tinylora`` and ``lily`` (adapters read out of shared banks), ``road``, ``psoft``, ``osf`` and
+``frod`` (orthogonal and spectral updates), ``supertuning``, ``waveft``, ``beft`` and ``cartridge``
+(sparse, wavelet, bias and key-value updates) and ``adamss`` (subspaces of the weight's SVD).
+``shadow`` is the twentieth and is refused for good: the method needs the base model's decoder loop
+and a second backbone beside it.
+
 The modules whose names begin with an underscore here (``_base``, ``_lycoris``, ``_orthogonal``,
 ``_shared``, ``_prompt`` …) are the machinery the methods share, not part of the public surface.
 """
 
 from lucid.peft.tuners import (
     adalora,
+    adamss,
     adaption_prompt,
+    beft,
     boft,
     bone,
     c3a,
+    cartridge,
     cpt,
+    deft,
+    delora,
     fourierft,
+    frod,
+    glora,
+    gralora,
+    hira,
     hra,
     ia3,
+    lily,
     ln_tuning,
     loha,
     lokr,
@@ -56,28 +77,48 @@ from lucid.peft.tuners import (
     miss,
     multitask_prompt_tuning,
     oft,
+    osf,
     p_tuning,
+    peanut,
     poly,
     prefix_tuning,
     prompt_tuning,
+    psoft,
+    pvera,
     randlora,
+    road,
+    shadow,
     shira,
+    supertuning,
+    tinylora,
     trainable_tokens,
+    unilora,
     vblora,
     vera,
+    waveft,
     xlora,
 )
 
 __all__ = [
     "adalora",
+    "adamss",
     "adaption_prompt",
+    "beft",
     "boft",
     "bone",
     "c3a",
+    "cartridge",
     "cpt",
+    "deft",
+    "delora",
     "fourierft",
+    "frod",
+    "glora",
+    "gralora",
+    "hira",
     "hra",
     "ia3",
+    "lily",
     "ln_tuning",
     "loha",
     "lokr",
@@ -85,14 +126,24 @@ __all__ = [
     "miss",
     "multitask_prompt_tuning",
     "oft",
+    "osf",
     "p_tuning",
+    "peanut",
     "poly",
     "prefix_tuning",
     "prompt_tuning",
+    "psoft",
+    "pvera",
     "randlora",
+    "road",
+    "shadow",
     "shira",
+    "supertuning",
+    "tinylora",
     "trainable_tokens",
+    "unilora",
     "vblora",
     "vera",
+    "waveft",
     "xlora",
 ]

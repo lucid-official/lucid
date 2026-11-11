@@ -28,16 +28,25 @@ import lucid.nn as nn
 import lucid.peft as peft
 from lucid.models import create_model
 from lucid.peft import (
+    AdamssConfig,
+    BeftConfig,
     BOFTConfig,
     BoneConfig,
     C3AConfig,
     CPTConfig,
     CPTEmbedding,
     CPTModel,
+    DeftConfig,
+    DeloraConfig,
     FourierFTConfig,
+    FrodConfig,
+    GloraConfig,
+    GraloraConfig,
+    HiraConfig,
     HRAConfig,
     IA3Config,
     IA3Model,
+    LilyConfig,
     LNTuningConfig,
     LoHaConfig,
     LoHaModel,
@@ -47,6 +56,8 @@ from lucid.peft import (
     LoraModel,
     MissConfig,
     OFTConfig,
+    OSFConfig,
+    PeanutConfig,
     PeftConfig,
     PeftModel,
     PeftType,
@@ -54,10 +65,17 @@ from lucid.peft import (
     PrefixEncoder,
     PromptEmbedding,
     PromptEncoder,
+    PsoftConfig,
+    PveraConfig,
     RandLoraConfig,
+    RoadConfig,
     ShiraConfig,
+    SupertuningConfig,
+    TinyLoraConfig,
     TrainableTokensConfig,
+    UniLoraConfig,
     VBLoRAConfig,
+    WaveFTConfig,
     XLoraConfig,
     XLoraModel,
 )
@@ -169,6 +187,27 @@ _EXAMPLE_CONFIGS: dict[PeftType, Callable[[], PeftConfig]] = {
     PeftType.TRAINABLE_TOKENS: lambda: TrainableTokensConfig(
         token_indices=[1], target_modules=["0", "2"]
     ),
+    # The methods whose tuner is still a stand-in (``_PENDING_TUNERS``) have their row already: the
+    # loop below builds a tuner once it is in ``_TUNERS``, and the card that writes it edits no
+    # file here.  CARTRIDGE (a prompt host) and SHADOW (refused) are not built from module targets.
+    PeftType.DELORA: lambda: DeloraConfig(r=2, target_modules=["0", "2"]),
+    PeftType.GRALORA: lambda: GraloraConfig(r=2, gralora_k=2, target_modules=["0", "2"]),
+    PeftType.HIRA: lambda: HiraConfig(r=2, target_modules=["0", "2"]),
+    PeftType.GLORA: lambda: GloraConfig(r=2, target_modules=["0", "2"]),
+    PeftType.DEFT: lambda: DeftConfig(r=2, target_modules=["0", "2"]),
+    PeftType.PEANUT: lambda: PeanutConfig(r=2, target_modules=["0", "2"]),
+    PeftType.UNILORA: lambda: UniLoraConfig(r=2, theta_d_length=16, target_modules=["0", "2"]),
+    PeftType.PVERA: lambda: PveraConfig(r=2, target_modules=["0", "2"]),
+    PeftType.TINYLORA: lambda: TinyLoraConfig(r=2, u=2, target_modules=["0", "2"]),
+    PeftType.LILY: lambda: LilyConfig(r=2, target_modules=["0", "2"]),
+    PeftType.ROAD: lambda: RoadConfig(group_size=2, target_modules=["0", "2"]),
+    PeftType.PSOFT: lambda: PsoftConfig(r=2, target_modules=["0", "2"]),
+    PeftType.OSF: lambda: OSFConfig(effective_rank=2, target_modules=["0", "2"]),
+    PeftType.FROD: lambda: FrodConfig(sparse_rate=0.5, target_modules=["0", "2"]),
+    PeftType.SUPERTUNING: lambda: SupertuningConfig(sparsity=0.5, target_modules=["0", "2"]),
+    PeftType.WAVEFT: lambda: WaveFTConfig(n_frequency=4, target_modules=["0", "2"]),
+    PeftType.BEFT: lambda: BeftConfig(target_modules=["0", "2"]),
+    PeftType.ADAMSS: lambda: AdamssConfig(r=2, num_subspaces=2, target_modules=["0", "2"]),
 }
 
 

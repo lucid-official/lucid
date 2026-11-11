@@ -33,7 +33,7 @@ from lucid.peft import (
 )
 from lucid.peft._config import _CONFIG_CLASSES
 from lucid.peft.tuners import bone, c3a, miss, randlora, shira, trainable_tokens, vblora
-from lucid.peft.tuners._base import _TUNERS
+from lucid.peft.tuners._base import _ALL_TUNERS
 from lucid.peft.tuners.c3a._circulant import _circulant_apply, _circulant_matrix
 from lucid.peft.tuners.miss._modes import _Mode
 from lucid.serialization import load_safetensors
@@ -54,9 +54,10 @@ def _close(a: lucid.Tensor, b: lucid.Tensor, atol: float = 1e-5) -> bool:
 
 @pytest.mark.parametrize("member", list(PeftType), ids=lambda m: m.value)
 def test_every_peft_type_has_a_config_and_a_tuner(member: PeftType) -> None:
+    """A method has a config and a tuner class: a working one, or the stand-in that says why not."""
     assert member in _CONFIG_CLASSES, f"{member} has no registered config"
-    assert member in _TUNERS, f"{member} has no registered tuner"
-    config_class, tuner = _CONFIG_CLASSES[member], _TUNERS[member]
+    assert member in _ALL_TUNERS, f"{member} has no registered tuner"
+    config_class, tuner = _CONFIG_CLASSES[member], _ALL_TUNERS[member]
     assert config_class._peft_type == member
     assert tuner._config_class is config_class or issubclass(config_class, tuner._config_class)
 

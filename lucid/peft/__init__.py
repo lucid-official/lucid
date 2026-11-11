@@ -92,6 +92,17 @@ a loss over the examples' outputs::
     config = PromptTuningConfig(num_virtual_tokens=20, task_type="CAUSAL_LM")
     model = get_peft_model(base_model, config)
 
+Twenty more methods that the reference library has added are here as configs, with no adapter yet:
+DeLoRA, GraLoRA, HiRA, GLoRA, DEFT and PEANuT (``DeloraConfig`` …), Uni-LoRA, PVeRA, TinyLoRA and
+Lily, RoAd, PSOFT, OSF and FRoD, Super-Tuning, WaveFT, BEFT and Cartridge, and AdaMSS.  Each config has
+every field of the reference's, in its order and with its defaults, and reads and writes
+``adapter_config.json``; building an adapter with one raises ``NotImplementedError`` naming the issue
+that tracks it, and ``PEFT_TYPE_TO_TUNER_MAPPING`` has a tuner class that raises it for each.  The
+twentieth, ShadowPEFT, is refused for good — it needs the base model's decoder loop and a second
+backbone beside it.  The option classes of LoRA's extensions (``ArrowConfig``, ``BdLoraConfig``,
+``KasaConfig``, ``MontecloraConfig``, ``VeloraConfig``) are here too, for the ``LoraConfig`` fields
+that hold them; a ``LoraConfig`` that sets one of those extensions is refused.
+
 
 What a LoRA layer guarantees:
 
@@ -222,15 +233,25 @@ from lucid.peft.auto import (
     AutoPeftModelForTokenClassification,
 )
 from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraModel
+from lucid.peft.tuners.adamss import AdamssConfig, AdamssModel
 from lucid.peft.tuners.adaption_prompt import AdaptionPromptConfig, AdaptionPromptModel
+from lucid.peft.tuners.beft import BeftConfig, BeftModel
 from lucid.peft.tuners.boft import BOFTConfig, BOFTModel
 from lucid.peft.tuners.bone import BoneConfig, BoneModel
 from lucid.peft.tuners.c3a import C3AConfig, C3AModel
+from lucid.peft.tuners.cartridge import CartridgeConfig
 from lucid.peft.tuners.cpt import CPTConfig, CPTEmbedding, CPTModel
+from lucid.peft.tuners.deft import DeftConfig, DeftModel
+from lucid.peft.tuners.delora import DeloraConfig, DeloraModel
 from lucid.peft.tuners.fourierft import FourierFTConfig, FourierFTModel
+from lucid.peft.tuners.frod import FrodConfig, FrodModel
+from lucid.peft.tuners.glora import GloraConfig, GloraModel
+from lucid.peft.tuners.gralora import GraloraConfig, GraloraModel
+from lucid.peft.tuners.hira import HiraConfig, HiraModel
 from lucid.peft.tuners.hra import HRAConfig, HRAModel
 from lucid.peft.tuners.ia3._config import IA3Config
 from lucid.peft.tuners.ia3._model import IA3Model
+from lucid.peft.tuners.lily import LilyConfig, LilyModel
 from lucid.peft.tuners.ln_tuning import LNTuningConfig, LNTuningModel
 from lucid.peft.tuners.loha._config import LoHaConfig
 from lucid.peft.tuners.loha._model import LoHaModel
@@ -247,6 +268,13 @@ from lucid.peft.tuners.lora._conversion import convert_to_lora, save_as_lora
 from lucid.peft.tuners.lora._eva import get_eva_state_dict, initialize_lora_eva_weights
 from lucid.peft.tuners.lora._loraga import preprocess_loraga
 from lucid.peft.tuners.lora._model import LoraModel
+from lucid.peft.tuners.lora._subconfigs import (
+    ArrowConfig,
+    BdLoraConfig,
+    KasaConfig,
+    MontecloraConfig,
+    VeloraConfig,
+)
 from lucid.peft.tuners.miss import MissConfig, MissModel
 from lucid.peft.tuners.multitask_prompt_tuning import (
     MultitaskPromptEmbedding,
@@ -254,19 +282,29 @@ from lucid.peft.tuners.multitask_prompt_tuning import (
     MultitaskPromptTuningInit,
 )
 from lucid.peft.tuners.oft import OFTConfig, OFTModel
+from lucid.peft.tuners.osf import OSFConfig, OSFModel
 from lucid.peft.tuners.p_tuning import (
     PromptEncoder,
     PromptEncoderConfig,
     PromptEncoderReparameterizationType,
 )
+from lucid.peft.tuners.peanut import PeanutConfig, PeanutModel
 from lucid.peft.tuners.poly import PolyConfig, PolyModel
 from lucid.peft.tuners.prefix_tuning import PrefixEncoder, PrefixTuningConfig
 from lucid.peft.tuners.prompt_tuning import PromptEmbedding, PromptTuningConfig, PromptTuningInit
+from lucid.peft.tuners.psoft import PsoftConfig, PsoftModel
+from lucid.peft.tuners.pvera import PveraConfig, PveraModel
 from lucid.peft.tuners.randlora import RandLoraConfig, RandLoraModel
+from lucid.peft.tuners.road import RoadConfig, RoadModel
+from lucid.peft.tuners.shadow import ShadowConfig, ShadowModel
 from lucid.peft.tuners.shira import ShiraConfig, ShiraModel
+from lucid.peft.tuners.supertuning import SupertuningConfig, SupertuningModel
+from lucid.peft.tuners.tinylora import TinyLoraConfig, TinyLoraModel
 from lucid.peft.tuners.trainable_tokens import TrainableTokensConfig, TrainableTokensModel
+from lucid.peft.tuners.unilora import UniLoraConfig, UniLoraModel
 from lucid.peft.tuners.vblora import VBLoRAConfig, VBLoRAModel
 from lucid.peft.tuners.vera import VeraConfig, VeraModel
+from lucid.peft.tuners.waveft import WaveFTConfig, WaveFTModel
 from lucid.peft.tuners.xlora import XLoraClassifier, XLoraConfig, XLoraModel
 
 __all__ = [
@@ -323,6 +361,31 @@ __all__ = [
     "VBLoRAConfig",
     "VeraConfig",
     "XLoraConfig",
+    "AdamssConfig",
+    "ArrowConfig",
+    "BdLoraConfig",
+    "BeftConfig",
+    "CartridgeConfig",
+    "DeftConfig",
+    "DeloraConfig",
+    "FrodConfig",
+    "GloraConfig",
+    "GraloraConfig",
+    "HiraConfig",
+    "KasaConfig",
+    "LilyConfig",
+    "MontecloraConfig",
+    "OSFConfig",
+    "PeanutConfig",
+    "PsoftConfig",
+    "PveraConfig",
+    "RoadConfig",
+    "ShadowConfig",
+    "SupertuningConfig",
+    "TinyLoraConfig",
+    "UniLoraConfig",
+    "VeloraConfig",
+    "WaveFTConfig",
     "PeftType",
     "TaskType",
     "AdaLoraModel",
@@ -349,6 +412,25 @@ __all__ = [
     "TrainableTokensModel",
     "VBLoRAModel",
     "VeraModel",
+    "AdamssModel",
+    "BeftModel",
+    "DeftModel",
+    "DeloraModel",
+    "FrodModel",
+    "GloraModel",
+    "GraloraModel",
+    "HiraModel",
+    "LilyModel",
+    "OSFModel",
+    "PeanutModel",
+    "PsoftModel",
+    "PveraModel",
+    "RoadModel",
+    "ShadowModel",
+    "SupertuningModel",
+    "TinyLoraModel",
+    "UniLoraModel",
+    "WaveFTModel",
     "XLoraClassifier",
     "XLoraModel",
     "PeftModel",

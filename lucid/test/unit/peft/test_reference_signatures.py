@@ -18,7 +18,7 @@ meaning here is accepted under the same name and default and refused with
 next to the feature).
 
 A reference member that Lucid lacks is not a mismatch (a later phase adds
-them); ``test_reference_gap_is_the_known_size`` records how many there are.
+them); ``_OWED`` names every reference export Lucid lacks and the issue that owes it.
 """
 
 import ast
@@ -26,6 +26,7 @@ import dataclasses
 import enum
 import inspect
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -371,13 +372,37 @@ def test_signature_matches_reference(name: str) -> None:
     assert _problems(name) == []
 
 
-def test_shared_surface_is_the_known_size() -> None:
-    assert len(_shared_names()) == 101
+#: The reference exports ``lucid.peft`` does not have yet, each with the issue that owes it.  The
+#: set is checked against the snapshot, so a name the reference gains, or one that lands and stays
+#: listed, fails here; a count would let one be traded for the other.  A name leaves the table in the
+#: commit that exports it.
+_OWED: dict[str, str] = {
+    "CartridgeEncoder": "LCD-826",
+    "compose_cartridge_adapters": "LCD-826",
+    "initialize_kv_prefix_from_past_key_values": "LCD-826",
+    "initialize_kv_prefix_from_text": "LCD-826",
+    "prompt_embeddings_from_past_key_values": "LCD-826",
+    "PeftMixedModel": "LCD-828",
+    "PEFT_TYPE_TO_MIXED_MODEL_MAPPING": "LCD-828",
+    # LCD-827 shipped LoRA's extensions without Arrow, whose library builder is this.
+    "create_arrow_model": "LCD-827",
+    # The class exists (``lucid.peft.tuners.lora``).  Naming it in ``lucid.peft.__all__`` would move
+    # its released path (the released surface keeps one spelling per object, the shallowest), which
+    # ``test_released_surface`` reads as a removal: it waits for that rule to accept a promotion.
+    "LoraRuntimeConfig": "LCD-822",
+}
 
 
-def test_reference_gap_is_the_known_size() -> None:
-    """The names Lucid lacks are the next phase's work; their count must not hide."""
-    assert len([n for n in _SNAPSHOT["exports"] if n not in peft.__all__]) == 53
+def test_the_reference_names_lucid_lacks_are_the_owed_ones() -> None:
+    """Every reference export is shared with Lucid or owed, with nothing in both and nothing unowned."""
+    exported = set(_SNAPSHOT["exports"])
+    missing = {n for n in exported if n not in peft.__all__}
+    assert missing == set(_OWED), sorted(missing ^ set(_OWED))
+    assert exported == set(_shared_names()) | set(_OWED)
+
+
+def test_every_owed_name_cites_the_issue_that_owes_it() -> None:
+    assert all(re.fullmatch(r"LCD-\d+", issue) for issue in _OWED.values()), _OWED
 
 
 def test_the_snapshot_is_of_the_reference_release_it_says() -> None:

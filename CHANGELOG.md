@@ -151,6 +151,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - batched inv and rank-safe det cofactor to 32 (LCD-946)
 
+- scaffold 20 more methods, 5 LoRA option classes (LCD-822)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

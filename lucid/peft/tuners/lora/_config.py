@@ -22,6 +22,14 @@ from lucid.peft._config import (
     _TargetedConfig,
 )
 from lucid.peft.tuners.lora._inits import _check_init, _Init
+from lucid.peft.tuners.lora._subconfigs import (
+    ArrowConfig,
+    BdLoraConfig,
+    KasaConfig,
+    MontecloraConfig,
+    VeloraConfig,
+    _subconfig,
+)
 
 _BIASES: Final[tuple[Literal["none", "all", "lora_only"], ...]] = ("none", "all", "lora_only")
 
@@ -130,14 +138,6 @@ class EvaConfig:
             raise ValueError("`tau` must be between 0.0 and 1.0.")
 
 
-def _check_eva(name: str, value: object) -> EvaConfig | None:
-    if value is None or isinstance(value, EvaConfig):
-        return value
-    if isinstance(value, Mapping):
-        return EvaConfig(**value)
-    raise TypeError(f"`{name}` must be an EvaConfig, a dict, or None, got {value!r}")
-
-
 _LORAGA_DIRECTIONS: Final = ("ArBr", "A2rBr", "ArB2r", "random")
 _LORAGA_SCALES: Final = ("stable", "weight_svd", "gd_scale", "unit")
 
@@ -189,14 +189,6 @@ class LoraGAConfig:
         gamma: object = self.stable_gamma
         if isinstance(gamma, bool) or not isinstance(gamma, int) or gamma <= 0:
             raise ValueError(f"`stable_gamma` must be a positive int, got {self.stable_gamma!r}.")
-
-
-def _check_lora_ga(name: str, value: object) -> LoraGAConfig | None:
-    if value is None or isinstance(value, LoraGAConfig):
-        return value
-    if isinstance(value, Mapping):
-        return LoraGAConfig(**value)
-    raise TypeError(f"`{name}` must be a LoraGAConfig, a dict, or None, got {value!r}")
 
 
 @dataclass
@@ -297,18 +289,18 @@ class _LoraFields(_TargetedConfig):
     corda_config: object | None = None
     lora_ga_config: LoraGAConfig | None = None
     use_dora: bool = False
-    velora_config: object | None = None
+    velora_config: VeloraConfig | None = None
     alora_invocation_tokens: list[int] | None = None
     use_qalora: bool = False
     qalora_group_size: int = 16
-    monteclora_config: object | None = None
+    monteclora_config: MontecloraConfig | None = None
     layer_replication: list[tuple[int, int]] | None = None
     runtime_config: LoraRuntimeConfig = field(default_factory=LoraRuntimeConfig)
     lora_bias: bool = False
     target_parameters: list[str] | None = None
-    use_bdlora: object | None = None
-    arrow_config: object | None = None
-    kasa_config: object | None = None
+    use_bdlora: BdLoraConfig | None = None
+    arrow_config: ArrowConfig | None = None
+    kasa_config: KasaConfig | None = None
     ensure_weight_tying: bool = False
 
 
@@ -432,7 +424,7 @@ class LoraConfig(_LoraFields, peft_type=PeftType.LORA):
         ones); ``nn.MultiheadAttention`` and ``target_parameters`` refuse it,
         as the reference does.  Costs a norm of the full weight per forward
         pass; merge before inference.
-    velora_config : object, optional
+    velora_config : VeloraConfig, optional
         VeLoRA is not implemented.  Accepted at the reference's default only:
         any other value raises ``NotImplementedError``.
     alora_invocation_tokens : list of int, optional
@@ -444,7 +436,7 @@ class LoraConfig(_LoraFields, peft_type=PeftType.LORA):
     qalora_group_size : int, default=16
         Quantisation-aware LoRA needs a quantised base layer.  Accepted at the reference's default only:
         any other value raises ``NotImplementedError``.
-    monteclora_config : object, optional
+    monteclora_config : MontecloraConfig, optional
         MonteCLoRA is not implemented.  Accepted at the reference's default only:
         any other value raises ``NotImplementedError``.
     layer_replication : list of tuple of int, optional
@@ -467,13 +459,13 @@ class LoraConfig(_LoraFields, peft_type=PeftType.LORA):
         them, ``(experts, out, in)``; ``lora_dropout`` must be 0 for it.
         The holding module cannot also be in ``target_modules``.  With no
         ``target_modules``, no module is adapted (the model-type default is not taken).
-    use_bdlora : object, optional
+    use_bdlora : BdLoraConfig, optional
         Block-diagonal LoRA is not implemented.  Accepted at the reference's default only:
         any other value raises ``NotImplementedError``.
-    arrow_config : object, optional
+    arrow_config : ArrowConfig, optional
         Arrow routing is not implemented.  Accepted at the reference's default only:
         any other value raises ``NotImplementedError``.
-    kasa_config : object, optional
+    kasa_config : KasaConfig, optional
         KaSA is not implemented.  Accepted at the reference's default only:
         any other value raises ``NotImplementedError``.
     ensure_weight_tying : bool, default=False
@@ -515,8 +507,13 @@ class LoraConfig(_LoraFields, peft_type=PeftType.LORA):
         "use_dora": _check_bool,
         "target_parameters": _optional_strings,
         "lora_bias": _check_bool,
-        "eva_config": _check_eva,
-        "lora_ga_config": _check_lora_ga,
+        "eva_config": _subconfig(EvaConfig),
+        "lora_ga_config": _subconfig(LoraGAConfig),
+        "velora_config": _subconfig(VeloraConfig),
+        "monteclora_config": _subconfig(MontecloraConfig),
+        "use_bdlora": _subconfig(BdLoraConfig),
+        "arrow_config": _subconfig(ArrowConfig),
+        "kasa_config": _subconfig(KasaConfig),
     }
 
     @override

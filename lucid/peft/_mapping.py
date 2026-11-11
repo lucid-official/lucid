@@ -10,15 +10,19 @@ from lucid.peft._config import _CONFIG_CLASSES, PeftConfig, PeftType, _require_c
 from lucid.peft._peft_model import PeftModel
 from lucid.peft._refusals import refuse_value
 from lucid.peft._targeting import _config_for_model
-from lucid.peft.tuners._host import _TUNERS, _AdapterHost, _tuner_for
+from lucid.peft.tuners._host import _ALL_TUNERS, _AdapterHost, _tuner_for, _WithheldTuner
 
 #: The config class of each method, by ``PeftType``: a read-only view of the registry that
 #: ``PeftConfig`` subclasses join as they are defined, so a method added later appears here.
 PEFT_TYPE_TO_CONFIG_MAPPING: Mapping[PeftType, type[PeftConfig]] = MappingProxyType(_CONFIG_CLASSES)
 
 #: The tuner (the model class that puts a method's adapters into a model) of each method, by
-#: ``PeftType``: a read-only view of the tuner registry, like ``PEFT_TYPE_TO_CONFIG_MAPPING``.
-PEFT_TYPE_TO_TUNER_MAPPING: Mapping[PeftType, type[_AdapterHost]] = MappingProxyType(_TUNERS)
+#: ``PeftType``: a read-only view of the tuner registries, like ``PEFT_TYPE_TO_CONFIG_MAPPING``.
+#: A method whose adapter is not written yet, or is refused, has a tuner class here too: it
+#: raises ``NotImplementedError`` when built, saying why.
+PEFT_TYPE_TO_TUNER_MAPPING: Mapping[PeftType, type[_AdapterHost] | type[_WithheldTuner]] = (
+    MappingProxyType(_ALL_TUNERS)
+)
 
 
 def get_peft_config(config_dict: dict[str, object]) -> PeftConfig:

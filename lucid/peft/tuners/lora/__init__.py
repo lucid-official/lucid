@@ -12,7 +12,9 @@ lucid.peft.tuners.lora import Linear`` read as they do there.  One layer type pe
 adapts: ``Linear``, ``Embedding``, the convolutions ``Conv1d`` / ``Conv2d`` / ``Conv3d`` and their
 transposes ``ConvTranspose1d`` / ``ConvTranspose2d`` / ``ConvTranspose3d``, ``MultiheadAttention``,
 and ``ParamWrapper`` for a raw parameter. ``LoraRuntimeConfig`` is the type of ``LoraConfig.runtime_config``
-(settings valid at runtime only). ``LoraConfig`` and ``LoraModel`` are defined here too and
+(settings valid at runtime only), and ``ArrowConfig``, ``BdLoraConfig``, ``KasaConfig``,
+``MontecloraConfig`` and ``VeloraConfig`` hold the options of the extensions ``LoraConfig`` has a field for
+and refuses to apply.  ``LoraConfig`` and ``LoraModel`` are defined here too and
 exported from ``lucid.peft``, which is where ``get_peft_model`` is.  Importing the package registers
 the method (its config under ``PeftType.LORA``, its tuner and layers), which is what makes
 ``get_peft_model`` and ``PeftModel.from_pretrained`` know it.

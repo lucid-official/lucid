@@ -5,11 +5,22 @@ The code lives in the module of its concern; this one re-exports it so
 
 * ``lucid.peft.tuners._layer`` — the layer base and its table helpers;
 * ``lucid.peft.tuners._plan`` — targets, the config to store, ``modules_to_save``;
-* ``lucid.peft.tuners._host`` — the host a ``PeftModel`` drives, and ``_TUNERS``;
+* ``lucid.peft.tuners._host`` — the host a ``PeftModel`` drives, ``_TUNERS``, and the stand-ins of
+  the methods that have no adapter yet (``_PendingTuner``) or never will (``_RefusedTuner``);
 * ``lucid.peft.tuners._tuner`` — the generic ``_BaseTuner``.
 """
 
-from lucid.peft.tuners._host import _TUNERS, _AdapterHost, _tuner_for
+from lucid.peft.tuners._host import (
+    _ALL_TUNERS,
+    _PENDING_TUNERS,
+    _REFUSED_TUNERS,
+    _TUNERS,
+    _AdapterHost,
+    _PendingTuner,
+    _RefusedTuner,
+    _tuner_for,
+    _WithheldTuner,
+)
 from lucid.peft.tuners._layer import (
     _BaseTunerLayer,
     _check_adapter_name,
@@ -37,16 +48,22 @@ from lucid.peft.tuners._plan import (
 from lucid.peft.tuners._tuner import _FLAGS_KEY, _BaseTuner
 
 __all__ = [
+    "_ALL_TUNERS",
     "_FLAGS_KEY",
     "_NO_PARAMETERS",
+    "_PENDING_TUNERS",
+    "_REFUSED_TUNERS",
     "_TUNERS",
     "_AdapterHost",
     "_BaseTuner",
     "_BaseTunerLayer",
     "_Injected",
     "_NamesParameters",
+    "_PendingTuner",
     "_Placement",
+    "_RefusedTuner",
     "_Target",
+    "_WithheldTuner",
     "_check_adapter_name",
     "_dotted",
     "_entry_leaves",

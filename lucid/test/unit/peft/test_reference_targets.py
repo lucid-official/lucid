@@ -39,7 +39,7 @@ from lucid.peft import (
 from lucid.peft._config import _TargetedConfig
 from lucid.peft._target_aliases import REFERENCE_TARGET_ALIASES, _zoo_target_names
 from lucid.peft._targeting import _module_names_matching, _selects
-from lucid.peft.tuners._base import _TUNERS
+from lucid.peft.tuners._base import _PENDING_TUNERS, _REFUSED_TUNERS, _TUNERS
 from lucid.peft.tuners.ia3._defaults import IA3_DEFAULT_FEEDFORWARD_MODULES
 from lucid.test.unit.models._peft_matrix import _refusal
 from lucid.test.unit.models._peft_rows import ROWS
@@ -51,32 +51,6 @@ _SIGNATURES = json.loads((Path(__file__).parent / "_reference_signatures.json").
 _PEFT_TYPE_OF = {"LNTUNING": "LN_TUNING"}
 _FEEDFORWARD = "IA3_FEEDFORWARD"
 _ALIAS_WARNING = "reference library's names"
-
-#: Tables whose method this library does not have.  A new tuner removes its table from here, and the
-#: parametrized test below then holds its defaults to the reference's.
-_NO_TUNER = frozenset(
-    {
-        "ADAMSS",
-        "BEFT",
-        "DEFT",
-        "DELORA",
-        "FROD",
-        "GLORA",
-        "GRALORA",
-        "HIRA",
-        "LILY",
-        "OSF",
-        "PEANUT",
-        "PSOFT",
-        "PVERA",
-        "ROAD",
-        "SUPERTUNING",
-        "TINYLORA",
-        "UNILORA",
-        "WAVEFT",
-    }
-)
-
 
 def _rows(table: str) -> dict[str, list[str] | str]:
     """The table ``table`` as the reference leaves it: its base's rows, edited by its own."""
@@ -145,9 +119,15 @@ def test_a_copied_table_is_its_base_with_its_own_rows() -> None:
     assert _rows("FROD")["vit"] == ["query", "value"]
 
 
-def test_the_methods_without_a_tuner_are_the_known_ones() -> None:
+def test_the_methods_without_a_tuner_are_the_pending_and_refused_ones() -> None:
+    """A table has no tuner here exactly when its method's tuner is a stand-in.
+
+    A method whose tuner lands leaves ``_PENDING_TUNERS`` and its table joins the parametrized test
+    below, which holds its defaults to the reference's; nothing in this file changes.
+    """
     without = {table for table in _SNAPSHOT["tables"] if not _has_tuner(table)}
-    assert without == _NO_TUNER, sorted(without ^ _NO_TUNER)
+    withheld = {str(peft_type) for peft_type in (*_PENDING_TUNERS, *_REFUSED_TUNERS)}
+    assert without == withheld & set(_SNAPSHOT["tables"]), sorted(without ^ withheld)
 
 
 # ── the defaults ─────────────────────────────────────────────────────────────

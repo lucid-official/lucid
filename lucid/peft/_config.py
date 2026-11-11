@@ -64,14 +64,17 @@ class PeftType(enum.StrEnum):
 
     The members are the reference library's ``peft_type`` strings, so a
     config file names its method the same way on both sides.
-    ``lucid.peft`` implements every member: the LoRA family (``LORA``, ``ADALORA``), the
+    Every member has a config class that reads and writes ``adapter_config.json``.  Twenty-six
+    have an adapter that can be built: the LoRA family (``LORA``, ``ADALORA``), the
     orthogonal and LyCORIS families (``OFT``, ``BOFT``, ``HRA``, ``LOHA``, ``LOKR``), the shared-table
     tuners (``VERA``, ``VBLORA``, ``RANDLORA``), the structured and sparse updates (``MISS``, its
     predecessor ``BONE``, ``SHIRA``, ``C3A``, ``FOURIERFT``), ``IA3``, ``LN_TUNING``,
     ``TRAINABLE_TOKENS``, the prompt-learning methods (``PROMPT_TUNING``,
     ``MULTITASK_PROMPT_TUNING``, ``PREFIX_TUNING``, ``P_TUNING``, ``CPT``), the adaption prompt
-    (``ADAPTION_PROMPT``) and the routing and mixing methods (``POLY``, ``XLORA``).  A file that names
-    any other type raises ``NotImplementedError``.
+    (``ADAPTION_PROMPT``) and the routing and mixing methods (``POLY``, ``XLORA``).  The other
+    twenty are the methods the reference library added since: building an adapter with one raises
+    ``NotImplementedError`` naming the issue that tracks it, except ``SHADOW``, which is refused
+    for good.  A file that names a type no config reads raises ``NotImplementedError``.
     """
 
     PROMPT_TUNING = "PROMPT_TUNING"
@@ -100,6 +103,26 @@ class PeftType(enum.StrEnum):
     TRAINABLE_TOKENS = "TRAINABLE_TOKENS"
     SHIRA = "SHIRA"
     C3A = "C3A"
+    ADAMSS = "ADAMSS"
+    BEFT = "BEFT"
+    LILY = "LILY"
+    FROD = "FROD"
+    PVERA = "PVERA"
+    GLORA = "GLORA"
+    UNILORA = "UNILORA"
+    ROAD = "ROAD"
+    HIRA = "HIRA"
+    WAVEFT = "WAVEFT"
+    OSF = "OSF"
+    DELORA = "DELORA"
+    GRALORA = "GRALORA"
+    CARTRIDGE = "CARTRIDGE"
+    TINYLORA = "TINYLORA"
+    PSOFT = "PSOFT"
+    PEANUT = "PEANUT"
+    SHADOW = "SHADOW"
+    SUPERTUNING = "SUPERTUNING"
+    DEFT = "DEFT"
 
 
 #: A file that names no ``peft_type`` is read as the one method v1 implements.
@@ -188,12 +211,28 @@ def _check_count(name: str, value: object) -> int:
     return value
 
 
+def _check_int(name: str, value: object) -> int:
+    """An ``int`` of any sign (a seed, an offset); ``bool`` excluded."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"`{name}` must be an int, got {value!r}")
+    return value
+
+
 def _check_number(name: str, value: object) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise TypeError(f"`{name}` must be a real number, got {value!r}")
     if not math.isfinite(value):
         raise ValueError(f"`{name}` must be finite, got {value!r}")
     return value
+
+
+def _nullable[V](each: Callable[[str, object], V]) -> Callable[[str, object], V | None]:
+    """A check that lets ``None`` through and hands any other value to ``each``."""
+
+    def check(name: str, value: object) -> V | None:
+        return None if value is None else each(name, value)
+
+    return check
 
 
 def _check_dropout(name: str, value: object) -> float:
@@ -215,6 +254,12 @@ def _check_auto_mapping(name: str, value: object) -> dict[str, str] | None:
             raise TypeError(f"`{name}` must map str to str, got {key!r}: {item!r}")
         mapping[key] = item
     return mapping
+
+
+def _check_str(name: str, value: object) -> str:
+    if not isinstance(value, str):
+        raise TypeError(f"`{name}` must be a str, got {value!r}")
+    return value
 
 
 def _optional_str(name: str, value: object) -> str | None:
