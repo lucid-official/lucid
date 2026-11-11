@@ -49,7 +49,6 @@ class _DeftSpec(NamedTuple):
 
     deft_r: int
     deft_decomposition: str
-    deft_init_scale: float
     deft_para: bool
     deft_scaling: float
 
@@ -58,8 +57,8 @@ class DeftLayer(_DeltaLayer[DeftConfig], _LinearSized, _PristineMerge, family=Tr
     r"""Adapter bookkeeping and the subspace edit shared by the DEFT layers.
 
     Per adapter: ``deft_P``, ``deft_R`` (absent with ``para``), a dropout of the injection's input
-    and the read-only mappings ``deft_r``, ``deft_decomposition``, ``deft_init_scale``,
-    ``deft_para`` and ``deft_scaling``.  ``get_delta_weight`` is :math:`\Delta W = Q_P\,(s R - M)` for
+    and the read-only mappings ``deft_r``, ``deft_decomposition``, ``deft_para`` and
+    ``deft_scaling``.  ``get_delta_weight`` is :math:`\Delta W = Q_P\,(s R - M)` for
     the weight as it was before any merge.
 
     Parameters
@@ -92,7 +91,6 @@ class DeftLayer(_DeltaLayer[DeftConfig], _LinearSized, _PristineMerge, family=Tr
         "Rank of each adapter, capped at the output size, by name (read-only)."
     )
     deft_decomposition = _SpecField[str]("Decomposition of each adapter, by name (read-only).")
-    deft_init_scale = _SpecField[float]("Scale of each adapter's random start of R (read-only).")
     deft_para = _SpecField[bool]("Whether each adapter is pure removal, by name (read-only).")
     deft_scaling = _SpecField[float]("Scale of each adapter's injection, by name (read-only).")
 
@@ -134,9 +132,7 @@ class DeftLayer(_DeltaLayer[DeftConfig], _LinearSized, _PristineMerge, family=Tr
         elif not config.para:
             injection = home.zeros(r, self.in_features)
             init.normal_(injection, mean=0.0, std=0.02 * config.init_scale)
-        self._specs[adapter_name] = _DeftSpec(
-            r, config.decomposition_method, config.init_scale, config.para, scaling
-        )
+        self._specs[adapter_name] = _DeftSpec(r, config.decomposition_method, config.para, scaling)
         self.deft_P[adapter_name] = Parameter(direction)
         if injection is not None:
             self.deft_R[adapter_name] = Parameter(injection)
@@ -149,9 +145,10 @@ class DeftLayer(_DeltaLayer[DeftConfig], _LinearSized, _PristineMerge, family=Tr
 
     def _injection(self, adapter: str) -> Tensor | None:
         """:math:`s R`, or ``None`` for pure removal."""
-        if adapter not in self.deft_R:
+        spec = self._spec(adapter)
+        if spec.deft_para:
             return None
-        return _parameter_at(self.deft_R, adapter) * self._spec(adapter).deft_scaling
+        return _parameter_at(self.deft_R, adapter) * spec.deft_scaling
 
     @override
     def _changes(self, adapter: str, base: Mapping[str, Tensor]) -> dict[str, Tensor]:

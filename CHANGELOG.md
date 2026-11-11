@@ -143,6 +143,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - OFT on Linear merges to what its forward computes (LCD-957)
 
+- the dead-code and typing counts of the six are zero (LCD-823)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

@@ -15,6 +15,7 @@ and the sum is scaled by :math:`\alpha / (r + \text{hybrid\_r})`.
 ``gralora_A_general`` / ``gralora_B_general``, the reference's keys.
 """
 
+from math import sqrt
 from typing import ClassVar, NamedTuple, override
 
 import lucid
@@ -45,7 +46,7 @@ class _GraloraSpec(NamedTuple):
 def _uniform(home: _Home, shape: tuple[int, ...], fan_in: int) -> Tensor:
     """A tensor of ``shape`` drawn from the uniform distribution ``Linear`` starts with: ``(-1, 1) / sqrt(fan_in)``."""
     draw = lucid.rand(*shape, device=home.device, dtype=home.dtype)
-    return (draw * 2.0 - 1.0) * fan_in**-0.5
+    return (draw * 2.0 - 1.0) / sqrt(fan_in)
 
 
 class GraloraLayer(_DeltaLayer[GraloraConfig], _LinearSized, _ResidualUpdate, family=True):

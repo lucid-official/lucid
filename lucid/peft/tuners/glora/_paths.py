@@ -149,3 +149,8 @@ class _AbsentPath(_Path, kind="none"):
     @override
     def forward(self) -> Tensor:
         return self.zeros
+
+
+# The kinds register themselves as they are defined; naming them here is how the dead-code gate
+# sees that they are used.
+__all__ = ["_AbsentPath", "_LoraPath", "_Path", "_ScalarPath", "_VectorPath"]
