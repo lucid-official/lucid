@@ -135,7 +135,9 @@ def test_the_methods_without_a_tuner_are_the_pending_and_refused_ones() -> None:
 
 def test_the_shared_rows_are_the_text_models_and_nothing_is_skipped_silently() -> None:
     shared = _shared()
-    assert {model_type for _, model_type in shared} == {"bert", "gpt2", "t5"}
+    assert {model_type for _, model_type in shared} == {"bert", "gpt2", "t5", "vit"}
+    # The one ViT row among the reference's tables with a tuner here is FRoD's (``query``, ``value``).
+    assert {table for table, model_type in shared if model_type == "vit"} == {"FROD"}
     # one row per method with a tuner here, for each of the three (IA3 and its feed-forward table too).
     assert len(shared) >= 3 * 13
 
