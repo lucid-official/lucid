@@ -1,20 +1,20 @@
-"""``lucid.peft.tuners.osf`` — OSF: constrained full fine-tuning in the weight's low singular directions.
+r"""``lucid.peft.tuners.osf`` — OSF: constrained full fine-tuning in the weight's low singular directions.
 
-OSF (Nayak et al., 2025, arXiv:2504.07097) freezes the top singular directions of each weight and
-trains the rest with gradients projected orthogonally to the frozen ones, so tasks learned in
-sequence do not overwrite each other; no parameter is added.  Pick it for learning several tasks in
-sequence without keeping an adapter per task.
+OSF (Nayak et al., 2025, arXiv:2504.07097 — Sculpting Subspaces) takes the SVD of each weight,
+freezes its top singular directions, which carry what the model already knows, and trains the rest, with
+the gradients projected onto the complement of the frozen directions so that a new task does not overwrite
+an old one.  Nothing is added to the model: the trained tensors are the weight's own low part.  Pick it for
+learning several tasks in sequence without keeping an adapter per task.
 
-Not implemented yet.  ``OSFConfig`` is complete: it has every field of the reference library's
-config, in its order and with its defaults, and reads and writes ``adapter_config.json``, so an
-adapter file of this method loads as a config.  ``OSFModel`` is the tuner's place in the registry:
-building one, through ``get_peft_model``, ``PeftModel.from_pretrained`` or the class itself, raises
-``NotImplementedError`` naming LCD-825, which tracks it, before any model is touched.  Importing the
-package registers the config under ``PeftType.OSF`` and the placeholder tuner; both are exported
-from ``lucid.peft``.
+Where the reference library keeps them, so ``isinstance(m, OSFLayer)`` and ``from
+lucid.peft.tuners.osf import OSFConfig, Linear`` read as they do there.  One layer type for the one
+module the method adapts, ``nn.Linear``.  ``OSFConfig`` and ``OSFModel`` are here and exported from
+``lucid.peft``.  Importing the package registers the method (its config under ``PeftType.OSF``, its
+tuner and layer), which is what makes ``get_peft_model`` and ``PeftModel.from_pretrained`` know it.
 """
 
 from lucid.peft.tuners.osf._config import OSFConfig
+from lucid.peft.tuners.osf._layer import Linear, OSFLayer
 from lucid.peft.tuners.osf._model import OSFModel
 
-__all__ = ["OSFConfig", "OSFModel"]
+__all__ = ["Linear", "OSFConfig", "OSFLayer", "OSFModel"]

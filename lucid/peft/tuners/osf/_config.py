@@ -19,7 +19,7 @@ from lucid.peft._config import (
 class OSFConfig(_TargetedConfig, peft_type=PeftType.OSF):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with OSF.
 
-    OSF (Orthogonal Subspace Fine-tuning; Nayak et al., 2025, arXiv:2504.07097 — Sculpting Subspaces)
+    OSF (Orthogonal Subspace Fine-tuning; Nayak et al., 2025, arXiv:2504.07097 — Sculpting Subspaces, section 3)
     is constrained full fine-tuning for continual learning.  It takes the SVD of each weight, freezes the top
     ``effective_rank`` singular directions, which carry what the model already knows, and trains the rest, with
     gradients projected orthogonally to the frozen directions so that a new task does not overwrite an old one.
@@ -56,10 +56,9 @@ class OSFConfig(_TargetedConfig, peft_type=PeftType.OSF):
 
     Notes
     -----
-    OSF's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  ``TypeError`` is raised when a field
-    holds a value of the wrong type.  No tuner applies it yet: ``get_peft_model`` raises
-    ``NotImplementedError`` naming LCD-825, which tracks it.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference library's.
+    ``TypeError`` is raised when a field holds a value of the wrong type.  A model type with no
+    default row (``gpt2`` has one) adapts every linear layer when ``target_modules`` is left unset.
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {

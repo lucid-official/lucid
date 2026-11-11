@@ -7,6 +7,7 @@ adapter files are written by hand in the reference's layout, and what a loaded f
 worked out entry by entry from the papers' formulas (``_spectral_forms``), never through the layers.
 """
 
+import types
 from collections.abc import Callable
 from typing import override
 
@@ -14,7 +15,18 @@ import pytest
 
 import lucid
 import lucid.linalg as linalg
-from lucid.peft import PeftType, PsoftConfig, PsoftModel, RoadConfig, RoadModel, get_peft_model
+import lucid.nn as nn
+from lucid.peft import (
+    OSFConfig,
+    OSFModel,
+    PeftType,
+    PsoftConfig,
+    PsoftModel,
+    RoadConfig,
+    RoadModel,
+    get_peft_model,
+)
+from lucid.peft.tuners.osf import OSFLayer
 from lucid.peft.tuners.psoft import PsoftLayer
 from lucid.peft.tuners.road import RoadLayer
 from lucid.test.unit.peft import _spectral_forms as forms
@@ -25,7 +37,6 @@ from lucid.test.unit.peft.test_tuner_contract import (
     TestFiles,
     TestMerging,
     TestMultiAdapter,
-    TestRegistration,
     _layers,
     _Method,
     test_a_reference_written_adapter_loads,
@@ -62,6 +73,26 @@ class TestForward(contract.TestForward):
                 assert p.grad is not None and float(p.grad.abs().max().item()) > 0, name
             else:
                 assert p.grad is None, name
+
+
+class TestRegistration(contract.TestRegistration):
+    """The shared registration tests, with the default-target one made right for a method that falls back to every linear layer."""
+
+    @override
+    def test_a_default_of_raw_parameters_is_not_taken_for_a_module_method(
+        self, method: _Method
+    ) -> None:
+        if method.peft_type is not PeftType.OSF:
+            super().test_a_default_of_raw_parameters_is_not_taken_for_a_module_method(method)
+            return
+        # OSF has no "no default" error: a model type its table lacks takes every linear layer, as the
+        # reference does, so a model with one linear layer and nothing else to take finds no target.
+        net = nn.Sequential(nn.Linear(4, 4))
+        net.config = types.SimpleNamespace(model_type="neural_ode")  # type: ignore[assignment]
+        config = method.make(targets=())
+        config.target_modules = None  # type: ignore[attr-defined]
+        peft = method.tuner(net, config, "default")
+        assert peft.targeted_module_names == ["0"]
 
 
 def _road(variant: str) -> Callable[..., RoadConfig]:
@@ -160,6 +191,45 @@ def _psoft_file(orth: bool, mag_a: bool) -> dict[str, tuple[int, ...]]:
     return file
 
 
+def _osf(targets: tuple[str, ...], random: bool, **kw: object) -> OSFConfig:
+    return OSFConfig.from_dict(
+        {"effective_rank": 2, "target_modules": list(targets), "init_weights": not random, **kw}
+    )
+
+
+def _osf_forward(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
+    """``W' = U_high S_high V_high^T + U_low S_low V_low^T``: the base's top two triplets, the file's low part."""
+    net = _mlp()
+    weights = []
+    for index in (0, 2):
+        p = f"{_PREFIX}{index}.osf_svd_params."
+        u, s, vt = linalg.svd(net[index].weight.detach(), full_matrices=False)
+        weights.append(
+            lucid.tensor(
+                forms.osf_adapted(
+                    u.tolist(),
+                    s.tolist(),
+                    vt.tolist(),
+                    t[p + "U_low"].tolist(),
+                    t[p + "S_low"].tolist(),
+                    t[p + "V_low"].tolist(),
+                    2,
+                )
+            )
+        )
+    return _run(weights, [net[0].bias, net[2].bias], x)
+
+
+_OSF_FILE = {
+    f"{_PREFIX}0.osf_svd_params.U_low": (8, 4),
+    f"{_PREFIX}0.osf_svd_params.S_low": (4,),
+    f"{_PREFIX}0.osf_svd_params.V_low": (4, 6),
+    f"{_PREFIX}2.osf_svd_params.U_low": (4, 2),
+    f"{_PREFIX}2.osf_svd_params.S_low": (2,),
+    f"{_PREFIX}2.osf_svd_params.V_low": (2, 8),
+}
+
+
 #: Method rows in the order the methods landed.
 _METHODS = [
     _Method("road", PeftType.ROAD, _road("road_1"), RoadModel, RoadLayer, _road_file(1)),
@@ -174,6 +244,7 @@ _METHODS = [
         PsoftLayer,
         _psoft_file(False, False),
     ),
+    _Method("osf", PeftType.OSF, _osf, OSFModel, OSFLayer, _OSF_FILE),
 ]
 
 CLOSED_FORMS["road"] = _road_forward("road_1")
@@ -196,6 +267,22 @@ _ROAD_REFERENCE = {
 _REFERENCE_CONFIGS["road"] = _ROAD_REFERENCE
 _REFERENCE_CONFIGS["road_2"] = {**_ROAD_REFERENCE, "variant": "road_2"}
 _REFERENCE_CONFIGS["road_4"] = {**_ROAD_REFERENCE, "variant": "road_4"}
+CLOSED_FORMS["osf"] = _osf_forward
+_REFERENCE_CONFIGS["osf"] = {
+    "auto_mapping": None,
+    "base_model_name_or_path": "tiny",
+    "effective_rank": 2,
+    "inference_mode": True,
+    "init_weights": True,
+    "modules_to_save": None,
+    "peft_type": "OSF",
+    "peft_version": "0.21.2",
+    "rank_pattern": None,
+    "revision": None,
+    "target_modules": ["0", "2"],
+    "target_svd_config": None,
+    "task_type": None,
+}
 CLOSED_FORMS["psoft"] = _psoft_forward("psoft_init", True, True)
 CLOSED_FORMS["psoft_free"] = _psoft_forward("pissa_init", False, False)
 _PSOFT_REFERENCE = {

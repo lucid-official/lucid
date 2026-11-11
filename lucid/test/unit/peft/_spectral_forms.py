@@ -141,3 +141,31 @@ def psoft_delta(
     left = [[u[i][k] * s[k] ** (1.0 - power) for k in range(rank)] for i in range(len(u))]
     right = [[vt[k][j] * s[k] ** power for j in range(len(vt[0]))] for k in range(rank)]
     return matmul(matmul(left, sub(inner, eye(rank))), right)
+
+
+# ── OSF (Nayak et al., 2025, section 3.2) ────────────────────────────────────
+
+
+def osf_adapted(
+    u: Matrix,
+    s: list[float],
+    vt: Matrix,
+    u_low: Matrix,
+    s_low: list[float],
+    v_low: Matrix,
+    frozen: int,
+) -> Matrix:
+    r""":math:`W' = U_{high}\Sigma_{high}V_{high}^\top + U_{low}\Sigma_{low}V_{low}^\top`.
+
+    The top ``frozen`` triplets of the SVD ``u diag(s) vt`` of the weight are kept, whatever signs the
+    decomposition gave them (the products are the same); the low part is the one the file holds.
+    """
+    rows, columns = len(u), len(vt[0])
+    return [
+        [
+            sum(u[i][k] * s[k] * vt[k][j] for k in range(frozen))
+            + sum(u_low[i][k] * s_low[k] * v_low[k][j] for k in range(len(s_low)))
+            for j in range(columns)
+        ]
+        for i in range(rows)
+    ]
