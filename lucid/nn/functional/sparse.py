@@ -447,8 +447,9 @@ def nearest_codebook(x: Tensor, codebook: Tensor) -> Tensor:
 
     Notes
     -----
-    Distances go through :func:`lucid.cdist`, whose ``p=2`` path uses the
-    stable expansion :math:`\|a-b\|^2 = \|a\|^2 + \|b\|^2 - 2ab^\top`
+    Distances go through :func:`lucid.cdist`, whose ``p=2`` path past 25
+    rows uses the expansion
+    :math:`\|a-b\|^2 = \|a\|^2 + \|b\|^2 - 2ab^\top`
     rather than materialising an ``(N, K, D)`` difference.  It does
     still build the ``(N, K)`` matrix, which at a large latent grid and
     a large codebook is the dominant allocation of a quantiser; a fused

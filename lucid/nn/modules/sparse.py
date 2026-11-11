@@ -686,8 +686,8 @@ class VectorQuantizer(Module):
     (arXiv:1711.00937).  The straight-through estimator is Bengio,
     Léonard, and Courville (arXiv:1308.3432).
 
-    Distances go through :func:`lucid.cdist`, whose ``p=2`` path uses the
-    numerically stable expansion
+    Distances go through :func:`lucid.cdist`, whose ``p=2`` path past 25
+    rows uses the expansion
     :math:`\|a-b\|^2 = \|a\|^2 + \|b\|^2 - 2 a b^\top` rather than
     materialising an ``(N, K, D)`` difference.
 

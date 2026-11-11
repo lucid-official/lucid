@@ -1344,7 +1344,11 @@ def pdist(input: Tensor, p: float = 2.0) -> Tensor:
     full :func:`lucid.cdist` matrix, which keeps the implementation
     simple and fully differentiable but is :math:`O(N^2)` in both
     compute and intermediate memory — for very large ``N``, prefer a
-    blocked / streaming pairwise routine.
+    blocked / streaming pairwise routine.  For ``p=2`` that is
+    :func:`lucid.cdist`'s default ``compute_mode``: pair-by-pair differences
+    up to 25 rows, the matrix-product expansion past that.  Both keep a
+    distance whose square leaves the float range (rows near ``1e-20`` or
+    ``1e25``), as :func:`lucid.cdist` documents.
 
     Examples
     --------

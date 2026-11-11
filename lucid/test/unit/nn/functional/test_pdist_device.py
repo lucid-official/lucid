@@ -123,11 +123,13 @@ def test_cdist_duplicate_rows_gradient_is_not_nan(device):
 def test_cdist_forward_unchanged_by_the_zero_guard(device):
     """The guard routes around sqrt but must not perturb forward values.
 
-    Note the self-distance case is only accurate to ~1e-3 in float32: the
-    ``‖a‖² + ‖b‖² − 2a·b`` expansion cancels catastrophically for coincident
-    points.  That is pre-existing behaviour of the stable-formula choice, not
-    something the zero-guard introduced — the guard fires on an exact zero,
-    which is what float64 produces (and exactly when the NaN used to appear).
+    Up to 25 rows the default mode takes the difference form, whose
+    self-distance is exact.  The ~1e-3 tolerance on it is what the
+    ``‖a‖² + ‖b‖² − 2a·b`` expansion (past 25 rows, or by ``compute_mode``)
+    cancels to for coincident points in float32 — behaviour of that form, not
+    something the zero-guard introduced.  The guard fires on an exact zero,
+    which is what the difference form and float64 produce (and exactly when
+    the NaN used to appear).
     """
     rng = np.random.default_rng(5)
     a = rng.standard_normal((4, 3)).astype(np.float64)

@@ -10,6 +10,7 @@ from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry
 from lucid._types import DeviceLike, DTypeLike
+from lucid._ops.composite._euclidean import _euclidean_cdist
 from lucid._ops.composite.indexing import _scatter_add
 from lucid._ops._dims import _wrap_dim
 from lucid._ops._reduce import (
@@ -477,10 +478,13 @@ def cdist(
 
     Specialised paths exist for ``p`` in :math:`\{1, 2, \infty, 0\}`;
     other ``p`` values fall back to the general
-    :math:`(\sum_k |a_k - b_k|^p)^{1/p}` formula.  For ``p=2`` the
-    numerically stable expansion
-    :math:`\|a-b\|^2 = \|a\|^2 + \|b\|^2 - 2 a \cdot b^\top` is used
-    so large coordinates don't lose precision.
+    :math:`(\sum_k |a_k - b_k|^p)^{1/p}` formula.  For ``p=2`` there are two
+    evaluations, picked by ``compute_mode`` as the reference picks them: the
+    difference :math:`a_i - b_j` taken pair by pair, which cancels nothing but
+    holds a ``(..., P, R, M)`` tensor, and the expansion
+    :math:`\|a-b\|^2 = \|a\|^2 + \|b\|^2 - 2 a \cdot b^\top`, one matrix
+    product that holds only the ``(..., P, R)`` result but cancels when two
+    points are close.
 
     Parameters
     ----------
@@ -494,10 +498,11 @@ def cdist(
         ``float("inf")`` for Chebyshev, ``0.0`` for the Hamming-style
         non-zero count.
     compute_mode : str, optional
-        Controls whether the matrix-multiplication identity is used when
-        ``p == 2.0``.  One of ``'use_mm_for_euclid_dist_if_necessary'``
-        (default), ``'use_mm_for_euclid_dist'``, or
-        ``'donot_use_mm_for_euclid_dist'``.
+        Which evaluation ``p == 2.0`` takes.
+        ``'use_mm_for_euclid_dist_if_necessary'`` (default) takes the
+        expansion when either operand has more than 25 rows and the
+        difference form otherwise; ``'use_mm_for_euclid_dist'`` always takes
+        the expansion; ``'donot_use_mm_for_euclid_dist'`` never does.
 
     Returns
     -------
@@ -508,9 +513,33 @@ def cdist(
     Raises
     ------
     DtypeMismatch
-        If ``x1`` or ``x2`` is not a real floating-point tensor, as the
-        reference refuses integer, bool and complex inputs — a ``TypeError``
-        and a ``RuntimeError``.
+        If ``x1`` or ``x2`` is not a real floating-point tensor, or they differ
+        in dtype, as the reference refuses integer, bool, complex and mixed
+        inputs — a ``TypeError`` and a ``RuntimeError``.
+
+    Notes
+    -----
+    A float32 square leaves the range at about ``1e19`` and ``1e-19``, long
+    before a distance does, so for ``p=2`` both evaluations divide their
+    operands by a largest magnitude first and multiply the root back, when that
+    magnitude is outside :math:`2^{\pm 30}` (:math:`2^{\pm 300}` in float64).
+    Rows near ``1e-20`` and near ``1e25`` keep their distances; the reference
+    answers ``0`` or ``inf`` there.  The expansion has one divisor per batch
+    entry, so a pair far below the largest magnitude of its batch entry loses
+    digits, as the expansion's cancellation already costs it; the difference
+    form has one per pair.  Inside the window the evaluation is unchanged, bit
+    for bit, and half precision is not rescaled.
+
+    Examples
+    --------
+    >>> import lucid
+    >>> a = lucid.tensor([[0.0, 0.0], [1.0, 0.0]])
+    >>> b = lucid.tensor([[0.0, 3.0]])
+    >>> lucid.cdist(a, b)
+    tensor([[3.], [3.162]])
+    >>> tiny = lucid.tensor([[1e-20] * 4, [3e-20] * 4])
+    >>> lucid.cdist(tiny[:1], tiny[1:])
+    tensor([[4e-20]])
     """
     if compute_mode not in _CDIST_MODES:
         raise _C_engine.InvalidArgument(
@@ -522,29 +551,30 @@ def cdist(
         _require_floating(_unwrap(operand), "cdist")
     with _autocast_entry("cdist", _unwrap(x1), _unwrap(x2)) as (x1i, x2i):
         x1, x2 = _wrap(x1i), _wrap(x2i)
-        if p == 2.0 and compute_mode != "donot_use_mm_for_euclid_dist":
-            # ||a - b||² = ||a||² + ||b||² − 2 a·bᵀ, which never materialises
-            # the (..., P, R, M) difference.
-            x1_sq = (x1 * x1).sum(dim=-1, keepdim=True)  # (..., P, 1)
-            x2_sq = (x2 * x2).sum(dim=-1, keepdim=True)  # (..., R, 1)
-            cross = lucid.matmul(x1, x2.swapaxes(-1, -2))  # (..., P, R)
-            sq = x1_sq + x2_sq.swapaxes(-1, -2) - 2.0 * cross
-            sq = lucid.clamp(sq, 0.0, float("inf"))  # clamp numerical noise
-            # Coincident points — every diagonal entry of cdist(x, x) — sit at
-            # the root's infinite slope; the shared zero-safe root gives them
-            # the 0 subgradient.
-            return _wrap(_zero_safe_root(_unwrap(sq), 2))
-        diff = _unwrap(x1.unsqueeze(-2) - x2.unsqueeze(-3))  # (..., P, R, M)
-        last = [len(diff.shape) - 1]
-        if p == 0.0:
-            # Count the non-zero differences; NaN is not one.
-            counted = _C_engine.logical_and(
-                _truth_mask(diff), _C_engine.logical_not(_C_engine.isnan(diff))
+        if x1.dtype != x2.dtype:
+            # The difference form promotes and the matmul form refuses, so
+            # without this the form a mode picks decided what was accepted.
+            raise _C_engine.DtypeMismatch(
+                f"cdist: expected x1 and x2 to have the same dtype, got {x1.dtype} and {x2.dtype}"
             )
-            return _wrap(_C_engine.astype(_C_engine.sum(counted, last, False), diff.dtype))
-        # Every other order — 1, inf, and the general p whose root used to give
-        # coincident points a nan gradient — is the shared vector p-norm.
-        return _wrap(_p_norm(diff, float(p), last, False))
+        if p == 2.0:
+            return _euclidean_cdist(x1, x2, compute_mode)
+        return _minkowski_cdist(x1, x2, p)
+
+
+def _minkowski_cdist(x1: Tensor, x2: Tensor, p: float) -> Tensor:
+    """``cdist`` for every order but 2: the vector ``p``-norm of each pair's difference."""
+    diff = _unwrap(x1.unsqueeze(-2) - x2.unsqueeze(-3))  # (..., P, R, M)
+    last = [len(diff.shape) - 1]
+    if p == 0.0:
+        # Count the non-zero differences; NaN is not one.
+        counted = _C_engine.logical_and(
+            _truth_mask(diff), _C_engine.logical_not(_C_engine.isnan(diff))
+        )
+        return _wrap(_C_engine.astype(_C_engine.sum(counted, last, False), diff.dtype))
+    # Every other order — 1, inf, and the general p whose root used to give
+    # coincident points a nan gradient — is the shared vector p-norm.
+    return _wrap(_p_norm(diff, float(p), last, False))
 
 
 # ── bincount ──────────────────────────────────────────────────────────────────
