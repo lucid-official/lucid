@@ -377,11 +377,12 @@ def _held_write() -> _Declined:
 def _no_emitter() -> _Declined:
     tally, cache = _tally_and_cache()
     eye = lucid.eye(3, device=COMPILE_DEVICE) * 4.0
+    rhs = lucid.ones(3, 1, device=COMPILE_DEVICE)
 
     def forward(hidden: Tensor, cache_position: Tensor) -> Tensor:
         tally.add_(1.0)
         keys = _update(cache, hidden, cache_position)
-        return keys + lucid.linalg.inv(hidden[:, :3] * 0.1 + eye).sum()
+        return keys + lucid.linalg.solve(hidden[:, :3] * 0.1 + eye, rhs).sum()
 
     return _Declined(forward, cache, tally)
 
