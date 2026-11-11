@@ -16,6 +16,8 @@ import lucid
 from lucid.peft import (
     DeloraConfig,
     DeloraModel,
+    GloraConfig,
+    GloraModel,
     GraloraConfig,
     GraloraModel,
     HiraConfig,
@@ -24,6 +26,7 @@ from lucid.peft import (
     get_peft_model,
 )
 from lucid.peft.tuners.delora import DeloraLayer
+from lucid.peft.tuners.glora import GloraLayer
 from lucid.peft.tuners.gralora import GraloraLayer
 from lucid.peft.tuners.hira import HiraLayer
 from lucid.test.unit.peft import _delta_forms as forms
@@ -185,6 +188,66 @@ _HIRA_FILE = {
     f"{_PREFIX}2.hira_B": (4, 2),
 }
 
+
+def _glora(**forms_: str) -> Callable[..., GloraConfig]:
+    def config(targets: tuple[str, ...], random: bool, **kw: object) -> GloraConfig:
+        return GloraConfig.from_dict(
+            {"r": 2, "target_modules": list(targets), "init_weights": not random, **forms_, **kw}
+        )
+
+    return config
+
+
+def _support(t: dict[str, lucid.Tensor], prefix: str) -> forms.Support:
+    """The support tensor the file holds under ``prefix`` (``...glora_A``), told by the names it keeps."""
+    if prefix + ".Xd" in t:
+        return "lora", [t[prefix + ".Xd"].tolist(), t[prefix + ".Xu"].tolist()]
+    if prefix + ".X" in t:
+        kind = "constant" if tuple(t[prefix + ".X"].shape) == (1,) else "vector"
+        return kind, [t[prefix + ".X"].tolist()]
+    return "none", [t[prefix + ".zeros"].tolist()]
+
+
+def _glora_forward(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
+    """``W' = W + W * A + B`` and ``b' = b + b * D + E + W C``, each support as the file holds it."""
+    net = _mlp()
+    weights, biases = [], []
+    for index in (0, 2):
+        p = f"{_PREFIX}{index}."
+        supports = [_support(t, p + f"glora_{name}") for name in "ABCDE"]
+        delta_w, delta_b = forms.glora_changes(
+            net[index].weight.tolist(), net[index].bias.tolist(), *supports
+        )
+        assert delta_b is not None
+        weights.append(net[index].weight + lucid.tensor(delta_w))
+        biases.append(net[index].bias + lucid.tensor(delta_b))
+    return _run(weights, biases, x)
+
+
+def _glora_file(a_b: str, c: str, d_e: str) -> dict[str, tuple[int, ...]]:
+    """The adapter file of the tiny MLP (targets ``0`` and ``2``) for rank 2 and the given forms of the supports."""
+    file: dict[str, tuple[int, ...]] = {}
+    for index, (out, inn) in {0: (8, 6), 2: (4, 8)}.items():
+        p = f"{_PREFIX}{index}.glora_"
+        shapes = {
+            "A": (a_b, (out, inn), True),
+            "B": (a_b, (out, inn), True),
+            "C": (c, (inn, 1), True),
+            "D": (d_e, (out,), False),
+            "E": (d_e, (out,), False),
+        }
+        for name, (kind, shape, column) in shapes.items():
+            if kind == "lora":
+                file[f"{p}{name}.Xd"], file[f"{p}{name}.Xu"] = (shape[0], 2), (2, shape[-1])
+            elif kind == "vector":
+                file[f"{p}{name}.X"] = (shape[0], 1) if column else (shape[0],)
+            elif kind == "constant":
+                file[f"{p}{name}.X"] = (1,)
+            else:
+                file[f"{p}{name}.zeros"] = shape
+    return file
+
+
 #: Method rows in the order the methods landed.
 _METHODS = [
     _Method("delora", PeftType.DELORA, _delora, DeloraModel, DeloraLayer, _DELORA_FILE),
@@ -198,11 +261,36 @@ _METHODS = [
         _GRALORA_HYBRID_FILE,
     ),
     _Method("hira", PeftType.HIRA, _hira, HiraModel, HiraLayer, _HIRA_FILE),
+    _Method(
+        "glora",
+        PeftType.GLORA,
+        _glora(),
+        GloraModel,
+        GloraLayer,
+        _glora_file("lora", "lora", "constant"),
+    ),
+    _Method(
+        "glora_vector",
+        PeftType.GLORA,
+        _glora(config_A_B="vector", config_C="vector", config_D_E="vector"),
+        GloraModel,
+        GloraLayer,
+        _glora_file("vector", "vector", "vector"),
+    ),
+    _Method(
+        "glora_mixed",
+        PeftType.GLORA,
+        _glora(config_A_B="constant", config_C="none", config_D_E="vector"),
+        GloraModel,
+        GloraLayer,
+        _glora_file("constant", "none", "vector"),
+    ),
 ]
 
 CLOSED_FORMS["delora"] = _delora_forward
 CLOSED_FORMS["gralora"] = CLOSED_FORMS["gralora_hybrid"] = _gralora_forward
 CLOSED_FORMS["hira"] = _hira_forward
+CLOSED_FORMS["glora"] = CLOSED_FORMS["glora_vector"] = CLOSED_FORMS["glora_mixed"] = _glora_forward
 _REFERENCE_CONFIGS["delora"] = {
     "auto_mapping": None,
     "base_model_name_or_path": "tiny",
@@ -265,6 +353,36 @@ _REFERENCE_CONFIGS["hira"] = {
     "revision": None,
     "target_modules": ["0", "2"],
     "task_type": None,
+}
+_GLORA_REFERENCE = {
+    "auto_mapping": None,
+    "base_model_name_or_path": "tiny",
+    "bias": "none",
+    "config_A_B": "lora",
+    "config_C": "lora",
+    "config_D_E": "constant",
+    "inference_mode": True,
+    "init_weights": True,
+    "modules_to_save": None,
+    "peft_type": "GLORA",
+    "peft_version": "0.21.2",
+    "r": 2,
+    "revision": None,
+    "target_modules": ["0", "2"],
+    "task_type": None,
+}
+_REFERENCE_CONFIGS["glora"] = _GLORA_REFERENCE
+_REFERENCE_CONFIGS["glora_vector"] = {
+    **_GLORA_REFERENCE,
+    "config_A_B": "vector",
+    "config_C": "vector",
+    "config_D_E": "vector",
+}
+_REFERENCE_CONFIGS["glora_mixed"] = {
+    **_GLORA_REFERENCE,
+    "config_A_B": "constant",
+    "config_C": "none",
+    "config_D_E": "vector",
 }
 
 

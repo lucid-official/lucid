@@ -26,8 +26,9 @@ class GloraConfig(_TargetedConfig, peft_type=PeftType.GLORA):
     r : int, default=8
         Rank of the parts written as low-rank products.
     bias : {"none", "all", "glora_only"}, default="none"
-        Which biases also train with GLoRA: none, all of them, or only those of the adapted
-        layers.
+        The reference trains none, all, or only the adapted layers' biases.  A GLoRA adapter
+        here trains its own tensors only, so ``"all"`` and ``"glora_only"`` raise
+        ``NotImplementedError``.
     config_A_B : {"lora", "vector", "constant", "none"}, default="lora"
         Parameterisation of :math:`A` and :math:`B`: a low-rank product, one value per output
         channel, one scalar, or off.
@@ -55,12 +56,17 @@ class GloraConfig(_TargetedConfig, peft_type=PeftType.GLORA):
 
     Notes
     -----
-    GLoRA's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``r`` is not positive, or a ``config_*`` field
-    names an unknown parameterisation.  No tuner applies it yet: ``get_peft_model`` raises
-    ``NotImplementedError`` naming LCD-823, which tracks it.
+    Every field of the reference library's config is here, in its order and with its defaults, read
+    and written as ``adapter_config.json``.  A field of the wrong type raises ``TypeError``.
+    ``ValueError`` is raised when ``r`` is not positive, or a ``config_*`` field names an unknown
+    parameterisation.  ``bias`` other than ``"none"`` raises ``NotImplementedError``.  The tuner is
+    :class:`~lucid.peft.GloraModel`; it adapts ``nn.Linear`` modules, and a module without a bias
+    has no :math:`C`, :math:`D` or :math:`E`.
     """
+
+    _unsupported: ClassVar[dict[str, str]] = {
+        "bias": "a GLoRA adapter trains its own tensors only (bias='none')"
+    }
 
     _field_checks: ClassVar[dict[str, _Check]] = {
         "r": _check_rank,

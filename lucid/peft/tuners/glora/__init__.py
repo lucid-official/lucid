@@ -1,20 +1,22 @@
-"""``lucid.peft.tuners.glora`` — GLoRA: learned corrections to both the weight and the bias of a layer.
+r"""``lucid.peft.tuners.glora`` — GLoRA: learned corrections to both the weight and the bias of a layer.
 
-GLoRA (Chavan et al., 2023, arXiv:2306.07967) corrects both the weight and the bias of a layer with
-learned terms, each a low-rank product, a vector, a scalar or off, so one family covers LoRA-like
-and scale-and-shift adapters.  Pick it for a search space of adapter shapes, or an adapter that also
-moves the bias.
+GLoRA (Chavan et al., 2023, arXiv:2306.07967 — Generalized LoRA) corrects the weight and the bias
+of a layer with five learned support tensors, :math:`W' = W + W A + B` and
+:math:`b' = b + b D + E + W C`, each a low-rank product, a vector, a scalar or off, so one family
+covers LoRA-like, scale-and-shift and prompt-like adapters.  The update reads the weight and the
+bias, so a merge keeps the values it was folded into and an unmerge gives them back exactly.  Pick it
+for a search space of adapter shapes, or an adapter that also moves the bias.
 
-Not implemented yet.  ``GloraConfig`` is complete: it has every field of the reference library's
-config, in its order and with its defaults, and reads and writes ``adapter_config.json``, so an
-adapter file of this method loads as a config.  ``GloraModel`` is the tuner's place in the registry:
-building one, through ``get_peft_model``, ``PeftModel.from_pretrained`` or the class itself, raises
-``NotImplementedError`` naming LCD-823, which tracks it, before any model is touched.  Importing the
-package registers the config under ``PeftType.GLORA`` and the placeholder tuner; both are exported
-from ``lucid.peft``.
+Where the reference library keeps them, so ``isinstance(m, GloraLayer)`` and ``from
+lucid.peft.tuners.glora import GloraConfig, Linear`` read as they do there.  One layer type for the
+one module the method adapts, ``nn.Linear``.  ``GloraConfig`` and ``GloraModel`` are here and
+exported from ``lucid.peft``.  Importing the package registers the method (its config under
+``PeftType.GLORA``, its tuner and layer), which is what makes ``get_peft_model`` and
+``PeftModel.from_pretrained`` know it.
 """
 
 from lucid.peft.tuners.glora._config import GloraConfig
+from lucid.peft.tuners.glora._layer import GloraLayer, Linear
 from lucid.peft.tuners.glora._model import GloraModel
 
-__all__ = ["GloraConfig", "GloraModel"]
+__all__ = ["GloraConfig", "GloraLayer", "GloraModel", "Linear"]

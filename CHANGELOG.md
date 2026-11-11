@@ -165,6 +165,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the HiRA tuner, a Hadamard high-rank update (LCD-823)
 
+- the GLoRA tuner, corrections to weight and bias (LCD-823)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

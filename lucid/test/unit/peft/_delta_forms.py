@@ -128,3 +128,51 @@ def hira_conv_delta(weight: list[Matrix], a: list[Matrix], b: Matrix) -> list[Ma
         ]
         for o in range(len(weight))
     ]
+
+
+# ── GLoRA (Chavan et al., 2023, Eq. 10, 13, 14) ──────────────────────────────
+
+type Support = tuple[str, list[Matrix]]
+"""A support tensor as its adapter holds it: its kind and its parts (``Xd, Xu`` / ``X`` / ``zeros``)."""
+
+
+def glora_value(support: Support, rows: int, cols: int) -> Matrix:
+    """The ``rows x cols`` matrix a support tensor stands for: a product, a column or a scalar broadcast, or zeros."""
+    kind, parts = support
+    if kind == "lora":
+        return matmul(parts[0], parts[1])
+    if kind == "vector":
+        flat = [v[0] if isinstance(v, list) else v for v in parts[0]]
+        return [[flat[o]] * cols for o in range(rows)]
+    if kind == "constant":
+        return [[parts[0][0]] * cols for _ in range(rows)]
+    if not parts:
+        return [[0.0] * cols for _ in range(rows)]
+    held = parts[0]  # an absent support's buffer, which a file may fill with anything
+    return [[v] for v in held] if not isinstance(held[0], list) else held
+
+
+def glora_changes(
+    weight: Matrix,
+    bias: list[float] | None,
+    a: Support,
+    b: Support,
+    c: Support,
+    d: Support,
+    e: Support,
+) -> tuple[Matrix, list[float] | None]:
+    r""":math:`\Delta W = W \odot A + B` and :math:`\Delta b = b \odot D + E + W C`, entry by entry."""
+    out, inn = len(weight), len(weight[0])
+    delta_a, delta_b = glora_value(a, out, inn), glora_value(b, out, inn)
+    delta_w = [
+        [weight[o][i] * delta_a[o][i] + delta_b[o][i] for i in range(inn)] for o in range(out)
+    ]
+    if bias is None:
+        return delta_w, None
+    column = glora_value(c, inn, 1)
+    scale, shift = glora_value(d, out, 1), glora_value(e, out, 1)
+    delta_bias = [
+        bias[o] * scale[o][0] + shift[o][0] + sum(weight[o][i] * column[i][0] for i in range(inn))
+        for o in range(out)
+    ]
+    return delta_w, delta_bias
