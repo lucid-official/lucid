@@ -397,7 +397,7 @@ class TestAgainstTheReference:
         assert ours.modules_to_save == theirs.modules_to_save is None
         assert ours.active_peft_config.peft_type == theirs.active_peft_config.peft_type
 
-    def test_modules_to_save_is_the_union_of_the_configs(self, ref: ModuleType) -> None:
+    def test_a_weight_adapters_names_and_flag_are_the_references(self, ref: ModuleType) -> None:
         library = adapter_library()
         net = ref.nn.Sequential(ref.nn.Linear(4, 4), ref.nn.Linear(4, 4), ref.nn.Linear(4, 2))
         theirs = library.get_peft_model(
@@ -405,3 +405,7 @@ class TestAgainstTheReference:
         )
         ours = get_peft_model(_net(), _lora(modules_to_save=["2"]))
         assert ours.modules_to_save == theirs.modules_to_save == {"2"}
+        assert ours.has_active_enabled_adapter == theirs.has_active_enabled_adapter is True
+        with theirs.disable_adapter(), ours.disable_adapter():
+            assert ours.has_active_enabled_adapter == theirs.has_active_enabled_adapter is False
+        assert ours.has_active_enabled_adapter == theirs.has_active_enabled_adapter is True
