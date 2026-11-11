@@ -8,7 +8,7 @@ weight, or the matrix that multiplies it, is.
 
 import math
 
-from lucid.test.unit.peft._delta_forms import Matrix, add, eye, matmul, sub
+from lucid.test.unit.peft._delta_forms import Matrix, add, eye, matmul, sub, transpose
 
 # ── RoAd (Liao and Monz, 2024, section 3.2, Eq. 3 and Table 1) ───────────────
 
@@ -169,3 +169,29 @@ def osf_adapted(
         ]
         for i in range(rows)
     ]
+
+
+# ── FRoD (Wan et al., 2025, Eq. 6-8) ─────────────────────────────────────────
+
+
+def frod_adapted(
+    weight: Matrix,
+    basis: Matrix,
+    indices: list[list[int]],
+    norms: list[float],
+    entries: list[float],
+) -> Matrix:
+    r""":math:`W' = U(\Sigma + S)V^\top` of the layer weight ``weight`` (``out x in``), the basis :math:`V` and the file's tensors.
+
+    :math:`U` is :math:`B = W V^{-\top}` with its columns divided by their norms (Eq. 6; a column of zero norm
+    stays zero); ``norms`` is the file's trained :math:`\operatorname{diag}\Sigma`, which is *not* what
+    :math:`U` was divided by; ``entries`` sit at ``indices`` (``[rows, columns]``) of :math:`S`.
+    """
+    columns = matmul(weight, transpose(invert(basis)))
+    scale = [math.sqrt(sum(row[j] ** 2 for row in columns)) for j in range(len(columns[0]))]
+    u = [[v / scale[j] if scale[j] > 1e-12 else 0.0 for j, v in enumerate(row)] for row in columns]
+    size = len(basis)
+    middle = [[norms[i] if i == j else 0.0 for j in range(size)] for i in range(size)]
+    for row, column, value in zip(indices[0], indices[1], entries, strict=True):
+        middle[row][column] += value
+    return matmul(matmul(u, middle), transpose(basis))

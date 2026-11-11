@@ -189,6 +189,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the OSF tuner, training low singular directions (LCD-825)
 
+- the FRoD tuner, sparse rotation on a shared basis (LCD-825)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

@@ -17,6 +17,8 @@ import lucid
 import lucid.linalg as linalg
 import lucid.nn as nn
 from lucid.peft import (
+    FrodConfig,
+    FrodModel,
     OSFConfig,
     OSFModel,
     PeftType,
@@ -26,6 +28,7 @@ from lucid.peft import (
     RoadModel,
     get_peft_model,
 )
+from lucid.peft.tuners.frod import FrodLayer
 from lucid.peft.tuners.osf import OSFLayer
 from lucid.peft.tuners.psoft import PsoftLayer
 from lucid.peft.tuners.road import RoadLayer
@@ -230,6 +233,79 @@ _OSF_FILE = {
 }
 
 
+def _frod(targets: tuple[str, ...], random: bool, **kw: object) -> FrodConfig:
+    return FrodConfig.from_dict(
+        {
+            "sparse_rate": 0.5,
+            "projection_prng_key": 3,
+            "progressbar": False,
+            "target_modules": list(targets),
+            "init_weights": not random,
+            **kw,
+        }
+    )
+
+
+_FROD_SIZES = {
+    "0": (6, 18),
+    "2": (8, 32),
+}  # category -> (input width, entries of S) of the tiny MLP at rate 0.5
+
+
+def _frod_file() -> dict[str, tuple[int, ...]]:
+    file: dict[str, tuple[int, ...]] = {}
+    for index, (width, count) in zip((0, 2), _FROD_SIZES.values(), strict=True):
+        file[f"{_PREFIX}{index}.frod_lambda_l"] = (width,)
+        file[f"{_PREFIX}{index}.frod_lambda_s_values"] = (count,)
+    for category, (width, count) in _FROD_SIZES.items():
+        file[f"base_model.frod_V.{category}"] = (width, width)
+        file[f"base_model.frod_s_indices.{category}"] = (2, count)
+        file[f"base_model.frod_s_size.{category}"] = (2,)
+    return file
+
+
+def _frod_tensors() -> dict[str, lucid.Tensor]:
+    """A file a person could have written: an invertible basis, distinct off-diagonal positions, trained values of any size."""
+    lucid.manual_seed(7)
+    made: dict[str, lucid.Tensor] = {}
+    for category, (width, count) in _FROD_SIZES.items():
+        index = int(category)
+        made[f"{_PREFIX}{index}.frod_lambda_l"] = (
+            lucid.randint(-2, 3, (width,)).to(lucid.float32) * 0.5
+        )
+        made[f"{_PREFIX}{index}.frod_lambda_s_values"] = (
+            lucid.randint(-2, 3, (count,)).to(lucid.float32) * 0.5
+        )
+        made[f"base_model.frod_V.{category}"] = lucid.eye(width) + 0.2 * lucid.randn(width, width)
+        pairs = [(i, j) for i in range(width) for j in range(width) if i != j][::-1][:count]
+        made[f"base_model.frod_s_indices.{category}"] = lucid.tensor(
+            [[p[0] for p in pairs], [p[1] for p in pairs]], dtype=lucid.int64
+        )
+        made[f"base_model.frod_s_size.{category}"] = lucid.tensor([width, width], dtype=lucid.int64)
+    return made
+
+
+def _frod_forward(t: dict[str, lucid.Tensor], x: lucid.Tensor) -> lucid.Tensor:
+    """``W' = U (diag(lambda_l) + S) V^T``: ``U`` from the base weight and the file's basis, the rest as the file holds it."""
+    net = _mlp()
+    weights = []
+    for index in (0, 2):
+        p = f"{_PREFIX}{index}."
+        category = str(index)
+        weights.append(
+            lucid.tensor(
+                forms.frod_adapted(
+                    net[index].weight.tolist(),
+                    t[f"base_model.frod_V.{category}"].tolist(),
+                    t[f"base_model.frod_s_indices.{category}"].tolist(),
+                    t[p + "frod_lambda_l"].tolist(),
+                    t[p + "frod_lambda_s_values"].tolist(),
+                )
+            )
+        )
+    return _run(weights, [net[0].bias, net[2].bias], x)
+
+
 #: Method rows in the order the methods landed.
 _METHODS = [
     _Method("road", PeftType.ROAD, _road("road_1"), RoadModel, RoadLayer, _road_file(1)),
@@ -245,6 +321,17 @@ _METHODS = [
         _psoft_file(False, False),
     ),
     _Method("osf", PeftType.OSF, _osf, OSFModel, OSFLayer, _OSF_FILE),
+    # The adapted weight is the base's up to the rounding of the decomposition, not bit for bit.
+    _Method(
+        "frod",
+        PeftType.FROD,
+        _frod,
+        FrodModel,
+        FrodLayer,
+        _frod_file(),
+        exact_start=False,
+        tensors=_frod_tensors,
+    ),
 ]
 
 CLOSED_FORMS["road"] = _road_forward("road_1")
@@ -268,6 +355,30 @@ _REFERENCE_CONFIGS["road"] = _ROAD_REFERENCE
 _REFERENCE_CONFIGS["road_2"] = {**_ROAD_REFERENCE, "variant": "road_2"}
 _REFERENCE_CONFIGS["road_4"] = {**_ROAD_REFERENCE, "variant": "road_4"}
 CLOSED_FORMS["osf"] = _osf_forward
+CLOSED_FORMS["frod"] = _frod_forward
+_REFERENCE_CONFIGS["frod"] = {
+    "auto_mapping": None,
+    "base_model_name_or_path": "tiny",
+    "bias": "none",
+    "fan_in_fan_out": False,
+    "frod_dropout": 0.0,
+    "inference_mode": True,
+    "init_weights": True,
+    "layers_pattern": None,
+    "layers_to_transform": None,
+    "modules_to_save": None,
+    "peft_type": "FROD",
+    "peft_version": "0.21.2",
+    "progressbar": False,
+    "projection_prng_key": 3,
+    "regularization_alpha": 0.001,
+    "revision": None,
+    "runtime_offload_base_weight": False,
+    "save_projection": True,
+    "sparse_rate": 0.5,
+    "target_modules": ["0", "2"],
+    "task_type": None,
+}
 _REFERENCE_CONFIGS["osf"] = {
     "auto_mapping": None,
     "base_model_name_or_path": "tiny",

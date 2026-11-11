@@ -19,7 +19,7 @@ from lucid.peft._config import (
 class FrodConfig(_TargetedConfig, peft_type=PeftType.FROD):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with FRoD.
 
-    FRoD (Wan et al., 2025, arXiv:2512.23485 — Full-Rank Efficient Fine-Tuning with Rotational Degrees)
+    FRoD (Wan et al., 2025, arXiv:2512.23485 — Full-Rank Efficient Fine-Tuning with Rotational Degrees, Eq. 6-8)
     reaches a full-rank update with few parameters.  A basis shared by the layers of one kind is built from the
     base weights, and a sparse trainable rotation matrix, with a fraction ``sparse_rate`` of its off-diagonal
     entries free, turns that basis into the weight update.  The sparsity pattern is drawn from
@@ -67,11 +67,11 @@ class FrodConfig(_TargetedConfig, peft_type=PeftType.FROD):
 
     Notes
     -----
-    FRoD's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``sparse_rate`` is outside ``[0, 1]``.  No tuner
-    applies it yet: ``get_peft_model`` raises ``NotImplementedError`` naming LCD-825, which tracks
-    it.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference library's.  A field of
+    the wrong type raises ``TypeError``; ``ValueError`` is raised when ``sparse_rate`` is outside ``[0, 1]``.
+    ``bias`` other than ``"none"`` (the adapter trains its own tensors only) and
+    ``runtime_offload_base_weight=True`` (it moves weights between a device and the host, which unified memory
+    has no use for) raise ``NotImplementedError``; ``progressbar`` is accepted and nothing is drawn.
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {
@@ -92,6 +92,16 @@ class FrodConfig(_TargetedConfig, peft_type=PeftType.FROD):
         super()._check_fields()
         if not 0 <= self.sparse_rate <= 1:
             raise ValueError(f"`sparse_rate` should be between 0 and 1, got {self.sparse_rate}.")
+        if self.bias != "none":
+            raise NotImplementedError(
+                f"bias={self.bias!r}: a FRoD adapter in lucid.peft trains its own tensors only "
+                "(bias='none')"
+            )
+        if self.runtime_offload_base_weight:
+            raise NotImplementedError(
+                "runtime_offload_base_weight=True keeps base weights off the accelerator, which "
+                "unified memory has no use for; it is not implemented in lucid.peft"
+            )
 
     target_modules: str | list[str] | set[str] | None = None
     projection_prng_key: int = 0
