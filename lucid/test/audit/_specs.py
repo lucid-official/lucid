@@ -1620,6 +1620,20 @@ def _bounds_resized(call: Call, array: np.ndarray) -> Call:
     return peers.resized(array)
 
 
+def _reflectors_resized(call: Call, array: np.ndarray) -> Call:
+    """``householder_product(H, tau)``: ``tau`` keeps one entry per column of ``H``.
+
+    ``tau`` may not be longer than ``H`` has columns (LCD-940, as the
+    reference refuses it), so a resized ``H`` against the old ``tau`` is
+    refused for the probe's mismatch, not for the size it was asked about.
+    """
+    rebuilt = call.with_primary(array)
+    tau = _probe.to_numpy(call.args[1])
+    fill = tau.flat[0] if tau is not None and tau.size else 0.0
+    rebuilt.args[1] = _rebuild(call.args[1], np.full(array.shape[-1:], fill))
+    return rebuilt
+
+
 #: Keyed by qualified name; consulted by :func:`invocations`, which sets
 #: the rule on every candidate it yields for that symbol.
 _JOINT_RESIZE: dict[str, Callable[[Call, np.ndarray], Call]] = {
@@ -1628,6 +1642,7 @@ _JOINT_RESIZE: dict[str, Callable[[Call, np.ndarray], Call]] = {
     "lucid.linalg.solve_triangular": _linear_system_resized,
     "lucid.linalg.lu_solve": _linear_system_resized,
     "lucid.linalg.ldl_solve": _linear_system_resized,
+    "lucid.linalg.householder_product": _reflectors_resized,
     "lucid.nn.utils.pack_padded_sequence": _padded_batch_resized,
     "F.ctc_loss": _ctc_resized,
 }
