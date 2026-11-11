@@ -1,0 +1,23 @@
+# The reference implementations pretrained-parity.yml compares against, pinned.
+#
+# Installed unpinned, they moved every week: from the 2026-10-20 run (green)
+# to the 2026-11-03 one, torch 2.14.1 -> 2.15.0, transformers 5.20.2 ->
+# 5.22.1, huggingface_hub 2.2.0 -> 2.4.0.  A week's result then said nothing
+# about whether the next week's would match, and the two reds since could
+# not be told apart from a changed reference by anything in the log.
+#
+# These are the versions of the last green run (2026-10-20).  scipy has no
+# role in the numbers — DETR's hub entry point and the MaskFormer family
+# import its Hungarian matcher at load time — but a moving scipy is as
+# unreproducible as the rest.  torchvision is tied to torch's release, and
+# huggingface_hub is the client whose downloads fail and retry.
+#
+# Bump them on purpose: change the versions together in one commit and let
+# this file's pull_request trigger run the gate on the new stack, rather than
+# finding out on a Tuesday.
+torch==2.14.1
+torchvision==0.29.1
+timm==1.0.30
+transformers==5.20.2
+scipy==1.18.1
+huggingface_hub==2.2.0

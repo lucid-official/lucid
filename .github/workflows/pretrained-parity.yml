@@ -35,6 +35,9 @@ on:
     paths:
       - "lucid/models/**/_weights.py"
       - "tools/check_pretrained_parity.py"
+      - "tools/_darknet_release.py"
+      - "tools/_network_retry.py"
+      - ".github/pretrained-parity-constraints.txt"
       - ".github/workflows/pretrained-parity.yml"
 
 # Read-only: the comparison step holds the job's token and runs code it
@@ -95,8 +98,12 @@ jobs:
       # Mask2Former import its Hungarian matcher at load time.  Without it
       # all eight were "unreachable" every week from 2026-09-22, which is
       # what failed the job — never a numeric difference.
+      #
+      # Pinned to the last green run's versions (the constraints file says
+      # why and how to move them): the stack used to float, so a red could
+      # not be told from a changed reference.
       - name: Install the reference implementations
-        run: python -m pip install timm transformers scipy
+        run: python -m pip install -c .github/pretrained-parity-constraints.txt timm transformers scipy
 
       - name: Disk before
         run: df -h / | tail -1
