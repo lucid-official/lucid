@@ -100,6 +100,7 @@ from lucid.peft.tuners.multitask_prompt_tuning import (
 from lucid.peft.tuners.p_tuning import PromptEncoderConfig, PromptEncoderModel
 from lucid.peft.tuners.prefix_tuning import PrefixTuningConfig, PrefixTuningModel
 from lucid.peft.tuners.prompt_tuning import PromptTuningConfig, PromptTuningModel
+from lucid.peft.tuners.road import RoadLayer
 from lucid.peft.tuners.vera import VeraConfig, VeraLayer, VeraModel
 from lucid.peft.tuners.xlora import XLoraClassifier
 
@@ -232,6 +233,12 @@ _LAYER_CONFIGS: dict[type[_BaseTunerLayer], Callable[[], PeftConfig]] = {
 }
 
 
+#: The base a layer family is built on where ``_BASES``'s does not fit it: RoAd pairs output features, so needs an even width.
+_LAYER_BASES: dict[type[_BaseTunerLayer], Callable[[], nn.Module]] = {
+    RoadLayer: lambda: nn.Linear(4, 4),
+}
+
+
 def _layer_types() -> Iterator[tuple[type[nn.Module], type[_BaseTunerLayer]]]:
     """Every registered ``(base_type, layer class)`` pair, over all tuner families."""
     seen: set[type] = set()
@@ -267,10 +274,11 @@ def _layer_builder(base: type[nn.Module], layer: type[_BaseTunerLayer]) -> Calla
         (m for root, m in _LAYER_CONFIGS.items() if issubclass(layer, root)), _example_config(layer)
     )
     wants_config = "config" in parameters and make_config is not None
+    make_base = next((m for root, m in _LAYER_BASES.items() if issubclass(layer, root)), _BASES[base])
 
     def build() -> Any:
         positional = [make_config()] if wants_config and make_config is not None else []
-        return layer(_BASES[base](), "default", *positional, **keywords)
+        return layer(make_base(), "default", *positional, **keywords)
 
     return build
 

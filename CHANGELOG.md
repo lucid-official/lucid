@@ -181,6 +181,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Lily, shared low-rank adapters mixed by a router (LCD-824)
 
+- the RoAd tuner, rotating pairs of output features (LCD-825)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

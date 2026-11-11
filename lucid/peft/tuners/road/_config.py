@@ -11,7 +11,7 @@ class RoadConfig(_TargetedConfig, peft_type=PeftType.ROAD):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with RoAd.
 
     RoAd (Liao and Monz, 2024, arXiv:2409.00119 — 2D Rotary Adaptation) pairs the output features of a
-    layer into 2-D vectors and rotates and scales each pair,
+    layer into 2-D vectors and rotates and scales each pair (section 3.2, Eq. 3),
 
     .. math:: \begin{pmatrix} y_i' \\ y_j' \end{pmatrix} = \alpha \begin{pmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{pmatrix} \begin{pmatrix} y_i \\ y_j \end{pmatrix} .
 
@@ -47,11 +47,10 @@ class RoadConfig(_TargetedConfig, peft_type=PeftType.ROAD):
 
     Notes
     -----
-    RoAd's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when ``variant`` is unknown, or ``group_size`` is not a
-    positive even number.  No tuner applies it yet: ``get_peft_model`` raises
-    ``NotImplementedError`` naming LCD-825, which tracks it.
+    Field names, their order, defaults and ``adapter_config.json`` are the reference library's.  A
+    field of the wrong type raises ``TypeError``; ``ValueError`` is raised when ``variant`` is
+    unknown, or ``group_size`` is not a positive even number.  ``RoadModel`` also needs a layer's
+    output width to be a multiple of ``group_size``.
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {
