@@ -77,6 +77,9 @@ class TestConfig:
             WaveFTConfig(n_frequency=0, target_modules=["a"])
         with pytest.raises(ValueError, match="bias"):
             WaveFTConfig(bias="some", target_modules=["a"])  # type: ignore[arg-type]
+        for kind in ("all", "waveft_only"):
+            with pytest.raises(NotImplementedError, match="bias"):
+                WaveFTConfig(bias=kind, target_modules=["a"])  # type: ignore[arg-type]
         with pytest.raises(TypeError, match="use_idwt"):
             WaveFTConfig(use_idwt="yes", target_modules=["a"])  # type: ignore[arg-type]
 

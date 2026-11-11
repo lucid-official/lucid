@@ -677,9 +677,9 @@ def test_the_encoder_matches_the_reference(ref: ModuleType, frozen: int) -> None
 
 @pytest.mark.parity
 def test_the_packing_matches_the_reference(ref: ModuleType) -> None:
+    adapter_library()
     from peft.tuners.cartridge.utils import prompt_embeddings_from_past_key_values as theirs
 
-    adapter_library()
     cache = _legacy(layers=3, heads=2, tokens=7, dim=5, seed=3)
     mine = prompt_embeddings_from_past_key_values(cache, num_virtual_tokens=5)
     twin = tuple((ref.tensor(k.tolist()), ref.tensor(v.tolist())) for k, v in cache)

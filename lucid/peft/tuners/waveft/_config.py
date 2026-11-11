@@ -54,7 +54,7 @@ class WaveFTConfig(_TargetedConfig, peft_type=PeftType.WAVEFT):
         Seed of the random positions of the learnable coefficients.
     bias : {"none", "all", "waveft_only"}, default="none"
         Which biases also train with WaveFT: none, all of them, or only those of the adapted
-        layers.
+        layers.  Only ``"none"`` is implemented; the others raise ``NotImplementedError``.
     n_frequency_pattern : dict of str to int, optional
         Per-module overrides of ``n_frequency``, keyed by name or regex.
     proportional_parameters : bool, default=False
@@ -86,10 +86,15 @@ class WaveFTConfig(_TargetedConfig, peft_type=PeftType.WAVEFT):
     config is read and written as ``adapter_config.json``.  A field of the wrong type raises
     ``TypeError``.  ``ValueError`` is raised when ``n_frequency`` is not positive, or ``wavelet_family``
     is not a name the reference accepts (``db1`` to ``db38``, ``sym2`` to ``sym20``, ``coif1`` to
-    ``coif17``).  The filters of ``db1`` to ``db10``, ``sym2`` to ``sym10`` and ``coif1`` to ``coif5``
+    ``coif17``).  ``bias`` other than ``"none"`` raises ``NotImplementedError``: the coefficients are
+    all a WaveFT adapter trains.  The filters of ``db1`` to ``db10``, ``sym2`` to ``sym10`` and ``coif1`` to ``coif5``
     are built in; a layer with ``use_idwt=True`` and another family raises ``ValueError`` when it is
     built, and one with ``use_idwt=False`` never reads the family.
     """
+
+    _unsupported: ClassVar[dict[str, str]] = {
+        "bias": "a WaveFT adapter trains its own coefficients only (bias='none')"
+    }
 
     _field_checks: ClassVar[dict[str, _Check]] = {
         "n_frequency": _check_rank,

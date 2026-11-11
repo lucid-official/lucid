@@ -151,6 +151,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - param gradient hooks survive Module.to / .data = (LCD-962)
 
+- WaveFT refuses bias; parity test skips first (LCD-826)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
