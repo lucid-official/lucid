@@ -41,12 +41,10 @@ Only sources whose reference package is installed can be checked; the
 rest are reported as unreachable rather than skipped silently.
 
 **A dropped network is not a finding.**  A comparison that fails because a
-download did — a resolver gone for seconds, a reset connection, a 503 — is
-tried again after 5, 15 and 45 seconds (one 10-minute allowance for the
-whole run).  If it still fails it is reported as ``unreachable (network)``
-and left out of the verdict.  A numeric mismatch, or a failure that is not
-the network's (a loader that raises, a wrong shape), is never retried and
-always fails the run.
+download did (a resolver gone for seconds, a reset, a 503) is retried after
+5, 15 and 45 seconds, from one 10-minute allowance for the whole run; if it
+still fails it is ``unreachable (network)`` and outside the verdict.  A
+numeric mismatch or any other failure is never retried and fails the run.
 
 Run::
 
@@ -59,13 +57,12 @@ Run::
 
 Exit codes
 ----------
-0 — every checkpoint that could be compared agrees.  Checkpoints that stayed
-    unreachable (network) after the retries are listed in the summary, and as
-    a warning under GitHub Actions, but are not failures.
+0 — every checkpoint that could be compared agrees; any still unreachable
+    (network) after the retries are listed, and warned about under GitHub
+    Actions, but do not fail the run.
 1 — at least one disagrees beyond tolerance, or failed for a reason other
     than the network.
-2 — nothing could be compared (no reference installed, or every selection
-    unreachable).
+2 — nothing could be compared (no reference installed, or all unreachable).
 """
 
 import argparse
@@ -123,9 +120,8 @@ _MIN_SCALE = 1e-3
 #: 774M-parameter model are over 6 GB before any activation.
 _MAX_PARAMS = 500_000_000
 
-#: Waits out a network that drops for seconds.  One instance for the whole
-#: run: its allowance is shared, so an outage that never ends cannot spend
-#: more than ten minutes of the job's two hours.
+#: Waits out a network that drops for seconds, from one allowance for the whole
+#: run, so an outage that never ends cannot outlast the job's timeout.
 _NETWORK = Backoff()
 
 #: The transformers class that reproduces each Lucid class, and the output
@@ -260,14 +256,12 @@ def _build_reference(kind: str, identifier: str) -> object:
 
 
 def _failure(exc: Exception) -> dict[str, object]:
-    """The verdict for a comparison that raised: the one place it is decided.
+    """The verdict for a comparison that raised, decided in one place.
 
-    A failure the network caused is ``unreachable``, marked so that
-    :func:`_compare` tries again and :func:`main` keeps it out of the
-    verdict; anything else is an ``error`` and fails the run.  Every
-    comparison reports its exceptions through here — a handler that built
-    its own ``error`` would bring back the week a DNS blip read as a
-    conversion defect.
+    The network's failures are ``unreachable`` and marked, so :func:`_compare`
+    retries them and :func:`main` keeps them out of the verdict; the rest are
+    ``error``.  A handler that built its own ``error`` would bring back the
+    week a DNS blip read as a conversion defect.
     """
     if is_network_failure(exc):
         return {
@@ -280,15 +274,13 @@ def _failure(exc: Exception) -> dict[str, object]:
 def _smooth_image(shape: tuple[int, ...], seed: int = 0) -> np.ndarray:
     """A deterministic image of low spatial frequencies, unit variance per plane.
 
-    White noise is an unlucky input for a detector: DETR's decoder
-    cross-attention scores reach about 90 on it, so the softmax turns a
-    1e-6 float32 rounding difference into a 1e-4 one.  Seed 0's noise put
-    DETR-R50's boxes 1.212e-4 apart from the reference (tolerance 1e-4) on
-    unchanged weights, and the same checkpoint on seeds 0-3 ranged over
-    6e-6 to 1.2e-4.  A few low-frequency cosines per channel, which is
-    nearer what the model was trained on, put every seed of both DETRs
-    under 1e-5 (worst 9.0e-6), while a 1% error in one decoder weight
-    still reads 9e-4.
+    White noise is an unlucky DETR input: decoder cross-attention scores reach
+    about 90 on it, so a 1e-6 float32 rounding difference becomes 1e-4.  Seed
+    0's put DETR-R50's boxes 1.212e-4 from the reference (tolerance 1e-4) on
+    unchanged weights; seeds 0-3 ranged 6e-6 to 1.2e-4.  A few low-frequency
+    cosines per channel, nearer what the model was trained on, keep both DETRs
+    under 1e-5 on every seed while a 1% error in one decoder weight still
+    reads 9e-4.
     """
     *lead, height, width = shape
     rng = np.random.default_rng(seed)
@@ -333,9 +325,9 @@ def _compare(
 ) -> dict[str, object]:
     """One checkpoint against its source, trying again while the network drops.
 
-    Every download either side makes — Lucid's checkpoint, the reference's —
-    happens inside :func:`_compare_once`, so retrying that retries both.  What
-    was fetched before the drop is already on disk and is not fetched again.
+    Both sides' downloads (Lucid's checkpoint, the reference's) happen inside
+    :func:`_compare_once`, so retrying it retries both; what was fetched
+    before the drop is already on disk.
     """
     result = _compare_once(model_name, source, shape, params, max_params)
     retry = 0
@@ -1472,9 +1464,7 @@ def main() -> int:
     if args.clean_downloads:
         print(f"removed {freed / 1e9:.2f} GB of downloads along the way")
     if offline:
-        # Not a parity result either way: said plainly so that a green run is
-        # not read as having covered these, and surfaced on the run's page
-        # where nobody opens the log.
+        # No parity result either way: say so, so a green run is not read as covering these.
         listing = ", ".join(offline)
         print(f"\n{len(offline)} unreachable (network) after retries: {listing}", file=sys.stderr)
         if os.environ.get("GITHUB_ACTIONS") == "true":
