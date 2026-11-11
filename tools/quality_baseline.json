@@ -2348,9 +2348,7 @@
     "lucid/peft/tuners/adamss/_config.py": 6,
     "lucid/peft/tuners/lora/_subconfigs.py": 7,
     "lucid/peft/tuners/osf/_config.py": 1,
-    "lucid/peft/tuners/shadow/_config.py": 4,
-    "lucid/peft/tuners/supertuning/_config.py": 2,
-    "lucid/peft/tuners/waveft/_config.py": 3
+    "lucid/peft/tuners/shadow/_config.py": 4
    }
   }
  }
