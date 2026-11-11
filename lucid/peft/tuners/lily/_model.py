@@ -63,15 +63,16 @@ class LilyModel(_SettlingTuner, _ConfigTuner[LilyConfig], peft_type=PeftType.LIL
     --------
     >>> import lucid.nn as nn
     >>> from lucid.peft import LilyConfig, LilyModel
-    >>> net = nn.Sequential(nn.Linear(8, 8), nn.Linear(8, 8), nn.Linear(8, 8))
-    >>> lily = LilyModel(net, LilyConfig(r=4, stride_A=2, target_modules=["0", "1", "2"]), "default")
-    >>> net[1].lily_A["default"] is net[0].lily_A["default"]   # one down-projection per two layers
+    >>> net = nn.ModuleList([nn.ModuleDict({"q": nn.Linear(8, 8)}) for _ in range(3)])
+    >>> lily = LilyModel(net, LilyConfig(r=4, stride_A=2, target_modules=["q"]), "default")
+    >>> q = [block["q"] for block in net]                 # the three layers the entry "q" selects
+    >>> q[1].lily_A["default"] is q[0].lily_A["default"]   # one down-projection per two layers
     True
-    >>> net[2].lily_A["default"] is net[0].lily_A["default"]
+    >>> q[2].lily_A["default"] is q[0].lily_A["default"]
     False
-    >>> net[2].lily_B["default"] is net[0].lily_B["default"]   # the up-projections are the model's
+    >>> q[2].lily_B["default"] is q[0].lily_B["default"]   # the up-projections are the group's
     True
-    >>> lily.unload() is net, type(net[0]) is nn.Linear
+    >>> lily.unload() is net, type(net[0]["q"]) is nn.Linear
     (True, True)
     """
 
