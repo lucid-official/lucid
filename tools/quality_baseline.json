@@ -146,6 +146,11 @@
    "date": "2026-11-09",
    "reason": "user's format-only reformat of lucid/linalg/__init__.py after LCD-940/941 (AST-identical) adds one line: file-loc 1414 -> 1415",
    "by": "chanlee"
+  },
+  {
+   "date": "2026-11-12",
+   "reason": "LCD-822 PEFT B4 scaffold: vulture unused-variable +57 in 17 config files \u2014 reference-parity dataclass fields of the 19 pending methods and 5 LoRA option classes that no tuner reads yet; each returns to 0 when its method card (LCD-823..826, 828) lands",
+   "by": "chanlee"
   }
  ],
  "counts": {
@@ -2336,6 +2341,27 @@
    },
    "UP047": {
     "lucid/nn/init.py": 1
+   }
+  },
+  "vulture": {
+   "unused-variable": {
+    "lucid/peft/tuners/adamss/_config.py": 6,
+    "lucid/peft/tuners/deft/_config.py": 3,
+    "lucid/peft/tuners/delora/_config.py": 2,
+    "lucid/peft/tuners/frod/_config.py": 3,
+    "lucid/peft/tuners/glora/_config.py": 3,
+    "lucid/peft/tuners/gralora/_config.py": 2,
+    "lucid/peft/tuners/hira/_config.py": 1,
+    "lucid/peft/tuners/lily/_config.py": 1,
+    "lucid/peft/tuners/lora/_subconfigs.py": 7,
+    "lucid/peft/tuners/osf/_config.py": 1,
+    "lucid/peft/tuners/psoft/_config.py": 8,
+    "lucid/peft/tuners/pvera/_config.py": 3,
+    "lucid/peft/tuners/shadow/_config.py": 4,
+    "lucid/peft/tuners/supertuning/_config.py": 2,
+    "lucid/peft/tuners/tinylora/_config.py": 3,
+    "lucid/peft/tuners/unilora/_config.py": 5,
+    "lucid/peft/tuners/waveft/_config.py": 3
    }
   }
  }
