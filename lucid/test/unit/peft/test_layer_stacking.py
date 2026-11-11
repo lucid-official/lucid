@@ -60,7 +60,7 @@ from lucid.peft.tuners import (
     road,
     shira,
 )
-from lucid.peft.tuners._layer import _BaseTunerLayer, _named, _tuner_layers
+from lucid.peft.tuners._layer import _BaseTunerLayer, _qualified, _tuner_layers
 from lucid.test.unit.peft._tuner_recipes import finite, perturb_adapter, same, span
 
 _IN, _OUT = 8, 6
@@ -143,7 +143,7 @@ _HIRA = _Method("hira", hira.Linear, _hira)
 #: What may stand beneath a layer here: any stackable layer, and HiRA.
 _INNERS = [*_METHODS, _HIRA]
 
-#: The classes that may be built on a layer, as ``_named`` spells them.
+#: The classes that may be built on a layer, as ``_qualified`` spells them.
 _DECLARED = frozenset(
     {
         "lora._layer.Linear",
@@ -457,9 +457,9 @@ class TestRefusedClasses:
         base = nn.Linear(_IN, _OUT)
         below = inner.build(base, "i")
         before = list(below.state_dict())
-        with pytest.raises(TypeError, match=re.escape(_named(refused.layer))) as caught:
+        with pytest.raises(TypeError, match=re.escape(_qualified(refused.layer))) as caught:
             refused.build(below, "x")
-        assert _named(inner.layer) in str(caught.value) and "stackable" in str(caught.value)
+        assert _qualified(inner.layer) in str(caught.value) and "stackable" in str(caught.value)
         assert list(below.state_dict()) == before and below.base_layer is base
 
 
@@ -547,7 +547,7 @@ class TestWrappersOfOneModuleNestAsBefore:
 
     def test_a_wrapper_may_not_stand_on_a_layer_of_a_module(self) -> None:
         below = lora.Linear(nn.Linear(_IN, _OUT), "i", r=2)
-        with pytest.raises(TypeError, match=re.escape(_named(lora.ParamWrapper))):
+        with pytest.raises(TypeError, match=re.escape(_qualified(lora.ParamWrapper))):
             lora.ParamWrapper(below, "o", "weight", r=2, lora_alpha=4)
 
 
@@ -575,15 +575,15 @@ class TestEveryLayerClassIsDecided:
         assert set(_DECIDED) <= set(_CLASSES)
 
     def test_the_stackable_classes_are_the_declared_ones(self) -> None:
-        assert {_named(cls) for cls in _CLASSES if cls._stackable} == _DECLARED
+        assert {_qualified(cls) for cls in _CLASSES if cls._stackable} == _DECLARED
         assert {m.layer for m in _METHODS} == {cls for cls in _CLASSES if cls._stackable}
 
-    @pytest.mark.parametrize("cls", _CLASSES, ids=_named)
+    @pytest.mark.parametrize("cls", _CLASSES, ids=_qualified)
     def test_a_class_is_refused_a_layer_unless_it_is_declared(
         self, cls: type[_BaseTunerLayer]
     ) -> None:
         """A new layer class lands refused; to stack, add it to ``_METHODS`` and ``_DECLARED`` and pass the pairs."""
         below = lora.Linear(nn.Linear(_IN, _OUT), "i", r=2)
-        declared = _named(cls) in _DECLARED
+        declared = _qualified(cls) in _DECLARED
         assert cls._stackable is declared
         assert cls._stands_on(below) is declared

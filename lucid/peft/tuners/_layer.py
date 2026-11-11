@@ -37,7 +37,7 @@ def _join(prefix: str, name: str) -> str:
     return f"{prefix}.{name}" if prefix else name
 
 
-def _named(layer: type) -> str:
+def _qualified(layer: type) -> str:
     """``layer`` as ``family._module.Class``: every family has a ``Linear``, so the bare name says nothing."""
     return f"{layer.__module__.removeprefix('lucid.peft.tuners.')}.{layer.__qualname__}"
 
@@ -165,10 +165,10 @@ class _BaseTunerLayer(nn.Module, ABC):
         if isinstance(base_layer, _BaseTunerLayer):
             if not type(self)._stands_on(base_layer):
                 raise TypeError(
-                    f"{_named(type(self))} cannot be built on {_named(type(base_layer))}: it "
-                    "computes from, or reads, the base weight, so the layer below would be "
-                    "dropped or counted twice; only a class declared stackable may stand on "
-                    "another tuner layer"
+                    f"{_qualified(type(self))} cannot be built on "
+                    f"{_qualified(type(base_layer))}: it computes from, or reads, the base "
+                    "weight, so the layer below would be dropped or counted twice; only a class "
+                    "declared stackable may stand on another tuner layer"
                 )
             root = base_layer._root()
         kind = type(self)._base_type

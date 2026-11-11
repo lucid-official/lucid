@@ -161,6 +161,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a decoder prefix has the decoder's layer count (LCD-958)
 
+- the class-name helper no longer shares a facade name
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
