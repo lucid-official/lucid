@@ -10,6 +10,7 @@ other value, never silently ignored; one with a meaning (``key_mapping``, ``is_m
 import dataclasses
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -21,9 +22,13 @@ from lucid.peft import (
     AdaLoraModel,
     AdaptionPromptConfig,
     AdaptionPromptModel,
+    ArrowConfig,
     AutoPeftModelForCausalLM,
+    BdLoraConfig,
+    KasaConfig,
     LoraConfig,
     LoraModel,
+    MontecloraConfig,
     PeftConfig,
     PeftModel,
     PeftModelForFeatureExtraction,
@@ -31,6 +36,7 @@ from lucid.peft import (
     PeftModelForSeq2SeqLM,
     PeftModelForSequenceClassification,
     PeftModelForTokenClassification,
+    VeloraConfig,
     XLoraConfig,
     XLoraModel,
     get_peft_model,
@@ -83,6 +89,15 @@ class TestRefusals:
 
 _LORA_ONLY = sorted(LoraConfig._all_unsupported)
 
+#: A value of the option dataclass an extension's field holds: the field reads it, then refuses it.
+_EXTENSION_OPTIONS: dict[str, Callable[[], object]] = {
+    "arrow_config": ArrowConfig,
+    "kasa_config": KasaConfig,
+    "use_bdlora": BdLoraConfig,
+    "monteclora_config": MontecloraConfig,
+    "velora_config": VeloraConfig,
+}
+
 
 class TestConfig:
     @pytest.mark.parametrize("name", _LORA_ONLY)
@@ -95,6 +110,8 @@ class TestConfig:
         other: object = (not default) if isinstance(default, bool) else "other"
         if isinstance(default, int) and not isinstance(default, bool):
             other = default + 1
+        if name in _EXTENSION_OPTIONS:
+            other = _EXTENSION_OPTIONS[name]()
         with pytest.raises(NotImplementedError, match=name):
             LoraConfig(**{name: other})  # type: ignore[arg-type]
 
