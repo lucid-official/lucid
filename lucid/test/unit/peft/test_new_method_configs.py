@@ -50,11 +50,10 @@ _CLASSES: list[type[PeftConfig]] = [getattr(peft, name) for name in _NAMES]
 
 
 def test_every_config_without_a_working_tuner_is_among_these() -> None:
-    """The withheld methods shrink as their cards land; each still has its config here."""
-    from lucid.peft.tuners._base import _PENDING_TUNERS, _REFUSED_TUNERS
+    """The refused method still has its config here."""
+    from lucid.peft.tuners._base import _REFUSED_TUNERS
 
-    withheld = {*_PENDING_TUNERS, *_REFUSED_TUNERS}
-    assert withheld <= {cls._peft_type for cls in _CLASSES}
+    assert set(_REFUSED_TUNERS) <= {cls._peft_type for cls in _CLASSES}
 
 
 @pytest.mark.parametrize("config_class", _CLASSES, ids=_NAMES)

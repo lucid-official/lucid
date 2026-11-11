@@ -211,6 +211,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the Cartridge tuner and its four utilities (LCD-826)
 
+- the AdaMSS tuner and its subspace allocation (LCD-828)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

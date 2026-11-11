@@ -28,29 +28,33 @@ class AdamssConfig(_TargetedConfig, peft_type=PeftType.ADAMSS):
     r"""How :func:`lucid.peft.get_peft_model` adapts a model with AdaMSS.
 
     AdaMSS (Zheng et al., 2025, NeurIPS — Adaptive Multi-Subspace Approach for Parameter-Efficient
-    Fine-Tuning) takes the SVD of each weight, clusters its top-``r`` singular directions into ``num_subspaces``
-    subspaces, and learns an independent rank-``subspace_rank`` update inside each one while the weight stays
-    frozen.  With ``use_asa``, an adaptive allocation prunes the less important subspaces during training, down to
-    ``asa_target_subspaces`` active ones in all.
+    Fine-Tuning) takes the SVD of each weight (joined to its bias as one more column), clusters the rows of its
+    top-``r`` left singular directions into ``num_subspaces`` subspaces, and learns an independent
+    rank-``subspace_rank`` update inside each one while the weight stays frozen.  With ``use_asa``, an adaptive
+    allocation freezes the less important subspaces during training, down to about ``asa_target_subspaces``
+    trainable ones in all.
 
     Parameters
     ----------
     task_type, peft_type, auto_mapping, peft_version, base_model_name_or_path, revision, inference_mode
         As in :class:`~lucid.peft.PeftConfig`.
     r : int, default=100
-        Total rank of the SVD (``R`` in the paper), clamped to the smaller weight dimension.
+        Total rank of the SVD (``R`` in the paper), clamped to the smaller dimension of the weight joined to its bias.
     num_subspaces : int, default=5
         Subspaces :math:`K` the SVD space is clustered into; with ASA, the number before
         pruning.
     subspace_rank : int, default=1
-        Rank of the update in each subspace.
+        Rank of the update in each subspace, capped by the subspace's rows and by ``r``.
     init_weights : {"orthogonal"}, optional
-        ``"orthogonal"``: orthogonal :math:`B`, zero :math:`A`, so the adapter starts as the
-        identity.  ``None`` (or ``False``): skip initialisation, as when loading a checkpoint.
+        ``"orthogonal"``: each subspace's :math:`A` starts with orthonormal rows and its :math:`B` at zero,
+        so the adapter starts as the identity.  ``None`` (or ``False``): :math:`B` starts as a small random
+        draw (standard deviation 0.01, from ``random_seed``), so the adapter already changes the output.
     use_asa : bool, default=False
-        Enable Adaptive Subspace Allocation, which prunes subspaces during training.
+        Enable Adaptive Subspace Allocation, which freezes subspaces during training.
     asa_target_subspaces : int, default=50
-        Active subspaces across all layers that ASA prunes down to; positive with ``use_asa``.
+        Trainable subspaces across all layers that ASA freezes down to (it keeps one fewer, the reference's
+        rule: a subspace stays only if its score is strictly above the ``asa_target_subspaces``-th highest);
+        positive with ``use_asa``.
     init_warmup : int, default=50
         Steps before pruning starts; below ``final_warmup`` with ``use_asa``.
     final_warmup : int, default=1000
@@ -86,11 +90,10 @@ class AdamssConfig(_TargetedConfig, peft_type=PeftType.ADAMSS):
 
     Notes
     -----
-    AdaMSS's config is complete: every field of the reference library's, in its order and with its
-    defaults, read and written as ``adapter_config.json``.  A field of the wrong type raises
-    ``TypeError``.  ``ValueError`` is raised when a rank is not positive, ``init_weights`` is
-    unknown, or the ASA schedule is inconsistent.  No tuner applies it yet: ``get_peft_model``
-    raises ``NotImplementedError`` naming LCD-828, which tracks it.
+    Every field of the reference library's config, in its order and with its defaults, is read and
+    written as ``adapter_config.json``.  A field of the wrong type raises ``TypeError``.
+    ``ValueError`` is raised when a rank is not positive, ``init_weights`` is unknown, or the ASA
+    schedule is inconsistent.  The tuner that applies it is :class:`~lucid.peft.AdamssModel`.
     """
 
     _field_checks: ClassVar[dict[str, _Check]] = {

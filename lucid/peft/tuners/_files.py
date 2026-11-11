@@ -10,12 +10,22 @@ does not is read and written by the layers' own keys.
 """
 
 from collections.abc import Mapping
-from typing import NamedTuple
+from typing import NamedTuple, Protocol, runtime_checkable
 
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig
 from lucid.peft.tuners._layer import _BaseTunerLayer, _dotted, _tuner_layers
+
+
+@runtime_checkable
+class _Persistable(Protocol):
+    """A per-adapter table of buffers that may or may not be saved (``_BufferDict``)."""
+
+    @property
+    def persistent(self) -> bool: ...
+
+    def __contains__(self, name: object) -> bool: ...
 
 
 class _FileContext(NamedTuple):
@@ -44,6 +54,23 @@ class _FileContext(NamedTuple):
     def key(self, path: str, table: str) -> str:
         """The file's key of the tensor in ``table`` of the layer at ``path``."""
         return f"{self.prefix}{_dotted(path, table)}"
+
+    def buffer_keys(self, table: str) -> dict[str, str]:
+        """In-memory key → file key of the tensors in the buffer table ``table`` of each layer that holds this adapter in it.
+
+        A layer's frozen tensor that the adapter file carries (positions, a projection) is a buffer
+        beside the layer's slot tables, so the slot machinery does not see it; a tuner's
+        ``_shared_keys`` returns this to put it in the file, under the layer's path and without the
+        adapter's name, as the reference writes it.  A table that is not persistent (a buffer
+        rebuilt on load) is left out.
+        """
+        keys: dict[str, str] = {}
+        for path, layer in self.layers:
+            held: object = getattr(layer, table, None)
+            if isinstance(held, _Persistable) and held.persistent and self.adapter in held:
+                where = self.key(path, table)
+                keys[_dotted(where, self.adapter)] = where
+        return keys
 
 
 class _FileFormat:

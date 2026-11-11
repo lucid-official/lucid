@@ -95,10 +95,8 @@ a loss over the examples' outputs::
 The methods the reference library has added since have an adapter too: DeLoRA, GraLoRA, HiRA, GLoRA,
 DEFT and PEANuT (``DeloraConfig`` …), Uni-LoRA, PVeRA, TinyLoRA and Lily, RoAd, PSOFT, OSF and FRoD,
 Super-Tuning, WaveFT, BEFT and Cartridge (``CartridgeConfig``, ``CartridgeEncoder`` and the four
-``initialize_kv_prefix_*`` / ``compose_cartridge_adapters`` utilities).  AdaMSS has a config with every
-field of the reference's, in its order and with its defaults, and no adapter yet: building one raises
-``NotImplementedError`` naming the issue that tracks it, and ``PEFT_TYPE_TO_TUNER_MAPPING`` has a class
-for it that raises it.  ShadowPEFT is refused for good — it needs the base model's decoder loop and a
+``initialize_kv_prefix_*`` / ``compose_cartridge_adapters`` utilities) and AdaMSS (``AdamssConfig``,
+``AdamssModel``).  ShadowPEFT is refused for good — it needs the base model's decoder loop and a
 second backbone beside it.  The option classes of LoRA's extensions (``ArrowConfig``, ``BdLoraConfig``,
 ``KasaConfig``, ``MontecloraConfig``, ``VeloraConfig``) are here too, for the ``LoraConfig`` fields
 that hold them; a ``LoraConfig`` that sets one of those extensions is refused.

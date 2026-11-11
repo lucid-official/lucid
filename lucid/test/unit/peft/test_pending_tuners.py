@@ -227,14 +227,6 @@ def test_a_module_targeting_stand_in_has_its_audit_example_ready(peft_type: Peft
 # ── the B4 end gate ──────────────────────────────────────────────────────────
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-828: the last pending tuner (AdaMSS) lands; delete this marker when it does",
-)
 def test_phase_b4_leaves_no_pending_tuner() -> None:
-    """The end gate of phase B4: every method but the refused one has a tuner.
-
-    Fails while any method is still a stand-in.  When the last one lands it passes, which a strict
-    ``xfail`` reports as a failure — the reminder to remove the marker.
-    """
+    """The end gate of phase B4: every method but the refused one has a tuner."""
     assert not _PENDING_TUNERS, sorted(str(t) for t in _PENDING_TUNERS)

@@ -39,7 +39,7 @@ from lucid.peft import (
 from lucid.peft._config import _TargetedConfig
 from lucid.peft._target_aliases import REFERENCE_TARGET_ALIASES, _zoo_target_names
 from lucid.peft._targeting import _module_names_matching, _selects
-from lucid.peft.tuners._base import _PENDING_TUNERS, _REFUSED_TUNERS, _TUNERS
+from lucid.peft.tuners._base import _REFUSED_TUNERS, _TUNERS
 from lucid.peft.tuners.ia3._defaults import IA3_DEFAULT_FEEDFORWARD_MODULES
 from lucid.test.unit.models._peft_matrix import _refusal
 from lucid.test.unit.models._peft_rows import ROWS
@@ -119,15 +119,11 @@ def test_a_copied_table_is_its_base_with_its_own_rows() -> None:
     assert _rows("FROD")["vit"] == ["query", "value"]
 
 
-def test_the_methods_without_a_tuner_are_the_pending_and_refused_ones() -> None:
-    """A table has no tuner here exactly when its method's tuner is a stand-in.
-
-    A method whose tuner lands leaves ``_PENDING_TUNERS`` and its table joins the parametrized test
-    below, which holds its defaults to the reference's; nothing in this file changes.
-    """
+def test_the_methods_without_a_tuner_are_the_refused_ones() -> None:
+    """A table has no tuner here exactly when its method is refused (SHADOW)."""
     without = {table for table in _SNAPSHOT["tables"] if not _has_tuner(table)}
-    withheld = {str(peft_type) for peft_type in (*_PENDING_TUNERS, *_REFUSED_TUNERS)}
-    assert without == withheld & set(_SNAPSHOT["tables"]), sorted(without ^ withheld)
+    refused = {str(peft_type) for peft_type in _REFUSED_TUNERS}
+    assert without == refused & set(_SNAPSHOT["tables"]), sorted(without ^ refused)
 
 
 # ── the defaults ─────────────────────────────────────────────────────────────
@@ -136,8 +132,8 @@ def test_the_methods_without_a_tuner_are_the_pending_and_refused_ones() -> None:
 def test_the_shared_rows_are_the_text_models_and_nothing_is_skipped_silently() -> None:
     shared = _shared()
     assert {model_type for _, model_type in shared} == {"bert", "gpt2", "t5", "vit"}
-    # The one ViT row among the reference's tables with a tuner here is FRoD's (``query``, ``value``).
-    assert {table for table, model_type in shared if model_type == "vit"} == {"FROD"}
+    # The ViT rows among the reference's tables with a tuner here are FRoD's and AdaMSS's (``query``, ``value``).
+    assert {table for table, model_type in shared if model_type == "vit"} == {"ADAMSS", "FROD"}
     # one row per method with a tuner here, for each of the three (IA3 and its feed-forward table too).
     assert len(shared) >= 3 * 13
 
