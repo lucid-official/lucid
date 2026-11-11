@@ -18,6 +18,7 @@ import pytest
 
 import lucid
 import lucid.nn as nn
+import lucid.optim as optim
 from lucid.peft import (
     AdamssConfig,
     AdamssModel,
@@ -726,6 +727,37 @@ class TestAllocation:
             counts.append(sum(1 for s in spaces if s.left.requires_grad and s.right.requires_grad))
         assert counts == sorted(counts, reverse=True)
         assert counts[-1] in (2, 3)
+
+    def test_a_training_loop_learns_while_the_allocation_freezes_subspaces(
+        self, device: str
+    ) -> None:
+        lucid.manual_seed(0)
+        net = nn.Sequential(nn.Linear(6, 24), nn.ReLU(), nn.Linear(24, 3)).to(device)
+        config = AdamssConfig(
+            r=6,
+            num_subspaces=4,
+            subspace_rank=2,
+            target_modules=["0", "2"],
+            use_asa=True,
+            asa_target_subspaces=3,
+            init_warmup=2,
+            final_warmup=20,
+            mask_interval=4,
+        )
+        peft = get_peft_model(net, config)
+        optimizer = optim.AdamW([p for p in peft.parameters() if p.requires_grad], lr=1e-2)
+        x, target = lucid.randn(32, 6, device=device), lucid.randn(32, 3, device=device)
+        losses = []
+        for step in range(30):
+            loss = ((peft(x) - target) ** 2).mean()
+            optimizer.zero_grad()
+            loss.backward()
+            peft.base_model.update_and_allocate(step)
+            optimizer.step()
+            losses.append(float(loss.item()))
+        spaces = peft.base_model.allocator("default")._subspaces()
+        assert losses[-1] < losses[0]
+        assert 0 < sum(1 for s in spaces if s.left.requires_grad) < len(spaces)
 
     def test_an_adapter_without_asa_is_left_alone(self) -> None:
         model, net = self._model(use_asa=False)
