@@ -285,6 +285,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - tuner-base inject_adapter and get_model_config (LCD-968)
 
+- Arrow routing and create_arrow_model (LCD-983)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

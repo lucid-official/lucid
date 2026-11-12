@@ -48,7 +48,6 @@ _LORA_UNSUPPORTED: Final = {
     "monteclora_config": "MonteCLoRA is not implemented",
     "layer_replication": "layer replication is not implemented",
     "use_bdlora": "block-diagonal LoRA is not implemented",
-    "arrow_config": "Arrow routing is not implemented",
     "kasa_config": "KaSA is not implemented",
     "ensure_weight_tying": "weight-tying bookkeeping is not implemented",
 }
@@ -463,8 +462,13 @@ class LoraConfig(_LoraFields, peft_type=PeftType.LORA):
         Block-diagonal LoRA is not implemented.  Accepted at the reference's default only:
         any other value raises ``NotImplementedError``.
     arrow_config : ArrowConfig, optional
-        Arrow routing is not implemented.  Accepted at the reference's default only:
-        any other value raises ``NotImplementedError``.
+        Make this adapter an Arrow router over the adapters the model already holds (Arrow,
+        Ostapenko et al., 2024): each token is sent through the ``top_k`` task adapters
+        whose prototype, the top singular vector of their update, it is most aligned with.
+        Add it after the task adapters (:func:`~lucid.peft.create_arrow_model` does).  The
+        router cannot be merged; ``nn.Linear`` layers only; not with ``use_dora``; its own
+        ``init_lora_weights`` must be ``True``, ``False`` or ``"gaussian"``, since its own
+        factors are never used.
     kasa_config : KasaConfig, optional
         KaSA is not implemented.  Accepted at the reference's default only:
         any other value raises ``NotImplementedError``.
@@ -520,6 +524,20 @@ class LoraConfig(_LoraFields, peft_type=PeftType.LORA):
     def _load_fields(self) -> dict[str, object]:
         return {"init_lora_weights": _Init.of(self.init_lora_weights).on_load().value}
 
+    def _check_arrow(self) -> None:
+        """An Arrow router is neither DoRA nor built from an initialisation that reads or rewrites the base weight."""
+        if self.arrow_config is None:
+            return
+        if self.use_dora:
+            raise ValueError(
+                "Invalid or unsupported variant combination: ('arrow_config', 'use_dora')"
+            )
+        if self.init_lora_weights not in (True, False, "gaussian"):
+            raise ValueError(
+                "An Arrow router never uses its own factors, so `init_lora_weights` must be "
+                f"True, False or 'gaussian', got {self.init_lora_weights!r}."
+            )
+
     def _check_init_subconfigs(self) -> None:
         if self.init_lora_weights == "eva" and self.eva_config is None:
             warnings.warn(
@@ -542,6 +560,7 @@ class LoraConfig(_LoraFields, peft_type=PeftType.LORA):
     def _check_fields(self) -> None:
         super()._check_fields()
         self._check_init_subconfigs()
+        self._check_arrow()
         if self.lora_bias:
             if self.init_lora_weights not in (True, False):
                 raise ValueError(

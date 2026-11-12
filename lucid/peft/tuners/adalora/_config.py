@@ -145,6 +145,7 @@ class AdaLoraConfig(_LoraFields, peft_type=PeftType.ADALORA):
         "target_parameters": "AdaLoRA adapts modules only",
         "eva_config": "AdaLoRA does not use EVA initialisation",
         "lora_ga_config": "AdaLoRA does not use LoRA-GA initialisation",
+        "arrow_config": "AdaLoRA has no Arrow routing among adapters",
     }
     _field_checks: ClassVar[dict[str, _Check]] = {
         "target_r": _check_rank,

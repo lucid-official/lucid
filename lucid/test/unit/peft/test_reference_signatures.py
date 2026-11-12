@@ -391,10 +391,7 @@ def test_signature_matches_reference(name: str) -> None:
 #: set is checked against the snapshot, so a name the reference gains, or one that lands and stays
 #: listed, fails here; a count would let one be traded for the other.  A name leaves the table in the
 #: commit that exports it.
-_OWED: dict[str, str] = {
-    # LCD-827 shipped LoRA's extensions without Arrow, whose library builder is this.
-    "create_arrow_model": "LCD-827"
-}
+_OWED: dict[str, str] = {}
 
 
 def test_the_reference_names_lucid_lacks_are_the_owed_ones() -> None:

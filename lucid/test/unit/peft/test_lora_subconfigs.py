@@ -1,9 +1,10 @@
 """The option dataclasses of LoRA's extensions, and the ``LoraConfig`` fields that hold them.
 
 ``ArrowConfig``, ``BdLoraConfig``, ``KasaConfig``, ``MontecloraConfig`` and ``VeloraConfig`` carry the
-options of extensions this library does not implement.  They are the reference's dataclasses (fields,
-order and defaults are in ``test_reference_signatures``).  Held here: what each one validates, how a file's dict
-becomes the dataclass, and that a ``LoraConfig`` which sets one is read and then refused.
+options of LoRA's extensions.  They are the reference's dataclasses (fields, order and defaults are in
+``test_reference_signatures``).  Held here: what each one validates, how a file's dict becomes the
+dataclass, and that a ``LoraConfig`` which sets one of the extensions this library does not implement
+is read and then refused (Arrow is implemented: ``test_arrow``).
 """
 
 import dataclasses
@@ -39,6 +40,10 @@ _FIELDS: dict[str, type] = {
     "monteclora_config": MontecloraConfig,
     "velora_config": VeloraConfig,
 }
+
+
+#: The fields whose extension is not implemented: a ``LoraConfig`` that sets one is refused.
+_REFUSED = [name for name in _FIELDS if name != "arrow_config"]
 
 
 def test_the_names_are_exported() -> None:
@@ -121,13 +126,19 @@ class TestLoraConfigFields:
         assert all(getattr(config, name) is None for name in _FIELDS)
         assert all(config.to_dict()[name] is None for name in _FIELDS)
 
-    @pytest.mark.parametrize("field", list(_FIELDS))
+    @pytest.mark.parametrize("field", _REFUSED)
     def test_setting_one_is_refused_after_it_is_read(self, field: str) -> None:
         """The options are validated, then the extension is refused: nothing is silently ignored."""
         with pytest.raises(NotImplementedError, match=field):
             LoraConfig(**{field: _FIELDS[field]()})
 
-    @pytest.mark.parametrize("field", list(_FIELDS))
+    def test_arrow_is_not_refused(self) -> None:
+        config = LoraConfig(arrow_config=ArrowConfig(top_k=2))
+        assert config.arrow_config == ArrowConfig(top_k=2)
+        from_dict = LoraConfig.from_dict({"peft_type": "LORA", "arrow_config": {"top_k": 2}})
+        assert from_dict.arrow_config == ArrowConfig(top_k=2)
+
+    @pytest.mark.parametrize("field", _REFUSED)
     def test_a_dict_is_read_as_the_dataclass_before_it_is_refused(self, field: str) -> None:
         with pytest.raises(NotImplementedError, match=field):
             LoraConfig.from_dict({"peft_type": "LORA", field: dataclasses.asdict(_FIELDS[field]())})

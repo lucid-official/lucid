@@ -543,6 +543,11 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("PeftConfig", "lucid.peft._config", "PeftConfig"),
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
     ),
+    "lucid.peft.tuners.lora._arrow": (
+        ("LoraLayer", "lucid.peft.tuners.lora._layer", "LoraLayer"),
+        ("_Extras", "lucid.peft.tuners.lora._layer", "_Extras"),
+        ("_Residual", "lucid.peft.tuners.lora._layer", "_Residual"),
+    ),
     "lucid.peft.tuners.lora._inits": (
         ("LoraConfig", "lucid.peft.tuners.lora._config", "LoraConfig"),
         ("LoraLayer", "lucid.peft.tuners.lora._layer", "LoraLayer"),

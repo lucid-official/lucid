@@ -34,6 +34,7 @@ from lucid.peft.tuners.lora._layer import (
 from lucid.peft.tuners.lora._mixed import _MixedBatch
 from lucid.peft.tuners.lora._merging import _Combination, _CombinationType, _MergeOptions
 from lucid.peft.tuners.lora._parameter import ParamWrapper
+from lucid.peft.tuners.lora._subconfigs import ArrowConfig
 from lucid.peft.tuners.lora._task_vectors import _SignElection
 
 
@@ -107,6 +108,7 @@ class _LayerArguments(TypedDict):
     use_rslora: bool
     use_dora: bool
     lora_bias: bool
+    arrow_config: ArrowConfig | None
 
 
 def _layer_arguments(config: LoraConfig, key: str) -> _LayerArguments:
@@ -118,6 +120,7 @@ def _layer_arguments(config: LoraConfig, key: str) -> _LayerArguments:
         use_rslora=config.use_rslora,
         use_dora=config.use_dora,
         lora_bias=config.lora_bias,
+        arrow_config=config.arrow_config,
     )
 
 
@@ -428,13 +431,14 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA, mixed=True):
         raise TypeError(f"Invalid type {type(targets[0])} found in target_modules")
 
     def _refuse_variants(self, adapters: list[str]) -> None:
-        """Raise ``NotImplementedError`` if a source adapter is DoRA or has ``lora_bias``: their extra state has no weighted sum."""
+        """Raise ``NotImplementedError`` if a source adapter is DoRA, has ``lora_bias`` or is an Arrow router: their extra state, or routing, has no weighted sum."""
         for name in adapters:
             config = self._lora_config(name)
-            if config.use_dora or config.lora_bias:
+            if config.use_dora or config.lora_bias or config.arrow_config is not None:
                 raise NotImplementedError(
-                    f"add_weighted_adapter does not combine DoRA or lora_bias adapters: "
-                    f"{name!r} has use_dora={config.use_dora}, lora_bias={config.lora_bias}"
+                    f"add_weighted_adapter does not combine DoRA, lora_bias or Arrow adapters: "
+                    f"{name!r} has use_dora={config.use_dora}, lora_bias={config.lora_bias}, "
+                    f"arrow_config={config.arrow_config is not None}"
                 )
 
     def _check_weighted_adapters(self, adapters: list[str], majority_sign_method: str) -> None:

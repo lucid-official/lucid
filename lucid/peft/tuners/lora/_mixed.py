@@ -131,6 +131,16 @@ class _ResidualRoute(_Route, slot_type=_Residual):
             )
         if any(self.slot.use_dora.get(name, False) for name in named):
             raise ValueError("Cannot pass `adapter_names` when DoRA is enabled.")
+        routers = sorted(
+            name
+            for name in named
+            if name in self.slot._specs and self.slot._specs[name].variant == "arrow"
+        )
+        if routers:
+            raise ValueError(
+                f"Cannot pass `adapter_names` naming the Arrow router(s) {routers}: a router "
+                "routes per token over the layer's other adapters."
+            )
 
     @override
     def apply(

@@ -99,7 +99,9 @@ Super-Tuning, WaveFT, BEFT and Cartridge (``CartridgeConfig``, ``CartridgeEncode
 ``AdamssModel``).  ShadowPEFT is refused for good — it needs the base model's decoder loop and a
 second backbone beside it.  The option classes of LoRA's extensions (``ArrowConfig``, ``BdLoraConfig``,
 ``KasaConfig``, ``MontecloraConfig``, ``VeloraConfig``) are here too, for the ``LoraConfig`` fields
-that hold them; a ``LoraConfig`` that sets one of those extensions is refused.
+that hold them.  Of those extensions Arrow is implemented (``LoraConfig(arrow_config=...)`` makes an
+adapter a router over the others, and ``create_arrow_model`` builds one from saved adapters); a
+``LoraConfig`` that sets one of the rest is refused.
 
 
 What a LoRA layer guarantees:
@@ -280,6 +282,7 @@ from lucid.peft.tuners.loha._config import LoHaConfig
 from lucid.peft.tuners.loha._model import LoHaModel
 from lucid.peft.tuners.lokr._config import LoKrConfig
 from lucid.peft.tuners.lokr._model import LoKrModel
+from lucid.peft.tuners.lora._arrow_model import create_arrow_model
 from lucid.peft.tuners.lora._config import (
     EvaConfig,
     LoftQConfig,
@@ -486,6 +489,7 @@ __all__ = [
     "prepare_model_for_kbit_training",
     "set_base_model_state_dict",
     "convert_to_lora",
+    "create_arrow_model",
     "get_eva_state_dict",
     "initialize_lora_eva_weights",
     "preprocess_loraga",

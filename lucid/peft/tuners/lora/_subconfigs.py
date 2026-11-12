@@ -4,8 +4,8 @@
 ``monteclora_config``, ``velora_config``, and the older ``eva_config`` / ``lora_ga_config``); each
 holds the extension's own options as a small dataclass defined here and in ``_config``.  A file
 writes such a field as a plain dict, so ``_subconfig`` turns the dict back into the dataclass.
-The extensions themselves are not implemented: a ``LoraConfig`` that sets one is refused
-(``_LORA_UNSUPPORTED``) once its options have been read and validated.
+Arrow is implemented (``_arrow``); the others are not: a ``LoraConfig`` that sets one of them is
+refused (``_LORA_UNSUPPORTED``) once its options have been read and validated.
 """
 
 import dataclasses
@@ -102,8 +102,9 @@ class ArrowConfig:
     adapters and, at every layer, scores them against the token by the principal direction of
     each one's update, combining the ``top_k`` best with softmax weights.  With ``use_gks``
     general-knowledge adapters are subtracted first (GenKnowSub).  ``task_adapter_names`` and
-    ``gks_adapter_names`` are filled in by the function that assembles the library, never passed.
-    ``LoraConfig(arrow_config=...)`` is refused: the extension is not implemented.
+    ``gks_adapter_names`` are filled in by the function that assembles the library
+    (:func:`~lucid.peft.create_arrow_model`), never passed.  ``LoraConfig(arrow_config=...)``
+    makes its adapter the router.
 
     Parameters
     ----------
@@ -114,7 +115,8 @@ class ArrowConfig:
     use_gks : bool, default=False
         Subtract the general-knowledge adapters first (GenKnowSub).
     rng_seed : int, optional
-        Seed of the sampling the router does; ``None`` leaves it non-deterministic.
+        Seed of the random start of the power iteration that finds each adapter's prototype;
+        ``None`` draws it from the global generator.
 
     Raises
     ------

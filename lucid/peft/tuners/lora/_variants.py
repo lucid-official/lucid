@@ -12,6 +12,9 @@ never branch on which one it is:
   and the row gain to remember so the merge can be undone;
 * ``attach`` — the state the variant keeps beside the factors.
 
+Arrow (``_arrow``) is a third: it routes each token over the other adapters of the layer, so it
+keeps no factors of its own to merge (``mergeable``) and its adapter names the layer's others.
+
 DoRA (Liu et al., 2024, arXiv:2402.09353) splits a weight into a
 magnitude and a direction: the adapted weight is
 :math:`m\,(W + s\,BA)/\lVert W + s\,BA\rVert_c`, the norm taken per output
@@ -28,6 +31,7 @@ import lucid.linalg as linalg
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
+from lucid.peft.tuners.lora._subconfigs import ArrowConfig
 
 if TYPE_CHECKING:
     from lucid.peft.tuners.lora._layer import LoraLayer, _Extras, _Residual
@@ -60,6 +64,8 @@ class _Variant(ABC):
     #: The registered name, and how a refusal names the feature.
     name: ClassVar[str]
     label: ClassVar[str]
+    #: Whether the adapter's update can be folded into the base weight (a router cannot).
+    mergeable: ClassVar[bool] = True
 
     @override
     def __init_subclass__(cls, *, variant: str | None = None, **kwargs: object) -> None:
@@ -74,21 +80,28 @@ class _Variant(ABC):
         return cls._registry[name]
 
     @classmethod
-    def requested(cls, *, use_dora: bool) -> _Variant:
-        """The variant the ``use_dora`` flag asks for."""
-        return cls.named("dora" if use_dora else "lora")
+    def requested(cls, *, use_dora: bool, arrow_config: ArrowConfig | None = None) -> _Variant:
+        """The variant the ``use_dora`` flag and ``arrow_config`` ask for; at most one of them may."""
+        if use_dora and arrow_config is not None:
+            raise ValueError(
+                "Invalid or unsupported variant combination: ('arrow_config', 'use_dora')"
+            )
+        return cls.named("arrow" if arrow_config is not None else "dora" if use_dora else "lora")
 
-    def check(self, layer: LoraLayer) -> None:
-        """Raise ``ValueError`` if ``layer`` cannot host this variant."""
+    def check(self, layer: LoraLayer, arrow_config: ArrowConfig | None = None) -> None:
+        """Raise ``ValueError`` if ``layer`` cannot host this variant (``arrow_config`` is Arrow's options)."""
+        del arrow_config  # only Arrow reads its own options
         if self.name not in layer._variant_names:
             raise ValueError(
                 f"{type(layer).__name__} does not support {self.label}; "
                 f"it takes {sorted(layer._variant_names)}"
             )
 
-    def attach(self, layer: _Residual, adapter: str) -> None:
+    def attach(
+        self, layer: _Residual, adapter: str, arrow_config: ArrowConfig | None = None
+    ) -> None:
         """Create the state this variant keeps for ``adapter``, whose factors are initialised."""
-        del layer, adapter  # plain LoRA keeps nothing
+        del layer, adapter, arrow_config  # plain LoRA keeps nothing
 
     @abstractmethod
     def contribution(
@@ -159,8 +172,8 @@ class _Dora(_Variant, variant="dora"):
     label = "DoRA (use_dora=True)"
 
     @override
-    def check(self, layer: LoraLayer) -> None:
-        super().check(layer)
+    def check(self, layer: LoraLayer, arrow_config: ArrowConfig | None = None) -> None:
+        super().check(layer, arrow_config)
         layer._check_weight_norm()
 
     @staticmethod
@@ -177,7 +190,10 @@ class _Dora(_Variant, variant="dora"):
             return linalg.norm(total.reshape(total.shape[0], -1), dim=1)
 
     @override
-    def attach(self, layer: _Residual, adapter: str) -> None:
+    def attach(
+        self, layer: _Residual, adapter: str, arrow_config: ArrowConfig | None = None
+    ) -> None:
+        del arrow_config
         magnitude = self.weight_norm(layer, adapter)
         table: nn.ModuleDict[_Magnitude] = getattr(layer, MAGNITUDE_TABLE)
         table[adapter] = _Magnitude(magnitude)

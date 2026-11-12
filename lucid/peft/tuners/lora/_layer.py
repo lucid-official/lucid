@@ -37,7 +37,9 @@ from lucid.peft.tuners._layer import (
     _entry_parameters,
 )
 from lucid.peft.tuners._plan import _unmerged
+from lucid.peft.tuners.lora._arrow import ARROW_TABLE, _ArrowRouter
 from lucid.peft.tuners.lora._inits import _check_init, _Init
+from lucid.peft.tuners.lora._subconfigs import ArrowConfig
 from lucid.peft.tuners.lora._variants import MAGNITUDE_TABLE, _Magnitude, _rows_view, _Variant
 from lucid.peft.tuners.lora._weight_site import _WeightSite
 
@@ -180,12 +182,14 @@ class LoraLayer(_BaseTunerLayer):
         use_dora: bool = False,
         *,
         lora_bias: bool = False,
+        arrow_config: ArrowConfig | None = None,
     ) -> None:
         """Wrap ``base_layer`` and build the adapter ``adapter_name`` on it.
 
         The update has rank ``r`` and scale ``lora_alpha / r`` (``lora_alpha / sqrt(r)`` with
         ``use_rslora``); ``use_dora`` adds a magnitude vector and ``lora_bias`` a bias on the
-        ``B`` side.  ``init_lora_weights`` picks how the factors start.
+        ``B`` side.  ``init_lora_weights`` picks how the factors start.  ``arrow_config`` makes
+        the adapter an Arrow router over the layer's other adapters.
         """
         super().__init__(base_layer)
         self._specs: dict[str, _AdapterSpec] = {}
@@ -202,6 +206,7 @@ class LoraLayer(_BaseTunerLayer):
             use_rslora,
             use_dora,
             lora_bias=lora_bias,
+            arrow_config=arrow_config,
         )
 
     # ── what a layer type supplies ────────────────────────────────────────
@@ -224,7 +229,7 @@ class LoraLayer(_BaseTunerLayer):
     def _build_factors(self, r: int, place: _Place) -> _Factors:
         """One adapter's new factors, one per factor table (``adapter_layer_names`` less the variant tables), in order."""
 
-    def _adapter_built(self, adapter: str) -> None:
+    def _adapter_built(self, adapter: str, arrow_config: ArrowConfig | None = None) -> None:
         """Called once ``adapter``'s factors are initialised; a layer that keeps variant state creates it here."""
 
     def _factor_tables(self) -> list[nn.ModuleDict[nn.Module] | nn.ParameterDict]:
@@ -307,6 +312,7 @@ class LoraLayer(_BaseTunerLayer):
         use_dora: bool = False,
         *,
         lora_bias: bool = False,
+        arrow_config: ArrowConfig | None = None,
     ) -> None:
         r"""Create adapter ``adapter_name``: its factors, dropout and scale.
 
@@ -341,6 +347,10 @@ class LoraLayer(_BaseTunerLayer):
             unit beside the factors.
         lora_bias : bool, default=False
             Give the second factor a bias.
+        arrow_config : ArrowConfig, optional
+            Make the adapter an Arrow router over the plain LoRA adapters the layer holds
+            (``nn.Linear`` layers only; not with ``use_dora``).  Its own factors are never
+            used.
 
         Raises
         ------
@@ -356,10 +366,10 @@ class LoraLayer(_BaseTunerLayer):
         lora_alpha = _check_number("lora_alpha", lora_alpha)
         init_strategy = _Init.of(_check_init("init_lora_weights", init_lora_weights))
         p = _check_dropout("lora_dropout", lora_dropout)
-        variant = _Variant.requested(use_dora=use_dora)
+        variant = _Variant.requested(use_dora=use_dora, arrow_config=arrow_config)
         if adapter_name in self._specs:
             raise ValueError(f"Adapter with name '{adapter_name}' already exists.")
-        variant.check(self)
+        variant.check(self, arrow_config)
         self._check_lora_bias(lora_bias)
         init_strategy.check(self, r)
         self._check_rank_fits(r)
@@ -374,7 +384,7 @@ class LoraLayer(_BaseTunerLayer):
         for table, factor in zip(self._factor_tables(), factors, strict=True):
             _enter(table, adapter_name, factor)
         init_strategy.apply(self, adapter_name)
-        self._adapter_built(adapter_name)
+        self._adapter_built(adapter_name, arrow_config)
         if not self.active_adapters:
             self.active_adapter = adapter_name
 
@@ -510,6 +520,12 @@ class LoraLayer(_BaseTunerLayer):
                 f"the DoRA adapters {dora} read the base weight and its output, which the folded "
                 f"adapters {folded} would have changed; merge the DoRA ones too"
             )
+        routers = [name for name in rest if self._specs[name].variant == "arrow"]
+        if routers:
+            return (
+                f"the Arrow routers {routers} read the factors of the adapters {folded} would "
+                "fold into the weights, so those would apply twice; delete the routers first"
+            )
         return None
 
 
@@ -548,7 +564,7 @@ class _Residual(LoraLayer):
     """
 
     _variant_names = frozenset({"lora", "dora"})
-    _variant_tables = (MAGNITUDE_TABLE,)
+    _variant_tables: ClassVar[tuple[str, ...]] = (MAGNITUDE_TABLE,)
     lora_magnitude_vector: nn.ModuleDict[_Magnitude]
 
     @override
@@ -634,8 +650,19 @@ class _Residual(LoraLayer):
         return self._site().read()
 
     @override
-    def _adapter_built(self, adapter: str) -> None:
-        self._variant(adapter).attach(self, adapter)
+    def _adapter_built(self, adapter: str, arrow_config: ArrowConfig | None = None) -> None:
+        self._variant(adapter).attach(self, adapter, arrow_config)
+
+    @override
+    def _pending_merges(self, adapter_names: list[str] | None) -> list[str]:
+        pending = super()._pending_merges(adapter_names)
+        fixed = [name for name in pending if not self._variant(name).mergeable]
+        if fixed:
+            raise RuntimeError(
+                f"Cannot merge {fixed}: a {self._variant(fixed[0]).label} adapter computes "
+                "per token, so no weight holds it. Remove it first."
+            )
+        return pending
 
     def _original_rows(self, rows: Tensor) -> Tensor:
         r"""``rows``, the weight now, with every merged adapter taken back out: the weight before any merge.
@@ -757,7 +784,7 @@ class _Factored[Factor: nn.Module](_Residual):
     the base bias.
     """
 
-    adapter_layer_names = ("lora_A", "lora_B", MAGNITUDE_TABLE)
+    adapter_layer_names: ClassVar[tuple[str, ...]] = ("lora_A", "lora_B", MAGNITUDE_TABLE)
     _lora_bias_ok = True
     lora_A: nn.ModuleDict[Factor]
     lora_B: nn.ModuleDict[Factor]
@@ -831,13 +858,20 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
     lora_bias : bool, default=False
         Give ``lora_B`` a bias (``lora_B.<adapter>.bias``); merging folds it,
         scaled, into the base bias.
+    arrow_config : ArrowConfig, optional
+        Make the adapter an Arrow router over the plain LoRA adapters the layer already
+        holds (``lora_arrow``): each token goes through the ``top_k`` of them its
+        prototype is nearest to, and the router cannot be merged.  Its own ``lora_A`` /
+        ``lora_B`` exist, as in the reference, and are not used.
 
     Raises
     ------
     ValueError
         ``r`` is not positive, ``fan_in_fan_out`` or
-        ``is_target_conv_1d_layer`` is ``True``, or ``init_lora_weights``
-        asks for more rank than the weight has.
+        ``is_target_conv_1d_layer`` is ``True``, ``init_lora_weights``
+        asks for more rank than the weight has, or ``arrow_config`` is given
+        with ``use_dora``, to a layer holding no plain adapter to route, or with
+        a ``top_k`` larger than their number.
 
     Examples
     --------
@@ -855,6 +889,10 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
 
     _dense_weight = True
     _stackable = True
+    _variant_names = frozenset({"lora", "dora", "arrow"})
+    _variant_tables = (MAGNITUDE_TABLE, ARROW_TABLE)
+    adapter_layer_names = ("lora_A", "lora_B", MAGNITUDE_TABLE, ARROW_TABLE)
+    lora_arrow: nn.ModuleDict[_ArrowRouter]
     base_layer: nn.Module
 
     def __init__(
@@ -871,6 +909,7 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
         use_dora: bool = False,
         *,
         lora_bias: bool = False,
+        arrow_config: ArrowConfig | None = None,
     ) -> None:
         """Wrap an ``nn.Linear`` as :class:`LoraLayer` does.
 
@@ -895,6 +934,7 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
             use_rslora,
             use_dora,
             lora_bias=lora_bias,
+            arrow_config=arrow_config,
         )
 
     @override
