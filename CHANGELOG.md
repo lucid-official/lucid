@@ -185,6 +185,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse a partial merge LN tuning cannot apply (LCD-971)
 
+- clear the ruff errors in the api-data scripts (LCD-970)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

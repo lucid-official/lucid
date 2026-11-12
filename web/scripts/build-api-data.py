@@ -37,6 +37,8 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, NoReturn
 
 if TYPE_CHECKING:
+    import ast
+
     from griffe import Alias, GriffeLoader, Object
 
 # ---------------------------------------------------------------------------
@@ -2157,7 +2159,6 @@ def _inject_lazy_loaded_members(
     from griffe import (
         Function as GriffeFunction,
         Class as GriffeClass,
-        Module as GriffeModule,
     )
 
     existing = {m.get("name") for m in lucid_data.get("members", [])}
@@ -2206,7 +2207,6 @@ def _inject_lazy_loaded_members(
         subcat = _LUCID_NAME_OVERRIDES[name]
         candidates = home_candidates.get(subcat, [])
         target = None
-        target_home: Any = None
         for home_path in candidates:
             home_mod = _load_home(home_path)
             if home_mod is None:
@@ -2216,7 +2216,6 @@ def _inject_lazy_loaded_members(
             if resolved is None:
                 continue
             target = resolved
-            target_home = home_mod
             break
         if target is None:
             skipped.append(name)
@@ -2750,9 +2749,12 @@ def build_synth(slug: str, filter_subcat: str, lucid_data: dict[str, Any]) -> No
         a = _OP_ARITY.get(name)
         if a is None and name.endswith("_"):
             a = _OP_ARITY.get(name[:-1])
-        if a == 1: return "unary"
-        if a == 2: return "binary"
-        if a == 3: return "ternary"
+        if a == 1:
+            return "unary"
+        if a == 2:
+            return "binary"
+        if a == 3:
+            return "ternary"
         return "variadic"
 
     if slug == "lucid.ops":
@@ -2810,7 +2812,8 @@ class _ElapsedSpinner:
             sys.stdout.flush()
 
     def __enter__(self) -> "_ElapsedSpinner":
-        sys.stdout.write(self._fmt()); sys.stdout.flush()
+        sys.stdout.write(self._fmt())
+        sys.stdout.flush()
         self._thread.start()
         return self
 

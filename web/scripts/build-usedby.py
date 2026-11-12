@@ -203,7 +203,7 @@ def _invert(imports: dict[str, set[str]], emitted: set[str]) -> dict[str, list[d
 def main() -> int:
     if not API_DATA.is_dir():
         print(
-            f"[build-usedby] api-data dir missing — " f"run ``build-api-data.py`` first.",
+            "[build-usedby] api-data dir missing — run ``build-api-data.py`` first.",
             file=sys.stderr,
         )
         return 1
