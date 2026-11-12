@@ -258,6 +258,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - remove the pending-tuner stand-in machinery (LCD-828)
 - Uni-LoRA's index helpers are private (LCD-958)
 - stackability is declared per class, not inherited
+- type the api-data object loader without Any (LCD-969)
 
 ---
 

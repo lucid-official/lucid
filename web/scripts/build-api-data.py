@@ -34,7 +34,10 @@ import threading
 import time
 from pathlib import Path
 from collections.abc import Callable
-from typing import Any, NoReturn
+from typing import TYPE_CHECKING, Any, NoReturn
+
+if TYPE_CHECKING:
+    from griffe import Alias, GriffeLoader, Object
 
 # ---------------------------------------------------------------------------
 # Griffe robustness shim — callable-module / overload collision
@@ -2104,7 +2107,7 @@ def _extract_family_meta(slug: str) -> dict[str, str]:
     return {}
 
 
-def _load_object(loader: Any, path: str) -> Any:
+def _load_object(loader: GriffeLoader, path: str) -> Object | Alias:
     """The Griffe object at ``path``, parsing ``lucid/`` at most once per loader.
 
     ``GriffeLoader.load(path)`` loads the *whole top-level package* from disk

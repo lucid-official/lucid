@@ -33,7 +33,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from types import ModuleType
 
 _HERE = Path(__file__).resolve().parent
 _SCRIPT = _HERE / "build-api-data.py"
@@ -56,7 +56,7 @@ def _griffe_available() -> bool:
     return importlib.util.find_spec("griffe") is not None
 
 
-def _load_builder() -> Any:
+def _load_builder() -> ModuleType:
     spec = importlib.util.spec_from_file_location("_build_api_data_perf", _SCRIPT)
     assert spec and spec.loader, f"cannot load {_SCRIPT}"
     mod = importlib.util.module_from_spec(spec)
@@ -64,7 +64,7 @@ def _load_builder() -> Any:
     return mod
 
 
-def _load_cached() -> Any:
+def _load_cached() -> ModuleType:
     spec = importlib.util.spec_from_file_location("_build_api_data_cached_perf", _CACHED)
     assert spec and spec.loader, f"cannot load {_CACHED}"
     mod = importlib.util.module_from_spec(spec)
@@ -76,10 +76,11 @@ class _FakeLoader:
     """What ``_load_object`` touches of a ``GriffeLoader``: ``load`` and a
     ``modules_collection`` that holds the packages loaded so far."""
 
-    class _Collection(dict):
-        def get_member(self, path: str) -> Any:
-            node: Any = self[path.split(".", 1)[0]]
+    class _Collection(dict[str, object]):
+        def get_member(self, path: str) -> object:
+            node: object = self[path.split(".", 1)[0]]
             for part in path.split(".")[1:]:
+                assert isinstance(node, dict)
                 node = node[part]
             return node
 
@@ -133,7 +134,7 @@ def test_a_build_parses_the_package_once() -> None:
     walks: list[str] = []
     real_load = griffe.GriffeLoader.load
 
-    def counting_load(self: Any, objspec: Any, *args: Any, **kwargs: Any) -> Any:
+    def counting_load(self: object, objspec: object, *args: object, **kwargs: object) -> object:
         walks.append(str(objspec))
         return real_load(self, objspec, *args, **kwargs)
 
