@@ -56,7 +56,7 @@ import lucid
 import lucid.linalg as linalg
 import lucid.nn as nn
 import lucid.nn.functional as F
-from lucid._C import engine as _C_engine
+from lucid._engine_scope import refuse_trace
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
 from lucid.peft.tuners.lora._subconfigs import ArrowConfig
@@ -105,12 +105,10 @@ def _refuse_trace() -> None:
     The prototypes follow the adapters' values (``_ArrowRouter.sync``), so a graph that fed them
     in would go on routing by the ones of its trace after an in-place change of an adapter.
     """
-    tracer = _C_engine.compile.current_tracer()
-    if tracer is not None:
-        tracer.mark_unsupported(
-            "an Arrow router routes by prototypes that follow the adapters' values, which a "
-            "compiled graph would replay as they were at the trace"
-        )
+    refuse_trace(
+        "an Arrow router routes by prototypes that follow the adapters' values, which a "
+        "compiled graph would replay as they were at the trace"
+    )
 
 
 def _plain(layer: LoraLayer) -> list[str]:

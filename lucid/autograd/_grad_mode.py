@@ -9,6 +9,7 @@ from contextlib import AbstractContextManager, contextmanager
 from typing import Callable, Self, overload, override
 
 from lucid._C import engine as _C_engine
+from lucid._engine_scope import refuse_trace
 
 
 def _scoped[F: Callable[..., object]](
@@ -327,9 +328,7 @@ def is_grad_enabled() -> bool:
     False
     """
     if _READS_REFUSED.whys:
-        tracer = _C_engine.compile.current_tracer()
-        if tracer is not None:
-            tracer.mark_unsupported(_READS_REFUSED.whys[-1])
+        refuse_trace(_READS_REFUSED.whys[-1])
     return _C_engine.raw_grad_enabled()
 
 

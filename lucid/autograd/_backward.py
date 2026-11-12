@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
+from lucid._engine_scope import refuse_trace
 from lucid.autograd._grad_mode import no_grad
 
 if TYPE_CHECKING:
@@ -22,9 +23,7 @@ def _refuse_trace() -> None:
     a VJP of the recorded backward.  The trace is marked, every compile
     entry point refuses it, and the call runs eager.
     """
-    tracer = _C_engine.compile.current_tracer()
-    if tracer is not None:
-        tracer.mark_unsupported("a backward pass ran inside the traced function")
+    refuse_trace("a backward pass ran inside the traced function")
 
 
 def _as_tensors(value: Tensor | Sequence[Tensor]) -> list[Tensor]:
