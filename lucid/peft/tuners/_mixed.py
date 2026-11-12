@@ -44,14 +44,18 @@ def _compatible_types() -> str:
     return ", ".join(sorted(peft_type.value for peft_type in _MIXED_TUNERS))
 
 
-def _family(config: PeftConfig) -> type[_BaseTuner]:
+def _family(config: object) -> type[_BaseTuner]:
     """The tuner of the method ``config`` belongs to, if that method can be mixed.
 
     Raises
     ------
+    TypeError
+        ``config`` is not a ``PeftConfig``.
     ValueError
         The method is not declared ``mixed=True``.
     """
+    if not isinstance(config, PeftConfig):
+        raise TypeError(f"config must be a PeftConfig, got {type(config).__name__}")
     family = _registered(_MIXED_TUNERS, config)
     if family is None:
         raise ValueError(

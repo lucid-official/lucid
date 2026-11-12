@@ -37,6 +37,7 @@ import lucid
 import lucid.nn as nn
 from lucid.peft import (
     HiraConfig,
+    IA3Config,
     LoHaConfig,
     LoraConfig,
     OFTConfig,
@@ -49,7 +50,7 @@ from lucid.peft import (
 from lucid.peft.tuners import MixedModel
 from lucid.peft.tuners._base import _TUNERS
 from lucid.peft.tuners._layer import _BaseTunerLayer, _tuner_layers
-from lucid.peft.tuners._mixed import _chain, _family_of
+from lucid.peft.tuners._mixed import _chain, _family, _family_of
 from lucid.peft.tuners._plan import _set_submodule
 from lucid.peft.tuners._tuner import _MIXED_TUNERS, _BaseTuner
 from lucid.test._default_device import default_device, metal_available
@@ -301,6 +302,11 @@ class TestThePartition:
         with pytest.raises(error, match=message):
             built.host.add_adapter("x", _config(peft_type, "cpu", tmp_path))
         _unchanged(built.base, built.host, before)
+
+    def test_something_that_is_no_config_is_a_type_error_not_an_attribute_error(self) -> None:
+        for given in ("lora", 3, None):
+            with pytest.raises(TypeError, match="config must be a PeftConfig"):
+                _family(given)
 
     def test_the_message_names_the_compatible_types(self, tmp_path: Path) -> None:
         built = _build((PeftType.LORA,), "cpu", tmp_path)
@@ -557,6 +563,44 @@ class TestTheHost:
             built.host.delete_adapter("lora")
         _unchanged(built.base, built.host, before)
 
+    @pytest.mark.filterwarnings("ignore:Unmerge result can be inaccurate:UserWarning")
+    def test_the_modules_may_hold_stacks_of_different_depths(self, tmp_path: Path) -> None:
+        base = RECIPES[PeftType.LORA].base(_F32, "cpu")
+        host = MixedModel(base, _lora(), "lora")
+        host.add_adapter("ia3", IA3Config(target_modules=["0"], feedforward_modules=[]))
+        host.add_adapter("oft", OFTConfig(oft_block_size=2, target_modules=["2"]))
+        for seed, name in enumerate(["lora", "ia3", "oft"], start=1):
+            _move_off_the_start(base, name, seed)
+        host.set_adapter(["lora", "ia3", "oft"])
+        depths = [
+            [layer._adapter_names() for layer in _chain(base.get_submodule(s))[::-1]]
+            for s in _SITES
+        ]
+        assert depths == [[["lora"], ["ia3"]], [["lora"], ["oft"]]]
+        with lucid.no_grad():
+            adapted = _call(base, "cpu")
+            assert span(adapted, _probe(base, "cpu")) < _TOLERANCE * max(1.0, magnitude(adapted))
+            host.merge_adapter()
+            assert span(_call(base, "cpu"), adapted) < _TOLERANCE * max(1.0, magnitude(adapted))
+            host.unmerge_adapter()
+            plain = host.merge_and_unload()
+            assert span(_call(plain, "cpu"), adapted) < _TOLERANCE * max(1.0, magnitude(adapted))
+
+    def test_a_module_trained_in_full_stays_beside_the_stacks(self, tmp_path: Path) -> None:
+        base = RECIPES[PeftType.LORA].base(_F32, "cpu")
+        host = MixedModel(
+            base, LoraConfig(r=2, target_modules=["0"], modules_to_save=["2"]), "lora"
+        )
+        host.add_adapter("loha", LoHaConfig(r=2, target_modules=["0"]))
+        host.set_adapter(["lora", "loha"])
+        assert type(base.get_submodule("2")).__name__ == "ModulesToSaveWrapper"
+        assert [len(_chain(base.get_submodule(s))) for s in _SITES] == [2, 0]
+        plain = host.unload()
+        assert (
+            type(plain.get_submodule("2")) is nn.Linear
+            and type(plain.get_submodule("0")) is nn.Linear
+        )
+
     def test_adalora_is_not_driven_by_the_host(self) -> None:
         """Its rank allocator and orthogonality loss belong to ``AdaLoraModel``; a mixed model is for inference."""
         assert not hasattr(MixedModel, "update_and_allocate")
@@ -567,6 +611,25 @@ def _trains(base: nn.Module, name: str) -> bool:
     """Whether every tensor of adapter ``name`` requires a gradient (and there is one)."""
     held = [p for _, layer in _tuner_layers(base) for p in layer._adapter_parameters(name)]
     return bool(held) and all(p.requires_grad for p in held)
+
+
+@pytest.mark.parametrize("stack", _STACKS, ids=_id)
+def test_gradients_reach_the_adapters_in_use_and_not_the_base(
+    stack: _Stack, device: str, tmp_path: Path
+) -> None:
+    built = _build(stack, device, tmp_path)
+    built.host.set_adapter(built.names)
+    _call(built.base, device).sum().backward()
+    for name in built.names:
+        grads = [
+            p.grad
+            for _, layer in _tuner_layers(built.base)
+            for p in layer._adapter_parameters(name)
+        ]
+        assert grads and all(
+            g is not None and bool(lucid.isfinite(g).all().item()) for g in grads
+        ), name
+    assert all(root.weight.grad is None and root.bias.grad is None for root in _roots(built.base))
 
 
 # ── what a stack refuses ──────────────────────────────────────────────────
@@ -632,6 +695,7 @@ class TestWhatAStackRefuses:
             built, "p", _lora(init_lora_weights=spelling), ValueError, "factorises the base weight"
         )
 
+    @pytest.mark.filterwarnings("ignore:`init_lora_weights` is 'eva' but `eva_config`:UserWarning")
     def test_eva_is_refused_on_a_layer_that_stands_on_another(self, tmp_path: Path) -> None:
         built = _build((PeftType.LOHA,), "cpu", tmp_path)
         self._refused(built, "e", _lora(init_lora_weights="eva"), ValueError, "'eva'")
