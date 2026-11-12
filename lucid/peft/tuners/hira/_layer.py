@@ -143,7 +143,8 @@ class HiraLayer(_DeltaLayer[HiraConfig], _PristineMerge, family=True):
 
     @override
     def _contribution(self, adapter: str, x: Tensor) -> Tensor:
-        return self._through(self._into(adapter, x), self._modulated(adapter, self.weight))
+        modulated = self._modulated(adapter, self._pristine_weight())
+        return self._through(self._into(adapter, x), modulated)
 
     @override
     def _changes(self, adapter: str, base: Mapping[str, Tensor]) -> dict[str, Tensor]:

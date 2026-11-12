@@ -443,6 +443,18 @@ class LoraLayer(_BaseTunerLayer):
             )
         return pending
 
+    @override
+    def _partial_merge_problem(self, folded: list[str], rest: list[str]) -> str | None:
+        # A plain update adds to the output, wherever the weights are; DoRA's gain divides by
+        # the norm of the weight it reads, and what it adds is taken from the base output.
+        dora = [name for name in rest if self._specs[name].variant == "dora"]
+        if dora:
+            return (
+                f"the DoRA adapters {dora} read the base weight and its output, which the folded "
+                f"adapters {folded} would have changed; merge the DoRA ones too"
+            )
+        return None
+
 
 class _Plan(NamedTuple):
     """What folding one adapter into the base does: the change of each merge target, and the DoRA row gain."""
@@ -648,21 +660,22 @@ class _Residual(LoraLayer):
 
     @override
     def forward(self, x: Tensor) -> Tensor:
-        """The base output plus each active adapter's low-rank update.
+        """The base output plus each applied adapter's low-rank update.
 
-        The base output alone when adapters are disabled or merged.
+        The base output alone when adapters are disabled or every active adapter is merged; a
+        layer merged for some of its adapters adds the others' updates to the weights that
+        hold the merged ones.
         """
         return self._forward(x, _NO_EXTRAS)
 
     def _forward(self, x: Tensor, extras: _Extras) -> Tensor:
         """The forward pass: the base layer on ``x`` and ``extras``, plus each active adapter's update."""
         result: Tensor = self.base_layer(x, **extras)
-        if self.disable_adapters or self.merged:
+        if self.disable_adapters:
             return result
         out = result
-        for adapter in self.active_adapters:
-            if adapter not in self._specs:
-                continue  # an adapter aimed at other layers: this one runs its base for it
+        # An adapter aimed at other layers is not held: this one runs its base for it.
+        for adapter in self._applied(self._specs):
             out = out + self._variant(adapter).contribution(self, adapter, x, result, extras)
         return out if out.dtype == result.dtype else out.to(result.dtype)
 

@@ -363,16 +363,17 @@ class _LycorisLayer(_AdditiveWeight):
         """The base output plus each active adapter's weight update, applied like the base weight.
 
         The update is ``get_delta_weight`` (with rank dropout while training) run as a linear map
-        or a convolution of ``x``; the base output alone when adapters are disabled or merged.
+        or a convolution of ``x``; the base output alone when adapters are disabled or every active
+        adapter is merged.
         """
         result: Tensor = self.base_layer(x)
-        if self.disable_adapters or self.merged:
+        if self.disable_adapters:
             return result
         root = self._root()
         kind = _Kind.of(type(root))
         out = result
-        for adapter in self.active_adapters:
-            if adapter not in self._specs or self._skips(adapter):
+        for adapter in self._applied(self._specs):
+            if self._skips(adapter):
                 continue
             delta = self.get_delta_weight(
                 adapter,

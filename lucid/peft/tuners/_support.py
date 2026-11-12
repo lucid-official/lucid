@@ -117,17 +117,17 @@ class _ResidualUpdate(_AdditiveWeight):
     def forward(self, x: Tensor) -> Tensor:
         """The base layer's output plus every active adapter's contribution to it.
 
-        The base output alone when adapters are disabled or merged; the sum is cast back to the
-        base output's dtype.
+        The base output alone when adapters are disabled or every active adapter is merged (a
+        merged adapter is in the base weights already); the sum is cast back to the base
+        output's dtype.
         """
         result: Tensor = self.base_layer(x)
-        if self.disable_adapters or self.merged:
+        if self.disable_adapters:
             return result
         out = result
-        held = self._adapter_names()
-        for adapter in self.active_adapters:
-            if adapter in held:  # an adapter aimed at other layers: this one runs its base
-                out = out + self._contribution(adapter, x)
+        # An adapter aimed at other layers is not held: this one runs its base for it.
+        for adapter in self._applied(self._adapter_names()):
+            out = out + self._contribution(adapter, x)
         return out if out.dtype == result.dtype else out.to(result.dtype)
 
     @override

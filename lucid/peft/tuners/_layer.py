@@ -11,7 +11,7 @@ import functools
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import ClassVar, Final, override
+from typing import ClassVar, Final, Protocol, override
 
 import lucid
 import lucid.nn as nn
@@ -21,6 +21,12 @@ from lucid.nn.parameter import Parameter
 from lucid.peft._slots import _as_names, _SlotState
 
 _HALF: Final = (lucid.float16, lucid.bfloat16)
+
+
+class _Holds(Protocol):
+    """Anything that can say whether it holds an adapter's name: a list, a dict, a ``ModuleDict``."""
+
+    def __contains__(self, name: str, /) -> bool: ...
 
 
 def _adapter_dtype(anchor: Tensor) -> DTypeLike:
@@ -113,6 +119,14 @@ class _BaseTunerLayer(nn.Module, ABC):
     ``set_adapter``, ``delete_adapter``, ``enable_adapters``, ``merge``
     and ``unmerge``.
 
+    A layer merged for some of its adapters is still adapted by the others: its forward
+    pass applies the active adapters that are not merged, on top of the weights that hold
+    the merged ones (``_applied``), so merging part of the active set does not change the
+    function — the reference runs a merged layer's base alone, and drops them.  Which
+    adapters are merged is ``merged_adapters``, a list the forward pass branches on as it
+    does on the flags (``lucid.compile`` keys on it too).  A method whose adapters would
+    compute another function that way refuses the merge instead (``_partial_merge_problem``).
+
     ``base_layer`` is the user's module, or — for a class that declares
     ``_stackable`` — another tuner layer standing on it, so the layers of two
     methods compose on one module.  A class that does not declare it is refused a
@@ -136,6 +150,10 @@ class _BaseTunerLayer(nn.Module, ABC):
     #: stackable classes has passed ``test_layer_stacking``.  It is not inherited: every
     #: subclass is refused again unless its own body declares it.
     _stackable: ClassVar[bool] = False
+    #: Whether the adapters apply one after another, each to what the ones before it made (a
+    #: rotation of the weight or the output): folded ones must then be the first of the active
+    #: adapters, in their order, for the rest to go on applying after them.
+    _ordered: ClassVar[bool] = False
 
     @override
     def __init_subclass__(
@@ -203,6 +221,18 @@ class _BaseTunerLayer(nn.Module, ABC):
     def active_adapters(self) -> list[str]:
         """The adapters the forward pass applies, as a list."""
         return [name for name in _as_names(self.active_adapter) if name]
+
+    def _applied(self, held: _Holds) -> list[str]:
+        """The adapters the forward pass applies: the active ones among ``held`` that are not folded into the base.
+
+        What every layer's forward pass asks, so one that is merged for some of its
+        adapters goes on applying the rest; nothing is left to apply once all are merged.
+        """
+        return [
+            name
+            for name in self.active_adapters
+            if name in held and name not in self.merged_adapters
+        ]
 
     def get_base_layer(self) -> nn.Module:
         """Return the wrapped module, whose parameters are the base model's own.
@@ -340,6 +370,76 @@ class _BaseTunerLayer(nn.Module, ABC):
                 raise ValueError(f"unknown adapter(s) {unknown}; this layer holds {held}")
         return [name for name in names if name not in self.merged_adapters]
 
+    def _check_partial_merge(self, pending: list[str]) -> None:
+        """Raise ``ValueError`` if folding ``pending`` would leave this layer computing another function than before.
+
+        What a merged layer does with the active adapters it has not folded is applying them
+        (``_applied``); whether that is the function the unmerged layer computes depends on
+        the method (``_partial_merge_problem``).  Nothing is checked while every active
+        adapter is folded, nor for one that is folded alone, which changes the function by
+        design.  The tuner calls it before it writes anything.
+
+        Parameters
+        ----------
+        pending : list of str
+            The adapters about to be folded, those not merged yet (``_pending_merges``).
+
+        Raises
+        ------
+        ValueError
+            The method cannot go on applying the rest after these are folded.
+        """
+        if not pending:
+            return
+        folded = [*self.merged_adapters, *pending]
+        rest = [name for name in self._applied(self._adapter_names()) if name not in pending]
+        if not rest:
+            return
+        problem = self._partial_merge_problem(folded, rest)
+        if problem is not None:
+            raise ValueError(
+                f"cannot merge {pending} while {rest} stay unmerged in "
+                f"{_qualified(type(self))}: {problem}"
+            )
+
+    def _partial_merge_problem(self, folded: list[str], rest: list[str]) -> str | None:
+        """Why this layer cannot fold ``folded`` and go on applying ``rest``, or ``None``.
+
+        The default is a method whose adapters add up, or commute: any split is the function
+        it was.  One whose adapters compose in order (``_ordered``) or read what the others
+        change says so here.
+
+        Parameters
+        ----------
+        folded : list of str
+            The adapters in the base weights once the merge is done, in the order folded.
+        rest : list of str
+            The active adapters the forward pass still applies, in their order.
+        """
+        del rest  # the order alone decides it; a method whose answer depends on what stays overrides
+        if type(self)._ordered:
+            return self._ordered_problem(folded)
+        return None
+
+    def _ordered_problem(self, folded: list[str]) -> str | None:
+        """Why folding ``folded`` ahead of applying the rest is not the sequence the active adapters make, or ``None``.
+
+        The layer applies its adapters one after another, in the order they are active.  What
+        is folded in is applied first, so it must be the first of them: folded adapters that
+        are not active are an extra the function never had, and are left out.
+        """
+        held = self._adapter_names()
+        active = [name for name in self.active_adapters if name in held]
+        folded_active = [name for name in folded if name in active]
+        first = active[: len(folded_active)]
+        if folded_active == first:
+            return None
+        return (
+            f"its adapters apply one after another in the order they are active, {active}, and "
+            f"the ones folded in are applied first, so they must be the first of them ({first}), "
+            f"not {folded_active}; merge those, or name every one of them"
+        )
+
     def _adapter_names(self) -> list[str]:
         """The adapter names this layer holds."""
         tables = self._tables()
@@ -452,6 +552,15 @@ class _BaseTunerLayer(nn.Module, ABC):
         module must not be merged into; the tuner's ``merge_adapter`` and
         ``merge_and_unload`` refuse it, as this layer alone cannot see the
         rest of the model.
+
+        Merging some of the active adapters leaves the rest applying: the layer's
+        forward pass runs the folded weights and then the active adapters that are
+        not folded, so it computes what it did unmerged.  The reference runs a
+        merged layer's base alone, which drops the others — a deliberate departure
+        (LCD-971).  A method whose adapters would not compute the same function
+        that way (rotations that must apply in order, DoRA reading the weight)
+        refuses the split in the tuner's ``merge_adapter``, before it writes
+        anything; this method, called on a layer directly, does not check it.
 
         Parameters
         ----------

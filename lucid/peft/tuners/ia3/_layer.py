@@ -171,16 +171,17 @@ class IA3Layer(_BaseTunerLayer):
         """Scale the layer by the active adapters' vectors.
 
         The output is scaled — the input, for a feed-forward layer; the base layer alone when
-        adapters are disabled or merged.
+        adapters are disabled or every active adapter is merged.  A vector scales the same
+        whether it is folded into the weight or applied, and the vectors commute, so a layer
+        merged for some of its adapters scales by the rest.
         """
-        if self.disable_adapters or self.merged:
+        if self.disable_adapters:
             result: Tensor = self.base_layer(x)
             return result
         scale: Tensor | None = None
-        for adapter in self.active_adapters:
-            if adapter in self.ia3_l:
-                vector = self._activation_scale(self._vector(adapter))
-                scale = vector if scale is None else scale * vector
+        for adapter in self._applied(self.ia3_l):
+            vector = self._activation_scale(self._vector(adapter))
+            scale = vector if scale is None else scale * vector
         if scale is None:
             result = self.base_layer(x)
         elif self.is_feedforward:

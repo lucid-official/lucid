@@ -181,6 +181,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - one Attributes heading, long names wrap (LCD-973)
 
+- a merged layer keeps applying what it did not fold (LCD-971)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

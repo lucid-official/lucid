@@ -162,7 +162,7 @@ class DeftLayer(_DeltaLayer[DeftConfig], _LinearSized, _PristineMerge, family=Tr
         # x (Q_P (s R - M))^T, with the removal read from the input before the injection's dropout.
         basis, right = self._basis(adapter)
         x = x.to(basis.dtype)
-        removal = (x @ (self.weight.to(basis.dtype).mT @ right)) @ basis.mT
+        removal = (x @ (self._pristine_weight().to(basis.dtype).mT @ right)) @ basis.mT
         injection = self._injection(adapter)
         if injection is None:
             return -removal

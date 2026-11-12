@@ -112,6 +112,14 @@ class RoadLayer(_ConfigLayer[RoadConfig], _LinearSized, family=True):
         )
 
     @override
+    def _partial_merge_problem(self, folded: list[str], rest: list[str]) -> str | None:
+        # ``road_1`` fills each pair's block with one scaled rotation, a complex number, and those
+        # commute; ``road_2`` and ``road_4`` fill the whole 2x2 block, which does not.
+        if all(self._spec(name).variant == "road_1" for name in [*folded, *rest]):
+            return None
+        return self._ordered_problem(folded)
+
+    @override
     def get_delta_weight(self, adapter: str) -> Tensor:
         r"""Return the dense :math:`R`, which multiplies the layer's output (and so its weight and bias) from the left.
 
@@ -131,19 +139,19 @@ class RoadLayer(_ConfigLayer[RoadConfig], _LinearSized, family=True):
     def forward(self, x: Tensor) -> Tensor:
         """The base layer's output, turned by every active adapter in the order listed.
 
-        The base output alone when adapters are disabled or merged.  The rotation runs in the
-        adapters' dtype (float32 beside a half-precision base) and the result returns to the base
-        output's.
+        The base output alone when adapters are disabled or every active adapter is merged; a
+        layer merged for some of its adapters turns the output of the weights that hold
+        them by the others.  The rotation runs in the adapters' dtype (float32 beside a
+        half-precision base) and the result returns to the base output's.
         """
         result: Tensor = self.base_layer(x)
-        if self.disable_adapters or self.merged:
+        if self.disable_adapters:
             return result
         out = result
-        held = self._adapter_names()
-        for adapter in self.active_adapters:
-            if adapter in held:  # an adapter aimed at other layers: this one runs its base
-                rotation = self._rotation(adapter)
-                out = rotation.apply(out.to(rotation.first.dtype))
+        # An adapter aimed at other layers is not held: this one runs its base for it.
+        for adapter in self._applied(self._adapter_names()):
+            rotation = self._rotation(adapter)
+            out = rotation.apply(out.to(rotation.first.dtype))
         return out if out.dtype == result.dtype else out.to(result.dtype)
 
     # ── merging ───────────────────────────────────────────────────────────

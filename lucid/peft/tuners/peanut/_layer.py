@@ -144,7 +144,7 @@ class PeanutLayer(_DeltaLayer[PeanutConfig], _LinearSized, _PristineMerge, famil
 
     @override
     def _contribution(self, adapter: str, x: Tensor) -> Tensor:
-        update = self._network(adapter, self.weight)
+        update = self._network(adapter, self._pristine_weight())
         out: Tensor = x.to(update.dtype) @ update
         return out
 

@@ -37,8 +37,10 @@ def _leaf(key: str) -> str:
 class _PristineMerge(_ResidualUpdate):
     r"""A residual layer whose adapters change the base by an amount that reads the base.
 
-    The forward pass is the base output plus every active adapter's ``_contribution``
-    (``_ResidualUpdate``); a merged layer runs its base alone.  A subclass gives ``_changes`` —
+    The forward pass is the base output plus every applied adapter's ``_contribution``
+    (``_ResidualUpdate``); a layer merged for only some of its adapters applies the rest, each
+    computed from the weights as they were before the merge (``_pristine_weight``), so the sum
+    is the one the unmerged layer makes.  A subclass gives ``_changes`` —
     what an adapter adds to each merge target, computed from the base values it is handed — and
     this class makes ``get_delta_weight`` (the change to the weight), ``merge`` and ``unmerge`` of
     it, in place of the additive merge ``_ResidualUpdate`` brings.
@@ -74,6 +76,10 @@ class _PristineMerge(_ResidualUpdate):
         for key, param in self._merge_targets().items():
             values[key] = self._kept[_leaf(key)] if len(self._kept) else param
         return values
+
+    def _pristine_weight(self) -> Tensor:
+        """The base weight an update is a function of, as it was before any merge: what a contribution reads."""
+        return self._pristine()[_WEIGHT]
 
     def _stash(self) -> None:
         """Keep a copy of every merge target (once: a second merge adds to the same stash)."""

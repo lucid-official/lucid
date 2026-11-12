@@ -21,12 +21,18 @@ adapter first, :math:`x D_n^\top \cdots D_1^\top`, to be the same function
 (``_input_order``).  The weight route and the merge walk the list as given and
 never decide this; ``_input_order`` is where it is decided.
 
+**A merge of some of the active adapters** leaves the others applying, and they apply to the
+weight that holds the folded ones: :math:`(W D_1) D_2` for ``[1, 2]`` with the first folded.
+That is the same function only when the folded adapters are the first of the active ones, in
+their order — folding :math:`D_2` and applying :math:`D_1` after it is :math:`W D_2 D_1`.  A
+merge of any other part is refused (``_ordered``), before it writes anything.
+
 A method supplies the matrix: ``_right_factor`` (and ``get_delta_weight``, the
 matrix the reference calls by that name) and, for a scale, ``_row_scale``.
 """
 
 from abc import abstractmethod
-from typing import override
+from typing import ClassVar, override
 
 import lucid.linalg as linalg
 from lucid._tensor.tensor import Tensor
@@ -42,6 +48,9 @@ class _OrthogonalLayer(_ConfigLayer, _WeightRewrite):
     ``nn.Linear`` or an ungrouped ``nn.Conv1d`` / ``nn.Conv2d`` is adapted:
     a grouped kernel has no single input space to rotate (``NotImplementedError``).
     """
+
+    # Rotations do not commute: what is folded in must be what the weight route applies first.
+    _ordered: ClassVar[bool] = True
 
     @property
     def _geometry(self) -> _Geometry:
@@ -144,11 +153,12 @@ class _OrthogonalLayer(_ConfigLayer, _WeightRewrite):
         """Run the layer on the weight the active adapters turn.
 
         The base weight is rotated by each active adapter in turn (and row-scaled, for BOFT)
-        and the layer is computed from that; the base layer alone when adapters are disabled,
-        merged or none applies.
+        and the layer is computed from that; the base layer alone when adapters are disabled, every
+        active adapter is merged or none applies.  A layer merged for the first of its adapters
+        rotates the weight that holds them by the others.
         """
-        adapters = [name for name in self.active_adapters if name in self._specs]
-        if self.disable_adapters or self.merged or not adapters:
+        adapters = self._applied(self._specs)
+        if self.disable_adapters or not adapters:
             result: Tensor = self.base_layer(x)
             return result
         out = self._adapted(x, adapters)

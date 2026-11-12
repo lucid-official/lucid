@@ -242,13 +242,15 @@ class FrodLayer(_DeltaLayer[FrodConfig], _LinearSized, _PristineMerge, family=Tr
         r""":math:`h\,(W' - W)^\top` for :math:`h` the input through the adapter's dropout.
 
         ``base_out`` is the base layer's output without its bias, if the caller has it: :math:`x\,W^\top` is
-        then not computed again (it is when dropout changes the input).
+        then not computed again (it is when dropout changes the input, and where the layer is
+        merged, whose output holds the merged adapters' change too).  :math:`W` is the weight as it was
+        before any merge.
         """
         h = self._dropped(adapter, x)
         adapted = self._adapted(adapter, h)
         if base_out is not None and h is x:
             return adapted - base_out.to(adapted.dtype)
-        return adapted - h.to(adapted.dtype) @ self.weight.to(adapted.dtype).mT
+        return adapted - h.to(adapted.dtype) @ self._pristine_weight().to(adapted.dtype).mT
 
     @override
     def _contribution(self, adapter: str, x: Tensor) -> Tensor:
@@ -258,18 +260,19 @@ class FrodLayer(_DeltaLayer[FrodConfig], _LinearSized, _PristineMerge, family=Tr
     def forward(self, x: Tensor) -> Tensor:
         """The base layer's output plus every active adapter's change of it, as the adapted weight makes it.
 
-        The base output alone when adapters are disabled or merged; the sum is cast back to the base
-        output's dtype.
+        The base output alone when adapters are disabled or every active adapter is merged; the sum
+        is cast back to the base output's dtype.
         """
         result: Tensor = self.base_layer(x)
-        if self.disable_adapters or self.merged:
+        if self.disable_adapters:
             return result
-        held = self._adapter_names()
-        adapters = [name for name in self.active_adapters if name in held]
+        adapters = self._applied(self._adapter_names())
         if not adapters:
             return result
-        bias = self.bias
-        base_out = result if bias is None else result - bias
+        base_out: Tensor | None = None
+        if not self.merged:
+            bias = self.bias
+            base_out = result if bias is None else result - bias
         out = result
         for adapter in adapters:
             out = out + self._shift(adapter, x, base_out)

@@ -793,6 +793,16 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
         shared with another module (a tied LM head — merging would change
         that module too) or if the adapter is disabled.
 
+        Merging some of the active adapters leaves the others applying: a merged
+        layer runs its folded weights and then the active adapters it has not
+        folded, so the model computes what it did unmerged.  The reference runs a
+        merged layer's base alone, which drops the others; Lucid departs from that
+        on purpose (LCD-971).  A method whose adapters do not compute the same
+        function once split refuses it: those that apply in order (OFT, BOFT, HRA,
+        RoAd's ``road_2`` and ``road_4``, MiSS / Bone's ``bat``) take only the first
+        of the active adapters, in their order, and a LoRA layer refuses to fold some
+        adapters while a DoRA one stays unmerged.
+
         Parameters
         ----------
         adapter_names : list of str, optional
@@ -807,15 +817,47 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
             A base weight is shared with another module, or the adapter is
             disabled (inside ``disable_adapter()``).
         ValueError
-            A name is not one of the model's adapters, or ``safe_merge``
-            found a non-finite merged weight.
+            A name is not one of the model's adapters, ``safe_merge`` found a
+            non-finite merged weight, or a layer's method cannot go on applying
+            the active adapters that stay unmerged.
+
+        Examples
+        --------
+        >>> import lucid
+        >>> import lucid.nn as nn
+        >>> from lucid.peft import LoraConfig, get_peft_model
+        >>> config = LoraConfig(r=2, target_modules=["0"], init_lora_weights=False)
+        >>> peft = get_peft_model(nn.Sequential(nn.Linear(4, 4)), config)
+        >>> peft.add_adapter("two", config)
+        >>> peft.base_model.set_adapter(["default", "two"])
+        >>> x = lucid.randn(3, 4)
+        >>> both = peft(x)
+        >>> peft.base_model.merge_adapter(adapter_names=["default"])
+        >>> peft.base_model.model[0].merged_adapters
+        ['default']
+        >>> bool(lucid.allclose(peft(x), both, atol=1e-5))   # "two" still applies
+        True
+        """
+        self._merge(adapter_names, safe_merge, keeps_layers=True)
+
+    def _merge(
+        self, adapter_names: list[str] | None, safe_merge: bool, *, keeps_layers: bool
+    ) -> None:
+        """Fold ``adapter_names`` into the layers' base weights: ``merge_adapter``, and the first half of ``merge_and_unload``.
+
+        ``keeps_layers`` says the layers stay, so what is merged must leave them computing the
+        function they did (``_check_partial_merge``).  ``merge_and_unload`` drops them: the
+        weights alone are what the names ask for, whatever is not named.
         """
         names = self.active_adapters if adapter_names is None else list(adapter_names)
         self._require_known(names)
         pending = []
         for _, layer in self._merge_order(self._mergeable_layers()):
             held = [name for name in names if name in layer._adapter_names()]
-            pending.append((layer, held, layer._pending_merges(held)))
+            adapters = layer._pending_merges(held)
+            if keeps_layers:
+                layer._check_partial_merge(adapters)
+            pending.append((layer, held, adapters))
         if safe_merge:
             for layer, _, adapters in pending:
                 for adapter in adapters:
@@ -882,7 +924,7 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
         """
         del progressbar  # the reference's signature; nothing to report progress on
         self._refuse_untying()
-        self.merge_adapter(adapter_names=adapter_names, safe_merge=safe_merge)
+        self._merge(adapter_names, safe_merge, keeps_layers=False)
         return self._unload(keep_trained=True)
 
     def _refuse_untying(self) -> None:

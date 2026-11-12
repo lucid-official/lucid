@@ -153,6 +153,13 @@ class MissLayer(_ConfigLayer, _LinearSized, _WeightRewrite, family=True):
         """
         return self._mode(adapter).delta(self.weight, _parameter_at(self._blocks, adapter))
 
+    @override
+    def _partial_merge_problem(self, folded: list[str], rest: list[str]) -> str | None:
+        # Shards add up, in any order; the ``bat`` rewrite reads the weight it is applied to.
+        if all(self._mode(name).additive for name in [*folded, *rest]):
+            return None
+        return self._ordered_problem(folded)
+
     # ── the forward pass ──────────────────────────────────────────────────
 
     @override
@@ -161,11 +168,11 @@ class MissLayer(_ConfigLayer, _LinearSized, _WeightRewrite, family=True):
 
         The default and ``mini`` variants add their contribution to the base output; ``bat``
         rewrites the weight and the layer is computed from that.  The base layer alone
-        when adapters are disabled, merged or none applies.
+        when adapters are disabled, every active adapter is merged or none applies.
         """
-        adapters = [name for name in self.active_adapters if name in self._specs]
+        adapters = self._applied(self._specs)
         base = self.base_layer
-        if self.disable_adapters or self.merged or not adapters:
+        if self.disable_adapters or not adapters:
             result: Tensor = base(x)
             return result
         if all(self._mode(name).additive for name in adapters):

@@ -192,11 +192,12 @@ class TrainableTokensLayer(_ConfigLayer, _WeightRewrite, family=True):
     def forward(self, x: Tensor) -> Tensor:
         """Run the layer on the table with the active adapters' rows in place.
 
-        The original table when adapters are disabled, merged or none applies; two adapters
-        that train the same token raise ``ValueError``.
+        The original table when adapters are disabled, every active adapter is merged or none
+        applies; two adapters that train the same token raise ``ValueError``.  A layer merged
+        for some of its adapters puts the rest's rows into the table that holds the merged ones.
         """
-        adapters = [name for name in self.active_adapters if name in self._specs]
-        if self.disable_adapters or self.merged or not adapters:
+        adapters = self._applied(self._specs)
+        if self.disable_adapters or not adapters:
             result: Tensor = self.base_layer(x)
             return result
         self._check_overlap(adapters)

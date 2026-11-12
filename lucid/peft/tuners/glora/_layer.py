@@ -140,7 +140,8 @@ class GloraLayer(_DeltaLayer[GloraConfig], _LinearSized, _PristineMerge, family=
 
     @override
     def _contribution(self, adapter: str, x: Tensor) -> Tensor:
-        weight, bias = self._corrections(adapter, self.weight, self.bias)
+        base = self._pristine()  # the base's own values, which a merge has changed in place
+        weight, bias = self._corrections(adapter, base[_BASE_WEIGHT], base.get(_BASE_BIAS))
         out: Tensor = x.to(weight.dtype) @ weight.mT
         return out if bias is None else out + bias
 
