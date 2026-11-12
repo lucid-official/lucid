@@ -159,6 +159,11 @@ quality = [
     "hypothesis>=6.100",
     "diff-cover>=9",
 ]
+# Ruff alone, for a CI job that lints without the rest of the quality tools: the
+# Docs workflow lints web/scripts, which the quality gate (lucid/ only) never
+# scans.  Pinned to the `quality` group's ruff -- web/scripts/test_ci_pins.py
+# fails if the two diverge -- so a new ruff cannot redden the Docs deploy by itself.
+lint = ["ruff==0.16.0"]
 # What the docs api-data build needs (web/scripts/build-api-data*.py; run by
 # .github/workflows/docs-api-data.yml).  Griffe reads lucid/ statically, so no
 # Lucid build and no other package.  Exact because the committed

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The Griffe version has one home, and every install reads it (LCD-970).
+"""The Griffe and ruff versions have one home each, and installs read it (LCD-970).
 
 ``web/public/api-data`` is Griffe's output, committed, and rebuilt by a nightly
 runner that installed ``griffe`` unpinned: it got 2.4.1 while the dev venv had
@@ -11,6 +11,11 @@ A pin only holds while nothing installs the package another way, so this fails
 on the two ways it comes undone: the group stops being one exact requirement,
 or a workflow / CI script runs a ``pip install`` that names Griffe without the
 group.
+
+The Docs workflow also lints ``web/scripts`` (the quality gate scans ``lucid/``
+only).  It installs ruff from the ``lint`` group, which must stay the same
+version as the ``quality`` group's ruff -- two lines, one version -- and must
+stay what the workflow installs.
 
 Standalone like the other ``web/scripts/test_*.py`` (stdlib only): ``python3
 web/scripts/test_ci_pins.py``, also pytest-collectable.
@@ -24,6 +29,7 @@ from pathlib import Path
 _ROOT = Path(__file__).resolve().parents[2]
 _GROUP = "apidata"
 _EXACT = re.compile(r"^griffe==\d+(\.\d+)+$")
+_RUFF = re.compile(r"^ruff==\d+(\.\d+)+$")
 _INSTALL = re.compile(r"\bpip\s+install\b")
 
 
@@ -72,6 +78,20 @@ def test_the_refresh_workflow_installs_the_group() -> None:
     """Dropping the install step would also pass the test above."""
     lines = _install_lines(_ROOT / ".github" / "workflows" / "docs-api-data.yml")
     assert any(f"--group {_GROUP}" in line for line in lines), lines
+
+
+def test_the_lint_group_is_the_quality_groups_ruff() -> None:
+    groups = _groups()
+    ruff = [r for r in groups["quality"] if r.startswith("ruff")]
+    assert groups["lint"] == ruff and _RUFF.match(ruff[0]), (
+        f"[dependency-groups].lint {groups['lint']!r} must be exactly the `quality` group's "
+        f"pinned ruff {ruff!r}: the Docs lint and the ratchet gate must not run different ruffs"
+    )
+
+
+def test_the_docs_workflow_lints_with_the_lint_group() -> None:
+    lines = _install_lines(_ROOT / ".github" / "workflows" / "docs.yml")
+    assert any("--group lint" in line for line in lines), lines
 
 
 _TESTS = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
