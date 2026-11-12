@@ -18,17 +18,18 @@ later is checked without a row here:
   ``add_adapter``, loaded from a file or made by a second ``get_peft_model``;
 * an initialisation that writes the base weights is refused, before anything changes, where there is
   a fold to write into — the model stays as it was, and takes the adapter once it is unmerged;
-* a stack of two methods' layers, both merged, is taken apart highest first and put back lowest first.
+* a stack of two methods' layers, both merged, is taken apart highest first: LoRA beneath LoHa, IA3, OFT
+  or BEFT, and the new adapter reads the weight beneath both;
+* what a merge keeps beside the weights (DoRA's row gains) is what it was after the add.
 """
 
+import warnings
 from pathlib import Path
 
 import pytest
 
 import lucid
-import lucid.nn as nn
 from lucid.peft import (
-    LoHaConfig,
     LoraConfig,
     LoraGAConfig,
     PeftMixedModel,
@@ -309,28 +310,32 @@ def test_an_initialisation_that_writes_the_base_is_refused_where_adapters_are_fo
         assert sorted(model.peft_config) == ["b", "default"]
 
 
-# ── a stack: the layers are taken apart highest first and put back lowest first ────────────────
+# ── a stack: the layers are taken apart highest first ────────────────────────────────────────────
+
+#: The layer above LoRA's, each folded after it: LoHa adds to the output and commutes with it, IA3
+#: scales it, OFT and BEFT rotate it, so a stack taken apart lowest first reads another weight.
+_UPPER = [PeftType.LOHA, PeftType.IA3, PeftType.OFT, PeftType.BEFT]
 
 
-def _stack(device: str, *, merged: bool) -> PeftMixedModel:
-    lucid.manual_seed(0)
-    net = nn.Sequential(nn.Linear(6, 8), nn.ReLU(), nn.Linear(8, 4)).to(device)
-    model = PeftMixedModel(net, _lora(), "lora")
-    model.add_adapter("loha", LoHaConfig(r=2, target_modules=["0", "2"]))
+def _stack(upper: PeftType, device: str, scratch: Path, *, merged: bool) -> PeftMixedModel:
+    recipe = RECIPES[upper]
+    model = PeftMixedModel(recipe.base(lucid.float32, device), _lora(), "lora")
+    model.add_adapter("upper", recipe.config(lucid.float32, device, scratch))
     perturb_adapter(model, "lora", seed=5)
-    perturb_adapter(model, "loha", seed=6)
-    model.set_adapter(["lora", "loha"])
+    perturb_adapter(model, "upper", seed=6)
+    model.set_adapter(["lora", "upper"])
     if merged:
         model.base_model.merge_adapter()
     return model
 
 
+@pytest.mark.parametrize("upper", _UPPER, ids=lambda t: t.name)
 def test_an_adapter_added_to_a_merged_stack_takes_the_weight_from_beneath_every_layer(
-    device: str,
+    upper: PeftType, device: str, tmp_path: Path
 ) -> None:
     outs = {}
     for merged in (False, True):
-        model = _stack(device, merged=merged)
+        model = _stack(upper, device, tmp_path, merged=merged)
         weights, folded = _base_weights(model), _folded(model)
         lucid.manual_seed(7)
         model.add_adapter("dora", _lora(use_dora=True))
@@ -340,3 +345,52 @@ def test_an_adapter_added_to_a_merged_stack_takes_the_weight_from_beneath_every_
         with lucid.no_grad():
             outs[merged] = model(lucid.randn(3, 6, device=device))
     assert span(outs[True], outs[False]) <= _TOLERANCE * max(1.0, magnitude(outs[False]))
+
+
+# ── what a merge keeps beside the weights ───────────────────────────────────────────────────────
+
+
+def test_the_row_gains_of_merged_dora_adapters_are_what_they_were_after_an_add(
+    device: str,
+) -> None:
+    """Folding DoRA again recomputes its gains from a weight that lost bits unmerging: they are put back."""
+    recipe = RECIPES[PeftType.LORA]
+    model = get_peft_model(
+        recipe.base(lucid.float32, device), _lora(use_dora=True), adapter_name="one"
+    )
+    model.add_adapter("two", _lora(use_dora=True))
+    perturb_adapter(model, "one", seed=5)
+    perturb_adapter(model, "two", seed=6)
+    model.set_adapter(["one", "two"])
+    original = {n: p.detach().clone() for n, p in model.named_parameters() if "base_layer" in n}
+    model.base_model.merge_adapter()
+    layers = [layer for _, layer in _tuner_layers(model)]
+    gains = [
+        {name: layer.lora_magnitude_vector[name].merged_gain for name in layer.merged_adapters}
+        for layer in layers
+    ]
+    assert all(gain is not None for held in gains for gain in held.values())
+
+    model.add_adapter("b", _lora())
+
+    for layer, held in zip(layers, gains, strict=True):
+        assert layer.merged_adapters == ["one", "two"]
+        for name, gain in held.items():
+            assert gain is not None
+            assert same(layer.lora_magnitude_vector[name].merged_gain, gain)
+    model.base_model.unmerge_adapter()
+    restored = _TOLERANCE * max(magnitude(w) for w in original.values())
+    assert all(
+        span(p, original[n]) <= restored for n, p in model.named_parameters() if n in original
+    )
+
+
+def test_adding_to_a_merged_model_does_not_warn_that_an_unmerge_is_inexact(
+    device: str, tmp_path: Path
+) -> None:
+    """IA3's unmerge divides and says so; here the weights it read are written back as they were."""
+    recipe = RECIPES[PeftType.IA3]
+    model = _first(recipe, device, tmp_path, merged=True)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        model.add_adapter("b", recipe.second(lucid.float32, device, tmp_path))
