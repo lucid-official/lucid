@@ -2013,7 +2013,7 @@
     "lucid/nn/modules/transformer.py": 17,
     "lucid/nn/utils/parametrize.py": 7,
     "lucid/nn/utils/rnn.py": 5,
-    "lucid/peft/_peft_model.py": 87,
+    "lucid/peft/_peft_model.py": 55,
     "lucid/peft/auto.py": 9,
     "lucid/quantization/_functional.py": 41,
     "lucid/quantization/_qparams.py": 13,

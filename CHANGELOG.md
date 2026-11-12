@@ -273,6 +273,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Uni-LoRA's index helpers are private (LCD-958)
 - stackability is declared per class, not inherited
 - type the api-data object loader without Any (LCD-969)
+- share the adapter load flows between wrappers (LCD-966)
 
 ---
 

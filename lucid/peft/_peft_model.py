@@ -3,7 +3,8 @@
 import dataclasses
 import os
 import re
-from collections.abc import Mapping, Sequence
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from types import TracebackType
 from typing import ClassVar, Final, Literal, Self, override
@@ -45,8 +46,49 @@ _WEIGHTS_NAME: Final = "adapter_model.safetensors"
 _PICKLE_WEIGHTS_NAME: Final = "adapter_model.bin"
 
 
+class _AdaptedModel(_ForwardsAttributes, ABC):
+    """A module that wraps the host holding a model's adapters: what ``PeftModel`` and ``PeftMixedModel`` share.
+
+    The flows both wrappers run (reading an adapter from a directory, filling a model from
+    one, ``disable_adapter()``) are written against this: the host as ``base_model``, how far
+    ``disable_adapter()`` is nested, and the four members each wrapper implements in its own
+    way.  The wrappers stay separate classes, as the reference's are.
+    """
+
+    base_model: _AdapterHost
+    _disable_depth: int
+
+    @override
+    def _wrapped(self) -> nn.Module | None:
+        modules = self.__dict__.get("_modules")
+        return _as_module(modules.get("base_model")) if modules else None
+
+    @property
+    @abstractmethod
+    def peft_config(self) -> dict[str, PeftConfig]:
+        """Each adapter's config by adapter name."""
+
+    @abstractmethod
+    def add_adapter(
+        self,
+        adapter_name: str,
+        peft_config: PeftConfig,
+        low_cpu_mem_usage: bool = False,
+        autocast_adapter_dtype: bool = True,
+    ) -> None:
+        """Add an adapter beside the ones held."""
+
+    @abstractmethod
+    def delete_adapter(self, adapter_name: str) -> None:
+        """Remove an adapter."""
+
+    @abstractmethod
+    def unload(self) -> nn.Module:
+        """Remove every adapter without merging and return the original model."""
+
+
 class _DisabledAdapter(AbstractContextManager[None]):
-    """What ``PeftModel.disable_adapter()`` returns: reentrant, the outermost exit re-enables.
+    """What ``disable_adapter()`` returns: reentrant, the outermost exit re-enables.
 
     Nested blocks — a helper that disables inside a caller's disabled
     block — leave the adapter off until the outermost one exits.
@@ -54,7 +96,7 @@ class _DisabledAdapter(AbstractContextManager[None]):
 
     __slots__ = ("_model",)
 
-    def __init__(self, model: PeftModel) -> None:
+    def __init__(self, model: _AdaptedModel) -> None:
         self._model = model
 
     @override
@@ -145,7 +187,147 @@ def _converted(model: nn.Module, adapter: AdapterFile, convert: ConvertMode) -> 
     return convert_adapter(adapter, ConversionContext.of(model, adapter.config), convert)
 
 
-class PeftModel(_ForwardsAttributes):
+def _saved_module_names(configs: Iterable[PeftConfig]) -> set[str] | None:
+    """The ``modules_to_save`` the configs name, together; ``None`` if there are none."""
+    names: set[str] = set()
+    for config in configs:
+        names.update(getattr(config, "modules_to_save", None) or ())
+    return names or None
+
+
+def _print_parameter_share(trainable: int, total: int) -> None:
+    """Print ``trainable`` of ``total`` parameter elements, and their share."""
+    share = 100 * trainable / total if total else 0.0
+    print(f"trainable params: {trainable:,d} || all params: {total:,d} || trainable%: {share:.4f}")
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _ReadOptions:
+    """How a wrapper reads an adapter from its directory, with the options the reference has and this library refuses.
+
+    ``unsupported`` is what the reference's ``**kwargs`` hold beyond the named ones (its hub
+    download); the three build options and ``ignore_mismatched_sizes`` are accepted at the
+    default only.
+    """
+
+    key_mapping: Mapping[str, str] | None = None
+    subfolder: str | None = None
+    convert: ConvertMode = "auto"
+    device: str | None = None
+    autocast_adapter_dtype: bool = True
+    ephemeral_gpu_offload: bool = False
+    low_cpu_mem_usage: bool = False
+    ignore_mismatched_sizes: object = False
+    unsupported: Mapping[str, object] = dataclasses.field(default_factory=dict)
+
+    def refuse(self, where: str) -> None:
+        """Raise ``NotImplementedError`` for an option this library cannot honour; ``where`` names the call."""
+        refuse_kwargs(where, self.unsupported, NO_HUB)
+        refuse_build_options(
+            where,
+            autocast_adapter_dtype=self.autocast_adapter_dtype,
+            low_cpu_mem_usage=self.low_cpu_mem_usage,
+            ephemeral_gpu_offload=self.ephemeral_gpu_offload,
+        )
+        refuse_value(
+            where,
+            "ignore_mismatched_sizes",
+            self.ignore_mismatched_sizes,
+            False,
+            NO_MISMATCH_SKIPPING,
+        )
+
+
+def _stored_config(directory: str, config: PeftConfig | None, is_trainable: bool) -> PeftConfig:
+    """``config`` (the directory's, without one) as the adapter is loaded: for inference unless ``is_trainable``."""
+    given = PeftConfig.from_pretrained(directory) if config is None else config
+    return dataclasses.replace(_require_config("config", given), inference_mode=not is_trainable)
+
+
+def _read_converted(
+    model: nn.Module, directory: str, config: PeftConfig, is_trainable: bool, options: _ReadOptions
+) -> AdapterFile:
+    """The adapter ``directory`` holds, for ``config``: renamed by ``key_mapping``, converted to ``model``'s layout."""
+    _tuner_for(config)._check_loadable(config, is_trainable)
+    read = _remapped(_adapter_weights(directory, options.device), options.key_mapping)
+    return _converted(model, AdapterFile(config, read), options.convert)
+
+
+def _build_filled[W: _AdaptedModel](
+    make: Callable[[nn.Module, PeftConfig, str], W],
+    model: nn.Module,
+    config: PeftConfig,
+    weights: Mapping[str, Tensor],
+    adapter_name: str,
+) -> W:
+    """``model`` adapted with ``config`` by ``make`` and holding ``weights``; undone if they do not fit.
+
+    The file's tensors replace whatever the adapter is built with, so it
+    is built from ``config._staged()`` — which leaves the base weight
+    alone — and the model keeps the file's ``config``.
+    """
+    wrapper = make(model, config._staged(), adapter_name)
+    try:
+        set_peft_model_state_dict(wrapper, weights, adapter_name=adapter_name)
+    except BaseException:
+        # Whatever stopped the load, ``model`` goes back to what it was.
+        wrapper.unload()
+        raise
+    config._unstaged(wrapper.peft_config[adapter_name])
+    return wrapper
+
+
+def _load_adapter(
+    wrapper: _AdaptedModel,
+    where: str,
+    model_id: str | os.PathLike[str],
+    adapter_name: str,
+    is_trainable: bool,
+    options: _ReadOptions,
+) -> _IncompatibleKeys:
+    """Load the adapter ``model_id`` holds into ``wrapper`` under ``adapter_name``; ``where`` names the call.
+
+    An adapter the wrapper does not hold is added from the directory's config and filled from
+    its weights; one it holds has its values replaced.  Nothing changes if the files are
+    missing or their tensors do not fit.
+    """
+    options.refuse(where)
+    directory = _adapter_directory(model_id, options.subfolder)
+    added = adapter_name not in wrapper.peft_config
+    config = None
+    if added:
+        config = dataclasses.replace(
+            PeftConfig.from_pretrained(directory), inference_mode=not is_trainable
+        )
+        _tuner_for(config)._check_loadable(config, is_trainable)
+    # Read before anything is changed, so a missing file leaves the model alone.
+    weights = _remapped(_adapter_weights(directory, options.device), options.key_mapping)
+    if options.convert is not False:
+        source = config if config is not None else PeftConfig.from_pretrained(directory)
+        converted = _converted(
+            wrapper.base_model.model, AdapterFile(source, weights), options.convert
+        )
+        weights = dict(converted.tensors)
+        if config is not None:
+            config = dataclasses.replace(converted.config, inference_mode=not is_trainable)
+    if config is not None:
+        wrapper.add_adapter(adapter_name, config._staged())
+        if is_trainable:
+            wrapper.base_model.set_requires_grad(adapter_name)
+    try:
+        loaded = set_peft_model_state_dict(wrapper, weights, adapter_name=adapter_name)
+    except BaseException:
+        if added:
+            wrapper.delete_adapter(adapter_name)
+        raise
+    if config is not None:
+        config._unstaged(wrapper.peft_config[adapter_name])
+    if not is_trainable:
+        wrapper.eval()
+    return loaded
+
+
+class PeftModel(_AdaptedModel):
     r"""A model with adapters, saved and loaded as the adapters alone.
 
     Wraps the model in its method's tuner (``LoraModel`` for a
@@ -256,12 +438,8 @@ class PeftModel(_ForwardsAttributes):
         self.base_model: _AdapterHost = _tuner_for(config)(model, config, adapter_name)
         self._disable_depth = 0
 
-    @override
-    def _wrapped(self) -> nn.Module | None:
-        modules = self.__dict__.get("_modules")
-        return _as_module(modules.get("base_model")) if modules else None
-
     @property
+    @override
     def peft_config(self) -> dict[str, PeftConfig]:
         """Each adapter's config by adapter name (``"all-linear"`` spelled out)."""
         return self.base_model.peft_config
@@ -314,10 +492,7 @@ class PeftModel(_ForwardsAttributes):
     @property
     def modules_to_save(self) -> set[str] | None:
         """The names of the modules trained in full beside the adapters, over every adapter; ``None`` if there are none."""
-        names: set[str] = set()
-        for config in self.peft_config.values():
-            names.update(getattr(config, "modules_to_save", None) or ())
-        return names or None
+        return _saved_module_names(self.peft_config.values())
 
     @property
     def base_model_dtype(self) -> lucid.dtype | None:
@@ -468,6 +643,7 @@ class PeftModel(_ForwardsAttributes):
         del output_dir
         refuse_method("PeftModel.create_or_update_model_card", NO_MODEL_CARD)
 
+    @override
     def add_adapter(
         self,
         adapter_name: str,
@@ -553,6 +729,7 @@ class PeftModel(_ForwardsAttributes):
         """
         self.base_model.set_adapter(adapter_name, inference_mode)
 
+    @override
     def delete_adapter(self, adapter_name: str) -> None:
         """Remove an adapter, its config and its ``modules_to_save`` copies from the model.
 
@@ -734,11 +911,7 @@ class PeftModel(_ForwardsAttributes):
         >>> peft.print_trainable_parameters()
         trainable params: 32 || all params: 104 || trainable%: 30.7692
         """
-        trainable, total = self.get_nb_trainable_parameters()
-        share = 100 * trainable / total if total else 0.0
-        print(
-            f"trainable params: {trainable:,d} || all params: {total:,d} || trainable%: {share:.4f}"
-        )
+        _print_parameter_share(*self.get_nb_trainable_parameters())
 
     def disable_adapter(self) -> AbstractContextManager[None]:
         """Run the base model alone inside the ``with`` block.
@@ -815,6 +988,7 @@ class PeftModel(_ForwardsAttributes):
         """
         return self.base_model.merge_and_unload(progressbar, safe_merge, adapter_names)
 
+    @override
     def unload(self) -> nn.Module:
         """Remove the adapter without merging and return the original model.
 
@@ -980,21 +1154,8 @@ class PeftModel(_ForwardsAttributes):
     def _filled(
         cls, model: nn.Module, config: PeftConfig, weights: Mapping[str, Tensor], adapter_name: str
     ) -> Self:
-        """``model`` adapted with ``config`` and holding ``weights``; undone if they do not fit.
-
-        The file's tensors replace whatever the adapter is built with, so it
-        is built from ``config._staged()`` — which leaves the base weight
-        alone — and the model keeps the file's ``config``.
-        """
-        peft_model = cls(model, config._staged(), adapter_name)
-        try:
-            set_peft_model_state_dict(peft_model, weights, adapter_name=adapter_name)
-        except BaseException:
-            # Whatever stopped the load, ``model`` goes back to what it was.
-            peft_model.unload()
-            raise
-        config._unstaged(peft_model.peft_config[adapter_name])
-        return peft_model
+        """``model`` adapted with ``config`` and holding ``weights``; undone if they do not fit."""
+        return _build_filled(cls, model, config, weights, adapter_name)
 
     @classmethod
     def from_pretrained(
@@ -1105,23 +1266,20 @@ class PeftModel(_ForwardsAttributes):
         >>> bool(lucid.allclose(loaded(x), trained(x)))
         True
         """
-        where = "PeftModel.from_pretrained"
-        refuse_kwargs(where, kwargs, NO_HUB)
-        refuse_build_options(
-            where,
+        options = _ReadOptions(
+            key_mapping=key_mapping,
+            subfolder=subfolder,
+            convert=convert,
             autocast_adapter_dtype=autocast_adapter_dtype,
-            low_cpu_mem_usage=low_cpu_mem_usage,
             ephemeral_gpu_offload=ephemeral_gpu_offload,
+            low_cpu_mem_usage=low_cpu_mem_usage,
+            unsupported=kwargs,
         )
+        options.refuse("PeftModel.from_pretrained")
         directory = _adapter_directory(model_id, subfolder)
         # Without a config, the file's ``peft_type`` picks the method.
-        given = PeftConfig.from_pretrained(directory) if config is None else config
-        config = dataclasses.replace(
-            _require_config("config", given), inference_mode=not is_trainable
-        )
-        _tuner_for(config)._check_loadable(config, is_trainable)
-        read = _remapped(_adapter_weights(directory), key_mapping)
-        converted = _converted(model, AdapterFile(config, read), convert)
+        stored = _stored_config(directory, config, is_trainable)
+        converted = _read_converted(model, directory, stored, is_trainable, options)
         config = converted.config
         peft_model = cls._model_class(config.task_type)._filled(
             model, config, converted.tensors, adapter_name
@@ -1221,49 +1379,20 @@ class PeftModel(_ForwardsAttributes):
         >>> sorted(mine.peft_config), mine.active_adapter
         (['default', 'loaded'], 'default')
         """
-        where = "PeftModel.load_adapter"
-        ignore_mismatched_sizes = kwargs.pop("ignore_mismatched_sizes", False)
-        refuse_kwargs(where, kwargs, NO_HUB)
-        refuse_build_options(
-            where,
+        options = _ReadOptions(
+            key_mapping=key_mapping,
+            subfolder=subfolder,
+            convert=convert,
+            device=device,
             autocast_adapter_dtype=autocast_adapter_dtype,
-            low_cpu_mem_usage=low_cpu_mem_usage,
             ephemeral_gpu_offload=ephemeral_gpu_offload,
+            low_cpu_mem_usage=low_cpu_mem_usage,
+            ignore_mismatched_sizes=kwargs.pop("ignore_mismatched_sizes", False),
+            unsupported=kwargs,
         )
-        refuse_value(
-            where, "ignore_mismatched_sizes", ignore_mismatched_sizes, False, NO_MISMATCH_SKIPPING
+        return _load_adapter(
+            self, "PeftModel.load_adapter", model_id, adapter_name, is_trainable, options
         )
-        directory = _adapter_directory(model_id, subfolder)
-        added = adapter_name not in self.peft_config
-        config = None
-        if added:
-            config = dataclasses.replace(
-                PeftConfig.from_pretrained(directory), inference_mode=not is_trainable
-            )
-            _tuner_for(config)._check_loadable(config, is_trainable)
-        # Read before anything is changed, so a missing file leaves the model alone.
-        weights = _remapped(_adapter_weights(directory, device), key_mapping)
-        if convert is not False:
-            source = config if config is not None else PeftConfig.from_pretrained(directory)
-            converted = _converted(self.get_base_model(), AdapterFile(source, weights), convert)
-            weights = dict(converted.tensors)
-            if config is not None:
-                config = dataclasses.replace(converted.config, inference_mode=not is_trainable)
-        if config is not None:
-            self.add_adapter(adapter_name, config._staged())
-            if is_trainable:
-                self.set_requires_grad(adapter_name)
-        try:
-            loaded = set_peft_model_state_dict(self, weights, adapter_name=adapter_name)
-        except BaseException:
-            if added:
-                self.delete_adapter(adapter_name)
-            raise
-        if config is not None:
-            config._unstaged(self.peft_config[adapter_name])
-        if not is_trainable:
-            self.eval()
-        return loaded
 
     def supports_lora_conversion(self, adapter_name: str = "default") -> bool:
         """Whether the adapter ``adapter_name`` on this model can be converted to LoRA."""
