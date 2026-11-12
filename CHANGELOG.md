@@ -201,6 +201,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - EVA rebuilds an adapter at the rank its data gave (LCD-977)
 
+- EVA rank 0 removes only its adapter from a layer (LCD-979)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

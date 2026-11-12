@@ -5,6 +5,7 @@ from collections.abc import Callable, Iterable, Mapping
 from copy import copy, deepcopy
 from itertools import cycle
 import math
+import re
 import warnings
 
 import lucid
@@ -644,6 +645,23 @@ def get_eva_state_dict(
     return _extract_eva_state_dict(session, rank_dist)
 
 
+def _drop_adapter_from_layer(
+    model: nn.Module, name: str, module: LoraLayer, adapter_name: str
+) -> None:
+    """Take ``adapter_name`` off the layer ``name``, and the layer out of the tree if it holds nothing else.
+
+    What a layer EVA gave no rank does.  The other adapters the layer holds are not EVA's to
+    drop, and their configs go on listing it.  The adapter itself is still the model's — only
+    this layer holds nothing for it, as if its ``target_modules`` had never selected the layer —
+    so the layer stays active for it, like every other layer.
+    """
+    active = module.active_adapters
+    module.delete_adapter(adapter_name)
+    module._activate(active)
+    if not module._adapter_names():
+        _set_submodule(model, name, module.get_base_layer())
+
+
 def _apply_eva_layer(
     model: nn.Module,
     name: str,
@@ -665,7 +683,7 @@ def _apply_eva_layer(
 
     new_rank = int(w.shape[0])
     if new_rank == 0:
-        _set_submodule(model, name, module.get_base_layer())
+        _drop_adapter_from_layer(model, name, module, adapter_name)
         return 0, alpha, False
 
     if eva_cfg is not None and eva_cfg.adjust_scaling_factors and new_rank != r:
@@ -684,6 +702,31 @@ def _apply_eva_layer(
     return new_rank, alpha, True
 
 
+def _any_of(names: Iterable[str]) -> str:
+    """A regex that matches each of ``names`` whole and nothing else."""
+    return "|".join(re.escape(name) for name in sorted(names))
+
+
+def _select_layers(peft_config: LoraConfig, kept: list[str], dropped: list[str]) -> None:
+    """Make ``peft_config`` select the layers ``kept`` and none of those ``dropped``.
+
+    The names alone do not when one is the dotted tail of another (``q_proj`` and
+    ``block.q_proj``): a list matches by suffix, and the adapter saved from this model would
+    come back on a layer EVA gave no rank.  Those layers are then excluded by their whole names.
+    """
+    peft_config.target_modules = kept
+    stray = [name for name in dropped if _selects(peft_config, name)]
+    if not stray:
+        return
+    patterns = [_any_of(stray)]
+    excluded = peft_config.exclude_modules
+    if isinstance(excluded, str):
+        patterns.append(excluded)
+    elif excluded:
+        patterns.append(rf"(?:.*\.)?(?:{_any_of(excluded)})")
+    peft_config.exclude_modules = "|".join(f"(?:{pattern})" for pattern in patterns)
+
+
 def _load_eva_state_dict(
     model: nn.Module, eva_state_dict: dict[str, Tensor], adapter_name: str
 ) -> None:
@@ -697,6 +740,7 @@ def _load_eva_state_dict(
     alpha_pattern: dict[str, float] = {}
     missing_eva_inits: list[str] = []
     new_target_modules: list[str] = []
+    dropped: list[str] = []
 
     target_layers = [
         (name, mod)
@@ -716,6 +760,7 @@ def _load_eva_state_dict(
             model, name, module, eva_state_dict, peft_config, adapter_name
         )
         if new_rank == 0:
+            dropped.append(name_in_base)
             continue
         if found:
             new_target_modules.append(name_in_base)
@@ -726,7 +771,7 @@ def _load_eva_state_dict(
         if alpha != float(peft_config.lora_alpha):
             alpha_pattern[name_in_base] = alpha
 
-    peft_config.target_modules = new_target_modules + missing_eva_inits
+    _select_layers(peft_config, new_target_modules + missing_eva_inits, dropped)
     peft_config.rank_pattern = rank_pattern
     peft_config.alpha_pattern = alpha_pattern
 
@@ -785,6 +830,14 @@ def initialize_lora_eva_weights(
         ``model`` is not a ``PeftModel`` of an ``init_lora_weights='eva'`` adapter, more than one
         adapter is active, no ``dataloader`` or ``eva_state_dict`` is given, or the adapter is
         merged into the base weights (``unmerge_adapter()`` first).
+
+    Notes
+    -----
+    A layer EVA gives rank 0 loses this adapter and no other: its factors are dropped from the
+    layer and the layer is left out of the adapter's ``target_modules``, so a saved adapter is
+    rebuilt without it.  Only a layer left holding no adapter at all is replaced by the module it
+    wrapped.  The reference replaces the layer by its base module whatever else it holds,
+    deleting the other adapters on it while their configs still list the module; this does not.
     """
     if not hasattr(model, "peft_config"):
         raise ValueError("initialize_lora_eva_weights requires a `PeftModel`.")
