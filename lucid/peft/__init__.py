@@ -1,4 +1,4 @@
-r"""``lucid.peft`` — parameter-efficient fine-tuning: LoRA and 25 other adapter methods, with one API.
+r"""``lucid.peft`` — parameter-efficient fine-tuning: LoRA and 44 other adapter methods, with one API.
 
 Fine-tuning a pretrained model end to end updates, stores and ships every
 weight.  LoRA (Hu et al., 2021) freezes them and learns, beside each
