@@ -1,10 +1,9 @@
 name: Docs api-data refresh
 
 # ``web/public/api-data/`` is a committed build artifact derived from
-# ``lucid/**``.  The pre-commit hook can regenerate it, but a full regen costs
-# ~13 min (and ~4 min even for a one-file change — the Griffe walk loads the
-# whole tree regardless of how many slugs are stale), so in practice it is
-# bypassed with ``LUCID_SKIP_API_DATA=1`` on every commit.
+# ``lucid/**``.  The pre-commit hook can regenerate it, but it used to be slow
+# enough that in practice it was bypassed with ``LUCID_SKIP_API_DATA=1`` on
+# every commit.
 #
 # The result: Python commits accumulate invisible drift, because the Docs
 # workflow only triggers on ``web/**`` and never sees them.  Drift went
@@ -13,6 +12,14 @@ name: Docs api-data refresh
 # This job removes the reliance on that discipline.  It is cheap on the common
 # path: the drift check is pure stdlib content hashing and exits in seconds
 # when nothing is stale.  Only a real drift pays for the rebuild.
+#
+# The rebuild itself is ~10 s of Griffe work (~1 min with the post-processors
+# and the commit).  It was 26 minutes plus 25 minutes of interpreter shutdown
+# until LCD-969: the builder asked Griffe for each page by path, and every such
+# call re-parsed the whole ``lucid/`` tree and left a 0.2 GB cyclic copy behind
+# (peak 6 GB for 46 pages, still climbing).  The nightly run then died on the
+# runner ("lost communication", 2026-11-11, twice).  Hence the limits below:
+# they do not budget the work, they turn a stall into a fast, named failure.
 
 on:
   schedule:
@@ -31,6 +38,12 @@ jobs:
   refresh:
     name: Regenerate api-data if the Lucid source has drifted
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      # A pipe is block-buffered: the 2026-11-11 runs showed nothing for the 24
+      # minutes before the runner was lost, so nobody could tell where it was.
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -58,12 +71,34 @@ jobs:
             echo "stale=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # The builder's own cost guards: Griffe parses lucid/ once per build, the
+      # process ends when its last output is written, the page order does not
+      # depend on the hash seed.  ~15 s, and only when a rebuild is coming — a
+      # builder that regressed to the old per-page re-parse should fail here,
+      # in seconds, not on minute 25 of the real build.
+      - name: Test the builder
+        if: steps.drift.outputs.stale == 'true'
+        working-directory: web
+        run: python3 scripts/test_build_api_data_perf.py
+
+      # FORCE because the per-module fingerprints the cached wrapper would
+      # otherwise use are file mtimes, which a fresh checkout makes all new;
+      # with the rebuild at ~10 s a full one costs less than the logic that
+      # would avoid it.  Each progress line carries elapsed time and peak
+      # memory, so a run that dies shows how far it got and how big it was.
       - name: Regenerate api-data
         if: steps.drift.outputs.stale == 'true'
         working-directory: web
+        timeout-minutes: 15
         env:
           FORCE_API_BUILD: "1"
-        run: python3 scripts/build-api-data-cached.py
+        run: |
+          free -m | sed -n '1,2p'
+          python3 scripts/build-api-data-cached.py || {
+            status=$?
+            echo "::error::api-data regeneration failed (exit $status) - the progress lines above name the last page built and the peak memory; 137 means the builder was SIGKILLed, almost always by the out-of-memory killer"
+            exit "$status"
+          }
 
       # Post-processes (mirroring ``pnpm prebuild``, so the committed tree is
       # the full deployable artifact the Docs drift gate expects),
