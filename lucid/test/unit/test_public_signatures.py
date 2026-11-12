@@ -62,12 +62,6 @@ from lucid._annotations import NAMES
 #: outlive it unnoticed.
 NO_PYTHON_SIGNATURE = {"from_numpy"}
 
-#: The same reason one level down, by qualified name: the protocol the numpy
-#: bridge accepts says ``-> np.ndarray`` without the package importing numpy.
-#: An entry excuses the one name ``np`` and nothing else — a second unresolved
-#: name on the same signature still fails.
-NUMPY_ANNOTATED_METHODS = {"lucid.SupportsNumpyConversion.numpy"}
-
 
 def _public_callables() -> list[str]:
     """Names in ``lucid.__all__`` that are callable.
@@ -291,8 +285,7 @@ def _remedy(name: str, module: str, *, listed: bool, imported: bool) -> str:
 
 def _excused(label: str, names: set[str]) -> bool:
     """Whether ``np`` is all that is missing, on a signature this file declares unreadable for it."""
-    declared = label.rsplit(".", 1)[-1] in NO_PYTHON_SIGNATURE or label in NUMPY_ANNOTATED_METHODS
-    return declared and names <= {"np"}
+    return label.rsplit(".", 1)[-1] in NO_PYTHON_SIGNATURE and names <= {"np"}
 
 
 def _describe(label: str, function: Fn, missing: dict[str, list[str]]) -> list[str]:
@@ -423,20 +416,33 @@ def test_a_class_is_read_through_its_constructor_methods_and_properties() -> Non
 def test_np_is_excused_only_where_this_file_declares_it() -> None:
     numpy_only = _function("def f(a: np.ndarray) -> None: ...")
     assert _unreadable([("lucid.from_numpy", numpy_only)]) == []
-    assert _unreadable([("lucid.SupportsNumpyConversion.numpy", numpy_only)]) == []
+    assert len(_unreadable([("lucid.SupportsNumpyConversion.numpy", numpy_only)])) == 1
     assert len(_unreadable([("lucid.somewhere_else", numpy_only)])) == 1
     also_gone = _function("def f(a: np.ndarray, b: Gone) -> None: ...")
     assert any("'Gone'" in report for report in _unreadable([("lucid.from_numpy", also_gone)]))
 
 
-def test_the_numpy_annotated_methods_are_unreadable_only_through_np() -> None:
-    """An entry for a method that left the surface, or that reads now, is stale."""
-    found = {label: fn for label, fn in _public_signatures() if label in NUMPY_ANNOTATED_METHODS}
-    assert set(found) == NUMPY_ANNOTATED_METHODS
-    for method in found.values():
-        with pytest.raises(NameError, match="'np' is not defined"):
-            inspect.signature(method)
-        assert _unresolved(method) == {"return": ["np"]}
+def test_the_numpy_protocol_reads_without_numpy() -> None:
+    """``SupportsNumpyConversion.numpy`` names its return through a lazy alias.
+
+    ``-> np.ndarray`` was evaluated by ``inspect.signature`` itself, so the
+    protocol the numpy bridge accepts could not be read in an interpreter
+    that had not imported numpy, and this file excused it by name.  The alias
+    (``lucid._types._NumpyArray``, a PEP 695 ``type`` whose value is evaluated
+    only when asked) reads at no cost to numpy, which stays the bridge's
+    dependency and not the package's.
+    """
+    method = lucid.SupportsNumpyConversion.numpy
+    assert list(inspect.signature(method).parameters) == ["self"]
+    assert _unresolved(method) == {}
+    code = (
+        "import sys, inspect, lucid\n"
+        "signature = inspect.signature(lucid.SupportsNumpyConversion.numpy)\n"
+        "assert repr(signature) == '<Signature (self) -> _NumpyArray>', repr(signature)\n"
+        "assert 'numpy' not in sys.modules, 'reading the protocol imported numpy'\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=_REPO)
+    assert result.returncode == 0, result.stderr[-2000:]
 
 
 def test_the_annotation_table_is_fresh() -> None:

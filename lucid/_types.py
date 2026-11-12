@@ -69,6 +69,13 @@ type ReductionKL = Literal["none", "mean", "sum", "batchmean"]
 type PaddingMode = Literal["zeros", "reflect", "replicate", "circular"]
 type GeluApproximate = Literal["none", "tanh"]
 
+# What ``SupportsNumpyConversion.numpy`` returns.  A PEP 695 alias evaluates its
+# value only when asked, so a signature that names it reads (``inspect.signature``,
+# ``help()``) without numpy loaded: ``-> np.ndarray`` there was evaluated by the
+# signature itself and raised ``NameError`` — numpy is a dependency of the bridge,
+# not of the package, so ``np`` is a ``TYPE_CHECKING`` name and nothing binds it.
+type _NumpyArray = np.ndarray
+
 
 # ── Protocols ─────────────────────────────────────────────────────────────────
 
@@ -108,7 +115,7 @@ class SupportsNumpyConversion(Protocol):
     dispatch correctly.
     """
 
-    def numpy(self) -> np.ndarray:
+    def numpy(self) -> _NumpyArray:
         """Return a NumPy view / copy of the underlying buffer."""
         ...
 
