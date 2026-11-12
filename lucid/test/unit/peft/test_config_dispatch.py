@@ -1,9 +1,10 @@
-"""``from_dict`` and ``from_pretrained`` read the method a file names, and ``from_pretrained`` checks the file first.
+"""``from_dict``, ``from_pretrained`` and ``get_peft_config`` read the method a file names, and a file is checked first.
 
 Whichever config class they are called on, the file's ``peft_type`` picks the class (the
 reference's ``from_peft_type``), through the one registry; ``from_pretrained`` hands the file's
 keys to that class's ``check_kwargs`` before any key is dropped for being unknown.  The guards walk
 the registry (``_CONFIG_CLASSES``), so a method added later is held to them the day it is defined.
+``get_peft_config`` is a call to ``PeftConfig.from_peft_type``, with no lookup of its own.
 """
 
 import json
@@ -21,8 +22,10 @@ from lucid.peft import (
     PeftConfig,
     PeftModel,
     PeftType,
+    get_peft_config,
     get_peft_model,
 )
+from lucid.peft import _config as config_module
 from lucid.peft._config import _CONFIG_CLASSES
 from lucid.test.unit.peft._parity import adapter_library
 
@@ -327,6 +330,53 @@ class TestModelLoadingChecksTheFile:
         _write(tmp_path, stored)
         with pytest.raises(ValueError, match="OFT has been updated since version 0.14.0"):
             PeftModel.from_pretrained(_net(), str(tmp_path))
+
+
+class TestGetPeftConfig:
+    """``get_peft_config`` is ``PeftConfig.from_peft_type`` of the dict, with no lookup or error of its own."""
+
+    def test_it_calls_from_peft_type_with_the_dict(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        sentinel = LoraConfig(target_modules=["q"])
+        calls: list[dict[str, object]] = []
+
+        def spy(cls: type[PeftConfig], **kwargs: object) -> PeftConfig:
+            calls.append(kwargs)
+            return sentinel
+
+        monkeypatch.setattr(PeftConfig, "from_peft_type", classmethod(spy))
+        given: dict[str, object] = {"peft_type": "LORA", "r": 4}
+        assert get_peft_config(given) is sentinel
+        assert calls == [given]
+
+    def test_an_unknown_method_is_the_one_registry_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        class Marker(Exception):
+            pass
+
+        def refuse(peft_type: object) -> type[PeftConfig]:
+            raise Marker(peft_type)
+
+        monkeypatch.setattr(config_module, "_config_class_named", refuse)
+        with pytest.raises(Marker):
+            get_peft_config({"peft_type": "LORA"})
+
+    @pytest.mark.parametrize("named", ["NOT_A_METHOD", "lora", "", None, 3])
+    def test_an_unknown_method_reads_as_it_does_everywhere(self, named: object) -> None:
+        with pytest.raises(KeyError) as raised:
+            get_peft_config({"peft_type": named})
+        with pytest.raises(KeyError) as other:
+            PeftConfig.from_peft_type(peft_type=named)
+        assert str(raised.value) == str(other.value)
+        assert "is not a method of lucid.peft; the methods are LORA, " in str(raised.value)
+
+    def test_a_dict_of_another_method_is_that_methods_config(self) -> None:
+        config = OFTConfig(oft_block_size=8, target_modules=["q"])
+        assert get_peft_config(config.to_dict()) == config
+
+    def test_a_dict_without_a_method_is_a_key_error(self) -> None:
+        with pytest.raises(KeyError, match="peft_type"):
+            get_peft_config({"r": 4})
 
 
 # -- against the reference adapter library ------------------------------------

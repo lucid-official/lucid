@@ -43,8 +43,9 @@ def get_peft_config(config_dict: dict[str, object]) -> PeftConfig:
     r"""Build the adapter config a dict describes, of the class its ``peft_type`` names.
 
     The dict is the shape ``PeftConfig.to_dict`` returns and ``adapter_config.json``
-    holds.  The class is looked up in ``PEFT_TYPE_TO_CONFIG_MAPPING`` and reads the dict
-    as :meth:`~lucid.peft.PeftConfig.from_dict` does, so a key from the reference's file
+    holds.  It is :meth:`~lucid.peft.PeftConfig.from_peft_type` called on the dict, which looks
+    the class up in ``PEFT_TYPE_TO_CONFIG_MAPPING`` and reads the dict as
+    :meth:`~lucid.peft.PeftConfig.from_dict` does, so a key from the reference's file
     that this library has no field for is accepted at a value that turns its feature off.
 
     Parameters
@@ -71,17 +72,9 @@ def get_peft_config(config_dict: dict[str, object]) -> PeftConfig:
     >>> type(config).__name__, config.r
     ('LoraConfig', 4)
     """
-    named = config_dict["peft_type"]
-    if not isinstance(named, str):
-        raise TypeError(f"peft_type must be a str, got {type(named).__name__}")
-    try:
-        peft_type = PeftType(named)
-    except ValueError:
-        raise KeyError(
-            f"{named!r} is not a method of lucid.peft; "
-            f"the methods are {', '.join(PEFT_TYPE_TO_CONFIG_MAPPING)}"
-        ) from None
-    return PEFT_TYPE_TO_CONFIG_MAPPING[peft_type].from_dict(config_dict)
+    if "peft_type" not in config_dict:
+        raise KeyError("peft_type")
+    return PeftConfig.from_peft_type(**config_dict)
 
 
 @overload
