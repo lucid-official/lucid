@@ -196,10 +196,15 @@ class FrodLayer(_DeltaLayer[FrodConfig], _LinearSized, _PristineMerge, family=Tr
                 )
 
     def _derive(self, adapter: str) -> None:
-        """Make ``frod_U`` and the initial ``frod_lambda_l`` from the base weight and ``adapter``'s basis."""
+        """Make ``frod_U`` and the initial ``frod_lambda_l`` from the base weight and ``adapter``'s basis.
+
+        The weight is the one before any merge, which a layer that holds merged adapters
+        keeps in its stash: ``_restart`` runs after a file is loaded, outside the tuner's own
+        start, with the layer as it is.
+        """
         v, _, _ = self._bound().entry(self._category, adapter)
         home = self._home()
-        start = _Start.of(self.weight, v, home.dtype, home.device)
+        start = _Start.of(self._pristine_weight(), v, home.dtype, home.device)
         self.frod_U[adapter] = start.u
         with lucid.no_grad():
             _parameter_at(self.frod_lambda_l, adapter).copy_(start.norms)

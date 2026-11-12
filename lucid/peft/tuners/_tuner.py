@@ -32,6 +32,7 @@ from lucid.peft.tuners._plan import (
     _Injected,
     _Placement,
     _Target,
+    _merged_layers,
     _named,
     _not_found,
     _plan_modules_to_save,
@@ -39,6 +40,7 @@ from lucid.peft.tuners._plan import (
     _selected_modules,
     _set_submodule,
     _stored_config,
+    _unmerged,
     _unplace,
     _values_of,
 )
@@ -418,12 +420,35 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
         return False
 
     def _inject(self, adapter_name: str, config: C) -> _Injected:
-        """Plan, then apply, ``config`` as adapter ``adapter_name``; the model is as it was on failure."""
+        """Plan, then apply, ``config`` as adapter ``adapter_name``; the model is as it was on failure.
+
+        Every adapter enters a model here, so this is where its start meets the base weights: a
+        layer that is merged holds the sum of the weights and the adapters folded into them, and
+        an adapter that is derived from a weight (a factorisation, a norm, an identity) must read
+        the weights as they were.  The merged layers on the modules the adapter reaches are held
+        unmerged while it is built and folded again after, the same adapters in the same order
+        (``_unmerged``).
+        """
         model = self.model
         stored = self._prepare_config(config, model)
         self._check_new_adapter_config(stored)
         targets = self._plan_targets(model, stored)
         saved = _plan_modules_to_save(model, stored)
+        merged = _merged_layers(model, (target.key for target in targets))
+        if merged and self._rewrites_base(stored):
+            raise ValueError(
+                f"cannot add adapter {adapter_name!r}: its initialisation rewrites the base "
+                f"weights, which {[key for key, _ in merged]} hold merged adapters in; call "
+                "unmerge_adapter() first"
+            )
+        with _unmerged([layer for _, layer in merged]):
+            return self._build(adapter_name, stored, targets, saved)
+
+    def _build(
+        self, adapter_name: str, stored: C, targets: list[_Target], saved: list[str]
+    ) -> _Injected:
+        """Build the planned adapter into the tree, undoing it all if any step fails."""
+        model = self.model
         # Everything new to the tree is built before the first change to it; an
         # initialisation that rewrites the base weights is the one thing built
         # in place, so its targets' values are kept.
@@ -555,6 +580,12 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
         it; any other target is wrapped.  The model is left as it was if
         the adapter cannot be added.
 
+        Layers that hold merged adapters stay merged, bit for bit, and the
+        adapter starts from the weights as they were before the merge, as it
+        would on the unmerged model.  An initialisation that writes the base
+        weights (PiSSA, OLoRA, LoRA-GA) cannot be applied where adapters are
+        merged: ``unmerge_adapter`` first.
+
         Parameters
         ----------
         adapter_name : str
@@ -566,8 +597,10 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
         ------
         ValueError
             The name is taken or malformed, the config is another
-            method's, no module matches it, or it cannot sit beside the
-            adapters held (two adapters training biases).
+            method's, no module matches it, it cannot sit beside the
+            adapters held (two adapters training biases), or its
+            initialisation writes the base weights of a layer that holds
+            merged adapters.
         TypeError
             ``config`` is not an adapter config.
         """

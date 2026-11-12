@@ -183,13 +183,22 @@ class TestUpdate:
             both = peft(x)
         assert span(both, layer.base_layer.bias + x @ expected.mT) <= _TOLERANCE * magnitude(both)
 
-    def test_an_adapter_cannot_be_added_to_a_merged_layer(self) -> None:
+    def test_an_adapter_added_to_a_merged_layer_splits_the_weight_from_before_the_merge(
+        self,
+    ) -> None:
+        lucid.manual_seed(1)
         net = nn.Sequential(nn.Linear(8, 6))
-        peft = get_peft_model(net, OSFConfig(effective_rank=2, target_modules=["0"]))
+        original = net[0].weight.detach().clone()
+        peft = get_peft_model(
+            net, OSFConfig(effective_rank=2, init_weights=False, target_modules=["0"])
+        )
+        layer = peft.base_model.model[0]
         peft.base_model.merge_adapter()
-        with pytest.raises(ValueError, match="merged layer"):
-            peft.add_adapter("b", OSFConfig(effective_rank=2, target_modules=["0"]))
-        assert sorted(peft.peft_config) == ["default"]
+        assert layer.merged and span(layer.weight, original) > 0.0
+        peft.add_adapter("b", OSFConfig(effective_rank=2, target_modules=["0"]))
+        assert layer.merged_adapters == ["default"]
+        _, s, _ = linalg.svd(original, full_matrices=False)
+        assert span(layer.osf_svd_params["b"]["S_low"], s[2:]) <= _TOLERANCE * magnitude(s)
 
     def test_merging_adds_the_delta_and_unmerging_takes_it_out(self) -> None:
         layer, base = _layer(init_weights=False)

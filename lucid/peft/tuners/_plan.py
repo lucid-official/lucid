@@ -4,7 +4,8 @@ Adding an adapter is planned in full first — every target found and typed,
 every ``modules_to_save`` entry found, the config to keep spelled out — so
 a config that cannot be applied raises with the model as it was.  Nothing
 here changes a model except ``_put_back``, which undoes the one write an
-initialisation may make before the tree is touched.
+initialisation may make before the tree is touched, and ``_unmerged``, which holds the merged
+layers unmerged while an adapter starts from their base weights.
 
 A method adapts a module (its layer found by the module's type) or one raw
 ``Parameter`` of a module (its layer found by the parameter's name): a
@@ -14,7 +15,8 @@ several parameters of one module nest, and the outermost stands in the tree.
 
 import copy
 import warnings
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from types import MappingProxyType
 from typing import Final, NamedTuple, Protocol, runtime_checkable
 
@@ -39,7 +41,7 @@ from lucid.peft._targeting import (
     _shared_outside,
     _with_subtrees_excluded,
 )
-from lucid.peft.tuners._layer import _BaseTunerLayer, _dotted
+from lucid.peft.tuners._layer import _BaseTunerLayer, _dotted, _tuner_layers
 
 #: For a method that adapts modules only: no model type has raw parameters as its default.
 _NO_PARAMETERS: Final[Mapping[str, frozenset[str]]] = MappingProxyType({})
@@ -115,6 +117,50 @@ def _put_back(values: Iterable[tuple[Parameter, Tensor]]) -> None:
     with lucid.no_grad():
         for param, value in values:
             param.copy_(value)
+
+
+def _merged_layers(model: nn.Module, keys: Iterable[str]) -> list[tuple[str, _BaseTunerLayer]]:
+    """The layers at or beneath the modules ``keys`` name that hold merged adapters, outermost first: the order they are unmerged in."""
+    named = set(keys)
+
+    def reaches(key: str) -> bool:
+        # The module itself or one that holds it: a layer stands on the layers it wraps.
+        while key not in named:
+            if not key:
+                return False
+            key = key.rpartition(".")[0]
+        return True
+
+    return [(key, layer) for key, layer in _tuner_layers(model) if layer.merged and reaches(key)]
+
+
+@contextmanager
+def _unmerged(layers: Sequence[_BaseTunerLayer]) -> Iterator[None]:
+    """Hold ``layers`` (merged ones, outermost first) unmerged, and fold what they held in again on the way out.
+
+    An adapter that starts from a weight (a factorisation, a norm, the identity of a rewrite) reads
+    the base weight as it was before any adapter was folded into it; a layer that is merged holds
+    the sum.  A layer is folded again the way it was — the same adapters, lowest layer first — and
+    the weights it merged into are written back as they were read, so what the layers hold is bit
+    for bit what they held, also when the body raises.  That holds only for a body that does not
+    write the base weights (``_rewrites_base`` says which do).
+    """
+    if not layers:
+        yield
+        return
+    folded = [(layer, list(layer.merged_adapters)) for layer in layers]
+    targets = {id(p): p for layer in layers for p in layer._merge_targets().values()}
+    with lucid.no_grad():
+        written = [(p, p.clone()) for p in targets.values()]
+    try:
+        for layer in layers:
+            layer.unmerge()
+        yield
+    finally:
+        for layer, names in reversed(folded):
+            if not layer.merged:
+                layer.merge(adapter_names=names)
+        _put_back(written)
 
 
 def _not_found(config: _TargetedConfig) -> NoMatchingPeftModuleError:

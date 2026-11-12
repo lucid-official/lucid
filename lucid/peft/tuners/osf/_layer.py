@@ -97,11 +97,6 @@ class OSFLayer(_ConfigLayer[OSFConfig], _LinearSized, _ResidualUpdate, family=Tr
 
     @override
     def _enter(self, adapter_name: str, config: OSFConfig) -> None:
-        if self.merged:
-            raise ValueError(
-                "cannot add an OSF adapter to a merged layer: its SVD would split the merged "
-                "weight; unmerge first"
-            )
         anchor = self.weight
         rows, columns = self.out_features, self.in_features
         frozen = _resolve_rank(config.effective_rank, min(rows, columns))
