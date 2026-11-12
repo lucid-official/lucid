@@ -121,7 +121,7 @@ def _layer_arguments(config: LoraConfig, key: str) -> _LayerArguments:
     )
 
 
-class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
+class LoraModel(_BaseTuner, peft_type=PeftType.LORA, mixed=True):
     r"""A model with LoRA layers put into it, and the tools to take them out.
 
     Construction replaces each module ``config`` selects with a LoRA layer
@@ -195,6 +195,7 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
 
     _layer_types = LoraLayer._layer_types
     _config_class: ClassVar[type[_TargetedConfig]] = LoraConfig
+    _adds_to_output = True
 
     @override
     @classmethod
@@ -219,21 +220,14 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
     @override
     @classmethod
     def _adapted_linear(cls, module: nn.Module) -> nn.Module | None:
-        if isinstance(module, tuple(cls._layer_types.values())):
-            base = module.get_base_layer()
+        if isinstance(module, _BaseTunerLayer):
+            base = module._root()
             return base if isinstance(base, (nn.Linear, *_QUANTIZED_LINEAR_TYPES)) else None
         return None
 
     @override
     def _check_new_adapter_config(self, config: PeftConfig) -> None:
-        biased = [name for name, held in self.peft_config.items() if _as_lora(held).bias != "none"]
-        if _as_lora(config).bias != "none":
-            biased.append("<new>")
-        if len(biased) > 1:
-            raise ValueError(
-                f"{type(self).__name__} supports only 1 adapter with bias. When using multiple "
-                "adapters, set bias to 'none' for all adapters."
-            )
+        self._refuse_second_biased(config)
 
     @override
     @classmethod
@@ -265,6 +259,49 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA):
     @classmethod
     def _rewrites_base(cls, config: _TargetedConfig) -> bool:
         return _Init.of(_as_lora(config).init_lora_weights).factorises
+
+    @override
+    @classmethod
+    def _mixed_refusal(cls, config: _TargetedConfig, *, stacked: bool) -> str | None:
+        """What a LoRA adapter may not do on a layer standing on another method's.
+
+        DoRA reads the base weight and a factorising start (PiSSA, OLoRA, LoRA-GA) writes
+        the residual back into it, so both need the user's module beneath the layer.  EVA fills
+        the factors from the activations of the whole model afterwards, through the layer's
+        shallow base, which in a stack is another method's layer.
+        """
+        lora_cfg = _as_lora(config)
+        if not stacked:
+            return None
+        if lora_cfg.use_dora:
+            return (
+                "use_dora reads the base weight, so a DoRA layer must stand on the user's module: "
+                "add the DoRA adapter before the other methods'"
+            )
+        init = _Init.of(lora_cfg.init_lora_weights)
+        if init.factorises:
+            return (
+                f"init_lora_weights={init.value!r} factorises the base weight and writes the "
+                "residual back into it, which would change the weight the layers beneath this "
+                "one read; use True, False or 'gaussian'"
+            )
+        if init.value == "eva":
+            return (
+                "init_lora_weights='eva' is filled from the activations of the model afterwards "
+                "by reading the layer's base, which in a stack is another method's layer; use "
+                "True, False or 'gaussian'"
+            )
+        return None
+
+    @override
+    @classmethod
+    def _mixed_layer_refusal(cls, layer: type[_BaseTunerLayer]) -> str | None:
+        if issubclass(layer, QuantizedLinear):
+            return (
+                "a quantized base cannot be mixed: the adapter methods stacked on it fold into "
+                "a weight it does not hold as a dense matrix"
+            )
+        return None
 
     @override
     @classmethod

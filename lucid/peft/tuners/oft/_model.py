@@ -9,7 +9,7 @@ from lucid.peft.tuners.oft._config import OFTConfig
 from lucid.peft.tuners.oft._layer import OFTLayer
 
 
-class OFTModel(_ConfigTuner, peft_type=PeftType.OFT):
+class OFTModel(_ConfigTuner, peft_type=PeftType.OFT, mixed=True):
     r"""A model with OFT layers in it, and the tools to take them out again.
 
     The modules ``config`` selects each become an

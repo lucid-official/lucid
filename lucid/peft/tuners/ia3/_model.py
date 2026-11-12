@@ -36,7 +36,7 @@ def _is_feedforward(config: IA3Config, key: str) -> bool:
     return names is not None and _suffix_match(key, names)
 
 
-class IA3Model(_BaseTuner, peft_type=PeftType.IA3):
+class IA3Model(_BaseTuner, peft_type=PeftType.IA3, mixed=True):
     r"""A model with (IA)^3 layers put into it, and the tools to take them out.
 
     Construction replaces each module ``config`` selects with an (IA)^3 layer

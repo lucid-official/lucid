@@ -231,6 +231,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - file an adapter on a stack as the single-method layout
 
+- tuners declare mixed=True; merge order is a tuner hook
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

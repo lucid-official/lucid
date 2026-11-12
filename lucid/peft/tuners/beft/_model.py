@@ -10,7 +10,7 @@ from lucid.peft.tuners.beft._defaults import BEFT_DEFAULT_TARGET_MODULES
 from lucid.peft.tuners.beft._layer import BeftLayer
 
 
-class BeftModel(_ConfigTuner[BeftConfig], peft_type=PeftType.BEFT):
+class BeftModel(_ConfigTuner[BeftConfig], peft_type=PeftType.BEFT, mixed=True):
     r"""A model whose chosen linear layers carry a trained bias, and the tools to take them out again.
 
     Each ``nn.Linear`` that ``config`` selects becomes a :class:`~lucid.peft.tuners.beft.Linear`

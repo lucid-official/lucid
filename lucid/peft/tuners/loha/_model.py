@@ -8,7 +8,7 @@ from lucid.peft.tuners.loha._config import LoHaConfig
 from lucid.peft.tuners.loha._layer import LoHaLayer
 
 
-class LoHaModel(_LycorisTuner, peft_type=PeftType.LOHA):
+class LoHaModel(_LycorisTuner, peft_type=PeftType.LOHA, mixed=True):
     r"""A model with LoHa layers in it, and the tools to take them out again.
 
     Each module ``config`` selects is replaced by a LoHa layer around it —
@@ -55,4 +55,5 @@ class LoHaModel(_LycorisTuner, peft_type=PeftType.LOHA):
     """
 
     _layer_types = LoHaLayer._layer_types
+    _adds_to_output = True
     _config_class: ClassVar[type[_TargetedConfig]] = LoHaConfig

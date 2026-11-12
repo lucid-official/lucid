@@ -8,7 +8,7 @@ from lucid.peft.tuners.lokr._config import LoKrConfig
 from lucid.peft.tuners.lokr._layer import LoKrLayer
 
 
-class LoKrModel(_LycorisTuner, peft_type=PeftType.LOKR):
+class LoKrModel(_LycorisTuner, peft_type=PeftType.LOKR, mixed=True):
     r"""A model whose chosen modules carry a Kronecker-product update, and the tools to undo it.
 
     ``config`` picks the modules; each becomes a LoKr layer —
@@ -56,4 +56,5 @@ class LoKrModel(_LycorisTuner, peft_type=PeftType.LOKR):
     """
 
     _layer_types = LoKrLayer._layer_types
+    _adds_to_output = True
     _config_class: ClassVar[type[_TargetedConfig]] = LoKrConfig

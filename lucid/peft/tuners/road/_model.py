@@ -6,7 +6,7 @@ from lucid.peft.tuners.road._config import RoadConfig
 from lucid.peft.tuners.road._layer import RoadLayer
 
 
-class RoadModel(_ConfigTuner[RoadConfig], peft_type=PeftType.ROAD):
+class RoadModel(_ConfigTuner[RoadConfig], peft_type=PeftType.ROAD, mixed=True):
     r"""A network whose linear layers turn their outputs by learned 2-D rotations, and the tools to undo that.
 
     Each ``nn.Linear`` that ``config`` selects is replaced by a

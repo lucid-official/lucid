@@ -55,7 +55,7 @@ def _kept_indices(pattern: list[bool]) -> list[int]:
     return [i for i, kept in enumerate(pattern) if kept]
 
 
-class AdaLoraModel(_FileFormat, _BaseTuner, peft_type=PeftType.ADALORA):
+class AdaLoraModel(_FileFormat, _BaseTuner, peft_type=PeftType.ADALORA, mixed=True):
     r"""A model with AdaLoRA layers put into it, the rank allocation and the tools to take them out.
 
     Construction replaces each module ``config`` selects with an AdaLoRA layer
@@ -77,6 +77,9 @@ class AdaLoraModel(_FileFormat, _BaseTuner, peft_type=PeftType.ADALORA):
     **One trainable adapter.**  Several adapters may be held, but only one may
     train: give every other config ``inference_mode=True``.  The rank allocator
     follows the one that trains.
+
+    **In a mixed model** (``mixed=True``) AdaLoRA is for inference: ``MixedModel`` neither
+    runs the rank allocator nor adds the orthogonality penalty, which are this class's.
 
     Parameters
     ----------
@@ -118,6 +121,7 @@ class AdaLoraModel(_FileFormat, _BaseTuner, peft_type=PeftType.ADALORA):
     """
 
     _layer_types = AdaLoraLayer._layer_types
+    _adds_to_output = True
     _config_class: ClassVar[type[_TargetedConfig]] = AdaLoraConfig
     _default_targets: ClassVar[Mapping[str, frozenset[str]]] = ADALORA_DEFAULT_TARGET_MODULES
     # Its raw-parameter defaults are LoRA's alone.

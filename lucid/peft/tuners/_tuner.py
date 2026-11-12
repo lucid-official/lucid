@@ -43,6 +43,9 @@ from lucid.peft.tuners._plan import (
 
 #: Where a model adapted in place keeps the ``requires_grad`` it had before its first adapter.
 _FLAGS_KEY: Final = "_peft_requires_grad_before"
+#: ``PeftType`` → the tuner of a method whose layers can share a module with another method's
+#: (declared ``mixed=True``, each held to ``test_mixed_model_contract``): what ``MixedModel`` hosts.
+_MIXED_TUNERS: dict[PeftType, type[_BaseTuner]] = {}
 
 
 class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
@@ -65,6 +68,11 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
     ``config`` every hook receives and sets ``_config_class`` to ``FooConfig``;
     a subclass of the bare base keeps the default ``_TargetedConfig`` and names
     ``_config_class`` itself.
+
+    ``mixed=True`` in the class statement declares that the method's layers can share a
+    module with another method's (``MixedModel`` hosts them); the declaration is the
+    method's claim and ``test_mixed_model_contract`` is what holds it to it.  A
+    method adds its own conditions through ``_mixed_refusal`` and ``_mixed_layer_refusal``.
     """
 
     #: The method's layer classes by the module type each wraps — its
@@ -76,9 +84,15 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
     _default_targets: ClassVar[Mapping[str, frozenset[str]]] = DEFAULT_LORA_TARGET_MODULES
     #: The raw parameters it adapts instead, for a model type whose weights are not layers'.
     _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = DEFAULT_LORA_TARGET_PARAMETERS
+    #: Whether the method's update is a term added to its layer's output (LoRA, LoHa, LoKr, AdaLoRA,
+    #: SHiRA), so it commutes with another such term in a stack and may be merged without the layers
+    #: beneath it.  A method that rotates, scales or reads the weight leaves it ``False``.
+    _adds_to_output: ClassVar[bool] = False
 
     @override
-    def __init_subclass__(cls, *, peft_type: PeftType | None = None, **kwargs: object) -> None:
+    def __init_subclass__(
+        cls, *, peft_type: PeftType | None = None, mixed: bool = False, **kwargs: object
+    ) -> None:
         derived = _parametrised_config(cls)
         if derived is not None:
             named = cls.__dict__.get("_config_class", derived)
@@ -89,6 +103,10 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
                 )
             cls._config_class = derived
         super().__init_subclass__(peft_type=peft_type, **kwargs)
+        if mixed:
+            if peft_type is None:
+                raise TypeError(f"{cls.__name__} declares mixed=True without a peft_type")
+            _MIXED_TUNERS[peft_type] = cls
 
     def __init__(
         self,
@@ -237,14 +255,51 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
 
     @classmethod
     def _adapted_linear(cls, module: nn.Module) -> nn.Module | None:
-        """The linear module ``module`` wraps, if it is one of this method's layers around one."""
-        if isinstance(module, tuple(cls._layer_types.values())):
-            base = module.get_base_layer()
+        """The linear module ``module`` wraps, if it is a tuner layer around one.
+
+        Read off ``_root()``: a layer standing on another method's layer wraps the user's linear
+        module through it, and ``"all-linear"`` must reach that module as it reaches any other.
+        """
+        if isinstance(module, _BaseTunerLayer):
+            base = module._root()
             return base if isinstance(base, nn.Linear) else None
         return None
 
     def _check_new_adapter_config(self, config: PeftConfig) -> None:
         """Raise ``ValueError`` if ``config`` cannot be added beside the adapters already held."""
+
+    def _refuse_second_biased(self, config: PeftConfig) -> None:
+        """Raise ``ValueError`` if ``config`` and the adapters held would train the bias of more than one.
+
+        The trainable biases follow one adapter, so two adapters that ask for ``bias`` other
+        than ``"none"`` cannot both have them.
+        """
+        biased = [name for name, held in self.peft_config.items() if _trains_bias(held)]
+        if _trains_bias(config):
+            biased.append("<new>")
+        if len(biased) > 1:
+            raise ValueError(
+                f"{type(self).__name__} supports only 1 adapter with bias. When using multiple "
+                "adapters, set bias to 'none' for all adapters."
+            )
+
+    @classmethod
+    def _mixed_refusal(cls, config: C, *, stacked: bool) -> str | None:
+        """Why ``config`` cannot be added to a mixed model, or ``None`` when it can.
+
+        ``stacked`` says the adapter would land in a layer that stands on another method's.
+        A method whose adapter reads or rewrites the base weight, or the data it is built from,
+        gives the reason here; the default has none.  The text is the ``ValueError`` message
+        ``MixedModel`` raises before it touches the model.
+        """
+        del config, stacked  # the default can always be mixed
+        return None
+
+    @classmethod
+    def _mixed_layer_refusal(cls, layer: type[_BaseTunerLayer]) -> str | None:
+        """Why the layer class ``layer`` of this method cannot be put in a mixed model, or ``None``."""
+        del layer  # the default takes every layer class
+        return None
 
     @classmethod
     @abstractmethod
@@ -661,6 +716,17 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
                     )
         return layers
 
+    def _merge_order(
+        self, layers: list[tuple[str, _BaseTunerLayer]]
+    ) -> list[tuple[str, _BaseTunerLayer]]:
+        """``layers`` in the order they are merged: the tree's, outermost first, unless a tuner says otherwise.
+
+        One method's layers do not stand on each other, so none is merged before another.  A
+        tuner whose layers stack (``MixedModel``) puts each module's layers lowest first: a
+        layer's update is computed from the weight the layers beneath it have left.
+        """
+        return layers
+
     def merge_adapter(
         self, adapter_names: list[str] | None = None, safe_merge: bool = False
     ) -> None:
@@ -692,7 +758,7 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
         names = self.active_adapters if adapter_names is None else list(adapter_names)
         self._require_known(names)
         pending = []
-        for _, layer in self._mergeable_layers():
+        for _, layer in self._merge_order(self._mergeable_layers()):
             held = [name for name in names if name in layer._adapter_names()]
             pending.append((layer, held, layer._pending_merges(held)))
         if safe_merge:
@@ -814,6 +880,11 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
             for module in self.modules()
             if isinstance(module, _BaseTunerLayer)
         )
+
+
+def _trains_bias(config: PeftConfig) -> bool:
+    """Whether ``config`` asks for biases to train: a ``bias`` field other than ``"none"``."""
+    return getattr(config, "bias", "none") != "none"
 
 
 def _parametrised_config(tuner: type[_BaseTuner]) -> type[_TargetedConfig] | None:

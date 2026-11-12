@@ -10,7 +10,7 @@ from lucid.peft.tuners.shira._config import ShiraConfig
 from lucid.peft.tuners.shira._layer import ShiraLayer
 
 
-class ShiraModel(_FileFormat, _ConfigTuner, peft_type=PeftType.SHIRA):
+class ShiraModel(_FileFormat, _ConfigTuner, peft_type=PeftType.SHIRA, mixed=True):
     r"""A model with SHiRA layers in it, and the tools to take them out again.
 
     A module ``config`` selects becomes a :class:`~lucid.peft.tuners.shira.Linear` around it
@@ -54,6 +54,7 @@ class ShiraModel(_FileFormat, _ConfigTuner, peft_type=PeftType.SHIRA):
     """
 
     _layer_types = ShiraLayer._layer_types
+    _adds_to_output = True
     _config_class: ClassVar[type[_TargetedConfig]] = ShiraConfig
 
     @override

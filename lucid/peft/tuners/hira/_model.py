@@ -18,7 +18,7 @@ def _with_rank_of(config: HiraConfig, key: str) -> HiraConfig:
     return dataclasses.replace(config, r=rank, rank_pattern={})
 
 
-class HiraModel(_ConfigTuner[HiraConfig], peft_type=PeftType.HIRA):
+class HiraModel(_ConfigTuner[HiraConfig], peft_type=PeftType.HIRA, mixed=True):
     r"""A model with HiRA layers in it, and the tools to take them out again.
 
     A linear, embedding or convolution module ``config`` selects is wrapped in the layer of its
@@ -26,7 +26,9 @@ class HiraModel(_ConfigTuner[HiraConfig], peft_type=PeftType.HIRA):
     ``Conv3d``), which adds the frozen weight modulated by a low-rank matrix,
     :math:`W \odot BA`; the rest of the model is frozen.  A module's rank is the config's unless
     ``rank_pattern`` names it.  The model is edited in place and stays reachable as ``model``;
-    several adapters coexist (``add_adapter``, ``set_adapter``, ``delete_adapter``).
+    several adapters coexist (``add_adapter``, ``set_adapter``, ``delete_adapter``).  In a mixed
+    model (``mixed=True``) a HiRA layer reads the weight it modulates, so it is the lowest layer
+    on a module and the layers of other methods stand on it.
 
     Parameters
     ----------
