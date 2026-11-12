@@ -674,16 +674,7 @@ def _apply_eva_layer(
         else:
             alpha = alpha * (new_rank / r)
     if new_rank != r or alpha != float(spec.lora_alpha):
-        module.update_layer(
-            adapter_name,
-            new_rank,
-            lora_alpha=alpha,
-            lora_dropout=peft_config.lora_dropout,
-            init_lora_weights=False,
-            use_rslora=peft_config.use_rslora,
-            use_dora=spec.variant == "dora",
-            lora_bias=spec.lora_bias,
-        )
+        module._resize_adapter(adapter_name, new_rank, alpha, peft_config.use_rslora)
     with lucid.no_grad():
         lora_a_mod = module.lora_A[adapter_name]
         assert isinstance(lora_a_mod, nn.Module)
@@ -712,6 +703,13 @@ def _load_eva_state_dict(
         for name, mod in model.named_modules()
         if isinstance(mod, LoraLayer) and adapter_name in mod._adapter_names()
     ]
+    merged = [name for name, mod in target_layers if adapter_name in mod.merged_adapters]
+    if merged:
+        raise ValueError(
+            f"cannot initialise adapter {adapter_name!r} with EVA: it is merged into the base "
+            f"weights of {merged}, which would keep the update of the factors this replaces; "
+            "call unmerge_adapter() first"
+        )
     for name, module in target_layers:
         name_in_base = name.removeprefix(prefix)
         new_rank, alpha, found = _apply_eva_layer(
@@ -752,7 +750,42 @@ def initialize_lora_eva_weights(
     gather_distributed_inputs: bool = True,
     show_progress_bar: bool = True,
 ) -> None:
-    r"""Initialise LoRA layers of ``model`` in place with EVA singular vectors and redistributed ranks."""
+    r"""Initialise LoRA layers of ``model`` in place with EVA singular vectors and redistributed ranks.
+
+    A layer whose rank changes gets new factors (``lora_A`` the singular vectors, ``lora_B``
+    zero), so make the optimizer afterwards; ``rank_pattern`` and ``alpha_pattern`` of the
+    adapter's config record the new ranks, and a saved adapter is rebuilt at them.
+
+    Parameters
+    ----------
+    model : nn.Module
+        A ``PeftModel`` holding an adapter made with ``init_lora_weights='eva'``.
+    dataloader : iterable, optional
+        The calibration batches; required unless ``eva_state_dict`` is given.
+    eva_state_dict : dict of str to Tensor, optional
+        The result of :func:`get_eva_state_dict`, to skip the forward passes.
+    forward_fn : callable, optional
+        Runs the model on a batch; by default a mapping is passed as keyword arguments.
+    prepare_model_inputs_fn : callable, optional
+        Turns a batch into what ``prepare_layer_inputs_fn`` is given as ``model_input``; by
+        default the token mask of a language-modelling batch.
+    prepare_layer_inputs_fn : callable or dict of str to callable, optional
+        Selects the activations a layer's singular vectors are taken from, one function or one
+        per module name; by default the unmasked tokens.
+    adapter_name : str, default="default"
+        The adapter to initialise.
+    gather_distributed_inputs : bool, default=True
+        Kept for the reference's signature: there is no process group to gather across.
+    show_progress_bar : bool, default=True
+        Kept for the reference's signature: nothing is displayed.
+
+    Raises
+    ------
+    ValueError
+        ``model`` is not a ``PeftModel`` of an ``init_lora_weights='eva'`` adapter, more than one
+        adapter is active, no ``dataloader`` or ``eva_state_dict`` is given, or the adapter is
+        merged into the base weights (``unmerge_adapter()`` first).
+    """
     if not hasattr(model, "peft_config"):
         raise ValueError("initialize_lora_eva_weights requires a `PeftModel`.")
     active_adapters = getattr(model, "active_adapters", [adapter_name])

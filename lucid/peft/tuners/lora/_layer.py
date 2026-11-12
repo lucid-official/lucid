@@ -36,6 +36,7 @@ from lucid.peft.tuners._layer import (
     _check_adapter_name,
     _entry_parameters,
 )
+from lucid.peft.tuners._plan import _unmerged
 from lucid.peft.tuners.lora._inits import _check_init, _Init
 from lucid.peft.tuners.lora._variants import MAGNITUDE_TABLE, _Magnitude, _rows_view, _Variant
 from lucid.peft.tuners.lora._weight_site import _WeightSite
@@ -422,6 +423,62 @@ class LoraLayer(_BaseTunerLayer):
             The initialisation, as ``update_layer`` takes it.
         """
         _Init.of(_check_init("init_lora_weights", init_lora_weights)).apply(self, adapter_name)
+
+    def _resize_adapter(
+        self, adapter_name: str, r: int, lora_alpha: float, use_rslora: bool = False
+    ) -> None:
+        r"""Start ``adapter_name`` over at rank ``r`` and ``lora_alpha``: new factors (:math:`B = 0`), the same adapter.
+
+        What the adapter is besides its size stays — its dropout, ``lora_bias``, variant and
+        whether it trains — and what it keeps beside the factors is made again from the weight as
+        it was before any adapter was folded into it (DoRA's magnitude), the way adding it would.
+        ``update_layer`` refuses a name the layer holds; this is how one that is held changes
+        size (EVA redistributes ranks).  The ``Parameter`` objects are new: an optimizer made
+        earlier holds the old ones.
+
+        Parameters
+        ----------
+        adapter_name : str
+            The adapter to resize.
+        r : int
+            The new rank; positive.
+        lora_alpha : float
+            The new numerator of the scale.
+        use_rslora : bool, default=False
+            Scale by :math:`\alpha/\sqrt r` instead of :math:`\alpha/r`.
+
+        Raises
+        ------
+        ValueError
+            The layer holds no such adapter, the adapter is merged (its weights hold the update
+            of the factors this would drop), or the rank does not fit the base layer.
+        """
+        spec = self._specs.get(adapter_name)
+        if spec is None:
+            raise ValueError(f"Adapter with name '{adapter_name}' does not exist.")
+        if adapter_name in self.merged_adapters:
+            raise ValueError(
+                f"cannot resize adapter {adapter_name!r}: it is merged into the base weights; "
+                "unmerge it first"
+            )
+        r = _check_rank("r", r)
+        lora_alpha = _check_number("lora_alpha", lora_alpha)
+        self._check_rank_fits(r)
+        trains = any(p.requires_grad for p in self._adapter_parameters(adapter_name))
+        anchor = self._anchor()
+        factors = self._build_factors(
+            r, _Place(anchor.device, _adapter_dtype(anchor), spec.lora_bias)
+        )
+        self._specs[adapter_name] = spec._replace(
+            r=r, lora_alpha=lora_alpha, scaling=lora_alpha / (math.sqrt(r) if use_rslora else r)
+        )
+        for table, factor in zip(self._factor_tables(), factors, strict=True):
+            _enter(table, adapter_name, factor)
+        self._reset_factors(adapter_name, gaussian=False)
+        # What is derived from the weight reads the weight the adapter would have started from.
+        with _unmerged([self] if self.merged else []):
+            self._adapter_built(adapter_name)
+        self.set_requires_grad(adapter_name, trains)
 
     @override
     def delete_adapter(self, adapter_name: str) -> None:

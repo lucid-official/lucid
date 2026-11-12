@@ -199,6 +199,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - show the copy-link icon on sub-package headings (LCD-978)
 
+- EVA rebuilds an adapter at the rank its data gave (LCD-977)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
