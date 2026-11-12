@@ -13492,6 +13492,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners._mixed"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners._plan"
     },
     {
@@ -18564,6 +18568,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners._mixed"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners._prompt._tuner"
     },
     {
@@ -19457,6 +19465,12 @@
     {
       "kind": "module",
       "module": "lucid.peft"
+    }
+  ],
+  "lucid.peft.tuners._mixed.MixedModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft.tuners"
     }
   ],
   "lucid.peft.tuners.adalora": [

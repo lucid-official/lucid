@@ -3,10 +3,579 @@
   "name": "tuners",
   "path": "lucid.peft.tuners",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/__init__.py#L1",
-  "members": [],
+  "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/__init__.py#L1",
+  "members": [
+    {
+      "name": "MixedModel",
+      "path": "lucid.peft.tuners._mixed.MixedModel",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_BaseTuner"
+      ],
+      "labels": [],
+      "signature": "MixedModel(model: nn.Module, peft_config: PeftConfig, adapter_name: str, low_cpu_mem_usage: bool = False, state_dict: dict[str, Tensor] | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_mixed.py#L92",
+      "subcategory": "mixed",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners._mixed.MixedModel.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(model: nn.Module, peft_config: PeftConfig, adapter_name: str, low_cpu_mem_usage: bool = False, state_dict: dict[str, Tensor] | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_mixed.py#L148",
+          "subcategory": "mixed",
+          "summary": "Adapt `model` with `peft_config`'s method, as `adapter_name`, ready to take other methods' adapters.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "add_weighted_adapter",
+          "path": "lucid.peft.tuners._mixed.MixedModel.add_weighted_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "add_weighted_adapter(adapters: list[str], weights: list[float], adapter_name: str, combination_type: str = 'svd', svd_rank: int | None = None, svd_clamp: float | None = None, svd_full_matrices: bool = True, svd_driver: str | None = None, density: float | None = None, majority_sign_method: str = 'total')",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_mixed.py#L282",
+          "subcategory": "mixed",
+          "summary": "Refused: a weighted sum of adapters is one method's operation, and a mixed model holds several.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "adapters",
+              "annotation": "list of str",
+              "description": "The adapters to combine; not read.",
+              "default": null
+            },
+            {
+              "name": "weights",
+              "annotation": "list of float",
+              "description": "One weight per adapter; not read.",
+              "default": null
+            },
+            {
+              "name": "adapter_name",
+              "annotation": "str",
+              "description": "Name of the combined adapter; not read.",
+              "default": null
+            },
+            {
+              "name": "combination_type",
+              "annotation": "str",
+              "description": "How the adapters are combined, as in `lucid.peft.LoraModel.add_weighted_adapter`; not read.",
+              "default": "\"svd\""
+            },
+            {
+              "name": "svd_rank",
+              "annotation": "int",
+              "description": "Rank of an `\"svd\"` result; not read.",
+              "default": "None"
+            },
+            {
+              "name": "svd_clamp",
+              "annotation": "float",
+              "description": "Quantile the `\"svd\"` factors are clamped to; not read.",
+              "default": "None"
+            },
+            {
+              "name": "svd_full_matrices",
+              "annotation": "bool",
+              "description": "Whether the SVD computes full matrices; not read.",
+              "default": "True"
+            },
+            {
+              "name": "svd_driver",
+              "annotation": "str",
+              "description": "The SVD routine; not read.",
+              "default": "None"
+            },
+            {
+              "name": "density",
+              "annotation": "float",
+              "description": "The share of elements kept by the pruning types; not read.",
+              "default": "None"
+            },
+            {
+              "name": "majority_sign_method",
+              "annotation": "str",
+              "description": "How TIES elects a sign; not read.",
+              "default": "\"total\""
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "NotImplementedError",
+              "description": "Always; combine the adapters inside the method's own model, then mix."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "merge_adapter",
+          "path": "lucid.peft.tuners._mixed.MixedModel.merge_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "merge_adapter(adapter_names: list[str] | None = None, safe_merge: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_mixed.py#L352",
+          "subcategory": "mixed",
+          "summary": "Fold adapter updates into their base weights, each module's layers lowest first.",
+          "extended": "A layer's update is computed from the weight the layers beneath it have left, so the\norder is the stack's, and a merge that would fold an update under a layer that\ntransforms it differently is refused before any weight is written.  A layer\nstanding on others folds into the user's module, so what is left unmerged beneath a\nmerged layer must be a sum of terms that commutes with it: refused are the merge of a\nlayer while a lower layer keeps adapters in use, and of a lower layer after a higher one\nhas been merged, unless both layers add a term to the output (LoRA, LoHa, LoKr, AdaLoRA,\nSHiRA); a layer above a merged one may stay as it is.",
+          "parameters": [
+            {
+              "name": "adapter_names",
+              "annotation": "list of str",
+              "description": "Adapters to merge; the active ones by default.",
+              "default": "None"
+            },
+            {
+              "name": "safe_merge",
+              "annotation": "bool",
+              "description": "Check every merged weight for NaN / inf before writing any.",
+              "default": "False"
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "RuntimeError",
+              "description": "A base weight is shared with another module, or the adapter is disabled."
+            },
+            {
+              "annotation": "ValueError",
+              "description": "A name is not one of the model's adapters, the merge would fold a layer's update\nunder a layer that transforms it, or `safe_merge` found a non-finite merged weight."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "active_adapters",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.active_adapters",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "active_adapters: list[str]",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_tuner.py#L191",
+          "summary": "The adapters the forward pass applies, as a list.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "list[str]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "add_adapter",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.add_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "add_adapter(adapter_name: str, config: PeftConfig)",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_tuner.py#L500",
+          "subcategory": "tuner",
+          "summary": "Add an adapter beside the ones the model holds.",
+          "extended": "The new adapter starts frozen and inactive: the forward pass keeps\napplying the adapters it applied, and every parameter keeps the\n`requires_grad` it had.  `set_adapter` switches to it.  A\nmodule an earlier adapter already wraps takes the new one beside\nit; any other target is wrapped.  The model is left as it was if\nthe adapter cannot be added.",
+          "parameters": [
+            {
+              "name": "adapter_name",
+              "annotation": "str",
+              "description": "Name of the new adapter; unique among the model's adapters.",
+              "default": null
+            },
+            {
+              "name": "config",
+              "annotation": "PeftConfig",
+              "description": "What to adapt and how — the config class of this tuner's method.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "The name is taken or malformed, the config is another\nmethod's, no module matches it, or it cannot sit beside the\nadapters held (two adapters training biases)."
+            },
+            {
+              "annotation": "TypeError",
+              "description": "`config` is not an adapter config."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "set_adapter",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.set_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_adapter(adapter_name: str | list[str], inference_mode: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_tuner.py#L584",
+          "subcategory": "tuner",
+          "summary": "Apply the named adapter(s) in the forward pass, and train exactly those.",
+          "extended": "Every other adapter is frozen; the activated ones train unless\n`inference_mode`.  A merged layer is unmerged first.  Layers that\nhold none of the named adapters run their base alone.  The\nparameters `bias` makes trainable follow the adapter that asked\nfor them.",
+          "parameters": [
+            {
+              "name": "adapter_name",
+              "annotation": "str or list of str",
+              "description": "The adapter, or adapters, to apply.",
+              "default": null
+            },
+            {
+              "name": "inference_mode",
+              "annotation": "bool",
+              "description": "Freeze the activated adapters too.",
+              "default": "False"
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "A name is not one of the model's adapters, or two named\nadapters train the same `modules_to_save` module."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "set_requires_grad",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.set_requires_grad",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_requires_grad(adapter_names: str | Sequence[str], requires_grad: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_tuner.py#L621",
+          "subcategory": "tuner",
+          "summary": "Enable or disable gradients on the parameters of the named adapter(s).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "A name is not one of the model's adapters."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "delete_adapter",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.delete_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "delete_adapter(adapter_name: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_tuner.py#L637",
+          "subcategory": "tuner",
+          "summary": "Remove an adapter: its parameters, its config, its `modules_to_save` copies.",
+          "extended": "If it was active, the adapters still active stay so; when none\nremain the first of the others (by name) takes over, with a\nwarning, and trains.  Deleting the last adapter leaves the layers\nin the model, applying nothing; `unload()` removes them.",
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "The adapter does not exist, or it is merged — unmerge first."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "forward",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(args: object = (), kwargs: object = {})",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_tuner.py#L708",
+          "subcategory": "tuner",
+          "summary": "Call the adapted model; its adapter layers do their work inside the call.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "object",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "unmerge_adapter",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.unmerge_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "unmerge_adapter()",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_tuner.py#L784",
+          "subcategory": "tuner",
+          "summary": "Take every merged adapter update back out of its base weight.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "merge_and_unload",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.merge_and_unload",
+          "kind": "function",
+          "labels": [],
+          "signature": "merge_and_unload(progressbar: bool = False, safe_merge: bool = False, adapter_names: list[str] | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_tuner.py#L803",
+          "subcategory": "tuner",
+          "summary": "Merge the adapters into the base weights and return the plain model.",
+          "extended": "Each adapter layer is replaced by its merged base module — the base\nmodel's own module, holding its own `Parameter` objects — and each\n`modules_to_save` entry by the active adapter's trained copy (the\noriginal when that adapter has none).  Adapters not merged are\ndropped with their layers.  Every base parameter gets back the\n`requires_grad` it had before injection.",
+          "parameters": [
+            {
+              "name": "progressbar",
+              "annotation": "bool",
+              "description": "Accepted for the reference's signature; there is no progress bar.",
+              "default": "False"
+            },
+            {
+              "name": "safe_merge",
+              "annotation": "bool",
+              "description": "Check every merged weight for NaN / inf before writing any.",
+              "default": "False"
+            },
+            {
+              "name": "adapter_names",
+              "annotation": "list of str",
+              "description": "Adapters to merge; the active ones by default.",
+              "default": "None"
+            }
+          ],
+          "returns": {
+            "annotation": "nn.Module",
+            "description": "The model, merged, with no adapter layer left in it."
+          },
+          "raises": [
+            {
+              "annotation": "RuntimeError",
+              "description": "A base weight is shared with another module, or a\n`modules_to_save` module shared one (its trained copy would\nbreak the tie)."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "unload",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.unload",
+          "kind": "function",
+          "labels": [],
+          "signature": "unload()",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_tuner.py#L865",
+          "subcategory": "tuner",
+          "summary": "Remove every adapter without merging and return the original model.",
+          "extended": "Every adapter layer is replaced by the module it wrapped (a merged\none is unmerged first), every `modules_to_save` entry by its\noriginal module, and every base parameter gets back the\n`requires_grad` it had before injection.",
+          "parameters": [],
+          "returns": {
+            "annotation": "nn.Module",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "enable_adapter_layers",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.enable_adapter_layers",
+          "kind": "function",
+          "labels": [],
+          "signature": "enable_adapter_layers()",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_tuner.py#L876",
+          "subcategory": "tuner",
+          "summary": "Apply the adapter again after `disable_adapter_layers`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "disable_adapter_layers",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.disable_adapter_layers",
+          "kind": "function",
+          "labels": [],
+          "signature": "disable_adapter_layers()",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_tuner.py#L882",
+          "subcategory": "tuner",
+          "summary": "Run the base model alone: adapter updates off, original `modules_to_save`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "supports_lora_conversion",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.supports_lora_conversion",
+          "kind": "function",
+          "labels": [],
+          "signature": "supports_lora_conversion(adapter_name: str = 'default')",
+          "source": "https://github.com/lucid-official/lucid/blob/5d73851/lucid/peft/tuners/_tuner.py#L888",
+          "subcategory": "tuner",
+          "summary": "Whether every adapted layer in this tuner supports conversion to LoRA.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "bool",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        }
+      ],
+      "summary": "A model holding adapters of several methods, their layers stacked on each module.",
+      "extended": "The first adapter of a method puts that method's layer on the module it targets; the layers of\nlater methods stand on it, so the forward pass runs the layers lowest first.  A method that\nalready has a layer on a module gets its further adapters in that layer.  `set_adapter`\nnames the adapters in use, of any methods; a layer holding none of them passes its input\nthrough to the layer beneath.  Merging folds each module's layers into its weight lowest\nfirst, and `unmerge_adapter` takes them out highest first.\n\nOnly methods declared mixable (`mixed=True` in the tuner's class statement) take part.\nA layer class stands on another method's layer only if it declares so, so the adapters that\nread the base weight (HiRA, DoRA) are the lowest in a stack, and a method that computes from\nthe weight (BOFT, HRA, MiSS) takes a module alone.  Adding an adapter that cannot sit where\nit would land raises `ValueError` and leaves the model as it was.\n\nAdaLoRA takes part for inference: the host does not drive its rank allocator or its\northogonality loss, which belong to `AdaLoraModel`.  Adapters of methods that train a\nshared table (VeRA) or hold one adapter at a time (prompt learning) are not mixable.",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The model to adapt; it must hold no adapters yet.",
+          "default": null
+        },
+        {
+          "name": "peft_config",
+          "annotation": "PeftConfig",
+          "description": "The first adapter's config: any mixable method's.",
+          "default": null
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the first adapter.",
+          "default": null
+        },
+        {
+          "name": "low_cpu_mem_usage",
+          "annotation": "bool",
+          "description": "As in `lucid.peft.LoraModel`.",
+          "default": "False"
+        },
+        {
+          "name": "state_dict",
+          "annotation": "bool",
+          "description": "As in `lucid.peft.LoraModel`.",
+          "default": "False"
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "ValueError",
+          "description": "The method is not mixable, the model already holds adapters, or the adapter cannot be\napplied (no module matches, or a layer cannot stand where this one would)."
+        }
+      ],
+      "examples": [
+        ">>> import lucid.nn as nn\n>>> from lucid.peft import LoHaConfig, LoraConfig\n>>> from lucid.peft.tuners import MixedModel\n>>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))\n>>> mixed = MixedModel(net, LoraConfig(r=2, target_modules=[\"0\"]), \"lora\")\n>>> mixed.add_adapter(\"loha\", LoHaConfig(r=2, target_modules=[\"0\"]))\n>>> type(net[0]).__module__.rsplit(\".\", 2)[-2:], type(net[0].base_layer).__module__.rsplit(\".\", 2)[-2:]\n(['loha', '_layer'], ['lora', '_layer'])\n>>> mixed.set_adapter([\"lora\", \"loha\"])\n>>> mixed.active_adapters\n['lora', 'loha']\n>>> mixed.unload() is net, type(net[0]) is nn.Linear\n(True, True)"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    }
+  ],
   "summary": "`lucid.peft.tuners` — one sub-package per parameter-efficient method, 46 in all.",
-  "extended": "A method is a config class, a tuner (the model-level host that injects, switches, merges and\nsaves its adapters) and, for the methods that adapt weights, the layer types that wrap the\nmodules it targets.  Each sub-package holds those layer types together with the method's\nconfig and tuner, registered by `PeftType` on import; the configs and tuners are also exported\nfrom `lucid.peft`, which is where `get_peft_model` and `PeftModel.from_pretrained` live.\nThe methods, by family:\n\n* **LoRA family** — a low-rank update beside each frozen weight: `lora` (LoRA, with DoRA, rsLoRA\n  and PiSSA / OLoRA starts) and `adalora` (AdaLoRA, rank allocated per layer during training).\n* **Orthogonal family** — a rotation of each layer's input space instead of an addition to its\n  weight: `oft` (block-diagonal Cayley rotations), `boft` (their butterfly factorisation) and\n  `hra` (a chain of Householder reflections).\n* **LyCORIS family** — a weight-shaped update from a structured factorisation: `loha` (a Hadamard\n  product of low-rank products) and `lokr` (a Kronecker product).\n* **Prompt learning** — an input learned instead of a weight, with no layer added to the model:\n  `prompt_tuning` (virtual tokens in front of the embeddings), `prefix_tuning` (virtual keys and\n  values in every attention layer), `p_tuning` (tokens an MLP or LSTM produces),\n  `multitask_prompt_tuning` (one prompt shared across tasks, scaled per task) and `cpt` (a\n  prompt of in-context examples with a bounded learned offset and its own loss).\n* **Shared-table tuners** — one set of tensors for the whole model, held once by the tuner, with a\n  few parameters per layer: `vera` (shared random projections, two vectors per layer),\n  `randlora` (shared random bases, a full-rank update) and `vblora` (a shared vector bank).\n* **Structured and sparse updates** — a weight update with a fixed structure other than low rank:\n  `fourierft` (a few frequency coefficients), `c3a` (block-circulant blocks), `miss` (shared\n  matrix shards), `bone` (the method MiSS replaced, kept to read old adapter files) and `shira`\n  (a sparse subset of the weight itself).\n* **Routing and mixing** — several low-rank adapters combined per task or per token: `poly`\n  (low-rank skills mixed by a per-task router) and `xlora` (LoRA experts weighed per token by a\n  classifier on the hidden states).\n* **Adaption prompts** — `adaption_prompt` (LLaMA-Adapter): learned prompts the top attention\n  layers attend to through a zero-initialised gate.\n* **Scaling and selective tuning** — a small part of the model itself: `ia3` (a rescaling vector\n  per layer), `ln_tuning` (a trainable copy of each chosen normalisation layer) and\n  `trainable_tokens` (a few rows of an embedding table).\n\nTwenty more methods have a config and no adapter yet: each package holds the complete config\n(every field of the reference library's, with its defaults, reading and writing\n`adapter_config.json`) and a stand-in tuner that raises `NotImplementedError` naming the issue\nthat tracks it, until the tuner is written.  They are `delora`, `gralora`, `hira`, `glora`,\n`deft` and `peanut` (a weight update of low-rank or projection form), `unilora`, `pvera`,\n`tinylora` and `lily` (adapters read out of shared banks), `road`, `psoft`, `osf` and\n`frod` (orthogonal and spectral updates), `supertuning`, `waveft`, `beft` and `cartridge`\n(sparse, wavelet, bias and key-value updates) and `adamss` (subspaces of the weight's SVD).\n`shadow` is the twentieth and is refused for good: the method needs the base model's decoder loop\nand a second backbone beside it.\n\nThe modules whose names begin with an underscore here (`_base`, `_lycoris`, `_orthogonal`,\n`_shared`, `_prompt` …) are the machinery the methods share, not part of the public surface.",
+  "extended": "A method is a config class, a tuner (the model-level host that injects, switches, merges and\nsaves its adapters) and, for the methods that adapt weights, the layer types that wrap the\nmodules it targets.  Each sub-package holds those layer types together with the method's\nconfig and tuner, registered by `PeftType` on import; the configs and tuners are also exported\nfrom `lucid.peft`, which is where `get_peft_model` and `PeftModel.from_pretrained` live.\nThe methods, by family:\n\n* **LoRA family** — a low-rank update beside each frozen weight: `lora` (LoRA, with DoRA, rsLoRA\n  and PiSSA / OLoRA starts) and `adalora` (AdaLoRA, rank allocated per layer during training).\n* **Orthogonal family** — a rotation of each layer's input space instead of an addition to its\n  weight: `oft` (block-diagonal Cayley rotations), `boft` (their butterfly factorisation) and\n  `hra` (a chain of Householder reflections).\n* **LyCORIS family** — a weight-shaped update from a structured factorisation: `loha` (a Hadamard\n  product of low-rank products) and `lokr` (a Kronecker product).\n* **Prompt learning** — an input learned instead of a weight, with no layer added to the model:\n  `prompt_tuning` (virtual tokens in front of the embeddings), `prefix_tuning` (virtual keys and\n  values in every attention layer), `p_tuning` (tokens an MLP or LSTM produces),\n  `multitask_prompt_tuning` (one prompt shared across tasks, scaled per task) and `cpt` (a\n  prompt of in-context examples with a bounded learned offset and its own loss).\n* **Shared-table tuners** — one set of tensors for the whole model, held once by the tuner, with a\n  few parameters per layer: `vera` (shared random projections, two vectors per layer),\n  `randlora` (shared random bases, a full-rank update) and `vblora` (a shared vector bank).\n* **Structured and sparse updates** — a weight update with a fixed structure other than low rank:\n  `fourierft` (a few frequency coefficients), `c3a` (block-circulant blocks), `miss` (shared\n  matrix shards), `bone` (the method MiSS replaced, kept to read old adapter files) and `shira`\n  (a sparse subset of the weight itself).\n* **Routing and mixing** — several low-rank adapters combined per task or per token: `poly`\n  (low-rank skills mixed by a per-task router) and `xlora` (LoRA experts weighed per token by a\n  classifier on the hidden states).\n* **Adaption prompts** — `adaption_prompt` (LLaMA-Adapter): learned prompts the top attention\n  layers attend to through a zero-initialised gate.\n* **Scaling and selective tuning** — a small part of the model itself: `ia3` (a rescaling vector\n  per layer), `ln_tuning` (a trainable copy of each chosen normalisation layer) and\n  `trainable_tokens` (a few rows of an embedding table).\n\nTwenty more methods have a config and no adapter yet: each package holds the complete config\n(every field of the reference library's, with its defaults, reading and writing\n`adapter_config.json`) and a stand-in tuner that raises `NotImplementedError` naming the issue\nthat tracks it, until the tuner is written.  They are `delora`, `gralora`, `hira`, `glora`,\n`deft` and `peanut` (a weight update of low-rank or projection form), `unilora`, `pvera`,\n`tinylora` and `lily` (adapters read out of shared banks), `road`, `psoft`, `osf` and\n`frod` (orthogonal and spectral updates), `supertuning`, `waveft`, `beft` and `cartridge`\n(sparse, wavelet, bias and key-value updates) and `adamss` (subspaces of the weight's SVD).\n`shadow` is the twentieth and is refused for good: the method needs the base model's decoder loop\nand a second backbone beside it.\n\n`MixedModel` is the host of a model that holds adapters of several of these methods at once, their\nlayers stacked on each module; only the methods declared `mixed=True` may take part.\n\nThe modules whose names begin with an underscore here (`_base`, `_lycoris`, `_orthogonal`,\n`_shared`, `_prompt` …) are the machinery the methods share, not part of the public surface.",
   "parameters": [],
   "returns": null,
   "raises": [],
