@@ -392,6 +392,17 @@ def _default_of(f: dataclasses.Field[object]) -> object:
 _CONFIG_CLASSES: dict[PeftType, type[PeftConfig]] = {}
 
 
+def _config_class_named(peft_type: object) -> type[PeftConfig]:
+    """The config class registered under ``peft_type`` (a ``PeftType`` or its string), else ``KeyError``."""
+    named = next((member for member in _CONFIG_CLASSES if member == peft_type), None)
+    if named is None:
+        raise KeyError(
+            f"{peft_type!r} is not a method of lucid.peft; "
+            f"the methods are {', '.join(_CONFIG_CLASSES)}"
+        )
+    return _CONFIG_CLASSES[named]
+
+
 @dataclass
 class PeftConfig:
     r"""What every adapter config holds, and the ``adapter_config.json`` round trip.
@@ -810,10 +821,90 @@ class PeftConfig:
             )
         return cls.from_dict(cls.from_json_file(path))
 
+    @classmethod
+    def from_peft_type(cls, **kwargs: object) -> PeftConfig:
+        r"""Build a config from its fields given as keyword arguments, the class chosen by ``peft_type``.
+
+        The reference's way to turn the keys of a config file into a config: the
+        ``peft_type`` argument names the method and so the class, whichever class this is
+        called on.  Without one, the calling class is built.  The fields are read as
+        :meth:`from_dict` reads them, so a key this library has no field for is accepted
+        at a value that turns its feature off (dropped, with a warning when the key is
+        unknown), where the reference drops it at any value.
+
+        Parameters
+        ----------
+        **kwargs
+            The config's fields, by name; ``peft_type`` is a :class:`PeftType` or its string.
+
+        Returns
+        -------
+        PeftConfig
+            The validated config, of the class ``peft_type`` names.
+
+        Raises
+        ------
+        KeyError
+            ``peft_type`` names no method of this library.
+        TypeError
+            No ``peft_type`` is given and this is ``PeftConfig`` itself, which builds no config of its own.
+        NotImplementedError
+            A key turns on a feature this library does not implement.
+
+        Examples
+        --------
+        >>> from lucid.peft import LoraConfig, PeftConfig
+        >>> config = PeftConfig.from_peft_type(peft_type="LORA", r=4, target_modules=["q"])
+        >>> type(config).__name__, config.r
+        ('LoraConfig', 4)
+        >>> LoraConfig.from_peft_type(r=2, target_modules=["q"]).r
+        2
+        """
+        if "peft_type" in kwargs:
+            return _config_class_named(kwargs["peft_type"]).from_dict(kwargs)
+        if cls._peft_type is None:
+            raise TypeError(
+                f"The {cls.__name__} config that is trying to be loaded is missing required "
+                "keys: {'peft_type'}."
+            )
+        return cls.from_dict(kwargs)
+
+    @classmethod
+    def check_kwargs(cls, **kwargs: object) -> dict[str, object]:
+        r"""Check the fields about to build a config; the reference's hook for a class to refuse a file it cannot read.
+
+        The reference calls it on the keys of an adapter file before building the config.
+        A config class overrides it to refuse or warn about a file written for an older
+        release of its method (:meth:`OFTConfig.check_kwargs`); the base accepts everything.
+        ``from_pretrained`` here does not call it.
+
+        Parameters
+        ----------
+        **kwargs
+            The config's fields, by name.
+
+        Returns
+        -------
+        dict of str to object
+            The fields to build the config with: ``kwargs`` itself.
+
+        Examples
+        --------
+        >>> from lucid.peft import LoraConfig
+        >>> LoraConfig.check_kwargs(r=4, peft_type="LORA")
+        {'r': 4, 'peft_type': 'LORA'}
+        """
+        return kwargs
+
     @property
     def is_prompt_learning(self) -> bool:
         """Whether this config is a prompt-learning method (:class:`PromptLearningConfig`)."""
         return isinstance(self, PromptLearningConfig)
+
+    @property
+    def is_adaption_prompt(self) -> bool:
+        """Whether this config is the adaption prompt (:class:`AdaptionPromptConfig`)."""
+        return False
 
 
 def _require_config(name: str, value: object) -> PeftConfig:

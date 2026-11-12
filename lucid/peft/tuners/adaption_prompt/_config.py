@@ -1,7 +1,7 @@
 """``AdaptionPromptConfig``: the LLaMA-Adapter hyper-parameters on top of the shared targeting fields."""
 
 from dataclasses import dataclass, field
-from typing import ClassVar
+from typing import ClassVar, override
 
 from lucid.peft._config import PeftType, _Check, _optional_count, _optional_str, _TargetedConfig
 
@@ -63,3 +63,9 @@ class AdaptionPromptConfig(_TargetedConfig, peft_type=PeftType.ADAPTION_PROMPT):
     adapter_len: int | None = None
     adapter_layers: int | None = None
     modules_to_save: list[str] | None = field(default=None, kw_only=True)
+
+    @property
+    @override
+    def is_adaption_prompt(self) -> bool:
+        """Whether this config is the adaption prompt: always."""
+        return True

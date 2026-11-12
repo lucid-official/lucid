@@ -432,14 +432,12 @@ _NO_MERGE = "X-LoRA mixes its adapters per input, so there is no weight to merge
 _CPT_HELPER = "not ported: a CPT training-loss helper of the reference's embedding"
 _INJECT = "not ported: Lucid injects through inject_adapter_in_model, not a method of the tuner"
 _GENERATE = "not ported: PeftModel.generate routes the batch; the tuner has none of its own"
-_CONFIG_BASE = "not ported: a helper of the reference's config base class"
-_HERE = "LCD-958"
+_HERE = "LCD-968"
 
 _OWED_MEMBERS: dict[str, Owed] = {
     "AdaLoraModel.resize_state_dict_by_rank_pattern": Owed(
         _HERE, "not ported: cuts saved tensors to a pruned rank pattern while loading"
     ),
-    "AdaptionPromptConfig.is_adaption_prompt": Owed(_HERE, _CONFIG_BASE),
     "BaseTuner.active_adapters": Owed(_HERE, _SHADOW, ("ShadowModel",)),
     "BaseTuner.disable_adapter_layers": Owed(_HERE, _SHADOW, ("ShadowModel",)),
     "BaseTuner.enable_adapter_layers": Owed(_HERE, _SHADOW, ("ShadowModel",)),
@@ -470,10 +468,6 @@ _OWED_MEMBERS: dict[str, Owed] = {
         _HERE,
         "not ported: save_pretrained's path_initial_model_for_weight_conversion converts PiSSA and OLoRA",
     ),
-    "OFTConfig.check_kwargs": Owed(_HERE, _CONFIG_BASE),
-    "PeftConfigMixin.check_kwargs": Owed(_HERE, _CONFIG_BASE),
-    "PeftConfigMixin.from_peft_type": Owed(_HERE, _CONFIG_BASE),
-    "PeftConfigMixin.is_adaption_prompt": Owed(_HERE, _CONFIG_BASE),
     "PeftModelForCausalLM.prepare_inputs_for_generation": Owed(
         _HERE, "no meaning here: the prompt is applied by hooks inside the model's own generate"
     ),

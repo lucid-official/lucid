@@ -1,7 +1,9 @@
 """``OFTConfig``: the OFT hyper-parameters on top of the shared targeting fields."""
 
+import re
+import warnings
 from dataclasses import dataclass
-from typing import ClassVar, Literal, override
+from typing import ClassVar, Final, Literal, override
 
 from lucid.peft._config import (
     PeftType,
@@ -16,6 +18,37 @@ from lucid.peft._config import (
 )
 
 _BIASES = ("none", "all", "oft_only")
+
+#: The reference release that made the Cayley-Neumann form numerically stabler, and the first to
+#: write ``peft_version``: a file older than it holds the old parameterisation.
+_CAYLEY_NEUMANN_RELEASE: Final = (0, 18, 0)
+
+#: A PEP 440 version, with the optional separators and ``v`` prefix its normal form allows.
+_VERSION: Final = re.compile(
+    r"v?(?P<release>\d+(?:\.\d+)*)"
+    r"(?P<pre>[-_.]?(?:a|b|rc)[-_.]?\d*)?"
+    r"(?P<post>[-_.]?post[-_.]?\d*)?"
+    r"(?P<dev>[-_.]?dev[-_.]?\d*)?"
+    r"(?:\+[a-z0-9]+(?:[-_.][a-z0-9]+)*)?",
+    re.IGNORECASE,
+)
+
+
+def _predates(version: str, release: tuple[int, ...]) -> bool:
+    """Whether the PEP 440 ``version`` sorts before the final release ``release``.
+
+    A pre-release or development release of ``release`` itself sorts before it; a post-release
+    does not.
+    """
+    found = _VERSION.fullmatch(version.strip())
+    if found is None:
+        raise ValueError(f"Invalid version: {version!r}")
+    numbers = tuple(int(part) for part in found["release"].split("."))
+    width = max(len(numbers), len(release))
+    padded, bound = (t + (0,) * (width - len(t)) for t in (numbers, release))
+    if padded != bound:
+        return padded < bound
+    return found["post"] is None and (found["pre"] is not None or found["dev"] is not None)
 
 
 @dataclass
@@ -154,3 +187,66 @@ class OFTConfig(_TargetedConfig, peft_type=PeftType.OFT):
                 f"bias={self.bias!r}: an OFT adapter in lucid.peft trains its own rotations only "
                 "(bias='none')"
             )
+
+    @classmethod
+    @override
+    def check_kwargs(cls, **kwargs: object) -> dict[str, object]:
+        r"""Refuse an adapter file written for the OFT the reference had before 0.14.0, and warn about one from before 0.18.0.
+
+        The reference changed OFT in 0.14.0 (``oft_block_size`` replaced the block count as
+        the way to size the blocks) and its Cayley-Neumann form in 0.18.0.  A file with no
+        ``oft_block_size`` holds weights of the old OFT; one with ``use_cayley_neumann``
+        set and a ``peft_version`` older than 0.18.0 (or none) holds the old form.
+        ``from_pretrained`` here does not call this.
+
+        Parameters
+        ----------
+        **kwargs
+            The config's fields, by name.
+
+        Returns
+        -------
+        dict of str to object
+            ``kwargs`` itself, as the base's does.
+
+        Raises
+        ------
+        ValueError
+            ``kwargs`` has no ``oft_block_size``, or its ``peft_version`` is not a version.
+        TypeError
+            ``peft_version`` is neither a string nor ``None``.
+
+        Warns
+        -----
+        UserWarning
+            ``use_cayley_neumann`` is set and the file is older than 0.18.0.
+
+        Examples
+        --------
+        >>> from lucid.peft import OFTConfig
+        >>> OFTConfig.check_kwargs(oft_block_size=32, peft_version="0.18.0")
+        {'oft_block_size': 32, 'peft_version': '0.18.0'}
+        >>> OFTConfig.check_kwargs(r=8)
+        Traceback (most recent call last):
+            ...
+        ValueError: OFT has been updated since version 0.14.0 of the reference adapter library: ...
+        """
+        if "oft_block_size" not in kwargs:
+            raise ValueError(
+                "OFT has been updated since version 0.14.0 of the reference adapter library: "
+                "the adapter's weights are incompatible with this OFT. Retrain the adapter "
+                "here, or load it with version 0.13.0 of the reference library."
+            )
+        if kwargs.get("use_cayley_neumann", False):
+            version = kwargs.get("peft_version")  # a file with none is older than the field
+            if version is not None and not isinstance(version, str):
+                raise TypeError(f"`peft_version` must be a str, got {version!r}")
+            text = "0.0.0" if version is None else version.partition("@")[0]
+            if _predates(text, _CAYLEY_NEUMANN_RELEASE):
+                warnings.warn(
+                    "The Cayley-Neumann parameterization became slightly more numerically stable "
+                    "in version 0.18.0 of the reference adapter library. Retrain the adapter here, "
+                    "or load it with version 0.17.0 of the reference library to keep the old form.",
+                    stacklevel=2,
+                )
+        return super().check_kwargs(**kwargs)
