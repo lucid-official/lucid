@@ -29,6 +29,7 @@ import ast
 import hashlib
 import json
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -541,8 +542,33 @@ def main() -> int:
         # — captures any slugs the build emitted, regardless of which
         # branch we took above.
         _save_module_cache(_per_module_fingerprints())
-    return result.returncode
+    return _exit_status(result.returncode)
+
+
+def _exit_status(returncode: int) -> int:
+    """The builder's status as a shell sees it, naming a death by signal.
+
+    ``subprocess`` reports a child killed by signal N as ``-N``, which
+    ``sys.exit`` turns into a meaningless 256-N.  On a CI runner the signal
+    that matters is SIGKILL — the out-of-memory killer, the likeliest reason a
+    hosted runner goes silent mid-step (LCD-969) — so say it in the log and
+    exit ``128+N`` like a shell does.
+    """
+    if returncode >= 0:
+        return returncode
+    killer = signal.Signals(-returncode)
+    hint = (
+        " — on a CI runner that is almost always the out-of-memory killer;"
+        " the progress lines above end with the peak memory so far"
+        if killer is signal.SIGKILL
+        else ""
+    )
+    print(f"[api-data] ✗ build-api-data.py was killed by {killer.name}{hint}", flush=True)
+    return 128 - returncode
 
 
 if __name__ == "__main__":
+    # Line-buffered: this wrapper's own lines (and the builder's, which
+    # inherits the stream) must reach a CI log as they happen.
+    sys.stdout.reconfigure(line_buffering=True)
     sys.exit(main())

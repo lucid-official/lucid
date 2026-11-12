@@ -165,6 +165,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a factorising LoRA init is refused on a stacked layer
 
+- api-data build parses lucid/ once, exits when done (LCD-969)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

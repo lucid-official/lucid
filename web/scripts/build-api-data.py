@@ -24,7 +24,9 @@ from __future__ import annotations  # allowed in build scripts (not lucid/ sourc
 import argparse
 import json
 import logging
+import os
 import re
+import resource
 import subprocess
 import sys
 import textwrap
@@ -32,12 +34,7 @@ import threading
 import time
 from pathlib import Path
 from collections.abc import Callable
-from typing import Any
-
-try:
-    from tqdm import tqdm
-except ImportError:                                          # graceful fallback
-    tqdm = None                                              # type: ignore[assignment]
+from typing import Any, NoReturn
 
 # ---------------------------------------------------------------------------
 # Griffe robustness shim — callable-module / overload collision
@@ -84,7 +81,12 @@ def _install_griffe_overload_guard() -> None:
 REPO_ROOT   = Path(__file__).parent.parent.parent  # lucid repo root
 LUCID_SRC   = REPO_ROOT                            # lucid/ lives here
 WEB_ROOT    = Path(__file__).parent.parent         # web/
-OUT_DIR     = WEB_ROOT / "public" / "api-data"
+# ``LUCID_API_DATA_OUT`` redirects the pages: the builder's own guards
+# (``test_build_api_data_perf.py``) build into a scratch directory instead of
+# the committed ``public/api-data``.  The factory-summary cache is an *input*
+# that lives in the committed tree, so it does not move with the output.
+OUT_DIR     = Path(os.environ.get("LUCID_API_DATA_OUT") or WEB_ROOT / "public" / "api-data")
+SUMMARIES_FILE = WEB_ROOT / "public" / "api-data" / "_summaries.json"
 GITHUB_BASE = "https://github.com/lucid-official/lucid/blob"
 
 # ---------------------------------------------------------------------------
@@ -1373,10 +1375,9 @@ def _load_model_summaries() -> dict[str, Any]:
     global _MODEL_SUMMARIES
     if _MODEL_SUMMARIES is not None:
         return _MODEL_SUMMARIES
-    cache = OUT_DIR / "_summaries.json"
-    if cache.is_file():
+    if SUMMARIES_FILE.is_file():
         try:
-            _MODEL_SUMMARIES = json.loads(cache.read_text())
+            _MODEL_SUMMARIES = json.loads(SUMMARIES_FILE.read_text())
         except (OSError, json.JSONDecodeError):
             _MODEL_SUMMARIES = {}
     else:
@@ -2103,6 +2104,25 @@ def _extract_family_meta(slug: str) -> dict[str, str]:
     return {}
 
 
+def _load_object(loader: Any, path: str) -> Any:
+    """The Griffe object at ``path``, parsing ``lucid/`` at most once per loader.
+
+    ``GriffeLoader.load(path)`` loads the *whole top-level package* from disk
+    on every call and returns only the object asked for — so one call per
+    documented module re-parsed the entire tree 160+ times (~4 s each on an
+    M1 Pro, ~12 min of a build that is otherwise seconds), and every walk left
+    a cyclic tree behind for the next collection (the 2-3 GB resident set).
+    After the first walk the package sits in ``modules_collection`` and
+    ``get_member`` reads it from there; this is the only place that asks the
+    loader to touch the disk.  Raises ``KeyError`` for an unknown path, like
+    ``load`` did.
+    """
+    top = path.split(".", 1)[0]
+    if top not in loader.modules_collection:
+        loader.load(top)
+    return loader.modules_collection.get_member(path)
+
+
 def _inject_lazy_loaded_members(
     loader: Any, parser: Any, sha: str, lucid_data: dict[str, Any],
 ) -> None:
@@ -2170,7 +2190,7 @@ def _inject_lazy_loaded_members(
         if path in home_cache:
             return home_cache[path]
         try:
-            m = loader.load(path)
+            m = _load_object(loader, path)
             home_cache[path] = m
             return m
         except Exception:
@@ -2366,7 +2386,11 @@ def _serialise_module(mod: Any, parser: Any, sha: str, *, slug: str) -> dict[str
         # renders that table — so those names are covered, not missing.
         documented_attrs = {a.get("name") for a in doc.get("attributes", [])}
         missing = []
-        for n in allowed_names:
+        # Sorted: ``allowed_names`` is a set, and the order this loop appends
+        # the module's documented constants to ``doc["attributes"]`` reached
+        # the committed page — it changed with ``PYTHONHASHSEED``, so every
+        # rebuild re-ordered ``lucid.peft``'s Attributes table in the diff.
+        for n in sorted(allowed_names):
             if n in emitted or n in documented_attrs or n in relocated_names:
                 continue
             sub = mod.members.get(n)
@@ -2426,7 +2450,7 @@ def _build_tensor_data(loader: Any, parser: Any, sha: str) -> dict[str, Any]:
     """
     from griffe import Class as GriffeClass
 
-    mod = loader.load("lucid._tensor.tensor")
+    mod = _load_object(loader, "lucid._tensor.tensor")
     tensor_cls = mod.members.get("Tensor")
     if tensor_cls is None or not isinstance(tensor_cls, GriffeClass):
         return {"slug": "lucid.tensor", "kind": "module", "name": "Tensor",
@@ -2483,11 +2507,38 @@ VERBOSE = False
 
 
 def _emit(msg: str) -> None:
-    """Print a status line without breaking an active tqdm bar."""
-    if tqdm is not None:
-        tqdm.write(msg)
-    else:
-        print(msg)
+    """Print a progress line now.  (It used to go through ``tqdm.write`` when
+    tqdm was installed — but no bar is ever drawn, and ``tqdm.write`` creates
+    a multiprocessing lock whose named semaphore a process ending through
+    :func:`_end_process` leaves behind for the resource tracker to warn about.)"""
+    print(msg, flush=True)
+
+
+def _peak_rss_gb() -> float:
+    """Peak resident set size of this process in GB — the progress lines carry
+    it so a build that dies on a small runner shows where memory was going.
+    ``ru_maxrss`` is bytes on macOS and KiB on Linux."""
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return peak / (1 << 30 if sys.platform == "darwin" else 1 << 20)
+
+
+def _end_process(status: int | None) -> NoReturn:
+    """End the process now, once every output is written.
+
+    Interpreter shutdown ends in a full cyclic collection of whatever is still
+    alive, and the Griffe object graph is the worst input that collector gets:
+    with the per-module re-walk (see :func:`_load_object`) it took 83 s for 46
+    modules on a laptop and 25 minutes after the last output on the hosted
+    runner — half of that workflow's wall-clock, spent freeing memory of a
+    process that was about to disappear anyway.  Nothing is lost by skipping it:
+    every output file was written through ``Path.write_text`` (closed), the
+    spinner thread is joined, and the two standard streams are flushed here.
+    Called only from ``__main__`` — ``main()`` itself is importable (the tests
+    drive it in-process).
+    """
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0 if status is None else status)
 
 
 _LUCID_MODELS_TIER1_SUBS = {
@@ -2616,7 +2667,7 @@ def build_one(slug: str, griffe_path: str, loader: Any, parser: Any, sha: str) -
         if slug == "lucid.tensor":
             data = _build_tensor_data(loader, parser, sha)
         else:
-            obj = loader.load(griffe_path)
+            obj = _load_object(loader, griffe_path)
             if isinstance(obj, GriffeModule):
                 data = _serialise_module(obj, parser, sha, slug=slug)
                 # Family-leaf metadata: each ``lucid.models.<domain>.<family>``
@@ -2770,6 +2821,7 @@ class _ElapsedSpinner:
 
 def main() -> None:
     global VERBOSE
+    t_start = time.monotonic()
 
     parser_args = argparse.ArgumentParser(description="Build Lucid API JSON data")
     parser_args.add_argument("--module", help="Build only this slug (e.g. lucid.fft)")
@@ -2854,7 +2906,7 @@ def main() -> None:
     if synth_slugs:
         try:
             with _ElapsedSpinner("loading lucid/ tree (Griffe AST walk)..."):
-                lucid_mod = loader.load("lucid")
+                lucid_mod = _load_object(loader, "lucid")
                 if isinstance(lucid_mod, GriffeModule):
                     lucid_data = _serialise_module(lucid_mod, Parser.numpy, sha, slug="lucid")
                     # Blind-spot rescue (category 5): lazy ``__getattr__``
@@ -2910,9 +2962,7 @@ def main() -> None:
     # ``LUCID_API_BUILD_WORKERS`` overrides the pool size for benchmarking;
     # ``0`` or ``1`` disables parallelism (single-process fallback for
     # easier debugging of build crashes).
-    import os as _os
-
-    n_workers_env = _os.environ.get("LUCID_API_BUILD_WORKERS")
+    n_workers_env = os.environ.get("LUCID_API_BUILD_WORKERS")
     if n_workers_env is not None:
         try:
             n_workers = int(n_workers_env)
@@ -2934,7 +2984,10 @@ def main() -> None:
 
     def _on_complete(slug: str) -> None:
         completed.append(slug)
-        _emit(f"  ✓ {slug:32}  ({len(completed)}/{total})")
+        _emit(
+            f"  ✓ {slug:32}  ({len(completed)}/{total})"
+            f"  {time.monotonic() - t_start:6.1f}s  peak {_peak_rss_gb():.2f} GB"
+        )
 
     if n_workers > 1 and len(manifest_items) > 1:
         from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -3031,8 +3084,19 @@ def main() -> None:
         )
         sys.exit(1)
 
-    print(f"\nDone. Files in {OUT_DIR}")
+    print(
+        f"\nDone. Files in {OUT_DIR}  "
+        f"({len(completed)} module(s) in {time.monotonic() - t_start:.1f}s, "
+        f"peak {_peak_rss_gb():.2f} GB)"
+    )
 
 
 if __name__ == "__main__":
-    main()
+    # Line-buffered, whatever the environment: into a pipe (a CI log) Python
+    # buffers blocks, and the nightly run showed nothing for 24 minutes.
+    sys.stdout.reconfigure(line_buffering=True)
+    try:
+        main()
+    except SystemExit as exc:
+        _end_process(exc.code if exc.code is None or isinstance(exc.code, int) else 1)
+    _end_process(0)
