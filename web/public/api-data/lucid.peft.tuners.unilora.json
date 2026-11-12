@@ -3,7 +3,7 @@
   "name": "unilora",
   "path": "lucid.peft.tuners.unilora",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/unilora/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/unilora/__init__.py#L1",
   "members": [
     {
       "name": "UniLoraConfig",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "UniLoraConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, peft_version: str | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, r: int = 4, proj_seed: int = 42, theta_d_length: int = 256, target_modules: str | list[str] | set[str] | None = None, unilora_dropout: float = 0.0, fan_in_fan_out: bool = False, bias: Literal['none', 'all', 'unilora_only'] = 'none', modules_to_save: list[str] | None = None, init_theta_d_bound: float = 0.02, init_weights: bool = True, save_indices: bool = False, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/unilora/_config.py#L26",
+      "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/unilora/_config.py#L26",
       "subcategory": "config",
       "methods": [
         {
@@ -24,7 +24,7 @@
           "kind": "function",
           "labels": [],
           "signature": "to_dict()",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L535",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L546",
           "subcategory": "config",
           "summary": "Return the config as the JSON-ready dict `adapter_config.json` holds.",
           "extended": "Enums become their strings and sets of module names sorted lists,\nso the result goes straight to `json.dumps` and back through\n`from_dict`.  A field the reference's config of this method lacks\n(`IA3Config.layers_to_transform`) is written only when it is set,\nso a file that does not use it is one the reference reads too.",
@@ -51,7 +51,7 @@
             "classmethod"
           ],
           "signature": "from_dict(config_dict: Mapping[str, object])",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L584",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L595",
           "subcategory": "config",
           "summary": "Build a config from a dict such as a parsed `adapter_config.json`.",
           "extended": "The constructor cannot do this: a file from the reference carries\nkeys v1 has no field for.  Such a key is accepted only at a value\nthat turns its feature off — null, false or empty\n(`\"loftq_config\": {}`, `\"megatron_config\": null`) — and dropped (with\na warning if v1 does not know the key); at any other value it\nraises, as it would change what the adapter computes.  The\n`peft_version` provenance key is dropped.  Called on\n`PeftConfig`, the dict's `peft_type` picks the class.",
@@ -88,7 +88,7 @@
           "kind": "function",
           "labels": [],
           "signature": "save_pretrained(save_directory: str | os.PathLike[str], kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L652",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L663",
           "subcategory": "config",
           "summary": "Write `adapter_config.json` into `save_directory`.",
           "extended": "The file is the reference's: `to_dict` with its keys sorted,\nindented by two spaces.  The directory is created if missing.",
@@ -137,7 +137,7 @@
             "classmethod"
           ],
           "signature": "from_json_file(path_json_file: str | os.PathLike[str], kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L693",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L704",
           "subcategory": "config",
           "summary": "Read a config file into the dict it holds, unchanged but for `runtime_config`.",
           "extended": "What `from_pretrained` reads before it chooses a config class: the\nfile's content as a dict, as the reference's `from_json_file` returns\nit.  `from_dict` turns it into a config.",
@@ -190,7 +190,7 @@
             "classmethod"
           ],
           "signature": "from_pretrained(pretrained_model_name_or_path: str | os.PathLike[str], subfolder: str | None = None, kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L748",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L759",
           "subcategory": "config",
           "summary": "Read `adapter_config.json` from a local adapter directory.",
           "extended": "The file's `peft_type` picks the config class: called on\n`PeftConfig` this returns a `LoraConfig` for a LoRA adapter,\nand called on a method's own class it refuses the file of another\nmethod.",
@@ -242,6 +242,87 @@
           "inherited_from": "PeftConfig"
         },
         {
+          "name": "from_peft_type",
+          "path": "lucid.peft._config.PeftConfig.from_peft_type",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_peft_type(kwargs: object = {})",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L824",
+          "subcategory": "config",
+          "summary": "Build a config from its fields given as keyword arguments, the class chosen by `peft_type`.",
+          "extended": "The reference's way to turn the keys of a config file into a config: the\n`peft_type` argument names the method and so the class, whichever class this is\ncalled on.  Without one, the calling class is built.  The fields are read as\n`from_dict` reads them, so a key this library has no field for is accepted\nat a value that turns its feature off (dropped, with a warning when the key is\nunknown), where the reference drops it at any value.",
+          "parameters": [
+            {
+              "name": "**kwargs",
+              "annotation": "object",
+              "description": "The config's fields, by name; `peft_type` is a `PeftType` or its string.",
+              "default": "{}"
+            }
+          ],
+          "returns": {
+            "annotation": "PeftConfig",
+            "description": "The validated config, of the class `peft_type` names."
+          },
+          "raises": [
+            {
+              "annotation": "KeyError",
+              "description": "`peft_type` names no method of this library."
+            },
+            {
+              "annotation": "TypeError",
+              "description": "No `peft_type` is given and this is `PeftConfig` itself, which builds no config of its own."
+            },
+            {
+              "annotation": "NotImplementedError",
+              "description": "A key turns on a feature this library does not implement."
+            }
+          ],
+          "examples": [
+            ">>> from lucid.peft import LoraConfig, PeftConfig\n>>> config = PeftConfig.from_peft_type(peft_type=\"LORA\", r=4, target_modules=[\"q\"])\n>>> type(config).__name__, config.r\n('LoraConfig', 4)\n>>> LoraConfig.from_peft_type(r=2, target_modules=[\"q\"]).r\n2"
+          ],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "check_kwargs",
+          "path": "lucid.peft._config.PeftConfig.check_kwargs",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "check_kwargs(kwargs: object = {})",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L872",
+          "subcategory": "config",
+          "summary": "Check the fields about to build a config; the reference's hook for a class to refuse a file it cannot read.",
+          "extended": "The reference calls it on the keys of an adapter file before building the config.\nA config class overrides it to refuse or warn about a file written for an older\nrelease of its method (`OFTConfig.check_kwargs`); the base accepts everything.\n`from_pretrained` here does not call it.",
+          "parameters": [
+            {
+              "name": "**kwargs",
+              "annotation": "object",
+              "description": "The config's fields, by name.",
+              "default": "{}"
+            }
+          ],
+          "returns": {
+            "annotation": "dict of str to object",
+            "description": "The fields to build the config with: `kwargs` itself."
+          },
+          "raises": [],
+          "examples": [
+            ">>> from lucid.peft import LoraConfig\n>>> LoraConfig.check_kwargs(r=4, peft_type=\"LORA\")\n{'r': 4, 'peft_type': 'LORA'}"
+          ],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "PeftConfig"
+        },
+        {
           "name": "is_prompt_learning",
           "path": "lucid.peft._config.PeftConfig.is_prompt_learning",
           "kind": "function",
@@ -249,8 +330,32 @@
             "property"
           ],
           "signature": "is_prompt_learning: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L814",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L900",
           "summary": "Whether this config is a prompt-learning method (`PromptLearningConfig`).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "bool",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "is_adaption_prompt",
+          "path": "lucid.peft._config.PeftConfig.is_adaption_prompt",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "is_adaption_prompt: bool",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L905",
+          "summary": "Whether this config is the adaption prompt (`AdaptionPromptConfig`).",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -412,7 +517,7 @@
       ],
       "labels": [],
       "signature": "Linear(base_layer: nn.Module, adapter_name: str, config: C)",
-      "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/unilora/_layer.py#L231",
+      "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/unilora/_layer.py#L231",
       "subcategory": "layer",
       "methods": [],
       "summary": "An `nn.Linear` with a Uni-LoRA update: $y = W x + b + B A\\,\\mathrm{drop}(x)$, $A, B$ read out of one vector.",
@@ -462,7 +567,7 @@
       ],
       "labels": [],
       "signature": "UniLoraLayer(base_layer: nn.Module, adapter_name: str, config: C)",
-      "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/unilora/_layer.py#L62",
+      "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/unilora/_layer.py#L62",
       "subcategory": "layer",
       "methods": [
         {
@@ -473,7 +578,7 @@
             "attribute"
           ],
           "signature": "r",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/unilora/_layer.py#L96",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/unilora/_layer.py#L96",
           "summary": "Read-only `{adapter: value}` views of the spec fields, by the reference's spelling.",
           "extended": null,
           "parameters": [],
@@ -491,7 +596,7 @@
           "kind": "function",
           "labels": [],
           "signature": "delete_adapter(adapter_name: str)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/unilora/_layer.py#L128",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/unilora/_layer.py#L128",
           "subcategory": "layer",
           "summary": "Remove `adapter_name`: its projection, its dropout and its recorded settings.",
           "extended": null,
@@ -513,7 +618,7 @@
           "kind": "function",
           "labels": [],
           "signature": "factor_shapes(adapter: str)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/unilora/_layer.py#L145",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/unilora/_layer.py#L145",
           "subcategory": "layer",
           "summary": "The shapes of `A` and `B`: `(r, in)` and `(out, r)`.",
           "extended": null,
@@ -542,7 +647,7 @@
           "kind": "function",
           "labels": [],
           "signature": "bind_projection(adapter: str, assignment: _Assignment)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/unilora/_layer.py#L161",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/unilora/_layer.py#L161",
           "subcategory": "layer",
           "summary": "Hold the projection the tuner drew for this layer's factors, on the base weight's device.",
           "extended": null,
@@ -577,7 +682,7 @@
           "kind": "function",
           "labels": [],
           "signature": "get_delta_weight(adapter: str)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/unilora/_layer.py#L206",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/unilora/_layer.py#L206",
           "subcategory": "layer",
           "summary": "The dense update of `adapter`: $B A$, with $A$ and $B$ read out of the vector.",
           "extended": null,
@@ -606,7 +711,7 @@
           "kind": "function",
           "labels": [],
           "signature": "set_requires_grad(adapter_names: str | Sequence[str], requires_grad: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/unilora/_common.py#L83",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/unilora/_common.py#L83",
           "subcategory": "common",
           "summary": "Set `requires_grad` on the named adapters' own tensors and on the shared parameters they read.",
           "extended": null,
@@ -629,7 +734,7 @@
           "kind": "function",
           "labels": [],
           "signature": "bind(shared: _Shared)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_shared.py#L209",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_shared.py#L209",
           "subcategory": "shared",
           "summary": "Read the tables from the ones the tuner shares; the first layer bound holds them in its tree.",
           "extended": null,
@@ -654,7 +759,7 @@
             "attribute"
           ],
           "signature": "active_adapter: str | list[str]",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L196",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_layer.py#L196",
           "summary": "Name (or names) of the adapter the forward pass applies.",
           "extended": null,
           "parameters": [],
@@ -675,7 +780,7 @@
             "attribute"
           ],
           "signature": "disable_adapters",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L198",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_layer.py#L198",
           "summary": "Whether the forward pass runs the base layer alone.",
           "extended": null,
           "parameters": [],
@@ -696,7 +801,7 @@
             "attribute"
           ],
           "signature": "merged",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L200",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_layer.py#L200",
           "summary": "Whether an adapter is folded into the base weight (`merged_adapters` non-empty).",
           "extended": null,
           "parameters": [],
@@ -717,7 +822,7 @@
             "property"
           ],
           "signature": "active_adapters: list[str]",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L203",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_layer.py#L203",
           "summary": "The adapters the forward pass applies, as a list.",
           "extended": null,
           "parameters": [],
@@ -739,7 +844,7 @@
           "kind": "function",
           "labels": [],
           "signature": "get_base_layer()",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L207",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_layer.py#L207",
           "subcategory": "layer",
           "summary": "Return the wrapped module, whose parameters are the base model's own.",
           "extended": "One step down: where another tuner layer stands between, that layer, not the user's\nmodule (`_root` goes all the way).",
@@ -764,7 +869,7 @@
             "property"
           ],
           "signature": "weight: Parameter",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L238",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_layer.py#L238",
           "summary": "The base layer's weight (unchanged unless an adapter is merged into it).",
           "extended": null,
           "parameters": [],
@@ -788,7 +893,7 @@
             "property"
           ],
           "signature": "bias: Tensor | None",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L246",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_layer.py#L246",
           "summary": "The base layer's bias (a buffer on a quantized base), or `None`.",
           "extended": null,
           "parameters": [],
@@ -810,7 +915,7 @@
           "kind": "function",
           "labels": [],
           "signature": "enable_adapters(enabled: bool)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L251",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_layer.py#L251",
           "subcategory": "layer",
           "summary": "Apply the adapter in the forward pass (`True`) or run the base alone (`False`).",
           "extended": "Disabling a merged layer unmerges it first, here rather than on\nthe next call, so the forward pass never writes a weight — a\ncompiled forward must not replay that write.",
@@ -840,7 +945,7 @@
           "kind": "function",
           "labels": [],
           "signature": "set_adapter(adapter_names: str | list[str], inference_mode: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L274",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_layer.py#L274",
           "subcategory": "layer",
           "summary": "Apply the named adapters, and train exactly those unless `inference_mode`.",
           "extended": "The names this layer holds nothing for are skipped by the forward\npass.  A merged layer is unmerged first, since the active adapters\nare no longer the merged ones.",
@@ -876,7 +981,7 @@
           "kind": "function",
           "labels": [],
           "signature": "merge(safe_merge: bool = False, adapter_names: list[str] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L446",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_layer.py#L446",
           "subcategory": "layer",
           "summary": "Fold the update into the base weights, in place.",
           "extended": "The weights keep their identity — they are written, not replaced —\nso whatever holds them (an optimizer, a tied embedding) sees the\nmerged values.  That is also why a weight shared with another\nmodule must not be merged into; the tuner's `merge_adapter` and\n`merge_and_unload` refuse it, as this layer alone cannot see the\nrest of the model.",
@@ -925,7 +1030,7 @@
           "kind": "function",
           "labels": [],
           "signature": "unmerge()",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L487",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_layer.py#L487",
           "subcategory": "layer",
           "summary": "Take every merged update back out of the base weights, in place.",
           "extended": "The result equals the original weights up to the rounding of the\nround trip.",
@@ -948,7 +1053,7 @@
           "kind": "function",
           "labels": [],
           "signature": "supports_lora_conversion(adapter_name: str = 'default')",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L501",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_layer.py#L501",
           "subcategory": "layer",
           "summary": "Whether `adapter_name` on this layer can be converted to a plain LoRA update.",
           "extended": null,
@@ -971,7 +1076,7 @@
           "kind": "function",
           "labels": [],
           "signature": "update_layer(adapter_name: str, config: C)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_support.py#L278",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_support.py#L278",
           "subcategory": "support",
           "summary": "Create adapter `adapter_name` from `config`.",
           "extended": "The adapter is built whole before the layer holds any of it.  A layer\nthat holds an adapter already keeps applying the adapters it applied:\nthe new one is inactive until `set_adapter` names it; a layer with\nnone starts applying this one.",
@@ -1012,7 +1117,7 @@
           "kind": "function",
           "labels": [],
           "signature": "extra_repr()",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_support.py#L314",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_support.py#L314",
           "subcategory": "support",
           "summary": "The active adapter, whether it is merged and whether adapters are disabled.",
           "extended": null,
@@ -1037,7 +1142,7 @@
             "property"
           ],
           "signature": "in_features: int",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_support.py#L192",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_support.py#L192",
           "summary": "Input features of the base layer.",
           "extended": null,
           "parameters": [],
@@ -1061,7 +1166,7 @@
             "property"
           ],
           "signature": "out_features: int",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_support.py#L197",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_support.py#L197",
           "summary": "Output features of the base layer.",
           "extended": null,
           "parameters": [],
@@ -1083,7 +1188,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(x: Tensor)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_support.py#L116",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_support.py#L116",
           "subcategory": "support",
           "summary": "The base layer's output plus every active adapter's contribution to it.",
           "extended": "The base output alone when adapters are disabled or merged; the sum is cast back to the\nbase output's dtype.",
@@ -1152,7 +1257,7 @@
       ],
       "labels": [],
       "signature": "UniLoraModel(model: nn.Module, config: PeftConfig, adapter_name: str, low_cpu_mem_usage: bool = False, state_dict: dict[str, Tensor] | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/unilora/_model.py#L26",
+      "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/unilora/_model.py#L26",
       "subcategory": "model",
       "methods": [
         {
@@ -1161,7 +1266,7 @@
           "kind": "function",
           "labels": [],
           "signature": "__init__(model: nn.Module, config: PeftConfig, adapter_name: str, low_cpu_mem_usage: bool = False, state_dict: dict[str, Tensor] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/unilora/_model.py#L78",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/unilora/_model.py#L78",
           "subcategory": "model",
           "summary": "Adapt `model` in place with `config`, as adapter `adapter_name`; the reference names the config `config`.",
           "extended": null,
@@ -1185,7 +1290,7 @@
             "property"
           ],
           "signature": "unilora_theta_d: nn.ParameterDict",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/unilora/_model.py#L91",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/unilora/_model.py#L91",
           "summary": "The shared vectors, one `(theta_d_length,)` parameter per adapter (the reference's attribute).",
           "extended": null,
           "parameters": [],
@@ -1208,7 +1313,7 @@
             "staticmethod"
           ],
           "signature": "generate_index(lora_param_count: int, theta_d_length: int, proj_seed: int)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/unilora/_model.py#L95",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/unilora/_model.py#L95",
           "subcategory": "model",
           "summary": "The slot of the shared vector each of `lora_param_count` LoRA parameters reads.",
           "extended": "Balanced — each slot is read `floor(D / d)` or `ceil(D / d)` times — and shuffled by\n`proj_seed`, the same on every device.  The values differ from the reference's, whose\nshuffle comes from a generator this library does not have: an adapter file written there\nreads its indices back only with `save_indices=True`.",
@@ -1256,7 +1361,7 @@
             "property"
           ],
           "signature": "active_adapters: list[str]",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L172",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_tuner.py#L172",
           "summary": "The adapters the forward pass applies, as a list.",
           "extended": null,
           "parameters": [],
@@ -1278,7 +1383,7 @@
           "kind": "function",
           "labels": [],
           "signature": "add_adapter(adapter_name: str, config: PeftConfig)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L433",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_tuner.py#L433",
           "subcategory": "tuner",
           "summary": "Add an adapter beside the ones the model holds.",
           "extended": "The new adapter starts frozen and inactive: the forward pass keeps\napplying the adapters it applied, and every parameter keeps the\n`requires_grad` it had.  `set_adapter` switches to it.  A\nmodule an earlier adapter already wraps takes the new one beside\nit; any other target is wrapped.  The model is left as it was if\nthe adapter cannot be added.",
@@ -1323,7 +1428,7 @@
           "kind": "function",
           "labels": [],
           "signature": "set_adapter(adapter_name: str | list[str], inference_mode: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L517",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_tuner.py#L517",
           "subcategory": "tuner",
           "summary": "Apply the named adapter(s) in the forward pass, and train exactly those.",
           "extended": "Every other adapter is frozen; the activated ones train unless\n`inference_mode`.  A merged layer is unmerged first.  Layers that\nhold none of the named adapters run their base alone.  The\nparameters `bias` makes trainable follow the adapter that asked\nfor them.",
@@ -1364,7 +1469,7 @@
           "kind": "function",
           "labels": [],
           "signature": "set_requires_grad(adapter_names: str | Sequence[str], requires_grad: bool = True)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L554",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_tuner.py#L554",
           "subcategory": "tuner",
           "summary": "Enable or disable gradients on the parameters of the named adapter(s).",
           "extended": null,
@@ -1392,7 +1497,7 @@
           "kind": "function",
           "labels": [],
           "signature": "delete_adapter(adapter_name: str)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L570",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_tuner.py#L570",
           "subcategory": "tuner",
           "summary": "Remove an adapter: its parameters, its config, its `modules_to_save` copies.",
           "extended": "If it was active, the adapters still active stay so; when none\nremain the first of the others (by name) takes over, with a\nwarning, and trains.  Deleting the last adapter leaves the layers\nin the model, applying nothing; `unload()` removes them.",
@@ -1420,7 +1525,7 @@
           "kind": "function",
           "labels": [],
           "signature": "forward(args: object = (), kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L641",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_tuner.py#L641",
           "subcategory": "tuner",
           "summary": "Call the adapted model; its adapter layers do their work inside the call.",
           "extended": null,
@@ -1443,7 +1548,7 @@
           "kind": "function",
           "labels": [],
           "signature": "merge_adapter(adapter_names: list[str] | None = None, safe_merge: bool = False)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L664",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_tuner.py#L664",
           "subcategory": "tuner",
           "summary": "Fold adapter updates into their base weights, keeping the adapter layers.",
           "extended": "A merged model runs at the base model's cost; `unmerge_adapter`\ntakes the updates out again.  Every refusal is made before any\nweight is written: nothing is merged if a layer's base weight is\nshared with another module (a tied LM head — merging would change\nthat module too) or if the adapter is disabled.",
@@ -1488,7 +1593,7 @@
           "kind": "function",
           "labels": [],
           "signature": "unmerge_adapter()",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L706",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_tuner.py#L706",
           "subcategory": "tuner",
           "summary": "Take every merged adapter update back out of its base weight.",
           "extended": null,
@@ -1511,7 +1616,7 @@
           "kind": "function",
           "labels": [],
           "signature": "merge_and_unload(progressbar: bool = False, safe_merge: bool = False, adapter_names: list[str] | None = None)",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L725",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_tuner.py#L725",
           "subcategory": "tuner",
           "summary": "Merge the adapters into the base weights and return the plain model.",
           "extended": "Each adapter layer is replaced by its merged base module — the base\nmodel's own module, holding its own `Parameter` objects — and each\n`modules_to_save` entry by the active adapter's trained copy (the\noriginal when that adapter has none).  Adapters not merged are\ndropped with their layers.  Every base parameter gets back the\n`requires_grad` it had before injection.",
@@ -1558,7 +1663,7 @@
           "kind": "function",
           "labels": [],
           "signature": "unload()",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L787",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_tuner.py#L787",
           "subcategory": "tuner",
           "summary": "Remove every adapter without merging and return the original model.",
           "extended": "Every adapter layer is replaced by the module it wrapped (a merged\none is unmerged first), every `modules_to_save` entry by its\noriginal module, and every base parameter gets back the\n`requires_grad` it had before injection.",
@@ -1581,7 +1686,7 @@
           "kind": "function",
           "labels": [],
           "signature": "enable_adapter_layers()",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L798",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_tuner.py#L798",
           "subcategory": "tuner",
           "summary": "Apply the adapter again after `disable_adapter_layers`.",
           "extended": null,
@@ -1604,7 +1709,7 @@
           "kind": "function",
           "labels": [],
           "signature": "disable_adapter_layers()",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L804",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_tuner.py#L804",
           "subcategory": "tuner",
           "summary": "Run the base model alone: adapter updates off, original `modules_to_save`.",
           "extended": null,
@@ -1627,7 +1732,7 @@
           "kind": "function",
           "labels": [],
           "signature": "supports_lora_conversion(adapter_name: str = 'default')",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L810",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/_tuner.py#L810",
           "subcategory": "tuner",
           "summary": "Whether every adapted layer in this tuner supports conversion to LoRA.",
           "extended": null,

@@ -3,7 +3,7 @@
   "name": "shadow",
   "path": "lucid.peft.tuners.shadow",
   "kind": "module",
-  "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/shadow/__init__.py#L1",
+  "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/shadow/__init__.py#L1",
   "members": [
     {
       "name": "ShadowConfig",
@@ -15,7 +15,7 @@
       ],
       "labels": [],
       "signature": "ShadowConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, peft_version: str | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, target_modules: str | list[str] | set[str] | None = None, exclude_modules: str | list[str] | set[str] | None = None, r: int = 8, shadow_alpha: float = 0.1, shadow_dropout: float = 0.2, init_weights: bool = True, shadow_model: str = 'mirror', shadow_num_hidden_layers: int | None = None, shadow_hidden_size: int | None = None, shadow_num_attention_heads: int | None = None, shadow_intermediate_size: int | None = None, share_embeddings: bool = True, update_hidden_size: int | None = None, auxiliary_loss_weight: float = 0.05, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, modules_to_save: list[str] | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/shadow/_config.py#L19",
+      "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/shadow/_config.py#L19",
       "subcategory": "config",
       "methods": [
         {
@@ -24,7 +24,7 @@
           "kind": "function",
           "labels": [],
           "signature": "to_dict()",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L535",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L546",
           "subcategory": "config",
           "summary": "Return the config as the JSON-ready dict `adapter_config.json` holds.",
           "extended": "Enums become their strings and sets of module names sorted lists,\nso the result goes straight to `json.dumps` and back through\n`from_dict`.  A field the reference's config of this method lacks\n(`IA3Config.layers_to_transform`) is written only when it is set,\nso a file that does not use it is one the reference reads too.",
@@ -51,7 +51,7 @@
             "classmethod"
           ],
           "signature": "from_dict(config_dict: Mapping[str, object])",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L584",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L595",
           "subcategory": "config",
           "summary": "Build a config from a dict such as a parsed `adapter_config.json`.",
           "extended": "The constructor cannot do this: a file from the reference carries\nkeys v1 has no field for.  Such a key is accepted only at a value\nthat turns its feature off — null, false or empty\n(`\"loftq_config\": {}`, `\"megatron_config\": null`) — and dropped (with\na warning if v1 does not know the key); at any other value it\nraises, as it would change what the adapter computes.  The\n`peft_version` provenance key is dropped.  Called on\n`PeftConfig`, the dict's `peft_type` picks the class.",
@@ -88,7 +88,7 @@
           "kind": "function",
           "labels": [],
           "signature": "save_pretrained(save_directory: str | os.PathLike[str], kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L652",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L663",
           "subcategory": "config",
           "summary": "Write `adapter_config.json` into `save_directory`.",
           "extended": "The file is the reference's: `to_dict` with its keys sorted,\nindented by two spaces.  The directory is created if missing.",
@@ -137,7 +137,7 @@
             "classmethod"
           ],
           "signature": "from_json_file(path_json_file: str | os.PathLike[str], kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L693",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L704",
           "subcategory": "config",
           "summary": "Read a config file into the dict it holds, unchanged but for `runtime_config`.",
           "extended": "What `from_pretrained` reads before it chooses a config class: the\nfile's content as a dict, as the reference's `from_json_file` returns\nit.  `from_dict` turns it into a config.",
@@ -190,7 +190,7 @@
             "classmethod"
           ],
           "signature": "from_pretrained(pretrained_model_name_or_path: str | os.PathLike[str], subfolder: str | None = None, kwargs: object = {})",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L748",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L759",
           "subcategory": "config",
           "summary": "Read `adapter_config.json` from a local adapter directory.",
           "extended": "The file's `peft_type` picks the config class: called on\n`PeftConfig` this returns a `LoraConfig` for a LoRA adapter,\nand called on a method's own class it refuses the file of another\nmethod.",
@@ -242,6 +242,87 @@
           "inherited_from": "PeftConfig"
         },
         {
+          "name": "from_peft_type",
+          "path": "lucid.peft._config.PeftConfig.from_peft_type",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_peft_type(kwargs: object = {})",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L824",
+          "subcategory": "config",
+          "summary": "Build a config from its fields given as keyword arguments, the class chosen by `peft_type`.",
+          "extended": "The reference's way to turn the keys of a config file into a config: the\n`peft_type` argument names the method and so the class, whichever class this is\ncalled on.  Without one, the calling class is built.  The fields are read as\n`from_dict` reads them, so a key this library has no field for is accepted\nat a value that turns its feature off (dropped, with a warning when the key is\nunknown), where the reference drops it at any value.",
+          "parameters": [
+            {
+              "name": "**kwargs",
+              "annotation": "object",
+              "description": "The config's fields, by name; `peft_type` is a `PeftType` or its string.",
+              "default": "{}"
+            }
+          ],
+          "returns": {
+            "annotation": "PeftConfig",
+            "description": "The validated config, of the class `peft_type` names."
+          },
+          "raises": [
+            {
+              "annotation": "KeyError",
+              "description": "`peft_type` names no method of this library."
+            },
+            {
+              "annotation": "TypeError",
+              "description": "No `peft_type` is given and this is `PeftConfig` itself, which builds no config of its own."
+            },
+            {
+              "annotation": "NotImplementedError",
+              "description": "A key turns on a feature this library does not implement."
+            }
+          ],
+          "examples": [
+            ">>> from lucid.peft import LoraConfig, PeftConfig\n>>> config = PeftConfig.from_peft_type(peft_type=\"LORA\", r=4, target_modules=[\"q\"])\n>>> type(config).__name__, config.r\n('LoraConfig', 4)\n>>> LoraConfig.from_peft_type(r=2, target_modules=[\"q\"]).r\n2"
+          ],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "check_kwargs",
+          "path": "lucid.peft._config.PeftConfig.check_kwargs",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "check_kwargs(kwargs: object = {})",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L872",
+          "subcategory": "config",
+          "summary": "Check the fields about to build a config; the reference's hook for a class to refuse a file it cannot read.",
+          "extended": "The reference calls it on the keys of an adapter file before building the config.\nA config class overrides it to refuse or warn about a file written for an older\nrelease of its method (`OFTConfig.check_kwargs`); the base accepts everything.\n`from_pretrained` here does not call it.",
+          "parameters": [
+            {
+              "name": "**kwargs",
+              "annotation": "object",
+              "description": "The config's fields, by name.",
+              "default": "{}"
+            }
+          ],
+          "returns": {
+            "annotation": "dict of str to object",
+            "description": "The fields to build the config with: `kwargs` itself."
+          },
+          "raises": [],
+          "examples": [
+            ">>> from lucid.peft import LoraConfig\n>>> LoraConfig.check_kwargs(r=4, peft_type=\"LORA\")\n{'r': 4, 'peft_type': 'LORA'}"
+          ],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "PeftConfig"
+        },
+        {
           "name": "is_prompt_learning",
           "path": "lucid.peft._config.PeftConfig.is_prompt_learning",
           "kind": "function",
@@ -249,8 +330,32 @@
             "property"
           ],
           "signature": "is_prompt_learning: bool",
-          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L814",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L900",
           "summary": "Whether this config is a prompt-learning method (`PromptLearningConfig`).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "bool",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "is_adaption_prompt",
+          "path": "lucid.peft._config.PeftConfig.is_adaption_prompt",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "is_adaption_prompt: bool",
+          "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/_config.py#L905",
+          "summary": "Whether this config is the adaption prompt (`AdaptionPromptConfig`).",
           "extended": null,
           "parameters": [],
           "returns": {
@@ -436,7 +541,7 @@
       ],
       "labels": [],
       "signature": "ShadowModel(model: nn.Module, peft_config: PeftConfig, adapter_name: str, low_cpu_mem_usage: bool = False, state_dict: dict[str, Tensor] | None = None)",
-      "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/shadow/_model.py#L7",
+      "source": "https://github.com/lucid-official/lucid/blob/8232923/lucid/peft/tuners/shadow/_model.py#L7",
       "subcategory": "model",
       "methods": [],
       "summary": "The ShadowPEFT tuner: refused.",
