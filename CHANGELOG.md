@@ -213,6 +213,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Arrow router survives deletes, owns its init rule (LCD-983)
 
+- receiver position reads forward references (LCD-987)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

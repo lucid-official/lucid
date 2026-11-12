@@ -1354,16 +1354,25 @@ def _receiver_position(free_fn: Any, method_fn: Any) -> int:
 
     Derived rather than listed: the method names every free parameter it
     still takes, so the one it does not name is the one it became.
+
+    Only names and kinds are read, so annotations come back as forward
+    references: one that names a type its module does not bind must not
+    change the answer.  Evaluating them and answering ``0`` on the
+    ``NameError`` gave ``where`` the wrong receiver without a word.
     """
     try:
         free_names = [
             name
-            for name, param in inspect.signature(free_fn).parameters.items()
+            for name, param in inspect.signature(
+                free_fn, annotation_format=annotationlib.Format.FORWARDREF
+            ).parameters.items()
             if param.kind in (param.POSITIONAL_ONLY, param.POSITIONAL_OR_KEYWORD)
         ]
-        method_params = inspect.signature(method_fn).parameters
+        method_params = inspect.signature(
+            method_fn, annotation_format=annotationlib.Format.FORWARDREF
+        ).parameters
         method_names = set(method_params)
-    except (TypeError, ValueError, NameError):
+    except (TypeError, ValueError):
         return 0
     method_names.discard("self")
 
