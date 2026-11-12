@@ -291,13 +291,27 @@ def test_a_constructor_that_raises_keeps_the_adapter_the_model_held(
 # ── an add that fails late ────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("peft_type", _TARGETED, ids=lambda t: t.name)
+#: Each method with its first adapter unmerged, and merged where the method can merge: an add that
+#: fails while the merged layers are held unmerged puts them back as they were.
+_LATE = [
+    (t, merged) for t in _TARGETED for merged in (False, True) if RECIPES[t].mergeable or not merged
+]
+
+
+@pytest.mark.parametrize(
+    ("peft_type", "merged"),
+    _LATE,
+    ids=lambda p: p.name if isinstance(p, PeftType) else ("merged" if p else "unmerged"),
+)
 def test_an_add_that_fails_on_its_second_layer_leaves_a_peft_model_as_it_was(
-    peft_type: PeftType, device: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    peft_type: PeftType, merged: bool, device: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     recipe = _recipe(peft_type)
     first = _narrowed(recipe.config(_F32, device, tmp_path), "2")
     peft = get_peft_model(recipe.base(_F32, device), first, adapter_name="first")
+    if merged:
+        peft.base_model.merge_adapter()
+        assert any(state.merged for _, _, state in _snapshot(peft).slots)
     before = _snapshot(peft)
     widened = _BaseTunerLayer._widen_adapter
     calls: list[str] = []
