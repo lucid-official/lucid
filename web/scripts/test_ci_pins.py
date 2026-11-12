@@ -17,6 +17,12 @@ only).  It installs ruff from the ``lint`` group, which must stay the same
 version as the ``quality`` group's ruff -- two lines, one version -- and must
 stay what the workflow installs.
 
+It installs the ``apidata`` group too (LCD-976): the builder's cost guards in
+``test_build_api_data_perf.py`` need Griffe, and without it they printed ``skip``
+there and counted as passed.  Two more ways to come undone, both failed here:
+the Docs workflow's install step goes, or ``LUCID_REQUIRE_GRIFFE`` does -- the
+variable that makes those guards fail, not skip, when Griffe is missing.
+
 Standalone like the other ``web/scripts/test_*.py`` (stdlib only): ``python3
 web/scripts/test_ci_pins.py``, also pytest-collectable.
 """
@@ -39,14 +45,15 @@ def _install_sources() -> list[Path]:
     )
 
 
+def _code_lines(path: Path) -> list[str]:
+    """The stripped lines of ``path`` that are not whole-line comments."""
+    stripped = (raw.strip() for raw in path.read_text().splitlines())
+    return [line for line in stripped if not line.startswith("#")]
+
+
 def _install_lines(path: Path) -> list[str]:
     """The non-comment lines of ``path`` that run a ``pip install``."""
-    lines = []
-    for raw in path.read_text().splitlines():
-        line = raw.strip()
-        if not line.startswith("#") and _INSTALL.search(line):
-            lines.append(line)
-    return lines
+    return [line for line in _code_lines(path) if _INSTALL.search(line)]
 
 
 def _groups() -> dict[str, list[str]]:
@@ -94,7 +101,28 @@ def test_the_docs_workflow_lints_with_the_lint_group() -> None:
     assert any("--group lint" in line for line in lines), lines
 
 
-_TESTS = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
+def test_the_docs_workflow_installs_the_griffe_group() -> None:
+    """The builder cost guards need it (LCD-976); a runner without Griffe skips them."""
+    lines = _install_lines(_ROOT / ".github" / "workflows" / "docs.yml")
+    assert any(f"--group {_GROUP}" in line for line in lines), lines
+
+
+def test_the_docs_workflow_makes_a_missing_griffe_fail_the_tests() -> None:
+    """Installing Griffe is not enough: a later edit that drops or breaks the install
+    would put the guards back to skipping, so the step that runs them must also say
+    Griffe is required (test_build_api_data_perf.py turns its skip into a failure)."""
+    lines = _code_lines(_ROOT / ".github" / "workflows" / "docs.yml")
+    runs = [n for n, line in enumerate(lines) if "scripts/run_tests.py" in line]
+    assert len(runs) == 1, f"expected one run_tests.py step in docs.yml, found {len(runs)}"
+    step_start = max(n for n in range(runs[0]) if lines[n].startswith("- "))
+    step = lines[step_start : runs[0] + 1]
+    assert 'LUCID_REQUIRE_GRIFFE: "1"' in step, step
+    assert not any("--skip" in line for line in step), (
+        f"the Docs run must not leave a test file out: {step}"
+    )
+
+
+_TESTS =[v for k, v in sorted(globals().items()) if k.startswith("test_")]
 
 
 def main() -> int:

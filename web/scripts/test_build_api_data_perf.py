@@ -19,9 +19,13 @@ runner ("lost communication") and the Docs workflow fail on every push:
 
 Standalone like the other ``web/scripts/test_*.py`` — ``python3
 web/scripts/test_build_api_data_perf.py``, no pytest needed, also
-pytest-collectable.  The builds need Griffe (``pip install griffe``); without
-it the build tests are skipped, the pure ones still run.  Each build is a few
-slugs: the first parse of ``lucid/`` is ~4 s, so the file takes ~15 s.
+pytest-collectable.  The builds need Griffe (``pip install --group apidata``,
+the one pin); without it the build tests are skipped, the pure ones still run --
+unless ``LUCID_REQUIRE_GRIFFE`` is set, which the Docs workflow does after
+installing the group: there a missing Griffe fails the four of them instead of
+letting them read as passed (they ran nowhere on that runner until LCD-976).
+Each build is a few slugs: the first parse of ``lucid/`` is ~4 s, so the file
+takes ~15 s.
 """
 
 import contextlib
@@ -52,8 +56,25 @@ _SMALL = ["lucid.einops", "lucid.peft.tuners.beft"]
 _EXIT_BOUND_S = 1.0
 
 
+_REQUIRE_GRIFFE = "LUCID_REQUIRE_GRIFFE"
+
+
 def _griffe_available() -> bool:
     return importlib.util.find_spec("griffe") is not None
+
+
+def _griffe_or_skip(test: str) -> bool:
+    """Whether the build test ``test`` can run.  Without Griffe it skips and says so,
+    unless ``LUCID_REQUIRE_GRIFFE`` promises the install: then its absence is a
+    broken install step, and a skip would count as a pass."""
+    if _griffe_available():
+        return True
+    assert os.environ.get(_REQUIRE_GRIFFE, "") in ("", "0"), (
+        f"{test}: Griffe is not installed, but {_REQUIRE_GRIFFE} says this run installs it -- "
+        "`pip install --group apidata` (the install step is missing or failed)"
+    )
+    print(f"  skip  {test} (griffe not installed)")
+    return False
 
 
 def _load_builder() -> ModuleType:
@@ -122,11 +143,40 @@ def test_peak_rss_is_reported_in_gigabytes() -> None:
     )
 
 
+def test_a_missing_griffe_fails_where_it_is_required() -> None:
+    """The four build tests ran nowhere on the Docs runner (LCD-976): it installed no
+    Griffe, so each printed ``skip`` and counted as passed.  The skip stays for a
+    laptop without Griffe; a run that sets ``LUCID_REQUIRE_GRIFFE`` must not take it."""
+    saved_env = os.environ.get(_REQUIRE_GRIFFE)
+    saved_probe = globals()["_griffe_available"]
+    globals()["_griffe_available"] = lambda: False
+    try:
+        os.environ.pop(_REQUIRE_GRIFFE, None)
+        with contextlib.redirect_stdout(io.StringIO()) as printed:
+            assert _griffe_or_skip("probe") is False
+        assert "skip  probe" in printed.getvalue(), printed.getvalue()
+        os.environ[_REQUIRE_GRIFFE] = "0"
+        with contextlib.redirect_stdout(io.StringIO()):
+            assert _griffe_or_skip("probe") is False, "0 means not required"
+        os.environ[_REQUIRE_GRIFFE] = "1"
+        try:
+            _griffe_or_skip("probe")
+        except AssertionError as exc:
+            assert "probe" in str(exc) and "apidata" in str(exc), str(exc)
+        else:
+            raise AssertionError("a required Griffe that is missing must fail, not skip")
+    finally:
+        globals()["_griffe_available"] = saved_probe
+        if saved_env is None:
+            os.environ.pop(_REQUIRE_GRIFFE, None)
+        else:
+            os.environ[_REQUIRE_GRIFFE] = saved_env
+
+
 def test_a_build_parses_the_package_once() -> None:
     """The complexity pin: the number of whole-package walks is 1, however many
     slugs are built and whichever way each reaches the loader."""
-    if not _griffe_available():
-        print("  skip  test_a_build_parses_the_package_once (griffe not installed)")
+    if not _griffe_or_skip("test_a_build_parses_the_package_once"):
         return
     import griffe
 
@@ -186,8 +236,7 @@ def _run_builder(*args: str, out: Path, hash_seed: str | None = None) -> tuple[i
 
 
 def test_the_process_ends_promptly_after_its_last_output() -> None:
-    if not _griffe_available():
-        print("  skip  test_the_process_ends_promptly_after_its_last_output (griffe not installed)")
+    if not _griffe_or_skip("test_the_process_ends_promptly_after_its_last_output"):
         return
     with tempfile.TemporaryDirectory() as tmp:
         status, output, gap = _run_builder("--slugs", *_SMALL, out=Path(tmp))
@@ -204,8 +253,7 @@ def test_the_process_ends_promptly_after_its_last_output() -> None:
 
 def test_a_failed_build_still_exits_non_zero() -> None:
     """The fast exit must not turn the failure paths into success."""
-    if not _griffe_available():
-        print("  skip  test_a_failed_build_still_exits_non_zero (griffe not installed)")
+    if not _griffe_or_skip("test_a_failed_build_still_exits_non_zero"):
         return
     with tempfile.TemporaryDirectory() as tmp:
         status, output, _gap = _run_builder("--module", "lucid.no_such_module", out=Path(tmp))
@@ -217,8 +265,7 @@ def test_the_output_does_not_depend_on_the_hash_seed() -> None:
     """``lucid.peft``'s documented constants were appended in set-iteration
     order, so two builds of the same source differed in the committed page and
     every nightly refresh churned it.  Same source, different seed: same bytes."""
-    if not _griffe_available():
-        print("  skip  test_the_output_does_not_depend_on_the_hash_seed (griffe not installed)")
+    if not _griffe_or_skip("test_the_output_does_not_depend_on_the_hash_seed"):
         return
     pages: list[bytes] = []
     for seed in ("1", "2"):
