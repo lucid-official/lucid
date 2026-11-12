@@ -55,8 +55,11 @@ jobs:
       # build-api-data.py is pure static analysis — Griffe reads the source
       # tree, nothing imports Lucid.  That matters here: Lucid is an Apple
       # Silicon / MLX extension and cannot be built on this runner at all.
+      # The version is the one in pyproject.toml's ``apidata`` group, so this
+      # runner and a laptop build the committed tree with the same Griffe
+      # (the unpinned install gave 2.4.1 here while the dev venv had 2.1.0).
       - name: Install Griffe
-        run: pip install griffe
+        run: pip install --group apidata
 
       # Content-hash comparison against the committed baseline.  Seconds, and
       # on most days it is the only step that runs.

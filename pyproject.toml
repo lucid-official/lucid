@@ -159,6 +159,18 @@ quality = [
     "hypothesis>=6.100",
     "diff-cover>=9",
 ]
+# What the docs api-data build needs (web/scripts/build-api-data*.py; run by
+# .github/workflows/docs-api-data.yml).  Griffe reads lucid/ statically, so no
+# Lucid build and no other package.  Exact because the committed
+# web/public/api-data tree is its output and the runner and a laptop must not
+# disagree about it: the workflow ran an unpinned install (2.4.1 on 2026-11-11,
+# 2.1.0 in the dev venv).  2.4.1 because that is what the nightly refresh that
+# produced the committed tree already used; its 164 pages are byte-identical to
+# 2.1.0's (LCD-969, re-measured in LCD-970).  The meta package pins griffelib
+# and griffecli to the same version.  Install: `pip install --group apidata`
+# (CI) / `uv pip install --group apidata` (dev venv).  The pin lives only here:
+# web/scripts/test_ci_pins.py fails a workflow that installs Griffe any other way.
+apidata = ["griffe==2.4.1"]
 
 # The MLX build the engine links and ships (LCD-292).  MLX's C++ ABI breaks
 # between patch releases, so the engine never links a user's `mlx`: setup.py
