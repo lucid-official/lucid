@@ -15,6 +15,7 @@ from typing import NamedTuple, Protocol, runtime_checkable
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig
+from lucid.peft._slots import _file_path
 from lucid.peft.tuners._layer import _BaseTunerLayer, _dotted, _tuner_layers
 
 
@@ -34,7 +35,8 @@ class _FileContext(NamedTuple):
     ``prefix`` is the path of the user's model inside ``model`` — ``""`` for a
     model adapted in place, ``"base_model.model."`` inside a ``PeftModel`` — so
     a layer at ``path`` (relative to the user's model) keeps its tensors at
-    ``prefix + path + "." + table`` in the file, as the reference lays it out.
+    ``prefix + file_path(path) + "." + table`` in the file, as the reference lays it out:
+    ``file_path`` is ``path`` unless another method's layer stands beneath the layer.
     ``host`` is the path of the tuner itself inside ``model`` (``"base_model."``
     in a ``PeftModel``), where a method keeps what is not the user's model's.
     """
@@ -47,13 +49,17 @@ class _FileContext(NamedTuple):
 
     @property
     def layers(self) -> list[tuple[str, _BaseTunerLayer]]:
-        """The tuner layers, by path relative to the user's model."""
+        """The tuner layers, by path relative to the user's model: where each is in memory, not in the file."""
         cut = len(self.prefix)
         return [(name[cut:], layer) for name, layer in _tuner_layers(self.model)]
 
+    def file_path(self, path: str) -> str:
+        """Where the layer at ``path`` is filed, relative to the user's model (``lucid.peft._slots._file_path``)."""
+        return _file_path(self.model, f"{self.prefix}{path}").removeprefix(self.prefix)
+
     def key(self, path: str, table: str) -> str:
         """The file's key of the tensor in ``table`` of the layer at ``path``."""
-        return f"{self.prefix}{_dotted(path, table)}"
+        return f"{self.prefix}{_dotted(self.file_path(path), table)}"
 
     def buffer_keys(self, table: str) -> dict[str, str]:
         """In-memory key → file key of the tensors in the buffer table ``table`` of each layer that holds this adapter in it.
@@ -68,9 +74,12 @@ class _FileContext(NamedTuple):
         for path, layer in self.layers:
             held: object = getattr(layer, table, None)
             if isinstance(held, _Persistable) and held.persistent and self.adapter in held:
-                where = self.key(path, table)
-                keys[_dotted(where, self.adapter)] = where
+                keys[self.memory_key(path, table)] = self.key(path, table)
         return keys
+
+    def memory_key(self, path: str, table: str) -> str:
+        """The in-memory key of the tensor of this adapter in the buffer ``table`` of the layer at ``path``."""
+        return f"{self.prefix}{_dotted(path, table, self.adapter)}"
 
 
 class _FileFormat:

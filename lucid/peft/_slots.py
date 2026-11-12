@@ -8,8 +8,8 @@ unloading, the state-dict helpers — walks slots without knowing their
 classes.
 """
 
-from collections.abc import Iterator, Sequence
-from typing import NamedTuple, Protocol, runtime_checkable
+from collections.abc import Iterator, Mapping, Sequence
+from typing import ClassVar, Final, NamedTuple, Protocol, runtime_checkable
 
 import lucid.nn as nn
 from lucid.nn.parameter import Parameter
@@ -85,6 +85,68 @@ class _AdapterSlot(Protocol):
     def _adapter_keys(self, adapter_name: str) -> dict[str, str]:
         """Own state-dict key → the adapter file's key, for ``adapter_name``'s tensors."""
         ...
+
+
+@runtime_checkable
+class _OfAMethod(Protocol):
+    """A slot that belongs to one method: its class carries that method's table of layer classes.
+
+    Every layer of a method answers with the same table, so two such slots belong to the same
+    method exactly when the tables are one object.  A ``modules_to_save`` copy belongs to none.
+    """
+
+    _layer_types: ClassVar[Mapping[type[nn.Module], object]]
+
+
+#: What a slot calls the module it stands on.
+_BASE: Final = "base_layer"
+
+
+def _file_path(model: nn.Module, path: str) -> str:
+    """Where the slot at ``path`` keeps its tensors in an adapter file, as a path in ``model``.
+
+    An adapter file is laid out as a model of the adapter's own method alone: ``lin0.lora_A.weight``.
+    When another method's layer stands between that layer and the user's module the layer sits
+    one ``base_layer`` down (``lin0.base_layer``), and the file path takes those steps off, so an
+    adapter saved from a stack has the layout of a single-method file and a single-method file
+    loads into a stack.  A step is taken only from one method's layer to a layer of another: the
+    wrappers one method nests around one module (a ``ParamWrapper`` per parameter) are named
+    in the file, ``base_layer`` and all.
+
+    Parameters
+    ----------
+    model : nn.Module
+        The module ``path`` is relative to.
+    path : str
+        The dotted path of a slot in ``model``.
+
+    Returns
+    -------
+    str
+        ``path`` without the trailing ``.base_layer`` steps that cross from one method's layer
+        to another's; ``path`` itself for a slot nothing stands beneath.
+
+    Examples
+    --------
+    >>> import lucid.nn as nn
+    >>> from lucid.peft import LoHaConfig
+    >>> from lucid.peft._slots import _file_path
+    >>> from lucid.peft.tuners import loha, lora
+    >>> net = nn.Sequential(nn.Linear(4, 4))
+    >>> below = lora.Linear(net[0], "a", r=2)
+    >>> net[0] = loha.Linear(below, "b", LoHaConfig(target_modules=["0"]), r=2, alpha=4)
+    >>> _file_path(net, "0.base_layer"), _file_path(net, "0")
+    ('0', '0')
+    """
+    while path.endswith(f".{_BASE}"):
+        parent_path = path.removesuffix(f".{_BASE}")
+        parent, child = model.get_submodule(parent_path), model.get_submodule(path)
+        if not (isinstance(parent, _OfAMethod) and isinstance(child, _OfAMethod)):
+            break
+        if parent._layer_types is child._layer_types:
+            break
+        path = parent_path
+    return path
 
 
 def _adapter_slots(model: nn.Module) -> list[tuple[str, _AdapterSlot]]:

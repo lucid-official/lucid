@@ -229,6 +229,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - config-base reference members (LCD-968)
 
+- file an adapter on a stack as the single-method layout
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

@@ -71,6 +71,6 @@ class ShiraModel(_FileFormat, _ConfigTuner, peft_type=PeftType.SHIRA):
         keys: dict[str, str] = {}
         for path, layer in context.layers:
             if isinstance(layer, ShiraLayer) and context.adapter in layer.shira_indices:
-                where = f"{context.prefix}{path}.shira_indices"
-                keys[f"{where}.{context.adapter}"] = where
+                table = "shira_indices"
+                keys[context.memory_key(path, table)] = context.key(path, table)
         return keys
