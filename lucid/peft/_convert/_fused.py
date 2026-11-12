@@ -19,6 +19,7 @@ from lucid.peft._convert._base import (
     split_key,
 )
 from lucid.peft._targeting import _pattern_value
+from lucid.peft.tuners._layer import _BaseTunerLayer
 from lucid.peft.tuners.lora._config import LoraConfig
 
 _PROJECTIONS: Final = ("query", "key", "value", "out_proj")
@@ -298,7 +299,10 @@ class _FusedQKVConverter(AdapterConverter):
                 "(PeftModel.from_pretrained) rather than converted on files"
             )
         layer = dict(model.named_modules())[name]
-        base = layer.get_base_layer() if hasattr(layer, "get_base_layer") else layer
+        if isinstance(layer, _BaseTunerLayer):
+            base = layer._root()  # the module beneath every layer, as methods may be stacked
+        else:
+            base = layer.get_base_layer() if hasattr(layer, "get_base_layer") else layer
         if not isinstance(base, nn.Linear):
             raise TypeError(f"{name} is {type(base).__name__}, not the zoo's fused nn.Linear")
         rows = base.weight[index * width : (index + 1) * width]

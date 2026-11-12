@@ -15,7 +15,14 @@ import pytest
 import lucid
 import lucid.nn as nn
 from lucid.models import create_model
-from lucid.peft import IA3Config, LoraConfig, PeftModel, get_peft_model_state_dict
+from lucid.peft import (
+    IA3Config,
+    LoHaConfig,
+    LoraConfig,
+    PeftMixedModel,
+    PeftModel,
+    get_peft_model_state_dict,
+)
 from lucid.peft._convert import (
     CLIPConverter,
     DETRConverter,
@@ -450,6 +457,29 @@ def test_vit_dora_magnitudes_stack_and_an_absent_projection_keeps_its_row_norm(
     key = f"{_PREFIX}blocks.0.attn.qkv.lora_magnitude_vector.weight"
     magnitude = get_peft_model_state_dict(loaded)[key]
     assert _same(magnitude[_DIM : 2 * _DIM], _norms(base, 0, 1))
+
+
+def test_vit_dora_reads_the_row_norms_of_qkv_beneath_a_stack_of_layers(tmp_path: Path) -> None:
+    """A mixed model's ``qkv`` is a LoHa layer on a LoRA layer on the zoo's ``nn.Linear``: the norms are the Linear's."""
+    base = _base("vit_base_16_cls", _VIT)
+    parts = {
+        (0, p): _Part(60 + n, r=4, magnitude=_norms(base, 0, _PROJECTIONS.index(p)) * 1.1)
+        for n, p in enumerate(("query", "value"))
+    }
+    config = _reference_config(
+        "ViTForImageClassification", _VIT_LIBRARY, ["query", "value"], use_dora=True
+    )
+    _write(tmp_path, config, _vit_tensors(parts))
+    mixed = PeftMixedModel(base, LoraConfig(r=2, target_modules=["qkv"]), "below")
+    mixed.add_adapter("above", LoHaConfig(r=2, target_modules=["qkv"]))
+    assert type(base.get_submodule("blocks.0.attn.qkv").base_layer).__name__ == "Linear"
+    mixed.load_adapter(tmp_path, "reference")  # converted against the model as it stands
+    mixed.set_adapter("reference")
+    images = _vit_batch()
+    expected = _vit_expected(parts, {k: 2.0 for k in parts}, dora=True)
+    with lucid.no_grad():
+        assert _same(mixed(images).logits, expected(images).logits)
+        assert not _same(expected(images).logits, _base("vit_base_16_cls", _VIT)(images).logits)
 
 
 def test_vit_dora_on_files_alone_needs_the_model_for_an_absent_projection(tmp_path: Path) -> None:

@@ -173,6 +173,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - add_weighted_adapter on a mixed model takes LoraModel's args
 
+- read a fused qkv's norms beneath a stack of layers (LCD-966)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
