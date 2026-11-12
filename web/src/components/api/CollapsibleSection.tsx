@@ -78,8 +78,11 @@ export function CollapsibleSection({
   }, [id]);
 
   return (
-    <section className={cn("group mb-10", className)}>
-      <div className="flex items-center gap-2 mb-3">
+    <section className={cn("mb-10", className)}>
+      {/* ``group/anchor`` is the header row, not the section: the row is what
+          shows the ``AnchorLink`` in ``header`` on hover, and the method cards
+          in the body (each with an ``AnchorLink`` of its own) must not. */}
+      <div className="group/anchor flex items-center gap-2 mb-3">
         <button
           type="button"
           onClick={toggle}

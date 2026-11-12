@@ -68,7 +68,9 @@ export async function FunctionSignature({
   return (
     <article
       className={cn(
-        "group rounded-2xl border border-lucid-border bg-lucid-surface",
+        // ``group/anchor``: this card's own heading shows its copy-link icon on
+        // hover — the card is the host, not the class's method group around it.
+        "group/anchor rounded-2xl border border-lucid-border bg-lucid-surface",
         "overflow-hidden",
         className,
       )}

@@ -16,9 +16,15 @@ interface AnchorLinkProps {
  *  ``#`` icon and the deep-link to that section is on the clipboard
  *  ready to paste into a chat / issue / commit message.
  *
- *  The button is invisible until the parent element (the heading or
- *  its wrapping section) gets ``:hover`` or keyboard focus — at rest
- *  it doesn't visually compete with the heading text. */
+ *  The button is invisible until the element that *hosts* it is hovered, or
+ *  the button itself takes keyboard focus — at rest it doesn't visually
+ *  compete with the heading text.  The host is whichever element carries
+ *  ``group/anchor`` (the heading row, a collapsible group's header row, a
+ *  method's card); that name — not Tailwind's bare ``group`` — is what the
+ *  button listens to, because a bare ``group`` matches *every* ancestor that
+ *  has it, so a section-wide one would reveal each icon in the section at once.
+ *  Give each host the smallest element whose hover should show *its* icon, and
+ *  never nest one ``group/anchor`` inside another that holds an ``AnchorLink``. */
 export function AnchorLink({ id, className }: AnchorLinkProps) {
   const [copied, setCopied] = React.useState(false);
 
@@ -49,25 +55,33 @@ export function AnchorLink({ id, className }: AnchorLinkProps) {
     [id],
   );
 
-  // Visibility: ``hidden`` (display: none) instead of ``opacity-0`` so
-  // the icon vacates the flex slot entirely when the parent isn't
-  // hovered.  Earlier ``opacity-0`` version still reserved its 20 px
-  // box + 8 px flex gap on each side, which made the trailing return
-  // type look orphaned from the function name at rest.  Toggling
-  // ``display`` causes a tiny one-frame width shift on hover, but the
-  // icon is small enough that it reads as a reveal, not a jump.
+  // Visibility: ``sr-only`` at rest, ``not-sr-only`` when revealed.  Two
+  // earlier recipes each broke one thing.  ``opacity-0`` reserved the icon's
+  // 20 px box plus the 8 px flex gap on each side, so the trailing return type
+  // looked orphaned from the function name at rest.  ``hidden`` (display: none)
+  // released the slot but also took the button out of the tab order, so a
+  // ``focus-within`` reveal could never fire and keyboard users could not reach
+  // any copy-link icon.  ``sr-only`` is out of flow (absolute, 1 px, clipped):
+  // no box, no flex gap, the heading is laid out as if the button were absent
+  // — yet it stays focusable and in the accessibility tree.  It is revealed on
+  // the host's hover and on the button's own ``focus-visible`` (not on
+  // ``focus-within``, which would show it whenever any link in the host took
+  // focus).  Revealing adds the slot back, a one-frame width shift small enough
+  // to read as a reveal, not a jump.
   return (
     <button
       type="button"
       onClick={handleClick}
       aria-label={copied ? "Link copied" : "Copy link to section"}
       className={cn(
-        "h-5 w-5 items-center justify-center rounded transition-colors duration-150",
+        "inline-flex items-center justify-center rounded transition-colors duration-150",
         copied
-          ? "inline-flex text-lucid-success"
+          ? "size-5 text-lucid-success"
           : cn(
-              "hidden group-hover:inline-flex group-focus-within:inline-flex",
-              "text-lucid-text-disabled hover:text-lucid-primary",
+              "sr-only",
+              "group-hover/anchor:not-sr-only group-hover/anchor:size-5",
+              "focus-visible:not-sr-only focus-visible:size-5",
+              "text-lucid-text-disabled hover:text-lucid-primary focus-visible:text-lucid-primary",
             ),
         className,
       )}

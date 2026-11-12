@@ -323,13 +323,13 @@ function SubpackageGrid({ groups, title, blurb }: SubpackageGridProps) {
   });
 
   const id = blurb ? _sectionId(title) : undefined;
-  // ``group`` sits on the heading, not on the ``<section>``: ``AnchorLink`` shows
-  // itself on ``group-hover`` and Tailwind's unnamed ``group`` matches *any*
-  // ancestor, so a section-wide one would also fire the ``group-hover`` title
-  // colour of every ``FamilyCard`` below.  (Without any, the icon never showed.)
+  // ``group/anchor`` sits on the heading, not on the ``<section>``: the heading
+  // is the element whose hover shows its own copy-link icon, and hovering a
+  // ``FamilyCard`` below must not.  (The icon once never showed: no ancestor was
+  // a group at all.)  The name keeps it apart from the cards' own ``group``.
   return (
     <section className="mb-10">
-      <SectionHeading id={id} className={blurb ? "group flex items-center gap-2" : undefined}>
+      <SectionHeading id={id} className={blurb ? "group/anchor flex items-center gap-2" : undefined}>
         {title}
         {id && <AnchorLink id={id} />}
       </SectionHeading>
@@ -629,8 +629,8 @@ function _sectionId(title: string): string {
 function MemberSection({ title, children, blurb }: MemberSectionProps) {
   const id = _sectionId(title);
   return (
-    <section className="group mb-10">
-      <SectionHeading id={id} className="flex items-center gap-2">
+    <section className="mb-10">
+      <SectionHeading id={id} className="group/anchor flex items-center gap-2">
         {title}
         <AnchorLink id={id} />
       </SectionHeading>

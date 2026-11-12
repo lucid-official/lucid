@@ -203,6 +203,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - EVA rank 0 removes only its adapter from a layer (LCD-979)
 
+- copy-link icons reachable by keyboard, one per host (LCD-980)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
