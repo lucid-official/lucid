@@ -5,17 +5,22 @@ import lucid.linalg as linalg
 from lucid._tensor.tensor import Tensor
 
 
-def _svd_lowrank(matrix: Tensor, rank: int, niter: int) -> tuple[Tensor, Tensor, Tensor]:
+def _svd_lowrank(
+    matrix: Tensor, rank: int, niter: int, generator: lucid.Generator | None = None
+) -> tuple[Tensor, Tensor, Tensor]:
     r"""Randomised rank-``rank`` SVD (Halko et al.) with ``niter`` power iterations.
 
     Returns ``(U, S, V)`` with :math:`M \approx U\,\mathrm{diag}(S)\,V^\top`.
     The basis is found for the tall orientation of ``matrix``; no
     oversampling, so ``niter = 0`` is a coarse sketch and a few iterations
-    approach the exact truncation.
+    approach the exact truncation.  The sketch is drawn from ``generator``, a stream
+    of its own that leaves the default one where it was; ``None`` draws from the default stream.
     """
     flipped = matrix.shape[0] < matrix.shape[1]
     tall = matrix.mT if flipped else matrix
-    sketch = lucid.randn(tall.shape[1], rank, device=tall.device, dtype=tall.dtype)
+    sketch = lucid.randn(
+        tall.shape[1], rank, device=tall.device, dtype=tall.dtype, generator=generator
+    )
     basis, _ = linalg.qr(tall @ sketch)
     for _ in range(niter):
         basis, _ = linalg.qr(tall.mT @ basis)

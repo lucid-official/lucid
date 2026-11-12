@@ -23,8 +23,6 @@ it only approximates the leading subspace, by a draw this library cannot reprodu
 at least the rank (small layers, low-rank weights) the subspace, and so the split, is the same.
 """
 
-from collections.abc import Iterator
-from contextlib import contextmanager
 from typing import NamedTuple
 
 import lucid
@@ -49,17 +47,6 @@ class _Split(NamedTuple):
     members: tuple[Tensor, ...]
     #: The start of each subspace's ``A_k``, ``(r_k, r)``, orthonormal rows.
     starts: tuple[Tensor, ...]
-
-
-@contextmanager
-def _seeded(seed: int) -> Iterator[None]:
-    """Draw from the default generator started at ``seed``, and leave it where it was found."""
-    saved = lucid.get_rng_state()
-    lucid.manual_seed(seed)
-    try:
-        yield
-    finally:
-        lucid.set_rng_state(saved)
 
 
 def _subspace_rank(sizes: Tensor, rows: int, config: AdamssConfig) -> int:
@@ -100,8 +87,8 @@ def _split(joined: Tensor, config: AdamssConfig) -> _Split:
     """
     rows = joined.shape[0]
     rank = min(config.r, *joined.shape)
-    with _seeded(config.random_seed):
-        left, _, right = _svd_lowrank(joined, rank, _NITER)
+    generator = lucid.Generator().manual_seed(config.random_seed)
+    left, _, right = _svd_lowrank(joined, rank, _NITER, generator)
     left, projection = left[:, :rank], right.mT[:rank].contiguous()
     clusters = min(config.num_subspaces, rows)
     labels = _kmeans_labels(left, clusters)

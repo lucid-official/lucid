@@ -318,6 +318,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - get_peft_config is a call to from_peft_type (LCD-968)
 - one owner for shared-table training (LCD-961)
 - SHiRA, Super-Tuning, TinyLoRA use buffer_keys (LCD-967)
+- seed _svd_lowrank with its own generator (LCD-967)
 
 ---
 

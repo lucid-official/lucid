@@ -13,25 +13,11 @@ choose differently on each device, so the decomposition is always run on the CPU
 the weight is on: an adapter trained on Metal then means the same thing when it is loaded on the CPU.
 """
 
-from collections.abc import Iterator
-from contextlib import contextmanager
-
 import lucid
 import lucid.linalg as linalg
 from lucid._tensor.tensor import Tensor
 from lucid.peft.tuners._spectral import _svd_lowrank
 from lucid.peft.tuners.psoft._config import PsoftConfig
-
-
-@contextmanager
-def _seeded(seed: int) -> Iterator[None]:
-    """Draw from the default generator started at ``seed``, and leave it where it was found."""
-    state = lucid.get_rng_state()
-    lucid.manual_seed(seed)
-    try:
-        yield
-    finally:
-        lucid.set_rng_state(state)
 
 
 def _top_triplets(weight: Tensor, config: PsoftConfig) -> tuple[Tensor, Tensor, Tensor]:
@@ -44,8 +30,8 @@ def _top_triplets(weight: Tensor, config: PsoftConfig) -> tuple[Tensor, Tensor, 
     if config.psoft_svd == "full":
         u, s, vh = linalg.svd(weight, full_matrices=False)
         return u[:, :rank], s[:rank], vh[:rank]
-    with _seeded(config.random_seed):
-        u, s, v = _svd_lowrank(weight, rank, config.psoft_svd_lowrank_niter)
+    generator = lucid.Generator().manual_seed(config.random_seed)
+    u, s, v = _svd_lowrank(weight, rank, config.psoft_svd_lowrank_niter, generator)
     return u[:, :rank], s[:rank], v.mT[:rank]
 
 
