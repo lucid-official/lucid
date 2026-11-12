@@ -24,11 +24,13 @@ from lucid.peft import (
     ArrowConfig,
     LoraConfig,
     PeftModel,
+    convert_to_lora,
     create_arrow_model,
     get_peft_model,
 )
 from lucid.peft.tuners.lora import Conv2d, Linear
 from lucid.peft.tuners.lora._arrow import _ArrowRouter
+from lucid.peft.tuners.lora._inits import _Init
 from lucid.test.unit.peft._parity import adapter_library
 
 _IN, _OUT = 6, 4
@@ -361,6 +363,66 @@ class TestGenKnowSub:
         assert layer.lora_arrow[_ROUTER]._seen.general == ("general_a", "general_b")
         assert layer.lora_arrow[_ROUTER]._seen.experts == ("task_0", "task_1")
 
+    def test_a_deleted_general_adapter_is_refused_at_the_next_pass(self, device: str) -> None:
+        """Their mean would change without the router having been asked: they must outlive it."""
+        layer, _ = _gks_library(device)
+        _route(layer, top_k=1, use_gks=True, rng_seed=0)  # general by name: gks_0, gks_1
+        x = lucid.randn(3, _IN, device=device)
+        layer(x)
+        layer.delete_adapter("gks_1")
+        with pytest.raises(ValueError, match="outlive the router"):
+            layer(x)
+
+    def test_the_same_for_names_the_config_gives(self, device: str) -> None:
+        layer, _ = _gks_library(device)
+        config = ArrowConfig(top_k=1, use_gks=True, rng_seed=0)
+        config.gks_adapter_names = ["gks_0", "gks_1"]
+        layer.update_layer(_ROUTER, 1, 1.0, 0.0, True, False, arrow_config=config)
+        layer.set_adapter(_ROUTER)
+        x = lucid.randn(3, _IN, device=device)
+        layer(x)
+        layer.delete_adapter("gks_0")
+        with pytest.raises(ValueError, match="outlive the router"):
+            layer(x)
+
+    def test_with_the_router_deleted_first_the_general_adapters_may_go(self, device: str) -> None:
+        layer, _ = _gks_library(device)
+        _route(layer, top_k=1, use_gks=True, rng_seed=0)
+        layer.delete_adapter(_ROUTER)
+        layer.delete_adapter("gks_0")
+        layer.set_adapter("task_0")
+        assert tuple(layer(lucid.randn(3, _IN, device=device)).shape) == (3, _OUT)
+
+    @pytest.mark.parametrize("named", [False, True])
+    def test_a_general_adapter_added_later_is_neither_a_task_nor_a_general_adapter(
+        self, device: str, named: bool
+    ) -> None:
+        """The reference never makes a ``gks_<i>`` adapter a task adapter; the mean is of the ones the router began with."""
+        layer, _ = _gks_library(device)
+        config = ArrowConfig(top_k=1, use_gks=True, rng_seed=0)
+        if named:
+            config.gks_adapter_names = ["gks_0", "gks_1"]
+        layer.update_layer(_ROUTER, 1, 1.0, 0.0, True, False, arrow_config=config)
+        layer.set_adapter(_ROUTER)
+        x = lucid.randn(5, _IN, device=device)
+        before = layer(x)
+        layer.update_layer("gks_2", 2, 2.0, 0.0, False, False)
+        _fill(layer, "gks_2", _rows(lucid.randn(2, _IN)), _rows(lucid.randn(_OUT, 2)))
+        layer.set_adapter(_ROUTER)
+        assert _close(layer(x), before, atol=1e-6)
+        router = layer.lora_arrow[_ROUTER]
+        assert router._seen.experts == ("task_0", "task_1")
+        assert router._seen.general == ("gks_0", "gks_1")
+
+    def test_without_gks_the_general_names_are_not_read(self, device: str) -> None:
+        layer, _ = _gks_library(device)
+        config = ArrowConfig(top_k=1, use_gks=False, rng_seed=0)
+        config.gks_adapter_names = ["gks_0", "gks_1"]
+        layer.update_layer(_ROUTER, 1, 1.0, 0.0, True, False, arrow_config=config)
+        layer.set_adapter(_ROUTER)
+        layer.delete_adapter("gks_1")
+        assert tuple(layer(lucid.randn(3, _IN, device=device)).shape) == (3, _OUT)
+
     def test_gks_without_general_adapters_is_refused(self, device: str) -> None:
         with pytest.raises(ValueError, match="general-knowledge adapters"):
             _route(_library(device), use_gks=True)
@@ -417,6 +479,18 @@ class TestRoster:
         assert abs(float(layer.lora_arrow[_ROUTER].prototypes[1][4].item())) > 0.99
         layer(along_four)
         assert abs(float(layer.lora_arrow[_ROUTER].prototypes[1][5].item())) > 0.99
+
+    def test_task_names_in_the_config_are_checked_when_the_router_is_built_only(
+        self, device: str
+    ) -> None:
+        config = ArrowConfig(top_k=1, rng_seed=0)
+        config.task_adapter_names = ["task_0", "task_1", "task_2"]
+        layer = _library(device)
+        layer.update_layer(_ROUTER, 1, 1.0, 0.0, True, False, arrow_config=config)
+        layer.set_adapter(_ROUTER)
+        layer.delete_adapter("task_1")
+        assert tuple(layer(_tokens(device)).shape) == (4, _OUT)
+        assert layer.lora_arrow[_ROUTER]._seen.experts == ("task_0", "task_2")
 
     def test_a_deleted_adapter_is_dropped_at_the_next_pass(self, device: str) -> None:
         layer = _route(_library(device), top_k=1, rng_seed=0)
@@ -486,6 +560,50 @@ class TestRefusals:
         ):
             LoraConfig(init_lora_weights="eva", arrow_config=ArrowConfig())
         assert LoraConfig(init_lora_weights="gaussian", arrow_config=ArrowConfig()).arrow_config
+
+    @pytest.mark.parametrize(
+        "init",
+        [*sorted(set(_Init._strategies) - {"default", "random", "gaussian"}), "pissa_niter_4"],
+    )
+    def test_a_router_layer_refuses_an_initialisation_that_touches_the_base(
+        self, device: str, init: str
+    ) -> None:
+        """The rule is the variant's, so the layer enforces it, not only ``LoraConfig``."""
+        layer = _library(device)
+        weight = layer.base_layer.weight.clone()
+        with pytest.raises(ValueError, match="init_lora_weights"):
+            layer.update_layer(_ROUTER, 1, 1.0, 0.0, init, False, arrow_config=ArrowConfig(top_k=1))
+        assert _ROUTER not in layer.lora_A and len(layer.lora_arrow) == 0
+        assert bool((layer.base_layer.weight == weight).all().item())
+
+    @pytest.mark.parametrize("init", [True, False, "gaussian"])
+    def test_a_router_layer_takes_the_initialisations_that_leave_the_base_alone(
+        self, device: str, init: bool | str
+    ) -> None:
+        layer = _library(device)
+        layer.update_layer(_ROUTER, 1, 1.0, 0.0, init, False, arrow_config=ArrowConfig(top_k=1))
+        assert _ROUTER in layer.lora_A
+
+    def test_a_router_cannot_be_resized(self, device: str) -> None:
+        layer = _route(_library(device), top_k=1)
+        with pytest.raises(ValueError, match="no rank"):
+            layer._resize_adapter(_ROUTER, 2, 2.0)
+
+    def test_a_router_is_not_converted_to_lora(self, device: str) -> None:
+        layer = _route(_library(device), top_k=1)
+        assert layer.supports_lora_conversion(_ROUTER) is False
+        assert layer.supports_lora_conversion("task_0") is True
+        assert layer.supports_lora_conversion("absent") is True
+        net = nn.Sequential(nn.Linear(_IN, _IN))
+        peft = get_peft_model(net, LoraConfig(r=1, target_modules=["0"]), adapter_name="task_0")
+        peft.add_adapter(
+            _ROUTER, LoraConfig(arrow_config=ArrowConfig(top_k=1), target_modules=["0"])
+        )
+        with (
+            pytest.warns(UserWarning, match="already uses LoRA"),
+            pytest.raises(ValueError, match="does not support conversion"),
+        ):
+            convert_to_lora(peft, 1, adapter_name=_ROUTER)
 
     def test_only_a_linear_layer_hosts_a_router(self, device: str) -> None:
         lucid.manual_seed(0)
@@ -740,6 +858,25 @@ class TestCreateArrowModel:
         assert not layer.lora_A["task_0"].weight.requires_grad
         assert layer.active_adapters == [_ROUTER]
 
+    def test_deleting_a_task_adapter_leaves_a_router_over_the_others(
+        self, device: str, library: dict[str, str]
+    ) -> None:
+        """``create_arrow_model`` names every task adapter in the config; a deleted one is just dropped."""
+        config = ArrowConfig(top_k=2, router_temperature=0.8, rng_seed=0)
+        model = create_arrow_model(
+            _base(device), [library["a"], library["b"], library["c"]], config
+        )
+        model.delete_adapter("task_1")
+        fewer = create_arrow_model(
+            _base(device),
+            [library["a"], library["c"]],
+            ArrowConfig(top_k=2, router_temperature=0.8, rng_seed=0),
+        )
+        x = lucid.randn(5, _IN, device=device)
+        layer = model.get_base_model()[0]
+        assert _close(model(x), fewer(x), atol=1e-5)
+        assert layer.lora_arrow[_ROUTER]._seen.experts == ("task_0", "task_2")
+
     def test_disabling_the_adapters_runs_the_base(self, library: dict[str, str]) -> None:
         model = create_arrow_model(_base(), [library["a"], library["b"]], ArrowConfig(top_k=1))
         x = lucid.randn(3, _IN)
@@ -918,6 +1055,32 @@ class TestRouterModule:
         assert (router.top_k, router.temperature, router.rng_seed) == (2, 0.5, 9)
         assert router._seen.experts == ("task_0", "task_1", "task_2")
 
+    def test_a_copy_rebuilds_the_same_prototypes_without_a_seed(self, device: str) -> None:
+        """A copied ``Parameter`` restarts its version, so the copy rebuilds; one start seed per router keeps them."""
+        lucid.manual_seed(7)
+        layer = Linear(
+            nn.Linear(_IN, _OUT).to(device), "task_0", r=3, lora_alpha=3.0, init_lora_weights=False
+        )
+        for name in ("task_1", "task_2"):
+            layer.update_layer(name, 3, 3.0, 0.0, False, False, lora_bias=False)
+            _fill(layer, name, _rows(lucid.randn(3, _IN)), _rows(lucid.randn(_OUT, 3)))
+        _route(layer, top_k=2)  # no rng_seed: a random start, and a spectrum without a gap
+        x = lucid.randn(6, _IN, device=device)
+        out = layer(x)
+        twin = copy.deepcopy(layer)
+        assert _close(twin(x), out, atol=1e-6)
+        assert _close(
+            twin.lora_arrow[_ROUTER].prototypes, layer.lora_arrow[_ROUTER].prototypes, atol=1e-6
+        )
+
+    def test_the_start_seed_is_one_draw_of_the_global_generator(self, device: str) -> None:
+        lucid.manual_seed(3)
+        first = _route(_library(device), top_k=1).lora_arrow[_ROUTER].start_seed
+        lucid.manual_seed(3)
+        again = _route(_library(device), top_k=1).lora_arrow[_ROUTER].start_seed
+        assert first == again
+        assert _route(_library(device), top_k=1, rng_seed=5).lora_arrow[_ROUTER].start_seed == 5
+
     def test_a_half_precision_base_gets_float32_prototypes(self) -> None:
         lucid.manual_seed(0)
         layer = Linear(nn.Linear(_IN, _OUT).to(lucid.float16), "task_0", r=1, lora_alpha=2.0)
@@ -926,6 +1089,46 @@ class TestRouterModule:
         assert layer.lora_arrow[_ROUTER].prototypes.dtype == lucid.float32
         x = lucid.randn(3, _IN).to(lucid.float16)
         assert layer(x).dtype == lucid.float16
+
+
+@pytest.mark.filterwarnings("ignore:lucid.compile")
+class TestUnderCompile:
+    """The prototypes follow the adapters' values; a compiled graph would replay the ones of its trace, so it runs eagerly."""
+
+    @staticmethod
+    def _model(device: str) -> PeftModel:
+        lucid.manual_seed(0)
+        config = LoraConfig(r=2, target_modules=["0"], init_lora_weights=False)
+        peft = get_peft_model(nn.Sequential(nn.Linear(_IN, _IN)).to(device), config, "task_0")
+        peft.add_adapter("task_1", config)
+        router = LoraConfig(arrow_config=ArrowConfig(top_k=1, rng_seed=0), target_modules=["0"])
+        peft.add_adapter(_ROUTER, router)
+        peft.set_adapter(_ROUTER)
+        return peft.eval()
+
+    def test_a_compiled_call_follows_an_in_place_change_and_an_added_adapter(
+        self, device: str
+    ) -> None:
+        peft = self._model(device)
+        layer = peft.get_base_model()[0]
+        x = lucid.randn(4, _IN, device=device)
+        with lucid.no_grad():
+            compiled = lucid.compile(peft)
+            first = compiled(x)
+            assert _close(first, peft(x))
+            for name in ("task_0", "task_1"):
+                layer.lora_A[name].weight.copy_(lucid.randn(2, _IN, device=device) * 3.0)
+            # The compiled call is first, so no eager pass has rebuilt the prototypes for it.
+            changed = compiled(x)
+            assert not _close(changed, first, atol=1e-3)
+            assert _close(changed, peft(x))
+            peft.add_adapter(
+                "task_2", LoraConfig(r=2, target_modules=["0"], init_lora_weights=False)
+            )
+            peft.set_adapter(_ROUTER)
+            added = compiled(x)
+            assert layer.lora_arrow[_ROUTER]._seen.experts == ("task_0", "task_1", "task_2")
+            assert _close(added, peft(x))
 
 
 # ── against the reference library ─────────────────────────────────────────

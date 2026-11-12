@@ -29,15 +29,22 @@ adapters they are of.
   read from the layer each pass, so adding or deleting one takes effect at the next, and the
   prototypes are rebuilt then.  They are also rebuilt when the values of an adapter they were
   built from change in place (``load_adapter`` over a name, an optimizer step), so the router
-  never routes by a stale prototype; the reference builds them once.
-* The general-knowledge adapters are the ones ``ArrowConfig.gks_adapter_names`` names, or,
-  where it is not filled in (a config read from a file does not keep it), the ones named
-  ``gks_<i>`` as ``create_arrow_model`` names them.
+  never routes by a stale prototype; the reference builds them once.  Explicit
+  ``task_adapter_names`` are checked when the router is built only: deleting a task adapter
+  afterwards just drops it from the roster.
+* The general-knowledge adapters are fixed when the router is built: the ones
+  ``ArrowConfig.gks_adapter_names`` names, or, where it is not filled in (a config read from a
+  file does not keep it), the ones named ``gks_<i>`` as ``create_arrow_model`` names them.  They
+  must outlive the router: deleting one is refused at the next pass (delete the router first),
+  since the mean they make would change without the router having been asked.  An adapter named
+  ``gks_<i>`` is never a task adapter, as in the reference, so one added later is ignored.
 * GenKnowSub is applied on the fly.  The reference subtracts the mean from the task adapters'
   stored weights once, at the first forward pass, so what an adapter file holds depends on
   whether the model has run; here the stored weights are never changed and the same router
   can be rebuilt as often as the adapters change.
 * The router cannot be merged: no single weight is what per-token routing computes.
+* ``lucid.compile`` runs a model with a router eagerly: the prototypes are kept beside the adapters
+  and follow their values, which a compiled graph would replay as they were when it was traced.
 """
 
 import functools
@@ -49,12 +56,14 @@ import lucid
 import lucid.linalg as linalg
 import lucid.nn as nn
 import lucid.nn.functional as F
+from lucid._C import engine as _C_engine
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
 from lucid.peft.tuners.lora._subconfigs import ArrowConfig
 from lucid.peft.tuners.lora._variants import _Variant
 
 if TYPE_CHECKING:
+    from lucid.peft.tuners.lora._inits import _Init
     from lucid.peft.tuners.lora._layer import LoraLayer, _Extras, _Residual
 
 #: The per-adapter table the router of each Arrow adapter is kept in (the reference's name).
@@ -68,6 +77,8 @@ _GKS_NAME: Final = re.compile(rf"{re.escape(GKS_ADAPTER_PREFIX)}\d+")
 #: Power iterations and the guard against dividing by zero, the reference's.
 _POWER_ITERATIONS: Final = 15
 _EPS: Final = 1e-8
+#: Exclusive bound of the start seed drawn when no ``rng_seed`` is given.
+_SEED_LIMIT: Final = 2**31 - 1
 
 
 class _Roster(NamedTuple):
@@ -86,6 +97,20 @@ def _options(arrow_config: ArrowConfig | None) -> ArrowConfig:
     if arrow_config is None:
         raise TypeError("an Arrow adapter is built from an ArrowConfig, got None")
     return arrow_config
+
+
+def _refuse_trace() -> None:
+    """Mark an active compile trace as one no executable can stand for; the call runs eagerly.
+
+    The prototypes follow the adapters' values (``_ArrowRouter.sync``), so a graph that fed them
+    in would go on routing by the ones of its trace after an in-place change of an adapter.
+    """
+    tracer = _C_engine.compile.current_tracer()
+    if tracer is not None:
+        tracer.mark_unsupported(
+            "an Arrow router routes by prototypes that follow the adapters' values, which a "
+            "compiled graph would replay as they were at the trace"
+        )
 
 
 def _plain(layer: LoraLayer) -> list[str]:
@@ -116,6 +141,9 @@ class _ArrowRouter(nn.Module):
         self.temperature = config.router_temperature
         self.use_gks = config.use_gks
         self.rng_seed = config.rng_seed
+        #: The start of every power iteration: ``rng_seed``, or one draw of the global generator
+        #: (``bind``), so that a rebuild after a copy of the model gives the same prototypes.
+        self.start_seed = 0 if config.rng_seed is None else config.rng_seed
         self.task_names = (
             None if config.task_adapter_names is None else tuple(config.task_adapter_names)
         )
@@ -134,31 +162,45 @@ class _ArrowRouter(nn.Module):
 
     # -- what the layer holds ------------------------------------------------
 
+    def bind(self, layer: LoraLayer) -> None:
+        """Fix what the router is once its layer is known: its general adapters, and its start seed."""
+        if self.general_names is None:
+            self.general_names = tuple(n for n in _plain(layer) if _GKS_NAME.fullmatch(n))
+        if self.rng_seed is None:
+            self.start_seed = int(lucid.randint(0, _SEED_LIMIT, (1,)).item())
+
     def _derive(self, layer: LoraLayer) -> _Roster:
-        """The roster the layer holds now, by name alone."""
+        """The roster the layer holds now, by name alone.
+
+        Task adapters are the plain adapters that are neither general nor named ``gks_<i>``.
+        """
         plain = _plain(layer)
         general = (
-            [n for n in plain if _GKS_NAME.fullmatch(n)]
+            tuple(n for n in plain if _GKS_NAME.fullmatch(n))
             if self.general_names is None
-            else list(self.general_names)
+            else self.general_names
         )
-        return _Roster(tuple(n for n in plain if n not in general), tuple(general))
+        experts = tuple(n for n in plain if n not in general and not _GKS_NAME.fullmatch(n))
+        return _Roster(experts, general)
 
-    @staticmethod
-    def _pairs(layer: LoraLayer, roster: _Roster) -> _Pairs:
-        return {n: layer._factor_pairs(n)[0] for n in (*roster.experts, *roster.general)}
+    def _pairs(self, layer: LoraLayer, roster: _Roster) -> _Pairs:
+        """The factors the router reads: the task adapters', and the general ones' under GenKnowSub."""
+        names = (*roster.experts, *(roster.general if self.use_gks else ()))
+        return {n: layer._factor_pairs(n)[0] for n in names}
+
+    def _require_general(self, layer: LoraLayer, roster: _Roster) -> None:
+        """Raise ``ValueError`` if a general adapter this router subtracts has been deleted."""
+        gone = [n for n in roster.general if n not in layer._specs] if self.use_gks else []
+        if gone:
+            raise ValueError(
+                f"Arrow subtracts the general-knowledge adapters {gone}, which this "
+                f"{type(layer).__name__} no longer holds: they must outlive the router "
+                "(delete the router first)"
+            )
 
     def _validate(self, layer: LoraLayer, roster: _Roster, pairs: _Pairs) -> None:
-        """Raise ``ValueError`` if ``roster`` cannot be routed or subtracted: nothing to route, ``top_k`` too large, a named adapter missing, ranks that differ."""
+        """Raise ``ValueError`` if ``roster`` cannot be routed or subtracted: nothing to route, ``top_k`` too large, ranks that differ."""
         where = type(layer).__name__
-        plain = _plain(layer)
-        for label, named in (("task", self.task_names), ("general-knowledge", self.general_names)):
-            missing = [n for n in named or () if n not in plain]
-            if missing:
-                raise ValueError(
-                    f"Arrow names the {label} adapters {missing}, but this {where} holds no plain "
-                    "LoRA adapter of those names (DoRA, lora_bias and router adapters cannot be routed)"
-                )
         if not roster.experts:
             raise ValueError(
                 f"Arrow routes the plain LoRA adapters a layer already holds, and this {where} "
@@ -184,7 +226,20 @@ class _ArrowRouter(nn.Module):
             )
 
     def check(self, layer: LoraLayer) -> None:
-        """Raise ``ValueError`` if this router cannot be built on ``layer`` as it is now."""
+        """Raise ``ValueError`` if this router cannot be built on ``layer`` as it is now.
+
+        The adapters its config names must be plain LoRA adapters the layer holds; that is asked
+        here only, since a task adapter deleted later is just dropped.
+        """
+        plain = _plain(layer)
+        for label, named in (("task", self.task_names), ("general-knowledge", self.general_names)):
+            missing = [n for n in named or () if n not in plain]
+            if missing:
+                raise ValueError(
+                    f"Arrow names the {label} adapters {missing}, but this {type(layer).__name__} "
+                    "holds no plain LoRA adapter of those names (DoRA, lora_bias and router "
+                    "adapters cannot be routed)"
+                )
         roster = self._derive(layer)
         self._validate(layer, roster, self._pairs(layer, roster))
 
@@ -205,15 +260,15 @@ class _ArrowRouter(nn.Module):
 
         It lives in the input space, which is what a token is compared with, and
         :math:`\Delta W = BA` is never formed.  The iteration runs in float32 from a random
-        start (drawn on the CPU, so it is the same on every device; ``rng_seed`` fixes it, and
-        ``None`` draws from the global generator) and is cut at the reference's fixed count: for
-        a spectrum without a gap it has not converged, as the reference's has not.  The sign is
-        arbitrary, and the routing ignores it.
+        start (drawn on the CPU, so it is the same on every device, from ``start_seed``: the
+        ``rng_seed`` or one draw of the global generator when the router was built) and is cut at
+        the reference's fixed count: for a spectrum without a gap it has not converged, as the
+        reference's has not.  The sign is arbitrary, and the routing ignores it.
         """
         a32, b32 = a.to(lucid.float32), b.to(lucid.float32)
         gram = b32.mT @ b32
-        generator = None if self.rng_seed is None else lucid.Generator(self.rng_seed, device="cpu")
-        v = lucid.randn(a32.shape[1], 1, generator=generator).to(a32.device)
+        v = lucid.randn(a32.shape[1], 1, generator=lucid.Generator(self.start_seed, device="cpu"))
+        v = v.to(a32.device)
         v = v / (linalg.norm(v) + _EPS)
         for _ in range(_POWER_ITERATIONS):
             w = a32.mT @ (gram @ (a32 @ v))
@@ -236,6 +291,7 @@ class _ArrowRouter(nn.Module):
     def sync(self, layer: LoraLayer) -> tuple[_Roster, _Pairs]:
         """Make the prototypes those of the roster ``layer`` holds now; return the roster and its factors."""
         roster = self._derive(layer)
+        self._require_general(layer, roster)
         pairs = self._pairs(layer, roster)
         stamp = tuple(p._version for pair in pairs.values() for p in pair)
         if roster != self._seen or stamp != self._stamp:
@@ -253,6 +309,7 @@ class _ArrowRouter(nn.Module):
         back to ``(..., out)``.  The coefficients carry the gradient of the token, as the reference's
         do; the prototypes do not.
         """
+        _refuse_trace()
         roster, pairs = self.sync(layer)
         dtype = pairs[roster.experts[0]][0].dtype
         tokens = x.reshape(-1, x.shape[-1])
@@ -285,11 +342,22 @@ class _Arrow(_Variant, variant="arrow"):
         _ArrowRouter(_options(arrow_config)).check(layer)
 
     @override
+    def check_init(self, init: _Init) -> None:
+        # The router never reads its own factors, so an initialisation that fills them from the
+        # weight, or rewrites the weight (PiSSA, OLoRA, LoRA-GA), would only damage the base.
+        if init.value not in (True, False, "gaussian"):
+            raise ValueError(
+                "An Arrow router never uses its own factors, so `init_lora_weights` must be "
+                f"True, False or 'gaussian', got {init.value!r}."
+            )
+
+    @override
     def attach(
         self, layer: _Residual, adapter: str, arrow_config: ArrowConfig | None = None
     ) -> None:
         table: nn.ModuleDict[_ArrowRouter] = getattr(layer, ARROW_TABLE)
         router = _ArrowRouter(_options(arrow_config))
+        router.bind(layer)
         router.sync(layer)
         table[adapter] = router
 

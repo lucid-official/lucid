@@ -370,6 +370,7 @@ class LoraLayer(_BaseTunerLayer):
         if adapter_name in self._specs:
             raise ValueError(f"Adapter with name '{adapter_name}' already exists.")
         variant.check(self, arrow_config)
+        variant.check_init(init_strategy)
         self._check_lora_bias(lora_bias)
         init_strategy.check(self, r)
         self._check_rank_fits(r)
@@ -471,6 +472,8 @@ class LoraLayer(_BaseTunerLayer):
                 f"cannot resize adapter {adapter_name!r}: it is merged into the base weights; "
                 "unmerge it first"
             )
+        if spec.variant == "arrow":
+            raise ValueError(f"cannot resize adapter {adapter_name!r}: an Arrow router has no rank")
         r = _check_rank("r", r)
         lora_alpha = _check_number("lora_alpha", lora_alpha)
         self._check_rank_fits(r)
@@ -961,9 +964,8 @@ class Linear(_Factored[nn.Linear], base_type=nn.Linear):
 
     @override
     def supports_lora_conversion(self, adapter_name: str = "default") -> bool:
-        """Whether ``adapter_name`` on this LoRA linear layer can be converted to LoRA."""
-        del adapter_name
-        return True
+        """Whether ``adapter_name`` on this LoRA linear layer can be converted to LoRA (a layer that holds none can; an Arrow router cannot)."""
+        return adapter_name not in self._specs or self._variant(adapter_name).mergeable
 
     @override
     def get_delta_weight(self, adapter: str) -> Tensor:

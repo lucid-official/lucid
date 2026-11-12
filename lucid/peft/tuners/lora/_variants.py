@@ -34,6 +34,7 @@ from lucid.nn.parameter import Parameter
 from lucid.peft.tuners.lora._subconfigs import ArrowConfig
 
 if TYPE_CHECKING:
+    from lucid.peft.tuners.lora._inits import _Init
     from lucid.peft.tuners.lora._layer import LoraLayer, _Extras, _Residual
 
 #: The per-adapter table DoRA keeps its magnitude vectors in (the reference's name).
@@ -96,6 +97,10 @@ class _Variant(ABC):
                 f"{type(layer).__name__} does not support {self.label}; "
                 f"it takes {sorted(layer._variant_names)}"
             )
+
+    def check_init(self, init: _Init) -> None:
+        """Raise ``ValueError`` if this variant cannot take the initialisation ``init`` asks for."""
+        del init  # any initialisation fills the factors of a plain or DoRA adapter
 
     def attach(
         self, layer: _Residual, adapter: str, arrow_config: ArrowConfig | None = None

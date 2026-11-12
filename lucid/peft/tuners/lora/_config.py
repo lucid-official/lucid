@@ -21,6 +21,7 @@ from lucid.peft._config import (
     _pattern_key_regex,
     _TargetedConfig,
 )
+from lucid.peft.tuners.lora._arrow import _Arrow
 from lucid.peft.tuners.lora._inits import _check_init, _Init
 from lucid.peft.tuners.lora._subconfigs import (
     ArrowConfig,
@@ -532,11 +533,7 @@ class LoraConfig(_LoraFields, peft_type=PeftType.LORA):
             raise ValueError(
                 "Invalid or unsupported variant combination: ('arrow_config', 'use_dora')"
             )
-        if self.init_lora_weights not in (True, False, "gaussian"):
-            raise ValueError(
-                "An Arrow router never uses its own factors, so `init_lora_weights` must be "
-                f"True, False or 'gaussian', got {self.init_lora_weights!r}."
-            )
+        _Arrow().check_init(_Init.of(self.init_lora_weights))
 
     def _check_init_subconfigs(self) -> None:
         if self.init_lora_weights == "eva" and self.eva_config is None:
