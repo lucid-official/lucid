@@ -167,6 +167,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - api-data build parses lucid/ once, exits when done (LCD-969)
 
+- file a trained bias on a stack where one method files it
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

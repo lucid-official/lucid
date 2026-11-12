@@ -103,7 +103,7 @@ _BASE: Final = "base_layer"
 
 
 def _file_path(model: nn.Module, path: str) -> str:
-    """Where the slot at ``path`` keeps its tensors in an adapter file, as a path in ``model``.
+    """Where the slot at ``path`` — or the user's module a slot stands on — is filed in an adapter file, as a path in ``model``.
 
     An adapter file is laid out as a model of the adapter's own method alone: ``lin0.lora_A.weight``.
     When another method's layer stands between that layer and the user's module the layer sits
@@ -111,14 +111,15 @@ def _file_path(model: nn.Module, path: str) -> str:
     adapter saved from a stack has the layout of a single-method file and a single-method file
     loads into a stack.  A step is taken only from one method's layer to a layer of another: the
     wrappers one method nests around one module (a ``ParamWrapper`` per parameter) are named
-    in the file, ``base_layer`` and all.
+    in the file, ``base_layer`` and all.  The user's module under the stack is filed one
+    ``base_layer`` beneath where the layer on it is filed (``lin0.base_layer``, where its bias is).
 
     Parameters
     ----------
     model : nn.Module
         The module ``path`` is relative to.
     path : str
-        The dotted path of a slot in ``model``.
+        The dotted path of a slot in ``model``, or of the module a slot stands on.
 
     Returns
     -------
@@ -137,16 +138,31 @@ def _file_path(model: nn.Module, path: str) -> str:
     >>> net[0] = loha.Linear(below, "b", LoHaConfig(target_modules=["0"]), r=2, alpha=4)
     >>> _file_path(net, "0.base_layer"), _file_path(net, "0")
     ('0', '0')
+    >>> _file_path(net, "0.base_layer.base_layer")
+    '0.base_layer'
     """
     while path.endswith(f".{_BASE}"):
         parent_path = path.removesuffix(f".{_BASE}")
         parent, child = model.get_submodule(parent_path), model.get_submodule(path)
-        if not (isinstance(parent, _OfAMethod) and isinstance(child, _OfAMethod)):
+        if not isinstance(parent, _OfAMethod):
             break
+        if not isinstance(child, _OfAMethod):
+            return f"{_file_path(model, parent_path)}.{_BASE}"
         if parent._layer_types is child._layer_types:
             break
         path = parent_path
     return path
+
+
+def _file_name(model: nn.Module, name: str) -> str:
+    """Where the parameter ``name`` of ``model`` is filed in an adapter file: its module's ``_file_path`` and its own name.
+
+    What a method trains beside its adapter (the biases ``bias`` picks) keeps its name in a
+    single-method file; under a stack its module is filed beneath the layer the file's method
+    would have there, and the name follows it.
+    """
+    owner, _, leaf = name.rpartition(".")
+    return f"{_file_path(model, owner)}.{leaf}" if owner else name
 
 
 def _adapter_slots(model: nn.Module) -> list[tuple[str, _AdapterSlot]]:

@@ -17,7 +17,7 @@ from lucid.nn._incompatible_keys import _IncompatibleKeys
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig
 from lucid.peft._refusals import NO_META_DEVICE, NO_MISMATCH_SKIPPING, refuse_value
-from lucid.peft._slots import _adapter_slots, _file_path
+from lucid.peft._slots import _adapter_slots, _file_name, _file_path
 from lucid.peft.tuners._host import _AdapterHost, _tuner_for
 from lucid.peft.tuners._layer import _join
 from lucid.peft.tuners._files import _FileContext, _FileFormat
@@ -58,7 +58,8 @@ def _adapter_keys(context: _FileContext) -> dict[str, str]:
     need not reach every layer another one does.  A layer that stands on another
     method's is filed where a single-method model would have it (``_file_path``).
     The parameters the method also trains (the biases ``bias`` picks) keep their
-    names, and what the method keeps outside its layers (``_shared_keys``) is added.
+    names (filed beside the layer they belong to, ``_file_name``), and what the method keeps
+    outside its layers (``_shared_keys``) is added.
     """
     model, config, adapter_name = context.model, context.config, context.adapter
     tuner = _tuner_for(config)
@@ -68,7 +69,7 @@ def _adapter_keys(context: _FileContext) -> dict[str, str]:
         for path, slot in _adapter_slots(model)
         for own, disk in slot._adapter_keys(adapter_name).items()
     }
-    keys.update({n: n for n in tuner._extra_trainable_names(model, config)})
+    keys.update({n: _file_name(model, n) for n in tuner._extra_trainable_names(model, config)})
     if issubclass(tuner, _FileFormat):
         keys.update(tuner._shared_keys(context))
     return keys
