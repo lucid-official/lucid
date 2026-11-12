@@ -35,7 +35,7 @@ import { Card } from "@/components/ui/Card";
 import { loadApiData } from "@/lib/api-loader";
 import { isApiModule, isApiClassModule } from "@/lib/types";
 import { canonical } from "@/lib/site";
-import { API_SECTIONS, sectionedSlugs } from "@/lib/api-sections";
+import { builtPackages, sectionedSlugs } from "@/lib/api-sections";
 
 export const metadata: Metadata = {
   title: "API Reference",
@@ -120,11 +120,13 @@ function _optimCounts(): { optimizers: number; lrSchedulers: number } {
 // ``lucid.peft`` documents its tuner configs, models and layers on one page per
 // method (``lucid.peft.tuners.<method>``), so its public names are spread over
 // the package page and those pages — count them all, or the card undersells it.
+// ``methods`` counts the ones that build an adapter (the guides say 45, not the
+// 46 the package knows): the refused section's page is documented, but there is
+// no adapter to fine-tune with.
 function _peftCounts(): { methods: number; names: number } {
-  const tuners = (API_SECTIONS["lucid.peft"]?.sections ?? []).flatMap(
-    (s) => s.packages ?? [],
-  );
-  const methods = tuners.filter((p) => _memberCount(p.slug) > 0).length;
+  const methods = builtPackages("lucid.peft").filter(
+    (p) => _memberCount(p.slug) > 0,
+  ).length;
   const names = sectionedSlugs().reduce((n, slug) => n + _memberCount(slug), 0);
   return { methods, names: names + _memberCount("lucid.peft") };
 }

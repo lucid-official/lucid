@@ -26,6 +26,7 @@ const OUT = join(ROOT, "out");
 const API_DATA = join(ROOT, "public", "api-data");
 const LABELS_TS = join(ROOT, "src", "lib", "labels.ts");
 const API_SECTIONS_JSON = join(ROOT, "data", "api-sections.json");
+const API_SECTIONS_TS = join(ROOT, "src", "lib", "api-sections.ts");
 const BASE = "/lucid";
 
 // ── reST / markdown leak patterns (unambiguous — used by prose contracts) ────
@@ -124,6 +125,17 @@ const sectionsJson = loadJson(API_SECTIONS_JSON);
 for (const parent of Object.values(sectionsJson ?? {}))
   for (const section of parent.sections ?? [])
     for (const pkg of section.packages ?? []) labelKeys.add(pkg.slug);
+
+// The section of lucid.peft that lists the methods which build no adapter.  The
+// id is declared once, in src/lib/api-sections.ts; read it from there.
+const REFUSED_SECTION_ID =
+  /REFUSED_SECTION_ID\s*=\s*"([^"]+)"/.exec(
+    existsSync(API_SECTIONS_TS) ? readFileSync(API_SECTIONS_TS, "utf8") : "",
+  )?.[1];
+if (!REFUSED_SECTION_ID) {
+  console.error(`✗ no REFUSED_SECTION_ID in ${API_SECTIONS_TS}`);
+  process.exit(2);
+}
 
 const isFamilyLeaf = (slug) => {
   const p = slug.split(".");
@@ -246,6 +258,44 @@ const PAGE_CONTRACTS = [
       return [...count]
         .filter(([, n]) => n > 1)
         .map(([id, n]) => ({ scope: ctx.scope, detail: `id="${id}" is on ${n} elements` }));
+    },
+  },
+  {
+    // The ``lucid.peft`` cards on /api count the package's methods.  The package
+    // names one more than it builds an adapter for (ShadowPEFT is documented
+    // but refused), and the tutorial and migration guide say how many build —
+    // so a card that counts every tuner page says 46 where they say 45 (LCD-978).
+    // Every "N methods" the two cards show must be the number of packages
+    // listed outside the refused section of data/api-sections.json.
+    id: "index.card-count", component: "ApiIndexCard", kind: "page",
+    applies: (ctx) => ctx.kind === "api-landing",
+    check(ctx) {
+      const parent = sectionsJson?.["lucid.peft"];
+      if (!parent?.overview)
+        return [{ scope: ctx.scope, detail: "data/api-sections.json lists no lucid.peft overview page" }];
+      const expected = (parent.sections ?? [])
+        .filter((s) => s.id !== REFUSED_SECTION_ID)
+        .reduce((n, s) => n + (s.packages ?? []).length, 0);
+      const out = [];
+      for (const slug of ["lucid.peft", parent.overview]) {
+        const href = `${BASE}/api/${slug}`;
+        const card = ctx.dom
+          .querySelectorAll("a.group.block")
+          .find((a) => a.getAttribute("href") === href);
+        if (!card) {
+          out.push({ scope: ctx.scope, detail: `no card links to ${href}` });
+          continue;
+        }
+        // The visible text, plus the full description a clamped card carries in ``title``.
+        const prose = [card.text, ...card.querySelectorAll("[title]").map((e) => e.getAttribute("title"))];
+        const counts = prose.flatMap((t) => [...t.matchAll(/\b(\d+)\s+methods\b/g)].map((m) => Number(m[1])));
+        if (slug === parent.overview && counts.length === 0)
+          out.push({ scope: ctx.scope, detail: `the ${slug} card shows no "N methods" count` });
+        for (const n of counts)
+          if (n !== expected)
+            out.push({ scope: ctx.scope, detail: `the ${slug} card says ${n} methods; ${expected} packages build an adapter` });
+      }
+      return out;
     },
   },
   // ── Prose / rendering (every page) ─────────────────────────────────────────

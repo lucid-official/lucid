@@ -213,6 +213,38 @@ def test_prose_counts_of_methods_match_the_package() -> None:
             assert count == built, f"{page.name}: {match[0]!r} — {built} methods build an adapter"
 
 
+_API_SECTIONS_TS = _WEB / "src" / "lib" / "api-sections.ts"
+_API_INDEX_PAGE = _WEB / "src" / "app" / "api" / "page.tsx"
+
+
+def test_index_card_counts_the_methods_that_build() -> None:
+    """The ``/api`` card said "46 methods" while the guides said 45 build (LCD-978).
+
+    The card counts the packages outside the refused section
+    (``builtPackages`` in ``api-sections.ts``).  That number has to be what the
+    package really builds: ``PeftType`` names every method, and the refused
+    section lists exactly the ones with no adapter.  The rendered card is
+    checked against the same number by the ``index.card-count`` audit contract.
+    """
+    declared = re.search(r'REFUSED_SECTION_ID\s*=\s*"([^"]+)"', _API_SECTIONS_TS.read_text(encoding="utf-8"))
+    assert declared, "api-sections.ts declares no REFUSED_SECTION_ID"
+    sections = _sections()
+    assert declared[1] in {s["id"] for s in sections}, (
+        f"REFUSED_SECTION_ID {declared[1]!r} names no section of api-sections.json"
+    )
+    refused = sum(len(s.get("packages", [])) for s in sections if s["id"] == declared[1])
+    built = sum(len(s.get("packages", [])) for s in sections if s["id"] != declared[1])
+    assert refused > 0, "the refused section lists no package"
+    assert built == _peft_type_count() - refused, (
+        f"{built} packages are listed outside the refused section but PeftType names "
+        f"{_peft_type_count()} methods, {refused} of them refused"
+    )
+    card = _API_INDEX_PAGE.read_text(encoding="utf-8")
+    assert 'builtPackages("lucid.peft")' in card, (
+        "the /api card must count builtPackages(), not every package a section lists"
+    )
+
+
 # ── every export has an api-data entry (and so a sidebar leaf) ──────────────
 
 def _members_by_path() -> dict[str, tuple[str, dict]]:

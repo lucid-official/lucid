@@ -102,6 +102,20 @@ export function sectionedSlugs(): string[] {
   );
 }
 
+/** Id of the section that lists the methods whose adapter is not built — their
+ *  config is read and written, but nothing trains.  ``test_peft_docs.py`` and
+ *  the ``index.card-count`` audit contract read the same id. */
+export const REFUSED_SECTION_ID = "refused";
+
+/** The sub-packages of a sectioned package that do what their name says: every
+ *  listed package outside the refused section.  This is the number the API
+ *  index card and the guides give as "how many methods". */
+export function builtPackages(parent: string): SectionPackage[] {
+  return (API_SECTIONS[parent]?.sections ?? [])
+    .filter((s) => s.id !== REFUSED_SECTION_ID)
+    .flatMap((s) => s.packages ?? []);
+}
+
 /** The members a section selects, by section id.
  *
  *  Sections with an explicit selector claim first, in order (a member goes to
