@@ -127,7 +127,10 @@ export async function ModuleOverview({ data }: ModuleOverviewProps) {
 
   // A package that groups its content in ``api-sections.json`` (``lucid.peft``)
   // renders those sections in order instead; its overview page
-  // (``lucid.peft.tuners``) renders the sub-package sections alone.
+  // (``lucid.peft.tuners``) renders the sub-package sections, and then lists
+  // its own classes and functions like any other module page — the member
+  // sections belong to the package that owns them, so an overview page's own
+  // members would otherwise be drawn nowhere (``MixedModel``).
   const ownSections = API_SECTIONS[data.slug]?.sections;
   const overviewSections = sectionsForOverview(data.slug);
   const groupedSections = ownSections ?? overviewSections;
@@ -235,21 +238,21 @@ export async function ModuleOverview({ data }: ModuleOverviewProps) {
           <AttributeTable attributes={data.attributes} />
         </MemberSection>
       )}
-      {!groupedSections && classes.length > 0 && (
+      {!ownSections && classes.length > 0 && (
         <MemberSection title="Classes" slug={data.slug} accent="primary">
           {classes.map((cls) => (
             <ClassCard key={cls.name} cls={cls} moduleSlug={data.slug} />
           ))}
         </MemberSection>
       )}
-      {!groupedSections && functions.length > 0 && (
+      {!ownSections && functions.length > 0 && (
         <MemberSection title="Functions" slug={data.slug} accent="blue">
           {functions.map((fn) => (
             <FunctionCard key={fn.name} fn={fn} moduleSlug={data.slug} />
           ))}
         </MemberSection>
       )}
-      {!groupedSections && weightClasses.length > 0 && (
+      {!ownSections && weightClasses.length > 0 && (
         <MemberSection title="Weights" slug={data.slug} accent="primary">
           {weightClasses.map((cls) => (
             <ClassCard key={cls.name} cls={cls} moduleSlug={data.slug} />

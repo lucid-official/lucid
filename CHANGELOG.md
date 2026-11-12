@@ -177,6 +177,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - take back what a failed add put in the tree (LCD-972)
 
+- draw an overview page's own members (LCD-973)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

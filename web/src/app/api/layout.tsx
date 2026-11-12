@@ -95,6 +95,12 @@ const BOTTOM_PINNED: string[] = [
 // Build sidebar tree — server-side, reads public/api-data/*.json
 // ---------------------------------------------------------------------------
 
+/** The members of a page that the sidebar draws a leaf for: classes and
+ *  functions.  One definition, so a page cannot list a member the tree lacks. */
+function listedMembers(data: ApiModule): ApiMember[] {
+  return data.members.filter((m) => isApiClass(m) || m.kind === "function");
+}
+
 function memberLeaf(slug: string, m: ApiMember): SidebarItem {
   // Encode the class-kind into the badge code so the sidebar pill picks
   // up the matching colour token.  Keep ``"C"`` for plain classes so
@@ -264,9 +270,7 @@ function buildFamilyLeafItem(slug: string, data: ApiModule): SidebarItem {
     ? data.canonical_name
     : titleize(dirName);
 
-  const allMembers = data.members.filter(
-    (m) => isApiClass(m) || m.kind === "function",
-  );
+  const allMembers = listedMembers(data);
 
   // Partition into the family slots.  Membership is decided by what a
   // class *inherits*, not by where it happens to sit in the member list:
@@ -396,7 +400,7 @@ function buildFamilyLeafItem(slug: string, data: ApiModule): SidebarItem {
  *  "Components" group.  The default bucketing by source file would put a
  *  one-class "Configuration" group beside a one-class "Tuner Model" group. */
 function buildTunerItem(slug: string, data: ApiModule): SidebarItem {
-  const members = data.members.filter((m) => isApiClass(m) || m.kind === "function");
+  const members = listedMembers(data);
   const configs = members.filter((m) => isApiClass(m) && m.name.endsWith("Config"));
   const models = members.filter((m) => isApiClass(m) && m.name.endsWith("Model"));
   const taken = new Set<ApiMember>([...configs, ...models]);
@@ -423,6 +427,17 @@ function buildTunerItem(slug: string, data: ApiModule): SidebarItem {
   };
 }
 
+/** The class and function members of an overview page; none when the page has
+ *  no data yet (the JSON is not built — the link degrades to a plain one). */
+function overviewMembers(slug: string): ApiMember[] {
+  try {
+    const data = loadApiData(slug);
+    return isApiModule(data) ? listedMembers(data) : [];
+  } catch {
+    return [];
+  }
+}
+
 function buildModuleItem(slug: string): SidebarItem {
   let memberItems: SidebarItem[] | undefined;
   let badge: string | undefined;
@@ -438,9 +453,7 @@ function buildModuleItem(slug: string): SidebarItem {
     }
 
     if (isApiModule(data)) {
-      const members = data.members.filter(
-        (m) => isApiClass(m) || m.kind === "function",
-      );
+      const members = listedMembers(data);
 
       // Family-root pages (lucid.models.vision/text/generative) — and the
       // top-level lucid.models — carry a ``family_groups`` array instead of
@@ -578,7 +591,8 @@ function buildApiSidebar(): SidebarItem[] {
    *  A sub-package section holds the tuner pages; a member section holds a
    *  slice of the package's own classes and functions (``splitMembers`` — the
    *  ``rest`` section takes whatever no other claimed).  The overview page
-   *  (``lucid.peft.tuners``) is one link at the top.  A documented
+   *  (``lucid.peft.tuners``) is one link at the top, opening onto the classes
+   *  and functions that page itself defines.  A documented
    *  sub-package no section lists still gets an entry, under "More", so a
    *  tuner added without touching the file shows up (the completeness test is
    *  what insists it be listed). */
@@ -587,18 +601,23 @@ function buildApiSidebar(): SidebarItem[] {
     const data = (() => {
       try { return loadApiData(slug); } catch { return null; }
     })();
-    const members = data && isApiModule(data)
-      ? data.members.filter((m) => isApiClass(m) || m.kind === "function")
-      : [];
+    const members = data && isApiModule(data) ? listedMembers(data) : [];
     const picked = splitMembers(members, plan.sections);
 
     const children: SidebarItem[] = [];
     const listed = new Set<string>();
     if (plan.overview && docSlugs.has(plan.overview)) {
       listed.add(plan.overview);
+      // The overview page lists its own classes and functions after the
+      // sub-package sections (``ModuleOverview``), and they belong to no
+      // section of ``plan`` — so each gets a leaf under the link, or a page
+      // member would be reachable from the page alone (``MixedModel`` on
+      // ``lucid.peft.tuners``).
+      const own = overviewMembers(plan.overview);
       children.push({
         title: `All ${packageLabel(plan.overview)}`,
         href: `/api/${plan.overview}`,
+        items: own.length > 0 ? groupMembers(plan.overview, own) : undefined,
       });
     }
 

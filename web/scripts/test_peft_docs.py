@@ -162,12 +162,96 @@ def _members_by_path() -> dict[str, tuple[str, dict]]:
     return seen
 
 
+def _split_members(members: list[dict], sections: list[dict]) -> dict[str, list[dict]]:
+    """Port of ``splitMembers`` (web/src/lib/api-sections.ts): a section with an
+    explicit selector claims first, in order; a ``rest`` section takes what is left."""
+    claimed: set[str] = set()
+    picked: dict[str, list[dict]] = {}
+    for section in sections:
+        sel = section.get("members")
+        if not sel or sel.get("rest"):
+            continue
+        subs = set(sel.get("subcategories", []))
+        hit = [
+            m
+            for m in members
+            if m["path"] not in claimed
+            and (not subs or (m.get("subcategory") or "").split("/")[0] in subs)
+            and (not sel.get("kind") or m["kind"] == sel["kind"])
+        ]
+        claimed.update(m["path"] for m in hit)
+        picked[section["id"]] = hit
+    for section in sections:
+        if (section.get("members") or {}).get("rest"):
+            picked[section["id"]] = [m for m in members if m["path"] not in claimed]
+    return picked
+
+
+def _sectioned_plans() -> dict[str, dict]:
+    """Every package ``api-sections.json`` groups, by slug."""
+    return json.loads(_SECTIONS.read_text(encoding="utf-8"))
+
+
+def _sidebar_leaf_paths(slug: str) -> set[str]:
+    """Paths of the members the sidebar gives a leaf, for the page ``slug``
+    (``buildSectionedItem`` in web/src/app/api/layout.tsx):
+
+    - a package that owns sections (``lucid.peft``): the members its member
+      sections select — ``rest`` makes that every one;
+    - the overview page of such a package (``lucid.peft.tuners``): its own
+      classes and functions, under the "All …" link — they belong to no section;
+    - any other page (a tuner): its classes and functions.
+
+    The DOM side — that the leaf is really drawn — is the e2e test
+    ``an overview page lists its own classes and gives each a sidebar leaf``.
+    """
+    members = [m for m in _page(slug)["members"] if m["kind"] in ("class", "function")]
+    plans = _sectioned_plans()
+    if slug in plans:
+        picked = _split_members(members, plans[slug]["sections"])
+        return {m["path"] for group in picked.values() for m in group}
+    return {m["path"] for m in members}
+
+
 def test_sidebar_draws_a_leaf_for_every_member() -> None:
     """The sidebar builds a leaf for each ``class`` / ``function`` member and
     nothing else: a member of any other kind would be on the page and in no
-    navigation."""
+    navigation.  That holds for every page the sidebar draws — the package that
+    owns the sections, its overview page and each tuner — and for the overview
+    page it once did not: ``MixedModel`` was on ``/api/lucid.peft.tuners`` and
+    reachable from no link."""
     for _path, (slug, member) in _members_by_path().items():
         assert member["kind"] in ("class", "function"), (slug, member["name"], member["kind"])
+    pages = ["lucid.peft", "lucid.peft.tuners", *(f"lucid.peft.tuners.{n}" for n in _tuner_dirs())]
+    for slug in pages:
+        drawn = _sidebar_leaf_paths(slug)
+        undrawn = [m["name"] for m in _page(slug)["members"] if m["path"] not in drawn]
+        assert not undrawn, f"{slug}: on the page and under no sidebar leaf: {undrawn}"
+
+
+def test_every_overview_page_has_its_own_members_drawn() -> None:
+    """The sweep behind the overview fix: for each package that names an overview
+    page in ``api-sections.json``, that page exists and each class and function it
+    defines itself is drawn.  The owner's member sections never see them, so
+    the overview page and its sidebar link are their only way in."""
+    overviews = [plan["overview"] for plan in _sectioned_plans().values() if plan.get("overview")]
+    assert overviews, "api-sections.json names no overview page"
+    for overview in overviews:
+        own = [m for m in _page(overview)["members"] if m["kind"] in ("class", "function")]
+        drawn = _sidebar_leaf_paths(overview)
+        undrawn = [m["name"] for m in own if m["path"] not in drawn]
+        assert not undrawn, f"{overview}: its own members are drawn nowhere: {undrawn}"
+
+
+def test_tuners_overview_lists_mixed_model() -> None:
+    """``lucid.peft.tuners`` defines ``MixedModel`` (the host of a model that holds
+    several methods at once); it is reachable only through the overview page, so
+    the overview page must draw it."""
+    page = _page("lucid.peft.tuners")
+    names = {m["name"]: m for m in page["members"]}
+    assert "MixedModel" in names, sorted(names)
+    assert names["MixedModel"]["kind"] == "class"
+    assert names["MixedModel"]["path"] in _sidebar_leaf_paths("lucid.peft.tuners")
 
 
 def test_every_lucid_peft_export_is_documented() -> None:

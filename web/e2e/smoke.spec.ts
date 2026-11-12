@@ -111,6 +111,37 @@ test.describe("lucid.peft reference", () => {
     }
   });
 
+  // The overview page of a sectioned package (api-sections.json "overview")
+  // defines classes of its own — ``MixedModel`` on /api/lucid.peft.tuners —
+  // that no section of the package claims.  Each one needs a card on the page
+  // and a leaf under the sidebar's "All …" link, or it is reachable from
+  // neither.
+  test("an overview page lists its own classes and gives each a sidebar leaf", async ({ page }) => {
+    const sections = JSON.parse(
+      readFileSync(join(process.cwd(), "data", "api-sections.json"), "utf8"),
+    ) as Record<string, { overview?: string }>;
+    const overviews = Object.values(sections)
+      .map((plan) => plan.overview)
+      .filter((slug): slug is string => Boolean(slug));
+    expect(overviews.length).toBeGreaterThan(0);
+
+    for (const slug of overviews) {
+      const data = JSON.parse(
+        readFileSync(join(process.cwd(), "public", "api-data", `${slug}.json`), "utf8"),
+      ) as { members: { name: string; kind: string }[] };
+      const own = data.members.filter((m) => m.kind === "class" || m.kind === "function");
+      await page.goto(`/api/${slug}`, { waitUntil: "networkidle" });
+      const sidebar = page.locator('aside[aria-label="Documentation navigation"]');
+      for (const { name } of own) {
+        const href = `/api/${slug}/${name}`;
+        await expect(page.locator(`#main-content a[href$="${href}"]`), `${name} card`).toHaveCount(1);
+        await expect(sidebar.locator(`a[href$="${href}"]`), `${name} sidebar leaf`).toBeVisible();
+      }
+    }
+    // MixedModel is the reason the test exists; name it in case the data moves.
+    await expect(page.locator('#main-content a[href$="/lucid.peft.tuners/MixedModel"]')).toHaveCount(1);
+  });
+
   test("a reST literal block renders as code, not as a paragraph", async ({ page }) => {
     await page.goto("/api/lucid.peft", { waitUntil: "networkidle" });
     const code = page.locator("#main-content pre", { hasText: "get_peft_model(base_model, config)" });
