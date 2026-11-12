@@ -15,6 +15,7 @@ are keyed by identity because ``Linear`` is also ``nn.Linear`` and four
 quantised layers.
 """
 
+import annotationlib
 import atexit
 import functools
 import inspect
@@ -269,7 +270,13 @@ def _family_roots() -> Iterator[type[_BaseTunerLayer]]:
 
 def _layer_builder(base: type[nn.Module], layer: type[_BaseTunerLayer]) -> Callable[[], Any]:
     """Wrap a fresh ``base`` module in ``layer`` with a rank-2 adapter, giving it what it takes."""
-    parameters = inspect.signature(layer).parameters
+    # Names and kinds only, so a forward reference is enough: reading the annotations
+    # by value raised here, at import, when a layer named a type that is bound only for
+    # type checkers, and took every module that imports this one down with it, the
+    # signature guard (lucid/test/unit/test_public_signatures.py) included.
+    parameters = inspect.signature(
+        layer, annotation_format=annotationlib.Format.FORWARDREF
+    ).parameters
     keywords = {name: 2 for name in ("r", "alpha") if name in parameters}
     # A layer taking ``**kwargs`` (lora.MultiheadAttention) forwards the rank to its base class.
     if "r" not in keywords and any(p.kind is p.VAR_KEYWORD for p in parameters.values()):
