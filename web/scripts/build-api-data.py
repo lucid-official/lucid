@@ -51,8 +51,7 @@ if TYPE_CHECKING:
 # the call.  Griffe's stub-overload merger then looks up ``lucid.compile`` while
 # merging the package stub, finds the *submodule* (a ``Module``) under that name,
 # and crashes on ``Module.parameters`` — taking down whichever module happens to
-# be loaded first on a worker (the api-data for that module silently goes
-# unbuilt).  Guard the merger so a name that resolves to a non-Function member is
+# be loaded first (the api-data for that module silently goes unbuilt).  Guard the merger so a name that resolves to a non-Function member is
 # skipped rather than fatal; real function-overload merges are untouched.
 
 _GRIFFE_GUARD_INSTALLED = False
@@ -2613,53 +2612,6 @@ def _build_family_groups(family_root_slug: str) -> list[dict[str, Any]]:
     return groups
 
 
-# ── ProcessPool worker plumbing ────────────────────────────────────────────
-# These two functions sit at module scope (not nested) so the worker
-# processes can re-import this script and call them by name — that's
-# how ``ProcessPoolExecutor`` smuggles work across the fork boundary.
-# The Griffe loader is created lazily in each worker the first time
-# it's needed; subsequent calls reuse the cached object so the
-# expensive walk-of-lucid happens at most once per worker.
-
-_WORKER_LOADER: Any = None
-
-
-def _worker_init() -> None:
-    """ProcessPool initialiser.  Suppresses Griffe's per-mismatch
-    warnings (the parent process already printed them; duplicating
-    across N workers triples the noise on real ones)."""
-    import logging as _logging
-    _logging.getLogger("griffe").setLevel(_logging.ERROR)
-    _logging.getLogger("mkdocstrings").setLevel(_logging.ERROR)
-
-
-def _worker_loader() -> Any:
-    """Lazy per-worker Griffe loader.  Cached on a module-global so
-    every task on the same worker process shares one loader instance
-    — the AST walk of ``lucid/`` is the dominant cost and we want it
-    paid once per worker, not once per task."""
-    global _WORKER_LOADER
-    if _WORKER_LOADER is None:
-        _install_griffe_overload_guard()
-        from griffe import GriffeLoader, Parser
-        _WORKER_LOADER = GriffeLoader(
-            docstring_parser=Parser.numpy,
-            search_paths=[str(LUCID_SRC)],
-            allow_inspection=False,
-        )
-    return _WORKER_LOADER
-
-
-def _worker_build_one(slug: str, griffe_path: str, sha: str) -> str:
-    """Entry point ``ProcessPoolExecutor`` calls per task.  Wraps
-    :func:`build_one` with worker-local loader / parser plumbing and
-    returns the slug so the parent's ``as_completed`` loop can stamp
-    a progress line."""
-    from griffe import Parser
-    build_one(slug, griffe_path, _worker_loader(), Parser.numpy, sha)
-    return slug
-
-
 def build_one(slug: str, griffe_path: str, loader: Any, parser: Any, sha: str) -> None:
     from griffe import Module as GriffeModule, Class as GriffeClass
 
@@ -2952,36 +2904,8 @@ def main() -> None:
             (slug, filter_subcat) for slug, filter_subcat in synth_slugs.items()
         ]
 
-    # ── Parallel manifest builds ────────────────────────────────────────
-    # Each manifest slug is independent — distribute across a process
-    # pool so the per-module work overlaps.  Measured speedup vs.
-    # sequential is modest (~20-30 %) because each worker re-walks
-    # ``lucid/`` once for its first task — that cost dominates over the
-    # per-module emit work — but it's still wall-clock cheaper than
-    # serial, and the worker model leaves room to share more state in
-    # the future.
-    #
-    # Synth slugs need ``lucid_data`` (heavy to pickle into workers)
-    # and are cheap individually, so we keep them on the main process
-    # below.
-    #
-    # ``LUCID_API_BUILD_WORKERS`` overrides the pool size for benchmarking;
-    # ``0`` or ``1`` disables parallelism (single-process fallback for
-    # easier debugging of build crashes).
-    n_workers_env = os.environ.get("LUCID_API_BUILD_WORKERS")
-    if n_workers_env is not None:
-        try:
-            n_workers = int(n_workers_env)
-        except ValueError:
-            n_workers = 0
-    else:
-        # Cap at 8 even on 16-core M-Max — Griffe's AST walk per worker
-        # is GIL-free but spawns ``importlib`` machinery whose I/O
-        # contention dominates beyond ~8 parallel readers.
-        n_workers = 1  # single-process reuses warm GriffeLoader + _AST_DOC_INDEX
-
     completed: list[str] = []
-    # ``failed`` tracks every slug whose worker threw — we surface
+    # ``failed`` tracks every slug whose build raised — we surface
     # them at the end with a hard exit code so CI / pre-commit never
     # accepts a partially-emitted JSON dir.  Earlier behaviour was to
     # print the failure and move on, which left stale builds passing
@@ -2995,64 +2919,20 @@ def main() -> None:
             f"  {time.monotonic() - t_start:6.1f}s  peak {_peak_rss_gb():.2f} GB"
         )
 
-    if n_workers > 1 and len(manifest_items) > 1:
-        from concurrent.futures import ProcessPoolExecutor, as_completed
-        import signal as _signal
-        _emit(f"  [pool] {n_workers} workers building {len(manifest_items)} manifest module(s)…")
-        # SIGINT cleanup: a bare ``with ProcessPoolExecutor`` leaves
-        # worker processes running for a few seconds after Ctrl-C
-        # while the executor drains in-flight tasks.  Installing an
-        # explicit handler that calls ``pool.shutdown(wait=False,
-        # cancel_futures=True)`` makes the cancel snappy.  We restore
-        # the prior handler on the normal-exit path so subsequent
-        # phases of the build pipeline don't inherit it.
-        prev_sigint = _signal.getsignal(_signal.SIGINT)
-        pool: Any = ProcessPoolExecutor(
-            max_workers=n_workers,
-            initializer=_worker_init,
-        )
-
-        def _on_sigint(_signum: int, _frame: Any) -> None:
-            print("\n  [pool] SIGINT received — shutting down workers…", file=sys.stderr)
-            try:
-                pool.shutdown(wait=False, cancel_futures=True)
-            except Exception:
-                pass
-            # Re-raise as KeyboardInterrupt so the outer ``with``
-            # cleanup runs and the script exits with the canonical
-            # 130 exit code.
-            raise KeyboardInterrupt
-
-        _signal.signal(_signal.SIGINT, _on_sigint)
+    # One process, one Griffe parse of ``lucid/`` shared by every page (see
+    # ``_load_object``).  A worker pool was removed in LCD-970: every worker
+    # re-parses the tree (~4 s, ~0.3 GB each), so it only added cost -- the
+    # full build is ~10 s here and a pool of 2/4/8 took 14/13/16 s (best of 3).
+    for slug, griffe_path in manifest_items:
         try:
-            with pool:
-                futures = {
-                    pool.submit(_worker_build_one, slug, griffe_path, sha): slug
-                    for slug, griffe_path in manifest_items
-                }
-                for fut in as_completed(futures):
-                    slug = futures[fut]
-                    try:
-                        fut.result()
-                    except Exception as exc:
-                        print(f"  [error] {slug}: {exc}", file=sys.stderr)
-                        failed.append((slug, str(exc)))
-                    else:
-                        _on_complete(slug)
-        finally:
-            _signal.signal(_signal.SIGINT, prev_sigint)
-    else:
-        for slug, griffe_path in manifest_items:
-            try:
-                build_one(slug, griffe_path, loader, Parser.numpy, sha)
-                _on_complete(slug)
-            except Exception as exc:
-                print(f"  [error] {slug}: {exc}", file=sys.stderr)
-                failed.append((slug, str(exc)))
+            build_one(slug, griffe_path, loader, Parser.numpy, sha)
+            _on_complete(slug)
+        except Exception as exc:
+            print(f"  [error] {slug}: {exc}", file=sys.stderr)
+            failed.append((slug, str(exc)))
 
-    # Synth slugs stay on the main process — ``lucid_data`` is large
-    # (whole-package serialised tree) and pickling it into each worker
-    # would dominate the wall-clock gain.
+    # Synth slugs are cut from ``lucid_data`` (the whole-package serialised
+    # tree), so they follow the manifest pages in the same process.
     for slug, filter_subcat in synth_items:
         assert lucid_data is not None
         try:
@@ -3064,7 +2944,7 @@ def main() -> None:
 
     # ── Post-build sanity check ─────────────────────────────────────────
     # Verify every expected slug emitted a JSON.  Catches the failure
-    # mode where a worker raised silently or wrote nothing.  Without
+    # mode where a build raised silently or wrote nothing.  Without
     # this, ``pnpm dev`` could ship a docs site missing whole modules
     # and the only signal would be 404s on user click.
     expected_slugs = {slug for slug, _ in manifest_items} | {
@@ -3084,7 +2964,7 @@ def main() -> None:
 
     if failed or missing_files:
         print(
-            f"\n  Build incomplete — {len(failed)} worker error(s), "
+            f"\n  Build incomplete — {len(failed)} build error(s), "
             f"{len(missing_files)} missing output(s).",
             file=sys.stderr,
         )

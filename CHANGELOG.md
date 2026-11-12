@@ -290,6 +290,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - stackability is declared per class, not inherited
 - type the api-data object loader without Any (LCD-969)
 - share the adapter load flows between wrappers (LCD-966)
+- drop the api-data builder's worker pool (LCD-970)
 
 ---
 
