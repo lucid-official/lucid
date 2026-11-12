@@ -797,11 +797,15 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
         layer runs its folded weights and then the active adapters it has not
         folded, so the model computes what it did unmerged.  The reference runs a
         merged layer's base alone, which drops the others; Lucid departs from that
-        on purpose (LCD-971).  A method whose adapters do not compute the same
-        function once split refuses it: those that apply in order (OFT, BOFT, HRA,
-        RoAd's ``road_2`` and ``road_4``, MiSS / Bone's ``bat``) take only the first
-        of the active adapters, in their order, and a LoRA layer refuses to fold some
-        adapters while a DoRA one stays unmerged.
+        on purpose (LCD-971).  Merging an adapter that is not active adds it: the
+        layers then run the weights with it folded in and the active adapters they
+        have not folded (the base with that adapter alone, in the reference).  A
+        method whose adapters do not compute the same function once split refuses
+        it: those that apply in order (OFT, BOFT, HRA, RoAd's ``road_2`` and
+        ``road_4``, MiSS / Bone's ``bat``) take only the first of the active
+        adapters, in their order; a LoRA layer refuses to fold some adapters while
+        a DoRA one stays unmerged; LN tuning, which runs one adapter's copy at a
+        time, refuses to fold an active adapter while another is active.
 
         Parameters
         ----------

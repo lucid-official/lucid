@@ -168,6 +168,17 @@ class LNTuningLayer(_ConfigLayer, base_type=nn.Module):
             self.unmerge()
         super().merge(safe_merge, adapter_names)
 
+    @override
+    def _partial_merge_problem(self, folded: list[str], rest: list[str]) -> str | None:
+        # One copy runs at a time: with an active adapter folded, the others cannot go on beside it.
+        folded_active = [name for name in folded if name in self.active_adapters]
+        if not folded_active:
+            return None
+        return (
+            f"LN tuning runs one adapter's copy at a time, so {rest} cannot go on applying "
+            f"after the active {folded_active} is folded into the base"
+        )
+
     # ── the forward pass ──────────────────────────────────────────────────
 
     @override

@@ -350,29 +350,29 @@ class MixedModel(_BaseTuner):
         return ordered
 
     @override
-    def _merge(
-        self, adapter_names: list[str] | None, safe_merge: bool, *, keeps_layers: bool
+    def merge_adapter(
+        self, adapter_names: list[str] | None = None, safe_merge: bool = False
     ) -> None:
         r"""Fold adapter updates into their base weights, each module's layers lowest first.
 
-        What ``merge_adapter`` and ``merge_and_unload`` do.  A layer's update is computed from
-        the weight the layers beneath it have left, so the order is the stack's, and a merge
-        that would fold an update under a layer that transforms it differently is refused
-        before any weight is written.  A layer standing on others folds into the user's module,
-        so what is left unmerged beneath a merged layer must be a sum of terms that commutes
-        with it: refused are the merge of a layer while a lower layer keeps adapters in use
-        (its adapters not merged, now or before), and of a lower layer after a higher one has
-        been merged, unless both layers add a term to the output (LoRA, LoHa, LoKr, AdaLoRA,
-        SHiRA); a layer above a merged one may stay as it is.
+        A layer's update is computed from the weight the layers beneath it have left, so the
+        order is the stack's, and a merge that would fold an update under a layer that
+        transforms it differently is refused before any weight is written.  A layer
+        standing on others folds into the user's module, so what is left unmerged beneath a
+        merged layer must be a sum of terms that commutes with it: refused are the merge of a
+        layer while a lower layer keeps adapters in use (its active adapters not merged, now
+        or before), and of a lower layer after a higher one has been merged, unless both
+        layers add a term to the output (LoRA, LoHa, LoKr, AdaLoRA, SHiRA); a layer above a
+        merged one may stay as it is.  A layer merged for some of its own adapters goes on
+        applying the others, as in a single method's model, and refuses the splits that method
+        cannot reproduce (``_BaseTuner.merge_adapter``).
 
         Parameters
         ----------
         adapter_names : list of str, optional
             Adapters to merge; the active ones by default.
-        safe_merge : bool
+        safe_merge : bool, default=False
             Check every merged weight for NaN / inf before writing any.
-        keeps_layers : bool
-            Whether the layers stay (``merge_adapter``), so each must go on computing its function.
 
         Raises
         ------
@@ -380,8 +380,16 @@ class MixedModel(_BaseTuner):
             A base weight is shared with another module, or the adapter is disabled.
         ValueError
             A name is not one of the model's adapters, the merge would fold a layer's update
-            under a layer that transforms it, or ``safe_merge`` found a non-finite merged weight.
+            under a layer that transforms it or leave a layer unable to apply what stays
+            unmerged, or ``safe_merge`` found a non-finite merged weight.
         """
+        super().merge_adapter(adapter_names, safe_merge)
+
+    @override
+    def _merge(
+        self, adapter_names: list[str] | None, safe_merge: bool, *, keeps_layers: bool
+    ) -> None:
+        """Check the stack's merge order, then fold: the shared step of ``merge_adapter`` and ``merge_and_unload``."""
         names = self.active_adapters if adapter_names is None else list(adapter_names)
         self._require_known(names)
         self._check_merge(names)

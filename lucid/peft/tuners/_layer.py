@@ -375,9 +375,10 @@ class _BaseTunerLayer(nn.Module, ABC):
 
         What a merged layer does with the active adapters it has not folded is applying them
         (``_applied``); whether that is the function the unmerged layer computes depends on
-        the method (``_partial_merge_problem``).  Nothing is checked while every active
-        adapter is folded, nor for one that is folded alone, which changes the function by
-        design.  The tuner calls it before it writes anything.
+        the method (``_partial_merge_problem``).  Nothing is checked once every active adapter
+        is folded, since none is left to apply.  An adapter that is not active changes the
+        function by being folded, as it should; only the active ones that stay unmerged are
+        held to it.  The tuner calls it before it writes anything.
 
         Parameters
         ----------
@@ -416,7 +417,8 @@ class _BaseTunerLayer(nn.Module, ABC):
         rest : list of str
             The active adapters the forward pass still applies, in their order.
         """
-        del rest  # the order alone decides it; a method whose answer depends on what stays overrides
+        # The order alone decides it; a method whose answer depends on what stays overrides this.
+        del rest
         if type(self)._ordered:
             return self._ordered_problem(folded)
         return None
@@ -437,7 +439,7 @@ class _BaseTunerLayer(nn.Module, ABC):
         return (
             f"its adapters apply one after another in the order they are active, {active}, and "
             f"the ones folded in are applied first, so they must be the first of them ({first}), "
-            f"not {folded_active}; merge those, or name every one of them"
+            f"not {folded_active}; merge those, or name every one of them in their active order"
         )
 
     def _adapter_names(self) -> list[str]:
@@ -561,6 +563,9 @@ class _BaseTunerLayer(nn.Module, ABC):
         that way (rotations that must apply in order, DoRA reading the weight)
         refuses the split in the tuner's ``merge_adapter``, before it writes
         anything; this method, called on a layer directly, does not check it.
+        Merging an adapter that is not active adds it: the layer then runs the weights
+        with it folded in and the active adapters it has not folded (the base with that
+        adapter alone, in the reference).
 
         Parameters
         ----------
