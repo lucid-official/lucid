@@ -1016,6 +1016,100 @@ class TestMergingOneLayerOfAPair:
             )
 
 
+# ── a layer of a stack merged for some of its adapters (LCD-971) ───────────
+
+
+#: ``(lower, upper)``: the lower layer holds two adapters, ``again`` beside its own.
+_SPLIT_STACKS: list[_Stack] = [
+    (PeftType.LORA, PeftType.LOHA),
+    (PeftType.LORA, PeftType.OFT),
+    (PeftType.LORA, PeftType.IA3),
+    (PeftType.LORA, PeftType.ROAD),
+    (PeftType.HIRA, PeftType.LORA),
+    (PeftType.HIRA, PeftType.IA3),
+    (PeftType.LOHA, PeftType.LORA),
+    (PeftType.OFT, PeftType.LORA),
+    (PeftType.ROAD, PeftType.LORA),
+]
+
+
+@pytest.mark.filterwarnings("ignore:Unmerge result can be inaccurate:UserWarning")
+@pytest.mark.filterwarnings("ignore:Already merged:UserWarning")
+@pytest.mark.parametrize("stack", _SPLIT_STACKS, ids=_id)
+class TestALowerLayerMergedForSomeOfItsAdapters:
+    """The layer goes on applying the adapters it did not fold, so the layers above see the same function.
+
+    What may be folded above it is what ``merge_adapter`` already allowed while the lower layer kept
+    adapters in use: an adapter it did not fold still counts as in use.
+    """
+
+    @staticmethod
+    def _built(stack: _Stack, device: str, scratch: Path) -> _Built:
+        lower = stack[0]
+        built = _build(stack, device, scratch)
+        built.host.add_adapter("again", _config(lower, device, scratch))
+        _move_off_the_start(built.base, "again", 7)
+        built.host.set_adapter([built.names[0], "again", *built.names[1:]])
+        return built
+
+    def test_one_of_two_adapters_of_the_lower_layer_may_be_merged(
+        self, stack: _Stack, device: str, tmp_path: Path
+    ) -> None:
+        built = self._built(stack, device, tmp_path)
+        weights = _snapshot(built.base)
+        with lucid.no_grad():
+            adapted = _call(built.base, device)
+            tolerance = _TOLERANCE * max(1.0, magnitude(adapted))
+            built.host.merge_adapter(adapter_names=built.names[:1])
+            assert span(_call(built.base, device), adapted) < tolerance
+            built.host.unmerge_adapter()
+            assert span(_call(built.base, device), adapted) < tolerance
+        for before, after in zip(weights, _snapshot(built.base), strict=True):
+            assert span(before, after) < _TOLERANCE
+
+    def test_the_layer_above_is_merged_after_it_only_where_both_add_to_the_output_or_none_stays(
+        self, stack: _Stack, device: str, tmp_path: Path
+    ) -> None:
+        built = self._built(stack, device, tmp_path)
+        lower, upper = built.names[0], built.names[1]
+        with lucid.no_grad():
+            adapted = _call(built.base, device)
+            tolerance = _TOLERANCE * max(1.0, magnitude(adapted))
+            built.host.merge_adapter(adapter_names=[lower])
+            before = _structure(built.base, built.host)
+            if not _both_add_to_output(stack):
+                with pytest.raises(ValueError, match=r"\['again'\] stay unmerged"):
+                    built.host.merge_adapter(adapter_names=[upper])
+                _unchanged(built.base, built.host, before)
+                # The same names in one call from the start: the lower layer still keeps one in use.
+                built.host.unmerge_adapter()
+                before = _structure(built.base, built.host)
+                with pytest.raises(ValueError, match=r"\['again'\] stay unmerged"):
+                    built.host.merge_adapter(adapter_names=[lower, upper])
+                _unchanged(built.base, built.host, before)
+                built.host.merge_adapter(adapter_names=[lower])
+            else:
+                built.host.merge_adapter(adapter_names=[upper])
+                assert span(_call(built.base, device), adapted) < tolerance
+            # Once the lower layer has folded both its adapters, the one above may be folded.
+            built.host.merge_adapter(adapter_names=[lower, "again"])
+            built.host.merge_adapter(adapter_names=[upper])
+            assert span(_call(built.base, device), adapted) < tolerance
+            built.host.unmerge_adapter()
+            assert span(_call(built.base, device), adapted) < tolerance
+
+    def test_merge_and_unload_of_one_adapter_is_the_model_with_that_adapter_alone(
+        self, stack: _Stack, device: str, tmp_path: Path
+    ) -> None:
+        built = self._built(stack, device, tmp_path)
+        with lucid.no_grad():
+            built.host.set_adapter(built.names[:1])
+            alone = _call(built.base, device)
+            built.host.set_adapter([built.names[0], "again", *built.names[1:]])
+            plain = built.host.merge_and_unload(adapter_names=built.names[:1])
+            assert span(_call(plain, device), alone) < _TOLERANCE * max(1.0, magnitude(alone))
+
+
 # ── a DoRA layer beneath: a variant of a method that reads the weight ──────
 
 

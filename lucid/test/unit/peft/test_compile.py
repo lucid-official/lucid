@@ -8,6 +8,7 @@ changes them — or a compiled model replays the executable of a state it
 has left: disabled, it still added the update; merged, it added it twice.
 """
 
+import warnings
 from collections.abc import Callable
 
 import pytest
@@ -15,6 +16,7 @@ import pytest
 import lucid
 import lucid.nn as nn
 from lucid.compile._core import signature
+from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.peft import LoraConfig, PeftModel, get_peft_model
 from lucid.peft.tuners.lora import Linear
 from lucid.test._fixtures.devices import metal_available
@@ -262,3 +264,43 @@ def test_every_adapter_switch_lands_in_the_compile_key() -> None:
     assert signature._module_state(peft) != before  # the layer holds another adapter
     peft.delete_adapter("third")
     assert signature._module_state(peft) == before
+
+
+@metal_only
+def test_compiled_follows_merging_one_of_two_active_adapters() -> None:
+    """A layer merged for one of its two active adapters still applies the other (LCD-971).
+
+    The compiled call follows each merge, and none of them sends it to eager: which adapters a
+    layer has folded is what its forward branches on, and it is in the compile key.
+    """
+    peft = _adapters("metal")
+    peft.base_model.set_adapter(["default", "other"])
+    compiled = lucid.compile(peft)
+    x = lucid.randn(4, 8).to("metal")
+    with warnings.catch_warnings(), lucid.no_grad():
+        warnings.simplefilter("error", CompileFallbackWarning)
+        both = peft(x)
+        assert _close(compiled(x), both)
+        for name in ("default", "other", "default"):
+            peft.base_model.merge_adapter(adapter_names=[name])
+            assert _close(peft(x), both)  # the layer still applies the other
+            assert _close(compiled(x), both), name
+            peft.base_model.unmerge_adapter()
+            assert _close(compiled(x), both), name
+        peft.base_model.merge_adapter(adapter_names=["default"])
+        peft.base_model.merge_adapter(adapter_names=["other"])
+        assert _close(compiled(x), both)
+
+
+def test_which_adapters_a_layer_has_folded_lands_in_the_compile_key() -> None:
+    peft = _adapters("cpu")
+    peft.base_model.set_adapter(["default", "other"])
+    states = {"none": signature._module_state(peft)}
+    peft.base_model.merge_adapter(adapter_names=["default"])
+    states["default"] = signature._module_state(peft)
+    peft.base_model.unmerge_adapter()
+    peft.base_model.merge_adapter(adapter_names=["other"])
+    states["other"] = signature._module_state(peft)
+    peft.base_model.merge_adapter(adapter_names=["default"])
+    states["both"] = signature._module_state(peft)
+    assert len(set(states.values())) == 4
