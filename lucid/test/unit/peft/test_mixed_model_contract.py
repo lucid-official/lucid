@@ -25,9 +25,10 @@ checked without anyone remembering to:
 
 import copy
 import dataclasses
+import inspect
 import itertools
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import NamedTuple
 
@@ -40,6 +41,7 @@ from lucid.peft import (
     IA3Config,
     LoHaConfig,
     LoraConfig,
+    LoraModel,
     OFTConfig,
     PeftConfig,
     PeftType,
@@ -85,7 +87,7 @@ _NOT_MIXED: dict[PeftType, str] = {
     PeftType.XLORA: "mixes LoRA experts it loads by name through a classifier and holds one adapter",
     PeftType.ADAPTION_PROMPT: "attends to a prompt inside one attention module and holds one adapter",
     PeftType.LN_TUNING: "swaps a norm layer for a trained copy, so no layer stands on it and one adapter",
-    PeftType.TRAINABLE_TOKENS: "writes rows of an embedding table through a slot of its own, not a layer",
+    PeftType.TRAINABLE_TOKENS: "rewrites the table rows it reads from its own base weight, so a layer beneath is dropped",
     PeftType.POLY: "routes low-rank skills per input, which no change of the weight holds",
     PeftType.LILY: "routes low-rank experts per input through tables the tuner shares",
     **dict.fromkeys(
@@ -193,14 +195,19 @@ def _build(
     *,
     order: str = "added",
     perturb: bool = True,
+    configs: Mapping[PeftType, PeftConfig] | None = None,
 ) -> _Built:
-    """``stack``'s adapters, lowest first, each moved well off its start, all active in ``order``."""
+    """``stack``'s adapters, lowest first, each moved well off its start, all active in ``order``.
+
+    A method's config is its recipe's unless ``configs`` names another (a variant of the method).
+    """
     base = RECIPES[stack[0]].base(dtype, device)
     clean = _call(base, device, dtype)
     names = [_name(p) for p in stack]
-    host = MixedModel(base, _config(stack[0], device, scratch, dtype), names[0])
+    chosen = {p: (configs or {}).get(p) or _config(p, device, scratch, dtype) for p in stack}
+    host = MixedModel(base, chosen[stack[0]], names[0])
     for peft_type, name in zip(stack[1:], names[1:], strict=True):
-        host.add_adapter(name, _config(peft_type, device, scratch, dtype))
+        host.add_adapter(name, chosen[peft_type])
     if perturb:
         for seed, name in enumerate(names, start=1):
             _move_off_the_start(base, name, seed)
@@ -764,6 +771,57 @@ class TestWhatAStackRefuses:
         built = _build((PeftType.LORA, PeftType.LOHA), "cpu", tmp_path)
         with pytest.raises(NotImplementedError, match="combine the adapters of one method"):
             built.host.add_weighted_adapter(["lora"], [1.0], "w")
+        with pytest.raises(NotImplementedError, match="combine the adapters of one method"):
+            built.host.add_weighted_adapter(
+                ["lora"], [1.0], "w", combination_type="cat", svd_rank=2, density=0.5
+            )
+
+    def test_the_refused_weighted_adapter_takes_the_arguments_of_the_one_it_stands_for(
+        self,
+    ) -> None:
+        """A call written for ``LoraModel`` reaches the refusal, not a ``TypeError``."""
+        mixed = inspect.signature(MixedModel.add_weighted_adapter).parameters
+        lora = inspect.signature(LoraModel.add_weighted_adapter).parameters
+        assert [(n, p.default) for n, p in mixed.items()] == [
+            (n, p.default) for n, p in lora.items()
+        ]
+
+    @pytest.mark.parametrize(
+        ("fields", "match"),
+        [
+            ({"use_dora": True}, "use_dora reads the base weight"),
+            ({"init_lora_weights": "pissa"}, "factorises the base weight"),
+            ({"init_lora_weights": "olora"}, "factorises the base weight"),
+            ({"init_lora_weights": "lora_ga"}, "factorises the base weight"),
+            ({"init_lora_weights": "eva"}, "'eva'"),
+        ],
+        ids=["dora", "pissa", "olora", "lora_ga", "eva"],
+    )
+    @pytest.mark.filterwarnings("ignore:`init_lora_weights` is 'eva' but `eva_config`:UserWarning")
+    def test_a_second_adapter_in_a_lora_layer_that_stands_on_another_is_refused_as_a_new_one_is(
+        self, fields: dict[str, object], match: str, tmp_path: Path
+    ) -> None:
+        """The layer exists already, so the refusal is not the layer's own at construction."""
+        built = _build((PeftType.LOHA, PeftType.LORA), "cpu", tmp_path)
+        assert len(_chain(built.base.get_submodule("0"))) == 2
+        self._refused(built, "again", _lora(**fields), ValueError, match)
+
+    def test_a_second_adapter_may_be_dora_in_the_lowest_lora_layer_under_others(
+        self, tmp_path: Path
+    ) -> None:
+        built = _build((PeftType.LORA, PeftType.LOHA), "cpu", tmp_path)
+        built.host.add_adapter("again", _lora(use_dora=True))
+        _move_off_the_start(built.base, "again", 9)
+        built.host.set_adapter(["again", "loha"])
+        with lucid.no_grad():
+            adapted = _call(built.base, "cpu")
+            assert span(adapted, _probe(built.base, "cpu")) < _TOLERANCE * max(
+                1.0, magnitude(adapted)
+            )
+            built.host.merge_adapter()
+            assert span(_call(built.base, "cpu"), adapted) < _TOLERANCE * max(
+                1.0, magnitude(adapted)
+            )
 
     def test_a_quantized_base_cannot_be_mixed(self) -> None:
         import lucid.nn.quantized.dynamic as nnqd
@@ -958,6 +1016,109 @@ class TestMergingOneLayerOfAPair:
             )
 
 
+# ── a DoRA layer beneath: a variant of a method that reads the weight ──────
+
+
+#: Every declared method that may stand on another's layer, bar LoRA itself (a method has one layer).
+_UPPERS = [p for p in _DECLARED if p not in _INNERMOST_ONLY and p is not PeftType.LORA]
+_DORA = {PeftType.LORA: _lora(use_dora=True)}
+
+
+def _dora_below(upper: PeftType, device: str, scratch: Path) -> _Built:
+    return _build((PeftType.LORA, upper), device, scratch, configs=_DORA)
+
+
+@pytest.mark.filterwarnings("ignore:Unmerge result can be inaccurate:UserWarning")
+@pytest.mark.parametrize("upper", _UPPERS, ids=lambda p: f"{p.name.lower()}-on-dora")
+class TestADoraLayerBeneath:
+    """DoRA divides by the norm of the weight it reads, so its layer is no additive term though LoRA is one."""
+
+    def test_the_layer_is_not_additive_while_it_holds_dora_and_is_once_it_does_not(
+        self, upper: PeftType, tmp_path: Path
+    ) -> None:
+        built = _dora_below(upper, "cpu", tmp_path)
+        low = _chain(built.base.get_submodule("0"))[-1]
+        assert _family_of(low) is _MIXED_TUNERS[PeftType.LORA]
+        assert not _MIXED_TUNERS[PeftType.LORA]._layer_adds_to_output(low)
+        plain = _build((PeftType.LORA, upper), "cpu", tmp_path)
+        plain_low = _chain(plain.base.get_submodule("0"))[-1]
+        assert _MIXED_TUNERS[PeftType.LORA]._layer_adds_to_output(plain_low)
+
+    def test_the_forward_pass_is_the_probe_and_merging_is_the_forward_pass(
+        self, upper: PeftType, device: str, tmp_path: Path
+    ) -> None:
+        built = _dora_below(upper, device, tmp_path)
+        weights = _snapshot(built.base)
+        with lucid.no_grad():
+            adapted = _call(built.base, device)
+            tolerance = _TOLERANCE * max(1.0, magnitude(adapted))
+            assert span(adapted, _probe(built.base, device)) < tolerance
+            assert _effect(built, device, "lora") > _EFFECT
+            built.host.set_adapter(built.names)
+            built.host.merge_adapter()
+            assert span(_call(built.base, device), adapted) < tolerance
+            built.host.unmerge_adapter()
+            assert span(_call(built.base, device), adapted) < tolerance
+        for before, after in zip(weights, _snapshot(built.base), strict=True):
+            assert span(before, after) < _TOLERANCE
+
+    def test_the_layer_above_is_not_merged_alone_and_nothing_changes(
+        self, upper: PeftType, device: str, tmp_path: Path
+    ) -> None:
+        built = _dora_below(upper, device, tmp_path)
+        before = _structure(built.base, built.host)
+        merged = [layer.merged for _, layer in _tuner_layers(built.base)]
+        with pytest.raises(ValueError, match=r"\['lora'\] stay unmerged beneath it"):
+            built.host.merge_adapter(adapter_names=[_name(upper)])
+        _unchanged(built.base, built.host, before)
+        assert [layer.merged for _, layer in _tuner_layers(built.base)] == merged
+
+    def test_dora_alone_and_then_the_layer_above_is_the_forward_pass_and_unmerges_clean(
+        self, upper: PeftType, device: str, tmp_path: Path
+    ) -> None:
+        built = _dora_below(upper, device, tmp_path)
+        weights = _snapshot(built.base)
+        with lucid.no_grad():
+            adapted = _call(built.base, device)
+            tolerance = _TOLERANCE * max(1.0, magnitude(adapted))
+            built.host.merge_adapter(adapter_names=["lora"])
+            assert span(_call(built.base, device), adapted) < tolerance
+            built.host.merge_adapter(adapter_names=[_name(upper)])
+            assert span(_call(built.base, device), adapted) < tolerance
+            built.host.unmerge_adapter()
+            assert span(_call(built.base, device), adapted) < tolerance
+        for before, after in zip(weights, _snapshot(built.base), strict=True):
+            assert span(before, after) < _TOLERANCE
+
+    def test_merging_and_unloading_dora_alone_is_the_model_with_only_dora(
+        self, upper: PeftType, device: str, tmp_path: Path
+    ) -> None:
+        built = _dora_below(upper, device, tmp_path)
+        with lucid.no_grad():
+            alone = _only(built, "lora", device)
+            built.host.set_adapter(built.names)
+            plain = built.host.merge_and_unload(adapter_names=["lora"])
+            assert span(_call(plain, device), alone) < _TOLERANCE * max(1.0, magnitude(alone))
+
+
+@pytest.mark.filterwarnings("ignore:Unmerge result can be inaccurate:UserWarning")
+def test_dora_under_two_additive_layers_is_merged_from_the_bottom_up(tmp_path: Path) -> None:
+    """With more than one layer above it the order is the same: nothing above is merged first."""
+    stack = (PeftType.LORA, PeftType.LOHA, PeftType.SHIRA)
+    built = _build(stack, "cpu", tmp_path, configs=_DORA)
+    with lucid.no_grad():
+        adapted = _call(built.base, "cpu")
+        tolerance = _TOLERANCE * max(1.0, magnitude(adapted))
+        for names in (["shira"], ["loha"], ["loha", "shira"]):
+            before = _structure(built.base, built.host)
+            with pytest.raises(ValueError, match="stay unmerged beneath it"):
+                built.host.merge_adapter(adapter_names=names)
+            _unchanged(built.base, built.host, before)
+        for names in (["lora"], ["loha"], ["shira"]):
+            built.host.merge_adapter(adapter_names=names)
+            assert span(_call(built.base, "cpu"), adapted) < tolerance, names
+
+
 # ── half precision and placement ──────────────────────────────────────────
 
 
@@ -1076,6 +1237,140 @@ class TestTheFiles:
         written = get_peft_model_state_dict(built.host, adapter_name=built.names[0])
         assert written.keys() == file.keys()
         assert all(same(written[k], file[k]) for k in file)
+
+
+#: What a stack's host reads a ``PeftModel`` file's keys as, and the other way round.
+def _to_host(file: Mapping[str, lucid.Tensor]) -> dict[str, lucid.Tensor]:
+    return {k.replace("base_model.model.", "model.", 1): v for k, v in file.items()}
+
+
+def _to_single(file: Mapping[str, lucid.Tensor]) -> dict[str, lucid.Tensor]:
+    return {k.replace("model.", "base_model.model.", 1): v for k, v in file.items()}
+
+
+def _move_the_biases(base: nn.Module, seed: int) -> None:
+    """Move every bias of the user's modules, as training them would."""
+    lucid.manual_seed(seed)
+    with lucid.no_grad():
+        for root in _roots(base):
+            root.bias.copy_(root.bias + 0.5 * lucid.randn(*root.bias.shape))
+
+
+_BIASED = [
+    (bias, position, partner)
+    for bias in ("all", "lora_only")
+    for position in ("lowest", "upper")
+    for partner in _DECLARED
+    if partner is not PeftType.LORA and (position == "upper" or partner not in _INNERMOST_ONLY)
+]
+
+
+def _biased_stack(bias: str, position: str, partner: PeftType, tmp_path: Path) -> _Built:
+    stack = (PeftType.LORA, partner) if position == "lowest" else (partner, PeftType.LORA)
+    return _build(stack, "cpu", tmp_path, configs={PeftType.LORA: _lora(bias=bias)})
+
+
+def _alone_with_bias(bias: str, seed: int) -> tuple[dict[str, lucid.Tensor], lucid.Tensor]:
+    """The file of a single-method LoRA model that trains ``bias``, keyed for a host, and its output."""
+    recipe = RECIPES[PeftType.LORA]
+    single = get_peft_model(recipe.base(_F32, "cpu"), _lora(bias=bias))
+    _move_off_the_start(single, "default", seed)
+    _move_the_biases(single.get_base_model(), seed)
+    with lucid.no_grad():
+        out = recipe.call(single, _F32, "cpu")
+    return _to_host(get_peft_model_state_dict(single)), out
+
+
+@pytest.mark.parametrize(
+    ("bias", "position", "partner"), _BIASED, ids=lambda v: str(getattr(v, "name", v)).lower()
+)
+class TestATrainedBiasIsFiledBesideItsLayer:
+    """A bias that ``bias="all"`` / ``"lora_only"`` trains is a base parameter: filed where a single-method file has it."""
+
+    def test_the_keys_are_those_of_a_single_method_model(
+        self, bias: str, position: str, partner: PeftType, tmp_path: Path
+    ) -> None:
+        alone, _ = _alone_with_bias(bias, seed=7)
+        built = _biased_stack(bias, position, partner, tmp_path)
+        filed = get_peft_model_state_dict(built.host, adapter_name="lora")
+        assert sorted(filed) == sorted(alone)
+        assert any(key.endswith(".bias") for key in filed)
+        assert all(tuple(filed[k].shape) == tuple(alone[k].shape) for k in alone)
+
+    def test_a_single_method_file_loads_into_the_stack_with_the_same_output(
+        self, bias: str, position: str, partner: PeftType, tmp_path: Path
+    ) -> None:
+        alone, wanted = _alone_with_bias(bias, seed=7)
+        built = _biased_stack(bias, position, partner, tmp_path)
+        set_peft_model_state_dict(built.host, alone, adapter_name="lora")
+        assert span(_only(built, "lora", "cpu"), wanted) < _TOLERANCE * max(1.0, magnitude(wanted))
+        written = get_peft_model_state_dict(built.host, adapter_name="lora")
+        assert written.keys() == alone.keys() and all(same(written[k], alone[k]) for k in alone)
+
+    def test_a_stacks_file_loads_into_a_single_method_model_with_the_same_output(
+        self, bias: str, position: str, partner: PeftType, tmp_path: Path
+    ) -> None:
+        built = _biased_stack(bias, position, partner, tmp_path)
+        _move_the_biases(built.base, 11)
+        wanted = _only(built, "lora", "cpu")
+        file = get_peft_model_state_dict(built.host, adapter_name="lora")
+        recipe = RECIPES[PeftType.LORA]
+        single = get_peft_model(recipe.base(_F32, "cpu"), _lora(bias=bias))
+        set_peft_model_state_dict(single, _to_single(file))
+        with lucid.no_grad():
+            assert span(recipe.call(single, _F32, "cpu"), wanted) < _TOLERANCE * max(
+                1.0, magnitude(wanted)
+            )
+        written = _to_host(get_peft_model_state_dict(single))
+        assert written.keys() == file.keys() and all(same(written[k], file[k]) for k in file)
+
+
+def _bias_flags(base: nn.Module) -> list[bool]:
+    """Whether each of the user's biases requires a gradient."""
+    return [root.bias.requires_grad for root in _roots(base)]
+
+
+@pytest.mark.parametrize(
+    ("bias", "position", "partner"), _BIASED, ids=lambda v: str(getattr(v, "name", v)).lower()
+)
+def test_the_biases_a_method_trains_follow_the_adapters_in_use(
+    bias: str, position: str, partner: PeftType, tmp_path: Path
+) -> None:
+    """``set_adapter`` is how a mixed model decides what trains: the host asks the method which parameters."""
+    built = _biased_stack(bias, position, partner, tmp_path)
+    assert _bias_flags(built.base) == [True, True]  # the adapters in use include LoRA's
+    built.host.set_adapter([_name(partner)])
+    assert _bias_flags(built.base) == [False, False]
+    built.host.set_adapter(["lora"], inference_mode=True)
+    assert _bias_flags(built.base) == [False, False]
+    built.host.set_adapter(["lora"])
+    assert _bias_flags(built.base) == [True, True]
+    _call(built.base, "cpu").sum().backward()
+    assert all(root.bias.grad is not None for root in _roots(built.base))
+
+
+def test_the_biases_train_from_the_first_adapter_of_a_mixed_model() -> None:
+    base = RECIPES[PeftType.LORA].base(_F32, "cpu")
+    MixedModel(base, _lora(bias="all"), "lora")
+    assert _bias_flags(base) == [True, True]
+
+
+def test_only_lora_among_the_declared_methods_can_train_a_bias() -> None:
+    """A declared method that learns to train one must have its file keys held like LoRA's above."""
+    trained = []
+    for peft_type, tuner in _MIXED_TUNERS.items():
+        config = RECIPES[peft_type].config(_F32, "cpu", Path("."))
+        if "bias" not in {f.name for f in dataclasses.fields(tuner._config_class)}:
+            continue
+        try:
+            dataclasses.replace(config, bias="all")
+        except (
+            ValueError,
+            NotImplementedError,
+        ):  # a refused value: AdaLoRA trains its tensors only
+            continue
+        trained.append(peft_type)
+    assert trained == [PeftType.LORA]
 
 
 # ── lucid.compile ─────────────────────────────────────────────────────────
