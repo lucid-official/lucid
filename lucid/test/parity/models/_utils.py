@@ -22,10 +22,13 @@ Size thresholds for ``pytest.mark``
 Registry-driven runners (used by vision/test_*.py)
 ----------------------------------------------------
 ``_spec_param(spec)``  — wrap ParitySpec with its tier mark for parametrize
-``_run_parity(spec)``  — full parity check from a ParitySpec
+``_run_parity(spec)``  — full parity check from a ParitySpec; returns a
+                         ``ParityResult`` (reference scale, tolerance, worst error)
 ``_run_self_consistency(spec)`` — determinism check from a ParitySpec
 """
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -37,6 +40,7 @@ from lucid.test._helpers.compare import assert_close
 
 if TYPE_CHECKING:
     from lucid.test.parity.models._registry import ParitySpec
+    from lucid.test.parity.models._sd_transfer import AlignResult
 
 # ── timm availability ─────────────────────────────────────────────────────────
 
@@ -72,100 +76,151 @@ def _spec_param(spec: ParitySpec) -> pytest.param:
 
 
 # ── Registry-driven runners ───────────────────────────────────────────────────
+#
+# A parity test is only a test if the reference's answer is far from zero
+# relative to the tolerance: an all-zeros Lucid model passes any comparison whose
+# expected value is within ``atol`` of zero.  Two things made that happen here --
+# a freshly initialised network carries no signal through its depth (BatchNorm at
+# its default statistics rescales nothing and the stack collapses, or amplifies
+# without bound), and a zero-initialised head answers exactly 0 whatever the body
+# computes -- so the harness establishes the signal before it transfers anything.
+# Both repairs act on the *Lucid* model, the source of the transfer: ``transfer``
+# copies Lucid's parameters *and buffers* over the reference's, so anything done to
+# the reference's buffers first is overwritten, which is how an earlier attempt to
+# randomise them came to do nothing at all.
 
+#: Standard deviation of the draw that replaces a parameter that is exactly zero.
+#: ViT's own initialisation uses 0.02, so a woken head answers at the scale a
+#: freshly initialised classifier would.
+_WAKE_STD: float = 0.02
+_WAKE_SEED: int = 0
 
-def _randomise_norm_buffers(model: object, ref: object, seed: int = 0) -> None:
-    """Give normalisation layers running statistics that keep signal alive.
+#: Images drawn beside the test input when the norm statistics are measured.  The
+#: test input is one of them, so no activation it produces lies outside its own
+#: calibration batch (a held-out input is amplified by 1/sqrt(var) in every layer
+#: whose variance came out small -- ResNeSt-101 answered at 2.8e4); the others keep a
+#: layer that sees one position per channel from having a variance of zero.
+_CALIBRATION_EXTRA: int = 3
+_CALIBRATION_SEED: int = 1
 
-    ``timm.create_model(pretrained=False)`` leaves every BatchNorm at
-    ``running_mean = 0`` / ``running_var = 1``.  In eval mode that makes the
-    layer a pure ``1 / sqrt(1 + eps)`` scale: it never restores variance.
-    Stacked deep enough it is a vanishing map — MobileNet-v3's feature stack
-    attenuated ~20-45x per non-residual block, so the *entire* backbone
-    contributed 1.5e-8 to the logits against an ``atol`` of 1e-3.  Whatever
-    the blocks computed, the comparison passed.
+_BATCH_NORMS = (nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d)
 
-    Filling the buffers with plausible statistics restores that signal
-    (measured on mobilenet_v3_large: 1.5e-8 -> 4.3), so a wrong SE gate, a
-    swapped activation row, a dropped residual or a mis-ordered SE placement
-    now actually reaches the assertion.  A few train-mode calibration batches
-    were tried first and recovered far less (1.2e-2), because momentum only
-    moves the buffers a fraction of the way and the statistics it collects
-    are themselves measured on already-attenuating activations.
-
-    Seeded, so the check stays deterministic — and applied before the
-    transfer, so the Lucid side receives the same buffers.
-    """
-    rng = np.random.default_rng(seed)
-    for module in model.modules():  # type: ignore[attr-defined]
-        mean = getattr(module, "running_mean", None)
-        var = getattr(module, "running_var", None)
-        if mean is None or var is None:
-            continue
-        n = int(mean.numel())
-        with ref.no_grad():  # type: ignore[attr-defined]
-            mean.copy_(
-                ref.from_numpy(  # type: ignore[attr-defined]
-                    rng.normal(0.0, 0.25, n).astype(np.float32)
-                ).reshape(mean.shape)
-            )
-            var.copy_(
-                ref.from_numpy(  # type: ignore[attr-defined]
-                    rng.uniform(0.5, 1.5, n).astype(np.float32)
-                ).reshape(var.shape)
-            )
-
-
-#: Above this the reference's own output has stopped being informative —
-#: see the skip in ``_run_parity``.  The tier's ordinary range tops out
-#: near 37, so this sits well clear of it and far below the runaways.
+#: Above this the reference's own output has stopped being informative -- float32
+#: cannot resolve a tolerance against it.  Calibrated models answer within 0.1-5, so
+#: this is a bug in the harness, and is reported as one rather than skipped.
 _REF_SCALE_CEILING: float = 1e3
 
-#: Floor for the absolute tolerance, as a fraction of the reference's
-#: largest logit.  Wide enough for accumulated float error through a
-#: 101-layer network, and orders below the structural breaks this suite
-#: has actually caught (1.7 for se_resnet, 0.12 for cspresnet).
-_SCALE_RELATIVE_ATOL: float = 1e-4
+#: Floor for the absolute tolerance, as a fraction of the reference's largest logit.
+#: Wide enough for accumulated float error through a 150-layer network (measured as
+#: much as 7.5e-4 of the largest logit, Inception-v4; the reference's own float32 answer
+#: sits 9e-4 from its float64 one at ResNeSt-101).  At this floor the signal-to-tolerance
+#: ratio is 1 / (2e-3 + rtol) = 333 however large the logits are.
+_SCALE_RELATIVE_ATOL: float = 2e-3
+
+#: The least ratio of the reference's largest logit to the loosest allowance of the
+#: comparison (``atol + rtol * max|logit|``).  Passing within one tolerance must mean
+#: agreeing to within 1% of the answer: at 100 a model that is wrong by one tolerance
+#: is wrong by 1% of the output, and below it ``allclose`` stops saying much -- at 10
+#: a model answering 10% off would pass.  The loosest allowance is at most
+#: ``scale * (rtol + atol / scale)``, so a spec with ``rtol=1e-3`` reaches the ratio of
+#: 100 whenever ``atol`` is under about 9e-3 of the logits' scale.
+_MIN_SIGNAL_TO_TOLERANCE: float = 100.0
 
 
-def _run_parity(spec: ParitySpec) -> None:
-    """Execute one full parity check from a ParitySpec.
+@dataclass(frozen=True)
+class ParityResult:
+    """What one passing comparison measured, so a sweep can report it."""
+
+    reference_scale: float
+    atol: float
+    rtol: float
+    max_abs_error: float
+
+    @property
+    def tolerance(self) -> float:
+        """The loosest allowance anywhere in the comparison."""
+        return self.atol + self.rtol * self.reference_scale
+
+    @property
+    def signal_to_tolerance(self) -> float:
+        return self.reference_scale / self.tolerance
+
+
+def _wake_zero_parameters(model: nn.Module) -> int:
+    """Draw every parameter that is exactly zero from ``N(0, _WAKE_STD)``.
+
+    A tensor of zeros carries no signal through any multiplicative path: ViT's
+    zero-initialised head answers 0 whatever the body computes, and a zero bias or
+    norm shift is a term the comparison cannot see go missing.  Seeded, and applied to
+    the Lucid model before the transfer, so both sides hold the same values.
+    """
+    lucid.manual_seed(_WAKE_SEED)
+    woken = 0
+    for parameter in model.parameters():
+        if parameter.numel() and parameter.data.abs().max().item() == 0.0:
+            nn.init.normal_(parameter, 0.0, _WAKE_STD)
+            woken += 1
+    return woken
+
+
+def _calibrate_norm_statistics(model: nn.Module, x_np: np.ndarray) -> int:
+    """Set every BatchNorm's running statistics to those of the activations it sees.
+
+    A freshly built network sits at ``running_mean = 0`` / ``running_var = 1``, which in
+    eval mode is a bare ``1 / sqrt(1 + eps)`` scale: it never restores the variance the
+    convolutions around it remove.  Deep enough that is a vanishing map -- the
+    MobileNets' logits came out at 1e-9 -- or, in a residual stack, an amplifier --
+    ResNet-152 at 1.6e8.  A trained network's statistics are its activations'; one
+    pass in train mode with a cumulative average (``momentum=None``) leaves exactly
+    that, so every layer then hands the next an O(1) signal.  Only the norm layers
+    switch to train mode, so dropout and stochastic depth stay off.
+    """
+    norms = [m for m in model.modules() if isinstance(m, _BATCH_NORMS) and m.track_running_stats]
+    momenta = [norm.momentum for norm in norms]
+    for norm in norms:
+        norm.reset_running_stats()
+        norm.momentum = None
+        norm.train()
+    rng = np.random.default_rng(_CALIBRATION_SEED)
+    extra = rng.standard_normal((_CALIBRATION_EXTRA, *x_np.shape[1:])).astype(np.float32)
+    try:
+        with lucid.no_grad():
+            model(lucid.from_numpy(np.concatenate([x_np, extra])))
+    finally:
+        for norm, momentum in zip(norms, momenta, strict=True):
+            norm.momentum = momentum
+            norm.eval()
+    return len(norms)
+
+
+def _build_aligned_pair(spec: ParitySpec) -> tuple[nn.Module, Any, np.ndarray, AlignResult]:
+    """Build the Lucid model and its reference, live, with the weights carried across.
 
     Steps
     -----
-    1. Build both models and put them in eval mode.
-    2. Named weight transfer via ``_sd_transfer.transfer()``.
-    3. If >2 keys are unmatched and ``use_positional_fallback`` is set,
-       fall back to positional parameter copy.
-    4. Feed identical random input to both models.
-    5. Compare logit arrays with ``spec.atol`` / ``spec.rtol``.
-    6. On failure, run ``diagnose_forward`` and print the top diverging layers.
+    1. Build the Lucid model, put it in eval mode, run the spec's ``prepare``.
+    2. Wake its zero parameters and calibrate its norm statistics on the test input.
+    3. Build the reference (``spec.timm_kwargs``) and copy Lucid's parameters *and
+       buffers* into it by name (``_sd_transfer.transfer``).
+    4. If more than 2 keys are unmatched, fall back to positional copy when the spec
+       allows it; otherwise skip, saying how much did not line up.
     """
     import timm
-    from lucid.test._fixtures.ref_framework import require_ref
 
-    _ref = require_ref()
-
-    from lucid.test.parity.models._sd_transfer import (
-        diagnose_forward,
-        transfer,
-        transfer_positional,
-    )
-
-    if spec.skip_reason:
-        pytest.skip(spec.skip_reason)
+    from lucid.test.parity.models._sd_transfer import transfer, transfer_positional
 
     lucid_model = spec.lucid_factory()
     lucid_model.eval()
     if spec.prepare is not None:
-        # Before the transfer, so the reference receives the same values.
         spec.prepare(lucid_model)
+    x_np = np.random.default_rng(0).standard_normal(spec.input_shape).astype(np.float32)
+    _wake_zero_parameters(lucid_model)
+    _calibrate_norm_statistics(lucid_model, x_np)
 
-    timm_model = timm.create_model(spec.timm_name, pretrained=False, num_classes=1000)
+    timm_model = timm.create_model(
+        spec.timm_name, pretrained=False, num_classes=1000, **spec.timm_kwargs
+    )
     timm_model.eval()
-    # Before the transfer, so both sides get the same statistics.
-    _randomise_norm_buffers(timm_model, _ref)
-
     result = transfer(lucid_model, timm_model, spec.key_remap, spec.key_transform)
 
     unmatched = len(result.unmatched_lucid)
@@ -184,9 +239,61 @@ def _run_parity(spec: ParitySpec) -> None:
             pytest.skip(
                 f"alignment incomplete: {result.summary()} — " f"{pct:.0f}% of keys unmatched"
             )
+    return lucid_model, timm_model, x_np, result
 
-    rng = np.random.default_rng(0)
-    x_np = rng.standard_normal(spec.input_shape).astype(np.float32)
+
+def _require_signal(spec_id: str, scale: float, tolerance: float) -> None:
+    """Fail -- never skip -- a comparison whose reference answer cannot discriminate.
+
+    ``scale`` is the reference's largest |logit|, ``tolerance`` the loosest allowance of
+    the comparison.  A skip reads green in a run and is indistinguishable from a
+    comparison that passed, which is how six models went unchecked.
+    """
+    if scale > _REF_SCALE_CEILING:
+        pytest.fail(
+            f"{spec_id}: the reference answers with |logits| up to {scale:.3g}, past the "
+            f"{_REF_SCALE_CEILING:g} a float32 comparison can resolve -- the harness failed "
+            f"to bring the forward pass into range",
+            pytrace=False,
+        )
+    if scale < _MIN_SIGNAL_TO_TOLERANCE * tolerance:
+        pytest.fail(
+            f"{spec_id}: the reference answers with |logits| up to {scale:.3g} against a "
+            f"tolerance of {tolerance:.3g} -- {scale / tolerance:.3g}x, under the "
+            f"{_MIN_SIGNAL_TO_TOLERANCE:g}x below which agreement within the tolerance says "
+            f"little (an all-zeros model passes at 1x).  Tighten the spec's atol, or give "
+            f"the harness a way to wake the forward pass.",
+            pytrace=False,
+        )
+
+
+def _run_parity(
+    spec: ParitySpec, mutate: Callable[[nn.Module], None] | None = None
+) -> ParityResult:
+    """Execute one full parity check from a ParitySpec.
+
+    Steps
+    -----
+    1. Build the live, aligned pair (``_build_aligned_pair``).
+    2. ``mutate``, when given, edits the Lucid model after the transfer -- the
+       sensitivity test uses it to prove a wrong model fails this comparison.
+    3. Feed identical random input to both models.
+    4. Fail unless the reference's answer is ``_MIN_SIGNAL_TO_TOLERANCE`` times the
+       tolerance (``_require_signal``).
+    5. Compare logit arrays with ``spec.atol`` / ``spec.rtol``.
+    6. On failure, run ``diagnose_forward`` and print the top diverging layers.
+    """
+    from lucid.test._fixtures.ref_framework import require_ref
+    from lucid.test.parity.models._sd_transfer import diagnose_forward
+
+    _ref = require_ref()
+
+    if spec.skip_reason:
+        pytest.skip(spec.skip_reason)
+
+    lucid_model, timm_model, x_np, result = _build_aligned_pair(spec)
+    if mutate is not None:
+        mutate(lucid_model)
 
     with _ref.no_grad():
         y_ref = timm_model(_ref.from_numpy(x_np.copy())).numpy()
@@ -195,39 +302,11 @@ def _run_parity(spec: ParitySpec) -> None:
     y_lucid = lucid_out.logits.numpy() if hasattr(lucid_out, "logits") else lucid_out.numpy()
 
     scale = float(np.abs(y_ref).max())
-    if scale > _REF_SCALE_CEILING:
-        # Randomising the reference's norm buffers is what makes an
-        # incomplete transfer visible, and in a deep network it also
-        # amplifies: se_resnet_152 answers with logits of 8.7e3 and
-        # inception_v3 with 3.9e13, against a median of 1.4 and a largest
-        # ordinary value of 37 across this tier.  Nothing can be concluded
-        # from agreement or disagreement at that size, so say so rather
-        # than report a failure that means nothing.
-        pytest.skip(
-            f"the reference answers with |logits| up to {scale:.3g}, far "
-            f"past the {_REF_SCALE_CEILING:g} this comparison is meaningful "
-            f"below — the randomised norm buffers have amplified through "
-            f"the depth, and the numbers no longer describe the model"
-        )
-
-    if scale <= spec.atol:
-        # The other end of the same problem: the reference's answer can be 0 -- the
-        # mobilenets' 1e-9 after randomised buffers shrink it through the depth, or a
-        # zero-initialised head (vit_base_16/32: exactly 0) -- and an atol of 1e-3 then
-        # accepts a model that answers all zeros whatever its body computes.
-        pytest.skip(
-            f"the reference answers with |logits| up to {scale:.3g}, within the "
-            f"{spec.atol:g} tolerance of zero, so an all-zeros answer would pass; "
-            f"compare features ahead of the head instead"
-        )
-
-    # Absolute error is roughly even across the logits while their
-    # magnitudes span three orders, so an element-wise atol judges the
-    # near-zero entries and nothing else: se_resnet_101 failed on 15 of
-    # 1000, all with |logit| under 4.4, while the vector reached 137 and
-    # the largest disagreement was 5.8e-05 of full scale.  Hold the floor
-    # to the signal instead.
+    # Absolute error is roughly even across the logits while their magnitudes span
+    # orders, so an element-wise atol judges the near-zero entries and nothing else.
+    # Hold the floor to the signal instead.
     atol = max(spec.atol, _SCALE_RELATIVE_ATOL * scale)
+    _require_signal(spec.id, scale, atol + spec.rtol * scale)
 
     try:
         assert_close(
@@ -247,6 +326,7 @@ def _run_parity(spec: ParitySpec) -> None:
             print(f"  {diff}")
         print("─" * 70)
         raise exc
+    return ParityResult(scale, atol, spec.rtol, float(np.abs(y_lucid - y_ref).max()))
 
 
 def _run_self_consistency(spec: ParitySpec) -> None:

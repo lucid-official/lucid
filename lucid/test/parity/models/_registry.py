@@ -114,50 +114,15 @@ def _convnext_key_transform(k: str) -> str:
     return k
 
 
-def _mobilenet_v4_branch_gains(model: object) -> None:
-    """MobileNet v4: give every branch gain a trained-like magnitude.
-
-    With the norm buffers randomised, normalisation stops rescaling, and
-    the reference initialisation then fails in both directions.  In the
-    conv variants every UIB branch adds about its input's size again, so
-    Conv-Medium / -Large answered with logits of 3e5 / 4e6 and the
-    comparison skipped.  In the hybrids every layer scale starts at 1e-5 —
-    including on the strided blocks that have no residual, each of which
-    therefore shrinks the main path by 1e-5 — so the logits came out near
-    1e-12 and an ``atol`` of 1e-3 passed anything, attention included.
-
-    Residual branches get a gain from U(0.1, 0.3) (their layer scale when
-    there is one, else the branch's last norm weight); non-residual layer
-    scales get U(0.5, 1).  Every variant then answers with logits between
-    about 0.5 and 20.  Seeded, so the check stays deterministic.
-    """
-    import lucid
-    import lucid.nn as nn
-
-    lucid.manual_seed(0)
-    for stage in getattr(model, "blocks"):
-        for block in stage:
-            residual = bool(getattr(block, "_has_skip", False)) or hasattr(block, "attn")
-            lo, hi = (0.1, 0.3) if residual else (0.5, 1.0)
-            gamma = getattr(getattr(block, "layer_scale", None), "gamma", None)
-            if gamma is not None:
-                nn.init.uniform_(gamma, lo, hi)
-            elif residual and hasattr(block, "pw_proj"):
-                nn.init.uniform_(block.pw_proj.bn.weight, lo, hi)
-            elif residual and hasattr(block, "bn2"):
-                nn.init.uniform_(block.bn2.weight, lo, hi)
-
-
 def _norm_gains(lo: float, hi: float) -> Callable[[object], None]:
-    """Draw every BatchNorm weight from U(lo, hi) before the transfer.
+    """Draw every BatchNorm weight from U(lo, hi) before the statistics are calibrated.
 
-    With the reference's norm buffers randomised, a deep plain stack
-    amplifies layer after layer: Inception v3 answered with logits of
-    1.25e12 and SE-ResNet-152 with 9.1e3, and the comparison skipped — for
-    as long as nobody looked.  Gains a little below one keep the signal
-    alive without letting it grow; the ranges were measured to land the
-    reference's logits at 108 and 22 (a range lower by 0.1 already
-    collapses them below 0.25).  Seeded, so the check stays deterministic.
+    Calibration leaves every normalised activation at unit variance, so a ReLU6 clamps
+    almost nothing: six standard deviations is a once-in-a-billion event, and a ReLU
+    in its place answers identically.  Gains of 1.5-2.5 put real mass past 6, so the
+    clamp is part of what the comparison measures (a ReLU6-for-ReLU swap in any layer
+    then moves the logits by 5-160x the tolerance instead of 0.003x in 31 of 35 layers).
+    Seeded, so the check stays deterministic.
     """
 
     def prepare(model: object) -> None:
@@ -236,12 +201,19 @@ class ParitySpec:
     use_positional_fallback: bool = False
 
     # Optional function applied to the freshly built Lucid model *before*
-    # the transfer (so the reference receives the same values).  For
-    # families whose default initialisation leaves the randomised-norm
-    # forward numerically meaningless — logits that explode past the
-    # skip ceiling, or collapse far below ``atol`` — it sets parameters
-    # to trained-like magnitudes so the comparison measures the model.
+    # the harness wakes its zero parameters and calibrates its norm statistics,
+    # and before the transfer (so the reference receives the same values).  For
+    # a family whose distinctive operation the calibrated forward leaves
+    # unexercised -- MobileNet-v2's ReLU6 clamp -- it sets parameters so that the
+    # comparison reaches it.
     prepare: Callable[[object], None] | None = None
+
+    # Keyword arguments for ``timm.create_model``: the reference's own
+    # configuration where it differs from the Lucid family's.  Never copy a
+    # value from the Lucid model here at run time -- that would make a wrong
+    # Lucid value invisible; name the value the checkpoint convention fixes
+    # (e.g. ``bn_eps=1e-3`` for MobileNet-v3, whose checkpoints are folded against it).
+    timm_kwargs: dict[str, object] = field(default_factory=dict)
 
     @property
     def id(self) -> str:
@@ -267,10 +239,13 @@ SPECS: list[ParitySpec] = [
     # ── VGG — heavy (> 100 M) ────────────────────────────────────────────────
     # Lucid names intermediate FC layers fc6/fc7; timm uses pre_logits.fc1/fc2.
     # The final Linear auto-remaps via _AUTO_HEAD_REMAP (classifier.* → head.fc.*).
+    # The plain variants have no norm layer to calibrate and answer at 0.07-0.10, so
+    # atol is 1e-4 for them (measured worst difference 3e-7); the _bn ones reach 0.4.
     ParitySpec(
         M.vgg_11_cls,
         "vgg11",
         tier="heavy",
+        atol=1e-4,
         key_remap={
             "fc6.weight": "pre_logits.fc1.weight",
             "fc6.bias": "pre_logits.fc1.bias",
@@ -293,6 +268,7 @@ SPECS: list[ParitySpec] = [
         M.vgg_13_cls,
         "vgg13",
         tier="heavy",
+        atol=1e-4,
         key_remap={
             "fc6.weight": "pre_logits.fc1.weight",
             "fc6.bias": "pre_logits.fc1.bias",
@@ -315,6 +291,7 @@ SPECS: list[ParitySpec] = [
         M.vgg_16_cls,
         "vgg16",
         tier="heavy",
+        atol=1e-4,
         key_remap={
             "fc6.weight": "pre_logits.fc1.weight",
             "fc6.bias": "pre_logits.fc1.bias",
@@ -337,6 +314,7 @@ SPECS: list[ParitySpec] = [
         M.vgg_19_cls,
         "vgg19",
         tier="heavy",
+        atol=1e-4,
         key_remap={
             "fc6.weight": "pre_logits.fc1.weight",
             "fc6.bias": "pre_logits.fc1.bias",
@@ -409,7 +387,6 @@ SPECS: list[ParitySpec] = [
         tier="slow",
         key_transform=_legacy_seresnet_key_transform,
         key_remap=_LEGACY_SERESNET_HEAD,
-        prepare=_norm_gains(0.8, 1.0),
     ),
     # ── SK-ResNet / SK-ResNeXt ────────────────────────────────────────────────
     # timm 1.0 only has skresnet18/34/50/50d and skresnext50_32x4d.
@@ -462,7 +439,6 @@ SPECS: list[ParitySpec] = [
         "inception_v3",
         input_shape=(1, 3, 299, 299),
         use_positional_fallback=True,
-        prepare=_norm_gains(0.4, 0.7),
     ),
     ParitySpec(
         M.inception_resnet_v2_cls, "inception_resnet_v2", input_shape=(1, 3, 299, 299), tier="slow"
@@ -486,8 +462,20 @@ SPECS: list[ParitySpec] = [
     # ── MobileNet v2 ──────────────────────────────────────────────────────────
     # timm head: classifier.weight (exact match).  Feature block names differ
     # from timm's MBConv naming → positional fallback for body alignment.
-    ParitySpec(M.mobilenet_v2_cls, "mobilenetv2_100", use_positional_fallback=True),
-    ParitySpec(M.mobilenet_v2_075_cls, "mobilenetv2_075", use_positional_fallback=True),
+    # ``_norm_gains``: ReLU6 only differs from ReLU past 6, which calibrated
+    # activations never reach, so without it that swap is invisible.
+    ParitySpec(
+        M.mobilenet_v2_cls,
+        "mobilenetv2_100",
+        use_positional_fallback=True,
+        prepare=_norm_gains(1.5, 2.5),
+    ),
+    ParitySpec(
+        M.mobilenet_v2_075_cls,
+        "mobilenetv2_075",
+        use_positional_fallback=True,
+        prepare=_norm_gains(1.5, 2.5),
+    ),
     # ── MobileNet v3 ──────────────────────────────────────────────────────────
     # No head remap: Lucid's classifier is a 6-element Sequential, so its head
     # keys are ``classifier.1.*`` (conv head) and ``classifier.5.*`` (linear)
@@ -496,41 +484,37 @@ SPECS: list[ParitySpec] = [
     # matched nothing and the positional fallback was doing all the work
     # anyway.  An inert entry is worse than none: it reads as though the head
     # were explicitly aligned.
-    ParitySpec(M.mobilenet_v3_large_cls, "mobilenetv3_large_100", use_positional_fallback=True),
-    ParitySpec(M.mobilenet_v3_small_cls, "mobilenetv3_small_100", use_positional_fallback=True),
+    #
+    # Lucid builds the family's batch-norm at ``eps=1e-3`` (the reference vision
+    # library's checkpoints it ports were folded against that); timm's own default is
+    # 1e-5.  The reference therefore gets ``bn_eps=1e-3`` -- with live norm
+    # statistics the two epsilons disagree by 100% of the output.  The logits
+    # are small here (0.09 / 0.18 against the 1e-3 default), so ``atol`` drops
+    # to 1e-4; the measured worst difference is 3e-7.
+    ParitySpec(
+        M.mobilenet_v3_large_cls,
+        "mobilenetv3_large_100",
+        atol=1e-4,
+        use_positional_fallback=True,
+        timm_kwargs={"bn_eps": 1e-3},
+    ),
+    ParitySpec(
+        M.mobilenet_v3_small_cls,
+        "mobilenetv3_small_100",
+        atol=1e-4,
+        use_positional_fallback=True,
+        timm_kwargs={"bn_eps": 1e-3},
+    ),
     # ── MobileNet v4 ──────────────────────────────────────────────────────────
     # The module tree mirrors timm's ``mobilenetv4_*`` key-for-key (conv_stem,
     # blocks.S.B.{dw_start,pw_exp,dw_mid,pw_proj,attn,...}, conv_head,
     # norm_head, classifier), so the named transfer is complete and no
     # positional fallback is allowed to paper over a mismatch.
-    # ``prepare`` — see ``_mobilenet_v4_branch_gains``.
-    ParitySpec(
-        M.mobilenet_v4_conv_small_cls, "mobilenetv4_conv_small", prepare=_mobilenet_v4_branch_gains
-    ),
-    ParitySpec(
-        M.mobilenet_v4_conv_medium_cls,
-        "mobilenetv4_conv_medium",
-        tier="slow",
-        prepare=_mobilenet_v4_branch_gains,
-    ),
-    ParitySpec(
-        M.mobilenet_v4_conv_large_cls,
-        "mobilenetv4_conv_large",
-        tier="slow",
-        prepare=_mobilenet_v4_branch_gains,
-    ),
-    ParitySpec(
-        M.mobilenet_v4_hybrid_medium_cls,
-        "mobilenetv4_hybrid_medium",
-        tier="slow",
-        prepare=_mobilenet_v4_branch_gains,
-    ),
-    ParitySpec(
-        M.mobilenet_v4_hybrid_large_cls,
-        "mobilenetv4_hybrid_large",
-        tier="slow",
-        prepare=_mobilenet_v4_branch_gains,
-    ),
+    ParitySpec(M.mobilenet_v4_conv_small_cls, "mobilenetv4_conv_small"),
+    ParitySpec(M.mobilenet_v4_conv_medium_cls, "mobilenetv4_conv_medium", tier="slow"),
+    ParitySpec(M.mobilenet_v4_conv_large_cls, "mobilenetv4_conv_large", tier="slow"),
+    ParitySpec(M.mobilenet_v4_hybrid_medium_cls, "mobilenetv4_hybrid_medium", tier="slow"),
+    ParitySpec(M.mobilenet_v4_hybrid_large_cls, "mobilenetv4_hybrid_large", tier="slow"),
     # ── EfficientNet — head: classifier.weight (exact match) ─────────────────
     # Lucid uses features.N vs timm's blocks.N.M — positional fallback for body.
     ParitySpec(M.efficientnet_b0_cls, "efficientnet_b0", use_positional_fallback=True),
@@ -538,9 +522,29 @@ SPECS: list[ParitySpec] = [
     ParitySpec(M.efficientnet_b2_cls, "efficientnet_b2", use_positional_fallback=True),
     ParitySpec(M.efficientnet_b3_cls, "efficientnet_b3", use_positional_fallback=True),
     ParitySpec(M.efficientnet_b4_cls, "efficientnet_b4", tier="slow", use_positional_fallback=True),
-    ParitySpec(M.efficientnet_b5_cls, "efficientnet_b5", tier="slow", use_positional_fallback=True),
-    ParitySpec(M.efficientnet_b6_cls, "efficientnet_b6", tier="slow", use_positional_fallback=True),
-    ParitySpec(M.efficientnet_b7_cls, "efficientnet_b7", tier="slow", use_positional_fallback=True),
+    # B5-B7 follow the reference vision library's recipe (batch-norm ``eps=1e-3``, as Lucid
+    # builds them); B0-B4 keep 1e-5, and so does timm's default.
+    ParitySpec(
+        M.efficientnet_b5_cls,
+        "efficientnet_b5",
+        tier="slow",
+        use_positional_fallback=True,
+        timm_kwargs={"bn_eps": 1e-3},
+    ),
+    ParitySpec(
+        M.efficientnet_b6_cls,
+        "efficientnet_b6",
+        tier="slow",
+        use_positional_fallback=True,
+        timm_kwargs={"bn_eps": 1e-3},
+    ),
+    ParitySpec(
+        M.efficientnet_b7_cls,
+        "efficientnet_b7",
+        tier="slow",
+        use_positional_fallback=True,
+        timm_kwargs={"bn_eps": 1e-3},
+    ),
     # ── ViT ───────────────────────────────────────────────────────────────────
     # head: head.weight (auto-remapped)
     # Transformer accumulation → slightly looser tolerance
@@ -551,31 +555,24 @@ SPECS: list[ParitySpec] = [
     ParitySpec(M.vit_huge_14_cls, None, tier="heavy"),  # 632 M — no timm parity
     # ── Swin Transformer ──────────────────────────────────────────────────────
     # Lucid: stages.X  vs  timm: layers.X  → key_transform handles this.
-    # Relative position bias accumulation → looser tolerance (atol=2e-2).
-    ParitySpec(
-        M.swin_tiny_cls,
-        "swin_tiny_patch4_window7_224",
-        atol=2e-2,
-        key_transform=_swin_key_transform,
-    ),
+    # The default tolerance holds: with a live signal the worst difference is 1e-6 and
+    # the 2e-2 these once carried left 30-50x between the logits and the tolerance.
+    ParitySpec(M.swin_tiny_cls, "swin_tiny_patch4_window7_224", key_transform=_swin_key_transform),
     ParitySpec(
         M.swin_small_cls,
         "swin_small_patch4_window7_224",
-        atol=2e-2,
         tier="slow",
         key_transform=_swin_key_transform,
     ),
     ParitySpec(
         M.swin_base_cls,
         "swin_base_patch4_window7_224",
-        atol=2e-2,
         tier="heavy",
         key_transform=_swin_key_transform,
     ),
     ParitySpec(
         M.swin_large_cls,
         "swin_large_patch4_window7_224",
-        atol=2e-2,
         tier="heavy",
         key_transform=_swin_key_transform,
     ),
@@ -639,11 +636,11 @@ SPECS: list[ParitySpec] = [
     ParitySpec(M.efficientformer_l7_cls, None, tier="slow"),
     # ── MaxViT ───────────────────────────────────────────────────────────────
     # 100% key coverage — attribute names match timm's maxvit_tiny_tf_224 exactly.
-    # Relative position bias accumulation → atol=2e-2.
-    ParitySpec(M.maxvit_tiny_cls, "maxvit_tiny_tf_224", tier="slow", atol=2e-2),
-    ParitySpec(M.maxvit_small_cls, "maxvit_small_tf_224", tier="slow", atol=2e-2),
-    ParitySpec(M.maxvit_base_cls, "maxvit_base_tf_224", tier="slow", atol=2e-2),
-    ParitySpec(M.maxvit_large_cls, "maxvit_large_tf_224", tier="slow", atol=2e-2),
+    # Default tolerance; see Swin above (worst difference 1.3e-6).
+    ParitySpec(M.maxvit_tiny_cls, "maxvit_tiny_tf_224", tier="slow"),
+    ParitySpec(M.maxvit_small_cls, "maxvit_small_tf_224", tier="slow"),
+    ParitySpec(M.maxvit_base_cls, "maxvit_base_tf_224", tier="slow"),
+    ParitySpec(M.maxvit_large_cls, "maxvit_large_tf_224", tier="slow"),
     ParitySpec(M.maxvit_xlarge_cls, None, tier="slow"),
     # ── InceptionNeXt ────────────────────────────────────────────────────────
     # 100% named key coverage — no key_transform or positional fallback needed.

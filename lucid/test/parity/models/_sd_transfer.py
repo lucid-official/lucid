@@ -253,7 +253,8 @@ def transfer_positional(lucid_model: Any, timm_model: Any) -> None:
     Parameters *and* buffers.  It copied only parameters for a long
     while, which is a quiet way to be wrong: the running statistics of
     every BatchNorm stayed at whatever each side happened to hold, and
-    since ``_randomise_norm_buffers`` deliberately makes those differ,
+    since the harness calibrates the Lucid side's statistics
+    (``_calibrate_norm_statistics``) the two sides differ, so
     the comparison then measured the statistics rather than the model.
     Thirty-three specs lean on this fallback; the ResNet family read as
     a numerical failure with the divergence sitting entirely in ``bn``
