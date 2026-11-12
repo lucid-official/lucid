@@ -103,9 +103,11 @@ def _take_entries(
 class _BufferDict(nn.Module):
     """Buffers by adapter name: tensors a layer reads and does not train, as ``ParameterDict`` holds parameters.
 
-    A buffer saved in ``state_dict`` as ``<name>`` (so ``vera_A.default``) unless the
-    container is not ``persistent``, in which case it is never saved — the
-    projections are then restored from the PRNG key.
+    A buffer is saved in ``state_dict`` as ``<name>`` (so ``vera_A.default``) unless it is not
+    persistent, in which case it is never saved — the projections are then restored from the PRNG
+    key.  ``persistent`` is what a buffer set with ``d[name] = tensor`` gets; a method whose adapters
+    choose for themselves whether to save a buffer (Uni-LoRA's ``save_indices``) enters each with
+    ``register``, and ``persists`` tells what one was given.
     """
 
     def __init__(self, persistent: bool) -> None:
@@ -115,11 +117,19 @@ class _BufferDict(nn.Module):
 
     @property
     def persistent(self) -> bool:
-        """Whether the buffers are saved in ``state_dict``."""
+        """Whether a buffer set without saying so is saved in ``state_dict``."""
         return self._persistent
 
+    def persists(self, name: str) -> bool:
+        """Whether the buffer ``name`` is held and saved in ``state_dict``."""
+        return name in self._buffers and name not in self._non_persistent_buffers
+
+    def register(self, name: str, tensor: Tensor, persistent: bool) -> None:
+        """Hold ``tensor`` as ``name``, saved in ``state_dict`` or not as ``persistent`` says."""
+        self.register_buffer(name, tensor, persistent=persistent)
+
     def __setitem__(self, name: str, tensor: Tensor) -> None:
-        self.register_buffer(name, tensor, persistent=self._persistent)
+        self.register(name, tensor, self._persistent)
 
     def __getitem__(self, name: str) -> Tensor:
         buffer = self._buffers.get(name)

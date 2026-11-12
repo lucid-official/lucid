@@ -53,7 +53,8 @@ class UniLoraConfig(_TargetedConfig, peft_type=PeftType.UNILORA):
         Use the default initialisation of the vector (``True``) or leave it random.
     save_indices : bool, default=False
         Also save the index and scale buffers of each layer, so an adapter does not depend on how
-        they are drawn.
+        they are drawn.  Each adapter of a model chooses for itself, as in the reference: the file of
+        one that does not save them holds the vector alone, whatever the others do.
     target_modules : str or list of str, optional
         The modules Uni-LoRA adapts, matched as ``LoraConfig.target_modules`` is.
     fan_in_fan_out : bool, default=False

@@ -21,12 +21,9 @@ from lucid.peft.tuners._layer import _BaseTunerLayer, _dotted, _tuner_layers
 
 @runtime_checkable
 class _Persistable(Protocol):
-    """A per-adapter table of buffers that may or may not be saved (``_BufferDict``)."""
+    """A per-adapter table of buffers, each of which may or may not be saved (``_BufferDict``)."""
 
-    @property
-    def persistent(self) -> bool: ...
-
-    def __contains__(self, name: object) -> bool: ...
+    def persists(self, name: str) -> bool: ...
 
 
 class _FileContext(NamedTuple):
@@ -67,8 +64,8 @@ class _FileContext(NamedTuple):
         A layer's frozen tensor that the adapter file carries (positions, a projection) is a buffer
         beside the layer's slot tables, so the slot machinery does not see it; a tuner's
         ``_shared_keys`` returns this to put it in the file, under the layer's path and without the
-        adapter's name, as the reference writes it.  A table that is not persistent (a buffer
-        rebuilt on load) is left out.
+        adapter's name, as the reference writes it.  A buffer that is not persistent (one rebuilt on
+        load) is left out; whether it is is the adapter's own, not the table's.
         """
         keys: dict[str, str] = {}
         for path, layer in self.layers:
@@ -84,7 +81,7 @@ class _FileContext(NamedTuple):
         keys: dict[str, str] = {}
         for table in tables:
             held: object = getattr(layer, table, None)
-            if isinstance(held, _Persistable) and held.persistent and self.adapter in held:
+            if isinstance(held, _Persistable) and held.persists(self.adapter):
                 keys[self.memory_key(path, table)] = self.key(path, table)
         return keys
 

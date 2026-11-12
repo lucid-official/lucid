@@ -9,7 +9,8 @@ for every entry.  The layer adds :math:`B A\,x`; there is no :math:`\alpha / r`.
 factors read the vector — ``unilora_indices_A`` (``(r, in)``), ``unilora_indices_B`` (``(out, r)``) and
 their scales ``unilora_scales_A`` / ``unilora_scales_B`` — and reads the vector itself, ``unilora_theta_d``
 (``(d,)``, one per adapter), from the table its tuner shares between all its layers (``bind``).  The
-four tensors are saved only when ``config.save_indices`` is set: the seed draws them again.
+four tensors are saved only when the adapter's ``config.save_indices`` is set (each adapter says for
+itself): the seed draws them again.
 
 A layer made on its own, outside a tuner, holds a vector of its own and draws the indices of its own
 two factors the first time it needs them.
@@ -46,6 +47,7 @@ class _UniLoraSpec(NamedTuple):
     r: int
     theta_d_length: int
     proj_seed: int
+    save_indices: bool
 
 
 def _new_theta_d(config: UniLoraConfig, home: _Home) -> Parameter:
@@ -110,7 +112,9 @@ class UniLoraLayer(
 
     @override
     def _enter(self, adapter_name: str, config: UniLoraConfig) -> None:
-        self._specs[adapter_name] = _UniLoraSpec(config.r, config.theta_d_length, config.proj_seed)
+        self._specs[adapter_name] = _UniLoraSpec(
+            config.r, config.theta_d_length, config.proj_seed, config.save_indices
+        )
         self._enter_dropout(adapter_name, config.unilora_dropout)
         if self._bound is None:
             # A layer used alone holds the vector it reads; a tuner's layers read the tuner's.
@@ -160,6 +164,9 @@ class UniLoraLayer(
     def bind_projection(self, adapter: str, assignment: _Assignment) -> None:
         """Hold the projection the tuner drew for this layer's factors, on the base weight's device.
 
+        The tensors are saved with the adapter when its ``save_indices`` is set, whatever the adapters
+        already in the layer chose.
+
         Parameters
         ----------
         adapter : str
@@ -168,8 +175,9 @@ class UniLoraLayer(
             The indices and scales of ``A`` and ``B``.
         """
         device = self.weight.device
+        saved = self._spec(adapter).save_indices
         for name, tensor in zip(_PROJECTION, assignment, strict=True):
-            getattr(self, name)[adapter] = tensor.to(device=device)
+            getattr(self, name).register(adapter, tensor.to(device=device), saved)
 
     def _assignment(self, adapter: str) -> _Assignment:
         """The projection ``adapter`` reads: the one the tuner bound, or one drawn for this layer alone.

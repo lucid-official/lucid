@@ -168,13 +168,8 @@ class UniLoraModel(_SettlingTuner, _SharedTablesTuner, _ConfigTuner, peft_type=P
     @override
     @classmethod
     def _shared_keys(cls, context: _FileContext) -> dict[str, str]:
-        """The vector, as the file's one model-wide tensor, and each layer's projection when ``save_indices`` is set."""
+        """The vector, as the file's one model-wide tensor, and each layer's projection when the adapter saves it (``save_indices``)."""
         keys = super()._shared_keys(context)
-        if not _as_unilora(context.config).save_indices:
-            return keys
         for path, layer in context.layers:
-            if isinstance(layer, UniLoraLayer) and context.adapter in layer._adapter_names():
-                where = f"{context.prefix}{path}"
-                for name in _PROJECTION:
-                    keys[f"{where}.{name}.{context.adapter}"] = f"{where}.{name}"
+            keys.update(context.layer_buffer_keys(path, layer, *_PROJECTION))
         return keys

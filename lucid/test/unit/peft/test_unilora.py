@@ -355,6 +355,171 @@ class TestFiles:
         )
 
 
+_THETA = "base_model.unilora_theta_d"
+_PROJECTION = (
+    "unilora_indices_A",
+    "unilora_indices_B",
+    "unilora_scales_A",
+    "unilora_scales_B",
+)
+
+#: (layers of the first adapter, layers of the second): the second one's reach among the first's.
+_LAYOUTS = {
+    "same_layers": (("0", "2"), ("0", "2")),
+    "second_on_a_subset": (("0", "2"), ("2",)),
+    "second_on_more": (("0",), ("0", "2")),
+    "disjoint": (("0",), ("2",)),
+}
+#: (save_indices of the first adapter, of the second)
+_CHOICES = [(False, False), (False, True), (True, False), (True, True)]
+
+
+def _projection_keys(*layers: str) -> list[str]:
+    """The file keys of the indices and scales of ``layers``, layer by layer."""
+    return [f"base_model.model.{layer}.{name}" for layer in layers for name in _PROJECTION]
+
+
+def _expected_keys(layers: tuple[str, ...], saved: bool) -> list[str]:
+    """An adapter's file: the vector, then each layer's projection when it saves them."""
+    return [_THETA, *(_projection_keys(*layers) if saved else [])]
+
+
+def _two(
+    layout: tuple[tuple[str, ...], tuple[str, ...]], choices: tuple[bool, bool], device: str = "cpu"
+) -> PeftModel:
+    """Adapter ``a`` and adapter ``b``, each on its own layers and choosing for itself whether to save its indices."""
+    (first, second), (save_a, save_b) = layout, choices
+    peft = get_peft_model(
+        _mlp(device), _config(save_indices=save_a, target_modules=list(first)), adapter_name="a"
+    )
+    peft.add_adapter("b", _config(save_indices=save_b, proj_seed=9, target_modules=list(second)))
+    return peft
+
+
+class TestSaveIndicesPerAdapter:
+    """``save_indices`` is each adapter's own choice, as the reference has it (LCD-984).
+
+    The reference lets adapters of one model differ: the file of each carries its projection if its own
+    config asks for it.  The buffers are persistent per adapter, not per layer.
+    """
+
+    @pytest.mark.parametrize("choices", _CHOICES)
+    @pytest.mark.parametrize("layout", _LAYOUTS.values(), ids=_LAYOUTS.keys())
+    def test_each_file_holds_what_its_own_config_asks(
+        self, layout: tuple[tuple[str, ...], tuple[str, ...]], choices: tuple[bool, bool]
+    ) -> None:
+        peft = _two(layout, choices)
+        for name, layers, saved in zip("ab", layout, choices, strict=True):
+            assert list(get_peft_model_state_dict(peft, adapter_name=name)) == _expected_keys(
+                layers, saved
+            )
+
+    @pytest.mark.parametrize("choices", _CHOICES)
+    def test_the_model_holds_the_buffers_of_the_adapters_that_save_them(
+        self, choices: tuple[bool, bool]
+    ) -> None:
+        peft = _two(_LAYOUTS["same_layers"], choices)
+        held = {k for k in peft.state_dict() if "unilora_indices_A" in k}
+        assert held == {
+            f"base_model.model.{layer}.unilora_indices_A.{name}"
+            for name, saved in zip("ab", choices, strict=True)
+            if saved
+            for layer in ("0", "2")
+        }
+
+    @pytest.mark.parametrize("choices", [(False, True), (True, False)])
+    @pytest.mark.parametrize("layout", _LAYOUTS.values(), ids=_LAYOUTS.keys())
+    def test_save_then_load_of_each_adapter_reproduces_it(
+        self,
+        layout: tuple[tuple[str, ...], tuple[str, ...]],
+        choices: tuple[bool, bool],
+        device: str,
+        tmp_path: Path,
+    ) -> None:
+        peft = _two(layout, choices, device)
+        _move(peft)
+        peft.set_adapter("b")
+        _move(peft, seed=4)
+        x = lucid.randn(4, 6, device=device)
+        expected: dict[str, lucid.Tensor] = {}
+        with lucid.no_grad():
+            for name in "ab":
+                peft.set_adapter(name)
+                expected[name] = peft(x)
+        peft.save_pretrained(tmp_path)
+        for name in "ab":
+            loaded = PeftModel.from_pretrained(_mlp(device), tmp_path / name, adapter_name=name)
+            with lucid.no_grad():
+                assert _same(loaded(x), expected[name]), name
+
+    def test_the_adapter_that_saves_carries_its_indices_whatever_the_other_chose(self) -> None:
+        trained = _two(_LAYOUTS["same_layers"], (False, True))
+        trained.set_adapter("b")
+        _move(trained)
+        state = get_peft_model_state_dict(trained, adapter_name="b")
+        other = get_peft_model(_mlp(), _config(save_indices=True, proj_seed=2), adapter_name="b")
+        x = lucid.randn(4, 6)
+        with lucid.no_grad():
+            assert not _same(other(x), trained(x))
+            set_peft_model_state_dict(other, state, adapter_name="b")
+            assert _same(other(x), trained(x))
+
+    def test_an_adapter_added_again_follows_its_new_choice(self) -> None:
+        peft = get_peft_model(_mlp(), _config(save_indices=True), adapter_name="a")
+        peft.add_adapter("b", _config(save_indices=False, proj_seed=9))
+        assert list(get_peft_model_state_dict(peft, adapter_name="b")) == [_THETA]
+        peft.delete_adapter("b")
+        peft.add_adapter("b", _config(save_indices=True, proj_seed=9))
+        assert list(get_peft_model_state_dict(peft, adapter_name="b")) == _expected_keys(
+            ("0", "2"), True
+        )
+
+    def test_a_layer_first_built_by_a_later_adapter_follows_that_adapter(self) -> None:
+        peft = _two((("0",), ("0", "2")), (False, True))
+        layer = _layer(peft, "2")
+        assert layer.unilora_indices_A.persists("b") and "a" not in layer.unilora_indices_A
+        assert not _layer(peft, "0").unilora_indices_A.persists("a")
+        assert _layer(peft, "0").unilora_indices_A.persists("b")
+
+
+class TestSaveIndicesFileKeyOrder:
+    """The order of the keys of a file: the vector, then each layer's projection in layer order.
+
+    The files of the adapters that agree (all saving or none) are what they were before the buffers
+    became persistent per adapter, key for key.
+    """
+
+    def test_the_layers_projections_follow_the_vector_in_layer_order(self) -> None:
+        state = get_peft_model_state_dict(get_peft_model(_mlp(), _config(save_indices=True)))
+        assert list(state) == [
+            "base_model.unilora_theta_d",
+            "base_model.model.0.unilora_indices_A",
+            "base_model.model.0.unilora_indices_B",
+            "base_model.model.0.unilora_scales_A",
+            "base_model.model.0.unilora_scales_B",
+            "base_model.model.2.unilora_indices_A",
+            "base_model.model.2.unilora_indices_B",
+            "base_model.model.2.unilora_scales_A",
+            "base_model.model.2.unilora_scales_B",
+        ]
+
+    @pytest.mark.parametrize("layout", _LAYOUTS.values(), ids=_LAYOUTS.keys())
+    def test_adapters_that_save_list_only_their_own_layers(
+        self, layout: tuple[tuple[str, ...], tuple[str, ...]]
+    ) -> None:
+        peft = _two(layout, (True, True))
+        for name, layers in zip("ab", layout, strict=True):
+            assert list(get_peft_model_state_dict(peft, adapter_name=name)) == [
+                _THETA,
+                *_projection_keys(*layers),
+            ]
+
+    def test_adapters_that_do_not_save_hold_the_vector_alone(self) -> None:
+        peft = _two(_LAYOUTS["second_on_a_subset"], (False, False))
+        for name in "ab":
+            assert list(get_peft_model_state_dict(peft, adapter_name=name)) == [_THETA]
+
+
 class TestErrors:
     def test_a_convolution_is_not_adapted(self) -> None:
         net = nn.Sequential(nn.Conv2d(2, 3, 3))
