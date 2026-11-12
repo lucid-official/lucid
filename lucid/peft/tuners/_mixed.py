@@ -157,7 +157,9 @@ class MixedModel(_BaseTuner):
 
     @override
     def _accepts(self, config: object) -> TypeIs[_TargetedConfig]:
-        return isinstance(config, _TargetedConfig) and _registered(_MIXED_TUNERS, config) is not None
+        return (
+            isinstance(config, _TargetedConfig) and _registered(_MIXED_TUNERS, config) is not None
+        )
 
     @override
     def _admit(self, adapter_name: str, peft_config: PeftConfig) -> str:
@@ -363,10 +365,7 @@ class MixedModel(_BaseTuner):
 
 
 def _fold_conflict(
-    below: _BaseTunerLayer,
-    above: _BaseTunerLayer,
-    below_now: list[str],
-    above_now: list[str],
+    below: _BaseTunerLayer, above: _BaseTunerLayer, below_now: list[str], above_now: list[str]
 ) -> str | None:
     """Why folding ``below_now`` and ``above_now`` (the adapters of two layers of one module that merge now) is refused, or ``None``.
 
@@ -391,9 +390,7 @@ def _fold_conflict(
     return None
 
 
-def _refuse(
-    family: type[_BaseTuner], config: _TargetedConfig, key: str, *, stacked: bool
-) -> None:
+def _refuse(family: type[_BaseTuner], config: _TargetedConfig, key: str, *, stacked: bool) -> None:
     """Raise ``ValueError`` with the family's reason if it cannot take ``config`` on ``key``."""
     refusal = family._mixed_refusal(config, stacked=stacked)
     if refusal is not None:
@@ -405,7 +402,9 @@ def _held_by(chain: list[_BaseTunerLayer]) -> list[str]:
     return [name for layer in chain[::-1] for name in layer._adapter_names()]
 
 
-def _adapters_of(layer: _BaseTunerLayer, names: Sequence[str], *, pending: bool = False) -> list[str]:
+def _adapters_of(
+    layer: _BaseTunerLayer, names: Sequence[str], *, pending: bool = False
+) -> list[str]:
     """The adapters among ``names`` that ``layer`` holds; with ``pending``, those not merged yet."""
     held = layer._adapter_names()
     chosen = [name for name in names if name in held]
