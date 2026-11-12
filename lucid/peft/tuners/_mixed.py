@@ -279,15 +279,51 @@ class MixedModel(_BaseTuner):
         _refuse(family, config, key, stacked=bool(chain))
         return _Target(key, top, layer_class)
 
-    def add_weighted_adapter(self, *args: object, **kwargs: object) -> None:
+    def add_weighted_adapter(
+        self,
+        adapters: list[str],
+        weights: list[float],
+        adapter_name: str,
+        combination_type: str = "svd",
+        svd_rank: int | None = None,
+        svd_clamp: float | None = None,
+        svd_full_matrices: bool = True,
+        svd_driver: str | None = None,
+        density: float | None = None,
+        majority_sign_method: str = "total",
+    ) -> None:
         """Refused: a weighted sum of adapters is one method's operation, and a mixed model holds several.
+
+        Parameters
+        ----------
+        adapters : list of str
+            The adapters to combine; not read.
+        weights : list of float
+            One weight per adapter; not read.
+        adapter_name : str
+            Name of the combined adapter; not read.
+        combination_type : str, default="svd"
+            How the adapters are combined, as in :meth:`~lucid.peft.LoraModel.add_weighted_adapter`; not read.
+        svd_rank : int, optional
+            Rank of an ``"svd"`` result; not read.
+        svd_clamp : float, optional
+            Quantile the ``"svd"`` factors are clamped to; not read.
+        svd_full_matrices : bool, default=True
+            Whether the SVD computes full matrices; not read.
+        svd_driver : str, optional
+            The SVD routine; not read.
+        density : float, optional
+            The share of elements kept by the pruning types; not read.
+        majority_sign_method : str, default="total"
+            How TIES elects a sign; not read.
 
         Raises
         ------
         NotImplementedError
             Always; combine the adapters inside the method's own model, then mix.
         """
-        del args, kwargs
+        del adapters, weights, adapter_name, combination_type  # the signature a call is written for
+        del svd_rank, svd_clamp, svd_full_matrices, svd_driver, density, majority_sign_method
         raise NotImplementedError(
             "add_weighted_adapter is not supported by a mixed model: combine the adapters of "
             "one method before mixing"
