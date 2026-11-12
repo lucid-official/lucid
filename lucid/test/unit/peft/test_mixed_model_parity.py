@@ -299,7 +299,12 @@ def test_a_reload_of_the_first_file_after_stacking_is_ignored_there_and_loaded_h
 def test_merging_one_of_two_active_adapters_drops_the_other_from_the_reference_forward_pass(
     ref: ModuleType,
 ) -> None:
-    """LCD-971, on the reference: one layer, two adapters in use, one merged."""
+    """LCD-971, on the reference: one layer, two adapters in use, one merged.
+
+    Pins the reference only.  Lucid departs from it on purpose: a merged layer there goes on
+    applying the active adapters it did not fold, so merging one of two does not change the
+    function (``test_multi_adapter_merge_contract``, "merging some of the active adapters").
+    """
     library = adapter_library()
     lucid.manual_seed(0)
     net = nn.Sequential(nn.Linear(6, 4))
