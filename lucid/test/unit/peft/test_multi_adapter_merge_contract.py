@@ -512,6 +512,61 @@ def test_an_adapter_of_ln_tuning_runs_whether_or_not_another_is_merged(
         assert all(same(p, w) for p, w in zip(own, weights, strict=True))
 
 
+@pytest.mark.parametrize("folded", ["default", "b"])
+def test_ln_tuning_refuses_to_fold_an_active_adapter_while_another_is_active(
+    folded: str, device: str, tmp_path: Path
+) -> None:
+    """One copy runs at a time: folding one of two active adapters would leave the other's copy alone."""
+    recipe = RECIPES[PeftType.LN_TUNING]
+    own, model = adapted(recipe, lucid.float32, device, tmp_path)
+    model.add_adapter("b", LNTuningConfig(target_modules=["0", "2"]))
+    perturb_adapter(model, "default", seed=5)
+    perturb_adapter(model, "b", seed=9)
+    model.set_adapter(["default", "b"])
+    model.eval()
+    weights = [p.detach().clone() for p in own]
+    with lucid.no_grad():
+        with pytest.raises(ValueError, match="LN tuning runs one adapter's copy at a time"):
+            model.base_model.merge_adapter(adapter_names=[folded])
+        assert _unmerged(model)
+        assert all(same(p, w) for p, w in zip(own, weights, strict=True))
+        # Naming both folds neither at a time: LN tuning's own refusal, as before.
+        with pytest.raises(ValueError, match="does not allow merging more than one adapter"):
+            model.base_model.merge_adapter(adapter_names=["default", "b"])
+        assert _unmerged(model)
+
+
+@pytest.mark.parametrize(
+    "peft_type", [PeftType.LORA, PeftType.LOHA, PeftType.HIRA, PeftType.IA3], ids=lambda t: t.name
+)
+@pytest.mark.filterwarnings("ignore:Unmerge result can be inaccurate:UserWarning")
+def test_merging_an_inactive_adapter_adds_it_to_the_active_ones(
+    peft_type: PeftType, device: str, tmp_path: Path
+) -> None:
+    """The base with the adapter folded in, and the active adapters on top of it: the base with that
+    adapter alone is what the reference leaves (it drops the active ones)."""
+    recipe, own, model = _two(peft_type, device, tmp_path)
+    perturb_adapter(model, "default", seed=5)
+    perturb_adapter(model, "b", seed=9)
+    model.eval()
+    weights = [p.detach().clone() for p in own]
+    with lucid.no_grad():
+        model.set_adapter(["default", "b"])
+        both = recipe.call(model, lucid.float32, device)
+        model.set_adapter(["b"])
+        only_b = recipe.call(model, lucid.float32, device)
+        assert span(both, only_b) > 1e3 * _TOLERANCE * magnitude(both)
+        model.set_adapter(["default"])
+        model.base_model.merge_adapter(adapter_names=["b"])
+        assert all(layer.merged_adapters == ["b"] for layer in _layers(model))
+        merged = recipe.call(model, lucid.float32, device)
+        assert span(merged, both) <= _TOLERANCE * magnitude(both)
+        assert span(merged, only_b) > 1e3 * _TOLERANCE * magnitude(both)
+        model.base_model.unmerge_adapter()
+        restored = _TOLERANCE * max(1.0, magnitude(both))
+        assert all(span(p, w) <= restored for p, w in zip(own, weights, strict=True))
+
+
 class _Attention(nn.Module):
     """A module that reads its attention weights inside its own forward: the LoRA weight-space layer."""
 
