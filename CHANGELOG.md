@@ -221,6 +221,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - strict index mode raises on Metal like the CPU (LCD-892)
 
+- strict index mode reaches the Python index guards (LCD-892)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

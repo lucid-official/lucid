@@ -480,6 +480,22 @@ def _fancy_select(
     return _C_engine.reshape(selected, out_shape)
 
 
+def _refuses_out_of_range(device: _C_engine.Device, unchecked: bool) -> bool:
+    """Whether :func:`_coordinate_select` refuses an index outside its dim.
+
+    The CPU always does; Metal isolates the index in the gather (policy B)
+    unless strict mode (``LUCID_STRICT_INDEX``) asks for the refusal too.
+    """
+    if device == _CPU:
+        return True
+    if not unchecked:
+        return False
+    # Imported here: ``lucid.nn`` imports this package.
+    from lucid.nn.functional._index_checks import _strict_index
+
+    return _strict_index()
+
+
 def _coordinate_select(
     impl: _C_engine.TensorImpl, int_indices: list[_C_engine.TensorImpl], unchecked: bool
 ) -> _C_engine.TensorImpl:
@@ -493,7 +509,9 @@ def _coordinate_select(
     ``x[[0], [5]]`` read element 5 rather than refusing.  A negative index
     wraps within its dim, and an out-of-range one is sent past the end of
     the folded axis, where the engine refuses it on the CPU and isolates it
-    on Metal, as for any other index.  Indices a mask made (``unchecked``
+    on Metal, as for any other index.  Under strict mode
+    (``LUCID_STRICT_INDEX``) Metal refuses it here, before the fold, in the
+    CPU's words.  Indices a mask made (``unchecked``
     false) are in range and non-negative by construction, and skip both.
     """
     n_indexed = len(int_indices)
@@ -507,6 +525,7 @@ def _coordinate_select(
         return _C_engine.full([], float(v), _I64, dev)
 
     zero = scalar(0)
+    refuse_here = _refuses_out_of_range(dev, unchecked)
     flat_idx: _C_engine.TensorImpl | None = None
     outside: _C_engine.TensorImpl | None = None
     stride = 1
@@ -522,7 +541,7 @@ def _coordinate_select(
         size = scalar(shape[k])
         idx = _C_engine.where(_C_engine.less(idx, zero), _C_engine.add(idx, size), idx)
         bad = _C_engine.logical_or(_C_engine.less(idx, zero), _C_engine.greater_equal(idx, size))
-        if dev == _CPU and not bad.is_phantom:
+        if refuse_here and not bad.is_phantom:
             # Only decides whether to raise — ``bad`` reaches the result
             # through ``outside`` below, not through this read — so a trace
             # does not count it as a data dependency.  Imported here:

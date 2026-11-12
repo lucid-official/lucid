@@ -17,6 +17,14 @@ on the CPU and dropping its write on Metal.  Narrowed to ``int32`` first,
 / ``values`` of another dtype than ``input``'s is refused, as the reference
 refuses it.
 
+That refusal is the CPU's.  Metal never reads an index back (a read would
+stall every call), so it answers a gather (``index_select``, ``gather``,
+``take``, ``x[idx]``) with NaN at an out-of-range position (0 for an
+integer source) and drops an out-of-range write.  Setting the environment
+variable ``LUCID_STRICT_INDEX=1`` makes Metal raise the CPU's ``IndexError``,
+in the CPU's words, for every one of these ops and for ``embedding``, at
+the cost of reading the index back on each call.
+
 An op that flattens or broadcasts its index before an engine kernel sees
 it (the ``index_*`` family, ``put``) checks the index here, at the public
 op, before any data is touched (:func:`_positions`, :func:`_require_index`).

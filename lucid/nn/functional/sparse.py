@@ -47,7 +47,10 @@ def check_embedding_indices(x: Tensor, weight: Tensor, op: str) -> None:
         If a CPU ``x`` holds an index that is negative or
         ``>= weight.shape[0]``.  A Metal ``x`` is not read back: the
         engine's gather isolates an out-of-range row on device (NaN for a
-        floating table, 0 for an integer one).
+        floating table, 0 for an integer one).  Set the environment
+        variable ``LUCID_STRICT_INDEX=1`` to make Metal raise the same
+        ``IndexError`` too, at the price of reading ``x`` back on every
+        call.
 
     Examples
     --------
@@ -370,7 +373,8 @@ def one_hot(input: Tensor, num_classes: int = -1) -> Tensor:
         If a CPU ``input`` holds a class outside ``[0, num_classes)``,
         a negative one included; it used to give a row of zeros.  A Metal
         ``input`` is not read back for the check (that would stall every
-        step), and a class outside the range gives a row of zeros there.
+        step), and a class outside the range gives a row of zeros there,
+        unless ``LUCID_STRICT_INDEX=1`` is set, which raises on Metal too.
 
     Notes
     -----

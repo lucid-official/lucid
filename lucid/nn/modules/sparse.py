@@ -174,6 +174,16 @@ class Embedding(_PaddedTable):
     (e.g. transformers), consider dividing by :math:`\sqrt{D}` after
     construction.
 
+    **An index outside** ``[0, num_embeddings)`` **differs by device.** On
+    the CPU it raises ``IndexError``.  On Metal the index is never read
+    back (that would stall every step), so the row it names reads as NaN
+    and the loss turns NaN far from its cause.  Set the environment
+    variable ``LUCID_STRICT_INDEX=1`` (before the call, or in
+    ``os.environ``) to have Metal raise the same ``IndexError``; it costs a
+    host read of the index on every lookup, so it is meant for finding a
+    bad label, not for the training loop.  Unset, or ``0``, Metal behaves
+    as before and pays nothing.
+
     Embedding is commonly used in natural-language processing (token
     embeddings, position encodings), recommendation systems (item /
     user embeddings), and any domain where discrete categorical inputs

@@ -46,6 +46,24 @@ inside the graph instead, and never reaches memory outside its buffer:
   gather reads 0, a scatter drops the update, and ``one_hot`` gives a
   zero row.
 
+**Strict mode.** The Metal difference above is the default, and it is a
+trade: the check is cheap only because it never reads the index. Set
+``LUCID_STRICT_INDEX=1`` in the environment (or in ``os.environ`` before
+the call) and Metal raises the CPU's ``IndexError``, in the CPU's words,
+for every op above and for the engine's own gathers and scatters
+(``index_select``, ``gather``, ``take``, ``scatter*``, ``x[idx]``,
+``x[idx] = v``). Each call then reads its index back, which is the stall
+the default avoids. Measured: a 16k-index lookup into a 50k-row table
+takes 1.3 ms instead of 0.8 ms with the result evaluated on every call;
+a GPU-bound training step pays a few percent, and a tiny latency-bound
+forward that would otherwise pipeline can take up to twice as long.
+``LUCID_STRICT_INDEX`` unset or ``0`` costs one environment lookup.
+
+A compiled program on Metal checks only the call it traced (the one that
+runs eagerly) and any call that falls back to eager, such as one that
+needs gradients: a replay runs the graph, where the index is isolated and
+not read back (see :func:`_host_read`).
+
 Two consumers read on Metal anyway, each for its own reason:
 
 - ``ctc_loss`` runs its recursions on the CPU, so its labels and lengths
@@ -59,6 +77,7 @@ accepts a label outside ``[0, C)`` and reads past the class axis. The loss
 it gives is meaningless, so such a label is refused here.
 """
 
+import os
 from collections.abc import Callable
 from itertools import pairwise
 from typing import TYPE_CHECKING, NamedTuple, cast, overload
@@ -70,6 +89,18 @@ from lucid.nn.functional._spatial_args import _spatial_extent
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
+
+
+def _strict_index() -> bool:
+    """Whether a Metal index outside its axis raises, as on the CPU.
+
+    ``LUCID_STRICT_INDEX`` set to anything but ``""`` or a leading ``0``.
+    The engine reads the same variable with the same rule
+    (``strict_index_enabled`` in ``backend/gpu/AxisIndex.h``), on every
+    call, so the two layers cannot disagree about a switch made at run
+    time.
+    """
+    return os.environ.get("LUCID_STRICT_INDEX", "")[:1] not in ("", "0")
 
 
 def _host_read[T](read: Callable[[], T]) -> T:
@@ -196,7 +227,8 @@ class _ClassTargets(NamedTuple):
     #: ``None`` when it reads every entry.
     counted: Tensor | None
     #: Metal only: ``False`` at each out-of-range counted target, for
-    #: :func:`_poison`.  ``None`` on the CPU, where such a target raised.
+    #: :func:`_poison`.  ``None`` where such a target raised: on the CPU, and
+    #: on Metal in strict mode.
     usable: Tensor | None
 
 
@@ -216,7 +248,8 @@ def _class_targets(
     ``ignore_index``), or the padding after a label list (pass the
     ``counted`` mask).  Any other target outside ``[0, num_classes)``
     raises ``IndexError("<op>: Target N is out of bounds.")`` for a CPU
-    ``target``, and is flagged in ``usable`` for a Metal one.
+    ``target`` (and for a Metal one in strict mode), and is flagged in
+    ``usable`` for a Metal one otherwise.
 
     A CPU target is checked at its own width, so an ``int64`` target past
     ``int32``'s range is refused rather than wrapped into the range.  A
@@ -228,11 +261,10 @@ def _class_targets(
     (LCD-270).
     """
     index = _class_index(target)
-    on_cpu = target.device == "cpu"
     if ignore_index is not None:
         counted = index != ignore_index
     clamped, usable = _in_range(index, num_classes, counted)
-    if on_cpu:
+    if target.device == "cpu" or _strict_index():
         _refuse(index, usable, lambda v: f"{op}: Target {v} is out of bounds.")
         return _ClassTargets(clamped.to(dtype=_lucid.int32), counted, None)
     return _ClassTargets(clamped, counted, usable)
@@ -267,10 +299,10 @@ def _check_indices(index: Tensor, extent: int, op: str, *, what: str, axis: str)
 
     The message is ``"<op>: <what> <v> is out of range for <axis> (valid
     range [0, extent - 1])"``. A Metal ``index`` is isolated in the graph
-    and not read back (see the module docstring). An empty ``index`` has
-    nothing to check.
+    and not read back unless strict mode is on (see the module docstring).
+    An empty ``index`` has nothing to check.
     """
-    if index.numel() == 0 or index.device != "cpu":
+    if index.numel() == 0 or (index.device != "cpu" and not _strict_index()):
         return
     index, usable = _host_read(lambda: _guard(index, extent))
     _refuse(
