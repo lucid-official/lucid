@@ -13,6 +13,11 @@ one contract:
   out-of-range update, so the base keeps its value there.  ``one_hot``
   answers a zero row.
 
+``LUCID_STRICT_INDEX=1`` is the opt-in exception (LCD-892): Metal then
+raises the CPU's IndexError, in the CPU's words, at the cost of reading the
+index back.  The strict tests at the bottom pin that, and that it changes
+nothing when off.
+
 The owners are ``gpu_axis_index`` in ``lucid/_C/backend/gpu/AxisIndex.h``
 and the CPU kernels' checks in ``lucid/_C/backend/cpu/IndexBounds.h``.  The
 device difference is written up in ``lucid/test/audit/README.md``.
@@ -102,6 +107,9 @@ def _gather_cases(bad: int) -> dict[str, tuple[Callable[[str], lucid.Tensor], ob
             lambda d: lucid.arange(N, dtype=lucid.float32).to(d)[_ix([1, bad], d)],
             [1.0, NAN],
         ),
+        # Two index tensors fold into one flat index; each is checked against
+        # its own dim first (``_coordinate_select``).
+        "getitem_coords": (lambda d: grid(d)[_ix([1, bad], d), _ix([0, 1], d)], [4.0, NAN]),
     }
 
 
@@ -478,3 +486,238 @@ def test_metal_isolation_takes_no_host_sync() -> None:
     ]
     lucid.eval(*outs)
     assert _C_engine.host_sync_count() == before
+
+
+# ── strict mode (LCD-892): Metal refuses, in the CPU's words ─────────────────
+#
+# Policy B is the default and the tests above pin it.  ``LUCID_STRICT_INDEX``
+# is the opt-in way back to the CPU's IndexError: the gates read the check
+# back to the host, so a bad index raises where it was made instead of
+# becoming a NaN far away.  The message is the CPU's, word for word.
+
+
+@pytest.fixture
+def strict(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LUCID_STRICT_INDEX", "1")
+
+
+def _refusal(run: Callable[[str], object], device: str) -> str:
+    with pytest.raises(IndexError) as info:
+        run(device)
+    return str(info.value)
+
+
+@pytest.mark.parametrize(
+    ("name", "case"), _name_case_params(list(_gather_cases(0)), list(_WRAPPING))
+)
+def test_strict_gather_family(device_gpu_only: str, strict: None, name: str, case: str) -> None:
+    run, _ = _gather_cases(_WRAPPING[case])[name]
+    assert _refusal(run, device_gpu_only) == _refusal(run, "cpu")
+
+
+# The class losses name the op by what called the engine, so for them only
+# the refusal itself is pinned here; ``test_strict_class_losses_*`` pins
+# the words through the public functions.
+_ROWS_WORDED_LIKE_THE_CPU = {"embedding", "embedding_bag", "one_hot"}
+
+
+@pytest.mark.parametrize("case", list(_NON_WRAPPING))
+@pytest.mark.parametrize("name", list(_row_cases(0)))
+def test_strict_row_and_class_family(
+    device_gpu_only: str, strict: None, name: str, case: str
+) -> None:
+    run, _ = _row_cases(_NON_WRAPPING[case])[name]
+    metal = _refusal(run, device_gpu_only)
+    if name in _ROWS_WORDED_LIKE_THE_CPU:
+        assert metal == _refusal(run, "cpu")
+
+
+@pytest.mark.parametrize(
+    ("name", "case"), _name_case_params(list(_scatter_cases(0)), list(_WRAPPING))
+)
+def test_strict_scatter_family(device_gpu_only: str, strict: None, name: str, case: str) -> None:
+    run, _ = _scatter_cases(_WRAPPING[case])[name]
+    assert _refusal(run, device_gpu_only) == _refusal(run, "cpu")
+
+
+@pytest.mark.parametrize("name", list(_engine_full_width_cases()))
+def test_strict_engine_ops_at_full_width(device_gpu_only: str, strict: None, name: str) -> None:
+    run, _ = _engine_full_width_cases()[name]
+    assert _refusal(run, device_gpu_only) == _refusal(run, "cpu")
+
+
+@pytest.mark.parametrize("case", list(_WRAPPING))
+def test_strict_setitem(device_gpu_only: str, strict: None, case: str) -> None:
+    bad = _WRAPPING[case]
+
+    def run(device: str) -> lucid.Tensor:
+        x = lucid.zeros(N).to(device)
+        x[_ix([1, bad], device)] = 5.0
+        return x
+
+    _refusal(run, device_gpu_only)
+
+
+def test_strict_embedding_module_says_what_the_cpu_says(device_gpu_only: str, strict: None) -> None:
+    import lucid.nn as nn
+
+    def run(device: str) -> lucid.Tensor:
+        return nn.Embedding(N, 3).to(device)(_ix([9], device))
+
+    assert _refusal(run, device_gpu_only) == _refusal(run, "cpu")
+
+
+@pytest.mark.parametrize(
+    "name", ["cross_entropy", "nll_loss", "multi_margin_loss", "multilabel_margin_loss"]
+)
+def test_strict_class_losses_say_what_the_cpu_says(
+    device_gpu_only: str, strict: None, name: str
+) -> None:
+    import lucid.nn.functional as F
+
+    def run(device: str) -> lucid.Tensor:
+        logits = lucid.tensor([[0.0, 1.0, 2.0, 3.0]]).to(device)
+        target = _ix([[9, -1, 0, 0]] if name == "multilabel_margin_loss" else [9], device)
+        return getattr(F, name)(logits, target)
+
+    assert _refusal(run, device_gpu_only) == _refusal(run, "cpu")
+
+
+def test_strict_class_loss_ignores_the_ignore_index(device_gpu_only: str, strict: None) -> None:
+    import lucid.nn.functional as F
+
+    metal = F.cross_entropy(lucid.zeros(2, N).to(device_gpu_only), _ix([1, -100], device_gpu_only))
+    cpu = F.cross_entropy(lucid.zeros(2, N), _ix([1, -100], "cpu"))
+    assert metal.item() == pytest.approx(cpu.item())
+
+
+def test_strict_one_hot_functional(device_gpu_only: str, strict: None) -> None:
+    import lucid.nn.functional as F
+
+    def run(device: str) -> lucid.Tensor:
+        return F.one_hot(_ix([1, 9], device), N)
+
+    assert _refusal(run, device_gpu_only) == _refusal(run, "cpu")
+
+
+def test_strict_leaves_valid_calls_alone(device: str, strict: None) -> None:
+    """In range, strict mode answers what policy B answers: the same values,
+    negative wrap-around included, and no refusal."""
+    import lucid.nn.functional as F
+
+    grid = lucid.arange(2 * N, dtype=lucid.float32).reshape(2, N).to(device)
+    table = lucid.arange(N * 3, dtype=lucid.float32).reshape(N, 3).to(device)
+    row = _ix([3, 0, -1, -N], device)  # negatives wrap for a gather
+    assert lucid.index_select(grid, 1, row).tolist() == [[3.0, 0.0, 3.0, 0.0], [7.0, 4.0, 7.0, 4.0]]
+    assert lucid.gather(grid, 1, _ix([[3, -1], [0, -N]], device)).tolist() == [
+        [3.0, 3.0],
+        [4.0, 4.0],
+    ]
+    assert lucid.take(grid, _ix([7, -1], device)).tolist() == [7.0, 7.0]
+    assert grid[_ix([1, -1], device)].tolist() == grid[_ix([1, 1], device)].tolist()
+    assert F.embedding(_ix([[3, 0], [1, 1]], device), table).shape == (2, 2, 3)
+    assert F.one_hot(_ix([0, 3], device), N).tolist() == [[1, 0, 0, 0], [0, 0, 0, 1]]
+    summed = lucid.scatter_add(grid, 1, _ix([[1], [-1]], device), lucid.ones(2, 1).to(device))
+    assert summed.tolist() == [[0.0, 2.0, 2.0, 3.0], [4.0, 5.0, 6.0, 8.0]]
+
+
+def test_strict_rows_never_wrap(device: str, strict: None) -> None:
+    # -1 is the last element for a gather and no row at all for a table.
+    table = lucid.arange(N * 3, dtype=lucid.float32).reshape(N, 3).to(device)
+    with pytest.raises(IndexError):
+        _C_engine.nn.embedding(_unwrap(table), _unwrap(_ix([-1], device)), -1)
+
+
+def test_strict_padding_idx_keeps_its_behaviour(device: str, strict: None) -> None:
+    import lucid.nn.functional as F
+
+    table = lucid.arange(N * 3, dtype=lucid.float32).reshape(N, 3).to(device)
+    padded = F.embedding(_ix([1, 2, 1], device), table, padding_idx=1)
+    plain = F.embedding(_ix([1, 2, 1], device), table)
+    assert padded.tolist() == plain.tolist()
+    with pytest.raises(IndexError):
+        F.embedding(_ix([1, N], device), table, padding_idx=1)
+
+
+def test_strict_embedding_backward_with_padding_idx(device: str, strict: None) -> None:
+    import lucid.nn.functional as F
+
+    w = lucid.zeros(N, 3).to(device).requires_grad_(True)
+    F.embedding(_ix([1, 2, 1], device), w, padding_idx=1).sum().backward()
+    assert w.grad.tolist() == [[0.0] * 3, [0.0] * 3, [1.0] * 3, [0.0] * 3]
+
+
+@pytest.mark.parametrize(
+    ("value", "raises"),
+    [("1", True), ("true", True), ("yes", True), ("0", False), ("", False), ("0abc", False)],
+)
+def test_strict_switch_reads_the_same_in_both_layers(
+    device_gpu_only: str, monkeypatch: pytest.MonkeyPatch, value: str, raises: bool
+) -> None:
+    # The Python guards and the engine each read LUCID_STRICT_INDEX; they
+    # must agree, for an engine op the guards never see and for one they do.
+    import lucid.nn.functional as F
+
+    monkeypatch.setenv("LUCID_STRICT_INDEX", value)
+    d = device_gpu_only
+    table = lucid.arange(N * 3, dtype=lucid.float32).reshape(N, 3).to(d)
+    engine_op = lambda: _wrap(_C_engine.nn.embedding(_unwrap(table), _unwrap(_ix([N], d)), -1))
+    guarded_op = lambda: F.embedding(_ix([N], d), table)
+    for call in (engine_op, guarded_op):
+        if raises:
+            with pytest.raises(IndexError):
+                call()
+        else:
+            assert all(math.isnan(v) for v in call().tolist()[0])
+
+
+# Compiled programs.  The call that traces a program runs eagerly, so strict
+# mode refuses on it; a replay runs the graph, where an index is isolated
+# in-graph (``compile/OpEmitters/_IndexBounds.h``) and nothing reads it back.
+# A call that falls back to eager (it needs gradients) is checked every time.
+
+
+def _compiled_embedding(device: str) -> Callable[[lucid.Tensor], lucid.Tensor]:
+    import lucid.nn.functional as F
+
+    table = lucid.arange(N * 3, dtype=lucid.float32).reshape(N, 3).to(device)
+    return lucid.compile(lambda x: F.embedding(x, table))
+
+
+def test_strict_compiled_trace_call_refuses(device_gpu_only: str, strict: None) -> None:
+    run = _compiled_embedding(device_gpu_only)
+    with lucid.no_grad(), pytest.raises(IndexError, match="index 9 is out of range"):
+        run(_ix([0, 9], device_gpu_only))
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="LCD-892: a compiled replay on Metal does not read its indices back; "
+    "the check has to ride the graph (export role)",
+)
+def test_strict_compiled_replay_refuses(device_gpu_only: str, strict: None) -> None:
+    run = _compiled_embedding(device_gpu_only)
+    with lucid.no_grad():
+        run(_ix([0, 1], device_gpu_only))
+        with pytest.raises(IndexError):
+            run(_ix([0, 9], device_gpu_only))
+
+
+@pytest.mark.filterwarnings("ignore:lucid.compile:UserWarning")
+def test_strict_compiled_call_that_needs_gradients_refuses(
+    device_gpu_only: str, strict: None
+) -> None:
+    import lucid.nn as nn
+
+    run = lucid.compile(nn.Embedding(N, 3).to(device_gpu_only))
+    run(_ix([0, 1], device_gpu_only))
+    with pytest.raises(IndexError, match="index 9 is out of range"):
+        run(_ix([0, 9], device_gpu_only))
+
+
+def test_strict_is_off_unless_asked(device_gpu_only: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LUCID_STRICT_INDEX", raising=False)
+    d = device_gpu_only
+    table = lucid.arange(N * 3, dtype=lucid.float32).reshape(N, 3).to(d)
+    out = lucid.index_select(table, 0, _ix([2, N], d))
+    assert _same(out.tolist(), [[6.0, 7.0, 8.0], [NAN, NAN, NAN]])
