@@ -151,6 +151,11 @@
    "date": "2026-11-12",
    "reason": "LCD-822 PEFT B4 scaffold: vulture unused-variable +57 in 17 config files \u2014 reference-parity dataclass fields of the 19 pending methods and 5 LoRA option classes that no tuner reads yet; each returns to 0 when its method card (LCD-823..826, 828) lands",
    "by": "chanlee"
+  },
+  {
+   "date": "2026-11-12",
+   "reason": "LCD-968c: TrainableTokensModel.inject_adapter type-ignore[override] (reference override signature: **kwargs where its base takes state_dict)",
+   "by": "chanlee"
   }
  ],
  "counts": {
@@ -1124,6 +1129,7 @@
     "lucid/models/vision/crossvit/_model.py": 1,
     "lucid/peft/_task_models.py": 5,
     "lucid/peft/tuners/poly/_model.py": 1,
+    "lucid/peft/tuners/trainable_tokens/_model.py": 1,
     "lucid/utils/data/dataset.py": 1,
     "lucid/utils/data/sampler.py": 1,
     "lucid/utils/tokenizer/_byte_bpe.py": 2
