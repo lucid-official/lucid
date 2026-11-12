@@ -233,6 +233,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - tuners declare mixed=True; merge order is a tuner hook
 
+- MixedModel stacks the adapters of several methods
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

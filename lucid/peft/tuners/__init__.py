@@ -46,6 +46,9 @@ that tracks it, until the tuner is written.  They are ``delora``, ``gralora``, `
 ``shadow`` is the twentieth and is refused for good: the method needs the base model's decoder loop
 and a second backbone beside it.
 
+``MixedModel`` is the host of a model that holds adapters of several of these methods at once, their
+layers stacked on each module; only the methods declared ``mixed=True`` may take part.
+
 The modules whose names begin with an underscore here (``_base``, ``_lycoris``, ``_orthogonal``,
 ``_shared``, ``_prompt`` …) are the machinery the methods share, not part of the public surface.
 """
@@ -98,8 +101,10 @@ from lucid.peft.tuners import (
     waveft,
     xlora,
 )
+from lucid.peft.tuners._mixed import MixedModel
 
 __all__ = [
+    "MixedModel",
     "adalora",
     "adamss",
     "adaption_prompt",
