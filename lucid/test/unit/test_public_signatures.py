@@ -19,20 +19,35 @@ foot of each file; 297 callables across ``nn``, ``compile``,
 :mod:`lucid._annotations` binds every name a module imports under
 ``TYPE_CHECKING`` once the module has finished executing, from the table
 at that file's foot which ``tools/gen_annotation_names.py`` writes — and the
-whole surface is held here, not only the top level.
+whole surface is held here, not only the top level: every public class's
+``__init__`` and public methods and properties, the model zoo included.
+
+When that table is stale, or a name cannot be bound, the signature raises a
+bare ``NameError`` that names neither the callable nor the parameter.  The
+guard for the whole surface reports, per signature, its qualified name, the
+parameter, the unresolved name and the fix.  It is a unit test rather than a
+commit-level rule: the static half (a ``TYPE_CHECKING`` import the table does
+not list) is ``.githooks/pre-commit`` 1a already, and what is left — a name
+the resolver cannot bind — can only be seen by evaluating the signature.
 """
 
 import annotationlib
+import ast
+import functools
 import inspect
 import pkgutil
 import subprocess
 import sys
+import types
+import typing
+from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 
 import lucid
+from lucid._annotations import NAMES
 
 #: One that stays unreadable, for a reason that is not an oversight.
 #:
@@ -46,6 +61,12 @@ import lucid
 #: A test below asserts the reason still holds, so the entry cannot
 #: outlive it unnoticed.
 NO_PYTHON_SIGNATURE = {"from_numpy"}
+
+#: The same reason one level down, by qualified name: the protocol the numpy
+#: bridge accepts says ``-> np.ndarray`` without the package importing numpy.
+#: An entry excuses the one name ``np`` and nothing else — a second unresolved
+#: name on the same signature still fails.
+NUMPY_ANNOTATED_METHODS = {"lucid.SupportsNumpyConversion.numpy"}
 
 
 def _public_callables() -> list[str]:
@@ -141,24 +162,281 @@ def test_a_module_that_annotates_tensor_binds_it() -> None:
 _REPO = Path(__file__).resolve().parents[3]
 
 
-def test_every_public_callable_in_every_subpackage_has_a_readable_signature() -> None:
-    """The whole surface the audit walks, not only ``lucid.__all__``."""
+Fn = Callable[..., object]
+
+
+def _accessors(raw: object) -> list[tuple[str, Fn]]:
+    """The functions behind one class attribute, each with the suffix that names it."""
+    if isinstance(raw, (staticmethod, classmethod)):
+        return [("", raw.__func__)]
+    if isinstance(raw, property):
+        return [(f".{kind}", fn) for kind in ("fget", "fset") if (fn := getattr(raw, kind))]
+    if isinstance(raw, functools.cached_property):
+        return [("", raw.func)]
+    return [("", raw)] if isinstance(raw, types.FunctionType) else []
+
+
+def _defined_here(fn: Fn) -> bool:
+    """Whether ``fn`` is Lucid's own, not a method a base class took from the standard library."""
+    module = getattr(fn, "__module__", None) or ""
+    return module == "lucid" or module.startswith("lucid.")
+
+
+def _targets(label: str, obj: object) -> list[tuple[str, Fn]]:
+    """What reading ``obj``'s public signatures evaluates: itself and, for a class, its methods.
+
+    A class reads through its ``__init__``.  Its public methods and properties
+    are separate callables with annotations of their own, which nothing but a
+    caller of that method evaluates, until a documentation build does.
+    """
+    if not inspect.isclass(obj):
+        found = [(label + suffix, fn) for suffix, fn in _accessors(obj)]
+        return found or ([(label, obj)] if callable(obj) else [])
+    found = [(label, obj)]
+    for name in dir(obj):
+        if name.startswith("_"):
+            continue
+        for suffix, fn in _accessors(inspect.getattr_static(obj, name, None)):
+            if _defined_here(fn):
+                found.append((f"{label}.{name}{suffix}", fn))
+    return found
+
+
+def _public_signatures() -> Iterator[tuple[str, Fn]]:
+    """``(label, callable)`` for every public signature of the released surface, once each.
+
+    The symbols ``lucid.test.audit`` enumerates, which leave the model zoo to a
+    stage of its own, then ``lucid.models.__all__``; for each class, its
+    ``__init__``, methods and properties.  A function reached under two names
+    is read once, under the first.
+    """
+    import lucid.models as models
     from lucid.test.audit import _surface
 
-    unreadable = []
-    for symbol in _surface.enumerate_surface():
-        value = _surface.resolve(symbol)
-        if value is None or not callable(value):
-            continue
-        if symbol.qualname.rsplit(".", 1)[-1] in NO_PYTHON_SIGNATURE:
-            continue
+    roots = [(symbol.qualname, symbol.obj) for symbol in _surface.enumerate_surface()]
+    roots += [(f"lucid.models.{name}", getattr(models, name, None)) for name in models.__all__]
+    seen: set[int] = set()
+    for label, obj in roots:
+        for target_label, target in _targets(label, obj):
+            if id(target) not in seen:
+                seen.add(id(target))
+                yield target_label, target
+
+
+def _function_of(target: Fn) -> Fn:
+    """The function whose annotations ``inspect.signature(target)`` reads."""
+    return getattr(target, "__init__", target) if inspect.isclass(target) else target
+
+
+def _unresolved(function: Fn) -> dict[str, list[str]]:
+    """Per parameter (``return`` too), the names its annotation uses that do not exist.
+
+    Read as forward references, which is what ``inspect.signature`` declines to
+    do: a name the module lacks comes back as a ``ForwardRef``, and the names
+    that did resolve come back as placeholders, so what is left in the text is
+    what is missing.
+    """
+    try:
+        annotations = annotationlib.get_annotations(
+            function, format=annotationlib.Format.FORWARDREF
+        )
+    except TypeError:
+        return {}
+
+    def refs(value: object) -> Iterator[annotationlib.ForwardRef]:
+        if isinstance(value, annotationlib.ForwardRef):
+            yield value
+        for part in value if isinstance(value, list) else typing.get_args(value):
+            yield from refs(part)
+
+    found: dict[str, list[str]] = {}
+    for parameter, annotation in annotations.items():
+        for ref in refs(annotation):
+            for node in ast.walk(ast.parse(ref.__forward_arg__, mode="eval")):
+                if isinstance(node, ast.Name) and not node.id.startswith("__annotationlib_name_"):
+                    found.setdefault(parameter, []).append(node.id)
+    return found
+
+
+@functools.cache
+def _imported_for_type_checkers() -> dict[str, tuple[str, ...]]:
+    """Module -> the names it imports only under ``TYPE_CHECKING``, read from the source."""
+    from tools import gen_annotation_names
+
+    return {
+        module: tuple(bound for bound, _, _ in entries)
+        for module, entries in gen_annotation_names.collect().items()
+    }
+
+
+def _remedy(name: str, module: str, *, listed: bool, imported: bool) -> str:
+    """What to do about ``name``, which ``module`` annotates with and does not define."""
+    regenerate = "python -m tools.gen_annotation_names"
+    if imported and not listed:
+        return (
+            f"{module} imports {name} under TYPE_CHECKING and the table in "
+            f"lucid/_annotations.py does not list it yet: run `{regenerate}`"
+        )
+    if listed:
+        return (
+            f"the table lists {name} for {module} but its source did not bind it: "
+            f"import {name} at runtime in {module}, outside TYPE_CHECKING, "
+            f"then run `{regenerate}`"
+        )
+    return (
+        f"{module} does not import {name}: import {name} at runtime, "
+        f"then run `{regenerate}` (a TYPE_CHECKING import needs the table row it writes)"
+    )
+
+
+def _excused(label: str, names: set[str]) -> bool:
+    """Whether ``np`` is all that is missing, on a signature this file declares unreadable for it."""
+    declared = label.rsplit(".", 1)[-1] in NO_PYTHON_SIGNATURE or label in NUMPY_ANNOTATED_METHODS
+    return declared and names <= {"np"}
+
+
+def _describe(label: str, function: Fn, missing: dict[str, list[str]]) -> list[str]:
+    module = getattr(function, "__module__", None) or "?"
+    listed = {bound for bound, _, _ in NAMES.get(module, ())}
+    imported = _imported_for_type_checkers().get(module, ())
+    lines = []
+    for parameter, names in missing.items():
+        where = {"": "an annotation", "return": "the return annotation"}.get(
+            parameter, f"parameter {parameter!r}"
+        )
+        for name in dict.fromkeys(names):
+            fix = _remedy(name, module, listed=name in listed, imported=name in imported)
+            lines.append(
+                f"{label}: {where} names {name!r}, which {module} does not define at run time"
+                f"\n    fix: {fix}"
+            )
+    return lines
+
+
+def _unreadable(targets: Iterable[tuple[str, Fn]]) -> list[str]:
+    """A report for each target whose annotations raise ``NameError``: where, which, and the fix."""
+    reports: list[str] = []
+    for label, target in targets:
         try:
-            inspect.signature(value)
+            inspect.signature(target)
         except NameError as exc:
-            unreadable.append(f"{symbol.qualname}: {exc}")
+            function = _function_of(target)
+            missing = _unresolved(function) or {"": [exc.name or "?"]}
+            if not _excused(label, {name for names in missing.values() for name in names}):
+                reports += _describe(label, function, missing)
         except (ValueError, TypeError):
             pass  # a builtin or C type: not something an annotation fixes
-    assert not unreadable, "\n".join(unreadable)
+    return reports
+
+
+def test_every_public_signature_of_the_released_surface_is_readable() -> None:
+    """The whole surface the audit walks and the model zoo, methods included.
+
+    ``inspect.signature`` raises a bare ``NameError`` that names neither the
+    callable nor the parameter; the report here does, and says what to run.
+    """
+    reports = _unreadable(_public_signatures())
+    assert not reports, (
+        f"{len(reports)} public annotation(s) name something that does not exist at run time, "
+        "so inspect.signature raises NameError and help(), editors and the docs build "
+        "cannot read the callable:\n" + "\n".join(reports)
+    )
+
+
+def _function(source: str) -> Fn:
+    """The function ``f`` that ``source`` defines, in a made-up module of the package."""
+    namespace: dict[str, object] = {"__name__": "lucid.scratch", "Callable": Callable}
+    exec(source, namespace)
+    function = namespace["f"]
+    assert callable(function)
+    return function
+
+
+def test_the_report_names_the_callable_the_parameter_the_name_and_the_fix() -> None:
+    function = _function(
+        "def f(self, size: int, config: Gone | None = None, *, hook: Callable[[Hook], Out]"
+        " = None, table: dict[str, Row | int] = {}) -> Result[int]: ..."
+    )
+    reports = _unreadable([("lucid.scratch.Layer.route", function)])
+    assert len(reports) == 5, reports
+    expected = [
+        ("parameter 'config'", "'Gone'"),
+        ("parameter 'hook'", "'Hook'"),
+        ("parameter 'hook'", "'Out'"),
+        ("parameter 'table'", "'Row'"),
+        ("the return annotation", "'Result'"),
+    ]
+    for report, (where, name) in zip(reports, expected, strict=True):
+        assert report.startswith("lucid.scratch.Layer.route: ")
+        assert where in report and name in report, report
+        assert "lucid.scratch does not define" in report
+        assert "`python -m tools.gen_annotation_names`" in report
+    assert not any("'size'" in report for report in reports)
+
+
+@pytest.mark.parametrize(
+    ("listed", "imported", "says"),
+    [
+        (False, True, "does not list it yet: run `python -m tools.gen_annotation_names`"),
+        (True, False, "did not bind it: import Gone at runtime in lucid.scratch"),
+        (False, False, "lucid.scratch does not import Gone: import Gone at runtime"),
+    ],
+    ids=["stale table", "unbindable source", "never imported"],
+)
+def test_the_fix_follows_how_the_module_comes_to_lack_the_name(
+    monkeypatch: pytest.MonkeyPatch, listed: bool, imported: bool, says: str
+) -> None:
+    monkeypatch.setattr(
+        f"{__name__}._imported_for_type_checkers",
+        lambda: {"lucid.scratch": ("Gone",)} if imported else {},
+    )
+    if listed:
+        monkeypatch.setitem(NAMES, "lucid.scratch", (("Gone", "lucid.nn", "Module"),))
+    [report] = _unreadable([("lucid.scratch.f", _function("def f(x: Gone) -> None: ..."))])
+    assert says in report, report
+    assert "python -m tools.gen_annotation_names" in report
+
+
+def test_a_class_is_read_through_its_constructor_methods_and_properties() -> None:
+    namespace: dict[str, object] = {"__name__": "lucid.scratch"}
+    exec(
+        "class Layer:\n"
+        "    def __init__(self, base: InInit) -> None: ...\n"
+        "    def route(self, config: InMethod | None = None) -> None: ...\n"
+        "    @property\n"
+        "    def size(self) -> InProperty: ...\n"
+        "    def _hidden(self, x: InPrivate) -> None: ...\n",
+        namespace,
+    )
+    targets = _targets("lucid.scratch.Layer", namespace["Layer"])
+    assert [label for label, _ in targets] == [
+        "lucid.scratch.Layer",
+        "lucid.scratch.Layer.route",
+        "lucid.scratch.Layer.size.fget",
+    ]
+    reports = _unreadable(targets)
+    assert [report.split(":")[0] for report in reports] == [label for label, _ in targets]
+    assert "InInit" in reports[0] and "InMethod" in reports[1] and "InProperty" in reports[2]
+    assert not any("InPrivate" in report for report in reports)
+
+
+def test_np_is_excused_only_where_this_file_declares_it() -> None:
+    numpy_only = _function("def f(a: np.ndarray) -> None: ...")
+    assert _unreadable([("lucid.from_numpy", numpy_only)]) == []
+    assert _unreadable([("lucid.SupportsNumpyConversion.numpy", numpy_only)]) == []
+    assert len(_unreadable([("lucid.somewhere_else", numpy_only)])) == 1
+    also_gone = _function("def f(a: np.ndarray, b: Gone) -> None: ...")
+    assert any("'Gone'" in report for report in _unreadable([("lucid.from_numpy", also_gone)]))
+
+
+def test_the_numpy_annotated_methods_are_unreadable_only_through_np() -> None:
+    """An entry for a method that left the surface, or that reads now, is stale."""
+    found = {label: fn for label, fn in _public_signatures() if label in NUMPY_ANNOTATED_METHODS}
+    assert set(found) == NUMPY_ANNOTATED_METHODS
+    for method in found.values():
+        with pytest.raises(NameError, match="'np' is not defined"):
+            inspect.signature(method)
+        assert _unresolved(method) == {"return": ["np"]}
 
 
 def test_the_annotation_table_is_fresh() -> None:
