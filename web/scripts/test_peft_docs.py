@@ -29,6 +29,7 @@ JSON is older than the source.
 import ast
 import importlib.util
 import json
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -143,6 +144,73 @@ def test_sections_list_every_tuner_exactly_once() -> None:
         assert bool(section.get("packages")) != bool(section.get("members")), (
             f"section {section['id']!r} must hold packages or members, not both or neither"
         )
+
+
+# ── prose that counts the methods says what the package has (LCD-974) ───────
+
+_ONES = (
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen "
+    "fourteen fifteen sixteen seventeen eighteen nineteen"
+).split()
+_TENS = "_ _ twenty thirty forty fifty sixty seventy eighty ninety".split()
+_NUMBER_WORDS = {w: i for i, w in enumerate(_ONES)} | {
+    (t if u == 0 else f"{t}-{_ONES[u]}"): 10 * i + u
+    for i, t in enumerate(_TENS)
+    if t != "_"
+    for u in range(10)
+}
+_NUMBER = r"\d+|[a-z]+(?:-[a-z]+)?"
+_METHODS_PHRASE = re.compile(rf"\b({_NUMBER})\s+(?:other\s+)?methods\b", re.IGNORECASE)
+_OF_THEM_PHRASE = re.compile(rf"\b({_NUMBER})\s+of\s+them\b", re.IGNORECASE)
+#: The two pages that count ``lucid.peft``'s methods in prose.
+_COUNTING_PAGES = (
+    _WEB / "content" / "tutorials" / "lora-fine-tuning.mdx",
+    _WEB / "content" / "migration" / "from-reference-framework.mdx",
+)
+
+
+def _count_of(word: str) -> int | None:
+    """``word`` as a number ("46", "forty-six"), or ``None`` if it is not one."""
+    return int(word) if word.isdigit() else _NUMBER_WORDS.get(word.lower())
+
+
+def _peft_type_count() -> int:
+    tree = ast.parse((_PEFT / "_config.py").read_text(encoding="utf-8"))
+    (klass,) = (n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "PeftType")
+    return sum(isinstance(n, ast.Assign) for n in klass.body)
+
+
+def test_prose_counts_of_methods_match_the_package() -> None:
+    """A page that says "twenty-two methods" outlived the package growing to 45.
+
+    ``PeftType`` names every method; the ones the sections file lists under
+    "Refused" are the ones that build no adapter.  A count of twenty or more in
+    front of "methods" (smaller ones are the mixed model's ten and the like) must
+    be one of: all the methods, the ones that build an adapter, or those less
+    LoRA ("the other forty-four"); "N of them" must be the ones that build.
+    """
+    named = _peft_type_count()
+    refused = sum(
+        len(s.get("packages", [])) for s in _sections() if s["id"] == "refused"
+    )
+    built = named - refused
+    assert built > 0 and refused > 0, (named, refused)
+    allowed = {named, built, built - 1}
+    for page in _COUNTING_PAGES:
+        text = page.read_text(encoding="utf-8")
+        for match in _METHODS_PHRASE.finditer(text):
+            count = _count_of(match[1])
+            if count is None or count < 20:
+                continue
+            assert count in allowed, (
+                f"{page.name}: {match[0]!r} — the package names {named} methods and {built} build "
+                f"an adapter, so a count here must be one of {sorted(allowed)}"
+            )
+        for match in _OF_THEM_PHRASE.finditer(text):
+            count = _count_of(match[1])
+            if count is None:
+                continue  # "several of them"
+            assert count == built, f"{page.name}: {match[0]!r} — {built} methods build an adapter"
 
 
 # ── every export has an api-data entry (and so a sidebar leaf) ──────────────
