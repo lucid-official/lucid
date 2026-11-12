@@ -15,7 +15,6 @@ the update is :math:`B\,A\,x`.  The bank is trained too.
 A layer made on its own, outside a tuner, draws a bank of its own for each adapter.
 """
 
-from collections.abc import Sequence
 from typing import ClassVar, NamedTuple, override
 
 import lucid
@@ -25,7 +24,7 @@ from lucid.nn.parameter import Parameter
 from lucid._tensor.tensor import Tensor
 from lucid.peft.tuners._layer import _parameter_at
 from lucid.peft._config import _TargetedConfig
-from lucid.peft.tuners._shared import _SharingLayer
+from lucid.peft.tuners._shared import _TrainedSharedLayer
 from lucid.peft.tuners._support import (
     _adapter_dtype,
     _config_as,
@@ -64,7 +63,7 @@ def _mix(logits: Tensor, bank: Tensor, topk: int) -> Tensor:
     return (weights.unsqueeze(-1) * bank[indices]).sum(-2)
 
 
-class VBLoRALayer(_SharingLayer, _ConfigLayer, _LinearSized, _ResidualUpdate, family=True):
+class VBLoRALayer(_TrainedSharedLayer, _ConfigLayer, _LinearSized, _ResidualUpdate, family=True):
     r"""Adapter bookkeeping and the bank-to-factors map shared by the VB-LoRA layers.
 
     Parameters
@@ -152,28 +151,6 @@ class VBLoRALayer(_SharingLayer, _ConfigLayer, _LinearSized, _ResidualUpdate, fa
         super().delete_adapter(adapter_name)
         if adapter_name in self.vblora_dropout:
             del self.vblora_dropout[adapter_name]
-
-    # ── the bank trains with the adapter ──────────────────────────────────
-
-    def _bank_parameters(self, adapter_name: str) -> list[Parameter]:
-        bank = self._table("vblora_vector_bank")
-        assert isinstance(bank, nn.ParameterDict)
-        return [_parameter_at(bank, adapter_name)] if adapter_name in bank else []
-
-    @override
-    def _adapter_parameters(self, adapter_name: str) -> list[Parameter]:
-        own = super()._adapter_parameters(adapter_name)
-        return [*own, *self._bank_parameters(adapter_name)] if own else own
-
-    @override
-    def set_requires_grad(
-        self, adapter_names: str | Sequence[str], requires_grad: bool = True
-    ) -> None:
-        """Set ``requires_grad`` on the named adapters' logits and on the vector bank they share."""
-        super().set_requires_grad(adapter_names, requires_grad)
-        for name in [adapter_names] if isinstance(adapter_names, str) else adapter_names:
-            for bank in self._bank_parameters(name):
-                bank.requires_grad_(requires_grad)
 
     # ── the factors ───────────────────────────────────────────────────────
 

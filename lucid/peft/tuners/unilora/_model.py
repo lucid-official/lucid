@@ -9,9 +9,8 @@ from lucid.peft.tuners._delta import _Home
 from lucid.peft.tuners._files import _FileContext
 from lucid.peft.tuners._layer import _tuner_layers
 from lucid.peft.tuners._plan import _Target
-from lucid.peft.tuners._shared import _base_linear, _SharedTablesTuner
+from lucid.peft.tuners._shared import _base_linear, _SettlingTuner, _SharedTablesTuner
 from lucid.peft.tuners._support import _adapter_dtype, _ConfigTuner, _reset_fan_in_fan_out
-from lucid.peft.tuners.unilora._common import _SettlingTuner
 from lucid.peft.tuners.unilora._config import UniLoraConfig
 from lucid.peft.tuners.unilora._indices import _assign, _generate_index
 from lucid.peft.tuners.unilora._layer import _PROJECTION, UniLoraLayer, _new_theta_d

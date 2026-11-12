@@ -6,10 +6,10 @@ from typing import override
 from lucid.peft._config import PeftType, _TargetedConfig
 from lucid.peft.tuners._layer import _tuner_layers
 from lucid.peft.tuners._plan import _Target
+from lucid.peft.tuners._shared import _SettlingTuner
 from lucid.peft.tuners._support import _ConfigTuner
 from lucid.peft.tuners.lily._config import LilyConfig
 from lucid.peft.tuners.lily._layer import LilyLayer
-from lucid.peft.tuners.unilora._common import _SettlingTuner
 
 
 def _suffix(key: str, target_modules: str | Set[str] | list[str] | None) -> str | None:

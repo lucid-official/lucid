@@ -1,4 +1,4 @@
-"""What the methods that share tensors between their layers have in common: VeRA, RandLoRA and VB-LoRA.
+"""What the methods that share tensors between their layers have in common: VeRA, RandLoRA, VB-LoRA, Uni-LoRA and TinyLoRA.
 
 Those methods keep one set of tensors for the whole model (random projections,
 a vector bank) and give each layer only a few small parameters of its own.  The
@@ -10,18 +10,25 @@ tables registers them as its attributes (``_Shared.attach``), so ``.to()``,
 ``state_dict`` and ``named_buffers`` see each tensor once, and the other layers
 read them through a plain reference.  The adapter file holds each table once, as
 the reference writes it (``base_model.<table>``), not once per layer.
+
+A table may hold the adapter's trainable parameters (VB-LoRA's bank, Uni-LoRA's vector, TinyLoRA's
+vectors): ``_TrainedSharedLayer`` trains and freezes them with the adapter of each layer that reads
+them.  ``_SettlingTuner`` is for the methods whose layers need to know about one another once all are
+in the tree.
 """
 
 import warnings
 from abc import abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from typing import ClassVar, Final, Protocol, override, runtime_checkable
 
 import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
+from lucid.nn.parameter import Parameter
 from lucid.peft._config import PeftConfig, _Check, _check_bool, _TargetedConfig
-from lucid.peft.tuners._layer import _BaseTunerLayer
+from lucid.peft._slots import _as_names
+from lucid.peft.tuners._layer import _BaseTunerLayer, _entry_parameters
 from lucid.peft.tuners._plan import _NO_PARAMETERS, _Injected, _Placement, _Target
 from lucid.peft.tuners._tuner import _BaseTuner
 from lucid.peft.tuners._files import _FileContext, _FileFormat
@@ -237,6 +244,80 @@ class _SharingLayer(_BaseTunerLayer):
                 table = getattr(self, name)
                 if isinstance(table, (nn.ParameterDict, _BufferDict)) and adapter_name in table:
                     del table[adapter_name]
+
+
+class _TrainedSharedLayer(_SharingLayer):
+    """A sharing layer whose shared tables hold the adapter's trainable parameters.
+
+    ``_shared_names`` names the tables; each maps an adapter name to a ``Parameter`` or to a module of
+    them.  Such a table is the adapter's trainable tensor though no layer owns it, so a layer that
+    holds an adapter reports the parameters its shared tables hold for it, and switches their
+    ``requires_grad`` with the adapter's.
+    """
+
+    def _shared_parameters(self, adapter_name: str) -> list[Parameter]:
+        """The parameters the shared tables hold for ``adapter_name``."""
+        found: list[Parameter] = []
+        for name in self._shared_names:
+            table = self._table(name)
+            if isinstance(table, (nn.ParameterDict, nn.ModuleDict)) and adapter_name in table:
+                found.extend(_entry_parameters(table[adapter_name]))
+        return found
+
+    @override
+    def _adapter_parameters(self, adapter_name: str) -> list[Parameter]:
+        own = super()._adapter_parameters(adapter_name)
+        if adapter_name not in self._adapter_names():
+            return own
+        return [*own, *self._shared_parameters(adapter_name)]
+
+    @override
+    def set_requires_grad(
+        self, adapter_names: str | Sequence[str], requires_grad: bool = True
+    ) -> None:
+        """Set ``requires_grad`` on the named adapters' own tensors and on the shared parameters they read."""
+        super().set_requires_grad(adapter_names, requires_grad)
+        held = self._adapter_names()
+        for name in _as_names(adapter_names):
+            if name in held:
+                for parameter in self._shared_parameters(name):
+                    parameter.requires_grad_(requires_grad)
+
+
+class _SettlingTuner(_BaseTuner):
+    """A tuner that finishes an adapter once its layers are in the model.
+
+    What a layer needs to know about the others — the slice of one draw it takes (Uni-LoRA), the group
+    whose vector it reads (TinyLoRA), the projections it shares with its neighbours (Lily) — cannot be
+    known while layers are made one at a time.  ``_settle`` runs after every layer of the adapter is in
+    place, inside the injection that rolls back if it raises.
+    """
+
+    @override
+    def _attach_adapter(
+        self,
+        config: _TargetedConfig,
+        adapter_name: str,
+        targets: list[_Target],
+        saved: list[str],
+        placements: list[_Placement],
+    ) -> None:
+        super()._attach_adapter(config, adapter_name, targets, saved, placements)
+        self._settle(config, adapter_name, targets)
+
+    @abstractmethod
+    def _settle(self, config: _TargetedConfig, adapter_name: str, targets: list[_Target]) -> None:
+        """Bind ``adapter_name``'s layers to one another, now that all of them are in the tree.
+
+        Parameters
+        ----------
+        config : _TargetedConfig
+            The adapter's stored config.
+        adapter_name : str
+            The adapter just attached.
+        targets : list of _Target
+            Everything the adapter targets, in the order the model lists it.
+        """
 
 
 class _SharedTablesTuner(_FileFormat, _BaseTuner):

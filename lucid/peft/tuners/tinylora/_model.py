@@ -9,11 +9,10 @@ from lucid.nn import Module, ModuleDict, ParameterDict
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
 from lucid.peft.tuners._files import _FileContext
 from lucid.peft.tuners._plan import _Target
-from lucid.peft.tuners._shared import _FILE_PREFIX, _SharedTablesTuner
+from lucid.peft.tuners._shared import _FILE_PREFIX, _SettlingTuner, _SharedTablesTuner
 from lucid.peft.tuners._support import _ConfigTuner, _reset_fan_in_fan_out
 from lucid.peft.tuners.tinylora._config import TinyLoraConfig
 from lucid.peft.tuners.tinylora._layer import TinyLoraLayer, _new_vector
-from lucid.peft.tuners.unilora._common import _SettlingTuner
 
 #: Where the reference's file keeps the trained vectors: one tensor per group, ``base_model.tinylora_v.<group>``.
 _VECTORS = f"{_FILE_PREFIX}tinylora_v."

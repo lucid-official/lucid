@@ -28,10 +28,9 @@ from lucid._tensor.tensor import Tensor
 from lucid.nn import Parameter
 from lucid.peft.tuners._delta import _DeltaLayer, _Home
 from lucid.peft.tuners._layer import _parameter_at
-from lucid.peft.tuners._shared import _BufferDict
+from lucid.peft.tuners._shared import _BufferDict, _TrainedSharedLayer
 from lucid.peft.tuners._support import _ResidualUpdate, _SpecField
 from lucid.peft.tuners.tinylora._config import TinyLoraConfig
-from lucid.peft.tuners.unilora._common import _TrainedSharedLayer
 
 
 class _TinyLoraSpec(NamedTuple):

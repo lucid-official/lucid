@@ -316,6 +316,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - share the adapter load flows between wrappers (LCD-966)
 - drop the api-data builder's worker pool (LCD-970)
 - get_peft_config is a call to from_peft_type (LCD-968)
+- one owner for shared-table training (LCD-961)
 
 ---
 
