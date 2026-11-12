@@ -9,9 +9,16 @@ each other.
 
 A layer EVA gives rank 0 (LCD-979) loses the EVA adapter and nothing else: the other adapters it
 holds, their parameters and their configs stay, and only a layer left holding no adapter at all
-goes back to the module it wrapped.
+goes back to the module it wrapped.  EVA giving every layer rank 0 (LCD-982) is refused before any
+layer changes: the adapter would hold no layer, and what is saved of it could not be loaded.
+
+``rank_pattern`` / ``alpha_pattern`` match a name by its dotted tail, so the entry of ``q_proj`` is
+the one read for ``block.q_proj`` as well (LCD-982): a layer at the default is listed when an entry
+for another name would be read for it, and a saved adapter comes back at every layer's own rank.
 """
 
+from copy import deepcopy
+import itertools
 from pathlib import Path
 from typing import NamedTuple
 
@@ -29,10 +36,10 @@ from lucid.peft import (
     get_peft_model,
     initialize_lora_eva_weights,
 )
-from lucid.peft._targeting import _selects
+from lucid.peft._targeting import _pattern_value, _selects
 from lucid.peft.tuners._layer import _tuner_layers
 from lucid.peft.tuners.lora import Linear, LoraLayer
-from lucid.peft.tuners.lora._eva import _select_layers
+from lucid.peft.tuners.lora._eva import _recorded, _select_layers
 from lucid.test.unit.peft._tuner_recipes import perturb_adapter, same, span
 
 _D = 8
@@ -427,17 +434,75 @@ def test_the_adapters_survive_save_and_load(beside: _Beside, device: str, tmp_pa
         assert span(loaded(beside.x), beside.model(beside.x)) < 1e-5
 
 
-def test_when_no_layer_gets_a_rank_the_other_adapter_is_left_whole(device: str) -> None:
+class _Held(NamedTuple):
+    """Everything about a model that EVA changing it would show in: its tree, its parameters, its configs."""
+
+    modules: list[tuple[str, type[nn.Module]]]
+    parameters: dict[str, lucid.Tensor]
+    values: dict[str, lucid.Tensor]
+    trainable: dict[str, bool]
+    adapters: dict[str, list[str]]
+    configs: dict[str, LoraConfig]
+
+
+def _held(model: PeftModel) -> _Held:
+    params = dict(model.named_parameters())
+    return _Held(
+        [(name, type(module)) for name, module in model.named_modules()],
+        params,
+        {name: p.detach().clone() for name, p in params.items()},
+        {name: p.requires_grad for name, p in params.items()},
+        {name: layer._adapter_names() for name, layer in _layers(model).items()},
+        {name: deepcopy(config) for name, config in model.peft_config.items()},
+    )
+
+
+def _assert_untouched(model: PeftModel, before: _Held) -> None:
+    after = _held(model)
+    assert after.modules == before.modules
+    assert after.adapters == before.adapters
+    assert after.trainable == before.trainable
+    assert after.configs == before.configs
+    assert after.parameters.keys() == before.parameters.keys()
+    for name, param in after.parameters.items():
+        assert param is before.parameters[name]  # not rebuilt
+        assert same(param, before.values[name])
+
+
+def test_when_no_layer_gets_a_rank_it_is_refused_and_the_model_is_left_whole(device: str) -> None:
     made = _beside_plain_lora(device, "default")
     state = {name: lucid.zeros(0, _D, device=device) for name in ("q_proj", "k_proj")}
-    initialize_lora_eva_weights(made.model, eva_state_dict=state, adapter_name="eva")
-    assert {n: layer._adapter_names() for n, layer in _layers(made.model).items()} == {
-        "q_proj": ["default"],
-        "k_proj": ["default"],
-    }
-    assert made.model.peft_config["eva"].target_modules == []
+    before = _held(made.model)
+    with pytest.raises(ValueError, match="every layer got rank 0"):
+        initialize_lora_eva_weights(made.model, eva_state_dict=state, adapter_name="eva")
+    _assert_untouched(made.model, before)
     with lucid.no_grad():
         assert span(made.model(made.x), made.before["default"]) < 1e-5
+
+
+def test_when_no_layer_gets_a_rank_the_adapter_that_holds_only_eva_is_not_unwrapped(
+    device: str,
+) -> None:
+    base, config = _base(device), _config()
+    model = get_peft_model(base, config)
+    state = {name: lucid.zeros(0, _D, device=device) for name in ("q_proj", "k_proj")}
+    before = _held(model)
+    with pytest.raises(ValueError, match="every layer got rank 0.*rho=4"):
+        initialize_lora_eva_weights(model, eva_state_dict=state)
+    _assert_untouched(model, before)
+    assert set(_layers(model)) == {"q_proj", "k_proj"}
+
+
+def test_a_layer_the_state_dict_does_not_name_still_counts_as_one_that_keeps_a_rank(
+    device: str,
+) -> None:
+    base, config = _base(device), _config()
+    model = get_peft_model(base, config)
+    state = {"q_proj": lucid.zeros(0, _D, device=device)}  # nothing said of k_proj: it keeps r
+    with pytest.warns(UserWarning, match="not found in the eva state_dict"):
+        initialize_lora_eva_weights(model, eva_state_dict=state)
+    assert set(_layers(model)) == {"k_proj"}
+    assert _layers(model)["k_proj"].r["default"] == _R
 
 
 def test_a_layer_that_holds_only_eva_goes_back_to_the_module_it_wrapped(device: str) -> None:
@@ -501,3 +566,125 @@ def test_the_exclusion_is_left_alone_when_no_name_selects_a_dropped_layer() -> N
     _select_layers(config, ["q_proj", "k_proj"], ["v_proj"])
     assert config.target_modules == ["q_proj", "k_proj"]
     assert config.exclude_modules == {"head"}
+
+
+# ── a name that ends in another's (LCD-982) ──────────────────────────────────
+
+
+def _nested_eva(
+    device: str, ranks: dict[str, int], *, alpha_pattern: dict[str, float] | None = None
+) -> PeftModel:
+    """``_Nested`` EVA-initialised at ``ranks`` (a layer's name -> its rank), every adapter weight then moved off its start."""
+    lucid.manual_seed(3)
+    config = LoraConfig(
+        r=_R,
+        lora_alpha=_ALPHA,
+        target_modules=["q_proj", "block.q_proj"],
+        alpha_pattern=alpha_pattern or {},
+        init_lora_weights="eva",
+        eva_config=EvaConfig(rho=4, tau=0.5),
+    )
+    model = get_peft_model(_Nested().to(device), config)
+    state = {name: lucid.randn(rank, _D, device=device) for name, rank in ranks.items()}
+    initialize_lora_eva_weights(model, eva_state_dict=state)
+    perturb_adapter(model, "default", seed=5)
+    return model
+
+
+def _reloaded(model: PeftModel, device: str, tmp_path: Path) -> PeftModel:
+    model.save_pretrained(tmp_path)
+    lucid.manual_seed(3)
+    return PeftModel.from_pretrained(_Nested().to(device), tmp_path)
+
+
+def _scales(model: PeftModel) -> dict[str, tuple[int, float]]:
+    return {
+        name: (layer.r["default"], layer.lora_alpha["default"])
+        for name, layer in _layers(model).items()
+    }
+
+
+@pytest.mark.parametrize(
+    "ranks",
+    [
+        {"q_proj": 3, "block.q_proj": _R},  # the shorter name differs: its entry reaches the other
+        {"q_proj": 1, "block.q_proj": _R},
+        {"q_proj": _R, "block.q_proj": 3},  # the longer name differs: nothing reaches the other
+        {"q_proj": 3, "block.q_proj": 1},
+    ],
+    ids=["shorter-above-r", "shorter-below-r", "longer-differs", "both-differ"],
+)
+def test_every_layer_is_reloaded_at_the_rank_and_scale_eva_gave_it(
+    device: str, tmp_path: Path, ranks: dict[str, int]
+) -> None:
+    model = _nested_eva(device, ranks)
+    loaded = _reloaded(model, device, tmp_path)
+
+    assert {n: rank for n, (rank, _) in _scales(loaded).items()} == ranks
+    assert _scales(loaded) == _scales(model)  # adjust_scaling_factors: alpha grew with the rank
+    x = lucid.randn(4, _D, device=device)
+    with lucid.no_grad():
+        assert span(loaded(x), model(x)) < 1e-5
+
+
+def test_a_layer_at_the_default_is_listed_when_another_entry_would_be_read_for_it(
+    device: str,
+) -> None:
+    config = _nested_eva(device, {"q_proj": 3, "block.q_proj": _R}).peft_config["default"]
+    assert config.rank_pattern == {"q_proj": 3, "block.q_proj": _R}
+    assert config.alpha_pattern == {"q_proj": _ALPHA * 3 / _R, "block.q_proj": float(_ALPHA)}
+
+
+def test_a_layer_is_not_listed_when_no_entry_would_be_read_for_it(device: str) -> None:
+    config = _nested_eva(device, {"q_proj": _R, "block.q_proj": 3}).peft_config["default"]
+    assert config.rank_pattern == {"block.q_proj": 3}
+    assert config.alpha_pattern == {"block.q_proj": _ALPHA * 3 / _R}
+
+
+def test_a_scale_that_differs_for_one_name_is_not_read_for_a_name_that_ends_in_it(
+    device: str, tmp_path: Path
+) -> None:
+    # Same ranks everywhere, so ``rank_pattern`` stays empty and only ``alpha_pattern`` can shadow.
+    ranks = {"q_proj": _R, "block.q_proj": _R}
+    model = _nested_eva(device, ranks, alpha_pattern={"q_proj": 8.0, "block.q_proj": float(_ALPHA)})
+    config = model.peft_config["default"]
+    assert config.rank_pattern == {}
+    assert config.alpha_pattern == {"q_proj": 8.0, "block.q_proj": float(_ALPHA)}
+
+    loaded = _reloaded(model, device, tmp_path)
+    assert _scales(loaded) == {"q_proj": (_R, 8.0), "block.q_proj": (_R, float(_ALPHA))}
+    x = lucid.randn(4, _D, device=device)
+    with lucid.no_grad():
+        assert span(loaded(x), model(x)) < 1e-5
+
+
+def test_the_config_reads_back_what_each_layer_holds(device: str) -> None:
+    model = _nested_eva(device, {"q_proj": 3, "block.q_proj": _R})
+    config = model.peft_config["default"]
+    for name, layer in _layers(model).items():
+        rank = _pattern_value(config.rank_pattern, name, config.r)
+        alpha = _pattern_value(config.alpha_pattern, name, config.lora_alpha)
+        assert (rank, alpha) == (layer.r["default"], layer.lora_alpha["default"])
+
+
+_NAMES = ("a", "b.a", "c.b.a", "b", "c.b")
+
+
+def test_recorded_reads_back_every_value_whichever_names_end_in_which() -> None:
+    """Every assignment of the default or one of two other values to five names that end in one another."""
+    default = 2
+    for assigned in itertools.product((default, 3, 5), repeat=len(_NAMES)):
+        values = dict(zip(_NAMES, assigned, strict=True))
+        pattern = _recorded(values, default)
+        for name, value in values.items():
+            assert _pattern_value(pattern, name, default) == value, (values, pattern, name)
+        assert list(pattern) == [name for name in values if name in pattern]  # in layer order
+
+
+def test_recorded_lists_what_differs_and_what_would_be_misread_and_nothing_else() -> None:
+    assert _recorded({"a": 2, "b.a": 2, "b": 2}, 2) == {}
+    assert _recorded({"a": 3, "b": 2, "c.d": 2}, 2) == {"a": 3}
+    assert _recorded({"a": 3, "b.a": 2}, 2) == {"a": 3, "b.a": 2}
+    assert _recorded({"a": 3, "b.a": 3}, 2) == {"a": 3, "b.a": 3}
+    # ``c.b.a`` is read through ``a``'s entry too, whether or not ``b.a`` is listed for itself.
+    assert _recorded({"a": 3, "b.a": 2, "c.b.a": 2}, 2) == {"a": 3, "b.a": 2, "c.b.a": 2}

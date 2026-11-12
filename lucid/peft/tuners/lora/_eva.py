@@ -662,6 +662,14 @@ def _drop_adapter_from_layer(
         _set_submodule(model, name, module.get_base_layer())
 
 
+def _eva_vectors(eva_state_dict: dict[str, Tensor], name: str) -> Tensor | None:
+    """The singular vectors ``eva_state_dict`` holds for the layer ``name``, under either spelling of its name."""
+    w = eva_state_dict.get(name)
+    if w is None:
+        w = eva_state_dict.get(name.removeprefix("base_model.model."))
+    return w
+
+
 def _apply_eva_layer(
     model: nn.Module,
     name: str,
@@ -674,9 +682,7 @@ def _apply_eva_layer(
     spec = module._specs[adapter_name]
     r = spec.r
     alpha = float(spec.lora_alpha)
-    w = eva_state_dict.get(name)
-    if w is None:
-        w = eva_state_dict.get(name.removeprefix("base_model.model."))
+    w = _eva_vectors(eva_state_dict, name)
     if w is None:
         module.reset_lora_parameters(adapter_name, init_lora_weights=True)
         return r, alpha, False
@@ -727,6 +733,48 @@ def _select_layers(peft_config: LoraConfig, kept: list[str], dropped: list[str])
     peft_config.exclude_modules = "|".join(f"(?:{pattern})" for pattern in patterns)
 
 
+def _recorded[V](values: dict[str, V], default: V) -> dict[str, V]:
+    """The ``rank_pattern`` / ``alpha_pattern`` that reads back ``values[name]`` for every layer ``name``.
+
+    A layer is listed when its value is not ``default``, and when a key listed for another layer
+    would be read for it: keys match by dotted suffix, so the entry of ``q_proj`` also answers for
+    ``block.q_proj``, which then has to name itself even where it holds the default.  A name
+    listed is read exactly, so each pass lists the layers still misread and the loop ends.
+    """
+    pattern = {name: value for name, value in values.items() if value != default}
+    misread = True
+    while misread:
+        misread = False
+        for name, value in values.items():
+            if _pattern_value(pattern, name, default) != value:
+                pattern[name] = value
+                misread = True
+    return {name: pattern[name] for name in values if name in pattern}
+
+
+def _refuse_if_no_layer_keeps_a_rank(
+    target_layers: list[tuple[str, LoraLayer]],
+    eva_state_dict: dict[str, Tensor],
+    adapter_name: str,
+    peft_config: LoraConfig,
+) -> None:
+    """Raise before any layer changes when EVA gives every layer of the adapter rank 0.
+
+    The adapter would then hold no layer: its ``target_modules`` is empty, so what is saved of it
+    cannot be loaded, and a layer holding only it would be unwrapped from under the model.
+    """
+    if target_layers and not any(
+        (w := _eva_vectors(eva_state_dict, name)) is None or w.shape[0] > 0
+        for name, _ in target_layers
+    ):
+        rho = peft_config.eva_config.rho if peft_config.eva_config is not None else None
+        raise ValueError(
+            f"cannot initialise adapter {adapter_name!r} with EVA: every layer got rank 0 "
+            f"(rho={rho}), so the adapter would hold no layer; use a larger `rho` or give "
+            "`eva_state_dict` a direction for at least one layer"
+        )
+
+
 def _load_eva_state_dict(
     model: nn.Module, eva_state_dict: dict[str, Tensor], adapter_name: str
 ) -> None:
@@ -736,8 +784,8 @@ def _load_eva_state_dict(
     base_model = getattr(model, "base_model", None)
     prefix = "base_model.model." if isinstance(base_model, LoraModel) else "base_model."
 
-    rank_pattern: dict[str, int] = {}
-    alpha_pattern: dict[str, float] = {}
+    ranks: dict[str, int] = {}
+    alphas: dict[str, float] = {}
     missing_eva_inits: list[str] = []
     new_target_modules: list[str] = []
     dropped: list[str] = []
@@ -754,6 +802,7 @@ def _load_eva_state_dict(
             f"weights of {merged}, which would keep the update of the factors this replaces; "
             "call unmerge_adapter() first"
         )
+    _refuse_if_no_layer_keeps_a_rank(target_layers, eva_state_dict, adapter_name, peft_config)
     for name, module in target_layers:
         name_in_base = name.removeprefix(prefix)
         new_rank, alpha, found = _apply_eva_layer(
@@ -766,14 +815,12 @@ def _load_eva_state_dict(
             new_target_modules.append(name_in_base)
         else:
             missing_eva_inits.append(name_in_base)
-        if new_rank != peft_config.r:
-            rank_pattern[name_in_base] = new_rank
-        if alpha != float(peft_config.lora_alpha):
-            alpha_pattern[name_in_base] = alpha
+        ranks[name_in_base] = new_rank
+        alphas[name_in_base] = alpha
 
     _select_layers(peft_config, new_target_modules + missing_eva_inits, dropped)
-    peft_config.rank_pattern = rank_pattern
-    peft_config.alpha_pattern = alpha_pattern
+    peft_config.rank_pattern = _recorded(ranks, peft_config.r)
+    peft_config.alpha_pattern = _recorded(alphas, float(peft_config.lora_alpha))
 
     if missing_eva_inits:
         warnings.warn(
@@ -828,8 +875,9 @@ def initialize_lora_eva_weights(
     ------
     ValueError
         ``model`` is not a ``PeftModel`` of an ``init_lora_weights='eva'`` adapter, more than one
-        adapter is active, no ``dataloader`` or ``eva_state_dict`` is given, or the adapter is
-        merged into the base weights (``unmerge_adapter()`` first).
+        adapter is active, no ``dataloader`` or ``eva_state_dict`` is given, the adapter is
+        merged into the base weights (``unmerge_adapter()`` first), or EVA gives every layer
+        rank 0 (the adapter would hold no layer; the model is left as it was).
 
     Notes
     -----
@@ -838,6 +886,13 @@ def initialize_lora_eva_weights(
     rebuilt without it.  Only a layer left holding no adapter at all is replaced by the module it
     wrapped.  The reference replaces the layer by its base module whatever else it holds,
     deleting the other adapters on it while their configs still list the module; this does not.
+
+    ``rank_pattern`` and ``alpha_pattern`` match a name by its dotted tail, so the entry of
+    ``q_proj`` is also the one read for ``block.q_proj``.  A layer holding the config's ``r`` or
+    ``lora_alpha`` is therefore listed too when such an entry would be read for it, and a saved
+    adapter is rebuilt at the rank and scale of every layer.  The reference lists only the layers
+    that differ, and reads a name through the first key that matches it, so it can rebuild
+    ``block.q_proj`` at the rank of ``q_proj``; this does not.
     """
     if not hasattr(model, "peft_config"):
         raise ValueError("initialize_lora_eva_weights requires a `PeftModel`.")

@@ -205,6 +205,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - copy-link icons reachable by keyboard, one per host (LCD-980)
 
+- EVA reloads each layer by name, refuses all rank 0 (LCD-982)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
