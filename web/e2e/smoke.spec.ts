@@ -58,7 +58,7 @@ test("model member page renders the Model Size card", async ({ page }) => {
 });
 
 // lucid.peft is documented as a package section (web/data/api-sections.json):
-// the sidebar groups the 22 tuners by family, each tuner page holds its config,
+// the sidebar groups the tuners by family, each tuner page holds its config,
 // model and layers, and the generator fixes of LCD-725 show on the real pages.
 test.describe("lucid.peft reference", () => {
   test.beforeEach(async ({ page }) => {
@@ -149,7 +149,7 @@ test.describe("lucid.peft reference", () => {
   test("the attributes table sits under one heading", async ({ page }) => {
     await page.goto("/api/lucid.peft", { waitUntil: "networkidle" });
     await expect(
-      page.locator("section#section-attributes").getByText("Attributes", { exact: true }),
+      page.locator("section:has(> h2#section-attributes)").getByText("Attributes", { exact: true }),
     ).toHaveCount(1);
   });
 
@@ -157,7 +157,7 @@ test.describe("lucid.peft reference", () => {
     test(`no attribute name spills out of its column at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/api/lucid.peft", { waitUntil: "networkidle" });
-      const section = page.locator("section#section-attributes");
+      const section = page.locator("section:has(> h2#section-attributes)");
 
       const spills = await section.evaluate((el) =>
         [...el.querySelectorAll(".divide-y > div")].flatMap((row) => {
@@ -253,4 +253,113 @@ test("header lockup loads and follows the site's theme toggle", async ({ page })
   await expect(onLight).toBeVisible();
   await expect(onDark).toBeHidden();
   await expect.poll(() => loaded(onLight)).toBeGreaterThan(0);
+});
+
+// A section's one anchor is its heading.  Every section of a package page used
+// to put the same id on the ``<section>`` and on its own ``<h2>``, which left
+// ``#fragment`` navigation, ``getElementById`` and the ToC to choose between
+// two elements.  These pages cover each place an id is minted: a module's
+// member sections, the titled sub-package sections, the family groups of the
+// model zoo, a class page's collapsible method groups, and a model member.
+const ID_PAGES = [
+  "/api",
+  "/api/lucid.nn",
+  "/api/lucid.peft",
+  "/api/lucid.peft.tuners",
+  "/api/lucid.models",
+  "/api/lucid.nn/Linear",
+  "/api/lucid.tensor/Tensor",
+  "/api/lucid.optim/Adam",
+  "/api/lucid.peft.tuners.lora/LoraConfig",
+  "/api/lucid.models.vision.resnet/resnet_50",
+];
+
+for (const path of ID_PAGES) {
+  test(`no id is repeated on ${path}`, async ({ page }) => {
+    await page.goto(path, { waitUntil: "networkidle" });
+    const repeated = await page.evaluate(() => {
+      const count = new Map<string, number>();
+      for (const el of document.querySelectorAll("[id]")) {
+        count.set(el.id, (count.get(el.id) ?? 0) + 1);
+      }
+      return [...count].filter(([, n]) => n > 1).map(([id, n]) => `${id} x${n}`);
+    });
+    expect(repeated, repeated.join(", ")).toEqual([]);
+  });
+}
+
+test("a section anchor is its heading, and a fragment lands it below the header", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/api/lucid.peft", { waitUntil: "networkidle" });
+  const anchor = page.locator("#section-attributes");
+  await expect(anchor).toHaveCount(1);
+  expect(await anchor.evaluate((el) => el.tagName)).toBe("H2");
+  // The browser's own fragment navigation (what a sidebar or tutorial link does).
+  // ``scroll-mt-24`` = 96 px: the heading stops under the fixed header, not behind it.
+  await page.evaluate(() => {
+    window.location.hash = "section-attributes";
+  });
+  await expect
+    .poll(async () => Math.abs((await anchor.boundingBox())!.y - 96))
+    .toBeLessThanOrEqual(2);
+
+  // A class page's method group: its ToC link scrolls to the one element carrying the id.
+  await page.goto("/api/lucid.nn/Linear", { waitUntil: "networkidle" });
+  const group = page.locator("article h2[id]").first();
+  const id = await group.getAttribute("id");
+  await expect(page.locator(`[id="${id}"]`)).toHaveCount(1);
+  await page.locator(`aside a[href="#${id}"]`).first().click();
+  await expect.poll(async () => Math.round((await group.boundingBox())!.y)).toBeLessThanOrEqual(100);
+});
+
+// A display formula wider than the column scrolls inside its own box.  Left to
+// KaTeX's single nowrap line it ran out of the column and widened the whole
+// page: 416 px on the LoRA tutorial at a 390 px viewport, so the page itself
+// scrolled sideways.  The pages are the formula-heavy ones of /docs plus API
+// pages whose docstrings carry display math.
+const FORMULA_PAGES = [
+  "/docs/tutorials/lora-fine-tuning",
+  "/docs/special",
+  "/docs/signal",
+  "/docs/distributions",
+  "/docs/fft",
+  "/docs/linalg",
+  "/api/lucid.distributions/Normal",
+  "/api/lucid.nn/TransformerDecoderLayer",
+];
+
+test.describe("display math at a phone width", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 800 });
+  });
+
+  for (const path of FORMULA_PAGES) {
+    test(`${path} is not wider than the viewport`, async ({ page }) => {
+      await page.goto(path, { waitUntil: "networkidle" });
+      expect(await page.locator(".katex-display").count(), "page has display math").toBeGreaterThan(0);
+      const { viewport, document: width } = await page.evaluate(() => ({
+        viewport: window.innerWidth,
+        document: document.documentElement.scrollWidth,
+      }));
+      expect(width, `document ${width}px in a ${viewport}px viewport`).toBeLessThanOrEqual(viewport);
+    });
+  }
+
+  test("a formula wider than its column scrolls in its own box; inline math is untouched", async ({
+    page,
+  }) => {
+    await page.goto("/docs/tutorials/lora-fine-tuning", { waitUntil: "networkidle" });
+    const wide = await page.locator(".katex-display").evaluateAll((els) =>
+      els
+        .filter((el) => el.scrollWidth > el.clientWidth + 1)
+        .map((el) => getComputedStyle(el).overflowX),
+    );
+    expect(wide.length, "a display formula wider than the column").toBeGreaterThan(0);
+    expect(new Set(wide)).toEqual(new Set(["auto"]));
+
+    const inline = page.locator(".katex:not(.katex-display .katex)").first();
+    expect(await inline.evaluate((el) => getComputedStyle(el).overflowX)).toBe("visible");
+  });
 });

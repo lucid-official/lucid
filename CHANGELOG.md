@@ -189,6 +189,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a wide display formula scrolls in its own box (LCD-974)
 
+- one id per section, on its heading (LCD-974)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

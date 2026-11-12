@@ -7,9 +7,12 @@ import { cn } from "@/lib/utils";
 const STORAGE_KEY_PREFIX = "lucid-docs-section-collapsed:";
 
 interface CollapsibleSectionProps {
-  /** Stable identifier for this section — used both as the ``<h2>``
-   *  anchor id and as the localStorage key suffix so the collapsed
-   *  state survives reloads. */
+  /** Stable identifier for this section — the localStorage key suffix
+   *  that keeps the collapsed state across reloads.  It is also the
+   *  anchor id, but the caller puts that on its own ``<h2>`` in
+   *  ``header`` (the ToC reads headings); the ``<section>`` does not
+   *  repeat it, since two elements with one id make ``#fragment``
+   *  navigation and ``getElementById`` ambiguous. */
   id: string;
   /** Header content (label + any inline controls like ``AnchorLink``).
    *  Rendered next to the chevron button. */
@@ -75,7 +78,7 @@ export function CollapsibleSection({
   }, [id]);
 
   return (
-    <section id={id} className={cn("group mb-10 scroll-mt-24", className)}>
+    <section className={cn("group mb-10", className)}>
       <div className="flex items-center gap-2 mb-3">
         <button
           type="button"

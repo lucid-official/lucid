@@ -324,7 +324,7 @@ function SubpackageGrid({ groups, title, blurb }: SubpackageGridProps) {
 
   const id = blurb ? _sectionId(title) : undefined;
   return (
-    <section id={id} className="mb-10 scroll-mt-24">
+    <section className="mb-10">
       <SectionHeading id={id} className={blurb ? "flex items-center gap-2" : undefined}>
         {title}
         {id && <AnchorLink id={id} />}
@@ -625,7 +625,7 @@ function _sectionId(title: string): string {
 function MemberSection({ title, children, blurb }: MemberSectionProps) {
   const id = _sectionId(title);
   return (
-    <section id={id} className="group mb-10 scroll-mt-24">
+    <section className="group mb-10">
       <SectionHeading id={id} className="flex items-center gap-2">
         {title}
         <AnchorLink id={id} />

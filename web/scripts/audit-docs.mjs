@@ -163,7 +163,7 @@ const UI_CLASS_SCHEMA = [
     all: ["group", "flex", "items-start", "justify-between", "rounded-xl", "border-lucid-border", "bg-lucid-surface", "px-4", "py-3.5"] },
   { id: "ui.member-card.hover-kind", sel: "a.compact-card",
     all: ["hover:bg-lucid-elevated"], any: /^hover:border-api-[a-z-]+\/40$/ },
-  { id: "ui.section-heading.recipe", sel: 'section[id^="section-"] > h2',
+  { id: "ui.section-heading.recipe", sel: 'section > h2[id^="section-"]',
     all: ["text-xs", "font-semibold", "tracking-widest", "uppercase", "text-lucid-text-disabled"] },
   { id: "ui.family-card.title", sel: "a.group.block header h3",
     all: ["font-mono", "text-lg", "font-semibold", "text-api-class"] },
@@ -229,6 +229,23 @@ const PAGE_CONTRACTS = [
         scope: ctx.scope,
         detail: `<a href="${a.getAttribute("href")}"> nested inside another <a>`,
       }));
+    },
+  },
+  {
+    // Two elements with one id leave ``#fragment`` navigation, ``getElementById``
+    // and the ToC to pick between them.  Every section of a package page used
+    // to put its id on both the ``<section>`` and its own ``<h2>`` (LCD-974).
+    id: "anchor.unique-ids", component: "Anchors", kind: "page",
+    applies: (ctx) => ctx.kind === "api-module" || ctx.kind === "api-member",
+    check(ctx) {
+      const count = new Map();
+      for (const el of ctx.dom.querySelectorAll("[id]")) {
+        const id = el.getAttribute("id");
+        count.set(id, (count.get(id) ?? 0) + 1);
+      }
+      return [...count]
+        .filter(([, n]) => n > 1)
+        .map(([id, n]) => ({ scope: ctx.scope, detail: `id="${id}" is on ${n} elements` }));
     },
   },
   // ── Prose / rendering (every page) ─────────────────────────────────────────
@@ -317,7 +334,7 @@ const PAGE_CONTRACTS = [
     id: "ui.classes-before-functions", component: "ModulePage", kind: "page",
     applies: (ctx) => ctx.kind === "api-module",
     check(ctx) {
-      const ids = ctx.dom.querySelectorAll('section[id^="section-"]').map((s) => s.getAttribute("id"));
+      const ids = ctx.dom.querySelectorAll('section > h2[id^="section-"]').map((h) => h.getAttribute("id"));
       const c = ids.indexOf("section-classes"), f = ids.indexOf("section-functions");
       return c !== -1 && f !== -1 && c > f
         ? [{ scope: ctx.scope, detail: "Functions section precedes Classes (Classes must render first)" }] : [];
