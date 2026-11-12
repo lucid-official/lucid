@@ -20,6 +20,7 @@ so what loops over the working tuners never meets it; building one raises
 ``NotImplementedError`` saying why.
 """
 
+import dataclasses
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager, nullcontext
@@ -31,6 +32,7 @@ from lucid.peft._adapter_file import _AdapterFile
 from lucid.peft._config import _CONFIG_CLASSES, PeftConfig, PeftType
 from lucid.peft._forwarding import _as_module, _ForwardsAttributes
 from lucid.peft._refusals import NO_META_DEVICE, NO_STATE_DICT_MATCHING, refuse_value
+from lucid.peft._target_defaults import _UNKNOWN_MODEL_TYPE
 from lucid.peft.tuners._layer import _check_adapter_name
 
 #: ``PeftType`` → the tuner that applies it, filled as each is defined.
@@ -119,6 +121,52 @@ class _AdapterHost(_ForwardsAttributes, ABC):
     def _wrapped(self) -> nn.Module | None:
         modules = self.__dict__.get("_modules")
         return _as_module(modules.get("model")) if modules else None
+
+    @staticmethod
+    def get_model_config(model: nn.Module) -> dict[str, object]:
+        """``model``'s config as a dict, whatever it is held as.
+
+        A config with a ``to_dict`` method is converted by it, a dataclass by ``asdict``, a
+        mapping is copied.  A model with no ``config`` (or one that is ``None``) has the
+        reference's stand-in, ``{"model_type": "custom"}``, which is what the default target
+        modules and the prompt geometry read for a model of no known type.
+
+        Parameters
+        ----------
+        model : nn.Module
+            The model to read the config of.
+
+        Returns
+        -------
+        dict of str to object
+            The config's entries; a new dict, whose changes do not reach the model.
+
+        Raises
+        ------
+        TypeError
+            ``model.config`` is none of a mapping, a dataclass or an object with ``to_dict``.
+
+        Examples
+        --------
+        >>> import lucid.nn as nn
+        >>> from lucid.peft import LoraModel
+        >>> LoraModel.get_model_config(nn.Linear(2, 2))
+        {'model_type': 'custom'}
+        """
+        config = getattr(model, "config", None)
+        if config is None:
+            return {"model_type": _UNKNOWN_MODEL_TYPE}
+        to_dict = getattr(config, "to_dict", None)
+        if callable(to_dict):
+            config = to_dict()
+        elif dataclasses.is_dataclass(config) and not isinstance(config, type):
+            config = dataclasses.asdict(config)
+        if not isinstance(config, Mapping):
+            raise TypeError(
+                "model.config must be a mapping, a dataclass or have a to_dict() method, "
+                f"got {type(config).__name__}"
+            )
+        return dict(config)
 
     def _task_scope(self, task_ids: Tensor | None) -> AbstractContextManager[None]:
         """The context a call runs in when it names a task per batch row.

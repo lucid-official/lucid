@@ -23,6 +23,7 @@ import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
+from lucid.peft._refusals import NO_STATE_DICT_MATCHING, refuse_build_options, refuse_value
 from lucid.peft._slots import _adapter_slots, _AdapterSlot, _as_names, _outermost_slots
 from lucid.peft._target_defaults import DEFAULT_LORA_TARGET_MODULES, DEFAULT_LORA_TARGET_PARAMETERS
 from lucid.peft._targeting import _parameter_paths, _shared_outside
@@ -272,7 +273,7 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
                     f"{type(slot).__name__} (at {key!r}), which is not a layer of "
                     f"{cls.__name__}."
                 )
-        held = {name for _, slot in slots for name in slot._adapter_names()}
+        held = _held_names(model)
         known: dict[str, PeftConfig] = dict(model.__dict__.get("peft_config", {}))
         if adapter_name in held | set(known):
             raise ValueError(
@@ -613,6 +614,88 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
         injected = self._inject(adapter_name, config)
         self.set_requires_grad(adapter_name, False)
         return partial(self._rollback, adapter_name, injected)
+
+    def inject_adapter(
+        self,
+        model: nn.Module,
+        adapter_name: str,
+        autocast_adapter_dtype: bool = True,
+        low_cpu_mem_usage: bool = False,
+        state_dict: dict[str, Tensor] | None = None,
+    ) -> None:
+        """Build the layers of adapter ``adapter_name`` into ``model``, from the config ``peft_config`` holds for it.
+
+        The reference's spelling of what ``add_adapter`` does: the config is not an argument but
+        is read from ``peft_config[adapter_name]``, which the caller has set.  The adapter is added
+        as ``add_adapter`` adds it (one path): beside the adapters held, frozen and inactive, with
+        merged layers left merged and the new adapter built from the weights as they were; a
+        failure leaves the model as it was and ``peft_config[adapter_name]`` as the caller set it.
+        On success ``peft_config[adapter_name]`` is the stored config (its default targets
+        spelled out), not the object the caller set.
+
+        Parameters
+        ----------
+        model : nn.Module
+            The model to adapt; this tuner's own ``model``.
+        adapter_name : str
+            Name of the adapter, with its config in ``peft_config`` and no layer of it in the model yet.
+        autocast_adapter_dtype : bool, default=True
+            The reference's option to keep a half-precision base's adapter in its own dtype;
+            ``False`` raises ``NotImplementedError``.
+        low_cpu_mem_usage : bool, default=False
+            The reference's option to build the adapter on the meta device; ``True`` raises
+            ``NotImplementedError``.
+        state_dict : dict of str to Tensor, optional
+            The reference's option to match targets against state-dict keys rather than the
+            model's modules; anything but ``None`` raises ``NotImplementedError``.
+
+        Raises
+        ------
+        ValueError
+            ``model`` is not this tuner's model, ``peft_config`` has no entry for
+            ``adapter_name``, the model already holds an adapter of that name, or the adapter
+            cannot be applied (as in ``add_adapter``).
+        TypeError
+            The config set is not a config of this tuner's method.
+        NotImplementedError
+            ``autocast_adapter_dtype``, ``low_cpu_mem_usage`` or ``state_dict`` holds a value the
+            library cannot honour.
+
+        Examples
+        --------
+        >>> import lucid.nn as nn
+        >>> from lucid.peft import LoraConfig, LoraModel
+        >>> net = nn.Sequential(nn.Linear(4, 4), nn.Linear(4, 4))
+        >>> tuner = LoraModel(net, LoraConfig(r=2, target_modules=["0"]), "default")
+        >>> tuner.peft_config["two"] = LoraConfig(r=2, target_modules=["1"])
+        >>> tuner.inject_adapter(net, "two")
+        >>> sorted(tuner.targeted_module_names), tuner.active_adapters
+        (['0', '1'], ['default'])
+        """
+        where = f"{type(self).__name__}.inject_adapter"
+        refuse_build_options(
+            where,
+            autocast_adapter_dtype=autocast_adapter_dtype,
+            low_cpu_mem_usage=low_cpu_mem_usage,
+        )
+        refuse_value(where, "state_dict", state_dict, None, NO_STATE_DICT_MATCHING)
+        if model is not self.model:
+            raise ValueError(f"{where} adapts the model this tuner holds, not another module")
+        adapter_name = _check_adapter_name(adapter_name)
+        if adapter_name in _held_names(self.model):
+            raise ValueError(f"Adapter with name '{adapter_name}' already exists in the model.")
+        # ``_add_adapter`` takes the config as an argument and finds its name free.
+        staged = self.peft_config.pop(adapter_name, None)
+        if staged is None:
+            raise ValueError(
+                f"{where} builds {adapter_name!r} from peft_config[{adapter_name!r}], which is "
+                f"not set; the tuner holds {sorted(self.peft_config)}"
+            )
+        try:
+            self._add_adapter(adapter_name, staged)
+        except BaseException:
+            self.peft_config[adapter_name] = staged
+            raise
 
     # ── switching, freezing, deleting ─────────────────────────────────────
 
@@ -1014,6 +1097,11 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
             for module in self.modules()
             if isinstance(module, _BaseTunerLayer)
         )
+
+
+def _held_names(model: nn.Module) -> set[str]:
+    """The names of the adapters the layers and slots of ``model`` hold."""
+    return {name for _, slot in _adapter_slots(model) for name in slot._adapter_names()}
 
 
 def _trains_bias(config: PeftConfig) -> bool:

@@ -13,7 +13,7 @@ from lucid._types import _ModuleOutput
 from lucid.nn.hooks import RemovableHandle
 from lucid.peft._config import PeftConfig, PeftType
 from lucid.peft._peft_model import PeftModel
-from lucid.peft._refusals import refuse_build_options, refuse_kwargs, refuse_value
+from lucid.peft._refusals import refuse_build_options, refuse_kwargs, refuse_method, refuse_value
 from lucid.peft._slots import _as_names
 from lucid.peft.tuners._host import _AdapterHost, _TakeBack
 from lucid.peft.tuners._layer import _adapter_dtype, _check_adapter_name, _tuner_layers
@@ -29,6 +29,11 @@ from lucid.utils.cache import Cache
 _CLASSIFIER: Final = "internal_xlora_classifier"
 #: Arguments of the scalings pass that must not reach it: it neither computes a loss nor touches a cache.
 _NOT_IN_THE_PASS: Final = ("labels", "past_key_values")
+#: Why nothing is folded into the weights, said once for every way of asking.
+_NO_FOLDING: Final = (
+    "X-LoRA weighs its experts per token, so they cannot be folded into the weights; "
+    "unload() removes them"
+)
 
 
 def _named_arguments(
@@ -430,9 +435,87 @@ class XLoraModel(_FileFormat, _AdapterHost, peft_type=PeftType.XLORA):
     ) -> nn.Module:
         """Refused: the experts' weights change with every token, so there is nothing to merge."""
         del progressbar, safe_merge, adapter_names
-        raise NotImplementedError(
-            "X-LoRA weighs its experts per token, so they cannot be folded into the weights; "
-            "unload() removes them"
+        raise NotImplementedError(_NO_FOLDING)
+
+    def merge_adapter(
+        self, adapter_names: list[str] | None = None, safe_merge: bool = False
+    ) -> None:
+        """Refused: the experts' weights change with every token, so there is nothing to merge.
+
+        This departs from the reference on purpose.  Its ``merge_adapter`` merges every expert at
+        weight 1 into the base weights, after which its layers skip the scalings, so the model
+        runs the sum of the experts and the classifier's mixture is silently dropped.
+
+        Parameters
+        ----------
+        adapter_names : list of str, optional
+            Not read.
+        safe_merge : bool, default=False
+            Not read.
+
+        Raises
+        ------
+        NotImplementedError
+            Always.
+        """
+        del adapter_names, safe_merge
+        raise NotImplementedError(_NO_FOLDING)
+
+    def unmerge_adapter(self) -> None:
+        """Take every merged update back out of the base weights: none is ever merged, so nothing changes.
+
+        ``merge_adapter`` is refused, so an X-LoRA model holds no merged weight; this is what the
+        reference's does on a model it has not merged.
+        """
+
+    def supports_lora_conversion(self, adapter_name: str = "default") -> bool:
+        """Whether the adapter converts to a LoRA one: it does not (``False``).
+
+        This departs from the reference on purpose, which answers ``True`` from the experts'
+        LoRA layers.  X-LoRA's update is a different mixture of the experts for every token, not
+        a weight delta that a LoRA adapter could stand for.
+
+        Parameters
+        ----------
+        adapter_name : str, default="default"
+            Not read.
+        """
+        del adapter_name  # the answer is the method's, whichever adapter is asked about
+        return False
+
+    def inject_adapter(
+        self,
+        model: nn.Module,
+        adapter_name: str,
+        autocast_adapter_dtype: bool = True,
+        low_cpu_mem_usage: bool = False,
+        state_dict: dict[str, Tensor] | None = None,
+    ) -> None:
+        """Refused: the experts are loaded from ``config.adapters`` when the model is built; X-LoRA has no layer of its own to inject.
+
+        Parameters
+        ----------
+        model : nn.Module
+            Not read.
+        adapter_name : str
+            Not read.
+        autocast_adapter_dtype : bool, default=True
+            Not read.
+        low_cpu_mem_usage : bool, default=False
+            Not read.
+        state_dict : dict of str to Tensor, optional
+            Not read.
+
+        Raises
+        ------
+        NotImplementedError
+            Always.
+        """
+        del model, adapter_name, autocast_adapter_dtype, low_cpu_mem_usage, state_dict
+        refuse_method(
+            f"{type(self).__name__}.inject_adapter",
+            "its experts are loaded from config.adapters when the model is built; the X-LoRA "
+            "adapter has no layer of its own to put into a model",
         )
 
     @override

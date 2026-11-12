@@ -424,9 +424,7 @@ class Owed:
 #: directions: a member Lucid lacks and this table does not list, or one listed that Lucid now has
 #: (or on a class it is not lacking on), fails.  A row leaves the table in the commit that adds it.
 _SHADOW = "SHADOW is refused, so its model class is a stand-in with no tuner behaviour"
-_NO_MERGE = "X-LoRA mixes its adapters per input, so there is no weight to merge or convert"
 _CPT_HELPER = "not ported: a CPT training-loss helper of the reference's embedding"
-_INJECT = "not ported: Lucid injects through inject_adapter_in_model, not a method of the tuner"
 _GENERATE = "not ported: PeftModel.generate routes the batch; the tuner has none of its own"
 _HERE = "LCD-968"
 
@@ -437,22 +435,14 @@ _OWED_MEMBERS: dict[str, Owed] = {
     "BaseTuner.active_adapters": Owed(_HERE, _SHADOW, ("ShadowModel",)),
     "BaseTuner.disable_adapter_layers": Owed(_HERE, _SHADOW, ("ShadowModel",)),
     "BaseTuner.enable_adapter_layers": Owed(_HERE, _SHADOW, ("ShadowModel",)),
-    "BaseTuner.get_model_config": Owed(
-        _HERE, "not ported: the reference tuner base's reader of the wrapped model's config"
-    ),
-    "BaseTuner.inject_adapter": Owed(_HERE, _INJECT),
-    "BaseTuner.merge_adapter": Owed(
-        _HERE, f"{_SHADOW}; {_NO_MERGE}", ("ShadowModel", "XLoraModel")
-    ),
+    "BaseTuner.get_model_config": Owed(_HERE, _SHADOW, ("ShadowModel",)),
+    "BaseTuner.inject_adapter": Owed(_HERE, _SHADOW, ("ShadowModel",)),
+    "BaseTuner.merge_adapter": Owed(_HERE, _SHADOW, ("ShadowModel",)),
     "BaseTuner.merge_and_unload": Owed(_HERE, _SHADOW, ("ShadowModel",)),
     "BaseTuner.set_requires_grad": Owed(_HERE, _SHADOW, ("ShadowModel",)),
-    "BaseTuner.supports_lora_conversion": Owed(
-        _HERE, f"{_SHADOW}; {_NO_MERGE}", ("ShadowModel", "XLoraModel")
-    ),
+    "BaseTuner.supports_lora_conversion": Owed(_HERE, _SHADOW, ("ShadowModel",)),
     "BaseTuner.unload": Owed(_HERE, _SHADOW, ("ShadowModel",)),
-    "BaseTuner.unmerge_adapter": Owed(
-        _HERE, f"{_SHADOW}; {_NO_MERGE}", ("ShadowModel", "XLoraModel")
-    ),
+    "BaseTuner.unmerge_adapter": Owed(_HERE, _SHADOW, ("ShadowModel",)),
     "CPTEmbedding.calculate_loss": Owed(_HERE, _CPT_HELPER),
     "CPTEmbedding.get_epsilon": Owed(_HERE, _CPT_HELPER),
     "CPTEmbedding.get_projection": Owed(_HERE, _CPT_HELPER),
@@ -476,8 +466,6 @@ _OWED_MEMBERS: dict[str, Owed] = {
     "ShadowModel.set_adapter": Owed(_HERE, _SHADOW),
     "ShadowModel.shadow_auxiliary_loss": Owed(_HERE, _SHADOW),
     "ShadowModel.unload_shadow": Owed(_HERE, _SHADOW),
-    "TrainableTokensModel.inject_adapter": Owed(_HERE, _INJECT),
-    "UniLoraModel.inject_adapter": Owed(_HERE, _INJECT),
     "XLoraModel.generate": Owed(_HERE, _GENERATE),
 }
 
