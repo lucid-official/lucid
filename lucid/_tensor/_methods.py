@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, cast
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _REAL_FLOATS, _binary_operands, _cannot_cast_inplace, _unwrap, _wrap
+from lucid._engine_scope import refuse_trace
 from lucid._tensor._copy import _tensor_deepcopy
 from lucid._tensor._indexing import _adopt_inplace
 from lucid._tensor_args import guard_methods, require_tensor, slot_name
@@ -1389,6 +1390,25 @@ def _make_method(e: OpEntry, tensor_cls: type) -> object:
     return _fixed_arity_method(e, tensor_cls)
 
 
+_VERSION_READ_WHY = (
+    "a tensor's version counter was read while tracing; a compiled call would replay the "
+    "trace-time branch"
+)
+
+
+def _read_version(self: Tensor) -> int:
+    """The mutation counter of ``self``'s storage (``Tensor._version``).
+
+    A forward that decides on it (rebuild a cache when a parameter's counter moved) takes one
+    branch at the trace, and the executable replays that branch for every later call, so a
+    trace that reads it is refused and the call runs eagerly.  The engine's own readers
+    (``compile._core.buffer_writes``, ``autograd.function``) read ``TensorImpl.version``
+    directly and are not refused.
+    """
+    refuse_trace(_VERSION_READ_WHY)
+    return self._impl.version
+
+
 def _inject_methods(tensor_cls: type) -> None:
     """Attach all registry ops as Tensor methods."""
     globals().setdefault("Tensor", tensor_cls)
@@ -1406,5 +1426,5 @@ def _inject_methods(tensor_cls: type) -> None:
     for _name, _fn in (("eval", eval), *_EXTRA_METHODS):
         _fn.__name__ = _name
         setattr(tensor_cls, _name, _fn)
-    type.__setattr__(tensor_cls, "_version", property(lambda self: self._impl.version))
+    type.__setattr__(tensor_cls, "_version", property(_read_version))
     guard_methods(tensor_cls)

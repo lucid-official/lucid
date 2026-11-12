@@ -69,6 +69,19 @@ class StateContract:
     is not known — every value it could read is keyed instead.  Measured over
     the zoo (79 families, eval and train), no module's state moved from one
     forward to the next; two moved on their first forward only.
+
+    Limit: a branch on a tensor's own metadata is not state.  The key holds a
+    module's attributes and the signatures of the call's arguments, not what the
+    tensors the module holds say about themselves.  A forward that takes
+    ``if self.weight.grad is None`` or ``if self.weight.requires_grad`` takes one
+    branch at the trace and a compiled call replays it however the tensor changes
+    afterwards: ``.grad`` is read by nothing, and ``requires_grad`` is read live
+    only to decide whether a call must stay differentiable, never as branch state.
+    Nothing in the tree branches that way; keep such a switch in a plain attribute
+    (keyed) or run the module eagerly.  ``Tensor._version`` is refused rather than
+    limited: reading it while a trace is active marks the trace unsupported, so a
+    forward that rebuilds a cache when a parameter's counter moved runs eagerly
+    (``lucid/test/unit/compile/test_version_counter_read.py`` pins both).
     """
 
     #: Values keyed by their type and value (a float by its bits, :func:`atom_sig`).

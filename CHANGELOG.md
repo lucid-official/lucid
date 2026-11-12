@@ -217,6 +217,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the numpy protocol's signature reads without numpy (LCD-987)
 
+- refuse a trace that reads Tensor._version (LCD-986)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
