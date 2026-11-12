@@ -28,6 +28,21 @@ function attachErrorCollectors(page: Page): { errors: string[] } {
   return { errors };
 }
 
+/** Open ``path`` and fail if the site answered with its not-found page.  Under
+ *  ``next dev`` a missing page is still HTTP 200 (the 404 is streamed in), so
+ *  the status code cannot tell; the not-found page is the one marked
+ *  ``noindex``.  Without this, a test on a path the static export does not
+ *  generate (``/api/lucid.tensor/Tensor`` — ``Tensor`` is the class page
+ *  ``/api/lucid.tensor``, not one of its methods) passes by inspecting a 404,
+ *  and ``next dev`` logs "Failed to generate static paths for /api/[...slug]". */
+async function visit(page: Page, path: string): Promise<void> {
+  await page.goto(path, { waitUntil: "networkidle" });
+  await expect(
+    page.locator('meta[name="robots"][content="noindex"]'),
+    `${path} is the 404 page — the static export has no such page`,
+  ).toHaveCount(0);
+}
+
 const PAGES = [
   { path: "/", name: "home" },
   { path: "/api", name: "api landing" },
@@ -44,7 +59,7 @@ const PAGES = [
 for (const { path, name } of PAGES) {
   test(`${name} hydrates without errors`, async ({ page }) => {
     const { errors } = attachErrorCollectors(page);
-    await page.goto(path, { waitUntil: "networkidle" });
+    await visit(page, path);
     await expect(page.locator("#main-content, main").first()).toBeVisible();
     expect(errors, errors.join("\n")).toEqual([]);
   });
@@ -268,7 +283,7 @@ const ID_PAGES = [
   "/api/lucid.peft.tuners",
   "/api/lucid.models",
   "/api/lucid.nn/Linear",
-  "/api/lucid.tensor/Tensor",
+  "/api/lucid.tensor",
   "/api/lucid.optim/Adam",
   "/api/lucid.peft.tuners.lora/LoraConfig",
   "/api/lucid.models.vision.resnet/resnet_50",
@@ -276,7 +291,7 @@ const ID_PAGES = [
 
 for (const path of ID_PAGES) {
   test(`no id is repeated on ${path}`, async ({ page }) => {
-    await page.goto(path, { waitUntil: "networkidle" });
+    await visit(page, path);
     const repeated = await page.evaluate(() => {
       const count = new Map<string, number>();
       for (const el of document.querySelectorAll("[id]")) {
@@ -337,7 +352,7 @@ test.describe("display math at a phone width", () => {
 
   for (const path of FORMULA_PAGES) {
     test(`${path} is not wider than the viewport`, async ({ page }) => {
-      await page.goto(path, { waitUntil: "networkidle" });
+      await visit(page, path);
       expect(await page.locator(".katex-display").count(), "page has display math").toBeGreaterThan(0);
       const { viewport, document: width } = await page.evaluate(() => ({
         viewport: window.innerWidth,
@@ -362,4 +377,59 @@ test.describe("display math at a phone width", () => {
     const inline = page.locator(".katex:not(.katex-display .katex)").first();
     expect(await inline.evaluate((el) => getComputedStyle(el).overflowX)).toBe("visible");
   });
+});
+
+// The copy-link icon of a titled sub-package section (the "LoRA family" heading
+// of /api/lucid.peft.tuners) is hidden until the heading is hovered.  It never
+// showed: the icon reveals on ``group-hover`` and no ancestor of the heading was
+// a ``group`` (LCD-978).  The group is the heading, not the section — a
+// section-wide one would also fire the ``group-hover`` styles of every card below.
+test("a sub-package section heading shows its copy-link icon on hover", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await visit(page, "/api/lucid.peft.tuners");
+  for (const [title, id] of [
+    ["LoRA family", "section-lora-family"],
+    ["Refused", "section-refused"],
+  ]) {
+    const heading = page.locator(`h2#${id}`);
+    await expect(heading, title).toHaveText(title);
+    const icon = heading.locator('button[aria-label="Copy link to section"]');
+    await page.mouse.move(0, 0);
+    await expect(icon, `${title}: hidden at rest`).toBeHidden();
+    await heading.hover();
+    await expect(icon, `${title}: shown while the heading is hovered`).toBeVisible();
+    await heading.locator("xpath=..").locator("a").first().hover();
+    await expect(icon, `${title}: hidden again while a card is hovered`).toBeHidden();
+  }
+
+  // Using it deep-links the section.
+  const heading = page.locator("h2#section-lora-family");
+  await heading.hover();
+  await heading.locator('button[aria-label="Copy link to section"]').click();
+  await expect(page).toHaveURL(/#section-lora-family$/);
+});
+
+// The /api index counts ``lucid.peft``'s methods.  The package names one more
+// than builds an adapter (ShadowPEFT is documented but refused) and the guides
+// say how many build, so the card said "46 methods" next to guides saying 45
+// (LCD-978).  The audit contract ``index.card-count`` checks the built site; this
+// reads the same sections file independently of the card's own code.
+test("the lucid.peft cards count the methods that build an adapter", async ({ page }) => {
+  const peft = (
+    JSON.parse(readFileSync(join(process.cwd(), "data", "api-sections.json"), "utf8")) as Record<
+      string,
+      { sections: { id: string; packages?: unknown[] }[] }
+    >
+  )["lucid.peft"];
+  const size = (keep: (id: string) => boolean) =>
+    peft.sections.filter((s) => keep(s.id)).reduce((n, s) => n + (s.packages?.length ?? 0), 0);
+  const built = size((id) => id !== "refused");
+  const named = size(() => true);
+  expect(built, "a refused section exists").toBeLessThan(named);
+
+  await visit(page, "/api");
+  const card = page.locator('#main-content a[href$="/api/lucid.peft.tuners"]');
+  await expect(card).toHaveCount(1);
+  await expect(card.getByText(/^\d+ methods$/)).toHaveText(`${built} methods`);
+  await expect(card).not.toContainText(`${named} methods`);
 });
