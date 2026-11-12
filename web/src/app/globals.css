@@ -363,6 +363,19 @@ code[data-copied="1"] {
   transition: color 150ms ease;
 }
 
+/* ── Display math ───────────────────────────────────────────────────────
+ * KaTeX sets a display formula on one nowrap line, so one wider than its
+ * column ran out of the column and widened the whole page (416 px at a
+ * 390 px viewport on the LoRA tutorial).  It scrolls inside its own box
+ * instead.  Only ``.katex-display``: inline math sits in a sentence's line
+ * box and is left alone, so it is never clipped.  ``overflow-y: hidden``
+ * because setting one axis computes the other to ``auto``, which would
+ * hang a vertical scrollbar on a box exactly as tall as its content. */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 /* Noise overlay for surfaces */
 .surface-noise::after {
   content: "";
