@@ -660,13 +660,10 @@ def _pair(ref: ModuleType, **kw: object) -> tuple[CartridgeEncoder, object]:
 def test_the_encoder_matches_the_reference(ref: ModuleType, frozen: int) -> None:
     mine, theirs = _pair(ref, num_frozen_tokens=frozen)
     assert {k: tuple(v.shape) for k, v in mine.state_dict().items()} == {
-        k: tuple(v.shape)
-        for k, v in theirs.state_dict().items()  # type: ignore[attr-defined]
+        k: tuple(v.shape) for k, v in theirs.state_dict().items()  # type: ignore[attr-defined]
     }
     assert [n for n, p in mine.named_parameters() if p.requires_grad] == [
-        n
-        for n, p in theirs.named_parameters()
-        if p.requires_grad  # type: ignore[attr-defined]
+        n for n, p in theirs.named_parameters() if p.requires_grad  # type: ignore[attr-defined]
     ]
     assert float((ref.tensor(mine.weight.tolist()) - theirs.weight.detach()).abs().max()) == 0.0  # type: ignore[attr-defined]
     ids = lucid.zeros(3, 7).long()

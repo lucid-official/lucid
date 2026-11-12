@@ -42,13 +42,7 @@ _FIELDS: dict[str, type] = {
 
 
 def test_the_names_are_exported() -> None:
-    for name in (
-        "ArrowConfig",
-        "BdLoraConfig",
-        "KasaConfig",
-        "MontecloraConfig",
-        "VeloraConfig",
-    ):
+    for name in ("ArrowConfig", "BdLoraConfig", "KasaConfig", "MontecloraConfig", "VeloraConfig"):
         assert name in peft.__all__
 
 
@@ -100,7 +94,8 @@ class TestSubconfigCheck:
     def test_a_dict_may_hold_the_fields_a_library_fills_in(self) -> None:
         """A file records ``task_adapter_names``; it is not a constructor argument."""
         config = _subconfig(ArrowConfig)(
-            "arrow_config", {"top_k": 2, "task_adapter_names": ["a", "b"], "gks_adapter_names": None}
+            "arrow_config",
+            {"top_k": 2, "task_adapter_names": ["a", "b"], "gks_adapter_names": None},
         )
         assert config == ArrowConfig(top_k=2)
 
@@ -164,4 +159,3 @@ class TestLoraConfigFields:
         assert type(LoraConfig().runtime_config) is LoraRuntimeConfig
         with pytest.raises(NotImplementedError, match="ephemeral_gpu_offload"):
             LoraRuntimeConfig(ephemeral_gpu_offload=True)
-

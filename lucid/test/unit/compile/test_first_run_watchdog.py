@@ -111,9 +111,9 @@ def _the_test_process_gives_up_on_nothing() -> Iterator[None]:
 def test_scenario(group: str, scenario: str, device_gpu_only: str) -> None:
     del device_gpu_only
     child = _run_group(group)
-    assert scenario in child.results, (
-        f"the child never reached it (exit {child.returncode}): {child.stderr}"
-    )
+    assert (
+        scenario in child.results
+    ), f"the child never reached it (exit {child.returncode}): {child.stderr}"
     assert child.results[scenario]["ok"], child.results[scenario]["detail"]
 
 
@@ -134,9 +134,9 @@ def test_the_real_hang_is_given_up_on_and_answered_eagerly(device_gpu_only: str)
     del device_gpu_only
     child = _run_group("real", f"{_REAL_BUDGET_S:g}")
     name = "the_real_hang_is_given_up_on_and_answered_eagerly"
-    assert name in child.results, (
-        f"the child never reached it (exit {child.returncode}): {child.stderr}"
-    )
+    assert (
+        name in child.results
+    ), f"the child never reached it (exit {child.returncode}): {child.stderr}"
     assert child.results[name]["ok"], child.results[name]["detail"]
     detail = child.results["real_hang_detail"]["detail"]
     assert isinstance(detail, dict)

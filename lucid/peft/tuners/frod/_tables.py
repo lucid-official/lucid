@@ -48,11 +48,7 @@ class _Projections:
         return self._buffers(NAMES[0], category).persistent
 
     def put(
-        self,
-        category: str,
-        adapter: str,
-        entry: tuple[Tensor, Tensor, Tensor],
-        persistent: bool,
+        self, category: str, adapter: str, entry: tuple[Tensor, Tensor, Tensor], persistent: bool
     ) -> None:
         """Set ``adapter``'s ``(V, indices, size)`` in ``category``; a category's containers are made with the first."""
         for name, tensor in zip(NAMES, entry, strict=True):

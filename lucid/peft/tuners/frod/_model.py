@@ -173,11 +173,7 @@ class FrodModel(_FileFormat, _ConfigTuner[FrodConfig], peft_type=PeftType.FROD):
 
     @override
     def _new_slots(
-        self,
-        config: FrodConfig,
-        adapter_name: str,
-        targets: list[_Target],
-        saved: list[str],
+        self, config: FrodConfig, adapter_name: str, targets: list[_Target], saved: list[str]
     ) -> list[_Placement]:
         self._provide(adapter_name, config, targets)
         try:

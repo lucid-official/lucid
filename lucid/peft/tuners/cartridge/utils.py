@@ -76,9 +76,7 @@ def _key_value(layer: object) -> tuple[Tensor, Tensor]:
 
 
 def prompt_embeddings_from_past_key_values(
-    past_key_values: object,
-    *,
-    num_virtual_tokens: int,
+    past_key_values: object, *, num_virtual_tokens: int
 ) -> Tensor:
     r"""Pack the first keys and values of a cache into the matrix an adapter file holds.
 

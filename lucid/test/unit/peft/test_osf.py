@@ -293,7 +293,8 @@ class TestGradientProjection:
 
     def test_the_hooks_of_a_pass_do_not_hold_the_layer_that_made_them(self, device: str) -> None:
         """The engine keeps a tensor hook where the collector cannot see (LCD-302): a hook that held
-        the layer would keep it alive as long as the graph is, and the projection must not need it."""
+        the layer would keep it alive as long as the graph is, and the projection must not need it.
+        """
         layer, base = _layer(init_weights=False)
         u_high, _, _ = _top(base.weight, 2)
         layer.to(device)

@@ -860,10 +860,7 @@ def report_coverage_diff(report: Report, recorded: dict[str, str], console: Cons
         console.always("")
         console.rule(f"listed under another spelling · {len(moved)}", "grey")
         _capped(
-            console,
-            "MOVED",
-            "grey",
-            [f"{key}  ->  {new}" for key, new in sorted(moved.items())],
+            console, "MOVED", "grey", [f"{key}  ->  {new}" for key, new in sorted(moved.items())]
         )
     if gained:
         console.always("")

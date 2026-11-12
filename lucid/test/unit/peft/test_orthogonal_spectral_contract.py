@@ -171,9 +171,7 @@ def _psoft_forward(init: str, orth: bool, mag_a: bool) -> Callable[..., lucid.Te
                 forms.cayley(t[p + "weight"].tolist(), 3) if orth else t[p + "weight"].tolist()
             )
             inner = forms.psoft_inner(
-                rotation,
-                t[p + "vector_b"].tolist(),
-                t[p + "vector_a"].tolist() if mag_a else None,
+                rotation, t[p + "vector_b"].tolist(), t[p + "vector_a"].tolist() if mag_a else None
             )
             u, s, vt = linalg.svd(net[index].weight.detach(), full_matrices=False)
             delta = forms.psoft_delta(u.tolist(), s.tolist(), vt.tolist(), inner, 3, init)

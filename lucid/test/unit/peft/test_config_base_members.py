@@ -70,9 +70,7 @@ class TestRegistryGuard:
         assert type(built) is config_class and built == config
 
     @pytest.mark.parametrize("config_class", _ALL, ids=_ids)
-    def test_a_named_type_wins_over_the_calling_class(
-        self, config_class: type[PeftConfig]
-    ) -> None:
+    def test_a_named_type_wins_over_the_calling_class(self, config_class: type[PeftConfig]) -> None:
         config = _make(config_class)
         assert LoraConfig.from_peft_type(**config.to_dict()) == config
 
@@ -241,7 +239,9 @@ def _their_class(library: object, name: str) -> type:
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(("config_class", "options"), _SAMPLE, ids=lambda v: getattr(v, "__name__", ""))
+@pytest.mark.parametrize(
+    ("config_class", "options"), _SAMPLE, ids=lambda v: getattr(v, "__name__", "")
+)
 def test_is_adaption_prompt_agrees_with_the_reference(
     config_class: type[PeftConfig], options: dict[str, object]
 ) -> None:
@@ -260,7 +260,9 @@ def test_is_adaption_prompt_is_false_on_a_prompt_learning_config_in_both() -> No
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(("config_class", "options"), _SAMPLE, ids=lambda v: getattr(v, "__name__", ""))
+@pytest.mark.parametrize(
+    ("config_class", "options"), _SAMPLE, ids=lambda v: getattr(v, "__name__", "")
+)
 def test_from_peft_type_builds_what_the_reference_builds(
     config_class: type[PeftConfig], options: dict[str, object], tmp_path: Path
 ) -> None:
@@ -297,7 +299,9 @@ def test_an_unknown_or_missing_peft_type_fails_as_the_reference_does() -> None:
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(("config_class", "options"), _SAMPLE, ids=lambda v: getattr(v, "__name__", ""))
+@pytest.mark.parametrize(
+    ("config_class", "options"), _SAMPLE, ids=lambda v: getattr(v, "__name__", "")
+)
 def test_check_kwargs_returns_what_the_reference_returns(
     config_class: type[PeftConfig], options: dict[str, object]
 ) -> None:
@@ -310,7 +314,16 @@ def test_check_kwargs_returns_what_the_reference_returns(
 @pytest.mark.parity
 @pytest.mark.parametrize(
     "version",
-    [None, "0.0.0", "0.17.1", "0.18.0", "0.18.0.dev0", "0.18.1.dev0@abc123", "0.18.0.post1", "0.21.2"],
+    [
+        None,
+        "0.0.0",
+        "0.17.1",
+        "0.18.0",
+        "0.18.0.dev0",
+        "0.18.1.dev0@abc123",
+        "0.18.0.post1",
+        "0.21.2",
+    ],
 )
 def test_oft_check_kwargs_warns_as_the_reference_does(version: str | None) -> None:
     library = adapter_library()

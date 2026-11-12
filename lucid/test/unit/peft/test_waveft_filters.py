@@ -164,9 +164,7 @@ class TestInverseTransform:
         bands = tuple(lucid.randn(height, width) for _ in range(4))
         mine = _idwt2(*bands, name)
         expected = forms.synthesis_2d(
-            tuple(b.tolist() for b in bands),
-            bank.rec_lo,
-            bank.rec_hi,  # type: ignore[arg-type]
+            tuple(b.tolist() for b in bands), bank.rec_lo, bank.rec_hi  # type: ignore[arg-type]
         )
         assert tuple(mine.shape) == (2 * height - taps + 2, 2 * width - taps + 2)
         gap = max(

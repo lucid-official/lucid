@@ -78,10 +78,7 @@ def delora_delta(a: Matrix, b: Matrix, boundary: float, w_norm: list[float]) -> 
 
 
 def gralora_delta(
-    a: list[Matrix],
-    b: list[Matrix],
-    scaling: float,
-    general: tuple[Matrix, Matrix] | None = None,
+    a: list[Matrix], b: list[Matrix], scaling: float, general: tuple[Matrix, Matrix] | None = None
 ) -> Matrix:
     r"""The block grid of the paper: block ``(j, n)`` of the update is :math:`B_{j,n} A_{j,n}^\top`.
 
@@ -212,12 +209,7 @@ def householder_q(a: Matrix) -> Matrix:
 
 
 def deft_delta(
-    weight: Matrix,
-    direction: Matrix,
-    injection: Matrix | None,
-    *,
-    method: str,
-    scaling: float,
+    weight: Matrix, direction: Matrix, injection: Matrix | None, *, method: str, scaling: float
 ) -> Matrix:
     r""":math:`\Delta W = Q_P\,(s R - \mathrm{right}^\top W)`, or :math:`-Q_P\,\mathrm{right}^\top W` without an injection.
 

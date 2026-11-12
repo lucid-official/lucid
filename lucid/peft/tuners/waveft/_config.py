@@ -17,7 +17,6 @@ from lucid.peft._config import (
     _TargetedConfig,
 )
 
-
 #: The wavelet names a config accepts, the reference's: Daubechies ``db1`` to ``db38``, symlets ``sym2`` to
 #: ``sym20`` and coiflets ``coif1`` to ``coif17``.  Filters exist for fewer (``_filters.WAVELET_FAMILIES``).
 KNOWN_WAVELETS: Final[tuple[str, ...]] = (

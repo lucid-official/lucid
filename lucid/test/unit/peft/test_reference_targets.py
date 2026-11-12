@@ -52,6 +52,7 @@ _PEFT_TYPE_OF = {"LNTUNING": "LN_TUNING"}
 _FEEDFORWARD = "IA3_FEEDFORWARD"
 _ALIAS_WARNING = "reference library's names"
 
+
 def _rows(table: str) -> dict[str, list[str] | str]:
     """The table ``table`` as the reference leaves it: its base's rows, edited by its own."""
     entry = _SNAPSHOT["tables"][table]

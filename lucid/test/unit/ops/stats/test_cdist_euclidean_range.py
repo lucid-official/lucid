@@ -396,9 +396,7 @@ def _plain_difference_form(x1: lucid.Tensor, x2: lucid.Tensor) -> lucid.Tensor:
 
 @pytest.mark.parametrize("magnitude", [1.0, 1e-4, 1e4, 1e8, 1e-8], ids=lambda m: f"{m:g}")
 @pytest.mark.parametrize(
-    "shapes",
-    [((40, 8), (30, 8)), ((2, 40, 8), (2, 30, 8)), ((6, 8), (3, 6, 8))],
-    ids=str,
+    "shapes", [((40, 8), (30, 8)), ((2, 40, 8), (2, 30, 8)), ((6, 8), (3, 6, 8))], ids=str
 )
 def test_normal_magnitudes_are_bit_identical_to_the_unscaled_forms(
     device: str, magnitude: float, shapes: tuple[tuple[int, ...], tuple[int, ...]]

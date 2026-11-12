@@ -121,9 +121,7 @@ RENAMED: dict[str, dict[str, str]] = {
 
 #: ``"DefiningClass.member"`` -> Lucid's name for a *member* whose reference name the library's
 #: source may not contain (H5).  The reference name is spelled as ``RENAMED`` spells its own.
-RENAMED_MEMBERS: dict[str, str] = {
-    f"PeftModel.base_model_{_FRAMEWORK}_dtype": "base_model_dtype",
-}
+RENAMED_MEMBERS: dict[str, str] = {f"PeftModel.base_model_{_FRAMEWORK}_dtype": "base_model_dtype"}
 
 _RENAME_REASON = "H5 (hard rule: the reference framework's name may not appear in lucid/ source)"
 
