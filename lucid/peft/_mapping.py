@@ -3,14 +3,17 @@
 import dataclasses
 from collections.abc import Mapping
 from types import MappingProxyType
+from typing import Literal, overload
 
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import _CONFIG_CLASSES, PeftConfig, PeftType, _require_config
+from lucid.peft._mixed_model import PeftMixedModel
 from lucid.peft._peft_model import PeftModel
-from lucid.peft._refusals import refuse_value
+from lucid.peft._refusals import refuse_build_options
 from lucid.peft._targeting import _config_for_model
 from lucid.peft.tuners._host import _ALL_TUNERS, _AdapterHost, _tuner_for, _WithheldTuner
+from lucid.peft.tuners._tuner import _MIXED_TUNERS, _BaseTuner
 
 #: The config class of each method, by ``PeftType``: a read-only view of the registry that
 #: ``PeftConfig`` subclasses join as they are defined, so a method added later appears here.
@@ -22,6 +25,17 @@ PEFT_TYPE_TO_CONFIG_MAPPING: Mapping[PeftType, type[PeftConfig]] = MappingProxyT
 #: ``NotImplementedError`` when built, saying why.
 PEFT_TYPE_TO_TUNER_MAPPING: Mapping[PeftType, type[_AdapterHost] | type[_WithheldTuner]] = (
     MappingProxyType(_ALL_TUNERS)
+)
+
+#: The tuner of each method a :class:`~lucid.peft.PeftMixedModel` can hold, by ``PeftType``: a
+#: read-only view of the registry a tuner joins with ``mixed=True`` as it is defined, so a
+#: method declared later appears here.  These are the methods whose layers stack on one another's
+#: and have passed the pair contract (LoRA, LoHa, LoKr, AdaLoRA, SHiRA, OFT, (IA)^3, BEFT, RoAd
+#: and HiRA).  The reference's table lists nine, without OFT, and four of those (IA3, BEFT, HiRA,
+#: RoAd) are refused where its constructor and ``add_adapter`` take a config; this table is
+#: exactly what the class accepts.
+PEFT_TYPE_TO_MIXED_MODEL_MAPPING: Mapping[PeftType, type[_BaseTuner]] = MappingProxyType(
+    _MIXED_TUNERS
 )
 
 
@@ -70,6 +84,43 @@ def get_peft_config(config_dict: dict[str, object]) -> PeftConfig:
     return PEFT_TYPE_TO_CONFIG_MAPPING[peft_type].from_dict(config_dict)
 
 
+@overload
+def get_peft_model(
+    model: nn.Module,
+    peft_config: PeftConfig,
+    adapter_name: str = ...,
+    mixed: Literal[False] = ...,
+    autocast_adapter_dtype: bool = ...,
+    revision: str | None = ...,
+    low_cpu_mem_usage: bool = ...,
+) -> PeftModel: ...
+
+
+@overload
+def get_peft_model(
+    model: nn.Module,
+    peft_config: PeftConfig,
+    adapter_name: str = ...,
+    *,
+    mixed: Literal[True],
+    autocast_adapter_dtype: bool = ...,
+    revision: str | None = ...,
+    low_cpu_mem_usage: bool = ...,
+) -> PeftMixedModel: ...
+
+
+@overload
+def get_peft_model(
+    model: nn.Module,
+    peft_config: PeftConfig,
+    adapter_name: str = ...,
+    mixed: bool = ...,
+    autocast_adapter_dtype: bool = ...,
+    revision: str | None = ...,
+    low_cpu_mem_usage: bool = ...,
+) -> PeftModel | PeftMixedModel: ...
+
+
 def get_peft_model(
     model: nn.Module,
     peft_config: PeftConfig,
@@ -78,8 +129,8 @@ def get_peft_model(
     autocast_adapter_dtype: bool = True,
     revision: str | None = None,
     low_cpu_mem_usage: bool = False,
-) -> PeftModel:
-    r"""Adapt ``model`` with the method ``peft_config`` names and return it wrapped as a :class:`~lucid.peft.PeftModel`.
+) -> PeftModel | PeftMixedModel:
+    r"""Adapt ``model`` with the method ``peft_config`` names and return it wrapped as a :class:`~lucid.peft.PeftModel` (or, with ``mixed=True``, a :class:`~lucid.peft.PeftMixedModel`).
 
     The model is changed in place: each module ``peft_config`` selects
     becomes an adapter layer of that method (LoRA, (IA)^3, LoHa, LoKr) around the
@@ -95,7 +146,8 @@ def get_peft_model(
     ``PeftModelForSequenceClassification``, ``PeftModelForTokenClassification``,
     ``PeftModelForQuestionAnswering`` and ``PeftModelForFeatureExtraction``
     for theirs (``MODEL_TYPE_TO_PEFT_MODEL_MAPPING`` is the table), and a
-    plain ``PeftModel`` when the config has no task.
+    plain ``PeftModel`` when the config has no task.  With ``mixed=True`` it is always a
+    ``PeftMixedModel`` whatever the task, which holds the adapters of several methods at once.
 
     Parameters
     ----------
@@ -108,8 +160,9 @@ def get_peft_model(
     adapter_name : str, default="default"
         Name of the adapter, the key in each of its tables (``lora_A``, ``ia3_l`` …).
     mixed : bool, default=False
-        The reference returns a ``PeftMixedModel`` for ``True``, which holds adapters of
-        different methods at once.  Not implemented: ``True`` raises ``NotImplementedError``.
+        Return a :class:`~lucid.peft.PeftMixedModel`, which holds adapters of different methods
+        at once, each module's layers stacked; ``peft_config`` must be a method of
+        ``PEFT_TYPE_TO_MIXED_MODEL_MAPPING``.
     autocast_adapter_dtype : bool, default=True
         Cast a half-precision base's adapter weights to float32.  Always the case here;
         ``False`` raises ``NotImplementedError``.
@@ -122,19 +175,19 @@ def get_peft_model(
 
     Returns
     -------
-    PeftModel
-        The adapted model.
+    PeftModel or PeftMixedModel
+        The adapted model: a ``PeftMixedModel`` for ``mixed=True``.
 
     Raises
     ------
     TypeError
         ``peft_config`` is not an adapter config.
     ValueError
-        No module matches ``target_modules``, or a match is not an
-        ``nn.Linear``.
+        No module matches ``target_modules``, a match is not an
+        ``nn.Linear``, or, for ``mixed=True``, the method cannot be mixed.
     NotImplementedError
-        ``mixed``, ``low_cpu_mem_usage`` or ``autocast_adapter_dtype`` holds a value the
-        library cannot honour.
+        ``low_cpu_mem_usage`` or ``autocast_adapter_dtype`` is set to what this library cannot
+        honour.
 
     Examples
     --------
@@ -148,10 +201,18 @@ def get_peft_model(
     >>> peft(lucid.randn(2, 16)).shape
     (2, 4)
     """
-    refuse_value("get_peft_model", "mixed", mixed, False, "PeftMixedModel is not implemented")
     config = _config_for_model(model, _require_config("peft_config", peft_config))
     if revision is not None:
         config = dataclasses.replace(config, revision=revision)
+    if mixed:
+        # The reference passes nothing but the name on; the options this library cannot
+        # honour are refused here instead of being dropped.
+        refuse_build_options(
+            "get_peft_model",
+            autocast_adapter_dtype=autocast_adapter_dtype,
+            low_cpu_mem_usage=low_cpu_mem_usage,
+        )
+        return PeftMixedModel(model, config, adapter_name)
     return PeftModel._model_class(config.task_type)(
         model,
         config,

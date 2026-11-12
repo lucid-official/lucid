@@ -85,6 +85,10 @@ NO_MODEL_CARD = (
     "does not have"
 )
 NO_HYBRID_CACHE = "a prompt's cache grows with the sequence; there is no fixed-size cache to size"
+NO_MIXED_SAVE = (
+    "a mixed model has no file layout of its own (the reference has none either): write each "
+    "adapter from a PeftModel of its own method, and read it back with load_adapter"
+)
 
 
 def reject_unexpected(where: str, kwargs: Mapping[str, object]) -> None:

@@ -59,6 +59,7 @@ from lucid.peft import (
     OSFConfig,
     PeanutConfig,
     PeftConfig,
+    PeftMixedModel,
     PeftModel,
     PeftType,
     PolyConfig,
@@ -420,6 +421,9 @@ BUILDERS.update(
 
 # The host of several methods' adapters is no method's tuner: it is built with the first of them.
 BUILDERS[MixedModel] = lambda: MixedModel(
+    _base_model(), LoraConfig(r=2, target_modules=["0", "2"]), "default"
+)
+BUILDERS[PeftMixedModel] = lambda: PeftMixedModel(
     _base_model(), LoraConfig(r=2, target_modules=["0", "2"]), "default"
 )
 

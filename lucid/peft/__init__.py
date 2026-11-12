@@ -177,9 +177,25 @@ adapter (``model(x, adapter_names=[...])``).  ``get_layer_status`` and
 Adapting a model a second time adds the new adapter beside the first, with a
 warning.
 
+A ``PeftModel`` holds the adapters of one method.  ``get_peft_model(model, config, mixed=True)``
+(or ``PeftMixedModel`` itself) holds those of several at once, each module's layers stacked on
+one another's — LoRA with a LoHa layer on it, an (IA)^3 scale above that::
+
+    model = get_peft_model(base_model, LoraConfig(r=8, target_modules=["c_attn"]), mixed=True)
+    model.add_adapter("loha", LoHaConfig(r=4, target_modules=["c_attn"]))
+    model.set_adapter(["default", "loha"])         # both in use, lowest layer first
+    PeftMixedModel.from_pretrained(fresh_base_model, "my-adapter")   # a single-method file
+
+The methods it can hold are the keys of ``PEFT_TYPE_TO_MIXED_MODEL_MAPPING`` (LoRA, LoHa,
+LoKr, AdaLoRA for inference, SHiRA, OFT, (IA)^3, BEFT, RoAd, HiRA); any other is refused where it
+is added.  Adapters are read from the files single-method models write, before or after other
+methods are stacked on their modules; a mixed model itself is not saved (the reference's is not
+either), and it has no layer status.
+
 The helpers a script moved from the reference library reaches for are here under its
 names: ``PeftError`` / ``NoMatchingPeftModuleError`` / ``PeftWarning``, the method tables
-``PEFT_TYPE_TO_CONFIG_MAPPING`` and ``PEFT_TYPE_TO_TUNER_MAPPING`` (read-only views),
+``PEFT_TYPE_TO_CONFIG_MAPPING``, ``PEFT_TYPE_TO_TUNER_MAPPING`` and
+``PEFT_TYPE_TO_MIXED_MODEL_MAPPING`` (read-only views),
 ``get_peft_config``, ``load_peft_weights``, ``get_base_model_state_dict`` /
 ``set_base_model_state_dict``, ``cast_mixed_precision_params``, ``shift_tokens_right``,
 ``prepare_model_for_kbit_training`` (freezes and upcasts; a quantized model is refused),
@@ -194,11 +210,13 @@ from lucid.peft._kappa import find_kappa_target_modules
 from lucid.peft._load_weights import load_peft_weights
 from lucid.peft._mapping import (
     PEFT_TYPE_TO_CONFIG_MAPPING,
+    PEFT_TYPE_TO_MIXED_MODEL_MAPPING,
     PEFT_TYPE_TO_TUNER_MAPPING,
     get_peft_config,
     get_peft_model,
     inject_adapter_in_model,
 )
+from lucid.peft._mixed_model import PeftMixedModel
 from lucid.peft._model_prep import (
     cast_mixed_precision_params,
     prepare_model_for_kbit_training,
@@ -325,6 +343,7 @@ __all__ = [
     "ModulesToSaveWrapper",
     "NoMatchingPeftModuleError",
     "PEFT_TYPE_TO_CONFIG_MAPPING",
+    "PEFT_TYPE_TO_MIXED_MODEL_MAPPING",
     "PEFT_TYPE_TO_TUNER_MAPPING",
     "PeftError",
     "PeftWarning",
@@ -441,6 +460,7 @@ __all__ = [
     "WaveFTModel",
     "XLoraClassifier",
     "XLoraModel",
+    "PeftMixedModel",
     "PeftModel",
     "PeftModelForCausalLM",
     "PeftModelForFeatureExtraction",

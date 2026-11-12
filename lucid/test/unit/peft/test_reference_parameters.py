@@ -202,9 +202,10 @@ class TestPeftModelOptions:
             peft.add_adapter("b", _config(), **{name: value})
         assert list(peft.peft_config) == ["default"]
 
-    def test_mixed_models_are_refused_and_the_revision_is_recorded(self) -> None:
-        with pytest.raises(NotImplementedError, match="mixed"):
-            get_peft_model(_net(), _config(), mixed=True)
+    def test_mixed_models_are_built_and_the_revision_is_recorded(self) -> None:
+        mixed = get_peft_model(_net(), _config(), mixed=True, revision="abc123")
+        assert type(mixed).__name__ == "PeftMixedModel"
+        assert mixed.peft_config["default"].revision == "abc123"
         peft = get_peft_model(_net(), _config(), revision="abc123")
         assert peft.peft_config["default"].revision == "abc123"
 

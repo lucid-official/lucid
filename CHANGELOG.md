@@ -241,6 +241,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - MixedModel stacks the adapters of several methods
 
+- PeftMixedModel and get_peft_model(mixed=True) (LCD-966)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

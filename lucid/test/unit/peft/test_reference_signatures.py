@@ -392,10 +392,8 @@ def test_signature_matches_reference(name: str) -> None:
 #: listed, fails here; a count would let one be traded for the other.  A name leaves the table in the
 #: commit that exports it.
 _OWED: dict[str, str] = {
-    "PeftMixedModel": "LCD-828",
-    "PEFT_TYPE_TO_MIXED_MODEL_MAPPING": "LCD-828",
     # LCD-827 shipped LoRA's extensions without Arrow, whose library builder is this.
-    "create_arrow_model": "LCD-827",
+    "create_arrow_model": "LCD-827"
 }
 
 
