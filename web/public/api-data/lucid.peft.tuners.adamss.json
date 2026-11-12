@@ -1,0 +1,1905 @@
+{
+  "slug": "lucid.peft.tuners.adamss",
+  "name": "adamss",
+  "path": "lucid.peft.tuners.adamss",
+  "kind": "module",
+  "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/__init__.py#L1",
+  "members": [
+    {
+      "name": "SubspaceAllocator",
+      "path": "lucid.peft.tuners.adamss._allocator.SubspaceAllocator",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [],
+      "labels": [],
+      "signature": "SubspaceAllocator(model: nn.Module, config: AdamssConfig, adapter_name: str)",
+      "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_allocator.py#L39",
+      "subcategory": "allocator",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.adamss._allocator.SubspaceAllocator.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(model: nn.Module, config: AdamssConfig, adapter_name: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_allocator.py#L77",
+          "subcategory": "allocator",
+          "summary": "Find the adapter's layers in `model`; `config` sets the schedule.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "total",
+          "path": "lucid.peft.tuners.adamss._allocator.SubspaceAllocator.total",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "total: int",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_allocator.py#L114",
+          "summary": "The subspaces of the whole model, whether or not they train.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "target",
+          "path": "lucid.peft.tuners.adamss._allocator.SubspaceAllocator.target",
+          "kind": "function",
+          "labels": [],
+          "signature": "target(step: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_allocator.py#L120",
+          "subcategory": "allocator",
+          "summary": "How many subspaces `step` allows to stay trainable, or `None` before the window opens.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "step",
+              "annotation": "int",
+              "description": "The training step.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "int or None",
+            "description": "The truncated schedule value; `asa_target_subspaces` from `final_warmup` on."
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "update_importance",
+          "path": "lucid.peft.tuners.adamss._allocator.SubspaceAllocator.update_importance",
+          "kind": "function",
+          "labels": [],
+          "signature": "update_importance()",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_allocator.py#L146",
+          "subcategory": "allocator",
+          "summary": "Record the importance of every factor that has a gradient, at its current value.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "reset_importance",
+          "path": "lucid.peft.tuners.adamss._allocator.SubspaceAllocator.reset_importance",
+          "kind": "function",
+          "labels": [],
+          "signature": "reset_importance()",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_allocator.py#L162",
+          "subcategory": "allocator",
+          "summary": "Forget the recorded importances.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "mask_to_target",
+          "path": "lucid.peft.tuners.adamss._allocator.SubspaceAllocator.mask_to_target",
+          "kind": "function",
+          "labels": [],
+          "signature": "mask_to_target(target: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_allocator.py#L176",
+          "subcategory": "allocator",
+          "summary": "Freeze every recorded subspace whose score is not strictly above the `target`-th highest.",
+          "extended": "Nothing is frozen while `target` is at least the number of subspaces recorded.  A frozen\nfactor loses its gradient and its `requires_grad`; a kept one is trainable.",
+          "parameters": [
+            {
+              "name": "target",
+              "annotation": "int",
+              "description": "The number of subspaces to keep, in the whole model.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "update_and_allocate",
+          "path": "lucid.peft.tuners.adamss._allocator.SubspaceAllocator.update_and_allocate",
+          "kind": "function",
+          "labels": [],
+          "signature": "update_and_allocate(global_step: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_allocator.py#L203",
+          "subcategory": "allocator",
+          "summary": "One training step's worth of allocation: record importances, then freeze if the schedule says so.",
+          "extended": "Nothing happens outside the window `init_warmup <= step <= final_warmup`.  Inside it the\nimportances are recorded every step; on a step that is a multiple of `mask_interval` the\nsubspaces are masked to the schedule's target and the importances restart.",
+          "parameters": [
+            {
+              "name": "global_step",
+              "annotation": "int",
+              "description": "The training step.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        }
+      ],
+      "summary": "Decides, on a schedule, which subspaces of an AdaMSS model stay trainable.",
+      "extended": "Call `update_and_allocate` once per training step, after `loss.backward()` and before the\ngradients are cleared; `AdamssModel.update_and_allocate` does so for the adapters that asked\nfor ASA.  Importances are gathered every step from `init_warmup` to `final_warmup`; every\n`mask_interval` steps in that window the subspaces are ranked across the whole model, all but\nthe best frozen, and the importances restarted.  The number to keep falls from the model's total\nnumber of subspaces to `asa_target_subspaces` as\n$\\text{target} + (\\text{total} - \\text{target})\\,(1 - p)^{\\rho}$ truncated, with\n$p$ the progress through the window and $\\rho$ `asa_schedule_exponent`.",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The model AdaMSS was applied to.",
+          "default": null
+        },
+        {
+          "name": "config",
+          "annotation": "AdamssConfig",
+          "description": "The adapter's config: the window, the interval, the averages' weights and the target.",
+          "default": null
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "The adapter that trains.",
+          "default": null
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "ValueError",
+          "description": "No AdaMSS layer of `model` holds `adapter_name`."
+        }
+      ],
+      "examples": [
+        ">>> import lucid.nn as nn\n>>> from lucid.peft import AdamssConfig, AdamssModel\n>>> net = nn.Sequential(nn.Linear(6, 6), nn.Linear(6, 2))\n>>> config = AdamssConfig(r=4, num_subspaces=3, use_asa=True, asa_target_subspaces=2,\n...                       init_warmup=1, final_warmup=5, mask_interval=1, target_modules=[\"0\", \"1\"])\n>>> allocator = AdamssModel(net, config, \"default\").allocator(\"default\")\n>>> allocator.total, [allocator.target(step) for step in range(1, 6)]\n(5, [5, 3, 2, 2, 2])"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "AdamssConfig",
+      "path": "lucid.peft.tuners.adamss._config.AdamssConfig",
+      "kind": "class",
+      "class_kind": "dataclass",
+      "bases": [
+        "_TargetedConfig"
+      ],
+      "labels": [],
+      "signature": "AdamssConfig(task_type: TaskType | str | None = None, peft_type: PeftType | str | None = None, auto_mapping: dict[str, str] | None = None, peft_version: str | None = None, base_model_name_or_path: str | None = None, revision: str | None = None, inference_mode: bool = False, r: int = 100, num_subspaces: int = 5, subspace_rank: int = 1, target_modules: str | list[str] | set[str] | None = None, init_weights: Literal['orthogonal'] | None = 'orthogonal', modules_to_save: list[str] | None = None, layers_to_transform: int | list[int] | None = None, layers_pattern: str | list[str] | None = None, use_asa: bool = False, asa_target_subspaces: int = 50, init_warmup: int = 50, final_warmup: int = 1000, mask_interval: int = 100, asa_importance_beta: float = 0.85, asa_uncertainty_beta: float = 0.85, asa_schedule_exponent: float = 3.0, use_dynamic_rank: bool = False, svd_threshold: float = 0.1, random_seed: int = 0)",
+      "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_config.py#L26",
+      "subcategory": "config",
+      "methods": [
+        {
+          "name": "to_dict",
+          "path": "lucid.peft._config.PeftConfig.to_dict",
+          "kind": "function",
+          "labels": [],
+          "signature": "to_dict()",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L535",
+          "subcategory": "config",
+          "summary": "Return the config as the JSON-ready dict `adapter_config.json` holds.",
+          "extended": "Enums become their strings and sets of module names sorted lists,\nso the result goes straight to `json.dumps` and back through\n`from_dict`.  A field the reference's config of this method lacks\n(`IA3Config.layers_to_transform`) is written only when it is set,\nso a file that does not use it is one the reference reads too.",
+          "parameters": [],
+          "returns": {
+            "annotation": "dict of str to object",
+            "description": "One entry per field, keyed by the reference's field names."
+          },
+          "raises": [],
+          "examples": [
+            ">>> from lucid.peft import LoraConfig\n>>> d = LoraConfig(target_modules=[\"v\", \"q\"], task_type=\"CAUSAL_LM\").to_dict()\n>>> d[\"target_modules\"], d[\"task_type\"], d[\"peft_type\"]\n(['q', 'v'], 'CAUSAL_LM', 'LORA')"
+          ],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "from_dict",
+          "path": "lucid.peft._config.PeftConfig.from_dict",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_dict(config_dict: Mapping[str, object])",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L584",
+          "subcategory": "config",
+          "summary": "Build a config from a dict such as a parsed `adapter_config.json`.",
+          "extended": "The constructor cannot do this: a file from the reference carries\nkeys v1 has no field for.  Such a key is accepted only at a value\nthat turns its feature off — null, false or empty\n(`\"loftq_config\": {}`, `\"megatron_config\": null`) — and dropped (with\na warning if v1 does not know the key); at any other value it\nraises, as it would change what the adapter computes.  The\n`peft_version` provenance key is dropped.  Called on\n`PeftConfig`, the dict's `peft_type` picks the class.",
+          "parameters": [
+            {
+              "name": "config_dict",
+              "annotation": "Mapping of str to object",
+              "description": "The config's fields, by the reference's names.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "PeftConfig",
+            "description": "The validated config, of the class the dict's method names."
+          },
+          "raises": [
+            {
+              "annotation": "NotImplementedError",
+              "description": "The dict describes another adapter type, or turns on a feature\nv1 lacks."
+            }
+          ],
+          "examples": [
+            ">>> from lucid.peft import LoraConfig\n>>> config = LoraConfig.from_dict(\n...     {\"peft_type\": \"LORA\", \"r\": 4, \"target_modules\": [\"c_attn\"],\n...      \"use_dora\": False, \"loftq_config\": {}, \"peft_version\": \"0.17.0\"})\n>>> config.r, config.target_modules\n(4, {'c_attn'})"
+          ],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "save_pretrained",
+          "path": "lucid.peft._config.PeftConfig.save_pretrained",
+          "kind": "function",
+          "labels": [],
+          "signature": "save_pretrained(save_directory: str | os.PathLike[str], kwargs: object = {})",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L652",
+          "subcategory": "config",
+          "summary": "Write `adapter_config.json` into `save_directory`.",
+          "extended": "The file is the reference's: `to_dict` with its keys sorted,\nindented by two spaces.  The directory is created if missing.",
+          "parameters": [
+            {
+              "name": "save_directory",
+              "annotation": "str or os.PathLike",
+              "description": "Directory to write into.",
+              "default": null
+            },
+            {
+              "name": "**kwargs",
+              "annotation": "object",
+              "description": "`auto_mapping_dict` replaces the `auto_mapping` the file records.\nThe reference forwards any other keyword to its hub upload; there\nis no hub here, so another key raises.",
+              "default": "{}"
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "NotADirectoryError",
+              "description": "`save_directory` names an existing file."
+            },
+            {
+              "annotation": "NotImplementedError",
+              "description": "`kwargs` holds a key other than `auto_mapping_dict`."
+            }
+          ],
+          "examples": [
+            ">>> import tempfile\n>>> from lucid.peft import LoraConfig\n>>> with tempfile.TemporaryDirectory() as d:\n...     LoraConfig(r=2, target_modules=[\"fc\"]).save_pretrained(d)\n...     LoraConfig.from_pretrained(d).r\n2"
+          ],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "from_json_file",
+          "path": "lucid.peft._config.PeftConfig.from_json_file",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_json_file(path_json_file: str | os.PathLike[str], kwargs: object = {})",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L693",
+          "subcategory": "config",
+          "summary": "Read a config file into the dict it holds, unchanged but for `runtime_config`.",
+          "extended": "What `from_pretrained` reads before it chooses a config class: the\nfile's content as a dict, as the reference's `from_json_file` returns\nit.  `from_dict` turns it into a config.",
+          "parameters": [
+            {
+              "name": "path_json_file",
+              "annotation": "str or os.PathLike",
+              "description": "The path of a JSON file such as `adapter_config.json`.",
+              "default": null
+            },
+            {
+              "name": "**kwargs",
+              "annotation": "object",
+              "description": "Accepted for the reference's signature; it passes none to the\nreader, and any key given here raises.",
+              "default": "{}"
+            }
+          ],
+          "returns": {
+            "annotation": "dict of str to object",
+            "description": "The file's object, without a `runtime_config` key: the\nreference warns that such a key is ignored, since a runtime\nconfiguration is valid at runtime only."
+          },
+          "raises": [
+            {
+              "annotation": "FileNotFoundError",
+              "description": "There is no file at `path_json_file`."
+            },
+            {
+              "annotation": "ValueError",
+              "description": "The file does not hold a JSON object."
+            },
+            {
+              "annotation": "NotImplementedError",
+              "description": "`kwargs` is not empty."
+            }
+          ],
+          "examples": [
+            ">>> import os, tempfile\n>>> from lucid.peft import LoraConfig, PeftConfig\n>>> with tempfile.TemporaryDirectory() as d:\n...     LoraConfig(r=2, target_modules=[\"fc\"]).save_pretrained(d)\n...     raw = PeftConfig.from_json_file(os.path.join(d, \"adapter_config.json\"))\n>>> raw[\"peft_type\"], raw[\"r\"]\n('LORA', 2)"
+          ],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "from_pretrained",
+          "path": "lucid.peft._config.PeftConfig.from_pretrained",
+          "kind": "function",
+          "labels": [
+            "classmethod"
+          ],
+          "signature": "from_pretrained(pretrained_model_name_or_path: str | os.PathLike[str], subfolder: str | None = None, kwargs: object = {})",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L748",
+          "subcategory": "config",
+          "summary": "Read `adapter_config.json` from a local adapter directory.",
+          "extended": "The file's `peft_type` picks the config class: called on\n`PeftConfig` this returns a `LoraConfig` for a LoRA adapter,\nand called on a method's own class it refuses the file of another\nmethod.",
+          "parameters": [
+            {
+              "name": "pretrained_model_name_or_path",
+              "annotation": "str or os.PathLike",
+              "description": "A directory holding `adapter_config.json` — one written by\n`save_pretrained` or by the reference library.  Hub ids\nare not resolved; download the adapter first.",
+              "default": null
+            },
+            {
+              "name": "subfolder",
+              "annotation": "str",
+              "description": "A directory under `pretrained_model_name_or_path` that holds\nthe file, e.g. the sub-directory `save_pretrained` gives each\nadapter but the one named `\"default\"`.",
+              "default": "None"
+            },
+            {
+              "name": "**kwargs",
+              "annotation": "object",
+              "description": "The reference forwards these to its hub download (`revision`,\n`token`, `cache_dir` …).  Adapters are read from a local\ndirectory, so any key given here raises.",
+              "default": "{}"
+            }
+          ],
+          "returns": {
+            "annotation": "PeftConfig",
+            "description": "The config, read through `from_dict`."
+          },
+          "raises": [
+            {
+              "annotation": "FileNotFoundError",
+              "description": "The directory has no `adapter_config.json`."
+            },
+            {
+              "annotation": "ValueError",
+              "description": "The file does not hold a JSON object."
+            },
+            {
+              "annotation": "NotImplementedError",
+              "description": "`kwargs` is not empty."
+            }
+          ],
+          "examples": [
+            ">>> import tempfile\n>>> from lucid.peft import LoraConfig\n>>> with tempfile.TemporaryDirectory() as d:\n...     LoraConfig(r=16, lora_alpha=32, target_modules=\"all-linear\").save_pretrained(d)\n...     loaded = LoraConfig.from_pretrained(d)\n>>> loaded.r, loaded.lora_alpha, loaded.target_modules\n(16, 32, 'all-linear')"
+          ],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "PeftConfig"
+        },
+        {
+          "name": "is_prompt_learning",
+          "path": "lucid.peft._config.PeftConfig.is_prompt_learning",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "is_prompt_learning: bool",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/_config.py#L814",
+          "summary": "Whether this config is a prompt-learning method (`PromptLearningConfig`).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "bool",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "PeftConfig"
+        }
+      ],
+      "summary": "How `lucid.peft.get_peft_model` adapts a model with AdaMSS.",
+      "extended": "AdaMSS (Zheng et al., 2025, NeurIPS — Adaptive Multi-Subspace Approach for Parameter-Efficient\nFine-Tuning) takes the SVD of each weight (joined to its bias as one more column), clusters the rows of its\ntop-`r` left singular directions into `num_subspaces` subspaces, and learns an independent\nrank-`subspace_rank` update inside each one while the weight stays frozen.  With `use_asa`, an adaptive\nallocation freezes the less important subspaces during training, down to about `asa_target_subspaces`\ntrainable ones in all.",
+      "parameters": [
+        {
+          "name": "task_type",
+          "annotation": "TaskType | str | None",
+          "description": "As in `lucid.peft.PeftConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "peft_type",
+          "annotation": "TaskType | str | None",
+          "description": "As in `lucid.peft.PeftConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "auto_mapping",
+          "annotation": "TaskType | str | None",
+          "description": "As in `lucid.peft.PeftConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "peft_version",
+          "annotation": "TaskType | str | None",
+          "description": "As in `lucid.peft.PeftConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "base_model_name_or_path",
+          "annotation": "TaskType | str | None",
+          "description": "As in `lucid.peft.PeftConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "revision",
+          "annotation": "TaskType | str | None",
+          "description": "As in `lucid.peft.PeftConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "inference_mode",
+          "annotation": "TaskType | str | None",
+          "description": "As in `lucid.peft.PeftConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "r",
+          "annotation": "int",
+          "description": "Total rank of the SVD (`R` in the paper), clamped to the smaller dimension of the weight joined to its bias.",
+          "default": "100"
+        },
+        {
+          "name": "num_subspaces",
+          "annotation": "int",
+          "description": "Subspaces $K$ the SVD space is clustered into; with ASA, the number before\npruning.",
+          "default": "5"
+        },
+        {
+          "name": "subspace_rank",
+          "annotation": "int",
+          "description": "Rank of the update in each subspace, capped by the subspace's rows and by `r`.",
+          "default": "1"
+        },
+        {
+          "name": "init_weights",
+          "annotation": "orthogonal",
+          "description": "`\"orthogonal\"`: each subspace's $A$ starts with orthonormal rows and its $B$ at zero,\nso the adapter starts as the identity.  `None` (or `False`): $B$ starts as a small random\ndraw (standard deviation 0.01, from `random_seed`), so the adapter already changes the output.",
+          "default": "\"orthogonal\""
+        },
+        {
+          "name": "use_asa",
+          "annotation": "bool",
+          "description": "Enable Adaptive Subspace Allocation, which freezes subspaces during training.",
+          "default": "False"
+        },
+        {
+          "name": "asa_target_subspaces",
+          "annotation": "int",
+          "description": "Trainable subspaces across all layers that ASA freezes down to (it keeps one fewer, the reference's\nrule: a subspace stays only if its score is strictly above the `asa_target_subspaces`-th highest);\npositive with `use_asa`.",
+          "default": "50"
+        },
+        {
+          "name": "init_warmup",
+          "annotation": "int",
+          "description": "Steps before pruning starts; below `final_warmup` with `use_asa`.",
+          "default": "50"
+        },
+        {
+          "name": "final_warmup",
+          "annotation": "int",
+          "description": "Step at which pruning reaches `asa_target_subspaces`.",
+          "default": "1000"
+        },
+        {
+          "name": "mask_interval",
+          "annotation": "int",
+          "description": "Steps between mask updates; positive with `use_asa`.",
+          "default": "100"
+        },
+        {
+          "name": "asa_importance_beta",
+          "annotation": "float",
+          "description": "EMA coefficient of the importance scores.",
+          "default": "0.85"
+        },
+        {
+          "name": "asa_uncertainty_beta",
+          "annotation": "float",
+          "description": "EMA coefficient of the importance uncertainty.",
+          "default": "0.85"
+        },
+        {
+          "name": "asa_schedule_exponent",
+          "annotation": "float",
+          "description": "Exponent of the pruning schedule; positive with `use_asa`.",
+          "default": "3.0"
+        },
+        {
+          "name": "use_dynamic_rank",
+          "annotation": "bool",
+          "description": "Set each subspace's rank by counting singular values above `svd_threshold`.",
+          "default": "False"
+        },
+        {
+          "name": "svd_threshold",
+          "annotation": "float",
+          "description": "Fraction of the largest singular value a singular value must exceed to count (dynamic\nrank).",
+          "default": "0.1"
+        },
+        {
+          "name": "random_seed",
+          "annotation": "int",
+          "description": "Seed that rebuilds the adapter deterministically.",
+          "default": "0"
+        },
+        {
+          "name": "target_modules",
+          "annotation": "str or list of str",
+          "description": "The modules AdaMSS adapts, matched as `LoraConfig.target_modules` is.",
+          "default": "None"
+        },
+        {
+          "name": "modules_to_save",
+          "annotation": "list[str] | None",
+          "description": "As in `lucid.peft.LoraConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "layers_to_transform",
+          "annotation": "list[str] | None",
+          "description": "As in `lucid.peft.LoraConfig`.",
+          "default": "None"
+        },
+        {
+          "name": "layers_pattern",
+          "annotation": "list[str] | None",
+          "description": "As in `lucid.peft.LoraConfig`.",
+          "default": "None"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> from lucid.peft import AdamssConfig\n>>> config = AdamssConfig(r=50, num_subspaces=4, target_modules=['q_proj', 'v_proj'])\n>>> sorted(config.target_modules), config.peft_type\n(['q_proj', 'v_proj'], <PeftType.ADAMSS: 'ADAMSS'>)\n>>> AdamssConfig.from_dict(config.to_dict()) == config\nTrue"
+      ],
+      "notes": [
+        "Every field of the reference library's config, in its order and with its defaults, is read and\nwritten as `adapter_config.json`.  A field of the wrong type raises `TypeError`.\n`ValueError` is raised when a rank is not positive, `init_weights` is unknown, or the ASA\nschedule is inconsistent.  The tuner that applies it is `lucid.peft.AdamssModel`."
+      ],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "AdamssLayer",
+      "path": "lucid.peft.tuners.adamss._layer.AdamssLayer",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_DeltaLayer[AdamssConfig]",
+        "_LinearSized",
+        "_PristineMerge"
+      ],
+      "labels": [],
+      "signature": "AdamssLayer(base_layer: nn.Module, adapter_name: str, config: C)",
+      "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_layer.py#L64",
+      "subcategory": "layer",
+      "methods": [
+        {
+          "name": "delete_adapter",
+          "path": "lucid.peft.tuners.adamss._layer.AdamssLayer.delete_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "delete_adapter(adapter_name: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_layer.py#L144",
+          "subcategory": "layer",
+          "summary": "Remove `adapter_name`: its factors, projection, row order and recorded settings.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "scatter_index",
+          "path": "lucid.peft.tuners.adamss._layer.AdamssLayer.scatter_index",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "scatter_index: Mapping[str, Tensor]",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_layer.py#L153",
+          "summary": "For each adapter, the weight row each stacked row of the subspaces belongs to (read-only).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Mapping[str, Tensor]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "get_delta_weight",
+          "path": "lucid.peft.tuners.adamss._layer.AdamssLayer.get_delta_weight",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_delta_weight(adapter: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_layer.py#L177",
+          "subcategory": "layer",
+          "summary": "Return the change `adapter` makes to the base weight: the first `in` columns of $\\Pi\\,[B_k A_k]\\,V_r^\\top$.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "adapter",
+              "annotation": "str",
+              "description": "The adapter's name.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "Tensor",
+            "description": "Shaped like the base weight, in the adapter's dtype."
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "get_delta_bias",
+          "path": "lucid.peft.tuners.adamss._layer.AdamssLayer.get_delta_bias",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_delta_bias(adapter: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_layer.py#L194",
+          "subcategory": "layer",
+          "summary": "Return the change `adapter` makes to the base bias: the last column of $\\Pi\\,[B_k A_k]\\,V_r^\\top$.",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "adapter",
+              "annotation": "str",
+              "description": "The adapter's name.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "Tensor",
+            "description": "`(out,)`, in the adapter's dtype; zeros when the base layer has no bias."
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "update_layer",
+          "path": "lucid.peft.tuners._support._ConfigLayer.update_layer",
+          "kind": "function",
+          "labels": [],
+          "signature": "update_layer(adapter_name: str, config: C)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_support.py#L278",
+          "subcategory": "support",
+          "summary": "Create adapter `adapter_name` from `config`.",
+          "extended": "The adapter is built whole before the layer holds any of it.  A layer\nthat holds an adapter already keeps applying the adapters it applied:\nthe new one is inactive until `set_adapter` names it; a layer with\nnone starts applying this one.",
+          "parameters": [
+            {
+              "name": "adapter_name",
+              "annotation": "str",
+              "description": "Key of the adapter in each of the layer's tables.",
+              "default": null
+            },
+            {
+              "name": "config",
+              "annotation": "C",
+              "description": "The method's config.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "The layer already holds an adapter of this name, or `config` does not fit the layer."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConfigLayer"
+        },
+        {
+          "name": "extra_repr",
+          "path": "lucid.peft.tuners._support._ConfigLayer.extra_repr",
+          "kind": "function",
+          "labels": [],
+          "signature": "extra_repr()",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_support.py#L314",
+          "subcategory": "support",
+          "summary": "The active adapter, whether it is merged and whether adapters are disabled.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "str",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ConfigLayer"
+        },
+        {
+          "name": "active_adapter",
+          "path": "lucid.peft.tuners._layer._BaseTunerLayer.active_adapter",
+          "kind": "function",
+          "labels": [
+            "attribute"
+          ],
+          "signature": "active_adapter: str | list[str]",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L196",
+          "summary": "Name (or names) of the adapter the forward pass applies.",
+          "extended": null,
+          "parameters": [],
+          "returns": null,
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTunerLayer"
+        },
+        {
+          "name": "disable_adapters",
+          "path": "lucid.peft.tuners._layer._BaseTunerLayer.disable_adapters",
+          "kind": "function",
+          "labels": [
+            "attribute"
+          ],
+          "signature": "disable_adapters",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L198",
+          "summary": "Whether the forward pass runs the base layer alone.",
+          "extended": null,
+          "parameters": [],
+          "returns": null,
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTunerLayer"
+        },
+        {
+          "name": "merged",
+          "path": "lucid.peft.tuners._layer._BaseTunerLayer.merged",
+          "kind": "function",
+          "labels": [
+            "attribute"
+          ],
+          "signature": "merged",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L200",
+          "summary": "Whether an adapter is folded into the base weight (`merged_adapters` non-empty).",
+          "extended": null,
+          "parameters": [],
+          "returns": null,
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTunerLayer"
+        },
+        {
+          "name": "active_adapters",
+          "path": "lucid.peft.tuners._layer._BaseTunerLayer.active_adapters",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "active_adapters: list[str]",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L203",
+          "summary": "The adapters the forward pass applies, as a list.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "list[str]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTunerLayer"
+        },
+        {
+          "name": "get_base_layer",
+          "path": "lucid.peft.tuners._layer._BaseTunerLayer.get_base_layer",
+          "kind": "function",
+          "labels": [],
+          "signature": "get_base_layer()",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L207",
+          "subcategory": "layer",
+          "summary": "Return the wrapped module, whose parameters are the base model's own.",
+          "extended": "One step down: where another tuner layer stands between, that layer, not the user's\nmodule (`_root` goes all the way).",
+          "parameters": [],
+          "returns": {
+            "annotation": "nn.Module",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTunerLayer"
+        },
+        {
+          "name": "weight",
+          "path": "lucid.peft.tuners._layer._BaseTunerLayer.weight",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "weight: Parameter",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L238",
+          "summary": "The base layer's weight (unchanged unless an adapter is merged into it).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Parameter",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTunerLayer"
+        },
+        {
+          "name": "bias",
+          "path": "lucid.peft.tuners._layer._BaseTunerLayer.bias",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "bias: Tensor | None",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L246",
+          "summary": "The base layer's bias (a buffer on a quantized base), or `None`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor | None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTunerLayer"
+        },
+        {
+          "name": "enable_adapters",
+          "path": "lucid.peft.tuners._layer._BaseTunerLayer.enable_adapters",
+          "kind": "function",
+          "labels": [],
+          "signature": "enable_adapters(enabled: bool)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L251",
+          "subcategory": "layer",
+          "summary": "Apply the adapter in the forward pass (`True`) or run the base alone (`False`).",
+          "extended": "Disabling a merged layer unmerges it first, here rather than on\nthe next call, so the forward pass never writes a weight — a\ncompiled forward must not replay that write.",
+          "parameters": [
+            {
+              "name": "enabled",
+              "annotation": "bool",
+              "description": "Whether the adapter takes part.  Gradient flags are left as\nthey are: a frozen adapter stays frozen when it is re-enabled.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTunerLayer"
+        },
+        {
+          "name": "set_adapter",
+          "path": "lucid.peft.tuners._layer._BaseTunerLayer.set_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_adapter(adapter_names: str | list[str], inference_mode: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L274",
+          "subcategory": "layer",
+          "summary": "Apply the named adapters, and train exactly those unless `inference_mode`.",
+          "extended": "The names this layer holds nothing for are skipped by the forward\npass.  A merged layer is unmerged first, since the active adapters\nare no longer the merged ones.",
+          "parameters": [
+            {
+              "name": "adapter_names",
+              "annotation": "str or list of str",
+              "description": "The adapter, or adapters, to apply.",
+              "default": null
+            },
+            {
+              "name": "inference_mode",
+              "annotation": "bool",
+              "description": "Freeze the activated adapters as well.",
+              "default": "False"
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTunerLayer"
+        },
+        {
+          "name": "set_requires_grad",
+          "path": "lucid.peft.tuners._layer._BaseTunerLayer.set_requires_grad",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_requires_grad(adapter_names: str | Sequence[str], requires_grad: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L299",
+          "subcategory": "layer",
+          "summary": "Set `requires_grad` on the parameters of the named adapters this layer holds.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTunerLayer"
+        },
+        {
+          "name": "merge",
+          "path": "lucid.peft.tuners._layer._BaseTunerLayer.merge",
+          "kind": "function",
+          "labels": [],
+          "signature": "merge(safe_merge: bool = False, adapter_names: list[str] | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L446",
+          "subcategory": "layer",
+          "summary": "Fold the update into the base weights, in place.",
+          "extended": "The weights keep their identity — they are written, not replaced —\nso whatever holds them (an optimizer, a tied embedding) sees the\nmerged values.  That is also why a weight shared with another\nmodule must not be merged into; the tuner's `merge_adapter` and\n`merge_and_unload` refuse it, as this layer alone cannot see the\nrest of the model.",
+          "parameters": [
+            {
+              "name": "safe_merge",
+              "annotation": "bool",
+              "description": "Check the merged weights for NaN / inf first and leave the base\nuntouched if there are any.",
+              "default": "False"
+            },
+            {
+              "name": "adapter_names",
+              "annotation": "list of str",
+              "description": "Adapters to merge; the active ones this layer holds by default.",
+              "default": "None"
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "An adapter name this layer does not hold, or `safe_merge`\nfound a non-finite merged weight."
+            },
+            {
+              "annotation": "RuntimeError",
+              "description": "The adapter is disabled, or the layer's own rules refuse the merge\n(`lora_bias` on a base with no bias)."
+            },
+            {
+              "annotation": "NotImplementedError",
+              "description": "This layer's update cannot be written into its base weights."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTunerLayer"
+        },
+        {
+          "name": "unmerge",
+          "path": "lucid.peft.tuners._layer._BaseTunerLayer.unmerge",
+          "kind": "function",
+          "labels": [],
+          "signature": "unmerge()",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L487",
+          "subcategory": "layer",
+          "summary": "Take every merged update back out of the base weights, in place.",
+          "extended": "The result equals the original weights up to the rounding of the\nround trip.",
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTunerLayer"
+        },
+        {
+          "name": "supports_lora_conversion",
+          "path": "lucid.peft.tuners._layer._BaseTunerLayer.supports_lora_conversion",
+          "kind": "function",
+          "labels": [],
+          "signature": "supports_lora_conversion(adapter_name: str = 'default')",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_layer.py#L501",
+          "subcategory": "layer",
+          "summary": "Whether `adapter_name` on this layer can be converted to a plain LoRA update.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "bool",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTunerLayer"
+        },
+        {
+          "name": "in_features",
+          "path": "lucid.peft.tuners._support._LinearSized.in_features",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "in_features: int",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_support.py#L192",
+          "summary": "Input features of the base layer.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_LinearSized"
+        },
+        {
+          "name": "out_features",
+          "path": "lucid.peft.tuners._support._LinearSized.out_features",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "out_features: int",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_support.py#L197",
+          "summary": "Output features of the base layer.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "int",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_LinearSized"
+        },
+        {
+          "name": "forward",
+          "path": "lucid.peft.tuners._support._ResidualUpdate.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(x: Tensor)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_support.py#L116",
+          "subcategory": "support",
+          "summary": "The base layer's output plus every active adapter's contribution to it.",
+          "extended": "The base output alone when adapters are disabled or merged; the sum is cast back to the\nbase output's dtype.",
+          "parameters": [],
+          "returns": {
+            "annotation": "Tensor",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_ResidualUpdate"
+        }
+      ],
+      "summary": "Adapter bookkeeping and the multi-subspace update shared by the AdaMSS layers.",
+      "extended": "Per adapter: `adamss_A` and `adamss_B` (one parameter per subspace each), the buffers\n`adamss_newB` and `adamss_rows`, and the read-only mappings `r` and `num_subspaces`.\n`get_delta_weight` and `get_delta_bias` are the weight and the bias parts of\n$\\Pi\\,[B_k A_k]\\,V_r^\\top$; the forward pass applies it to the input without forming it.\n\nThe split into subspaces is computed from the weight the layer holds when the adapter is made\n(the weight as it was before any merge), so building the same adapter on the same weights gives\nthe same subspaces, which is what lets a saved adapter be loaded into a fresh model.",
+      "parameters": [
+        {
+          "name": "base_layer",
+          "annotation": "nn.Module",
+          "description": "The `nn.Linear` whose rows are split; its parameters stay shared.",
+          "default": null
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the first adapter.",
+          "default": null
+        },
+        {
+          "name": "config",
+          "annotation": "AdamssConfig",
+          "description": "The rank, the number of subspaces and their rank, the initialisation and the seed.",
+          "default": null
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "TypeError",
+          "description": "`base_layer` is some other module type."
+        },
+        {
+          "annotation": "ValueError",
+          "description": "`base_layer` has parameters that only its first input will create, or its rows are too\nalike to fall into `num_subspaces` distinct clusters."
+        }
+      ],
+      "examples": [],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "Linear",
+      "path": "lucid.peft.tuners.adamss._layer.Linear",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "AdamssLayer"
+      ],
+      "labels": [],
+      "signature": "Linear(base_layer: nn.Module, adapter_name: str, config: C)",
+      "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_layer.py#L240",
+      "subcategory": "layer",
+      "methods": [],
+      "summary": "An `nn.Linear` whose rows are split into subspaces, each with its own low-rank update.",
+      "extended": null,
+      "parameters": [
+        {
+          "name": "base_layer",
+          "annotation": "nn.Linear",
+          "description": "The layer to adapt; the other parameters are those of `AdamssLayer`.",
+          "default": null
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the first adapter.",
+          "default": null,
+          "inherited_from": "AdamssLayer"
+        },
+        {
+          "name": "config",
+          "annotation": "AdamssConfig",
+          "description": "The rank, the number of subspaces and their rank, the initialisation and the seed.",
+          "default": null,
+          "inherited_from": "AdamssLayer"
+        }
+      ],
+      "returns": null,
+      "raises": [],
+      "examples": [
+        ">>> import lucid\n>>> import lucid.nn as nn\n>>> from lucid.peft import AdamssConfig\n>>> from lucid.peft.tuners.adamss import Linear\n>>> base = nn.Linear(8, 6)\n>>> layer = Linear(base, \"default\", AdamssConfig(r=4, num_subspaces=2, target_modules=[\"x\"]))\n>>> layer.num_subspaces[\"default\"], sum(b.shape[0] for b in layer.adamss_B[\"default\"].parameters())\n(2, 6)\n>>> x = lucid.randn(3, 8)\n>>> bool((layer(x) == base(x)).all().item())   # every B starts at zero\nTrue"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    },
+    {
+      "name": "AdamssModel",
+      "path": "lucid.peft.tuners.adamss._model.AdamssModel",
+      "kind": "class",
+      "class_kind": "regular",
+      "bases": [
+        "_FileFormat",
+        "_ConfigTuner[AdamssConfig]"
+      ],
+      "labels": [],
+      "signature": "AdamssModel(model: nn.Module, config: PeftConfig, adapter_name: str, low_cpu_mem_usage: bool = False, state_dict: dict[str, Tensor] | None = None)",
+      "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_model.py#L22",
+      "subcategory": "model",
+      "methods": [
+        {
+          "name": "__init__",
+          "path": "lucid.peft.tuners.adamss._model.AdamssModel.__init__",
+          "kind": "function",
+          "labels": [],
+          "signature": "__init__(model: nn.Module, config: PeftConfig, adapter_name: str, low_cpu_mem_usage: bool = False, state_dict: dict[str, Tensor] | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_model.py#L81",
+          "subcategory": "model",
+          "summary": "Adapt `model` in place with `config`, building the AdaMSS layers as `adapter_name`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "delete_adapter",
+          "path": "lucid.peft.tuners.adamss._model.AdamssModel.delete_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "delete_adapter(adapter_name: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_model.py#L94",
+          "subcategory": "model",
+          "summary": "Remove `adapter_name` from every layer and forget what the allocator recorded for it.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "allocator",
+          "path": "lucid.peft.tuners.adamss._model.AdamssModel.allocator",
+          "kind": "function",
+          "labels": [],
+          "signature": "allocator(adapter_name: str)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_model.py#L102",
+          "subcategory": "model",
+          "summary": "The `SubspaceAllocator` of `adapter_name` (built on first use).",
+          "extended": null,
+          "parameters": [
+            {
+              "name": "adapter_name",
+              "annotation": "str",
+              "description": "An adapter this model holds.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "SubspaceAllocator",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "The model holds no adapter of that name."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "update_and_allocate",
+          "path": "lucid.peft.tuners.adamss._model.AdamssModel.update_and_allocate",
+          "kind": "function",
+          "labels": [],
+          "signature": "update_and_allocate(global_step: int)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/adamss/_model.py#L123",
+          "subcategory": "model",
+          "summary": "Record the importance of every subspace and, on schedule, freeze the least important ones.",
+          "extended": "Call it every training step, after `loss.backward()` and before the gradients are\ncleared.  Each active adapter whose config has `use_asa` is allocated; the others are\nleft alone.",
+          "parameters": [
+            {
+              "name": "global_step",
+              "annotation": "int",
+              "description": "The current training step.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": []
+        },
+        {
+          "name": "active_adapters",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.active_adapters",
+          "kind": "function",
+          "labels": [
+            "property"
+          ],
+          "signature": "active_adapters: list[str]",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L172",
+          "summary": "The adapters the forward pass applies, as a list.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "list[str]",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "add_adapter",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.add_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "add_adapter(adapter_name: str, config: PeftConfig)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L433",
+          "subcategory": "tuner",
+          "summary": "Add an adapter beside the ones the model holds.",
+          "extended": "The new adapter starts frozen and inactive: the forward pass keeps\napplying the adapters it applied, and every parameter keeps the\n`requires_grad` it had.  `set_adapter` switches to it.  A\nmodule an earlier adapter already wraps takes the new one beside\nit; any other target is wrapped.  The model is left as it was if\nthe adapter cannot be added.",
+          "parameters": [
+            {
+              "name": "adapter_name",
+              "annotation": "str",
+              "description": "Name of the new adapter; unique among the model's adapters.",
+              "default": null
+            },
+            {
+              "name": "config",
+              "annotation": "PeftConfig",
+              "description": "What to adapt and how — the config class of this tuner's method.",
+              "default": null
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "The name is taken or malformed, the config is another\nmethod's, no module matches it, or it cannot sit beside the\nadapters held (two adapters training biases)."
+            },
+            {
+              "annotation": "TypeError",
+              "description": "`config` is not an adapter config."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "set_adapter",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.set_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_adapter(adapter_name: str | list[str], inference_mode: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L517",
+          "subcategory": "tuner",
+          "summary": "Apply the named adapter(s) in the forward pass, and train exactly those.",
+          "extended": "Every other adapter is frozen; the activated ones train unless\n`inference_mode`.  A merged layer is unmerged first.  Layers that\nhold none of the named adapters run their base alone.  The\nparameters `bias` makes trainable follow the adapter that asked\nfor them.",
+          "parameters": [
+            {
+              "name": "adapter_name",
+              "annotation": "str or list of str",
+              "description": "The adapter, or adapters, to apply.",
+              "default": null
+            },
+            {
+              "name": "inference_mode",
+              "annotation": "bool",
+              "description": "Freeze the activated adapters too.",
+              "default": "False"
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "A name is not one of the model's adapters, or two named\nadapters train the same `modules_to_save` module."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "set_requires_grad",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.set_requires_grad",
+          "kind": "function",
+          "labels": [],
+          "signature": "set_requires_grad(adapter_names: str | Sequence[str], requires_grad: bool = True)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L554",
+          "subcategory": "tuner",
+          "summary": "Enable or disable gradients on the parameters of the named adapter(s).",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "ValueError",
+              "description": "A name is not one of the model's adapters."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "forward",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.forward",
+          "kind": "function",
+          "labels": [],
+          "signature": "forward(args: object = (), kwargs: object = {})",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L641",
+          "subcategory": "tuner",
+          "summary": "Call the adapted model; its adapter layers do their work inside the call.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "object",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "merge_adapter",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.merge_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "merge_adapter(adapter_names: list[str] | None = None, safe_merge: bool = False)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L664",
+          "subcategory": "tuner",
+          "summary": "Fold adapter updates into their base weights, keeping the adapter layers.",
+          "extended": "A merged model runs at the base model's cost; `unmerge_adapter`\ntakes the updates out again.  Every refusal is made before any\nweight is written: nothing is merged if a layer's base weight is\nshared with another module (a tied LM head — merging would change\nthat module too) or if the adapter is disabled.",
+          "parameters": [
+            {
+              "name": "adapter_names",
+              "annotation": "list of str",
+              "description": "Adapters to merge; the active ones by default.  A layer holding\nonly some of them merges those.",
+              "default": "None"
+            },
+            {
+              "name": "safe_merge",
+              "annotation": "bool",
+              "description": "Check every merged weight for NaN / inf before writing any.",
+              "default": "False"
+            }
+          ],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [
+            {
+              "annotation": "RuntimeError",
+              "description": "A base weight is shared with another module, or the adapter is\ndisabled (inside `disable_adapter()`)."
+            },
+            {
+              "annotation": "ValueError",
+              "description": "A name is not one of the model's adapters, or `safe_merge`\nfound a non-finite merged weight."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "unmerge_adapter",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.unmerge_adapter",
+          "kind": "function",
+          "labels": [],
+          "signature": "unmerge_adapter()",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L706",
+          "subcategory": "tuner",
+          "summary": "Take every merged adapter update back out of its base weight.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "merge_and_unload",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.merge_and_unload",
+          "kind": "function",
+          "labels": [],
+          "signature": "merge_and_unload(progressbar: bool = False, safe_merge: bool = False, adapter_names: list[str] | None = None)",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L725",
+          "subcategory": "tuner",
+          "summary": "Merge the adapters into the base weights and return the plain model.",
+          "extended": "Each adapter layer is replaced by its merged base module — the base\nmodel's own module, holding its own `Parameter` objects — and each\n`modules_to_save` entry by the active adapter's trained copy (the\noriginal when that adapter has none).  Adapters not merged are\ndropped with their layers.  Every base parameter gets back the\n`requires_grad` it had before injection.",
+          "parameters": [
+            {
+              "name": "progressbar",
+              "annotation": "bool",
+              "description": "Accepted for the reference's signature; there is no progress bar.",
+              "default": "False"
+            },
+            {
+              "name": "safe_merge",
+              "annotation": "bool",
+              "description": "Check every merged weight for NaN / inf before writing any.",
+              "default": "False"
+            },
+            {
+              "name": "adapter_names",
+              "annotation": "list of str",
+              "description": "Adapters to merge; the active ones by default.",
+              "default": "None"
+            }
+          ],
+          "returns": {
+            "annotation": "nn.Module",
+            "description": "The model, merged, with no adapter layer left in it."
+          },
+          "raises": [
+            {
+              "annotation": "RuntimeError",
+              "description": "A base weight is shared with another module, or a\n`modules_to_save` module shared one (its trained copy would\nbreak the tie)."
+            }
+          ],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "unload",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.unload",
+          "kind": "function",
+          "labels": [],
+          "signature": "unload()",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L787",
+          "subcategory": "tuner",
+          "summary": "Remove every adapter without merging and return the original model.",
+          "extended": "Every adapter layer is replaced by the module it wrapped (a merged\none is unmerged first), every `modules_to_save` entry by its\noriginal module, and every base parameter gets back the\n`requires_grad` it had before injection.",
+          "parameters": [],
+          "returns": {
+            "annotation": "nn.Module",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "enable_adapter_layers",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.enable_adapter_layers",
+          "kind": "function",
+          "labels": [],
+          "signature": "enable_adapter_layers()",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L798",
+          "subcategory": "tuner",
+          "summary": "Apply the adapter again after `disable_adapter_layers`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "disable_adapter_layers",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.disable_adapter_layers",
+          "kind": "function",
+          "labels": [],
+          "signature": "disable_adapter_layers()",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L804",
+          "subcategory": "tuner",
+          "summary": "Run the base model alone: adapter updates off, original `modules_to_save`.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "None",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        },
+        {
+          "name": "supports_lora_conversion",
+          "path": "lucid.peft.tuners._tuner._BaseTuner.supports_lora_conversion",
+          "kind": "function",
+          "labels": [],
+          "signature": "supports_lora_conversion(adapter_name: str = 'default')",
+          "source": "https://github.com/lucid-official/lucid/blob/55dd489/lucid/peft/tuners/_tuner.py#L810",
+          "subcategory": "tuner",
+          "summary": "Whether every adapted layer in this tuner supports conversion to LoRA.",
+          "extended": null,
+          "parameters": [],
+          "returns": {
+            "annotation": "bool",
+            "description": ""
+          },
+          "raises": [],
+          "examples": [],
+          "notes": [],
+          "attributes": [],
+          "warns": [],
+          "see_also": [],
+          "inherited_from": "_BaseTuner"
+        }
+      ],
+      "summary": "A model whose chosen linear layers train a low-rank update inside each subspace of their rows.",
+      "extended": "Each `nn.Linear` that `config` selects becomes a `lucid.peft.tuners.adamss.Linear`:\nthe SVD of its weight (with the bias as one more column) is clustered into\n`num_subspaces` subspaces of rows, and each subspace gets a pair of small trained factors that\nstart as the identity; every other parameter is frozen.  The model is edited in place and stays\nreachable as `model`; several adapters coexist (`add_adapter`, `set_adapter`,\n`delete_adapter`) and their updates add.  Without `target_modules` the attention projections\nthe reference's table covers are taken.  `config` is named `config`, not `peft_config`, as\nin the reference.\n\nThe split into subspaces is derived from the weight, not saved: an adapter file holds the\nfactors and the projection, and loading it into a model whose weights split another way (a\ndifferent base, or an adapter trained with the reference library on a weight that its randomised\nSVD split differently) raises `ValueError` naming the layer.\n\n**Training.**  With `use_asa=True` call `update_and_allocate` once per step, after\n`loss.backward()` and before the gradients are cleared; it records how much each subspace\nmatters and, on the schedule `init_warmup` / `final_warmup` / `mask_interval` define,\nfreezes the least important ones until about `asa_target_subspaces` remain.  A step's\n`set_adapter` makes every subspace of the adapter trainable again.",
+      "parameters": [
+        {
+          "name": "model",
+          "annotation": "nn.Module",
+          "description": "The model to adapt.",
+          "default": null
+        },
+        {
+          "name": "config",
+          "annotation": "AdamssConfig",
+          "description": "What to adapt and how.",
+          "default": null
+        },
+        {
+          "name": "adapter_name",
+          "annotation": "str",
+          "description": "Name of the first adapter, the key in every `adamss_*` table.",
+          "default": null
+        },
+        {
+          "name": "low_cpu_mem_usage",
+          "annotation": "bool",
+          "description": "As in `lucid.peft.LoraModel`.",
+          "default": "False"
+        },
+        {
+          "name": "state_dict",
+          "annotation": "bool",
+          "description": "As in `lucid.peft.LoraModel`.",
+          "default": "False"
+        }
+      ],
+      "returns": null,
+      "raises": [
+        {
+          "annotation": "ValueError",
+          "description": "`target_modules` finds nothing (or is left out for a model type the table does not\ncover), a match is not an `nn.Linear`, or `modules_to_save` finds nothing."
+        },
+        {
+          "annotation": "NotImplementedError",
+          "description": "Layers of a different method are already in `model`."
+        }
+      ],
+      "examples": [
+        ">>> import lucid\n>>> import lucid.nn as nn\n>>> from lucid.peft import AdamssConfig, AdamssModel\n>>> net = nn.Sequential(nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 2))\n>>> adamss = AdamssModel(net, AdamssConfig(r=4, num_subspaces=2, target_modules=[\"0\"]), \"default\")\n>>> adamss.targeted_module_names, net[0].num_subspaces[\"default\"]\n(['0'], 2)\n>>> net[0].base_layer.weight.requires_grad, net[0].adamss_B[\"default\"][0].requires_grad\n(False, True)\n>>> adamss.unload() is net, type(net[0]) is nn.Linear\n(True, True)"
+      ],
+      "notes": [],
+      "attributes": [],
+      "warns": [],
+      "see_also": []
+    }
+  ],
+  "summary": "`lucid.peft.tuners.adamss` — AdaMSS: independent low-rank updates inside clustered subspaces of the SVD.",
+  "extended": "AdaMSS (Zheng et al., 2025, NeurIPS) takes the SVD of each weight, clusters the rows of its leading\nleft singular directions into subspaces and learns an independent low-rank update inside each,\noptionally freezing the less important subspaces while training.  Pick it for a low-rank adapter\nwhose capacity is spent where the weight's spectrum needs it: a handful of tiny factors per layer\ninstead of one large pair.\n\nWhere the reference library keeps them, so `isinstance(m, AdamssLayer)` and `from\nlucid.peft.tuners.adamss import AdamssConfig, Linear` read as they do there.  One layer type for\nthe one module the method adapts, `nn.Linear`; `SubspaceAllocator` is the adaptive allocation's\nstate, which `AdamssModel.update_and_allocate` drives.  `AdamssConfig` and `AdamssModel` are\nhere and exported from `lucid.peft`.  Importing the package registers the method (its config under\n`PeftType.ADAMSS`, its tuner and layer), which is what makes `get_peft_model` and\n`PeftModel.from_pretrained` know it.",
+  "parameters": [],
+  "returns": null,
+  "raises": [],
+  "examples": [],
+  "notes": [],
+  "attributes": [],
+  "warns": [],
+  "see_also": [],
+  "canonical_name": "AdaMSS",
+  "citation": "Zheng, Jingjing, et al. \"AdaMSS: Adaptive Multi-Subspace Approach for Parameter-Efficient Fine-Tuning.\" NeurIPS, 2025.",
+  "theory": "AdaMSS (Zheng et al., 2025, NeurIPS — Adaptive Multi-Subspace Approach for Parameter-Efficient\nFine-Tuning) takes the SVD of each weight (joined to its bias as one more column), clusters the rows of its\ntop-`r` left singular directions into `num_subspaces` subspaces, and learns an independent\nrank-`subspace_rank` update inside each one while the weight stays frozen.  With `use_asa`, an adaptive\nallocation freezes the less important subspaces during training, down to about `asa_target_subspaces`\ntrainable ones in all."
+}

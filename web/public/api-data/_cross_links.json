@@ -214,6 +214,12 @@
         "kind": "backward_node"
       }
     ],
+    "lucid.peft.tuners.hira.Conv1d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
     "lucid.peft.tuners.loha.Conv1d": [
       {
         "name": "ConvNdBackward",
@@ -261,6 +267,12 @@
       }
     ],
     "lucid.peft.tuners.boft.Conv2d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.hira.Conv2d": [
       {
         "name": "ConvNdBackward",
         "kind": "backward_node"
@@ -325,6 +337,12 @@
       }
     ],
     "lucid.nn.quantized.Conv3d": [
+      {
+        "name": "ConvNdBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.hira.Conv3d": [
       {
         "name": "ConvNdBackward",
         "kind": "backward_node"
@@ -576,7 +594,19 @@
         "kind": "backward_node"
       }
     ],
+    "lucid.peft.tuners.hira.Embedding": [
+      {
+        "name": "EmbeddingBackward",
+        "kind": "backward_node"
+      }
+    ],
     "lucid.peft.tuners.lora.Embedding": [
+      {
+        "name": "EmbeddingBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.tinylora.Embedding": [
       {
         "name": "EmbeddingBackward",
         "kind": "backward_node"
@@ -808,6 +838,18 @@
         "kind": "backward_node"
       }
     ],
+    "lucid.peft.tuners.adamss.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.beft.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
     "lucid.peft.tuners.boft.Linear": [
       {
         "name": "LinearBackward",
@@ -826,7 +868,43 @@
         "kind": "backward_node"
       }
     ],
+    "lucid.peft.tuners.deft.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.delora.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
     "lucid.peft.tuners.fourierft.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.frod.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.glora.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.gralora.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.hira.Linear": [
       {
         "name": "LinearBackward",
         "kind": "backward_node"
@@ -839,6 +917,12 @@
       }
     ],
     "lucid.peft.tuners.ia3.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.lily.Linear": [
       {
         "name": "LinearBackward",
         "kind": "backward_node"
@@ -874,7 +958,31 @@
         "kind": "backward_node"
       }
     ],
+    "lucid.peft.tuners.osf.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.peanut.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
     "lucid.peft.tuners.poly.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.psoft.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.pvera.Linear": [
       {
         "name": "LinearBackward",
         "kind": "backward_node"
@@ -886,13 +994,37 @@
         "kind": "backward_node"
       }
     ],
+    "lucid.peft.tuners.road.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
     "lucid.peft.tuners.shira.Linear": [
       {
         "name": "LinearBackward",
         "kind": "backward_node"
       }
     ],
+    "lucid.peft.tuners.supertuning.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.tinylora.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
     "lucid.peft.tuners.trainable_tokens.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.unilora.Linear": [
       {
         "name": "LinearBackward",
         "kind": "backward_node"
@@ -905,6 +1037,12 @@
       }
     ],
     "lucid.peft.tuners.vera.Linear": [
+      {
+        "name": "LinearBackward",
+        "kind": "backward_node"
+      }
+    ],
+    "lucid.peft.tuners.waveft.Linear": [
       {
         "name": "LinearBackward",
         "kind": "backward_node"
@@ -2607,6 +2745,11 @@
         "kind": "class"
       },
       {
+        "path": "lucid.peft.tuners.hira.Conv1d",
+        "module": "lucid.peft.tuners.hira",
+        "kind": "class"
+      },
+      {
         "path": "lucid.peft.tuners.loha.Conv1d",
         "module": "lucid.peft.tuners.loha",
         "kind": "class"
@@ -2644,6 +2787,11 @@
       {
         "path": "lucid.peft.tuners.boft.Conv2d",
         "module": "lucid.peft.tuners.boft",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.hira.Conv2d",
+        "module": "lucid.peft.tuners.hira",
         "kind": "class"
       },
       {
@@ -2694,6 +2842,11 @@
       {
         "path": "lucid.nn.quantized.Conv3d",
         "module": "lucid.nn.quantized",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.hira.Conv3d",
+        "module": "lucid.peft.tuners.hira",
         "kind": "class"
       },
       {
@@ -2884,8 +3037,18 @@
         "kind": "class"
       },
       {
+        "path": "lucid.peft.tuners.hira.Embedding",
+        "module": "lucid.peft.tuners.hira",
+        "kind": "class"
+      },
+      {
         "path": "lucid.peft.tuners.lora.Embedding",
         "module": "lucid.peft.tuners.lora",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.tinylora.Embedding",
+        "module": "lucid.peft.tuners.tinylora",
         "kind": "class"
       },
       {
@@ -3056,6 +3219,16 @@
         "kind": "class"
       },
       {
+        "path": "lucid.peft.tuners.adamss.Linear",
+        "module": "lucid.peft.tuners.adamss",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.beft.Linear",
+        "module": "lucid.peft.tuners.beft",
+        "kind": "class"
+      },
+      {
         "path": "lucid.peft.tuners.boft.Linear",
         "module": "lucid.peft.tuners.boft",
         "kind": "class"
@@ -3071,8 +3244,38 @@
         "kind": "class"
       },
       {
+        "path": "lucid.peft.tuners.deft.Linear",
+        "module": "lucid.peft.tuners.deft",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.delora.Linear",
+        "module": "lucid.peft.tuners.delora",
+        "kind": "class"
+      },
+      {
         "path": "lucid.peft.tuners.fourierft.Linear",
         "module": "lucid.peft.tuners.fourierft",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.frod.Linear",
+        "module": "lucid.peft.tuners.frod",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.glora.Linear",
+        "module": "lucid.peft.tuners.glora",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.gralora.Linear",
+        "module": "lucid.peft.tuners.gralora",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.hira.Linear",
+        "module": "lucid.peft.tuners.hira",
         "kind": "class"
       },
       {
@@ -3083,6 +3286,11 @@
       {
         "path": "lucid.peft.tuners.ia3.Linear",
         "module": "lucid.peft.tuners.ia3",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.lily.Linear",
+        "module": "lucid.peft.tuners.lily",
         "kind": "class"
       },
       {
@@ -3111,8 +3319,28 @@
         "kind": "class"
       },
       {
+        "path": "lucid.peft.tuners.osf.Linear",
+        "module": "lucid.peft.tuners.osf",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.peanut.Linear",
+        "module": "lucid.peft.tuners.peanut",
+        "kind": "class"
+      },
+      {
         "path": "lucid.peft.tuners.poly.Linear",
         "module": "lucid.peft.tuners.poly",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.psoft.Linear",
+        "module": "lucid.peft.tuners.psoft",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.pvera.Linear",
+        "module": "lucid.peft.tuners.pvera",
         "kind": "class"
       },
       {
@@ -3121,13 +3349,33 @@
         "kind": "class"
       },
       {
+        "path": "lucid.peft.tuners.road.Linear",
+        "module": "lucid.peft.tuners.road",
+        "kind": "class"
+      },
+      {
         "path": "lucid.peft.tuners.shira.Linear",
         "module": "lucid.peft.tuners.shira",
         "kind": "class"
       },
       {
+        "path": "lucid.peft.tuners.supertuning.Linear",
+        "module": "lucid.peft.tuners.supertuning",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.tinylora.Linear",
+        "module": "lucid.peft.tuners.tinylora",
+        "kind": "class"
+      },
+      {
         "path": "lucid.peft.tuners.trainable_tokens.Linear",
         "module": "lucid.peft.tuners.trainable_tokens",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.unilora.Linear",
+        "module": "lucid.peft.tuners.unilora",
         "kind": "class"
       },
       {
@@ -3138,6 +3386,11 @@
       {
         "path": "lucid.peft.tuners.vera.Linear",
         "module": "lucid.peft.tuners.vera",
+        "kind": "class"
+      },
+      {
+        "path": "lucid.peft.tuners.waveft.Linear",
+        "module": "lucid.peft.tuners.waveft",
         "kind": "class"
       },
       {
