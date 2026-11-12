@@ -86,6 +86,8 @@ jobs:
       - name: Test the builder
         if: steps.drift.outputs.stale == 'true'
         working-directory: web
+        env:
+          LUCID_REQUIRE_GRIFFE: "1"
         run: python3 scripts/run_tests.py --skip test_peft_docs.py
 
       # FORCE because the per-module fingerprints the cached wrapper would

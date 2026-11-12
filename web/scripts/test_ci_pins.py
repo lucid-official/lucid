@@ -122,7 +122,17 @@ def test_the_docs_workflow_makes_a_missing_griffe_fail_the_tests() -> None:
     )
 
 
-_TESTS =[v for k, v in sorted(globals().items()) if k.startswith("test_")]
+def test_the_refresh_workflow_makes_a_missing_griffe_fail_the_tests() -> None:
+    """The refresh job runs the same builder tests before it regenerates the data; it
+    installs Griffe, so a missing one must fail there too, not skip (LCD-976 FOUND)."""
+    lines = _code_lines(_ROOT / ".github" / "workflows" / "docs-api-data.yml")
+    runs = [n for n, line in enumerate(lines) if "scripts/run_tests.py" in line]
+    assert len(runs) == 1, f"expected one run_tests.py step in docs-api-data.yml, found {len(runs)}"
+    step_start = max(n for n in range(runs[0]) if lines[n].startswith("- "))
+    assert 'LUCID_REQUIRE_GRIFFE: "1"' in lines[step_start : runs[0] + 1]
+
+
+_TESTS = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
 
 
 def main() -> int:

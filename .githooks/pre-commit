@@ -6,7 +6,8 @@
 #   1. The registry's commit level.  ``tools.rules run --level commit --staged``
 #      runs what ``tools/rules/registry`` claims here: H1 / H5 / H6 / H7 and dead
 #      ``lucid.`` paths on the staged blobs, the H4 guard, the C++ layer rules
-#      with H13, and the quality ratchet.  Steps 1a to 1f are not records yet.
+#      with H13, ruff on staged ``web/scripts`` (D-SCRIPTS-LINT), and the quality
+#      ratchet.  Steps 1a to 1f are not records yet.
 #
 #   2. Docstring coverage.  ``tools/check_docstring_coverage.py``
 #      catches the five blind-spot categories that silently degrade the
