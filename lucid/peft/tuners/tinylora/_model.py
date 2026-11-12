@@ -169,24 +169,24 @@ class TinyLoraModel(_SettlingTuner, _SharedTablesTuner, _ConfigTuner, peft_type=
     @override
     @classmethod
     def _shared_keys(cls, context: _FileContext) -> dict[str, str]:
-        """Each group's vector as ``base_model.tinylora_v.<group>``, and each layer's frozen factors (and projection, when saved)."""
+        """Each group's vector as ``base_model.tinylora_v.<group>``, and each layer's frozen factors (and projection, when saved).
+
+        The vectors are filed where the layer that holds the table stands among the layers, whether or
+        not that layer holds this adapter: an adapter that targets other layers reads the same table.
+        """
         keys: dict[str, str] = {}
-        owner_found = False
         for path, layer in context.layers:
-            if (
-                not isinstance(layer, TinyLoraLayer)
-                or context.adapter not in layer._adapter_names()
-            ):
+            if not isinstance(layer, TinyLoraLayer):
                 continue
             held = getattr(layer, "tinylora_v", None)
-            if held is not None and not owner_found and context.adapter in held:
-                owner_found = True
+            if held is not None and context.adapter in held:
                 where = f"{context.prefix}{path}"
                 for group in held[context.adapter]:
                     keys[f"{where}.tinylora_v.{context.adapter}.{group}"] = f"{_VECTORS}{group}"
-            keys.update(
-                context.layer_buffer_keys(path, layer, "tinylora_A", "tinylora_B", "tinylora_P")
-            )
+            if context.adapter in layer._adapter_names():
+                keys.update(
+                    context.layer_buffer_keys(path, layer, "tinylora_A", "tinylora_B", "tinylora_P")
+                )
         return keys
 
     @override

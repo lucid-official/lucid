@@ -207,6 +207,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - EVA reloads each layer by name, refuses all rank 0 (LCD-982)
 
+- TinyLoRA adapter files carry the vectors they read (LCD-984)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

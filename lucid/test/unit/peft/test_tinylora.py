@@ -46,6 +46,14 @@ def _stack(depth: int, device: str = "cpu") -> nn.Sequential:
     return nn.Sequential(*[nn.Linear(6, 6) for _ in range(depth)]).to(device)
 
 
+def _probe(device: str = "cpu") -> nn.Sequential:
+    """Three linear layers (``0``, ``2``, ``4``), so an adapter can reach some and not others."""
+    lucid.manual_seed(0)
+    return nn.Sequential(
+        nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 8), nn.ReLU(), nn.Linear(8, 4)
+    ).to(device)
+
+
 def _span(a: lucid.Tensor, b: lucid.Tensor) -> float:
     return float((a - b).abs().max().item())
 
@@ -370,6 +378,161 @@ class TestFiles:
         state = {k: v for k, v in get_peft_model_state_dict(peft).items() if "tinylora_P" not in k}
         with pytest.warns(UserWarning, match="regenerated from the projection_seed"):
             set_peft_model_state_dict(peft, state)
+
+
+_VECTOR = "base_model.tinylora_v."
+
+
+def _factor_keys(*layers: int) -> list[str]:
+    """The file keys of the frozen tensors of ``layers``, layer by layer."""
+    return [
+        f"base_model.model.{layer}.tinylora_{name}" for layer in layers for name in ("A", "B", "P")
+    ]
+
+
+#: (targets of the first adapter, targets of a second adapter), named for what the second does with
+#: the layer that holds the vectors in its tree: the first of the first adapter's targets.
+_PAIRS = {
+    "second_misses_the_owner": (("0", "2", "4"), ("2", "4")),
+    "second_before_the_owner": (("2", "4"), ("0",)),
+    "second_around_the_owner": (("2", "4"), ("0", "4")),
+    "second_alone_on_one_layer": (("0", "2", "4"), ("4",)),
+    "second_with_the_owner": (("0", "2", "4"), ("0", "2")),
+    "second_beyond_the_first": (("2",), ("0", "2", "4")),
+}
+
+
+def _pair(first: tuple[str, ...], second: tuple[str, ...], device: str = "cpu") -> PeftModel:
+    """A model with adapter ``default`` on ``first`` and ``b`` on ``second``, every module with its own vector."""
+    peft = get_peft_model(
+        _probe(device),
+        _config(weight_tying=0.0, target_modules=list(first)),
+        adapter_name="default",
+    )
+    peft.add_adapter(
+        "b", _config(weight_tying=0.0, projection_seed=11, target_modules=list(second))
+    )
+    return peft
+
+
+class TestSecondAdapterFile:
+    """An adapter's file carries the vectors it reads, whichever layers it reaches (LCD-984).
+
+    The first layer the first adapter targets holds the tuner's vectors in its module tree; a later adapter
+    that does not reach that layer still reads them, so its file must hold them too.
+    """
+
+    @pytest.mark.parametrize("first, second", _PAIRS.values(), ids=_PAIRS.keys())
+    def test_each_file_holds_the_vector_of_every_group_the_adapter_has(
+        self, first: tuple[str, ...], second: tuple[str, ...]
+    ) -> None:
+        peft = _pair(first, second)
+        for name, targets in (("default", first), ("b", second)):
+            state = get_peft_model_state_dict(peft, adapter_name=name)
+            held = peft.base_model.tinylora_v[name]
+            vectors = {key: v for key, v in state.items() if key.startswith(_VECTOR)}
+            assert sorted(vectors) == sorted(f"{_VECTOR}{group}" for group in held)
+            assert len(vectors) == len(targets)  # weight_tying=0.0: one group per module
+            for group, vector in held.items():
+                assert _same(vectors[f"{_VECTOR}{group}"], vector)
+
+    @pytest.mark.parametrize("first, second", _PAIRS.values(), ids=_PAIRS.keys())
+    def test_the_file_holds_the_adapters_factors_and_vectors_and_nothing_else(
+        self, first: tuple[str, ...], second: tuple[str, ...]
+    ) -> None:
+        peft = _pair(first, second)
+        state = get_peft_model_state_dict(peft, adapter_name="b")
+        factors = {key for key in state if not key.startswith(_VECTOR)}
+        assert factors == set(_factor_keys(*(int(i) for i in second)))
+        assert len(state) == len(factors) + len(second)
+
+    @pytest.mark.parametrize("first, second", _PAIRS.values(), ids=_PAIRS.keys())
+    def test_save_then_load_of_each_adapter_reproduces_it(
+        self, first: tuple[str, ...], second: tuple[str, ...], device: str, tmp_path: Path
+    ) -> None:
+        peft = _pair(first, second, device)
+        _move(peft)
+        peft.set_adapter("b")
+        _move(peft, seed=4)
+        x = lucid.randn(4, 8, device=device)
+        expected: dict[str, lucid.Tensor] = {}
+        with lucid.no_grad():
+            for name in ("default", "b"):
+                peft.set_adapter(name)
+                expected[name] = peft(x)
+        peft.save_pretrained(tmp_path)
+        for name, folder in (("default", tmp_path), ("b", tmp_path / "b")):
+            loaded = PeftModel.from_pretrained(_probe(device), folder, adapter_name=name)
+            with lucid.no_grad():
+                assert _same(loaded(x), expected[name]), name
+
+    def test_a_file_without_the_vectors_of_a_second_adapter_is_still_refused(self) -> None:
+        peft = _pair(("0", "2", "4"), ("2", "4"))
+        state = {
+            k: v
+            for k, v in get_peft_model_state_dict(peft, adapter_name="b").items()
+            if "tinylora_v" not in k
+        }
+        with pytest.raises(ValueError, match="tinylora_v"):
+            set_peft_model_state_dict(peft, state, adapter_name="b")
+
+
+class TestFileKeyOrder:
+    """The order of an adapter's file keys: the vectors stand where the layer that holds them stands among the layers.
+
+    Held fixed for the adapters that always had their vectors (the first adapter, and every one that
+    reaches the layer holding them), so a file written before and after is the same.
+    """
+
+    def test_the_first_adapter_lists_its_vectors_before_the_first_layers_factors(self) -> None:
+        peft = _pair(("0", "2", "4"), ("2", "4"))
+        assert list(get_peft_model_state_dict(peft, adapter_name="default")) == [
+            f"{_VECTOR}0",
+            f"{_VECTOR}1",
+            f"{_VECTOR}2",
+            *_factor_keys(0, 2, 4),
+        ]
+
+    def test_an_adapter_that_reaches_the_owner_keeps_the_order(self) -> None:
+        peft = _pair(("0", "2", "4"), ("0", "2"))
+        assert list(get_peft_model_state_dict(peft, adapter_name="b")) == [
+            f"{_VECTOR}0",
+            f"{_VECTOR}1",
+            *_factor_keys(0, 2),
+        ]
+
+    def test_an_adapter_that_misses_the_owner_lists_them_where_it_stands(self) -> None:
+        peft = _pair(("0", "2", "4"), ("2", "4"))
+        assert list(get_peft_model_state_dict(peft, adapter_name="b")) == [
+            f"{_VECTOR}0",
+            f"{_VECTOR}1",
+            *_factor_keys(2, 4),
+        ]
+
+    def test_an_adapter_on_layers_before_the_owner_lists_them_after_its_factors(self) -> None:
+        peft = _pair(("2", "4"), ("0",))
+        assert list(get_peft_model_state_dict(peft, adapter_name="b")) == [
+            *_factor_keys(0),
+            f"{_VECTOR}0",
+        ]
+
+    @pytest.mark.filterwarnings("ignore:Specified to not")
+    def test_without_the_projection_the_factors_are_the_two_frozen_tensors(self) -> None:
+        peft = get_peft_model(
+            _probe(),
+            _config(weight_tying=0.0, save_projection=False, target_modules=["0", "2", "4"]),
+        )
+        peft.add_adapter(
+            "b", _config(weight_tying=0.0, save_projection=False, target_modules=["2", "4"])
+        )
+        assert list(get_peft_model_state_dict(peft, adapter_name="b")) == [
+            f"{_VECTOR}0",
+            f"{_VECTOR}1",
+            "base_model.model.2.tinylora_A",
+            "base_model.model.2.tinylora_B",
+            "base_model.model.4.tinylora_A",
+            "base_model.model.4.tinylora_B",
+        ]
 
 
 class TestErrors:
