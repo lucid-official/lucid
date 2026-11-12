@@ -13868,10 +13868,6 @@
     },
     {
       "kind": "module",
-      "module": "lucid.peft.tuners.unilora._common"
-    },
-    {
-      "kind": "module",
       "module": "lucid.peft.tuners.unilora._layer"
     },
     {
@@ -17526,6 +17522,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft.tuners._shared"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft.tuners._stash"
     },
     {
@@ -17687,10 +17687,6 @@
     {
       "kind": "module",
       "module": "lucid.peft.tuners.trainable_tokens._layer"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.peft.tuners.unilora._common"
     },
     {
       "kind": "module",
