@@ -55,15 +55,15 @@ jobs:
         working-directory: web
         run: python3 scripts/build-api-data-cached.py --check
 
-      # Regression tests for the reST->markdown converter (build-api-data.py).
-      # Standalone stdlib script (no pytest) so it runs on this minimal runner.
-      - name: Test reST->markdown converter
+      # Every web/scripts/test_*.py (the reST->markdown converter, the builder's
+      # helpers and fingerprints, the lucid.peft reference completeness, ...),
+      # found by glob so a new test cannot go unrun — two of them ran in no
+      # workflow until LCD-970.  Standalone stdlib scripts (no pytest) so they
+      # run on this minimal runner; the ones that need Griffe skip themselves
+      # here and run in docs-api-data.yml.
+      - name: Test the docs scripts
         working-directory: web
-        run: python3 scripts/test_rst_converter.py
-
-      - name: Test lucid.peft reference completeness
-        working-directory: web
-        run: python3 scripts/test_peft_docs.py
+        run: python3 scripts/run_tests.py
 
       - uses: actions/setup-node@v4
         with:

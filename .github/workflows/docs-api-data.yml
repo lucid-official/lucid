@@ -74,15 +74,19 @@ jobs:
             echo "stale=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # The builder's own cost guards: Griffe parses lucid/ once per build, the
-      # process ends when its last output is written, the page order does not
-      # depend on the hash seed.  ~15 s, and only when a rebuild is coming — a
-      # builder that regressed to the old per-page re-parse should fail here,
-      # in seconds, not on minute 25 of the real build.
+      # Every web/scripts/test_*.py, found by glob so a new test cannot go
+      # unrun.  Among them the builder's cost guards: Griffe parses lucid/ once
+      # per build, the process ends when its last output is written, the page
+      # order does not depend on the hash seed.  ~16 s, and only when a rebuild
+      # is coming — a builder that regressed to the old per-page re-parse
+      # should fail here, in seconds, not on minute 25 of the real build.
+      # test_peft_docs.py is left out: it judges the committed JSON, which is
+      # exactly what this job is about to regenerate (the Docs workflow runs
+      # it against the result).
       - name: Test the builder
         if: steps.drift.outputs.stale == 'true'
         working-directory: web
-        run: python3 scripts/test_build_api_data_perf.py
+        run: python3 scripts/run_tests.py --skip test_peft_docs.py
 
       # FORCE because the per-module fingerprints the cached wrapper would
       # otherwise use are file mtimes, which a fresh checkout makes all new;
