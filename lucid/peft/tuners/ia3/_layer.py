@@ -25,6 +25,7 @@ import lucid.nn.init as init
 from lucid._tensor.tensor import Tensor
 from lucid.nn.parameter import Parameter
 from lucid.peft.tuners._layer import (
+    _INEXACT_UNMERGE,
     _adapter_dtype,
     _BaseTunerLayer,
     _check_adapter_name,
@@ -247,7 +248,7 @@ class IA3Layer(_BaseTunerLayer):
         adds a tolerance of ``1e-8`` so a zero entry does not divide by zero.  Warns, as the
         reference does.
         """
-        warnings.warn("Unmerge result can be inaccurate for (IA)^3.", stacklevel=4)
+        warnings.warn(f"{_INEXACT_UNMERGE} for (IA)^3.", stacklevel=4)
         targets = self._merge_targets()
         bias_key = self._base_key("bias")
         for adapter in reversed(self.merged_adapters):

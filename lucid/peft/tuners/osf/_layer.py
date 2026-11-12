@@ -68,8 +68,7 @@ class OSFLayer(_ConfigLayer[OSFConfig], _LinearSized, _ResidualUpdate, family=Tr
     TypeError
         ``base_layer`` is some other module type.
     ValueError
-        ``base_layer`` has parameters that only its first input will create, the rank is not positive, or
-        the layer is merged (the split would read the merged weight).
+        ``base_layer`` has parameters that only its first input will create, or the rank is not positive.
     """
 
     adapter_layer_names: ClassVar[tuple[str, ...]] = ("osf_svd_params",)

@@ -653,12 +653,12 @@ class PeftModel(_AdaptedModel):
     ) -> None:
         """Add an adapter beside the ones the model holds.
 
-        The new adapter is initialised, not trained, and starts frozen and
-        inactive: the model computes what it computed, and every parameter
-        keeps its ``requires_grad``.  Switch to it with ``set_adapter``.
-        Modules an earlier adapter wraps take the new one beside it; a
-        classification or question-answering ``task_type`` adds the model's
-        head to ``modules_to_save`` as ``get_peft_model`` does.
+        The new adapter is initialised, not trained, and starts frozen and inactive: the model
+        computes what it computed, and every parameter keeps its ``requires_grad``.  Switch to it
+        with ``set_adapter``.  Modules an earlier adapter wraps take the new one beside it; a
+        classification or question-answering ``task_type`` adds the model's head to
+        ``modules_to_save`` as ``get_peft_model`` does.  Merged layers stay merged, and the adapter
+        starts from their weights as they were before the merge.
 
         Parameters
         ----------
@@ -676,9 +676,9 @@ class PeftModel(_AdaptedModel):
         Raises
         ------
         ValueError
-            The name is taken, the config is another method's, no module
-            matches it, or two adapters would train biases.  The model is
-            left as it was.
+            The name is taken, the config is another method's, no module matches it, two adapters
+            would train biases, or a PiSSA / OLoRA / LoRA-GA start would write the base weights of
+            merged layers (``base_model.unmerge_adapter()`` first).  The model is left as it was.
         NotImplementedError
             ``low_cpu_mem_usage`` or ``autocast_adapter_dtype`` holds a value
             the library cannot honour.

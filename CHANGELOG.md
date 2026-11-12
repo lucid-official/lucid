@@ -193,6 +193,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - start an added adapter from pre-merge weights (LCD-975)
 
+- put a merged layer back with what its merge kept (LCD-975)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

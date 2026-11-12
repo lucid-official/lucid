@@ -303,7 +303,8 @@ class PeftMixedModel(_AdaptedModel):
 
         The new adapter starts frozen and inactive; ``set_adapter`` switches to it.  A module that
         a method already adapts takes this adapter in that method's layer, and a module another
-        method adapted gets this method's layer stacked on top.
+        method adapted gets this method's layer stacked on top.  A merged stack stays merged; the
+        new adapter reads the weight beneath every layer of it.
 
         Parameters
         ----------
@@ -320,8 +321,9 @@ class PeftMixedModel(_AdaptedModel):
         Raises
         ------
         ValueError
-            The name is taken, the method is not mixable, no module matches, or the adapter cannot
-            stand where it would land.  The model is left as it was.
+            The name is taken, the method is not mixable, no module matches, the adapter cannot
+            stand where it would land, or a LoRA initialisation that writes the base weights
+            (PiSSA, OLoRA, LoRA-GA) meets merged layers.  The model is left as it was.
         NotImplementedError
             ``low_cpu_mem_usage`` or ``autocast_adapter_dtype`` holds a value the library cannot
             honour.

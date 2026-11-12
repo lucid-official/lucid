@@ -41,7 +41,7 @@ from lucid.peft._targeting import (
     _shared_outside,
     _with_subtrees_excluded,
 )
-from lucid.peft.tuners._layer import _BaseTunerLayer, _dotted, _tuner_layers
+from lucid.peft.tuners._layer import _INEXACT_UNMERGE, _BaseTunerLayer, _dotted, _tuner_layers
 
 #: For a method that adapts modules only: no model type has raw parameters as its default.
 _NO_PARAMETERS: Final[Mapping[str, frozenset[str]]] = MappingProxyType({})
@@ -140,26 +140,32 @@ def _unmerged(layers: Sequence[_BaseTunerLayer]) -> Iterator[None]:
 
     An adapter that starts from a weight (a factorisation, a norm, the identity of a rewrite) reads
     the base weight as it was before any adapter was folded into it; a layer that is merged holds
-    the sum.  A layer is folded again the way it was — the same adapters, lowest layer first — and
-    the weights it merged into are written back as they were read, so what the layers hold is bit
+    the sum.  The layers are unmerged highest first, since each one's merge was computed from the
+    weights the layers beneath it left.  They are folded again the way they were — the same
+    adapters, lowest first — and the weights they merged into and what their merges kept besides
+    them (``_merge_memory``) are written back as they were read, so what the layers hold is bit
     for bit what they held, also when the body raises.  That holds only for a body that does not
     write the base weights (``_rewrites_base`` says which do).
     """
     if not layers:
         yield
         return
-    folded = [(layer, list(layer.merged_adapters)) for layer in layers]
+    folded = [(layer, list(layer.merged_adapters), layer._merge_memory()) for layer in layers]
     targets = {id(p): p for layer in layers for p in layer._merge_targets().values()}
     with lucid.no_grad():
         written = [(p, p.clone()) for p in targets.values()]
     try:
-        for layer in layers:
-            layer.unmerge()
+        # A layer whose unmerge divides warns that it is inexact; the weights are written back below.
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=_INEXACT_UNMERGE)
+            for layer in layers:
+                layer.unmerge()
         yield
     finally:
-        for layer, names in reversed(folded):
+        for layer, names, memory in reversed(folded):
             if not layer.merged:
                 layer.merge(adapter_names=names)
+                layer._recall_merge_memory(memory)
         _put_back(written)
 
 

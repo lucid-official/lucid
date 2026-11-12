@@ -646,6 +646,16 @@ class _Residual(LoraLayer):
         self._variant(adapter).remember(self, adapter, plan.gain)
 
     @override
+    def _merge_memory(self) -> dict[str, Tensor]:
+        gains = {name: self._variant(name).recall(self, name) for name in self.merged_adapters}
+        return {name: gain for name, gain in gains.items() if gain is not None}
+
+    @override
+    def _recall_merge_memory(self, memory: Mapping[str, Tensor]) -> None:
+        for name, gain in memory.items():
+            self._variant(name).remember(self, name, gain)
+
+    @override
     def _unfold(self) -> None:
         site = self._site()
         weight = site.read()

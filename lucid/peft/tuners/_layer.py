@@ -10,7 +10,7 @@ holds any number of adapters, one entry per name in each of the tables
 import functools
 import warnings
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import ClassVar, Final, Protocol, override
 
 import lucid
@@ -21,6 +21,9 @@ from lucid.nn.parameter import Parameter
 from lucid.peft._slots import _as_names, _SlotState
 
 _HALF: Final = (lucid.float16, lucid.bfloat16)
+#: What an unmerge that divides warns, as the reference does; a layer taken apart and put back
+#: (``_plan._unmerged``) silences it, since the weights it read are written back as they were.
+_INEXACT_UNMERGE: Final = "Unmerge result can be inaccurate"
 
 
 class _Holds(Protocol):
@@ -532,6 +535,19 @@ class _BaseTunerLayer(nn.Module, ABC):
     @abstractmethod
     def _unfold(self) -> None:
         """Take every merged adapter back out of the merge targets, in place."""
+
+    def _merge_memory(self) -> dict[str, Tensor]:
+        """What each merged adapter's merge kept beside the weights, by adapter name (DoRA's row gains).
+
+        Folding an adapter again after it was unmerged recomputes that from a weight which lost
+        bits in the round trip; ``_recall_merge_memory`` puts the original back, so a layer that
+        was taken apart and folded again is the one it was.  Nothing by default.
+        """
+        return {}
+
+    def _recall_merge_memory(self, memory: Mapping[str, Tensor]) -> None:
+        """Make ``memory`` (from ``_merge_memory``) what the merged adapters' merges kept."""
+        del memory  # the default keeps nothing
 
     def _check_finite_merge(self, adapter: str) -> None:
         """Raise ``ValueError`` if merging ``adapter`` would write NaN or inf."""
