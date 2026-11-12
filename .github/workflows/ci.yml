@@ -102,6 +102,10 @@ jobs:
           python -m pip install setuptools wheel cmake ninja "pybind11>=3.0,<3.1" \
               "clang-format>=22,<23"
           python -m pip install --no-build-isolation -e ".[test]"
+          # The pinned ruff: the D-SCRIPTS-LINT seed control in
+          # tools/test_rules.py runs tools/check_web_scripts_lint.py, which
+          # refuses (exit 2) without the lint group's ruff (LCD-976).
+          python -m pip install --group lint
 
       # Beside the checks part's clang-format step, with the same pinned
       # clang-format: PhantomBackend.h is generated from IBackend.h, and a
