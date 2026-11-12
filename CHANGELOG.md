@@ -197,6 +197,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - count only the methods that build on the API card (LCD-978)
 
+- show the copy-link icon on sub-package headings (LCD-978)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

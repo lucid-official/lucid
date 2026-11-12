@@ -323,9 +323,13 @@ function SubpackageGrid({ groups, title, blurb }: SubpackageGridProps) {
   });
 
   const id = blurb ? _sectionId(title) : undefined;
+  // ``group`` sits on the heading, not on the ``<section>``: ``AnchorLink`` shows
+  // itself on ``group-hover`` and Tailwind's unnamed ``group`` matches *any*
+  // ancestor, so a section-wide one would also fire the ``group-hover`` title
+  // colour of every ``FamilyCard`` below.  (Without any, the icon never showed.)
   return (
     <section className="mb-10">
-      <SectionHeading id={id} className={blurb ? "flex items-center gap-2" : undefined}>
+      <SectionHeading id={id} className={blurb ? "group flex items-center gap-2" : undefined}>
         {title}
         {id && <AnchorLink id={id} />}
       </SectionHeading>
