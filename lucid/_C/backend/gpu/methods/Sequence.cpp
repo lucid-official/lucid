@@ -105,7 +105,7 @@ Storage GpuBackend::embedding_bag_forward(const Storage& weight,
     // bag answers NaN (policy B, ``gpu_axis_index``).  The index is
     // checked at its own width: it was narrowed to int32 first, and an
     // index of 2^32 + 1 read row 1.
-    auto emb = gpu_take(*gw.arr, *gi.arr, 0, NegativeIndex::OutOfRange);
+    auto emb = gpu_take(*gw.arr, *gi.arr, 0, IndexSite::row("embedding_bag"));
 
     // seg[k] = (#offsets <= k) - 1  — the bag position k falls in.  The
     // sentinel counts here, so a position past it lands on bag B.
@@ -418,7 +418,7 @@ Storage GpuBackend::embedding_forward(const Storage& weight,
     (void)padding_idx;
     // An index outside the table, negative ones included, reads a row of
     // NaN (policy B, ``gpu_axis_index``); the CPU raises IndexError.
-    auto out = gpu_take(*gw.arr, *gi.arr, 0, NegativeIndex::OutOfRange);
+    auto out = gpu_take(*gw.arr, *gi.arr, 0, IndexSite::row("embedding"));
     return Storage{gpu::wrap_mlx_array(std::move(out), dt)};
 }
 
@@ -458,7 +458,7 @@ Storage GpuBackend::embedding_backward(const Storage& grad_out,
     // NaN, and an infinite gradient at a padding position reached the
     // padding row as NaN.
     auto ix = gpu_axis_index(::mlx::core::reshape(*gi.arr, {static_cast<int>(M_total)}), N,
-                             NegativeIndex::OutOfRange);
+                             IndexSite::row("embedding_backward"));
     auto keep = ix.in_range;
     if (padding_idx >= 0)
         keep = ::mlx::core::logical_and(

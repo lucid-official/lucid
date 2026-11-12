@@ -1189,7 +1189,6 @@
     "lucid/_C/backend/cpu/methods/Sequence.cpp": 8,
     "lucid/_C/backend/cpu/methods/Spatial.cpp": 7,
     "lucid/_C/backend/cpu/methods/Unary.cpp": 2,
-    "lucid/_C/backend/gpu/AxisIndex.h": 1,
     "lucid/_C/backend/gpu/GpuBackend.h": 49,
     "lucid/_C/backend/gpu/methods/Conv.cpp": 13,
     "lucid/_C/backend/gpu/methods/Indexing.cpp": 3,

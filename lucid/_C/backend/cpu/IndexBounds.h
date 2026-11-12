@@ -8,7 +8,8 @@
 // index pointed, embedding_bag read every index through ``int`` (2^32 + 1
 // became row 1) and walked offsets past the end of the indices, and one_hot
 // left a bad class's row zero.  Metal isolates the same indices in the graph
-// instead (policy B, ``lucid/_C/backend/gpu/AxisIndex.h``, LCD-228).
+// instead (policy B, ``lucid/_C/backend/gpu/AxisIndex.h``, LCD-228), and
+// refuses them in the same words when ``LUCID_STRICT_INDEX`` is set.
 
 #pragma once
 
@@ -19,6 +20,7 @@
 
 #include "../../core/Dtype.h"
 #include "../../core/ErrorBuilder.h"
+#include "../../core/IndexRefusal.h"
 #include "../../core/Storage.h"
 
 namespace lucid::backend::cpu {
@@ -86,8 +88,7 @@ inline IndexReader real_index_reader(const char* op, const CpuStorage& s) {
 // lies below zero: a row or a class is never counted from the end.
 inline std::int64_t checked_row(const char* op, std::int64_t id, std::int64_t rows) {
     if (id < 0 || id >= rows)
-        ErrorBuilder(op).index_error("index " + std::to_string(id) + " is out of range [0, " +
-                                     std::to_string(rows) + ")");
+        refuse_row_index(op, std::to_string(id), rows);
     return id;
 }
 
@@ -99,9 +100,7 @@ checked_axis(const char* op, std::int64_t id, std::int64_t extent, const char* m
     if (id < 0)
         id += extent;
     if (id < 0 || id >= extent)
-        ErrorBuilder(op).index_error(std::string(msg) + ": index " + std::to_string(raw) +
-                                     " is out of bounds for dimension " + std::to_string(axis) +
-                                     " with size " + std::to_string(extent));
+        refuse_axis_index(op, msg, std::to_string(raw), axis, extent);
     return id;
 }
 

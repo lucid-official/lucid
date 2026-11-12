@@ -471,7 +471,7 @@ Storage GpuBackend::nll_loss_backward(const Storage& target,
 
 ::mlx::core::array GpuBackend::class_pick(const ::mlx::core::array& x,
                                           const ::mlx::core::array& safe_t) {
-    return gpu_take_along_axis(x, safe_t, 1, NegativeIndex::OutOfRange);
+    return gpu_take_along_axis(x, safe_t, 1, IndexSite::row("gpu_backend::class_pick"));
 }
 
 ::mlx::core::array GpuBackend::class_weight_gather(const Storage* weight,
@@ -480,7 +480,7 @@ Storage GpuBackend::nll_loss_backward(const Storage& target,
                                                    ::mlx::core::Dtype dt) {
     if (weight) {
         const auto& w = std::get<GpuStorage>(*weight);
-        return gpu_take(*w.arr, safe_t, 0, NegativeIndex::OutOfRange);
+        return gpu_take(*w.arr, safe_t, 0, IndexSite::row("gpu_backend::class_weight"));
     }
     return ::mlx::core::broadcast_to(gpu::mlx_scalar(1.0, dt), shape);
 }

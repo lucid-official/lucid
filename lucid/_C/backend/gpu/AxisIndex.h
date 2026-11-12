@@ -28,16 +28,28 @@
 // ``gpu_sink_index``.  The device difference is documented in
 // lucid/test/audit/README.md and pinned by
 // lucid/test/unit/ops/test_index_bounds_contract.py.
+//
+// Strict mode (LCD-892) is the opt-in way back to the CPU's refusal.  With
+// ``LUCID_STRICT_INDEX`` set to anything but ``0`` the same gates read the
+// check back to the host and raise the CPU's IndexError, in the CPU's words
+// (``core/IndexRefusal.h``).  That read is the pipeline stall policy B
+// exists to avoid, so it is off by default, and the default path pays one
+// ``getenv`` per call and nothing else.  Each gate takes the ``IndexSite``
+// naming the op the CPU kernel would have named, so a new entry point
+// cannot be written without saying where its refusal comes from.
 #pragma once
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <limits>
 #include <optional>
 #include <sstream>
+#include <string>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -50,6 +62,7 @@
 #include "../../core/Determinism.h"
 #include "../../core/Error.h"
 #include "../../core/ErrorBuilder.h"
+#include "../../core/IndexRefusal.h"
 #include "ComplexParts.h"
 #include "HalfAccumulation.h"
 
@@ -89,6 +102,35 @@ enum class NegativeIndex {
     Wrap,        // ``-k`` names ``extent - k``, once: gather, scatter, take
     OutOfRange,  // nothing lies below zero: a table row, a class
 };
+
+// What a gate needs to know about the op that hands it an index: the op the
+// CPU kernel names, its wording, and what a negative index means there.
+// ``what`` is null for a table row or a class, which the CPU words as
+// ``index N is out of range [0, rows)`` and for which nothing lies below zero.
+struct IndexSite {
+    const char* op;
+    const char* what;
+    int axis;
+    NegativeIndex negative;
+
+    static constexpr IndexSite gathered(const char* op, int axis) {
+        return {op, "index out of range for the gathered axis", axis, NegativeIndex::Wrap};
+    }
+    static constexpr IndexSite scattered(const char* op, int axis) {
+        return {op, "index out of range for the scattered axis", axis, NegativeIndex::Wrap};
+    }
+    static constexpr IndexSite row(const char* op) {
+        return {op, nullptr, 0, NegativeIndex::OutOfRange};
+    }
+};
+
+// Whether an out-of-range index raises on Metal instead of being isolated.
+// Read on every call, so a program can switch it with
+// ``os.environ["LUCID_STRICT_INDEX"] = "1"`` between ops.
+inline bool strict_index_enabled() {
+    const char* v = std::getenv("LUCID_STRICT_INDEX");
+    return v != nullptr && v[0] != '\0' && v[0] != '0';
+}
 
 // An index that is safe to hand to an MLX gather or scatter.
 struct AxisIndex {
@@ -158,6 +200,63 @@ inline const Fused& fused(NegativeIndex negative, bool narrow) {
     if (negative == NegativeIndex::Wrap)
         return narrow ? wrap32 : wrap;
     return narrow ? strict32 : strict;
+}
+
+// ``a``'s ``i``-th element, an index of any integer dtype or bool, as text.
+inline std::string element_text(const ::mlx::core::array& a, std::size_t i) {
+    namespace mx = ::mlx::core;
+    auto text = [&](auto tag) {
+        using T = decltype(tag);
+        const T v = a.data<T>()[i];
+        if constexpr (std::is_signed_v<T>)
+            return std::to_string(static_cast<long long>(v));
+        else
+            return std::to_string(static_cast<unsigned long long>(v));
+    };
+    const auto dt = a.dtype();
+    if (dt == mx::int8)
+        return text(std::int8_t{});
+    if (dt == mx::int16)
+        return text(std::int16_t{});
+    if (dt == mx::int32)
+        return text(std::int32_t{});
+    if (dt == mx::int64)
+        return text(std::int64_t{});
+    if (dt == mx::uint8)
+        return text(std::uint8_t{});
+    if (dt == mx::uint16)
+        return text(std::uint16_t{});
+    if (dt == mx::uint32)
+        return text(std::uint32_t{});
+    if (dt == mx::uint64)
+        return text(std::uint64_t{});
+    return text(bool{});
+}
+
+// Strict mode's one host read: ``in_range`` is all true, or the first
+// entry of ``idx`` (in its own row-major order, as the CPU kernel walks it)
+// that is not is refused with the CPU's IndexError.
+inline void refuse_out_of_range(const ::mlx::core::array& idx,
+                                const ::mlx::core::array& in_range,
+                                std::int64_t extent,
+                                const IndexSite& site) {
+    namespace mx = ::mlx::core;
+    auto every = mx::all(in_range);
+    mx::eval(every);
+    if (every.item<bool>())
+        return;
+    // An error is certain now, so finding the entry may cost what it likes.
+    auto flags = mx::contiguous(mx::reshape(in_range, {-1}));
+    auto values = mx::contiguous(mx::reshape(idx, {-1}));
+    mx::eval({flags, values});
+    const bool* ok = flags.data<bool>();
+    std::size_t first = 0;
+    while (ok[first])
+        ++first;
+    const std::string raw = element_text(values, first);
+    if (site.what == nullptr)
+        refuse_row_index(site.op, raw, extent);
+    refuse_axis_index(site.op, site.what, raw, site.axis, extent);
 }
 
 template <bool Narrow>
@@ -278,22 +377,45 @@ inline ::mlx::core::array dispatch_gather_3d(const ::mlx::core::array& src,
 
 }  // namespace axis_index_detail
 
+namespace axis_index_detail {
+
+inline AxisIndex
+checked_index(const ::mlx::core::array& idx, std::int64_t extent, NegativeIndex negative) {
+    namespace mx = ::mlx::core;
+    validate_index_dtype(idx);
+    if (extent <= 0)
+        ErrorBuilder("gpu_axis_index").fail("an empty axis has no position to index");
+    const auto work = work_dtype(idx.dtype(), extent);
+    auto i = idx.dtype() == work ? idx : mx::astype(idx, work);
+    const bool narrow = extent <= std::numeric_limits<std::int32_t>::max();
+    auto out = fused(negative, narrow)({std::move(i), mx::array(extent, work)});
+    return {std::move(out[0]), std::move(out[1])};
+}
+
+}  // namespace axis_index_detail
+
 // ``idx`` checked against an axis of ``extent`` positions.  ``extent`` must
 // be positive.  An empty axis has no position to point at, so every caller
 // answers for it without indexing (an all-fill gather, a scatter that
-// leaves the base alone).
-inline AxisIndex gpu_axis_index(const ::mlx::core::array& idx,
-                                std::int64_t extent,
-                                NegativeIndex negative = NegativeIndex::Wrap) {
-    namespace mx = ::mlx::core;
-    axis_index_detail::validate_index_dtype(idx);
-    if (extent <= 0)
-        ErrorBuilder("gpu_axis_index").fail("an empty axis has no position to index");
-    const auto work = axis_index_detail::work_dtype(idx.dtype(), extent);
-    auto i = idx.dtype() == work ? idx : mx::astype(idx, work);
-    const bool narrow = extent <= std::numeric_limits<std::int32_t>::max();
-    auto out = axis_index_detail::fused(negative, narrow)({std::move(i), mx::array(extent, work)});
-    return {std::move(out[0]), std::move(out[1])};
+// leaves the base alone).  Under strict mode an out-of-range ``idx`` raises
+// at ``site`` instead of coming back in ``in_range``.
+inline AxisIndex
+gpu_axis_index(const ::mlx::core::array& idx, std::int64_t extent, const IndexSite& site) {
+    auto out = axis_index_detail::checked_index(idx, extent, site.negative);
+    if (strict_index_enabled())
+        axis_index_detail::refuse_out_of_range(idx, out.in_range, extent, site);
+    return out;
+}
+
+// Strict mode's check for a gate that has no use for ``gpu_axis_index``'s
+// answer, because its Metal kernel isolates the index itself.  Does nothing
+// unless strict mode is on.
+inline void
+require_in_range(const ::mlx::core::array& idx, std::int64_t extent, const IndexSite& site) {
+    if (!strict_index_enabled())
+        return;
+    auto out = axis_index_detail::checked_index(idx, extent, site.negative);
+    axis_index_detail::refuse_out_of_range(idx, out.in_range, extent, site);
 }
 
 // What a gather answers at an out-of-range position.  A floating or complex
@@ -320,7 +442,7 @@ inline ::mlx::core::array fill_out_of_range(const ::mlx::core::array& gathered,
 inline ::mlx::core::array gpu_take_along_axis(const ::mlx::core::array& src,
                                               const ::mlx::core::array& idx,
                                               int axis,
-                                              NegativeIndex negative = NegativeIndex::Wrap) {
+                                              const IndexSite& site) {
     namespace mx = ::mlx::core;
     const int ax = axis < 0 ? axis + static_cast<int>(src.ndim()) : axis;
     const auto extent = static_cast<std::int64_t>(src.shape(ax));
@@ -330,15 +452,16 @@ inline ::mlx::core::array gpu_take_along_axis(const ::mlx::core::array& src,
     if (extent == 0)
         return mx::full(out_shape, out_of_range_fill(src.dtype()));
     axis_index_detail::validate_index_dtype(idx);
+    require_in_range(idx, extent, site);
     if (out_shape != idx.shape() || shape != out_shape) {
         auto src_target = out_shape;
         src_target[static_cast<std::size_t>(ax)] = src.shape(ax);
         auto src_b = src.shape() == src_target ? src : mx::broadcast_to(src, src_target);
         auto idx_b = idx.shape() == out_shape ? idx : mx::broadcast_to(idx, out_shape);
-        return axis_index_detail::dispatch_gather_3d(src_b, idx_b, out_shape, ax, negative,
+        return axis_index_detail::dispatch_gather_3d(src_b, idx_b, out_shape, ax, site.negative,
                                                      /*slice=*/false);
     }
-    return axis_index_detail::dispatch_gather_3d(src, idx, out_shape, ax, negative,
+    return axis_index_detail::dispatch_gather_3d(src, idx, out_shape, ax, site.negative,
                                                  /*slice=*/false);
 }
 
@@ -348,7 +471,7 @@ inline ::mlx::core::array gpu_take_along_axis(const ::mlx::core::array& src,
 inline ::mlx::core::array gpu_take(const ::mlx::core::array& src,
                                    const ::mlx::core::array& idx,
                                    int axis,
-                                   NegativeIndex negative) {
+                                   const IndexSite& site) {
     namespace mx = ::mlx::core;
     const int ndim = static_cast<int>(src.ndim());
     const int ax = axis < 0 ? axis + ndim : axis;
@@ -361,7 +484,8 @@ inline ::mlx::core::array gpu_take(const ::mlx::core::array& src,
     if (extent == 0)
         return mx::full(out_shape, out_of_range_fill(src.dtype()));
     axis_index_detail::validate_index_dtype(idx);
-    return axis_index_detail::dispatch_gather_3d(src, idx, out_shape, ax, negative,
+    require_in_range(idx, extent, site);
+    return axis_index_detail::dispatch_gather_3d(src, idx, out_shape, ax, site.negative,
                                                  /*slice=*/true);
 }
 
@@ -429,11 +553,12 @@ template <class Scatter>
                                            const ::mlx::core::array& src,
                                            int dim,
                                            ScatterReduce op,
+                                           const IndexSite& site,
                                            Scatter&& scatter) {
     const int d = dim < 0 ? dim + static_cast<int>(base.ndim()) : dim;
     if (base.shape(d) == 0)
         return base;
-    auto ix = gpu_axis_index(idx, base.shape(d));
+    auto ix = gpu_axis_index(idx, base.shape(d), site);
     const auto identity = scatter_identity(op, base.dtype());
     return scatter_on_index_corner(
         base, ix.safe, src, d,
@@ -448,11 +573,13 @@ template <class Scatter>
 // cuts off afterwards.  Unlike a sum, a write cannot be made harmless: any
 // value aimed at a real position overwrites it.  So an out-of-range write
 // gets a position of its own.
-inline ::mlx::core::array gpu_sink_index(const ::mlx::core::array& idx, std::int64_t extent) {
+inline ::mlx::core::array
+gpu_sink_index(const ::mlx::core::array& idx, std::int64_t extent, const IndexSite& site) {
     namespace mx = ::mlx::core;
     axis_index_detail::validate_index_dtype(idx);
     if (extent <= 0)
         ErrorBuilder("gpu_axis_index").fail("an empty axis has no position to index");
+    require_in_range(idx, extent, site);
     const auto work = axis_index_detail::work_dtype(idx.dtype(), extent);
     auto i = idx.dtype() == work ? idx : mx::astype(idx, work);
     const bool narrow = extent <= std::numeric_limits<std::int32_t>::max();

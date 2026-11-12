@@ -23,7 +23,7 @@ Storage GpuBackend::gather(const Storage& a,
     if (source.shape() != corner)
         source = ::mlx::core::slice(
             source, ::mlx::core::Shape(static_cast<std::size_t>(source.ndim()), 0), corner);
-    auto result = gpu_take_along_axis(source, *gi.arr, axis);
+    auto result = gpu_take_along_axis(source, *gi.arr, axis, IndexSite::gathered("gather", axis));
     return Storage{gpu::wrap_mlx_array(std::move(result), dt)};
 }
 
@@ -40,6 +40,7 @@ Storage GpuBackend::gather_backward(const Storage& grad,
     // was read there, so nothing flows back (policy B, gpu_axis_index).
     auto base = ::mlx::core::zeros(gpu::to_mlx_shape(input_shape), gpu::to_mlx_dtype(dt));
     auto result = gpu_scatter_reduce_axis(base, *gi.arr, *gg.arr, axis, ScatterReduce::Add,
+                                          IndexSite::gathered("gpu_backend::gather_backward", axis),
                                           [axis](const auto& b, const auto& i, const auto& v) {
                                               return scatter_add_axis_widened(b, i, v, axis);
                                           });
@@ -79,6 +80,7 @@ Storage GpuBackend::scatter_add_axis(const Storage& grad,
     const auto& idx = std::get<GpuStorage>(indices);
     auto base = ::mlx::core::zeros(gpu::to_mlx_shape(output_shape), gpu::to_mlx_dtype(dt));
     auto out = gpu_scatter_reduce_axis(base, *idx.arr, *g.arr, axis, ScatterReduce::Add,
+                                       IndexSite::scattered("scatter_add_axis", axis),
                                        [axis](const auto& b, const auto& i, const auto& v) {
                                            return scatter_add_axis_widened(b, i, v, axis);
                                        });
@@ -106,7 +108,7 @@ Storage GpuBackend::scatter_add(const Storage& base,
         // every other dtype.
         if (extent == 0)
             return base;
-        auto ix = gpu_axis_index(*gi.arr, extent);
+        auto ix = gpu_axis_index(*gi.arr, extent, IndexSite::scattered("scatter_add", d));
         auto values = ::mlx::core::where(ix.in_range, *gs.arr,
                                          scatter_identity(ScatterReduce::Add, gs.arr->dtype()));
         const Storage safe_idx{
@@ -119,6 +121,7 @@ Storage GpuBackend::scatter_add(const Storage& base,
                                });
     }
     auto out = gpu_scatter_reduce_axis(*gb.arr, *gi.arr, *gs.arr, d, ScatterReduce::Add,
+                                       IndexSite::scattered("scatter_add", d),
                                        [d](const auto& b, const auto& i, const auto& v) {
                                            return scatter_add_axis_widened(b, i, v, d);
                                        });
@@ -140,7 +143,7 @@ Storage GpuBackend::scatter_set(const Storage& base,
     const std::int64_t extent = base_shape[static_cast<std::size_t>(d)];
     if (extent == 0)
         return base;
-    auto sink = gpu_sink_index(*gi.arr, extent);
+    auto sink = gpu_sink_index(*gi.arr, extent, IndexSite::scattered("scatter", d));
     auto padded = with_sink_slab(*gb.arr, d);
     if (dt == Dtype::I64 || dt == Dtype::C64) {
         Shape padded_shape = base_shape;
@@ -202,7 +205,10 @@ Storage GpuBackend::axis_scatter_via_multiaxis(const Storage& base,
     const std::int64_t extent = base_shape[static_cast<std::size_t>(d)];
     if (extent == 0)
         return base;
-    auto ix = gpu_axis_index(*gi.arr, extent);
+    const char* name = op == ScatterReduce::Max   ? "scatter_amax"
+                       : op == ScatterReduce::Min ? "scatter_amin"
+                                                  : "scatter_prod";
+    auto ix = gpu_axis_index(*gi.arr, extent, IndexSite::scattered(name, d));
     const auto coord_dt = ix.safe.dtype();
 
     std::vector<::mlx::core::array> index_list;
@@ -331,6 +337,7 @@ Storage GpuBackend::one_hot_forward(const Storage& indices,
     const auto& gi = std::get<GpuStorage>(indices);
     auto cls = ::mlx::core::astype(::mlx::core::arange(0, num_classes, 1), ::mlx::core::int64);
     auto idx = ::mlx::core::astype(*gi.arr, ::mlx::core::int64);
+    require_in_range(idx, num_classes, IndexSite::row("one_hot"));
     ::mlx::core::Shape idx_shape = idx.shape();
     idx_shape.push_back(1);
     auto idx_b = ::mlx::core::reshape(idx, idx_shape);
