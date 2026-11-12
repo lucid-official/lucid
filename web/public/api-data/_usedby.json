@@ -13424,6 +13424,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft._mixed_model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft._model_prep"
     },
     {
@@ -18536,6 +18540,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.peft._mixed_model"
+    },
+    {
+      "kind": "module",
       "module": "lucid.peft._peft_model"
     },
     {
@@ -19229,6 +19237,16 @@
       "module": "lucid.peft"
     }
   ],
+  "lucid.peft._mixed_model.PeftMixedModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft._mapping"
+    }
+  ],
   "lucid.peft._model_prep.cast_mixed_precision_params": [
     {
       "kind": "module",
@@ -19255,6 +19273,10 @@
     {
       "kind": "module",
       "module": "lucid.peft._base_state_dict"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.peft._mixed_model"
     },
     {
       "kind": "module",
@@ -19468,6 +19490,10 @@
     }
   ],
   "lucid.peft.tuners._mixed.MixedModel": [
+    {
+      "kind": "module",
+      "module": "lucid.peft._mixed_model"
+    },
     {
       "kind": "module",
       "module": "lucid.peft.tuners"
