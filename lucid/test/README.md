@@ -71,6 +71,26 @@ trigger this import — Lucid stays usable without `pip install <ref>`.
 When the reference isn't installed, every test under `parity/` is
 auto-skipped at collection time with a single message.
 
+## Model parity (`parity/models`)
+
+`parity/models/_utils._run_parity` builds a Lucid model and its reference, copies Lucid's
+parameters *and buffers* into the reference, and compares the logits. A comparison is only
+a test if the reference's answer is far from zero relative to its tolerance, so the harness
+makes it so before the transfer, on the Lucid model (the source — anything done to the
+reference's buffers first is overwritten by the copy):
+
+- every parameter that is exactly zero (ViT's head, biases, norm shifts) is redrawn from
+  `N(0, 0.02)`;
+- every BatchNorm's running statistics are set to those of the activations it sees (one
+  train-mode pass, `momentum=None`, over the test input plus three more), so each layer hands
+  the next an O(1) signal instead of collapsing to 1e-9 or amplifying to 1e8.
+
+A comparison whose reference answer is under 100x its tolerance (`atol + rtol * max|logit|`),
+or past 1e3, **fails** — it is never skipped, because a skip reads green. Where the reference's
+own configuration differs from the family's (a batch-norm epsilon), name it in the spec's
+`timm_kwargs`; never copy it from the Lucid model. `test_parity_sensitivity.py` proves the six
+MobileNet/ViT comparisons reject a deliberately wrong model (`_mutations.py`).
+
 ## Determinism
 
 `conftest.py` sets `lucid.manual_seed(0)` automatically before every
