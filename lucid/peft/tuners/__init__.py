@@ -35,7 +35,7 @@ The methods, by family:
   per layer), ``ln_tuning`` (a trainable copy of each chosen normalisation layer) and
   ``trainable_tokens`` (a few rows of an embedding table).
 
-Twenty more methods are full tuners like the ones above, grouped by the form of their update:
+Nineteen more methods are full tuners like the ones above, grouped by the form of their update:
 ``delora``, ``gralora``, ``hira``, ``glora``, ``deft`` and ``peanut`` (a weight update of low-rank
 or projection form), ``unilora``, ``pvera``, ``tinylora`` and ``lily`` (adapters read out of shared
 banks), ``road``, ``psoft``, ``osf`` and ``frod`` (orthogonal and spectral updates),

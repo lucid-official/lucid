@@ -64,17 +64,19 @@ class PeftType(enum.StrEnum):
 
     The members are the reference library's ``peft_type`` strings, so a
     config file names its method the same way on both sides.
-    Every member has a config class that reads and writes ``adapter_config.json``.  Twenty-six
-    have an adapter that can be built: the LoRA family (``LORA``, ``ADALORA``), the
+    Every member has a config class that reads and writes ``adapter_config.json``, and every one
+    but ``SHADOW`` has an adapter that can be built.  The first twenty-six: the LoRA family
+    (``LORA``, ``ADALORA``), the
     orthogonal and LyCORIS families (``OFT``, ``BOFT``, ``HRA``, ``LOHA``, ``LOKR``), the shared-table
     tuners (``VERA``, ``VBLORA``, ``RANDLORA``), the structured and sparse updates (``MISS``, its
     predecessor ``BONE``, ``SHIRA``, ``C3A``, ``FOURIERFT``), ``IA3``, ``LN_TUNING``,
     ``TRAINABLE_TOKENS``, the prompt-learning methods (``PROMPT_TUNING``,
     ``MULTITASK_PROMPT_TUNING``, ``PREFIX_TUNING``, ``P_TUNING``, ``CPT``), the adaption prompt
     (``ADAPTION_PROMPT``) and the routing and mixing methods (``POLY``, ``XLORA``).  The other
-    twenty are the methods the reference library added since: building an adapter with one raises
-    ``NotImplementedError`` naming the issue that tracks it, except ``SHADOW``, which is refused
-    for good.  A file that names a type no config reads raises ``NotImplementedError``.
+    nineteen are the methods the reference library added since (``DELORA`` … ``ADAMSS``; see
+    :mod:`lucid.peft.tuners`).  ``SHADOW`` is refused for good: building it raises
+    ``NotImplementedError``.  A file that names a type no config reads raises
+    ``NotImplementedError``.
     """
 
     PROMPT_TUNING = "PROMPT_TUNING"
