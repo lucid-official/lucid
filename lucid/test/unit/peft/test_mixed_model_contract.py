@@ -922,6 +922,20 @@ class TestMergingOneLayerOfAPair:
         for before, after in zip(weights, _snapshot(built.base), strict=True):
             assert span(before, after) < _TOLERANCE
 
+    def test_merging_and_unloading_the_layer_below_leaves_the_model_with_only_its_adapter(
+        self, stack: _Stack, device: str, tmp_path: Path
+    ) -> None:
+        """The adapters not named are dropped with their layers, so what is left is the model without them."""
+        built = _build(stack, device, tmp_path)
+        with lucid.no_grad():
+            built.host.set_adapter(built.names[:1])
+            alone = _call(built.base, device)
+            built.host.set_adapter(built.names)
+            plain = built.host.merge_and_unload(adapter_names=built.names[:1])
+            assert not any(isinstance(m, _BaseTunerLayer) for m in plain.modules())
+            assert span(_call(plain, device), alone) < _TOLERANCE * max(1.0, magnitude(alone))
+            assert span(alone, built.clean) > _EFFECT
+
     def test_the_layer_above_is_merged_alone_only_where_both_layers_add_to_the_output(
         self, stack: _Stack, device: str, tmp_path: Path
     ) -> None:
@@ -1068,16 +1082,7 @@ class TestTheFiles:
 
 
 @pytest.mark.skipif(not lucid.metal.is_available(), reason="Metal unavailable")
-@pytest.mark.parametrize(
-    "stack",
-    [
-        (PeftType.LORA, PeftType.LOHA),
-        (PeftType.LORA, PeftType.OFT),
-        (PeftType.HIRA, PeftType.IA3),
-        (PeftType.SHIRA, PeftType.ROAD),
-    ],
-    ids=_id,
-)
+@pytest.mark.parametrize("stack", _STACKS, ids=_id)
 def test_switching_the_active_adapters_changes_the_compiled_output(
     stack: _Stack, tmp_path: Path
 ) -> None:

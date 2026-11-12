@@ -128,7 +128,6 @@ class MixedModel(_BaseTuner):
 
     Examples
     --------
-    >>> import lucid
     >>> import lucid.nn as nn
     >>> from lucid.peft import LoHaConfig, LoraConfig
     >>> from lucid.peft.tuners import MixedModel
