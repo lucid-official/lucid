@@ -1,6 +1,6 @@
 ---
 title: Fine-Tune with LoRA
-description: A runnable tutorial for lucid.peft — adapt a zoo model with LoRA, train only the adapter, generate, save and reload the adapter alone, switch it off, merge it for deployment, pick the target modules for each model family, hold several adapters in one model, export to Core ML, load adapters written by the reference adapter library, and find the other twenty-one methods of the package.
+description: A runnable tutorial for lucid.peft — adapt a zoo model with LoRA, train only the adapter, generate, save and reload the adapter alone, switch it off, merge it for deployment, pick the target modules for each model family, hold several adapters in one model, export to Core ML, load adapters written by the reference adapter library, find the other forty-four methods of the package, and mix several of them in one model.
 category: Tutorials
 order: 5
 ---
@@ -13,7 +13,7 @@ $$
 
 where $W$ is the frozen weight and the rank $r$ is small. $B$ starts at zero, so the adapted model begins exactly as the base model. Only $A$ and $B$ train, and only they are saved: a fine-tune becomes a few megabytes you can train, store and swap.
 
-[`lucid.peft`](/api/lucid.peft) implements this with the reference adapter library's API and adapter file format — the same names, the same defaults, the same two files on disk — so a script written for that library reads the same here, and an adapter directory moves between the two. LoRA is one of [twenty-two methods](/api/lucid.peft.tuners) behind that one entry point; the last section is a map of the rest. This tutorial adapts a small GPT-2 from the zoo end to end, then covers the target modules for each model family, several adapters in one model, shipping to Core ML, and the other methods.
+[`lucid.peft`](/api/lucid.peft) implements this with the reference adapter library's API and adapter file format — the same names, the same defaults, the same two files on disk — so a script written for that library reads the same here, and an adapter directory moves between the two. LoRA is one of [forty-five methods](/api/lucid.peft.tuners) behind that one entry point; *The other methods* is a map of the rest. This tutorial adapts a small GPT-2 from the zoo end to end, then covers the target modules for each model family, several adapters in one model, shipping to Core ML, and the other methods.
 
 Run the blocks in order as one script; it takes a few seconds on the CPU or on Metal.
 
@@ -381,7 +381,7 @@ Where the zoo's layout differs from that library's, `from_pretrained` converts a
 
 ## The other methods
 
-LoRA is one of twenty-two methods in `lucid.peft`, and the rest are used the same way: a config for the method, `get_peft_model`, then train, save, load, merge. What changes is what the adapter learns, and so how many parameters it has and whether it can be merged.
+LoRA is one of forty-five methods in `lucid.peft`, and the rest are used the same way: a config for the method, `get_peft_model`, then train, save, load, merge. What changes is what the adapter learns, and so how many parameters it has and whether it can be merged.
 
 ```python
 from lucid.peft import IA3Config, PromptTuningConfig, VeraConfig
@@ -397,23 +397,39 @@ The methods are grouped on [the tuners page](/api/lucid.peft.tuners); each has i
 
 | Family | Methods | What the adapter learns |
 |---|---|---|
-| [LoRA family](/api/lucid.peft.tuners#section-lora-family) | [LoRA](/api/lucid.peft.tuners.lora), [AdaLoRA](/api/lucid.peft.tuners.adalora) | A low-rank update beside each frozen weight; AdaLoRA moves rank between layers while it trains. LoRA's `use_dora` option adds a trainable magnitude (DoRA). |
-| [Orthogonal family](/api/lucid.peft.tuners#section-orthogonal-family) | [OFT](/api/lucid.peft.tuners.oft), [BOFT](/api/lucid.peft.tuners.boft), [HRA](/api/lucid.peft.tuners.hra) | A rotation of each layer's input space instead of an addition to its weight. |
+| [LoRA family](/api/lucid.peft.tuners#section-lora-family) | [LoRA](/api/lucid.peft.tuners.lora), [AdaLoRA](/api/lucid.peft.tuners.adalora), [DeLoRA](/api/lucid.peft.tuners.delora), [GraLoRA](/api/lucid.peft.tuners.gralora), [HiRA](/api/lucid.peft.tuners.hira), [GLoRA](/api/lucid.peft.tuners.glora), [DEFT](/api/lucid.peft.tuners.deft), [PEANuT](/api/lucid.peft.tuners.peanut), [AdaMSS](/api/lucid.peft.tuners.adamss) | A low-rank update beside each frozen weight. AdaLoRA moves rank between layers while it trains, and LoRA's `use_dora` option adds a trainable magnitude (DoRA). The others bound the update (DeLoRA), grid it (GraLoRA), modulate the weight with it (HiRA), correct the bias too (GLoRA), project a subspace out (DEFT), generate it from the weight (PEANuT) or cluster the SVD into subspaces (AdaMSS). |
+| [Orthogonal family](/api/lucid.peft.tuners#section-orthogonal-family) | [OFT](/api/lucid.peft.tuners.oft), [BOFT](/api/lucid.peft.tuners.boft), [HRA](/api/lucid.peft.tuners.hra), [RoAd](/api/lucid.peft.tuners.road), [PSOFT](/api/lucid.peft.tuners.psoft), [OSF](/api/lucid.peft.tuners.osf), [FRoD](/api/lucid.peft.tuners.frod) | A rotation of each layer's input space instead of an addition to its weight (OFT, BOFT, HRA), or of output pairs (RoAd), of the principal subspace (PSOFT), of the low singular directions under a constraint (OSF), or a sparse rotation over a shared basis (FRoD). |
 | [LyCORIS family](/api/lucid.peft.tuners#section-lycoris-family) | [LoHa](/api/lucid.peft.tuners.loha), [LoKr](/api/lucid.peft.tuners.lokr) | A weight-shaped update built as a Hadamard or Kronecker product. |
-| [Prompt learning](/api/lucid.peft.tuners#section-prompt-learning) | [Prompt tuning](/api/lucid.peft.tuners.prompt_tuning), [prefix tuning](/api/lucid.peft.tuners.prefix_tuning), [P-tuning](/api/lucid.peft.tuners.p_tuning), [multitask prompt tuning](/api/lucid.peft.tuners.multitask_prompt_tuning) | An input, not a weight: virtual tokens that no layer of the model changes. Nothing to merge. |
-| [Shared-table tuners](/api/lucid.peft.tuners#section-shared-table-tuners) | [VeRA](/api/lucid.peft.tuners.vera), [RandLoRA](/api/lucid.peft.tuners.randlora), [VB-LoRA](/api/lucid.peft.tuners.vblora) | A few parameters per layer over tensors the whole model shares. |
-| [Structured and sparse updates](/api/lucid.peft.tuners#section-structured-and-sparse-updates) | [FourierFT](/api/lucid.peft.tuners.fourierft), [C3A](/api/lucid.peft.tuners.c3a), [MiSS](/api/lucid.peft.tuners.miss), [Bone](/api/lucid.peft.tuners.bone), [SHiRA](/api/lucid.peft.tuners.shira) | An update with a fixed structure other than low rank. |
-| [Scaling and selective tuning](/api/lucid.peft.tuners#section-scaling-and-selective-tuning) | [IA3](/api/lucid.peft.tuners.ia3), [LN tuning](/api/lucid.peft.tuners.ln_tuning), [trainable tokens](/api/lucid.peft.tuners.trainable_tokens) | A rescaling vector per layer, a copy of each chosen normalisation layer, or a few rows of an embedding table. |
+| [Prompt learning](/api/lucid.peft.tuners#section-prompt-learning) | [Prompt Tuning](/api/lucid.peft.tuners.prompt_tuning), [Prefix Tuning](/api/lucid.peft.tuners.prefix_tuning), [P-Tuning](/api/lucid.peft.tuners.p_tuning), [Multitask Prompt Tuning](/api/lucid.peft.tuners.multitask_prompt_tuning), [CPT](/api/lucid.peft.tuners.cpt), [Cartridge](/api/lucid.peft.tuners.cartridge) | An input, not a weight: virtual tokens that no layer of the model changes. CPT tunes a prompt of in-context examples; a Cartridge is a trained key-value cache that stands in for a long document. Nothing to merge. |
+| [Shared-table tuners](/api/lucid.peft.tuners#section-shared-table-tuners) | [VeRA](/api/lucid.peft.tuners.vera), [RandLoRA](/api/lucid.peft.tuners.randlora), [VB-LoRA](/api/lucid.peft.tuners.vblora), [Uni-LoRA](/api/lucid.peft.tuners.unilora), [PVeRA](/api/lucid.peft.tuners.pvera), [TinyLoRA](/api/lucid.peft.tuners.tinylora), [Lily](/api/lucid.peft.tuners.lily) | A few parameters per layer over tensors the whole model shares, such as random projections or a vector bank, held once by the tuner. |
+| [Structured and sparse updates](/api/lucid.peft.tuners#section-structured-and-sparse-updates) | [FourierFT](/api/lucid.peft.tuners.fourierft), [C3A](/api/lucid.peft.tuners.c3a), [MiSS](/api/lucid.peft.tuners.miss), [Bone](/api/lucid.peft.tuners.bone), [SHiRA](/api/lucid.peft.tuners.shira), [Super-Tuning](/api/lucid.peft.tuners.supertuning), [WaveFT](/api/lucid.peft.tuners.waveft) | An update with a fixed structure other than low rank: a few frequency coefficients (FourierFT), block-circulant blocks (C3A), shared shards (MiSS, and Bone, the method it replaced), a sparse subset of the weight (SHiRA), its entries of largest magnitude (Super-Tuning) or a few inverse-wavelet coefficients (WaveFT). |
+| [Routing and mixing](/api/lucid.peft.tuners#section-routing-and-mixing) | [Poly](/api/lucid.peft.tuners.poly), [X-LoRA](/api/lucid.peft.tuners.xlora) | Several low-rank adapters combined per task or per token: skills mixed by a learned per-task router (Poly), or trained LoRA experts weighed per token by a classifier on the hidden states (X-LoRA). |
+| [Adaption prompts](/api/lucid.peft.tuners#section-adaption-prompts) | [Adaption Prompt](/api/lucid.peft.tuners.adaption_prompt) | Learned prompts the top attention layers of a decoder attend to through a gate that starts at zero (LLaMA-Adapter). |
+| [Scaling and selective tuning](/api/lucid.peft.tuners#section-scaling-and-selective-tuning) | [IA3](/api/lucid.peft.tuners.ia3), [LN Tuning](/api/lucid.peft.tuners.ln_tuning), [Trainable Tokens](/api/lucid.peft.tuners.trainable_tokens), [BEFT](/api/lucid.peft.tuners.beft) | A rescaling vector per layer, a copy of each chosen normalisation layer, a few rows of an embedding table, or one bias added to the value projections (BEFT). |
 
-Everything above about switching, merging and files holds for all of them, with two exceptions that follow from what they learn: LN tuning applies, and merges, one adapter at a time, and the prompt methods train one prompt at a time and have nothing to merge. The prompt methods work on the causal-LM, sequence-to-sequence, sequence-classification, token-classification and question-answering tasks, and apply the prompt by hooks on the model's own call, so `model(...)` and `generate` both carry it.
+Everything above about switching, merging and files holds for all of them, with exceptions that follow from what they learn. LN tuning applies, and merges, one adapter at a time. The prompt methods and adaption prompts apply one prompt at a time and have nothing to merge into the weights, and neither do Poly and X-LoRA, whose update depends on the task or the token. The prompt methods work on the causal-LM, sequence-to-sequence, sequence-classification, token-classification and question-answering tasks, and apply the prompt by hooks on the model's own call, so `model(...)` and `generate` both carry it.
+
+Adapters of *different* methods can share one model too. `get_peft_model(model, config, mixed=True)` returns a `PeftMixedModel`, in which each module holds the layers of every method added to it, stacked and run lowest first. Ten methods can take part: LoRA, LoHa, LoKr, AdaLoRA (for inference only), SHiRA, OFT, IA3, BEFT, RoAd and HiRA; adding any other is a `ValueError`. A mixed model reads adapters from the plain single-method files that each method's own `PeftModel` writes, with `PeftMixedModel.from_pretrained` or `load_adapter`, and it does not save: write each adapter from a `PeftModel` of its own method.
+
+```python
+from lucid.peft import LoHaConfig, PeftMixedModel
+
+mixed = PeftMixedModel.from_pretrained(load_base().to(device), str(adapter_dir), adapter_name="lora")
+mixed.add_adapter("loha", LoHaConfig(r=4, target_modules=["c_attn"]))
+mixed.set_adapter(["lora", "loha"])
+print(mixed.active_adapters, sorted(mixed.peft_config))
+print(mixed.generate(prompt, max_new_tokens=6).tolist())
+```
 
 ## What `lucid.peft` still refuses
 
-`lucid.peft` refuses with `NotImplementedError` rather than doing less than you asked.
+`lucid.peft` knows 46 methods by `PeftType`, and 45 of them build an adapter. It refuses what it cannot do rather than doing less than you asked, with a `NotImplementedError` that names the option unless an item says otherwise.
 
-- **Local directories only.** Hub ids are not resolved, and `safe_serialization=False` is refused: adapters are SafeTensors.
-- **Methods the package lacks.** An adapter file of a method that is not one of the twenty-two is refused.
+- **Local directories only.** A hub id is not resolved: it is read as a path and fails with a `FileNotFoundError`, and the options of a hub download (`token`, `revision` …) are refused. `safe_serialization=False` is refused: adapters are SafeTensors.
+- **ShadowPEFT.** It needs the base model's decoder loop and a second backbone beside it, so `get_peft_model` and `PeftModel.from_pretrained` refuse it; `ShadowConfig` still reads and writes `adapter_config.json`. An adapter file that names a method `PeftType` does not know is refused as well.
+- **LoRA's extensions.** A `LoraConfig` that sets Arrow routing, block-diagonal LoRA, KaSA, MonteCLoRA or VeLoRA is refused.
 - **`add_weighted_adapter` over anything but `nn.Linear` layers.**
+- **Saving a mixed model.** `PeftMixedModel.save_pretrained` is refused: write each adapter from a `PeftModel` of its own method.
 
 ## Where to go next
 
