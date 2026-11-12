@@ -295,6 +295,18 @@ class LoraModel(_BaseTuner, peft_type=PeftType.LORA, mixed=True):
 
     @override
     @classmethod
+    def _layer_adds_to_output(cls, layer: _BaseTunerLayer) -> bool:
+        """LoRA adds ``B A x`` to the output, but a DoRA adapter normalises by the weight it reads.
+
+        A layer holding any DoRA adapter, active or not, is not additive.  The other options leave
+        the update a function of its own factors: ``lora_bias`` adds a vector, ``use_rslora``
+        changes the scale, ``rank_pattern`` / ``alpha_pattern`` the shapes.
+        """
+        dora = isinstance(layer, LoraLayer) and any(layer.use_dora.values())
+        return cls._adds_to_output and not dora
+
+    @override
+    @classmethod
     def _mixed_layer_refusal(cls, layer: type[_BaseTunerLayer]) -> str | None:
         if issubclass(layer, QuantizedLinear):
             return (

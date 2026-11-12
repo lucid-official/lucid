@@ -86,7 +86,8 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
     _default_parameters: ClassVar[Mapping[str, frozenset[str]]] = DEFAULT_LORA_TARGET_PARAMETERS
     #: Whether the method's update is a term added to its layer's output (LoRA, LoHa, LoKr, AdaLoRA,
     #: SHiRA), so it commutes with another such term in a stack and may be merged without the layers
-    #: beneath it.  A method that rotates, scales or reads the weight leaves it ``False``.
+    #: beneath it.  A method that rotates, scales or reads the weight leaves it ``False``.  It is the
+    #: method's claim; one of its layers may take it back (``_layer_adds_to_output``).
     _adds_to_output: ClassVar[bool] = False
 
     @override
@@ -294,6 +295,17 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
         """
         del config, stacked  # the default can always be mixed
         return None
+
+    @classmethod
+    def _layer_adds_to_output(cls, layer: _BaseTunerLayer) -> bool:
+        """Whether ``layer``, one of this method's, adds a term to its output that does not depend on the weight beneath it.
+
+        The class's declaration (``_adds_to_output``) unless the layer holds an adapter whose
+        update reads the weight (LoRA's DoRA): its output then changes with whatever is folded
+        beneath it, so it does not commute with a term merged on its own.
+        """
+        del layer  # the declaration is the method's, whatever the layer holds
+        return cls._adds_to_output
 
     @classmethod
     def _mixed_layer_refusal(cls, layer: type[_BaseTunerLayer]) -> str | None:

@@ -86,7 +86,7 @@ def _chain(top: nn.Module) -> list[_BaseTunerLayer]:
 
 
 def _adds_to_output(layer: _BaseTunerLayer) -> bool:
-    return _family_of(layer)._adds_to_output
+    return _family_of(layer)._layer_adds_to_output(layer)
 
 
 class MixedModel(_BaseTuner):
