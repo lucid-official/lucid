@@ -17,6 +17,7 @@ import copy
 import warnings
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
+from functools import partial
 from typing import ClassVar, Final, override
 
 import lucid
@@ -26,9 +27,9 @@ from lucid.nn.hooks import RemovableHandle
 from lucid.peft._config import PeftConfig, PromptLearningConfig, TaskType
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
 from lucid.peft._slots import _adapter_slots, _as_names, _outermost_slots
-from lucid.peft.tuners._host import _AdapterHost
+from lucid.peft.tuners._host import _AdapterHost, _TakeBack
 from lucid.peft.tuners._layer import _check_adapter_name
-from lucid.peft.tuners._plan import _plan_modules_to_save, _set_submodule
+from lucid.peft.tuners._plan import _Placement, _plan_modules_to_save, _set_submodule, _unplace
 from lucid.peft.tuners._files import _FileContext, _FileFormat
 from lucid.peft.tuners._prompt._encoder import _Injection, _PromptEncoder
 from lucid.peft.tuners._prompt._geometry import _fill_sizes
@@ -193,21 +194,44 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
         table = getattr(self.model, "get_input_embeddings", lambda: None)()
         return table if isinstance(table, nn.Module) else None
 
-    def _add(self, adapter_name: str, config: PromptLearningConfig) -> None:
-        """Build the adapter's encoder and ``modules_to_save`` copies; the model is as it was if that fails."""
+    def _add(self, adapter_name: str, config: PromptLearningConfig) -> list[_Placement]:
+        """Build the adapter's encoder and ``modules_to_save`` copies; the model is as it was if that fails.
+
+        Returns the wrappers it put in the tree, each with the module it stands in for.
+        """
         stored = self._complete(config)
         encoder = type(self)._encoder_class.from_config(stored, self._word_embeddings())
         device = next(iter(self.model.parameters())).device
         encoder.to(device)
         saved = _plan_modules_to_save(self.model, stored)
         held = {key: self.model.get_submodule(key) for key in saved}
-        for key, module in held.items():
-            if isinstance(module, ModulesToSaveWrapper):
-                module.update(adapter_name)
-            else:
-                _set_submodule(self.model, key, ModulesToSaveWrapper(module, adapter_name))
+        # Everything new to the tree is built before the first change to it.
+        placements = [
+            _Placement(key, ModulesToSaveWrapper(module, adapter_name), module)
+            for key, module in held.items()
+            if not isinstance(module, ModulesToSaveWrapper)
+        ]
         self.peft_config[adapter_name] = stored
         self.prompt_encoder[adapter_name] = encoder
+        try:
+            for module in held.values():
+                if isinstance(module, ModulesToSaveWrapper):
+                    module.update(adapter_name)
+            for placement in placements:
+                _set_submodule(self.model, placement.key, placement.slot)
+        except BaseException:
+            self._withdraw(adapter_name, placements)
+            raise
+        return placements
+
+    def _withdraw(self, adapter_name: str, placements: list[_Placement]) -> None:
+        """Take an added adapter out: its encoder and config, its copies, the wrappers it put in the tree."""
+        self.peft_config.pop(adapter_name, None)
+        if adapter_name in self.prompt_encoder:
+            del self.prompt_encoder[adapter_name]
+        for _, slot in _adapter_slots(self.model):
+            slot.delete_adapter(adapter_name)
+        _unplace(self.model, placements)
 
     def _mark_only_adapters_as_trainable(self) -> None:
         trainable: set[int] = set()
@@ -231,15 +255,15 @@ class _PromptLearningTuner(_FileFormat, _AdapterHost):
         ValueError
             The name is taken, or the config is another method's.
         """
+        self._add_adapter(adapter_name, config)
+
+    @override
+    def _add_adapter(self, adapter_name: str, config: PeftConfig) -> _TakeBack:
         adapter_name = self._admit(adapter_name, config)
         assert isinstance(config, PromptLearningConfig)  # _admit checked the class
-        self._add(adapter_name, config)
+        placements = self._add(adapter_name, config)
         self.set_requires_grad(adapter_name, False)
-
-    def _require_known(self, adapter_names: Sequence[str]) -> None:
-        for name in adapter_names:
-            if name not in self.peft_config:
-                raise ValueError(f"Adapter {name} not found.")
+        return partial(self._withdraw, adapter_name, placements)
 
     @override
     def set_adapter(self, adapter_name: str | list[str], inference_mode: bool = False) -> None:

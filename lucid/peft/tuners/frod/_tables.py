@@ -63,9 +63,12 @@ class _Projections:
         return v, indices, size
 
     def drop(self, adapter: str) -> None:
-        """Take every entry of ``adapter`` out of every category."""
+        """Take every entry of ``adapter`` out of every category, and the categories that hold none after."""
         for name in NAMES:
-            for category in self._containers(name):
+            containers = self._containers(name)
+            for category in list(containers):
                 buffers = self._buffers(name, category)
                 if adapter in buffers:
                     del buffers[adapter]
+                if not buffers:
+                    del containers[category]

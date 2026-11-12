@@ -15,7 +15,7 @@ from lucid.peft._config import PeftConfig, PeftType
 from lucid.peft._peft_model import PeftModel
 from lucid.peft._refusals import refuse_build_options, refuse_kwargs, refuse_value
 from lucid.peft._slots import _as_names
-from lucid.peft.tuners._host import _AdapterHost
+from lucid.peft.tuners._host import _AdapterHost, _TakeBack
 from lucid.peft.tuners._layer import _adapter_dtype, _check_adapter_name, _tuner_layers
 from lucid.peft.tuners._files import _FileContext, _FileFormat
 from lucid.peft.tuners._prompt._geometry import _model_size
@@ -388,6 +388,10 @@ class XLoraModel(_FileFormat, _AdapterHost, peft_type=PeftType.XLORA):
     @override
     def add_adapter(self, adapter_name: str, config: PeftConfig) -> None:
         """Refused: an X-LoRA model holds one classifier; build another model to mix other experts."""
+        self._add_adapter(adapter_name, config)
+
+    @override
+    def _add_adapter(self, adapter_name: str, config: PeftConfig) -> _TakeBack:
         del adapter_name, config
         raise NotImplementedError(
             "an X-LoRA model holds one adapter; the experts it mixes are managed through "

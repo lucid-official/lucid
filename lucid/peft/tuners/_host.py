@@ -21,8 +21,8 @@ so what loops over the working tuners never meets it; building one raises
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
-from contextlib import AbstractContextManager, nullcontext
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from typing import ClassVar, override
 
 import lucid.nn as nn
@@ -37,6 +37,8 @@ from lucid.peft.tuners._layer import _check_adapter_name
 _TUNERS: dict[PeftType, type[_AdapterHost]] = {}
 #: ``PeftType`` → the stand-in of a method this library will not build adapters for.
 _REFUSED_TUNERS: dict[PeftType, type[_RefusedTuner]] = {}
+#: What takes an adapter just added back out, leaving the model as it was before the add.
+type _TakeBack = Callable[[], None]
 
 
 def _registered[T](registry: Mapping[PeftType, T], config: PeftConfig) -> T | None:
@@ -203,6 +205,44 @@ class _AdapterHost(_ForwardsAttributes, ABC):
     @abstractmethod
     def add_adapter(self, adapter_name: str, config: PeftConfig) -> None:
         """Add an adapter beside the ones held."""
+
+    def _require_known(self, adapter_names: Sequence[str]) -> None:
+        """Raise ``ValueError`` for the first name that is not one of the adapters held."""
+        for name in adapter_names:
+            if name not in self.peft_config:
+                raise ValueError(f"Adapter {name} not found.")
+
+    @abstractmethod
+    def _add_adapter(self, adapter_name: str, config: PeftConfig) -> _TakeBack:
+        """Add an adapter as ``add_adapter`` does; the call returned takes it back out.
+
+        Taking back is not ``delete_adapter``: that keeps what the adapter put in the model
+        beside its tensors (a layer another adapter may stand on), while a call that adds and then
+        fails must leave the model as it was.  A host puts whatever it adds into the call.
+        """
+
+    @contextmanager
+    def _adding(self, adapter_name: str, config: PeftConfig) -> Iterator[None]:
+        """Within the block the adapter is added; a block that raises takes it back out first.
+
+        For a flow that adds an adapter and then fills or checks it: what it raises leaves the
+        model as it was before the add.
+        """
+        take_back = self._add_adapter(adapter_name, config)
+        try:
+            yield
+        except BaseException:
+            take_back()
+            raise
+
+    def _undo_construction(self) -> None:
+        """Take back what constructing this host did to its model, after the constructor returned.
+
+        The constructor undoes itself when it raises; this is for a flow that builds a host and
+        then fails (filling it from a file).  The default unloads, which suits a host that refuses
+        a model already holding adapters; one that adopts them overrides, to keep what they were.
+        """
+        self.unload()
 
     @abstractmethod
     def set_adapter(self, adapter_name: str | list[str], inference_mode: bool = False) -> None:

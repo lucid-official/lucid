@@ -61,6 +61,13 @@ def _set_submodule(model: nn.Module, key: str, module: nn.Module) -> None:
     setattr(model.get_submodule(parent), child, module)
 
 
+def _unplace(model: nn.Module, placements: Iterable[_Placement]) -> None:
+    """Put back the module each placement of a slot that is still in the tree replaced."""
+    for placement in placements:
+        if model.get_submodule(placement.key) is placement.slot:
+            _set_submodule(model, placement.key, placement.original)
+
+
 class _Target(NamedTuple):
     key: str
     module: nn.Module
@@ -91,6 +98,8 @@ class _Injected(NamedTuple):
     placements: list[_Placement]
     #: The base parameters an initialisation rewrote in place, each with its value before.
     overwritten: list[tuple[Parameter, Tensor]]
+    #: How many module and parameter names the tuner had recorded as targeted before it.
+    targeted: tuple[int, int]
 
 
 def _values_of(modules: Iterable[nn.Module]) -> list[tuple[Parameter, Tensor]]:

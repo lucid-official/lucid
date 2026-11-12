@@ -86,6 +86,10 @@ class _AdaptedModel(_ForwardsAttributes, ABC):
     def unload(self) -> nn.Module:
         """Remove every adapter without merging and return the original model."""
 
+    @abstractmethod
+    def _host_config(self, peft_config: PeftConfig) -> PeftConfig:
+        """``peft_config`` as the host takes a new adapter: checked and fitted to the model."""
+
 
 class _DisabledAdapter(AbstractContextManager[None]):
     """What ``disable_adapter()`` returns: reentrant, the outermost exit re-enables.
@@ -270,8 +274,8 @@ def _build_filled[W: _AdaptedModel](
     try:
         set_peft_model_state_dict(wrapper, weights, adapter_name=adapter_name)
     except BaseException:
-        # Whatever stopped the load, ``model`` goes back to what it was.
-        wrapper.unload()
+        # Whatever stopped the load, ``model`` goes back to what it was, earlier adapters included.
+        wrapper.base_model._undo_construction()
         raise
     config._unstaged(wrapper.peft_config[adapter_name])
     return wrapper
@@ -293,9 +297,8 @@ def _load_adapter(
     """
     options.refuse(where)
     directory = _adapter_directory(model_id, options.subfolder)
-    added = adapter_name not in wrapper.peft_config
     config = None
-    if added:
+    if adapter_name not in wrapper.peft_config:
         config = dataclasses.replace(
             PeftConfig.from_pretrained(directory), inference_mode=not is_trainable
         )
@@ -310,16 +313,13 @@ def _load_adapter(
         weights = dict(converted.tensors)
         if config is not None:
             config = dataclasses.replace(converted.config, inference_mode=not is_trainable)
+    adding: AbstractContextManager[None] = nullcontext()
     if config is not None:
-        wrapper.add_adapter(adapter_name, config._staged())
-        if is_trainable:
+        adding = wrapper.base_model._adding(adapter_name, wrapper._host_config(config._staged()))
+    with adding:
+        if config is not None and is_trainable:
             wrapper.base_model.set_requires_grad(adapter_name)
-    try:
         loaded = set_peft_model_state_dict(wrapper, weights, adapter_name=adapter_name)
-    except BaseException:
-        if added:
-            wrapper.delete_adapter(adapter_name)
-        raise
     if config is not None:
         config._unstaged(wrapper.peft_config[adapter_name])
     if not is_trainable:
@@ -702,11 +702,14 @@ class PeftModel(_AdaptedModel):
             autocast_adapter_dtype=autocast_adapter_dtype,
             low_cpu_mem_usage=low_cpu_mem_usage,
         )
+        self.base_model.add_adapter(adapter_name, self._host_config(peft_config))
+
+    @override
+    def _host_config(self, peft_config: PeftConfig) -> PeftConfig:
         model = self.get_base_model()
-        config = self._prepared(
+        return self._prepared(
             model, _config_for_model(model, _require_config("peft_config", peft_config))
         )
-        self.base_model.add_adapter(adapter_name, config)
 
     def set_adapter(self, adapter_name: str, inference_mode: bool = False) -> None:
         """Make ``adapter_name`` the adapter in use.

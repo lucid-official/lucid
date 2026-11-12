@@ -341,10 +341,11 @@ class PeftMixedModel(_AdaptedModel):
             autocast_adapter_dtype=autocast_adapter_dtype,
             low_cpu_mem_usage=low_cpu_mem_usage,
         )
-        config = _config_for_model(
-            self.base_model.model, _require_config("peft_config", peft_config)
-        )
-        self.base_model.add_adapter(adapter_name, config)
+        self.base_model.add_adapter(adapter_name, self._host_config(peft_config))
+
+    @override
+    def _host_config(self, peft_config: PeftConfig) -> PeftConfig:
+        return _config_for_model(self.base_model.model, _require_config("peft_config", peft_config))
 
     def set_modules_to_save(self, peft_config: PeftConfig, adapter_name: str) -> None:
         """Check that the modules ``peft_config`` trains in full are held by ``adapter_name``.

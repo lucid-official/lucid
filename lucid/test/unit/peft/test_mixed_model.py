@@ -260,9 +260,6 @@ class TestWhatItRefuses:
         with lucid.no_grad():
             assert same(_call(wide, "cpu"), wanted)
 
-    @pytest.mark.xfail(
-        strict=True, reason="LCD-972: a failed load of a new adapter leaves the layers it added"
-    )
     def test_a_load_that_does_not_fit_leaves_the_tree_as_it_was(self, tmp_path: Path) -> None:
         _saved(_lora(), tmp_path, "cpu", seed=1)
         wide = nn.Sequential(nn.Linear(6, 8), nn.ReLU(), nn.Linear(8, 5))

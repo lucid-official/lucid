@@ -175,6 +175,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - read a fused qkv's norms beneath a stack of layers (LCD-966)
 
+- take back what a failed add put in the tree (LCD-972)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

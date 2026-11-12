@@ -15,17 +15,18 @@ import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractContextManager
+from functools import partial
 from types import get_original_bases
-from typing import ClassVar, Final, TypeIs, get_args, get_origin, override
+from typing import ClassVar, Final, NamedTuple, TypeIs, get_args, get_origin, override
 
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.peft._config import PeftConfig, PeftType, _TargetedConfig
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
-from lucid.peft._slots import _adapter_slots, _as_names, _outermost_slots
+from lucid.peft._slots import _adapter_slots, _AdapterSlot, _as_names, _outermost_slots
 from lucid.peft._target_defaults import DEFAULT_LORA_TARGET_MODULES, DEFAULT_LORA_TARGET_PARAMETERS
 from lucid.peft._targeting import _parameter_paths, _shared_outside
-from lucid.peft.tuners._host import _AdapterHost
+from lucid.peft.tuners._host import _AdapterHost, _TakeBack
 from lucid.peft.tuners._layer import _BaseTunerLayer, _check_adapter_name, _join, _tuner_layers
 from lucid.peft.tuners._plan import (
     _Injected,
@@ -38,6 +39,7 @@ from lucid.peft.tuners._plan import (
     _selected_modules,
     _set_submodule,
     _stored_config,
+    _unplace,
     _values_of,
 )
 
@@ -46,6 +48,20 @@ _FLAGS_KEY: Final = "_peft_requires_grad_before"
 #: ``PeftType`` → the tuner of a method whose layers can share a module with another method's
 #: (declared ``mixed=True``, each held to ``test_mixed_model_contract``): what ``MixedModel`` hosts.
 _MIXED_TUNERS: dict[PeftType, type[_BaseTuner]] = {}
+
+
+class _Construction(NamedTuple):
+    """What constructing a tuner changed in its model, so a flow that fails after it can undo it."""
+
+    adapter_name: str
+    injected: _Injected
+    #: Every parameter's ``requires_grad`` before the constructor, by name.
+    requires_grad: dict[str, bool]
+    #: The slots the model already held (an adopted model's), each with the adapters in use in it.
+    active: list[tuple[_AdapterSlot, list[str]]]
+    #: The attributes the constructor sets on the model (``peft_config`` and the flags), as they
+    #: were; one the model lacked is absent again.
+    attributes: dict[str, object]
 
 
 class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
@@ -166,7 +182,18 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
         self.targeted_module_names: list[str] = []
         self.targeted_parameter_names: list[str] = []
         self._requires_grad_before = flags
+        held = [(slot, slot._state().active) for _, slot in _adapter_slots(model)]
         injected = self._inject(adapter_name, peft_config)
+        # Kept without ``overwritten``: those are base weights an initialisation rewrote, which
+        # may be the whole model, and a flow that undoes a built tuner builds it with a staged
+        # config that rewrites none.
+        self._constructed = _Construction(
+            adapter_name,
+            injected._replace(overwritten=[]),
+            trainable_now,
+            held,
+            {k: v for k in ("peft_config", _FLAGS_KEY) if (v := model.__dict__.get(k)) is not None},
+        )
         try:
             if earlier is not None:
                 # The newest adapter is the one in use; a merged earlier one would hide it.
@@ -178,13 +205,30 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
             self._mark_only_adapters_as_trainable()
         except BaseException:
             # A constructor that raises leaves the model it was given as it found it.
-            self._rollback(adapter_name, injected)
-            for name, param in model.named_parameters(remove_duplicate=False):
-                param.requires_grad_(trainable_now[name])
-            if earlier is None:
-                model.__dict__.pop("peft_config", None)
-                model.__dict__.pop(_FLAGS_KEY, None)
+            self._undo_construction()
+            _put_back(injected.overwritten)
             raise
+
+    @override
+    def _undo_construction(self) -> None:
+        """Take out the adapter the constructor added and put back what it changed, and nothing more.
+
+        The adapters a model held before stay, in use as they were, and their ``requires_grad``
+        is as it was; the model's ``peft_config`` is the object it had, or none.  An earlier
+        adapter the constructor unmerged stays unmerged: the same function, not the same bits.
+        """
+        built = self._constructed
+        self._rollback(built.adapter_name, built.injected)
+        for slot, active in built.active:
+            slot._activate(active)
+        model = self.model
+        for name, param in model.named_parameters(remove_duplicate=False):
+            param.requires_grad_(built.requires_grad[name])
+        for name in ("peft_config", _FLAGS_KEY):
+            if name in built.attributes:
+                model.__dict__[name] = built.attributes[name]
+            else:
+                model.__dict__.pop(name, None)
 
     @property
     @override
@@ -389,7 +433,9 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
         except BaseException:
             _put_back(kept)
             raise
-        injected = _Injected(placements, kept)
+        injected = _Injected(
+            placements, kept, (len(self.targeted_module_names), len(self.targeted_parameter_names))
+        )
         self.peft_config[adapter_name] = stored
         try:
             self._attach_adapter(stored, adapter_name, targets, saved, placements)
@@ -457,18 +503,19 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
             _set_submodule(self.model, placement.key, placement.slot)
 
     def _rollback(self, adapter_name: str, injected: _Injected) -> None:
-        """Take ``injected`` back out: the adapter out of the tree, the base weights as they were."""
+        """Take ``injected`` back out: the adapter out of the tree, the base weights and the targeted names as they were."""
         self._withdraw(adapter_name, injected.placements)
         _put_back(injected.overwritten)
+        modules, parameters = injected.targeted
+        del self.targeted_module_names[modules:]
+        del self.targeted_parameter_names[parameters:]
 
     def _withdraw(self, adapter_name: str, placements: list[_Placement]) -> None:
         """Undo a failed ``_inject``: the adapter out of every slot, the new slots out of the tree."""
         model = self.model
         for _, slot in _adapter_slots(model):
             slot.delete_adapter(adapter_name)
-        for placement in placements:
-            if model.get_submodule(placement.key) is placement.slot:
-                _set_submodule(model, placement.key, placement.original)
+        _unplace(model, placements)
         self.peft_config.pop(adapter_name, None)
 
     @classmethod
@@ -524,10 +571,15 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
         TypeError
             ``config`` is not an adapter config.
         """
+        self._add_adapter(adapter_name, config)
+
+    @override
+    def _add_adapter(self, adapter_name: str, config: PeftConfig) -> _TakeBack:
         adapter_name = self._admit(adapter_name, config)
         assert self._accepts(config)  # _admit checked the class
-        self._inject(adapter_name, config)
+        injected = self._inject(adapter_name, config)
         self.set_requires_grad(adapter_name, False)
+        return partial(self._rollback, adapter_name, injected)
 
     # ── switching, freezing, deleting ─────────────────────────────────────
 
@@ -565,21 +617,12 @@ class _BaseTuner[C: _TargetedConfig = _TargetedConfig](_AdapterHost, ABC):
     def _add_combined_adapter(
         self, adapter_name: str, config: PeftConfig, fill: Callable[[], None]
     ) -> None:
-        """Add ``adapter_name``, then ``fill`` it from other adapters; withdrawn if ``fill`` fails.
+        """Add ``adapter_name``, then ``fill`` it from other adapters; taken back out if ``fill`` fails.
 
         A half-filled adapter must not stay behind under a name that looks complete.
         """
-        self.add_adapter(adapter_name, config)
-        try:
+        with self._adding(adapter_name, config):
             fill()
-        except BaseException:
-            self.delete_adapter(adapter_name)
-            raise
-
-    def _require_known(self, adapter_names: Sequence[str]) -> None:
-        for name in adapter_names:
-            if name not in self.peft_config:
-                raise ValueError(f"Adapter {name} not found.")
 
     @override
     def set_adapter(self, adapter_name: str | list[str], inference_mode: bool = False) -> None:
