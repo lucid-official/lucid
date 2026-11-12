@@ -238,7 +238,7 @@ _LAYER_CONFIGS: dict[type[_BaseTunerLayer], Callable[[], PeftConfig]] = {
 
 #: The base a layer family is built on where ``_BASES``'s does not fit it: RoAd pairs output features, so needs an even width.
 _LAYER_BASES: dict[type[_BaseTunerLayer], Callable[[], nn.Module]] = {
-    RoadLayer: lambda: nn.Linear(4, 4),
+    RoadLayer: lambda: nn.Linear(4, 4)
 }
 
 
@@ -277,7 +277,9 @@ def _layer_builder(base: type[nn.Module], layer: type[_BaseTunerLayer]) -> Calla
         (m for root, m in _LAYER_CONFIGS.items() if issubclass(layer, root)), _example_config(layer)
     )
     wants_config = "config" in parameters and make_config is not None
-    make_base = next((m for root, m in _LAYER_BASES.items() if issubclass(layer, root)), _BASES[base])
+    make_base = next(
+        (m for root, m in _LAYER_BASES.items() if issubclass(layer, root)), _BASES[base]
+    )
 
     def build() -> Any:
         positional = [make_config()] if wants_config and make_config is not None else []
