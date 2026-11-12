@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 
 /**
  * Runtime smoke: load representative pages and assert they hydrate without
@@ -379,6 +379,22 @@ test.describe("display math at a phone width", () => {
   });
 });
 
+// The copy-link icon (``AnchorLink``) is visually hidden until the element that
+// hosts it (``group/anchor``) is hovered or the icon itself takes keyboard focus.
+// At rest it is ``sr-only`` — out of flow, 1 px, clipped — not ``display: none``:
+// that took it out of the tab order, so no keyboard user could reach any copy-link
+// icon (LCD-980).  Playwright counts the 1 px box as visible, so "is it showing"
+// is measured: the revealed icon is its 20 px box.
+const COPY_LINK = 'button[aria-label="Copy link to section"]';
+async function isRevealed(icon: Locator): Promise<boolean> {
+  const box = await icon.boundingBox();
+  return box !== null && box.width >= 16 && box.height >= 16;
+}
+/** Poll, so a hover or focus the browser has not yet applied does not flake. */
+async function expectRevealed(icon: Locator, revealed: boolean, why: string): Promise<void> {
+  await expect.poll(() => isRevealed(icon), why).toBe(revealed);
+}
+
 // The copy-link icon of a titled sub-package section (the "LoRA family" heading
 // of /api/lucid.peft.tuners) is hidden until the heading is hovered.  It never
 // showed: the icon reveals on ``group-hover`` and no ancestor of the heading was
@@ -393,21 +409,157 @@ test("a sub-package section heading shows its copy-link icon on hover", async ({
   ]) {
     const heading = page.locator(`h2#${id}`);
     await expect(heading, title).toHaveText(title);
-    const icon = heading.locator('button[aria-label="Copy link to section"]');
+    const icon = heading.locator(COPY_LINK);
     await page.mouse.move(0, 0);
-    await expect(icon, `${title}: hidden at rest`).toBeHidden();
+    await expectRevealed(icon, false, `${title}: hidden at rest`);
     await heading.hover();
-    await expect(icon, `${title}: shown while the heading is hovered`).toBeVisible();
+    await expectRevealed(icon, true, `${title}: shown while the heading is hovered`);
     await heading.locator("xpath=..").locator("a").first().hover();
-    await expect(icon, `${title}: hidden again while a card is hovered`).toBeHidden();
+    await expectRevealed(icon, false, `${title}: hidden again while a card is hovered`);
   }
 
   // Using it deep-links the section.
   const heading = page.locator("h2#section-lora-family");
   await heading.hover();
-  await heading.locator('button[aria-label="Copy link to section"]').click();
+  await heading.locator(COPY_LINK).click();
   await expect(page).toHaveURL(/#section-lora-family$/);
 });
+
+// Pressing Tab from the top of a page reaches a heading's copy-link icon, and it
+// is showing while it has focus — and gone again once focus moves on.  A class
+// page has the three kinds of host: a method group's header row, a method's card,
+// and (on a package page) a section heading.
+for (const path of ["/api/lucid.nn/Module", "/api/lucid.peft.tuners"]) {
+  test(`Tab reaches a copy-link icon on ${path}, and it shows while focused`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await visit(page, path);
+    await page.mouse.move(0, 0);
+    const icons = page.locator(COPY_LINK);
+    expect(await icons.count(), "the page has copy-link icons").toBeGreaterThan(0);
+    // Every icon that is on the page (not inside a collapsed group) is in the
+    // accessibility tree at rest, name intact.
+    const rendered = await icons.evaluateAll((els) => els.filter((el) => el.checkVisibility()).length);
+    expect(rendered, "icons on the page, not in a collapsed group").toBeGreaterThan(0);
+    await expect(page.getByRole("button", { name: "Copy link to section" })).toHaveCount(rendered);
+    await page.locator("body").click({ position: { x: 5, y: 5 } });
+    let focused = -1;
+    for (let presses = 0; presses < 600 && focused < 0; presses++) {
+      await page.keyboard.press("Tab");
+      focused = await icons.evaluateAll((els) => els.findIndex((el) => el === document.activeElement));
+    }
+    expect(focused, "Tab reached no copy-link icon in 600 presses").toBeGreaterThanOrEqual(0);
+    const icon = icons.nth(focused);
+    await expectRevealed(icon, true, "shown while it has keyboard focus");
+    // The next stop is something else, and the icon goes back to rest.
+    await page.keyboard.press("Tab");
+    await expect(icon).not.toBeFocused();
+    await expectRevealed(icon, false, "hidden once focus has moved on");
+  });
+}
+
+// Hovering one method reveals its own icon only.  ``MemberSection`` and
+// ``CollapsibleSection`` once carried a bare ``group`` on the whole section, and
+// a bare ``group`` matches every ancestor that has it: hovering any method of a
+// class page revealed the icon of its group's header and of every sibling method
+// at once (LCD-980).
+test("hovering one method reveals only its own copy-link icon", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await visit(page, "/api/lucid.nn/Module");
+  // The first method group with at least two expanded method cards.
+  const groups = page.locator("article section");
+  let group: Locator | null = null;
+  for (let i = 0; i < (await groups.count()); i++) {
+    const candidate = groups.nth(i);
+    const cards = candidate.locator("article");
+    if ((await cards.count()) >= 2 && (await cards.first().isVisible())) {
+      group = candidate;
+      break;
+    }
+  }
+  expect(group, "no method group with two expanded methods").not.toBeNull();
+  const cards = group!.locator("article");
+  const header = group!.locator("h2").first();
+  const everyIcon = page.locator(COPY_LINK);
+  const revealedNow = async () =>
+    (await everyIcon.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().width >= 16))).filter(
+      Boolean,
+    ).length;
+
+  await page.mouse.move(0, 0);
+  await expect.poll(revealedNow, "no icon at rest").toBe(0);
+  for (let i = 0; i < (await cards.count()); i++) {
+    const card = cards.nth(i);
+    await card.scrollIntoViewIfNeeded();
+    await card.hover();
+    await expectRevealed(card.locator(COPY_LINK), true, `method ${i}: its own icon shows`);
+    await expect.poll(revealedNow, `method ${i}: no other icon shows`).toBe(1);
+  }
+  // The group's header row shows its own icon, and no method's.
+  await header.scrollIntoViewIfNeeded();
+  await header.hover();
+  await expectRevealed(header.locator("xpath=..").locator(COPY_LINK), true, "the header shows its icon");
+  await expect.poll(revealedNow, "only the header's icon shows").toBe(1);
+});
+
+// A package page's "Classes" section: its heading shows the icon, hovering the
+// cards below does not.
+test("hovering a card does not reveal the heading's copy-link icon of its section", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await visit(page, "/api/lucid.nn");
+  const heading = page.locator("section > h2[id^='section-']").first();
+  const icon = heading.locator(COPY_LINK);
+  await page.mouse.move(0, 0);
+  await expectRevealed(icon, false, "hidden at rest");
+  await heading.hover();
+  await expectRevealed(icon, true, "shown while the heading is hovered");
+  await heading.locator("xpath=..").locator("a").first().hover();
+  await expectRevealed(icon, false, "hidden again while a card is hovered");
+});
+
+// Making the icon focusable must not move anything at rest.  The old recipe was
+// ``display: none``; the new one (``sr-only``) is out of flow too, so a heading's
+// row lays out exactly as when the icon is absent.  The expected layout is
+// measured here: the same rows with the icon forced to ``display: none``.
+for (const path of ["/api/lucid.nn/Module", "/api/lucid.peft.tuners"]) {
+  test(`the copy-link icon takes no room in a heading's row at rest on ${path}`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await visit(page, path);
+    await page.mouse.move(0, 0);
+    // Every row that holds an icon, with its children's boxes (the icon excluded).
+    const rows = () =>
+      page.evaluate((sel) => {
+        const round = (n: number) => Math.round(n * 100) / 100;
+        return [...document.querySelectorAll(sel)].map((icon) => {
+          const row = icon.parentElement!;
+          const rect = (el: Element) => {
+            const r = el.getBoundingClientRect();
+            return [round(r.x), round(r.y + window.scrollY), round(r.width), round(r.height)];
+          };
+          // Text sits straight in a heading (``<h2>LoRA family<button>``): measure each
+          // text node as a range, which leaves the icon's own box out of it.
+          const text = [...row.childNodes]
+            .filter((n) => n.nodeType === Node.TEXT_NODE && n.textContent?.trim())
+            .map((n) => {
+              const range = document.createRange();
+              range.selectNodeContents(n);
+              const r = range.getBoundingClientRect();
+              return [round(r.x), round(r.y + window.scrollY), round(r.width), round(r.height)];
+            });
+          return {
+            row: rect(row),
+            children: [...row.children].filter((c) => c !== icon).map(rect),
+            text,
+          };
+        });
+      }, COPY_LINK);
+    const atRest = await rows();
+    expect(atRest.length, "rows that hold a copy-link icon").toBeGreaterThan(0);
+    await page.addStyleTag({ content: `${COPY_LINK} { display: none !important; }` });
+    expect(await rows(), "the rows lay out as if the icon were absent").toEqual(atRest);
+  });
+}
 
 // The /api index counts ``lucid.peft``'s methods.  The package names one more
 // than builds an adapter (ShadowPEFT is documented but refused) and the guides

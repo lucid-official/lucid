@@ -261,6 +261,51 @@ const PAGE_CONTRACTS = [
     },
   },
   {
+    // A copy-link icon (``AnchorLink``) shows on the hover of the element that
+    // hosts it — an element with ``group/anchor`` — and takes keyboard focus on
+    // its own.  Three ways it went wrong (LCD-978, LCD-980):
+    //   - it listened to a bare ``group``/``group-hover``, which matches *every*
+    //     ancestor that has one: a section-wide ``group`` revealed the icon of
+    //     each method card in the section at once;
+    //   - it hid with ``display: none`` (``hidden``), so no keyboard user could
+    //     reach it;
+    //   - it had no host at all, so it never showed.
+    // So: each icon has exactly one ``group/anchor`` ancestor, that host holds no
+    // other icon, and the icon is ``sr-only`` at rest, revealed on host hover and
+    // on its own ``focus-visible``.
+    id: "anchor.copy-link-host", component: "Anchors", kind: "page",
+    check(ctx) {
+      const out = [];
+      const where = (el) => {
+        const heading = el.parentNode?.querySelector?.("h2, h3");
+        return `copy-link icon beside "${(heading?.text ?? "?").trim().slice(0, 40)}"`;
+      };
+      const isHost = (el) => classSet(el).has("group/anchor");
+      for (const icon of ctx.dom.querySelectorAll('button[aria-label="Copy link to section"]')) {
+        const cs = classSet(icon);
+        const missing = ["sr-only", "group-hover/anchor:not-sr-only", "focus-visible:not-sr-only"].filter((c) => !cs.has(c));
+        const bare = [...cs].filter((c) => /^group-(hover|focus|focus-within|focus-visible):/.test(c));
+        const hidden = cs.has("hidden") ? ["hidden"] : [];
+        if (missing.length || bare.length || hidden.length)
+          out.push({
+            scope: ctx.scope,
+            detail: `${where(icon)}: ${[missing.length && "missing " + missing.join(" "), bare.length && "bare group variant " + bare.join(" "), hidden.length && "display:none (hidden) is unreachable by keyboard"].filter(Boolean).join("; ")}`,
+          });
+        let hosts = 0;
+        for (let n = icon.parentNode; n; n = n.parentNode) if (n.getAttribute && isHost(n)) hosts++;
+        if (hosts !== 1)
+          out.push({ scope: ctx.scope, detail: `${where(icon)} has ${hosts} group/anchor ancestors; it needs exactly one` });
+      }
+      for (const host of ctx.dom.querySelectorAll('[class*="group/anchor"]')) {
+        if (!isHost(host)) continue;
+        const n = host.querySelectorAll('button[aria-label="Copy link to section"]').length;
+        if (n > 1)
+          out.push({ scope: ctx.scope, detail: `a group/anchor host holds ${n} copy-link icons; hovering it would reveal them all` });
+      }
+      return out;
+    },
+  },
+  {
     // The ``lucid.peft`` cards on /api count the package's methods.  The package
     // names one more than it builds an adapter for (ShadowPEFT is documented
     // but refused), and the tutorial and migration guide say how many build —
