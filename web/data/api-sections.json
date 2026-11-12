@@ -17,6 +17,18 @@
         }
       },
       {
+        "id": "mixed-adapters",
+        "title": "Mixed adapters",
+        "summary": "`PeftMixedModel`, which `get_peft_model(model, config, mixed=True)` returns, holds the adapters of several methods on one model; it is not a `PeftModel`. The methods are the keys of `PEFT_TYPE_TO_MIXED_MODEL_MAPPING` (under Attributes): LoRA, LoHa, LoKr, AdaLoRA, SHiRA, OFT, IA3, BEFT, RoAd and HiRA. That is the set this library verifies; the reference's own table lists nine, without OFT, and its constructor refuses four of them. A method has one layer on each module it adapts, and the layers stand on one another in the order the methods were added, lowest first; a second adapter of a method goes into that method's layer. HiRA reads the weight beneath it, so it can only be the lowest layer, and AdaLoRA takes part for inference only (its rank allocator and orthogonality loss are not run). A mixed model loads the plain single-method adapter files a `PeftModel` writes, also after another method is stacked on the module, and it does not save: `save_pretrained` raises `NotImplementedError`, as the reference's does. `merge_and_unload` folds each module's layers lowest first and drops the adapters it does not fold in, and a merge that would fold an update under a layer that transforms it is refused before any weight is written.",
+        "members": {
+          "subcategories": [
+            "mixed_model"
+          ],
+          "kind": "class",
+          "flat": true
+        }
+      },
+      {
         "id": "lora-family",
         "title": "LoRA family",
         "summary": "A low-rank update learned beside each frozen weight, the variant that moves rank between layers while it trains, and the methods that bound it (DeLoRA), grid it (GraLoRA), correct the bias too (GLoRA), modulate the weight with it (HiRA), project a subspace out (DEFT), generate it from the weight (PEANuT) or cluster the SVD into subspaces (AdaMSS).",
