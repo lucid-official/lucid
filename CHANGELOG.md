@@ -179,6 +179,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - draw an overview page's own members (LCD-973)
 
+- one Attributes heading, long names wrap (LCD-973)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

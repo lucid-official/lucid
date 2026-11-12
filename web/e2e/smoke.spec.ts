@@ -142,6 +142,40 @@ test.describe("lucid.peft reference", () => {
     await expect(page.locator('#main-content a[href$="/lucid.peft.tuners/MixedModel"]')).toHaveCount(1);
   });
 
+  // A module page puts its constants under one "Attributes" section title; the
+  // table beneath it used to repeat the word.  And a name wider than the name
+  // column (``TRANSFORMERS_MODELS_TO_PREFIX_TUNING_POSTPROCESS_MAPPING``) was
+  // drawn over its own description at 1440 px and clipped at 390 px.
+  test("the attributes table sits under one heading", async ({ page }) => {
+    await page.goto("/api/lucid.peft", { waitUntil: "networkidle" });
+    await expect(
+      page.locator("section#section-attributes").getByText("Attributes", { exact: true }),
+    ).toHaveCount(1);
+  });
+
+  for (const width of [1440, 390]) {
+    test(`no attribute name spills out of its column at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/api/lucid.peft", { waitUntil: "networkidle" });
+      const section = page.locator("section#section-attributes");
+
+      const spills = await section.evaluate((el) =>
+        [...el.querySelectorAll(".divide-y > div")].flatMap((row) => {
+          const code = row.querySelector("code");
+          const column = code?.parentElement;
+          if (!code || !column) return [];
+          // The text's own extent: an inline box reports its column's width.
+          const range = document.createRange();
+          range.selectNodeContents(code);
+          const text = range.getBoundingClientRect();
+          const col = column.getBoundingClientRect();
+          return text.right > col.right + 0.5 ? [`${code.textContent}: ${text.right} > ${col.right}`] : [];
+        }),
+      );
+      expect(spills, spills.join("\n")).toEqual([]);
+    });
+  }
+
   test("a reST literal block renders as code, not as a paragraph", async ({ page }) => {
     await page.goto("/api/lucid.peft", { waitUntil: "networkidle" });
     const code = page.locator("#main-content pre", { hasText: "get_peft_model(base_model, config)" });

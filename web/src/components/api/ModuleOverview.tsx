@@ -221,7 +221,7 @@ export async function ModuleOverview({ data }: ModuleOverviewProps) {
           table via ClassDoc. */}
       {!groupedSections && data.attributes.length > 0 && (
         <MemberSection title="Attributes" slug={data.slug} accent="blue">
-          <AttributeTable attributes={data.attributes} />
+          <AttributeTable attributes={data.attributes} heading={false} />
         </MemberSection>
       )}
       {groupedSections && groupedSections.map((sec) => (
@@ -235,7 +235,7 @@ export async function ModuleOverview({ data }: ModuleOverviewProps) {
       ))}
       {groupedSections && data.attributes.length > 0 && (
         <MemberSection title="Attributes" slug={data.slug} accent="blue">
-          <AttributeTable attributes={data.attributes} />
+          <AttributeTable attributes={data.attributes} heading={false} />
         </MemberSection>
       )}
       {!ownSections && classes.length > 0 && (
