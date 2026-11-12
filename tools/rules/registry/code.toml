@@ -55,6 +55,12 @@ kind = "pytest"
 nodes = ["lucid/test/unit/test_tolerance_guard.py::test_the_guard_is_installed_in_this_run"]
 trigger = ["lucid/test/**"]
 
+# web/scripts is Python the ratchet never scans (it counts lucid/).  The tool runs the repo's
+# own ruff under [tool.ruff] on the paths it is given, and on all of web/scripts when none are.
+[check.web-scripts-lint]
+run = ["{py}", "tools/check_web_scripts_lint.py", "{changed}"]
+trigger = ["web/scripts/**/*.py"]
+
 # web/scripts/{build-api-data,build-cpp-data,build-usedby}.py hold the import: outside this scope.
 [[rule]]
 id = "H1"
@@ -246,3 +252,37 @@ nodes = [
     "lucid/test/unit/test_tolerance_guard.py::test_allclose_legitimate_forms_are_left_alone",
     "lucid/test/unit/test_tolerance_guard.py::test_expects_noise_declares_a_comparison_of_roundoff",
 ]
+
+# The Docs workflow lints web/scripts with ruff (LCD-970), so a CI level would only repeat that
+# step; the commit and push levels are what bring a finding forward to its author.
+[[rule]]
+id = "D-SCRIPTS-LINT"
+statement = "Python under web/scripts passes ruff under the project's [tool.ruff] config."
+why = "The ratchet counts lucid/ only, so the docs builder held a dozen lint errors until a push reached CI."
+scope = ["web/scripts/**/*.py"]
+doc = "web"
+enforce = [
+    { level = "commit", check = "web-scripts-lint" },
+    { level = "push", check = "web-scripts-lint" },
+]
+
+# F821 on an undefined `ast` is what the builder had.  The tool imports the gate's ruff resolver,
+# so tools/quality_gate comes along, and pyproject.toml is the config the next seed shows is read.
+[[rule.control]]
+kind = "seed"
+check = ["web-scripts-lint"]
+tree = ["tools/quality_gate", "pyproject.toml"]
+path = "web/scripts/_seed.py"
+clean = "import ast\n\nprint(ast.dump)\n"
+text = "print(ast.dump)\n"
+expect = 'F821'
+
+# W is not in ruff's default select: trailing whitespace is red only if the project config is read.
+[[rule.control]]
+kind = "seed"
+check = ["web-scripts-lint"]
+tree = ["tools/quality_gate", "pyproject.toml"]
+path = "web/scripts/_seed.py"
+clean = "x = 1\n"
+text = "x = 1 \n"
+expect = 'W291'

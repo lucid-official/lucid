@@ -2500,6 +2500,7 @@ def real_copy(tmp_path_factory: pytest.TempPathFactory) -> Path:
     root = tmp_path_factory.mktemp("real").resolve()
     _clone(root, "tools", ".githooks", "scripts", ".github", "pyproject.toml", "lucid")
     _clone(root, ".gitignore", "setup.py")  # E-VERIFY-CPP's key and trigger read setup.py
+    _clone(root, "web/scripts")  # D-SCRIPTS-LINT's scope: a glob that matches nothing is a finding
     finder = REPO / ".venv/lib/python3.14/site-packages/_lucid_worktree_finder.py"
     if finder.exists():  # a worktree's light venv pins lucid and tools to the worktree
         _clone(root, ".venv")
@@ -2522,7 +2523,8 @@ def _audit_copy(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
 _SRC = "tools/check_source_rules.py"
 _NUM = "tools/check_numpy_h4.py"
 _CPP = "tools/check_cpp_layers.py"
-_TSR = "lucid/test/unit/test_source_rules.py"
+_WEB = "tools/check_web_scripts_lint.py"
+_TSR ="lucid/test/unit/test_source_rules.py"
 _TCC = "lucid/test/unit/test_check_cpp_layers.py"
 _QG = "tools/quality_gate/__main__.py"
 _CODE = "tools/rules/registry/code.toml"
@@ -2796,7 +2798,7 @@ def test_each_real_seed_goes_red_and_a_tool_gone_green_would_show(tmp_path: Path
     proofs = SeedControl.prove_all(ws, seeds)
     assert [p.detail for p in proofs if p.outcome is not Exit.PASS] == []
     by_tool = {check.tool: (control, check) for control, check in seeds}
-    assert set(by_tool) == {_SRC, _NUM, _CPP}, "a new seed needs a case here"
+    assert set(by_tool) == {_SRC, _NUM, _CPP, _WEB}, "a new seed needs a case here"
     for number, (control, check) in enumerate(by_tool.values()):
         assert isinstance(control, SeedControl)
         root = (tmp_path / str(number)).resolve()
@@ -2812,7 +2814,7 @@ def test_each_real_seed_goes_red_and_a_tool_gone_green_would_show(tmp_path: Path
 def test_the_real_records_say_what_the_inventory_says() -> None:
     rules = _real().rules
     verdicts = {name: rule.verdict for name, rule in rules.items()}
-    enforced = dict.fromkeys(("H1", "H5", "H7", "H13", "S22"), Verdict.ENFORCED)
+    enforced = dict.fromkeys(("H1", "H5", "H7", "H13", "S22", "D-SCRIPTS-LINT"), Verdict.ENFORCED)
     partly = dict.fromkeys(
         ("H4", "E-ABI-BUMP", "E-VERIFY-CPP", "E-GRAD-MASK", "T-TOLERANCE-FLOOR"), Verdict.PARTLY
     )
