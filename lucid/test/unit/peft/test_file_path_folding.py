@@ -129,10 +129,7 @@ class TestTheKeysOfAnAdapterInAStack:
         stacked = _net()
         stacked[0] = _loha(_lora(stacked[0], "a"), "b")
         keys = self._keys(stacked, LoraConfig(target_modules=_TARGETS), "a")
-        assert set(keys) == {
-            "0.base_layer.lora_A.a.weight",
-            "0.base_layer.lora_B.a.weight",
-        }
+        assert set(keys) == {"0.base_layer.lora_A.a.weight", "0.base_layer.lora_B.a.weight"}
         assert set(keys.values()) == {"0.lora_A.weight", "0.lora_B.weight"}
 
     @pytest.mark.parametrize("name", ["a", "b"])

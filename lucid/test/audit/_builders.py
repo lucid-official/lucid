@@ -80,7 +80,7 @@ from lucid.peft import (
     XLoraModel,
 )
 from lucid.peft._modules_to_save import ModulesToSaveWrapper
-from lucid.peft.tuners import lora
+from lucid.peft.tuners import MixedModel, lora
 from lucid.peft.tuners._base import _TUNERS, _BaseTuner, _BaseTunerLayer
 from lucid.peft.tuners.adalora import AdaLoraConfig, AdaLoraLayer, AdaLoraModel
 from lucid.peft.tuners.adamss import AdamssLayer, AdamssModel
@@ -414,6 +414,11 @@ BUILDERS.update(
         for peft_type, tuner in _TUNERS.items()
         if issubclass(tuner, _BaseTuner) and peft_type in _EXAMPLE_CONFIGS
     }
+)
+
+# The host of several methods' adapters is no method's tuner: it is built with the first of them.
+BUILDERS[MixedModel] = lambda: MixedModel(
+    _base_model(), LoraConfig(r=2, target_modules=["0", "2"]), "default"
 )
 
 # Every task wrapper ``get_peft_model`` can return takes the same
