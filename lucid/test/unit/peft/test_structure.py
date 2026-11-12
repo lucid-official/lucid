@@ -76,7 +76,7 @@ class TestRegistries:
         assert type(config) is LoraConfig and config.r == 2
         assert type(PeftConfig.from_dict({"target_modules": ["q"]})) is LoraConfig
         assert type(PeftConfig.from_dict({"peft_type": "IA3"})) is IA3Config
-        with pytest.raises(NotImplementedError, match="FUTURE_METHOD"):
+        with pytest.raises(KeyError, match="FUTURE_METHOD"):
             PeftConfig.from_dict({"peft_type": "FUTURE_METHOD"})
 
     def test_peft_model_reads_the_method_a_file_names(self, tmp_path: Path) -> None:

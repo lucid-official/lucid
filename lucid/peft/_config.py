@@ -410,10 +410,10 @@ class PeftConfig:
     r"""What every adapter config holds, and the ``adapter_config.json`` round trip.
 
     The base of each method's config (``LoraConfig``), with the fields
-    the reference's ``PeftConfig`` has, in its order.  Called on ``PeftConfig`` itself,
-    ``from_pretrained`` / ``from_dict`` read the method the file names and
-    return that method's config — the reference's idiom for learning which
-    base model an adapter needs before loading either.  It is not built
+    the reference's ``PeftConfig`` has, in its order.  ``from_pretrained`` / ``from_dict``
+    read the method the file names and return that method's config, whichever config class
+    they are called on; ``PeftConfig.from_pretrained`` is the reference's idiom for learning
+    which base model an adapter needs before loading either.  It is not built
     directly: a config of no method adapts nothing.
 
     Parameters
@@ -534,16 +534,15 @@ class PeftConfig:
         return cls()
 
     @classmethod
-    def _class_for(cls, peft_type: object) -> type[Self]:
-        """The registered config class, ``cls`` or below it, that reads ``peft_type``."""
-        wanted = (cls._peft_type or _DEFAULT_PEFT_TYPE) if peft_type is None else peft_type
-        for klass in _CONFIG_CLASSES.values():
-            if klass._peft_type == wanted and issubclass(klass, cls):
-                return klass
-        raise NotImplementedError(
-            f"this is a {wanted} adapter; {cls.__name__} reads "
-            f"{', '.join(str(k._peft_type) for k in _CONFIG_CLASSES.values() if issubclass(k, cls))}"
-        )
+    def _class_for(cls, peft_type: object) -> type[PeftConfig]:
+        """The config class a file naming ``peft_type`` is read as: the registry's, whichever class is called on.
+
+        A file that names none is read as ``cls`` (as LoRA, on the base, which is of no method).
+        A method this library lacks is :func:`_config_class_named`'s ``KeyError``.
+        """
+        if peft_type is not None:
+            return _config_class_named(peft_type)
+        return cls if cls._peft_type is not None else _config_class_named(_DEFAULT_PEFT_TYPE)
 
     def to_dict(self) -> dict[str, object]:
         r"""Return the config as the JSON-ready dict ``adapter_config.json`` holds.
@@ -595,7 +594,7 @@ class PeftConfig:
             setattr(stored, name, getattr(self, name))
 
     @classmethod
-    def from_dict(cls, config_dict: Mapping[str, object]) -> Self:
+    def from_dict(cls, config_dict: Mapping[str, object]) -> PeftConfig:
         r"""Build a config from a dict such as a parsed ``adapter_config.json``.
 
         The constructor cannot do this: a file from the reference carries
@@ -604,8 +603,12 @@ class PeftConfig:
         (``"loftq_config": {}``, ``"megatron_config": null``) — and dropped (with
         a warning if v1 does not know the key); at any other value it
         raises, as it would change what the adapter computes.  The
-        ``peft_version`` provenance key is dropped.  Called on
-        ``PeftConfig``, the dict's ``peft_type`` picks the class.
+        ``peft_version`` provenance key is kept as the field it is.
+
+        The dict's ``peft_type`` picks the class, whichever class this is called
+        on, as the reference's ``from_peft_type`` does: ``LoraConfig.from_dict`` of
+        an OFT dict is an ``OFTConfig``.  A dict that names no method is read as
+        the calling class (as LoRA on ``PeftConfig``).
 
         Parameters
         ----------
@@ -619,9 +622,10 @@ class PeftConfig:
 
         Raises
         ------
+        KeyError
+            ``peft_type`` names no method of this library.
         NotImplementedError
-            The dict describes another adapter type, or turns on a feature
-            v1 lacks.
+            The dict turns on a feature v1 lacks.
 
         Examples
         --------
@@ -631,6 +635,8 @@ class PeftConfig:
         ...      "use_dora": False, "loftq_config": {}, "peft_version": "0.17.0"})
         >>> config.r, config.target_modules
         (4, {'c_attn'})
+        >>> type(LoraConfig.from_dict({"peft_type": "OFT", "target_modules": ["q"]})).__name__
+        'OFTConfig'
         """
         target = cls._class_for(config_dict.get("peft_type"))
         names = {f.name for f in dataclasses.fields(target)}
@@ -764,13 +770,17 @@ class PeftConfig:
         pretrained_model_name_or_path: str | os.PathLike[str],
         subfolder: str | None = None,
         **kwargs: object,
-    ) -> Self:
+    ) -> PeftConfig:
         r"""Read ``adapter_config.json`` from a local adapter directory.
 
-        The file's ``peft_type`` picks the config class: called on
-        ``PeftConfig`` this returns a ``LoraConfig`` for a LoRA adapter,
-        and called on a method's own class it refuses the file of another
-        method.
+        The file's ``peft_type`` picks the config class, whichever class this is called
+        on (``PeftConfig.from_pretrained`` of a LoRA adapter is a ``LoraConfig``, and
+        ``LoraConfig.from_pretrained`` of an OFT adapter an ``OFTConfig``), as the
+        reference's does.  The file's keys go through that class's :meth:`check_kwargs`
+        first, before any is dropped for being unknown, and then through :meth:`from_dict`.
+        The reference calls the ``check_kwargs`` of the class this is called on, which is
+        the file's class on the paths that load a model; here it is the file's class on
+        every path, so an OFT file is checked when read through ``PeftConfig`` too.
 
         Parameters
         ----------
@@ -790,16 +800,26 @@ class PeftConfig:
         Returns
         -------
         PeftConfig
-            The config, read through ``from_dict``.
+            The config, read through ``from_dict``, of the class the file's ``peft_type`` names.
 
         Raises
         ------
         FileNotFoundError
             The directory has no ``adapter_config.json``.
         ValueError
-            The file does not hold a JSON object.
+            The file does not hold a JSON object, or its class's :meth:`check_kwargs` refuses it
+            (an OFT file of the reference's before 0.14.0).
+        KeyError
+            The file's ``peft_type`` names no method of this library.
         NotImplementedError
-            ``kwargs`` is not empty.
+            ``kwargs`` is not empty, or the file turns on a feature this library lacks.
+
+        Warns
+        -----
+        UserWarning
+            The file's class's :meth:`check_kwargs` warns (an OFT file of the reference's before
+            0.18.0 that records its ``peft_version``), or the file has a key this library has no
+            field for.
 
         Examples
         --------
@@ -821,7 +841,9 @@ class PeftConfig:
                 f"no {_CONFIG_NAME} in {directory!r} "
                 "(lucid.peft reads adapters from a local directory)"
             )
-        return cls.from_dict(cls.from_json_file(path))
+        stored = cls.from_json_file(path)
+        target = cls._class_for(stored.get("peft_type"))
+        return target.from_dict(target.check_kwargs(**stored))
 
     @classmethod
     def from_peft_type(cls, **kwargs: object) -> PeftConfig:
@@ -875,10 +897,11 @@ class PeftConfig:
     def check_kwargs(cls, **kwargs: object) -> dict[str, object]:
         r"""Check the fields about to build a config; the reference's hook for a class to refuse a file it cannot read.
 
-        The reference calls it on the keys of an adapter file before building the config.
+        :meth:`from_pretrained` calls it on the keys of an adapter file, on the class the file
+        names and before any key is dropped for being unknown, as the reference does.
         A config class overrides it to refuse or warn about a file written for an older
         release of its method (:meth:`OFTConfig.check_kwargs`); the base accepts everything.
-        ``from_pretrained`` here does not call it.
+        :meth:`from_dict` and :meth:`from_peft_type` do not call it.
 
         Parameters
         ----------

@@ -12,7 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from lucid.peft import LoraConfig, PeftConfig, PeftType, TaskType
+from lucid.peft import IA3Config, LoraConfig, PeftConfig, PeftType, TaskType
+from lucid.peft._config import _CONFIG_CLASSES
 
 #: What the reference writes for ``LoraConfig(r=8, lora_alpha=16,
 #: lora_dropout=0.05, target_modules=["c_attn"], task_type="CAUSAL_LM")``
@@ -232,10 +233,14 @@ class TestDict:
         with pytest.raises(NotImplementedError, match=key):
             LoraConfig.from_dict({**GOLDEN_CONFIG, key: value})
 
-    @pytest.mark.parametrize("peft_type", ["IA3", "SOME_NEWER_METHOD"])
-    def test_another_adapter_type_is_refused(self, peft_type: str) -> None:
-        with pytest.raises(NotImplementedError, match=peft_type):
-            LoraConfig.from_dict({"peft_type": peft_type, "target_modules": ["k"]})
+    def test_another_adapter_type_is_read_as_that_types_config(self) -> None:
+        config = LoraConfig.from_dict({"peft_type": "IA3", "target_modules": ["k"]})
+        assert type(config) is IA3Config
+        assert config.target_modules == {"k"}
+
+    def test_an_adapter_type_this_library_lacks_is_a_key_error(self) -> None:
+        with pytest.raises(KeyError, match="SOME_NEWER_METHOD"):
+            LoraConfig.from_dict({"peft_type": "SOME_NEWER_METHOD", "target_modules": ["k"]})
 
     def test_dora_and_lora_bias_in_a_file_are_read(self) -> None:
         dora = LoraConfig.from_dict({**GOLDEN_CONFIG, "use_dora": True})
@@ -318,7 +323,7 @@ class TestFile:
         (tmp_path / "adapter_config.json").write_text(
             json.dumps({"peft_type": "FUTURE_METHOD", "task_type": "CAUSAL_LM"})
         )
-        with pytest.raises(NotImplementedError, match="FUTURE_METHOD"):
+        with pytest.raises(KeyError, match="FUTURE_METHOD"):
             PeftConfig.from_pretrained(tmp_path)
 
 
@@ -408,9 +413,9 @@ def test_enum_members_are_the_reference_strings(
 
 
 @pytest.mark.parametrize("peft_type", [m for m in PeftType if m is not PeftType.LORA])
-def test_every_other_adapter_type_is_not_implemented(peft_type: PeftType) -> None:
-    with pytest.raises(NotImplementedError, match=str(peft_type)):
-        LoraConfig.from_dict({"peft_type": str(peft_type)})
+def test_every_other_adapter_type_is_read_as_its_own_class(peft_type: PeftType) -> None:
+    config = LoraConfig.from_dict({"peft_type": str(peft_type)})
+    assert type(config) is _CONFIG_CLASSES[peft_type]
 
 
 @pytest.mark.parametrize("task_type", list(TaskType))

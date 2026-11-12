@@ -196,8 +196,14 @@ class OFTConfig(_TargetedConfig, peft_type=PeftType.OFT):
         The reference changed OFT in 0.14.0 (``oft_block_size`` replaced the block count as
         the way to size the blocks) and its Cayley-Neumann form in 0.18.0.  A file with no
         ``oft_block_size`` holds weights of the old OFT; one with ``use_cayley_neumann``
-        set and a ``peft_version`` older than 0.18.0 (or none) holds the old form.
-        ``from_pretrained`` here does not call this.
+        set and a ``peft_version`` older than 0.18.0 holds the old form.
+        :meth:`~lucid.peft.PeftConfig.from_pretrained` calls this on an OFT file.
+
+        A file with no ``peft_version`` is not warned about, where the reference reads a missing
+        version as 0.0.0.  This library writes none and ``use_cayley_neumann`` defaults to set, so
+        the reference's rule would warn on every file this library saved.  The cost is that a
+        reference file older than 0.18.0, which holds no version either (the reference added the
+        key in 0.18.0), loads without the warning.
 
         Parameters
         ----------
@@ -212,14 +218,15 @@ class OFTConfig(_TargetedConfig, peft_type=PeftType.OFT):
         Raises
         ------
         ValueError
-            ``kwargs`` has no ``oft_block_size``, or its ``peft_version`` is not a version.
+            ``kwargs`` has no ``oft_block_size``, or, with ``use_cayley_neumann`` set, its
+            ``peft_version`` is not a version.
         TypeError
-            ``peft_version`` is neither a string nor ``None``.
+            ``use_cayley_neumann`` is set and ``peft_version`` is neither a string nor ``None``.
 
         Warns
         -----
         UserWarning
-            ``use_cayley_neumann`` is set and the file is older than 0.18.0.
+            ``use_cayley_neumann`` is set and the file's ``peft_version`` is older than 0.18.0.
 
         Examples
         --------
@@ -237,12 +244,11 @@ class OFTConfig(_TargetedConfig, peft_type=PeftType.OFT):
                 "the adapter's weights are incompatible with this OFT. Retrain the adapter "
                 "here, or load it with version 0.13.0 of the reference library."
             )
-        if kwargs.get("use_cayley_neumann", False):
-            version = kwargs.get("peft_version")  # a file with none is older than the field
-            if version is not None and not isinstance(version, str):
+        version = kwargs.get("peft_version")
+        if kwargs.get("use_cayley_neumann", False) and version is not None:
+            if not isinstance(version, str):
                 raise TypeError(f"`peft_version` must be a str, got {version!r}")
-            text = "0.0.0" if version is None else version.partition("@")[0]
-            if _predates(text, _CAYLEY_NEUMANN_RELEASE):
+            if _predates(version.partition("@")[0], _CAYLEY_NEUMANN_RELEASE):
                 warnings.warn(
                     "The Cayley-Neumann parameterization became slightly more numerically stable "
                     "in version 0.18.0 of the reference adapter library. Retrain the adapter here, "

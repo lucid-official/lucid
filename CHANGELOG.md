@@ -277,6 +277,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - PeftMixedModel and get_peft_model(mixed=True) (LCD-966)
 
+- config readers dispatch, from_pretrained checks (LCD-968)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

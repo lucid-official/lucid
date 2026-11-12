@@ -179,13 +179,25 @@ class TestOFTCheckKwargs:
             assert OFTConfig.check_kwargs(**fields) == fields
 
     @pytest.mark.parametrize(
-        "version", [None, "0.0.0", "0.17.1", "0.18.0.dev0", "0.18.0rc1", "0.17.1.dev0@abc123"]
+        "version", ["0.0.0", "0.17.1", "0.18.0.dev0", "0.18.0rc1", "0.17.1.dev0@abc123"]
     )
-    def test_the_old_parameterisation_warns(self, version: str | None) -> None:
-        fields: dict[str, object] = {"oft_block_size": 32, "use_cayley_neumann": True}
-        if version is not None:
-            fields["peft_version"] = version
+    def test_the_old_parameterisation_warns(self, version: str) -> None:
+        fields: dict[str, object] = {
+            "oft_block_size": 32,
+            "use_cayley_neumann": True,
+            "peft_version": version,
+        }
         with pytest.warns(UserWarning, match="Cayley-Neumann parameterization"):
+            assert OFTConfig.check_kwargs(**fields) == fields
+
+    @pytest.mark.parametrize("recorded", [False, True])
+    def test_a_file_with_no_version_does_not_warn(self, recorded: bool) -> None:
+        """The reference reads a missing version as 0.0.0; this library writes none, so it cannot."""
+        fields: dict[str, object] = {"oft_block_size": 32, "use_cayley_neumann": True}
+        if recorded:
+            fields["peft_version"] = None
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
             assert OFTConfig.check_kwargs(**fields) == fields
 
     @pytest.mark.parametrize("version", ["0.18.0", "0.18.1.dev0@abc123", "0.21.2", "0.18.0.post1"])
@@ -315,7 +327,6 @@ def test_check_kwargs_returns_what_the_reference_returns(
 @pytest.mark.parametrize(
     "version",
     [
-        None,
         "0.0.0",
         "0.17.1",
         "0.18.0",
@@ -325,11 +336,13 @@ def test_check_kwargs_returns_what_the_reference_returns(
         "0.21.2",
     ],
 )
-def test_oft_check_kwargs_warns_as_the_reference_does(version: str | None) -> None:
+def test_oft_check_kwargs_warns_as_the_reference_does(version: str) -> None:
     library = adapter_library()
-    fields: dict[str, object] = {"oft_block_size": 4, "use_cayley_neumann": True}
-    if version is not None:
-        fields["peft_version"] = version
+    fields: dict[str, object] = {
+        "oft_block_size": 4,
+        "use_cayley_neumann": True,
+        "peft_version": version,
+    }
     with warnings.catch_warnings(record=True) as theirs:
         warnings.simplefilter("always")
         library.OFTConfig.check_kwargs(**fields)
@@ -338,6 +351,21 @@ def test_oft_check_kwargs_warns_as_the_reference_does(version: str | None) -> No
         OFTConfig.check_kwargs(**fields)
     assert len(mine) == len(theirs)
     assert [w.category for w in mine] == [w.category for w in theirs]
+
+
+@pytest.mark.parity
+def test_oft_check_kwargs_is_quiet_on_a_missing_version_where_the_reference_warns() -> None:
+    """The one deliberate difference: this library writes no ``peft_version``, so it cannot warn on its absence."""
+    library = adapter_library()
+    fields: dict[str, object] = {"oft_block_size": 4, "use_cayley_neumann": True}
+    with warnings.catch_warnings(record=True) as theirs:
+        warnings.simplefilter("always")
+        library.OFTConfig.check_kwargs(**fields)
+    with warnings.catch_warnings(record=True) as mine:
+        warnings.simplefilter("always")
+        OFTConfig.check_kwargs(**fields)
+    assert len(theirs) == 1
+    assert mine == []
 
 
 @pytest.mark.parity

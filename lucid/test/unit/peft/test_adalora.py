@@ -175,11 +175,13 @@ class TestConfig:
         with pytest.raises(NotImplementedError, match="use_dora"):
             AdaLoraConfig.from_dict({**_config().to_dict(), "use_dora": True})
 
-    def test_a_lora_file_is_not_an_adalora_file(self) -> None:
+    def test_an_adalora_file_is_an_adalora_config_whichever_class_reads_it(self) -> None:
         from lucid.peft import LoraConfig
 
-        with pytest.raises(NotImplementedError, match="ADALORA"):
-            LoraConfig.from_dict(_config().to_dict())
+        config = _config()
+        read = LoraConfig.from_dict(config.to_dict())
+        assert type(read) is AdaLoraConfig
+        assert read == config
 
 
 # ── the layers ───────────────────────────────────────────────────────────────
