@@ -69,9 +69,4 @@ class ShiraModel(_FileFormat, _ConfigTuner, peft_type=PeftType.SHIRA, mixed=True
     @classmethod
     def _shared_keys(cls, context: _FileContext) -> dict[str, str]:
         """Each layer's indices, which no slot table holds: ``<layer>.shira_indices`` in the file."""
-        keys: dict[str, str] = {}
-        for path, layer in context.layers:
-            if isinstance(layer, ShiraLayer) and context.adapter in layer.shira_indices:
-                table = "shira_indices"
-                keys[context.memory_key(path, table)] = context.key(path, table)
-        return keys
+        return context.buffer_keys("shira_indices")

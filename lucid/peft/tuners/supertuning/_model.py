@@ -73,13 +73,4 @@ class SupertuningModel(
     @classmethod
     def _shared_keys(cls, context: _FileContext) -> dict[str, str]:
         """Each layer's positions, which no slot table holds: ``<layer>.supertuning_indices`` in the file, when saved."""
-        keys: dict[str, str] = {}
-        for path, layer in context.layers:
-            if (
-                isinstance(layer, SupertuningLayer)
-                and layer.supertuning_indices.persistent
-                and context.adapter in layer.supertuning_indices
-            ):
-                where = f"{context.prefix}{path}.supertuning_indices"
-                keys[f"{where}.{context.adapter}"] = where
-        return keys
+        return context.buffer_keys("supertuning_indices")

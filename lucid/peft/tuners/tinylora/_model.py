@@ -170,7 +170,6 @@ class TinyLoraModel(_SettlingTuner, _SharedTablesTuner, _ConfigTuner, peft_type=
     @classmethod
     def _shared_keys(cls, context: _FileContext) -> dict[str, str]:
         """Each group's vector as ``base_model.tinylora_v.<group>``, and each layer's frozen factors (and projection, when saved)."""
-        config = _as_tinylora(context.config)
         keys: dict[str, str] = {}
         owner_found = False
         for path, layer in context.layers:
@@ -179,16 +178,15 @@ class TinyLoraModel(_SettlingTuner, _SharedTablesTuner, _ConfigTuner, peft_type=
                 or context.adapter not in layer._adapter_names()
             ):
                 continue
-            where = f"{context.prefix}{path}"
             held = getattr(layer, "tinylora_v", None)
             if held is not None and not owner_found and context.adapter in held:
                 owner_found = True
+                where = f"{context.prefix}{path}"
                 for group in held[context.adapter]:
                     keys[f"{where}.tinylora_v.{context.adapter}.{group}"] = f"{_VECTORS}{group}"
-            names = ("tinylora_A", "tinylora_B") + (
-                ("tinylora_P",) if config.save_projection else ()
+            keys.update(
+                context.layer_buffer_keys(path, layer, "tinylora_A", "tinylora_B", "tinylora_P")
             )
-            keys.update({f"{where}.{name}.{context.adapter}": f"{where}.{name}" for name in names})
         return keys
 
     @override

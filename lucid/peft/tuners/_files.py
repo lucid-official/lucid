@@ -72,6 +72,17 @@ class _FileContext(NamedTuple):
         """
         keys: dict[str, str] = {}
         for path, layer in self.layers:
+            keys.update(self.layer_buffer_keys(path, layer, table))
+        return keys
+
+    def layer_buffer_keys(self, path: str, layer: _BaseTunerLayer, *tables: str) -> dict[str, str]:
+        """``buffer_keys`` for the one layer at ``path``, over its buffer ``tables`` in the order given.
+
+        A tuner that files something else among the layers' buffers (TinyLoRA's vectors, right before
+        the factors of the layer that holds them) walks the layers itself and calls this for each.
+        """
+        keys: dict[str, str] = {}
+        for table in tables:
             held: object = getattr(layer, table, None)
             if isinstance(held, _Persistable) and held.persistent and self.adapter in held:
                 keys[self.memory_key(path, table)] = self.key(path, table)
