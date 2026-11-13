@@ -310,8 +310,6 @@ class DreamerV3Config(WorldModelConfig):
 
     actor_entropy: float = 3e-4
     actor_min_std: float = 0.1
-    actor_max_std: float = 1.0
-    actor_outscale: float = 0.01
     return_ema_decay: float = 0.99
     return_low: float = 5.0
     return_high: float = 95.0
@@ -325,7 +323,10 @@ class DreamerV3Config(WorldModelConfig):
     pcont_layers: int = 1
 
     action_space: str = "continuous"
-
+    # Added after the released fields (LCD-950, LCD-993): new fields go last so
+    # the released positional order stays binding.
+    actor_max_std: float = 1.0
+    actor_outscale: float = 0.01
     dense_init: DenseInit = "fan_in_trunc_normal"
 
     @override
