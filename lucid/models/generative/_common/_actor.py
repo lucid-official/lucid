@@ -297,7 +297,7 @@ class Actor(nn.Module):
 
     @override
     def forward(self, feature: Tensor, *, sample: bool = True) -> Tensor:
-        """Propose an action — ``(B, T, action_dim)``, inside ``(-1, 1)`` unless untruncated.
+        """Propose an action — ``(B, T, action_dim)``.
 
         Parameters
         ----------
@@ -309,10 +309,11 @@ class Actor(nn.Module):
         Returns
         -------
         Tensor
-            Actions at the rank that went in.  Strictly inside ``(-1, 1)``
-            for a truncated policy and for the mode of any; a *draw* from
-            ``"bounded_normal"`` is not clipped and may fall outside, which
-            the environment boundary corrects (the rollout driver clips).
+            Actions at the rank that went in, one-hot when discrete.  A
+            continuous action lies in ``[-1, 1]`` for ``"truncated_normal"``
+            and for either policy's mode; a *draw* from ``"bounded_normal"``
+            is not clipped and may fall outside, which the environment
+            boundary corrects (the rollout driver clips).
         """
         stepwise = feature.ndim == 2
         if stepwise:
