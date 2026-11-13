@@ -257,14 +257,14 @@ def test_a_norm_second_derivative_divides_by_the_tracked_norm(
     the closed form ``(p-1)/n (|r|^(p-2) w - s <s, w>)``.
     """
     if device == "cpu" and ord_ == 3.0 and magnitude == 1e-10:
-        pytest.skip("covered by the strict xfail below")
+        pytest.skip("LCD-1003: the strict xfail below pins this case")
     _check_norm_hvp(device, ord_, magnitude)
 
 
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "LCD-998 FOUND: the CPU p-norm (p = 3) second derivative is +-inf for a slice near "
+        "LCD-1003: the CPU p-norm (p = 3) second derivative is +-inf for a slice near "
         "1e-9 .. 1e-10 (the unscaled sum |x|^p chain, not a quotient)"
     ),
 )
