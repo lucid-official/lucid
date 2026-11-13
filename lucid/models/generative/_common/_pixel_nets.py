@@ -26,7 +26,8 @@ from typing import final, override
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
 from lucid.models._utils._generative import generative_activation
-from lucid.models.generative._common._config import WORLD_MODEL_IMAGE_SIZE
+from lucid.models.generative._common._config import WORLD_MODEL_IMAGE_SIZE, DenseInit
+from lucid.models.generative._common._init import initialise_linear_layers_
 
 __all__ = ["PixelEncoder", "PixelDecoder", "DenseHead", "pixel_embed_size", "PIXEL_IMAGE_SIZE"]
 
@@ -151,6 +152,9 @@ class PixelDecoder(nn.Module):
         Matches the encoder's, so the two stacks mirror.
     act_fn : {"silu", "swish", "relu", "gelu"}
         Activation between transposed convolutions.
+    dense_init : {"default", "fan_in_trunc_normal"}, default="default", keyword-only
+        How the lift starts; see :mod:`._init`.  Only the dense lift is
+        affected — the transposed convolutions keep their own default.
 
     Notes
     -----
@@ -171,13 +175,22 @@ class PixelDecoder(nn.Module):
     happened to need.
     """
 
-    def __init__(self, latent_size: int, out_channels: int, cnn_depth: int, act_fn: str) -> None:
+    def __init__(
+        self,
+        latent_size: int,
+        out_channels: int,
+        cnn_depth: int,
+        act_fn: str,
+        *,
+        dense_init: DenseInit = "default",
+    ) -> None:
         """Initialise the decoder. See the class docstring for parameters."""
         super().__init__()
         self._act_name = act_fn
         self._lift_width = pixel_embed_size(cnn_depth)
 
         self.lift = nn.Linear(latent_size, self._lift_width)
+        initialise_linear_layers_(self.lift, dense_init)
         specs = (
             (self._lift_width, 4 * cnn_depth, 5),
             (4 * cnn_depth, 2 * cnn_depth, 5),
@@ -224,6 +237,9 @@ class DenseHead(nn.Module):
         Activation between hidden layers; the output layer is unactivated.
     squeeze : bool, default=False
         Drop the trailing axis when ``out_features == 1``.
+    dense_init : {"default", "fan_in_trunc_normal"}, default="default", keyword-only
+        How every layer, the output included, starts; see :mod:`._init`.
+        A family that scales or zeroes the output does so after this.
 
     Examples
     --------
@@ -246,6 +262,8 @@ class DenseHead(nn.Module):
         out_features: int = 1,
         act_fn: str = "relu",
         squeeze: bool = False,
+        *,
+        dense_init: DenseInit = "default",
     ) -> None:
         """Initialise the head. See the class docstring for parameters."""
         super().__init__()
@@ -256,6 +274,7 @@ class DenseHead(nn.Module):
         widths = [in_features] + [hidden] * layers
         self.layers = nn.ModuleList([nn.Linear(widths[i], widths[i + 1]) for i in range(layers)])
         self.out = nn.Linear(hidden, out_features)
+        initialise_linear_layers_(self, dense_init)
 
     @override
     def forward(self, feature: Tensor) -> Tensor:

@@ -14,7 +14,7 @@ Two tiers:
 """
 
 from dataclasses import dataclass
-from typing import ClassVar, Literal, Protocol, override
+from typing import ClassVar, Literal, Protocol, get_args, override
 
 from lucid.models._base import ModelConfig
 
@@ -22,6 +22,11 @@ from lucid.models._base import ModelConfig
 # typically use SiLU (Swish); VAEs use either SiLU or ReLU; the world
 # models split — PlaNet specifies ReLU, Dreamer specifies ELU.
 GenerativeActivation = Literal["silu", "swish", "relu", "gelu", "elu"]
+
+# How a world model's dense layers start.  ``"default"`` leaves each layer as
+# its constructor drew it; ``"fan_in_trunc_normal"`` is the released
+# DreamerV3's ``winit: trunc_normal_in`` with zero biases — see ``_init``.
+DenseInit = Literal["default", "fan_in_trunc_normal"]
 
 # Noise schedule shape — see ``make_beta_schedule`` in ``_utils/_generative``.
 BetaSchedule = Literal["linear", "cosine", "scaled_linear"]
@@ -174,8 +179,10 @@ __all__ = [
     "NormalizingFlowConfig",
     "WorldModelConfig",
     "GenerativeActivation",
+    "DenseInit",
     "BetaSchedule",
     "FlowPrior",
+    "check_dense_init",
     "square_side",
     "patch_grid_side",
     "check_patch_grid",
@@ -189,6 +196,36 @@ __all__ = [
 #: The only frame size the shared world-model convolutional schedule produces —
 #: see :mod:`lucid.models.generative._common._pixel_nets`.
 WORLD_MODEL_IMAGE_SIZE = 64
+
+
+def check_dense_init(dense_init: str) -> None:
+    """Reject a ``dense_init`` that names no initialiser.
+
+    Lives with the configs, which validate their fields without importing
+    ``nn``; the blocks that act on the value (``_init``) call it too, so a
+    block built by hand is refused the same way a config is.
+
+    Parameters
+    ----------
+    dense_init : str
+        The value to check.
+
+    Raises
+    ------
+    ValueError
+        If ``dense_init`` is not one of :data:`DenseInit`.
+
+    Examples
+    --------
+    >>> from lucid.models.generative._common._config import check_dense_init
+    >>> check_dense_init("fan_in_trunc_normal")
+    >>> check_dense_init("glorot")
+    Traceback (most recent call last):
+        ...
+    ValueError: dense_init must be one of ('default', 'fan_in_trunc_normal'), got 'glorot'
+    """
+    if dense_init not in get_args(DenseInit):
+        raise ValueError(f"dense_init must be one of {get_args(DenseInit)}, got {dense_init!r}")
 
 
 @dataclass(frozen=True)

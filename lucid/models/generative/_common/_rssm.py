@@ -48,6 +48,8 @@ from lucid.models._utils._generative import (
     normal_kl,
     resolve_generation_device,
 )
+from lucid.models.generative._common._config import DenseInit, check_dense_init
+from lucid.models.generative._common._init import fan_in_trunc_normal_, initialise_linear_layers_
 
 __all__ = ["RSSMState", "RSSM", "BlockLinear", "rssm_kl"]
 
@@ -274,11 +276,15 @@ class BlockLinear(nn.Module):
         the call site.
     blocks : int
         How many independent maps to run side by side.
+    dense_init : {"default", "fan_in_trunc_normal"}, default="default", keyword-only
+        How the weight starts; see :mod:`._init`.  Kept on the layer so
+        :meth:`reset_parameters` returns it to the same distribution.
 
     Raises
     ------
     ValueError
-        If ``blocks`` is not positive, or does not divide both widths.
+        If ``blocks`` is not positive, does not divide both widths, or
+        ``dense_init`` names no initialiser.
 
     Notes
     -----
@@ -297,9 +303,15 @@ class BlockLinear(nn.Module):
     because a list of submodules would put ``blocks`` entries in
     ``state_dict`` where there is conceptually one layer.
 
-    Initialised exactly as :class:`~lucid.nn.Linear` is, with the fan-in
-    taken *within* a block, which is the fan-in that actually reaches an
-    output.
+    Under ``"default"`` it is initialised exactly as :class:`~lucid.nn.Linear`
+    is, with the fan-in taken *within* a block, which is the fan-in that
+    actually reaches an output.  Under ``"fan_in_trunc_normal"`` it is
+    initialised as the released DreamerV3 does, whose fan is *not* that:
+    ``Initializer.compute_fans`` multiplies the within-block width back by
+    the block count for a 3-axis kernel (``embodied/jax/nets.py:196-197``),
+    so the scale is :math:`1/\sqrt{d_{\mathrm{in}}}` over the whole input
+    width, :math:`\sqrt{g}` smaller than the within-block fan would give.
+    Matching the release means matching that.
 
     Examples
     --------
@@ -312,9 +324,12 @@ class BlockLinear(nn.Module):
     (4, 3, 6)
     """
 
-    def __init__(self, in_features: int, out_features: int, blocks: int) -> None:
+    def __init__(
+        self, in_features: int, out_features: int, blocks: int, *, dense_init: DenseInit = "default"
+    ) -> None:
         """Initialise the layer. See the class docstring for parameters."""
         super().__init__()
+        check_dense_init(dense_init)
         if blocks < 1:
             raise ValueError(f"blocks must be positive, got {blocks}")
         if in_features % blocks or out_features % blocks:
@@ -325,12 +340,17 @@ class BlockLinear(nn.Module):
         self.blocks = blocks
         self.in_block = in_features // blocks
         self.out_block = out_features // blocks
+        self.dense_init: DenseInit = dense_init
         self.weight = nn.Parameter(lucid.empty(blocks, self.in_block, self.out_block))
         self.bias = nn.Parameter(lucid.empty(blocks, self.out_block))
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
-        """Uniform on the within-block fan-in, as :class:`~lucid.nn.Linear` is."""
+        """Back to ``dense_init``: ``"default"`` is uniform on the within-block fan-in."""
+        if self.dense_init == "fan_in_trunc_normal":
+            fan_in_trunc_normal_(self.weight, self.blocks * self.in_block)
+            nn.init.zeros_(self.bias)
+            return
         bound = 1.0 / math.sqrt(self.in_block)
         nn.init.uniform_(self.weight, -bound, bound)
         nn.init.uniform_(self.bias, -bound, bound)
@@ -355,6 +375,21 @@ class BlockLinear(nn.Module):
         out = lucid.matmul(grouped, self.weight)
         return (out.reshape(*leading, self.blocks, self.out_block) + self.bias).reshape(
             *leading, self.blocks * self.out_block
+        )
+
+
+def _check_recurrence_init(dense_init: DenseInit, blocks: int) -> None:
+    """Refuse a ``dense_init`` the ``blocks=0`` recurrence cannot honour.
+
+    That recurrence is an :class:`~lucid.nn.GRUCell`, which the released
+    initialiser does not describe, so an initialiser covering everything
+    but it would be a half-measure.
+    """
+    check_dense_init(dense_init)
+    if dense_init != "default" and not blocks:
+        raise ValueError(
+            f"dense_init={dense_init!r} needs blocks >= 1: the blocks=0 recurrence is an "
+            "nn.GRUCell, which the released initialiser does not describe"
         )
 
 
@@ -412,6 +447,11 @@ class RSSM(nn.Module):
         block-diagonal sequence model instead, in which the ``deter_size``
         units are split into this many independent groups — see
         :meth:`_block_recurrent`.  Must divide ``deter_size``.
+    dense_init : {"default", "fan_in_trunc_normal"}, default="default", keyword-only
+        How every dense layer starts; see :mod:`._init`.  Needs ``blocks``:
+        the ``blocks=0`` recurrence is an :class:`~lucid.nn.GRUCell`, which
+        has no counterpart in the release to match, so an initialiser that
+        covered everything but it would be a half-measure and is refused.
 
     Attributes
     ----------
@@ -478,9 +518,12 @@ class RSSM(nn.Module):
         discrete: int = 0,
         unimix: float = 0.0,
         blocks: int = 0,
+        *,
+        dense_init: DenseInit = "default",
     ) -> None:
         """Initialise the RSSM. See the class docstring for parameter semantics."""
         super().__init__()
+        _check_recurrence_init(dense_init, blocks)
         if not 0.0 <= unimix < 1.0:
             raise ValueError(f"unimix must be in [0, 1), got {unimix}")
         if blocks < 0:
@@ -535,10 +578,10 @@ class RSSM(nn.Module):
             self.stoch_in_norm = nn.RMSNorm(hidden_size, eps=1e-8)
             self.action_in_norm = nn.RMSNorm(hidden_size, eps=1e-8)
             self.block_hidden = BlockLinear(
-                deter_size + 3 * hidden_size * blocks, deter_size, blocks
+                deter_size + 3 * hidden_size * blocks, deter_size, blocks, dense_init=dense_init
             )
             self.block_hidden_norm = nn.RMSNorm(deter_size, eps=1e-8)
-            self.block_gate = BlockLinear(deter_size, 3 * deter_size, blocks)
+            self.block_gate = BlockLinear(deter_size, 3 * deter_size, blocks, dense_init=dense_init)
         else:
             self.pre_cell = nn.Linear(self.stoch_width + action_dim, hidden_size)
             self.cell = nn.GRUCell(hidden_size, deter_size)
@@ -549,6 +592,7 @@ class RSSM(nn.Module):
         self.posterior_head: nn.ModuleList[nn.Linear] = nn.ModuleList(
             [nn.Linear(deter_size + embed_size, hidden_size), nn.Linear(hidden_size, head_width)]
         )
+        initialise_linear_layers_(self, dense_init)
 
     # ── internals ────────────────────────────────────────────────────────
 

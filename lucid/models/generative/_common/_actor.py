@@ -6,10 +6,11 @@ a one-hot categorical when it is a button.  DreamerV2 needed it first,
 DreamerV3 needs the same two branches, so it lives here rather than in
 either family.
 
-The two families disagree about three things, all constructor arguments:
+The two families disagree about four things, all constructor arguments:
 ``unimix``, which Gaussian a box reads as (``continuous_dist``, with its
-``max_std``), and how the output layer starts (``outscale``).  A family
-that passes none of them gets DreamerV2's head.
+``max_std``), how the output layer starts (``outscale``), and how every
+dense layer starts (``dense_init``).  A family that passes none of them gets
+DreamerV2's head.
 """
 
 from typing import Literal, override
@@ -18,6 +19,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
+from lucid.models.generative._common._config import DenseInit
 from lucid.models.generative._common._dists import Normal, OneHotCategorical, TruncatedNormal
 from lucid.models.generative._common._pixel_nets import DenseHead
 
@@ -67,7 +69,11 @@ class Actor(nn.Module):
         default initialisation.  A number starts it as the released
         implementations do: weights scaled by ``outscale`` and bias zero,
         so ``0.0`` is an output that is exactly zero and ``0.01`` one that
-        is nearly so.  Applies to the location and the scale alike.
+        is nearly so.  Applies to the location and the scale alike, and to
+        whatever ``dense_init`` drew.
+    dense_init : {"default", "fan_in_trunc_normal"}, default="default", keyword-only
+        How the trunk's layers start before ``outscale`` is applied; see
+        :mod:`._init`.
 
     Raises
     ------
@@ -121,6 +127,7 @@ class Actor(nn.Module):
         continuous_dist: ContinuousPolicy = "truncated_normal",
         max_std: float = 1.0,
         outscale: float | None = None,
+        dense_init: DenseInit = "default",
     ) -> None:
         """Initialise the actor. See the class docstring for parameters."""
         super().__init__()
@@ -145,7 +152,9 @@ class Actor(nn.Module):
         # A one-hot needs one score per alternative; a Gaussian needs a
         # location and a scale per dimension.
         width = action_dim if discrete else 2 * action_dim
-        self.head = DenseHead(latent_size, hidden, layers, out_features=width, act_fn=act_fn)
+        self.head = DenseHead(
+            latent_size, hidden, layers, out_features=width, act_fn=act_fn, dense_init=dense_init
+        )
         if outscale is not None:
             self._scale_output(outscale)
 

@@ -315,6 +315,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Actor can read the released bounded-normal head (LCD-950)
 
+- opt-in fan-in truncated-normal dense init (LCD-993)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views
