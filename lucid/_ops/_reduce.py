@@ -172,9 +172,11 @@ def _takes_scaled_kernel(r: _Impl, p: float, axes: list[int]) -> bool:
     ordinary number; the kernel keeps a running largest magnitude and divides
     it out in the same pass that reads the data (``backend/gpu/PNorm.h``).
     ``p <= 1`` powers nothing that can leave the range, and the extrema of
-    ``p = ±inf`` power nothing at all.  A compile trace and a phantom tensor have
-    no kernel to run and take the plain graph, as does the CPU stream, whose
-    accumulation does not flush.
+    ``p = ±inf`` power nothing at all.  A compile trace records the kernel as the
+    ``p_norm`` node, which the compiled graph lowers to the same scaled form
+    (``compile/OpEmitters/reduce/Reduction.mm``).  A phantom tensor has no kernel to
+    run and takes the plain graph, as does the CPU stream, whose accumulation
+    does not flush.
     """
     return (
         p > 1.0
@@ -184,7 +186,6 @@ def _takes_scaled_kernel(r: _Impl, p: float, axes: list[int]) -> bool:
         and not r.is_phantom
         and 0 < r.numel() < _MAX_KERNEL_NUMEL
         and bool(axes)
-        and _C_engine.compile.current_tracer() is None
     )
 
 

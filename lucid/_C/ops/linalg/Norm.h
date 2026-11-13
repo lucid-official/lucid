@@ -181,10 +181,11 @@ private:
 // flush to 0 or overflow to inf the way ``sum(a * a)`` does.
 //
 // ``axis`` empty reduces every axis, as in :func:`norm_op`.  A half input
-// reduces in float32 and answers in its own dtype.  The CPU stream and an
-// active compile trace refuse it: the CPU's accumulation does not flush, and
-// the Python reduction that owns the choice (``_p_norm``) never sends either
-// here.
+// reduces in float32 and answers in its own dtype.  The CPU stream refuses it:
+// its accumulation does not flush, and the Python reduction that owns the
+// choice (``_p_norm``) never sends it here.  A compile trace records it as the
+// ``p_norm`` node, which ``OpEmitters/reduce/Reduction.mm`` lowers to the same
+// scaled form.
 LUCID_API TensorImplPtr p_norm_op(const TensorImplPtr& a,
                                   double p,
                                   std::vector<int> axis,

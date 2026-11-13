@@ -292,8 +292,6 @@ TensorImplPtr p_norm_op(const TensorImplPtr& a_in, double p, std::vector<int> ax
     if (a->device() != Device::GPU)
         ErrorBuilder("p_norm").not_implemented(
             "the scaled p-norm kernel runs on the GPU stream only");
-    if (::lucid::compile::current_tracer() != nullptr)
-        ErrorBuilder("p_norm").not_implemented("the scaled p-norm cannot be traced");
     axis = normalize_axes(axis, static_cast<int>(a->shape().size()), "p_norm");
     const Shape out_shape = reduced_shape(a->shape(), axis, keepdims);
     OpScopeFull scope{"p_norm", a->device(), a->dtype(), out_shape};
@@ -308,6 +306,9 @@ TensorImplPtr p_norm_op(const TensorImplPtr& a_in, double p, std::vector<int> ax
         backend::Dispatcher::for_device(a->device())
             .p_norm_forward(a->storage(), a->shape(), p, axis, keepdims, a->dtype());
     auto out = fresh(std::move(out_storage), out_shape, a->dtype(), a->device());
+    if (auto* trc = ::lucid::compile::current_tracer()) {
+        trc->on_op_io({a}, out);
+    }
     auto bwd = std::make_shared<PNormBackward>();
     bwd->p_ = p;
     bwd->axis_ = axis;
