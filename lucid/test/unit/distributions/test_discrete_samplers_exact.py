@@ -193,8 +193,11 @@ def test_an_explicit_generator_replays_poisson(device: str) -> None:
 
 def test_poisson_is_not_a_per_element_python_loop() -> None:
     lucid.poisson(lucid.full((64,), 5.0))  # engine warm-up
-    start = time.perf_counter()
-    lucid.poisson(lucid.full((100_000,), 5.0))
-    elapsed = time.perf_counter() - start
-    # ~0.03 s measured; the loop took 0.54 s.  A generous bound, not a benchmark.
+    rate = lucid.full((100_000,), 5.0)
+    elapsed = float("inf")
+    for _ in range(3):  # the best of three: one descheduled run is not the loop
+        start = time.perf_counter()
+        lucid.poisson(rate)
+        elapsed = min(elapsed, time.perf_counter() - start)
+    # ~0.03 s measured; the loop took 0.54 s on every run.  A generous bound, not a benchmark.
     assert elapsed < 0.25, f"1e5 Poisson(5) draws took {elapsed:.2f} s"

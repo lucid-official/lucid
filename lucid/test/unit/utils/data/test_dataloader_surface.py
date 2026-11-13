@@ -226,9 +226,12 @@ def test_stop_iteration_from_collate_fn_is_an_error_not_an_end():
 def test_weighted_sampling_is_not_quadratic(replacement):
     """It was 1.7 s (with) and 1.2 s (without replacement) per 10k epoch."""
     sampler = WeightedRandomSampler([1.0] * 10_000, 10_000, replacement=replacement)
-    start = time.perf_counter()
-    drawn = list(sampler)
-    assert time.perf_counter() - start < 0.5
+    took = float("inf")
+    for _ in range(3):  # the best of three: one descheduled epoch is not the quadratic walk
+        start = time.perf_counter()
+        drawn = list(sampler)
+        took = min(took, time.perf_counter() - start)
+    assert took < 0.5
     assert len(drawn) == 10_000
     if not replacement:
         assert sorted(drawn) == list(range(10_000))
