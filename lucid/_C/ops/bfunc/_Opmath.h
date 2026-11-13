@@ -139,12 +139,13 @@ struct Forward {
 };
 
 // ``in = {g, T, S}``: the gradient of ``S / T`` with respect to ``T``,
-// ``-(S * g) / T^2``, in float32 and rounded once into ``g``'s dtype.
+// ``-(g * (S / T)) / T``, in float32 and rounded once into ``g``'s dtype.  ``T^2`` is
+// never formed: it leaves float32 for a bfloat16 ``T`` outside ~1e-19 .. 1e19.
 struct ReciprocalGrad {
     std::vector<mx::array> operator()(const std::vector<mx::array>& in) const {
         const mx::array t = backend::widen_half(in[1]);
         const mx::array r = mx::negative(
-            mx::divide(mx::multiply(in[2], backend::widen_half(in[0])), mx::square(t)));
+            mx::divide(mx::multiply(backend::widen_half(in[0]), mx::divide(in[2], t)), t));
         return {backend::narrow_to(r, in[0].dtype())};
     }
 };
@@ -220,7 +221,9 @@ inline Storage compute(Op op,
     return be.astype(q, shape, Dtype::F32, h);
 }
 
-// ``-(S * g) / T^2`` in float32, rounded once to ``h``.
+// ``-(g * (S / T)) / T`` in float32, rounded once to ``h``.  The textbook
+// ``-(S * g) / T^2`` forms ``T^2``, which leaves float32 for a bfloat16 ``T`` outside
+// ~1e-19 .. 1e19 while the gradient is an ordinary float (LCD-998).
 inline Storage reciprocal_grad(const Storage& g,
                                const Storage& t,
                                const Shape& shape,
@@ -239,9 +242,14 @@ inline Storage reciprocal_grad(const Storage& g,
     auto& be = backend::Dispatcher::for_device(Device::CPU);
     const Storage g32 = be.astype(g, shape, h, Dtype::F32);
     const Storage t32 = be.astype(t, shape, h, Dtype::F32);
-    const Storage t_sq = be.mul(t32, t32, shape, Dtype::F32);
-    const Storage neg_sg = be.mul_scalar(g32, shape, Dtype::F32, -read_cpu_scalar(s, s_dt));
-    return be.astype(be.div(neg_sg, t_sq, shape, Dtype::F32), shape, Dtype::F32, h);
+    // Accelerate has no scalar-by-vector division: the 0-d is spread to ``shape`` first.
+    const Storage s32 = s_dt == Dtype::F32 ? s : be.astype(s, Shape{}, s_dt, Dtype::F32);
+    const Storage s_full{
+        detail::broadcast_cpu(std::get<CpuStorage>(s32), Shape{}, shape, Dtype::F32)};
+    const Storage s_over_t = be.div(s_full, t32, shape, Dtype::F32);
+    const Storage g_s_over_t = be.mul(g32, s_over_t, shape, Dtype::F32);
+    const Storage quotient = be.div(g_s_over_t, t32, shape, Dtype::F32);
+    return be.astype(be.neg(quotient, shape, Dtype::F32), shape, Dtype::F32, h);
 }
 
 // One node per op.  Slot ``t_index_`` is ``T``; slot ``1 - t_index_`` is the
@@ -295,7 +303,8 @@ private:
             const TensorImplPtr g32 = astype_op(grad_out, Dtype::F32);
             const TensorImplPtr t32 = astype_op(t, Dtype::F32);
             const TensorImplPtr s32 = s->dtype() == Dtype::F32 ? s : astype_op(s, Dtype::F32);
-            return astype_op(neg_op(div_op(mul_op(g32, s32), mul_op(t32, t32))), this->dtype_);
+            // -(g * (S / T)) / T: T^2 is never formed (see reciprocal_grad).
+            return astype_op(neg_op(div_op(mul_op(g32, div_op(s32, t32)), t32)), this->dtype_);
         } else {
             return zeros_like_op(t);
         }
@@ -318,7 +327,9 @@ private:
                 } else {
                     const TensorImplPtr s32 =
                         s->dtype() == Dtype::F32 ? s : astype_op(s, Dtype::F32);
-                    term = neg_op(div_op(mul_op(g32, t32), mul_op(s32, s32)));
+                    // -(g * (t / s)) / s: s^2 leaves float32 for a divisor outside
+                    // ~1e-19 .. 1e19 (see reciprocal_grad).
+                    term = neg_op(div_op(mul_op(g32, div_op(t32, s32)), s32));
                 }
             }
             const TensorImplPtr ds = sum_op(term, {}, false);
@@ -361,7 +372,8 @@ private:
                         term = mx::divide(g32, t32);
                     } else {
                         const mx::array& s32 = gpu_fn::arr(this->saved_inputs_[1 - t_index_]);
-                        term = mx::negative(mx::divide(mx::multiply(g32, t32), mx::square(s32)));
+                        term =
+                            mx::negative(mx::divide(mx::multiply(g32, mx::divide(t32, s32)), s32));
                     }
                 }
                 return gpu_fn::wrap(mx::sum(term), s_dtype_);
@@ -383,11 +395,11 @@ private:
                     const Storage& s = this->saved_inputs_[1 - t_index_];
                     const Storage s32 =
                         s_dtype_ == Dtype::F32 ? s : be.astype(s, Shape{}, s_dtype_, Dtype::F32);
-                    const Storage s_sq_0d = be.mul(s32, s32, Shape{}, Dtype::F32);
-                    const Storage s_sq{detail::broadcast_cpu(std::get<CpuStorage>(s_sq_0d), Shape{},
-                                                             flat, Dtype::F32)};
-                    const Storage gt = be.mul(g32, t32, flat, Dtype::F32);
-                    term = be.neg(be.div(gt, s_sq, flat, Dtype::F32), flat, Dtype::F32);
+                    const Storage s_full{detail::broadcast_cpu(std::get<CpuStorage>(s32), Shape{},
+                                                               flat, Dtype::F32)};
+                    const Storage t_over_s = be.div(t32, s_full, flat, Dtype::F32);
+                    const Storage g_t_over_s = be.mul(g32, t_over_s, flat, Dtype::F32);
+                    term = be.neg(be.div(g_t_over_s, s_full, flat, Dtype::F32), flat, Dtype::F32);
                 }
             }
             Storage sum32 = be.reduce_sum(term, flat, {{0}, false}, Dtype::F32);
