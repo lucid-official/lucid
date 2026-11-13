@@ -505,21 +505,26 @@ Storage GpuBackend::lp_normalize_backward(const Storage& x,
                                           double ord,
                                           int axis,
                                           Dtype dt) {
+    namespace mx = ::mlx::core;
     const auto& gx = std::get<GpuStorage>(x);
     const auto& gn = std::get<GpuStorage>(saved_norm);
     const auto& gg = std::get<GpuStorage>(grad_out);
     const auto mlx_dt = gpu::to_mlx_dtype(dt);
-    auto proj = narrow_half(
-        ::mlx::core::sum(product_widened(*gg.arr, *gx.arr), std::vector<int>{axis}, true), mlx_dt);
-    auto first = ::mlx::core::divide(*gg.arr, *gn.arr);
-    auto sign_x = ::mlx::core::sign(*gx.arr);
-    auto abs_x = ::mlx::core::abs(*gx.arr);
-    auto abs_pm1 = gpu_pow(abs_x, ord - 1.0);
-    auto N_pp1 = gpu_pow(*gn.arr, ord + 1.0);
-    auto second = ::mlx::core::divide(
-        ::mlx::core::multiply(::mlx::core::multiply(sign_x, abs_pm1), proj), N_pp1);
-    auto dx = ::mlx::core::subtract(first, second);
-    return Storage{gpu::wrap_mlx_array(std::move(dx), dt)};
+    // dx = (g - sgn(u) |u|^(p-1) <g, u>) / d with u = x / d: the usual
+    // g/d - sgn(x) |x|^(p-1) <g, x> / d^(p+1) after factoring out d.  u is the
+    // forward output, at most 1 in magnitude, so no power of the norm is ever
+    // formed: d^(p+1) left the float32 range for a norm outside ~1e-13 .. 1e13
+    // (p = 2), and the gradient came back NaN where it is an ordinary float.
+    // The arithmetic is float32 for a half input (see ``widen_half``).
+    const auto xw = widen_half(*gx.arr);
+    const auto gw = widen_half(*gg.arr);
+    const auto d = widen_half(*gn.arr);
+    auto u = mx::divide(xw, d);
+    auto proj = mx::sum(mx::multiply(gw, u), std::vector<int>{axis}, true);
+    // For p = 2, sgn(u) |u| is u.
+    auto weight = ord == 2.0 ? u : mx::multiply(mx::sign(u), gpu_pow(mx::abs(u), ord - 1.0));
+    auto dx = mx::divide(mx::subtract(gw, mx::multiply(weight, proj)), d);
+    return Storage{gpu::wrap_mlx_array(narrow_half(dx, mlx_dt), dt)};
 }
 
 std::vector<Storage> GpuBackend::global_response_norm_forward(const Storage& x,

@@ -527,40 +527,9 @@ std::vector<Storage> CpuBackend::lp_normalize_forward(
     auto norm_cpu = alloc_cpu(static_cast<std::size_t>(outer) * inner, dt);
     auto run = [&](auto tag) {
         using T = decltype(tag);
-        const T* xp = reinterpret_cast<const T*>(xs.ptr.get());
-        T* yp = reinterpret_cast<T*>(y_cpu.ptr.get());
-        T* np = reinterpret_cast<T*>(norm_cpu.ptr.get());
-        for (int o = 0; o < outer; ++o)
-            for (int n = 0; n < inner; ++n) {
-                T acc = T{0};
-                for (int a = 0; a < axis_len; ++a)
-                    acc += static_cast<T>(std::pow(
-                        std::abs(static_cast<double>(xp[(o * axis_len + a) * inner + n])), ord));
-                const T nm = static_cast<T>(std::pow(static_cast<double>(acc), 1.0 / ord));
-                // ``max(nm, eps)``, written so a NaN norm survives it.
-                //
-                // ``nm > eps`` is *false* when ``nm`` is NaN — every
-                // comparison against NaN is — so the ternary quietly
-                // took the other branch and the denominator became
-                // ``eps``.  A row containing one NaN then normalised to
-                // ``x / 1e-12``:
-                //
-                //     normalize([nan, inf, -inf, -1])
-                //       cpu       [nan, inf, -inf, -1e12]
-                //       metal     [nan, nan,  nan,   nan]
-                //
-                // The norm of a vector with a NaN in it is NaN, so every
-                // output is NaN; Metal and the reference both say so.
-                // ``std::fmax`` would not help — it is specified to
-                // return the non-NaN operand.
-                const T nan_safe_eps = static_cast<T>(eps);
-                const T denom = (nm > nan_safe_eps || nm != nm) ? nm : nan_safe_eps;
-                np[o * inner + n] = denom;
-                for (int a = 0; a < axis_len; ++a) {
-                    const std::size_t idx = (o * axis_len + a) * inner + n;
-                    yp[idx] = xp[idx] / denom;
-                }
-            }
+        cpu::lp_normalize_forward_typed(
+            reinterpret_cast<const T*>(xs.ptr.get()), reinterpret_cast<T*>(y_cpu.ptr.get()),
+            reinterpret_cast<T*>(norm_cpu.ptr.get()), outer, axis_len, inner, ord, eps);
     };
     if (dt == Dtype::F32)
         run(float{});
@@ -597,28 +566,10 @@ Storage CpuBackend::lp_normalize_backward(const Storage& x,
     auto dx_cpu = alloc_cpu(numel, dt);
     auto run = [&](auto tag) {
         using T = decltype(tag);
-        const T* xp = reinterpret_cast<const T*>(xs.ptr.get());
-        const T* np = reinterpret_cast<const T*>(ns.ptr.get());
-        const T* gp = reinterpret_cast<const T*>(gs.ptr.get());
-        T* dxp = reinterpret_cast<T*>(dx_cpu.ptr.get());
-        for (int o = 0; o < outer; ++o)
-            for (int n = 0; n < inner; ++n) {
-                const T N = np[o * inner + n];
-                T proj = T{0};
-                for (int a = 0; a < axis_len; ++a) {
-                    const std::size_t idx = (o * axis_len + a) * inner + n;
-                    proj += gp[idx] * xp[idx];
-                }
-                const T N_pp1 = static_cast<T>(std::pow(static_cast<double>(N), ord + 1.0));
-                for (int a = 0; a < axis_len; ++a) {
-                    const std::size_t idx = (o * axis_len + a) * inner + n;
-                    const T xi = xp[idx];
-                    const T sgn = (xi > T{0}) ? T{1} : (xi < T{0} ? T{-1} : T{0});
-                    const T abs_pm1 =
-                        static_cast<T>(std::pow(std::abs(static_cast<double>(xi)), ord - 1.0));
-                    dxp[idx] = gp[idx] / N - sgn * abs_pm1 * proj / N_pp1;
-                }
-            }
+        cpu::lp_normalize_backward_typed(
+            reinterpret_cast<const T*>(xs.ptr.get()), reinterpret_cast<const T*>(ns.ptr.get()),
+            reinterpret_cast<const T*>(gs.ptr.get()), reinterpret_cast<T*>(dx_cpu.ptr.get()), outer,
+            axis_len, inner, ord);
     };
     if (dt == Dtype::F32)
         run(float{});

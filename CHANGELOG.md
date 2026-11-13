@@ -243,6 +243,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - record the scaled p-norm in a compile trace (LCD-955)
 
+- range-safe lp_normalize backward and CPU norm (LCD-994)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

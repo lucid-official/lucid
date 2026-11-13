@@ -16,10 +16,15 @@
 //
 // Both norms save per-row reciprocal standard deviation (rstd = 1/std) during
 // the forward pass so the backward pass can avoid a redundant division.
+//
+// Lp normalisation (``lp_normalize``): ``y = x / max(||x||_p, eps)`` along one
+// axis, written once over the scalar type at the end of this header.
 
 #pragma once
 
+#include <cmath>
 #include <cstddef>
+#include <limits>
 
 #include "../../api.h"
 
@@ -308,5 +313,145 @@ LUCID_INTERNAL void rms_norm_backward_f64(const double* x,
                                           double* dgamma,
                                           std::size_t outer,
                                           std::size_t N);
+
+// ---------------------------------------------------------------------------
+// Lp normalisation.  x, y, grad and dx are (outer, axis_len, inner) row-major;
+// the norm is (outer, inner).
+//
+// Everything is taken relative to the slice's largest magnitude or to the
+// denominator itself, so no intermediate leaves the float range the answer is
+// in.  ``sum(|x|^p)`` of a float32 slice near 1e25 is 1e50 and one near 1e-25
+// is 1e-50 with p = 2, although the norm and the normalised row are ordinary
+// floats; BLAS's ``nrm2`` rescales by the largest magnitude for the same
+// reason.  The accumulators are double, as the powers are.
+// ---------------------------------------------------------------------------
+
+// ``x^e`` for a fixed exponent ``e``.  A small exponent that is a multiple of a
+// half — 2, 3 and 1.5 above all, the usual orders of a norm — is a square root and
+// a few multiplications by squaring, where ``std::pow`` is ~15 ns; any other
+// exponent takes ``std::pow``.  ``x^0`` is 1 for every ``x``, NaN included, as
+// ``std::pow``'s is.
+struct LpPower {
+    static constexpr int kMaxHalves = 64;
+    double exponent;
+    int halves;  // ``2 * exponent`` when that is a whole number in [0, kMaxHalves], else -1
+
+    explicit LpPower(double e)
+        : exponent(e),
+          halves((e >= 0.0 && 2.0 * e <= kMaxHalves && 2.0 * e == std::floor(2.0 * e))
+                     ? static_cast<int>(2.0 * e)
+                     : -1) {}
+
+    double operator()(double x) const {
+        if (halves < 0)
+            return std::pow(x, exponent);
+        double result = (halves & 1) != 0 ? std::sqrt(x) : 1.0;
+        double base = x;
+        for (int n = halves >> 1; n != 0; n >>= 1) {
+            if (n & 1)
+                result *= base;
+            base *= base;
+        }
+        return result;
+    }
+};
+
+// ``(sum |x_a|^p)^(1/p)`` of the ``len`` entries ``x[a * stride]``, ``power``
+// being ``x^p``.  The sum is the plain one in double when no power can leave the
+// double range: an order of at most 1 has no power larger than its base, and a
+// float up to 3.4e38 raised to p <= 6 is below 1e231 (its smallest, 1.4e-45, is
+// above 1e-270).  Otherwise it is
+// ``top * (sum (|x_a| / top)^p)^(1/p)`` with ``top`` the largest magnitude, so
+// every power is in [0, 1]: a NaN anywhere is the answer, an infinity makes it
+// inf, an all-zero slice is 0.
+template <typename T>
+double lp_slice_norm(const T* x, int len, std::size_t stride, double ord, const LpPower& power) {
+    constexpr double kFloatSafeOrder = 6.0;
+    if (!(ord > 1.0) || (sizeof(T) < sizeof(double) && ord <= kFloatSafeOrder)) {
+        double acc = 0.0;
+        for (int a = 0; a < len; ++a)
+            acc += power(std::abs(static_cast<double>(x[a * stride])));
+        return ord == 2.0 ? std::sqrt(acc) : std::pow(acc, 1.0 / ord);
+    }
+    double top = 0.0;
+    bool nan_seen = false;
+    for (int a = 0; a < len; ++a) {
+        const double v = std::abs(static_cast<double>(x[a * stride]));
+        nan_seen = nan_seen || v != v;
+        top = v > top ? v : top;
+    }
+    if (nan_seen)
+        return std::numeric_limits<double>::quiet_NaN();
+    if (top == 0.0 || std::isinf(top))
+        return top;
+    double acc = 0.0;
+    // A multiplication is cheaper than a division; ``1 / top`` overflows only for
+    // a subnormal double ``top``, which divides instead.
+    const double inv = 1.0 / top;
+    const bool by_inverse = std::isfinite(inv);
+    for (int a = 0; a < len; ++a) {
+        const double v = std::abs(static_cast<double>(x[a * stride]));
+        acc += power(by_inverse ? v * inv : v / top);
+    }
+    return top * (ord == 2.0 ? std::sqrt(acc) : std::pow(acc, 1.0 / ord));
+}
+
+// ``y = x / d`` with ``d = max(||x||_p, eps)``, and ``d`` itself into ``norm``.
+template <typename T>
+void lp_normalize_forward_typed(
+    const T* x, T* y, T* norm, int outer, int axis_len, int inner, double ord, double eps) {
+    const T floor = static_cast<T>(eps);
+    const LpPower power(ord);
+    for (int o = 0; o < outer; ++o)
+        for (int n = 0; n < inner; ++n) {
+            const std::size_t base = static_cast<std::size_t>(o) * axis_len * inner + n;
+            const T nm = static_cast<T>(lp_slice_norm(x + base, axis_len, inner, ord, power));
+            // ``max(nm, eps)``, written so a NaN norm survives it: ``nm > eps`` is
+            // false for NaN, and the ternary would otherwise divide the row by eps
+            // (``std::fmax`` returns the non-NaN operand, the same swallowing).
+            const T denom = (nm > floor || nm != nm) ? nm : floor;
+            norm[static_cast<std::size_t>(o) * inner + n] = denom;
+            for (int a = 0; a < axis_len; ++a) {
+                const std::size_t idx = base + static_cast<std::size_t>(a) * inner;
+                y[idx] = x[idx] / denom;
+            }
+        }
+}
+
+// ``dx = (g - sgn(u) |u|^(p-1) <g, u>) / d`` with ``u = x / d`` — the usual
+// ``g/d - sgn(x) |x|^(p-1) <g, x> / d^(p+1)`` after factoring out ``d``.  ``u`` is
+// the forward output (every entry at most 1 in magnitude once ``d`` is the norm),
+// so the form never raises a magnitude to a power of the norm, which leaves the
+// float range for a norm outside roughly 1e-13 .. 1e13 (``d^3``).  For p = 2 the
+// factor ``sgn(u) |u|`` is ``u``.
+template <typename T>
+void lp_normalize_backward_typed(
+    const T* x, const T* norm, const T* g, T* dx, int outer, int axis_len, int inner, double ord) {
+    const bool two = ord == 2.0;
+    const LpPower power(ord - 1.0);
+    auto weight = [&](double u) {
+        if (two)
+            return u;
+        const double sgn = u > 0.0 ? 1.0 : (u < 0.0 ? -1.0 : 0.0);
+        return sgn * power(std::abs(u));
+    };
+    for (int o = 0; o < outer; ++o)
+        for (int n = 0; n < inner; ++n) {
+            const std::size_t base = static_cast<std::size_t>(o) * axis_len * inner + n;
+            // ``d`` is at least eps, so its inverse is finite for any eps above ~1e-308.
+            const double inv =
+                1.0 / static_cast<double>(norm[static_cast<std::size_t>(o) * inner + n]);
+            double proj = 0.0;
+            for (int a = 0; a < axis_len; ++a) {
+                const std::size_t idx = base + static_cast<std::size_t>(a) * inner;
+                proj += static_cast<double>(g[idx]) * (static_cast<double>(x[idx]) * inv);
+            }
+            for (int a = 0; a < axis_len; ++a) {
+                const std::size_t idx = base + static_cast<std::size_t>(a) * inner;
+                const double u = static_cast<double>(x[idx]) * inv;
+                dx[idx] = static_cast<T>((static_cast<double>(g[idx]) - weight(u) * proj) * inv);
+            }
+        }
+}
 
 }  // namespace lucid::backend::cpu
