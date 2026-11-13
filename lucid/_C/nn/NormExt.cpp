@@ -237,6 +237,84 @@ TensorImplPtr real_p_norm_keepdim(const TensorImplPtr& r, double ord, int axis) 
     return real_non_trivial_p_norm(r, ord, axis);
 }
 
+// sgn(u) |u|^(p-1) for ``u = r / d``, the slope of |u|^p / p; ``base`` is ``|r|``.  It is
+// formed from ``r`` and ``d`` apart, sgn(r) |r|^(p-1) / d^(p-1), rather than as a power of
+// the quotient: a power below 2 has an infinite slope at a zero entry, and through
+// ``u = r / d`` that infinity meets the zero ``r`` in the gradient of ``d`` (``inf * 0``)
+// and poisons every entry of the slice instead of the one component that is infinite.
+TensorImplPtr
+signed_power(const TensorImplPtr& r, const TensorImplPtr& base, const TensorImplPtr& d, double p) {
+    if (p == 1.0)
+        return sign_op(r);
+    if (p == 2.0)
+        return div_op(r, d);
+    return div_op(mul_op(sign_op(r), pow_scalar_op(base, p - 1.0)), pow_scalar_op(d, p - 1.0));
+}
+
+// ``|r|`` with every entry of a ``floored`` slice set to 1, for the power below 2 (see
+// ``signed_power``).  A floored slice's weight is masked away and its gradient is 0, which
+// meets that infinite slope at an entry that is 0 (``inf * 0``): the entry's own component
+// of the second derivative, whose true value is 0 there, came back NaN.
+TensorImplPtr power_base(const TensorImplPtr& magnitude, const TensorImplPtr& floored, double p) {
+    if (p >= 2.0)
+        return magnitude;
+    return where_op(broadcast_to_op(floored, magnitude->shape()), ones_like_op(magnitude),
+                    magnitude);
+}
+
+// ``(sum |r|^p)^(1/p)`` along ``axis`` for a slice of ``r`` with a largest magnitude ~1, and 1
+// for a slice flagged ``floored``.  The floored slices' root is selected away before it is
+// taken: an all-zero slice has the root's infinite slope at 0, which meets the zero gradient
+// that ``where`` hands it (``inf * 0``) and leaves NaN behind.
+TensorImplPtr unit_scale_norm(const TensorImplPtr& r,
+                              const TensorImplPtr& magnitude,
+                              const TensorImplPtr& floored,
+                              double p,
+                              int axis) {
+    const std::vector<int> axes{axis};
+    auto sum = p == 1.0   ? sum_op(magnitude, axes, true)
+               : p == 2.0 ? sum_op(mul_op(r, r), axes, true)
+                          : sum_op(pow_scalar_op(magnitude, p), axes, true);
+    sum = where_op(floored, ones_like_op(sum), sum);
+    if (p == 1.0)
+        return sum;
+    return p == 2.0 ? sqrt_op(sum) : pow_scalar_op(sum, 1.0 / p);
+}
+
+// The recorded dx of ``y = x / d`` for ``d = max(||x||_p, eps)`` along ``axis``:
+//
+//   dx = (g - [||x|| >= eps] sgn(u) |u|^(p-1) <g, u>) / d,    u = x / d,
+//
+// evaluated at the scale ``m`` of each slice, a constant of the call: ``m`` is the
+// forward's denominator, so ``x / m`` has norm ~1 and every tracked op below works on
+// numbers of order 1 whatever the magnitude of ``x`` is.  ``||x|| = m ||x / m||`` for
+// any constant ``m > 0``, so the derivatives of every order are those of the plain
+// formula; only the intermediate magnitudes differ.  Written plainly the graph
+// divides by ``d^2`` where the quotient rule is differentiated (DivBackward's
+// ``-g a / b^2``), and that leaves float32 for a norm outside ~1e-19 .. 1e19.
+//
+// ``signed_d`` is the forward's saved denominator, negative for a floored slice, whose
+// denominator is the constant ``eps`` (``m`` itself, ``d / m = 1``) and which carries no
+// second term.
+TensorImplPtr lp_normalize_graph_dx(const TensorImplPtr& x,
+                                    const TensorImplPtr& g,
+                                    const TensorImplPtr& signed_d,
+                                    double ord,
+                                    int axis) {
+    const std::vector<int> axes{axis};
+    auto floored = less_op(signed_d, zeros_like_op(signed_d));
+    auto m = abs_op(signed_d);
+    auto r = div_op(x, m);
+    auto magnitude = abs_op(r);
+    // d / m: ~1 for an unfloored slice, exactly 1 for a floored one (whose denominator does
+    // not depend on x).
+    auto d_hat = unit_scale_norm(r, magnitude, floored, ord, axis);
+    auto along = div_op(sum_op(mul_op(g, r), axes, true), d_hat);
+    along = where_op(floored, zeros_like_op(along), along);
+    auto pull = mul_op(signed_power(r, power_base(magnitude, floored, ord), d_hat, ord), along);
+    return div_op(div_op(sub_op(g, pull), d_hat), m);
+}
+
 }  // namespace
 
 TensorImplPtr
@@ -297,31 +375,29 @@ std::vector<Storage> LpNormalizeBackward::apply(Storage grad_out) {
 }
 
 std::vector<TensorImplPtr> LpNormalizeBackward::apply_for_graph(const TensorImplPtr& grad_out) {
-    // y = x / d, d = max(n, eps), n = (sum |x|^p)^(1/p) along the axis.
-    //   dx = g / d - x * sum(g * x) / d^2 * dn/dx,  dn/dx = sign(x) |x|^(p-1) / n^(p-1)
-    // where the norm is above eps; below it d is the constant eps and the
-    // second term vanishes.  Everything is recomputed from x so the second
-    // derivative sees its dependence on the input.
+    // The eager backward's formula built from tracked ops of x, so the second
+    // derivative sees the norm's dependence on it; see ``lp_normalize_graph_dx``
+    // for why it is evaluated at the scale of the forward's denominator.  The
+    // reference's floor is a clamp_min: a norm equal to eps keeps its derivative
+    // (the saved denominator is negated only below it), a NaN norm passes
+    // through the forward and gets none.
     const auto& x = this->saved_impl_inputs_[0];
     if (!x)
         ErrorBuilder("lp_normalize").fail("graph-mode backward is missing its saved input");
     if (!std::isfinite(ord_) || ord_ < 1.0)
         ErrorBuilder("lp_normalize")
             .not_implemented("create_graph=True needs a finite ord of at least 1");
-    const std::vector<int> axis{axis_};
-    auto magnitude = abs_op(x);
-    auto norm = pow_scalar_op(sum_op(pow_scalar_op(magnitude, ord_), axis, true), 1.0 / ord_);
-    auto floor = full_like_op(norm, eps_);
-    // The reference's floor is a clamp_min: a norm equal to eps keeps its
-    // derivative, a NaN norm passes through the forward and gets none.
-    // maximum_op would halve the derivative at the tie.
-    auto denom = where_op(less_op(norm, floor), floor, norm);
-    auto active = greater_equal_op(norm, floor);
-    auto dnorm = div_op(mul_op(sign_op(x), pow_scalar_op(magnitude, ord_ - 1.0)),
-                        pow_scalar_op(norm, ord_ - 1.0));
-    dnorm = where_op(broadcast_to_op(active, x->shape()), dnorm, zeros_like_op(dnorm));
-    auto along = div_op(sum_op(mul_op(grad_out, x), axis, true), mul_op(denom, denom));
-    return {sub_op(div_op(grad_out, denom), mul_op(dnorm, along))};
+    Shape reduced = this->out_shape_;
+    reduced[axis_] = 1;
+    auto signed_d = std::make_shared<TensorImpl>(this->saved_norm_, reduced, this->dtype_,
+                                                 this->device_, false);
+    // A half input is differentiated in float32, as the eager kernels read it.
+    if (is_half_float(this->dtype_)) {
+        auto dx = lp_normalize_graph_dx(astype_op(x, Dtype::F32), astype_op(grad_out, Dtype::F32),
+                                        astype_op(signed_d, Dtype::F32), ord_, axis_);
+        return {astype_op(dx, this->dtype_)};
+    }
+    return {lp_normalize_graph_dx(x, grad_out, signed_d, ord_, axis_)};
 }
 
 TensorImplPtr lp_normalize_op(const TensorImplPtr& x, double ord, int axis, double eps) {

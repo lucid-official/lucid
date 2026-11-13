@@ -249,6 +249,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - repeat and tile intermediates stay at rank <= 4 (LCD-995)
 
+- range-safe graph-mode lp_normalize backward (LCD-996)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

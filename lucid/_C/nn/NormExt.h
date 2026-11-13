@@ -294,7 +294,9 @@ public:
     //     Single-element vector ``{dx}``.
     std::vector<Storage> apply(Storage grad_out) override;
 
-    // The same gradient, recorded, with the norm recomputed from x.
+    // The same gradient, recorded: the norm is recomputed from x at the scale of
+    // the saved denominator, so a slice near 1e-25 or 1e25 differentiates twice
+    // without leaving the float range.
     std::vector<TensorImplPtr> apply_for_graph(const TensorImplPtr& grad_out) override;
 };
 
