@@ -326,15 +326,7 @@ def test_check_kwargs_returns_what_the_reference_returns(
 @pytest.mark.parity
 @pytest.mark.parametrize(
     "version",
-    [
-        "0.0.0",
-        "0.17.1",
-        "0.18.0",
-        "0.18.0.dev0",
-        "0.18.1.dev0@abc123",
-        "0.18.0.post1",
-        "0.21.2",
-    ],
+    ["0.0.0", "0.17.1", "0.18.0", "0.18.0.dev0", "0.18.1.dev0@abc123", "0.18.0.post1", "0.21.2"],
 )
 def test_oft_check_kwargs_warns_as_the_reference_does(version: str) -> None:
     library = adapter_library()

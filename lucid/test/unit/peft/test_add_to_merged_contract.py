@@ -29,14 +29,7 @@ from pathlib import Path
 import pytest
 
 import lucid
-from lucid.peft import (
-    LoraConfig,
-    LoraGAConfig,
-    PeftMixedModel,
-    PeftModel,
-    PeftType,
-    get_peft_model,
-)
+from lucid.peft import LoraConfig, LoraGAConfig, PeftMixedModel, PeftModel, PeftType, get_peft_model
 from lucid.peft.tuners._layer import _BaseTunerLayer, _tuner_layers
 from lucid.test.unit.peft._tuner_recipes import (
     RECIPES,
@@ -350,9 +343,7 @@ def test_an_adapter_added_to_a_merged_stack_takes_the_weight_from_beneath_every_
 # ── what a merge keeps beside the weights ───────────────────────────────────────────────────────
 
 
-def test_the_row_gains_of_merged_dora_adapters_are_what_they_were_after_an_add(
-    device: str,
-) -> None:
+def test_the_row_gains_of_merged_dora_adapters_are_what_they_were_after_an_add(device: str) -> None:
     """Folding DoRA again recomputes its gains from a weight that lost bits unmerging: they are put back."""
     recipe = RECIPES[PeftType.LORA]
     model = get_peft_model(

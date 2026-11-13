@@ -23,14 +23,7 @@ from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.peft import PeftModel, PeftType
 from lucid.peft.tuners._base import _TUNERS
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.peft._tuner_recipes import (
-    RECIPES,
-    Recipe,
-    adapted,
-    magnitude,
-    perturb,
-    span,
-)
+from lucid.test.unit.peft._tuner_recipes import RECIPES, Recipe, adapted, magnitude, perturb, span
 
 pytestmark = [
     pytest.mark.skipif(not metal_available(), reason="compiled executables run on Metal"),

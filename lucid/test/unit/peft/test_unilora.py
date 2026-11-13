@@ -356,12 +356,7 @@ class TestFiles:
 
 
 _THETA = "base_model.unilora_theta_d"
-_PROJECTION = (
-    "unilora_indices_A",
-    "unilora_indices_B",
-    "unilora_scales_A",
-    "unilora_scales_B",
-)
+_PROJECTION = ("unilora_indices_A", "unilora_indices_B", "unilora_scales_A", "unilora_scales_B")
 
 #: (layers of the first adapter, layers of the second): the second one's reach among the first's.
 _LAYOUTS = {
