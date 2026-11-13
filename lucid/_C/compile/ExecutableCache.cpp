@@ -12,8 +12,13 @@
 #include <bit>
 #include <cstdint>
 #include <cstdlib>
+#include <string_view>
 #include <utility>
 
+#include <unistd.h>
+
+#include "../core/Dtype.h"
+#include "../core/Shape.h"
 #include "OpEmitters/OpEmitter.h"
 #include "RankCanon.h"
 #include "VjpEmitters/VjpEmitter.h"
@@ -21,6 +26,10 @@
 namespace lucid::compile {
 
 namespace {
+// The op name a ``VjpRegion`` takes in a :class:`CacheKey`: its slot of
+// ``output_shapes`` holds the region's bounds, not a tensor shape.
+constexpr std::string_view kVjpRegionOp = "__vjp_region__";
+
 // Boost-style hash combiner — small enough to inline here and used
 // uniformly across every CacheKey field.
 inline void hash_combine(std::size_t& seed, std::size_t v) noexcept {
@@ -111,7 +120,7 @@ inline void append_node_to_key(CacheKey& key,
 }
 
 inline void append_vjp_region_to_key(CacheKey& key, TraceIdMap& local_map, const VjpRegion& r) {
-    key.op_names.emplace_back("__vjp_region__");
+    key.op_names.emplace_back(kVjpRegionOp);
     std::vector<std::int64_t> header_ids;
     header_ids.reserve(r.input_ids.size() + r.output_metas.size() + r.cotangent_ids.size() +
                        r.input_grad_ids.size());
@@ -181,7 +190,27 @@ inline bool remap_to_raw(std::vector<TensorId>& ids, const TraceIdMap& id_map) {
     }
     return true;
 }
+
+// An eighth of the machine's memory: the estimate counts every op output, which is
+// more than the executables pin for most graphs, and the rest of the machine keeps
+// seven eighths.  Unknown (``sysconf`` failed) is no byte cap.
+std::size_t default_max_bytes() noexcept {
+    const long pages = ::sysconf(_SC_PHYS_PAGES);
+    const long page_bytes = ::sysconf(_SC_PAGESIZE);
+    if (pages <= 0 || page_bytes <= 0)
+        return 0;
+    return static_cast<std::size_t>(pages) * static_cast<std::size_t>(page_bytes) / 8;
+}
 }  // namespace
+
+std::size_t retained_bytes_estimate(const CacheKey& key) {
+    std::size_t total = 0;
+    for (std::size_t i = 0; i < key.op_names.size(); ++i) {
+        if (key.op_names[i] != kVjpRegionOp)
+            total += shape_numel(key.output_shapes[i]) * dtype_size(key.output_dtypes[i]);
+    }
+    return total;
+}
 
 bool CacheKey::operator==(const CacheKey& other) const noexcept {
     return device == other.device && policy == other.policy && op_names == other.op_names &&
@@ -325,8 +354,10 @@ SharedExecutable ExecutableCache::insert(CacheKey key, SharedExecutable exec) {
     std::lock_guard<std::mutex> lock(mu_);
 
     // Replace any existing entry under the same key; a caller still
-    // holding the previous executable keeps it alive.
-    map_[key] = exec;
+    // holding the previous executable keeps it alive.  A key that is already here
+    // is already counted in ``bytes_``.
+    if (map_.insert_or_assign(key, exec).second)
+        bytes_ += retained_bytes_estimate(key);
 
     // Bring the key to the front of "most-recent".
     auto vit = std::find(lru_order_.begin(), lru_order_.end(), key);
@@ -338,16 +369,24 @@ SharedExecutable ExecutableCache::insert(CacheKey key, SharedExecutable exec) {
     // given up on stays: forgetting it would let the next module that meets the same
     // graph spend the whole budget again, and leave one more thread running.  The
     // watchdog's circuit breaker keeps their number small (its limit plus the first runs
-    // in flight when it opened).
-    while (lru_order_.size() > max_entries_) {
-        const auto victim_it =
-            std::find_if(lru_order_.begin(), lru_order_.end(), [&](const CacheKey& k) {
-                return executable_first_run_state(map_.at(k).get()) != FirstRunState::Refused;
-            });
-        if (victim_it == lru_order_.end())
-            break;
+    // in flight when it opened).  ``spare`` entries at the back are off limits.
+    const auto evict_oldest = [&](std::size_t spare) {
+        const auto last = lru_order_.end() - static_cast<std::ptrdiff_t>(spare);
+        const auto victim_it = std::find_if(lru_order_.begin(), last, [&](const CacheKey& k) {
+            return executable_first_run_state(map_.at(k).get()) != FirstRunState::Refused;
+        });
+        if (victim_it == last)
+            return false;
+        bytes_ -= retained_bytes_estimate(*victim_it);
         map_.erase(*victim_it);
         lru_order_.erase(victim_it);
+        return true;
+    };
+    while (lru_order_.size() > max_entries_ && evict_oldest(0)) {
+    }
+    // The entry just inserted is the one the caller is about to run, so it stays even
+    // when it alone is over the byte cap.
+    while (max_bytes_ != 0 && bytes_ > max_bytes_ && evict_oldest(1)) {
     }
     return exec;
 }
@@ -356,11 +395,27 @@ void ExecutableCache::clear() {
     std::lock_guard<std::mutex> lock(mu_);
     map_.clear();
     lru_order_.clear();
+    bytes_ = 0;
 }
 
 std::size_t ExecutableCache::size() const {
     std::lock_guard<std::mutex> lock(mu_);
     return map_.size();
+}
+
+std::size_t ExecutableCache::bytes() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return bytes_;
+}
+
+void ExecutableCache::set_max_bytes(std::size_t n) {
+    std::lock_guard<std::mutex> lock(mu_);
+    max_bytes_ = n;
+}
+
+std::size_t ExecutableCache::max_bytes() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    return max_bytes_;
 }
 
 void ExecutableCache::set_max_entries(std::size_t n) {
@@ -380,6 +435,13 @@ ExecutableCache& ExecutableCache::session() {
             unsigned long v = std::strtoul(s, &end, 10);
             if (end != s && v > 0)
                 c->set_max_entries(static_cast<std::size_t>(v));
+        }
+        c->set_max_bytes(default_max_bytes());
+        if (const char* s = std::getenv("LUCID_COMPILE_MAX_CACHE_BYTES")) {
+            char* end = nullptr;
+            const unsigned long long v = std::strtoull(s, &end, 10);
+            if (end != s)
+                c->set_max_bytes(static_cast<std::size_t>(v));
         }
         return c;
     }();

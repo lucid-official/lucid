@@ -375,6 +375,27 @@ void bind_rank_canon(py::module_& m) {
         "Part of the executable cache key; Python's per-module cache keys on it too.");
 }
 
+// The process-global executable cache (ExecutableCache.h): what it holds and how much.
+void bind_session_cache(py::module_& m) {
+    m.def("session_cache_size", [] { return lucid::compile::ExecutableCache::session().size(); });
+    m.def("session_cache_clear", [] { lucid::compile::ExecutableCache::session().clear(); });
+    m.def(
+        "session_cache_bytes", [] { return lucid::compile::ExecutableCache::session().bytes(); },
+        "Estimated bytes the session cache's executables keep pinned "
+        "(``retained_bytes_estimate`` summed over its entries).");
+    m.def(
+        "session_cache_set_max_bytes",
+        [](std::size_t n) {
+            auto& cache = lucid::compile::ExecutableCache::session();
+            const std::size_t previous = cache.max_bytes();
+            cache.set_max_bytes(n);
+            return previous;
+        },
+        py::arg("n"),
+        "Set the session cache's byte cap (``0`` = none) and return the previous one.  "
+        "Honoured by the next insert.");
+}
+
 void bind_trace_nodes(py::module_& m) {
     using lucid::compile::OpNode;
     using lucid::compile::TensorMeta;
@@ -719,8 +740,7 @@ void register_compile(py::module_& m) {
         "(stub semantics) — this helper only distinguishes "
         "'registered but possibly a stub' from 'no emitter at all'.");
 
-    m.def("session_cache_size", [] { return lucid::compile::ExecutableCache::session().size(); });
-    m.def("session_cache_clear", [] { lucid::compile::ExecutableCache::session().clear(); });
+    bind_session_cache(m);
 
     // Attention fused-pass workaround capability flag (see OpEmitter.h +
     // lucid.compile._core.attention_probe).  -1 unprobed / 0 unaffected /

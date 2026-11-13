@@ -19,6 +19,14 @@
 // The cache is thread-safe (one mutex protects the underlying map +
 // LRU vector); calls from the autograd Engine or DataLoader workers
 // share one cache.
+//
+// Besides the entry cap there is a byte cap.  An MPSGraphExecutable keeps the
+// intermediate buffers MPSGraph planned for it from its first run until it is
+// released, nothing Lucid or MLX holds and no public API returns: a graph that
+// broadcasts a 34 MB input 4x pins 140 MB for as long as the cache keeps it.
+// 32 entries bounds the count and not that (LCD-1000), so the cache also
+// evicts, oldest first, while the :func:`retained_bytes_estimate` of its
+// entries is over ``max_bytes``.
 
 #pragma once
 
@@ -204,6 +212,14 @@ LUCID_API SharedExecutable canonicalize_executable(const CompiledExecutable* exe
 LUCID_API SharedExecutable localize_executable(const CompiledExecutable* exe,
                                                const TraceIdMap& id_map);
 
+// An estimate of the memory an executable built from ``key`` keeps pinned: the bytes
+// of every op's output, the graph outputs and the views among them included.  MPSGraph
+// fuses and aliases some of those away (measured: 0 for an elementwise chain, 1.0x for
+// ``cumsum``, 0.4-0.6x for ``repeat``, a conv net and an MLP), and an emitter that
+// expands one op into several (attention) pins more than its output.  The feeds are the
+// caller's.
+LUCID_API std::size_t retained_bytes_estimate(const CacheKey& key);
+
 // Bounded-LRU cache of compiled MPSGraph executables.
 //
 // Thread-safe.  Entries are shared: eviction drops the cache's reference
@@ -249,13 +265,24 @@ public:
     // Number of currently-cached entries.
     std::size_t size() const;
 
+    // Sum of :func:`retained_bytes_estimate` over the cached entries.
+    std::size_t bytes() const;
+
     // Override the LRU cap.  Honoured by subsequent inserts; existing
     // entries are not evicted retroactively.  Default is 32.
     void set_max_entries(std::size_t n);
 
+    // The byte cap: the oldest entries go while :func:`bytes` is above it, except
+    // the one just inserted, which stays however large it is.  ``0`` (the default
+    // of a cache made here) means no byte cap.  Honoured by subsequent inserts.
+    void set_max_bytes(std::size_t n);
+    std::size_t max_bytes() const;
+
     // Process-global session cache.  First call honours the
     // ``LUCID_COMPILE_MAX_CACHE`` environment variable (positive
-    // integer).  Subsequent calls return the same instance.
+    // integer) and ``LUCID_COMPILE_MAX_CACHE_BYTES`` (``0`` = no byte cap;
+    // default an eighth of the machine's memory).  Subsequent calls return
+    // the same instance.
     static ExecutableCache& session();
 
 private:
@@ -264,6 +291,8 @@ private:
     // Most-recent at the back; front = next eviction candidate.
     std::vector<CacheKey> lru_order_;
     std::size_t max_entries_ = 32;
+    std::size_t max_bytes_ = 0;
+    std::size_t bytes_ = 0;
 };
 
 }  // namespace lucid::compile
