@@ -1,6 +1,7 @@
 // lucid/_C/compile/OpEmitters/_AxisSplitLayout.h
 //
-// The shapes a repeat / tile emitter and its VJP work in (LCD-995).
+// The shapes a repeat / tile emitter and its VJP, and a wide-integer gather, work in
+// (LCD-995, LCD-997).
 //
 // ``repeat`` is spelled as "insert a unit axis after ``axis``, broadcast it to ``reps``,
 // collapse the two", its VJP as the mirror ("fold the axis into ``(d, r)``, sum ``r``"), and
@@ -19,6 +20,12 @@
 // reshape only as a ``-1``, and a product with it is unknowable here).  The forward emitter and
 // the VJP take their shapes from here, so they agree.
 //
+// A gather of a wide integer is the same defect with another cause: ``_DataMovement.h`` carries
+// the operand as int16 lanes on one more trailing axis, so ``(8192, 8, 16, 16)`` of int32 is a
+// rank-5 intermediate (53 ms against 12 at rank 3).  The gathered axis is the one the op names,
+// so the operand merges around it before the lanes are added (``lane_gather_along_axis`` /
+// ``lane_take``).
+//
 // Pure C++ — include from ``.mm`` files only.
 
 #pragma once
@@ -27,6 +34,7 @@
 #include <cstdint>
 #include <initializer_list>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "../RankCanon.h"
@@ -137,6 +145,95 @@ tile_folds(const std::vector<std::int64_t>& x, const std::vector<std::int64_t>& 
         tiled[a] = x[a];
     }
     return folds;
+}
+
+// A gather of a carried (wide-integer) operand: the operand and the index read around the
+// gathered axis, and the shape the answer is read back as.  ``data`` is ``(pre, d, post)``, so
+// the carried operand, ``(pre, d, post, lanes)``, is rank 4 at most.
+struct LaneGather {
+    std::vector<std::int64_t> data;
+    std::vector<std::int64_t> index;
+    std::size_t axis = 0;  // the gathered axis in ``data``
+    std::vector<std::int64_t> result;
+};
+
+namespace axis_split_detail {
+
+inline bool concrete(const std::vector<std::int64_t>& shape) {
+    for (std::int64_t d : shape) {
+        if (d <= 0)
+            return false;
+    }
+    return !shape.empty();
+}
+
+inline std::vector<std::int64_t> with_lanes(std::vector<std::int64_t> shape, std::int64_t lanes) {
+    shape.push_back(lanes);
+    return shape;
+}
+
+// Whether a gather of ``operand`` into ``result``, carried on ``lanes`` lanes, is worth merging:
+// both shapes known, and one of the two carried shapes over the pass's gate.
+inline bool wants_lane_merge(const std::vector<std::int64_t>& operand,
+                             const std::vector<std::int64_t>& result,
+                             std::int64_t lanes) {
+    if (!concrete(operand) || !concrete(result))
+        return false;
+    return wants_axis_bands(with_lanes(operand, lanes)) ||
+           wants_axis_bands(with_lanes(result, lanes));
+}
+
+inline std::optional<std::size_t> resolve_axis(std::int64_t axis, std::size_t rank) {
+    if (axis < 0)
+        axis += static_cast<std::int64_t>(rank);
+    if (axis < 0 || axis >= static_cast<std::int64_t>(rank))
+        return std::nullopt;
+    return static_cast<std::size_t>(axis);
+}
+
+}  // namespace axis_split_detail
+
+// ``gatherAlongAxis`` of ``data`` at ``index`` (the same shape off ``axis``; the answer has
+// ``index``'s shape), carried on ``lanes`` lanes.  nullopt keeps the native spelling.
+[[maybe_unused]] inline std::optional<LaneGather>
+lane_gather_along_axis(const std::vector<std::int64_t>& data,
+                       const std::vector<std::int64_t>& index,
+                       std::int64_t axis,
+                       std::int64_t lanes) {
+    namespace d = axis_split_detail;
+    const auto at = d::resolve_axis(axis, data.size());
+    if (!at || index.size() != data.size() || !d::wants_lane_merge(data, index, lanes))
+        return std::nullopt;
+    for (std::size_t i = 0; i < data.size(); ++i) {
+        if (i != *at && data[i] != index[i])
+            return std::nullopt;
+    }
+    const AxisBands bands = axis_bands(data, *at);
+    return LaneGather{bands.shape({data[*at]}), bands.shape({index[*at]}), bands.index_of(0),
+                      index};
+}
+
+// ``gather`` of ``data`` at ``index`` along ``axis`` (the answer is ``data`` with the axis
+// replaced by ``index``'s shape), carried on ``lanes`` lanes.  The index is read flat, so the
+// gather's result is ``(pre, k, post)`` however many axes the index has.
+[[maybe_unused]] inline std::optional<LaneGather> lane_take(const std::vector<std::int64_t>& data,
+                                                            const std::vector<std::int64_t>& index,
+                                                            std::int64_t axis,
+                                                            std::int64_t lanes) {
+    namespace d = axis_split_detail;
+    const auto at = d::resolve_axis(axis, data.size());
+    if (!at)
+        return std::nullopt;
+    std::vector<std::int64_t> result(data.begin(), data.begin() + static_cast<std::ptrdiff_t>(*at));
+    result.insert(result.end(), index.begin(), index.end());
+    result.insert(result.end(), data.begin() + static_cast<std::ptrdiff_t>(*at) + 1, data.end());
+    if (!d::wants_lane_merge(data, result, lanes))
+        return std::nullopt;
+    std::int64_t count = 1;
+    for (std::int64_t k : index)
+        count *= k;
+    const AxisBands bands = axis_bands(data, *at);
+    return LaneGather{bands.shape({data[*at]}), {count}, bands.index_of(0), std::move(result)};
 }
 
 }  // namespace lucid::compile

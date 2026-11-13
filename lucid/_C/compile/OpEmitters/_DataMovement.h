@@ -22,6 +22,13 @@
 // by broadcasting, an axis gather needs none.  Every other dtype goes to
 // MPSGraph untouched, so float graphs are the graphs they were.
 //
+// The lane axis is one more axis, and MPSGraph runs a rank >= 5 gather as a
+// loop over the dims above the last four (~4.5 us a slice): int32
+// ``(8192, 8, 16, 16)`` gathered in 53 ms against 12 at rank 3.  So the
+// operand and the index are read as ``(pre, d, post)`` around the gathered
+// axis before the lanes are added, and the answer is read back
+// (``_AxisSplitLayout.h``, LCD-997; the policy is the rank pass's gate).
+//
 // An overwrite cannot run on lanes either: each lane is its own scatter
 // element, so where two updates aim at one slot each lane picked its own
 // winner and the slot held half of one update and half of another.  It
@@ -43,6 +50,10 @@
 #import <MetalPerformanceShadersGraph/MetalPerformanceShadersGraph.h>
 
 #include <cstdint>
+#include <optional>
+
+#include "_AttrHelpers.h"
+#include "_AxisSplitLayout.h"
 
 namespace lucid::compile {
 
@@ -111,6 +122,12 @@ inline MPSGraphTensor* lane_index(MPSGraph* g, MPSGraphTensor* idx, NSUInteger l
                                                         shape:spread
                                                      dataType:idx.dataType]
                                    name:nil];
+}
+
+// ``x`` read as ``shape`` (a reshape: an alias of a computed tensor).  nil in, nil out.
+inline MPSGraphTensor*
+read_as(MPSGraph* g, MPSGraphTensor* x, const std::vector<std::int64_t>& shape) {
+    return x == nil ? nil : [g reshapeTensor:x withShape:shape_to_ns(shape) name:nil];
 }
 
 // An int32 tensor of ``like``'s shape holding ``value``; the shape is read
@@ -187,12 +204,22 @@ inline MPSGraphTensor* graph_gather_along_axis(
     const MPSDataType dt = data.dataType;
     if (graph_moves_exactly(dt, GraphMove::Gather))
         return [g gatherAlongAxis:axis withUpdatesTensor:data indicesTensor:idx name:name];
-    MPSGraphTensor* c = d::carry(g, data);
-    MPSGraphTensor* i = d::lane_index(g, idx, d::lanes_of(dt));
+    const NSUInteger lanes = d::lanes_of(dt);
+    const auto merged = lanes == 0 ? std::nullopt
+                                   : lane_gather_along_axis(shape_of_mps(data), shape_of_mps(idx),
+                                                            axis, static_cast<std::int64_t>(lanes));
+    MPSGraphTensor* c = d::carry(g, merged ? d::read_as(g, data, merged->data) : data);
+    MPSGraphTensor* i = d::lane_index(g, merged ? d::read_as(g, idx, merged->index) : idx, lanes);
     if (c == nil || i == nil)
         return nil;
-    return d::uncarry(g, [g gatherAlongAxis:axis withUpdatesTensor:c indicesTensor:i name:name],
-                      dt);
+    MPSGraphTensor* out =
+        d::uncarry(g,
+                   [g gatherAlongAxis:merged ? static_cast<NSInteger>(merged->axis) : axis
+                       withUpdatesTensor:c
+                           indicesTensor:i
+                                    name:name],
+                   dt);
+    return merged ? d::read_as(g, out, merged->result) : out;
 }
 
 // ``gather`` (the axis gather, no batch axes), exact for every dtype.
@@ -200,15 +227,29 @@ inline MPSGraphTensor* graph_gather(
     MPSGraph* g, MPSGraphTensor* data, MPSGraphTensor* idx, NSUInteger axis, NSString* name = nil) {
     namespace d = data_movement_detail;
     const MPSDataType dt = data.dataType;
-    MPSGraphTensor* src = graph_moves_exactly(dt, GraphMove::Gather) ? data : d::carry(g, data);
+    if (graph_moves_exactly(dt, GraphMove::Gather))
+        return [g gatherWithUpdatesTensor:data
+                            indicesTensor:idx
+                                     axis:axis
+                          batchDimensions:0
+                                     name:name];
+    const NSUInteger lanes = d::lanes_of(dt);
+    const auto merged =
+        lanes == 0 ? std::nullopt
+                   : lane_take(shape_of_mps(data), shape_of_mps(idx),
+                               static_cast<std::int64_t>(axis), static_cast<std::int64_t>(lanes));
+    MPSGraphTensor* src = d::carry(g, merged ? d::read_as(g, data, merged->data) : data);
     if (src == nil)
         return nil;
-    MPSGraphTensor* out = [g gatherWithUpdatesTensor:src
-                                       indicesTensor:idx
-                                                axis:axis
-                                     batchDimensions:0
-                                                name:name];
-    return src == data ? out : d::uncarry(g, out, dt);
+    MPSGraphTensor* out =
+        d::uncarry(g,
+                   [g gatherWithUpdatesTensor:src
+                                indicesTensor:merged ? d::read_as(g, idx, merged->index) : idx
+                                         axis:merged ? merged->axis : axis
+                              batchDimensions:0
+                                         name:name],
+                   dt);
+    return merged ? d::read_as(g, out, merged->result) : out;
 }
 
 namespace data_movement_detail {
