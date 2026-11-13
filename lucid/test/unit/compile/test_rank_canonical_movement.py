@@ -23,8 +23,10 @@ Three guards, as for the earlier rules:
 * a value table on Metal: the forward and the ``make_step`` gradients of the rewritten graph equal
   eager's (and the unrewritten graph's, exactly, for ops that only move values) at float32,
   float16 and bfloat16, over rank 5 and rank 6 and with NaN and inf in the data;
-* a coarse timing bound against the rank-4 twin of each case, and the permute gate that now reads
-  the larger of the input's and the output's lead.
+* a coarse timing bound against the twin of each case (the rank-4 form of the same elements; a
+  rank-3 one for ``repeat``), the same measurement with the pass off, which must exceed the bound
+  (a bound the unfixed graph meets guards nothing), and the permute gate that now reads the larger
+  of the input's and the output's lead.
 """
 
 import os
@@ -42,6 +44,7 @@ from lucid.test._fixtures.devices import metal_available
 from lucid.test.unit.compile._helpers import (
     COMPILE_DEVICE,
     assert_ratio_within,
+    compare_ms,
     compiled_call,
     to_metal,
     with_env,
@@ -583,6 +586,15 @@ _TWINS: dict[str, tuple[Op, Op]] = {
 }
 
 
+#: The same elements with the leading axes merged, for the op whose rank-4 graph is not a twin.
+#: ``repeat`` widens its operand by one axis (insert a size-1 axis, broadcast it, collapse), so a
+#: rank-4 operand runs through a rank-5 intermediate and MPSGraph's slice loop: the rank-4 twin
+#: ran 43 ms against 3.0 for the fixed graph and 60 for the unfixed one, so the unfixed graph
+#: measured 1.4x it under a 1.5x bound (0.07x fixed) -- a guard that could not fail (LCD-935).
+#: At rank 3 the intermediate stays at rank 4 and the twin runs at the fixed graph's 3.0 ms.
+_S3: Shape = (65536, 16, 16)
+_TWIN_SHAPE: dict[str, Shape] = {"repeat": _S3}
+
 #: The ratio each op is held to.  ``expand`` stays at 1.5x its twin on an M1 Pro (the broadcast
 #: is materialised at rank 4 too, LCD-928's remaining row), which leaves 1.5x a hair of slack;
 #: unfixed it ran 13x.
@@ -594,18 +606,49 @@ _DEFAULT_BOUND = 1.5
 @pytest.mark.usefixtures("inference")
 @pytest.mark.parametrize("name", sorted(_TWINS))
 def test_a_rank_5_movement_op_is_not_slower_than_its_rank_4_twin(name: str) -> None:
-    """Held to 1.5x the twin (``expand``: 3x); the unfixed graphs ran 2x to 15x it."""
+    """Held to 1.5x the twin (``expand``: 3x); the unfixed graphs ran 4x to 20x it."""
     wide_fn, twin_fn = _TWINS[name]
+    twin_shape = _TWIN_SHAPE.get(name, _S4)
 
     def build() -> dict[str, Callable[[], float]]:
         _C_engine.compile.session_cache_clear()
         return {
             "rank-5": compiled_call(wide_fn, _metal(_S5)),
-            "twin": compiled_call(twin_fn, _metal(_S4)),
+            "twin": compiled_call(twin_fn, _metal(twin_shape)),
         }
 
     bound = _BOUND.get(name, _DEFAULT_BOUND)
     assert_ratio_within(build, "rank-5", "twin", bound=bound, slack_ms=0.3, what=name)
+
+
+@needs_metal
+@pytest.mark.usefixtures("inference")
+@pytest.mark.parametrize("name", sorted(_TWINS))
+def test_the_movement_bound_is_exceeded_by_the_unfixed_graph(name: str) -> None:
+    """The guard above can fail: with the pass off the rank-5 graph is over its bound.
+
+    A bound the unfixed graph also meets guards nothing.  ``repeat``'s did -- its rank-4 twin is
+    itself on MPSGraph's slow path, so the unfixed graph read 1.4x under a 1.5x bound -- and
+    nothing said so until the ratio of the unfixed graph was measured by hand (LCD-935).  This
+    measures it with the pass off (``-1``) against the same twin and the same bound, so a twin
+    that changes, or an op whose unfixed cost moves under the bound, fails here by name.
+    """
+    wide_fn, twin_fn = _TWINS[name]
+    twin_shape = _TWIN_SHAPE.get(name, _S4)
+
+    def build() -> dict[str, Callable[[], float]]:
+        _C_engine.compile.session_cache_clear()
+        return {
+            "pass off": with_env(compiled_call(wide_fn, _metal(_S5)), ENV, "-1"),
+            "twin": compiled_call(twin_fn, _metal(twin_shape)),
+        }
+
+    bound = _BOUND.get(name, _DEFAULT_BOUND)
+    unfixed = compare_ms(build, "pass off", "twin", bound=bound, slack_ms=0.3, attempts=2)
+    assert not unfixed.within, (
+        f"{name}: the unfixed graph meets the guard's bound, so the guard cannot fail: "
+        f"{unfixed.report}"
+    )
 
 
 @needs_metal
