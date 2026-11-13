@@ -309,6 +309,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Arrow routing and create_arrow_model (LCD-983)
 
+- Actor can read the released bounded-normal head (LCD-950)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

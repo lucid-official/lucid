@@ -14,6 +14,12 @@ and the pixel networks.
 live, and it is missing one, but that module has a contract of its own —
 constraints, registered divergences, transform composition — and adding a
 half-conforming member to it would be worse than this.
+
+:class:`Normal` is the untruncated counterpart, with the same surface, for
+the one head that does not truncate: DreamerV3's released continuous policy
+is a plain Gaussian whose *mean* is squashed, and clipping an action into
+the environment's box is the environment's job there, not the
+distribution's.
 """
 
 import math
@@ -23,7 +29,7 @@ import lucid.nn.functional as F
 from lucid.models.generative._common._rssm import _gumbel_argmax
 from lucid._tensor.tensor import Tensor
 
-__all__ = ["TruncatedNormal", "OneHotCategorical"]
+__all__ = ["Normal", "TruncatedNormal", "OneHotCategorical"]
 
 _LOG_SQRT_2PI = 0.5 * math.log(2.0 * math.pi)
 _SQRT_2 = math.sqrt(2.0)
@@ -196,6 +202,104 @@ class TruncatedNormal:
         return (
             0.5 * math.log(2.0 * math.pi * math.e) + self.scale.log() + self._z.log() + correction
         )
+
+
+class Normal:
+    r"""A normal over the whole real line, with the surface of :class:`TruncatedNormal`.
+
+    Parameters
+    ----------
+    loc, scale : Tensor
+        Mean and standard deviation, broadcast together.  ``scale`` must be
+        positive; nothing here checks it, because the heads that build this
+        one construct ``scale`` as a floor plus a positive term.
+
+    Notes
+    -----
+    .. math::
+
+        \log p(x) = -\tfrac{1}{2}\Big(\tfrac{x - \mu}{\sigma}\Big)^2
+                    - \log \sigma - \tfrac{1}{2}\log 2\pi,
+        \qquad
+        H = \tfrac{1}{2}\log\!\big(2\pi e\, \sigma^2\big).
+
+    A draw is **not** clipped, so it can leave the interval a squashed
+    mean was kept in — that is the released DreamerV3 policy.  The
+    density is defined everywhere, so :meth:`log_prob` needs no support
+    check.  The draw is reparameterised: the gradient reaches ``loc`` and
+    ``scale`` through the affine step.
+
+    Examples
+    --------
+    >>> import math
+    >>> import lucid
+    >>> from lucid.models.generative._common._dists import Normal
+    >>> dist = Normal(lucid.zeros((2, 3)), lucid.ones((2, 3)) * 0.5)
+    >>> dist.rsample().shape, dist.mode.shape
+    ((2, 3), (2, 3))
+    >>> round(float(dist.entropy()[0, 0].item()), 4)
+    0.7258
+    >>> round(0.5 * math.log(2.0 * math.pi * math.e * 0.25), 4)  # closed form
+    0.7258
+    """
+
+    def __init__(self, loc: Tensor, scale: Tensor) -> None:
+        """Initialise the distribution. See the class docstring."""
+        self.loc = loc
+        self.scale = scale
+
+    @property
+    def mean(self) -> Tensor:
+        """The mean — ``loc``."""
+        return self.loc
+
+    @property
+    def mode(self) -> Tensor:
+        """The density's peak — ``loc`` again, since nothing is truncated."""
+        return self.loc
+
+    def rsample(self) -> Tensor:
+        """Draw reparameterised, so gradients reach ``loc`` and ``scale``.
+
+        Returns
+        -------
+        Tensor
+            ``loc + scale * eps`` with ``eps`` standard normal.  Unclipped.
+        """
+        shape = tuple(int(s) for s in self.loc.shape)
+        noise = lucid.randn(shape, device=self.loc.device, dtype=self.loc.dtype)
+        return self.loc + self.scale * noise
+
+    def log_prob(self, value: Tensor) -> Tensor:
+        """Log density at ``value``, elementwise.
+
+        Parameters
+        ----------
+        value : Tensor
+            Broadcastable against ``loc``.
+
+        Returns
+        -------
+        Tensor
+            Elementwise log density.
+
+        Examples
+        --------
+        >>> import math
+        >>> import lucid
+        >>> from lucid.models.generative._common._dists import Normal
+        >>> dist = Normal(lucid.tensor([0.0]), lucid.tensor([1.0]))
+        >>> round(float(dist.log_prob(lucid.tensor([0.0])).item()), 4)
+        -0.9189
+        >>> round(-0.5 * math.log(2.0 * math.pi), 4)
+        -0.9189
+        """
+        standard = (value - self.loc) / self.scale
+        return -0.5 * standard * standard - self.scale.log() - _LOG_SQRT_2PI
+
+    def entropy(self) -> Tensor:
+        r"""Differential entropy, :math:`\tfrac{1}{2}\log(2\pi e) + \log\sigma`, elementwise."""
+        return 0.5 * math.log(2.0 * math.pi * math.e) + self.scale.log()
 
 
 class OneHotCategorical:
