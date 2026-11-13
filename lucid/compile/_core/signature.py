@@ -1228,7 +1228,7 @@ class ParamFingerprint(_ModuleWrapper):
             self._tensors_replaced()
         self._keep(now)
 
-    def outside_slots(self) -> frozenset[_Held]:
+    def outside_slots(self, call: Iterable[Tensor] = ()) -> frozenset[_Held]:
         """The tensors the tree holds outside its registries, taken before a trace.
 
         A module's plain tensor attributes and the wrapped callable's closure
@@ -1240,7 +1240,7 @@ class ParamFingerprint(_ModuleWrapper):
 
         It also starts the attempt's rebinding watch (:class:`SlotWatch`): every
         tensor slot as it is now, which :func:`held_writes` compares with the
-        slots once the trace is over.
+        slots once the trace is over; ``call`` is the call's own tensors, whose ``.grad`` it puts back.
 
         Returns
         -------
@@ -1249,10 +1249,10 @@ class ParamFingerprint(_ModuleWrapper):
         """
         from lucid.compile._core.buffer_writes import watch_slots
 
-        watch_slots(self.slot_watch())
+        watch_slots(self.slot_watch(call))
         return frozenset(_outside_tensors(self.model))
 
-    def slot_watch(self) -> SlotWatch:
+    def slot_watch(self, call: Iterable[Tensor] = ()) -> SlotWatch:
         """A watch on every slot of the tree as it is now, to put them back with
         :meth:`~lucid.compile._core.rebound_slots.SlotWatch.restore`.
 
@@ -1262,7 +1262,7 @@ class ParamFingerprint(_ModuleWrapper):
         from lucid.compile._core.rebound_slots import SlotWatch
 
         model = self.model
-        return SlotWatch(_iter_modules(_root_modules(model)), _wrapped_callable(model))
+        return SlotWatch(_iter_modules(_root_modules(model)), _wrapped_callable(model), call)
 
     def settle(
         self, fed: Iterable[_C_engine.TensorImpl] = (), before: frozenset[_Held] = frozenset()

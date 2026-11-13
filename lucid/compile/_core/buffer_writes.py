@@ -403,7 +403,7 @@ def _put_back(tracer: Tracer, held: Sequence[_HeldWrite]) -> None:
     tracer.restore_outside_writes()
 
 
-def restore_slots() -> None:
+def restore_slots(*, grads: bool = True) -> None:
     """Put back what the trace-time call changed in Python, when nothing compiled.
 
     :func:`_put_back` returns the tensors the call wrote in place to their values
@@ -418,11 +418,22 @@ def restore_slots() -> None:
     (:meth:`~lucid.compile._core.trace_context.CompileAttempt.concluded`), and
     the eager call that follows is the call as eager runs it.  A trace that
     stood as the call keeps them: it is the call.  Call it inside the attempt,
-    which owns the watch (:func:`watch_slots`).
+    which owns the watch (:func:`watch_slots`).  ``grads`` is whether the gradients
+    go back too (:meth:`~lucid.compile._core.rebound_slots.SlotWatch.restore`).
     """
     watch = _HELD.watch
     if watch is not None:
-        watch.restore()
+        watch.restore(grads=grads)
+
+
+def current_watch() -> SlotWatch | None:
+    """The slot watch of the compile attempt running now, if it has taken one.
+
+    :func:`~lucid.compile._core.trace_context.compile_attempt` keeps it on its
+    :class:`~lucid.compile._core.trace_context.CompileAttempt` when it ends, for
+    :meth:`~lucid.compile._core.trace_context.CompileAttempt.undo`.
+    """
+    return _HELD.watch
 
 
 @contextmanager

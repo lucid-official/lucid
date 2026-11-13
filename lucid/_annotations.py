@@ -333,7 +333,9 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
     ),
     "lucid.compile._core.trace_context": (
         ("Module", "lucid.nn.module", "Module"),
+        ("SlotWatch", "lucid.compile._core.rebound_slots", "SlotWatch"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
+        ("_StreamState", "lucid._factories._generator", "_StreamState"),
     ),
     "lucid.compile._debug.diagnose": (("Tensor", "lucid._tensor.tensor", "Tensor"),),
     "lucid.compile._debug.trace_dump": (
@@ -357,6 +359,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
     ),
     "lucid.compile._entry.fused_step": (
+        ("CompileAttempt", "lucid.compile._core.trace_context", "CompileAttempt"),
         ("CompiledExecutable", "lucid._C.engine.compile", "CompiledExecutable"),
         ("GradScaler", "lucid.amp.grad_scaler", "GradScaler"),
         ("Module", "lucid.nn.module", "Module"),
@@ -369,6 +372,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("_ScalarLayout", "lucid.compile._optim.compiler", "_ScalarLayout"),
     ),
     "lucid.compile._entry.module": (
+        ("CompileAttempt", "lucid.compile._core.trace_context", "CompileAttempt"),
         ("Module", "lucid.nn.module", "Module"),
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
@@ -378,6 +382,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("Module", "lucid.nn.module", "Module"),
         ("ParamFingerprint", "lucid.compile._core.signature", "ParamFingerprint"),
         ("Sequential", "lucid.nn.modules.container", "Sequential"),
+        ("SlotWatch", "lucid.compile._core.rebound_slots", "SlotWatch"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
         ("_StreamState", "lucid._factories._generator", "_StreamState"),
     ),
