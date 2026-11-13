@@ -49,20 +49,6 @@ import pytest
 import lucid
 from lucid._annotations import NAMES
 
-#: One that stays unreadable, for a reason that is not an oversight.
-#:
-#: ``from_numpy`` annotates a numpy type, and numpy is a dependency of
-#: the bridge rather than of the package: ``converters`` imports it
-#: inside the one function that needs it so a Lucid install without
-#: numpy still works. Binding it at module scope to make this signature
-#: readable would turn an optional import into a required one, which is
-#: the worse trade.
-#:
-#: A test below asserts the reason still holds, so the entry cannot
-#: outlive it unnoticed.
-NO_PYTHON_SIGNATURE = {"from_numpy"}
-
-
 def _public_callables() -> list[str]:
     """Names in ``lucid.__all__`` that are callable.
 
@@ -82,14 +68,9 @@ def _public_callables() -> list[str]:
     return found
 
 
-@pytest.mark.parametrize("name", [n for n in _public_callables() if n not in NO_PYTHON_SIGNATURE])
+@pytest.mark.parametrize("name", _public_callables())
 def test_a_public_callable_has_a_readable_signature(name: str) -> None:
     inspect.signature(getattr(lucid, name))
-
-
-def test_the_exemptions_are_still_public_callables() -> None:
-    """An entry for a name that left the surface is a stale entry."""
-    assert NO_PYTHON_SIGNATURE <= set(_public_callables())
 
 
 def test_generator_reads_as_a_python_class() -> None:
@@ -97,20 +78,6 @@ def test_generator_reads_as_a_python_class() -> None:
     describe; the Python subclass that carries the reference's methods
     (LCD-374) reads like any other callable, so it left the exemptions."""
     assert list(inspect.signature(lucid.Generator).parameters) == ["seed", "device"]
-
-
-def test_from_numpy_is_unreadable_only_through_its_numpy_annotation() -> None:
-    """The one thing missing is the lazily imported ``np``.
-
-    Evaluating the annotations fails on that name and nothing else: asked
-    for forward references instead of values, the signature reads.
-    """
-    with pytest.raises(NameError, match="'np' is not defined"):
-        inspect.signature(lucid.from_numpy)
-    signature = inspect.signature(
-        lucid.from_numpy, annotation_format=annotationlib.Format.FORWARDREF
-    )
-    assert list(signature.parameters) == ["ndarray"]
 
 
 def test_the_tensor_constructor_is_readable() -> None:
@@ -138,8 +105,6 @@ def test_a_module_that_annotates_tensor_binds_it() -> None:
 
     missing = []
     for name in _public_callables():
-        if name in NO_PYTHON_SIGNATURE:
-            continue
         value = getattr(lucid, name)
         module = sys.modules.get(getattr(value, "__module__", ""))
         if module is None or not module.__name__.startswith("lucid."):
@@ -283,11 +248,6 @@ def _remedy(name: str, module: str, *, listed: bool, imported: bool) -> str:
     )
 
 
-def _excused(label: str, names: set[str]) -> bool:
-    """Whether ``np`` is all that is missing, on a signature this file declares unreadable for it."""
-    return label.rsplit(".", 1)[-1] in NO_PYTHON_SIGNATURE and names <= {"np"}
-
-
 def _describe(label: str, function: Fn, missing: dict[str, list[str]]) -> list[str]:
     module = getattr(function, "__module__", None) or "?"
     listed = {bound for bound, _, _ in NAMES.get(module, ())}
@@ -315,8 +275,7 @@ def _unreadable(targets: Iterable[tuple[str, Fn]]) -> list[str]:
         except NameError as exc:
             function = _function_of(target)
             missing = _unresolved(function) or {"": [exc.name or "?"]}
-            if not _excused(label, {name for names in missing.values() for name in names}):
-                reports += _describe(label, function, missing)
+            reports += _describe(label, function, missing)
         except (ValueError, TypeError):
             pass  # a builtin or C type: not something an annotation fixes
     return reports
@@ -413,13 +372,29 @@ def test_a_class_is_read_through_its_constructor_methods_and_properties() -> Non
     assert not any("InPrivate" in report for report in reports)
 
 
-def test_np_is_excused_only_where_this_file_declares_it() -> None:
+def test_np_is_reported_like_any_other_name_that_does_not_exist() -> None:
+    """No signature is excused for naming ``np``: ``from_numpy`` annotates through an alias."""
     numpy_only = _function("def f(a: np.ndarray) -> None: ...")
-    assert _unreadable([("lucid.from_numpy", numpy_only)]) == []
-    assert len(_unreadable([("lucid.SupportsNumpyConversion.numpy", numpy_only)])) == 1
-    assert len(_unreadable([("lucid.somewhere_else", numpy_only)])) == 1
-    also_gone = _function("def f(a: np.ndarray, b: Gone) -> None: ...")
-    assert any("'Gone'" in report for report in _unreadable([("lucid.from_numpy", also_gone)]))
+    for label in ("lucid.from_numpy", "lucid.SupportsNumpyConversion.numpy", "lucid.elsewhere"):
+        [report] = _unreadable([(label, numpy_only)])
+        assert "'np'" in report, report
+
+
+def _read_without_numpy(target: str) -> subprocess.CompletedProcess[str]:
+    """Read ``target``'s signature in an interpreter that has not imported numpy.
+
+    Succeeds only if the signature names ``_NumpyArray`` and reading it left
+    numpy unloaded.
+    """
+    code = (
+        "import sys, inspect, lucid\n"
+        f"signature = inspect.signature({target})\n"
+        "named = [p.annotation for p in signature.parameters.values()]\n"
+        "named.append(signature.return_annotation)\n"
+        "assert any(getattr(a, '__name__', '') == '_NumpyArray' for a in named), repr(signature)\n"
+        "assert 'numpy' not in sys.modules, 'reading the signature imported numpy'\n"
+    )
+    return subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=_REPO)
 
 
 def test_the_numpy_protocol_reads_without_numpy() -> None:
@@ -435,13 +410,20 @@ def test_the_numpy_protocol_reads_without_numpy() -> None:
     method = lucid.SupportsNumpyConversion.numpy
     assert list(inspect.signature(method).parameters) == ["self"]
     assert _unresolved(method) == {}
-    code = (
-        "import sys, inspect, lucid\n"
-        "signature = inspect.signature(lucid.SupportsNumpyConversion.numpy)\n"
-        "assert repr(signature) == '<Signature (self) -> _NumpyArray>', repr(signature)\n"
-        "assert 'numpy' not in sys.modules, 'reading the protocol imported numpy'\n"
-    )
-    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=_REPO)
+    result = _read_without_numpy("lucid.SupportsNumpyConversion.numpy")
+    assert result.returncode == 0, result.stderr[-2000:]
+
+
+def test_from_numpy_reads_without_numpy() -> None:
+    """``from_numpy`` takes the same alias, so it left the exemptions too.
+
+    It was the last callable of the surface that raised ``NameError`` when
+    asked: the bridge imports numpy inside its functions, so ``np`` was a
+    ``TYPE_CHECKING`` name no module bound.
+    """
+    assert list(inspect.signature(lucid.from_numpy).parameters) == ["ndarray"]
+    assert _unresolved(lucid.from_numpy) == {}
+    result = _read_without_numpy("lucid.from_numpy")
     assert result.returncode == 0, result.stderr[-2000:]
 
 

@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, TypeGuard
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _impl_with_grad, normalize_factory_kwargs
 from lucid._factories._build import _from_values, _infer_dtype, _is_scalar_leaf, _leaf
-from lucid._types import DeviceLike, DTypeLike
+from lucid._types import DeviceLike, DTypeLike, _NumpyArray
 
 if TYPE_CHECKING:
     import numpy as np
@@ -519,7 +519,7 @@ def _widen_unsigned(arr: np.ndarray) -> np.ndarray:
     return arr.astype(target)
 
 
-def from_numpy(ndarray: np.ndarray, /) -> Tensor:
+def from_numpy(ndarray: _NumpyArray, /) -> Tensor:
     r"""Copy a NumPy ``ndarray`` into an owned Lucid tensor.
 
     The returned tensor owns a copy and inherits the array's dtype according
