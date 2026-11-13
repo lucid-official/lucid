@@ -12984,6 +12984,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.models.generative._common._init"
+    },
+    {
+      "kind": "module",
       "module": "lucid.models.generative._common._pixel_nets"
     },
     {
