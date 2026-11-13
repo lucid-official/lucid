@@ -596,6 +596,9 @@ _TINY_V3 = dict(
 #: of 1 moves the whole band clear of where it was.
 _REWARD_SHIFT = 1.0
 
+#: Steps the shifted run trains, and why: see its test's docstring.
+_SHIFT_STEPS = 100
+
 
 def _reward_range(replay: SequenceReplay) -> tuple[float, float]:
     """The rewards the world model was trained on — where real reward lives for it.
@@ -719,18 +722,27 @@ class TestDreamerV3EndToEnd:
         Rewards here are ``exp(-d^2)``, so they sit in a narrow positive
         band that an untrained head could fall inside by accident — which
         would make the check above pass without the model having learned
-        anything. It does: this head is not zero-initialised, and over 20
-        seeds an untrained one read -0.39 to 0.75, inside the band on 6 of
-        20 seeds on the CPU and on Metal alike. Withholding the world
-        optimiser, the guard this replaces, was therefore a draw on the
-        initialisation, and seed 0 lost it on Metal only (LCD-872).
+        anything. It did, while this head carried the default
+        initialisation: over 20 seeds an untrained one read -0.39 to 0.75,
+        inside the band on 6 of 20 seeds on the CPU and on Metal alike.
+        Withholding the world optimiser, the guard this replaces, was
+        therefore a draw on the initialisation, and seed 0 lost it on
+        Metal only (LCD-872).
 
-        So the guard moves the target instead of withholding the training:
-        the same run on rewards shifted by ``_REWARD_SHIFT`` must read the
-        shifted band, which no initialisation reaches by accident and
-        which lies wholly outside the real one.
+        The head now starts at exactly zero, as the paper's does, and zero
+        is below the band, so that draw is gone. The guard stays because
+        it asks something the check above does not — that the reading
+        *follows the data*: the same run on rewards shifted by
+        ``_REWARD_SHIFT`` must read the shifted band, which lies wholly
+        outside the real one.
+
+        It trains ``_SHIFT_STEPS`` steps rather than the default sixty,
+        because a zero output layer sends its hidden layer no gradient
+        until it has moved: at sixty, seed 0 on the CPU read 0.018 below
+        the band's edge. At a hundred, 10 seeds on each of the CPU and
+        Metal read inside it by at least 0.06.
         """
-        _, _, replay, out = _train_v3(shift=_REWARD_SHIFT)
+        _, _, replay, out = _train_v3(steps=_SHIFT_STEPS, shift=_REWARD_SHIFT)
         low, high = _reward_range(replay)
         assert high < low + _REWARD_SHIFT, "the shifted band overlaps the real one"
         imagined = float(out.behavior.imagined_reward.mean().item())

@@ -908,6 +908,13 @@ def test_dreamer_v3_block_recurrence_matches_across_devices(paired):
 def test_dreamer_v3_two_hot_head_matches_across_devices(paired):
     """Prediction and loss, over four orders of magnitude of target."""
     cpu, metal = paired("dreamer_v3_12m", **_DREAMER_V3_SMALL)
+    # The reward head starts at zero (paper, Critic learning), and two devices'
+    # predictions of a head that outputs zero differ only by the rounding of its
+    # float32 sum, which a relative bound cannot compare.  Give it an output.
+    with lucid.no_grad():
+        weight = cpu.reward_head.trunk.out.weight
+        weight[:] = lucid.randn(tuple(weight.shape)) * 0.5
+    metal.reward_head.load_state_dict(cpu.reward_head.state_dict())
     feature = lucid.rand((2, 3, cpu.config.latent_size))
     target = lucid.tensor([[0.01, 1.0, 10000.0], [-5.0, 0.0, 250.0]])
     _agree(

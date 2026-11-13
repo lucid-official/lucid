@@ -343,6 +343,14 @@ class TestReturnNormalisation:
         """Otherwise a run's numbers depend on how often it was measured."""
         lucid.manual_seed(0)
         model = DreamerV3ForWorldModeling(_tiny_cfg())
+        # The reward head starts at zero (paper, Critic learning), so every
+        # imagined return is exactly zero and so is their spread — on Metal
+        # as well as the CPU, where a float32 rounding residue happened to
+        # leave it positive.  Give the head an output to have a spread to
+        # watch; what is tested is the normaliser, not the initialisation.
+        with lucid.no_grad():
+            weight = model.dreamer_v3.reward_head.trunk.out.weight
+            weight[:] = lucid.randn(tuple(weight.shape))
         observations, actions, rewards = _batch(t=3)
         model.train()
         model(observations, actions, rewards)
