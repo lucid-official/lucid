@@ -271,3 +271,53 @@ def test_a_norm_second_derivative_divides_by_the_tracked_norm(
 @pytest.mark.parametrize("magnitude", [1e-9, 1e-10])
 def test_cpu_p_norm_three_near_one_e_minus_ten(device_cpu_only: str, magnitude: float) -> None:
     _check_norm_hvp(device_cpu_only, 3.0, magnitude)
+
+
+#: bfloat16 keeps 8 bits of significand: its gradients are checked to 1e-2, the float32 0-d's to 1e-5.
+HALF_TOLERANCE = 1e-2
+SCALAR_MAGNITUDES = [1e-30, 1e-25, 1e-10, 1.0, 1e10, 1e25, 1e30]
+
+
+def _bf16(values: list[float], device: str, requires_grad: bool = False) -> lucid.Tensor:
+    return lucid.tensor(values, dtype=lucid.bfloat16, device=device, requires_grad=requires_grad)
+
+
+@pytest.mark.parametrize("create_graph", [False, True])
+@pytest.mark.parametrize("magnitude", SCALAR_MAGNITUDES)
+def test_a_half_tensor_over_a_zero_dim_divisor(
+    device: str, magnitude: float, create_graph: bool
+) -> None:
+    """``t / s`` for a bfloat16 ``t`` and a 0-d float32 ``s`` (``_Opmath.h``): ``s^2`` was formed.
+
+    ``ds = -sum(g t) / s^2``, with ``t = beta s`` and ``g = gamma s`` so that it is of order 1.
+    """
+    s = lucid.tensor(magnitude, device=device, requires_grad=True)
+    t = _bf16([beta * magnitude for beta in BETA], device, True)
+    g = _bf16([gamma * magnitude for gamma in GAMMA], device)
+    ds, dt = grad(t / s, [s, t], grad_outputs=g, create_graph=create_graph)
+    sv, tv, gv = s.item(), t.tolist(), g.tolist()
+    terms = [-(g_ / sv) * (t_ / sv) for t_, g_ in zip(tv, gv, strict=True)]
+    assert abs(ds.item() - sum(terms)) <= 1e-5 * sum(abs(x) for x in terms)
+    want_dt = [g_ / sv for g_ in gv]
+    _close(dt, want_dt, [abs(x) for x in want_dt], HALF_TOLERANCE)
+
+
+@pytest.mark.parametrize("create_graph", [False, True])
+@pytest.mark.parametrize("magnitude", SCALAR_MAGNITUDES)
+def test_a_zero_dim_numerator_over_a_half_tensor(
+    device: str, magnitude: float, create_graph: bool
+) -> None:
+    """``s / t``: ``dt = -(g s) / t^2`` formed ``t^2``, which leaves float32 for a bfloat16 ``t``."""
+    s = lucid.tensor(magnitude, device=device, requires_grad=True)
+    t = _bf16([beta * magnitude for beta in BETA], device, True)
+    g = _bf16([gamma * magnitude for gamma in GAMMA], device)
+    ds, dt = grad(s / t, [s, t], grad_outputs=g, create_graph=create_graph)
+    sv, tv, gv = s.item(), t.tolist(), g.tolist()
+    want_dt = [-(g_ / t_) * (sv / t_) for t_, g_ in zip(tv, gv, strict=True)]
+    _close(dt, want_dt, [abs(x) for x in want_dt], HALF_TOLERANCE)
+    want_ds = [g_ / t_ for t_, g_ in zip(tv, gv, strict=True)]
+    assert abs(ds.item() - sum(want_ds)) <= 1e-5 * sum(abs(x) for x in want_ds)
+    if create_graph:
+        (h_s,) = grad(dt, [s], grad_outputs=_bf16([1.0] * 5, device))
+        want_h = -sum(g_ / t_ / t_ for t_, g_ in zip(tv, gv, strict=True))
+        assert abs(h_s.item() - want_h) <= 2e-2 * abs(want_h)
