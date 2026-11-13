@@ -373,6 +373,14 @@ DREAMER_V3: dict[str, tuple[Any, str]] = {
     "pcont": (True, "code: configs.yaml contdisc True"),
     "pcont_scale": (1.0, "code: configs.yaml loss_scales.con 1.0, the beta_pred family"),
     "pcont_layers": (1, "code: configs.yaml conhead.layers 1"),
+    "dense_init": (
+        "fan_in_trunc_normal",
+        "code: configs.yaml winit: trunc_normal_in on dyn.rssm, rewhead, conhead, policy and "
+        "value (and enc/dec.simple), with the zero binit that embodied/jax/nets.py Linear "
+        "defaults to (nets.py:233-234); the distribution is Initializer 'trunc_normal', "
+        "nets.py:168-170.  The paper is silent.  'default' is Lucid's, for the layers this "
+        "family had before the release's was matched",
+    ),
 }
 
 

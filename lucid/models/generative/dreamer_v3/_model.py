@@ -24,18 +24,24 @@ the released code has added *since*: extra dynamics layers, an
 The last two are optimiser behaviour and belong to :mod:`lucid.optim` if
 anywhere.
 
-Three further departures are deliberate and worth stating because they are
-not visible from the configuration:
+Further departures are deliberate and worth stating because they are not
+visible from the configuration:
 
-* **Only the output layers named by the paper and the release start as the
-  release's do.**  The release draws every dense kernel from a
-  fan-in-scaled truncated normal and starts every bias at zero
-  (``winit: trunc_normal_in`` and a zero ``binit``, ``embodied/jax/nets.py``).
-  The layers here keep :class:`~lucid.nn.Linear`'s default — Kaiming-uniform
-  kernels, uniform biases — except the three outputs whose start the paper
-  or ``configs.yaml`` states: the reward predictor and both critics at zero
-  (paper, Critic learning; ``outscale: 0.0``) and the policy at
-  ``outscale: 0.01``, each with a zero bias.
+* **Dense layers start as the release's do; the convolutions do not.**  The
+  release draws every dense kernel from a fan-in-scaled truncated normal and
+  starts every bias at zero (``winit: trunc_normal_in`` and a zero ``binit``,
+  ``embodied/jax/nets.py:168-170, 233-234``).  Every dense layer here does
+  (``dense_init``, on by default): the decoder's lift, the RSSM's projections
+  and heads, the block-diagonal gates — with the release's own fan for those,
+  the whole input width (``nets.py:196-197``) — and the reward, critic,
+  continuation and policy heads.  Three outputs then take their own start on
+  top: the reward predictor and both critics at zero (paper, Critic learning;
+  ``outscale: 0.0``) and the policy at ``outscale: 0.01``, each with a zero
+  bias.  The convolutional encoder and decoder are not dense layers, and they
+  are not the release's either — the release alternates a 5x5 convolution with
+  a max-pool (``rssm.py:230-241``) where these are the 4x4 stride-2 stack the
+  earlier families share — so there is no like-for-like rule to match, and
+  they keep :class:`~lucid.nn.Conv2d`'s default.
 
 * The **replay critic reads detached features.**  The reference lets that
   loss reach the world model (``repval_grad: True``) because it has a
@@ -258,9 +264,14 @@ class DreamerV3Model(PretrainedModel):
             discrete=config.discrete,
             unimix=config.unimix,
             blocks=config.blocks,
+            dense_init=config.dense_init,
         )
         self.decoder = PixelDecoder(
-            config.latent_size, config.out_channels, config.cnn_depth, config.act_fn
+            config.latent_size,
+            config.out_channels,
+            config.cnn_depth,
+            config.act_fn,
+            dense_init=config.dense_init,
         )
         # The reward predictor and both critics start predicting exactly
         # zero (paper, Critic learning: "initialize the output weight matrix
@@ -277,6 +288,7 @@ class DreamerV3Model(PretrainedModel):
             bin_range=config.bin_range,
             act_fn=config.act_fn,
             zero_init=True,
+            dense_init=config.dense_init,
         )
         self.value_head = _TwoHotHead(
             config.latent_size,
@@ -286,6 +298,7 @@ class DreamerV3Model(PretrainedModel):
             bin_range=config.bin_range,
             act_fn=config.act_fn,
             zero_init=True,
+            dense_init=config.dense_init,
         )
         self.slow_value_head = _TwoHotHead(
             config.latent_size,
@@ -295,6 +308,7 @@ class DreamerV3Model(PretrainedModel):
             bin_range=config.bin_range,
             act_fn=config.act_fn,
             zero_init=True,
+            dense_init=config.dense_init,
         )
         self.pcont_head = (
             DenseHead(
@@ -303,6 +317,7 @@ class DreamerV3Model(PretrainedModel):
                 config.pcont_layers,
                 act_fn=config.act_fn,
                 squeeze=True,
+                dense_init=config.dense_init,
             )
             if config.pcont
             else None
@@ -319,6 +334,7 @@ class DreamerV3Model(PretrainedModel):
             continuous_dist="bounded_normal",
             max_std=config.actor_max_std,
             outscale=config.actor_outscale,
+            dense_init=config.dense_init,
         )
         self._sample = not config.mean_only
 

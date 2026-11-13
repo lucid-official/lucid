@@ -15,7 +15,12 @@ from dataclasses import dataclass
 from typing import ClassVar, override
 
 from lucid.models._meta import model_family_meta
-from lucid.models.generative._common._config import GenerativeActivation, WorldModelConfig
+from lucid.models.generative._common._config import (
+    DenseInit,
+    GenerativeActivation,
+    WorldModelConfig,
+    check_dense_init,
+)
 
 #: The released scaling ladder, ``name -> (deter, hidden, classes, depth, units)``.
 #: The paper reports six sizes from 12M to 400M parameters; the released
@@ -211,6 +216,19 @@ class DreamerV3Config(WorldModelConfig):
         a single Bernoulli from a state the RSSM has already built.
     action_space : {"continuous", "discrete"}, default="continuous"
         What an action is, as in DreamerV2.
+    dense_init : {"fan_in_trunc_normal", "default"}, default="fan_in_trunc_normal"
+        How every dense layer starts — the decoder's lift, the RSSM's
+        projections and block-diagonal gates, and the reward, critic,
+        continuation and policy heads.  ``"fan_in_trunc_normal"`` is the
+        release's ``winit: trunc_normal_in`` with a zero ``binit``: a normal
+        truncated at two standard deviations, scaled so the draw has
+        standard deviation :math:`1/\sqrt{\text{fan}_{in}}`.  The output
+        layers then take their own start on top of it (``actor_outscale``,
+        and zero for the reward predictor and both critics).  ``"default"``
+        keeps :class:`~lucid.nn.Linear`'s Kaiming-uniform kernel and uniform
+        bias, which is what this family did before the release's was
+        matched.  The convolutional encoder and decoder are not dense layers
+        and keep their default either way.
 
     Notes
     -----
@@ -308,6 +326,8 @@ class DreamerV3Config(WorldModelConfig):
 
     action_space: str = "continuous"
 
+    dense_init: DenseInit = "fan_in_trunc_normal"
+
     @override
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -370,6 +390,7 @@ class DreamerV3Config(WorldModelConfig):
             raise ValueError(
                 f"action_space must be 'continuous' or 'discrete', got " f"{self.action_space!r}"
             )
+        check_dense_init(self.dense_init)
         self._validate_actor_head()
 
     def _validate_actor_head(self) -> None:

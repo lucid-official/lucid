@@ -237,6 +237,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - strict index mode compiles no index op (LCD-991)
 
+- DreamerV3 dense layers start as the release's (LCD-993)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

@@ -25,6 +25,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
+from lucid.models.generative._common._config import DenseInit
 from lucid.models.generative._common._pixel_nets import DenseHead
 
 
@@ -54,6 +55,9 @@ class _TwoHotHead(nn.Module):
         that begins by asserting large returns sends the actor chasing
         them, and a reward head that does the same feeds the critic those
         returns to fit.
+    dense_init : {"default", "fan_in_trunc_normal"}, default="default"
+        How the trunk starts before ``zero_init`` is applied to its output;
+        see :mod:`lucid.models.generative._common._init`.
 
     Notes
     -----
@@ -86,6 +90,7 @@ class _TwoHotHead(nn.Module):
         bin_range: float = 20.0,
         act_fn: str = "silu",
         zero_init: bool = False,
+        dense_init: DenseInit = "default",
     ) -> None:
         """Initialise the head. See the class docstring for parameters."""
         super().__init__()
@@ -98,7 +103,9 @@ class _TwoHotHead(nn.Module):
             raise ValueError(f"bin_range must be positive, got {bin_range}")
 
         self.num_bins = num_bins
-        self.trunk = DenseHead(in_features, hidden, layers, out_features=num_bins, act_fn=act_fn)
+        self.trunk = DenseHead(
+            in_features, hidden, layers, out_features=num_bins, act_fn=act_fn, dense_init=dense_init
+        )
         if zero_init:
             with lucid.no_grad():
                 self.trunk.out.weight[:] = lucid.zeros_like(self.trunk.out.weight)
