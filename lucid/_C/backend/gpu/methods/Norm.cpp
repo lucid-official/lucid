@@ -492,7 +492,13 @@ std::vector<Storage> GpuBackend::lp_normalize_forward(
     }();
     auto eps_arr = ::mlx::core::astype(::mlx::core::array(static_cast<float>(eps)), mlx_dt);
     auto N_clip = ::mlx::core::maximum(N, eps_arr);
-    auto saved_norm = N_clip;
+    // The saved norm is the denominator, negated for a slice whose norm is below
+    // eps: the backward has no eps, and under the floor the denominator is the
+    // constant eps, so the second term of its gradient is absent.  The sign is how
+    // it tells ``||x|| < eps`` from ``||x|| == eps`` (a tie keeps its derivative);
+    // see ``lp_normalize_forward_typed`` in ``cpu/Norm.h``, the same contract.
+    auto neg_eps = ::mlx::core::astype(::mlx::core::array(-static_cast<float>(eps)), mlx_dt);
+    auto saved_norm = ::mlx::core::where(::mlx::core::less(N, eps_arr), neg_eps, N_clip);
     auto y = ::mlx::core::divide(*gx.arr, N_clip);
     return {Storage{gpu::wrap_mlx_array(std::move(y), dt)},
             Storage{gpu::wrap_mlx_array(std::move(saved_norm), dt)}};
@@ -518,9 +524,13 @@ Storage GpuBackend::lp_normalize_backward(const Storage& x,
     // The arithmetic is float32 for a half input (see ``widen_half``).
     const auto xw = widen_half(*gx.arr);
     const auto gw = widen_half(*gg.arr);
-    const auto d = widen_half(*gn.arr);
+    // The saved norm is negative for a slice the forward floored at eps: the
+    // denominator is then the constant eps and the second term is absent.
+    const auto saved = widen_half(*gn.arr);
+    const auto d = mx::abs(saved);
     auto u = mx::divide(xw, d);
     auto proj = mx::sum(mx::multiply(gw, u), std::vector<int>{axis}, true);
+    proj = mx::where(mx::less(saved, mx::array(0.0f)), mx::array(0.0f), proj);
     // For p = 2, sgn(u) |u| is u.
     auto weight = ord == 2.0 ? u : mx::multiply(mx::sign(u), gpu_pow(mx::abs(u), ord - 1.0));
     auto dx = mx::divide(mx::subtract(gw, mx::multiply(weight, proj)), d);

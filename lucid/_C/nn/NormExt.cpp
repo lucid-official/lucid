@@ -270,7 +270,8 @@ LpNormalizeBackward::forward(const TensorImplPtr& x0, double ord, int axis, doub
     scope.set_attr("eps", eps);
 
     auto& be = backend::Dispatcher::for_device(x->device());
-    // lp_normalize_forward returns [y, norm].
+    // lp_normalize_forward returns [y, norm]; norm is the denominator, negated for
+    // a slice below eps, and goes to the backward untouched.
     auto fwd = be.lp_normalize_forward(x->storage(), x->shape(), ord, axis, eps, x->dtype());
     Storage y_storage = std::move(fwd[0]);
     Storage norm_storage = std::move(fwd[1]);

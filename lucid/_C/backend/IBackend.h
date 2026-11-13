@@ -1806,11 +1806,14 @@ public:
                                                           GradMask5 grad_mask = {}) = 0;
 
     // Lp-normalizes `x` along `axis` using the given norm order `ord`.
-    // Returns [output, saved_norm] so the backward can reuse the computed norm.
+    // Returns [output, saved_norm] so the backward can reuse the computed norm:
+    // saved_norm is the denominator max(||x||, eps), NEGATED for a slice whose
+    // norm is below eps (the backward has no eps; its sign is the "floored" flag).
     virtual std::vector<Storage> lp_normalize_forward(
         const Storage& x, const Shape& x_shape, double ord, int axis, double eps, Dtype dt) = 0;
 
-    // Lp-normalize backward; saved_norm is the per-row norm from the forward.
+    // Lp-normalize backward; saved_norm is the forward's signed denominator
+    // (negative = floored at eps, where the gradient is grad_out / eps).
     virtual Storage lp_normalize_backward(const Storage& x,
                                           const Storage& saved_norm,
                                           const Storage& grad_out,

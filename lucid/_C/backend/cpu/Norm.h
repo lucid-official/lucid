@@ -396,7 +396,12 @@ double lp_slice_norm(const T* x, int len, std::size_t stride, double ord, const 
     return top * (ord == 2.0 ? std::sqrt(acc) : std::pow(acc, 1.0 / ord));
 }
 
-// ``y = x / d`` with ``d = max(||x||_p, eps)``, and ``d`` itself into ``norm``.
+// ``y = x / d`` with ``d = max(||x||_p, eps)``, and ``d`` into ``norm`` — negated
+// for a slice whose norm is below eps.  Under the floor ``d`` is the constant eps,
+// so the backward's second term (the dependence of ``d`` on ``x``) is absent; the
+// sign is how the backward, which has no eps and only ``d``, tells ``||x|| < eps``
+// from ``||x|| == eps`` (a tie keeps its derivative).  ``lp_normalize_backward_typed``
+// reads it, as does ``GpuBackend::lp_normalize_backward``.
 template <typename T>
 void lp_normalize_forward_typed(
     const T* x, T* y, T* norm, int outer, int axis_len, int inner, double ord, double eps) {
@@ -410,7 +415,7 @@ void lp_normalize_forward_typed(
             // false for NaN, and the ternary would otherwise divide the row by eps
             // (``std::fmax`` returns the non-NaN operand, the same swallowing).
             const T denom = (nm > floor || nm != nm) ? nm : floor;
-            norm[static_cast<std::size_t>(o) * inner + n] = denom;
+            norm[static_cast<std::size_t>(o) * inner + n] = nm < floor ? -denom : denom;
             for (int a = 0; a < axis_len; ++a) {
                 const std::size_t idx = base + static_cast<std::size_t>(a) * inner;
                 y[idx] = x[idx] / denom;
@@ -423,7 +428,8 @@ void lp_normalize_forward_typed(
 // the forward output (every entry at most 1 in magnitude once ``d`` is the norm),
 // so the form never raises a magnitude to a power of the norm, which leaves the
 // float range for a norm outside roughly 1e-13 .. 1e13 (``d^3``).  For p = 2 the
-// factor ``sgn(u) |u|`` is ``u``.
+// factor ``sgn(u) |u|`` is ``u``.  A slice the forward floored (``norm`` negative,
+// see ``lp_normalize_forward_typed``) divides by the constant eps: no second term.
 template <typename T>
 void lp_normalize_backward_typed(
     const T* x, const T* norm, const T* g, T* dx, int outer, int axis_len, int inner, double ord) {
@@ -438,11 +444,12 @@ void lp_normalize_backward_typed(
     for (int o = 0; o < outer; ++o)
         for (int n = 0; n < inner; ++n) {
             const std::size_t base = static_cast<std::size_t>(o) * axis_len * inner + n;
+            const T saved = norm[static_cast<std::size_t>(o) * inner + n];
+            const bool floored = saved < T{0};
             // ``d`` is at least eps, so its inverse is finite for any eps above ~1e-308.
-            const double inv =
-                1.0 / static_cast<double>(norm[static_cast<std::size_t>(o) * inner + n]);
+            const double inv = 1.0 / static_cast<double>(floored ? -saved : saved);
             double proj = 0.0;
-            for (int a = 0; a < axis_len; ++a) {
+            for (int a = 0; a < axis_len && !floored; ++a) {
                 const std::size_t idx = base + static_cast<std::size_t>(a) * inner;
                 proj += static_cast<double>(g[idx]) * (static_cast<double>(x[idx]) * inv);
             }

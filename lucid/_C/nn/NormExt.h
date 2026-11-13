@@ -232,7 +232,9 @@ LUCID_API TensorImplPtr batch_norm_eval_op(const TensorImplPtr& x,
 //     Minimum allowed denominator, clamping the norm from below to
 //     avoid division by zero.  Default: ``1e-12``.
 // saved_norm_ : Storage
-//     Per-slice norm value $\|x\|_p$ retained for backward.
+//     Per-slice denominator $\max(\|x\|_p, \epsilon)$ retained for backward,
+//     negated for a slice whose norm is below $\epsilon$ (the backend's
+//     contract; see ``IBackend::lp_normalize_forward``).
 class LUCID_API LpNormalizeBackward : public FuncOp<LpNormalizeBackward, 1> {
 public:
     static constexpr bool kKeepsOwnValues = true;
