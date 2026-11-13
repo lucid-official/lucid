@@ -361,16 +361,31 @@ struct LpPower {
     }
 };
 
-// The largest magnitude of the ``len`` entries ``x[a * stride]``, NaN when any entry is.
+// The largest magnitude of the ``len`` entries ``x[a * stride]``, NaN when any entry is.  Four
+// independent running maxima: one is a chain of dependent compares, each entry waiting for the
+// one before it.
 template <typename T>
 double lp_slice_top(const T* x, std::size_t len, std::size_t stride) {
-    double top = 0.0;
+    double t0 = 0.0, t1 = 0.0, t2 = 0.0, t3 = 0.0;
     bool nan_seen = false;
-    for (std::size_t a = 0; a < len; ++a) {
+    std::size_t a = 0;
+    for (; a + 4 <= len; a += 4) {
+        const double v0 = std::abs(static_cast<double>(x[a * stride]));
+        const double v1 = std::abs(static_cast<double>(x[(a + 1) * stride]));
+        const double v2 = std::abs(static_cast<double>(x[(a + 2) * stride]));
+        const double v3 = std::abs(static_cast<double>(x[(a + 3) * stride]));
+        nan_seen = nan_seen || (v0 != v0) || (v1 != v1) || (v2 != v2) || (v3 != v3);
+        t0 = v0 > t0 ? v0 : t0;
+        t1 = v1 > t1 ? v1 : t1;
+        t2 = v2 > t2 ? v2 : t2;
+        t3 = v3 > t3 ? v3 : t3;
+    }
+    for (; a < len; ++a) {
         const double v = std::abs(static_cast<double>(x[a * stride]));
         nan_seen = nan_seen || v != v;
-        top = v > top ? v : top;
+        t0 = v > t0 ? v : t0;
     }
+    const double top = std::max(std::max(t0, t1), std::max(t2, t3));
     return nan_seen ? std::numeric_limits<double>::quiet_NaN() : top;
 }
 
@@ -673,7 +688,91 @@ public:
         return finish(total, top);
     }
 
+    // The columns ``[c0, c1)`` (at most ``kTile``) of one ``(len, inner)`` matrix, swept row
+    // by row so every load is contiguous: a reduction over a leading axis reads one entry per
+    // cache line when each column is walked on its own.  A column's sum is in row order, one
+    // value whatever the tile.
+    void columns(const T* x,
+                 T* out,
+                 std::size_t len,
+                 std::size_t inner,
+                 std::size_t c0,
+                 std::size_t c1) const {
+        const std::size_t m = c1 - c0;
+        double top[kTile], inv[kTile], acc[kTile];
+        std::fill(acc, acc + m, 0.0);
+        std::fill(top, top + m, 0.0);
+        std::fill(inv, inv + m, 0.0);
+        if (!plain_) {
+            for (std::size_t a = 0; a < len; ++a) {
+                const T* row = x + a * inner + c0;
+                for (std::size_t n = 0; n < m; ++n) {
+                    const double v = std::abs(static_cast<double>(row[n]));
+                    top[n] = (v > top[n] || v != v) ? v : top[n];
+                }
+            }
+            for (std::size_t n = 0; n < m; ++n)
+                inv[n] = settled(top[n]) ? 0.0 : 1.0 / top[n];
+        }
+        sweep(x, len, inner, c0, m, inv, acc);
+        for (std::size_t n = 0; n < m; ++n) {
+            if (plain_) {
+                out[c0 + n] = static_cast<T>(finish(acc[n], 1.0));
+            } else if (settled(top[n])) {
+                out[c0 + n] = static_cast<T>(top[n]);
+            } else if (std::isfinite(inv[n])) {
+                out[c0 + n] = static_cast<T>(finish(acc[n], top[n]));
+            } else {
+                // A subnormal double largest entry: its reciprocal overflows, so the
+                // column is a slice of its own that divides.
+                out[c0 + n] = static_cast<T>(serial(x + c0 + n, len, inner));
+            }
+        }
+    }
+
+    static constexpr std::size_t kTile = 256;
+
 private:
+    // ``acc[n] += power(entry)`` over every row of the tile, entries relative to ``1 / inv[n]``
+    // unless the sum is plain.
+    void sweep(const T* x,
+               std::size_t len,
+               std::size_t inner,
+               std::size_t c0,
+               std::size_t m,
+               const double* inv,
+               double* acc) const {
+        if (!plain_ && power_.halves < 0) {
+            T ratio[kTile], expo[kTile], powered[kTile];
+            std::fill(expo, expo + m, static_cast<T>(p_));
+            for (std::size_t a = 0; a < len; ++a) {
+                const T* row = x + a * inner + c0;
+                for (std::size_t n = 0; n < m; ++n)
+                    ratio[n] = static_cast<T>(std::abs(static_cast<double>(row[n])) * inv[n]);
+                if constexpr (sizeof(T) == sizeof(float))
+                    vpow_f32(ratio, expo, powered, m);
+                else
+                    vpow_f64(ratio, expo, powered, m);
+                for (std::size_t n = 0; n < m; ++n)
+                    acc[n] += powered[n];
+            }
+            return;
+        }
+        with_fixed_power(power_, [&](auto pw) {
+            for (std::size_t a = 0; a < len; ++a) {
+                const T* row = x + a * inner + c0;
+                if (plain_) {
+                    for (std::size_t n = 0; n < m; ++n)
+                        acc[n] += pw(std::abs(static_cast<double>(row[n])));
+                } else {
+                    for (std::size_t n = 0; n < m; ++n)
+                        acc[n] += pw(std::abs(static_cast<double>(row[n])) * inv[n]);
+                }
+            }
+            return 0.0;
+        });
+    }
+
     double p_;
     LpPower power_;
     bool plain_;
@@ -682,11 +781,32 @@ private:
 // ``out[o * inner + n] = ||x[o, :, n]||_p`` for ``x`` of layout ``(outer, len, inner)``: the
 // norm over the middle axis, the layout a reduction over one run of axes has.  Many slices are
 // chunks of one parallel loop, a few long ones are split into blocks; either way each slice's
-// value is the same.
+// value is the same.  A wide ``inner`` (a reduction over a
+// leading axis) is swept row by row in tiles of columns instead of walking each strided slice.
 template <typename T>
 void p_norm_typed(
     const T* x, T* out, std::size_t outer, std::size_t len, std::size_t inner, double p) {
     const PNorm<T> norm(p);
+    if (inner >= 8) {
+        // Tiles as narrow as 16 columns when that is what it takes to give every core a few.
+        const std::size_t per_outer =
+            std::max<std::size_t>(1, (4 * parallel_workers() + outer - 1) / outer);
+        std::size_t tile = (inner + per_outer - 1) / per_outer;
+        tile = std::min(PNorm<T>::kTile, std::max<std::size_t>(16, (tile + 7) / 8 * 8));
+        const std::size_t tiles = (inner + tile - 1) / tile;
+        parallel_for(
+            outer * tiles,
+            std::max<std::size_t>(1, PNorm<T>::kBlock / std::max<std::size_t>(len * tile, 1)),
+            [&](std::size_t lo, std::size_t hi) {
+                for (std::size_t task = lo; task < hi; ++task) {
+                    const std::size_t o = task / tiles;
+                    const std::size_t c0 = (task - o * tiles) * tile;
+                    norm.columns(x + o * len * inner, out + o * inner, len, inner, c0,
+                                 std::min(inner, c0 + tile));
+                }
+            });
+        return;
+    }
     const std::size_t slices = outer * inner;
     const auto at = [&](std::size_t slice) {
         const std::size_t o = slice / inner;

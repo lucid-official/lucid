@@ -81,6 +81,11 @@ LAYOUTS = [
     ((1, 5), [0]),
     ((600, 3), [0]),
     ((3, 1300), [1]),
+    # a wide inner extent is swept in tiles of 256 columns: one tile, several, a remainder
+    ((9, 40), [0]),
+    ((37, 700), [0]),
+    ((3, 50, 20), [1]),
+    ((2, 5, 9, 2), [1, 2]),
 ]
 
 
@@ -200,6 +205,33 @@ def test_a_nan_an_infinity_and_a_zero_slice_answer_as_themselves(
     assert got[0] == 0.0
     assert math.isnan(got[1]) and math.isnan(got[3])
     assert got[2] == inf and got[4] == inf
+
+
+@pytest.mark.parametrize("dtype", [lucid.float32, lucid.float64])
+@pytest.mark.parametrize("p", [1.5, 3.0, 2.7, 7.5])
+def test_the_columns_of_a_matrix_answer_as_themselves(
+    device_cpu_only: str, dtype: lucid.dtype, p: float
+) -> None:
+    """A leading-axis reduction sweeps rows: a zero, NaN, infinite and ordinary column side by side."""
+    nan, inf = math.nan, math.inf
+    cols = [[0.0] * 4, [1.0, nan, 2.0, 3.0], [1.0, -inf, 2.0, 3.0], [nan, inf, 1.0, 1.0]]
+    cols += [[0.5, -1.5, 2.5, 0.25]] * 6 + [[1e-3, 2e-3, -3e-3, 4e-3]] * 6
+    x = lucid.tensor([list(row) for row in zip(*cols, strict=True)], dtype=dtype)
+    got = lucid.linalg.vector_norm(x, p, dim=0).tolist()
+    assert got[0] == 0.0 and math.isnan(got[1]) and got[2] == inf and math.isnan(got[3])
+    for column, g in zip(cols[4:], got[4:], strict=True):
+        assert g == pytest.approx(_norm(column, p), rel=3e-6, abs=0)
+
+
+def test_a_float64_column_with_a_subnormal_top_divides(device_cpu_only: str) -> None:
+    """Its reciprocal overflows, so the tile hands that column to the slice path."""
+    tiny = 4e-320
+    x = lucid.tensor(
+        [[tiny, 1.0] * 6, [-2 * tiny, 2.0] * 6, [3 * tiny, 0.5] * 6], dtype=lucid.float64
+    )
+    got = lucid.linalg.vector_norm(x, 7.5, dim=0).tolist()
+    assert got[0] == pytest.approx(_norm(x[:, 0].tolist(), 7.5), rel=1e-6, abs=0)
+    assert got[1] == pytest.approx(_norm(x[:, 1].tolist(), 7.5), rel=1e-12, abs=0)
 
 
 @pytest.mark.parametrize("dtype", [lucid.float16, lucid.bfloat16])
