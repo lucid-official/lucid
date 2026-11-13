@@ -19,6 +19,7 @@
 #include <variant>
 #include <vector>
 
+#include "../../OpEmitters/_AxisSplitLayout.h"
 #include "../../OpEmitters/_SortOrder.h"
 #include "../VjpEmitter.h"
 #include "../_VjpHelpers.h"
@@ -280,6 +281,25 @@ public:
 
         std::vector<std::int64_t> x_shape = shape_of_mps(x);
         if (x_shape.size() != reps->size()) return false;
+
+        // A lead worth it: one rank <= 4 reduction per tiled axis, instead of one over
+        // the rank-2n interleaved shape below (a slice loop in MPSGraph).
+        if (const auto folds = tile_folds(x_shape, *reps)) {
+            MPSGraphTensor* cur = grad;
+            for (const TileFold& fold : *folds) {
+                MPSGraphTensor* split =
+                    [g reshapeTensor:cur withShape:shape_to_ns(fold.split) name:nil];
+                MPSGraphTensor* summed = [g reductionSumWithTensor:split
+                                                              axis:(NSInteger)fold.sum_axis
+                                                              name:nil];
+                cur = [g reshapeTensor:summed withShape:shape_to_ns(fold.folded) name:nil];
+            }
+            bctx.accumulate_grad(
+                x_id, from_tensor([g reshapeTensor:cur
+                                         withShape:shape_to_ns(x_shape)
+                                              name:@"tile_vjp"]));
+            return true;
+        }
 
         // Build the interleaved shape [r0, d0, r1, d1, ...] and the
         // axes-to-reduce list [0, 2, 4, ...].

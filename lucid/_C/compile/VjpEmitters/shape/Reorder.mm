@@ -24,6 +24,7 @@
 #include <variant>
 #include <vector>
 
+#include "../../OpEmitters/_AxisSplitLayout.h"
 #include "../../OpEmitters/_IndexBounds.h"
 #include "../../OpEmitters/_SortOrder.h"
 #include "../VjpEmitter.h"
@@ -241,14 +242,14 @@ public:
                 NSInteger axis = 0;
                 if (!known(x) || !norm_axis(a, x.shape.count, axis))
                     return nil;
-                NSMutableArray<NSNumber*>* split = [NSMutableArray array];
-                for (NSUInteger i = 0; i < x.shape.count; ++i) {
-                    [split addObject:x.shape[i]];
-                    if ((NSInteger)i == axis)
-                        [split addObject:@(r)];
-                }
-                MPSGraphTensor* folded = [g reshapeTensor:go withShape:split name:nil];
-                MPSGraphTensor* summed = [g reductionSumWithTensor:folded axis:axis + 1 name:nil];
+                // The gradient read as (…, n, r, …), at rank <= 4 when the lead is worth it
+                // (``repeat_layout``), summed over r.
+                const RepeatLayout layout =
+                    repeat_layout(shape_of_mps(x), static_cast<std::size_t>(axis), r);
+                MPSGraphTensor* folded =
+                    [g reshapeTensor:go withShape:shape_to_ns(layout.spread) name:nil];
+                MPSGraphTensor* summed =
+                    [g reductionSumWithTensor:folded axis:(NSInteger)layout.spread_axis name:nil];
                 return [g reshapeTensor:summed withShape:x.shape name:@"repeat_vjp"];
             });
     }

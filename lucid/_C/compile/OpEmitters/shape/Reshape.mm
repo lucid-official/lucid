@@ -22,6 +22,7 @@
 
 #include "../OpEmitter.h"
 #include "../_AttrHelpers.h"
+#include "../_AxisSplitLayout.h"
 
 namespace lucid::compile {
 
@@ -215,7 +216,9 @@ public:
 // ``repeat`` — element-wise repetition (numpy semantics: [a,b,c] →
 // [a,a,b,b,c,c] with n=2 along axis 0).  Realised by inserting a
 // size-1 axis after the chosen one, broadcasting to size n, and
-// reshaping so the new axis collapses into the original.
+// reshaping so the new axis collapses into the original.  The shapes come
+// from ``repeat_layout``: with a lead worth it the axes around the repeated
+// one merge, so the intermediate stays at rank <= 4 (LCD-995).
 class RepeatEmitter final : public OpEmitter {
 public:
     std::string_view op_name() const override { return "repeat"; }
@@ -239,43 +242,27 @@ public:
         if (graph == nil || x_t == nil)
             return false;
 
-        NSArray<NSNumber*>* in_shape = x_t.shape;
-        NSUInteger ndim = in_shape.count;
+        const std::vector<std::int64_t> in_shape = shape_of_mps(x_t);
+        const std::int64_t ndim = static_cast<std::int64_t>(in_shape.size());
         std::int64_t ax = *axp;
-        if (ax < 0) ax += (std::int64_t)ndim;
-        if (ax < 0 || ax >= (std::int64_t)ndim)
+        if (ax < 0) ax += ndim;
+        if (ax < 0 || ax >= ndim)
             return false;
-        std::int64_t reps = *rp;
+        const RepeatLayout layout = repeat_layout(in_shape, static_cast<std::size_t>(ax), *rp);
 
         // 1) insert a size-1 axis after ``ax``: shape (..., D, 1, ...).
-        NSMutableArray<NSNumber*>* expanded =
-            [NSMutableArray arrayWithCapacity:ndim + 1];
-        for (NSUInteger d = 0; d < ndim; ++d) {
-            [expanded addObject:in_shape[d]];
-            if ((std::int64_t)d == ax)
-                [expanded addObject:[NSNumber numberWithLongLong:1]];
-        }
         MPSGraphTensor* shaped =
-            [graph reshapeTensor:x_t withShape:expanded name:nil];
+            [graph reshapeTensor:x_t withShape:shape_to_ns(layout.unit) name:nil];
 
         // 2) broadcast the inserted size-1 axis to ``reps``.
-        NSMutableArray<NSNumber*>* broadcast = [expanded mutableCopy];
-        broadcast[ax + 1] = [NSNumber numberWithLongLong:reps];
         MPSGraphTensor* tiled =
-            [graph broadcastTensor:shaped toShape:broadcast name:nil];
+            [graph broadcastTensor:shaped toShape:shape_to_ns(layout.spread) name:nil];
 
         // 3) collapse the two axes back: (..., D*reps, ...).
-        NSMutableArray<NSNumber*>* final_shape =
-            [NSMutableArray arrayWithCapacity:ndim];
-        for (NSUInteger d = 0; d < ndim; ++d) {
-            if ((std::int64_t)d == ax)
-                [final_shape addObject:
-                    [NSNumber numberWithLongLong:in_shape[d].longLongValue * reps]];
-            else
-                [final_shape addObject:in_shape[d]];
-        }
+        std::vector<std::int64_t> final_shape = in_shape;
+        final_shape[static_cast<std::size_t>(ax)] = in_shape[static_cast<std::size_t>(ax)] * *rp;
         ctx.bind(node.outputs[0].id, (__bridge void*)([graph reshapeTensor:tiled
-                                          withShape:final_shape
+                                          withShape:shape_to_ns(final_shape)
                                                name:@"repeat"]));
         return true;
     }
