@@ -160,8 +160,11 @@ class DreamerV3Config(WorldModelConfig):
         the returns it competes with are normalised.
     actor_min_std, actor_max_std : float, default=0.1, 1.0
         Bounds on the continuous policy's standard deviation, which the
-        released implementation's head spans with
-        ``std = (max_std - min_std) * sigmoid(raw + 2) + min_std``.
+        released implementation's head (``embodied/jax/heads.py``,
+        ``bounded_normal``; ``policy.minstd`` and ``policy.maxstd`` in
+        ``configs.yaml``) spans with
+        ``std = (max_std - min_std) * sigmoid(raw + 2) + min_std``.  The
+        paper does not give the policy head.
         Without a floor the actor can drive the deviation to zero,
         which ends exploration and leaves the entropy bonus fighting a
         term that has already collapsed; the ceiling is what keeps the
@@ -169,7 +172,8 @@ class DreamerV3Config(WorldModelConfig):
         it is uniform.  Both are ignored when ``action_space="discrete"``.
     actor_outscale : float, default=0.01
         Scale applied to the policy's output layer at initialisation, with
-        its bias started at zero, so the actor begins near uniform
+        its bias started at zero (``policy.outscale`` in ``configs.yaml``;
+        the paper is silent on it), so the actor begins near uniform
         (discrete) or near ``N(0, 0.89)`` around zero (continuous) instead
         of committing to whatever its random weights happen to prefer.
         The reward and value heads need no such knob: the paper starts
