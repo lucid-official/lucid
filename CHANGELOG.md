@@ -259,6 +259,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - range-safe half op-math div backward (LCD-998)
 
+- div and reciprocal VJPs never square a divisor (LCD-1004)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

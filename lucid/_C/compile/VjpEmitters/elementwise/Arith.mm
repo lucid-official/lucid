@@ -116,7 +116,14 @@ public:
 };
 
 // ────────────────────────────────────────────────────────────────────
-// div: dA = grad / b, dB = -(grad * a) / b² (unreduce).  Quotient rule.
+// div: dA = grad / b, dB = -(grad * (a / b)) / b (unreduce).  Quotient rule.
+//
+// dB is the textbook -(grad * a) / b² with the square never formed, as eager's
+// ``DivBackward`` (LCD-998): b² leaves float32 for a |b| outside ~1e-19 .. 1e19, so the
+// textbook form returns 0 or inf there for a gradient that is an ordinary float whenever
+// grad and a are of b's scale.  Dividing by b twice keeps every intermediate at the scale
+// of the result, and ``a / b`` is 0 for an a that is 0, which ``grad * a / b²`` turns
+// into 0 / 0 once b² underflows.
 // ────────────────────────────────────────────────────────────────────
 class DivVjp final : public VjpEmitter {
 public:
@@ -128,16 +135,16 @@ public:
                 MPSGraphTensor* da = [c.g divisionWithPrimaryTensor:c.go
                                                     secondaryTensor:c.b
                                                                name:nil];
-                MPSGraphTensor* g_times_a = [c.g multiplicationWithPrimaryTensor:c.go
-                                                                 secondaryTensor:c.a
-                                                                            name:nil];
-                MPSGraphTensor* b_sq = [c.g multiplicationWithPrimaryTensor:c.b
-                                                            secondaryTensor:c.b
-                                                                       name:nil];
-                MPSGraphTensor* div_b_sq = [c.g divisionWithPrimaryTensor:g_times_a
-                                                          secondaryTensor:b_sq
+                MPSGraphTensor* quotient = [c.g divisionWithPrimaryTensor:c.a
+                                                          secondaryTensor:c.b
                                                                      name:nil];
-                MPSGraphTensor* db = [c.g negativeWithTensor:div_b_sq name:nil];
+                MPSGraphTensor* g_times_q = [c.g multiplicationWithPrimaryTensor:c.go
+                                                                 secondaryTensor:quotient
+                                                                            name:nil];
+                MPSGraphTensor* div_by_b = [c.g divisionWithPrimaryTensor:g_times_q
+                                                          secondaryTensor:c.b
+                                                                     name:nil];
+                MPSGraphTensor* db = [c.g negativeWithTensor:div_by_b name:nil];
                 return {da, db};
             });
     }

@@ -132,7 +132,9 @@ public:
     }
 };
 
-// d(reciprocal(x))/dx = -1/x²
+// d(reciprocal(x))/dx = -1/x², evaluated as -(go / x) / x: x² leaves float32 for a |x|
+// outside ~1e-19 .. 1e19, where a go of x's own scale still has a float32 gradient
+// (eager's ``ReciprocalBackward``, LCD-998, and ``DivVjp``'s dB are the same product).
 class ReciprocalVjp final : public VjpEmitter {
 public:
     std::string_view op_name() const override { return "reciprocal"; }
@@ -140,11 +142,12 @@ public:
               const std::vector<void*>& grad_outs) override {
         return emit_unary_vjp(bctx, node, grad_outs,
             [](MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* go) {
-                MPSGraphTensor* x_sq =
-                    [g multiplicationWithPrimaryTensor:x secondaryTensor:x name:nil];
                 MPSGraphTensor* neg_go = [g negativeWithTensor:go name:nil];
-                return [g divisionWithPrimaryTensor:neg_go
-                                     secondaryTensor:x_sq
+                MPSGraphTensor* over_x = [g divisionWithPrimaryTensor:neg_go
+                                                       secondaryTensor:x
+                                                                  name:nil];
+                return [g divisionWithPrimaryTensor:over_x
+                                     secondaryTensor:x
                                                 name:@"reciprocal_vjp"];
             });
     }
