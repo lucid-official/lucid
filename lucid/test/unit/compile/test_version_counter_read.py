@@ -162,22 +162,7 @@ def test_a_version_read_is_refused_and_the_call_runs_eagerly(name: str) -> None:
     assert any(VERSION_NOTICE in why for why in run.said), run.said
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        pytest.param(
-            "buffer_rebuild",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="LCD-990: the refused trace puts the rebuilt buffer back but keeps its "
-                "stamp, so the eager rerun skips the rebuild (see "
-                "test_a_refused_trace_leaves_the_buffer_and_its_stamp_agreeing)",
-            ),
-        ),
-        "plain_attribute_cache",
-        "branch_only",
-    ],
-)
+@pytest.mark.parametrize("name", PATTERNS)
 def test_the_refused_call_equals_eager_after_every_call(name: str) -> None:
     assert max(_gaps(PATTERNS[name])) <= TOLERANCE
 
@@ -229,16 +214,10 @@ class _Stamped(nn.Module):
         return x @ self.w * self.scale
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-990: a refused CompiledModule trace puts a rebuilt buffer back (it is not in "
-    "__dict__, so SlotWatch does not restore the stamp) and the eager rerun, which finds the "
-    "stamp moved, skips the rebuild and reads the buffer as it was before the trace",
-)
 @pytest.mark.parametrize("write", ["rebind", "copy_"])
 @pytest.mark.parametrize("refuse", ["host_read", "version_read"])
 def test_a_refused_trace_leaves_the_buffer_and_its_stamp_agreeing(refuse: str, write: str) -> None:
-    """The first call of a refused module equals eager's, buffer and stamp alike (33.73 off today)."""
+    """The first call of a refused module equals eager's, buffer and stamp alike (LCD-990: 33.73 off)."""
 
     def build() -> tuple[_Stamped, Tensor]:
         lucid.manual_seed(0)
