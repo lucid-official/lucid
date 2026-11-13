@@ -23,10 +23,13 @@ Three guards, as for the earlier rules:
 * a value table on Metal: the forward and the ``make_step`` gradients of the rewritten graph equal
   eager's (and the unrewritten graph's, exactly, for ops that only move values) at float32,
   float16 and bfloat16, over rank 5 and rank 6 and with NaN and inf in the data;
-* a coarse timing bound against the twin of each case (the rank-4 form of the same elements; a
-  rank-3 one for ``repeat``), the same measurement with the pass off, which must exceed the bound
-  (a bound the unfixed graph meets guards nothing), and the permute gate that now reads the larger
-  of the input's and the output's lead.
+* a coarse timing bound against the rank-4 twin of each case (the same elements), the same
+  measurement with the pass off, which must exceed the bound (a bound the unfixed graph meets
+  guards nothing), and the permute gate that now reads the larger of the input's and the output's
+  lead.
+
+The rank-4 ``repeat`` and ``tile`` backward that the pass cannot see are in
+``test_rank_canonical_widening.py``.
 """
 
 import os
@@ -485,15 +488,9 @@ _STEP_OPS = [
 ]
 
 
-@needs_metal
-@pytest.mark.parametrize("dtype", _DTYPES, ids=str)
-@pytest.mark.parametrize("shape_name", sorted(_SHAPES))
-@pytest.mark.parametrize("name", _STEP_OPS)
-def test_a_movement_step_matches_eager_and_the_unrewritten_graph(
-    name: str, shape_name: str, dtype: lucid.dtype
-) -> None:
-    op, exact = _OPS[name]
-    shape = _SHAPES[shape_name]
+def _check_step(op: Op, exact: bool, shape: Shape, dtype: lucid.dtype) -> None:
+    """``op``'s forward loss and gradients, compiled with the rewrite on, equal eager's and (for a
+    pure data move, ``exact``) those of the unrewritten graph."""
     arg = _on_metal(lucid.ones(1), dtype)
     eager = to_metal(_Moved(op, shape, dtype))
     want = _loss(eager(arg))
@@ -512,6 +509,17 @@ def test_a_movement_step_matches_eager_and_the_unrewritten_graph(
         _close(grad / scale, eager_grad / scale, tol * 8, f"grad {pname} vs eager")
         if exact:
             _close(grad / scale, off_grads[pname] / scale, tol * 8, f"grad {pname} vs off")
+
+
+@needs_metal
+@pytest.mark.parametrize("dtype", _DTYPES, ids=str)
+@pytest.mark.parametrize("shape_name", sorted(_SHAPES))
+@pytest.mark.parametrize("name", _STEP_OPS)
+def test_a_movement_step_matches_eager_and_the_unrewritten_graph(
+    name: str, shape_name: str, dtype: lucid.dtype
+) -> None:
+    op, exact = _OPS[name]
+    _check_step(op, exact, _SHAPES[shape_name], dtype)
 
 
 @needs_metal
@@ -586,15 +594,6 @@ _TWINS: dict[str, tuple[Op, Op]] = {
 }
 
 
-#: The same elements with the leading axes merged, for the op whose rank-4 graph is not a twin.
-#: ``repeat`` widens its operand by one axis (insert a size-1 axis, broadcast it, collapse), so a
-#: rank-4 operand runs through a rank-5 intermediate and MPSGraph's slice loop: the rank-4 twin
-#: ran 43 ms against 3.0 for the fixed graph and 60 for the unfixed one, so the unfixed graph
-#: measured 1.4x it under a 1.5x bound (0.07x fixed) -- a guard that could not fail (LCD-935).
-#: At rank 3 the intermediate stays at rank 4 and the twin runs at the fixed graph's 3.0 ms.
-_S3: Shape = (65536, 16, 16)
-_TWIN_SHAPE: dict[str, Shape] = {"repeat": _S3}
-
 #: The ratio each op is held to.  ``expand`` stays at 1.5x its twin on an M1 Pro (the broadcast
 #: is materialised at rank 4 too, LCD-928's remaining row), which leaves 1.5x a hair of slack;
 #: unfixed it ran 13x.
@@ -608,13 +607,12 @@ _DEFAULT_BOUND = 1.5
 def test_a_rank_5_movement_op_is_not_slower_than_its_rank_4_twin(name: str) -> None:
     """Held to 1.5x the twin (``expand``: 3x); the unfixed graphs ran 4x to 20x it."""
     wide_fn, twin_fn = _TWINS[name]
-    twin_shape = _TWIN_SHAPE.get(name, _S4)
 
     def build() -> dict[str, Callable[[], float]]:
         _C_engine.compile.session_cache_clear()
         return {
             "rank-5": compiled_call(wide_fn, _metal(_S5)),
-            "twin": compiled_call(twin_fn, _metal(twin_shape)),
+            "twin": compiled_call(twin_fn, _metal(_S4)),
         }
 
     bound = _BOUND.get(name, _DEFAULT_BOUND)
@@ -634,13 +632,12 @@ def test_the_movement_bound_is_exceeded_by_the_unfixed_graph(name: str) -> None:
     that changes, or an op whose unfixed cost moves under the bound, fails here by name.
     """
     wide_fn, twin_fn = _TWINS[name]
-    twin_shape = _TWIN_SHAPE.get(name, _S4)
 
     def build() -> dict[str, Callable[[], float]]:
         _C_engine.compile.session_cache_clear()
         return {
             "pass off": with_env(compiled_call(wide_fn, _metal(_S5)), ENV, "-1"),
-            "twin": compiled_call(twin_fn, _metal(twin_shape)),
+            "twin": compiled_call(twin_fn, _metal(_S4)),
         }
 
     bound = _BOUND.get(name, _DEFAULT_BOUND)
