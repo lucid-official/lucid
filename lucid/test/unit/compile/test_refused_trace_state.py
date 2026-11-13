@@ -25,6 +25,17 @@ whole observable state, after each.  The class is the product of
 * the entry that runs the call: ``lucid.compile`` of a module, ``make_step``, a segmented
   ``make_step`` (the module in its first and in its last segment), ``fused_step``, and a
   compiled decode step.
+
+The same driver then checks the rest of what a trace-time call leaves that eager does not (LCD-992):
+
+* a registered buffer, or an attribute, grown by every call (``cat``): its trace stands as the call
+  and is never replayed (a replay would hand every call the first one's history);
+* a ``.backward()`` with no ``inputs=`` in the forward: ``.grad`` of the parameters and of the
+  call's own tensors goes back with the rest, or the eager rerun accumulates into it twice;
+* a plan that compiled and then failed its first run, which the call answers eagerly: the Python
+  the trace ran goes back first, in every entry (the segmented ones too, forward and backward);
+* a segmented compile, which traces the forward twice (the second for its backward) and moves the
+  forward's counters once, as eager does.
 """
 
 import warnings
@@ -43,6 +54,7 @@ from lucid.compile._entry.decode_step import compiled_decode_step
 from lucid.compile._entry.fused_step import fused_step
 from lucid.test._fixtures.devices import metal_available
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
+from lucid.test.unit.compile.test_first_run_fallback import _inject
 from lucid.utils.cache import StaticCache
 
 pytestmark = pytest.mark.skipif(not metal_available(), reason="compiled executables run on Metal")
@@ -130,24 +142,22 @@ def _state(stamped: _Stamped) -> tuple[object, ...]:
     )
 
 
-def _same_state(got: _Stamped, want: _Stamped, when: str, *, counts: bool = True) -> None:
-    """The exact state and the cache, which a compiled run computes to a rounding of eager's.
-
-    ``counts`` is off for an entry whose compile runs the forward's Python twice, which
-    moves a counter twice (a segmented step traces the forward again for its backward).
-    """
-    exact, wanted = _state(got), _state(want)
-    if not counts:
-        exact, wanted = exact[:1], wanted[:1]
-    assert exact == wanted, f"state {when}"
+def _same_state(got: _Stamped, want: _Stamped, when: str) -> None:
+    """The exact state and the cache, which a compiled run computes to a rounding of eager's."""
+    assert _state(got) == _state(want), f"state {when}"
     gap = float((got.scale - want.scale).abs().max().item())
     assert gap <= TOLERANCE, f"cache {when}: {gap} off"
 
 
-def _stamped_of(model: nn.Module) -> _Stamped:
-    found = [m for m in model.modules() if isinstance(m, _Stamped)]
+def _inner[M: nn.Module](model: nn.Module, kind: type[M]) -> M:
+    """The one module of ``kind`` in ``model``'s tree."""
+    found = [m for m in model.modules() if isinstance(m, kind)]
     assert len(found) == 1
     return found[0]
+
+
+def _stamped_of(model: nn.Module) -> _Stamped:
+    return _inner(model, _Stamped)
 
 
 def _loss(y: Tensor) -> Tensor:
@@ -159,24 +169,27 @@ def _batches() -> list[Tensor]:
     return [lucid.randn(6, WIDTH, device=COMPILE_DEVICE) * (1 + i) for i in range(CALLS)]
 
 
-type _Build = Callable[[_Stamped], nn.Module]
+type _Build = Callable[[nn.Module], nn.Module]
+type _Make = Callable[[], nn.Module]
+#: Compares the module of a call with its eager twin's, after it: what a case is about.
+type _Compare = Callable[[nn.Module, nn.Module, str], None]
 
 
-def _alone(stamped: _Stamped) -> nn.Module:
-    return nn.Sequential(nn.Linear(WIDTH, WIDTH), stamped, nn.Tanh(), nn.Linear(WIDTH, WIDTH))
+def _alone(inner: nn.Module) -> nn.Module:
+    return nn.Sequential(nn.Linear(WIDTH, WIDTH), inner, nn.Tanh(), nn.Linear(WIDTH, WIDTH))
 
 
-def _first_segment(stamped: _Stamped) -> nn.Module:
-    return nn.Sequential(stamped, nn.Tanh(), nn.Linear(WIDTH, WIDTH), nn.Tanh())
+def _first_segment(inner: nn.Module) -> nn.Module:
+    return nn.Sequential(inner, nn.Tanh(), nn.Linear(WIDTH, WIDTH), nn.Tanh())
 
 
-def _last_segment(stamped: _Stamped) -> nn.Module:
-    return nn.Sequential(nn.Linear(WIDTH, WIDTH), nn.Tanh(), nn.Linear(WIDTH, WIDTH), stamped)
+def _last_segment(inner: nn.Module) -> nn.Module:
+    return nn.Sequential(nn.Linear(WIDTH, WIDTH), nn.Tanh(), nn.Linear(WIDTH, WIDTH), inner)
 
 
-def _model(build: _Build, refuse: str, write: str, target: str) -> nn.Module:
+def _model(build: _Build, make: _Make) -> nn.Module:
     lucid.manual_seed(0)
-    return build(_Stamped(refuse, write, target)).to(COMPILE_DEVICE)
+    return build(make()).to(COMPILE_DEVICE)
 
 
 class _Entry:
@@ -184,8 +197,6 @@ class _Entry:
 
     grad = True
     steps_itself = False
-    #: Whether a call that compiles moves the module's counters once, as eager does.
-    counts_once = True
     build: _Build = staticmethod(_alone)
 
     def __init__(self, model: nn.Module, optimizer: optim.Optimizer) -> None:
@@ -232,7 +243,6 @@ class _Segmented(_MakeStep):
     """A two-segment step; ``holder`` is the segment the stamped module sits in."""
 
     holder = 0
-    counts_once = False
 
     def __init__(self, model: nn.Module, optimizer: optim.Optimizer) -> None:
         _Entry.__init__(self, model, optimizer)
@@ -284,15 +294,10 @@ def _eager(model: nn.Module, x: Tensor, grad: bool) -> float:
     return value
 
 
-def _run(entry_name: str, refuse: str, write: str, target: str) -> _Entry:
-    """Run the entry against an eager twin, comparing the loss and the state after each call.
-
-    A call that is refused runs the Python once in the trace and once eagerly, so every entry
-    compares the counters then; one that compiles is compared as the entry counts it.
-    """
+def _drive(entry_name: str, make: _Make, compare: _Compare) -> _Entry:
+    """Run the entry against an eager twin, comparing the loss and ``compare`` after each call."""
     kind = ENTRIES[entry_name]
-    counts = refuse != "none" or kind.counts_once
-    model, twin = (_model(kind.build, refuse, write, target) for _ in range(2))
+    model, twin = (_model(kind.build, make) for _ in range(2))
     optimizer = optim.SGD(model.parameters(), lr=0.05)
     twin_optimizer = optim.SGD(twin.parameters(), lr=0.05)
     entry = kind(model, optimizer)
@@ -304,12 +309,21 @@ def _run(entry_name: str, refuse: str, write: str, target: str) -> _Entry:
             got = entry.call(batch.clone())
             want = _eager(twin, batch.clone(), entry.grad)
             assert abs(got - want) / max(1.0, abs(want)) < TOLERANCE, f"call {i}: {got} vs {want}"
-            _same_state(_stamped_of(model), _stamped_of(twin), f"after call {i}", counts=counts)
+            compare(model, twin, f"after call {i}")
             if entry.grad:
                 if not entry.steps_itself:
                     optimizer.step()
                 twin_optimizer.step()
     return entry
+
+
+def _same_stamped(model: nn.Module, twin: nn.Module, when: str) -> None:
+    _same_state(_stamped_of(model), _stamped_of(twin), when)
+
+
+def _run(entry_name: str, refuse: str, write: str, target: str) -> _Entry:
+    """:func:`_drive` over a :class:`_Stamped`, whose state is compared exactly."""
+    return _drive(entry_name, lambda: _Stamped(refuse, write, target), _same_stamped)
 
 
 @pytest.mark.parametrize("target", TARGETS)
@@ -338,7 +352,7 @@ def test_the_scenario_catches_a_stamp_left_behind(
     target: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Without the restore the eager rerun finds the stamp set: the guard has teeth."""
-    monkeypatch.setattr(SlotWatch, "restore", lambda self: None)
+    monkeypatch.setattr(SlotWatch, "restore", lambda self, *, grads=True: None)
     with pytest.raises(AssertionError):
         _run("module", "host_read", "copy_", target)
 
@@ -385,23 +399,27 @@ def test_a_segment_refused_after_a_compiled_one_leaves_both_as_one_eager_step_wo
 
 
 class _Decoding(nn.Module):
-    """A decode forward whose state is a :class:`_Stamped`'s, with a cache to write."""
+    """A decode forward over ``inner``, with a cache to write."""
 
-    def __init__(self, stamped: _Stamped) -> None:
+    def __init__(self, inner: nn.Module) -> None:
         super().__init__()
-        self.stamped = stamped
+        self.inner = inner
 
     def forward(self, hidden: Tensor, cache: StaticCache, position: Tensor) -> Tensor:
-        y = self.stamped(hidden)
+        y = self.inner(hidden)
         keys, _ = cache.update(
             y.reshape(1, 1, 1, WIDTH), y.reshape(1, 1, 1, WIDTH), 0, {"cache_position": position}
         )
         return y + keys.mean()
 
 
-def _decode(refuse: str, write: str, target: str, compiled: bool) -> tuple[list[Tensor], _Stamped]:
+def _decode(make: _Make, compiled: bool, *, refused: bool) -> tuple[list[Tensor], nn.Module]:
+    """Three decode steps over ``make()``, compiled or eager: each output, and the module.
+
+    ``refused``: that no step may leave an executable (a trace that is refused makes none).
+    """
     lucid.manual_seed(0)
-    model = _Decoding(_Stamped(refuse, write, target)).to(COMPILE_DEVICE)
+    model = _Decoding(make()).to(COMPILE_DEVICE)
     cache = StaticCache(8)
 
     def forward(hidden: Tensor, position: Tensor) -> Tensor:
@@ -414,9 +432,18 @@ def _decode(refuse: str, write: str, target: str, compiled: bool) -> tuple[list[
         for pos in range(CALLS + 1):
             hidden = lucid.ones(1, 1, WIDTH, device=COMPILE_DEVICE) * (0.1 * (pos + 1))
             outs.append(step(hidden, lucid.tensor([pos], device=COMPILE_DEVICE).long()))
-            if compiled:
+            if compiled and refused:
                 assert not step.cache, "the scenario must be refused"
-    return outs, model.stamped
+    return outs, model.inner
+
+
+def _same_decode(make: _Make, compare: _Compare, *, refused: bool = True) -> None:
+    """A compiled decode step against an eager one: every output, then ``compare``."""
+    got, model = _decode(make, compiled=True, refused=refused)
+    want, twin = _decode(make, compiled=False, refused=refused)
+    for i, (a, b) in enumerate(zip(got, want, strict=True)):
+        assert float((a - b).abs().max().item()) < TOLERANCE, f"step {i}"
+    compare(model, twin, "after the last step")
 
 
 @pytest.mark.parametrize("target", TARGETS)
@@ -425,8 +452,247 @@ def _decode(refuse: str, write: str, target: str, compiled: bool) -> tuple[list[
 def test_a_refused_decode_step_leaves_the_module_as_one_eager_call_would(
     refuse: str, write: str, target: str
 ) -> None:
-    got, stamped = _decode(refuse, write, target, compiled=True)
-    want, twin = _decode(refuse, write, target, compiled=False)
-    for i, (a, b) in enumerate(zip(got, want, strict=True)):
-        assert float((a - b).abs().max().item()) < TOLERANCE, f"step {i}"
-    _same_state(stamped, twin, "after the last step")
+    _same_decode(lambda: _Stamped(refuse, write, target), _same_stamped)
+
+
+# -- LCD-992: a buffer replaced by a tensor of another shape ------------------------------
+
+
+class _Growing(nn.Module):
+    """A history that every call grows by a row (``cat``), which the output reads.
+
+    A registered buffer takes the replacement through its registry and not through ``__dict__``;
+    a write into the old buffer cannot change its shape, so ``Module.__setattr__`` leaves it a
+    replacement.  Compiled, the executable was fed the history it read at trace time, and the
+    module kept the first call's.
+    """
+
+    def __init__(self, target: str) -> None:
+        super().__init__()
+        self.w = nn.Parameter(lucid.randn(WIDTH, WIDTH))
+        if target == "buffer":
+            self.register_buffer("hist", lucid.zeros(1, WIDTH), persistent=False)
+        else:
+            self.hist = lucid.zeros(1, WIDTH, device=COMPILE_DEVICE)
+
+    def forward(self, x: Tensor) -> Tensor:
+        self.hist = lucid.cat([self.hist, x.detach().reshape(-1, WIDTH).mean(0, keepdim=True)], 0)
+        return x @ self.w + self.hist.sum()
+
+
+def _same_history(model: nn.Module, twin: nn.Module, when: str) -> None:
+    got, want = _inner(model, _Growing).hist, _inner(twin, _Growing).hist
+    assert got.shape == want.shape, f"history {when}: {tuple(got.shape)} vs {tuple(want.shape)}"
+    gap = float((got - want).abs().max().item())
+    assert gap <= TOLERANCE, f"history {when}: {gap} off"
+
+
+@pytest.mark.parametrize("target", TARGETS)
+@pytest.mark.parametrize("entry", list(ENTRIES))
+def test_a_history_grown_by_every_call_is_never_replayed(entry: str, target: str) -> None:
+    """The trace that grew it stands as the call, and the signature runs eagerly: every call
+    finds the history one row longer, as eager's does.  Replayed, call 1 was 0.66 off."""
+    ran = _drive(entry, lambda: _Growing(target), _same_history)
+    assert ran.cached() == 0, "a rebinding no write can carry must not compile"
+
+
+@pytest.mark.parametrize("target", TARGETS)
+def test_a_decode_step_that_grows_a_history_is_never_replayed(target: str) -> None:
+    _same_decode(lambda: _Growing(target), _same_history)
+
+
+class _Table(nn.Module):
+    """A table built once from constants and kept: the same values however often it is built."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.w = nn.Parameter(lucid.randn(WIDTH, WIDTH))
+        self.register_buffer("table", None, persistent=False)
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.table is None:
+            self.table = lucid.arange(WIDTH, device=COMPILE_DEVICE).float() * 0.1
+        return x @ self.w + self.table
+
+
+def test_a_table_built_once_from_constants_still_compiles() -> None:
+    """What a replay would build is what the trace built: no verdict, an executable."""
+    ran = _drive("module", _Table, lambda model, twin, when: None)
+    assert ran.cached() > 0
+
+
+# -- LCD-992: a backward pass in the forward accumulates into .grad -----------------------
+
+
+class _Backwarding(nn.Module):
+    """A forward that runs a backward pass of its own: ``.backward()`` with no ``inputs=``
+    accumulates into the gradient of every leaf it reaches, ``w`` here."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.w = nn.Parameter(lucid.randn(WIDTH, WIDTH))
+
+    def forward(self, x: Tensor) -> Tensor:
+        with lucid.enable_grad():
+            (self.w * self.w).sum().backward()
+        return x @ self.w
+
+
+def _same_grads(model: nn.Module, twin: nn.Module, when: str) -> None:
+    got, want = _inner(model, _Backwarding).w.grad, _inner(twin, _Backwarding).w.grad
+    assert got is not None and want is not None, f"gradient {when}"
+    gap = float((got - want).abs().max().item())
+    assert gap <= TOLERANCE * (1.0 + float(want.abs().max().item())), f"gradient {when}: {gap} off"
+
+
+@pytest.mark.parametrize("entry", ["module", "make_step", "segmented_first", "segmented_last"])
+def test_a_backward_in_a_refused_forward_accumulates_once(entry: str) -> None:
+    """The trace ran the forward's backward, and the eager rerun runs it again: ``.grad`` went
+    back with the rest of the module's state, or it held twice what eager's did."""
+    ran = _drive(entry, _Backwarding, _same_grads)
+    assert ran.cached() == 0, "a backward pass in the forward must refuse the trace"
+
+
+def test_a_backward_in_a_refused_decode_step_accumulates_once() -> None:
+    _same_decode(_Backwarding, _same_grads)
+
+
+class _BackwardToArgument(nn.Module):
+    """Backward from the forward into its own input, a leaf the module does not hold."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.w = nn.Parameter(lucid.randn(WIDTH, WIDTH))
+
+    def forward(self, x: Tensor) -> Tensor:
+        with lucid.enable_grad():
+            (x * x).sum().backward()
+        return x @ self.w
+
+
+def test_a_refused_trace_puts_back_the_gradient_of_an_argument() -> None:
+    model, twin = (_model(lambda inner: inner, _BackwardToArgument) for _ in range(2))
+    compiled = lucid.compile(model)
+    x, y = (lucid.ones(6, WIDTH, device=COMPILE_DEVICE).requires_grad_() for _ in range(2))
+    with warnings.catch_warnings(), lucid.no_grad():
+        warnings.simplefilter("ignore", CompileFallbackWarning)
+        compiled(x)
+        twin(y)
+    assert x.grad is not None and y.grad is not None
+    assert float((x.grad - y.grad).abs().max().item()) <= TOLERANCE, "accumulated twice"
+    assert compiled.cache_info()["entries"] == 0
+
+
+def test_a_gradient_already_held_goes_back_to_its_values() -> None:
+    """A gradient the call found is not zeroed or doubled: it is as it was before the trace."""
+    model, twin = (_model(_alone, _Backwarding) for _ in range(2))
+    for m in (_inner(model, _Backwarding), _inner(twin, _Backwarding)):
+        m.w.grad = lucid.ones(WIDTH, WIDTH, device=COMPILE_DEVICE) * 3.0
+    compiled = lucid.compile(model)
+    x = lucid.randn(6, WIDTH, device=COMPILE_DEVICE)
+    with warnings.catch_warnings(), lucid.no_grad():
+        warnings.simplefilter("ignore", CompileFallbackWarning)
+        compiled(x)
+        twin(x)
+    _same_grads(model, twin, "after the call")
+
+
+# -- LCD-992: a plan that compiled and failed its first run -------------------------------
+
+#: The engine call each entry's first run goes through, which the case makes fail.
+FIRST_RUNS: Final = {
+    "module": "run_executable",
+    "make_step": "run_executable",
+    "segmented_first": "run_executable",
+    "segmented_last": "run_executable",
+    "fused_step": "run_executable_inplace",
+}
+
+
+@pytest.mark.parametrize("target", TARGETS)
+@pytest.mark.parametrize("write", COMPILED_WRITES)
+@pytest.mark.parametrize("entry", list(ENTRIES))
+def test_a_first_run_the_engine_fails_leaves_the_module_as_one_eager_call_would(
+    entry: str, write: str, target: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The trace ran the forward's Python and the executable it made never ran: the eager answer
+    runs it again over what the trace left, so that goes back first."""
+    calls = _inject(monkeypatch, FIRST_RUNS[entry], {0})
+    _run(entry, "none", write, target)
+    assert len(calls) > 1, "the failure was never reached, or nothing ran after it"
+
+
+@pytest.mark.parametrize("target", TARGETS)
+@pytest.mark.parametrize("write", COMPILED_WRITES)
+def test_a_decode_step_whose_first_run_fails_leaves_the_module_as_eager_would(
+    write: str, target: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _inject(monkeypatch, "run_executable", {0})
+    _same_decode(lambda: _Stamped("none", write, target), _same_stamped, refused=False)
+
+
+@pytest.mark.parametrize("target", TARGETS)
+@pytest.mark.parametrize(("entry", "fails_at"), [("segmented_first", 3), ("segmented_last", 2)])
+def test_a_segmented_backward_recompute_does_not_move_the_forward_state_again(
+    entry: str, fails_at: int, target: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The forward ran compiled; its backward executable's first run fails, in the caller's
+    ``loss.backward()``, and the segment's gradients are taken eagerly from its input: a second
+    run of the forward's Python, whose effects are not the call's."""
+    _inject(monkeypatch, "run_executable", {fails_at})
+    _run(entry, "none", "copy_", target)
+
+
+def test_a_first_run_failure_gives_the_eager_call_the_random_stream_eager_has(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Put back with the module: the attempt's streams are restored when it ends, and a run that
+    failed may have drawn from them since."""
+    lucid.manual_seed(5)
+    model = nn.Sequential(nn.Linear(WIDTH, WIDTH), nn.Dropout(0.5)).to(COMPILE_DEVICE)
+    compiled = lucid.compile(model)
+    x = lucid.randn(6, WIDTH, device=COMPILE_DEVICE)
+    drawn: list[object] = []
+
+    def draw_then_fail(*args: object) -> object:
+        drawn.append(lucid.rand(1, device=COMPILE_DEVICE))  # a run's own draw before it fails
+        raise RuntimeError("run_executable: MPSGraph failed: injected")
+
+    monkeypatch.setattr(_C_engine.compile, "run_executable", draw_then_fail)
+    lucid.manual_seed(7)
+    with warnings.catch_warnings(), lucid.no_grad():
+        warnings.simplefilter("ignore", CompileFallbackWarning)
+        got = compiled(x)
+    lucid.manual_seed(7)
+    with lucid.no_grad():
+        want = model(x)
+    assert drawn, "the failure was never reached"
+    assert float((got - want).abs().max().item()) <= TOLERANCE
+
+
+# -- LCD-992: a segmented compile traces the forward twice ---------------------------------
+
+
+class _Counting(nn.Module):
+    """A forward that counts its own runs: eager moves it once per call."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.runs = 0
+        self.w = nn.Parameter(lucid.randn(WIDTH, WIDTH))
+
+    def forward(self, x: Tensor) -> Tensor:
+        self.runs += 1
+        return x @ self.w
+
+
+def _same_runs(model: nn.Module, twin: nn.Module, when: str) -> None:
+    assert _inner(model, _Counting).runs == _inner(twin, _Counting).runs, f"runs {when}"
+
+
+@pytest.mark.parametrize("entry", ["segmented_first", "segmented_last"])
+def test_a_segmented_compile_moves_a_forward_counter_once_per_call(entry: str) -> None:
+    """The backward executable is built from a second trace of the forward.  That run starts from
+    where the call began, so the counter holds one run, not two."""
+    ran = _drive(entry, _Counting, _same_runs)
+    assert ran.cached() > 0, "the scenario must compile, or it proves nothing"
