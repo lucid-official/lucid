@@ -35,6 +35,8 @@ from lucid.compile._core.fallback import _fallback_notice
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
+    from lucid._factories._generator import _StreamState
+    from lucid.compile._core.rebound_slots import SlotWatch
     from lucid.nn.module import Module
 
 __all__ = [
@@ -93,18 +95,20 @@ def compile_attempt() -> Iterator[CompileAttempt]:
     to the eager call after it, and nowhere if it raises
     (:func:`~lucid.compile._core.buffer_writes.eager_rerun`).  An attempt that
     made nothing to run also puts back what its trace-time call changed in
-    Python (:meth:`CompileAttempt.concluded`).
+    Python (:meth:`CompileAttempt.concluded`), and so does one whose entry
+    then fails its first run and is answered eagerly (:meth:`CompileAttempt.undo`).
     """
-    from lucid.compile._core.buffer_writes import begin_attempt, end_attempt
+    from lucid.compile._core.buffer_writes import begin_attempt, current_watch, end_attempt
 
     saved = _stream_states()
-    attempt = CompileAttempt()
+    attempt = CompileAttempt(saved)
     outer = begin_attempt()
     finished = False
     try:
         yield attempt
         finished = True
     finally:
+        attempt.watch = current_watch()
         end_attempt(outer, finished=finished)
         if not attempt.answered:
             _restore_stream_states(saved)
@@ -114,11 +118,15 @@ class CompileAttempt:
     """What a :func:`compile_attempt` ended as.
 
     ``answered`` is set when the trace-time call stands as the call
-    (:class:`~lucid.compile._core.buffer_writes.TraceAnswer`).
+    (:class:`~lucid.compile._core.buffer_writes.TraceAnswer`).  ``watch`` is the
+    attempt's :class:`~lucid.compile._core.rebound_slots.SlotWatch`, kept once it ends
+    for :meth:`undo`.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, streams: tuple[_StreamState, ...]) -> None:
         self.answered = False
+        self.watch: SlotWatch | None = None
+        self._streams = streams
 
     def concluded(self, built: object | None) -> None:
         """Say what the attempt made, and undo its trace-time call if it made nothing.
@@ -146,6 +154,21 @@ class CompileAttempt:
         self.answered = isinstance(built, TraceAnswer)
         if built is None:
             restore_slots()
+
+    def undo(self) -> None:
+        """Put the module and the streams back as before the attempt, once it has ended.
+
+        For a call that is run eagerly *after* an attempt made an entry: the executable
+        that was to replace the call did not run (the engine failed its first run), and
+        the eager call runs the forward's Python again over what the trace-time call
+        left.  Same as :meth:`concluded` with nothing made, and the random streams too:
+        a run that failed may have drawn from them.  Call it only for an entry made in
+        this very call: one that ran before, its calls have been answered since
+        (LCD-992).
+        """
+        if self.watch is not None:
+            self.watch.restore()
+        _restore_stream_states(self._streams)
 
 
 def _scan_retained_values(tracer: Tracer) -> None:

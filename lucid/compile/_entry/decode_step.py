@@ -56,7 +56,7 @@ from lucid.compile._core.buffer_writes import (
     held_writes,
     refuse,
 )
-from lucid.compile._core.fallback import _fallback_notice, run_or_answer_eagerly
+from lucid.compile._core.fallback import _fallback_notice, no_undo, run_or_answer_eagerly
 from lucid.compile._core.rebound_slots import REBOUND_MARK
 from lucid.compile._core.signature import TraceReads, tree_requires_grad
 
@@ -540,13 +540,15 @@ def compiled_decode_step(
 
         call = (input_ids, cache_position)
         entry = cache.get(key) if key is not None else None
+        undo = no_undo
         if entry is None and not _needs_gradients(call, self_cache, cross_cache, None, adapter):
             with compile_attempt() as attempt:
-                before = fingerprint.outside_slots()
+                before = fingerprint.outside_slots(call)
                 entry = _compile_decode_entry(
                     forward_fn, self_cache, adapter, input_ids, cache_position
                 )
                 attempt.concluded(entry)
+            undo = attempt.undo
             fingerprint.settle(() if entry is None else entry.reads.fed, before)
             if key is not None:
                 key = fingerprint.rekey(key, call, {})
@@ -555,6 +557,7 @@ def compiled_decode_step(
                 else:
                     cache[key] = entry
         if entry is None or _needs_gradients(call, self_cache, cross_cache, entry, adapter):
+            undo()  # an entry made now, the call run eagerly over its trace's writes
             with eager_rerun():  # what a refused trace put back, written once
                 return forward_fn(input_ids, cache_position)
         return run_or_answer_eagerly(
@@ -562,6 +565,7 @@ def compiled_decode_step(
             warm=entry.n_hits > 0,
             drop=lambda: _drop_entry(cache, eager_sigs, key),
             eagerly=lambda: _eagerly(forward_fn, input_ids, cache_position),
+            undo=undo,
         )
 
     step.cache = cache  # type: ignore[attr-defined]

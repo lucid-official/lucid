@@ -528,7 +528,7 @@ def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Call
     """Build the monolithic (single-segment) compiled step callable."""
     from lucid._dispatch import _wrap
     from lucid._tensor.tensor import Tensor
-    from lucid.compile._core.fallback import EagerFallbackSet, run_or_answer_eagerly
+    from lucid.compile._core.fallback import EagerFallbackSet, no_undo, run_or_answer_eagerly
     from lucid.compile._core.signature import (
         ParamFingerprint,
         leaf_tensors,
@@ -562,11 +562,12 @@ def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Call
             return loss_fn(model(*x_args[:1]), *x_args[1:])
 
         entry = _live_entry(cache, key)
+        undo = no_undo
         if entry is None:
             from lucid.compile._core.trace_context import compile_attempt
 
             with compile_attempt() as attempt:
-                before = fingerprint.outside_slots()
+                before = fingerprint.outside_slots(leaves)
                 built = _compile_step_entry(model, loss_fn, params, x_args, use_dynamic=use_dynamic)
                 attempt.concluded(built)
                 fingerprint.settle(built.fed if isinstance(built, _StepEntry) else (), before)
@@ -576,7 +577,7 @@ def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Call
                 if key is not None:
                     eager_only.add(key)
                 return _answered_or_eager(built, model, loss_fn, x_args)
-            entry = built
+            entry, undo = built, attempt.undo
             if key is not None:
                 cache[key] = entry
 
@@ -590,6 +591,7 @@ def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Call
             warm=entry.n_hits > 0,
             drop=lambda: _drop_entry(cache, eager_only, key),
             eagerly=lambda: _answered_or_eager(None, model, loss_fn, x_args),
+            undo=undo,
         )
 
     def clear_cache() -> None:

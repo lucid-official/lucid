@@ -114,6 +114,7 @@ if TYPE_CHECKING:
     from lucid._C.engine.compile import CompiledExecutable, TraceGraph, Tracer
     from lucid._tensor.tensor import Tensor
     from lucid.amp.grad_scaler import GradScaler
+    from lucid.compile._core.trace_context import CompileAttempt
     from lucid.compile._optim.compiler import _CompiledStepBase, _PlanFlags, _ScalarLayout
     from lucid.nn.module import Module
     from lucid.optim.optimizer import Optimizer
@@ -673,6 +674,7 @@ class _FusedStep:
         copt = self._copt
         prev_init = list(copt._initialized)
         prev_pstate = [dict(d) for d in copt._pstate]
+        made: CompileAttempt | None = None
         try:
             with compile_attempt() as attempt:
                 try:
@@ -686,6 +688,7 @@ class _FusedStep:
                     if not _is_user_error(why):
                         attempt.concluded(None)
                     raise
+            made = attempt
             self._refresh_scaler_scalars()
             result = self._run(plan, args, flags)
         except (*_RERUN_ON, _TraceStands) as why:
@@ -703,6 +706,8 @@ class _FusedStep:
             self._eager_only.add(fallback_key)
             if isinstance(why, _TraceStands):
                 return self._step_eagerly(why.loss)
+            if made is not None:
+                made.undo()  # the plan was built, then its first run failed (LCD-992)
             return self._run_eager(args)
         # Keyed after the build + first run: it initialised the new members'
         # state, and the trace showed which tensor attributes it reads.
@@ -1162,9 +1167,10 @@ class _FusedStep:
     def _build_plan(self, args: tuple[Tensor, ...], flags: _PlanFlags) -> _FusedPlan:
         """Trace + compile the fused step for the current participants."""
         from lucid.compile._core.attention_probe import maybe_probe_for_graph
+        from lucid.compile._core.signature import leaf_tensors
 
         scaler_enabled = self._ensure_scaler_holders()
-        before = self._fingerprint.outside_slots()
+        before = self._fingerprint.outside_slots(leaf_tensors(args, {}))
         try:
             traced = self._trace_fused_graph(args, flags, scaler_enabled=scaler_enabled)
         except BaseException:

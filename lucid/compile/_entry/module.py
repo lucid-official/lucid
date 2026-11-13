@@ -57,6 +57,7 @@ from lucid.compile._core.fallback import (
     EagerFallbackSet,
     _fallback_notice,
     _narrate,
+    no_undo,
     run_eager,
     run_or_answer_eagerly,
 )
@@ -75,6 +76,7 @@ from lucid.nn.parameter import Parameter
 if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
     from lucid._tensor.tensor import Tensor
+    from lucid.compile._core.trace_context import CompileAttempt
     from lucid.nn.module import Module
 
 
@@ -940,15 +942,19 @@ class CompiledModule[**P, R](_ModuleWrapper):
         if grad_mode and self._needs_gradients(leaves, cached):
             return self._run_differentiable(key, args, kwargs)
         entry: _CacheEntry | TraceAnswer[object] | None = cached
+        undo = no_undo
         if entry is None:
-            key, entry = self._compile_and_cache(key, eff, args, kwargs)
+            key, entry, attempt = self._compile_and_cache(key, eff, args, kwargs)
+            undo = attempt.undo
             # A tensor no module holds — a closure's, a global, one a factory
             # makes — is seen only once the trace has read it.  The executable
-            # stays cached for the calls made under ``no_grad``.
+            # stays cached for the calls made under ``no_grad``.  The call then
+            # runs eagerly over what the trace-time call left: put back (LCD-992).
             if isinstance(entry, _CacheEntry) and grad_mode and entry.reads_grad():
+                undo()
                 return self._run_differentiable(key, args, kwargs)
         self._count(key)
-        return self._answer(key, entry, args, kwargs)
+        return self._answer(key, entry, args, kwargs, undo)
 
     def _answer(
         self,
@@ -956,29 +962,34 @@ class CompiledModule[**P, R](_ModuleWrapper):
         entry: _CacheEntry | TraceAnswer[object] | None,
         args: tuple[object, ...],
         kwargs: dict[str, object],
+        undo: Callable[[], None],
     ) -> object:
         """Run ``entry``, or the call eagerly without one; a trace that stood
-        as the call (:class:`TraceAnswer`) is the answer already."""
+        as the call (:class:`TraceAnswer`) is the answer already.  ``undo`` puts back
+        what the attempt that compiled ``entry`` in this call left (:func:`no_undo`
+        for one cached before)."""
         if isinstance(entry, TraceAnswer):
             return entry.value
         if entry is None:
             return run_eager(self._model, args, kwargs)
-        return self._execute(key, entry, args, kwargs)
+        return self._execute(key, entry, args, kwargs, undo)
 
     def _compile_and_cache(
         self, key: CacheKey, symbolic: bool, args: tuple[object, ...], kwargs: dict[str, object]
-    ) -> tuple[CacheKey, _CacheEntry | TraceAnswer[object] | None]:
+    ) -> tuple[CacheKey, _CacheEntry | TraceAnswer[object] | None, CompileAttempt]:
         """Trace and compile a signature not cached yet; ``None`` if it cannot be.
 
         Returns the key the entry is cached under: the first trace may have
         downgraded symbolic → static (the gate rejected the graph, or the
         symbolic lowering failed), and the wildcarded key is then wrong.
-        A signature that does not compile is remembered as eager-only.
+        A signature that does not compile is remembered as eager-only.  The
+        attempt comes back too: what its trace-time call left in Python can be put
+        back, should the entry it made not run (:meth:`CompileAttempt.undo`).
         """
         from lucid.compile._core.trace_context import compile_attempt
 
         with compile_attempt() as attempt:
-            before = self._param_fp.outside_slots()
+            before = self._param_fp.outside_slots(leaf_tensors(args, kwargs))
             entry = self._compile_for(args, kwargs)
             attempt.concluded(entry)
             self._param_fp.settle(entry.reads.fed if isinstance(entry, _CacheEntry) else (), before)
@@ -991,7 +1002,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
             self._cache[key] = entry
         else:
             self._eager_only.add(key)
-        return key, entry
+        return key, entry, attempt
 
     def _count(self, key: CacheKey) -> None:
         """Count one call that ran as ``key``."""
@@ -1033,7 +1044,12 @@ class CompiledModule[**P, R](_ModuleWrapper):
         return run_eager(self._model, args, kwargs)
 
     def _execute(
-        self, key: CacheKey, entry: _CacheEntry, args: tuple[object, ...], kwargs: dict[str, object]
+        self,
+        key: CacheKey,
+        entry: _CacheEntry,
+        args: tuple[object, ...],
+        kwargs: dict[str, object],
+        undo: Callable[[], None],
     ) -> object:
         """Run ``entry``; on its first run, answer eagerly if MPSGraph fails.
 
@@ -1042,13 +1058,16 @@ class CompiledModule[**P, R](_ModuleWrapper):
         simplified into an int64 ``square`` it has no kernel for.  A first
         run that fails that way is the same verdict as a compile that
         declines: nothing was written yet, so the call is answered eagerly
-        and the signature remembered.
+        and the signature remembered.  An entry made in this very call has had
+        its trace-time call's Python run already, which the eager call runs again:
+        ``undo`` puts that back first (LCD-992).
         """
         return run_or_answer_eagerly(
             lambda: self._run(entry, args, kwargs),
             warm=entry.n_hits > 0,
             drop=lambda: self._drop(key),
             eagerly=lambda: run_eager(self._model, args, kwargs),
+            undo=undo,
         )
 
     def _drop(self, key: CacheKey) -> None:

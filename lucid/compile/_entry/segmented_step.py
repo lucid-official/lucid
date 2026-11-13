@@ -61,6 +61,7 @@ eager's does (``_core/rng_replay``, LCD-896).
 """
 
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable, NoReturn, Sequence, cast, final, override
 
@@ -78,6 +79,7 @@ from lucid.compile._core.signature import CacheKey, outside_feeds, tree_tensors
 if TYPE_CHECKING:
     from lucid._C.engine.compile import CompiledExecutable, Tracer
     from lucid._factories._generator import _StreamState
+    from lucid.compile._core.rebound_slots import SlotWatch
     from lucid.compile._core.signature import ParamFingerprint
     from lucid.nn.module import Module
     from lucid.nn.modules.container import Sequential
@@ -155,13 +157,16 @@ class _SegCall:
     ``mark_eager`` makes the call's signature eager-only: a backward executable
     that fails in its first run is the call's verdict, and it is found out
     after the forward chain has run, so the step that raised could not take it
-    back.  ``owner`` is the model, whose buffers an eager recompute puts back.
+    back.  ``owner`` is the model, whose buffers an eager recompute puts back, and
+    ``slot_watch`` takes the watch that puts back the rest of what its Python does
+    (:meth:`ParamFingerprint.slot_watch`).
     """
 
     compiled: _SegCompiled
     seg: _Segment
     owner: Module
     mark_eager: Callable[[], None]
+    slot_watch: Callable[[Iterable[Tensor]], SlotWatch]
 
 
 def _segment_key(x: Tensor, fingerprint: ParamFingerprint) -> CacheKey:
@@ -479,12 +484,15 @@ def _compile_segment(
     """Trace + compile the forward and backward executables for ``seg`` at ``x``.
 
     Two traces are taken (forward-only, then forward + ``loss_seg``) so the
-    forward executable does not carry the cotangent-product tail.  ``owner``
+    forward executable does not carry the cotangent-product tail.  The second
+    runs the forward's Python again, from where the call began: the module is
+    put back between them, so what the Python does to it happens once.  ``owner``
     is the model the segment is part of, whose BatchNorm counters it advances.
     Returns ``None`` on any uncompilable condition → the caller falls back to
     eager; the forward trace's output when it stands as the segment's call.
     """
     from lucid._dispatch import _unwrap
+    from lucid.compile._core.buffer_writes import restore_slots
 
     param_impls = [_unwrap(p) for p in seg.params]
     x_impl = _unwrap(x)
@@ -526,6 +534,11 @@ def _compile_segment(
     if fwd_plan is None:
         return None
 
+    # The backward trace runs the forward's Python again.  From where the call began:
+    # both traces then take the same path, and the first run's effects (a counter, a
+    # stamp) stand once, as the one call's.  Left standing, the second run found the
+    # work done and moved them twice (LCD-992).
+    restore_slots(grads=False)
     backward = _compile_segment_backward(seg, x, y, drew, values)
     if backward is None:
         return None
@@ -563,7 +576,7 @@ def _compile_into(
     if not fingerprint.tree_alias((x,), {}):
         values.hand(seg.index, (_unwrap(x),))
     with compile_attempt() as attempt:
-        before = fingerprint.outside_slots()
+        before = fingerprint.outside_slots((x,))
         compiled = (
             None if model_has_cumulative_bn(owner) else _compile_segment(seg, x, owner, values)
         )
@@ -641,7 +654,7 @@ def _forward_segments(
     compiling = key not in seg_objs[0].cache
     restore = _keep_buffers(fingerprint.model) if compiling else None
     # Past every segment's own attempt: what each ran in Python while traced goes back too.
-    slots = fingerprint.slot_watch() if compiling else None
+    slots = fingerprint.slot_watch((cur,)) if compiling else None
     values = CallValues()
     try:
         for i, seg in enumerate(seg_objs):
@@ -653,7 +666,9 @@ def _forward_segments(
                 if isinstance(built, TraceAnswer):
                     return _run_eagerly(seg_objs[i + 1 :], built.value), True
                 compiled = built
-            holder: list[object] = [_SegCall(compiled, seg, fingerprint.model, mark_eager)]
+            holder: list[object] = [
+                _SegCall(compiled, seg, fingerprint.model, mark_eager, fingerprint.slot_watch)
+            ]
             try:
                 cur = cast(Tensor, _SegmentFunction.apply(holder, cur, *seg.params))
             except RuntimeError as why:
@@ -720,13 +735,16 @@ def _eager_segment_grads(
     forward's (``rng``).  The input is a detached copy, so the recompute never
     runs on into whatever computed it: an earlier segment's own backward does
     that.  An input that is one of the segment's parameters is that parameter,
-    whose gradient then counts both uses, as in the executable (LCD-629).
+    whose gradient then counts both uses, as in the executable (LCD-629).  The forward's
+    Python runs once more here, and what it does to the module (a counter, a stamp, a
+    cache) goes back with the buffers: the compiled forward was the call's run (LCD-992).
     """
     from lucid._dispatch import _unwrap
     from lucid.autograd import enable_grad, grad
 
     seg = call.seg
     restore = _keep_buffers(call.owner)
+    slots = call.slot_watch((x,))
     x_impl = _unwrap(x)
     as_param = next(
         (p for p, impl in zip(seg.params, param_impls, strict=True) if impl is x_impl), None
@@ -749,6 +767,7 @@ def _eager_segment_grads(
                 }
     finally:
         restore()
+        slots.restore(grads=False)  # ``grad`` is functional: nothing reached ``.grad``
     return (found.get(id(x_in)) if wants_x else None, *(found.get(id(p)) for p in seg.params))
 
 

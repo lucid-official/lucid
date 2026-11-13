@@ -39,6 +39,7 @@ __all__ = [
     "run_eager",
     "EagerFallbackSet",
     "is_first_run_failure",
+    "no_undo",
     "run_or_answer_eagerly",
     "off_gpu_detail",
     "refuse_off_gpu",
@@ -126,8 +127,18 @@ def is_first_run_failure(why: BaseException) -> bool:
     return isinstance(why, _C_engine.compile.FirstRunTimeout) or "MPSGraph failed" in str(why)
 
 
+def no_undo() -> None:
+    """The ``undo`` of an entry no attempt made in this call: nothing of its trace-time call
+    is left to put back."""
+
+
 def run_or_answer_eagerly[T](
-    run: Callable[[], T], *, warm: bool, drop: Callable[[], None], eagerly: Callable[[], T]
+    run: Callable[[], T],
+    *,
+    warm: bool,
+    drop: Callable[[], None],
+    eagerly: Callable[[], T],
+    undo: Callable[[], None] = no_undo,
 ) -> T:
     """Run a compiled entry, answering eagerly if its first run is the engine's to fail.
 
@@ -146,6 +157,10 @@ def run_or_answer_eagerly[T](
     dropped, since the refusal is remembered by the executable and the same size
     fails fast on the next call.
 
+    An entry compiled in this very call has had its trace-time call's Python run
+    already, and the eager answer runs it again: ``undo`` puts that back first
+    (:meth:`~lucid.compile._core.trace_context.CompileAttempt.undo`, LCD-992).
+
     Parameters
     ----------
     run : callable
@@ -156,6 +171,9 @@ def run_or_answer_eagerly[T](
         Forgets the entry and marks its signature eager-only.
     eagerly : callable
         The call, run eagerly.
+    undo : callable, optional
+        Puts back what the trace-time call of an entry made in this call left
+        behind; :func:`no_undo` for an entry from an earlier call.
 
     Returns
     -------
@@ -173,6 +191,7 @@ def run_or_answer_eagerly[T](
     # timeout, and the timeout's traceback is not kept alive for the length of the call.
     if not warm:
         drop()
+    undo()
     return eagerly()
 
 
