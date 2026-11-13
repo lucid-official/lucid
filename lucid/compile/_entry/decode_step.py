@@ -57,6 +57,7 @@ from lucid.compile._core.buffer_writes import (
     refuse,
 )
 from lucid.compile._core.fallback import _fallback_notice, no_undo, run_or_answer_eagerly
+from lucid.compile._core.index_strict import declines_for_strict_index
 from lucid.compile._core.rebound_slots import REBOUND_MARK
 from lucid.compile._core.signature import TraceReads, tree_requires_grad
 
@@ -362,7 +363,7 @@ def _compile_decode_entry(
     del traced, out
     _restore_cache(static_cache, snap)
     carried = _carry_writes(tracer, adapter, (input_ids, cache_position))
-    if collected is None or carried is None:
+    if collected is None or carried is None or declines_for_strict_index(graph):
         return None
     write_ids, buf_slot = collected
 

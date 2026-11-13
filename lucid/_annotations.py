@@ -321,6 +321,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("CacheKey", "lucid.compile._core.signature", "CacheKey"),
         ("Module", "lucid.nn.module", "Module"),
     ),
+    "lucid.compile._core.index_strict": (("TraceGraph", "lucid._C.engine.compile", "TraceGraph"),),
     "lucid.compile._core.rng_replay": (
         ("_C_engine", "lucid._C", "engine"),
         ("_StreamState", "lucid._factories._generator", "_StreamState"),
@@ -375,6 +376,7 @@ NAMES: dict[str, tuple[tuple[str, str, str | None], ...]] = {
         ("CompileAttempt", "lucid.compile._core.trace_context", "CompileAttempt"),
         ("Module", "lucid.nn.module", "Module"),
         ("Tensor", "lucid._tensor.tensor", "Tensor"),
+        ("TraceGraph", "lucid._C.engine.compile", "TraceGraph"),
         ("Tracer", "lucid._C.engine.compile", "Tracer"),
     ),
     "lucid.compile._entry.segmented_step": (

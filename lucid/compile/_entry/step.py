@@ -304,7 +304,10 @@ def _lower_step_executable(
     """Lower ``tracer``'s recording with backward into an executable, or ``None``."""
     from lucid.compile._core.custom_backward import CustomBackwardInTrace, refuse_custom_backward
     from lucid.compile._core.fallback import _fallback_notice
+    from lucid.compile._core.index_strict import declines_for_strict_index
 
+    if declines_for_strict_index(tracer.graph):
+        return None
     try:
         refuse_custom_backward(tracer, loss_id, param_ids)
         exe = _C_engine.compile.compile_trace_with_backward(

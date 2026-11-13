@@ -61,6 +61,7 @@ from lucid.compile._core.fallback import (
     run_eager,
     run_or_answer_eagerly,
 )
+from lucid.compile._core.index_strict import declines_for_strict_index
 from lucid.compile._core.signature import (
     CacheKey,
     ParamFingerprint,
@@ -74,7 +75,7 @@ from lucid.nn.module import Module, _ModuleWrapper
 from lucid.nn.parameter import Parameter
 
 if TYPE_CHECKING:
-    from lucid._C.engine.compile import Tracer
+    from lucid._C.engine.compile import TraceGraph, Tracer
     from lucid._tensor.tensor import Tensor
     from lucid.compile._core.trace_context import CompileAttempt
     from lucid.nn.module import Module
@@ -1131,7 +1132,11 @@ class CompiledModule[**P, R](_ModuleWrapper):
         ]
 
     def _emit(
-        self, graph: object, ext: dict[int, object], use_dynamic: bool, explicit_outputs: list[int]
+        self,
+        graph: TraceGraph,
+        ext: dict[int, object],
+        use_dynamic: bool,
+        explicit_outputs: list[int],
     ) -> _ExecutableLike | None:
         """Lower ``graph`` to an executable (symbolic or static).
 
@@ -1139,9 +1144,14 @@ class CompiledModule[**P, R](_ModuleWrapper):
         keeps their first dim static (only the per-call feeds get the symbolic
         leading axis).  Returns the executable, or ``None`` on a graceful
         lowering failure (unsupported op / off-dim-0 view / backend rejection),
-        which the caller turns into a static retry or eager fallback.
+        which the caller turns into a static retry or eager fallback.  Strict
+        index mode declines a graph that holds an index op: a replay would not
+        read the index back (LCD-991).
         """
         from lucid._dispatch import _unwrap
+
+        if declines_for_strict_index(graph):
+            return None
 
         param_ids: list[int] = []
         if use_dynamic:

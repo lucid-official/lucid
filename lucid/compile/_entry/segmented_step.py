@@ -362,7 +362,11 @@ def _lower_segment_forward(
     BatchNorm ``stats``; ``None`` when it cannot be compiled."""
     from lucid.compile._core.custom_backward import CustomBackwardInTrace, refuse_custom_backward
     from lucid.compile._core.fallback import _fallback_notice
+    from lucid.compile._core.index_strict import declines_for_strict_index
 
+    # The backward trace records the same ops again, so the forward's verdict is the segment's.
+    if declines_for_strict_index(tracer.graph):
+        return None
     try:
         refuse_custom_backward(tracer, y_id, grad_target_ids)
         return _C_engine.compile.compile_or_cached(

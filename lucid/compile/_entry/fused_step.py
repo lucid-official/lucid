@@ -77,6 +77,7 @@ from lucid._dtype import dtype as _dtype_cls
 from lucid.compile._core.bn_runstats import advance_bn_counters, bn_counter_targets
 from lucid.compile._core.buffer_writes import UncarriedWrite
 from lucid.compile._core.fallback import is_first_run_failure
+from lucid.compile._core.index_strict import StrictIndexInTrace, strict_index_detail
 from lucid.compile._core.custom_backward import (
     GRADIENT_DTYPES,
     CustomBackwardInTrace,
@@ -344,6 +345,8 @@ def _fallback_category(why: Exception) -> str:
     """The kind of reason a fused plan was declined for, as announced once."""
     if isinstance(why, CustomBackwardInTrace):
         return "custom-backward"
+    if isinstance(why, StrictIndexInTrace):
+        return "strict-index"
     if isinstance(why, NotImplementedError):
         return "cumulative-bn"
     if isinstance(why, UncarriedWrite):
@@ -1049,6 +1052,8 @@ class _FusedStep:
         """Lower the combined forward+backward+optimizer trace into an executable."""
         import os as _os
 
+        if (why := strict_index_detail(traced.graph)) is not None:
+            raise StrictIndexInTrace(why)
         params_as_vars = _os.environ.get("LUCID_COMPILE_VARS", "0") in ("1", "true", "True")
         if params_as_vars or traced.dropout_pairs:
             variable_pairs: list[tuple[int, int]] = []

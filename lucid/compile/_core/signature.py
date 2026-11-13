@@ -46,6 +46,7 @@ from lucid.compile._core.callable_slots import callable_slots, cell_value, globa
 from lucid.compile._core.fallback import _fallback_notice
 from lucid.compile._core.hook_contract import HookContract, HookSite
 from lucid.compile._core.module_state import HeldState, StateContract, atom_sig
+from lucid.nn.functional._index_checks import _strict_index
 from lucid.nn.module import _ModuleWrapper, _watch_tensors
 from lucid.nn.utils._reparam import _ReparamHook
 
@@ -215,11 +216,10 @@ class CacheKey:
         dtype.  A trace records the region's casts: one traced outside it
         answered float32 inside a float16 region, and the other way round.
     policy : tuple of int
-        The environment settings the engine reads at each compile
-        (``compile_policy``: the rank-canonical lead gate, the manual-VJP
-        switches).  They decide what a compile emits for the same trace, so
-        an executable built under one setting must not answer a call made
-        under another (LCD-922).
+        The environment settings read at each compile: the engine's (``compile_policy``:
+        the rank-canonical lead gate, the manual-VJP switches), then ``LUCID_STRICT_INDEX``.
+        They decide what a compile emits, or whether it compiles, so an executable built
+        under one setting must not answer a call made under another (LCD-922, LCD-991).
 
     Examples
     --------
@@ -1494,5 +1494,5 @@ def signature_of(
         module_state=module_state,
         grad_mode=bool(_C_engine.grad_enabled()),
         autocast=_autocast_state(),
-        policy=_C_engine.compile.compile_policy(),
+        policy=(*_C_engine.compile.compile_policy(), _strict_index()),
     )

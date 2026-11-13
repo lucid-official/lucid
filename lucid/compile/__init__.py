@@ -46,6 +46,14 @@ adding, removing or reordering one retraces.  Any other forward hook or pre-hook
 may act by side effect - log, count, record - which a replay would silently
 skip, so a call with one runs eagerly, with a one-time notice.  Backward hooks,
 global module hooks and tensor gradient hooks always run eagerly.
+
+A compiled replay never reads an index back, so on Metal an index outside its axis
+answers policy B's NaN or dropped write instead of the CPU's ``IndexError``.  With
+``LUCID_STRICT_INDEX=1`` set, a program that holds an index op (``gather``,
+``embedding``, ``scatter*``, ``one_hot``, ...) is not compiled: its calls run eagerly,
+with a one-time notice, where the index is checked.  The switch is read at every call
+and is part of the cache key.  A program restored with :func:`load_compiled` has no
+trace to inspect and is not checked.
 """
 
 import sys

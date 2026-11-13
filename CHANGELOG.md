@@ -235,6 +235,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - DreamerV3 actor/reward heads follow the release (LCD-950)
 
+- strict index mode compiles no index op (LCD-991)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
