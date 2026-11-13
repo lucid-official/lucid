@@ -108,7 +108,7 @@ export default function RootLayout({
             plays them in.  Without JavaScript that never happens, so show them.
             (The page-wide entrance is a CSS animation and needs no help.) */}
         <noscript>
-          <style>{`[style*="opacity:0"]{opacity:1!important}`}</style>
+          <style>{`[style="opacity:0"],[style^="opacity:0;"]{opacity:1!important}`}</style>
         </noscript>
       </head>
       <body>

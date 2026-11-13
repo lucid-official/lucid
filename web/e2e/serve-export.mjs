@@ -55,22 +55,48 @@ async function resolveFile(pathname) {
   return null;
 }
 
+/** A malformed request (bad percent-encoding, an unparsable URL) is the client's. */
+function isBadRequest(error) {
+  return error instanceof URIError || error?.code === "ERR_INVALID_URL";
+}
+
+function reply(res, status, type, body) {
+  if (res.headersSent) {
+    res.destroy();
+    return;
+  }
+  res.writeHead(status, { "content-type": type });
+  res.end(body);
+}
+
 const server = createServer(async (req, res) => {
-  const { pathname } = new URL(req.url ?? "/", "http://localhost");
-  const file = await resolveFile(pathname);
-  const target = file ?? join(ROOT, "404.html");
   try {
-    const body = await readFile(target);
-    res.writeHead(file ? 200 : 404, {
-      "content-type": TYPES[extname(target)] ?? "application/octet-stream",
-    });
-    res.end(body);
-  } catch {
-    res.writeHead(404, { "content-type": "text/plain" });
-    res.end("not found");
+    const { pathname } = new URL(req.url ?? "/", "http://localhost");
+    const file = await resolveFile(pathname);
+    const target = file ?? join(ROOT, "404.html");
+    let body;
+    try {
+      body = await readFile(target);
+    } catch {
+      return reply(res, 404, "text/plain", "not found");
+    }
+    reply(res, file ? 200 : 404, TYPES[extname(target)] ?? "application/octet-stream", body);
+  } catch (error) {
+    // Whatever one request does, the server stays up for the next.
+    if (isBadRequest(error)) reply(res, 400, "text/plain", "bad request");
+    else reply(res, 500, "text/plain", "server error");
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`serving ${ROOT} at http://localhost:${PORT}${BASE}/`);
+// A missing build would otherwise surface as Playwright's generic 30 s webServer
+// timeout (the 404 page it would be serving does not exist either).
+if (!(await isFile(join(ROOT, "index.html")))) {
+  console.error(`web/out missing — run pnpm build first (no ${join(ROOT, "index.html")})`);
+  process.exit(1);
+}
+
+// Loopback only: this is a test fixture that serves whatever ``out/`` holds, not
+// something to expose on the LAN of a developer machine or a shared runner.
+server.listen(PORT, "127.0.0.1", () => {
+  console.log(`serving ${ROOT} at http://127.0.0.1:${PORT}${BASE}/`);
 });

@@ -66,6 +66,13 @@ jobs:
           SKIP_API_BUILD: "1"   # JSON tree is committed; never rebuild on CI
         run: pnpm build
 
-      - name: Run smoke (next dev) and export tests (out/)
+      # Two steps, not one ``pnpm e2e``: the export tests throttle the CPU and
+      # measure where a page settles, so they must not share the runner with
+      # Turbopack compiling for the dev smoke run.
+      - name: Export tests (out/)
         working-directory: web
-        run: pnpm e2e
+        run: pnpm e2e:export
+
+      - name: Smoke (next dev)
+        working-directory: web
+        run: pnpm e2e:dev

@@ -267,6 +267,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a copied section link lands, and the export is visible pre-JS
 
+- review of LCD-1005 - loopback server, listeners, CI steps
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

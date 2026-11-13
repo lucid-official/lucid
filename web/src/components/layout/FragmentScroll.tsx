@@ -14,9 +14,9 @@ import * as React from "react";
  *  below the ``scroll-mt-24`` line.  This looks again once the fonts are in and
  *  laid out, and puts the heading where the fragment says (LCD-1005).
  *
- *  A scroll the user started wins: any wheel, touch, key or pointer press, or a
- *  new fragment, ends the wait (seen from hydration on — input before it is not,
- *  and the page then follows the link as asked).  Only a fresh navigation is
+ *  A scroll the user started wins: any wheel, touch, key, pointer press or click,
+ *  a new fragment or a history step ends the wait (seen from hydration on — input
+ *  before it is not, and the page then follows the link as asked).  Only a fresh navigation is
  *  followed — a reload or back/forward has the browser's own scroll restoration,
  *  which this must not undo.  A heading that already sits on its line is left
  *  alone.
@@ -32,21 +32,31 @@ export function FragmentScroll() {
     const id = fragmentId();
     if (!id || navigationType() !== "navigate") return;
 
+    // Any of these is the user (or the history) taking the page somewhere else.
+    const takeover = [
+      "wheel",
+      "touchstart",
+      "keydown",
+      "pointerdown",
+      "click",
+      "hashchange",
+      "popstate",
+    ] as const;
     let live = true;
+    // Ends the wait and releases every listener: called on takeover, after the
+    // landing, and on unmount.  Removing a listener twice is harmless.
     const stop = () => {
       live = false;
+      for (const type of takeover) window.removeEventListener(type, stop, { capture: true });
     };
-    const takeover = ["wheel", "touchstart", "keydown", "pointerdown", "hashchange"] as const;
     for (const type of takeover) window.addEventListener(type, stop, { passive: true, capture: true });
 
     void layoutSettled().then(() => {
       if (live) landOnHeading(id);
+      stop();
     });
 
-    return () => {
-      live = false;
-      for (const type of takeover) window.removeEventListener(type, stop, { capture: true });
-    };
+    return stop;
   }, []);
 
   return null;
