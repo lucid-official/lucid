@@ -25,6 +25,7 @@ import sys
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field, replace
+from itertools import pairwise
 from pathlib import Path
 
 import pytest
@@ -2201,7 +2202,30 @@ def _suite(text: str, *, both: bool = False) -> Callable[[Scratch], None]:
     return spoil
 
 
+def _more(*named: tuple[str, str]) -> Callable[[Scratch], None]:
+    """Files added to the compile suite (beside ``test_suite.py``), committed."""
+
+    def spoil(s: Scratch) -> None:
+        for name, text in named:
+            s.write(f"{attest.SUITES[0]}/{name}", text)
+        s.commit_all("test: more files in the suite")
+        s.write(_SO, "")
+
+    return spoil
+
+
 _SKIPPED = "import pytest\n@pytest.mark.skip\ndef test_skip():\n    pass\n"
+_THIRTY = "import pytest\n@pytest.mark.parametrize('n', range(30))\ndef test_many(n):\n    pass\n"
+# What takes a chunk's process down: the kernel's SIGKILL, an exit, and a report cut short.
+_DIES = "import os, signal\ndef test_dies():\n    os.kill(os.getpid(), signal.SIGKILL)\n"
+_EXITS = "import os\ndef test_exits():\n    os._exit(3)\n"
+_EXITS_AT_IMPORT = "import os\nos._exit(3)\n"
+_GARBLES = (
+    "import pathlib\n"
+    "def pytest_unconfigure(config):\n"
+    "    pathlib.Path(config.option.xmlpath).write_text('<testsuites')\n"
+)
+_CHUNKED = ("attest", "--chunk-files", "1")
 _FAILING = "def test_ok():\n    pass\ndef test_bad():\n    assert False\n"
 # What a suite does to the checkout while it runs.
 _MID_RUN = "import pathlib, subprocess\ndef test_moves_the_checkout():\n    {}\n"
@@ -2248,6 +2272,45 @@ _ATTEMPTS = {
     "cpp-moved-mid-run": Attempt(_suite(_MID_RUN.format(_CPP_COMMIT)), 2, "during the run"),
     "head-moved-mid-run": Attempt(_suite(_MID_RUN.format(_PY_COMMIT)), 2, "during the run"),
     "edited-mid-run": Attempt(_suite(_MID_RUN.format(_EDIT)), 2, "during the run"),
+    # A suite is several processes, and one that dies proves nothing about its tests.
+    # ... and names the test it was on, which is what points at the file that outgrew memory.
+    "chunk-killed": Attempt(
+        _more(("test_z_dies.py", _DIES)),
+        2,
+        "chunk 2/2 killed by signal 9 (SIGKILL), likely memory; "
+        "it was running lucid/test/unit/compile/test_z_dies.py::test_dies (1 files: test_z_dies.py)",
+        args=_CHUNKED,
+    ),
+    "chunk-exits-in-a-test": Attempt(
+        _more(("test_z_exits.py", _EXITS)),
+        2,
+        "chunk 2/2 exited 3 and wrote no report; "
+        "it was running lucid/test/unit/compile/test_z_exits.py::test_exits",
+        args=_CHUNKED,
+    ),
+    # No test had started: nothing is claimed about one.
+    "chunk-exits-before-a-test": Attempt(
+        _more(("test_z_exits.py", _EXITS_AT_IMPORT)),
+        2,
+        "chunk 2/2 exited 3 and wrote no report (1 files: test_z_exits.py)",
+        args=_CHUNKED,
+    ),
+    "chunk-report-garbled": Attempt(
+        _more(("conftest.py", _GARBLES)), 2, "wrote a report that does not parse"
+    ),
+    # The ratio is the suite's, whatever the cut: 1 of 2, where chunk 1 alone ran no test.
+    "chunks-mostly-skipped": Attempt(
+        _more(("test_a_skipped.py", _SKIPPED)), 2, "skipped 1 of 2, over 5%", args=_CHUNKED
+    ),
+    "chunk-all-skipped-in-a-sound-suite": Attempt(
+        _more(("test_a_skipped.py", _SKIPPED), ("test_b_many.py", _THIRTY)),
+        0,
+        "passed on",
+        args=_CHUNKED,
+    ),
+    "chunk-collects-nothing": Attempt(
+        _more(("test_empty.py", "import pytest\n")), 0, "passed on", args=_CHUNKED
+    ),
     # A selection from the environment would have hidden the failure: it is dropped.
     "deselected": Attempt(
         _suite(_FAILING),
@@ -2379,6 +2442,37 @@ _ATTEST_MUTANTS = [
         "dirty-setup",
     ),
     ("autoload-passed-on", ', "PYTEST_DISABLE_PLUGIN_AUTOLOAD")', ")", "plugins-env"),
+    ("signal-death-not-named", "    if returncode < 0:\n", "    if False:\n", "chunk-killed"),
+    (
+        "death-is-no-refusal",
+        "    if died:\n        problem = died\n",
+        "    if False:\n        problem = died\n",
+        "chunk-killed",
+    ),
+    (
+        "running-test-not-named",
+        'on_now = marker.read_text() if died and marker.is_file() else ""',
+        'on_now = ""',
+        "chunk-killed",
+    ),
+    (
+        "last-chunk-dropped",
+        "for n in range(count))",
+        "for n in range(count - 1))",
+        "chunk-killed",
+    ),
+    (
+        "tests-not-summed",
+        "tests = sum(p.tests for p in parts)",
+        "tests = max(p.tests for p in parts)",
+        "chunks-mostly-skipped",
+    ),
+    (
+        "empty-chunk-fails",
+        "if p.returncode not in (0, _NO_TESTS)",
+        "if p.returncode not in (0,)",
+        "chunk-collects-nothing",
+    ),
     ("plugins-passed-on", '"PYTEST_PLUGINS", ', "", "plugins-env"),
 ]
 
@@ -2426,6 +2520,147 @@ def test_attest_a_record_that_does_not_read_is_none(scratch: Scratch) -> None:
         record.write_text(spoiled)
         done = _rules_in(scratch, "attest", "--verify")
         assert done.returncode == 1, (spoiled, done.stdout)
+
+
+@pytest.mark.parametrize("name", ["chunk-all-skipped-in-a-sound-suite", "chunk-collects-nothing"])
+def test_attest_merges_what_its_chunks_ran(scratch: Scratch, name: str) -> None:
+    """Totals are the chunks' sum; a chunk that skipped all or found none fails no suite."""
+    done = _attempt(scratch, name)
+    assert _ended_as_said(done, name), done.stdout + done.stderr
+    compile_run = json.loads(_record_of(scratch).read_text())["suites"][0]
+    tests, skipped, chunks = {"chunk-collects-nothing": (1, 0, 2)}.get(name, (32, 1, 3))
+    assert (compile_run["tests"], compile_run["skipped"]) == (tests, skipped)
+    assert compile_run["returncode"] == 0 and compile_run["failures"] == 0
+    assert f"attest: lucid/test/unit/compile chunk {chunks}/{chunks}:" in done.stdout
+
+
+def test_attest_counts_a_failure_in_any_chunk(scratch: Scratch) -> None:
+    _attempt(scratch, "chunk-collects-nothing")  # the repo, as that attempt leaves it
+    scratch.write(f"{attest.SUITES[0]}/test_y_bad.py", _FAILING)
+    scratch.commit_all("test: a failing file")
+    scratch.write(_SO, "")
+    done = _rules_in(scratch, *_CHUNKED)
+    assert done.returncode == 1 and "FAILED on" in done.stdout, done.stdout + done.stderr
+    run = json.loads(_record_of(scratch).read_text())["suites"][0]
+    assert (run["tests"], run["failures"], run["returncode"]) == (3, 1, 1)
+
+
+@pytest.mark.parametrize(
+    ("count", "most"), [(0, 12), (1, 12), (12, 12), (13, 12), (25, 12), (181, 12), (7, 1), (7, 100)]
+)
+def test_a_suite_is_dealt_out_in_even_chunks_of_its_sorted_test_files(
+    scratch: Scratch, count: int, most: int
+) -> None:
+    suite = attest.SUITES[0]
+    names = [f"test_{i:03d}.py" for i in range(count)]
+    for name in reversed(names):  # not in order: the cut does not depend on how they were made
+        scratch.write(f"{suite}/{name}", "")
+    for name in ("conftest.py", "__init__.py", "_helpers.py", "helper_test_data.txt"):
+        scratch.write(f"{suite}/{name}", "")  # none of them is collected
+    scratch.write(f"{suite}/sub/test_in_a_directory.py", "")
+    scratch.write("elsewhere/test_other_suite.py", "")
+    scratch.commit_all("test: files")
+    found = sorted([*(f"{suite}/{n}" for n in names), f"{suite}/sub/test_in_a_directory.py"])
+    chunks = attest.chunks_of(scratch.ws, suite, most)
+    assert sorted(f for chunk in chunks for f in chunk.files) == found  # each, once
+    assert all(list(chunk.files) == sorted(chunk.files) for chunk in chunks)
+    assert attest.chunks_of(scratch.ws, suite, most) == chunks
+    sizes = [len(chunk.files) for chunk in chunks]
+    assert len(chunks) == -(-len(found) // most)
+    assert all(0 < size <= most for size in sizes) and max(sizes) - min(sizes) <= 1
+    assert [(c.number, c.of) for c in chunks] == [
+        (n, len(chunks)) for n in range(1, len(chunks) + 1)
+    ]
+    # Files named alike cost alike (the rank_canonical_* family): neighbours land apart.
+    where = {f: c.number for c in chunks for f in c.files}
+    assert len(chunks) < 2 or all(where[a] != where[b] for a, b in pairwise(found))
+
+
+def test_the_chunks_hold_every_test_file_pytest_collects() -> None:
+    """The cut names files; what pytest takes by file name must not be missed by it."""
+    ws = Workspace.of(REPO)
+    held = {
+        f
+        for suite in attest.SUITES
+        for chunk in attest.chunks_of(ws, suite, 12)
+        for f in chunk.files
+    }
+    done = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "-o",
+            "addopts=",
+            *attest.SUITES,
+        ],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    collected = {line.split("::")[0] for line in done.stdout.splitlines() if "::" in line}
+    tracked = set(
+        subprocess.run(
+            ["git", "ls-files", "--", *attest.SUITES],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+    )
+    assert collected, done.stdout[-500:] + done.stderr[-500:]
+    assert (collected & tracked) <= held, sorted((collected & tracked) - held)
+
+
+def test_attest_plan_lists_the_chunks_and_runs_nothing(scratch: Scratch) -> None:
+    _attest_repo(scratch)
+    done = _rules_in(scratch, "attest", "--plan", "--chunk-files", "1")
+    assert done.returncode == 0, done.stderr
+    assert "lucid/test/unit/compile: 1 files in 1 chunks" in done.stdout
+    assert "  1/1: 1 files: test_suite.py" in done.stdout
+    assert not (scratch.root / ".git/lucid-attest").exists()
+
+
+@pytest.mark.parametrize("bad", ["0", "-1", "many"])
+def test_attest_takes_chunks_of_one_file_or_more(scratch: Scratch, bad: str) -> None:
+    _attest_repo(scratch)
+    done = _rules_in(scratch, "attest", "--chunk-files", bad)
+    assert done.returncode == 2 and "is not a count of one or more" in done.stderr, done.stderr
+    assert not (scratch.root / ".git/lucid-attest").exists()
+
+
+def test_a_chunk_that_died_is_told_from_one_that_failed(tmp_path: Path) -> None:
+    report = tmp_path / "junit.xml"
+    assert attest._death(-9, report) == "killed by signal 9 (SIGKILL), likely memory"
+    assert attest._death(-11, report) == "killed by signal 11 (SIGSEGV)"
+    assert attest._death(-99, report) == "killed by signal 99"
+    assert (
+        attest._death(247, report)
+        == "exited 247 (above 128 a shell reports a signal) and wrote no report"
+    )
+    assert attest._death(3, report) == "exited 3 and wrote no report"
+    report.write_text("<testsuites")
+    assert attest._death(0, report) == "exited 0 and wrote a report that does not parse"
+    report.write_text('<testsuites><testsuite tests="1" failures="1"/></testsuites>')
+    assert attest._death(1, report) is None  # a failing test is a result, not a death
+
+
+def test_suites_merge_by_their_totals() -> None:
+    parts = [
+        attest.SuiteRun(f"c{n}", code, t, f, k)
+        for n, (code, t, f, k) in enumerate([(0, 10, 0, 1), (5, 0, 0, 0), (1, 4, 2, 1)])
+    ]
+    merged = attest.SuiteRun.merged("suite", parts)
+    assert merged == attest.SuiteRun("suite", 1, 14, 2, 2)
+    assert attest.SuiteRun.merged("suite", parts[:2]).returncode == 0  # a chunk that found none
+    empty = attest.SuiteRun.merged("suite", [parts[1]])
+    assert empty.returncode == 5 and empty.unproven is not None and "ran no test" in empty.unproven
+    assert attest.SuiteRun.merged("suite", []).unproven is not None
 
 
 @_needs_the_gate

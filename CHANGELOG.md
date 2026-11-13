@@ -251,6 +251,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - range-safe graph-mode lp_normalize backward (LCD-996)
 
+- attest runs each suite in chunks, names a dead one (LCD-999)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

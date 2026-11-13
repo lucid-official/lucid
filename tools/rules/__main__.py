@@ -72,12 +72,20 @@ def _audit(registry: Registry, args: argparse.Namespace) -> Exit:
     return report.outcome
 
 
+def _positive(text: str) -> int:
+    if not text.isdigit() or int(text) < 1:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a count of one or more")
+    return int(text)
+
+
 def _attest(registry: Registry, args: argparse.Namespace) -> Exit:
     # Here, not above: it brings tools/agent_ws.py, which no other subcommand needs.
     from tools.rules import attest
 
-    check = attest.verify if args.verify else attest.attest
-    return check(registry.workspace)
+    if args.verify:
+        return attest.verify(registry.workspace)
+    run = attest.plan if args.plan else attest.attest
+    return run(registry.workspace, args.chunk_files or attest.CHUNK_FILES)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -106,7 +114,14 @@ def main(argv: list[str] | None = None) -> int:
     audit.add_argument("--check", action="append", default=[], help="only these checks' controls")
     audit.set_defaults(handler=_audit)
     attesting = commands.add_parser("attest", help="run the C++ suites here and record them")
-    attesting.add_argument("--verify", action="store_true", help="only look HEAD's record up")
+    what = attesting.add_mutually_exclusive_group()
+    what.add_argument("--verify", action="store_true", help="only look HEAD's record up")
+    what.add_argument("--plan", action="store_true", help="list the chunks, run nothing")
+    attesting.add_argument(
+        "--chunk-files",
+        type=_positive,
+        help="test files per pytest process, at most; fewer when a chunk is killed for memory",
+    )
     attesting.set_defaults(handler=_attest)
     args = parser.parse_args(argv)
     try:

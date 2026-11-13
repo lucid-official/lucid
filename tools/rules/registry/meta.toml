@@ -8,9 +8,12 @@ paths = ["tools/rules/registry/*.toml"]
 # Non-blank, non-comment lines.  R3 raised it by 227, measured: attest.py's ledger, key,
 # record, refusals and suite runner (190), the audit's trigger-covers-scope finding over
 # what git lists (26), the `attest` subcommand (8) and a passing check's notes at push (3).
+# Attest in chunks raised it by 127, measured: attest.py 114 (the dealt-out chunks, their runner,
+# the totals merged from them, what a dead process says) and __main__.py 13 (`--plan`,
+# `--chunk-files`).
 [budget.code-lines]
 unit = "lines"
-ceiling = 1275
+ceiling = 1401
 paths = ["tools/rules/**/*.py"]
 
 # Rules and levels recorded as owed.  It equals the count, so it can only fall with it;

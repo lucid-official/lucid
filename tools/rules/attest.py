@@ -5,19 +5,25 @@ the engine is fresh and records the result under a key for what the engine is bu
 (``HEAD:lucid/_C``, the native inputs outside it, the MLX pin), and pre-push only looks the
 key up.  One record covers any number of commits that leave those as they are, a
 Python-only change needs none, and every worktree reads the same ledger.
+
+A suite runs as several processes, each over a run of its test files, and their junit
+totals are one ``SuiteRun``: the record is what it always was, whatever the cut.
 """
 
 import hashlib
 import json
 import os
 import platform
+import signal
 import subprocess
 import sys
 import tempfile
 import time
 import tomllib
 import xml.etree.ElementTree as ElementTree
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Final, Self
 
@@ -41,6 +47,29 @@ _SELECTION_ENV: Final = ("PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTEST_DISABLE_PLU
 # included), unit/cost 0 of 42.  A run under memory pressure (lucid/test/conftest.py's
 # governor) skips by the hundred; 5 % is some 30 times what a sound run skips.
 _MOST_SKIPPED: Final = 0.05
+# One process holds what its tests leave behind, so a suite of thousands outgrows the machine:
+# unit/compile, 14 280 tests in one process, was SIGKILLed on the 16 GB MacBook at about 80 %,
+# with no traceback and no report.  Each pytest process takes at most this many test files.
+# Measured 2026-11-13 (peak memory footprint, /usr/bin/time -l): 6 files make 31 chunks of
+# unit/compile, 18 minutes in all, and only four chunks peak above 2 GB.  Those hold the files
+# that peak that high alone (rank_canonical_widening 38.9 GB, norm_pool_rank_canonical 5.9,
+# rank_canonical_movement 4.9, rank_canonical_attention 2.7): fewer files per chunk keeps such
+# files apart, and cannot make one of them smaller.
+CHUNK_FILES: Final = 6
+# What pytest collects by file name when no ``python_files`` says otherwise.
+_TEST_FILES: Final = ("test_*.py", "*_test.py")
+# pytest's exit code for "no test was collected": a chunk whose tests are all deselected by
+# the markers in addopts says it, and the suite's totals are what must be non-empty.
+_NO_TESTS: Final = 5
+# A chunk's pytest, which leaves the id of the test it is on in the file named first: a process
+# the kernel kills writes no traceback and no report, and this is what it can still be asked.
+_CHUNK_RUNNER: Final = """\
+import sys, pytest
+class OnNow:
+    def pytest_runtest_logstart(self, nodeid, location):
+        open(sys.argv[1], "w").write(nodeid)
+sys.exit(pytest.main(sys.argv[2:], plugins=[OnNow()]))
+"""
 _COMMAND: Final = ".venv/bin/python3 -m tools.rules attest"
 _PROBE: Final = (
     "import lucid; from lucid import _C_engine; "
@@ -65,6 +94,19 @@ class SuiteRun:
         }
         return cls(
             path, returncode, count["tests"], count["failures"] + count["errors"], count["skipped"]
+        )
+
+    @classmethod
+    def merged(cls, path: str, parts: Sequence[Self]) -> Self:
+        """One suite's totals from its chunks'.  A chunk that collected nothing failed nothing."""
+        failed = next((p.returncode for p in parts if p.returncode not in (0, _NO_TESTS)), 0)
+        tests = sum(p.tests for p in parts)
+        return cls(
+            path,
+            failed or (0 if tests else _NO_TESTS),
+            tests,
+            sum(p.failures for p in parts),
+            sum(p.skipped for p in parts),
         )
 
     @property
@@ -177,31 +219,128 @@ def _dirty(ws: Workspace) -> str:
     return _git(ws, "status", "--porcelain", "--untracked-files=normal", "--", *_CLEAN)
 
 
-def _run_suites(ws: Workspace) -> list[SuiteRun]:
-    """One process each, its output on the terminal: these take minutes."""
+@dataclass(frozen=True)
+class Chunk:
+    """The test files of one suite that one pytest process takes."""
+
+    suite: str
+    number: int
+    of: int
+    files: tuple[str, ...]
+
+    @property
+    def name(self) -> str:
+        return f"{self.suite} chunk {self.number}/{self.of}"
+
+    @property
+    def span(self) -> str:
+        return f"{len(self.files)} files: {', '.join(Path(f).name for f in self.files)}"
+
+
+def _test_files(ws: Workspace, suite: str) -> list[str]:
+    """The test files HEAD holds under ``suite``, sorted: one tree is always cut the same way."""
+    names = _git(ws, "ls-files", "-z", "--", suite).split("\0")
+    return sorted(n for n in names if any(fnmatch(Path(n).name, pat) for pat in _TEST_FILES))
+
+
+def chunks_of(ws: Workspace, suite: str, most: int) -> tuple[Chunk, ...]:
+    """``suite`` in the fewest runs of at most ``most`` files, the sorted files dealt out in turn.
+
+    In turn, not in runs: files named alike cost alike (the ``rank_canonical_*`` family holds
+    the three that peak above 2 GB), and dealt out they land in different processes.
+    """
+    files = _test_files(ws, suite)
+    count = -(-len(files) // most)
+    return tuple(Chunk(suite, n + 1, count, tuple(files[n::count])) for n in range(count))
+
+
+def _death(returncode: int, report: Path) -> str | None:
+    """How a pytest process ended without finishing, or None.  What it ran proved nothing."""
+    if returncode < 0:
+        try:
+            name = f" ({signal.Signals(-returncode).name})"
+        except ValueError:
+            name = ""
+        likely = ", likely memory" if -returncode == signal.SIGKILL else ""
+        return f"killed by signal {-returncode}{name}{likely}"
+    if not report.is_file():
+        shell = " (above 128 a shell reports a signal)" if returncode > 128 else ""
+        return f"exited {returncode}{shell} and wrote no report"
+    try:
+        ElementTree.parse(report)
+    except ElementTree.ParseError:
+        return f"exited {returncode} and wrote a report that does not parse"
+    return None
+
+
+@dataclass(frozen=True)
+class ChunkRun:
+    chunk: Chunk
+    run: SuiteRun
+    died: str | None
+    on_now: str  # the test it was on when it died
+    seconds: float
+
+
+def _run_chunk(ws: Workspace, chunk: Chunk, env: dict[str, str]) -> ChunkRun:
+    """One process, its output on the terminal."""
+    start = time.monotonic()
+    with tempfile.TemporaryDirectory(prefix="lucid-attest-") as tmp:
+        report, marker = Path(tmp) / "junit.xml", Path(tmp) / "on-now"
+        argv = [ws.python, "-c", _CHUNK_RUNNER, str(marker), "-q", "-p", "no:cacheprovider"]
+        done = subprocess.run(
+            [*argv, f"--junitxml={report}", *chunk.files], cwd=ws.root, env=env, check=False
+        )
+        died = _death(done.returncode, report)
+        on_now = marker.read_text() if died and marker.is_file() else ""
+        run = (
+            SuiteRun(chunk.name, done.returncode, 0, 0, 0)
+            if died
+            else SuiteRun.of(chunk.name, done.returncode, report)
+        )
+    return ChunkRun(chunk, run, died, on_now, time.monotonic() - start)
+
+
+def _run_suites(ws: Workspace, most: int) -> tuple[list[SuiteRun], str | None]:
+    """Each suite as its chunks, one after another; a chunk that died ends the run.
+
+    Dead is not failed: a process the kernel killed says nothing about its tests, and the
+    chunks after it say nothing about it.  The reason comes back, and no record is made.
+    """
     env = {name: value for name, value in os.environ.items() if name not in _SELECTION_ENV}
     for name in sorted(os.environ.keys() - env.keys()):
         print(f"[rules] attest ignores {name}={os.environ[name]!r}: suites run as committed")
-    runs = []
-    for suite in SUITES:
-        with tempfile.TemporaryDirectory(prefix="lucid-attest-") as tmp:
-            report = Path(tmp) / "junit.xml"
-            argv = [ws.python, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
-            done = subprocess.run(
-                [*argv, f"--junitxml={report}", suite], cwd=ws.root, env=env, check=False
-            )
-            runs.append(SuiteRun.of(suite, done.returncode, report))
-    return runs
+    plans = [chunks_of(ws, suite, most) for suite in SUITES]
+    runs: list[SuiteRun] = []
+    for suite, chunks in zip(SUITES, plans, strict=True):
+        parts = []
+        for chunk in chunks:
+            print(f"[rules] attest: {chunk.name}: {len(chunk.files)} files", flush=True)
+            made = _run_chunk(ws, chunk, env)
+            if made.died:
+                half = len(chunk.files) // 2
+                split = f", or split it with `attest --chunk-files {half}`" if half else ""
+                on_now = f"; it was running {made.on_now}" if made.on_now else ""
+                return runs, (
+                    f"{chunk.name} {made.died}{on_now} ({chunk.span}): "
+                    f"rerun when memory is free{split}"
+                )
+            print(f"[rules] attest: {made.run.line} in {made.seconds:.0f}s", flush=True)
+            parts.append(made.run)
+        runs.append(SuiteRun.merged(suite, parts))
+    return runs, None
 
 
-def attest(ws: Workspace) -> Exit:
+def attest(ws: Workspace, most: int = CHUNK_FILES) -> Exit:
     """Run the suites on this checkout's engine and record the result under its key."""
     key, commit, dirty = engine_key(ws), _head(ws), _dirty(ws)
     problem = f"what the suites read is not committed:\n{dirty}" if dirty else _engine_problem(ws)
     start = time.monotonic()
-    runs = [] if problem else _run_suites(ws)
+    runs, died = ([], None) if problem else _run_suites(ws, most)
     unproven = [why for run in runs if (why := run.unproven)]
-    if unproven:
+    if died:
+        problem = died
+    elif unproven:
         problem = "; ".join(unproven)
     elif runs and (engine_key(ws), _head(ws), _dirty(ws)) != (key, commit, ""):
         problem = f"HEAD or what the suites read changed during the run, from {commit[:9]}"
@@ -215,6 +354,15 @@ def attest(ws: Workspace) -> Exit:
     print("".join(f"  {run.line}\n" for run in runs), end="")
     print(f"attest: key {key[:9]} {made.line}\n  recorded in {path}")
     return Exit.PASS if made.passed else Exit.VIOLATION
+
+
+def plan(ws: Workspace, most: int = CHUNK_FILES) -> Exit:
+    """What ``attest`` would run, process by process, without running it."""
+    for suite in SUITES:
+        chunks = chunks_of(ws, suite, most)
+        print(f"{suite}: {sum(len(c.files) for c in chunks)} files in {len(chunks)} chunks")
+        print("".join(f"  {c.number}/{c.of}: {c.span}\n" for c in chunks), end="")
+    return Exit.PASS
 
 
 def verify(ws: Workspace) -> Exit:
