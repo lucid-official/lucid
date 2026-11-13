@@ -233,7 +233,7 @@ def _norm_hvp(x: list[float], w: list[float], p: float) -> list[float]:
     r = [v / n for v in x]
     s = [math.copysign(abs(ri) ** (p - 1), ri) for ri in r]
     sw = sum(si * wi for si, wi in zip(s, w, strict=True))
-    return [(p - 1) / n * (abs(ri) ** (p - 2) * wi - si * sw) for ri, wi, si in zip(r, w, s)]
+    return [(p - 1) / n * (abs(ri) ** (p - 2) * wi - si * sw) for ri, wi, si in zip(r, w, s, strict=True)]
 
 
 def _check_norm_hvp(device: str, ord_: float, magnitude: float) -> None:

@@ -29,8 +29,9 @@ const OpSchema DivBackward::schema_v1{"div", 1, AmpPolicy::Promote, true};
 // there for a gradient that is an ordinary float whenever grad_out and a are of b's
 // scale: x / ||x|| for a norm near 1e25, or any create_graph backward through a tracked
 // divisor, whose second-order cotangent is of the divisor's magnitude.  Dividing by b
-// twice keeps every intermediate at the scale of the result, and a / b is 0 for an
-// a that is 0, which a product g * a / b^2 turns into 0 / 0 once b^2 underflows.
+// twice never forms a square of b, so the range is that of grad_out * (a / b) rather
+// than of b^2, and a / b is 0 for an a that is 0, which a product g * a / b^2 turns
+// into 0 / 0 once b^2 underflows.
 //
 // The computation is broken into explicit storage operations so that each
 // intermediate value can be freed individually.  Both saved inputs are first
