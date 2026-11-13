@@ -34,6 +34,7 @@
 #include "../_VjpHelpers.h"
 #include "../../OpEmitters/_GroupNormLayout.h"
 #include "../../OpEmitters/_NormLayout.h"
+#include "../../OpEmitters/_ScaledPNorm.h"
 
 namespace lucid::compile {
 
@@ -787,9 +788,22 @@ public:
 // ────────────────────────────────────────────────────────────────────
 // lp_normalize (ord=2 only) — y = x / max(‖x‖_2, eps) along ``axis``.
 //
-// Backward (dot = sum(grad*x, axis, keepdim=true), inv_norm = 1/max(norm,eps)):
-//   dx = inv_norm * (grad - x * dot * inv_norm²)
+// Backward (denom = max(norm, eps), u = x / denom, dot = sum(grad*u, axis, keepdim=true)):
+//   dx = (grad - u * dot) / denom
+// The same value as ``inv * (grad - x * <grad, x> * inv²)`` with ``inv = 1 / denom``, which
+// squares an ``inv`` that flushes to zero from denom ~ 1e19 up (LCD-955).
 // ────────────────────────────────────────────────────────────────────
+
+// The norm the forward divided by: its own (``kLpNormSavedSlot``) when the same graph holds
+// it, else built the same way, so the backward never reduces ``x`` a second time.
+MPSGraphTensor* lp_normalize_norm(BackwardContext& bctx, const OpNode& node, MPSGraph* g,
+                                  MPSGraphTensor* x, std::int64_t axis) {
+    void* saved = node.outputs.empty() ? nullptr
+                                       : bctx.forward_ctx().resolve_saved(node.outputs[0].id,
+                                                                          kLpNormSavedSlot);
+    return saved != nullptr ? as_tensor(saved) : euclidean_norm_keepdim(g, x, @[ @(axis) ]);
+}
+
 class LpNormalizeVjp final : public VjpEmitter {
 public:
     std::string_view op_name() const override { return "lp_normalize"; }
@@ -829,34 +843,26 @@ public:
         if (axis < 0 || axis >= nd) return false;
 
         MPSDataType dt = chain_dt;
-        MPSGraphTensor* x_sq =
-            [g multiplicationWithPrimaryTensor:x secondaryTensor:x name:nil];
-        MPSGraphTensor* sum =
-            [g reductionSumWithTensor:x_sq axis:(NSInteger)axis name:nil];
-        MPSGraphTensor* norm = [g squareRootWithTensor:sum name:nil];
+        MPSGraphTensor* norm = cast_if_needed(g, lp_normalize_norm(bctx, node, g, x, axis), dt);
         MPSGraphTensor* eps_t = [g constantWithScalar:eps dataType:dt];
         MPSGraphTensor* denom =
             [g maximumWithPrimaryTensor:norm secondaryTensor:eps_t name:nil];
-        MPSGraphTensor* one = [g constantWithScalar:1.0 dataType:dt];
-        MPSGraphTensor* inv_norm =
-            [g divisionWithPrimaryTensor:one secondaryTensor:denom name:nil];
-        MPSGraphTensor* g_times_x =
-            [g multiplicationWithPrimaryTensor:grad secondaryTensor:x name:nil];
+        // dx = (grad - u * <grad, u>) / denom with u = x / denom.  The textbook
+        // ``inv * (grad - x * <grad, x> * inv^2)`` squares ``1 / denom``, which
+        // is subnormal (flushed to 0) from denom ~ 1e19 up; ``u`` is at most 1
+        // in magnitude and the one division by denom never forms ``inv``.
+        MPSGraphTensor* u = [g divisionWithPrimaryTensor:x secondaryTensor:denom name:nil];
+        MPSGraphTensor* g_times_u =
+            [g multiplicationWithPrimaryTensor:grad secondaryTensor:u name:nil];
         MPSGraphTensor* dot =
-            [g reductionSumWithTensor:g_times_x axis:(NSInteger)axis name:nil];
-        MPSGraphTensor* inv_norm_sq =
-            [g multiplicationWithPrimaryTensor:inv_norm
-                                secondaryTensor:inv_norm name:nil];
-        MPSGraphTensor* dot_inv2 =
-            [g multiplicationWithPrimaryTensor:dot secondaryTensor:inv_norm_sq name:nil];
-        MPSGraphTensor* x_term =
-            [g multiplicationWithPrimaryTensor:x secondaryTensor:dot_inv2 name:nil];
+            [g reductionSumWithTensor:g_times_u axis:(NSInteger)axis name:nil];
+        MPSGraphTensor* u_term =
+            [g multiplicationWithPrimaryTensor:u secondaryTensor:dot name:nil];
         MPSGraphTensor* diff =
-            [g subtractionWithPrimaryTensor:grad secondaryTensor:x_term name:nil];
-        MPSGraphTensor* dx =
-            [g multiplicationWithPrimaryTensor:inv_norm
-                                secondaryTensor:diff
-                                           name:@"lp_normalize_vjp"];
+            [g subtractionWithPrimaryTensor:grad secondaryTensor:u_term name:nil];
+        MPSGraphTensor* dx = [g divisionWithPrimaryTensor:diff
+                                          secondaryTensor:denom
+                                                     name:@"lp_normalize_vjp"];
         bctx.accumulate_grad(x_id, from_tensor(dx));
         return true;
     }

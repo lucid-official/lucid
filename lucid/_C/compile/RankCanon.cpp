@@ -1346,11 +1346,11 @@ bool passes_through(const OpNode& node) {
 // ``(x * w).sum()`` over a rank-5 ``x`` runs at 1.3 ms wrapped against 29 ms unwrapped
 // (LCD-920a), and a reduction has no producer to fuse into that the view would end.  The
 // norm and pool3d emitters (LCD-927) reshape a rank-5+ input to a rank <= 4 layout of
-// their own, so for them the view folds into that reshape.
+// their own, so for them the view folds into that reshape; so does ``p_norm`` (LCD-955).
 bool reads_views_for_free(const OpNode& node) {
     static const std::unordered_set<std::string_view> names{
-        "sum",        "mean",     "max",        "min",        "prod",      "var",
-        "layer_norm", "rms_norm", "group_norm", "max_pool3d", "avg_pool3d"};
+        "sum",    "mean",       "max",      "min",        "prod",       "var",
+        "p_norm", "layer_norm", "rms_norm", "group_norm", "max_pool3d", "avg_pool3d"};
     return names.count(node.name) != 0;
 }
 

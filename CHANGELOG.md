@@ -321,6 +321,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - opt-in fan-in truncated-normal dense init (LCD-993)
 
+- scaled p_norm emitter and VJP, range-safe norm (LCD-955)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

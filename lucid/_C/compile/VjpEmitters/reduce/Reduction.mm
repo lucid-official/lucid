@@ -1,6 +1,6 @@
 // lucid/_C/compile/VjpEmitters/reduce/Reduction.mm
 //
-// VJPs for the ``sum`` / ``mean`` / ``max`` / ``min`` reductions and ``cumsum``.
+// VJPs for the ``sum`` / ``mean`` / ``max`` / ``min`` / ``p_norm`` reductions and ``cumsum``.
 //
 // Forward emitter (see :file:`OpEmitters/reduce/Reduction.mm`) carries
 // ``dims`` (vector<int64>) + ``keepdim`` (bool) attrs and squeezes the
@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "../../OpEmitters/_ReduceCanon.h"
+#include "../../OpEmitters/_ScaledPNorm.h"
 #include "../VjpEmitter.h"
 #include "../_VjpHelpers.h"
 
@@ -208,6 +209,30 @@ MPSGraphTensor* share_among_ties(MPSGraph* g,
     return [g divisionWithPrimaryTensor:mask secondaryTensor:denom name:nil];
 }
 
+// What a one-input reduction's VJP reads: the graph, the gradient of the result (``go``),
+// the input (``x``) and the result itself (``y``).  False from ``open_reduce_vjp`` when the
+// node or the forward leaves one of them out.
+struct ReduceVjpOperands {
+    MPSGraph* g = nil;
+    MPSGraphTensor* go = nil;
+    MPSGraphTensor* x = nil;
+    MPSGraphTensor* y = nil;
+};
+
+bool open_reduce_vjp(BackwardContext& bctx,
+                     const OpNode& node,
+                     const std::vector<void*>& grad_outs,
+                     ReduceVjpOperands& ops) {
+    if (node.inputs.size() != 1 || node.inputs[0] < 0 || node.outputs.empty() ||
+        grad_outs.empty() || grad_outs[0] == nullptr)
+        return false;
+    ops.g = (__bridge MPSGraph*)bctx.graph();
+    ops.go = as_tensor(grad_outs[0]);
+    ops.x = as_tensor(bctx.forward(node.inputs[0]));
+    ops.y = as_tensor(bctx.forward(node.outputs[0].id));
+    return ops.g != nil && ops.go != nil && ops.x != nil && ops.y != nil;
+}
+
 // ────────────────────────────────────────────────────────────────────
 // max / min: a slice's gradient is shared evenly among the elements tied
 // for its extremum, ``mask / (ties + 1 - mask)`` with ``mask = (x == y)``
@@ -231,15 +256,13 @@ public:
     std::string_view op_name() const override { return IS_MAX ? "max" : "min"; }
     bool
     emit(BackwardContext& bctx, const OpNode& node, const std::vector<void*>& grad_outs) override {
-        if (node.inputs.size() != 1 || node.inputs[0] < 0 || node.outputs.empty() ||
-            grad_outs.empty() || grad_outs[0] == nullptr)
+        ReduceVjpOperands ops;
+        if (!open_reduce_vjp(bctx, node, grad_outs, ops))
             return false;
-        MPSGraph* g = (__bridge MPSGraph*)bctx.graph();
-        MPSGraphTensor* go = as_tensor(grad_outs[0]);
-        MPSGraphTensor* x = as_tensor(bctx.forward(node.inputs[0]));
-        MPSGraphTensor* y = as_tensor(bctx.forward(node.outputs[0].id));
-        if (g == nil || go == nil || x == nil || y == nil)
-            return false;
+        MPSGraph* g = ops.g;
+        MPSGraphTensor* go = ops.go;
+        MPSGraphTensor* x = ops.x;
+        MPSGraphTensor* y = ops.y;
         const auto x_shape = shape_of_mps(x);
         const auto reduced = reduced_axes(node, x_shape.size());
         if (!reduced)
@@ -296,6 +319,43 @@ public:
     }
 };
 
+// ────────────────────────────────────────────────────────────────────
+// p_norm (finite p > 1) — the engine's ``PNormBackward``:
+//
+//   dA = sign(A) * (|A| / N)^(p-1) * expand(dN),   0 where N == 0
+//
+// ``|A| / N`` is in [0, 1], so the slope is as range-safe as the forward
+// (``_ScaledPNorm.h``): a slice at 1e-25 gets the gradient a slice at 1 does.
+// A zero norm has the subgradient 0 (its ratio is 0 / 0); a NaN norm is not
+// zero and keeps its NaN.  Without this VJP the op would be differentiated by
+// MPSGraph's autodiff, which aborts on the forward's selects.
+// ────────────────────────────────────────────────────────────────────
+class PNormVjp final : public VjpEmitter {
+public:
+    std::string_view op_name() const override { return "p_norm"; }
+    bool
+    emit(BackwardContext& bctx, const OpNode& node, const std::vector<void*>& grad_outs) override {
+        ReduceVjpOperands ops;
+        if (!open_reduce_vjp(bctx, node, grad_outs, ops))
+            return false;
+        MPSGraph* g = ops.g;
+        const auto x_shape = shape_of_mps(ops.x);
+        const auto spec = p_norm_spec(node, x_shape);
+        if (!spec)
+            return false;
+        // The chain's dtype, as every VJP (autocast reconciliation); a rank-5+
+        // input is worked at its canonical lower rank (LCD-918).
+        const MPSDataType dt = ops.go.dataType;
+        const ReduceWork work(x_shape, spec->reduced);
+        MPSGraphTensor* dx = work.leave(
+            g, p_norm_grad(g, work.enter(g, cast_if_needed(g, ops.x, dt)),
+                           work.keep(g, cast_if_needed(g, ops.y, dt)), work.keep(g, ops.go),
+                           spec->p));
+        bctx.accumulate_grad(node.inputs[0], from_tensor(dx));
+        return true;
+    }
+};
+
 struct ReductionVjpRegistrar {
     ReductionVjpRegistrar() {
         register_vjp_emitter(std::make_unique<SumVjp>());
@@ -303,6 +363,7 @@ struct ReductionVjpRegistrar {
         register_vjp_emitter(std::make_unique<ExtremumVjp<false>>());
         register_vjp_emitter(std::make_unique<CumsumVjp>());
         register_vjp_emitter(std::make_unique<MeanVjp>());
+        register_vjp_emitter(std::make_unique<PNormVjp>());
     }
 };
 

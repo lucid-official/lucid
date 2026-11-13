@@ -1,6 +1,6 @@
 // lucid/_C/compile/OpEmitters/Reduction.mm
 //
-// Reduction emitters — sum / mean / max / min.
+// Reduction emitters — sum / mean / max / min / prod / var / p_norm.
 //
 // All require the ``dims`` (vector<int64>) + ``keepdim`` (bool)
 // attributes that :file:`kernel/ReduceKernel.h`'s forward path
@@ -27,6 +27,7 @@
 #include "../OpEmitter.h"
 #include "../_AttrHelpers.h"
 #include "../_ReduceCanon.h"
+#include "../_ScaledPNorm.h"
 #include "../_SignedZero.h"
 
 namespace lucid::compile {
@@ -240,6 +241,56 @@ public:
     }
 };
 
+// ``r`` (a ``p_norm`` at ``work``'s rank, the reduced axes at size 1) on the shape the
+// trace recorded for the node; nil when a symbolic batch is not provably at dim 0
+// (the compile falls back).
+MPSGraphTensor* land_p_norm_result(MPSGraph* g,
+                                   MPSGraphTensor* r,
+                                   const ReduceWork& work,
+                                   const OpNode& node) {
+    const Shape& out_shape = node.outputs[0].shape;
+    if (work.canonical())
+        return [g reshapeTensor:r withShape:shape_to_ns(out_shape) name:@"p_norm_out"];
+    if (flag_attr(node, "keepdims", false))
+        return r;
+    return reshape_dynamic_aware(g, r, out_shape, @"p_norm_out");
+}
+
+// p_norm — the entrywise p-norm of a finite ``p > 1`` that eager Metal answers
+// with the scaled kernel (``backend/gpu/PNorm.h``), spelled out as the same
+// largest-magnitude rescale in MPSGraph ops (``_ScaledPNorm.h``).  The plain
+// ``sqrt(sum(x * x))`` flushed a float32 slice near 1e-25 to zero and
+// overflowed one near 1e25 (LCD-955).  Attrs: ``p``, ``axis_list`` (none =
+// every axis), ``keepdims``.
+//
+// A rank-5+ input is worked at its canonical lower rank like the other
+// reductions (LCD-918): every pass here is over the whole input, so a rank-5+
+// tensor would put each of them on MPSGraph's slice-loop kernel.
+class PNormEmitter final : public OpEmitter {
+public:
+    std::string_view op_name() const override { return "p_norm"; }
+    bool emit(BuilderContext& ctx, const OpNode& node) override {
+        if (node.inputs.size() != 1 || node.outputs.empty() || node.inputs[0] < 0)
+            return false;
+        MPSGraph* g = (__bridge MPSGraph*)ctx.graph();
+        MPSGraphTensor* x = (__bridge MPSGraphTensor*)ctx.resolve(node.inputs[0]);
+        // The kernel is float32; a half input reaches the op already widened.
+        if (g == nil || x == nil || x.dataType != MPSDataTypeFloat32)
+            return false;
+        const auto x_shape = shape_of_mps(x);
+        const auto spec = p_norm_spec(node, x_shape);
+        if (!spec)
+            return false;
+        const ReduceWork work(x_shape, spec->reduced);
+        MPSGraphTensor* r = land_p_norm_result(
+            g, scaled_p_norm_keepdim(g, work.enter(g, x), work.axes_ns(), spec->p), work, node);
+        if (r == nil)
+            return false;
+        ctx.bind(node.outputs[0].id, (__bridge void*)(r));
+        return true;
+    }
+};
+
 struct ReductionEmitterRegistrar {
     ReductionEmitterRegistrar() {
         register_emitter(std::make_unique<SumEmitter>());
@@ -248,6 +299,7 @@ struct ReductionEmitterRegistrar {
         register_emitter(std::make_unique<ExtremumReduceEmitter<false>>());
         register_emitter(std::make_unique<ProdEmitter>());
         register_emitter(std::make_unique<VarEmitter>());
+        register_emitter(std::make_unique<PNormEmitter>());
     }
 };
 

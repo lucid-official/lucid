@@ -27,6 +27,7 @@
 #include "../_GroupNormLayout.h"
 #include "../_NanPropagation.h"
 #include "../_NormLayout.h"
+#include "../_ScaledPNorm.h"
 
 namespace lucid::compile {
 
@@ -519,11 +520,12 @@ public:
         NSInteger nd = (NSInteger)x.shape.count;
         if (axis < 0) axis += nd;
         if (axis < 0 || axis >= nd) return false;
-        MPSGraphTensor* x_sq = [g squareWithTensor:x name:nil];
-        MPSGraphTensor* sum = [g reductionSumWithTensor:x_sq
-                                                    axis:(NSInteger)axis
-                                                    name:nil];
-        MPSGraphTensor* norm = [g squareRootWithTensor:sum name:nil];
+        // The norm as eager Metal's scaled kernel computes it: a float32 slice
+        // near 1e-25 flushed to 0 and one near 1e25 overflowed in the plain
+        // ``sqrt(sum(x * x))`` (LCD-955).  The forward's norm rides to the VJP
+        // through the saved slot so the backward does not recompute it.
+        MPSGraphTensor* norm = euclidean_norm_keepdim(g, x, @[ @(axis) ]);
+        ctx.stash_saved(node.outputs[0].id, kLpNormSavedSlot, (__bridge void*)norm);
         MPSGraphTensor* eps_c = [g constantWithScalar:eps dataType:norm.dataType];
         MPSGraphTensor* denom =
             keep_nan_of(g, [g maximumWithPrimaryTensor:norm secondaryTensor:eps_c name:nil], norm);
