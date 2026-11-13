@@ -20,7 +20,9 @@
     "rebaseline:api-cache": "./scripts/py.sh scripts/build-api-data-cached.py --write-cache",
     "validate:math": "node scripts/validate-math.mjs",
     "audit:docs": "node scripts/audit-docs.mjs",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:dev": "E2E_TARGET=dev playwright test",
+    "e2e:export": "E2E_TARGET=export playwright test"
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.2.8",

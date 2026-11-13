@@ -46,21 +46,23 @@ async function visit(page: Page, path: string): Promise<void> {
 
 /** Wait until the page has hydrated and finished entering.  ``networkidle`` says
  *  the requests are done, not that React has run: under ``next dev`` on a slow
- *  runner hydration lands well after it, and the entrance (``template.tsx`` /
- *  ``FadeIn``) only *starts* then.  A test that follows a ``#fragment`` or reads
- *  a box in that window acts on a page that is still changing (LCD-1001: the
- *  copy-link row check saw a fraction of a pixel of spring, the fragment landed
- *  4–11 px off, and a hash set before hydration was dropped altogether).  The
- *  server renders the entrance at ``opacity: 0``, so the heading's ancestors are
- *  all fully opaque exactly when the entrance has played out.  Under ``next dev``
- *  the body can also stream in after the ``loading.tsx`` shell (the tutorial page
- *  had no heading yet when ``networkidle`` fired at 8x CPU slowdown), so no
- *  heading yet means not yet.  Fonts are part of layout too. */
+ *  runner hydration lands well after it.  A test that follows a ``#fragment``,
+ *  clicks a control or reads a box in that window acts on a page that is still
+ *  changing (LCD-1001: the copy-link row check saw a fraction of a pixel of
+ *  spring, and a hash set before hydration was dropped altogether).  The page
+ *  enters with a CSS fade that starts at first paint, so opacity says nothing
+ *  about hydration any more (LCD-1005): React marks every DOM node it has claimed
+ *  with a ``__reactFiber$…`` property, so a heading that carries one is hydrated.
+ *  Its ancestors must also be fully opaque - the entrance has played out.  Under
+ *  ``next dev`` the body can stream in after the shell (the tutorial page had no
+ *  heading yet when ``networkidle`` fired at 8x CPU slowdown), so no heading yet
+ *  means not yet.  Fonts are part of layout too. */
 async function settled(page: Page): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
   await page.waitForFunction(() => {
     const heading = document.querySelector("#main-content h1, #main-content h2, main h1, main h2");
     if (!heading) return false;
+    if (!Object.keys(heading).some((key) => key.startsWith("__reactFiber$"))) return false;
     for (let el: Element | null = heading; el; el = el.parentElement) {
       if (getComputedStyle(el).opacity !== "1") return false;
     }
@@ -376,16 +378,19 @@ for (const path of ["/api/lucid.nn/Linear", "/api/lucid.peft.tuners.lora/LoraCon
   });
 }
 
-// ... and a section link opened directly keeps scrolling toward its heading.  The
-// heading is ~20 000 px down; the old reveal cut the scroll off at ~50 px.  It is
-// "toward", not "onto": web fonts arriving after the browser has aimed shift the
-// layout above the heading, so where the scroll ends is the fonts' business.
-test("a section link opened directly scrolls toward its heading, and keeps going", async ({ page }) => {
+// ... and a section link opened directly lands on its heading.  The heading is
+// ~20 000 px down; the old reveal cut the scroll off at ~50 px (LCD-1001).  Web
+// fonts arriving after the browser has aimed used to leave it short of the
+// heading too; ``FragmentScroll`` looks again once they are in (LCD-1005).  The
+// exported build, where this actually bites, is ``export.spec.ts``.
+test("a section link opened directly lands on its heading", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await visit(page, "/api/lucid.peft#section-attributes");
   await expect
-    .poll(() => page.evaluate(() => window.scrollY), { timeout: 10_000 })
-    .toBeGreaterThan(5_000);
+    .poll(async () => Math.abs((await page.locator("#section-attributes").boundingBox())!.y - 96), {
+      timeout: 10_000,
+    })
+    .toBeLessThanOrEqual(2);
 });
 
 // A page's entrance fades; it must not slide.  Whatever carries a heading and
@@ -393,9 +398,9 @@ test("a section link opened directly scrolls toward its heading, and keeps going
 // browser (or the Next router) scrolls to the heading's position *at that
 // moment*, and when the spring settles the heading is off the ``scroll-mt-24``
 // line for good.  The same displacement fooled the row-layout check below by up
-// to 6 + 10 px (LCD-1001).  Sampled every frame from document start — the server
-// renders the entrance's first keyframe, so this sees it before hydration, not
-// just when the spring happens to be running.
+// to 6 + 10 px (LCD-1001).  Sampled every frame from document start, so a
+// transform that is only there before hydration (the server used to write the
+// entrance's first keyframe into the HTML) or in the tail of the entrance is seen.
 for (const path of [
   "/api/lucid.peft",
   "/api/lucid.nn/Module",

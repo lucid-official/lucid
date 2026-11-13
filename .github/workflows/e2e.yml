@@ -1,9 +1,11 @@
 name: E2E smoke
 
-# Runtime smoke (Playwright) — hydration / console errors / interactive ToC,
-# which the static docs audit can't see.  Browser install is heavy, so this is
-# opt-in: manual dispatch + a nightly run, not every push.  The static
-# contract audit in docs.yml remains the per-push web gate.
+# Runtime tests (Playwright) — hydration / console errors / interactive ToC on
+# ``next dev`` (the ``chromium`` project), and a copied section link / the page
+# without JavaScript on the static export (the ``export`` project, LCD-1005),
+# which the static docs audit can't see.  Browser install and the export build
+# are heavy, so this is opt-in: manual dispatch + a nightly run, not every push.
+# The static contract audit in docs.yml remains the per-push web gate.
 on:
   workflow_dispatch:
   schedule:
@@ -24,7 +26,8 @@ jobs:
       - uses: actions/checkout@v4
 
       # dev:fast runs build-bibtex / build-meta (stdlib only, SKIP_API_BUILD=1)
-      # then `next dev` — no Griffe / Lucid needed.
+      # then `next dev` — no Griffe / Lucid needed.  The export build below runs
+      # the same post-process scripts (``pnpm prebuild``), also stdlib only.
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
@@ -46,6 +49,23 @@ jobs:
         working-directory: web
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Run smoke
+      # The ``export`` project opens ``web/out`` — built the way docs.yml builds
+      # it, from the committed api-data.  The extra cost of this job is this
+      # build (a few minutes, less with the cache) plus ~1 minute of tests.
+      - uses: actions/cache@v4
+        with:
+          path: web/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('web/pnpm-lock.yaml') }}-${{ hashFiles('web/src/**/*.ts', 'web/src/**/*.tsx', 'web/public/api-data/**') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('web/pnpm-lock.yaml') }}-
+
+      - name: Build the static export
+        working-directory: web
+        env:
+          NODE_ENV: production
+          SKIP_API_BUILD: "1"   # JSON tree is committed; never rebuild on CI
+        run: pnpm build
+
+      - name: Run smoke (next dev) and export tests (out/)
         working-directory: web
         run: pnpm e2e
