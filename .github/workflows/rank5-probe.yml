@@ -1,0 +1,125 @@
+name: Rank-5 multiply probe
+
+# Why a compiled rank-5 multiply runs 4.4x its rank-4 twin on the hosted runner (LCD-935).
+#
+# ``test_rank_canon.py::test_a_rank_5_multiply_is_not_slower_than_its_rank_4_twin`` measured
+# ``(x * w).sum(-1)`` over a (6144, 16, 2, 16, 2) feed at 16.3 ms against 3.7 ms for its
+# (6144, 16, 2, 32) twin on Engine CI run 42516598252, and at 2.1x on an M1 Pro.  Its twin
+# reduces an axis of size 32 where the rank-5 graph reduces an axis of size 2, so part of the
+# ratio is the reduction, not the rank.  ``tools/probe_rank5_multiply.py`` separates the parts
+# in one process, each variant timed in alternating rounds against all the others:
+#
+#   * the guard's graph, the pass off (``LUCID_COMPILE_RANK_CANON_MIN_LEAD=-1``, which turns off
+#     every RankCanon path: 920a-c and 928 have no switch of their own);
+#   * a rank-4 graph that reduces the same size-2 axis, and the rank-5 graph reduced over the
+#     same 32 elements per output as the twin (rank alone, the reduction held equal);
+#   * ``w`` a feed instead of a parameter;
+#   * the feed also read whole (LCD-928's declared feed shape off, net of the extra read);
+#   * the rank-5 product returned, against the same product reshaped to rank 1 in the graph
+#     (LCD-920c's output binding).
+#
+# Two jobs, because the runners are not one machine: the same fixed graph has measured 0.75x
+# its comparison on an M1 Pro and 1.11x on a runner.  The movement guards run after the probe,
+# both directions (the bound holds fixed, and is exceeded with the pass off), so a runner on
+# which a guard cannot fail shows here.
+#
+# Manual only.  It is a diagnosis, not a gate::
+#
+#     gh workflow run rank5-probe.yml --ref main
+#     gh run list --workflow rank5-probe.yml --limit 1
+#     gh run view <run id> --log        # the "Time the variants" step; also the job summary
+
+on:
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: "Alternating rounds per pass (5 calls per variant per round)"
+        default: "12"
+        type: string
+      passes:
+        description: "Fresh processes per job"
+        default: "2"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: Rank-5 multiply, job ${{ matrix.job }}
+    runs-on: macos-26
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        job: [1, 2]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      # Restores the engine objects Engine CI saved; never saves (the key is that job's).
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: phase-gate-py3.14
+          save: false
+          max-size: 600M
+
+      - uses: ./.github/actions/pinned-mlx
+
+      # The same install as Engine CI's phase gate.
+      - name: Install Lucid
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install setuptools wheel cmake ninja "pybind11>=3.0,<3.1"
+          python -m pip install --no-build-isolation -e ".[test]"
+
+      - name: Host
+        run: |
+          sw_vers
+          sysctl -n kern.hv_vmm_present machdep.cpu.brand_string hw.memsize
+          uptime
+          python - <<'PY'
+          import lucid
+          print("gpu:", lucid.metal.get_device_name())
+          PY
+
+      - name: Time the variants
+        shell: bash
+        env:
+          ROUNDS: ${{ inputs.rounds }}
+          PASSES: ${{ inputs.passes }}
+        run: |
+          out="$RUNNER_TEMP/rank5-probe-${{ matrix.job }}.txt"
+          : > "$out"
+          for pass in $(seq 1 "$PASSES"); do
+            echo "::group::pass $pass of $PASSES"
+            python -m tools.probe_rank5_multiply --rounds "$ROUNDS" 2>&1 | tee -a "$out"
+            echo "::endgroup::"
+          done
+          {
+            echo "### Rank-5 multiply probe, job ${{ matrix.job }}"
+            echo '```'
+            cat "$out"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Both directions of each movement guard on this runner: the rank-5 graph within its
+      # bound, and the unfixed graph over it.  A failure is a result, so it does not hide the
+      # probe's.
+      - name: The movement guards, both directions
+        continue-on-error: true
+        run: |
+          python -m pytest lucid/test/unit/compile/test_rank_canonical_movement.py \
+            -k "slower_than or exceeded_by" -q -p no:cacheprovider
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rank5-probe-${{ matrix.job }}
+          path: ${{ runner.temp }}/rank5-probe-${{ matrix.job }}.txt
+          if-no-files-found: ignore
