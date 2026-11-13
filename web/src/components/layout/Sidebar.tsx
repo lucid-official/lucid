@@ -330,6 +330,20 @@ function filterSidebarItems(items: SidebarItem[], query: string): SidebarItem[] 
   return items.map(visit).filter((i): i is SidebarItem => i !== null);
 }
 
+/** Center ``el`` in the sidebar's own scroll area — and nowhere else.
+ *  ``el.scrollIntoView()`` scrolls *every* scrollable ancestor, the document
+ *  included, so revealing the active entry also moved the page (about 48 px on
+ *  every page open) and, run a frame after hydration, cancelled the scroll the
+ *  browser had just started for a ``#fragment`` URL: a copied section link
+ *  opened at the top of the page, 20 000 px short of its heading (LCD-1001). */
+function centerInScrollArea(el: HTMLElement): void {
+  const viewport = el.closest<HTMLElement>("[data-radix-scroll-area-viewport]");
+  if (!viewport) return;
+  const area = viewport.getBoundingClientRect();
+  const item = el.getBoundingClientRect();
+  viewport.scrollTop += item.top - area.top - (area.height - item.height) / 2;
+}
+
 export function Sidebar({ items, className, variant = "desktop" }: SidebarProps) {
   const isMobile = variant === "mobile";
   const [query, setQuery] = React.useState("");
@@ -357,11 +371,8 @@ export function Sidebar({ items, className, variant = "desktop" }: SidebarProps)
         '[aria-current="page"]',
       );
       if (!active) return;
-      // ``scroll-margin`` on the active element does NOT help here
-      // — that's an anchor-link scroll behaviour, not an
-      // imperative ``scrollIntoView`` one.  We rely on
-      // ``block: "center"`` instead.
-      active.scrollIntoView({ block: "center", behavior: "instant" });
+      // Not ``scrollIntoView`` — see ``centerInScrollArea``.
+      centerInScrollArea(active);
     });
     return () => cancelAnimationFrame(id);
   }, [pathname, items]);

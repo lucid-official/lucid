@@ -263,6 +263,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a page enters by fading, it no longer slides its headings
 
+- sidebar reveal scrolls its own area, not the whole page
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
