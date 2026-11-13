@@ -31,6 +31,7 @@ shapes alone, so both devices refuse it.
 
 import math
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import pytest
 
@@ -671,10 +672,15 @@ def test_strict_switch_reads_the_same_in_both_layers(
             assert all(math.isnan(v) for v in call().tolist()[0])
 
 
-# Compiled programs.  The call that traces a program runs eagerly, so strict
-# mode refuses on it; a replay runs the graph, where an index is isolated
-# in-graph (``compile/OpEmitters/_IndexBounds.h``) and nothing reads it back.
-# A call that falls back to eager (it needs gradients) is checked every time.
+# Compiled programs.  A replay runs the graph, where an index is isolated
+# in-graph (``compile/OpEmitters/_IndexBounds.h``) and nothing reads it back,
+# so a program that holds an index op is not compiled while strict mode is on
+# (LCD-991, ``compile/_core/index_strict.py``): its calls run eagerly, where
+# the gates refuse, in the CPU's words.  The call that traces a program and a
+# call that needs gradients run eagerly in any case.  With strict mode off
+# nothing changed: the replay answers policy B, as eager Metal does.
+
+_COMPILE_NOTICE = pytest.mark.filterwarnings("ignore:lucid.compile:UserWarning")
 
 
 def _compiled_embedding(device: str) -> Callable[[lucid.Tensor], lucid.Tensor]:
@@ -684,23 +690,201 @@ def _compiled_embedding(device: str) -> Callable[[lucid.Tensor], lucid.Tensor]:
     return lucid.compile(lambda x: F.embedding(x, table))
 
 
+@_COMPILE_NOTICE
 def test_strict_compiled_trace_call_refuses(device_gpu_only: str, strict: None) -> None:
     run = _compiled_embedding(device_gpu_only)
     with lucid.no_grad(), pytest.raises(IndexError, match="index 9 is out of range"):
         run(_ix([0, 9], device_gpu_only))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-892: a compiled replay on Metal does not read its indices back; "
-    "the check has to ride the graph (export role)",
-)
+@_COMPILE_NOTICE
 def test_strict_compiled_replay_refuses(device_gpu_only: str, strict: None) -> None:
     run = _compiled_embedding(device_gpu_only)
     with lucid.no_grad():
         run(_ix([0, 1], device_gpu_only))
-        with pytest.raises(IndexError):
+        with pytest.raises(IndexError, match="index 9 is out of range"):
             run(_ix([0, 9], device_gpu_only))
+
+
+@dataclass(frozen=True)
+class _Case:
+    """One index op as a compiled program fed its index.
+
+    ``build(device)`` is the function to compile; ``feed(value, device)`` its index with
+    one entry set to ``value`` (0 is in range everywhere, ``bad`` is not).  ``compiles``
+    is whether the engine has an emitter for the op: ``embedding_bag`` has none yet, so it
+    runs eagerly and is checked either way.
+    """
+
+    build: Callable[[str], Callable[[lucid.Tensor], lucid.Tensor]]
+    feed: Callable[[int, str], lucid.Tensor]
+    compiles: bool = True
+    bad: int = N
+
+
+def _compiled_cases() -> dict[str, _Case]:
+    import lucid.nn.functional as F
+
+    def grid(d: str) -> lucid.Tensor:
+        return lucid.arange(2 * N, dtype=lucid.float32).reshape(2, N).to(d)
+
+    def table(d: str) -> lucid.Tensor:
+        return lucid.arange(N * 3, dtype=lucid.float32).reshape(N, 3).to(d)
+
+    def logits(d: str) -> lucid.Tensor:
+        return lucid.tensor([[0.0, 1.0, 2.0, 3.0], [3.0, 2.0, 1.0, 0.0]]).to(d)
+
+    def updates(d: str, value: float) -> lucid.Tensor:
+        return lucid.full((2, 2), value).to(d)
+
+    def flat(d: str) -> lucid.Tensor:
+        return lucid.zeros(N).to(d)
+
+    def tens(d: str) -> lucid.Tensor:
+        return lucid.full((2,), 10.0).to(d)
+
+    def pairs(b: int, d: str) -> lucid.Tensor:
+        return _ix([[1, b], [b, 3]], d)
+
+    def two(b: int, d: str) -> lucid.Tensor:
+        return _ix([1, b], d)
+
+    def setitem(d: str) -> Callable[[lucid.Tensor], lucid.Tensor]:
+        def run(i: lucid.Tensor) -> lucid.Tensor:
+            x = flat(d)
+            x[i] = 5.0
+            return x
+
+        return run
+
+    def index_put(d: str) -> Callable[[lucid.Tensor], lucid.Tensor]:
+        def run(i: lucid.Tensor) -> lucid.Tensor:
+            x = flat(d)
+            x.index_put_((i,), tens(d))
+            return x
+
+        return run
+
+    def reduce(op: str, value: float) -> Callable[[str], Callable[[lucid.Tensor], lucid.Tensor]]:
+        return lambda d: lambda i: lucid.scatter_reduce(grid(d), 1, i, updates(d, value), op)
+
+    return {
+        "gather": _Case(lambda d: lambda i: lucid.gather(grid(d), 1, i), pairs),
+        "index_select": _Case(
+            lambda d: lambda i: lucid.index_select(table(d), 0, i), lambda b, d: _ix([2, b], d)
+        ),
+        "take": _Case(
+            lambda d: lambda i: lucid.take(grid(d)[:, :2], i), lambda b, d: _ix([3, b], d)
+        ),
+        "take_along_dim": _Case(lambda d: lambda i: lucid.take_along_dim(grid(d), i, 1), pairs),
+        "getitem": _Case(lambda d: lambda i: lucid.arange(N, dtype=lucid.float32).to(d)[i], two),
+        "getitem_coords": _Case(lambda d: lambda i: grid(d)[i, _ix([0, 1], d)], two),
+        "setitem": _Case(setitem, two),
+        "embedding": _Case(
+            lambda d: lambda i: F.embedding(i, table(d)), lambda b, d: _ix([2, b], d)
+        ),
+        "embedding_bag": _Case(
+            lambda d: lambda i: F.embedding_bag(i, table(d), _ix([0, 2], d)),
+            lambda b, d: _ix([1, b, 2], d),
+            compiles=False,
+        ),
+        "one_hot": _Case(lambda d: lambda i: F.one_hot(i, N), two),
+        "cross_entropy": _Case(lambda d: lambda i: F.cross_entropy(logits(d), i), two),
+        "nll_loss": _Case(lambda d: lambda i: F.nll_loss(logits(d), i), two),
+        "multi_margin_loss": _Case(lambda d: lambda i: F.multi_margin_loss(logits(d), i), two),
+        "multilabel_margin_loss": _Case(
+            lambda d: lambda i: F.multilabel_margin_loss(logits(d)[:1], i),
+            lambda b, d: _ix([[b, -1, 0, 0]], d),
+        ),
+        # The flat positions of a 4 x 4 output: 16 is the first one outside it.
+        "max_unpool": _Case(
+            lambda d: lambda i: F.max_unpool2d(lucid.ones(1, 1, 2, 2).to(d), i, kernel_size=2),
+            lambda b, d: _ix([[[[0, 5], [10, b]]]], d),
+            bad=16,
+        ),
+        "scatter_add": _Case(
+            lambda d: lambda i: lucid.scatter_add(grid(d), 1, i, updates(d, 10.0)), pairs
+        ),
+        "scatter": _Case(lambda d: lambda i: lucid.scatter(grid(d), 1, i, updates(d, 10.0)), pairs),
+        "scatter_reduce_amax": _Case(reduce("amax", 100.0), pairs),
+        "scatter_reduce_amin": _Case(reduce("amin", -100.0), pairs),
+        "scatter_reduce_prod": _Case(reduce("prod", 3.0), pairs),
+        "index_add": _Case(lambda d: lambda i: flat(d).index_add(0, i, tens(d)), two),
+        "index_copy": _Case(lambda d: lambda i: flat(d).index_copy(0, i, tens(d)), two),
+        "index_fill": _Case(lambda d: lambda i: flat(d).index_fill(0, i, 7.0), two),
+        "index_put_": _Case(index_put, two),
+    }
+
+
+_COMPILED = _compiled_cases()
+
+
+@_COMPILE_NOTICE
+@pytest.mark.parametrize("name", list(_COMPILED))
+def test_strict_compiled_replay_refuses_every_index_op(
+    device_gpu_only: str, strict: None, name: str
+) -> None:
+    """Strict on: the replay's call raises the CPU's text, for every index op."""
+    case, d = _COMPILED[name], device_gpu_only
+    cpu_says = _refusal(lambda _: case.build("cpu")(case.feed(case.bad, "cpu")), "cpu")
+    compiled = lucid.compile(case.build(d))
+    with lucid.no_grad():
+        compiled(case.feed(0, d))
+        compiled(case.feed(0, d))
+        assert _refusal(lambda _: compiled(case.feed(case.bad, d)), d) == cpu_says
+    # Declined, not compiled: nothing for a later call to replay.
+    assert compiled.cache_info()["entries"] == 0
+
+
+@_COMPILE_NOTICE
+@pytest.mark.parametrize("name", list(_COMPILED))
+def test_strict_compiled_trace_call_refuses_every_index_op(
+    device_gpu_only: str, strict: None, name: str
+) -> None:
+    """Strict on: the call that would trace the program raises the CPU's text too."""
+    case, d = _COMPILED[name], device_gpu_only
+    cpu_says = _refusal(lambda _: case.build("cpu")(case.feed(case.bad, "cpu")), "cpu")
+    compiled = lucid.compile(case.build(d))
+    with lucid.no_grad():
+        assert _refusal(lambda _: compiled(case.feed(case.bad, d)), d) == cpu_says
+
+
+@_COMPILE_NOTICE
+@pytest.mark.parametrize("name", list(_COMPILED))
+def test_compiled_replay_is_unchanged_with_strict_off(
+    device_gpu_only: str, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    """Strict off: the program compiles and the replay answers policy B, as eager Metal does."""
+    monkeypatch.delenv("LUCID_STRICT_INDEX", raising=False)
+    case, d = _COMPILED[name], device_gpu_only
+    run = case.build(d)
+    compiled = lucid.compile(run)
+    with lucid.no_grad():
+        for bad in (0, case.bad, 0, case.bad):
+            got = compiled(case.feed(bad, d)).tolist()
+            assert _same(got, run(case.feed(bad, d)).tolist()), f"{name} with {bad}: {got}"
+    assert compiled.cache_info()["entries"] == (1 if case.compiles else 0)
+
+
+@_COMPILE_NOTICE
+@pytest.mark.parametrize("name", [n for n, c in _COMPILED.items() if c.compiles])
+def test_strict_read_at_every_call_of_a_compiled_program(
+    device_gpu_only: str, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    """Turned on and off between calls: each call is judged by the switch it finds, and the
+    program compiled while it was off is the one that answers once it is off again."""
+    case, d = _COMPILED[name], device_gpu_only
+    compiled = lucid.compile(case.build(d))
+    monkeypatch.delenv("LUCID_STRICT_INDEX", raising=False)
+    with lucid.no_grad():
+        compiled(case.feed(0, d))
+        policy_b = compiled(case.feed(case.bad, d)).tolist()
+        monkeypatch.setenv("LUCID_STRICT_INDEX", "1")
+        with pytest.raises(IndexError):
+            compiled(case.feed(case.bad, d))
+        monkeypatch.delenv("LUCID_STRICT_INDEX")
+        assert _same(compiled(case.feed(case.bad, d)).tolist(), policy_b)
+    assert compiled.cache_info()["entries"] == 1
 
 
 @pytest.mark.filterwarnings("ignore:lucid.compile:UserWarning")
