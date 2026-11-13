@@ -615,7 +615,7 @@ _SHAPE_BY_FIRST_PARAM: dict[str, tuple[tuple[int, ...], ...]] = {
 def _first_parameter(fn: Any) -> str:
     try:
         signature = inspect.signature(fn, annotation_format=annotationlib.Format.STRING)
-    except (TypeError, ValueError, NameError):
+    except (TypeError, ValueError):
         return ""
     return next(iter(signature.parameters), "")
 
@@ -889,7 +889,7 @@ def _value_for(
 def _build(fn: Any, op_name: str, domain: str, shape: tuple[int, ...]) -> _Plan | None:
     try:
         signature = inspect.signature(fn, annotation_format=annotationlib.Format.STRING)
-    except (TypeError, ValueError, NameError):
+    except (TypeError, ValueError):
         return None
 
     plan = _Plan()
@@ -1004,7 +1004,7 @@ def explain(fn: Any, op_name: str) -> str:
     """Why a symbol gets no derived invocation, for ``--list-uncovered``."""
     try:
         signature = inspect.signature(fn, annotation_format=annotationlib.Format.STRING)
-    except (TypeError, ValueError, NameError) as exc:
+    except (TypeError, ValueError) as exc:
         return f"unreadable signature: {type(exc).__name__}"
     for shape in _tensor_shapes(op_name, fn):
         plan = _Plan()

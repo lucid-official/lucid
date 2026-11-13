@@ -82,7 +82,7 @@ def _takes_no_tensor(fn: Any) -> bool:
         return False
     try:
         signature = inspect.signature(fn, annotation_format=annotationlib.Format.STRING)
-    except (TypeError, ValueError, NameError):
+    except (TypeError, ValueError):
         return False
     first = next(
         (
@@ -451,7 +451,7 @@ class _DifferenceAxis(Axis):
     def _differentiates_a_factorization(self, fn: Any) -> bool:
         try:
             signature = inspect.signature(fn, annotation_format=annotationlib.Format.STRING)
-        except (TypeError, ValueError, NameError):
+        except (TypeError, ValueError):
             return False
         first = next(iter(signature.parameters), "")
         return first in self._FACTORED_ARGUMENTS
@@ -2149,7 +2149,7 @@ class DtypeAxis(Axis):
         """
         try:
             signature = inspect.signature(fn, annotation_format=annotationlib.Format.STRING)
-        except (TypeError, ValueError, NameError):
+        except (TypeError, ValueError):
             return None
         if "dtype" not in signature.parameters:
             return None

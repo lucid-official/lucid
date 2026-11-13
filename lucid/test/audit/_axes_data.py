@@ -398,7 +398,7 @@ def _construct(cls: Any, **extra: Any) -> tuple[Any, str]:
 
     try:
         signature = inspect.signature(cls, annotation_format=annotationlib.Format.STRING)
-    except (TypeError, ValueError, NameError) as exc:
+    except (TypeError, ValueError) as exc:
         return None, f"no signature: {type(exc).__name__}: {exc}"
 
     kwargs: dict[str, Any] = {}
