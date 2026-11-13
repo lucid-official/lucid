@@ -378,7 +378,7 @@ def _fwd_call(fn: Callable[[lucid.Tensor], lucid.Tensor], x: lucid.Tensor) -> Ca
 def _step_call(
     fn: Callable[[lucid.Tensor], lucid.Tensor], shape: tuple[int, ...], x: lucid.Tensor
 ) -> Callable[[], float]:
-    return step_call(make_step(_PoolNet(fn, shape), lambda y: (y * y).sum()), x)
+    return step_call(_PoolNet(fn, shape), lambda y: (y * y).sum(), x)
 
 
 def _ratio_within(

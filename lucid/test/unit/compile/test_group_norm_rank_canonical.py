@@ -223,8 +223,8 @@ def test_a_group_norm_is_not_slower_than_its_rank_2_twin() -> None:
     x = _input(shape, lucid.float32)
     assert_ratio_within(
         lambda: {
-            "group_norm": step_call(make_step(_module(shape, 8, True, lucid.float32), _loss), x),
-            "rank-2 twin": step_call(make_step(to_metal(_Twin(shape, 8)), _loss), x),
+            "group_norm": step_call(_module(shape, 8, True, lucid.float32), _loss, x),
+            "rank-2 twin": step_call(to_metal(_Twin(shape, 8)), _loss, x),
         },
         "group_norm",
         "rank-2 twin",

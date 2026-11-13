@@ -31,7 +31,6 @@ import pytest
 import lucid
 import lucid.nn as nn
 from lucid._C import engine as _C_engine
-from lucid.compile import make_step
 from lucid.test.unit.compile._helpers import (
     COMPILE_DEVICE,
     assert_ratio_within,
@@ -147,8 +146,8 @@ class _Stepped(nn.Module):
 
 
 def _step(op: Op, shape: Shape, env: str | None) -> Callable[[], float]:
-    step = make_step(_Stepped(op, shape), lambda y: y)
-    return with_env(step_call(step, lucid.ones(1).to(COMPILE_DEVICE)), ENV, env)
+    step = step_call(_Stepped(op, shape), lambda y: y, lucid.ones(1).to(COMPILE_DEVICE))
+    return with_env(step, ENV, env)
 
 
 def _repeat_forward(dim: int) -> Op:

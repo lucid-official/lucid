@@ -27,6 +27,7 @@ from unittest import mock
 import lucid
 import lucid.nn as nn
 from lucid._tensor.tensor import Tensor
+from lucid.compile import make_step
 from lucid.test._fixtures.compile_notices import VERBOSE_ENV
 
 # Compile path is Metal-only — MPSGraph is the only emit backend in
@@ -241,13 +242,24 @@ def compiled_call(
     return call
 
 
-def step_call(step: Callable[..., Tensor], *args: Tensor) -> Callable[[], float]:
-    """A self-synchronising forward + backward of a ``make_step`` step, for ``compare_ms``."""
+def step_call(
+    model: nn.Module, loss_fn: Callable[..., Tensor], *args: Tensor
+) -> Callable[[], float]:
+    """A self-synchronising forward + backward of ``make_step(model, loss_fn)``, for ``compare_ms``.
+
+    The gradients are dropped after each call, as a training loop does with ``zero_grad``.
+    ``backward`` adds into ``.grad`` and on Metal that add is lazy and never read, so a timed
+    loop that kept them chained every call's gradient to the next: one parameter-sized buffer a
+    call, ~20 GB over ``test_rank_canonical_widening.py`` (LCD-995).
+    """
+    step = make_step(model, loss_fn)
 
     def call() -> float:
         loss = step(*args)
         loss.backward()
-        return float(loss.item())
+        value = float(loss.item())
+        model.zero_grad()
+        return value
 
     return call
 

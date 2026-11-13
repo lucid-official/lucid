@@ -243,7 +243,7 @@ def test_a_symbolic_batch_survives_the_fused_reduction() -> None:
 def _step_of(
     shape: tuple[int, ...], fn: Callable[[lucid.Tensor], lucid.Tensor]
 ) -> Callable[[], float]:
-    return step_call(make_step(to_metal(_Scaled(shape)), fn), _input(shape))
+    return step_call(to_metal(_Scaled(shape)), fn, _input(shape))
 
 
 def test_a_rank_5_reduction_is_not_slower_than_its_rank_3_twin() -> None:
