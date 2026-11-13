@@ -256,21 +256,7 @@ def test_a_norm_second_derivative_divides_by_the_tracked_norm(
     rule returned NaN for a slice near 1e-25 or 1e25 on Metal.  ``H w`` of the norm is
     the closed form ``(p-1)/n (|r|^(p-2) w - s <s, w>)``.
     """
-    if device == "cpu" and ord_ == 3.0 and magnitude == 1e-10:
-        pytest.skip("LCD-1003: the strict xfail below pins this case")
     _check_norm_hvp(device, ord_, magnitude)
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "LCD-1003: the CPU p-norm (p = 3) second derivative is +-inf for a slice near "
-        "1e-9 .. 1e-10 (the unscaled sum |x|^p chain, not a quotient)"
-    ),
-)
-@pytest.mark.parametrize("magnitude", [1e-9, 1e-10])
-def test_cpu_p_norm_three_near_one_e_minus_ten(device_cpu_only: str, magnitude: float) -> None:
-    _check_norm_hvp(device_cpu_only, 3.0, magnitude)
 
 
 #: bfloat16 keeps 8 bits of significand: its gradients are checked to 1e-2, the float32 0-d's to 1e-5.
