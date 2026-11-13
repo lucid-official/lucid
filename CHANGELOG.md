@@ -351,6 +351,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - scaled p_norm emitter and VJP, range-safe norm (LCD-955)
 
+- audit every perf ceiling, refuse blind lowering (LCD-947)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views
