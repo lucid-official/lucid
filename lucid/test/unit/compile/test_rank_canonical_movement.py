@@ -546,9 +546,13 @@ def _metal(shape: Shape, phase: float = 0.0) -> lucid.Tensor:
 
 
 #: The rank-5 case and the rank-4 twin of the same elements and work (the axis the op
-#: names moves down by one with the merged leading axes).  16.8M elements.
-_S5: Shape = (2048, 4, 8, 16, 16)
-_S4: Shape = (8192, 8, 16, 16)
+#: names moves down by one with the merged leading axes).  1M elements: what the unfixed graph
+#: pays is the slice loop over the lead (2048 slices), not the elements, so the inner dims are
+#: small.  The first version of these guards, 16.8M elements, held the file at a 4.9 GB footprint
+#: (each unfixed graph kept 0.1-0.7 GB after its test); at this size every unfixed graph is still
+#: 30x to 100x its twin.
+_S5: Shape = (2048, 4, 8, 4, 4)
+_S4: Shape = (8192, 8, 4, 4)
 
 
 def _tot(y: lucid.Tensor) -> lucid.Tensor:
@@ -594,9 +598,9 @@ _TWINS: dict[str, tuple[Op, Op]] = {
 }
 
 
-#: The ratio each op is held to.  ``expand`` stays at 1.5x its twin on an M1 Pro (the broadcast
-#: is materialised at rank 4 too, LCD-928's remaining row), which leaves 1.5x a hair of slack;
-#: unfixed it ran 13x.
+#: The ratio each op is held to.  ``expand`` stays at 1.1x-1.5x its twin on an M1 Pro (the
+#: broadcast is materialised at rank 4 too, LCD-928's remaining row; 1.5x at 16.8M elements, 1.1x
+#: at this size), which leaves 1.5x a hair of slack; unfixed it ran 33x.
 _BOUND = {"expand": 3.0}
 _DEFAULT_BOUND = 1.5
 
@@ -605,7 +609,7 @@ _DEFAULT_BOUND = 1.5
 @pytest.mark.usefixtures("inference")
 @pytest.mark.parametrize("name", sorted(_TWINS))
 def test_a_rank_5_movement_op_is_not_slower_than_its_rank_4_twin(name: str) -> None:
-    """Held to 1.5x the twin (``expand``: 3x); the unfixed graphs ran 4x to 20x it."""
+    """Held to 1.5x the twin (``expand``: 3x); the unfixed graphs ran 30x to 100x it."""
     wide_fn, twin_fn = _TWINS[name]
 
     def build() -> dict[str, Callable[[], float]]:
@@ -641,7 +645,8 @@ def test_the_movement_bound_is_exceeded_by_the_unfixed_graph(name: str) -> None:
         }
 
     bound = _BOUND.get(name, _DEFAULT_BOUND)
-    unfixed = compare_ms(build, "pass off", "twin", bound=bound, slack_ms=0.3, attempts=2)
+    # One attempt: the unfixed graph is expected to miss the bound, so a second would always run.
+    unfixed = compare_ms(build, "pass off", "twin", bound=bound, slack_ms=0.3, attempts=1)
     assert not unfixed.within, (
         f"{name}: the unfixed graph meets the guard's bound, so the guard cannot fail: "
         f"{unfixed.report}"
