@@ -50,14 +50,14 @@ class TestMatmulMicrobench:
         b = lucid.tensor(np.random.standard_normal((64, 64)).astype(np.float32), device=device)
         bench(lambda: a @ b)
         if hasattr(bench, "last_elapsed"):
-            assert_no_regression(f"matmul_64_{device}", bench.last_elapsed, _THRESHOLDS)
+            assert_no_regression(f"matmul_64x64_{device}", bench.last_elapsed, _THRESHOLDS)
 
     def test_matmul_256x256(self, bench, device: str) -> None:
         a = lucid.tensor(np.random.standard_normal((256, 256)).astype(np.float32), device=device)
         b = lucid.tensor(np.random.standard_normal((256, 256)).astype(np.float32), device=device)
         bench(lambda: a @ b)
         if hasattr(bench, "last_elapsed"):
-            assert_no_regression(f"matmul_256_{device}", bench.last_elapsed, _THRESHOLDS)
+            assert_no_regression(f"matmul_256x256_{device}", bench.last_elapsed, _THRESHOLDS)
 
 
 @pytest.mark.perf

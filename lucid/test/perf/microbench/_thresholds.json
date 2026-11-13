@@ -1,9 +1,9 @@
 {
-  "_comment": "Per-op timing ceilings in seconds. Threshold checks apply a 25% tolerance band on top of these values. The six fft/signal cases are hosted-runner ceilings (see _provenance); the rest were recorded on Apple M-series CPU. Record a ceiling from many runs, never one: tools/record_perf_ceilings.py. Re-record after intentional kernel changes.",
+  "_comment": "Per-op timing ceilings in seconds. Threshold checks apply a 25% tolerance band on top of these values. A case with a _provenance entry is a hosted-runner ceiling; the rest were set by hand on Apple M-series CPU and sit 2x or more above the slowest hosted run (LCD-947 audit). Record a ceiling from many runs, never one: tools/record_perf_ceilings.py; --audit sweeps the whole file against the perf-history artifacts. Re-record after intentional kernel changes.",
   "add_2048_cpu": 0.005,
   "mul_2048_cpu": 0.005,
-  "matmul_64_cpu": 0.01,
-  "matmul_256_cpu": 0.05,
+  "matmul_64x64_cpu": 0.01,
+  "matmul_256x256_cpu": 0.05,
   "sum_4096_cpu": 0.005,
   "softmax_1024_cpu": 0.02,
   "tanh_1m_cpu": 0.01,

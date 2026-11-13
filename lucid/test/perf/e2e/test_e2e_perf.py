@@ -45,4 +45,4 @@ class TestTransformerForward:
 
         bench(lambda: block(x))
         if hasattr(bench, "last_elapsed"):
-            assert_no_regression(f"transformer_block_fwd_{device}", bench.last_elapsed, _THRESHOLDS)
+            assert_no_regression(f"block_forward_{device}", bench.last_elapsed, _THRESHOLDS)

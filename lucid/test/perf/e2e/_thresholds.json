@@ -1,5 +1,5 @@
 {
   "_comment": "End-to-end timing ceilings in seconds. Re-record after intentional kernel / module changes.",
   "mlp_step_cpu": 0.050,
-  "transformer_block_fwd_cpu": 0.100
+  "block_forward_cpu": 0.100
 }
