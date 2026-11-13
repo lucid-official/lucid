@@ -11,6 +11,20 @@ import { FadeIn } from "@/components/motion/FadeIn";
 import { BreadcrumbStep, type BreadcrumbSibling } from "@/components/api/BreadcrumbStep";
 import { canonical } from "@/lib/site";
 
+/** The reference page's entrance: a fade in place.  ``FadeIn`` slides its content
+ *  up 10 px by default, and this wraps the whole reference page, so every
+ *  ``#section-…`` / method heading on it sat 10 px low until the spring settled
+ *  (after hydration).  A fragment followed in that window scrolled to the
+ *  displaced heading and landed it off the ``scroll-mt-24`` line for good
+ *  (LCD-1001); ``y={0}`` keeps the fade and moves nothing. */
+function PageBody({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <FadeIn y={0} className={className}>
+      {children}
+    </FadeIn>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Static generation
 // ---------------------------------------------------------------------------
@@ -109,7 +123,7 @@ export default async function ApiSlugPage({
       const method = data.methods.find((m) => m.name === memberName);
       if (!method) notFound();
       return (
-        <FadeIn className="flex flex-col gap-10 xl:flex-row xl:items-start xl:justify-between">
+        <PageBody className="flex flex-col gap-10 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 max-w-4xl xl:flex-1">
             <Breadcrumb parts={breadcrumbParts} />
             <FunctionSignature
@@ -120,7 +134,7 @@ export default async function ApiSlugPage({
             />
           </div>
           <PageTableOfContents />
-        </FadeIn>
+        </PageBody>
       );
     }
 
@@ -130,7 +144,7 @@ export default async function ApiSlugPage({
       if (!member) notFound();
 
       return (
-        <FadeIn className="flex flex-col gap-10 xl:flex-row xl:items-start xl:justify-between">
+        <PageBody className="flex flex-col gap-10 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 max-w-4xl xl:flex-1">
             <Breadcrumb parts={breadcrumbParts} />
             <div className="mt-6">
@@ -142,7 +156,7 @@ export default async function ApiSlugPage({
             </div>
           </div>
           <PageTableOfContents />
-        </FadeIn>
+        </PageBody>
       );
     }
 
@@ -156,18 +170,18 @@ export default async function ApiSlugPage({
   // and relies on the sidebar tree for the full drill-down.
   if (moduleSlug === "lucid._C.engine" && isApiModule(data)) {
     return (
-      <FadeIn className="max-w-4xl">
+      <PageBody className="max-w-4xl">
         <CppEngineOverview data={data} />
-      </FadeIn>
+      </PageBody>
     );
   }
   return (
-    <FadeIn className="flex flex-col gap-10 xl:flex-row xl:items-start xl:justify-between">
+    <PageBody className="flex flex-col gap-10 xl:flex-row xl:items-start xl:justify-between">
       <div className="min-w-0 max-w-4xl xl:flex-1">
         <ModuleOverview data={data} />
       </div>
       <PageTableOfContents minEntries={2} />
-    </FadeIn>
+    </PageBody>
   );
 }
 

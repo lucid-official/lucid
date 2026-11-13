@@ -261,6 +261,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - div and reciprocal VJPs never square a divisor (LCD-1004)
 
+- a page enters by fading, it no longer slides its headings
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
