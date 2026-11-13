@@ -37,7 +37,7 @@ import lucid
 from lucid._C import engine as _C_engine
 from lucid.compile import _tracing
 from lucid.compile._core.fallback import is_first_run_failure
-from lucid.test.unit.compile._first_run_probes import _GROUPS, GROUP_ENV
+from lucid.test.unit.compile._first_run_probes import _GROUPS, GROUP_ENV, STALL_BUDGET_ENV
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_ratio_within
 
 _C = _C_engine.compile
@@ -72,11 +72,14 @@ def _parse(stdout: str) -> dict[str, dict[str, object]]:
 
 
 @cache
-def _run_group(group: str, budget_env: str | None = None) -> _Child:
+def _run_group(group: str, budget_env: str | None = None, stall_s: float | None = None) -> _Child:
     env = dict(os.environ, LUCID_COMPILE_TEST_HOOKS="1", **GROUP_ENV.get(group, {}))
     env.pop("LUCID_COMPILE_FIRST_RUN_TIMEOUT_S", None)
+    env.pop(STALL_BUDGET_ENV, None)
     if budget_env is not None:
         env["LUCID_COMPILE_FIRST_RUN_TIMEOUT_S"] = budget_env
+    if stall_s is not None:
+        env[STALL_BUDGET_ENV] = repr(stall_s)
     with subprocess.Popen(
         [sys.executable, "-m", "lucid.test.unit.compile._first_run_probes", group],
         cwd=_ROOT,
@@ -115,6 +118,29 @@ def test_scenario(group: str, scenario: str, device_gpu_only: str) -> None:
         scenario in child.results
     ), f"the child never reached it (exit {child.returncode}): {child.stderr}"
     assert child.results[scenario]["ok"], child.results[scenario]["detail"]
+
+
+# A scenario holds one run and gives up on it at a small budget (0.3 s).  Any other first run
+# in the same scenario -- an optimizer step's own compile, the eager rerun's -- is an ordinary
+# one, and a runner that needs more than the small budget for it fails the scenario on timing
+# (LCD-981: ``fused_step_answers_eagerly`` on a hosted runner).  A stall budget no real first
+# run can beat makes that dependence deterministic instead of a flake.
+_UNBEATABLE_STALL_S = 0.001
+#: The groups whose stalled runs use the small budget (``breaker`` and ``herd`` set their own).
+_STALL_GROUPS = ("engine", "entries", "raises", "pinned", "inplace_target")
+
+
+@pytest.mark.parametrize("group", _STALL_GROUPS)
+def test_a_scenario_does_not_depend_on_the_runner_beating_the_stall_budget(
+    group: str, device_gpu_only: str
+) -> None:
+    del device_gpu_only
+    child = _run_group(group, stall_s=_UNBEATABLE_STALL_S)
+    missing = set(_GROUPS[group]) - set(child.results)
+    assert not missing, f"the child never reached {sorted(missing)} (exit {child.returncode})"
+    failed = {name: rec["detail"] for name, rec in child.results.items() if not rec["ok"]}
+    assert not failed, failed
+    assert child.exited and child.returncode == 0, (child.returncode, child.stderr)
 
 
 @pytest.mark.parametrize("group", [g for g in _GROUPS if g != "real"])
@@ -242,7 +268,14 @@ def test_the_budget_follows_the_environment(
 def test_the_guard_adds_no_measurable_steady_state_cost(
     _clean_session_cache: None, device_gpu_only: str
 ) -> None:
-    """A warm run looks the ledger up and runs on the caller's thread; off, it does neither."""
+    """A warm run looks the ledger up and runs on the caller's thread; off, it does neither.
+
+    Absolute, not a ratio (LCD-935): the cost is a microsecond-scale lookup on a ~0.3 ms run, so
+    a ratio bound would measure the runner.  The run may cost 0.1 ms more, a third of itself: a
+    per-call wait or lock of that size fails.  That a warm run never asks for a worker (a
+    hand-off is ~0.02 ms, below any wall-clock bound) is held by the probe
+    ``a_warm_executable_does_not_need_a_worker``.
+    """
     del device_gpu_only
     exe, feeds = _cached_executable(1.5)
     _C.run_executable(exe, feeds)
@@ -260,7 +293,7 @@ def test_the_guard_adds_no_measurable_steady_state_cost(
         {"guarded": guarded, "unguarded": unguarded},
         "guarded",
         "unguarded",
-        bound=1.15,
-        slack_ms=0.05,
+        bound=1.0,
+        slack_ms=0.1,
         what="a warm run with the watchdog on against off",
     )

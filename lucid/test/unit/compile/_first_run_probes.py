@@ -41,8 +41,12 @@ from lucid.test.unit.compile._jacobi_probes import _rotation_chain
 
 _C = _C_engine.compile
 _METAL = "metal"
-#: A budget a test outlasts without waiting long.
-_SMALL_BUDGET_S = 0.3
+#: Replaces the stall budget in a child (``test_a_scenario_does_not_depend_on_...``).
+STALL_BUDGET_ENV = "LUCID_FIRST_RUN_PROBE_STALL_S"
+#: The budget the one stalled run is given up on at: short, so a test need not wait long.
+_SMALL_BUDGET_S = float(os.environ.get(STALL_BUDGET_ENV, "0.3"))
+#: What every first run that is not the stalled one runs under, far above what a runner needs.
+_ORDINARY_BUDGET_S = 60.0
 #: Slack for a thread's wake-up on a loaded machine.
 _SLACK_S = 2.0
 
@@ -90,6 +94,18 @@ def _hold(on: bool) -> None:
 
 def _budget(seconds: float | None) -> None:
     _C.set_first_run_budget_s(seconds)
+
+
+def _end_stall() -> None:
+    """The stalled run is over: let its worker go and give every later first run a real budget.
+
+    The small budget exists to give up on the held run quickly.  A first run that is not the
+    held one (the eager rerun's own optimizer step, a twin's) must not be held to it: on a slow
+    runner that first run overruns 0.3 s and the scenario fails on timing, not on the
+    behaviour it tests (LCD-981).
+    """
+    _hold(False)
+    _budget(_ORDINARY_BUDGET_S)
 
 
 def _abandoned() -> int:
@@ -140,7 +156,7 @@ def _timeout_is_typed_and_refusal_is_sticky() -> None:
     _hold(False)
     time.sleep(0.5)
     assert e.exe.first_run_state == "refused"
-    _budget(60.0)
+    _budget(_ORDINARY_BUDGET_S)
     again, took_again = _raises_timeout(e.run)
     assert "given up on earlier" in str(again), again
     assert took_again < 1.0, took_again
@@ -149,7 +165,7 @@ def _timeout_is_typed_and_refusal_is_sticky() -> None:
 
 def _a_warm_executable_does_not_need_a_worker() -> None:
     e = _Executable(3.0)
-    _budget(60.0)
+    _budget(_ORDINARY_BUDGET_S)
     _close(e.run(), e.expect())
     assert e.exe.first_run_state == "warm"
     _hold(True)
@@ -169,8 +185,7 @@ def _a_budget_of_zero_is_the_old_path() -> None:
     try:
         _close(e.run(), e.expect())
     finally:
-        _hold(False)
-        _budget(60.0)
+        _end_stall()
     # Nothing was tracked: the run was an ordinary run on this thread.
     assert e.exe.first_run_state == "cold"
     assert _abandoned() == before
@@ -180,7 +195,7 @@ def _a_second_caller_joins_the_first_run() -> None:
     e = _Executable(5.0)
     before = _abandoned()
     other = lucid.full((4,), 7.0, device=_METAL)
-    _budget(60.0)
+    _budget(_ORDINARY_BUDGET_S)
     _hold(True)
     with ThreadPoolExecutor(max_workers=2) as pool:
         starter = pool.submit(e.run)
@@ -213,8 +228,7 @@ def _joined_callers_share_one_deadline_and_one_count() -> None:
     # Counted once, and the joiner waited for the starter's deadline, not for a fresh budget.
     assert _abandoned() == before + 1
     assert joiner_took < budget - 0.2, joiner_took
-    _hold(False)
-    _budget(60.0)
+    _end_stall()
 
 
 def _an_abandoned_run_outlives_its_executable() -> None:
@@ -232,14 +246,14 @@ def _an_abandoned_run_outlives_its_executable() -> None:
     _hold(False)
     time.sleep(1.0)
     fresh = _Executable(9.0)
-    _budget(60.0)
+    _budget(_ORDINARY_BUDGET_S)
     _close(fresh.run(), fresh.expect())
 
 
 def _an_interrupt_leaves_the_run_going() -> None:
     e = _Executable(10.0)
     before = _abandoned()
-    _budget(60.0)
+    _budget(_ORDINARY_BUDGET_S)
     _hold(True)
     timer = threading.Timer(0.3, lambda: os.kill(os.getpid(), signal.SIGINT))
     timer.start()
@@ -351,10 +365,11 @@ def _fused_step_answers_eagerly() -> None:
 
     def release_on_notice(message: object, category: type[Warning], *_rest: object) -> None:
         # The eager rerun updates the parameters through a compiled optimizer step of its
-        # own, which is an ordinary first run: only the fused executable is to stall.
+        # own, which is an ordinary first run (MPSGraph specialises it on the spot): only the
+        # fused executable is to stall, and only it is held to the small budget.
         if issubclass(category, CompileFallbackWarning):
             said.append(str(message))
-            _hold(False)
+            _end_stall()
 
     with warnings.catch_warnings():
         warnings.simplefilter("always")
@@ -369,7 +384,6 @@ def _fused_step_answers_eagerly() -> None:
         _close(got_p.reshape(-1).tolist(), want_p.reshape(-1).tolist())
     assert len(said) == 1 and "did not finish within" in said[0], said
     assert _abandoned() == before + 1
-    _budget(60.0)
 
 
 _ENTRIES = {
@@ -394,15 +408,14 @@ def _compiled_step_raises() -> None:
     timeout, _took = _raises_timeout(lambda: compiled_step(model, x, loss_fn))
     assert "LUCID_COMPILE_FIRST_RUN_TIMEOUT_S" in str(timeout), timeout
     assert _abandoned() == before + 1
-    _hold(False)
-    _budget(60.0)
+    _end_stall()
 
 
 def _a_dynamic_batch_specializes_once_per_batch_size() -> None:
     model = nn.Sequential(nn.Linear(4, 3)).to(_METAL)
     compiled = lucid.compile(model, dynamic=True)
     before = _abandoned()
-    _budget(60.0)
+    _budget(_ORDINARY_BUDGET_S)
     with lucid.no_grad(), warnings.catch_warnings():
         warnings.simplefilter("error", CompileFallbackWarning)
         compiled(lucid.randn(4, 4, device=_METAL))
@@ -418,8 +431,7 @@ def _a_dynamic_batch_specializes_once_per_batch_size() -> None:
     said = _fallback_messages(caught)
     assert len(said) == 1 and "did not finish within" in said[0], said
     assert _abandoned() == before + 1
-    _hold(False)
-    _budget(60.0)
+    _end_stall()
 
 
 _RAISES = {
@@ -433,7 +445,7 @@ _RAISES = {
 
 def _the_breaker_stops_new_first_runs() -> None:
     warm = _Executable(11.0)
-    _budget(60.0)
+    _budget(_ORDINARY_BUDGET_S)
     _close(warm.run(), warm.expect())
     _hold(True)
     _budget(0.2)
@@ -457,7 +469,7 @@ def _the_breaker_stops_new_first_runs() -> None:
     _budget(0.0)
     sixth = _Executable(17.0)
     _close(sixth.run(), sixth.expect())
-    _budget(60.0)
+    _budget(_ORDINARY_BUDGET_S)
 
 
 def _an_entry_answers_eagerly_with_the_breaker_open() -> None:
@@ -492,8 +504,7 @@ def _a_refused_executable_is_not_evicted() -> None:
     _budget(_SMALL_BUDGET_S)
     _raises_timeout(refused.run)
     assert _abandoned() == before + 1
-    _hold(False)
-    _budget(60.0)
+    _end_stall()
     # Four other structures through a cache of two: each insert evicts the oldest entry
     # that is not refused, so the refusal stays and the cache does not grow past it.
     for size in (5, 6, 7, 8):
@@ -535,12 +546,12 @@ def _an_abandoned_first_run_leaves_the_target_alone() -> None:
     _hold(False)
     time.sleep(1.5)
     assert all(v == 7.0 for v in target.tolist()), target.tolist()
-    _budget(60.0)
+    _budget(_ORDINARY_BUDGET_S)
 
 
 def _a_cold_run_takes_fresh_buffers_and_a_warm_one_aliases() -> None:
     e = _Executable(3.0, 64)
-    _budget(60.0)
+    _budget(_ORDINARY_BUDGET_S)
     target = lucid.zeros(64, device=_METAL)
     lucid.eval(target)
     address = target.data_ptr()
@@ -581,7 +592,7 @@ def _an_abandoned_run_survives_its_inputs_being_freed() -> None:
     time.sleep(2.0)
     probe = lucid.full((n,), 3.0, device=_METAL)
     assert float((probe * 2).sum().item()) == 6.0 * n
-    _budget(60.0)
+    _budget(_ORDINARY_BUDGET_S)
 
 
 _ALIAS = {
