@@ -24,8 +24,18 @@ the released code has added *since*: extra dynamics layers, an
 The last two are optimiser behaviour and belong to :mod:`lucid.optim` if
 anywhere.
 
-Two further departures are deliberate and worth stating because they are
+Three further departures are deliberate and worth stating because they are
 not visible from the configuration:
+
+* **Only the output layers named by the paper and the release start as the
+  release's do.**  The release draws every dense kernel from a
+  fan-in-scaled truncated normal and starts every bias at zero
+  (``winit: trunc_normal_in`` and a zero ``binit``, ``embodied/jax/nets.py``).
+  The layers here keep :class:`~lucid.nn.Linear`'s default — Kaiming-uniform
+  kernels, uniform biases — except the three outputs whose start the paper
+  or ``configs.yaml`` states: the reward predictor and both critics at zero
+  (paper, Critic learning; ``outscale: 0.0``) and the policy at
+  ``outscale: 0.01``, each with a zero bias.
 
 * The **replay critic reads detached features.**  The reference lets that
   loss reach the world model (``repval_grad: True``) because it has a
