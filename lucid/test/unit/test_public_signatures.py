@@ -49,6 +49,7 @@ import pytest
 import lucid
 from lucid._annotations import NAMES
 
+
 def _public_callables() -> list[str]:
     """Names in ``lucid.__all__`` that are callable.
 
