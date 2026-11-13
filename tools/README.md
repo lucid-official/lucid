@@ -119,15 +119,16 @@ minutes, so the run and the check are apart:
 
     .venv/bin/python3 -m tools.rules attest            # run them here, record the result
     .venv/bin/python3 -m tools.rules attest --verify   # what pre-push asks; instant
+    .venv/bin/python3 -m tools.rules attest --plan     # the chunks (below), run nothing
 
 `attest` refuses (exit 2) when `lucid/`, `pyproject.toml`, `setup.py` or
 `tools/fetch_mlx.py` holds anything uncommitted; when the engine has no build stamp, or a
 stamp that is not this tree's digest (below); when the checkout's python imports lucid or its engine from anywhere else; when a
 suite ran no test, every one skipped, or skipped more than 5 % (a sound run skips 0.17 %;
 the memory governor's summary in the output says why, so run it again when memory is free);
-and when HEAD or what the suites read moved during the run. It runs each suite in its own
-process, without `PYTEST_ADDOPTS`, `PYTEST_PLUGINS` or `PYTEST_DISABLE_PLUGIN_AUTOLOAD`
-(it says when it drops one), and
+when a chunk's process died (below); and when HEAD or what the suites read moved during the
+run. It runs each suite as several processes, without `PYTEST_ADDOPTS`, `PYTEST_PLUGINS` or
+`PYTEST_DISABLE_PLUGIN_AUTOLOAD` (it says when it drops one), and
 writes `<git common dir>/lucid-attest/<key>.json`: counts, commit, host, time. A failing
 run is recorded too, and exits 1. The key digests what the engine is built from:
 `HEAD:lucid/_C`, `setup.py`, `tools/fetch_mlx.py` and `[tool.lucid.mlx]`. So one record
@@ -137,6 +138,35 @@ is checked out and the engine is built, in a checkout whose `.git` the pushing o
 or syncs with, or copy the one file. In the Studio's main checkout run `git reset -q`
 first: `.git/index` is not synced, so a stale index reads as uncommitted edits (the
 working tree is left alone).
+
+**Chunks.** One pytest process holds what its tests leave behind, and `unit/compile` (14 280
+tests) in one was SIGKILLed on the 16 GB MacBook at about 80 %: no traceback, no junit, and
+`attest` read the missing report as "ran no test". Now each suite is dealt out, in sorted
+order of the test files `git ls-files` lists at HEAD, over the fewest processes that hold at
+most `--chunk-files N` files each (default 6: 31 chunks for compile, 1 for cost). Dealt out
+in turn, not cut in runs, because files named alike cost alike (the `rank_canonical_*`
+family) and neighbours should land apart. The same tree is always cut the same way, and
+`attest --plan` lists who is where. The chunks' junit totals are the suite's: the record,
+its key and its format are what they were, a record from the old runner stays valid, and
+every refusal above is judged on the merged totals (a chunk that skipped every test, or found
+none, fails nothing when the suite ran). A process that **dies** (a signal, an exit that left
+no report, a report that does not parse) is neither a failing test nor a zero: the run stops,
+no record is written (a transient kill must not overwrite a green record), and it exits 2 with
+
+    chunk 7/31 killed by signal 9 (SIGKILL), likely memory; it was running
+    lucid/test/unit/compile/test_x.py::test_y[mid] (6 files: ...): rerun when memory is free,
+    or split it with `attest --chunk-files 3`
+
+where the test is the one the chunk's pytest had started, left in a file at each test start
+(the killed process can say nothing else). That is the test the footprint was on, not
+proof it is the one that grew it: a leak shows on the test that ran last. Measured
+2026-11-13 on the MacBook, peak memory footprint per chunk (`/usr/bin/time -l`): of the 31
+compile chunks (18 minutes, 14 238 tests, 0 failed, 46 skipped) all but four stay under 2 GB.
+Those hold the files that peak that high alone: LCD-995's `test_rank_canonical_widening` 38.9
+GB (the swap grew to 37 GB), `test_norm_pool_rank_canonical` 5.9, `test_rank_canonical_movement`
+4.9 and `_attention` 2.7. Memory is per file, not per test count, so a smaller `--chunk-files`
+helps only by keeping such files apart; one file that needs more than the machine has needs
+the file changed.
 
 **The engine build stamp** (LCD-881). "This engine was built from this tree" cannot be
 read off mtimes: `unison` keeps times, and a `cp -c` of an `.so` is "now". An in-place
