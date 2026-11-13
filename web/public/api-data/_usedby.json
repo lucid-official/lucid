@@ -592,10 +592,6 @@
     },
     {
       "kind": "module",
-      "module": "lucid.peft.tuners.lora._arrow"
-    },
-    {
-      "kind": "module",
       "module": "lucid.profiler"
     },
     {
