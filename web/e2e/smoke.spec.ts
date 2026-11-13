@@ -41,6 +41,31 @@ async function visit(page: Page, path: string): Promise<void> {
     page.locator('meta[name="robots"][content="noindex"]'),
     `${path} is the 404 page — the static export has no such page`,
   ).toHaveCount(0);
+  await settled(page);
+}
+
+/** Wait until the page has hydrated and finished entering.  ``networkidle`` says
+ *  the requests are done, not that React has run: under ``next dev`` on a slow
+ *  runner hydration lands well after it, and the entrance (``template.tsx`` /
+ *  ``FadeIn``) only *starts* then.  A test that follows a ``#fragment`` or reads
+ *  a box in that window acts on a page that is still changing (LCD-1001: the
+ *  copy-link row check saw a fraction of a pixel of spring, the fragment landed
+ *  4–11 px off, and a hash set before hydration was dropped altogether).  The
+ *  server renders the entrance at ``opacity: 0``, so the heading's ancestors are
+ *  all fully opaque exactly when the entrance has played out.  Under ``next dev``
+ *  the body can also stream in after the ``loading.tsx`` shell (the tutorial page
+ *  had no heading yet when ``networkidle`` fired at 8x CPU slowdown), so no
+ *  heading yet means not yet.  Fonts are part of layout too. */
+async function settled(page: Page): Promise<void> {
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForFunction(() => {
+    const heading = document.querySelector("#main-content h1, #main-content h2, main h1, main h2");
+    if (!heading) return false;
+    for (let el: Element | null = heading; el; el = el.parentElement) {
+      if (getComputedStyle(el).opacity !== "1") return false;
+    }
+    return true;
+  });
 }
 
 const PAGES = [
@@ -307,7 +332,7 @@ test("a section anchor is its heading, and a fragment lands it below the header"
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/api/lucid.peft", { waitUntil: "networkidle" });
+  await visit(page, "/api/lucid.peft");
   const anchor = page.locator("#section-attributes");
   await expect(anchor).toHaveCount(1);
   expect(await anchor.evaluate((el) => el.tagName)).toBe("H2");
@@ -321,13 +346,83 @@ test("a section anchor is its heading, and a fragment lands it below the header"
     .toBeLessThanOrEqual(2);
 
   // A class page's method group: its ToC link scrolls to the one element carrying the id.
-  await page.goto("/api/lucid.nn/Linear", { waitUntil: "networkidle" });
+  await visit(page, "/api/lucid.nn/Linear");
   const group = page.locator("article h2[id]").first();
   const id = await group.getAttribute("id");
   await expect(page.locator(`[id="${id}"]`)).toHaveCount(1);
   await page.locator(`aside a[href="#${id}"]`).first().click();
   await expect.poll(async () => Math.round((await group.boundingBox())!.y)).toBeLessThanOrEqual(100);
 });
+
+// Opening a page leaves it where it opened.  The sidebar reveals its active entry
+// a frame after hydration; that used to be ``scrollIntoView``, which scrolls the
+// document too: every page opened ~48 px down, and a ``#fragment`` URL's scroll —
+// started by the browser at load — was cancelled a few frames in (production
+// build: scrollY 47–52 with the heading 20 000 px below).  The reveal now moves
+// only the sidebar's own scroll area (LCD-1001).
+for (const path of ["/api/lucid.nn/Linear", "/api/lucid.peft.tuners.lora/LoraConfig"]) {
+  test(`opening ${path} leaves the page at its top`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await visit(page, path);
+    // The sidebar's reveal runs in a frame after hydration; let two pass.
+    await page.evaluate(
+      () => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))),
+    );
+    expect(
+      await page.locator('aside[aria-label="Documentation navigation"] a[aria-current="page"]').count(),
+      "the sidebar has an active entry to reveal",
+    ).toBeGreaterThan(0);
+    expect(await page.evaluate(() => window.scrollY), "the page scrolled by itself").toBe(0);
+  });
+}
+
+// ... and a section link opened directly keeps scrolling toward its heading.  The
+// heading is ~20 000 px down; the old reveal cut the scroll off at ~50 px.  It is
+// "toward", not "onto": web fonts arriving after the browser has aimed shift the
+// layout above the heading, so where the scroll ends is the fonts' business.
+test("a section link opened directly scrolls toward its heading, and keeps going", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await visit(page, "/api/lucid.peft#section-attributes");
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY), { timeout: 10_000 })
+    .toBeGreaterThan(5_000);
+});
+
+// A page's entrance fades; it must not slide.  Whatever carries a heading and
+// is translated while it enters moves every ``#fragment`` target with it: the
+// browser (or the Next router) scrolls to the heading's position *at that
+// moment*, and when the spring settles the heading is off the ``scroll-mt-24``
+// line for good.  The same displacement fooled the row-layout check below by up
+// to 6 + 10 px (LCD-1001).  Sampled every frame from document start — the server
+// renders the entrance's first keyframe, so this sees it before hydration, not
+// just when the spring happens to be running.
+for (const path of [
+  "/api/lucid.peft",
+  "/api/lucid.nn/Module",
+  "/api/lucid.peft.tuners",
+  "/docs/tutorials/lora-fine-tuning",
+]) {
+  test(`nothing above a heading is translated while ${path} enters`, async ({ page }) => {
+    await page.addInitScript(() => {
+      const displaced = new Set<string>();
+      (window as unknown as { __displaced: Set<string> }).__displaced = displaced;
+      const t0 = performance.now();
+      const frame = () => {
+        const heading = document.querySelector("#main-content h1, #main-content h2[id]");
+        for (let el: Element | null = heading; el; el = el.parentElement) {
+          const transform = getComputedStyle(el).transform;
+          if (transform !== "none") displaced.add(`<${el.tagName.toLowerCase()}> ${transform}`);
+        }
+        if (performance.now() - t0 < 10_000) requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+    });
+    await visit(page, path);
+    expect(await page.locator("#main-content h1, #main-content h2[id]").count(), "a heading to look above").toBeGreaterThan(0);
+    const displaced = await page.evaluate(() => [...(window as unknown as { __displaced: Set<string> }).__displaced]);
+    expect(displaced, "elements above the first heading carried a transform while the page entered").toEqual([]);
+  });
+}
 
 // A display formula wider than the column scrolls inside its own box.  Left to
 // KaTeX's single nowrap line it ran out of the column and widened the whole
