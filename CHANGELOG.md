@@ -265,6 +265,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - sidebar reveal scrolls its own area, not the whole page
 
+- a copied section link lands, and the export is visible pre-JS
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

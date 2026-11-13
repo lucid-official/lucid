@@ -262,15 +262,16 @@ const PAGE_CONTRACTS = [
   },
   {
     // A page with ``#fragment`` targets enters by fading, not sliding.  The server
-    // renders the entrance's first keyframe (``opacity:0;transform:translateY(…)``),
-    // and whatever carries the page and is offset that way moves every heading
-    // with it: the browser scrolls to a heading where it *is* then, and once the
-    // spring settles it stays off the ``scroll-mt-24`` line.  ``template.tsx``
-    // wrapped every page in a 6 px slide and ``FadeIn`` slid the reference body 10 px
-    // more, so fragments landed 4–11 px off (LCD-1001).  Page-wide rather than
-    // "an ancestor of a heading": the exported HTML streams the body in as a sibling
-    // of the entrance wrapper (``<div hidden id="S:0">``), so nesting is not visible
-    // here.  Same rule as the e2e ``nothing above a heading is translated``.
+    // used to render the entrance's first keyframe (``opacity:0;transform:
+    // translateY(…)``), and whatever carries the page and is offset that way moves
+    // every heading with it: the browser scrolls to a heading where it *is* then,
+    // and once the spring settles it stays off the ``scroll-mt-24`` line.
+    // ``template.tsx`` wrapped every page in a 6 px slide and ``FadeIn`` slid the
+    // reference body 10 px more, so fragments landed 4–11 px off (LCD-1001).  Page-
+    // wide rather than "an ancestor of a heading": stricter than needed, and it
+    // cannot miss one.  The entrance is a CSS class now (``.page-enter``), so a
+    // regression has to come back as an inline style - which is what this reads.
+    // Same rule as the e2e ``nothing above a heading is translated``.
     id: "anchor.not-displaced", component: "Anchors", kind: "page",
     applies: (ctx) => ctx.kind === "api-module" || ctx.kind === "api-member" || ctx.kind === "docs",
     check(ctx) {
@@ -286,6 +287,32 @@ const PAGE_CONTRACTS = [
         });
       }
       return out;
+    },
+  },
+  {
+    // The server writes the page into the HTML; scripts only add behaviour.  A
+    // heading inside an element rendered ``opacity:0`` is blank until JavaScript
+    // has loaded and hydrated: with scripts off, for a crawler that does not run
+    // them, and on a slow connection.  That was framer-motion's ``initial`` on
+    // ``template.tsx`` (the whole page) and on the reference body, until the page
+    // entrance became a CSS animation (LCD-1005).  Pages without ``#fragment``
+    // targets (the landing pages, whose ``FadeIn`` sections still start at
+    // ``opacity:0``) are out of scope; a ``<noscript>`` rule in the root layout
+    // shows those without scripts.
+    id: "anchor.visible-in-html", component: "Anchors", kind: "page",
+    applies: (ctx) => ctx.kind === "api-module" || ctx.kind === "api-member" || ctx.kind === "docs",
+    check(ctx) {
+      const targets = ctx.dom.querySelectorAll("h1[id], h2[id], h3[id]");
+      const hidden = new Set();
+      for (const heading of targets) {
+        for (let el = heading.parentNode; el?.tagName; el = el.parentNode) {
+          if (/(^|;)\s*opacity:\s*0\s*(;|$)/.test(el.getAttribute("style") ?? "")) hidden.add(el);
+        }
+      }
+      return [...hidden].map((el) => ({
+        scope: ctx.scope,
+        detail: `<${el.tagName.toLowerCase()}> is rendered with opacity:0 around a heading: the page is blank until JavaScript hydrates`,
+      }));
     },
   },
   {

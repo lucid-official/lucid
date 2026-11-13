@@ -295,6 +295,22 @@ html[data-theme="light"] .shiki {
   background-color: var(--shiki-light-bg) !important;
 }
 
+/* ── Page entrance ─────────────────────────────────────────────────────
+ * ``app/template.tsx`` wraps every route in ``.page-enter``.  A fade only:
+ * no ``transform`` anywhere on the way down to a heading (a ``#fragment``
+ * followed mid-slide lands off its line — LCD-1001), and a CSS animation
+ * rather than a framer-motion ``initial`` so the exported HTML is visible
+ * before — and without — JavaScript (LCD-1005).  The ``from`` keyframe alone:
+ * the end state is the element's own ``opacity: 1``. */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+  }
+}
+.page-enter {
+  animation: page-enter 0.3s ease-out;
+}
+
 /* ── Reduced motion ────────────────────────────────────────────────────
  * ``ReducedMotionProvider`` already wraps Framer Motion in
  * ``reducedMotion="user"`` so JS-driven springs respect the OS

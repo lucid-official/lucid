@@ -7,6 +7,7 @@ import { BackToTop } from "@/components/layout/BackToTop";
 import { ReducedMotionProvider } from "@/components/motion/ReducedMotionProvider";
 import { ThemeBoot, ThemeProvider } from "@/components/layout/ThemeProvider";
 import { RecentPageTracker } from "@/components/layout/RecentPageTracker";
+import { FragmentScroll } from "@/components/layout/FragmentScroll";
 import { InlineCodeCopy } from "@/components/layout/InlineCodeCopy";
 import { RouteProgress } from "@/components/layout/RouteProgress";
 import { brandColors } from "@/lib/brand-kit";
@@ -102,11 +103,19 @@ export default function RootLayout({
         {/* ThemeBoot runs SYNCHRONOUSLY before React hydrates so the
             user's persisted theme is applied without a dark/light flash. */}
         <ThemeBoot />
+        {/* Scripts off: the landing pages' ``FadeIn`` sections are written into
+            the HTML at ``opacity:0`` and only framer-motion, once hydrated,
+            plays them in.  Without JavaScript that never happens, so show them.
+            (The page-wide entrance is a CSS animation and needs no help.) */}
+        <noscript>
+          <style>{`[style*="opacity:0"]{opacity:1!important}`}</style>
+        </noscript>
       </head>
       <body>
         <SkipLink />
         <ScrollProgress />
         <RecentPageTracker />
+        <FragmentScroll />
         <InlineCodeCopy />
         <RouteProgress />
         <ThemeProvider>
