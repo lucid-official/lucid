@@ -9,6 +9,11 @@ inf (the row came back all zeros) where Metal's range-safe kernel was right.
 The backward is now ``(g - sgn(u) |u|^(p-1) <g, u>) / d`` with ``u = x / d``, the
 forward output, and the CPU norm is taken relative to the largest magnitude.  Every
 case compares both devices with a float64 closed form of the same float32 inputs.
+
+Below ``eps`` the denominator is the constant ``eps``, so the gradient is ``g / eps``:
+the dependence of the norm on ``x`` is clamped away, as the reference's ``clamp_min``
+does and graph mode (``create_graph=True``) already did.  Eager kept the second term,
+and a norm exactly ``eps`` keeps it (the clamp passes its gradient at the boundary).
 """
 
 import math
@@ -31,7 +36,10 @@ SCALE = 2e-5
 def _truth(
     arr: np.ndarray, g: np.ndarray, p: float, eps: float, axis: int
 ) -> tuple[np.ndarray, np.ndarray]:
-    """``(y, dx)`` in float64 for ``y = x / max(||x||_p, eps)``, relative to the largest entry."""
+    """``(y, dx)`` in float64 for ``y = x / max(||x||_p, eps)``, relative to the largest entry.
+
+    A norm below ``eps`` is a constant denominator: ``dx = g / eps``.
+    """
     x = arr.astype(np.float64)
     top = np.abs(x).max(axis=axis, keepdims=True)
     safe = np.where(top > 0, top, 1.0)
@@ -40,7 +48,7 @@ def _truth(
     )
     d = np.maximum(n, eps)
     u = x / d
-    along = (g.astype(np.float64) * u).sum(axis=axis, keepdims=True)
+    along = np.where(n < eps, 0.0, (g.astype(np.float64) * u).sum(axis=axis, keepdims=True))
     return u, (g - np.sign(u) * np.abs(u) ** (p - 1) * along) / d
 
 
@@ -68,8 +76,6 @@ def _run(
 def test_forward_and_backward_match_the_float64_closed_form(
     device: str, magnitude: float, eps: float, p: float
 ) -> None:
-    if 4.0 * magnitude < eps:
-        pytest.skip("the norm is below eps: the floor region, tested separately")
     arr = BASE * np.float32(magnitude)
     # The incoming gradient is the same at every magnitude, so dx is ~1/magnitude.
     g = np.tile(np.arange(5.0, dtype=np.float32), (2, 1))
@@ -174,3 +180,50 @@ def test_a_zero_dimensional_input(device: str) -> None:
     assert float(y.item()) == pytest.approx(-1.0, rel=1e-6)
     assert math.isfinite(float(x.grad.item()))
     assert float(x.grad.item()) == pytest.approx(0.0, abs=1e-30)
+
+
+# ── the eps floor ────────────────────────────────────────────────────────────
+
+
+def _graph_mode(arr: np.ndarray, g: np.ndarray, p: float, eps: float, device: str) -> np.ndarray:
+    x = lucid.tensor(arr, device=device, requires_grad=True)
+    y = F.normalize(x, p, -1, eps)
+    (dx,) = lucid.autograd.grad(
+        y, [x], grad_outputs=lucid.tensor(g, device=device), create_graph=True
+    )
+    return dx.numpy()
+
+
+@pytest.mark.parametrize("p", [1.0, 1.5, 2.0, 3.0])
+def test_below_eps_the_gradient_is_g_over_eps(device: str, p: float) -> None:
+    """The norm 5e-4 is under eps 1e-3: the unfloored form gave ``[1060, 1920, 3020]`` at p = 2."""
+    arr = np.array([[3e-4, -4e-4, 1e-4]], dtype=np.float32)
+    g = np.array([[1.0, 2.0, 3.0]], dtype=np.float32)
+    y, dx = _run(arr, g, p, 1e-3, -1, device)
+    np.testing.assert_allclose(y, arr / np.float32(1e-3), rtol=1e-6, atol=0)
+    np.testing.assert_allclose(dx, g / np.float32(1e-3), rtol=1e-6, atol=0)
+    np.testing.assert_allclose(_graph_mode(arr, g, p, 1e-3, device), dx, rtol=1e-5, atol=0)
+
+
+@pytest.mark.parametrize("p", [1.0, 2.0])
+def test_a_norm_exactly_eps_keeps_its_derivative(device: str, p: float) -> None:
+    """``max`` is the reference's ``clamp_min``: at the boundary the gradient passes."""
+    arr = np.array([[3.0, 4.0]] if p == 2.0 else [[1.0, 4.0]], dtype=np.float32)
+    eps = 5.0
+    g = np.array([[1.0, 2.0]], dtype=np.float32)
+    y, dx = _run(arr, g, p, eps, -1, device)
+    _, want = _truth(arr, g, p, eps, -1)
+    np.testing.assert_allclose(y, arr / eps, rtol=1e-6, atol=0)
+    np.testing.assert_allclose(dx, want, rtol=2e-6, atol=1e-7)
+    assert not np.allclose(dx, g / np.float32(eps), rtol=1e-3)
+    np.testing.assert_allclose(_graph_mode(arr, g, p, eps, device), dx, rtol=1e-5, atol=1e-7)
+
+
+@pytest.mark.parametrize("p", [1.5, 2.0, 3.0])
+def test_rows_on_both_sides_of_the_floor(device: str, p: float) -> None:
+    """Norms ~5e-6 and 5e-5 are under eps 1e-4, ~5e-4 and 5 over it: each row takes its own branch."""
+    arr = BASE[:1] * np.array([1e-6, 1e-5, 1e-4, 1.0], dtype=np.float32)[:, None]
+    g = np.tile(np.arange(5.0, dtype=np.float32), (4, 1))
+    _, dx = _run(arr, g, p, 1e-4, -1, device)
+    _close(dx, _truth(arr, g, p, 1e-4, -1)[1], -1)
+    _close(dx, _graph_mode(arr, g, p, 1e-4, device), -1)
