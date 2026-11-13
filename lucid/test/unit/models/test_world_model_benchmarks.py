@@ -324,6 +324,27 @@ class TestDreamerV3ReadsTheGoal:
         how long it takes to undo is the same lottery as the corner itself,
         so a bar on the return would be a bar on the seed.
 
+        The table is from before LCD-950 gave DreamerV3 the released
+        implementation's policy head (``bounded_normal``, outscale 0.01) and
+        a zero-initialised reward head. Re-measured with them on a MacBook
+        (M1 Pro), Metal as the default, seeds 0-2, against the same loop
+        before the change:
+
+        ======  ============================  ===========================
+        seed    decoy cost, before / after    best return, before / after
+        ======  ============================  ===========================
+        0       6.44 / 5.40                   16.83 / 16.51
+        1       7.30 / 4.13                   17.12 / 16.79
+        2       3.43 / 7.33                   16.42 / 16.21
+        ======  ============================  ===========================
+
+        The asserted cost keeps its margin over ``_READ`` (lowest 3.43
+        before, 4.13 after) and every run still beats walking to the origin,
+        by less (the lowest, 16.21, by 0.02). What changed is *when*: the
+        cost at step 500 was at most 0.28 on all three seeds after, against
+        3.88 on seed 0 before. The two changes were not separated, and
+        three seeds a side bound the average, not the lottery above.
+
         About 3.5 minutes on Metal and 8 on the CPU there.
         """
         lucid.manual_seed(0)
