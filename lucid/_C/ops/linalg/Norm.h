@@ -176,16 +176,20 @@ private:
 };
 
 // The entrywise p-norm $(\sum |a_i|^p)^{1/p}$ over ``axis`` for a finite
-// $p > 1$, on the GPU stream, accumulated relative to each slice's largest
-// magnitude (``backend/gpu/PNorm.h``) so a slice at 1e-20 or 1e25 does not
-// flush to 0 or overflow to inf the way ``sum(a * a)`` does.
+// $p > 1$, accumulated relative to each slice's largest magnitude (the GPU
+// kernel in ``backend/gpu/PNorm.h``, ``cpu::PNorm`` on the CPU) so a
+// slice at 1e-20 or 1e25 does not flush to 0 or overflow to inf the way
+// ``sum(a * a)`` does.
 //
-// ``axis`` empty reduces every axis, as in :func:`norm_op`.  A half input
-// reduces in float32 and answers in its own dtype.  The CPU stream refuses it:
-// its accumulation does not flush, and the Python reduction that owns the
-// choice (``_p_norm``) never sends it here.  A compile trace records it as the
-// ``p_norm`` node, which ``OpEmitters/reduce/Reduction.mm`` lowers to the same
-// scaled form.
+// ``axis`` empty reduces every axis, as in :func:`norm_op`.  Float32 and
+// float64 only: a half input is reduced in float32 by the Python reduction
+// (``_p_norm``) that owns the choice.  Its backward is
+// :class:`PNormBackward`, which only ever forms ratios $|a|/N$ in $[0, 1]$, so
+// a second or third derivative is as scale-free as the first on both streams.
+// A compile trace records it as the ``p_norm`` node, which
+// ``OpEmitters/reduce/Reduction.mm`` lowers to the same scaled form; the
+// Python reduction that owns the choice (``_p_norm``) keeps a CPU trace on the
+// plain graph, as Core ML has no emitter for the node.
 LUCID_API TensorImplPtr p_norm_op(const TensorImplPtr& a,
                                   double p,
                                   std::vector<int> axis,

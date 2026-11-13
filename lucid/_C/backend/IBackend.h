@@ -1110,8 +1110,9 @@ public:
 
     // Entrywise ``(sum |a|^p)^(1/p)`` over ``axes`` (distinct, in range; empty
     // means every axis) for a finite ``p > 1``, accumulated relative to each
-    // slice's largest magnitude so no power leaves the float range.  Only the
-    // GPU stream has the kernel; the default throws not_implemented.
+    // slice's largest magnitude so no power leaves the float range.  Both
+    // streams have the kernel; the default (a backend without one) throws
+    // not_implemented.
     virtual Storage p_norm_forward(const Storage& a,
                                    const Shape& shape,
                                    double p,
@@ -1125,7 +1126,7 @@ public:
         (void)keepdims;
         (void)dt;
         ErrorBuilder("IBackend::p_norm_forward")
-            .not_implemented("the scaled p-norm is only implemented on the GPU backend");
+            .not_implemented("this backend has no scaled p-norm kernel");
         return {};
     }
 

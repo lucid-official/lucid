@@ -239,10 +239,11 @@ def test_the_engine_op_refuses_orders_that_are_not_finite_and_above_one(
         _C_engine.linalg.p_norm(x._impl, p, [0], False)
 
 
-def test_the_engine_op_is_a_gpu_stream_kernel(device_cpu_only: str) -> None:
-    x = _t(np.ones(4), device_cpu_only)
-    with pytest.raises(NotImplementedError):
-        _C_engine.linalg.p_norm(x._impl, 2.0, [0], False)
+def test_the_engine_op_serves_the_cpu_stream_too(device_cpu_only: str) -> None:
+    """LCD-1003: ``cpu::PNorm`` is the CPU stream's kernel (``test_p_norm_cpu_kernel.py``)."""
+    x = _t(np.full(4, 3.0), device_cpu_only)
+    got = lucid.Tensor.__new_from_impl__(_C_engine.linalg.p_norm(x._impl, 2.0, [0], False))
+    assert got.item() == pytest.approx(6.0, rel=1e-6, abs=0)
 
 
 def test_an_empty_reduction_is_zero(device_gpu_only: str) -> None:

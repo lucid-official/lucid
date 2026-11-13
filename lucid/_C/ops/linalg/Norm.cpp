@@ -64,20 +64,21 @@ const OpSchema NormBackward::schema_v1{"norm", 1, AmpPolicy::KeepInput, true, ""
 
 namespace {
 
-// ``t`` — shaped like a reduction over ``axis`` of a ``full``-shaped tensor —
-// broadcast back to ``full``, re-inserting the reduced axes first.  Two cases:
+// ``t`` — shaped like a reduction over ``axis`` of a ``full``-shaped tensor — with
+// every reduced axis present as size 1, so a binary op broadcasts it against the
+// full shape.  Two cases:
 //   - keepdims or a full reduction (axis empty): the dimensions are all
-//     present (possibly all-ones), so a broadcast is enough.
+//     present (possibly all-ones), so ``t`` is already that.
 //   - otherwise the missing axes are re-inserted.  Indices are normalised
 //     (negative -> positive) and sorted ascending so that each unsqueeze_op
 //     call inserts at the right logical position even as previously inserted
 //     axes shift subsequent dimension indices.
-TensorImplPtr expand_reduced(const TensorImplPtr& t,
-                             const Shape& full,
-                             const std::vector<int>& axis,
-                             bool keepdims) {
+TensorImplPtr keepdim_view(const TensorImplPtr& t,
+                           const Shape& full,
+                           const std::vector<int>& axis,
+                           bool keepdims) {
     if (keepdims || axis.empty())
-        return broadcast_to_op(t, full);
+        return t;
     const int ndim = static_cast<int>(full.size());
     std::vector<int> sorted_axes;
     for (int a : axis)
@@ -86,7 +87,15 @@ TensorImplPtr expand_reduced(const TensorImplPtr& t,
     auto result = t;
     for (int a : sorted_axes)
         result = unsqueeze_op(result, a);
-    return broadcast_to_op(result, full);
+    return result;
+}
+
+// ``t`` broadcast back to ``full``, re-inserting the reduced axes first.
+TensorImplPtr expand_reduced(const TensorImplPtr& t,
+                             const Shape& full,
+                             const std::vector<int>& axis,
+                             bool keepdims) {
+    return broadcast_to_op(keepdim_view(t, full, axis, keepdims), full);
 }
 
 // The eager gradient of a norm node: ``grad_from`` over detached views of the
@@ -249,16 +258,34 @@ const OpSchema PNormBackward::schema_v1{"p_norm", 1,   AmpPolicy::KeepInput, tru
 TensorImplPtr PNormBackward::grad_from(const TensorImplPtr& A,
                                        const TensorImplPtr& N,
                                        const TensorImplPtr& dN) const {
-    const Shape& full = input_shapes_[0];
-    auto N_exp = expand_reduced(N, full, axis_, keepdims_);
-    auto dN_exp = expand_reduced(dN, full, axis_, keepdims_);
-    auto ratio = div_op(abs_op(A), N_exp);
-    auto slope = p_ == 2.0 ? ratio : pow_scalar_op(ratio, p_ - 1.0);
-    auto grad = mul_op(mul_op(sign_op(A), slope), dN_exp);
     // A zero norm has the subgradient 0 (its ratio is 0 / 0); a NaN norm is not
-    // zero and keeps its NaN.
-    auto live = not_equal_op(N_exp, zeros_like_op(N_exp));
-    return where_op(live, grad, zeros_like_op(grad));
+    // zero and keeps its NaN.  Both are settled on the reduced shape: a zero
+    // slice divides by 1 and takes a zero cotangent, so its gradient is
+    // ``0 * 0`` with no full-size mask, and the derivative through the cotangent
+    // and the norm is 0 there, as the masked gradient's was.
+    auto zero = equal_op(N, zeros_like_op(N));
+    auto n_safe = masked_fill_op(N, zero, 1.0);
+    auto d_live = masked_fill_op(dN, zero, 0.0);
+    const Shape& full = input_shapes_[0];
+    // ``u = A / N``, in [-1, 1]: the slope never forms a power of the norm.
+    auto u = div_op(A, keepdim_view(n_safe, full, axis_, keepdims_));
+    // ``sign(u) |u|^(p-1)``, written ``u |u|^(p-2)`` where that is as good: one op
+    // fewer.  Below 3 the slope of ``|u|^(p-2)`` is infinite at a zero entry and
+    // meets the zero factor ``u`` in a derivative taken through the slope, so a
+    // recorded graph keeps ``|u|^(p-1)`` there (the infinity stays in that
+    // entry's own component); the value is the same.  Below 2 ``|u|^(p-2)`` is
+    // itself infinite at 0.
+    const bool recorded = GradMode::is_enabled();
+    TensorImplPtr slope;
+    if (p_ == 2.0)
+        slope = u;
+    else if (p_ == 3.0)
+        slope = mul_op(u, abs_op(u));
+    else if (p_ > 3.0 || (p_ > 2.0 && !recorded))
+        slope = mul_op(u, pow_scalar_op(abs_op(u), p_ - 2.0));
+    else
+        slope = mul_op(sign_op(u), pow_scalar_op(abs_op(u), p_ - 1.0));
+    return mul_op(slope, keepdim_view(d_live, full, axis_, keepdims_));
 }
 
 std::vector<Storage> PNormBackward::apply(Storage grad_out) {
@@ -289,9 +316,6 @@ TensorImplPtr p_norm_op(const TensorImplPtr& a_in, double p, std::vector<int> ax
     SchemaGuard sg{PNormBackward::schema_v1, a_in->dtype(), a_in->device()};
     const TensorImplPtr a = astype_op(a_in, sg.effective_dtype());
     require_float(a->dtype(), "p_norm");
-    if (a->device() != Device::GPU)
-        ErrorBuilder("p_norm").not_implemented(
-            "the scaled p-norm kernel runs on the GPU stream only");
     axis = normalize_axes(axis, static_cast<int>(a->shape().size()), "p_norm");
     const Shape out_shape = reduced_shape(a->shape(), axis, keepdims);
     OpScopeFull scope{"p_norm", a->device(), a->dtype(), out_shape};

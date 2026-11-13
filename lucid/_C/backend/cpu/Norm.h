@@ -22,11 +22,16 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include <vector>
 
 #include "../../api.h"
+#include "../../core/Shape.h"
+#include "Parallel.h"
+#include "Vforce.h"
 
 namespace lucid::backend::cpu {
 
@@ -356,6 +361,19 @@ struct LpPower {
     }
 };
 
+// The largest magnitude of the ``len`` entries ``x[a * stride]``, NaN when any entry is.
+template <typename T>
+double lp_slice_top(const T* x, std::size_t len, std::size_t stride) {
+    double top = 0.0;
+    bool nan_seen = false;
+    for (std::size_t a = 0; a < len; ++a) {
+        const double v = std::abs(static_cast<double>(x[a * stride]));
+        nan_seen = nan_seen || v != v;
+        top = v > top ? v : top;
+    }
+    return nan_seen ? std::numeric_limits<double>::quiet_NaN() : top;
+}
+
 // ``(sum |x_a|^p)^(1/p)`` of the ``len`` entries ``x[a * stride]``, ``power``
 // being ``x^p``.  The sum is the plain one in double when no power can leave the
 // double range: an order of at most 1 has no power larger than its base, and a
@@ -365,31 +383,24 @@ struct LpPower {
 // every power is in [0, 1]: a NaN anywhere is the answer, an infinity makes it
 // inf, an all-zero slice is 0.
 template <typename T>
-double lp_slice_norm(const T* x, int len, std::size_t stride, double ord, const LpPower& power) {
+double
+lp_slice_norm(const T* x, std::size_t len, std::size_t stride, double ord, const LpPower& power) {
     constexpr double kFloatSafeOrder = 6.0;
     if (!(ord > 1.0) || (sizeof(T) < sizeof(double) && ord <= kFloatSafeOrder)) {
         double acc = 0.0;
-        for (int a = 0; a < len; ++a)
+        for (std::size_t a = 0; a < len; ++a)
             acc += power(std::abs(static_cast<double>(x[a * stride])));
         return ord == 2.0 ? std::sqrt(acc) : std::pow(acc, 1.0 / ord);
     }
-    double top = 0.0;
-    bool nan_seen = false;
-    for (int a = 0; a < len; ++a) {
-        const double v = std::abs(static_cast<double>(x[a * stride]));
-        nan_seen = nan_seen || v != v;
-        top = v > top ? v : top;
-    }
-    if (nan_seen)
-        return std::numeric_limits<double>::quiet_NaN();
-    if (top == 0.0 || std::isinf(top))
+    const double top = lp_slice_top(x, len, stride);
+    if (top != top || top == 0.0 || std::isinf(top))
         return top;
     double acc = 0.0;
     // A multiplication is cheaper than a division; ``1 / top`` overflows only for
     // a subnormal double ``top``, which divides instead.
     const double inv = 1.0 / top;
     const bool by_inverse = std::isfinite(inv);
-    for (int a = 0; a < len; ++a) {
+    for (std::size_t a = 0; a < len; ++a) {
         const double v = std::abs(static_cast<double>(x[a * stride]));
         acc += power(by_inverse ? v * inv : v / top);
     }
@@ -459,6 +470,308 @@ void lp_normalize_backward_typed(
                 dx[idx] = static_cast<T>((static_cast<double>(g[idx]) - weight(u) * proj) * inv);
             }
         }
+}
+
+// ---------------------------------------------------------------------------
+// Entrywise p-norm over any set of axes (``CpuBackend::p_norm_forward``), p > 1.
+//
+// The same range-safe value as :func:`lp_slice_norm` — the sum in double when no float
+// power can leave it, relative to the largest magnitude otherwise — computed to be as
+// fast as the plain float graph it replaces:
+//   * the orders a norm is taken at most (3/2, 2, 3, 4) are straight multiplications;
+//   * a sum is four independent partial sums: one running sum is a chain of dependent
+//     additions, each entry waiting four cycles for the one before it;
+//   * any other order goes through vForce ``pow`` on blocks of ratios in [0, 1] (so a
+//     float power cannot overflow, and an underflowing one is negligible next to the 1
+//     the largest entry contributes), the sum still in double;
+//   * the slices of a large reduction are chunks of one parallel loop, each slice one
+//     chunk's, so the result is the same at any core count.
+// ---------------------------------------------------------------------------
+
+struct SquarePower {
+    double operator()(double x) const { return x * x; }
+};
+struct CubePower {
+    double operator()(double x) const { return x * x * x; }
+};
+struct QuarticPower {
+    double operator()(double x) const {
+        const double square = x * x;
+        return square * square;
+    }
+};
+struct ThreeHalvesPower {
+    double operator()(double x) const { return x * std::sqrt(x); }
+};
+
+// ``f`` called with the cheapest functor for ``power``.
+template <class F>
+double with_fixed_power(const LpPower& power, F&& f) {
+    switch (power.halves) {
+    case 3:
+        return f(ThreeHalvesPower{});
+    case 4:
+        return f(SquarePower{});
+    case 6:
+        return f(CubePower{});
+    case 8:
+        return f(QuarticPower{});
+    default:
+        return f(power);
+    }
+}
+
+// ``sum power(entry(x[a * stride]))`` over ``len`` entries in four partial sums.
+template <typename T, class Entry, class Power>
+double lp_power_sum(const T* x, std::size_t len, std::size_t stride, Entry entry, Power power) {
+    double s0 = 0.0, s1 = 0.0, s2 = 0.0, s3 = 0.0;
+    std::size_t a = 0;
+    for (; a + 4 <= len; a += 4) {
+        s0 += power(entry(x[a * stride]));
+        s1 += power(entry(x[(a + 1) * stride]));
+        s2 += power(entry(x[(a + 2) * stride]));
+        s3 += power(entry(x[(a + 3) * stride]));
+    }
+    for (; a < len; ++a)
+        s0 += power(entry(x[a * stride]));
+    return (s0 + s1) + (s2 + s3);
+}
+
+// ``sum (|x_a| / top)^p`` by vForce, for an order with no cheap functor.  The ratios and
+// their powers are in the entries' own precision (a ratio is in [0, 1], so a float power cannot
+// overflow, and one that underflows is negligible next to the 1 the largest entry
+// contributes), the sum in double.  A float ratio is formed in float when the reciprocal of
+// ``top`` is a normal float: one rounding more than the division, still within an ulp.
+template <typename T>
+double lp_ratio_power_sum(const T* x, std::size_t len, std::size_t stride, double top, double p) {
+    constexpr std::size_t kBlock = 512;
+    T ratio[kBlock];
+    T expo[kBlock];
+    T powered[kBlock];
+    const double inv = 1.0 / top;
+    const bool by_inverse = std::isfinite(inv);
+    const T narrow_inv = static_cast<T>(inv);
+    const bool narrow = std::isnormal(narrow_inv);
+    std::fill(expo, expo + std::min(kBlock, len), static_cast<T>(p));
+    double acc = 0.0;
+    for (std::size_t off = 0; off < len; off += kBlock) {
+        const std::size_t m = std::min(kBlock, len - off);
+        const T* block = x + off * stride;
+        if (narrow) {
+            for (std::size_t j = 0; j < m; ++j)
+                ratio[j] = std::abs(block[j * stride]) * narrow_inv;
+        } else {
+            for (std::size_t j = 0; j < m; ++j) {
+                const double v = std::abs(static_cast<double>(block[j * stride]));
+                ratio[j] = static_cast<T>(by_inverse ? v * inv : v / top);
+            }
+        }
+        if constexpr (sizeof(T) == sizeof(float))
+            vpow_f32(ratio, expo, powered, m);
+        else
+            vpow_f64(ratio, expo, powered, m);
+        double s0 = 0.0, s1 = 0.0, s2 = 0.0, s3 = 0.0;
+        std::size_t j = 0;
+        for (; j + 4 <= m; j += 4) {
+            s0 += powered[j];
+            s1 += powered[j + 1];
+            s2 += powered[j + 2];
+            s3 += powered[j + 3];
+        }
+        for (; j < m; ++j)
+            s0 += powered[j];
+        acc += (s0 + s1) + (s2 + s3);
+    }
+    return acc;
+}
+
+// One order's ``(sum |x_a|^p)^(1/p)`` for p > 1, the value of :func:`lp_slice_norm` (NaN,
+// infinity and all-zero slices included), summed over fixed blocks of ``kBlock`` entries
+// that are added in order: a block may run on any core, the total does not change.
+//
+// ``plain``: a float entry raised to p <= 6 stays inside double, so the sum is the plain one.
+// Otherwise it is relative to the slice's largest magnitude ``top``.
+template <typename T>
+class PNorm {
+public:
+    static constexpr std::size_t kBlock = std::size_t{1} << 14;
+
+    explicit PNorm(double p)
+        : p_(p), power_(p), plain_(sizeof(T) < sizeof(double) && p <= 6.0 && power_.halves >= 0) {}
+
+    bool plain() const { return plain_; }
+
+    // ``sum`` of one block's powers (relative to ``top`` unless the sum is plain).
+    double block_sum(const T* x, std::size_t len, std::size_t stride, double top) const {
+        const auto magnitude = [](T v) { return std::abs(static_cast<double>(v)); };
+        if (plain_)
+            return with_fixed_power(
+                power_, [&](auto pw) { return lp_power_sum(x, len, stride, magnitude, pw); });
+        if (power_.halves < 0)
+            return lp_ratio_power_sum(x, len, stride, top, p_);
+        const double inv = 1.0 / top;
+        if (std::isfinite(inv)) {
+            const auto ratio = [inv](T v) { return std::abs(static_cast<double>(v)) * inv; };
+            return with_fixed_power(
+                power_, [&](auto pw) { return lp_power_sum(x, len, stride, ratio, pw); });
+        }
+        const auto ratio = [top](T v) { return std::abs(static_cast<double>(v)) / top; };
+        return with_fixed_power(power_,
+                                [&](auto pw) { return lp_power_sum(x, len, stride, ratio, pw); });
+    }
+
+    // The norm from the blocks' total and the slice's ``top`` (unused when plain).
+    double finish(double total, double top) const {
+        const double root = p_ == 2.0 ? std::sqrt(total) : std::pow(total, 1.0 / p_);
+        return plain_ ? root : top * root;
+    }
+
+    // Whether ``top`` is the answer by itself: NaN, an infinity, or an all-zero slice.
+    static bool settled(double top) { return top != top || top == 0.0 || std::isinf(top); }
+
+    // The whole slice on this thread.
+    double serial(const T* x, std::size_t len, std::size_t stride) const {
+        double top = 1.0;
+        if (!plain_) {
+            top = lp_slice_top(x, len, stride);
+            if (settled(top))
+                return top;
+        }
+        double total = 0.0;
+        for (std::size_t at = 0; at < len; at += kBlock)
+            total += block_sum(x + at * stride, std::min(kBlock, len - at), stride, top);
+        return finish(total, top);
+    }
+
+    // The same value with the blocks spread over the cores, for a slice worth it.
+    double blocked(const T* x, std::size_t len, std::size_t stride) const {
+        const std::size_t blocks = (len + kBlock - 1) / kBlock;
+        const auto extent = [&](std::size_t b) { return std::min(kBlock, len - b * kBlock); };
+        std::vector<double> part(blocks);
+        double top = 1.0;
+        if (!plain_) {
+            parallel_for(blocks, 1, [&](std::size_t lo, std::size_t hi) {
+                for (std::size_t b = lo; b < hi; ++b)
+                    part[b] = lp_slice_top(x + b * kBlock * stride, extent(b), stride);
+            });
+            top = 0.0;
+            for (const double t : part) {
+                if (t != t)
+                    return t;
+                top = t > top ? t : top;
+            }
+            if (settled(top))
+                return top;
+        }
+        parallel_for(blocks, 1, [&](std::size_t lo, std::size_t hi) {
+            for (std::size_t b = lo; b < hi; ++b)
+                part[b] = block_sum(x + b * kBlock * stride, extent(b), stride, top);
+        });
+        double total = 0.0;
+        for (const double s : part)
+            total += s;
+        return finish(total, top);
+    }
+
+private:
+    double p_;
+    LpPower power_;
+    bool plain_;
+};
+
+// ``out[o * inner + n] = ||x[o, :, n]||_p`` for ``x`` of layout ``(outer, len, inner)``: the
+// norm over the middle axis, the layout a reduction over one run of axes has.  Many slices are
+// chunks of one parallel loop, a few long ones are split into blocks; either way each slice's
+// value is the same.
+template <typename T>
+void p_norm_typed(
+    const T* x, T* out, std::size_t outer, std::size_t len, std::size_t inner, double p) {
+    const PNorm<T> norm(p);
+    const std::size_t slices = outer * inner;
+    const auto at = [&](std::size_t slice) {
+        const std::size_t o = slice / inner;
+        return x + o * len * inner + (slice - o * inner);
+    };
+    if (len > 2 * PNorm<T>::kBlock && slices < 8 * parallel_workers()) {
+        for (std::size_t slice = 0; slice < slices; ++slice)
+            out[slice] = static_cast<T>(norm.blocked(at(slice), len, inner));
+        return;
+    }
+    parallel_for(slices, std::max<std::size_t>(1, PNorm<T>::kBlock / std::max<std::size_t>(len, 1)),
+                 [&](std::size_t lo, std::size_t hi) {
+                     for (std::size_t slice = lo; slice < hi; ++slice)
+                         out[slice] = static_cast<T>(norm.serial(at(slice), len, inner));
+                 });
+}
+
+// ``x`` of ``shape`` rearranged so the ``reduced`` axes are the trailing ones, row-major in the
+// order they appear.  The reduction then runs over contiguous slices.
+template <typename T>
+std::vector<T>
+p_norm_gather_reduced_last(const T* x, const Shape& shape, const std::vector<bool>& reduced) {
+    const std::size_t rank = shape.size();
+    const Stride stride = contiguous_stride(shape, 1);
+    std::vector<std::size_t> order;
+    for (std::size_t d = 0; d < rank; ++d)
+        if (!reduced[d])
+            order.push_back(d);
+    for (std::size_t d = 0; d < rank; ++d)
+        if (reduced[d])
+            order.push_back(d);
+    std::vector<std::int64_t> extent(rank), step(rank), coord(rank, 0);
+    for (std::size_t i = 0; i < rank; ++i) {
+        extent[i] = shape[order[i]];
+        step[i] = stride[order[i]];
+    }
+    std::vector<T> out(shape_numel(shape));
+    std::int64_t at = 0;
+    for (T& slot : out) {
+        slot = x[at];
+        for (std::ptrdiff_t i = static_cast<std::ptrdiff_t>(rank) - 1; i >= 0; --i) {
+            const auto k = static_cast<std::size_t>(i);
+            at += step[k];
+            if (++coord[k] < extent[k])
+                break;
+            at -= step[k] * extent[k];
+            coord[k] = 0;
+        }
+    }
+    return out;
+}
+
+// ``p_norm_typed`` over ``reduced`` axes of any layout: one contiguous run of axes is
+// ``(outer, len, inner)`` as it stands, anything else is gathered to put them last first.
+template <typename T>
+void p_norm_over_axes(
+    const T* x, T* out, const Shape& shape, const std::vector<bool>& reduced, double p) {
+    const std::size_t rank = shape.size();
+    std::size_t first = rank, last = 0, count = 0;
+    for (std::size_t d = 0; d < rank; ++d)
+        if (reduced[d]) {
+            first = std::min(first, d);
+            last = d;
+            ++count;
+        }
+    if (count == 0) {
+        p_norm_typed(x, out, shape_numel(shape), 1, 1, p);
+        return;
+    }
+    auto span = [&](std::size_t lo, std::size_t hi) {
+        std::size_t n = 1;
+        for (std::size_t d = lo; d < hi; ++d)
+            n *= static_cast<std::size_t>(shape[d]);
+        return n;
+    };
+    if (last - first + 1 == count) {
+        p_norm_typed(x, out, span(0, first), span(first, last + 1), span(last + 1, rank), p);
+        return;
+    }
+    const std::vector<T> moved = p_norm_gather_reduced_last(x, shape, reduced);
+    std::size_t len = 1;
+    for (std::size_t d = 0; d < rank; ++d)
+        if (reduced[d])
+            len *= static_cast<std::size_t>(shape[d]);
+    p_norm_typed(moved.data(), out, shape_numel(shape) / std::max<std::size_t>(len, 1), len, 1, p);
 }
 
 }  // namespace lucid::backend::cpu

@@ -271,6 +271,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - make three ceilings readable by the recorder (LCD-947)
 
+- CPU p-norm kernel and a scale-free PNormBackward (LCD-1003)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

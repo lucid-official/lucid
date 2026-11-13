@@ -1335,6 +1335,13 @@ public:
                                   int axis,
                                   Dtype dt) override;
 
+    Storage p_norm_forward(const Storage& a,
+                           const Shape& shape,
+                           double p,
+                           const std::vector<int>& axes,
+                           bool keepdims,
+                           Dtype dt) override;
+
     std::vector<Storage> global_response_norm_forward(const Storage& x,
                                                       const Storage& gamma,
                                                       const Storage& beta,

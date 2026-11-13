@@ -540,6 +540,36 @@ std::vector<Storage> CpuBackend::lp_normalize_forward(
     return {Storage{std::move(y_cpu)}, Storage{std::move(norm_cpu)}};
 }
 
+Storage CpuBackend::p_norm_forward(const Storage& a,
+                                   const Shape& shape,
+                                   double p,
+                                   const std::vector<int>& axes,
+                                   bool keepdims,
+                                   Dtype dt) {
+    const auto& as = std::get<CpuStorage>(a);
+    std::vector<bool> reduced(shape.size(), axes.empty());
+    for (int axis : axes)
+        reduced[static_cast<std::size_t>(axis < 0 ? axis + static_cast<int>(shape.size()) : axis)] =
+            true;
+    std::size_t kept = 1;
+    for (std::size_t d = 0; d < shape.size(); ++d)
+        if (!reduced[d])
+            kept *= static_cast<std::size_t>(shape[d]);
+    auto out = alloc_cpu(kept, dt);
+    auto run = [&](auto tag) {
+        using T = decltype(tag);
+        cpu::p_norm_over_axes(reinterpret_cast<const T*>(as.ptr.get()),
+                              reinterpret_cast<T*>(out.ptr.get()), shape, reduced, p);
+    };
+    if (dt == Dtype::F32)
+        run(float{});
+    else if (dt == Dtype::F64)
+        run(double{});
+    else
+        ErrorBuilder("cpu_backend::p_norm_forward").not_implemented("dtype not supported");
+    return Storage{std::move(out)};
+}
+
 Storage CpuBackend::lp_normalize_backward(const Storage& x,
                                           const Storage& saved_norm,
                                           const Storage& grad_out,
