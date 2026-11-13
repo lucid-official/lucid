@@ -59,10 +59,11 @@ a GPU-bound training step pays a few percent, and a tiny latency-bound
 forward that would otherwise pipeline can take up to twice as long.
 ``LUCID_STRICT_INDEX`` unset or ``0`` costs one environment lookup.
 
-A compiled program on Metal checks only the call it traced (the one that
-runs eagerly) and any call that falls back to eager, such as one that
-needs gradients: a replay runs the graph, where the index is isolated and
-not read back (see :func:`_host_read`).
+With strict mode on, a compiled program that holds an index op is not
+compiled: its calls run eagerly, with a one-time notice, so every call is
+checked (``lucid.compile._core.index_strict``).  A replay would run the
+graph, where the index is isolated and not read back (see
+:func:`_host_read`).
 
 Two consumers read on Metal anyway, each for its own reason:
 
