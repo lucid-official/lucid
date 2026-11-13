@@ -368,18 +368,19 @@ def test_a_symbolic_batch_survives_the_wrapped_ops() -> None:
 
 
 class _Scaled(nn.Module):
-    def __init__(self, shape: tuple[int, ...]) -> None:
+    def __init__(self, shape: tuple[int, ...], dims: tuple[int, ...]) -> None:
         super().__init__()
         self.w = nn.Parameter(_filled(shape, 0.5).to(COMPILE_DEVICE))
+        self.dims = dims
 
     def forward(self, x: lucid.Tensor) -> lucid.Tensor:
         # A rank-5 *output* is copied out by a slow kernel whatever ran before it, so the
         # product is consumed inside the graph.
-        return (x * self.w).sum(dim=-1)
+        return (x * self.w).sum(dim=self.dims)
 
 
-def _forward_call(shape: tuple[int, ...]) -> Callable[[], float]:
-    m = to_metal(_Scaled(shape)).eval()
+def _forward_call(shape: tuple[int, ...], dims: tuple[int, ...]) -> Callable[[], float]:
+    m = to_metal(_Scaled(shape, dims)).eval()
     x = _filled(shape).to(COMPILE_DEVICE)
     cm = lucid.compile(m)
     return lambda: float(cm(x)[0].sum().item())
@@ -388,18 +389,21 @@ def _forward_call(shape: tuple[int, ...]) -> Callable[[], float]:
 @needs_metal
 @pytest.mark.usefixtures("inference")
 def test_a_rank_5_multiply_is_not_slower_than_its_rank_4_twin() -> None:
-    """Coarse on purpose: the unfixed graph ran ~14x the twin, the fixed one ~1x on an
-    M1 Pro.  The hosted runner's virtual GPU measured 4.4x on 2b9dfa83b (LCD-935), so
-    the bound is 5x: still far under the unfixed graph."""
+    """Both sides reduce the same 32 elements per output into the same (6144, 16, 2)
+    result, so only the rank differs.  The old twin reduced a size-32 axis against the
+    rank-5 graph's size-2 axis; that reduction difference, not the rank, was 2.4-2.7x of
+    the ratio the hosted runner reported (LCD-935 runner probe, rank5-probe.yml).  With
+    matched reductions the fixed graph measures 1.3-1.4x on the M1 Pro and the virtual
+    M1 alike; the unfixed graph is about 15-30x."""
     assert_ratio_within(
         lambda: {
-            "rank-5": _forward_call((6144, 16, 2, 16, 2)),
-            "rank-4": _forward_call((6144, 16, 2, 32)),
+            "rank-5": _forward_call((6144, 16, 2, 16, 2), (-2, -1)),
+            "rank-4": _forward_call((6144, 16, 2, 32), (-1,)),
         },
         "rank-5",
         "rank-4",
-        bound=5.0,
-        slack_ms=2.0,
+        bound=2.0,
+        slack_ms=1.0,
     )
 
 
