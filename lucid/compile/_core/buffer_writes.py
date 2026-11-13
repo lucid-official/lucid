@@ -401,8 +401,28 @@ def _put_back(tracer: Tracer, held: Sequence[_HeldWrite]) -> None:
         impl.copy_from(before)
     _HELD.pending = [(impl, after, int(impl.version)) for impl, _before, after in held]
     tracer.restore_outside_writes()
-    if isinstance(held, HeldWrites) and held.rebound is not None:
-        held.rebound.restore()
+
+
+def restore_slots() -> None:
+    """Put back what the trace-time call changed in Python, when nothing compiled.
+
+    :func:`_put_back` returns the tensors the call wrote in place to their values
+    from before the trace, because whatever runs next (an executable, or an eager
+    call) applies the write itself.  An executable does not run the call's
+    Python, so what the call did there — a stamp it set, a counter it moved, a
+    cache it filled, a slot it rebound — stands, and has to: the call ran once.
+    An eager call does run it, and finds that work done: the stamp says the
+    cache was rebuilt, and the buffer, put back, is not (LCD-990).
+
+    So an attempt that ended with nothing to run puts every slot back too
+    (:meth:`~lucid.compile._core.trace_context.CompileAttempt.concluded`), and
+    the eager call that follows is the call as eager runs it.  A trace that
+    stood as the call keeps them: it is the call.  Call it inside the attempt,
+    which owns the watch (:func:`watch_slots`).
+    """
+    watch = _HELD.watch
+    if watch is not None:
+        watch.restore()
 
 
 @contextmanager

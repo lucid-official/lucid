@@ -52,6 +52,7 @@ from lucid.nn.utils._reparam import _ReparamHook
 if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
     from lucid._tensor.tensor import Tensor
+    from lucid.compile._core.rebound_slots import SlotWatch
     from lucid.nn.module import Module
 
 __all__ = ["TensorSig", "CacheKey", "signature_of"]
@@ -1247,11 +1248,21 @@ class ParamFingerprint(_ModuleWrapper):
             ``(holder, name, TensorImpl id)`` for each such slot.
         """
         from lucid.compile._core.buffer_writes import watch_slots
+
+        watch_slots(self.slot_watch())
+        return frozenset(_outside_tensors(self.model))
+
+    def slot_watch(self) -> SlotWatch:
+        """A watch on every slot of the tree as it is now, to put them back with
+        :meth:`~lucid.compile._core.rebound_slots.SlotWatch.restore`.
+
+        An attempt takes one (:meth:`outside_slots`); an entry whose call is several
+        attempts takes its own around them, to go back past all of them.
+        """
         from lucid.compile._core.rebound_slots import SlotWatch
 
         model = self.model
-        watch_slots(SlotWatch(_iter_modules(_root_modules(model)), _wrapped_callable(model)))
-        return frozenset(_outside_tensors(model))
+        return SlotWatch(_iter_modules(_root_modules(model)), _wrapped_callable(model))
 
     def settle(
         self, fed: Iterable[_C_engine.TensorImpl] = (), before: frozenset[_Held] = frozenset()

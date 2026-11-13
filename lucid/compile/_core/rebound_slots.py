@@ -26,12 +26,17 @@ writes are carried (:mod:`~lucid.compile._core.buffer_writes`).
 :class:`SlotWatch` is taken before a trace and asked after it.  The one place that
 asks is :func:`~lucid.compile._core.buffer_writes.held_writes`, which every entry
 that compiles a call already calls: the call stands as the call, as one that wrote
-a tensor it made and keeps does, and its signature runs eagerly.  Where it cannot
-stand, :meth:`Rebinding.restore` puts the slots back for the eager call that
-follows.
+a tensor it made and keeps does, and its signature runs eagerly.
+
+The same watch is also how a refused trace is undone.  The trace-time call ran the
+forward's Python, and an eager call that follows it runs that Python again: if the
+first left a stamp, a counter, a cache or a rebound tensor behind, the second
+finds the work done and skips it (LCD-990).  :meth:`SlotWatch.restore` puts every
+slot back as it was before the trace, scalars and containers as much as tensors, so
+the eager call is the call.
 """
 
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import ClassVar, final, override
 
@@ -67,6 +72,15 @@ class _Root:
     def label(self, name: str) -> str:
         raise NotImplementedError
 
+    def buffers(self) -> dict[str, object]:
+        """The tensors the root keeps in a registry, not as attributes: what
+        :meth:`SlotWatch.restore` puts back, and no verdict is read from."""
+        return {}
+
+    def rebind_buffer(self, name: str, value: object) -> None:
+        """Hold ``value`` in registered buffer ``name``."""
+        raise NotImplementedError
+
 
 class _Attributes(_Root):
     """A module's plain attributes, but not the registries and hook sets it keeps."""
@@ -88,6 +102,14 @@ class _Attributes(_Root):
     @override
     def label(self, name: str) -> str:
         return f"attribute {name!r} of {type(self._module).__name__}"
+
+    @override
+    def buffers(self) -> dict[str, object]:
+        return dict(self._module._buffers)
+
+    @override
+    def rebind_buffer(self, name: str, value: object) -> None:
+        self._module._buffers[name] = value
 
 
 class _Callable(_Root):
@@ -123,23 +145,15 @@ class _Callable(_Root):
 
 @dataclass(frozen=True, slots=True)
 class Rebinding:
-    """What a finished trace found rebound, and how to put it back.
+    """What a finished trace found rebound.
 
     Attributes
     ----------
     why : str
         The verdict, for the notice and the trace's unsupported reason.
-    undo : tuple of callable
-        Each puts one slot or container back as it was before the trace.
     """
 
     why: str
-    undo: tuple[Callable[[], None], ...]
-
-    def restore(self) -> None:
-        """Put every slot the call rebound back, for the eager call that follows."""
-        for put_back in self.undo:
-            put_back()
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,10 +162,12 @@ class _State:
 
     #: What each root holds, by name, in the roots' order.
     names: tuple[dict[str, object], ...]
+    #: What each root keeps in its buffer registry.
+    buffers: tuple[dict[str, object], ...]
     #: The slots by path, containers opened.
     leaves: dict[_Path, object]
-    #: Each container opened, with a copy of what it held.
-    containers: tuple[tuple[object, object], ...]
+    #: What puts each container opened back as it was.
+    containers: tuple[Callable[[], None], ...]
 
 
 @final
@@ -168,6 +184,7 @@ class SlotWatch:
     Each :meth:`rebound` compares the slots with how they were at the last one
     (or at construction): a segmented step traces a segment's forward and then its
     backward, which runs the forward again, and each is asked for what it rebound.
+    :meth:`restore` goes back to construction, whatever was asked since.
 
     Parameters
     ----------
@@ -184,32 +201,33 @@ class SlotWatch:
         self._roots: list[_Root] = [_Attributes(m) for m in modules]
         if fn is not None:
             self._roots.append(_Callable(fn))
-        self._base = self._take()
+        self._start = self._base = self._take()
 
     def _take(self) -> _State:
         names = tuple(root.names() for root in self._roots)
         leaves: dict[_Path, object] = {}
-        containers: list[tuple[object, object]] = []
+        containers: list[Callable[[], None]] = []
         for index, held in enumerate(names):
             for name, value in held.items():
                 self._open((index, name, ()), value, leaves, containers)
-        return _State(names, leaves, tuple(containers))
+        buffers = tuple(root.buffers() for root in self._roots)
+        return _State(names, buffers, leaves, tuple(containers))
 
     def _open(
         self,
         path: _Path,
         value: object,
         leaves: dict[_Path, object],
-        containers: list[tuple[object, object]],
+        containers: list[Callable[[], None]],
     ) -> None:
         index, name, keys = path
         opened = _opened(value, self.MAX_ITEMS) if len(keys) < self.MAX_DEPTH else None
         if opened is None:
             leaves[path] = value
             return
-        items, copy = opened
-        if copy is not None:
-            containers.append((value, copy))
+        items, refill = opened
+        if refill is not None:
+            containers.append(refill)
         for key, item in items:
             self._open((index, name, (*keys, key)), item, leaves, containers)
 
@@ -224,8 +242,7 @@ class SlotWatch:
         Returns
         -------
         Rebinding or None
-            The verdict and the means to put the slots back, ``None`` when no
-            slot is rebound that way.
+            The verdict, ``None`` when no slot is rebound that way.
         """
         base, now = self._base, self._take()
         self._base = now
@@ -248,32 +265,51 @@ class SlotWatch:
         listed = "; ".join(sorted(why)[:3])
         return Rebinding(
             f"{REBOUND_MARK} {listed}: a compiled call runs no Python, so it would not rebind "
-            "the slot and would be fed the tensor the trace saw there",
-            tuple(self._undo(base, now)),
+            "the slot and would be fed the tensor the trace saw there"
         )
+
+    def restore(self) -> None:
+        """Put every slot back as it was when the watch was taken.
+
+        For a refused trace: the eager call that follows runs the forward's Python
+        again, and must find what the first run left (a stamp, a counter, a cache,
+        a rebound tensor) as it was before it, or it skips the work the first run
+        already did and reads what that work was to replace.  A slot the call
+        added is removed, and a container held in one is refilled in place.  A
+        registered buffer the call rebound (a cache grown by concatenation) is put
+        back, one it wrote in place is not a slot: the tracer puts that back.
+        """
+        start, now = self._start, self._take()
+        for root, before, after in zip(self._roots, start.names, now.names, strict=True):
+            for name in {*before, *after}:
+                if before.get(name, _ABSENT) is not after.get(name, _ABSENT):
+                    root.put(name, before.get(name, _ABSENT))
+        for root, before, after in zip(self._roots, start.buffers, now.buffers, strict=True):
+            for name, value in before.items():
+                if value is not after.get(name, _ABSENT):
+                    root.rebind_buffer(name, value)
+        for refill in start.containers:
+            refill()
 
     def _describe(self, path: _Path) -> str:
         index, name, keys = path
         return self._roots[index].label(name) + "".join(f" item {key!r}" for key in keys)
 
-    def _undo(self, base: _State, now: _State) -> Iterator[Callable[[], None]]:
-        for root, before, after in zip(self._roots, base.names, now.names, strict=True):
-            for name in {*before, *after}:
-                if before.get(name, _ABSENT) is not after.get(name, _ABSENT):
-                    yield _put(root, name, before.get(name, _ABSENT))
-        for container, copy in base.containers:
-            yield _refill(container, copy)
 
-
-def _opened(value: object, limit: int) -> tuple[list[tuple[object, object]], object | None] | None:
-    """``value``'s ``(key, item)`` pairs and a copy to restore it from (none for a
-    tuple), when it is exactly a ``dict``, ``list`` or ``tuple`` of at most ``limit`` items."""
+def _opened(
+    value: object, limit: int
+) -> tuple[list[tuple[object, object]], Callable[[], None] | None] | None:
+    """``value``'s ``(key, item)`` pairs and what puts it back as it is (none for a
+    tuple), when it is exactly a ``dict``, ``list``, ``tuple`` or ``set`` of at most
+    ``limit`` items.  A set has no positions: its items are not slots, only its copy."""
     if type(value) is dict and len(value) <= limit:
-        return list(value.items()), value.copy()
+        return list(value.items()), _refiller(_refill_dict, value, value.copy())
     if type(value) is list and len(value) <= limit:
-        return list(enumerate(value)), value.copy()
+        return list(enumerate(value)), _refiller(_refill_list, value, value.copy())
     if type(value) is tuple and len(value) <= limit:
         return list(enumerate(value)), None
+    if type(value) is set and len(value) <= limit:
+        return [], _refiller(_refill_set, value, value.copy())
     return None
 
 
@@ -281,16 +317,19 @@ def _same_tensor(a: object, b: object) -> bool:
     return isinstance(a, Tensor) and isinstance(b, Tensor) and a._impl is b._impl
 
 
-def _put(root: _Root, name: str, value: object) -> Callable[[], None]:
-    return lambda: root.put(name, value)
+def _refiller[C](refill: Callable[[C, C], None], target: C, copy: C) -> Callable[[], None]:
+    return lambda: refill(target, copy)
 
 
-def _refill(container: object, copy: object) -> Callable[[], None]:
-    def refill() -> None:
-        if isinstance(container, dict) and isinstance(copy, dict):
-            container.clear()
-            container.update(copy)
-        elif isinstance(container, list) and isinstance(copy, list):
-            container[:] = copy
+def _refill_dict(target: dict[object, object], copy: dict[object, object]) -> None:
+    target.clear()
+    target.update(copy)
 
-    return refill
+
+def _refill_set(target: set[object], copy: set[object]) -> None:
+    target.clear()
+    target.update(copy)
+
+
+def _refill_list(target: list[object], copy: list[object]) -> None:
+    target[:] = copy

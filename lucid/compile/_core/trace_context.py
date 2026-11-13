@@ -91,7 +91,9 @@ def compile_attempt() -> Iterator[CompileAttempt]:
     stood as the call itself (``CompileAttempt.answered``): its draws were
     the call's.  What it put back of the tensors it made and Python holds goes
     to the eager call after it, and nowhere if it raises
-    (:func:`~lucid.compile._core.buffer_writes.eager_rerun`).
+    (:func:`~lucid.compile._core.buffer_writes.eager_rerun`).  An attempt that
+    made nothing to run also puts back what its trace-time call changed in
+    Python (:meth:`CompileAttempt.concluded`).
     """
     from lucid.compile._core.buffer_writes import begin_attempt, end_attempt
 
@@ -109,11 +111,41 @@ def compile_attempt() -> Iterator[CompileAttempt]:
 
 
 class CompileAttempt:
-    """What a :func:`compile_attempt` ended as: ``answered`` when the trace-time
-    call stands as the call (:class:`~lucid.compile._core.buffer_writes.TraceAnswer`)."""
+    """What a :func:`compile_attempt` ended as.
+
+    ``answered`` is set when the trace-time call stands as the call
+    (:class:`~lucid.compile._core.buffer_writes.TraceAnswer`).
+    """
 
     def __init__(self) -> None:
         self.answered = False
+
+    def concluded(self, built: object | None) -> None:
+        """Say what the attempt made, and undo its trace-time call if it made nothing.
+
+        The trace ran the forward's Python once.  Compiled, that run is the call's:
+        the executable replaces its tensor work and nothing runs the Python again.
+        Standing as the call, it is the call.  With nothing made (``None``: the
+        trace was refused, or did not lower) an eager call follows, which runs the
+        Python again — so what the first run left behind goes back to what it was
+        before it (:func:`~lucid.compile._core.buffer_writes.restore_slots`), and
+        the eager call is the call, not the second half of one (LCD-990).
+
+        Every entry point that runs the call eagerly after an attempt says so
+        here, before it records what the trace read: the slots are then as the
+        eager call will find them.
+
+        Parameters
+        ----------
+        built : object or None
+            What the attempt made: an entry to run, a
+            :class:`~lucid.compile._core.buffer_writes.TraceAnswer`, or ``None``.
+        """
+        from lucid.compile._core.buffer_writes import TraceAnswer, restore_slots
+
+        self.answered = isinstance(built, TraceAnswer)
+        if built is None:
+            restore_slots()
 
 
 def _scan_retained_values(tracer: Tracer) -> None:

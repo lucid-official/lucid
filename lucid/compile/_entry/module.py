@@ -980,7 +980,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         with compile_attempt() as attempt:
             before = self._param_fp.outside_slots()
             entry = self._compile_for(args, kwargs)
-            attempt.answered = isinstance(entry, TraceAnswer)
+            attempt.concluded(entry)
             self._param_fp.settle(entry.reads.fed if isinstance(entry, _CacheEntry) else (), before)
         resolved = self._symbolic_resolved
         if resolved is not None and resolved != symbolic:

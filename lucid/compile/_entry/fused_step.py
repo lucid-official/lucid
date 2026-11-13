@@ -333,6 +333,12 @@ class _TraceStands(Exception):
 _RERUN_ON = (RuntimeError, NotImplementedError)
 
 
+def _is_user_error(why: Exception) -> bool:
+    """Whether ``why`` is for the caller, not a plan the step declines and answers eagerly."""
+    msg = str(why)
+    return "LUCID_MANUAL_VJP_REQUIRE=1" in msg or "no optimizer parameter both requires grad" in msg
+
+
 def _fallback_category(why: Exception) -> str:
     """The kind of reason a fused plan was declined for, as announced once."""
     if isinstance(why, CustomBackwardInTrace):
@@ -675,14 +681,16 @@ class _FusedStep:
                     # Its draws were the call's: the streams stay where it left them.
                     attempt.answered = True
                     raise
+                except _RERUN_ON as why:
+                    # The call reruns eagerly, so what the trace-time call did goes back.
+                    if not _is_user_error(why):
+                        attempt.concluded(None)
+                    raise
             self._refresh_scaler_scalars()
             result = self._run(plan, args, flags)
         except (*_RERUN_ON, _TraceStands) as why:
             msg = str(why)
-            if (
-                "LUCID_MANUAL_VJP_REQUIRE=1" in msg
-                or "no optimizer parameter both requires grad" in msg
-            ):
+            if _is_user_error(why):
                 raise
             copt._initialized[:] = prev_init
             copt._pstate[:] = prev_pstate

@@ -567,7 +567,7 @@ def _compile_into(
         compiled = (
             None if model_has_cumulative_bn(owner) else _compile_segment(seg, x, owner, values)
         )
-        attempt.answered = isinstance(compiled, TraceAnswer)
+        attempt.concluded(compiled)
         fingerprint.settle(compiled.fed if isinstance(compiled, _SegCompiled) else (), before)
     if compiled is None:
         raise _SegmentCompileError(seg.index)
@@ -628,7 +628,8 @@ def _forward_segments(
     that replaces it applies it again — statistics and counters moved twice.
     A call compiles when its first segment has no executable for its input
     (every later input follows from that one and the module state, both in
-    the key), so that is when the buffers are kept, to be put back.
+    the key), so that is when the buffers and the module's slots are kept, to
+    be put back: the Python each segment's trace ran goes back with them.
 
     Returns the last segment's output, and whether a segment's forward trace
     stood as its call (:func:`_trace_segment_forward`).  That ends the
@@ -637,7 +638,10 @@ def _forward_segments(
     caller marks the call's key eager, as every entry point does after a
     trace stood.
     """
-    restore = None if key in seg_objs[0].cache else _keep_buffers(fingerprint.model)
+    compiling = key not in seg_objs[0].cache
+    restore = _keep_buffers(fingerprint.model) if compiling else None
+    # Past every segment's own attempt: what each ran in Python while traced goes back too.
+    slots = fingerprint.slot_watch() if compiling else None
     values = CallValues()
     try:
         for i, seg in enumerate(seg_objs):
@@ -657,6 +661,8 @@ def _forward_segments(
     except _SegmentCompileError:
         if restore is not None:
             restore()
+        if slots is not None:
+            slots.restore()
         raise
     return cur, False
 

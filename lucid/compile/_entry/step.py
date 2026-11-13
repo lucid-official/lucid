@@ -568,7 +568,7 @@ def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Call
             with compile_attempt() as attempt:
                 before = fingerprint.outside_slots()
                 built = _compile_step_entry(model, loss_fn, params, x_args, use_dynamic=use_dynamic)
-                attempt.answered = isinstance(built, TraceAnswer)
+                attempt.concluded(built)
                 fingerprint.settle(built.fed if isinstance(built, _StepEntry) else (), before)
             if key is not None:
                 key = fingerprint.rekey(key, x_args, {})

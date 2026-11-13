@@ -215,9 +215,10 @@ def _carry_writes(
     """What the executable must write back besides the cache buffers, or ``None``
     when the step has to run eagerly.
 
-    Puts every outside tensor the trace wrote back to its value from before it,
-    and the slots it rebound (LCD-903): the eager call that follows applies them
-    once, as a compiled run would.  Call with the trace's result held by the
+    Puts every outside tensor the trace wrote back to its value from before it:
+    the eager call that follows applies them once, as a compiled run would.  The
+    slots it rebound go back when the attempt ends without an entry
+    (``CompileAttempt.concluded``).  Call with the trace's result held by the
     tracer (``keep_answer``), not by Python: a result made and written in place
     would otherwise count as a tensor the call kept.
     """
@@ -540,11 +541,12 @@ def compiled_decode_step(
         call = (input_ids, cache_position)
         entry = cache.get(key) if key is not None else None
         if entry is None and not _needs_gradients(call, self_cache, cross_cache, None, adapter):
-            with compile_attempt():
+            with compile_attempt() as attempt:
                 before = fingerprint.outside_slots()
                 entry = _compile_decode_entry(
                     forward_fn, self_cache, adapter, input_ids, cache_position
                 )
+                attempt.concluded(entry)
             fingerprint.settle(() if entry is None else entry.reads.fed, before)
             if key is not None:
                 key = fingerprint.rekey(key, call, {})
