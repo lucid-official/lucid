@@ -13,7 +13,7 @@ from collections.abc import Callable
 
 import lucid
 from lucid._C import engine as _C_engine
-from lucid._ops._reduce import _p_norm
+from lucid._ops._reduce import _p_norm, _takes_scaled_kernel
 from lucid._tensor.tensor import Tensor
 
 _Impl = _C_engine.TensorImpl
@@ -61,6 +61,8 @@ def _scaled_p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
     if r.dtype in _HALF:
         out = _scaled_p_norm(_C_engine.astype(r, _C_engine.F32), p, axes, keepdim)
         return _C_engine.astype(out, r.dtype)
+    if _takes_scaled_kernel(r, p, axes):
+        return _p_norm(r, p, axes, keepdim)
     out = _p_norm(r, p, axes, keepdim)
     exponent = _RANGE_EXPONENT[r.dtype] / max(abs(p), 1.0)
     with lucid.no_grad():

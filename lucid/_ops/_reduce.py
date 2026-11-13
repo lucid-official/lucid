@@ -162,30 +162,47 @@ _ABS_EXTREMA = {math.inf: _C_engine.max, -math.inf: _C_engine.min}
 #: tensor takes the plain graph.
 _MAX_KERNEL_NUMEL = 2**31
 
+#: The float dtypes the CPU stream's kernel computes (Metal's is float32 only: it has no float64).
+_CPU_KERNEL_DTYPES = frozenset({_C_engine.F32, _C_engine.F64})
+
 
 def _takes_scaled_kernel(r: _Impl, p: float, axes: list[int]) -> bool:
-    """Whether the GPU stream's range-safe p-norm kernel computes this reduction.
+    """Whether the range-safe p-norm kernel computes this reduction.
 
-    It serves a float32 Metal reduction of a finite ``p > 1`` — the orders that
-    power the entries.  ``sum(r * r)`` flushes a float32 slice below ~1e-19 to
-    zero on Metal and overflows one above ~1.8e19, though the norm is an
-    ordinary number; the kernel keeps a running largest magnitude and divides
-    it out in the same pass that reads the data (``backend/gpu/PNorm.h``).
+    It serves a finite ``p > 1`` — the orders that power the entries — of a
+    float32 reduction on either stream and of a float64 one on the CPU.
+    ``sum(r * r)`` flushes a float32 slice below ~1e-19 to zero on Metal and
+    overflows one above ~1.8e19, though the norm is an ordinary number; the
+    kernel keeps each slice's largest magnitude and divides it out in the same
+    pass that reads the data (``backend/gpu/PNorm.h``, ``cpu::PNorm``).
+
+    On the CPU the plain graph kept the forward in range but not its
+    derivatives: the second derivative of ``(sum |x|^p)^(1/p)`` forms
+    ``s^(1/p - 2)`` for ``s = sum |x|^p``, which leaves float32 for a slice
+    near 1e-9 or 1e8 at ``p = 3`` (the window narrows as ``p`` grows).  The
+    kernel's backward (``PNormBackward``) only forms ratios ``|x| / N`` in
+    [0, 1], on both streams and at every derivative order.  ``p = 2`` stays on
+    the plain graph there: its root's derivatives are in ``N``, not in ``s``,
+    so they keep their range wherever the forward does, and ``mul`` + ``sum``
+    are vDSP passes the kernel's scalar loop does not beat on a large slice.
+
     ``p <= 1`` powers nothing that can leave the range, and the extrema of
-    ``p = ±inf`` power nothing at all.  A compile trace records the kernel as the
-    ``p_norm`` node, which the compiled graph lowers to the same scaled form
-    (``compile/OpEmitters/reduce/Reduction.mm``).  A phantom tensor has no kernel to
-    run and takes the plain graph, as does the CPU stream, whose accumulation
-    does not flush.
+    ``p = ±inf`` power nothing at all.  A compile trace on the GPU records the
+    kernel as the ``p_norm`` node, which the compiled graph lowers to the same
+    scaled form (``compile/OpEmitters/reduce/Reduction.mm``); a trace of a CPU
+    tensor takes the plain graph, as Core ML has no emitter for the node.  A
+    phantom tensor has no kernel to run and takes the plain graph too.
     """
+    if not p > 1.0 or math.isinf(p) or not axes:
+        return False
+    if r.device == _C_engine.Device.GPU:
+        return r.dtype == _C_engine.F32 and not r.is_phantom and 0 < r.numel() < _MAX_KERNEL_NUMEL
     return (
-        p > 1.0
-        and not math.isinf(p)
-        and r.dtype == _C_engine.F32
-        and r.device == _C_engine.Device.GPU
+        p != 2.0
+        and r.dtype in _CPU_KERNEL_DTYPES
         and not r.is_phantom
         and 0 < r.numel() < _MAX_KERNEL_NUMEL
-        and bool(axes)
+        and _C_engine.compile.current_tracer() is None
     )
 
 

@@ -273,6 +273,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - CPU p-norm kernel and a scale-free PNormBackward (LCD-1003)
 
+- serve the CPU p-norm from the scaled kernel (LCD-1003)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
