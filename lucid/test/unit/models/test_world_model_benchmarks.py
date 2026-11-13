@@ -345,6 +345,26 @@ class TestDreamerV3ReadsTheGoal:
         3.88 on seed 0 before. The two changes were not separated, and
         three seeds a side bound the average, not the lottery above.
 
+        LCD-993 then started every dense layer as the release does (fan-in
+        truncated normal, zero bias; ``DreamerV3Config.dense_init``). The same
+        loop on the same machine, seeds 0-2, with ``dense_init="default"``
+        (the start above) against the release's:
+
+        ======  ============================  ===========================
+        seed    decoy cost, before / after    best return, before / after
+        ======  ============================  ===========================
+        0       5.40 / 7.23                   16.51 / 15.72
+        1       4.13 / 5.71                   16.79 / 15.60
+        2       7.33 / 3.76                   16.21 / 15.85
+        ======  ============================  ===========================
+
+        The asserted cost keeps its margin over ``_READ`` (lowest 4.13 before,
+        3.76 after), and the cost at step 500 stays small (at most 1.82, against
+        0.28). The return does not: every run reads the goal and none beats
+        walking to the origin any more (16.18; the highest, 15.85). The return is
+        not asserted, for the reason above, and three seeds a side do not say
+        whether it is the start or the lottery.
+
         About 3.5 minutes on Metal and 8 on the CPU there.
         """
         lucid.manual_seed(0)
