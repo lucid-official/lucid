@@ -252,6 +252,13 @@ class DreamerV3Model(PretrainedModel):
         self.decoder = PixelDecoder(
             config.latent_size, config.out_channels, config.cnn_depth, config.act_fn
         )
+        # The reward predictor and both critics start predicting exactly
+        # zero (paper, Critic learning: "initialize the output weight matrix
+        # of the reward predictor and critic to zeros"; released configs.yaml
+        # rewhead.outscale and value.outscale 0.0).  A critic that opens by
+        # asserting large returns sends the actor chasing them, and the slow
+        # copy would then spend its whole warm-up defending that; a reward
+        # head that does the same hands the critic those returns to learn.
         self.reward_head = _TwoHotHead(
             config.latent_size,
             config.reward_hidden,
@@ -259,10 +266,8 @@ class DreamerV3Model(PretrainedModel):
             num_bins=config.num_bins,
             bin_range=config.bin_range,
             act_fn=config.act_fn,
+            zero_init=True,
         )
-        # Both critics start predicting exactly zero.  A critic that opens
-        # by asserting large returns sends the actor chasing them, and the
-        # slow copy would then spend its whole warm-up defending that.
         self.value_head = _TwoHotHead(
             config.latent_size,
             config.value_hidden,
@@ -301,6 +306,9 @@ class DreamerV3Model(PretrainedModel):
             config.actor_min_std,
             discrete=config.action_space == "discrete",
             unimix=config.unimix,
+            continuous_dist="bounded_normal",
+            max_std=config.actor_max_std,
+            outscale=config.actor_outscale,
         )
         self._sample = not config.mean_only
 
@@ -472,7 +480,11 @@ class DreamerV3Model(PretrainedModel):
         Returns
         -------
         Tensor
-            Actions inside ``(-1, 1)``, or one-hot when discrete.
+            One-hot when discrete.  Otherwise the mode lies inside
+            ``(-1, 1)`` and a *draw* is a Gaussian around it that is not
+            clipped, as the released policy's is not — the environment
+            boundary clips it (:class:`~lucid.utils.rollout.LatentPolicy`
+            does).
 
         Examples
         --------
@@ -487,7 +499,7 @@ class DreamerV3Model(PretrainedModel):
         >>> last = posteriors.map(lambda t: t[:, -1])
         >>> model.act(posteriors).shape, model.act(last).shape
         ((1, 3, 2), (1, 2))
-        >>> bool((model.act(last).abs() < 1).all())
+        >>> bool((model.act(last, sample=False).abs() < 1).all())  # the mode is squashed
         True
 
         A discrete action space picks one alternative instead, as a one-hot:

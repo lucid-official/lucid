@@ -50,8 +50,10 @@ class _TwoHotHead(nn.Module):
     zero_init : bool, default=False
         Start the output layer at zero, so the head predicts exactly
         ``symexp(0) = 0`` before it has learned anything.  The paper does
-        this for the critic: a value function that begins by asserting
-        large returns sends the actor chasing them.
+        this for the reward predictor and the critic: a value function
+        that begins by asserting large returns sends the actor chasing
+        them, and a reward head that does the same feeds the critic those
+        returns to fit.
 
     Notes
     -----
@@ -151,7 +153,7 @@ class _TwoHotHead(nn.Module):
 
         A zero-initialised head is uniform over a grid symmetric about zero,
         so it predicts ``symexp(0) = 0``, up to the rounding of the grid's
-        float32 sum — which is how the critic starts:
+        float32 sum — which is how the reward predictor and critic start:
 
         >>> critic = _TwoHotHead(8, 16, 2, num_bins=41, zero_init=True)
         >>> float(critic.predict(lucid.randn((2, 3, 8))).abs().max().item()) < 1e-6

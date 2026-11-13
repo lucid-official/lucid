@@ -611,11 +611,16 @@ class TestForwardAndShapes:
         assert output.behavior is not None
         assert output.behavior.imagined_discount is not None
 
-    def test_actions_are_bounded(self) -> None:
+    def test_the_mode_is_bounded_and_a_draw_is_not_clipped(self) -> None:
+        """The released policy squashes the mean only; the environment clips the draw."""
         lucid.manual_seed(0)
-        model = DreamerV3Model(_tiny_cfg()).eval()
+        model = DreamerV3Model(_tiny_cfg(actor_hidden=16)).eval()
         _, posteriors = model.observe(*_batch(t=3)[:2])
-        assert float(model.act(posteriors).abs().max().item()) <= 1.0
+        assert float(model.act(posteriors, sample=False).abs().max().item()) <= 1.0
+        # std is about 0.89 around a mean near 0: over 200 draws a sample outside
+        # (-1, 1) is all but certain, and a clipped policy could never produce one.
+        feature = lucid.zeros((200, model.actor.head.layers[0].in_features))
+        assert float(model.actor(feature).abs().max().item()) > 1.0
 
 
 class TestTheImaginationWeight:
@@ -736,7 +741,13 @@ class TestGradientRouting:
         observations, actions, rewards = _batch(t=4)
         output = model(observations, actions, rewards, lucid.ones((2, 4)))
         model.backward(output)
-        assert self._touched(model.world_parameters()) == len(model.world_parameters())
+        # The paper starts the reward head's output layer at zero, so the
+        # gradient that reaches its hidden layer is exactly zero until that
+        # output layer has moved: every other world parameter is touched.
+        reward_hidden = {id(p) for p in model.dreamer_v3.reward_head.trunk.layers.parameters()}
+        expected = [p for p in model.world_parameters() if id(p) not in reward_hidden]
+        assert self._touched(model.world_parameters()) == len(expected)
+        assert self._touched(list(model.dreamer_v3.reward_head.trunk.out.parameters())) == 2
         assert self._touched(model.actor_parameters()) == len(model.actor_parameters())
         assert self._touched(model.value_parameters()) > 0
 

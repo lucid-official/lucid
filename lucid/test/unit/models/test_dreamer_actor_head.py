@@ -26,6 +26,14 @@ import pytest
 
 import lucid
 import lucid.distributions as D
+import lucid.optim as optim
+from lucid.models import (
+    DreamerV2Config,
+    DreamerV2Model,
+    DreamerV3Config,
+    DreamerV3ForWorldModeling,
+    DreamerV3Model,
+)
 from lucid.models.generative._common._actor import Actor, ContinuousPolicy
 from lucid.models.generative._common._dists import Normal, OneHotCategorical, TruncatedNormal
 from lucid.test._default_device import default_device, metal_available
@@ -331,3 +339,161 @@ class TestOutscale:
     def test_nonsense_is_rejected_at_construction(self, overrides: dict[str, object]) -> None:
         with pytest.raises(ValueError):
             _actor(**overrides)
+
+
+_V3 = DreamerV3Config(
+    action_dim=2,
+    cnn_depth=4,
+    stoch_size=4,
+    discrete=5,
+    deter_size=16,
+    hidden_size=8,
+    actor_hidden=16,
+    value_hidden=16,
+    reward_hidden=16,
+    num_bins=7,
+    horizon=4,
+    blocks=4,
+    pcont=False,
+)
+_V2 = DreamerV2Config(
+    action_dim=2,
+    cnn_depth=4,
+    stoch_size=4,
+    discrete=5,
+    deter_size=16,
+    hidden_size=16,
+    actor_hidden=16,
+    value_hidden=16,
+    reward_hidden=16,
+    horizon=4,
+    pcont=False,
+)
+
+
+def _v3_cfg(**overrides: object) -> DreamerV3Config:
+    """``replace`` rebuilds through ``__post_init__``, so a bad override still raises."""
+    return replace(_V3, **overrides)
+
+
+def _v2_cfg(**overrides: object) -> DreamerV2Config:
+    return replace(_V2, **overrides)
+
+
+class TestDreamerV3UsesTheReleasedHead:
+    def test_the_config_carries_the_released_values(self) -> None:
+        cfg = DreamerV3Config()
+        assert (cfg.actor_min_std, cfg.actor_max_std, cfg.actor_outscale) == (0.1, 1.0, 0.01)
+
+    @pytest.mark.parametrize("overrides", [{"actor_max_std": 0.05}, {"actor_outscale": -1.0}])
+    def test_the_config_rejects_nonsense(self, overrides: dict[str, object]) -> None:
+        with pytest.raises(ValueError):
+            _v3_cfg(**overrides)
+
+    def test_a_discrete_policy_does_not_police_the_std_bounds(self) -> None:
+        """They are ignored there, so a config that sets them oddly is not an error."""
+        _v3_cfg(action_space="discrete", actor_min_std=2.0)
+
+    def test_the_actor_is_the_bounded_normal_it_was_configured_as(self, device: str) -> None:
+        model = DreamerV3Model(_v3_cfg(actor_max_std=0.8)).eval()
+        assert (model.actor.continuous_dist, model.actor.max_std) == ("bounded_normal", 0.8)
+        feature = lucid.randn((3, 2, _v3_cfg().latent_size))
+        policy = model.actor.distribution(feature)
+        assert type(policy) is Normal
+        scale = _values(policy.scale)
+        assert min(scale) >= 0.1 - 1e-6 and max(scale) <= 0.8 + 1e-6
+
+    def test_the_discrete_actor_is_still_a_one_hot(self, device: str) -> None:
+        model = DreamerV3Model(_v3_cfg(action_space="discrete")).eval()
+        feature = lucid.randn((3, 2, _v3_cfg().latent_size))
+        assert isinstance(model.actor.distribution(feature), OneHotCategorical)
+
+    def test_actor_outscale_reaches_the_output_layer(self, device: str) -> None:
+        lucid.manual_seed(5)
+        unit = DreamerV3Model(_v3_cfg(actor_outscale=1.0)).actor
+        lucid.manual_seed(5)
+        released = DreamerV3Model(_v3_cfg()).actor
+        assert _values(released.head.out.weight) == pytest.approx(
+            [0.01 * v for v in _values(unit.head.out.weight)], rel=1e-5, abs=1e-9
+        )
+        assert all(v == 0.0 for v in _values(released.head.out.bias))
+
+    def test_the_policy_starts_near_a_wide_zero_mean_gaussian(self, device: str) -> None:
+        model = DreamerV3Model(_v3_cfg()).eval()
+        policy = model.actor.distribution(lucid.randn((8, 3, _v3_cfg().latent_size)))
+        assert max(abs(v) for v in _values(policy.mean)) < 0.05
+        assert _values(policy.scale) == pytest.approx(
+            [0.8927] * len(_values(policy.scale)), abs=0.01
+        )
+
+    @pytest.mark.parametrize("head", ["reward_head", "value_head", "slow_value_head"])
+    def test_the_reward_predictor_and_both_critics_start_at_zero(
+        self, device: str, head: str
+    ) -> None:
+        """Paper, Critic learning: the output weight matrix of each starts at zeros."""
+        model = DreamerV3Model(_v3_cfg()).eval()
+        module = getattr(model, head)
+        assert all(v == 0.0 for v in _values(module.trunk.out.weight))
+        assert all(v == 0.0 for v in _values(module.trunk.out.bias))
+        feature = lucid.randn((4, 3, _v3_cfg().latent_size))
+        assert max(abs(v) for v in _values(module.predict(feature))) < 1e-6
+        # A uniform prediction over the bins costs log(bins) whatever the target.
+        cost = _values(module.cross_entropy(feature, lucid.tensor([[0.0, 1.0, -5.0]] * 4)))
+        assert cost == pytest.approx([math.log(7)] * 12, abs=1e-5)
+
+    def test_the_hidden_layers_are_not_zeroed_only_the_output(self, device: str) -> None:
+        model = DreamerV3Model(_v3_cfg()).eval()
+        assert any(v != 0.0 for v in _values(model.reward_head.trunk.layers[0].weight))
+
+    def test_a_model_so_initialised_trains_and_acts(self, device: str) -> None:
+        """Reachable end to end from the public config: a step, then inference."""
+        lucid.manual_seed(0)
+        model = DreamerV3ForWorldModeling(_v3_cfg())
+        optimisers = [
+            optim.Adam(model.world_parameters(), lr=1e-3),
+            optim.Adam(model.actor_parameters(), lr=1e-3),
+            optim.Adam(model.value_parameters(), lr=1e-3),
+        ]
+        batch = (lucid.randn((2, 4, 3, 64, 64)), lucid.randn((2, 4, 2)), lucid.randn((2, 4)))
+        output = model(*batch)
+        assert math.isfinite(float(output.loss.item()))
+        model.backward(output)
+        for opt in optimisers:
+            opt.step()
+        # The zero output layer is the only thing the reward loss can move first.
+        assert any(v != 0.0 for v in _values(model.dreamer_v3.reward_head.trunk.out.weight))
+        assert math.isfinite(float(model(*batch).loss.item()))
+
+        model.eval()
+        inner = model.dreamer_v3
+        _, posteriors = inner.observe(batch[0], batch[1])
+        last = posteriors.map(lambda t: t[:, -1])
+        assert tuple(inner.act(last).shape) == (2, 2)
+        _, actions = inner.imagine(last, horizon=3)
+        assert tuple(actions.shape) == (2, 3, 2)
+
+
+class TestDreamerV2KeepsItsOwnHead:
+    """The other consumer of ``Actor``: nothing about it moves."""
+
+    def test_it_is_still_a_truncated_normal_with_its_own_scale(self, device: str) -> None:
+        model = DreamerV2Model(_v2_cfg()).eval()
+        actor = model.actor
+        assert (actor.continuous_dist, actor.max_std) == ("truncated_normal", 1.0)
+        feature = lucid.randn((3, 2, _v2_cfg().latent_size))
+        policy = actor.distribution(feature)
+        assert type(policy) is TruncatedNormal
+        raw_std = _values(actor.head(feature)[..., 2:])
+        assert _values(policy.scale) == pytest.approx(
+            [2.0 * _sigmoid(x / 2.0) + 0.1 for x in raw_std], abs=1e-5
+        )
+
+    def test_its_output_layer_keeps_the_default_initialisation(self, device: str) -> None:
+        actor = DreamerV2Model(_v2_cfg()).actor
+        assert any(v != 0.0 for v in _values(actor.head.out.bias))
+
+    def test_its_samples_stay_inside_the_box(self, device: str) -> None:
+        lucid.manual_seed(0)
+        model = DreamerV2Model(_v2_cfg()).eval()
+        feature = lucid.randn((64, 2, _v2_cfg().latent_size)) * 3.0
+        assert max(abs(v) for v in _values(model.actor(feature))) < 1.0

@@ -347,6 +347,19 @@ DREAMER_V3: dict[str, tuple[Any, str]] = {
     "lambda_": (0.95, "paper: Table 4, Return lambda 0.95"),
     "actor_entropy": (3e-4, "paper: Table 4, Actor entropy regularizer 3e-4"),
     "actor_min_std": (0.1, "code: configs.yaml policy.minstd 0.1"),
+    "actor_max_std": (
+        1.0,
+        "code: configs.yaml policy.maxstd 1.0, the ceiling in embodied/jax/heads.py "
+        "bounded_normal, std = (maxstd - minstd) * sigmoid(raw + 2) + minstd.  The "
+        "paper gives no policy-head parameterisation",
+    ),
+    "actor_outscale": (
+        0.01,
+        "code: configs.yaml policy.outscale 0.01, which embodied/jax/nets.py Linear "
+        "applies to the kernel's initial draw (bias starts at zero).  The paper is "
+        "silent on the policy; for the reward predictor and critic it says zero, and "
+        "those are not configurable",
+    ),
     "return_ema_decay": (0.99, "paper: Table 4, Actor RetNorm decay 0.99"),
     "return_low": (5.0, "paper: Table 4, Actor RetNorm scale Per(R,95)-Per(R,5)"),
     "return_high": (95.0, "paper: Table 4, the same entry"),
