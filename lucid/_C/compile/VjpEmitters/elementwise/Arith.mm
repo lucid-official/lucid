@@ -121,9 +121,9 @@ public:
 // dB is the textbook -(grad * a) / b² with the square never formed, as eager's
 // ``DivBackward`` (LCD-998): b² leaves float32 for a |b| outside ~1e-19 .. 1e19, so the
 // textbook form returns 0 or inf there for a gradient that is an ordinary float whenever
-// grad and a are of b's scale.  Dividing by b twice keeps every intermediate at the scale
-// of the result, and ``a / b`` is 0 for an a that is 0, which ``grad * a / b²`` turns
-// into 0 / 0 once b² underflows.
+// grad and a are of b's scale.  Dividing by b twice never forms a square of b, so the
+// range is that of ``grad * (a / b)`` rather than of b², and ``a / b`` is 0 for an a that
+// is 0, which ``grad * a / b²`` turns into 0 / 0 once b² underflows.
 // ────────────────────────────────────────────────────────────────────
 class DivVjp final : public VjpEmitter {
 public:
