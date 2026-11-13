@@ -375,7 +375,7 @@ def _normalize_weight_grad(arr: np.ndarray) -> np.ndarray:
 
 @pytest.mark.parametrize("magnitude", [1e-25, 1e-20, 1e-3, 1.0, 1e10, 1e25, 1e30])
 def test_the_gradient_of_a_compiled_normalize_is_the_analytic_one(magnitude: float) -> None:
-    """Eager's backward leaves the float range from ~1e8 up (``pow(norm, 3)``), so the truth is closed form."""
+    """The truth is the closed form, against which eager and compiled are both right."""
     arr = BASE * np.float32(magnitude)
     got, _, _ = _step_pair(lambda: _Normalized(1e-30), arr)
     want = _normalize_weight_grad(arr)
@@ -383,8 +383,9 @@ def test_the_gradient_of_a_compiled_normalize_is_the_analytic_one(magnitude: flo
     np.testing.assert_allclose(got.numpy(), want, rtol=2e-4, atol=1e-5 * np.abs(want).max())
 
 
-@pytest.mark.parametrize("magnitude", [1e-3, 1.0, 1e5])
+@pytest.mark.parametrize("magnitude", [1e-25, 1e-20, 1e-3, 1.0, 1e5, 1e10, 1e25, 1e30])
 def test_the_gradient_of_a_compiled_normalize_equals_eager(magnitude: float) -> None:
+    """LCD-994: eager's backward is range-safe too, so the two agree where it was NaN."""
     got, want, _ = _step_pair(lambda: _Normalized(1e-30), BASE * np.float32(magnitude))
     np.testing.assert_allclose(
         got.numpy(), want.numpy(), rtol=1e-3, atol=1e-6 * float(np.abs(want.numpy()).max())
