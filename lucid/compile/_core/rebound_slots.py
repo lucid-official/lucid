@@ -72,12 +72,12 @@ class _Root:
     def label(self, name: str) -> str:
         raise NotImplementedError
 
-    def buffers(self) -> dict[str, object]:
+    def buffers(self) -> dict[str, Tensor | None]:
         """The tensors the root keeps in a registry, not as attributes: what
         :meth:`SlotWatch.restore` puts back, and no verdict is read from."""
         return {}
 
-    def rebind_buffer(self, name: str, value: object) -> None:
+    def rebind_buffer(self, name: str, value: Tensor | None) -> None:
         """Hold ``value`` in registered buffer ``name``."""
         raise NotImplementedError
 
@@ -104,11 +104,11 @@ class _Attributes(_Root):
         return f"attribute {name!r} of {type(self._module).__name__}"
 
     @override
-    def buffers(self) -> dict[str, object]:
+    def buffers(self) -> dict[str, Tensor | None]:
         return dict(self._module._buffers)
 
     @override
-    def rebind_buffer(self, name: str, value: object) -> None:
+    def rebind_buffer(self, name: str, value: Tensor | None) -> None:
         self._module._buffers[name] = value
 
 
@@ -163,7 +163,7 @@ class _State:
     #: What each root holds, by name, in the roots' order.
     names: tuple[dict[str, object], ...]
     #: What each root keeps in its buffer registry.
-    buffers: tuple[dict[str, object], ...]
+    buffers: tuple[dict[str, Tensor | None], ...]
     #: The slots by path, containers opened.
     leaves: dict[_Path, object]
     #: What puts each container opened back as it was.
@@ -284,9 +284,9 @@ class SlotWatch:
             for name in {*before, *after}:
                 if before.get(name, _ABSENT) is not after.get(name, _ABSENT):
                     root.put(name, before.get(name, _ABSENT))
-        for root, before, after in zip(self._roots, start.buffers, now.buffers, strict=True):
-            for name, value in before.items():
-                if value is not after.get(name, _ABSENT):
+        for root, kept, held in zip(self._roots, start.buffers, now.buffers, strict=True):
+            for name, value in kept.items():
+                if value is not held.get(name, _ABSENT):
                     root.rebind_buffer(name, value)
         for refill in start.containers:
             refill()

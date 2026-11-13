@@ -227,6 +227,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a refused trace puts the module's state back (LCD-990)
 
+- type the buffer slots SlotWatch restores (LCD-990)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
