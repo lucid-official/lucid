@@ -187,8 +187,24 @@ def assert_no_eager_fallback(compiled_model: object) -> None:
 # ``perf_counter`` in a test file): both sides are measured in alternation, so a load
 # spike hits both, each side keeps its minimum over every round, and a measurement that
 # still misses the bound is retried from a fresh build before it is reported.
+#
+# None of that removes a *persistent* difference between two graphs, and the hosted runner's
+# virtual GPU has them: the same fixed graph measured 0.75x its comparison on an M1 Pro and
+# 1.11x on the runner (``layer_norm_after_add``, LCD-935), and a rank-5 multiply 2.1x and 4.4x.
+# A guard is therefore a bound on a *large* cost -- the defects they were written for ran 2x to
+# 100x their twin -- and ``compare_ms`` refuses a ratio bound it cannot resolve.  A cost below
+# that is asserted on the graph (``_canon`` in the ``test_rank_canonical_*`` files), not on a
+# clock.
 
 Calls = Mapping[str, Callable[[], object]]
+
+#: The smallest ratio bound a guard may state (``1.0`` itself is allowed: it says "no ratio,
+#: only ``slack_ms``").  The bounds that held on the runner run after run are 1.5x and up; the
+#: ones that failed there were 1.1x and a 3x that a graph at 2.1x here measured 4.4x on it.
+MIN_RATIO_BOUND = 1.5
+#: What a guard that states no slack of its own gets: the launch and sync jitter of a
+#: millisecond-scale graph, which a ratio of a ~1 ms side does not cover.
+MIN_SLACK_MS = 0.25
 
 
 @dataclass(frozen=True)
@@ -276,13 +292,26 @@ def _measure(calls: Calls, rounds: int, reps: int, warmup: int) -> dict[str, flo
     return {name: t * 1e3 for name, t in best.items()}
 
 
+def _checked_slack(bound: float, slack_ms: float | None) -> float:
+    """The slack a guard runs with, after refusing a ratio bound a runner cannot resolve."""
+    if 1.0 < bound < MIN_RATIO_BOUND:
+        raise ValueError(
+            f"a wall-clock ratio bound of {bound}x is below what a shared runner resolves "
+            f"({MIN_RATIO_BOUND}x): the same fixed graph measured 0.75x here and 1.11x on the "
+            "hosted runner (LCD-935).  Bound a large cost with a ratio >= "
+            f"{MIN_RATIO_BOUND}, or assert a small one on the graph; bound=1.0 with slack_ms "
+            "is an absolute guard."
+        )
+    return MIN_SLACK_MS if slack_ms is None else slack_ms
+
+
 def compare_ms(
     calls: Calls | Callable[[], Calls],
     num: str,
     den: str,
     *,
     bound: float,
-    slack_ms: float = 0.0,
+    slack_ms: float | None = None,
     attempts: int = 3,
     rounds: int = 4,
     reps: int = 5,
@@ -296,7 +325,11 @@ def compare_ms(
     Each attempt warms every callable, then times them in rounds that alternate the order,
     ``reps`` calls apiece, and keeps each side's minimum.  The first attempt to hold ends
     the search; otherwise the lowest-ratio attempt is returned with ``within=False``.
+
+    ``bound`` is ``1.0`` (absolute only) or at least ``MIN_RATIO_BOUND``; ``slack_ms`` left
+    out is ``MIN_SLACK_MS``, an explicit value (``0.0`` too) is taken as stated.
     """
+    slack_ms = _checked_slack(bound, slack_ms)
     best: Timing | None = None
     for attempt in range(1, attempts + 1):
         ms = _measure(calls if isinstance(calls, Mapping) else calls(), rounds, reps, warmup)
@@ -320,7 +353,7 @@ def assert_ratio_within(
     den: str,
     *,
     bound: float,
-    slack_ms: float = 0.0,
+    slack_ms: float | None = None,
     attempts: int = 3,
     rounds: int = 4,
     reps: int = 5,

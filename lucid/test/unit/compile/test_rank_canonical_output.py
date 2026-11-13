@@ -320,7 +320,7 @@ def test_a_dynamic_batch_rank_5_output_is_unchanged(gate: str | None) -> None:
 
 @pytest.mark.usefixtures("inference")
 def test_a_rank_5_output_is_not_slower_than_its_rank_4_twin() -> None:
-    """Unfixed: 26 ms against 2 ms.  Each rank-5 output is held to its own rank-4 twin.
+    """Unfixed: 26 ms against 2 ms.  Each rank-5 output is held to 1.5x its own rank-4 twin.
 
     The twin differs from the case in the output alone, so a cost the *input* side pays
     (a rank-5 feed) is in both.
@@ -343,7 +343,7 @@ def test_a_rank_5_output_is_not_slower_than_its_rank_4_twin() -> None:
         pair((lambda a: a + 1.0, x5), (lambda a: (a + 1.0).reshape(*r4), x5)),
         "case",
         "twin",
-        bound=1.3,
+        bound=1.5,
         what="rank-5 output",
     )
     # A graph output that is a reshape of a computed value costs a rank-4 reshape too
@@ -355,6 +355,6 @@ def test_a_rank_5_output_is_not_slower_than_its_rank_4_twin() -> None:
         ),
         "case",
         "twin",
-        bound=1.3,
+        bound=1.5,
         what="reshape to rank 5",
     )

@@ -420,7 +420,7 @@ def test_a_rank_5_norm_is_not_slower_than_the_same_elements_at_rank_2(kind: str,
         return twin(t * 1.5) * 2.0
 
     _ratio_within(
-        lambda: {"native": _fwd_call(native, x), "view": _fwd_call(view, x)}, "native", "view", 1.3
+        lambda: {"native": _fwd_call(native, x), "view": _fwd_call(view, x)}, "native", "view", 1.5
     )
 
 
@@ -438,7 +438,7 @@ def test_a_rank_5_norm_step_is_not_slower_than_the_same_elements_at_rank_2(kind:
         lambda: {"native": _step_call(norm, shape, x), "view": _step_call(twin, shape, x)},
         "native",
         "view",
-        1.3,
+        1.5,
     )
 
 

@@ -286,7 +286,7 @@ _TWINS: dict[str, tuple[Callable[..., lucid.Tensor], Shape, Shape]] = {
 @pytest.mark.usefixtures("inference")
 @pytest.mark.parametrize("name", sorted(_TWINS))
 def test_a_rank_5_feed_is_not_slower_than_its_rank_4_twin(name: str) -> None:
-    """Held to 1.3x the twin; the views of a rank-5 feed ran 1.9x to 2.6x it."""
+    """Held to 1.5x the twin; the views of a rank-5 feed ran 1.9x to 2.6x it, the pass off 4.7x+."""
     fn, wide, twin = _TWINS[name]
     xs5 = (_on(_filled(wide, 0.1)), _on(_filled(wide, 0.9)))
     xs4 = (_on(_filled(twin, 0.1)), _on(_filled(twin, 0.9)))
@@ -298,4 +298,4 @@ def test_a_rank_5_feed_is_not_slower_than_its_rank_4_twin(name: str) -> None:
             "rank-4 twin": compiled_call(fn, *xs4, read=read_first),
         }
 
-    assert_ratio_within(build, "rank-5", "rank-4 twin", bound=1.3, slack_ms=0.1, what=name)
+    assert_ratio_within(build, "rank-5", "rank-4 twin", bound=1.5, slack_ms=0.1, what=name)

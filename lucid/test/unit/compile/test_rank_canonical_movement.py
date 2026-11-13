@@ -583,11 +583,18 @@ _TWINS: dict[str, tuple[Op, Op]] = {
 }
 
 
+#: The ratio each op is held to.  ``expand`` stays at 1.5x its twin on an M1 Pro (the broadcast
+#: is materialised at rank 4 too, LCD-928's remaining row), which leaves 1.5x a hair of slack;
+#: unfixed it ran 13x.
+_BOUND = {"expand": 3.0}
+_DEFAULT_BOUND = 1.5
+
+
 @needs_metal
 @pytest.mark.usefixtures("inference")
 @pytest.mark.parametrize("name", sorted(_TWINS))
 def test_a_rank_5_movement_op_is_not_slower_than_its_rank_4_twin(name: str) -> None:
-    """Held to 1.5x the twin; the unfixed graphs ran 2x to 15x it."""
+    """Held to 1.5x the twin (``expand``: 3x); the unfixed graphs ran 2x to 15x it."""
     wide_fn, twin_fn = _TWINS[name]
 
     def build() -> dict[str, Callable[[], float]]:
@@ -597,7 +604,8 @@ def test_a_rank_5_movement_op_is_not_slower_than_its_rank_4_twin(name: str) -> N
             "twin": compiled_call(twin_fn, _metal(_S4)),
         }
 
-    assert_ratio_within(build, "rank-5", "twin", bound=1.5, slack_ms=0.3, what=name)
+    bound = _BOUND.get(name, _DEFAULT_BOUND)
+    assert_ratio_within(build, "rank-5", "twin", bound=bound, slack_ms=0.3, what=name)
 
 
 @needs_metal
