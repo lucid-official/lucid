@@ -122,13 +122,16 @@ def test_a_symbolic_batch_keeps_the_native_spelling() -> None:
 
 # ── time ──────────────────────────────────────────────────────────────────────────────
 
-#: 16.8M elements at rank 4 and the same elements at rank 3 with the axes around the repeated one
-#: merged, which is what the layout reads them as.
-_W4: Shape = (8192, 8, 16, 16)
+#: 1M elements at rank 4 and the same elements at rank 3 with the axes around the repeated one
+#: merged, which is what the layout reads them as.  What the unfixed graph pays is the slice loop
+#: over the lead (2048 slices), not the elements, so the inner dims are small: the first version of
+#: this guard, ``(8192, 8, 16, 16)`` (16.8M elements), ran the file to a 39 GB footprint, and at
+#: this size the whole file stays under 1 GB with the unfixed graph still 19x to 23x its twin.
+_W4: Shape = (2048, 8, 8, 8)
 _REPEAT_TWINS: dict[str, tuple[int, Shape]] = {
-    "last": (-1, (65536, 16, 16)),
-    "mid": (1, (8192, 8, 256)),
-    "first": (0, (8192, 2048)),
+    "last": (-1, (16384, 8, 8)),
+    "mid": (1, (2048, 8, 64)),
+    "first": (0, (2048, 512)),
 }
 
 
@@ -159,21 +162,24 @@ def _repeat_step(dim: int) -> Op:
 
 
 #: The tile's twin at rank 2, where the backward's interleaved ``(r0, d0, r1, d1)`` is rank 4: the
-#: same output elements, tiled along the leading axis.
-_TILE_WIDE: Shape = (65536, 16, 16)
-_TILE_TWIN: Shape = (1048576, 16)
+#: same output elements, tiled along the leading axis.  Sized like ``_W4``: 2048 slices of 64.
+_TILE_WIDE: Shape = (2048, 8, 8)
+_TILE_TWIN: Shape = (16384, 8)
 
 _BOUND = 1.5
-#: A step is 10-20 ms and runs the forward and the backward, so it gets more slack than the
-#: forward alone (fixed ratios 0.75x-1.4x on a loaded M1 Pro; unfixed 10x to 70x).
+#: A step runs the forward and the backward, so it gets more slack than the forward alone (fixed
+#: ratios 0.75x-1.4x on a loaded M1 Pro, 0.98x-1.00x at this size; unfixed 21x to 23x).
 _STEP_BOUND = 2.0
+#: The unfixed graph is expected to miss the bound, and ``compare_ms`` only stops early on a hit,
+#: so every attempt of an "exceeds the bound" guard runs: one is enough for a 20x miss.
+_UNFIXED_ATTEMPTS = 1
 
 
 @needs_metal
 @pytest.mark.usefixtures("inference")
 @pytest.mark.parametrize("where", sorted(_REPEAT_TWINS))
 def test_a_rank_4_repeat_is_not_slower_than_its_rank_3_twin(where: str) -> None:
-    """Held to 1.5x the twin; unfixed the rank-5 intermediate ran 14x to 17x it."""
+    """Held to 1.5x the twin; unfixed the rank-5 intermediate ran 19x to 21x it."""
     dim, twin_shape = _REPEAT_TWINS[where]
     fn = _repeat_forward(dim)
 
@@ -201,7 +207,9 @@ def test_the_repeat_bound_is_exceeded_by_the_unfixed_graph(where: str) -> None:
             "twin": compiled_call(_repeat_forward(dim), _metal(twin_shape)),
         }
 
-    unfixed = compare_ms(build, "gate off", "twin", bound=_BOUND, slack_ms=0.3, attempts=2)
+    unfixed = compare_ms(
+        build, "gate off", "twin", bound=_BOUND, slack_ms=0.3, attempts=_UNFIXED_ATTEMPTS
+    )
     assert not unfixed.within, (
         f"{where}: the unfixed graph meets the guard's bound, so the guard cannot fail: "
         f"{unfixed.report}"
@@ -235,7 +243,9 @@ def test_the_repeat_backward_bound_is_exceeded_by_the_unfixed_graph(where: str) 
             "twin": _step(_repeat_step(dim), twin_shape, None),
         }
 
-    unfixed = compare_ms(build, "gate off", "twin", bound=_STEP_BOUND, slack_ms=0.5, attempts=2)
+    unfixed = compare_ms(
+        build, "gate off", "twin", bound=_STEP_BOUND, slack_ms=0.5, attempts=_UNFIXED_ATTEMPTS
+    )
     assert not unfixed.within, (
         f"{where}: the unfixed backward meets the guard's bound, so the guard cannot fail: "
         f"{unfixed.report}"
@@ -252,7 +262,7 @@ def _tile_twin(t: lucid.Tensor) -> lucid.Tensor:
 
 @needs_metal
 def test_a_tile_backward_is_not_slower_than_its_rank_2_twin() -> None:
-    """Held to 2x the twin; unfixed the rank-6 interleave ran 40x it."""
+    """Held to 2x the twin; unfixed the rank-6 interleave ran 22x it."""
 
     def build() -> dict[str, Callable[[], float]]:
         _C_engine.compile.session_cache_clear()
@@ -273,7 +283,9 @@ def test_the_tile_backward_bound_is_exceeded_by_the_unfixed_graph() -> None:
             "twin": _step(_tile_twin, _TILE_TWIN, None),
         }
 
-    unfixed = compare_ms(build, "gate off", "twin", bound=_STEP_BOUND, slack_ms=0.5, attempts=2)
+    unfixed = compare_ms(
+        build, "gate off", "twin", bound=_STEP_BOUND, slack_ms=0.5, attempts=_UNFIXED_ATTEMPTS
+    )
     assert not unfixed.within, (
         f"the unfixed tile backward meets the guard's bound, so the guard cannot fail: "
         f"{unfixed.report}"
