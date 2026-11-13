@@ -121,9 +121,11 @@ public:
     //
     // Notes
     // -----
-    // The implementation materialises intermediates (``b_sq``, ``g_times_a``,
-    // ``div_by_b_sq``) explicitly so each transient storage can be released
-    // as soon as it is no longer needed.
+    // ``dB`` is evaluated as ``-(grad_out * (a / b)) / b``: $b^2$ leaves float32
+    // outside $|b| \approx 10^{-19} \ldots 10^{19}$, which would zero or NaN a
+    // gradient of ordinary size.  The implementation materialises intermediates
+    // (``quotient``, ``g_times_q``, ``div_by_b``) explicitly so each transient
+    // storage can be released as soon as it is no longer needed.
     //
     // Warns
     // -----
@@ -144,7 +146,7 @@ public:
     // Returns
     // -------
     // std::pair<TensorImplPtr, TensorImplPtr>
-    //     ``(grad_out / b, -grad_out * a / b^2)``.
+    //     ``(grad_out / b, -(grad_out * (a / b)) / b)``.
     std::pair<TensorImplPtr, TensorImplPtr> grad_formula_impl(const TensorImplPtr& grad_out,
                                                               const TensorImplPtr& a,
                                                               const TensorImplPtr& b);

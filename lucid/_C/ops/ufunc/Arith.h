@@ -174,10 +174,11 @@ public:
 
 // Autograd node for the element-wise reciprocal $y = 1/x$.
 //
-// Saves the input ``x`` so the backward pass can form $x^2$ in the
-// denominator without recomputing the forward result.  The forward and
-// backward are both undefined at $x = 0$ and the caller is responsible for
-// avoiding that domain point.
+// Saves the input ``x`` so the backward pass can divide by it twice (the
+// square $x^2$ is never formed: it leaves float32 outside
+// $|x| \approx 10^{-19} \ldots 10^{19}$) without recomputing the forward
+// result.  The forward and backward are both undefined at $x = 0$ and the
+// caller is responsible for avoiding that domain point.
 //
 // Math
 // ----
@@ -203,9 +204,10 @@ public:
     static Storage dispatch(backend::IBackend& be, const Storage& a, const Shape& s, Dtype dt) {
         return be.reciprocal(a, s, dt);
     }
-    // Backward — $\partial y/\partial x = -1/x^2$, scaled by ``grad_out``.
+    // Backward — $\partial y/\partial x = -1/x^2$, scaled by ``grad_out`` and evaluated
+    // as $-(g / x) / x$.
     Storage grad_formula(const Storage& g);
-    // Graph-mode backward: $\partial x = -g / x^2$ kept inside the autograd graph.
+    // Graph-mode backward: $\partial x = -(g / x) / x$ kept inside the autograd graph.
     TensorImplPtr
     grad_formula_impl(const TensorImplPtr& g, const TensorImplPtr& x, const TensorImplPtr&);
 };

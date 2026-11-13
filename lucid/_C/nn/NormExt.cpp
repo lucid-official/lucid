@@ -289,9 +289,10 @@ TensorImplPtr unit_scale_norm(const TensorImplPtr& r,
 // forward's denominator, so ``x / m`` has norm ~1 and every tracked op below works on
 // numbers of order 1 whatever the magnitude of ``x`` is.  ``||x|| = m ||x / m||`` for
 // any constant ``m > 0``, so the derivatives of every order are those of the plain
-// formula; only the intermediate magnitudes differ.  Written plainly the graph
-// divides by ``d^2`` where the quotient rule is differentiated (DivBackward's
-// ``-g a / b^2``), and that leaves float32 for a norm outside ~1e-19 .. 1e19.
+// formula; only the intermediate magnitudes differ.  The rescale is what keeps the
+// norm's own ``sum |x|^p`` in float32 (it leaves it for a norm outside ~1e-19 .. 1e19 at
+// ``p = 2``, a narrower range as ``p`` grows).  The quotient rule of a division by a
+// tracked ``d`` no longer needs it: DivBackward never forms ``d^2`` (LCD-998).
 //
 // ``signed_d`` is the forward's saved denominator, negative for a floored slice, whose
 // denominator is the constant ``eps`` (``m`` itself, ``d / m = 1``) and which carries no

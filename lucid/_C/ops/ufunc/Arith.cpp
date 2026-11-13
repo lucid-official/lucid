@@ -176,24 +176,25 @@ TensorImplPtr SignBackward::grad_formula_impl(const TensorImplPtr& g,
 
 LUCID_REGISTER_OP(SignBackward)
 
-// reciprocal — saves input to compute x^2 in the backward pass.
+// reciprocal — saves the input: the backward divides by it twice.
 const OpSchema ReciprocalBackward::schema_v1{"reciprocal", 1, AmpPolicy::Promote, true, "", true};
 
-// dL/dx = -dL/dy / x^2.
+// dL/dx = -dL/dy / x^2, evaluated as -(dL/dy / x) / x: x^2 leaves float32 for a |x|
+// outside ~1e-19 .. 1e19, where a dL/dy of x's own scale still has a float32 gradient
+// (DivBackward's dB is the same product).
 Storage ReciprocalBackward::grad_formula(const Storage& g) {
     const std::size_t n = shape_numel(out_shape_);
 
-    Storage x_sq = square_storage(saved_inputs_[0], n, dtype_, device_);
-    Storage g_div = divide_storages(g, x_sq, n, dtype_, device_);
-    return negate_storage(g_div, n, dtype_, device_);
+    Storage g_div = divide_storages(g, saved_inputs_[0], n, dtype_, device_);
+    Storage g_div_twice = divide_storages(g_div, saved_inputs_[0], n, dtype_, device_);
+    return negate_storage(g_div_twice, n, dtype_, device_);
 }
 
 TensorImplPtr ReciprocalBackward::grad_formula_impl(const TensorImplPtr& g,
                                                     const TensorImplPtr& x,
                                                     const TensorImplPtr&) {
-    // dx = -g / x^2
-    auto x_sq = mul_op(x, x);
-    return neg_op(div_op(g, x_sq));
+    // dx = -(g / x) / x
+    return neg_op(div_op(div_op(g, x), x));
 }
 
 TensorImplPtr reciprocal_op(const TensorImplPtr& a) {

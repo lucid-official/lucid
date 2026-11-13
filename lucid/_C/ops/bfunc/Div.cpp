@@ -22,7 +22,15 @@ const OpSchema DivBackward::schema_v1{"div", 1, AmpPolicy::Promote, true};
 //
 // Given c = a / b:
 //   dA = grad_out / b
-//   dB = -(grad_out * a) / b²
+//   dB = -(grad_out * (a / b)) / b
+//
+// dB is the textbook -(grad_out * a) / b^2 with the square never formed.  b^2 leaves
+// float32 for a |b| outside ~1e-19 .. 1e19, so the textbook form returns 0 or NaN
+// there for a gradient that is an ordinary float whenever grad_out and a are of b's
+// scale: x / ||x|| for a norm near 1e25, or any create_graph backward through a tracked
+// divisor, whose second-order cotangent is of the divisor's magnitude.  Dividing by b
+// twice keeps every intermediate at the scale of the result, and a / b is 0 for an
+// a that is 0, which a product g * a / b^2 turns into 0 / 0 once b^2 underflows.
 //
 // The computation is broken into explicit storage operations so that each
 // intermediate value can be freed individually.  Both saved inputs are first
@@ -45,12 +53,11 @@ std::pair<Storage, Storage> DivBackward::grad_formula(const Storage& grad_out) {
 
     auto a_b = saved_input_broadcasted(0);
 
-    // dB = -(grad_out * a) / b²
-    Storage b_sq = is_complex(dtype_) ? multiply_storages(b_b, b_b, n, dtype_, device_)
-                                      : square_storage(b_b, n, dtype_, device_);
-    Storage g_times_a = multiply_storages(grad_out, a_b, n, dtype_, device_);
-    Storage div_by_b_sq = divide_storages(g_times_a, b_sq, n, dtype_, device_);
-    Storage dy = negate_storage(div_by_b_sq, n, dtype_, device_);
+    // dB = -(grad_out * (a / b)) / b
+    Storage quotient = divide_storages(a_b, b_b, n, dtype_, device_);
+    Storage g_times_q = multiply_storages(grad_out, quotient, n, dtype_, device_);
+    Storage div_by_b = divide_storages(g_times_q, b_b, n, dtype_, device_);
+    Storage dy = negate_storage(div_by_b, n, dtype_, device_);
     return {std::move(dx), std::move(dy)};
 }
 
@@ -60,10 +67,10 @@ std::pair<TensorImplPtr, TensorImplPtr> DivBackward::grad_formula_impl(
     TensorImplPtr da = needs_input_grad(0) ? div_op(grad_out, b) : nullptr;
     if (!needs_input_grad(1))
         return {std::move(da), nullptr};
-    // db = -grad_out * a / b^2
-    auto b_sq = mul_op(b, b);
-    auto ga = mul_op(grad_out, a);
-    auto db = neg_op(div_op(ga, b_sq));
+    // db = -(grad_out * (a / b)) / b; see grad_formula for why b^2 is never formed.
+    // This graph is differentiated again, and the quotient rule of each division in it
+    // forms the same expression: the divisor's square stays out of every order.
+    auto db = neg_op(div_op(mul_op(grad_out, div_op(a, b)), b));
     return {std::move(da), std::move(db)};
 }
 
