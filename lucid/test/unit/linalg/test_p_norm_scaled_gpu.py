@@ -4,6 +4,10 @@
 answered 0 on Metal for a float32 slice near 1e-20 (``sum(x * x)`` flushes the
 squares) and ``inf`` for one near 1e25.  ``backend/gpu/PNorm.h`` accumulates
 relative to the running largest magnitude in one Metal kernel.
+
+LCD-1009 serves the quasi-norms ``0 < p < 1`` from it too.  Their root ``s^(1/p)`` multiplies
+the sum's rounding error by ``1/p``, so for ``p < 1`` the sum is a double-float pair through the
+lane loop, the simdgroup reduction and the chunk fold (``QUASI_ORDERS`` below).
 """
 
 import math
@@ -21,6 +25,8 @@ from lucid.test._fixtures.tolerance_guard import noise_when_below
 TINY = [1e-20, 1e-30, 1e-37]
 HUGE = [1e25, 1e30, 1e36]
 ORDERS = [1.5, 2.0, 3.5]
+#: Below 1: 1/2 (the root is a square), 1/4 (4x amplification), 3/4 (a non-dyadic ``1/p``).
+QUASI_ORDERS = [0.25, 0.5, 0.75]
 
 
 def _t(a: np.ndarray, device: str, **kw: object) -> lucid.Tensor:
@@ -62,7 +68,7 @@ def test_metal_entrywise_norm_at_tiny_magnitude(device_gpu_only: str, kind: str)
     assert got.item() == pytest.approx(float(np.sqrt(6.0)) * 1e-20, rel=1e-5, abs=0)
 
 
-@pytest.mark.parametrize("p", ORDERS)
+@pytest.mark.parametrize("p", ORDERS + QUASI_ORDERS)
 @pytest.mark.parametrize(
     ("shape", "dim"),
     [
@@ -87,10 +93,11 @@ def test_matches_float64_at_every_layout(
     axis = dim if dim is None or isinstance(dim, int) else tuple(dim)
     want = _truth(arr, p, axis, keepdim)
     assert got.shape == want.shape
-    assert _ulps(got, want) < 12
+    # The quasi-norms' pair sum keeps them within a few ulp (14 with a plain float32 sum).
+    assert _ulps(got, want) < (6 if p < 1.0 else 12)
 
 
-@pytest.mark.parametrize("p", ORDERS)
+@pytest.mark.parametrize("p", ORDERS + QUASI_ORDERS)
 def test_every_row_is_scaled_on_its_own(device_gpu_only: str, p: float) -> None:
     """A tiny row beside a normal one and a huge one keeps each row's own scale."""
     base = np.array([3.0, -4.0, 1.0, 2.0] * 40, dtype=np.float32)
@@ -110,7 +117,7 @@ def test_a_spike_anywhere_in_a_row_is_the_scale(device_gpu_only: str, width: int
     assert np.all(got >= 3.0)
 
 
-@pytest.mark.parametrize("p", ORDERS)
+@pytest.mark.parametrize("p", ORDERS + QUASI_ORDERS)
 def test_special_values(device_gpu_only: str, p: float) -> None:
     nan, inf = float("nan"), float("inf")
     arr = np.array(
@@ -133,15 +140,34 @@ def test_special_values(device_gpu_only: str, p: float) -> None:
     assert got[6] == pytest.approx(five, rel=1e-6)
 
 
+@pytest.mark.parametrize("p", [2.0, 0.25, 0.5])
 @pytest.mark.parametrize("width", [4, 5000, 100000])
-def test_nan_and_inf_survive_the_chunk_combine(device_gpu_only: str, width: int) -> None:
+def test_nan_and_inf_survive_the_chunk_combine(device_gpu_only: str, width: int, p: float) -> None:
     arr = np.zeros((3, width), dtype=np.float32)
     arr[0, width - 1] = np.nan
     arr[1, width // 2] = np.inf
     arr[2, 0] = np.inf
     arr[2, width - 1] = np.nan
-    got = LA.vector_norm(_t(arr, device_gpu_only), 2.0, dim=1).numpy()
+    got = LA.vector_norm(_t(arr, device_gpu_only), p, dim=1).numpy()
     assert math.isnan(got[0]) and got[1] == math.inf and math.isnan(got[2])
+
+
+@pytest.mark.parametrize("p", QUASI_ORDERS)
+@pytest.mark.parametrize("width", [4, 100, 5000, 100000, 600000])
+def test_a_quasi_norm_chunk_fold_keeps_zero_rows_zero_and_spikes_exact(
+    device_gpu_only: str, width: int, p: float
+) -> None:
+    """The chunk pairs (m, s, c) fold by rescaling ``(m_a / m)^p``: an all-zero chunk, a chunk
+    with the spike, and a row of zeros are each right, with the spike in any chunk."""
+    arr = np.zeros((3, width), dtype=np.float32)
+    arr[0, 0] = 3.0
+    arr[1, width // 2] = -4.0
+    arr[1, width - 1] = 1e-3
+    arr[2, :] = 0.0
+    got = LA.vector_norm(_t(arr, device_gpu_only), p, dim=1).numpy()
+    assert got[2] == 0.0
+    assert got[0] == pytest.approx(3.0, rel=1e-6)
+    assert got[1] == pytest.approx(float(_truth(arr[1:2], p, 1)[0]), rel=1e-6)
 
 
 @pytest.mark.parametrize("dtype", [lucid.float16, lucid.bfloat16])
@@ -173,6 +199,27 @@ def test_gradient_is_the_analytic_slope_at_any_magnitude(
     assert _ulps(got, want) < 40
 
 
+@pytest.mark.parametrize("p", QUASI_ORDERS)
+@pytest.mark.parametrize("magnitude", [1.0, 1e-20, 1e25])
+def test_a_quasi_norm_gradient_is_the_analytic_slope_with_zero_at_a_zero_entry(
+    device_gpu_only: str, p: float, magnitude: float
+) -> None:
+    """``|u|^(p-1)`` is infinite at a zero entry; its gradient there is 0, as the reference's."""
+    base = np.array([[3.0, -4.0, 1.0, 0.0], [0.5, 0.5, -2.0, 7.0]], dtype=np.float32)
+    arr = base * np.float32(magnitude)
+    x = _t(arr, device_gpu_only, requires_grad=True)
+    LA.vector_norm(x, p, dim=1).sum().backward()
+    xd = arr.astype(np.float64)
+    top = np.abs(xd).max(axis=1, keepdims=True)
+    norm = top * (np.abs(xd / top) ** p).sum(axis=1, keepdims=True) ** (1 / p)
+    ratio = np.abs(xd) / norm
+    with np.errstate(divide="ignore", invalid="ignore"):
+        want = np.where(xd == 0.0, 0.0, np.sign(xd) * ratio ** (p - 1))
+    got = x.grad.numpy()
+    assert np.all(np.isfinite(got)) and got[0, 3] == 0.0
+    assert _ulps(got, want) < 40
+
+
 def test_gradient_of_a_zero_slice_is_zero(device_gpu_only: str) -> None:
     x = _t(np.zeros((2, 3)), device_gpu_only, requires_grad=True)
     LA.vector_norm(x, 2.0, dim=1).sum().backward()
@@ -185,7 +232,7 @@ def test_gradient_keeps_a_nan_slice_nan(device_gpu_only: str) -> None:
     assert np.all(np.isnan(x.grad.numpy()))
 
 
-@pytest.mark.parametrize("p", [2.0, 3.5])
+@pytest.mark.parametrize("p", [2.0, 3.5, 0.5, 0.75])
 def test_second_derivative_agrees_with_the_cpu(device_gpu_only: str, p: float) -> None:
     rng = np.random.default_rng(1)
     arr = rng.standard_normal((3, 5)).astype(np.float32) + 2.0
@@ -222,7 +269,7 @@ def test_normalize_with_a_small_eps_keeps_a_tiny_row(device_gpu_only: str) -> No
     assert np.all(np.isfinite(both))
 
 
-@pytest.mark.parametrize("p", [1.0, 0.5, math.inf, -math.inf, 0.0])
+@pytest.mark.parametrize("p", [1.0, math.inf, -math.inf, 0.0, -2.0])
 def test_orders_that_power_nothing_are_untouched(device_gpu_only: str, p: float) -> None:
     arr = np.array([3.0, -4.0, 1.0, 2.0], dtype=np.float32)
     got = LA.vector_norm(_t(arr, device_gpu_only), p).item()
@@ -230,13 +277,22 @@ def test_orders_that_power_nothing_are_untouched(device_gpu_only: str, p: float)
     assert got == pytest.approx(cpu, rel=1e-6)
 
 
-@pytest.mark.parametrize("p", [1.0, 0.5, 0.0, -2.0, math.inf, math.nan])
-def test_the_engine_op_refuses_orders_that_are_not_finite_and_above_one(
+@pytest.mark.parametrize("p", [0.0, -2.0, -0.5, math.inf, -math.inf, math.nan])
+def test_the_engine_op_refuses_orders_that_are_not_finite_and_positive(
     device_gpu_only: str, p: float
 ) -> None:
     x = _t(np.ones(4), device_gpu_only)
     with pytest.raises(ValueError):
         _C_engine.linalg.p_norm(x._impl, p, [0], False)
+
+
+@pytest.mark.parametrize("p", [1.0, 0.5, 0.25])
+def test_the_engine_op_takes_one_and_the_quasi_norms(device_gpu_only: str, p: float) -> None:
+    """LCD-1009: ``p`` below 1 (and 1 itself, which Python keeps on its own sum) is a norm."""
+    arr = np.array([3.0, -4.0, 1.0, 2.0], dtype=np.float32)
+    x = _t(arr, device_gpu_only)
+    got = lucid.Tensor.__new_from_impl__(_C_engine.linalg.p_norm(x._impl, p, [0], False))
+    assert got.item() == pytest.approx(float(_truth(arr, p)), rel=1e-6)
 
 
 def test_the_engine_op_serves_the_cpu_stream_too(device_cpu_only: str) -> None:

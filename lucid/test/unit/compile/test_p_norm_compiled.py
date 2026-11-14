@@ -180,7 +180,7 @@ def test_every_layout_and_axis_set(
 # ── orders the scaled op does not serve ───────────────────────────────────────
 
 
-@pytest.mark.parametrize("p", [1.0, 0.5, math.inf, -math.inf, -2.0])
+@pytest.mark.parametrize("p", [1.0, 0.25, 0.5, 0.75, math.inf, -math.inf, -2.0])
 @pytest.mark.parametrize("magnitude", [1e-3, 1.0, 1e3])
 def test_the_other_orders_still_compile_and_equal_eager(p: float, magnitude: float) -> None:
     arr = BASE * np.float32(magnitude)
