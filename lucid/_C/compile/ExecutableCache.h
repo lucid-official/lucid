@@ -29,11 +29,12 @@
 // entries is over ``max_bytes``.
 //
 // The byte cap bounds only the references THIS cache holds: eviction drops the
-// cache's reference and nothing else.  A live CompiledModule keeps every signature's
-// executable in its own unbounded ``_cache``, training-step and function-compile
-// executables (``compile_trace_with_backward``) never enter this cache, and the
-// dynamic-batch path bypasses it, so what those hold stays pinned whatever the cap
-// says (LCD-1008).
+// cache's reference and nothing else.  The Python wrappers that keep executables
+// of their own — a live CompiledModule, ``make_step``, ``fused_step``, the decode
+// step — bound them separately, with the same estimate and the same default cap
+// (``lucid.compile._core.signature_cache``, LCD-1008).  What a segmented step keeps
+// per segment, and what ``compile_trace_with_backward`` executables outside any such
+// wrapper hold, stays pinned whatever this cap says.
 
 #pragma once
 
@@ -227,6 +228,11 @@ LUCID_API SharedExecutable localize_executable(const CompiledExecutable* exe,
 // MLP), and an emitter that expands one op into several (attention) pins more than its
 // output.  So it is neither an upper nor a lower bound.  The feeds are the caller's.
 LUCID_API std::size_t retained_bytes_estimate(const CacheKey& key);
+
+// The byte cap a holder of executables gets when nothing says otherwise: an eighth of
+// the machine's memory, ``0`` (no cap) when the OS does not say.  The session cache
+// starts from it and so does every Python-side holder, so the two layers agree.
+LUCID_API std::size_t default_cache_bytes() noexcept;
 
 // Bounded-LRU cache of compiled MPSGraph executables.
 //

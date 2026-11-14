@@ -195,17 +195,6 @@ inline bool remap_to_raw(std::vector<TensorId>& ids, const TraceIdMap& id_map) {
     return true;
 }
 
-// An eighth of the machine's memory: the estimate counts every op output, which is
-// more than the executables pin for most graphs, and the rest of the machine keeps
-// seven eighths.  Unknown (``sysconf`` failed) is no byte cap.
-std::size_t default_max_bytes() noexcept {
-    const long pages = ::sysconf(_SC_PHYS_PAGES);
-    const long page_bytes = ::sysconf(_SC_PAGESIZE);
-    if (pages <= 0 || page_bytes <= 0)
-        return 0;
-    return static_cast<std::size_t>(pages) * static_cast<std::size_t>(page_bytes) / 8;
-}
-
 constexpr const char* kMaxBytesEnv = "LUCID_COMPILE_MAX_CACHE_BYTES";
 
 // A whole number of bytes, or of KiB / MiB / GiB with a ``k`` / ``m`` / ``g`` suffix.
@@ -248,7 +237,7 @@ bool parse_byte_count(const char* text, std::size_t& bytes) noexcept {
 // said once on stderr and replaced by the default, as ``LUCID_COMPILE_FIRST_RUN_TIMEOUT_S``
 // is: "1g" taken as one byte would evict everything but the newest entry.
 std::size_t max_bytes_from_environment() {
-    const std::size_t fallback = default_max_bytes();
+    const std::size_t fallback = default_cache_bytes();
     const char* text = std::getenv(kMaxBytesEnv);
     if (text == nullptr)
         return fallback;
@@ -262,6 +251,17 @@ std::size_t max_bytes_from_environment() {
     return fallback;
 }
 }  // namespace
+
+// An eighth of the machine's memory: the estimate counts every op output, which is
+// more than the executables pin for most graphs, and the rest of the machine keeps
+// seven eighths.  Unknown (``sysconf`` failed) is no byte cap.
+std::size_t default_cache_bytes() noexcept {
+    const long pages = ::sysconf(_SC_PHYS_PAGES);
+    const long page_bytes = ::sysconf(_SC_PAGESIZE);
+    if (pages <= 0 || page_bytes <= 0)
+        return 0;
+    return static_cast<std::size_t>(pages) * static_cast<std::size_t>(page_bytes) / 8;
+}
 
 std::size_t retained_bytes_estimate(const CacheKey& key) {
     std::size_t total = 0;

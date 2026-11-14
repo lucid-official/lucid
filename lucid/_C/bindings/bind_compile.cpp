@@ -394,6 +394,17 @@ void bind_session_cache(py::module_& m) {
         py::arg("n"),
         "Set the session cache's byte cap (``0`` = none) and return the previous one.  "
         "Honoured by the next insert.");
+    m.def("default_cache_bytes", &lucid::compile::default_cache_bytes,
+          "The byte cap a holder of executables starts with: an eighth of the machine's "
+          "memory, ``0`` (none) when the OS does not say.");
+    m.def(
+        "retained_bytes_estimate",
+        [](const lucid::compile::TraceGraph& graph) {
+            return lucid::compile::retained_bytes_estimate(lucid::compile::make_cache_key(graph));
+        },
+        py::arg("graph"),
+        "Estimated bytes the executable built from ``graph`` keeps pinned: the number the "
+        "session cache counts for the same graph.  Rough, neither an upper nor a lower bound.");
 }
 
 void bind_trace_nodes(py::module_& m) {

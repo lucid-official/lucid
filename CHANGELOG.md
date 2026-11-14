@@ -367,6 +367,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - audit every perf ceiling, refuse blind lowering (LCD-947)
 
+- bind the executable byte estimate and cap (LCD-1008)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views
