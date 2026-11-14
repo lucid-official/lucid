@@ -18,10 +18,13 @@ If either of the first two breaks, what dead modules leave in the cache grows
 without bound; if the third does, it grows by 32 entries of any size.
 
 What the byte cap does NOT bound: it drops only the session cache's reference.
-A live ``CompiledModule`` keeps every signature's executable in its own
-unbounded ``_cache``, training-step and function-compile executables never
-enter the session cache, and the dynamic-batch path bypasses it, so a
-long-lived module fed many shapes still pins them all (LCD-1008).
+A live ``CompiledModule`` kept every signature's executable in its own unbounded
+``_cache`` (LCD-1008): one module over eight shapes pinned the same with the session
+cap as without.  That dict is a ``SignatureCache`` now, with a byte cap and an entry
+cap of its own (``test_signature_cache.py``), and the last test here is its
+footprint, with the session cap alone as the control.  Still outside both caps: the
+symbolic-batch path (one executable, specialised per runtime shape inside MPSGraph)
+and a segmented step's per-segment caches.
 """
 
 import json
@@ -198,7 +201,11 @@ def test_the_newest_entry_stays_when_it_alone_is_over_the_byte_cap(
     assert _C_engine.compile.session_cache_bytes() > 1
 
 
-_CHILD_ENV = {k: v for k, v in os.environ.items() if not k.startswith("LUCID_COMPILE_MAX_CACHE")}
+_CHILD_ENV = {
+    k: v
+    for k, v in os.environ.items()
+    if not k.startswith(("LUCID_COMPILE_MAX_CACHE", "LUCID_COMPILE_MAX_SIGNATURE"))
+}
 
 # What MPSGraph pins, measured in a process of its own: the floor is then the Metal
 # set-up of one graph, not whatever the tests before this one left to release.
@@ -330,3 +337,112 @@ def test_an_unusable_byte_cap_falls_back_to_the_default_and_says_so(text: str) -
     got, said = _initial_cap(text)
     assert got == default
     assert "ignoring LUCID_COMPILE_MAX_CACHE_BYTES" in said
+
+
+# One live module over many shapes (LCD-1008).  The module's own cap is read when the
+# module is made, so each arm sets it first.
+_LIVE_MODULE_CHILD = textwrap.dedent("""
+    import gc
+    import json
+    import os
+    import time
+
+    import lucid
+    from lucid._C import engine as E
+    from lucid.test.audit._zoo_budget import footprint_gb
+
+    N, LEAD = 8, 1024
+    RELEASE_S = 3.0
+    MODULE_BYTES = "LUCID_COMPILE_MAX_SIGNATURE_BYTES"
+
+
+    def widen(x):
+        return x.repeat(1, 1, 1, 2).reshape(-1).sum()
+
+
+    def settled_mb():
+        gc.collect()
+        lucid.metal.empty_cache()
+        time.sleep(RELEASE_S)
+        return footprint_gb(os.getpid()) * 1024
+
+
+    def drive(cm):
+        for i in range(N):
+            # Made on the device: randn(...).to leaves host copies in malloc's cache.
+            x = lucid.randn(LEAD + 32 * i, 8, 16, 16, device="metal")
+            cm(x).item()
+            del x
+
+
+    def arm(session_cap, module_cap):
+        E.compile.session_cache_clear()
+        E.compile.session_cache_set_max_bytes(session_cap)
+        os.environ[MODULE_BYTES] = str(module_cap)
+        base = settled_mb()
+        cm = lucid.compile(widen)
+        drive(cm)
+        grown = settled_mb() - base
+        entries = cm.cache_info()["entries"]
+        del cm
+        E.compile.session_cache_clear()
+        return grown, entries
+
+
+    with lucid.no_grad():
+        # The first graph of a process also sets up Metal, which stays; the same pass
+        # tells what the module's estimate of one entry is.
+        E.compile.session_cache_set_max_bytes(0)
+        os.environ[MODULE_BYTES] = "0"
+        warm = lucid.compile(widen)
+        drive(warm)
+        entry = warm._cache.retained_bytes // N
+        del warm
+        E.compile.session_cache_clear()
+        settled_mb()
+
+        cap = entry * 5 // 2
+        # The session cache capped to two entries, the module not: the report of LCD-1008.
+        session_only, session_only_entries = arm(cap, 0)
+        # Both capped to two entries.
+        both, both_entries = arm(cap, cap)
+    print(json.dumps({
+        "session_only": session_only,
+        "session_only_entries": session_only_entries,
+        "both": both,
+        "both_entries": both_entries,
+        "pinned_per_graph_mb": 2 * LEAD * 8 * 16 * 16 * 4 / 2**20,
+        "graphs": N,
+    }))
+    """)
+
+
+@pytest.mark.slow
+@pytest.mark.skipif(not metal_available(), reason="metal unavailable")
+def test_a_live_modules_footprint_stays_inside_its_own_cap() -> None:
+    """One live module over eight shapes: bounded by its cap, not by the session cache's.
+
+    Both runs cap the session cache to two entries, as the LCD-1008 reviewer did.  The
+    module with no cap of its own keeps all eight executables and their pins (the control:
+    were MPSGraph to stop pinning, or the module to stop holding, this fails instead of
+    passing vacuously); with a cap of two entries it keeps two.
+    """
+    done = subprocess.run(
+        [sys.executable, "-c", _LIVE_MODULE_CHILD],
+        env=_CHILD_ENV,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    got = json.loads(done.stdout.strip().splitlines()[-1])
+
+    assert got["session_only_entries"] == got["graphs"]
+    assert got["session_only"] > got["graphs"] * got["pinned_per_graph_mb"] / 2, (
+        f"uncapped module grew {got['session_only']:.0f} MB: MPSGraph no longer pins the "
+        "broadcast or the module no longer holds it, so this test proves nothing"
+    )
+    assert got["both_entries"] == 2
+    assert (
+        got["both"] < got["session_only"] / 2
+    ), f"capped {got['both']:.0f} MB vs session-capped-only {got['session_only']:.0f} MB"

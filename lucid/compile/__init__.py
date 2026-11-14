@@ -54,6 +54,21 @@ answers policy B's NaN or dropped write instead of the CPU's ``IndexError``.  Wi
 with a one-time notice, where the index is checked.  The switch is read at every call
 and is part of the cache key.  A program restored with :func:`load_compiled` has no
 trace to inspect and is not checked.
+
+Memory.  An ``MPSGraphExecutable`` keeps the buffers MPSGraph planned for its
+intermediates until it is released, so every signature a long-lived wrapper has
+compiled pins memory in proportion to its tensors.  The executables are therefore
+bounded, least recently used out, in two places: the process-wide session cache
+(``LUCID_COMPILE_MAX_CACHE`` entries, ``LUCID_COMPILE_MAX_CACHE_BYTES`` of estimated
+pinned memory) and each wrapper's own cache (:class:`CompiledModule`,
+:func:`make_step`, :func:`fused_step`, :func:`compiled_decode_step`:
+``LUCID_COMPILE_MAX_SIGNATURES`` entries, default 256, and
+``LUCID_COMPILE_MAX_SIGNATURE_BYTES``, default an eighth of the machine's memory;
+``0`` turns a cap off, and the values are read when the wrapper is made).  A dropped
+signature is compiled again on its next call, so a loop that cycles over more shapes
+than a cap allows recompiles on every call.  Not bounded: a ``dynamic=True`` module
+that shares one symbolic-batch executable (MPSGraph specialises it per runtime shape
+inside), and a segmented step's per-segment caches (``make_step(segments > 1)``).
 """
 
 import sys
@@ -174,7 +189,7 @@ def save_compiled(cm: object, path: str) -> bool:
     # An entry is cached before its first run, which MPSGraph may still
     # refuse; one that has run is known to work.  Newest first.
     cache = getattr(cm, "_cache", None) or {}
-    ran = [entry for entry in reversed(cache.values()) if entry.n_hits]
+    ran = [entry for entry in reversed(list(cache.values())) if entry.n_hits]
     if not ran:
         raise RuntimeError(
             "save_compiled: no executable of this CompiledModule has run yet. "

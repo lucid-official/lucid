@@ -253,6 +253,11 @@ class _Segment:
     # Its modules' parameters and buffers: a trace that reads one on the host
     # is unsupported, or the value read would be baked in.
     state: tuple[Tensor, ...] = ()
+    # Unbounded, unlike every other wrapper's (:class:`SignatureCache`): a call is
+    # compiling when the FIRST segment has no entry (``_forward_segments`` keeps the
+    # buffers only then), so a later segment's entry dropped alone would send a half-run
+    # step through a recompile that cannot be put back.  A bound has to drop a whole
+    # chain of entries at once (LCD-1008).
     cache: dict[CacheKey, _SegCompiled] = field(default_factory=dict)
 
 

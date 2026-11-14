@@ -60,6 +60,7 @@ from lucid.compile._core.fallback import _fallback_notice, no_undo, run_or_answe
 from lucid.compile._core.index_strict import declines_for_strict_index
 from lucid.compile._core.rebound_slots import REBOUND_MARK
 from lucid.compile._core.signature import TraceReads, tree_requires_grad
+from lucid.compile._core.signature_cache import SignatureCache
 
 if TYPE_CHECKING:
     from lucid._C.engine.compile import Tracer
@@ -134,6 +135,9 @@ class _DecodeEntry:
     # Outside tensors the call wrote and the batch norm statistics it handed
     # out: the executable's outputs after the cache buffers (LCD-860).
     carried: CarriedWrites = CarriedWrites()
+    # Estimated bytes the executable keeps pinned (``retained_bytes_estimate`` of its
+    # graph): what :class:`SignatureCache` bounds the step's entries by.
+    retained: int = 0
 
 
 def _needs_gradients(
@@ -403,6 +407,7 @@ def _compile_decode_entry(
         cp_feed_indices=cp_feed_indices,
         key_buf_feeds=key_buf_feeds,
         val_buf_feeds=val_buf_feeds,
+        retained=_C_engine.compile.retained_bytes_estimate(graph),
     )
 
 
@@ -472,7 +477,7 @@ def _unwrap_decode_caches(
 
 
 def _drop_entry(
-    cache: dict[CacheKey, _DecodeEntry], eager_sigs: set[CacheKey], key: CacheKey | None
+    cache: SignatureCache[CacheKey, _DecodeEntry], eager_sigs: set[CacheKey], key: CacheKey | None
 ) -> None:
     """Forget ``key``'s executable and answer its signature eagerly from now on."""
     if key is not None:
@@ -520,7 +525,7 @@ def compiled_decode_step(
 
     self_cache, cross_cache = _unwrap_decode_caches(static_cache)
 
-    cache: dict[Any, _DecodeEntry] = {}
+    cache: SignatureCache[Any, _DecodeEntry] = SignatureCache()
     eager_sigs: set[Any] = set()
     adapter = _CallableModule(forward_fn)  # names forward_fn's modules
     fingerprint = ParamFingerprint(adapter, cache.clear)
@@ -540,7 +545,7 @@ def compiled_decode_step(
             return forward_fn(input_ids, cache_position)
 
         call = (input_ids, cache_position)
-        entry = cache.get(key) if key is not None else None
+        entry = cache.lookup(key) if key is not None else None
         undo = no_undo
         if entry is None and not _needs_gradients(call, self_cache, cross_cache, None, adapter):
             with compile_attempt() as attempt:

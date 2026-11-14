@@ -47,6 +47,7 @@ from typing import (
 from lucid._C import engine as _C_engine
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.compile._core.buffer_writes import CarriedWrites, TraceAnswer
+from lucid.compile._core.signature_cache import SignatureCache
 
 
 class _ExecutableLike(Protocol):
@@ -118,6 +119,9 @@ class _StepEntry:
     # of the model's: the executable differentiates exactly the ones that
     # required grad then, so a flip afterwards retraces (:meth:`grad_flipped`).
     watched: tuple[tuple[_C_engine.TensorImpl, bool], ...] = ()
+    # Estimated bytes the executable keeps pinned (``retained_bytes_estimate`` of its
+    # graph, the forward and the loss): what :class:`SignatureCache` bounds the step by.
+    retained: int = 0
 
     def grad_flipped(self) -> bool:
         """Has a watched feed gained or lost ``requires_grad`` since the trace?"""
@@ -406,6 +410,7 @@ def _compile_step_entry(
         compile_ms=(time.perf_counter() - t0) * 1000.0,
         carried=carried,
         fed=outside_feeds(tracer),
+        retained=_C_engine.compile.retained_bytes_estimate(graph),
     )
 
 
@@ -510,7 +515,7 @@ class _CompiledStepFunction(Function):
 
 
 def _drop_entry(
-    cache: dict[object, _StepEntry], eager_only: EagerFallbackSet, key: CacheKey | None
+    cache: SignatureCache[object, _StepEntry], eager_only: EagerFallbackSet, key: CacheKey | None
 ) -> None:
     """Forget ``key``'s executable and answer its signature eagerly from now on."""
     if key is not None:
@@ -518,9 +523,9 @@ def _drop_entry(
         eager_only.add(key)
 
 
-def _live_entry(cache: dict[object, _StepEntry], key: object) -> _StepEntry | None:
+def _live_entry(cache: SignatureCache[object, _StepEntry], key: object) -> _StepEntry | None:
     """``key``'s cached entry, dropped instead when a tensor of the loss flipped its grad need."""
-    entry = cache.get(key) if key is not None else None
+    entry = cache.lookup(key) if key is not None else None
     if entry is not None and entry.grad_flipped():
         del cache[key]
         return None
@@ -540,7 +545,7 @@ def _make_monolithic_step(model: Module, loss_fn: Callable[..., Tensor]) -> Call
     )
 
     use_dynamic = False
-    cache: dict[object, _StepEntry] = {}
+    cache: SignatureCache[object, _StepEntry] = SignatureCache()
     eager_only = EagerFallbackSet()
 
     params = list(model.parameters())

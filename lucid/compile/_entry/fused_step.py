@@ -86,6 +86,7 @@ from lucid.compile._core.custom_backward import (
     vjp_region_index,
 )
 from lucid.compile._core.signature import CacheKey, ParamFingerprint, outside_feeds
+from lucid.compile._core.signature_cache import SignatureCache
 
 # Thread-local flag flipped on while ``_FusedStep._build_plan``
 # is actively tracing.  ``lucid.nn.functional.dropout`` checks it to
@@ -125,7 +126,8 @@ if TYPE_CHECKING:
 
 __all__ = ["fused_step"]
 
-# Executables a single fused step keeps (oldest dropped first).
+# Executables a single fused step keeps (least recently used dropped first).  The cap
+# predates the byte cap every wrapper has now (:class:`SignatureCache`).
 _MAX_PLANS: int = 8
 
 
@@ -398,6 +400,9 @@ class _FusedPlan:
     loss_dtype: _dtype_cls
     loss_device: _device_cls
     scaled_loss_sink: _C_engine.TensorImpl | None = None
+    # Estimated bytes the executable keeps pinned (``retained_bytes_estimate`` of the
+    # traced forward, loss and update): what :class:`SignatureCache` bounds the step by.
+    retained: int = 0
 
 
 def _verify_target_shapes(
@@ -498,9 +503,11 @@ class _FusedStep:
     _copt : _CompiledStepBase
         The compiled optimizer driving the update math and owning the
         optimizer state (exposed as :attr:`optimizer`).
-    _plans : dict
+    _plans : SignatureCache
         Compiled executables keyed by (participating parameters,
-        structural flags of every group, per-parameter scalar classes).
+        structural flags of every group, per-parameter scalar classes);
+        at most ``_MAX_PLANS``, least recently used out, and bounded by
+        estimated pinned bytes like every wrapper's.
     _reachable : frozenset[int] or None
         Flat indices of the parameters the loss depends on; found on the
         first trace.
@@ -565,7 +572,7 @@ class _FusedStep:
         # back after each run to drive ``scaler.update()``.
         self._found_inf_target: Tensor | None = None
 
-        self._plans: dict[_PlanKey, _FusedPlan] = {}
+        self._plans: SignatureCache[_PlanKey, _FusedPlan] = SignatureCache(max_entries=_MAX_PLANS)
         self._eager_only: set[_PlanKey] = set()
         self._reachable: frozenset[int] | None = None
         # Part of the plan key, as make_step's; and a plan feeds and writes the
@@ -655,7 +662,7 @@ class _FusedStep:
         key = self._key(self._members() if self._reachable is not None else (), flags, call)
         if key in self._eager_only:
             return self._run_eager(args)
-        plan = self._plans.get(key) if self._reachable is not None else None
+        plan = self._plans.lookup(key) if self._reachable is not None else None
         if plan is None:
             return self._compile_and_run_first(args, flags, call)
         # GradScaler scalar refresh — write the current ``scaler._scale``
@@ -715,8 +722,6 @@ class _FusedStep:
         # Keyed after the build + first run: it initialised the new members'
         # state, and the trace showed which tensor attributes it reads.
         self._plans[self._key(plan.members, flags, self._fingerprint.rekey(call, args, {}))] = plan
-        while len(self._plans) > _MAX_PLANS:
-            self._plans.pop(next(iter(self._plans)))
         return result
 
     def _run_eager(self, args: tuple[Tensor, ...]) -> Tensor:
@@ -1214,6 +1219,7 @@ class _FusedStep:
             loss_dtype=traced.loss.dtype,
             loss_device=traced.loss.device,
             scaled_loss_sink=scaled_loss_sink,
+            retained=_C_engine.compile.retained_bytes_estimate(traced.graph),
         )
 
     def _run(self, plan: _FusedPlan, args: tuple[Tensor, ...], flags: _PlanFlags) -> Tensor:

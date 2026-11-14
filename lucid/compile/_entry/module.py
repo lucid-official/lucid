@@ -71,6 +71,7 @@ from lucid.compile._core.signature import (
     tensors_have_active_hooks,
     tree_requires_grad,
 )
+from lucid.compile._core.signature_cache import SignatureCache
 from lucid.nn.module import Module, _ModuleWrapper
 from lucid.nn.parameter import Parameter
 
@@ -208,6 +209,42 @@ def _repack_outputs(spec: object, outs_wrapped: list[object]) -> object:
     raise RuntimeError(f"_repack_outputs: unknown spec tag {tag!r}")
 
 
+def _feed_sources(
+    exe: _ExecutableLike,
+    ext: dict[int, _C_engine.TensorImpl],
+    args: tuple[object, ...],
+    kwargs: dict[str, object],
+) -> list[int | None] | None:
+    """For each feed in ``exe.input_ids``, where it comes from at call time: an index
+    into the call's tensors (:func:`leaf_tensors` order) or ``None``, a pinned parameter
+    or constant.  ``None`` instead of a list when a feed is not among the trace's.
+
+    Index by ``TensorImpl is`` identity.  A tensor passed BOTH positionally and by
+    keyword resolves to the positional slot (args win — they're checked first).  Nested
+    tensors too: a tensor inside a list argument used to fall through to ``None`` —
+    pinned at its trace-time value, so every later call reused it and returned a wrong
+    answer without a word.
+    """
+    from lucid._dispatch import _unwrap
+
+    feed_source: dict[int, int] = {}
+    for i, t in enumerate(leaf_tensors(args, kwargs)):
+        feed_source.setdefault(id(_unwrap(t)), i)
+
+    input_source: list[int | None] = []
+    for tid in exe.input_ids:
+        impl = ext.get(tid)
+        if impl is None:
+            # Should not happen — the builder only emits placeholder ids that are in the
+            # external_feeds set.  Treat as a compile failure.
+            _fallback_notice(
+                "unresolvable-feed", f"executable input id {tid} is not in traced external_feeds"
+            )
+            return None
+        input_source.append(feed_source.get(id(impl)))
+    return input_source
+
+
 #: What a call that needs gradients is told, once per process.
 _AUTOGRAD_FALLBACK = (
     "the call needs gradients (grad mode is on and a tensor it reads requires "
@@ -265,6 +302,9 @@ class _CacheEntry:
     # buffers, a closure's or a global's tensors — and whether the call makes
     # a grad leaf itself.  Under grad mode one requiring grad makes it eager.
     reads: TraceReads = TraceReads()
+    # Estimated bytes the executable keeps pinned (``retained_bytes_estimate`` of its
+    # graph): what :class:`SignatureCache` bounds the module's entries by.
+    retained: int = 0
 
     def reads_grad(self) -> bool:
         """Whether, besides its arguments, the call reads or makes a tensor
@@ -289,7 +329,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
     _dynamic: bool
     _symbolic: bool
     _symbolic_resolved: bool | None
-    _cache: dict[CacheKey, _CacheEntry]
+    _cache: SignatureCache[CacheKey, _CacheEntry]
     _eager_only: EagerFallbackSet
     _call_counter: dict[CacheKey, int]
     _param_fp: ParamFingerprint
@@ -331,21 +371,42 @@ class CompiledModule[**P, R](_ModuleWrapper):
 
     Two cache layers cooperate here:
 
-    * **Python-side ``self._cache``** — unbounded ``dict`` keyed by
+    * **Python-side ``self._cache``** — a :class:`SignatureCache` keyed by
       :class:`CacheKey`, holds the :class:`_CacheEntry` + return spec
       + timing.  Dropped on :meth:`train` / :meth:`eval` / :meth:`to`
-      / :meth:`load_state_dict` / :meth:`clear_cache`.
+      / :meth:`load_state_dict` / :meth:`clear_cache`.  Bounded per module,
+      least recently used out: ``LUCID_COMPILE_MAX_SIGNATURES`` entries
+      (default 256) and ``LUCID_COMPILE_MAX_SIGNATURE_BYTES`` of estimated
+      pinned memory (default an eighth of the machine's), read when the
+      module is made, ``0`` = no cap.  An executable keeps the buffers
+      MPSGraph planned for it until it is released, so a module fed many
+      shapes would otherwise hold them all; a dropped signature recompiles
+      on its next call, and a loop cycling over more shapes than the cap
+      pays that on every call.  ``cache_info`` / ``timing`` / ``graph_dump``
+      do not count as a use.
     * **C++ ``ExecutableCache::session()``** — process-global LRU
       bounded by ``LUCID_COMPILE_MAX_CACHE`` (default 32) and by an
       estimate of the memory its executables keep pinned,
       ``LUCID_COMPILE_MAX_CACHE_BYTES`` (default an eighth of the
       machine's memory).  Both caps drop only the session cache's own
       reference: an executable this module's ``_cache`` holds stays alive
-      and pinned.  Holds one ``CompiledExecutable`` per *trace structure*
+      and pinned, and one the session cache holds stays pinned after this
+      module drops it, so the two bound the union.  Holds one
+      ``CompiledExecutable`` per *trace structure*
       so two :class:`CompiledModule` instances tracing the same op DAG
       share the underlying Metal kernels.  Cache key includes per-op
       attributes (since 2026-05-24), so ``dropout(p=0)`` and
       ``dropout(p=0.5)`` no longer collide.
+
+    **The symbolic-batch path is not bounded by either cache.**  A module made with
+    ``dynamic=True`` whose graph the symbolic gate accepts keeps one executable for
+    every batch size: one entry here, none in the session cache.  MPSGraph
+    specializes that executable once per distinct runtime shape and keeps each
+    shape's intermediates until the executable is released, so its footprint grows
+    with the number of distinct batch sizes it has seen (measured: +80 MB per
+    distinct batch on a 1024-4096-4096-1024 MLP fed 2112-3072 rows, linear over 16
+    sizes), and releasing one means dropping the executable.  Per-shape static
+    caching, the default, is bounded as above.
 
     A signature's first run is timed.  MPSGraph finishes preparing a graph
     inside it, and for a few graphs (a long chain of ``cat`` of slices of its
@@ -487,7 +548,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
         # keep the symbolic executable, ``False`` → per-shape static.  ``None``
         # until then (and forever for non-dynamic modules).
         object.__setattr__(self, "_symbolic_resolved", None)
-        object.__setattr__(self, "_cache", {})
+        object.__setattr__(self, "_cache", SignatureCache())
         object.__setattr__(self, "_eager_only", EagerFallbackSet())
         object.__setattr__(self, "_call_counter", {})
         # The key's parameter fingerprint, walked again only when a parameter
@@ -943,7 +1004,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
             return run_eager(self._model, args, kwargs)
 
         grad_mode = _C_engine.grad_enabled()
-        cached = self._cache.get(key)
+        cached = self._cache.lookup(key)
         if grad_mode and self._needs_gradients(leaves, cached):
             return self._run_differentiable(key, args, kwargs)
         entry: _CacheEntry | TraceAnswer[object] | None = cached
@@ -1326,31 +1387,9 @@ class CompiledModule[**P, R](_ModuleWrapper):
         if self._symbolic and self._symbolic_resolved is None:
             object.__setattr__(self, "_symbolic_resolved", use_dynamic)
 
-        # Figure out, for each feed in exe.input_ids, where it comes from at
-        # call time: a positional arg (int index), a keyword arg (str name), or
-        # a pinned parameter / constant (None).  Index by ``TensorImpl is``
-        # identity.  A tensor passed BOTH positionally and by keyword resolves
-        # to the positional slot (args win — they're checked first).
-        # Nested tensors too: a tensor inside a list argument used to fall
-        # through to ``None`` — pinned at its trace-time value, so every
-        # later call reused it and returned a wrong answer without a word.
-        feed_source: dict[int, int] = {}
-        for i, t in enumerate(leaf_tensors(args, kwargs)):
-            feed_source.setdefault(id(_unwrap(t)), i)
-
-        input_source: list[int | None] = []
-        for tid in exe.input_ids:
-            impl = ext.get(tid)
-            if impl is None:
-                # Should not happen — the builder only emits placeholder
-                # ids that are in the external_feeds set.  Treat as a
-                # compile failure.
-                _fallback_notice(
-                    "unresolvable-feed",
-                    f"executable input id {tid} is not in traced external_feeds",
-                )
-                return None
-            input_source.append(feed_source.get(id(impl)))
+        input_source = _feed_sources(exe, ext, args, kwargs)
+        if input_source is None:
+            return None
 
         from lucid.compile._debug.trace_dump import trace_to_json
 
@@ -1363,6 +1402,7 @@ class CompiledModule[**P, R](_ModuleWrapper):
             compile_ms=(time.perf_counter() - t_compile_start) * 1000.0,
             carried=carried,
             reads=TraceReads.of(tracer, exe.input_ids, input_source),
+            retained=_C_engine.compile.retained_bytes_estimate(graph),
         )
 
     def _run(

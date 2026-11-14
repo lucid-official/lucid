@@ -283,6 +283,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - byte cap review fixes, scope and env parsing (LCD-1000)
 
+- bound each wrapper's signature cache (LCD-1008)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
