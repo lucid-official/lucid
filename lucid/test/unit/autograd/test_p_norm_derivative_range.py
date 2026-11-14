@@ -25,7 +25,7 @@ from lucid.autograd import grad
 BASE = [3.0, -4.0, 1.0, 2.0, 0.5]
 DIRECTION = [0.3, -1.0, 0.5, 2.0, -0.7]
 SECOND = [-0.4, 0.9, 1.3, -0.2, 0.6]
-ORDERS = [1.5, 2.0, 3.0, 4.0, 6.0]
+ORDERS = [1.5, 2.0, 2.5, 3.0, 4.0, 6.0]
 #: Decades across (nearly) the float32 range, plus the edges of both bands the plain graph lost.
 MAGNITUDES = sorted({10.0**e for e in range(-30, 31, 5)} | {1e-10, 1e-9, 1e-8, 1e-7, 1e6, 1e8, 1e9})
 
@@ -48,6 +48,18 @@ def _hvp(x: list[float], w: list[float], p: float) -> list[float]:
     dot = sum(s * v for s, v in zip(slope, w, strict=True))
     return [
         (p - 1.0) / n * (r ** (p - 2.0) * v - s * dot)
+        for r, v, s in zip(ratio, w, slope, strict=True)
+    ]
+
+
+def _hvp_at_live_entries(x: list[float], w: list[float], p: float) -> list[float | None]:
+    """:func:`_hvp` with ``None`` for a zero entry below ``p = 2``, where ``|0|^(p-2)`` is infinite."""
+    n, ratio, slope = _norm_and_slope(x, p)
+    dot = sum(s * v for s, v in zip(slope, w, strict=True))
+    return [
+        None
+        if r == 0.0 and p < 2.0
+        else (p - 1.0) / n * ((r ** (p - 2.0) if r > 0.0 else 0.0) * v - s * dot)
         for r, v, s in zip(ratio, w, slope, strict=True)
     ]
 
@@ -91,7 +103,7 @@ def test_the_recorded_first_derivative_equals_the_eager_one(device: str, p: floa
 
 
 @pytest.mark.parametrize("magnitude", [1e-30, 1e-20, 1e-10, 1e-5, 1e5, 1e10, 1e20, 1e30])
-@pytest.mark.parametrize("p", [2.0, 3.0, 4.0])
+@pytest.mark.parametrize("p", [2.0, 2.5, 3.0, 4.0])
 def test_the_third_derivative_does_not_depend_on_the_scale(
     device: str, p: float, magnitude: float
 ) -> None:
@@ -114,7 +126,7 @@ def test_the_third_derivative_does_not_depend_on_the_scale(
         assert abs(a - b) <= 2e-3 * scale, f"entry {i}: {a} vs {b}"
 
 
-@pytest.mark.parametrize("p", [2.0, 3.0, 4.0, 6.0])
+@pytest.mark.parametrize("p", [2.0, 2.5, 3.0, 4.0, 6.0])
 def test_a_zero_slice_has_a_zero_gradient_and_a_zero_second_derivative(
     device: str, p: float
 ) -> None:
@@ -126,7 +138,7 @@ def test_a_zero_slice_has_a_zero_gradient_and_a_zero_second_derivative(
     assert hw.tolist() == [0.0, 0.0, 0.0]
 
 
-@pytest.mark.parametrize("p", [1.5, 2.0, 3.0])
+@pytest.mark.parametrize("p", [1.5, 2.0, 2.5, 3.0])
 def test_a_zero_slice_beside_a_live_one_keeps_both_gradients(device: str, p: float) -> None:
     x = _leaf([0.0, 0.0, 0.0, 3.0, -4.0, 1.0], device).reshape(2, 3)
     (g,) = grad(lucid.linalg.vector_norm(x, ord=p, dim=1).sum(), [x])
@@ -168,3 +180,59 @@ def test_a_batched_second_derivative_reduces_over_its_axes(
         for i, w in zip(members, want, strict=True):
             assert hs[i] - hs[i] == 0.0, f"entry {i} is {hs[i]}, want {w}"
             assert abs(hs[i] - w) <= 5e-5 * scale, f"entry {i}: {hs[i]} vs {w} (scale {scale})"
+
+
+#: The spellings of "every axis".
+EVERY_AXIS = [None, (), []]
+
+
+@pytest.mark.parametrize("magnitude", [1e-30, 1e-10, 1e-9, 1e-7, 1.0, 1e6, 1e8, 1e9, 1e30])
+@pytest.mark.parametrize("p", [1.5, 3.0, 4.0])
+@pytest.mark.parametrize("dim", EVERY_AXIS)
+def test_every_spelling_of_every_axis_keeps_the_second_derivative(
+    device: str, dim: tuple[()] | list[int] | None, p: float, magnitude: float
+) -> None:
+    """``dim=()`` and ``dim=[]`` reduce every axis; they took the plain graph and lost its range."""
+    flat = [v * magnitude for v in BASE[:4]]
+    w = [v * magnitude for v in DIRECTION[:4]]
+    x = _leaf(flat, device).reshape(2, 2)
+    (g,) = grad(lucid.linalg.vector_norm(x, ord=p, dim=dim), [x], create_graph=True)
+    (hw,) = grad(g, [x], grad_outputs=lucid.tensor(w, device=device).reshape(2, 2))
+    _close(hw.reshape(4), _hvp(x.reshape(4).tolist(), w, p), 2e-5)
+
+
+@pytest.mark.parametrize("magnitude", [1e-30, 1e-10, 1e-9, 1.0, 1e8, 1e9, 1e30])
+@pytest.mark.parametrize("p", [1.5, 3.0, 4.0])
+def test_a_zero_dim_input_is_its_own_magnitude_and_its_derivatives(
+    device: str, p: float, magnitude: float
+) -> None:
+    """``||x||_p`` of a scalar is ``|x|``: slope ``sign(x)``, second derivative 0, whatever ``x``."""
+    for sign in (1.0, -1.0):
+        x = lucid.tensor(sign * magnitude, device=device, requires_grad=True)
+        n = lucid.linalg.vector_norm(x, ord=p)
+        assert n.item() == abs(x.item())
+        (g,) = grad(n, [x], create_graph=True)
+        assert g.item() == sign
+        (h,) = grad(g, [x])
+        assert h.item() == 0.0
+
+
+@pytest.mark.parametrize("p", [1.5, 2.5, 3.0, 4.0])
+@pytest.mark.parametrize("magnitude", [1e-9, 1.0, 1e8])
+def test_a_zero_entry_in_a_live_slice_leaves_the_others_finite_and_exact(
+    device: str, p: float, magnitude: float
+) -> None:
+    """Below ``p = 2`` the power's slope is infinite at 0: that ``inf * 0`` turned the second
+    derivative of the whole slice NaN (every entry of it, through the cotangent sum of ``N``)."""
+    flat = [v * magnitude for v in (3.0, 0.0, -4.0, 1.0, 0.0)]
+    w = [v * magnitude for v in DIRECTION]
+    x = _leaf(flat, device)
+    (g,) = grad(lucid.linalg.vector_norm(x, ord=p), [x], create_graph=True)
+    (hw,) = grad(g, [x], grad_outputs=lucid.tensor(w, device=device))
+    want = _hvp_at_live_entries(x.tolist(), w, p)
+    scale = max(abs(v) for v in want if v is not None)
+    for i, (got, ref) in enumerate(zip(hw.tolist(), want, strict=True)):
+        if ref is None:
+            continue
+        assert got - got == 0.0, f"entry {i} is {got}, want {ref}"
+        assert abs(got - ref) <= 2e-5 * scale, f"entry {i}: {got} vs {ref}"

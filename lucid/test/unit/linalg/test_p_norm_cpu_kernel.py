@@ -113,13 +113,14 @@ def test_the_kernel_matches_the_float64_norm_over_every_layout(
         assert abs(g - w) <= tol * w
 
 
-@pytest.mark.parametrize("rows", [1, 2, 3])
-@pytest.mark.parametrize("length", [32768, 50000, 70001, 150001])
+@pytest.mark.parametrize("rows", [1, 3])
+@pytest.mark.parametrize("length", [16384, 20000, 32768, 40000, 70001, 150001])
 @pytest.mark.parametrize("p", ORDERS)
 def test_a_long_slice_is_summed_in_blocks_with_the_same_value(
     device_cpu_only: str, p: float, length: int, rows: int
 ) -> None:
-    """Slices past one block (32768 entries) are split across the cores when few."""
+    """A slice is summed over blocks of 16384 entries: one block, two (serial) and past two
+    blocks (32768), where a few slices are split across the cores, are the same value."""
     flat = _values(rows * length, length)
     x = lucid.tensor(flat).reshape(rows, length)
     got = _kernel(x, p, [1], False).tolist()
@@ -157,7 +158,17 @@ def test_a_zero_dim_input_is_its_magnitude(device_cpu_only: str, p: float) -> No
 
 @pytest.mark.parametrize(
     ("shape", "axes", "out_shape"),
-    [((0, 3), [0], (3,)), ((3, 0), [1], (3,)), ((0, 3), [1], (0,)), ((2, 0, 3), [1], (2, 3))],
+    [
+        ((0, 3), [0], (3,)),
+        ((3, 0), [1], (3,)),
+        ((0, 3), [1], (0,)),
+        ((2, 0, 3), [1], (2, 3)),
+        # a wide inner extent (swept in column tiles) with nothing outer, nothing to reduce, nothing inner
+        ((0, 4, 16), [1], (0, 16)),
+        ((0, 4, 16), [0], (4, 16)),
+        ((3, 0, 16), [1], (3, 16)),
+        ((3, 4, 0), [1], (3, 0)),
+    ],
 )
 def test_an_empty_reduction_is_zero(
     device_cpu_only: str, shape: tuple[int, ...], axes: list[int], out_shape: tuple[int, ...]
@@ -263,44 +274,62 @@ def _impl(dtype: lucid.dtype = lucid.float32, device: str = "cpu", n: int = 6) -
 
 
 @pytest.mark.parametrize(
-    ("p", "dtype", "axes", "serves"),
+    ("p", "dtype", "serves"),
     [
-        (3.0, lucid.float32, [0], True),
-        (3.0, lucid.float64, [0], True),
-        (1.5, lucid.float32, [0], True),
-        (2.0, lucid.float32, [0], False),  # the plain graph's root has no window problem
-        (1.0, lucid.float32, [0], False),
-        (0.5, lucid.float32, [0], False),
-        (math.inf, lucid.float32, [0], False),
-        (3.0, lucid.float32, [], False),
-        (3.0, lucid.float16, [0], False),  # reduces in float32 through ``_scaled_p_norm``
-        (3.0, lucid.bfloat16, [0], False),
+        (3.0, lucid.float32, True),
+        (3.0, lucid.float64, True),
+        (1.5, lucid.float32, True),
+        (2.0, lucid.float32, False),  # the plain graph's root has no window problem
+        (1.0, lucid.float32, False),
+        (0.5, lucid.float32, False),
+        (math.inf, lucid.float32, False),
+        (3.0, lucid.float16, False),  # reduces in float32 through ``_scaled_p_norm``
+        (3.0, lucid.bfloat16, False),
     ],
 )
 def test_the_cpu_stream_serves_the_orders_that_power_the_entries(
-    device_cpu_only: str, p: float, dtype: lucid.dtype, axes: list[int], serves: bool
+    device_cpu_only: str, p: float, dtype: lucid.dtype, serves: bool
 ) -> None:
-    assert _reduce._takes_scaled_kernel(_impl(dtype), p, axes) is serves
+    assert _reduce._takes_scaled_kernel(_impl(dtype), p) is serves
+
+
+def test_a_scalar_takes_the_kernel_on_the_cpu(device_cpu_only: str) -> None:
+    """It is its own magnitude; the plain graph's second derivative of it was ``-inf`` at 1e-10."""
+    assert _reduce._takes_scaled_kernel(_unwrap(lucid.tensor(1.5)), 3.0) is True
 
 
 def test_an_empty_tensor_takes_the_plain_graph(device_cpu_only: str) -> None:
-    assert _reduce._takes_scaled_kernel(_unwrap(lucid.zeros(0, 3)), 3.0, [1]) is False
+    assert _reduce._takes_scaled_kernel(_unwrap(lucid.zeros(0, 3)), 3.0) is False
 
 
 def test_metal_keeps_its_own_dtypes_and_serves_p_two(device_gpu_only: str) -> None:
-    assert _reduce._takes_scaled_kernel(_impl(device=device_gpu_only), 2.0, [0]) is True
-    assert _reduce._takes_scaled_kernel(_impl(lucid.float16, device_gpu_only), 3.0, [0]) is False
+    assert _reduce._takes_scaled_kernel(_impl(device=device_gpu_only), 2.0) is True
+    assert _reduce._takes_scaled_kernel(_impl(lucid.float16, device_gpu_only), 3.0) is False
 
 
 def test_a_cpu_compile_trace_records_the_plain_graph(device_cpu_only: str) -> None:
     """Core ML has no emitter for the ``p_norm`` node, and a trace of a CPU tensor is exportable."""
     x = lucid.tensor(_values(12, 1)).reshape(3, 4)
     with _tracing(watch=((x,), {})) as tracer:
-        assert _reduce._takes_scaled_kernel(_unwrap(x), 3.0, [1]) is False
+        assert _reduce._takes_scaled_kernel(_unwrap(x), 3.0) is False
         lucid.linalg.vector_norm(x, 3.0, dim=1)
     names = [op.name for op in tracer.graph.ops]
     assert "p_norm" not in names
     assert "pow_scalar" in names
+
+
+def test_a_metal_compile_trace_keeps_a_scalar_on_the_plain_graph(device_gpu_only: str) -> None:
+    """The compiled graph's ``p_norm`` emitter has no 0-d variant: a scalar in a trace would
+    fall back to eager with a warning, so it records the plain ops."""
+    scalar = lucid.tensor(1.5, device=device_gpu_only)
+    with _tracing(watch=((scalar,), {})) as tracer:
+        lucid.linalg.vector_norm(scalar, 3.0)
+    assert "p_norm" not in [op.name for op in tracer.graph.ops]
+    matrix = lucid.tensor([[3.0, -4.0], [1.0, 2.0]], device=device_gpu_only)
+    for dim in (None, (), []):
+        with _tracing(watch=((matrix,), {})) as tracer:
+            lucid.linalg.vector_norm(matrix, 3.0, dim=dim)
+        assert "p_norm" in [op.name for op in tracer.graph.ops], dim
 
 
 # ── the kernel's value against the plain graph it replaced ─────────────────────
@@ -319,7 +348,7 @@ def test_the_kernel_agrees_with_the_plain_graph_at_moderate_magnitudes(
         return n.tolist(), g.reshape(-1).tolist()
 
     kernel_n, kernel_g = value_and_gradient()
-    never = lambda r, p, axes: False  # noqa: E731 - the plain graph, as before the kernel
+    never = lambda r, p: False  # noqa: E731 - the plain graph, as before the kernel
     monkeypatch.setattr(_reduce, "_takes_scaled_kernel", never)
     monkeypatch.setattr(_norm_scale, "_takes_scaled_kernel", never)
     plain_n, plain_g = value_and_gradient()
@@ -328,3 +357,31 @@ def test_the_kernel_agrees_with_the_plain_graph_at_moderate_magnitudes(
     scale = max(abs(v) for v in plain_g)
     for a, b in zip(kernel_g, plain_g, strict=True):
         assert abs(a - b) <= 2e-6 * scale
+
+
+@pytest.mark.parametrize("dtype", [lucid.float32, lucid.float64])
+@pytest.mark.parametrize("p", [1.5, 2.7, 3.0, 7.5])
+@pytest.mark.parametrize(
+    ("shape", "axes"),
+    [
+        ((5, 9), [1]),
+        ((4, 6, 5), [0, 2]),  # gathered to put the reduced axes last
+        ((37, 700), [0]),  # tiles of columns
+        ((3, 50, 20), [1]),
+        ((3, 40000), [1]),  # past two blocks of 16384: split across the cores
+        ((150001,), [0]),
+    ],
+)
+def test_the_kernel_returns_the_same_bits_every_time(
+    device_cpu_only: str,
+    dtype: lucid.dtype,
+    p: float,
+    shape: tuple[int, ...],
+    axes: list[int],
+) -> None:
+    """Blocks are added in order and a slice or a tile is one chunk's, so the core a chunk
+    lands on does not change the total."""
+    x = lucid.tensor(_values(math.prod(shape), 17), dtype=dtype).reshape(*shape)
+    first = _kernel(x, p, axes, False).reshape(-1).tolist()
+    for _ in range(3):
+        assert _kernel(x, p, axes, False).reshape(-1).tolist() == first
