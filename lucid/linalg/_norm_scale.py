@@ -3,9 +3,9 @@
 ``vector_norm`` is the one place a norm reduces entries, and ``matrix_norm``'s
 entry-wise orders go through it, so the guard against a power leaving the
 floating-point range on the CPU lives here (:func:`_scaled_p_norm`); where the
-range-safe kernel serves the call (a finite ``p > 1`` but 2, on Metal and
-the CPU: ``backend/gpu/PNorm.h``, ``cpu::PNorm``) the reduction itself is
-range-safe.  ``norm``
+range-safe kernel serves the call (a finite ``p > 0`` other than 1, and other
+than 2 on the CPU: ``backend/gpu/PNorm.h``, ``cpu::PNorm``) the reduction
+itself is range-safe.  ``norm``
 additionally rescales whatever it dispatches by the largest magnitude
 (:func:`_scaled`), on every device, as it always has.
 """
@@ -36,8 +36,8 @@ def _scaled_p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
     nothing powers out of range.  ``vector_norm([1e-20, 1e-20])`` in float32 is
     2e-20, an ordinary number, and the direct evaluation squares to 1e-40.
 
-    A finite ``p > 1`` other than 2 of a float32 or float64 CPU tensor is the
-    range-safe kernel itself (:func:`_takes_scaled_kernel`): it keeps the
+    A finite ``p > 0`` other than 1 and 2 of a float32 or float64 CPU tensor is
+    the range-safe kernel itself (:func:`_takes_scaled_kernel`): it keeps the
     largest magnitude in the pass that reads the data, and its backward only
     forms ratios to the norm, so the value and every derivative are in range
     and nothing is read or redone here.  The same holds on Metal, which has
@@ -45,7 +45,7 @@ def _scaled_p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
     (a ~200 us device sync) and no extra pass is needed.
 
     What is left on the CPU is ``p = 2``, whose plain graph keeps its range
-    wherever the forward does, and ``0 < p < 1`` and ``p < 0``.  The rescale
+    wherever the forward does, and ``p < 0``.  The rescale
     costs several passes over the input, and only a slice whose magnitude is
     outside the window where ``|x|^p`` is representable needs it.  The
     reduction therefore runs plain first and its answers are read: when every

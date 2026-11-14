@@ -169,44 +169,51 @@ _CPU_KERNEL_DTYPES = frozenset({_C_engine.F32, _C_engine.F64})
 def _takes_scaled_kernel(r: _Impl, p: float) -> bool:
     """Whether the range-safe p-norm kernel computes this reduction.
 
-    It serves a finite ``p > 1`` — the orders that power the entries — of a
-    float32 reduction on either stream and of a float64 one on the CPU.
-    ``sum(r * r)`` flushes a float32 slice below ~1e-19 to zero on Metal and
-    overflows one above ~1.8e19, though the norm is an ordinary number; the
-    kernel keeps each slice's largest magnitude and divides it out in the same
-    pass that reads the data (``backend/gpu/PNorm.h``, ``cpu::PNorm``).
+    It serves a finite ``p > 0`` other than 1 — the orders that power the
+    entries — of a float32 reduction on either stream and of a float64 one on
+    the CPU.  ``sum(r * r)`` flushes a float32 slice below ~1e-19 to zero on
+    Metal and overflows one above ~1.8e19, though the norm is an ordinary
+    number; the kernel keeps each slice's largest magnitude and divides it out
+    in the same pass that reads the data (``backend/gpu/PNorm.h``,
+    ``cpu::PNorm``).
 
     On the CPU the plain graph kept the forward in range but not its
     derivatives: the second derivative of ``(sum |x|^p)^(1/p)`` forms
     ``s^(1/p - 2)`` for ``s = sum |x|^p``, which leaves float32 for a slice
-    near 1e-9 or 1e8 at ``p = 3`` (the window narrows as ``p`` grows).  The
-    kernel's backward (``PNormBackward``) only forms ratios ``|x| / N`` in
-    [0, 1], on both streams and at every derivative order.  ``p = 2`` stays on
-    the plain graph there: its root's derivatives are in ``N``, not in ``s``,
-    so they keep their range wherever the forward does, and ``mul`` + ``sum``
-    are vDSP passes the kernel's scalar loop does not beat on a large slice.
+    near 1e-9 or 1e8 at ``p = 3`` (the window narrows as ``p`` grows).  Below
+    ``p = 1`` the window is the forward's whole ``2^±100`` and the same second
+    derivative is still lost: for a slice near 1e-28 or 1e27 at ``p = 0.5``
+    (``inf`` on the CPU, NaN on Metal), over most of 1e-30 .. 1e30 at
+    ``p = 0.25``.  The kernel's backward (``PNormBackward``) only forms ratios
+    ``|x| / N`` in [0, 1], on both streams and at every derivative order.
+    ``p = 2`` stays on the plain graph on the CPU: its root's derivatives are
+    in ``N``, not in ``s``, so they keep their range wherever the forward does,
+    and ``mul`` + ``sum`` are vDSP passes the kernel's scalar loop does not
+    beat on a large slice.
 
     The reduction's axes take no part: an empty list reduces every axis, as it
     does for the plain graph, and a 0-d input is its own magnitude, so the
     ``dim=()`` and ``dim=[]`` spellings and a scalar keep the kernel's
     derivatives too.
-    ``p <= 1`` powers nothing that can leave the range, and the extrema of
-    ``p = ±inf`` power nothing at all.  A compile trace on the GPU records the
-    kernel as the ``p_norm`` node, which the compiled graph lowers to the same
-    scaled form (``compile/OpEmitters/reduce/Reduction.mm``); a trace of a CPU
-    tensor takes the plain graph, as Core ML has no emitter for the node.  A
-    phantom tensor has no kernel to run and takes the plain graph too, and so
-    does a 0-d tensor in a trace: the node's emitter has no scalar variant.
+    ``p = 1`` is a sum of magnitudes that powers nothing, ``p <= 0`` counts
+    entries or divides by them, and the extrema of ``p = ±inf`` power nothing at
+    all.  A compile trace on the GPU records the kernel as the ``p_norm`` node,
+    which the compiled graph lowers to the same scaled form
+    (``compile/OpEmitters/reduce/Reduction.mm``, which takes ``p > 1`` only); a
+    trace of a CPU tensor takes the plain graph, as Core ML has no emitter for
+    the node.  A phantom tensor has no kernel to run and takes the plain graph
+    too, and so does a 0-d tensor in a trace: the node's emitter has no scalar
+    variant.
     """
-    if not p > 1.0 or math.isinf(p):
+    if not p > 0.0 or p == 1.0 or math.isinf(p):
         return False
     if r.device == _C_engine.Device.GPU:
         return (
             r.dtype == _C_engine.F32
             and not r.is_phantom
             and 0 < r.numel() < _MAX_KERNEL_NUMEL
-            # The compiled graph's ``p_norm`` emitter has no 0-d variant.
-            and (len(r.shape) > 0 or _C_engine.compile.current_tracer() is None)
+            # The compiled graph's ``p_norm`` emitter has no 0-d variant and no ``p < 1``.
+            and (_C_engine.compile.current_tracer() is None or (len(r.shape) > 0 and p > 1.0))
         )
     return (
         p != 2.0

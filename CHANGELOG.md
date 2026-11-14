@@ -293,6 +293,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - serve 0 < p < 1 from the p-norm kernel (LCD-1009)
 
+- route the quasi-norms to the range-safe p-norm (LCD-1009)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
