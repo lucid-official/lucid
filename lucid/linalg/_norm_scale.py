@@ -2,8 +2,10 @@
 
 ``vector_norm`` is the one place a norm reduces entries, and ``matrix_norm``'s
 entry-wise orders go through it, so the guard against a power leaving the
-floating-point range on the CPU lives here (:func:`_scaled_p_norm`); on Metal
-the reduction itself is range-safe (``backend/gpu/PNorm.h``).  ``norm``
+floating-point range on the CPU lives here (:func:`_scaled_p_norm`); where the
+range-safe kernel serves the call (a finite ``p > 1`` but 2, on Metal and
+the CPU: ``backend/gpu/PNorm.h``, ``cpu::PNorm``) the reduction itself is
+range-safe.  ``norm``
 additionally rescales whatever it dispatches by the largest magnitude
 (:func:`_scaled`), on every device, as it always has.
 """
@@ -34,20 +36,25 @@ def _scaled_p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
     nothing powers out of range.  ``vector_norm([1e-20, 1e-20])`` in float32 is
     2e-20, an ordinary number, and the direct evaluation squares to 1e-40.
 
-    The rescale costs several passes over the input, and only a slice whose
-    magnitude is outside the window where ``|x|^p`` is representable needs it.
-    On the CPU the reduction therefore runs plain first and its answers are
-    read: when every one is inside the window the plain result stands, bit for
-    bit what it was before, and only an underflowed, overflowed or all-zero
-    slice has the call redone rescaled.  The read is one boolean of the
-    *result*, and costs nothing there — the CPU is eager.
+    A finite ``p > 1`` other than 2 of a float32 or float64 CPU tensor is the
+    range-safe kernel itself (:func:`_takes_scaled_kernel`): it keeps the
+    largest magnitude in the pass that reads the data, and its backward only
+    forms ratios to the norm, so the value and every derivative are in range
+    and nothing is read or redone here.  The same holds on Metal, which has
+    its own scaled kernel (``backend/gpu/PNorm.h``), so no read of the result
+    (a ~200 us device sync) and no extra pass is needed.
 
-    Metal, a compile trace and a phantom tensor take :func:`_p_norm` as it is.
-    On Metal that is the reduction's own scaled kernel, which keeps a running
-    largest magnitude in the pass that reads the data, so no read of the result
-    (a ~200 us device sync) and no extra pass is needed; a trace or a phantom
-    has no value to read and takes the plain graph.  ``norm`` still rescales on
-    every device.
+    What is left on the CPU is ``p = 2``, whose plain graph keeps its range
+    wherever the forward does, and ``0 < p < 1`` and ``p < 0``.  The rescale
+    costs several passes over the input, and only a slice whose magnitude is
+    outside the window where ``|x|^p`` is representable needs it.  The
+    reduction therefore runs plain first and its answers are read: when every
+    one is inside the window the plain result stands, bit for bit what it was
+    before, and only an underflowed, overflowed or all-zero slice has the call
+    redone rescaled.  The read is one boolean of the *result*, and costs
+    nothing there — the CPU is eager.  A compile trace and a phantom tensor
+    have no value to read and take the plain graph.  ``norm`` still rescales
+    on every device.
 
     The divisor is a constant of the call — computed without the graph — so
     the gradient is the plain norm's, and an all-zero, ``nan`` or infinite
@@ -61,7 +68,7 @@ def _scaled_p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
     if r.dtype in _HALF:
         out = _scaled_p_norm(_C_engine.astype(r, _C_engine.F32), p, axes, keepdim)
         return _C_engine.astype(out, r.dtype)
-    if _takes_scaled_kernel(r, p, axes):
+    if _takes_scaled_kernel(r, p):
         return _p_norm(r, p, axes, keepdim)
     out = _p_norm(r, p, axes, keepdim)
     exponent = _RANGE_EXPONENT[r.dtype] / max(abs(p), 1.0)

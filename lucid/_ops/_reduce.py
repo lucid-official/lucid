@@ -166,7 +166,7 @@ _MAX_KERNEL_NUMEL = 2**31
 _CPU_KERNEL_DTYPES = frozenset({_C_engine.F32, _C_engine.F64})
 
 
-def _takes_scaled_kernel(r: _Impl, p: float, axes: list[int]) -> bool:
+def _takes_scaled_kernel(r: _Impl, p: float) -> bool:
     """Whether the range-safe p-norm kernel computes this reduction.
 
     It serves a finite ``p > 1`` — the orders that power the entries — of a
@@ -186,17 +186,28 @@ def _takes_scaled_kernel(r: _Impl, p: float, axes: list[int]) -> bool:
     so they keep their range wherever the forward does, and ``mul`` + ``sum``
     are vDSP passes the kernel's scalar loop does not beat on a large slice.
 
+    The reduction's axes take no part: an empty list reduces every axis, as it
+    does for the plain graph, and a 0-d input is its own magnitude, so the
+    ``dim=()`` and ``dim=[]`` spellings and a scalar keep the kernel's
+    derivatives too.
     ``p <= 1`` powers nothing that can leave the range, and the extrema of
     ``p = ±inf`` power nothing at all.  A compile trace on the GPU records the
     kernel as the ``p_norm`` node, which the compiled graph lowers to the same
     scaled form (``compile/OpEmitters/reduce/Reduction.mm``); a trace of a CPU
     tensor takes the plain graph, as Core ML has no emitter for the node.  A
-    phantom tensor has no kernel to run and takes the plain graph too.
+    phantom tensor has no kernel to run and takes the plain graph too, and so
+    does a 0-d tensor in a trace: the node's emitter has no scalar variant.
     """
-    if not p > 1.0 or math.isinf(p) or not axes:
+    if not p > 1.0 or math.isinf(p):
         return False
     if r.device == _C_engine.Device.GPU:
-        return r.dtype == _C_engine.F32 and not r.is_phantom and 0 < r.numel() < _MAX_KERNEL_NUMEL
+        return (
+            r.dtype == _C_engine.F32
+            and not r.is_phantom
+            and 0 < r.numel() < _MAX_KERNEL_NUMEL
+            # The compiled graph's ``p_norm`` emitter has no 0-d variant.
+            and (len(r.shape) > 0 or _C_engine.compile.current_tracer() is None)
+        )
     return (
         p != 2.0
         and r.dtype in _CPU_KERNEL_DTYPES
@@ -226,7 +237,7 @@ def _p_norm(r: _Impl, p: float, axes: list[int], keepdim: bool) -> _Impl:
         return _ABS_EXTREMA[p](_C_engine.abs(r), axes, keepdim, _C_engine.ExtremumNanGrad.ZERO)
     if p == 1:
         return _C_engine.sum(_C_engine.abs(r), axes, keepdim)
-    if _takes_scaled_kernel(r, p, axes):
+    if _takes_scaled_kernel(r, p):
         return _C_engine.linalg.p_norm(r, p, axes, keepdim)
     if p == 2:
         # r² = |x|² for a real r, one product cheaper than ``abs`` first.

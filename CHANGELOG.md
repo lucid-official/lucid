@@ -277,6 +277,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - a zero entry no longer NaNs a recorded p<2 norm (LCD-1003)
 
+- every spelling of every axis takes the p-norm kernel
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
