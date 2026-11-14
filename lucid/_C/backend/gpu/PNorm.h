@@ -25,6 +25,15 @@
 // (the answer is inf unless a NaN is there), and an all-zero slice has m = 0 and
 // answers 0.
 //
+// An order below 1 (a quasi-norm) is served too: every ratio's power ``r^p`` is in
+// [0, 1] and ``s`` in [1, n], the same ranges.  What differs is the root: ``s^(1/p)``
+// multiplies the sum's relative rounding error by 1/p (4x at p = 0.25), where p > 1
+// divides it, so a plain float32 running sum cost the quasi-norm up to 14 ulp where
+// the plain graph's tree reduction had 2.  For p < 1 the sum is a double-float
+// ``(s, c)`` (``s + c``, ``c`` the rounding errors of the additions) through the lane
+// loop, the simdgroup reduction, the chunk pairs and their fold, and the root takes
+// the pair.
+//
 // Float32 arithmetic on Metal flushes subnormal operands, so a magnitude below
 // float32's smallest normal (1.18e-38) reads as zero here as it does in every
 // other op of the stream; the kernel is exact down to that floor.
@@ -79,6 +88,48 @@ inline float pn_ratio(float a, float m) {
 inline float pn_root(float m, float s, float p, bool two) {
     return m * (two ? metal::sqrt(s) : lucid_pow(s, 1.0f / p));
 }
+// Error-free sum: ``hi + lo == a + b`` exactly, ``hi`` the rounded sum.
+inline void pn_two_sum(float a, float b, thread float& hi, thread float& lo) {
+    hi = a + b;
+    float v = hi - a;
+    lo = (a - (hi - v)) + (b - v);
+}
+// ``(s, c) += (s2, c2)`` for the double-float sums of an order below 1.
+inline void pn_df_add(thread float& s, thread float& c, float s2, float c2) {
+    float hi, lo;
+    pn_two_sum(s, s2, hi, lo);
+    s = hi;
+    c = (c + c2) + lo;
+}
+// ``m * (s + c)^(1/p)`` with ``1/p = e + e_lo`` (``e`` its float32 rounding, ``e_lo`` the
+// rest, both from the host in double): ``(s + c)^(e + e_lo) = s^e (1 + e c / s + e_lo ln s)``
+// to first order, where ``c / s`` is ~1e-7 and ``e_lo ln s`` at most 1e-6.  The rounding of
+// ``1/p`` alone is ``e_lo ln s`` of relative error in the norm (3.6 ulp for p = 0.75 and
+// 2e5 entries).  An all-zero (m = 0) or NaN slice answers ``m``.
+inline float pn_root_df(float m, float s, float c, float e, float e_lo) {
+    if (!(m > 0.0f))
+        return m;
+    return m * (lucid_pow(s, e) * (1.0f + (e * (c / s) + e_lo * metal::log(s))));
+}
+// ``pn_merge`` for the double-float sums: the rescale ``(m_a / m)^p`` is the accurate
+// ``lucid_pow`` (its error multiplies a whole partial sum), the products are exact pairs.
+inline void pn_merge_df(thread float& m, thread float& s, thread float& c,
+                        float m2, float s2, float c2, float p) {
+    if (m != m || m2 != m2) { m = NAN; s = NAN; c = 0.0f; return; }
+    float big = metal::max(m, m2);
+    if (!(big > 0.0f)) { m = 0.0f; s = 0.0f; c = 0.0f; return; }
+    float r1 = lucid_pow(pn_ratio(m, big), p);
+    float r2 = lucid_pow(pn_ratio(m2, big), p);
+    float h1 = s * r1;
+    float h2 = s2 * r2;
+    float l1 = metal::fma(s, r1, -h1) + c * r1;
+    float l2 = metal::fma(s2, r2, -h2) + c2 * r2;
+    float hi, lo;
+    pn_two_sum(h1, h2, hi, lo);
+    s = hi;
+    c = (lo + l1) + l2;
+    m = big;
+}
 inline void pn_merge(thread float& m, thread float& s, float m2, float s2, float p, bool two) {
     if (m != m || m2 != m2) { m = NAN; s = NAN; return; }
     float big = metal::max(m, m2);
@@ -109,15 +160,16 @@ inline const ::mlx::core::fast::CustomKernelFunction& row_thread_kernel() {
         nan_seen = nan_seen || (a != a);
         m = metal::max(m, a);
     }
-    float s = 0.0f;
+    float s = 0.0f, c = 0.0f;
     if (m > 0.0f && !nan_seen) {
         for (uint i = 0; i < N; ++i) {
             float r = pn_ratio(metal::abs(xr[i]), m);
-            s += Two ? r * r : pn_pow(r, p);
+            float t = Two ? r * r : (Quasi ? lucid_pow(r, p) : pn_pow(r, p));
+            if (Quasi) { pn_df_add(s, c, t, 0.0f); } else { s += t; }
         }
     }
     if (nan_seen) { m = NAN; s = NAN; }
-    out[row] = pn_root(m, s, p, Two);
+    out[row] = Quasi ? pn_root_df(m, s, c, pw[1], pw[2]) : pn_root(m, s, p, Two);
 )",
                                                  header(), true, false, mx::CompileOptions{});
     return k;
@@ -148,17 +200,27 @@ inline const ::mlx::core::fast::CustomKernelFunction& simd_kernel() {
     }
     m = metal::simd_max(m);
     nan_seen = metal::simd_any(nan_seen);
-    float s = 0.0f;
+    float s = 0.0f, c = 0.0f;
     if (m > 0.0f && !nan_seen) {
         for (uint i = lo + lane; i < hi; i += 32u) {
             float r = pn_ratio(metal::abs(xr[i]), m);
-            s += Two ? r * r : pn_pow(r, p);
+            float t = Two ? r * r : (Quasi ? lucid_pow(r, p) : pn_pow(r, p));
+            if (Quasi) { pn_df_add(s, c, t, 0.0f); } else { s += t; }
         }
-        s = metal::simd_sum(s);
+        if (Quasi) {
+            for (uint off = 16u; off > 0u; off >>= 1) {
+                float s2 = metal::simd_shuffle_down(s, off);
+                float c2 = metal::simd_shuffle_down(c, off);
+                pn_df_add(s, c, s2, c2);
+            }
+        } else {
+            s = metal::simd_sum(s);
+        }
     }
-    if (nan_seen) { m = NAN; s = NAN; }
+    if (nan_seen) { m = NAN; s = NAN; c = 0.0f; }
     if (lane == 0u) {
-        if (Single) { out[row] = pn_root(m, s, p, Two); }
+        if (Single) { out[row] = Quasi ? pn_root_df(m, s, c, pw[1], pw[2]) : pn_root(m, s, p, Two); }
+        else if (Quasi) { out[w * 3u] = m; out[w * 3u + 1u] = s; out[w * 3u + 2u] = c; }
         else { out[w * 2u] = m; out[w * 2u + 1u] = s; }
     }
 )",
@@ -176,17 +238,24 @@ inline const ::mlx::core::fast::CustomKernelFunction& combine_kernel() {
     uint row = threadgroup_position_in_grid.x * 8u + sg;
     if (row >= B) return;
     float p = pw[0];
-    float m = 0.0f, s = 0.0f;
+    float m = 0.0f, s = 0.0f, c = 0.0f;
+    uint stride = Quasi ? 3u : 2u;
     for (uint g = lane; g < G; g += 32u) {
-        uint at = (uint(row) * G + g) * 2u;
-        pn_merge(m, s, part[at], part[at + 1u], p, Two);
+        uint at = (uint(row) * G + g) * stride;
+        if (Quasi) { pn_merge_df(m, s, c, part[at], part[at + 1u], part[at + 2u], p); }
+        else { pn_merge(m, s, part[at], part[at + 1u], p, Two); }
     }
     for (uint off = 16u; off > 0u; off >>= 1) {
         float m2 = metal::simd_shuffle_down(m, off);
         float s2 = metal::simd_shuffle_down(s, off);
-        pn_merge(m, s, m2, s2, p, Two);
+        if (Quasi) {
+            float c2 = metal::simd_shuffle_down(c, off);
+            pn_merge_df(m, s, c, m2, s2, c2, p);
+        } else {
+            pn_merge(m, s, m2, s2, p, Two);
+        }
     }
-    if (lane == 0u) out[row] = pn_root(m, s, p, Two);
+    if (lane == 0u) out[row] = Quasi ? pn_root_df(m, s, c, pw[1], pw[2]) : pn_root(m, s, p, Two);
 )",
                                header(), true, false, mx::CompileOptions{});
     return k;
@@ -206,9 +275,16 @@ scaled_rows(const ::mlx::core::array& x, std::int64_t rows, std::int64_t n, doub
     namespace mx = ::mlx::core;
     const int b = static_cast<int>(rows);
     const bool two = p == 2.0;
-    const float p_value = static_cast<float>(p);
-    const mx::array pw(&p_value, {1}, mx::float32);
-    const std::vector<std::pair<std::string, mx::fast::TemplateArg>> two_arg{{"Two", two}};
+    const bool quasi = p < 1.0;
+    // ``pw``: the order, and ``1/p`` as a float32 and the remainder of that rounding (the root
+    // of an order below 1 corrects for it; the others read ``pw[0]`` only).
+    const double inverse = 1.0 / p;
+    const float e_hi = static_cast<float>(inverse);
+    const float pw_values[3] = {static_cast<float>(p), e_hi,
+                                static_cast<float>(inverse - static_cast<double>(e_hi))};
+    const mx::array pw(pw_values, {3}, mx::float32);
+    const std::vector<std::pair<std::string, mx::fast::TemplateArg>> two_arg{{"Two", two},
+                                                                             {"Quasi", quasi}};
     if (n <= kRowThreadMax || rows >= kMaxSimdRows) {
         return row_thread_kernel()({x, pw}, {{b}}, {mx::float32}, {b, 1, 1}, {256, 1, 1}, two_arg,
                                    std::nullopt, false, {})[0];
@@ -218,11 +294,14 @@ scaled_rows(const ::mlx::core::array& x, std::int64_t rows, std::int64_t n, doub
     const int tg_count = (items + 7) / 8;
     if (g == 1) {
         return simd_kernel()({x, pw}, {{b}}, {mx::float32}, {tg_count * 256, 1, 1}, {256, 1, 1},
-                             {{"Two", two}, {"Single", true}}, std::nullopt, false, {})[0];
+                             {{"Two", two}, {"Quasi", quasi}, {"Single", true}}, std::nullopt,
+                             false, {})[0];
     }
-    auto part =
-        simd_kernel()({x, pw}, {{items * 2}}, {mx::float32}, {tg_count * 256, 1, 1}, {256, 1, 1},
-                      {{"Two", two}, {"Single", false}}, std::nullopt, false, {})[0];
+    // A chunk's pair (m, s), and its rounding error c for an order below 1.
+    const int pair_width = quasi ? 3 : 2;
+    auto part = simd_kernel()(
+        {x, pw}, {{items * pair_width}}, {mx::float32}, {tg_count * 256, 1, 1}, {256, 1, 1},
+        {{"Two", two}, {"Quasi", quasi}, {"Single", false}}, std::nullopt, false, {})[0];
     const std::vector<int> meta_v{g, b};
     const mx::array meta(meta_v.data(), {2}, mx::int32);
     return combine_kernel()({part, pw, meta}, {{b}}, {mx::float32}, {((b + 7) / 8) * 256, 1, 1},

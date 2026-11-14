@@ -1109,7 +1109,7 @@ public:
                                 Dtype dt) = 0;
 
     // Entrywise ``(sum |a|^p)^(1/p)`` over ``axes`` (distinct, in range; empty
-    // means every axis) for a finite ``p > 1``, accumulated relative to each
+    // means every axis) for a finite ``p > 0``, accumulated relative to each
     // slice's largest magnitude so no power leaves the float range.  Both
     // streams have the kernel; the default (a backend without one) throws
     // not_implemented.

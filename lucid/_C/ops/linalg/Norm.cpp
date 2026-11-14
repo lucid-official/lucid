@@ -279,7 +279,10 @@ TensorImplPtr PNormBackward::grad_from(const TensorImplPtr& A,
     // ``N`` carries to every entry of the slice, so a recorded graph takes the power
     // of 1 at a zero entry instead: its slope is ``sign(0) = 0`` either way, the
     // value is the same, and only that entry's own second derivative differs (0,
-    // where the true Hessian is infinite).
+    // where the true Hessian is infinite).  Below 1 the *value* of ``|u|^(p-1)`` is
+    // infinite at a zero entry (``0^(p-1) = inf``), so ``sign(0) * inf`` is a NaN in
+    // that entry even with nothing recorded, where the reference's gradient is 0:
+    // the base is masked in eager mode too.
     const bool recorded = GradMode::is_enabled();
     TensorImplPtr slope;
     if (p_ == 2.0) {
@@ -290,7 +293,7 @@ TensorImplPtr PNormBackward::grad_from(const TensorImplPtr& A,
         slope = mul_op(u, pow_scalar_op(abs_op(u), p_ - 2.0));
     } else {
         auto magnitude = abs_op(u);
-        if (recorded && p_ < 2.0)
+        if ((recorded && p_ < 2.0) || p_ < 1.0)
             magnitude =
                 masked_fill_op(magnitude, equal_op(magnitude, zeros_like_op(magnitude)), 1.0);
         slope = mul_op(sign_op(u), pow_scalar_op(magnitude, p_ - 1.0));
@@ -320,8 +323,8 @@ LUCID_REGISTER_OP(PNormBackward)
 TensorImplPtr p_norm_op(const TensorImplPtr& a_in, double p, std::vector<int> axis, bool keepdims) {
     using namespace linalg_detail;
     Validator::input(a_in, "p_norm.a").non_null();
-    if (!(p > 1.0) || !std::isfinite(p))
-        ErrorBuilder("p_norm").invalid_argument("p must be finite and greater than 1, got " +
+    if (!(p > 0.0) || !std::isfinite(p))
+        ErrorBuilder("p_norm").invalid_argument("p must be finite and positive, got " +
                                                 std::to_string(p));
     SchemaGuard sg{PNormBackward::schema_v1, a_in->dtype(), a_in->device()};
     const TensorImplPtr a = astype_op(a_in, sg.effective_dtype());

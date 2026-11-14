@@ -150,13 +150,14 @@ private:
 
 // Autograd node of :func:`p_norm_op`.
 //
-// For $N = \|A\|_p$ with a finite $p > 1$ the gradient is
+// For $N = \|A\|_p$ with a finite $p > 0$ the gradient is
 // $$
 //   \frac{\partial L}{\partial A}
 //     = \mathrm{sign}(A)\,\Bigl(\frac{|A|}{N}\Bigr)^{p-1}
 //       \odot \mathrm{expand}(\partial L/\partial N),
 // $$
-// zero where $N = 0$ (the subgradient the reference picks).  The ratio
+// zero where $N = 0$ (the subgradient the reference picks) and, for $p < 1$,
+// zero at a zero entry (its power's slope is infinite there).  The ratio
 // $|A|/N$ is in $[0, 1]$, so the slope is as range-safe as the forward: a
 // slice at 1e-20 gets the same gradient as one at 1.
 class LUCID_API PNormBackward : public FuncOp<PNormBackward, 1> {
@@ -176,10 +177,10 @@ private:
 };
 
 // The entrywise p-norm $(\sum |a_i|^p)^{1/p}$ over ``axis`` for a finite
-// $p > 1$, accumulated relative to each slice's largest magnitude (the GPU
-// kernel in ``backend/gpu/PNorm.h``, ``cpu::PNorm`` on the CPU) so a
-// slice at 1e-20 or 1e25 does not flush to 0 or overflow to inf the way
-// ``sum(a * a)`` does.
+// $p > 0$ (the quasi-norms $0 < p < 1$ included), accumulated relative to each
+// slice's largest magnitude (the GPU kernel in ``backend/gpu/PNorm.h``,
+// ``cpu::PNorm`` on the CPU) so a slice at 1e-20 or 1e25 does not flush to 0
+// or overflow to inf the way ``sum(a * a)`` does.
 //
 // ``axis`` empty reduces every axis, as in :func:`norm_op`.  Float32 and
 // float64 only: a half input is reduced in float32 by the Python reduction
