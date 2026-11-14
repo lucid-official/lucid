@@ -270,21 +270,31 @@ TensorImplPtr PNormBackward::grad_from(const TensorImplPtr& A,
     // ``u = A / N``, in [-1, 1]: the slope never forms a power of the norm.
     auto u = div_op(A, keepdim_view(n_safe, full, axis_, keepdims_));
     // ``sign(u) |u|^(p-1)``, written ``u |u|^(p-2)`` where that is as good: one op
-    // fewer.  Below 3 the slope of ``|u|^(p-2)`` is infinite at a zero entry and
-    // meets the zero factor ``u`` in a derivative taken through the slope, so a
-    // recorded graph keeps ``|u|^(p-1)`` there (the infinity stays in that
-    // entry's own component); the value is the same.  Below 2 ``|u|^(p-2)`` is
-    // itself infinite at 0.
+    // fewer.  From p = 3 up, and from p > 2 when nothing is recorded, the slope of
+    // ``|u|^(p-2)`` is finite at 0 (or only the value is wanted).  In (2, 3) a
+    // recorded graph keeps ``|u|^(p-1)``, whose slope ``(p-1) |u|^(p-2)`` is finite
+    // there, where ``|u|^(p-2)``'s infinite slope would meet the zero factor ``u``.
+    // Below 2 even ``|u|^(p-1)`` has an infinite slope at a zero entry, and that
+    // ``inf * 0`` (through ``sign``'s zero slope) is a NaN that the cotangent sum of
+    // ``N`` carries to every entry of the slice, so a recorded graph takes the power
+    // of 1 at a zero entry instead: its slope is ``sign(0) = 0`` either way, the
+    // value is the same, and only that entry's own second derivative differs (0,
+    // where the true Hessian is infinite).
     const bool recorded = GradMode::is_enabled();
     TensorImplPtr slope;
-    if (p_ == 2.0)
+    if (p_ == 2.0) {
         slope = u;
-    else if (p_ == 3.0)
+    } else if (p_ == 3.0) {
         slope = mul_op(u, abs_op(u));
-    else if (p_ > 3.0 || (p_ > 2.0 && !recorded))
+    } else if (p_ > 3.0 || (p_ > 2.0 && !recorded)) {
         slope = mul_op(u, pow_scalar_op(abs_op(u), p_ - 2.0));
-    else
-        slope = mul_op(sign_op(u), pow_scalar_op(abs_op(u), p_ - 1.0));
+    } else {
+        auto magnitude = abs_op(u);
+        if (recorded && p_ < 2.0)
+            magnitude =
+                masked_fill_op(magnitude, equal_op(magnitude, zeros_like_op(magnitude)), 1.0);
+        slope = mul_op(sign_op(u), pow_scalar_op(magnitude, p_ - 1.0));
+    }
     return mul_op(slope, keepdim_view(d_live, full, axis_, keepdims_));
 }
 

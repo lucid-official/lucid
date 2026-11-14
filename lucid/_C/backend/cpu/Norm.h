@@ -786,6 +786,8 @@ private:
 template <typename T>
 void p_norm_typed(
     const T* x, T* out, std::size_t outer, std::size_t len, std::size_t inner, double p) {
+    if (outer == 0 || inner == 0)
+        return;
     const PNorm<T> norm(p);
     if (inner >= 8) {
         // Tiles as narrow as 16 columns when that is what it takes to give every core a few.

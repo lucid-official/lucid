@@ -275,6 +275,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - serve the CPU p-norm from the scaled kernel (LCD-1003)
 
+- a zero entry no longer NaNs a recorded p<2 norm (LCD-1003)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
