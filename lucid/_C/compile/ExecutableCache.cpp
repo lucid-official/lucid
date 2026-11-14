@@ -10,8 +10,12 @@
 
 #include <algorithm>
 #include <bit>
+#include <cctype>
+#include <cerrno>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <string_view>
 #include <utility>
 
@@ -201,6 +205,62 @@ std::size_t default_max_bytes() noexcept {
         return 0;
     return static_cast<std::size_t>(pages) * static_cast<std::size_t>(page_bytes) / 8;
 }
+
+constexpr const char* kMaxBytesEnv = "LUCID_COMPILE_MAX_CACHE_BYTES";
+
+// A whole number of bytes, or of KiB / MiB / GiB with a ``k`` / ``m`` / ``g`` suffix.
+// ``strtoull`` alone takes leading blanks and ``-`` (which negates), and stops quietly at
+// the first character it does not know.
+bool parse_byte_count(const char* text, std::size_t& bytes) noexcept {
+    if (!std::isdigit(static_cast<unsigned char>(*text)))
+        return false;
+    char* end = nullptr;
+    errno = 0;
+    const unsigned long long value = std::strtoull(text, &end, 10);
+    if (errno == ERANGE)
+        return false;
+    unsigned shift = 0;
+    switch (*end) {
+    case 'k':
+    case 'K':
+        shift = 10;
+        break;
+    case 'm':
+    case 'M':
+        shift = 20;
+        break;
+    case 'g':
+    case 'G':
+        shift = 30;
+        break;
+    default:
+        break;
+    }
+    if (shift != 0)
+        ++end;
+    if (*end != '\0' || value > (std::numeric_limits<std::size_t>::max() >> shift))
+        return false;
+    bytes = static_cast<std::size_t>(value) << shift;
+    return true;
+}
+
+// ``LUCID_COMPILE_MAX_CACHE_BYTES``; ``0`` turns the byte cap off.  An unusable value is
+// said once on stderr and replaced by the default, as ``LUCID_COMPILE_FIRST_RUN_TIMEOUT_S``
+// is: "1g" taken as one byte would evict everything but the newest entry.
+std::size_t max_bytes_from_environment() {
+    const std::size_t fallback = default_max_bytes();
+    const char* text = std::getenv(kMaxBytesEnv);
+    if (text == nullptr)
+        return fallback;
+    std::size_t bytes = 0;
+    if (parse_byte_count(text, bytes))
+        return bytes;
+    std::fprintf(stderr,
+                 "lucid: ignoring %s=\"%s\" (want a whole number of bytes, optionally with a k, "
+                 "m or g suffix; 0 turns the byte cap off); using %zu\n",
+                 kMaxBytesEnv, text, fallback);
+    return fallback;
+}
 }  // namespace
 
 std::size_t retained_bytes_estimate(const CacheKey& key) {
@@ -355,9 +415,11 @@ SharedExecutable ExecutableCache::insert(CacheKey key, SharedExecutable exec) {
 
     // Replace any existing entry under the same key; a caller still
     // holding the previous executable keeps it alive.  A key that is already here
-    // is already counted in ``bytes_``.
+    // is already counted in ``bytes_``.  The estimate is made first: should it throw,
+    // the map has no entry that ``lru_order_`` and ``bytes_`` do not know.
+    const std::size_t estimate = retained_bytes_estimate(key);
     if (map_.insert_or_assign(key, exec).second)
-        bytes_ += retained_bytes_estimate(key);
+        bytes_ += estimate;
 
     // Bring the key to the front of "most-recent".
     auto vit = std::find(lru_order_.begin(), lru_order_.end(), key);
@@ -436,13 +498,7 @@ ExecutableCache& ExecutableCache::session() {
             if (end != s && v > 0)
                 c->set_max_entries(static_cast<std::size_t>(v));
         }
-        c->set_max_bytes(default_max_bytes());
-        if (const char* s = std::getenv("LUCID_COMPILE_MAX_CACHE_BYTES")) {
-            char* end = nullptr;
-            const unsigned long long v = std::strtoull(s, &end, 10);
-            if (end != s)
-                c->set_max_bytes(static_cast<std::size_t>(v));
-        }
+        c->set_max_bytes(max_bytes_from_environment());
         return c;
     }();
     return *instance;

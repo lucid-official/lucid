@@ -281,6 +281,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - bound the session cache by estimated bytes (LCD-1000)
 
+- byte cap review fixes, scope and env parsing (LCD-1000)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

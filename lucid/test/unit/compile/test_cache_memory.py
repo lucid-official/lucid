@@ -9,19 +9,26 @@ dataloader batching that includes a remainder batch, …):
   1. The session cache size never exceeds the LRU cap.
   2. Repeatedly compiling new signatures evicts the oldest entries
      rather than growing unboundedly.
-  3. The memory its entries keep pinned stays inside the byte cap
-     (``LUCID_COMPILE_MAX_CACHE_BYTES``): an MPSGraphExecutable holds the
-     intermediate buffers MPSGraph planned for it until it is released, in
+  3. The memory the session cache's own entries keep pinned stays inside the
+     byte cap (``LUCID_COMPILE_MAX_CACHE_BYTES``): an MPSGraphExecutable holds
+     the intermediate buffers MPSGraph planned for it until it is released, in
      proportion to the tensors, which 32 entries do not bound (LCD-1000).
 
-If either of the first two breaks, a long-running service compiling a model
-on a shape-variable input stream will OOM on the cumulative MPSGraph
-executables; if the third does, it does so on 32 large ones.
+If either of the first two breaks, what dead modules leave in the cache grows
+without bound; if the third does, it grows by 32 entries of any size.
+
+What the byte cap does NOT bound: it drops only the session cache's reference.
+A live ``CompiledModule`` keeps every signature's executable in its own
+unbounded ``_cache``, training-step and function-compile executables never
+enter the session cache, and the dynamic-batch path bypasses it, so a
+long-lived module fed many shapes still pins them all (LCD-1008).
 """
 
-import gc
+import json
 import os
-import time
+import subprocess
+import sys
+import textwrap
 from collections.abc import Callable, Iterator
 
 import pytest
@@ -30,7 +37,7 @@ import lucid
 import lucid.nn as nn
 from lucid._C import engine as _C_engine
 
-from lucid.test.audit._zoo_budget import footprint_gb
+from lucid.test._fixtures.devices import metal_available
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor
 
 # Compiled forwards under grad mode run eagerly (LCD-582); these test them.
@@ -191,60 +198,135 @@ def test_the_newest_entry_stays_when_it_alone_is_over_the_byte_cap(
     assert _C_engine.compile.session_cache_bytes() > 1
 
 
-def _widen(x: lucid.Tensor) -> lucid.Tensor:
-    """A graph that must write its 2x broadcast out: MPSGraph pins that buffer."""
-    return x.repeat(1, 1, 1, 2).reshape(-1).sum()
+_CHILD_ENV = {k: v for k, v in os.environ.items() if not k.startswith("LUCID_COMPILE_MAX_CACHE")}
+
+# What MPSGraph pins, measured in a process of its own: the floor is then the Metal
+# set-up of one graph, not whatever the tests before this one left to release.
+_FOOTPRINT_CHILD = textwrap.dedent("""
+    import gc
+    import json
+    import os
+    import time
+
+    import lucid
+    from lucid._C import engine as E
+    from lucid.test.audit._zoo_budget import footprint_gb
+
+    N, LEAD = 8, 1024
+    # What a release needs to reach the footprint: MPS keeps a retired heap about a
+    # second and Metal returns released buffers in a step 1-2 s after the release.
+    RELEASE_S = 3.0
 
 
-#: What a release needs to reach the footprint: MPS keeps a retired heap about a second and
-#: Metal returns released buffers in a step that lands 1-2 s after the release.
-_RELEASE_S = 3.0
+    def widen(x):
+        # A graph that must write its 2x broadcast out: MPSGraph pins that buffer.
+        return x.repeat(1, 1, 1, 2).reshape(-1).sum()
 
 
-def _settled_footprint_mb() -> float:
-    gc.collect()
-    lucid.metal.empty_cache()  # the freed inputs sit in MLX's cache, not in an executable
-    time.sleep(_RELEASE_S)
-    return footprint_gb(os.getpid()) * 1024
+    def settled_mb():
+        gc.collect()
+        lucid.metal.empty_cache()  # the freed inputs sit in MLX's cache, not in an executable
+        time.sleep(RELEASE_S)
+        return footprint_gb(os.getpid()) * 1024
+
+
+    def run_graphs(count):
+        for i in range(count):
+            # Made on the device: randn(...).to leaves three host copies of the input in
+            # malloc's cache, 25 MB each round, which would bury what is measured here.
+            x = lucid.randn(LEAD + 32 * i, 8, 16, 16, device="metal")
+            lucid.compile(widen)(x).item()
+            del x
+
+
+    with lucid.no_grad():
+        E.compile.session_cache_set_max_bytes(0)
+        # The first graph of a process also sets up Metal, which stays: out of the baseline.
+        run_graphs(1)
+        E.compile.session_cache_clear()
+        base = settled_mb()
+
+        run_graphs(N)
+        uncapped = settled_mb() - base
+        entry = E.compile.session_cache_bytes() // N
+
+        E.compile.session_cache_clear()
+        E.compile.session_cache_set_max_bytes(entry * 5 // 2)
+        run_graphs(N)
+        capped = settled_mb() - base
+    print(json.dumps({
+        "uncapped": uncapped,
+        "capped": capped,
+        "entries": E.compile.session_cache_size(),
+        "pinned_per_graph_mb": 2 * LEAD * 8 * 16 * 16 * 4 / 2**20,
+        "graphs": N,
+    }))
+    """)
 
 
 @pytest.mark.slow
-def test_footprint_stays_inside_the_byte_cap(byte_cap: Callable[[int], int]) -> None:
+@pytest.mark.skipif(not metal_available(), reason="metal unavailable")
+def test_footprint_stays_inside_the_byte_cap() -> None:
     """Distinct graphs pin memory until their executables go; the byte cap lets it go.
 
     Eight graphs each holding a 17 MB broadcast: with no byte cap the process keeps all
     eight, with a cap of two entries it keeps two.  The uncapped run is the control, so
     an MPSGraph that stops pinning fails here instead of passing vacuously.
     """
-    n, lead = 8, 1024
+    done = subprocess.run(
+        [sys.executable, "-c", _FOOTPRINT_CHILD],
+        env=_CHILD_ENV,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    got = json.loads(done.stdout.strip().splitlines()[-1])
+    uncapped, capped = got["uncapped"], got["capped"]
 
-    def run_graphs(count: int) -> None:
-        for i in range(count):
-            # Made on the device: ``randn(...).to`` leaves three host copies of the input in
-            # malloc's cache, 25 MB each round, which would bury what is measured here.
-            x = lucid.randn(lead + 32 * i, 8, 16, 16, device=COMPILE_DEVICE)
-            lucid.compile(_widen)(x).item()
-            del x
-
-    # The first graph of a process also sets up Metal, which stays: take it out of the
-    # baseline.  The floor is read after the release of the cache that clearing starts.
-    run_graphs(1)
-    _C_engine.compile.session_cache_clear()
-    base = _settled_footprint_mb()
-
-    run_graphs(n)
-    uncapped = _settled_footprint_mb() - base
-    entry = _C_engine.compile.session_cache_bytes() // n
-
-    _C_engine.compile.session_cache_clear()
-    byte_cap(entry * 5 // 2)
-    run_graphs(n)
-    capped = _settled_footprint_mb() - base
-
-    pinned_per_graph_mb = 2 * lead * 8 * 16 * 16 * 4 / _MB
-    assert uncapped > n * pinned_per_graph_mb / 2, (
+    assert uncapped > got["graphs"] * got["pinned_per_graph_mb"] / 2, (
         f"uncapped growth {uncapped:.0f} MB: MPSGraph no longer pins the broadcast, "
         "so this test proves nothing"
     )
-    assert _C_engine.compile.session_cache_size() == 2
+    assert got["entries"] == 2
     assert capped < uncapped / 2, f"capped {capped:.0f} MB vs uncapped {uncapped:.0f} MB"
+
+
+# ``LUCID_COMPILE_MAX_CACHE_BYTES`` is read when the session cache is first made, so
+# each value needs a process of its own.
+_CAP_CHILD = "from lucid._C import engine as E; print(E.compile.session_cache_set_max_bytes(0))"
+
+
+def _initial_cap(value: str | None) -> tuple[int, str]:
+    """The byte cap a fresh process starts with under ``value``, and what it said on stderr."""
+    env = dict(_CHILD_ENV)
+    if value is not None:
+        env["LUCID_COMPILE_MAX_CACHE_BYTES"] = value
+    done = subprocess.run(
+        [sys.executable, "-c", _CAP_CHILD], env=env, capture_output=True, text=True, timeout=120
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    return int(done.stdout.strip().splitlines()[-1]), done.stderr
+
+
+@pytest.mark.parametrize(
+    ("text", "bytes_"),
+    [("0", 0), ("123456", 123456), ("64k", 64 * 1024), ("64m", 64 * _MB), ("2G", 2 * 1024**3)],
+)
+def test_byte_cap_environment_value_is_honoured(text: str, bytes_: int) -> None:
+    """A number of bytes, with an optional k / m / g suffix; ``0`` turns the cap off."""
+    got, said = _initial_cap(text)
+    assert got == bytes_
+    assert "ignoring" not in said
+
+
+@pytest.mark.parametrize(
+    "text", ["", "-5", "1x", "abc", "1.5g", " 12", "12 ", "99999999999999999999", "99999999999g"]
+)
+def test_an_unusable_byte_cap_falls_back_to_the_default_and_says_so(text: str) -> None:
+    """``1g`` read as one byte would evict every entry but the newest: reject, do not guess."""
+    default, quiet = _initial_cap(None)
+    assert default > 0 and "ignoring" not in quiet
+    got, said = _initial_cap(text)
+    assert got == default
+    assert "ignoring LUCID_COMPILE_MAX_CACHE_BYTES" in said

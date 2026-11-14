@@ -23,10 +23,17 @@
 // Besides the entry cap there is a byte cap.  An MPSGraphExecutable keeps the
 // intermediate buffers MPSGraph planned for it from its first run until it is
 // released, nothing Lucid or MLX holds and no public API returns: a graph that
-// broadcasts a 34 MB input 4x pins 140 MB for as long as the cache keeps it.
-// 32 entries bounds the count and not that (LCD-1000), so the cache also
-// evicts, oldest first, while the :func:`retained_bytes_estimate` of its
+// broadcasts a 34 MB input 4x pins 140 MB for as long as anyone holds the
+// executable.  32 entries bounds the count and not that (LCD-1000), so the cache
+// also evicts, oldest first, while the :func:`retained_bytes_estimate` of its
 // entries is over ``max_bytes``.
+//
+// The byte cap bounds only the references THIS cache holds: eviction drops the
+// cache's reference and nothing else.  A live CompiledModule keeps every signature's
+// executable in its own unbounded ``_cache``, training-step and function-compile
+// executables (``compile_trace_with_backward``) never enter this cache, and the
+// dynamic-batch path bypasses it, so what those hold stays pinned whatever the cap
+// says (LCD-1008).
 
 #pragma once
 
@@ -212,12 +219,13 @@ LUCID_API SharedExecutable canonicalize_executable(const CompiledExecutable* exe
 LUCID_API SharedExecutable localize_executable(const CompiledExecutable* exe,
                                                const TraceIdMap& id_map);
 
-// An estimate of the memory an executable built from ``key`` keeps pinned: the bytes
-// of every op's output, the graph outputs and the views among them included.  MPSGraph
-// fuses and aliases some of those away (measured: 0 for an elementwise chain, 1.0x for
-// ``cumsum``, 0.4-0.6x for ``repeat``, a conv net and an MLP), and an emitter that
-// expands one op into several (attention) pins more than its output.  The feeds are the
-// caller's.
+// A rough estimate of the memory an executable built from ``key`` keeps pinned: the
+// bytes of each op's FIRST output (all ``make_cache_key`` records of an op, so a
+// multi-output op is under-counted), the graph outputs and the views among them
+// included.  MPSGraph fuses and aliases some of those away (measured: 0 for an
+// elementwise chain, 1.0x for ``cumsum``, 0.4-0.6x for ``repeat``, a conv net and an
+// MLP), and an emitter that expands one op into several (attention) pins more than its
+// output.  So it is neither an upper nor a lower bound.  The feeds are the caller's.
 LUCID_API std::size_t retained_bytes_estimate(const CacheKey& key);
 
 // Bounded-LRU cache of compiled MPSGraph executables.
@@ -280,9 +288,10 @@ public:
 
     // Process-global session cache.  First call honours the
     // ``LUCID_COMPILE_MAX_CACHE`` environment variable (positive
-    // integer) and ``LUCID_COMPILE_MAX_CACHE_BYTES`` (``0`` = no byte cap;
-    // default an eighth of the machine's memory).  Subsequent calls return
-    // the same instance.
+    // integer) and ``LUCID_COMPILE_MAX_CACHE_BYTES`` (a number of bytes, with an
+    // optional ``k`` / ``m`` / ``g`` suffix; ``0`` = no byte cap; default an
+    // eighth of the machine's memory; anything else is said once on stderr and
+    // ignored).  Subsequent calls return the same instance.
     static ExecutableCache& session();
 
 private:

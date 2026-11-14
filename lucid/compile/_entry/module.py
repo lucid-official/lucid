@@ -336,9 +336,13 @@ class CompiledModule[**P, R](_ModuleWrapper):
       + timing.  Dropped on :meth:`train` / :meth:`eval` / :meth:`to`
       / :meth:`load_state_dict` / :meth:`clear_cache`.
     * **C++ ``ExecutableCache::session()``** — process-global LRU
-      bounded by ``LUCID_COMPILE_MAX_CACHE`` (default 32).  Holds
-      one ``CompiledExecutable`` per *trace structure* so two
-      :class:`CompiledModule` instances tracing the same op DAG
+      bounded by ``LUCID_COMPILE_MAX_CACHE`` (default 32) and by an
+      estimate of the memory its executables keep pinned,
+      ``LUCID_COMPILE_MAX_CACHE_BYTES`` (default an eighth of the
+      machine's memory).  Both caps drop only the session cache's own
+      reference: an executable this module's ``_cache`` holds stays alive
+      and pinned.  Holds one ``CompiledExecutable`` per *trace structure*
+      so two :class:`CompiledModule` instances tracing the same op DAG
       share the underlying Metal kernels.  Cache key includes per-op
       attributes (since 2026-05-24), so ``dropout(p=0)`` and
       ``dropout(p=0.5)`` no longer collide.
