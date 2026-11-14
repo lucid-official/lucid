@@ -488,12 +488,13 @@ void lp_normalize_backward_typed(
 }
 
 // ---------------------------------------------------------------------------
-// Entrywise p-norm over any set of axes (``CpuBackend::p_norm_forward``), p > 1.
+// Entrywise p-norm over any set of axes (``CpuBackend::p_norm_forward``), any finite p > 0.
 //
 // The same range-safe value as :func:`lp_slice_norm` — the sum in double when no float
 // power can leave it, relative to the largest magnitude otherwise — computed to be as
 // fast as the plain float graph it replaces:
-//   * the orders a norm is taken at most (3/2, 2, 3, 4) are straight multiplications;
+//   * the orders a norm is taken at most (1/2, 3/2, 2, 3, 4) are a square root and straight
+//     multiplications;
 //   * a sum is four independent partial sums: one running sum is a chain of dependent
 //     additions, each entry waiting four cycles for the one before it;
 //   * any other order goes through vForce ``pow`` on blocks of ratios in [0, 1] (so a
@@ -518,11 +519,16 @@ struct QuarticPower {
 struct ThreeHalvesPower {
     double operator()(double x) const { return x * std::sqrt(x); }
 };
+struct SqrtPower {
+    double operator()(double x) const { return std::sqrt(x); }
+};
 
 // ``f`` called with the cheapest functor for ``power``.
 template <class F>
 double with_fixed_power(const LpPower& power, F&& f) {
     switch (power.halves) {
+    case 1:
+        return f(SqrtPower{});
     case 3:
         return f(ThreeHalvesPower{});
     case 4:
@@ -541,11 +547,22 @@ template <typename T, class Entry, class Power>
 double lp_power_sum(const T* x, std::size_t len, std::size_t stride, Entry entry, Power power) {
     double s0 = 0.0, s1 = 0.0, s2 = 0.0, s3 = 0.0;
     std::size_t a = 0;
-    for (; a + 4 <= len; a += 4) {
-        s0 += power(entry(x[a * stride]));
-        s1 += power(entry(x[(a + 1) * stride]));
-        s2 += power(entry(x[(a + 2) * stride]));
-        s3 += power(entry(x[(a + 3) * stride]));
+    if (stride == 1) {
+        // The same four sums over a contiguous run, where the loads and the power can be
+        // vectorised (a runtime stride keeps the compiler from packing them).
+        for (; a + 4 <= len; a += 4) {
+            s0 += power(entry(x[a]));
+            s1 += power(entry(x[a + 1]));
+            s2 += power(entry(x[a + 2]));
+            s3 += power(entry(x[a + 3]));
+        }
+    } else {
+        for (; a + 4 <= len; a += 4) {
+            s0 += power(entry(x[a * stride]));
+            s1 += power(entry(x[(a + 1) * stride]));
+            s2 += power(entry(x[(a + 2) * stride]));
+            s3 += power(entry(x[(a + 3) * stride]));
+        }
     }
     for (; a < len; ++a)
         s0 += power(entry(x[a * stride]));
@@ -600,19 +617,27 @@ double lp_ratio_power_sum(const T* x, std::size_t len, std::size_t stride, doubl
     return acc;
 }
 
-// One order's ``(sum |x_a|^p)^(1/p)`` for p > 1, the value of :func:`lp_slice_norm` (NaN,
-// infinity and all-zero slices included), summed over fixed blocks of ``kBlock`` entries
+// One order's ``(sum |x_a|^p)^(1/p)`` for a finite p > 0, the value of :func:`lp_slice_norm`
+// (NaN, infinity and all-zero slices included), summed over fixed blocks of ``kBlock`` entries
 // that are added in order: a block may run on any core, the total does not change.
 //
-// ``plain``: a float entry raised to p <= 6 stays inside double, so the sum is the plain one.
-// Otherwise it is relative to the slice's largest magnitude ``top``.
+// ``plain``: a float entry raised to p <= 6, or a double entry raised to p <= 1, stays inside
+// double, so the sum is the plain one (a half-integer order only: the others go through vForce on
+// ratios).  Otherwise it is relative to the slice's largest magnitude ``top``.  Below p = 1 the ratios' powers are in
+// [0, 1] too and the sum in [1, n]; the root ``s^(1/p)`` amplifies the sum's relative error by
+// 1/p, which the double accumulator absorbs.
 template <typename T>
 class PNorm {
 public:
     static constexpr std::size_t kBlock = std::size_t{1} << 14;
 
+    // For p <= 1, ``|x|^p`` lies between ``min(|x|, 1)`` and ``max(|x|, 1)``: no power leaves double
+    // unless the norm itself does, so a double entry takes the plain sum there too, as
+    // ``lp_slice_norm``'s does.
     explicit PNorm(double p)
-        : p_(p), power_(p), plain_(sizeof(T) < sizeof(double) && p <= 6.0 && power_.halves >= 0) {}
+        : p_(p),
+          power_(p),
+          plain_(power_.halves >= 0 && p <= 6.0 && (sizeof(T) < sizeof(double) || p <= 1.0)) {}
 
     bool plain() const { return plain_; }
 

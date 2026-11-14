@@ -263,7 +263,7 @@ def test_the_columns_of_a_matrix_answer_as_themselves(
         assert g == pytest.approx(_norm(column, p), rel=3e-6, abs=0)
 
 
-@pytest.mark.parametrize("p", [7.5, 0.25, 0.75])
+@pytest.mark.parametrize("p", [7.5, 0.25, 0.5, 0.75])
 def test_a_float64_column_with_a_subnormal_top_divides(device_cpu_only: str, p: float) -> None:
     """Its reciprocal overflows, so the tile hands that column to the slice path."""
     tiny = 4e-320

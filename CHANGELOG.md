@@ -400,6 +400,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - sweep a leading-axis p-norm by rows (LCD-1003)
 
+- fast CPU p-norm for p = 1/2 and flat slices (LCD-1009)
+
 ### Tooling
 
 - record that 1055fa3b9 moves no binary interface
