@@ -5,15 +5,17 @@ A ceiling in ``_thresholds.json`` is read by ``assert_no_regression`` with a tol
 top.  Recorded from a single CI sample it fails the moment the runner pool hands out a slower
 machine (LCD-867: six FFT and signal ceilings taken from one fast sample failed in 31 of 55
 later runs, while the engine had not changed).  This tool takes the ``pytest_benchmark.json``
-of several runs (the nightly uploads one per run as ``perf-history-<n>``), reduces each case to
-one value per run (the plugin's median), and sets the ceiling so the checked limit
-(``ceiling * (1 + tolerance)``) sits ``headroom`` above a chosen quantile of those values.
+of several runs (the nightly uploads one per run as ``perf-history-<n>``, the phase gate's checks
+part one per push as ``perf-core-<run id>-<attempt>``; ``tools/README.md``, "Perf ceiling
+history", lists and downloads both), reduces each case to one value per run (the plugin's
+median), and sets the ceiling so the checked limit (``ceiling * (1 + tolerance)``) sits
+``headroom`` above a chosen quantile of those values.
 
 The default is the slowest run seen plus 15%.  A limit *at* a quantile fails by construction:
 at p95 each case is red in one run of twenty, and six such cases made the nightly red in one
 run of four (the first nightly after LCD-867 failed at 3.939 ms against a 3.938 ms limit).
 
-    gh run download <run-id> -n perf-history-<n> -D runs/<n>      # once per run
+    gh run download <run-id> -n <artifact-name> -D runs/<artifact-name>   # once per run
     python3 -m tools.record_perf_ceilings lucid/test/perf/microbench/_thresholds.json \\
         runs/*/pytest_benchmark.json --cases '^(fft|ifft)_' --issue LCD-867 --write
 

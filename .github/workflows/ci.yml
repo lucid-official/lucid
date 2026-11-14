@@ -49,6 +49,11 @@ jobs:
       matrix:
         part: ${{ fromJSON(github.event_name == 'push' && '["core:compile", "core:rest", "coreml", "checks"]' || '["core:compile", "core:rest", "coreml", "checks", "native", "zoo:1/2", "zoo:2/2"]') }}
 
+    # Where the checks part's perf tier writes its pytest-benchmark JSON
+    # (scripts/ci_full.sh) and the upload step below reads it.
+    env:
+      LUCID_CI_PERF_JSON: build/perf/pytest_benchmark.json
+
     steps:
       - uses: actions/checkout@v4
 
@@ -164,6 +169,27 @@ jobs:
           name: lucid-audit-report
           path: build/audit-report.json
           if-no-files-found: ignore
+
+      # The checks part's perf tier only warns, but it runs on every push —
+      # the densest record there is of how fast the hosted runner is — where
+      # the nightly's perf-history-<n> is one a day.  tools/record_perf_ceilings.py
+      # reads any `perf-*` artifact (tools/README.md, "Perf ceiling history"),
+      # so a ceiling is set from all the runs there are, not from the few the
+      # nightly happens to hold for a newer case (LCD-867, LCD-947).
+      #
+      # `!cancelled()`, not `always()`: a red run is the point (its timings
+      # are as good as a green one's), but a cancelled one — the next push
+      # cancels it — dies mid-tier and leaves an empty or partial file.  Not
+      # on a pull request: a branch's code is not the code the ceilings are
+      # for.  14 days: ~100 runs a fortnight, while the nightly keeps 90.
+      # run_attempt, so a re-run does not collide with the first attempt's name.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && matrix.part == 'checks' && github.event_name != 'pull_request' }}
+        with:
+          name: perf-core-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.LUCID_CI_PERF_JSON }}
+          if-no-files-found: ignore
+          retention-days: 14
 
   # Lucid beside each `mlx` a user may have installed: none, the [mlx]
   # extra's floor, and the newest release.  The engine links its own pinned

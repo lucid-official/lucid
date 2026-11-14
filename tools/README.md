@@ -180,6 +180,40 @@ with none; `attest` takes no fallback. `python3 tools/engine_stamp.py check` say
 checkout's stamp matches. The stamp is local (`build/` is not synced): a checkout that
 received its engine by sync or copy has none until it builds.
 
+## Perf ceiling history
+
+A ceiling in `lucid/test/perf/**/_thresholds.json` is recorded from many hosted runs,
+never one: `tools/record_perf_ceilings.py` refuses fewer than ten, and refuses to lower
+a ceiling without `--allow-lower` (LCD-867, LCD-947). CI keeps two kinds of runs for it,
+each a zip holding `pytest_benchmark.json` at its root:
+
+| artifact | uploaded by | kept | one per |
+|---|---|---|---|
+| `perf-history-<run_number>` | `nightly-perf` (all of `lucid/test/perf/`, with `run_all.json`) | 90 days | scheduled or manual run |
+| `perf-core-<run_id>-<attempt>` | the phase gate's `checks` part: its perf tier (`-m perf`), via `LUCID_CI_PERF_JSON` in `scripts/ci_full.sh` | 14 days | push, tag, scheduled or manual run; red runs too, cancelled runs and pull requests never |
+
+The perf tier is still warn-only; the upload changes nothing about whether `checks` is
+green. The `perf-core` numbers come from a VM that has just run the parity and integration
+tiers, so they read slower and noisier than the nightly's: recording from both sets a
+ceiling that is safer against a flake, not a tighter one.
+
+```sh
+mkdir -p runs
+# `?name=` matches exactly, so list everything and filter by prefix.  `main` only: a
+# branch's code is not the code the ceilings are for (each file's `commit_info` says
+# which commit it measured).
+gh api --paginate 'repos/{owner}/{repo}/actions/artifacts?per_page=100' \
+    --jq '.artifacts[] | select(.expired == false and (.name | startswith("perf-"))
+          and .workflow_run.head_branch == "main") | "\(.workflow_run.id) \(.name)"' |
+    while read -r run name; do gh run download "$run" -n "$name" -D "runs/$name"; done
+python3 -m tools.record_perf_ceilings lucid/test/perf/microbench/_thresholds.json \
+    runs/*/pytest_benchmark.json --audit
+```
+
+`--audit` exits 1 on `NO-HISTORY`, `EXCEEDS` or `TIGHT`; `FEW-RUNS` is informational.
+Tests: `lucid/test/unit/audit/test_ci_perf_artifact.py` pins the workflow and script side,
+`test_perf_ceiling_recorder.py` the recorder.
+
 ## Quality gate
 
 `tools/quality_gate/` plus the committed `tools/quality_baseline.json`: a

@@ -25,7 +25,8 @@
 # LUCID_CI_SLOW_STAGES=0 drops the slow parts (pushes set it).  Two more
 # switches serve scripts/ci_local.sh: LUCID_CI_SKIP_BUILD=1 (the caller
 # installed the engine already) and LUCID_CI_SKIP_PUBLISH=1 (no pip to
-# build a wheel with).
+# build a wheel with).  LUCID_CI_PERF_JSON=<path> has the checks part's perf
+# tier write its pytest-benchmark JSON there (ci.yml uploads it).
 
 set -euo pipefail
 
@@ -179,9 +180,30 @@ sys.exit(0 if ref_module() and zoo_module() else 1)
     stage "Integration tier" "$PYTHON_BIN" -m pytest lucid/test/integration/ --tb=short -q
 
     # ── 4b. Perf tier (opt-in; uses pytest-benchmark when installed) ────────
+    #
+    # Warn-only: a shared runner's speed varies too much to fail a push on.
+    # Its timings are still the data tools/record_perf_ceilings.py sets the
+    # ceilings from, and this tier runs on every push where the nightly runs
+    # once a day, so when LUCID_CI_PERF_JSON names a file (ci.yml's phase
+    # gate does) the plugin writes its JSON there for the workflow to upload
+    # (LCD-1006).  Unset, as locally, the command is exactly what it was.
     echo "==> Perf tier"
-    "$PYTHON_BIN" -m pytest lucid/test/perf/ -m perf --tb=short -q || \
+    local perf_tier=(lucid/test/perf/ -m perf --tb=short -q)
+    if [ -n "${LUCID_CI_PERF_JSON:-}" ]; then
+        mkdir -p "$(dirname "$LUCID_CI_PERF_JSON")"
+        perf_tier+=("--benchmark-json=$LUCID_CI_PERF_JSON")
+    fi
+    "$PYTHON_BIN" -m pytest "${perf_tier[@]}" || \
         echo "[WARN] Perf tier failed — continuing."
+    # The plugin opens its output when pytest starts and writes it when the
+    # session ends, so a run that died between leaves an empty file; one
+    # unreadable artifact would break every audit that globs them.
+    if [ -n "${LUCID_CI_PERF_JSON:-}" ] && ! "$PYTHON_BIN" -c \
+        'import json, sys; json.load(open(sys.argv[1]))["benchmarks"]' \
+        "$LUCID_CI_PERF_JSON" 2>/dev/null; then
+        rm -f "$LUCID_CI_PERF_JSON"
+        echo "[WARN] The perf tier left no readable benchmark JSON; nothing to upload."
+    fi
 
     # ── 5. Validator tools ───────────────────────────────────────────────────
     stage "Layer dependency check" "$PYTHON_BIN" tools/check_layers.py
