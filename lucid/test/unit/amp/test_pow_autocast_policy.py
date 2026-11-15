@@ -225,10 +225,15 @@ def test_int64_pow_past_float64_mantissa_is_exact(device: str, amp: bool) -> Non
 
 
 @pytest.mark.parametrize("amp", [False, True], ids=["eager", "autocast"])
-def test_bool_pow_stays_bool(device: str, amp: bool) -> None:
+def test_bool_pow_is_refused_and_never_autocast(device: str, amp: bool) -> None:
     x = lucid.tensor([True, True, False, False], device=device)
     y = lucid.tensor([True, False, True, False], device=device)
     with autocast(device_type=device, dtype=_amp_dtype(device), enabled=amp):
-        got = x**y
+        # Two bool tensors have no kernel in the reference's CPU (LCD-1020); autocast must not
+        # cast them to half and answer where eager refuses.
+        with pytest.raises(NotImplementedError, match="pow does not accept bool"):
+            x**y
+        # A number exponent is answered, and the answer stays bool.
+        got = x**True
     assert got.dtype == lucid.bool
-    assert got.tolist() == [True, True, False, True]
+    assert got.tolist() == x.tolist()
