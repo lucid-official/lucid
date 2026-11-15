@@ -51,8 +51,9 @@ ORDERS = [0.1, 0.25, 0.5, 0.75, 0.9]
 ULP = 1.1920929e-07
 #: The most the compiled value is allowed from the float64 value, by order.
 VALUE_ULP = {0.1: 6.0, 0.25: 6.0, 0.5: 3.0, 0.75: 4.0, 0.9: 4.0}
-#: The same for the gradient, entry by entry.
-GRAD_ULP = {0.1: 8.0, 0.25: 4.0, 0.5: 3.0, 0.75: 4.0, 0.9: 4.0}
+#: The same for the gradient, entry by entry.  ``p = 0.25`` measured 4.16 on an M4 Max (3.x on
+#: an M1 Pro): MPSGraph's float32 ``pow`` differs by chip, so the bound is the value's.
+GRAD_ULP = {0.1: 8.0, 0.25: 6.0, 0.5: 3.0, 0.75: 4.0, 0.9: 4.0}
 FLT_MAX = 3.4028235e38
 BASE = np.array(
     [[3.0, -4.0, 1.0, 2.0, 0.5], [0.25, 0.5, -2.0, 7.0, 1.0], [1.0, 1.0, 1.0, 1.0, 1.0]],
