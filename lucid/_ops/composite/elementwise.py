@@ -23,6 +23,7 @@ from lucid._ops._bool_refusal import refuse_bool
 from lucid._ops.composite import _bessel
 from lucid._ops.composite._expm1 import _erfc_double, _erfc_single, _expm1, _logaddexp2, _sgn
 from lucid._ops.composite._gamma import _LogGamma, _polygamma
+from lucid._ops.composite._inverse_hyperbolic import _acosh, _asinh, _atanh
 from lucid._ops.composite._opmath import _nan_quiet_pick, _promote_pair, _real
 from lucid._ops.composite._pow2 import _copysign, _frexp, _ldexp_dtype, _ldexp_to, _signbit
 from lucid._ops.composite._shared import _is_tensor
@@ -443,9 +444,9 @@ def arccosh(input: Tensor) -> Tensor:
 
     Inputs with :math:`x < 1` produce NaN through the real ``sqrt``
     branch.  The derivative is :math:`1 / \sqrt{x^{2} - 1}`, singular
-    at :math:`x = 1`.  Both ``arccosh`` and :func:`acosh` refer to the
-    same composite; either spelling may be used for parity with NumPy
-    or reference-framework code.
+    at :math:`x = 1`.  Both ``arccosh`` and :func:`acosh` are one composite.
+    Value and derivative hold to a few ulp over the whole dtype range
+    (``acosh(3e19)`` is 45.54), at every order of ``create_graph``.
 
     Examples
     --------
@@ -454,8 +455,7 @@ def arccosh(input: Tensor) -> Tensor:
     >>> lucid.arccosh(x)
     tensor([0., 1.317, 2.993])
     """
-    input = _float_input(input)
-    return lucid.log(input + lucid.sqrt(input * input - 1.0))
+    return _acosh(input)
 
 
 def acosh(input: Tensor) -> Tensor:
@@ -524,7 +524,9 @@ def arcsinh(input: Tensor) -> Tensor:
 
     Odd function: :math:`\operatorname{arcsinh}(-x) = -\operatorname{arcsinh}(x)`.
     Derivative is :math:`1 / \sqrt{x^{2} + 1}`.  Both ``arcsinh`` and
-    :func:`asinh` refer to the same composite.
+    :func:`asinh` are one composite.  Value and derivative hold to a few ulp
+    over the whole dtype range (``asinh(1e-8)`` is ``1e-8``, ``asinh(1e20)``
+    is 46.74), at every order of ``create_graph``.
 
     Examples
     --------
@@ -533,8 +535,7 @@ def arcsinh(input: Tensor) -> Tensor:
     >>> lucid.arcsinh(x)
     tensor([-0.8814, 0., 0.8814])
     """
-    input = _float_input(input)
-    return lucid.log(input + lucid.sqrt(input * input + 1.0))
+    return _asinh(input)
 
 
 def asinh(input: Tensor) -> Tensor:
@@ -604,7 +605,9 @@ def arctanh(input: Tensor) -> Tensor:
 
     Boundary values :math:`x = \pm 1` produce :math:`\pm\infty`;
     :math:`|x| > 1` produces NaN.  Derivative is :math:`1 / (1 - x^{2})`.
-    Both ``arctanh`` and :func:`atanh` refer to the same composite.
+    Both ``arctanh`` and :func:`atanh` are one composite.  Value and
+    derivative hold to a few ulp over the whole dtype range
+    (``atanh(1e-8)`` is ``1e-8``), at every order of ``create_graph``.
 
     Examples
     --------
@@ -613,8 +616,7 @@ def arctanh(input: Tensor) -> Tensor:
     >>> lucid.arctanh(x)
     tensor([-0.5493, 0., 0.5493])
     """
-    input = _float_input(input)
-    return lucid.log((1.0 + input) / (1.0 - input)) * 0.5
+    return _atanh(input)
 
 
 def atanh(input: Tensor) -> Tensor:

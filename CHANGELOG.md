@@ -323,6 +323,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - float64 bessel_j0 curvature at the origin (LCD-1030)
 
+- range-safe asinh/acosh/atanh and their slopes (LCD-1028)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

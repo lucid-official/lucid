@@ -31,6 +31,10 @@ TRACE_FORM: frozenset[str] = frozenset(
         "_TruncQuotient",
         "_RoundDecimals",
         "_Erfcx",
+        # Inverse hyperbolics with a range-safe slope (LCD-1028)
+        "_Asinh",
+        "_Acosh",
+        "_Atanh",
         # Special edge-value backwards (LCD-772)
         "_Entr",
         "_HalfLineEdge",
