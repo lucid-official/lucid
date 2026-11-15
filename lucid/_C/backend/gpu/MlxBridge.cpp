@@ -4,11 +4,15 @@
 // MlxBridge.h.
 //
 // upload_cpu_to_gpu design:
-//   A transient mlx::core::array is constructed that points at the CPU buffer
-//   via a non-owning "external" view.  A shared_ptr keepalive token holds the
-//   original CpuStorage ptr so it cannot be freed until after mlx::core::copy()
-//   has finished reading it.  copy() returns a new array backed by GPU-private
-//   memory that is safe to use from Metal compute kernels.
+//   The bytes are copied once into a buffer MLX's own allocator hands out, and
+//   the array is built over that buffer.  MLX's buffers are Metal shared-mode
+//   (unified memory): readable from the CPU and visible to the GPU with no
+//   second transfer.  The array owns everything it reads, so the caller's host
+//   block is free as soon as the call returns.  Wrapping the host block instead
+//   kept it alive for as long as the Metal tensor lived, so the CPU and GPU
+//   memory counters both held the same bytes, and the first kernel to touch it
+//   paid for making it GPU-resident (LCD-1012).  An empty upload has no bytes
+//   to copy and keeps the wrapping route: MLX has no buffer to give it.
 //
 // download_gpu_to_cpu design:
 //   Wraps the array in mlx::core::contiguous() before eval() so the underlying
@@ -184,17 +188,22 @@ GpuStorage upload_cpu_to_gpu(const CpuStorage& cpu, const Shape& shape) {
     auto mlx_shape = to_mlx_shape(shape);
     auto mlx_dt = to_mlx_dtype(cpu.dtype);
 
+    GpuStorage out;
+    out.dtype = cpu.dtype;
+    out.nbytes = cpu.nbytes;
+    if (cpu.nbytes > 0) {
+        auto buffer = ::mlx::core::allocator::malloc(cpu.nbytes);
+        std::memcpy(buffer.raw_ptr(), cpu.ptr.get(), cpu.nbytes);
+        out.arr = make_tracked(
+            new ::mlx::core::array(std::move(buffer), std::move(mlx_shape), mlx_dt), out.nbytes);
+        return out;
+    }
+
     auto keepalive = std::make_shared<std::shared_ptr<std::byte[]>>(cpu.ptr);
     void* raw = static_cast<void*>(cpu.ptr.get());
     ::mlx::core::array external(raw, std::move(mlx_shape), mlx_dt,
                                 [keepalive](void*) mutable { keepalive.reset(); });
-
-    auto owned = ::mlx::core::copy(external);
-
-    GpuStorage out;
-    out.dtype = cpu.dtype;
-    out.nbytes = cpu.nbytes;
-    out.arr = make_tracked(new ::mlx::core::array(std::move(owned)), out.nbytes);
+    out.arr = make_tracked(new ::mlx::core::array(::mlx::core::copy(external)), out.nbytes);
     return out;
 }
 

@@ -257,7 +257,7 @@ public:
     // -----
     // For :class:`CpuBackend` this is a no-op move into the
     // ``CpuStorage`` slot of the variant; for :class:`GpuBackend` it
-    // copies the data to GPU-private memory via ``mlx::core::copy``.
+    // copies the data into a buffer MLX owns, and ``cpu`` is not kept.
     virtual Storage from_cpu(CpuStorage cpu, const Shape& shape) = 0;
 
     // Allocates a zero-filled buffer of shape ``shape`` with element type ``dt``.

@@ -161,6 +161,69 @@ void scatter_contig_to_strided(const std::byte* packed,
                                const Stride& stride,
                                std::size_t storage_offset);
 
+// A CpuStorage over ``nbytes`` at ``p`` that owns nothing, to hand memory to
+// ``gpu::upload_cpu_to_gpu``.  The upload copies before it returns, so a NumPy
+// array's data, a bytes object's, or a slice of a tensor's own buffer is read
+// where it lies; a host copy made only to be uploaded was a second full-size
+// block (LCD-1012).  It must not outlive the call that lends ``p``.
+CpuStorage borrowed_host(const void* p, std::size_t nbytes, Dtype dtype) {
+    CpuStorage s;
+    s.ptr = std::shared_ptr<std::byte[]>(static_cast<std::byte*>(const_cast<void*>(p)),
+                                         [](std::byte*) {});
+    s.nbytes = nbytes;
+    s.dtype = dtype;
+    return s;
+}
+
+// Whether two storages can reach the same byte, by the whole allocation each
+// is a window into: a write whose source is a view of its own destination
+// ('x.copy_(x.t())') reads what it overwrites, so it needs a temporary.
+bool buffers_overlap(const CpuStorage& a, const CpuStorage& b) {
+    const auto reach = [](const CpuStorage& s) {
+        const auto base = reinterpret_cast<std::uintptr_t>(s.ptr.get()) - s.offset_in_allocation;
+        return std::pair{base,
+                         base + std::max(s.allocation_nbytes, s.offset_in_allocation + s.nbytes)};
+    };
+    const auto [a0, a1] = reach(a);
+    const auto [b0, b1] = reach(b);
+    return a0 < b1 && b0 < a1;
+}
+
+// A bfloat16 view widened to float32, row-major.  NumPy has no bfloat16, so the
+// bridge converts.  The view is packed a few rows at a time into a small
+// temporary and widened out of it, so the tensor is never copied whole — a
+// packed copy of all of it was a second buffer — and a transposed view keeps
+// the tiled pack's cache behaviour.  ``dst`` has the view's element count and
+// the view is not empty.
+void widen_bf16_view(const std::byte* src, float* dst, const Shape& shape, const Stride& stride) {
+    constexpr std::size_t kChunk = std::size_t{1} << 20;  // elements: 2 MiB of bfloat16
+    const auto widen = [](const std::uint16_t* bits, float* out, std::size_t n) {
+        for (std::size_t i = 0; i < n; ++i) {
+            const std::uint32_t wide = static_cast<std::uint32_t>(bits[i]) << 16;
+            std::memcpy(&out[i], &wide, sizeof(float));
+        }
+    };
+    if (shape.empty()) {
+        std::uint16_t bits;
+        std::memcpy(&bits, src, sizeof(bits));
+        widen(&bits, dst, 1);
+        return;
+    }
+    const std::size_t per_row = shape_numel(shape) / static_cast<std::size_t>(shape[0]);
+    const std::int64_t rows = static_cast<std::int64_t>(std::max<std::size_t>(1, kChunk / per_row));
+    auto tmp = std::make_unique_for_overwrite<std::uint16_t[]>(
+        std::min(shape_numel(shape), static_cast<std::size_t>(rows) * per_row));
+    Shape part = shape;
+    for (std::int64_t r = 0; r < shape[0]; r += rows) {
+        part[0] = std::min(rows, shape[0] - r);
+        strided::pack(src + r * stride[0], reinterpret_cast<std::byte*>(tmp.get()), part, stride,
+                      sizeof(std::uint16_t));
+        const std::size_t n = static_cast<std::size_t>(part[0]) * per_row;
+        widen(tmp.get(), dst, n);
+        dst += n;
+    }
+}
+
 py::object
 make_numpy_view(const CpuStorage& s, const Shape& shape, const Stride& stride, std::size_t offset) {
     // Heap-allocate a copy of the shared_ptr so the capsule's destructor can
@@ -181,15 +244,10 @@ make_numpy_view(const CpuStorage& s, const Shape& shape, const Stride& stride, s
     // positions: ``1e30`` came back as ``4e-41``.  Convert instead — only the
     // tensor's own elements, in order, since the buffer may hold more.
     if (s.dtype == Dtype::BF16) {
-        const auto packed = contig_snapshot_cpu(s, shape, stride, offset);
-        const std::size_t n = packed.size() / sizeof(std::uint16_t);
         py::array_t<float> out(py_shape);
-        const auto* bits = reinterpret_cast<const std::uint16_t*>(packed.data());
-        auto* dst = static_cast<float*>(out.request().ptr);
-        for (std::size_t i = 0; i < n; ++i) {
-            const std::uint32_t widened = static_cast<std::uint32_t>(bits[i]) << 16;
-            std::memcpy(&dst[i], &widened, sizeof(float));
-        }
+        if (shape_numel(shape) > 0)
+            widen_bf16_view(s.ptr.get() + offset, static_cast<float*>(out.request().ptr), shape,
+                            stride);
         return out;
     }
 
@@ -797,9 +855,20 @@ void write_cpu_buffer(const TensorImpl& dst_impl,
     // values are already in place.
     if (from.ptr == dst.ptr && src.is_dense() && dst_impl.is_dense())
         return;
+    const std::size_t n = dst_impl.nbytes();
+    // A view source into a dense destination packs straight into it.  Only a
+    // source that can reach the destination's own bytes (``x.copy_(x.t())``)
+    // or a strided destination needs the temporary below.
+    if (!src.is_dense() && dst_impl.is_dense() && !buffers_overlap(from, dst) &&
+        shape_numel(src.shape()) * dtype_size(from.dtype) == n) {
+        settle_before_host_write(shared, dst_impl.raw_storage());
+        if (n > 0)
+            strided::pack(from.ptr.get() + src.storage_offset(), dst.ptr.get(), src.shape(),
+                          src.stride(), dtype_size(from.dtype));
+        return;
+    }
     // The source packed, then laid into this tensor's own elements — at its
     // offset and through its strides, which a dense tensor has trivially.
-    const std::size_t n = dst_impl.nbytes();
     std::vector<std::byte> packed;
     const std::byte* bytes = from.ptr.get();
     if (!src.is_dense()) {
@@ -1165,15 +1234,6 @@ TensorImpl::from_numpy(py::array arr, Device device, bool requires_grad) {
         return std::make_shared<TensorImpl>(phantom_storage(shape, dtype, device), std::move(shape),
                                             dtype, device, requires_grad);
 
-    // Always land in a fresh aligned CPU buffer first, regardless of the
-    // target device.  For GPU tensors the buffer is uploaded below via the
-    // MLX bridge.  We never write into arr's buffer directly to avoid
-    // inadvertently mutating the Python-side array.
-    CpuStorage cpu;
-    cpu.ptr = allocate_aligned_bytes(total);
-    cpu.nbytes = total;
-    cpu.dtype = dtype;
-
     // Preserve dtype while packing strides. An array_t<std::byte> forcecast
     // converts values rather than reinterpreting bytes: it allocated an unused
     // buffer and emitted lossy-cast warnings (or failed under warnings=error).
@@ -1181,13 +1241,26 @@ TensorImpl::from_numpy(py::array arr, Device device, bool requires_grad) {
     if (!contig) {
         ErrorBuilder("from_numpy").fail("failed to obtain C-contiguous view");
     }
+
+    // A CPU tensor lands in a fresh aligned buffer; we never write into arr's
+    // buffer, so the Python-side array cannot be mutated through the result.
+    // A Metal tensor is uploaded straight from ``contig``: the upload copies
+    // into a buffer MLX owns, and a host copy first was a second one of the
+    // same size.
+    if (device == Device::GPU && total > 0) {
+        return std::make_shared<TensorImpl>(
+            Storage{gpu::upload_cpu_to_gpu(borrowed_host(contig.data(), total, dtype), shape)},
+            std::move(shape), dtype, device, requires_grad);
+    }
+    CpuStorage cpu;
+    cpu.ptr = allocate_aligned_bytes(total);
+    cpu.nbytes = total;
+    cpu.dtype = dtype;
     if (total > 0) {
         std::memcpy(cpu.ptr.get(), contig.data(), total);
     }
 
     if (device == Device::GPU) {
-        // Upload the CPU-side copy to the MLX lazy graph and discard the
-        // temporary CPU buffer; the GpuStorage retains the only live reference.
         return std::make_shared<TensorImpl>(Storage{gpu::upload_cpu_to_gpu(cpu, shape)},
                                             std::move(shape), dtype, device, requires_grad);
     }
@@ -1336,6 +1409,26 @@ std::vector<std::byte> contig_snapshot_cpu(const CpuStorage& s,
     if (total == 0)
         return out;
     strided::pack(s.ptr.get() + storage_offset, out.data(), shape, stride, elem);
+    return out;
+}
+
+// The view's elements, row-major, as a bytes object packed straight into the
+// object's own buffer.  Going through a vector snapshot first held two copies
+// of the tensor at once, and ``pickle``, ``tolist`` and ``save`` all read
+// through here.
+py::bytes packed_bytes(const CpuStorage& s,
+                       const Shape& shape,
+                       const Stride& stride,
+                       std::size_t storage_offset) {
+    const std::size_t elem = dtype_size(s.dtype);
+    const std::size_t total = shape_numel(shape) * elem;
+    PyObject* raw = PyBytes_FromStringAndSize(nullptr, static_cast<Py_ssize_t>(total));
+    if (!raw)
+        throw py::error_already_set();
+    auto out = py::reinterpret_steal<py::bytes>(raw);
+    if (total > 0)
+        strided::pack(s.ptr.get() + storage_offset,
+                      reinterpret_cast<std::byte*>(PyBytes_AS_STRING(raw)), shape, stride, elem);
     return out;
 }
 
@@ -1535,17 +1628,14 @@ py::bytes TensorImpl::to_bytes() const {
     return std::visit(
         overloaded{
             [&](const CpuStorage& s) -> py::bytes {
-                auto buf = contig_snapshot_cpu(s, meta_.shape, meta_.stride, offset_);
-                return py::bytes(reinterpret_cast<const char*>(buf.data()), buf.size());
+                return packed_bytes(s, meta_.shape, meta_.stride, offset_);
             },
             [&](const GpuStorage& g) -> py::bytes {
                 CpuStorage cpu = gpu::download_gpu_to_cpu(g, meta_.shape);
                 return py::bytes(reinterpret_cast<const char*>(cpu.ptr.get()), total);
             },
             [&](const SharedStorage& sh) -> py::bytes {
-                CpuStorage v = sh.cpu_view();
-                auto buf = contig_snapshot_cpu(v, meta_.shape, meta_.stride, offset_);
-                return py::bytes(reinterpret_cast<const char*>(buf.data()), buf.size());
+                return packed_bytes(sh.cpu_view(), meta_.shape, meta_.stride, offset_);
             },
             [&](const PhantomStorage&) -> py::bytes { refuse_phantom_read("to_bytes"); },
         },
@@ -1571,6 +1661,13 @@ std::shared_ptr<TensorImpl> TensorImpl::from_bytes(
         return std::make_shared<TensorImpl>(phantom_storage(shape, dtype, device), std::move(shape),
                                             dtype, device, requires_grad);
 
+    // Uploaded straight from the bytes object: the upload copies, so a host
+    // copy first would be a second one of the same size.
+    if (device == Device::GPU && expected > 0) {
+        return std::make_shared<TensorImpl>(
+            Storage{gpu::upload_cpu_to_gpu(borrowed_host(raw_ptr, expected, dtype), shape)},
+            std::move(shape), dtype, device, requires_grad);
+    }
     CpuStorage cpu;
     cpu.ptr = allocate_aligned_bytes(expected);
     cpu.nbytes = expected;
@@ -1610,6 +1707,25 @@ std::shared_ptr<TensorImpl> TensorImpl::transfer_to_device(Device target,
         }
         return out;
     };
+    // A CPU source, whatever storage holds it.  A row-major one going to Metal
+    // is uploaded where it lies: the upload copies into the buffer Metal keeps,
+    // so packing it into a host block first was a second copy of the tensor
+    // (LCD-1012).  A strided view is packed once, then uploaded.
+    auto from_host = [&](const CpuStorage& src) -> std::shared_ptr<TensorImpl> {
+        if (target == Device::GPU && nbytes() > 0 && is_contiguous()) {
+            return std::make_shared<TensorImpl>(
+                Storage{gpu::upload_cpu_to_gpu(
+                    borrowed_host(src.ptr.get() + offset_, nbytes(), meta_.dtype), meta_.shape)},
+                meta_.shape, meta_.dtype, target, requires_grad);
+        }
+        CpuStorage cpu = build_cpu_from_view(src);
+        if (target == Device::GPU) {
+            return std::make_shared<TensorImpl>(Storage{gpu::upload_cpu_to_gpu(cpu, meta_.shape)},
+                                                meta_.shape, meta_.dtype, target, requires_grad);
+        }
+        return std::make_shared<TensorImpl>(Storage{std::move(cpu)}, meta_.shape, meta_.dtype,
+                                            target, requires_grad);
+    };
     // Under phantom mode any tensor moves as a label: a new phantom of the
     // same shape and dtype on ``target``, the source untouched and no copy
     // run.  Outside it a phantom has no values to move.
@@ -1619,16 +1735,7 @@ std::shared_ptr<TensorImpl> TensorImpl::transfer_to_device(Device target,
 
     return std::visit(
         overloaded{
-            [&](const CpuStorage& s) -> std::shared_ptr<TensorImpl> {
-                CpuStorage cpu = build_cpu_from_view(s);
-                if (target == Device::GPU) {
-                    return std::make_shared<TensorImpl>(
-                        Storage{gpu::upload_cpu_to_gpu(cpu, meta_.shape)}, meta_.shape, meta_.dtype,
-                        target, requires_grad);
-                }
-                return std::make_shared<TensorImpl>(Storage{std::move(cpu)}, meta_.shape,
-                                                    meta_.dtype, target, requires_grad);
-            },
+            [&](const CpuStorage& s) -> std::shared_ptr<TensorImpl> { return from_host(s); },
             [&](const GpuStorage& g) -> std::shared_ptr<TensorImpl> {
                 CpuStorage cpu = gpu::download_gpu_to_cpu(g, meta_.shape);
                 if (target == Device::GPU) {
@@ -1644,15 +1751,8 @@ std::shared_ptr<TensorImpl> TensorImpl::transfer_to_device(Device target,
             [&](const SharedStorage& sh) -> std::shared_ptr<TensorImpl> {
                 // _to.py routes is_metal_shared tensors through transfer_storage()
                 // — that path is zero-copy relabel.  We provide this fallthrough
-                // for safety: contiguous CPU snapshot then route as CPU storage.
-                CpuStorage cpu = build_cpu_from_view(sh.cpu_view());
-                if (target == Device::GPU) {
-                    return std::make_shared<TensorImpl>(
-                        Storage{gpu::upload_cpu_to_gpu(cpu, meta_.shape)}, meta_.shape, meta_.dtype,
-                        target, requires_grad);
-                }
-                return std::make_shared<TensorImpl>(Storage{std::move(cpu)}, meta_.shape,
-                                                    meta_.dtype, target, requires_grad);
+                // for safety: read the buffer as CPU storage.
+                return from_host(sh.cpu_view());
             },
             [&](const PhantomStorage&) -> std::shared_ptr<TensorImpl> {
                 refuse_phantom_read("to (a device copy) outside phantom mode");
@@ -2132,23 +2232,34 @@ Storage TensorImpl::detach_gpu_grad_slot(Storage s) {
 
 std::string
 TensorImpl::to_string(int precision, std::size_t threshold, std::size_t edgeitems) const {
-    // Snapshot data on CPU regardless of device.  All formatting then
-    // reads through a packed contiguous buffer with canonical stride.
-    std::vector<std::byte> buf;
+    // Formatting reads a row-major buffer with canonical strides.  A CPU tensor
+    // that already is one is read where it lies, a Metal download is one by
+    // construction, and only a strided view is packed (into ``packed``) — a
+    // snapshot of the whole tensor taken just to print the few elements
+    // ``edgeitems`` shows was a second copy of it.
+    std::vector<std::byte> packed;
+    CpuStorage downloaded;
+    const std::byte* data = nullptr;
+    const auto read_cpu = [&](const CpuStorage& s) {
+        const std::size_t elem = dtype_size(meta_.dtype);
+        const std::byte* first = s.ptr.get() + offset_;
+        // format_element dereferences typed pointers: a row-major buffer that
+        // starts off the element's alignment gets the aligned copy instead.
+        if (nbytes() > 0 && is_contiguous() &&
+            reinterpret_cast<std::uintptr_t>(first) % elem == 0) {
+            data = first;
+            return;
+        }
+        packed = contig_snapshot_cpu(s, meta_.shape, meta_.stride, offset_);
+        data = packed.data();
+    };
     std::visit(overloaded{
-                   [&](const CpuStorage& s) {
-                       buf = contig_snapshot_cpu(s, meta_.shape, meta_.stride, offset_);
-                   },
+                   [&](const CpuStorage& s) { read_cpu(s); },
                    [&](const GpuStorage& g) {
-                       CpuStorage cpu = gpu::download_gpu_to_cpu(g, meta_.shape);
-                       buf = contig_snapshot_cpu(
-                           cpu, meta_.shape,
-                           contiguous_stride(meta_.shape, dtype_size(meta_.dtype)), 0);
+                       downloaded = gpu::download_gpu_to_cpu(g, meta_.shape);
+                       data = downloaded.ptr.get();
                    },
-                   [&](const SharedStorage& sh) {
-                       CpuStorage v = sh.cpu_view();
-                       buf = contig_snapshot_cpu(v, meta_.shape, meta_.stride, offset_);
-                   },
+                   [&](const SharedStorage& sh) { read_cpu(sh.cpu_view()); },
                    [&](const PhantomStorage&) { refuse_phantom_read("to_string"); },
                },
                readable());
@@ -2156,12 +2267,12 @@ TensorImpl::to_string(int precision, std::size_t threshold, std::size_t edgeitem
     if (meta_.shape.empty()) {
         // 0-d scalar — render the single element with no brackets.
         std::ostringstream os;
-        format_element(buf.data(), meta_.dtype, precision, os);
+        format_element(data, meta_.dtype, precision, os);
         return os.str();
     }
 
     // Compute byte-strides for the canonical contiguous layout we just
-    // packed into ``buf``.
+    // laid out in ``data``.
     const std::size_t elem = dtype_size(meta_.dtype);
     std::vector<std::int64_t> contig_stride_bytes(meta_.shape.size(), 0);
     if (!meta_.shape.empty()) {
@@ -2173,8 +2284,8 @@ TensorImpl::to_string(int precision, std::size_t threshold, std::size_t edgeitem
 
     const bool truncate = numel() > threshold;
     std::ostringstream os;
-    render_nested(buf.data(), meta_.shape, 0, 0, contig_stride_bytes, meta_.dtype, precision,
-                  truncate, edgeitems, os);
+    render_nested(data, meta_.shape, 0, 0, contig_stride_bytes, meta_.dtype, precision, truncate,
+                  edgeitems, os);
     return os.str();
 }
 
@@ -2192,12 +2303,24 @@ void copy_storage_values(Storage& dst_storage,
                        // A view source is read through its geometry, not from
                        // its buffer's first byte.
                        if (!other.is_dense()) {
+                           const std::size_t elem = dtype_size(src.dtype);
+                           const std::size_t total = shape_numel(other.shape()) * elem;
+                           if (total != dst.nbytes)
+                               ErrorBuilder("copy_from").fail("nbytes mismatch");
+                           if (total == 0)
+                               return;
+                           // Packed straight into the destination, unless the
+                           // view is of the destination itself (``x.copy_(x.t())``):
+                           // that one reads what it writes, so it goes through a
+                           // temporary.
+                           if (!buffers_overlap(src, dst)) {
+                               strided::pack(src.ptr.get() + other.storage_offset(), dst.ptr.get(),
+                                             other.shape(), other.stride(), elem);
+                               return;
+                           }
                            const auto packed = contig_snapshot_cpu(
                                src, other.shape(), other.stride(), other.storage_offset());
-                           if (packed.size() != dst.nbytes)
-                               ErrorBuilder("copy_from").fail("nbytes mismatch");
-                           if (!packed.empty())
-                               std::memcpy(dst.ptr.get(), packed.data(), packed.size());
+                           std::memcpy(dst.ptr.get(), packed.data(), total);
                            return;
                        }
                        if (dst.nbytes != src.nbytes) {

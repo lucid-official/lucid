@@ -2,12 +2,13 @@
 //
 // Conversion helpers between Lucid's Storage types and mlx::core::array.
 //
-// Critical constraint: mlx::core::allocator::malloc() allocates GPU-private
-// pages on Apple Silicon Metal.  The raw data() pointer of an unevaluated
-// or GPU-allocated mlx array must NEVER be accessed from the CPU — doing so
-// causes SIGBUS on M-series hardware.  The upload_cpu_to_gpu function uses
-// mlx::core::copy() (a lazy DRAM copy at ~100 GB/s) to ensure the resulting
-// array owns GPU-accessible memory without aliasing the CPU buffer.
+// Memory model: mlx::core::allocator::malloc() hands out Metal shared-mode
+// buffers, which are unified memory — the CPU can read and write the pointer
+// ``Buffer::raw_ptr()`` returns, and the GPU sees the same bytes.  What an
+// array's ``data()`` must not be asked for is a value that has not been
+// computed yet: evaluate first (``download_gpu_to_cpu`` does).  The
+// upload_cpu_to_gpu function copies the host bytes into such a buffer, so the
+// resulting array owns its memory and does not alias the CPU buffer.
 //
 // GpuStorage holds a shared_ptr<mlx::core::array> so that multiple Storage
 // objects can share the same underlying MLX array without copying.  The
@@ -98,15 +99,13 @@ inline const char* mlx_eigh_uplo(bool upper) noexcept {
 // :func:`to_mlx_dtype` — inverse direction.
 Dtype from_mlx_dtype(::mlx::core::Dtype dt);
 
-// Upload a CPU buffer to GPU-private memory via ``mlx::core::copy``.
+// Upload a CPU buffer into a new MLX array that owns its memory.
 //
-// MLX arrays own GPU-private pages that **cannot alias** a CPU
-// pointer (touching the raw ``data()`` from the CPU side raises
-// SIGBUS on M-series hardware).  This routine allocates a new MLX
-// array of the requested shape and dispatches a lazy
-// ``mlx::core::copy`` from the CPU buffer.  The ``cpu`` storage is
-// kept alive — via a custom deleter on the source MLX view — until
-// the asynchronous copy completes.
+// The bytes are copied, once and before the call returns, into a buffer
+// MLX's allocator provides; ``cpu`` is not referenced afterwards, so a caller
+// may pass a view of memory it does not own (a NumPy array's data, a bytes
+// object's, a slice of another tensor) and need not stage a host copy first.
+// A zero-byte upload has nothing to copy and goes through an empty MLX array.
 //
 // Parameters
 // ----------
@@ -122,9 +121,10 @@ Dtype from_mlx_dtype(::mlx::core::Dtype dt);
 //
 // Notes
 // -----
-// Copy bandwidth on M-series unified memory is ~100 GB/s, so the
-// transfer is rarely the bottleneck — but the call still pays for a
-// fresh GPU allocation.  Prefer batching uploads.
+// One memcpy of ``cpu.nbytes`` plus a fresh MLX allocation.  A caller that
+// still has to produce the bytes (a CPU fallback's result) pays that memcpy
+// on top; one that only stages a copy to hand over should read from the
+// source instead.  Prefer batching uploads.
 //
 // See Also
 // --------

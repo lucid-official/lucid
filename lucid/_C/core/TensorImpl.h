@@ -1076,8 +1076,9 @@ public:
     //
     // Dispatch summary:
     //
-    //   * CPU → GPU: contiguous-snapshot the source view, then
-    //     ``gpu::upload_cpu_to_gpu`` into a fresh GPU-private MLX array.
+    //   * CPU → GPU: ``gpu::upload_cpu_to_gpu`` into an MLX array that owns
+    //     its buffer, reading a dense source where it lies and packing a
+    //     strided view first.
     //   * GPU → CPU: ``gpu::download_gpu_to_cpu`` into a fresh
     //     :class:`CpuStorage`.
     //   * :class:`SharedStorage` is handled by the separate

@@ -412,6 +412,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - fast CPU p-norm for p = 1/2 and flat slices (LCD-1009)
 
+- upload into an MLX-owned buffer, pack in place (LCD-1012)
+
 ### Tooling
 
 - record that 1055fa3b9 moves no binary interface
