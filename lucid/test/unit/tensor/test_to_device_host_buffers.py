@@ -1,25 +1,35 @@
-"""A move between devices makes no full-size buffer beyond the one it hands back (LCD-1007).
+"""A move between devices makes no full-size host buffer of its own (LCD-1007, LCD-1012).
 
 ``randn(...).to("metal")`` of a new shape left about four times the tensor in the process
 footprint after everything was freed, against one for ``randn(...)`` alone: a freed block
 above the allocator pool's 4 MB limit stays in malloc's cache for tens of seconds, and the
 move made three of them.  ``_transfer_impl`` densified the source first (``contiguous``, a
 full copy of a dense tensor), ``transfer_to_device`` packed it into a zero-filled vector,
-and only then copied it into the buffer the Metal tensor keeps.  The move reads the source
-through its own strides and writes the new buffer in one pass, so neither is needed.
+and only then handed a host block to MLX, which wrapped it: the Metal tensor kept that block
+for its whole life, so the CPU and the device counters held the same bytes.
+
+``upload_cpu_to_gpu`` now copies into a buffer MLX allocates and keeps nothing of the host
+block, and the callers that staged a copy only to upload it (``to``, NumPy ingestion,
+``from_bytes``) read their source where it lies.  A Metal tensor is counted on the device
+alone, and the loop below leaves what the CPU-only loop leaves.
 
 The footprint test measures a child process and has a control, the CPU-only version of the
 same loop, so an allocator that stops retaining freed blocks fails it instead of passing.
-The peak tests count what the engine itself allocates and do not depend on the allocator.
+The peak tests count what the engine itself allocates and do not depend on the allocator;
+the snapshot tests, whose temporaries the engine does not track, read a child's peak
+resident size.
 """
 
+import gc
 import json
 import os
+import pickle
 import subprocess
 import sys
 import textwrap
 from collections.abc import Callable
 
+import numpy as np
 import pytest
 
 import lucid
@@ -44,17 +54,68 @@ def _peak(device: _C_engine.Device, body: Callable[[], object]) -> int:
     return int(_C_engine.memory_stats(device).peak_bytes) - int(start)
 
 
-def test_a_cpu_to_metal_move_holds_one_host_buffer_beside_the_source() -> None:
+def _current(device: _C_engine.Device) -> int:
+    return int(_C_engine.memory_stats(device).current_bytes)
+
+
+def test_a_dense_cpu_to_metal_move_allocates_no_host_buffer() -> None:
+    x = lucid.randn(*_BIG, device="cpu")
+    kept: list[lucid.Tensor] = []
+    above = _peak(_CPU, lambda: kept.append(x.to("metal")))
+    # The upload copies into the buffer Metal keeps, straight out of the source.
+    assert above <= _MB, f"{above / _MB:.1f} MB of host memory made for a dense move"
+    assert kept[0].tolist() == x.tolist()
+
+
+def test_a_strided_cpu_to_metal_move_packs_through_one_temporary_block() -> None:
     x = lucid.randn(*_BIG, device="cpu")
     nbytes = x.numel() * 4
     kept: list[lucid.Tensor] = []
-    above = _peak(_CPU, lambda: kept.append(x.to("metal")))
-    # The tensor the move returns is backed by the host buffer it was packed into, so one
-    # block above the source is the floor; a second one is the densifying copy.
+    above = _peak(_CPU, lambda: kept.append(x.t().to("metal")))
+    # A view has to be packed somewhere; the copy that densified it first made a second block.
     assert above <= nbytes + _MB, (
         f"{above / _MB:.1f} MB above the source for a {nbytes / _MB:.0f} MB tensor"
     )
-    assert kept[0].tolist() == x.tolist()
+    assert kept[0].tolist() == x.t().tolist()
+
+
+def test_a_metal_tensor_is_counted_on_the_device_and_not_on_the_host() -> None:
+    gc.collect()
+    cpu0, gpu0 = _current(_CPU), _current(_GPU)
+    src = lucid.randn(*_BIG, device="cpu")
+    nbytes = src.numel() * 4
+    moved = src.to("metal")
+    del src
+    gc.collect()
+    # The moved tensor held the host block it was wrapped around: both counters had its bytes.
+    assert _current(_CPU) - cpu0 <= _MB, "the moved tensor still holds a host buffer"
+    assert _current(_GPU) - gpu0 >= nbytes
+    del moved
+    gc.collect()
+    assert abs(_current(_GPU) - gpu0) <= _MB
+
+
+def test_ingesting_onto_metal_stages_no_host_copy() -> None:
+    arr = np.random.default_rng(0).standard_normal(_BIG).astype(np.float32)
+    kept: list[lucid.Tensor] = []
+    assert _peak(_CPU, lambda: kept.append(lucid.tensor(arr, device="metal"))) <= _MB
+    raw = arr.tobytes()
+    impl = lucid.tensor(arr, device="cpu")._impl
+    stats: list[object] = []
+
+    def from_bytes() -> None:
+        stats.append(
+            _C_engine.TensorImpl.from_bytes(
+                raw, list(arr.shape), impl.dtype, _C_engine.Device.GPU, False
+            )
+        )
+
+    assert _peak(_CPU, from_bytes) <= _MB
+    unpickled: list[lucid.Tensor] = []
+    blob = pickle.dumps(kept[0])
+    assert _peak(_CPU, lambda: unpickled.append(pickle.loads(blob))) <= _MB
+    np.testing.assert_array_equal(unpickled[0].numpy(), arr)
+    np.testing.assert_array_equal(kept[0].numpy(), arr)
 
 
 def test_a_metal_to_cpu_move_makes_no_device_side_copy() -> None:
@@ -184,17 +245,98 @@ def _grew(mode: str) -> dict[str, float]:
 
 
 @pytest.mark.slow
-def test_a_loop_of_cpu_to_metal_moves_leaves_what_the_cpu_loop_leaves_not_four_times_it() -> None:
-    """Eight new shapes: the move was at four times the control, one block per copy it made."""
+def test_a_loop_of_cpu_to_metal_moves_leaves_what_the_cpu_loop_leaves() -> None:
+    """Eight new shapes: the move was at four times the control, then at two, now at one."""
     control = _grew("control")
     moved = _grew("move")
     assert control["grew_mb"] > control["inputs_mb"] / 2, (
         f"the control grew {control['grew_mb']:.0f} MB for {control['inputs_mb']:.0f} MB of "
         "inputs: freed large blocks are no longer retained, so this test proves nothing"
     )
-    # The returned tensor is backed by one host block, so twice the control is the floor
-    # until that block belongs to Metal; the three-copy path was at four times.
-    assert moved["grew_mb"] < 3.0 * control["grew_mb"], (
+    # The moved tensor no longer holds a host block of its own, so the loop leaves what the
+    # CPU-only loop leaves: the three-copy path was at four times, the landed one-pass pack
+    # at twice (the Metal tensor kept the block it was packed into).
+    assert moved["grew_mb"] < 1.5 * control["grew_mb"], (
         f"move {moved['grew_mb']:.0f} MB vs control {control['grew_mb']:.0f} MB "
         f"for {moved['inputs_mb']:.0f} MB of inputs"
+    )
+
+
+# ── the snapshots a read or a write through a view used to take, in a child's peak size ──
+
+_PEAK_CHILD = textwrap.dedent("""
+    import gc
+    import json
+    import resource
+    import sys
+
+    import numpy  # imported here so the body's peak does not include loading it
+
+    import lucid
+
+    N = 4096  # 4096 x 4096: 64 MiB of float32
+
+
+    def peak():
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss  # bytes on macOS
+
+
+    SETUP
+    gc.collect()
+    before = peak()
+    BODY
+    print(json.dumps({"rise_mb": (peak() - before) / 2**20, "tensor_mb": N * N * 4 / 2**20}))
+    """)
+
+_SETUP_F32 = "x = lucid.ones(N, N, device='cpu'); y = lucid.ones(N, N, device='cpu')"
+_SETUP_F32_LIVE_VIEW = _SETUP_F32 + "; keep = x[0:2]"
+# Built from a column, so no full-size block is freed during setup for the body to reuse: a
+# freed large block stays in malloc's cache and would hide the temporary this measures.
+_SETUP_BF16 = "x = lucid.ones(N, 1, device='cpu').to(lucid.bfloat16).expand(N, N).contiguous()"
+# Case id -> (setup, body, megabytes of result the case has to hold anyway): a bytes object or
+# a float32 array of one tensor's size (``pickle`` also writes them into its own output), and
+# nothing for a write or a repr.
+_SNAPSHOT_CASES: dict[str, tuple[str, str, float]] = {
+    "to_bytes": (_SETUP_F32, "b = x._impl.to_bytes()", 64.0),
+    "to_bytes of a transposed view": (_SETUP_F32, "b = x.t()._impl.to_bytes()", 64.0),
+    "pickle": (_SETUP_F32, "import pickle; b = pickle.dumps(x)", 128.0),
+    "bfloat16 numpy": (_SETUP_BF16, "a = x.numpy()", 64.0),
+    "bfloat16 numpy of a transposed view": (_SETUP_BF16, "a = x.t().numpy()", 64.0),
+    "repr": (_SETUP_F32, "s = repr(x)", 0.0),
+    "assignment of a view": (_SETUP_F32, "x[:] = y.t()", 0.0),
+    "assignment of a view to a tensor with a live view": (
+        _SETUP_F32_LIVE_VIEW,
+        "x[:] = y.t()",
+        0.0,
+    ),
+}
+
+
+def _rise(case: str) -> dict[str, float]:
+    setup, body, _ = _SNAPSHOT_CASES[case]
+    code = _PEAK_CHILD.replace("SETUP", setup).replace("BODY", body)
+    done = subprocess.run(
+        [sys.executable, "-c", code],
+        env=dict(os.environ),
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    return {k: float(v) for k, v in json.loads(done.stdout.strip().splitlines()[-1]).items()}
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("case", list(_SNAPSHOT_CASES))
+def test_a_read_or_write_through_a_view_takes_no_full_size_snapshot(case: str) -> None:
+    """The peak above the setup is the result it hands back and a little, not a second copy of it.
+
+    Every one of these went through a zero-filled ``std::vector`` the size of the tensor
+    first (the engine's tracker never sees one), then a copy out of it.
+    """
+    holds = _SNAPSHOT_CASES[case][2]
+    got = _rise(case)
+    assert got["rise_mb"] <= holds + 12.0, (
+        f"{case}: peak rose {got['rise_mb']:.0f} MB for a {got['tensor_mb']:.0f} MB tensor, "
+        f"of which {holds:.0f} MB is the result itself"
     )
