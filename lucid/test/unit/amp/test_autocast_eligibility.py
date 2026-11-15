@@ -189,7 +189,8 @@ def test_integer_and_bool_dtypes_under_autocast(
 
     with autocast(device_type=device, dtype=amp_dt):
         y_exp = lucid.exp(x)
-        y_mean = x.mean()
+        # ``mean`` refuses a bool, as the reference does (LCD-1013): cast the mask.
+        y_mean = (x.float() if dtype == lucid.bool else x).mean()
         if dtype != lucid.bool:
             y_add = x + x
             y_mul = x * x

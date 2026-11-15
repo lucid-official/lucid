@@ -280,6 +280,9 @@ def test_unary_free_fn_and_method_parity(
 ) -> None:
     if fn is lucid.neg and dt == lucid.bool_:
         pytest.skip("neg is not supported on bool tensors in eager mode")
+    if fn in (lucid.abs, lucid.relu) and dt == lucid.bool_:
+        # Refused as the reference refuses them (LCD-1013, test_bool_refusal_table).
+        pytest.skip(f"{fn.__name__} is refused on bool tensors in eager mode")
     eager_x = lucid.ones((2, 3), dtype=dt, device=device)
     eager_out = fn(eager_x)
 
