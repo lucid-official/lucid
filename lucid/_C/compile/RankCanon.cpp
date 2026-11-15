@@ -1274,6 +1274,181 @@ public:
     }
 };
 
+// ── Ops that take an index tensor (LCD-1014) ──────────────────────────────────────────
+//
+// An index is checked against the axis it names before it reaches MPSGraph
+// (``OpEmitters/_IndexBounds.h``): a run of elementwise compares and selects over the index, one
+// select over the answer, and the gather or scatter itself.  Every one of them reads or writes a
+// tensor of the index's rank, so at rank 5+ the whole chain is a slice loop: ``embedding`` of a
+// ``(2048, 2, 2, 2, 8)`` index took 40 ms against 2 for the same rows flat, a rank-5 ``gather``
+// 12-40 against 1.4, a rank-5 ``searchsorted`` (a dozen elementwise ops per step of its binary
+// search) 640 ms against 5, and the first run of a ``one_hot`` of a ``(64, 4, 4, 8)`` index never
+// finished.  The layout of an index op is free to change, so the pass owns it, and the backward,
+// which is built from the rewritten graph, follows.
+
+// ``embedding(weight, indices)`` and ``one_hot(indices)`` answer every position of ``indices`` on
+// its own, as ``(*indices.shape, *tail)`` (``tail`` is ``weight``'s other axes, or the classes), so
+// the indices are read flat and the result is ``(count, *tail)``, viewed back.
+class FlatIndexRule final : public RankRule {
+public:
+    bool handles(const OpNode& node) const override {
+        return node.name == "embedding" || node.name == "one_hot";
+    }
+
+    std::optional<RankRewrite> plan(const OpNode& node, const RankEnv& env) const override {
+        const std::size_t at = node.name == "embedding" ? 1 : 0;
+        if (node.outputs.size() != 1 || node.inputs.size() <= at || node.inputs[at] < 0 ||
+            env.dynamic_batch())
+            return std::nullopt;
+        const TensorMeta& out = node.outputs[0];
+        const RankOperand* index = env.find(node.inputs[at]);
+        if (index == nullptr || index->shape.size() < 2 || is_complex(out.dtype) ||
+            !rank_canon_wants(out.shape) || !concrete_and_nonempty(out.shape) ||
+            !concrete_and_nonempty(index->shape) || out.shape.size() < index->shape.size() ||
+            !std::equal(index->shape.begin(), index->shape.end(), out.shape.begin()))
+            return std::nullopt;
+        Dims flat{element_count(index->shape)};
+        flat.insert(flat.end(),
+                    out.shape.begin() + static_cast<std::ptrdiff_t>(index->shape.size()),
+                    out.shape.end());
+        if (flat.size() > 4)
+            return std::nullopt;
+
+        RankRewrite rewrite;
+        rewrite.input_shapes.assign(node.inputs.size(), Dims{});
+        rewrite.input_shapes[at] = {flat[0]};
+        rewrite.out_shape = std::move(flat);
+        return rewrite;
+    }
+};
+
+// ``gather`` and the ``scatter`` family name one axis, and the operands, the index and the
+// result agree on every other: the axes before it merge, the axes after it merge, and the axis
+// attribute is re-pointed at the middle run.  ``scatter``'s source has the index's shape.
+class AlongAxisIndexRule final : public RankRule {
+public:
+    bool handles(const OpNode& node) const override { return axis_attr(node) != nullptr; }
+
+    std::optional<RankRewrite> plan(const OpNode& node, const RankEnv& env) const override {
+        const char* attr = axis_attr(node);
+        const std::int64_t* axis = attr == nullptr ? nullptr : int_attr_of(node, attr);
+        const auto shapes = operand_dims(node, env);
+        if (axis == nullptr || !shapes || node.outputs.size() != 1)
+            return std::nullopt;
+        const Dims& base = shapes->front();
+        const TensorMeta& out = node.outputs[0];
+        const auto at = axis_index(*axis, base.size());
+        if (!at || is_complex(out.dtype) || !agree_off_axis(*shapes, out.shape, *at) ||
+            !(rank_canon_wants(base) || rank_canon_wants(out.shape)))
+            return std::nullopt;
+        std::vector<int> key(base.size(), kPlainAxis);
+        key[*at] = kSoloAxis;
+        const auto runs = fitting_runs(base, key, env.dynamic_batch());
+        if (!runs)
+            return std::nullopt;
+
+        RankRewrite rewrite;
+        for (const Dims& shape : *shapes)
+            rewrite.input_shapes.push_back(shape_in_runs(shape, *runs));
+        rewrite.out_shape = shape_in_runs(out.shape, *runs);
+        rewrite.attrs = with_attr(node.attrs, attr, static_cast<std::int64_t>(runs->run_of[*at]));
+        return rewrite;
+    }
+
+private:
+    // The attribute that names the axis of ``node``'s op, nullptr when it is not one of them.
+    static const char* axis_attr(const OpNode& node) {
+        static const std::unordered_map<std::string_view, const char*> attrs{
+            {"gather", "axis"},      {"scatter_add", "dim"},  {"scatter_amax", "dim"},
+            {"scatter_amin", "dim"}, {"scatter_prod", "dim"}, {"scatter_set", "dim"}};
+        const auto it = attrs.find(node.name);
+        return it == attrs.end() ? nullptr : it->second;
+    }
+
+    // The shape of each input (data / base first, then the index and the source), nullopt
+    // when one is unknown, complex, empty or symbolic, or the node has the wrong number.
+    static std::optional<std::vector<Dims>> operand_dims(const OpNode& node, const RankEnv& env) {
+        if (node.inputs.size() < 2 || node.inputs.size() > 3)
+            return std::nullopt;
+        std::vector<Dims> shapes;
+        for (TensorId id : node.inputs) {
+            const RankOperand* operand = id >= 0 ? env.find(id) : nullptr;
+            if (operand == nullptr || is_complex(operand->dtype) ||
+                !concrete_and_nonempty(operand->shape))
+                return std::nullopt;
+            shapes.push_back(operand->shape);
+        }
+        if (shapes.size() == 3 && shapes[1] != shapes[2])
+            return std::nullopt;
+        return shapes;
+    }
+
+    // Every operand and the result have ``shapes.front()``'s rank and its size on every axis
+    // but ``at`` (an op that disagrees is declined by its emitter and runs eagerly).
+    static bool agree_off_axis(const std::vector<Dims>& shapes, const Dims& out, std::size_t at) {
+        const Dims& base = shapes.front();
+        const auto agrees = [&](const Dims& shape) {
+            if (shape.size() != base.size())
+                return false;
+            for (std::size_t a = 0; a < base.size(); ++a) {
+                if (a != at && shape[a] != base[a])
+                    return false;
+            }
+            return true;
+        };
+        return agrees(out) && std::all_of(shapes.begin() + 1, shapes.end(), agrees);
+    }
+};
+
+// ``searchsorted(sequence, values)``: a 1-D sequence answers every value alike, so the values
+// read flat; a batched sequence has one row per row of values, so the rows merge and the last
+// axis stays.  The result has the values' shape.
+class SearchsortedRule final : public RankRule {
+public:
+    bool handles(const OpNode& node) const override { return node.name == "searchsorted"; }
+
+    std::optional<RankRewrite> plan(const OpNode& node, const RankEnv& env) const override {
+        if (node.outputs.size() != 1 || node.inputs.size() != 2 || node.inputs[0] < 0 ||
+            node.inputs[1] < 0)
+            return std::nullopt;
+        const RankOperand* sequence = env.find(node.inputs[0]);
+        const RankOperand* values = env.find(node.inputs[1]);
+        const TensorMeta& out = node.outputs[0];
+        if (sequence == nullptr || values == nullptr || is_complex(sequence->dtype) ||
+            out.shape != values->shape || !rank_canon_wants(values->shape) ||
+            !concrete_and_nonempty(values->shape) || !concrete_and_nonempty(sequence->shape))
+            return std::nullopt;
+        return sequence->shape.size() == 1 ? flat_values(values->shape, env)
+                                           : by_row(sequence->shape, values->shape, env);
+    }
+
+private:
+    static std::optional<RankRewrite> flat_values(const Dims& values, const RankEnv& env) {
+        if (env.dynamic_batch())
+            return std::nullopt;
+        RankRewrite rewrite;
+        rewrite.input_shapes = {Dims{}, Dims{element_count(values)}};
+        rewrite.out_shape = {element_count(values)};
+        return rewrite;
+    }
+
+    static std::optional<RankRewrite>
+    by_row(const Dims& sequence, const Dims& values, const RankEnv& env) {
+        if (sequence.size() != values.size() ||
+            !std::equal(sequence.begin(), sequence.end() - 1, values.begin()))
+            return std::nullopt;
+        std::vector<int> key(values.size(), kPlainAxis);
+        key.back() = kSoloAxis;
+        const auto runs = fitting_runs(values, key, env.dynamic_batch());
+        if (!runs)
+            return std::nullopt;
+        RankRewrite rewrite;
+        rewrite.input_shapes = {shape_in_runs(sequence, *runs), shape_in_runs(values, *runs)};
+        rewrite.out_shape = rewrite.input_shapes[1];
+        return rewrite;
+    }
+};
+
 }  // namespace
 
 const std::vector<std::unique_ptr<RankRule>>& rank_rules() {
@@ -1294,6 +1469,9 @@ const std::vector<std::unique_ptr<RankRule>>& rank_rules() {
         v.push_back(std::make_unique<SplitRule>());
         v.push_back(std::make_unique<StackRule>());
         v.push_back(std::make_unique<BroadcastRule>());
+        v.push_back(std::make_unique<FlatIndexRule>());
+        v.push_back(std::make_unique<AlongAxisIndexRule>());
+        v.push_back(std::make_unique<SearchsortedRule>());
         return v;
     }();
     return rules;

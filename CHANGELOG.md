@@ -303,6 +303,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - wide take merges only for a rank <= 4 answer (LCD-1014)
 
+- rank pass owns the layout of index-taking ops (LCD-1014)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
