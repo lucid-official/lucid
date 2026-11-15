@@ -12,7 +12,10 @@ under ``LUCID_COMPILE_FIRST_RUN_TIMEOUT_S`` (120 s; 0 turns the guard off):
   running -- it is inside Apple's code and cannot be stopped -- holding one core;
 * four such runs open a circuit breaker: a cold first run is no longer started at all;
 * a warm executable never touches a worker, so steady-state runs are as they were;
-* ``compiled_step`` has no eager path and keeps raising.
+* ``compiled_step`` has no eager path and keeps raising;
+* a process that ends while such a worker is still running waits for it (up to 10 s) before the
+  frameworks' static destructors run: a worker that reaches MPSGraph's logging after its table is
+  destroyed crashes the exit (LCD-1019).  A stuck worker (the hang itself) is left after the wait.
 
 A first run given up on leaves a thread behind and counts toward the breaker, so no test may do
 it in the pytest process: the scenarios in ``_first_run_probes.py`` run in child processes, each

@@ -37,6 +37,17 @@ constexpr std::size_t kWorkerStackBytes = 8u << 20;
 
 constexpr const char* kBudgetEnv = "LUCID_COMPILE_FIRST_RUN_TIMEOUT_S";
 
+// Workers from the start of their function to its end, and how many of those wait at the test
+// seam's gate.  Guarded by ``FirstRunWatchdog::gate_mu_``.  Plain integers on purpose: nothing of
+// theirs is destroyed before the exit handler reads them.
+std::size_t g_workers = 0;
+std::size_t g_gated = 0;
+
+// What ``exit()`` waits for the workers still running a first run (LCD-1019).  Their number is
+// small and their runs end in seconds; a run that does not (LCD-847's hang, inside an MPSGraph
+// pass for good) is left, as before, and costs this much at exit.
+constexpr std::chrono::seconds kExitGrace{10};
+
 // The longest wait taken at its word (about 31 years): a deadline in a clock's integer
 // nanoseconds must not overflow on a budget meant as "forever".
 constexpr double kLongestBudgetS = 1e9;
@@ -216,7 +227,9 @@ void FirstRunWatchdog::hold_workers(bool hold) {
 
 void FirstRunWatchdog::wait_gate() {
     std::unique_lock<std::mutex> lock(gate_mu_);
+    ++g_gated;
     gate_cv_.wait(lock, [this] { return !held_; });
+    --g_gated;
 }
 
 // Wait for ``job`` until it finishes, is given up on, or passes its deadline.  True
@@ -269,6 +282,19 @@ void FirstRunWatchdog::worker_main(const std::shared_ptr<FirstRunLedger>& ledger
                                    std::uint64_t signature,
                                    const std::shared_ptr<FirstRunLedger::Job>& job,
                                    const FirstRunBody& body) {
+    {
+        const std::lock_guard<std::mutex> lock(gate_mu_);
+        ++g_workers;
+    }
+    // Leaves the count when this function does, so the exit handler never sees a worker that is
+    // between its run and its return as quiet.
+    const ScopeExit uncount([this] {
+        {
+            const std::lock_guard<std::mutex> lock(gate_mu_);
+            --g_workers;
+        }
+        gate_cv_.notify_all();
+    });
     wait_gate();
     std::exception_ptr error;
     try {
@@ -345,6 +371,21 @@ void FirstRunWatchdog::run(const std::shared_ptr<FirstRunLedger>& ledger,
     }
 
     if (plan == Plan::Start) {
+        // A worker that is still inside MPSGraph when ``exit()`` runs the static destructors
+        // meets a framework that has begun to come down: MPSGraph destroys the table its
+        // ``MPSGraphOSLog`` reads there, and a worker that logs after that faults (SIGSEGV on
+        // the way out of a process whose results were all delivered, LCD-1019).  A worker cannot
+        // be stopped, so the exit waits for the running ones, up to ``kExitGrace``.  Handlers run
+        // last-in first-out and MPSGraph registers its own with its first log, made by the
+        // compile that produced this executable, so this one, registered now, runs before it.
+        [[maybe_unused]] static const int exit_handler = std::atexit([] {
+            FirstRunWatchdog& self = instance();
+            std::unique_lock<std::mutex> lock(self.gate_mu_);
+            // A worker held at the gate stays there for good, so it is not waited for; one that
+            // was just let go is still counted, whether or not it has left the gate yet.
+            self.gate_cv_.wait_for(lock, kExitGrace,
+                                   [&self] { return g_workers == (self.held_ ? g_gated : 0); });
+        });
         // The slot says Running from here, with a job nobody completes until a thread
         // owns the run.  Anything that throws before that (the allocations below) must
         // give the slot back, and let whoever joined go on to run their own call.

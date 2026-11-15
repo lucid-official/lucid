@@ -311,6 +311,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - CPU argmax/argmin on bool name the cast (LCD-1013)
 
+- exit waits for running first-run workers (LCD-1019)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

@@ -12,12 +12,16 @@ A scenario makes a first run last as long as it needs with the engine's test sea
 budget, so nothing here depends on how slow MPSGraph is on the machine.
 
 A child exits through the interpreter's normal exit, with workers possibly still held: that
-is the check that an abandoned worker cannot keep the process from ending.
+is the check that an abandoned worker cannot keep the process from ending.  The ``exit`` group
+is the other half: a worker that is *running* at exit is waited for, not raced (LCD-1019), and
+it ends with libc's ``exit`` so that its last handler can still run Python.
 """
 
+import ctypes
 import gc
 import json
 import os
+import random
 import signal
 import sys
 import threading
@@ -54,14 +58,18 @@ _SLACK_S = 2.0
 class _Executable:
     """A fresh cold executable computing ``x * scale + 1`` over ``n`` floats, and its feeds.
 
-    Through the session cache when ``cached``, else on its own.
+    Through the session cache when ``cached``, else on its own.  ``chain`` > 1 follows it with
+    ``chain - 1`` more ``sin(y * c) + 1`` (MPSGraph does not fuse them, so a first run lasts in
+    proportion); ``expect`` describes the executable of one.
     """
 
-    def __init__(self, scale: float, n: int = 4, *, cached: bool = False) -> None:
+    def __init__(self, scale: float, n: int = 4, *, cached: bool = False, chain: int = 1) -> None:
         self.x = lucid.ones(n, device=_METAL)
         step = lucid.ones_like(self.x)
         with lucid.no_grad(), _tracing() as tracer:
             y = self.x * scale + step
+            for i in range(chain - 1):
+                y = lucid.sin(y * (scale + 1e-3 * i)) + step
         lucid.eval(self.x, step, y)
         if cached:
             exe = _C.compile_or_cached(tracer.graph, tracer.external_feeds, False, [], [])
@@ -637,6 +645,85 @@ _HERD = {
 }
 
 
+# ── group "exit": the process does not leave while a given-up run is still running ───────
+#
+# ``exit()`` runs the static destructors of the frameworks, and MPSGraph's logging table is one
+# of them.  A worker that logs after it (any run reaching its encode step does) crashed the
+# process on its way out, after every result was out (LCD-1019: SIGSEGV in a first-run worker on
+# a hosted runner).  The engine's exit handler waits for the workers that are running.
+
+_EXIT_SCENARIO = "exit_waits_for_the_workers_still_running"
+_WORKER_THREAD = b"lucid-first-run"
+#: Long enough that every first run is still going when the exit starts (~1.5 s on an M1 Pro,
+#: and a slower runner takes longer, to the engine's grace of 10 s), short enough to stay inside it.
+_EXIT_CHAIN = 60
+_EXIT_WORKERS = 3
+#: How long the last exit handler gives a worker that has finished to leave the process.
+_THREAD_EXIT_SLACK_S = 0.5
+
+
+def _threads_named(name: bytes) -> int:
+    """How many threads of this process carry ``name``: the engine names its first-run workers."""
+    libc = ctypes.CDLL(None)
+    libc.mach_task_self.restype = ctypes.c_uint32
+    libc.pthread_from_mach_thread_np.argtypes = [ctypes.c_uint32]
+    libc.pthread_from_mach_thread_np.restype = ctypes.c_void_p
+    libc.pthread_getname_np.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t]
+    ports = ctypes.POINTER(ctypes.c_uint32)()
+    count = ctypes.c_uint32()
+    if libc.task_threads(libc.mach_task_self(), ctypes.byref(ports), ctypes.byref(count)) != 0:
+        raise OSError("task_threads failed")
+    label = ctypes.create_string_buffer(64)
+    found = 0
+    for index in range(count.value):
+        thread = libc.pthread_from_mach_thread_np(ports[index])
+        if thread and libc.pthread_getname_np(thread, label, len(label)) == 0:
+            found += label.value == name
+    return found
+
+
+def _report_when_the_exit_handlers_are_done() -> None:
+    """The last exit handler: runs after the engine's and after MPSGraph's own."""
+    try:
+        deadline = time.monotonic() + _THREAD_EXIT_SLACK_S
+        left = _threads_named(_WORKER_THREAD)
+        while left and time.monotonic() < deadline:
+            time.sleep(0.01)
+            left = _threads_named(_WORKER_THREAD)
+        record = {"scenario": _EXIT_SCENARIO, "ok": left == 0, "detail": f"{left} worker(s) left"}
+    except OSError:  # the probe could not look: a failed scenario, not a crashed child
+        record = {"scenario": _EXIT_SCENARIO, "ok": False, "detail": traceback.format_exc()}
+    print(json.dumps(record), flush=True)
+
+
+def _exit_waits_for_the_workers_still_running() -> None:
+    """Give up on first runs, let their workers go, and end the process at once.
+
+    Handlers run last-in first-out, so the one registered first (before any worker exists, hence
+    before the engine's and MPSGraph's) is the last: when it looks, the frameworks are down.  It
+    needs Python, which has already finished by the time a normal exit reaches the C handlers, so
+    the probe ends with libc's ``exit`` itself, the call a Python exit ends with.
+    """
+    libc = ctypes.CDLL(None)
+    callback = ctypes.CFUNCTYPE(None)(_report_when_the_exit_handlers_are_done)  # kept by this frame
+    libc.atexit(callback)
+    # MPSGraph keeps what it specialised on disk, keyed by the graph with its constants: a graph
+    # that an earlier process ran has a first run of ~0.1 s.  New constants every time keep
+    # the runs long.
+    salt = random.random()
+    executables = [_Executable(1.0 + i + salt, 8, chain=_EXIT_CHAIN) for i in range(_EXIT_WORKERS)]
+    _budget(_SMALL_BUDGET_S)
+    _hold(True)
+    for e in executables:
+        _raises_timeout(e.run)
+    assert _abandoned() == _EXIT_WORKERS
+    _hold(False)
+    libc.exit(0)
+
+
+_EXIT = {_EXIT_SCENARIO: _exit_waits_for_the_workers_still_running}
+
+
 # ── group "real": the hang the guard exists for ─────────────────────────────────────────
 
 
@@ -678,6 +765,7 @@ _GROUPS: dict[str, dict[str, Callable[[], None]]] = {
     "pinned": _PINNED,
     "inplace_target": _ALIAS,
     "herd": _HERD,
+    "exit": _EXIT,
     "real": _REAL,
 }
 #: What a group's child process needs in its environment, before the engine starts.
