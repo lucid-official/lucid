@@ -1594,15 +1594,19 @@ std::shared_ptr<TensorImpl> TensorImpl::from_bytes(
 // exactly once between source and destination storage.
 std::shared_ptr<TensorImpl> TensorImpl::transfer_to_device(Device target,
                                                            bool requires_grad) const {
+    // One pass from the source's own layout into the destination buffer.  A
+    // vector snapshot first meant a zero-filled temporary the size of the
+    // tensor plus a second copy out of it; a freed block of that size lingers
+    // in the allocator long after the call (LCD-1007).
     auto build_cpu_from_view = [&](const CpuStorage& src) {
-        auto snap = contig_snapshot_cpu(src, meta_.shape, meta_.stride, offset_);
-        const std::size_t total = snap.size();
+        const std::size_t elem = dtype_size(meta_.dtype);
+        const std::size_t total = shape_numel(meta_.shape) * elem;
         CpuStorage out;
         out.ptr = allocate_aligned_bytes(total);
         out.nbytes = total;
         out.dtype = meta_.dtype;
         if (total > 0) {
-            std::memcpy(out.ptr.get(), snap.data(), total);
+            strided::pack(src.ptr.get() + offset_, out.ptr.get(), meta_.shape, meta_.stride, elem);
         }
         return out;
     };

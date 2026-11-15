@@ -287,6 +287,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - make SignatureCache pop and listings atomic (LCD-1008)
 
+- pack a cross-device move into its buffer in one pass
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
