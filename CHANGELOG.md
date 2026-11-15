@@ -315,6 +315,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - range-safe recorded p-norm gradient below p = 2 (LCD-1018)
 
+- the survey's probes put determinism back (LCD-1020)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

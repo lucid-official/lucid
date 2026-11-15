@@ -293,22 +293,28 @@ def metal_available() -> bool:
 def preserved_globals() -> Iterator[None]:
     """Restore the process-wide switches around one probe.
 
-    The survey calls every public symbol, and three of them write state
+    The survey calls every public symbol, and four of them write state
     the whole framework reads: ``set_default_dtype``,
-    ``set_default_device`` and ``set_grad_enabled``.  A successful call
-    to any of them re-tunes every check that runs afterwards — the
+    ``set_default_device``, ``set_grad_enabled`` and
+    ``use_deterministic_algorithms``.  A successful call to any of them
+    re-tunes every check that runs afterwards — the
     survey would still report, but on a framework configured differently
     from the one it claims to be describing, and nothing in the output
     would say so.  Grad is the worst of the three: left disabled, every
     later gradient check finds no graph and reports the framework as
-    non-differentiable.
+    non-differentiable.  Determinism left on makes every later call of a
+    Generator-driven op (``dropout``, ``bernoulli``) refuse, so a test
+    process that ran the bool-refusal sweep first failed them (LCD-1020).
     """
     dtype_before = lucid.get_default_dtype()
     device_before = lucid.get_default_device()
     grad_before = lucid.is_grad_enabled()
+    deterministic_before = lucid.are_deterministic_algorithms_enabled()
     try:
         yield
     finally:
+        if lucid.are_deterministic_algorithms_enabled() != deterministic_before:
+            lucid.use_deterministic_algorithms(deterministic_before)
         if lucid.get_default_dtype() is not dtype_before:
             lucid.set_default_dtype(dtype_before)
         if lucid.get_default_device() != device_before:
