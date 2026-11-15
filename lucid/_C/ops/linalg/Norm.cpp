@@ -25,6 +25,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <string>
 #include <variant>
 #include <vector>
@@ -50,6 +52,7 @@
 #include "../../ops/gfunc/Gfunc.h"
 #include "../../ops/ufunc/Arith.h"
 #include "../../ops/ufunc/Astype.h"
+#include "../../ops/ufunc/Exponential.h"
 #include "../../ops/ufunc/Predicate.h"
 #include "../../ops/ufunc/Reductions.h"
 #include "../../ops/ufunc/ScalarParam.h"
@@ -259,6 +262,97 @@ const OpSchema PNormBackward::schema_v1{"p_norm", 1,   AmpPolicy::KeepInput, tru
 
 namespace {
 
+// ``ln`` of ``n^(1/p)``, the bound on ``N / m`` for a slice of ``n`` entries: the sum of the
+// ratios ``(|x| / m)^p``, each at most 1, is at most ``n``.
+double log_ratio_bound(const Shape& full, const std::vector<int>& axis, double p) {
+    const int ndim = static_cast<int>(full.size());
+    double entries = 1.0;
+    if (axis.empty()) {
+        for (std::int64_t extent : full)
+            entries *= static_cast<double>(extent);
+    } else {
+        for (int a : axis)
+            entries *= static_cast<double>(full[a < 0 ? a + ndim : a]);
+    }
+    return std::log(std::max(entries, 1.0)) / p;
+}
+
+// ``x^e`` for a base of at most ``exp(log_base)``, the exponent split into its float32 head and
+// the tail the head loses.  ``pow_scalar_op`` rounds ``e`` to float32 (relative 6e-8), which a
+// base near 1e20 turns into a relative error of ``tail * ln(x)`` ~ 1e-6 in the power: 20 ulp for
+// ``1 - p`` at p = 0.1.  The tail's power is ``1 + tail * ln(x)``, good to a float32 ulp of 1, so
+// a second power of the reduced operand restores it where it is more than half an ulp.  That
+// factor is a constant of the call: its slope is ``tail / x`` of the power's own ``e / x``
+// (2e-8 of it), and with its graph the tail node would meet the cotangent times the power, an
+// intermediate 1e6 above the answer, in a higher derivative.  A float64 exponent is exact as it
+// is.
+TensorImplPtr pow_by_parts(const TensorImplPtr& x, double e, double log_base) {
+    const double head = static_cast<double>(static_cast<float>(e));
+    constexpr double half_ulp = 3e-8;
+    if (x->dtype() == Dtype::F64 || std::abs(e - head) * log_base < half_ulp)
+        return pow_scalar_op(x, e);
+    TensorImplPtr tail;
+    {
+        NoGradGuard ng;
+        tail = pow_scalar_op(x, e - head);
+    }
+    return mul_op(pow_scalar_op(x, head), tail);
+}
+
+// The largest magnitude of each slice of ``magnitude`` (``full``-shaped, reduced over ``axis`` with
+// the reduced axes kept as size 1), without the graph; 1 where it is zero or not finite.
+TensorImplPtr
+slice_top(const TensorImplPtr& magnitude, const Shape& full, const std::vector<int>& axis) {
+    NoGradGuard ng;
+    TensorImplPtr top = magnitude;
+    if (!full.empty()) {
+        std::vector<int> axes = axis;
+        if (axes.empty())
+            for (int d = 0; d < static_cast<int>(full.size()); ++d)
+                axes.push_back(d);
+        top = max_op(magnitude, axes, true);
+    }
+    auto finite = where_op(isfinite_op(top), top, ones_like_op(top));
+    return masked_fill_op(finite, equal_op(finite, zeros_like_op(finite)), 1.0);
+}
+
+// ``d * (n / m)^(1-p)`` for the reduced norm ``n`` and cotangent ``d`` and the slice's largest
+// magnitude ``m``; ``log_bound`` is :func:`log_ratio_bound`.
+//
+// The ratio ``n / m`` is up to ``n_slice^(1/p)``: 1e40 for 1e4 entries at p = 0.1, past
+// float32's 3.4e38, while the product (``n_slice^((1-p)/p)`` ~ 1e36) is a good float.  Where the
+// bound is below 1e35 the ratio is formed and powered whole, and the cotangent multiplied in.
+// Above it neither the ratio nor its power is: ``n / m = q q'`` with ``c = sqrt(n) / sqrt(m)``,
+// ``q' = c`` and ``q = n / (m c)``, both factors the ratio's square root (at most 1e50, 1e19
+// where the whole fits), and ``d`` is folded into the first power before the second:
+// ``(d q^(1-p)) q'^(1-p)``, every partial product no larger than the answer (both powers are at
+// least 1).  ``m c`` is a constant of the call, so the graph's only ``n`` is in ``q``, linear in
+// it; ``c = 1`` where ``n = m``, as it must for a slice of one entry.  A non-finite norm gives
+// ``m c`` the cap and ``q`` = inf, the answer the whole ratio had.
+//
+// The split is for the slices that need it because it costs more headroom in a higher
+// derivative: the cotangent meets ``q'^(1-p)`` before the power's derivative divides by ``m c``,
+// where the whole ratio's chain divides by ``m`` (a third derivative near 1e30 lost 1e3 of it).
+TensorImplPtr quasi_scale(const TensorImplPtr& n,
+                          const TensorImplPtr& d,
+                          const TensorImplPtr& m,
+                          double p,
+                          double log_bound) {
+    constexpr double kSplitAboveLog = 80.0;  // ln(1e35)
+    if (log_bound <= kSplitAboveLog)
+        return mul_op(pow_by_parts(div_op(n, m), 1.0 - p, log_bound), d);
+    const double cap = n->dtype() == Dtype::F64 ? std::numeric_limits<double>::max()
+                                                : std::numeric_limits<float>::max();
+    TensorImplPtr pivot, tail;
+    {
+        NoGradGuard ng;
+        auto root = div_op(sqrt_op(n), sqrt_op(m));
+        pivot = clip_op(mul_op(m, root), 0.0, cap);
+        tail = pow_by_parts(root, 1.0 - p, log_bound);
+    }
+    return mul_op(mul_op(d, pow_by_parts(div_op(n, pivot), 1.0 - p, log_bound)), tail);
+}
+
 // ``dA`` of an order below 1: ``sign(A) (|A| / N)^(p-1) * dN``, formed relative to the slice's
 // largest magnitude ``m`` instead of to the norm.
 //
@@ -269,14 +363,13 @@ namespace {
 // (N / m)^(1-p)`` and both factors are at least 1: ``|A| / m`` is in (0, 1] and ``N / m`` in
 // [1, n^(1/p)], so neither underflows, and their product is the slope (it overflows only where
 // the slope does).  ``m`` is a constant of the call: the slope is homogeneous of degree 0 in the
-// scale, so any positive constant gives the same function and the same derivatives.  It is
-// taken without the graph; a zero or non-finite ``m`` (an all-zero slice, an infinity, a NaN)
-// is 1, as the norm's own zero is settled by the caller.
+// scale, so any positive constant gives the same function and the same derivatives.  A zero or
+// non-finite ``m`` (an all-zero slice, an infinity, a NaN) is 1, as the norm's own zero is settled
+// by the caller.
 //
 // ``n_safe`` and ``d_live`` are the norm and its gradient on the reduced shape with the zero
-// slices settled; the cotangent is multiplied into the (reduced) ``(N / m)^(1-p)`` first, since
-// the slope factor ``(|A| / m)^(p-1)`` is at least 1 and the product of the reduced factors is
-// then no larger than the answer.
+// slices settled; :func:`quasi_scale` multiplies the cotangent into the reduced ``(N / m)^(1-p)``
+// before the full-size slope does (the slope is at least 1).
 TensorImplPtr quasi_grad(const TensorImplPtr& A,
                          const TensorImplPtr& n_safe,
                          const TensorImplPtr& d_live,
@@ -285,27 +378,14 @@ TensorImplPtr quasi_grad(const TensorImplPtr& A,
                          const std::vector<int>& axis,
                          bool keepdims) {
     auto magnitude = abs_op(A);
-    TensorImplPtr m;
-    {
-        NoGradGuard ng;
-        TensorImplPtr top = magnitude;
-        if (!full.empty()) {
-            std::vector<int> axes = axis;
-            if (axes.empty())
-                for (int d = 0; d < static_cast<int>(full.size()); ++d)
-                    axes.push_back(d);
-            top = max_op(magnitude, axes, true);
-        }
-        auto finite = where_op(isfinite_op(top), top, ones_like_op(top));
-        m = masked_fill_op(finite, equal_op(finite, zeros_like_op(finite)), 1.0);
-    }
+    auto m = slice_top(magnitude, full, axis);
     auto ratio = div_op(magnitude, m);
     // A zero entry has the slope 0 (its power is infinite there): the base 1 gives ``sign(0) * 1``.
     auto base = masked_fill_op(ratio, equal_op(ratio, zeros_like_op(ratio)), 1.0);
     auto slope = mul_op(sign_op(A), pow_scalar_op(base, p - 1.0));
-    auto norm_ratio = div_op(keepdim_view(n_safe, full, axis, keepdims), m);
-    auto scale =
-        mul_op(pow_scalar_op(norm_ratio, 1.0 - p), keepdim_view(d_live, full, axis, keepdims));
+    auto scale = quasi_scale(keepdim_view(n_safe, full, axis, keepdims),
+                             keepdim_view(d_live, full, axis, keepdims), m, p,
+                             log_ratio_bound(full, axis, p));
     return mul_op(slope, scale);
 }
 
