@@ -143,7 +143,7 @@ def _make_round_adapter(*, inplace: bool = False) -> Callable[..., _Impl]:
     """``round(input, *, decimals=0)``, or ``round_`` with ``inplace``."""
 
     def _adapter(input: _Impl, /, *, decimals: int = 0) -> _Impl:
-        if isinstance(input, _Impl) and input.dtype.value == BOOL_CODE:
+        if type(input) is _Impl and input.dtype.value == BOOL_CODE:
             raise bool_refusal("round_" if inplace else "round")
         dec = int(decimals)
         if dec == 0 or input.dtype not in _REAL_FLOATS:

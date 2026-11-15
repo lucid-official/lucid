@@ -172,7 +172,7 @@ def _bool_refused(name: str, engine_fn: _Unary) -> _Unary:
     """
 
     def _op(input: _C_engine.TensorImpl, /) -> _C_engine.TensorImpl:
-        if isinstance(input, _IMPL) and input.dtype.value == BOOL_CODE:
+        if type(input) is _IMPL and input.dtype.value == BOOL_CODE:
             raise bool_refusal(name)
         return engine_fn(input)
 
@@ -202,7 +202,7 @@ def _bool_refused_adapter(
     def _op(
         x_impl: _C_engine.TensorImpl, /, *args: object, **kwargs: object
     ) -> _C_engine.TensorImpl:
-        if isinstance(x_impl, _IMPL) and x_impl.dtype.value == BOOL_CODE:
+        if type(x_impl) is _IMPL and x_impl.dtype.value == BOOL_CODE:
             dtype = (
                 signature.bind_partial(x_impl, *args, **kwargs).arguments.get("dtype")
                 if unless_dtype
