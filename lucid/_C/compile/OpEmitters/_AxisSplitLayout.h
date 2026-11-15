@@ -26,10 +26,15 @@
 // so the operand merges around it before the lanes are added (``lane_gather_along_axis`` /
 // ``lane_take``).
 //
+// A sort reads its operand the same way, ``(before, n, after)`` around the sorted axis, for its
+// rank grid and for the gather of its values (``_SortOrder.h``); it takes only ``axis_bands``,
+// and folds every static rank-5+ operand whatever the lead.
+//
 // Pure C++ — include from ``.mm`` files only.
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
@@ -60,6 +65,11 @@ struct AxisBands {
     // Where ``mid[k]`` sits in ``shape(mid)``.
     std::size_t index_of(std::size_t k) const { return (pre != 1 ? 1U : 0U) + k; }
 };
+
+// Whether every dim of ``shape`` is known at build time (a symbolic dim is negative).
+[[maybe_unused]] inline bool is_static_shape(const std::vector<std::int64_t>& shape) {
+    return std::none_of(shape.begin(), shape.end(), [](std::int64_t d) { return d < 0; });
+}
 
 // Whether the intermediate ``native`` — what the op would build with no merging — is one to
 // keep out of MPSGraph's slice loop: concrete, rank 5+ and over the pass's lead gate.

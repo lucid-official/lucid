@@ -415,6 +415,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - seed _svd_lowrank with its own generator (LCD-967)
 - one owner for refusing a trace (LCD-986)
 - drop dead NameError arms from STRING reads (LCD-989)
+- sort folds via axis_bands, nil-idx guard (LCD-1002)
 
 ---
 

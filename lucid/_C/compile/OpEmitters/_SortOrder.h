@@ -79,47 +79,35 @@ graph_argsort_order(MPSGraph* g, MPSGraphTensor* x, NSInteger axis, bool descend
                            name:nil];
 }
 
-// MPSGraph runs a tensor of rank five or more as a loop over the dims above the
-// last four, one dispatch per slice (LCD-918), so a static rank-5+ ``x`` is
-// read as ``[before, n, after]`` — the dims on each side of the axis fused.
-struct SortFold {
-    NSInteger before = 1;
-    NSInteger after = 1;
-};
-
-// ``shape`` as ``before * n * after`` around ``axis``; false for a dynamic dim.
-inline bool sort_fold(NSArray<NSNumber*>* shape, NSInteger axis, SortFold& fold) {
-    fold = SortFold{};
-    for (NSUInteger d = 0; d < shape.count; ++d) {
-        const NSInteger size = shape[d].integerValue;
-        if (size < 0)
-            return false;
-        if ((NSInteger)d < axis)
-            fold.before *= size;
-        else if ((NSInteger)d > axis)
-            fold.after *= size;
-    }
-    return true;
-}
-
 // ``x`` read at ``order`` along ``axis`` — a sort's values, every bit of
 // them: MPSGraph's own gather rounded int64 through float32, so 2^40 + 3
 // came back as 2^40 (LCD-435, ``_DataMovement.h``).
-// A static rank-5+ ``x`` is gathered folded (``SortFold``).
+// MPSGraph runs a tensor of rank five or more as a loop over the dims above the
+// last four, one dispatch per slice (LCD-918), so a static rank-5+ ``x`` of any
+// dtype is gathered as ``[before, n, after]``, the dims on each side of the axis
+// fused (``axis_bands``).
 inline MPSGraphTensor*
 graph_gather_sorted(MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* order, NSInteger axis) {
-    const NSInteger rank = (NSInteger)x.shape.count;
+    const std::vector<std::int64_t> shape = shape_of_mps(x);
+    const std::vector<std::int64_t> order_shape = shape_of_mps(order);
+    const auto rank = static_cast<NSInteger>(shape.size());
     if (axis < 0)
         axis += rank;
-    SortFold fold, order_fold;
-    if (rank < 5 || axis < 0 || axis >= rank || order.shape.count != x.shape.count ||
-        !sort_fold(x.shape, axis, fold) || !sort_fold(order.shape, axis, order_fold) ||
-        fold.before != order_fold.before || fold.after != order_fold.after)
+    if (shape.size() < kRankCanonMinRank || axis < 0 || axis >= rank ||
+        order_shape.size() != shape.size() || !is_static_shape(shape) ||
+        !is_static_shape(order_shape))
         return graph_gather_along_axis(g, axis, x, order);
-    NSArray<NSNumber*>* x3 = @[ @(fold.before), x.shape[(NSUInteger)axis], @(fold.after) ];
-    NSArray<NSNumber*>* o3 = @[ @(fold.before), order.shape[(NSUInteger)axis], @(fold.after) ];
-    MPSGraphTensor* out = graph_gather_along_axis(g, 1, [g reshapeTensor:x withShape:x3 name:nil],
-                                                  [g reshapeTensor:order withShape:o3 name:nil]);
+    const auto at = static_cast<std::size_t>(axis);
+    const AxisBands bands = axis_bands(shape, at);
+    const AxisBands order_bands = axis_bands(order_shape, at);
+    if (bands.pre != order_bands.pre || bands.post != order_bands.post)
+        return graph_gather_along_axis(g, axis, x, order);
+    MPSGraphTensor* out = graph_gather_along_axis(
+        g, 1,
+        [g reshapeTensor:x withShape:shape_to_ns({bands.pre, shape[at], bands.post}) name:nil],
+        [g reshapeTensor:order
+               withShape:shape_to_ns({order_bands.pre, order_shape[at], order_bands.post})
+                    name:nil]);
     return out == nil ? nil : [g reshapeTensor:out withShape:order.shape name:nil];
 }
 
@@ -241,12 +229,13 @@ inline MPSGraphTensor* graph_rank_key(MPSGraph* g, MPSGraphTensor* x) {
 inline MPSGraphTensor* graph_rank_order(
     MPSGraph* g, MPSGraphTensor* x, MPSGraphTensor* key, NSInteger axis, bool descending) {
     // Folded to ``[before, n, after]`` so the compared grid ``[before, n, n,
-    // after]`` is rank four whatever the rank of ``x`` (see ``SortFold``).
-    SortFold fold;
-    if (!sort_fold(x.shape, axis, fold))
+    // after]`` is rank four whatever the rank of ``x`` (``axis_bands``).
+    const std::vector<std::int64_t> shape = shape_of_mps(x);
+    if (!is_static_shape(shape))
         return nil;
+    const AxisBands bands = axis_bands(shape, static_cast<std::size_t>(axis));
     NSNumber* n = x.shape[(NSUInteger)axis];
-    NSArray<NSNumber*>* folded = @[ @(fold.before), n, @(fold.after) ];
+    NSArray<NSNumber*>* folded = @[ @(bands.pre), n, @(bands.post) ];
     key = [g reshapeTensor:key withShape:folded name:nil];
 
     // ``mine`` is element i on the first of the two compared axes, ``other``

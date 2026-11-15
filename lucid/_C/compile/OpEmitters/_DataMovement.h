@@ -234,10 +234,13 @@ inline MPSGraphTensor* graph_gather(
                           batchDimensions:0
                                      name:name];
     const NSUInteger lanes = d::lanes_of(dt);
+    // A rankless ``idx`` reads as shape {} (``shape_of_mps``), which is also rank 0: merging
+    // it would read an index of unknown rank as one element.
     const auto merged =
-        lanes == 0 ? std::nullopt
-                   : lane_take(shape_of_mps(data), shape_of_mps(idx),
-                               static_cast<std::int64_t>(axis), static_cast<std::int64_t>(lanes));
+        lanes == 0 || idx.shape == nil
+            ? std::nullopt
+            : lane_take(shape_of_mps(data), shape_of_mps(idx), static_cast<std::int64_t>(axis),
+                        static_cast<std::int64_t>(lanes));
     MPSGraphTensor* src = d::carry(g, merged ? d::read_as(g, data, merged->data) : data);
     if (src == nil)
         return nil;

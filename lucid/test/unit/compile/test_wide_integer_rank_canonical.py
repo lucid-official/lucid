@@ -164,12 +164,12 @@ def test_take_along_dim_and_index_select_are_whole(name: str, dtype: str) -> Non
 
 @needs_metal
 @pytest.mark.parametrize("dtype", sorted(_DTYPES))
-def test_a_table_read_by_a_rank_3_index_is_whole(dtype: str) -> None:
-    """``embedding`` reads a table by ``graph_gather``: a rank-3 index makes a rank-4 answer."""
+@pytest.mark.parametrize("index", [(3, 4, 2), (2, 3, 2, 2)], ids=["rank_3_index", "rank_4_index"])
+def test_a_table_read_by_a_high_rank_index_is_whole(index: Shape, dtype: str) -> None:
+    """``embedding`` reads a table by ``graph_gather``: a rank-3 index makes a rank-4 answer, a
+    rank-4 one an answer that is rank 5 by itself (``lane_take`` reads it back as such)."""
     table = _wide((6, 3), dtype, 31)
-    rows = lucid.tensor([[[k % 6 for k in range(j, j + 2)] for j in range(4)]] * 3).to(
-        COMPILE_DEVICE
-    )
+    rows = (lucid.arange(_numel(index)) % 6).reshape(*index).to(COMPILE_DEVICE)
     _holds(lambda w, r: F.embedding(r, w) + 0, table, rows)
 
 
@@ -332,3 +332,19 @@ def test_the_carried_op_bound_is_exceeded_by_the_unfixed_graph(name: str, where:
         f"{name} {where}: the unfixed graph meets the guard's bound, so the guard cannot fail: "
         f"{unfixed.report}"
     )
+
+
+# ── no timing row for ``lane_take`` (``graph_gather``): measured, and the clock cannot see it ──
+#
+# ``graph_gather``'s users that reach the carry (``embedding`` of an int table, ``searchsorted`` of
+# one sequence) gather a table of rank <= 2, so the carried *table* is rank <= 3 and only the
+# answer is rank 5, and MPSGraph does not loop over a gather's answer.  (The resize take of
+# ``_Resample.h`` never meets a wide integer: ``F.interpolate`` of an int tensor traces as plain
+# ``gather``s.)  With the merge off the same 1M-element graph runs 1.1x to 1.25x its merged self
+# for ``embedding`` (rank-3 index, int32 / int64) and 1.3x to 1.4x for ``searchsorted`` (rank-4
+# values, ~10 ms), against the 1.5x bound + 0.3 ms every guard above states; a rank-1 index, which
+# nothing merges, swings 0.99x to 1.4x between the same two runs.  A twin row would pass with the
+# merge off too, which is a guard that cannot fail, so the merge is held by the value rows
+# (``_holds``) only.  An answer that is rank 5 by itself (``embedding`` of a rank-4 index, table
+# ``(1000, 32)``, index ``(512, 4, 4, 8)``) runs ~1.9x *slower* merged (10-11 ms against 5-6; the
+# cause is not isolated; LCD-1002).
