@@ -1589,9 +1589,9 @@ std::shared_ptr<TensorImpl> TensorImpl::from_bytes(
 
 // Numpy-free cross-device copy used by ``Tensor.to(device=...)``.
 // Mirrors the structure of ``to_bytes``+``from_bytes`` but skips the
-// intermediate ``py::bytes`` round-trip — the contiguous-snapshot vector
-// is reused directly as the new CpuStorage backing, so the data moves
-// exactly once between source and destination storage.
+// intermediate ``py::bytes`` round-trip: the source's view is packed
+// straight into the destination's freshly allocated buffer, so the data
+// moves exactly once between source and destination storage.
 std::shared_ptr<TensorImpl> TensorImpl::transfer_to_device(Device target,
                                                            bool requires_grad) const {
     // One pass from the source's own layout into the destination buffer.  A
