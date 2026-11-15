@@ -395,6 +395,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - bind the executable byte estimate and cap (LCD-1008)
 
+- compiled quasi-norm p_norm emitter and VJP (LCD-1015)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

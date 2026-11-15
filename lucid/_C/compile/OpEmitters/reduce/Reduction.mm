@@ -256,12 +256,12 @@ MPSGraphTensor* land_p_norm_result(MPSGraph* g,
     return reshape_dynamic_aware(g, r, out_shape, @"p_norm_out");
 }
 
-// p_norm — the entrywise p-norm of a finite ``p > 1`` that eager Metal answers
-// with the scaled kernel (``backend/gpu/PNorm.h``), spelled out as the same
+// p_norm — the entrywise p-norm of a finite ``p > 0`` other than 1 that eager Metal
+// answers with the scaled kernel (``backend/gpu/PNorm.h``), spelled out as the same
 // largest-magnitude rescale in MPSGraph ops (``_ScaledPNorm.h``).  The plain
 // ``sqrt(sum(x * x))`` flushed a float32 slice near 1e-25 to zero and
-// overflowed one near 1e25 (LCD-955).  Attrs: ``p``, ``axis_list`` (none =
-// every axis), ``keepdims``.
+// overflowed one near 1e25 (LCD-955); an order below 1 has its own form there (LCD-1015).
+// Attrs: ``p``, ``axis_list`` (none = every axis), ``keepdims``.
 //
 // A rank-5+ input is worked at its canonical lower rank like the other
 // reductions (LCD-918): every pass here is over the whole input, so a rank-5+
@@ -282,8 +282,18 @@ public:
         if (!spec)
             return false;
         const ReduceWork work(x_shape, spec->reduced);
-        MPSGraphTensor* r = land_p_norm_result(
-            g, scaled_p_norm_keepdim(g, work.enter(g, x), work.axes_ns(), spec->p), work, node);
+        MPSGraphTensor* x_work = work.enter(g, x);
+        MPSGraphTensor* keep = nil;
+        if (spec->p < 1.0) {
+            // The divisor and the sum ride to the VJP, which does not reduce ``x`` again.
+            const QuasiNormParts q = quasi_p_norm_keepdim(g, x_work, work.axes_ns(), spec->p);
+            ctx.stash_saved(node.outputs[0].id, kQuasiNormDivisorSlot, (__bridge void*)q.divisor);
+            ctx.stash_saved(node.outputs[0].id, kQuasiNormSumSlot, (__bridge void*)q.sum);
+            keep = q.norm;
+        } else {
+            keep = scaled_p_norm_keepdim(g, x_work, work.axes_ns(), spec->p);
+        }
+        MPSGraphTensor* r = land_p_norm_result(g, keep, work, node);
         if (r == nil)
             return false;
         ctx.bind(node.outputs[0].id, (__bridge void*)(r));

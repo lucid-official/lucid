@@ -30,6 +30,27 @@
 // so the special values come out as the eager kernel's.  The VJP of the op uses
 // the same ratio (``|x| / N`` is in [0, 1] too), :func:`p_norm_grad`.
 //
+// An order below 1 (a quasi-norm, LCD-1015) has the same shape with three differences,
+// each one eager Metal's (``backend/gpu/PNorm.h``, LCD-1009):
+//
+//   * Its power is not negligible where the ratio underflows: ``r^p > r``, so for
+//     ``p < 1/2`` an entry 40 decades below the largest still adds ``1e-40^p`` (1e-4
+//     at ``p = 0.1``), and the division flushes that ratio to zero.  Such a term is
+//     the power of a rescaled ratio instead (:func:`quasi_ratio_power`); the ratios
+//     above the floor, and every ratio for ``p >= 1/2`` (whose underflowed power is
+//     below 1e-19), keep the plain ``pow``.
+//   * ``s`` is in [1, n] and the root ``s^(1/p)`` reaches ``n^(1/p)`` (1e40 for 1e4
+//     equal entries at ``p = 0.1``) while ``d * s^(1/p)`` is an ordinary float, so it
+//     is taken in two halves, ``(d * h) * h`` with ``h = s^(1/(2p)) >= 1`` and
+//     ``d * h`` no larger than the answer.
+//   * Its gradient has an infinite slope at a zero entry, which is defined as 0
+//     (:func:`quasi_p_norm_grad`).
+//
+// The plain chain a trace recorded for these orders kept the value and the first
+// gradient in range but not accurate: ``pow`` is ``exp2(y log2 x)`` in float32, whose
+// error grows with ``|y log2 x|``, so a slice at 1e+-25 lost up to 20 ulp at ``p = 0.75``
+// where a slice at 1 lost one.  The ratio form's exponents are small.
+//
 // Objective-C++ only.
 
 #pragma once
@@ -91,6 +112,154 @@ euclidean_norm_keepdim(MPSGraph* g, MPSGraphTensor* x, NSArray<NSNumber*>* axes)
     return [g squareRootWithTensor:sum name:nil];
 }
 
+// ``(|x| / d)^q`` of the quasi-norm's terms (``q = p``) and slopes (``q = p - 1``), where
+// ``a = |x|``, ``d`` is the slice's divisor and ``ratio = a / d``.  A ratio below float32's
+// smallest normal is flushed to zero by the division, and its power is not negligible (the
+// file header), so with ``rescue`` those entries take ``((a 2^126) / d)^q 2^(-126 q)``: the
+// ratio of a power-of-two multiple of ``a`` (below 4 there, so exact and finite), whose
+// exponent ``q log2`` stays small for the ratios that matter, where the difference of two
+// float32 logarithms of magnitude ~100 loses ~1e-5 of the entry (``2^(q (log2 a - log2 d))``
+// measured 120 ulp on a slope).  The select is on the base and the factor, so the one ``pow``
+// is the only transcendental pass.  An entry of 0 gets ``0^q``: 0 for the terms, ``inf`` for
+// the slopes (the caller masks it).
+[[maybe_unused]] inline MPSGraphTensor* quasi_ratio_power(MPSGraph* g,
+                                                          MPSGraphTensor* a,
+                                                          MPSGraphTensor* d,
+                                                          MPSGraphTensor* ratio,
+                                                          double q,
+                                                          bool rescue) {
+    const MPSDataType dt = a.dataType;
+    MPSGraphTensor* exponent = [g constantWithScalar:q dataType:dt];
+    if (!rescue)
+        return [g powerWithPrimaryTensor:ratio secondaryTensor:exponent name:nil];
+    constexpr double kRescale = 0x1p126;
+    MPSGraphTensor* lifted = [g
+        divisionWithPrimaryTensor:[g multiplicationWithPrimaryTensor:a
+                                                     secondaryTensor:[g constantWithScalar:kRescale
+                                                                                  dataType:dt]
+                                                                name:nil]
+                  secondaryTensor:d
+                             name:nil];
+    MPSGraphTensor* flushed =
+        [g lessThanWithPrimaryTensor:ratio
+                     secondaryTensor:[g constantWithScalar:std::numeric_limits<float>::min()
+                                                  dataType:dt]
+                                name:nil];
+    MPSGraphTensor* base = [g selectWithPredicateTensor:flushed
+                                    truePredicateTensor:lifted
+                                   falsePredicateTensor:ratio
+                                                   name:nil];
+    MPSGraphTensor* factor =
+        [g selectWithPredicateTensor:flushed
+                 truePredicateTensor:[g constantWithScalar:std::exp2(-126.0 * q) dataType:dt]
+                falsePredicateTensor:[g constantWithScalar:1.0 dataType:dt]
+                                name:nil];
+    return [g multiplicationWithPrimaryTensor:[g powerWithPrimaryTensor:base
+                                                        secondaryTensor:exponent
+                                                                   name:nil]
+                              secondaryTensor:factor
+                                         name:nil];
+}
+
+// What the quasi-norm's forward computes and its VJP reads again: the divisor
+// ``d = clamp(max |x|)``, ``s = sum (|x| / d)^p`` and the norm ``d s^(1/p)``, all
+// keepdim-shaped.
+struct QuasiNormParts {
+    MPSGraphTensor* divisor = nil;
+    MPSGraphTensor* sum = nil;
+    MPSGraphTensor* norm = nil;
+};
+
+// The saved-state slots (``BuilderContext::stash_saved``) under which a compiled quasi-norm
+// hands ``d`` and ``s`` to its VJP, so the backward does not reduce ``x`` again.
+inline constexpr const char* kQuasiNormDivisorSlot = "p_norm_quasi_divisor";
+inline constexpr const char* kQuasiNormSumSlot = "p_norm_quasi_sum";
+
+// ``(sum |x|^p)^(1/p)`` of float32 ``x`` over ``axes`` for ``0 < p < 1``, reduced axes kept at
+// size 1.  ``d`` is the largest magnitude as :func:`scaled_p_norm_keepdim` takes it (the
+// clamp keeps a zero slice's 0 / 0 and an infinity's inf / inf out of the ratio), every term
+// is ``(|x| / d)^p`` in [0, 1] with the largest entry's exactly 1, and the root is
+// ``(d h) h`` for ``h = s^(1/(2p))``: ``s^(1/p)`` alone leaves float32 where the norm does not.
+[[maybe_unused]] inline QuasiNormParts
+quasi_p_norm_keepdim(MPSGraph* g, MPSGraphTensor* x, NSArray<NSNumber*>* axes, double p) {
+    const MPSDataType dt = x.dataType;
+    MPSGraphTensor* a = [g absoluteWithTensor:x name:nil];
+    MPSGraphTensor* top = [g reductionMaximumWithTensor:a axes:axes name:@"p_norm_top"];
+    QuasiNormParts out;
+    out.divisor =
+        [g clampWithTensor:top
+            minValueTensor:[g constantWithScalar:std::numeric_limits<float>::min() dataType:dt]
+            maxValueTensor:[g constantWithScalar:std::numeric_limits<float>::max() dataType:dt]
+                      name:@"p_norm_divisor"];
+    MPSGraphTensor* ratio = [g divisionWithPrimaryTensor:a secondaryTensor:out.divisor name:nil];
+    out.sum = [g reductionSumWithTensor:quasi_ratio_power(g, a, out.divisor, ratio, p, p < 0.5)
+                                   axes:axes
+                                   name:nil];
+    // At p = 1/2 the half root is s itself.
+    MPSGraphTensor* half = p == 0.5 ? out.sum
+                                    : [g powerWithPrimaryTensor:out.sum
+                                                secondaryTensor:[g constantWithScalar:0.5 / p
+                                                                             dataType:dt]
+                                                           name:nil];
+    out.norm = [g multiplicationWithPrimaryTensor:[g multiplicationWithPrimaryTensor:out.divisor
+                                                                     secondaryTensor:half
+                                                                                name:nil]
+                                  secondaryTensor:half
+                                             name:@"p_norm"];
+    return out;
+}
+
+// The engine's ``PNormBackward`` of an order below 1 (``quasi_grad``, ``ops/linalg/Norm.cpp``):
+//
+//     sign(x) (|x| / N)^(p-1) dN  =  sign(x) (|x| / d)^(p-1) s^((1-p)/p) dN
+//
+// with ``N = d s^(1/p)``, 0 at a zero entry (the power's slope is infinite there; the
+// reference's gradient is 0) and where ``|x|`` is below float32's smallest normal (the
+// arithmetic of the stream reads it as 0).  Neither factor underflows, since ``|x| / d``
+// is at most 1 and ``s`` at least 1 where the slope is live, so the slope is as range-safe
+// as the forward.  Where eager forms ``N / d`` for the second factor, which is ``s^(1/p)``,
+// past float32 for 1e4 equal entries at ``p = 0.1`` though the gradient is an ordinary
+// 1e36, this takes ``s^((1-p)/p)`` itself, in two halves with the cotangent
+// (``(dN h) h``, as the norm's root is) before it meets the slope.  A NaN slice keeps its
+// NaN, and an all-zero slice is 0.
+//
+// ``x``, ``parts`` (:func:`quasi_p_norm_keepdim`'s, of ``x``) and ``go`` (the cotangent of
+// the norm, keepdim-shaped) are all float32.
+[[maybe_unused]] inline MPSGraphTensor* quasi_p_norm_grad(
+    MPSGraph* g, MPSGraphTensor* x, const QuasiNormParts& parts, MPSGraphTensor* go, double p) {
+    const MPSDataType dt = x.dataType;
+    MPSGraphTensor* a = [g absoluteWithTensor:x name:nil];
+    MPSGraphTensor* ratio = [g divisionWithPrimaryTensor:a secondaryTensor:parts.divisor name:nil];
+    MPSGraphTensor* slope = quasi_ratio_power(g, a, parts.divisor, ratio, p - 1.0, true);
+    MPSGraphTensor* floor = [g constantWithScalar:std::numeric_limits<float>::min() dataType:dt];
+    MPSGraphTensor* live_slope = [g selectWithPredicateTensor:[g lessThanWithPrimaryTensor:a
+                                                                           secondaryTensor:floor
+                                                                                      name:nil]
+                                          truePredicateTensor:[g constantWithScalar:0.0 dataType:dt]
+                                         falsePredicateTensor:slope
+                                                         name:nil];
+    // dN s^((1-p)/p); at p = 1/2 the exponent is 1.
+    MPSGraphTensor* scale = nil;
+    if (p == 0.5) {
+        scale = [g multiplicationWithPrimaryTensor:go secondaryTensor:parts.sum name:nil];
+    } else {
+        MPSGraphTensor* half = [g powerWithPrimaryTensor:parts.sum
+                                         secondaryTensor:[g constantWithScalar:(1.0 - p) / (2.0 * p)
+                                                                      dataType:dt]
+                                                    name:nil];
+        scale = [g multiplicationWithPrimaryTensor:[g multiplicationWithPrimaryTensor:go
+                                                                      secondaryTensor:half
+                                                                                 name:nil]
+                                   secondaryTensor:half
+                                              name:nil];
+    }
+    return [g multiplicationWithPrimaryTensor:[g signWithTensor:x name:nil]
+                              secondaryTensor:[g multiplicationWithPrimaryTensor:live_slope
+                                                                 secondaryTensor:scale
+                                                                            name:nil]
+                                         name:@"p_norm_quasi_vjp"];
+}
+
 // What a recorded ``p_norm`` node says: the order and the axes it reduced.
 struct PNormSpec {
     double p = 2.0;
@@ -99,11 +268,12 @@ struct PNormSpec {
 
 // ``node``'s order and reduced axes over an input of ``x_shape`` (no ``axis_list``
 // = every axis); nullopt for what the lowering does not serve — an order that is
-// not finite and above 1, a 0-d input, an axis outside the rank.
+// not finite and positive, or is 1 (a sum of magnitudes powers nothing), a 0-d
+// input, an axis outside the rank.
 [[maybe_unused]] inline std::optional<PNormSpec>
 p_norm_spec(const OpNode& node, const std::vector<std::int64_t>& x_shape) {
     const double p = double_attr(node, "p", 0.0);
-    if (!(p > 1.0) || std::isinf(p) || x_shape.empty())
+    if (!(p > 0.0) || p == 1.0 || std::isinf(p) || x_shape.empty())
         return std::nullopt;
     const auto* dims = int_vec_attr(node, "axis_list");
     auto reduced = dims == nullptr || dims->empty()

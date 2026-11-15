@@ -177,10 +177,10 @@ def test_every_layout_and_axis_set(
     assert cm.cache_info()["entries"] >= 1 and not cm.cache_info()["eager_only"]
 
 
-# ── orders the scaled op does not serve ───────────────────────────────────────
+# ── orders the scaled op does not serve (the quasi-norms are test_p_norm_quasi_compiled.py's) ──
 
 
-@pytest.mark.parametrize("p", [1.0, 0.25, 0.5, 0.75, math.inf, -math.inf, -2.0])
+@pytest.mark.parametrize("p", [1.0, math.inf, -math.inf, -2.0])
 @pytest.mark.parametrize("magnitude", [1e-3, 1.0, 1e3])
 def test_the_other_orders_still_compile_and_equal_eager(p: float, magnitude: float) -> None:
     arr = BASE * np.float32(magnitude)

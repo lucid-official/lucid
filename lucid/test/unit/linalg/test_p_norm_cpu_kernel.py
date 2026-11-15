@@ -410,16 +410,31 @@ def test_a_cpu_compile_trace_records_the_plain_graph(device_cpu_only: str) -> No
 
 
 @pytest.mark.parametrize("p", [0.25, 0.5, 0.75])
-def test_a_compile_trace_records_the_plain_graph_for_a_quasi_norm(device: str, p: float) -> None:
-    """The compiled graph's ``p_norm`` emitter takes ``p > 1`` only (and Core ML has none): a
-    trace of a quasi-norm on either stream records the plain ops, so it still compiles."""
-    x = lucid.tensor(_values(12, 1), device=device).reshape(3, 4)
+def test_a_cpu_compile_trace_records_the_plain_graph_for_a_quasi_norm(
+    device_cpu_only: str, p: float
+) -> None:
+    """Core ML has no ``p_norm`` emitter and a trace of a CPU tensor is exportable."""
+    x = lucid.tensor(_values(12, 1)).reshape(3, 4)
     with _tracing(watch=((x,), {})) as tracer:
         assert _reduce._takes_scaled_kernel(_unwrap(x), p) is False
         lucid.linalg.vector_norm(x, p, dim=1)
     names = [op.name for op in tracer.graph.ops]
     assert "p_norm" not in names
     assert "pow_scalar" in names
+
+
+@pytest.mark.parametrize("p", [0.25, 0.5, 0.75])
+def test_a_metal_compile_trace_records_the_p_norm_node_for_a_quasi_norm(
+    device_gpu_only: str, p: float
+) -> None:
+    """The compiled graph's ``p_norm`` emitter lowers the quasi-norms too (LCD-1015)."""
+    x = lucid.tensor(_values(12, 1), device=device_gpu_only).reshape(3, 4)
+    with _tracing(watch=((x,), {})) as tracer:
+        assert _reduce._takes_scaled_kernel(_unwrap(x), p) is True
+        lucid.linalg.vector_norm(x, p, dim=1)
+    names = [op.name for op in tracer.graph.ops]
+    assert "p_norm" in names
+    assert "pow_scalar" not in names
 
 
 def test_a_metal_compile_trace_keeps_a_scalar_on_the_plain_graph(device_gpu_only: str) -> None:

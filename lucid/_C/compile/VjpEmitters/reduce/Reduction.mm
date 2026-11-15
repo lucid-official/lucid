@@ -320,7 +320,7 @@ public:
 };
 
 // ────────────────────────────────────────────────────────────────────
-// p_norm (finite p > 1) — the engine's ``PNormBackward``:
+// p_norm (finite p > 0, not 1) — the engine's ``PNormBackward``:
 //
 //   dA = sign(A) * (|A| / N)^(p-1) * expand(dN),   0 where N == 0
 //
@@ -329,7 +329,23 @@ public:
 // A zero norm has the subgradient 0 (its ratio is 0 / 0); a NaN norm is not
 // zero and keeps its NaN.  Without this VJP the op would be differentiated by
 // MPSGraph's autodiff, which aborts on the forward's selects.
+//
+// Below p = 1 the slope ``|A| / N`` is the form the ratios of a wide slice flush in (the
+// norm is up to ``n^(1/p)`` times the largest entry), so it is ``quasi_p_norm_grad``'s
+// (``|A| / d`` and ``s^((1-p)/p)``, with 0 at a zero entry), computed in float32 from the
+// forward's divisor and sum.
 // ────────────────────────────────────────────────────────────────────
+
+// The divisor and sum the quasi-norm's forward emitter left for its VJP (they are the
+// forward's own tensors, which MPSGraph evaluates once for both).  False when the forward
+// was not emitted into this graph: the backward then declines, as the compile falls back.
+bool quasi_norm_parts(BackwardContext& bctx, const OpNode& node, QuasiNormParts& parts) {
+    const TensorId out_id = node.outputs[0].id;
+    parts.divisor = as_tensor(bctx.forward_ctx().resolve_saved(out_id, kQuasiNormDivisorSlot));
+    parts.sum = as_tensor(bctx.forward_ctx().resolve_saved(out_id, kQuasiNormSumSlot));
+    return parts.divisor != nil && parts.sum != nil;
+}
+
 class PNormVjp final : public VjpEmitter {
 public:
     std::string_view op_name() const override { return "p_norm"; }
@@ -347,6 +363,18 @@ public:
         // input is worked at its canonical lower rank (LCD-918).
         const MPSDataType dt = ops.go.dataType;
         const ReduceWork work(x_shape, spec->reduced);
+        if (spec->p < 1.0) {
+            QuasiNormParts parts;
+            if (!quasi_norm_parts(bctx, node, parts))
+                return false;
+            // Float32 throughout (the forward is): a half chain's constants would flush.
+            MPSGraphTensor* x32 = work.enter(g, cast_if_needed(g, ops.x, MPSDataTypeFloat32));
+            MPSGraphTensor* go32 = work.keep(g, cast_if_needed(g, ops.go, MPSDataTypeFloat32));
+            MPSGraphTensor* quasi = quasi_p_norm_grad(g, x32, parts, go32, spec->p);
+            bctx.accumulate_grad(node.inputs[0],
+                                 from_tensor(work.leave(g, cast_if_needed(g, quasi, dt))));
+            return true;
+        }
         MPSGraphTensor* dx = work.leave(
             g, p_norm_grad(g, work.enter(g, cast_if_needed(g, ops.x, dt)),
                            work.keep(g, cast_if_needed(g, ops.y, dt)), work.keep(g, ops.go),
