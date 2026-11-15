@@ -489,7 +489,9 @@ def _recorded(x: lucid.Tensor) -> lucid.Tensor:
 def test_a_tracer_without_folding_records_what_main_did(device: str, mode: str) -> None:
     """With folding off the factory hook leaves the recording alone: it is the
     one the engine made before the hook existed (``_fold_off_recordings.json``,
-    taken at a571a6c20), op by op, id by id."""
+    taken at a571a6c20), op by op, id by id.  The two Metal entries were re-taken
+    when a move stopped densifying its source first (LCD-1007): the literal's CPU
+    ``contiguous`` and ``to_device`` are no longer ops, its moved copy is a feed."""
     x = lucid.ones(4, device=device)
     with _tracing(watch=[x] if mode == "coreml" else ()) as tracer:
         if mode == "coreml":
