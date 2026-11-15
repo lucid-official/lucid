@@ -199,7 +199,8 @@ def _takes_scaled_kernel(r: _Impl, p: float) -> bool:
     entries or divides by them, and the extrema of ``p = ±inf`` power nothing at
     all.  A compile trace on the GPU records the kernel as the ``p_norm`` node,
     which the compiled graph lowers to the same scaled form
-    (``compile/OpEmitters/reduce/Reduction.mm``, which takes ``p > 1`` only); a
+    (``compile/OpEmitters/reduce/Reduction.mm``, a quasi-norm's with its own
+    terms, root and slope: ``_ScaledPNorm.h``); a
     trace of a CPU tensor takes the plain graph, as Core ML has no emitter for
     the node.  A phantom tensor has no kernel to run and takes the plain graph
     too, and so does a 0-d tensor in a trace: the node's emitter has no scalar
@@ -212,8 +213,8 @@ def _takes_scaled_kernel(r: _Impl, p: float) -> bool:
             r.dtype == _C_engine.F32
             and not r.is_phantom
             and 0 < r.numel() < _MAX_KERNEL_NUMEL
-            # The compiled graph's ``p_norm`` emitter has no 0-d variant and no ``p < 1``.
-            and (_C_engine.compile.current_tracer() is None or (len(r.shape) > 0 and p > 1.0))
+            # The compiled graph's ``p_norm`` emitter has no 0-d variant.
+            and (_C_engine.compile.current_tracer() is None or len(r.shape) > 0)
         )
     return (
         p != 2.0

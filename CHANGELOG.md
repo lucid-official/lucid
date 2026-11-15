@@ -397,6 +397,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - compiled quasi-norm p_norm emitter and VJP (LCD-1015)
 
+- route a Metal quasi-norm trace to the p_norm node (LCD-1015)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views
