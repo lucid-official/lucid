@@ -23,8 +23,6 @@
 #include "../bfunc/Add.h"
 #include "../bfunc/Compare.h"
 #include "../bfunc/Div.h"
-#include "../bfunc/Maximum.h"
-#include "../bfunc/Minimum.h"
 #include "../bfunc/Mul.h"
 #include "../bfunc/Pow.h"
 #include "../bfunc/Sub.h"
@@ -58,20 +56,6 @@ cast_operands(const AmpScope& amp, const TensorImplPtr& a, const TensorImplPtr& 
     return {std::move(cast[0]), std::move(cast[1])};
 }
 
-}  // namespace
-
-// ── unary compositions ──────────────────────────────────────────────────────
-
-// ``log10(x) = log(x) / log(10)``.  Materialises ``log(10)`` as a same-shape
-// constant so the divide kernel does not need scalar broadcasting.
-TensorImplPtr log10_op(const TensorImplPtr& a_in) {
-    const AmpScope amp{"log10", unary_input(a_in, "log10")->device()};
-    const TensorImplPtr a = amp.cast(a_in);
-    auto log_a = log_op(a);
-    auto ln10 = full_like_op(log_a, std::log(10.0));
-    return div_op(log_a, ln10);
-}
-
 // ``log1p(x) = log(1 + x)`` — but not by forming ``1 + x`` and taking the
 // log of that, which is where the information goes.  Below the machine
 // epsilon ``1 + x`` rounds to exactly 1 and the answer comes back 0 where
@@ -96,27 +80,52 @@ TensorImplPtr log10_op(const TensorImplPtr& a_in) {
 // (+inf, -inf at -1, NaN below -1 and at NaN).  ``x / (u - 1)`` is
 // divided before it multiplies, since it is about 1 and ``log(u) · x``
 // overflows float32 from x ≈ 4e36.
-TensorImplPtr log1p_op(const TensorImplPtr& a_in) {
-    const AmpScope amp{"log1p", unary_input(a_in, "log1p")->device()};
-    const TensorImplPtr a = amp.cast(a_in);
+//
+// Every lane — also where the increment vanished — keeps ``log(u)``'s graph.
+// Those lanes used to return ``x`` itself, whose graph has the constant slope
+// 1: right for the first derivative and 0 for every later one, so
+// ``d²log1p(0)`` was -0 where it is -1 (and ``d³`` 0 where it is 2).
+// There ``log(u)`` is exactly +0 and the correction is ``x``, so the sum is
+// ``x`` to the bit — except for ``x = -0``, where ``(+0) + (-0)`` is +0.  The
+// sum is therefore written ``correction - (0 - log(u))``: ``0 - (+0)`` is +0,
+// ``(-0) - (+0)`` is -0, and ``0 - v`` is ``-v`` for every other ``v``, so the
+// value is the one ``log(u) + correction`` would round to, with ``log1p(-0)``
+// still -0 and the slope still +1 / (1 + x).
+TensorImplPtr log1p_lanes(const TensorImplPtr& a) {
     auto ones = full_like_op(a, 1.0);
+    auto zero = full_like_op(a, 0.0);
     auto u = add_op(a, ones);
     auto plain = log_op(u);
-    TensorImplPtr vanished;
     TensorImplPtr correction;
     {
         NoGradGuard no_grad;
         auto increment = sub_op(u, ones);
-        vanished = equal_op(increment, full_like_op(increment, 0.0));
-        auto safe = where_op(vanished, ones, increment);
-        auto accurate = mul_op(plain, div_op(a, safe));
-        correction =
-            where_op(isfinite_op(plain), sub_op(accurate, plain), full_like_op(plain, 0.0));
+        auto vanished = equal_op(increment, zero);
+        // ``x / 0`` in the lanes ``vanished`` selects away is inf or NaN, and
+        // never read.
+        auto accurate = where_op(vanished, a, mul_op(plain, div_op(a, increment)));
+        correction = where_op(isfinite_op(plain), sub_op(accurate, plain), zero);
     }
-    // Where the increment vanished, x is already the answer to within one
-    // ulp, its derivative 1 / (1 + x) rounds to 1, and taking x keeps
-    // log1p(-0) = -0.
-    return where_op(vanished, a, add_op(plain, correction));
+    return sub_op(correction, sub_op(zero, plain));
+}
+
+}  // namespace
+
+// ── unary compositions ──────────────────────────────────────────────────────
+
+// ``log10(x) = log(x) / log(10)``.  Materialises ``log(10)`` as a same-shape
+// constant so the divide kernel does not need scalar broadcasting.
+TensorImplPtr log10_op(const TensorImplPtr& a_in) {
+    const AmpScope amp{"log10", unary_input(a_in, "log10")->device()};
+    const TensorImplPtr a = amp.cast(a_in);
+    auto log_a = log_op(a);
+    auto ln10 = full_like_op(log_a, std::log(10.0));
+    return div_op(log_a, ln10);
+}
+
+TensorImplPtr log1p_op(const TensorImplPtr& a_in) {
+    const AmpScope amp{"log1p", unary_input(a_in, "log1p")->device()};
+    return log1p_lanes(amp.cast(a_in));
 }
 
 // ``exp2(x) = 2**x``.  Routing through ``pow_op(2, a)`` reaches the exact
@@ -200,7 +209,26 @@ TensorImplPtr atan2_op(const TensorImplPtr& y_in, const TensorImplPtr& x_in) {
     const auto safe_x =
         where_op(logical_or_op(x_is_zero, x_is_inf), where_op(x_neg, neg_op(ones_x), ones_x), x);
     const auto safe_y = where_op(y_is_inf, where_op(y_neg, neg_op(ones_y), ones_y), y);
-    const auto base = arctan_op(div_op(safe_y, safe_x));
+
+    // ``arctan(safe_y / safe_x)`` taken on the ratio that is at most 1 in
+    // magnitude.  The quotient itself leaves float32 once the operands are
+    // 1e20 apart (``q² = inf``, so the slope ``1 / (1 + q²)`` was 0 where the
+    // derivative is 1e-10).  Past ``|y| > |x|`` the operands swap, and
+    //
+    //     arctan(y / x) = sign(y / x) · π/2 - arctan(x / y)
+    //
+    // — a ``where`` on the operands, not on two quotients: the quotient of the
+    // unselected pair would still overflow and its zero cotangent times that
+    // infinity is NaN.  Both forms are exact in a neighbourhood of the switch,
+    // so a tie (``|y| = |x|``, ``q = ±1``) keeps its derivative.  ``safe_x`` is
+    // never 0, and where the operands swap ``|safe_y| > |safe_x| > 0``.
+    const auto swapped = greater_op(abs_op(safe_y), abs_op(safe_x));
+    const auto ratio = div_op(where_op(swapped, safe_x, safe_y), where_op(swapped, safe_y, safe_x));
+    const auto arc = arctan_op(ratio);
+    const auto half_pi = full_like_op(arc, 0.5 * pi);
+    const auto swapped_arc =
+        sub_op(where_op(logical_xor_op(x_neg, y_neg), neg_op(half_pi), half_pi), arc);
+    const auto base = where_op(swapped, swapped_arc, arc);
     const auto pos_zero = full_like_op(base, 0.0);
     const auto neg_zero = neg_op(pos_zero);
     // Hardware arctan(-0.0) on Metal (and half on CPU) returns +0.0; adding -base
@@ -220,7 +248,6 @@ TensorImplPtr atan2_op(const TensorImplPtr& y_in, const TensorImplPtr& x_in) {
                  neg_zero_with_grad, base);
 
     const auto pi_t = full_like_op(base, pi);
-    const auto half_pi = full_like_op(base, 0.5 * pi);
     const auto quarter_pi = full_like_op(base, 0.25 * pi);
     const auto three_quarter_pi = full_like_op(base, 0.75 * pi);
 
@@ -281,14 +308,23 @@ void require_floating(const char* op, const TensorImplPtr& a, const TensorImplPt
 // 1.00004e-40 instead of 1.4142e-40.
 //
 // An infinite operand makes the result +inf even when the other is NaN
-// (C99 Annex G, and the reference), which ``maximum`` above would
-// propagate as NaN.  That case is overridden last, so the arithmetic above
-// may produce NaN for it (inf/inf) without consequence.
+// (C99 Annex G, and the reference), which the ratio would propagate as NaN.
+// That case is overridden last, so the arithmetic above may produce NaN for
+// it (inf/inf) without consequence.
+//
+// The larger magnitude is picked by a ``where`` on the operands, not by
+// ``maximum`` / ``minimum``.  ``m · sqrt(1 + (n/m)²)`` is the length for
+// either choice, so at a tie (``|a| = |b|``) any pick differentiates it
+// exactly; ``maximum`` and ``minimum`` split the tied cotangent between the
+// two operands, and the ratio ``n / m`` then has slope 0 where it is not, so
+// the second derivative at ``a = b`` was 0 for every scale
+// (``hypot(1, 1)``: 0 against 0.354).
 TensorImplPtr hypot_lanes(const TensorImplPtr& a, const TensorImplPtr& b) {
     auto abs_a = abs_op(a);
     auto abs_b = abs_op(b);
-    auto big = maximum_op(abs_a, abs_b);
-    auto small = minimum_op(abs_a, abs_b);
+    auto b_larger = greater_op(abs_b, abs_a);
+    auto big = where_op(b_larger, abs_b, abs_a);
+    auto small = where_op(b_larger, abs_a, abs_b);
     auto one = ones_like_op(big);
     auto safe = where_op(equal_op(big, zeros_like_op(big)), one, big);
     auto ratio = div_op(small, safe);
@@ -307,8 +343,30 @@ TensorImplPtr hypot_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in) {
     return hypot_lanes(a, b);
 }
 
-// Numerically-stable ``log(exp(a) + exp(b))``.  Factor out the per-pair max
-// so only the smaller-magnitude exponential sees rounding error.
+// Numerically-stable ``log(exp(a) + exp(b))``.  Factor out the larger operand,
+//
+//     hi + log1p(exp(lo - hi)),     lo - hi <= 0
+//
+// so only the partner's exponential, in [0, 1], is rounded, and ``log1p``
+// keeps it: ``log(1 + t)`` returned 0 for every ``t`` under 6e-8 (float32),
+// where ``logaddexp(0, -17)`` is 4.1e-8.  The slope, softmax's
+// ``1 / (1 + exp(other - self))``, is what that graph differentiates to:
+// ``1 - t / (1 + t)`` for the larger operand, ``t / (1 + t)`` for the other.
+//
+// ``hi`` is picked by a ``where`` on the operands, not ``maximum`` /
+// ``minimum``: that split would give a tied pair the cotangent 1/2 each, and
+// ``lo - hi`` then has slope 0 where it is not, so the second derivative at
+// ``a == b`` was 0 where it is 1/4.  The expression is the function itself
+// for either pick, so a tie differentiates exactly.
+//
+// ``lo - hi`` is NaN for a pair of equal infinities (``inf - inf``), where
+// the answer is that infinity.  Those lanes take ``-inf`` instead — the
+// partner's weight ``exp(-inf)`` is 0 and ``hi`` is the result — and every
+// other lane keeps ``lo - hi``: already ``-inf`` for an infinite ``hi`` or
+// ``lo`` beside a different value, NaN for a NaN operand.  Substituting the
+// operand of ``exp`` (not the sum) keeps the slope of the infinite lanes
+// finite: the finite partner of ``+inf`` has slope 0 and the infinity 1, as
+// the weights ``1 / (1 + exp(other - self))`` have.
 TensorImplPtr logaddexp_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in) {
     if (!a_in || !b_in)
         ErrorBuilder("logaddexp").fail("null input");
@@ -316,11 +374,13 @@ TensorImplPtr logaddexp_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in)
     const auto [a_dev, b_dev] = detail::align_binary_devices(a_in, b_in, "logaddexp");
     const AmpScope amp{"logaddexp", a_dev->device()};
     const auto [a, b] = cast_operands(amp, a_dev, b_dev);
-    auto m = maximum_op(a, b);
-    auto safe_m = where_op(isinf_op(m), full_like_op(m, 0.0), m);
-    auto exp_a = exp_op(sub_op(a, safe_m));
-    auto exp_b = exp_op(sub_op(b, safe_m));
-    return add_op(m, log_op(add_op(exp_a, exp_b)));
+    const auto b_larger = greater_op(b, a);
+    auto hi = where_op(b_larger, b, a);
+    auto lo = where_op(b_larger, a, b);
+    auto equal_infinities = logical_and_op(isinf_op(hi), equal_op(lo, hi));
+    auto gap = where_op(equal_infinities,
+                        full_like_op(hi, -std::numeric_limits<double>::infinity()), sub_op(lo, hi));
+    return add_op(hi, log1p_lanes(exp_op(gap)));
 }
 
 // Tolerance check via the standard formula.  We materialise the ``rtol``

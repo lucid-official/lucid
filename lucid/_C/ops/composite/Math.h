@@ -156,8 +156,10 @@ LUCID_API TensorImplPtr frac_op(const TensorImplPtr& a);
 // Composite over :func:`arctan_op` plus :func:`where_op` branches that
 // patch the result with $\pm \pi$ / $\pm \pi/2$ / $0$ corrections based on
 // the signs of the operands.  The divide $y / x$ is guarded by
-// substituting $1$ for $x = 0$ so the safe branch is always defined.
-// Gradient flows through the underlying primitives.
+// substituting $1$ for $x = 0$ so the safe branch is always defined, and it
+// is taken on the ratio that is at most 1 in magnitude (the operands swap
+// past $|y| > |x|$), so the slope $x / (x^2 + y^2)$ keeps its range at every
+// derivative order.  Gradient flows through the underlying primitives.
 //
 // Math
 // ----
@@ -193,9 +195,8 @@ LUCID_API TensorImplPtr atan2_op(const TensorImplPtr& y, const TensorImplPtr& x)
 // Pythagorean length: $y = \sqrt{a^2 + b^2}$.
 //
 // Composite over :func:`square_op` + :func:`add_op` + :func:`sqrt_op`.
-// **Naive** formulation — does not perform IEEE-754 overflow-safe scaling
-// (i.e. no $\max(|a|, |b|) \cdot \sqrt{1 + (\min / \max)^2}$ trick),
-// matching the engine's ``square_op`` precision.
+// Computed as $\max(|a|, |b|) \cdot \sqrt{1 + (\min / \max)^2}$, so the
+// squares never leave the float range the result fits in.
 //
 // Math
 // ----
@@ -232,15 +233,15 @@ LUCID_API TensorImplPtr hypot_lanes(const TensorImplPtr& a, const TensorImplPtr&
 
 // Numerically-stable $\log(\exp(a) + \exp(b))$ via the max-shift trick.
 //
-// Composite over :func:`maximum_op` + :func:`sub_op` + :func:`exp_op` +
-// :func:`add_op` + :func:`log_op`.  Factoring out the per-pair max keeps
-// the exponent's argument $\le 0$ so the underflow side bears the rounding
-// error rather than the overflow side.
+// Composite over :func:`where_op` (picking the larger operand) +
+// :func:`sub_op` + :func:`exp_op` + :func:`log1p_op`'s rule.  Factoring out the
+// larger operand keeps the exponent's argument $\le 0$, and ``log1p`` keeps
+// the partner's weight where $1 + e^{-|a - b|}$ would round to 1.
 //
 // Math
 // ----
 // $$
-//   y = m + \ln\!\left( e^{a - m} + e^{b - m} \right),
+//   y = m + \operatorname{log1p}\!\left( e^{-|a - b|} \right),
 //   \qquad m = \max(a, b)
 // $$
 //
