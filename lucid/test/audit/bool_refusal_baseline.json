@@ -500,11 +500,6 @@
       "owner": "probe-artifact",
       "reason": "the probe rebuilds a size or range argument (eye's n, randint's low) as a bool tensor; it is not an operand"
     },
-    "lucid.special.multigammaln": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite never reads the dtype; the BOOL_REFUSED row and the entry check are pending: lucid/special/__init__.py was claimed by LCD-1030 when LCD-1020-A1 ran"
-    },
     "lucid.topk": {
       "kind": "class",
       "owner": "call-dependent",

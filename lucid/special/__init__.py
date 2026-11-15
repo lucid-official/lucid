@@ -35,6 +35,7 @@ import math
 from typing import TYPE_CHECKING, Callable
 
 import lucid
+from lucid._ops._bool_refusal import refuse_bool
 from lucid._ops.composite import _bessel
 from lucid._ops.composite._bessel import _half_line_split
 from lucid._ops.composite._gamma import _integer_order, _polygamma, gammainc, gammaincc
@@ -715,10 +716,9 @@ def multigammaln(input: Tensor, p: int) -> Tensor:
     p = _integer_order(p, "p")
     if p < 1:
         raise ValueError(f"multigammaln requires p >= 1, got {p}")
-    accum = lucid.zeros_like(input)
-    for i in range(1, p + 1):
-        accum = accum + lucid.lgamma(input + (1.0 - float(i)) / 2.0)
-    return float(p * (p - 1)) / 4.0 * math.log(math.pi) + accum
+    refuse_bool("multigammaln", input)
+    terms = (lucid.lgamma(input + (1.0 - float(i)) / 2.0) for i in range(1, p + 1))
+    return float(p * (p - 1)) / 4.0 * math.log(math.pi) + sum(terms, lucid.zeros_like(input))
 
 
 def polygamma(n: int, input: Tensor) -> Tensor:

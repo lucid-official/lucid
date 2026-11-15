@@ -210,6 +210,7 @@ _TABLE: dict[str, _Row] = {
     "pow-bool-base-operator": _kernel("pow", lambda fw, t, m: operator.pow(True, t)),
     "gammainc": _kernel("gammainc", lambda fw, t, m: fw.special.gammainc(t, t)),
     "gammaincc": _kernel("gammaincc", lambda fw, t, m: fw.special.gammaincc(t, t)),
+    "multigammaln": _guard("multigammaln", lambda fw, t, m: fw.special.multigammaln(t, 1)),
     "vecdot": _guard("vecdot", lambda fw, t, m: fw.linalg.vecdot(t, t)),
     "vecdot-first": _guard("vecdot", lambda fw, t, m: fw.linalg.vecdot(t, t.float())),
     "vecdot-second": _guard("vecdot", lambda fw, t, m: fw.linalg.vecdot(t.float(), t)),
@@ -580,13 +581,3 @@ def test_a_refused_in_place_twin_leaves_the_tensor_as_it_was(device: str, name: 
         _IN_PLACE[name](t)
     assert t.tolist() == _VECTOR
     assert t._impl.version == version
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-1020-A1: lucid/special/__init__.py was claimed by LCD-1030; the entry needs "
-    "refuse_bool('multigammaln', input) and a BOOL_REFUSED row (guard, number)",
-)
-def test_multigammaln_refuses_a_bool(device: str) -> None:
-    with pytest.raises(RuntimeError, match="does not accept"):
-        lucid.special.multigammaln(lucid.tensor(_VECTOR, device=device), 1)

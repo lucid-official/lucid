@@ -88,6 +88,7 @@ BOOL_REFUSED: Mapping[str, tuple[type[RuntimeError], str]] = MappingProxyType(
         # Special functions and linear algebra.
         "gammainc": (_KERNEL, _FLOATING),
         "gammaincc": (_KERNEL, _FLOATING),
+        "multigammaln": (_GUARD, _NUMBER),
         "vecdot": (_GUARD, _FLOATING),
         # Activations composed from other ops.
         "celu": (_KERNEL, _FLOATING),
