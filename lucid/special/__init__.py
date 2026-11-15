@@ -98,11 +98,11 @@ def erfcx(input: Tensor) -> Tensor:
                          = e^{x^2} \cdot \frac{2}{\sqrt{\pi}}
                            \int_x^\infty e^{-t^2}\, dt.
 
-    The implementation forms the product of ``exp(x*x)`` and ``erfc(x)``
-    directly, which is accurate for :math:`|x| \lesssim 5`.  For very
-    large positive ``x`` the two factors hit opposite floating-point
-    extremes and accuracy degrades — use a dedicated continued-fraction
-    expansion if extreme-value precision is required.
+    From :math:`x = 2` the value is the continued fraction
+    :math:`\pi^{-1/2} / (x + \tfrac12 / (x + 1 / (x + \tfrac32 / (x + \cdots))))`,
+    never the product, whose factors hit opposite extremes.  The derivative,
+    :math:`2x\,\mathrm{erfcx}(x) - 2/\sqrt\pi`, is read from the fraction's
+    tail :math:`f` as :math:`-\tfrac{2}{\sqrt\pi} f / (x + f)` from :math:`x = 1.5`.
 
     Examples
     --------
@@ -834,11 +834,11 @@ def spherical_bessel_j0(x: Tensor) -> Tensor:
 
         j_0(x) = \frac{\sin x}{x}, \qquad j_0(0) = 1, \qquad j_0(\pm\infty) = 0.
 
-    The implementation guards the removable singularity at the origin
-    by substituting ``x = 1`` into the division and patching the result
-    with ``where(x == 0, 1, ...)``, so the function is well-defined and
-    differentiable across the origin.  Related to the normalised sinc:
-    :math:`j_0(x) = \mathrm{sinc}(x / \pi)`.
+    For :math:`|x| < 1` the value is the Maclaurin series in :math:`x^2`, so
+    the function is differentiable across the origin to every order (the
+    quotient's own slope is the difference of two :math:`1/x` terms and loses
+    it); beyond, :math:`\sin x / x` is evaluated as written.  Related to the
+    normalised sinc: :math:`j_0(x) = \mathrm{sinc}(x / \pi)`.
 
     Examples
     --------

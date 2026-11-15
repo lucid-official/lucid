@@ -319,6 +319,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - exit drain follows forks and capture release (LCD-1023)
 
+- j0 and erfcx derivatives exact over the range (LCD-1030)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

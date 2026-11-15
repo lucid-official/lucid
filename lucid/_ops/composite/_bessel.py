@@ -37,7 +37,8 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, final, override
 
 import lucid
-from lucid._ops.composite._opmath import _in_float32
+from lucid._ops.composite._opmath import _in_float32, _real
+from lucid._ops.composite._sinc import _sin_over
 from lucid.autograd.function import Function, FunctionCtx
 
 if TYPE_CHECKING:
@@ -207,15 +208,18 @@ def _half_line_split(
 
 
 def _spherical_j0(x: Tensor) -> Tensor:
-    """``sin(x) / x``, 1 at 0 and 0 at ``±inf``; a NaN stays NaN."""
-    is_zero = x == lucid.zeros_like(x)
+    """``sin(x) / x``, 1 at 0 and 0 at ``±inf``; a NaN stays NaN.
+
+    Every derivative is exact through the origin (:func:`_sin_over`: a series
+    in ``x²`` on ``|x| < 1``), where the quotient's graph loses them: the slope
+    ``cos(x) / x - sin(x) / x²`` is a difference of two ``1 / x``'s.
+    """
+    x = _real(x)
     # ``sin(inf) / inf`` is NaN, but the envelope ``1 / |x|`` carries the limit
     # to 0, as the reference has it.
     is_inf = lucid.isinf(x)
-    safe_x = lucid.where(is_zero | is_inf, lucid.full_like(x, 1.0), x)
-    val = lucid.sin(safe_x) / safe_x
-    val = lucid.where(is_inf, lucid.zeros_like(x), val)
-    return lucid.where(is_zero, lucid.full_like(x, 1.0), val)
+    safe_x = lucid.where(is_inf, lucid.full_like(x, 1.0), x)
+    return lucid.where(is_inf, lucid.zeros_like(x), _sin_over(safe_x))
 
 
 # ── I0 / I1 ──────────────────────────────────────────────────────────────────
