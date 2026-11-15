@@ -317,6 +317,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the survey's probes put determinism back (LCD-1020)
 
+- exit drain follows forks and capture release (LCD-1023)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

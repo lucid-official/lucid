@@ -14,7 +14,8 @@ budget, so nothing here depends on how slow MPSGraph is on the machine.
 A child exits through the interpreter's normal exit, with workers possibly still held: that
 is the check that an abandoned worker cannot keep the process from ending.  The ``exit`` group
 is the other half: a worker that is *running* at exit is waited for, not raced (LCD-1019), and
-it ends with libc's ``exit`` so that its last handler can still run Python.
+it ends with libc's ``exit`` so that its last handler can still run Python.  The ``fork`` group is
+the third: a forked child has none of its parent's workers and must not wait for them (LCD-1023).
 """
 
 import ctypes
@@ -724,6 +725,66 @@ def _exit_waits_for_the_workers_still_running() -> None:
 _EXIT = {_EXIT_SCENARIO: _exit_waits_for_the_workers_still_running}
 
 
+# ── group "fork": a child leaves without waiting for threads it never had ────────────────
+#
+# ``fork()`` copies the engine's count of running workers but not their threads, so a child that
+# ends through ``exit()`` would wait out the engine's whole grace for workers that cannot finish
+# (LCD-1023).  The count is the child's own after the fork.
+
+_FORK_SCENARIO = "a_forked_child_does_not_wait_for_workers_it_does_not_have"
+#: A child with no workers of its own leaves in milliseconds; the grace it would otherwise wait
+#: out is 10 s.
+_FORK_EXIT_CEILING_S = 1.0
+#: A child that is still there after this is stuck for good (a gate mutex copied locked).
+_FORK_REAP_LIMIT_S = 30.0
+
+
+def _reap(pid: int) -> tuple[int | None, float]:
+    """The exit status of child ``pid`` (``None`` if it had to be killed) and how long it took."""
+    start = time.monotonic()
+    while time.monotonic() - start < _FORK_REAP_LIMIT_S:
+        reaped, status = os.waitpid(pid, os.WNOHANG)
+        if reaped:
+            return os.waitstatus_to_exitcode(status), time.monotonic() - start
+        time.sleep(0.005)
+    os.kill(pid, signal.SIGKILL)
+    os.waitpid(pid, 0)
+    return None, time.monotonic() - start
+
+
+def _a_forked_child_does_not_wait_for_workers_it_does_not_have() -> None:
+    """Fork while first runs are going, and let the child end through libc's ``exit``."""
+    salt = random.random()
+    executables = [_Executable(1.0 + i + salt, 8, chain=_EXIT_CHAIN) for i in range(_EXIT_WORKERS)]
+    _budget(_SMALL_BUDGET_S)
+    _hold(True)
+    for e in executables:
+        _raises_timeout(e.run)
+    assert _abandoned() == _EXIT_WORKERS
+    _hold(False)
+    running = _threads_named(_WORKER_THREAD)
+    # Without workers at the fork there is nothing for the child to over-count: a probe that
+    # proves nothing must not pass.
+    assert running == _EXIT_WORKERS, f"{running} of {_EXIT_WORKERS} workers running at the fork"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)  # a multi-threaded fork is the point
+        pid = os.fork()
+    if pid == 0:
+        try:
+            ctypes.CDLL(None).exit(0)
+        finally:
+            os._exit(70)  # exit did not end the child: never fall back into the parent's loop
+    code, took = _reap(pid)
+    assert code is not None, f"the child was stuck for {took:.0f} s and had to be killed"
+    # The status is not asserted: Metal does not survive a fork, and MLX's own static destructor
+    # commits a command buffer in the child and faults (SIGSEGV) whether or not the engine's
+    # handler waited first.  How long the child took to get there is what this is about.
+    assert took < _FORK_EXIT_CEILING_S, f"the child's exit took {took:.2f} s (status {code})"
+
+
+_FORK = {_FORK_SCENARIO: _a_forked_child_does_not_wait_for_workers_it_does_not_have}
+
+
 # ── group "real": the hang the guard exists for ─────────────────────────────────────────
 
 
@@ -766,6 +827,7 @@ _GROUPS: dict[str, dict[str, Callable[[], None]]] = {
     "inplace_target": _ALIAS,
     "herd": _HERD,
     "exit": _EXIT,
+    "fork": _FORK,
     "real": _REAL,
 }
 #: What a group's child process needs in its environment, before the engine starts.

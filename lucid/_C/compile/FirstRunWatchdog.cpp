@@ -37,16 +37,98 @@ constexpr std::size_t kWorkerStackBytes = 8u << 20;
 
 constexpr const char* kBudgetEnv = "LUCID_COMPILE_FIRST_RUN_TIMEOUT_S";
 
-// Workers from the start of their function to its end, and how many of those wait at the test
-// seam's gate.  Guarded by ``FirstRunWatchdog::gate_mu_``.  Plain integers on purpose: nothing of
-// theirs is destroyed before the exit handler reads them.
-std::size_t g_workers = 0;
-std::size_t g_gated = 0;
-
 // What ``exit()`` waits for the workers still running a first run (LCD-1019).  Their number is
 // small and their runs end in seconds; a run that does not (LCD-847's hang, inside an MPSGraph
 // pass for good) is left, as before, and costs this much at exit.
 constexpr std::chrono::seconds kExitGrace{10};
+
+// What the exit handler knows of the first-run workers (LCD-1019): how many there are, from the
+// moment one is started (before its thread exists) to the end of its thread's function, and how
+// many of those sit at the test seam's gate.  It is not the watchdog's own state but borrows its
+// gate (mutex, condition variable, flag), which guards the counts, and holds plain integers on
+// purpose: nothing of theirs is destroyed before the exit handler reads them.
+//
+// A fork copies the counts and not the threads.  A child that ends through ``exit()`` would wait
+// out the whole grace for workers it does not have, and a gate mutex copied locked would hold it
+// for good, so the forking thread owns the mutex across the fork (no other thread can have it
+// locked) and the child starts from zero.
+class WorkerCensus {
+public:
+    // Leaked: the exit handler reads it after every destructor has run.
+    static WorkerCensus& get() {
+        static WorkerCensus* const census = new WorkerCensus();
+        return *census;
+    }
+
+    // Borrow the watchdog's gate and register the process hooks, once.  ``exit()`` runs its
+    // handlers last-in first-out, so the exit hook has to be registered after the frameworks'
+    // own: the first worker does, and by then MPSGraph has made its first log (the compile that
+    // produced the executable).
+    void attach(std::mutex& mu, std::condition_variable& cv, const bool& held) {
+        std::call_once(attached_, [this, &mu, &cv, &held] {
+            mu_ = &mu;
+            cv_ = &cv;
+            held_ = &held;
+            [[maybe_unused]] const int exit_hook = std::atexit(&WorkerCensus::drain_at_exit);
+            [[maybe_unused]] const int fork_hooks =
+                pthread_atfork(&WorkerCensus::before_fork, &WorkerCensus::after_fork_parent,
+                               &WorkerCensus::after_fork_child);
+        });
+    }
+
+    // A worker is about to be started: counted before its thread exists, so the exit handler
+    // never finds the gap between starting one and its first line.
+    void enter() {
+        const std::lock_guard<std::mutex> lock(*mu_);
+        ++workers_;
+    }
+
+    // A worker's thread is gone, or was never made.
+    void leave() {
+        {
+            const std::lock_guard<std::mutex> lock(*mu_);
+            --workers_;
+        }
+        cv_->notify_all();
+    }
+
+    // A worker reached the gate / left it.  The caller holds the gate mutex.  Parking is news to
+    // the exit handler, which counts a parked worker as quiet and may be waiting for this one.
+    void park() {
+        ++gated_;
+        cv_->notify_all();
+    }
+    void unpark() { --gated_; }
+
+private:
+    static void drain_at_exit() { get().drain(); }
+    static void before_fork() { get().mu_->lock(); }
+    static void after_fork_parent() { get().mu_->unlock(); }
+    static void after_fork_child() {
+        // The condition variable is left as it is: the drain checks its condition before it
+        // waits (no workers: it does not), and the gate waits only while the test seam holds it.
+        WorkerCensus& census = get();
+        census.workers_ = 0;
+        census.gated_ = 0;
+        census.mu_->unlock();
+    }
+
+    void drain() {
+        std::unique_lock<std::mutex> lock(*mu_);
+        // A worker held at the gate stays there for good, so it is not waited for; one that was
+        // just let go is still counted, whether or not it has left the gate yet.  (More parked
+        // than counted happens only when a thread that failed to start one runs the run itself.)
+        cv_->wait_for(lock, kExitGrace,
+                      [this] { return workers_ <= (*held_ ? gated_ : std::size_t{0}); });
+    }
+
+    std::once_flag attached_;
+    std::mutex* mu_ = nullptr;
+    std::condition_variable* cv_ = nullptr;
+    const bool* held_ = nullptr;
+    std::size_t workers_ = 0;
+    std::size_t gated_ = 0;
+};
 
 // The longest wait taken at its word (about 31 years): a deadline in a clock's integer
 // nanoseconds must not overflow on a budget meant as "forever".
@@ -132,27 +214,42 @@ private:
     bool armed_ = true;
 };
 
+// What a worker thread runs, and the census it leaves when it is done.
+struct Launch {
+    std::function<void()> work;
+    WorkerCensus* census;
+};
+
 void* worker_entry(void* arg) {
-    std::unique_ptr<std::function<void()>> work(static_cast<std::function<void()>*>(arg));
+    const std::unique_ptr<Launch> launch(static_cast<Launch*>(arg));
     pthread_setname_np("lucid-first-run");
-    (*work)();
+    launch->work();
+    // What the run captured (the executable, its queue, the feeds) is let go here, before the
+    // census is left: the last release of an Objective-C object runs framework code, and leaving
+    // is the point the exit handler stops waiting for this thread.
+    launch->work = nullptr;
+    launch->census->leave();
     return nullptr;
 }
 
-// Start ``work`` on a detached thread with a stack of ``kWorkerStackBytes``.  False when
-// the system has no thread to give.
-bool spawn_detached(std::function<void()> work) {
-    auto boxed = std::make_unique<std::function<void()>>(std::move(work));
+// Start ``work`` on a detached thread with a stack of ``kWorkerStackBytes``, counted in
+// ``census`` from before the thread exists until ``work`` and everything it captured are gone.
+// False when the system has no thread to give (and nothing is counted then).
+bool spawn_detached(std::function<void()> work, WorkerCensus& census) {
+    auto boxed = std::make_unique<Launch>(Launch{std::move(work), &census});
     pthread_attr_t attr;
     if (pthread_attr_init(&attr) != 0)
         return false;
     pthread_attr_setstacksize(&attr, kWorkerStackBytes);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
     pthread_t thread;
+    census.enter();
     const int rc = pthread_create(&thread, &attr, &worker_entry, boxed.get());
     pthread_attr_destroy(&attr);
-    if (rc != 0)
+    if (rc != 0) {
+        census.leave();
         return false;
+    }
     boxed.release();  // the thread owns it now
     return true;
 }
@@ -226,10 +323,11 @@ void FirstRunWatchdog::hold_workers(bool hold) {
 }
 
 void FirstRunWatchdog::wait_gate() {
+    WorkerCensus& census = WorkerCensus::get();
     std::unique_lock<std::mutex> lock(gate_mu_);
-    ++g_gated;
+    census.park();
     gate_cv_.wait(lock, [this] { return !held_; });
-    --g_gated;
+    census.unpark();
 }
 
 // Wait for ``job`` until it finishes, is given up on, or passes its deadline.  True
@@ -282,19 +380,6 @@ void FirstRunWatchdog::worker_main(const std::shared_ptr<FirstRunLedger>& ledger
                                    std::uint64_t signature,
                                    const std::shared_ptr<FirstRunLedger::Job>& job,
                                    const FirstRunBody& body) {
-    {
-        const std::lock_guard<std::mutex> lock(gate_mu_);
-        ++g_workers;
-    }
-    // Leaves the count when this function does, so the exit handler never sees a worker that is
-    // between its run and its return as quiet.
-    const ScopeExit uncount([this] {
-        {
-            const std::lock_guard<std::mutex> lock(gate_mu_);
-            --g_workers;
-        }
-        gate_cv_.notify_all();
-    });
     wait_gate();
     std::exception_ptr error;
     try {
@@ -377,15 +462,9 @@ void FirstRunWatchdog::run(const std::shared_ptr<FirstRunLedger>& ledger,
         // the way out of a process whose results were all delivered, LCD-1019).  A worker cannot
         // be stopped, so the exit waits for the running ones, up to ``kExitGrace``.  Handlers run
         // last-in first-out and MPSGraph registers its own with its first log, made by the
-        // compile that produced this executable, so this one, registered now, runs before it.
-        [[maybe_unused]] static const int exit_handler = std::atexit([] {
-            FirstRunWatchdog& self = instance();
-            std::unique_lock<std::mutex> lock(self.gate_mu_);
-            // A worker held at the gate stays there for good, so it is not waited for; one that
-            // was just let go is still counted, whether or not it has left the gate yet.
-            self.gate_cv_.wait_for(lock, kExitGrace,
-                                   [&self] { return g_workers == (self.held_ ? g_gated : 0); });
-        });
+        // compile that produced this executable, so the census's, registered now, runs before it.
+        WorkerCensus& census = WorkerCensus::get();
+        census.attach(gate_mu_, gate_cv_, held_);
         // The slot says Running from here, with a job nobody completes until a thread
         // owns the run.  Anything that throws before that (the allocations below) must
         // give the slot back, and let whoever joined go on to run their own call.
@@ -401,9 +480,10 @@ void FirstRunWatchdog::run(const std::shared_ptr<FirstRunLedger>& ledger,
             slot.job.reset();
         });
         const auto shared_body = std::make_shared<FirstRunBody>(std::move(body));
-        const bool spawned = spawn_detached([this, ledger, signature, job, shared_body] {
+        auto work = [this, ledger, signature, job, shared_body] {
             worker_main(ledger, signature, job, *shared_body);
-        });
+        };
+        const bool spawned = spawn_detached(std::move(work), census);
         unstarted.dismiss();
         if (!spawned) {
             // No thread to watch it on: this thread is the worker, as it was before the
