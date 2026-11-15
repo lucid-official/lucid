@@ -41,7 +41,12 @@ import lucid.nn as nn
 from lucid._C import engine as _C_engine
 
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor
+from lucid.test.unit.compile._helpers import (
+    COMPILE_DEVICE,
+    UNUSABLE_BYTE_COUNTS,
+    count_id,
+    metal_tensor,
+)
 
 # Compiled forwards under grad mode run eagerly (LCD-582); these test them.
 pytestmark = pytest.mark.usefixtures("inference")
@@ -352,9 +357,7 @@ def test_byte_cap_environment_value_is_honoured(text: str, bytes_: int) -> None:
     assert "ignoring" not in said
 
 
-@pytest.mark.parametrize(
-    "text", ["", "-5", "1x", "abc", "1.5g", " 12", "12 ", "99999999999999999999", "99999999999g"]
-)
+@pytest.mark.parametrize("text", UNUSABLE_BYTE_COUNTS, ids=count_id)
 def test_an_unusable_byte_cap_falls_back_to_the_default_and_says_so(text: str) -> None:
     """``1g`` read as one byte would evict every entry but the newest: reject, do not guess."""
     default, quiet = _initial_cap(None)

@@ -527,7 +527,7 @@ def _live_entry(cache: SignatureCache[object, _StepEntry], key: object) -> _Step
     """``key``'s cached entry, dropped instead when a tensor of the loss flipped its grad need."""
     entry = cache.lookup(key) if key is not None else None
     if entry is not None and entry.grad_flipped():
-        del cache[key]
+        cache.pop(key, None)  # not ``del``: a store on another thread may have evicted it
         return None
     return entry
 

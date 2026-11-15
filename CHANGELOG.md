@@ -285,6 +285,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - bound each wrapper's signature cache (LCD-1008)
 
+- make SignatureCache pop and listings atomic (LCD-1008)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

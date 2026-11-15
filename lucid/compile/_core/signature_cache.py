@@ -24,9 +24,9 @@ import os
 import re
 import sys
 import threading
-from collections.abc import Callable, Hashable, Iterator, MutableMapping
+from collections.abc import Callable, Hashable, ItemsView, Iterator, MutableMapping, ValuesView
 from dataclasses import dataclass
-from typing import Protocol, override
+from typing import Protocol, overload, override
 
 from lucid._C import engine as _C_engine
 from lucid.compile._core.fallback import _narrate
@@ -43,12 +43,19 @@ BYTES_ENV = "LUCID_COMPILE_MAX_SIGNATURE_BYTES"
 DEFAULT_MAX_ENTRIES = 256
 
 _UINT64_MAX = 2**64 - 1
+#: Digits of ``_UINT64_MAX``.  ``int()`` refuses a longer string past 4300 digits with a
+#: ``ValueError`` of its own, so the length is checked first: an unusable value must
+#: reach the fallback and its one-time message, whatever its length.
+_MAX_DIGITS = len(str(_UINT64_MAX))
 _COUNT = re.compile(r"[0-9]+")
 _BYTES = re.compile(r"([0-9]+)([kKmMgG]?)")
 _SHIFT = {"": 0, "k": 10, "m": 20, "g": 30}
 
 #: Variables already reported as unusable: said once per process, as the engine's are.
 _REPORTED: set[str] = set()
+
+#: What ``pop`` was given no default for (``None`` is a legitimate default).
+_MISSING = object()
 
 
 class HasRetainedBytes(Protocol):
@@ -77,7 +84,7 @@ class SignatureLimits:
 
 def _parse_count(text: str) -> int | None:
     """A whole number of entries; ``None`` for anything else (no sign, no blanks)."""
-    if _COUNT.fullmatch(text) is None:
+    if _COUNT.fullmatch(text) is None or len(text) > _MAX_DIGITS:
         return None
     value = int(text)
     return value if value <= _UINT64_MAX else None
@@ -90,7 +97,7 @@ def _parse_bytes(text: str) -> int | None:
     a ``-`` is no number, and trailing text is not ignored.
     """
     found = _BYTES.fullmatch(text)
-    if found is None:
+    if found is None or len(found.group(1)) > _MAX_DIGITS:
         return None
     value = int(found.group(1)) << _SHIFT[found.group(2).lower()]
     return value if value <= _UINT64_MAX else None
@@ -155,6 +162,10 @@ class SignatureCache[K: Hashable, V: HasRetainedBytes](MutableMapping[K, V]):
     :meth:`lookup` is the read that counts as a use: ``get`` and ``[]`` do not, so
     introspection (``cache_info``, ``timing``, a dump) cannot keep an entry alive.
 
+    Safe to share between threads, each call answering as the ``dict`` it replaced would
+    (a store that evicts cannot make a ``pop`` or a listing raise): ``pop`` is one step
+    under the lock, and ``items`` / ``values`` / iteration are snapshots, not live views.
+
     Parameters
     ----------
     max_entries, max_bytes : int, optional
@@ -194,7 +205,8 @@ class SignatureCache[K: Hashable, V: HasRetainedBytes](MutableMapping[K, V]):
     @property
     def retained_bytes(self) -> int:
         """The estimated bytes the stored entries' executables keep pinned."""
-        return sum(slot.value.retained for slot in tuple(self._slots.values()))
+        with self._lock:
+            return self._retained()
 
     def lookup(self, key: K) -> V | None:
         """The entry for ``key`` — now the most recently used — or ``None``."""
@@ -215,7 +227,10 @@ class SignatureCache[K: Hashable, V: HasRetainedBytes](MutableMapping[K, V]):
             self._clock += 1
             self._slots[key] = _Slot(value, self._clock)
             while len(self._slots) > 1 and self._over_cap():
-                oldest = min(self._slots, key=lambda k: self._slots[k].tick)
+                # Not by tick alone: a lookup racing for one may share the new entry's.
+                oldest = min(
+                    (k for k in self._slots if k != key), key=lambda k: self._slots[k].tick
+                )
                 del self._slots[oldest]
                 _narrate(
                     "a wrapper's signature cache is over its cap: dropped its oldest executable"
@@ -226,9 +241,44 @@ class SignatureCache[K: Hashable, V: HasRetainedBytes](MutableMapping[K, V]):
         with self._lock:
             del self._slots[key]
 
+    @overload
+    def pop(self, key: K, /) -> V: ...
+
+    @overload
+    def pop(self, key: K, /, default: V) -> V: ...
+
+    @overload
+    def pop[T](self, key: K, /, default: T) -> V | T: ...
+
+    @override
+    def pop(self, key: K, /, default: object = _MISSING) -> object:
+        """Remove ``key`` and return its entry, else ``default``; one step, so atomic.
+
+        ``MutableMapping.pop`` reads and then deletes, and a store that evicts ``key``
+        in between makes the delete raise.
+        """
+        with self._lock:
+            slot = self._slots.pop(key, None)
+        if slot is not None:
+            return slot.value
+        if default is _MISSING:
+            raise KeyError(key)
+        return default
+
     @override
     def __iter__(self) -> Iterator[K]:
-        return iter(tuple(self._slots))
+        with self._lock:
+            return iter(tuple(self._slots))
+
+    @override
+    def items(self) -> ItemsView[K, V]:
+        """A snapshot of the ``(key, entry)`` pairs: no use, and safe against eviction."""
+        return self._snapshot().items()
+
+    @override
+    def values(self) -> ValuesView[V]:
+        """A snapshot of the entries: no use, and safe against eviction."""
+        return self._snapshot().values()
 
     @override
     def __len__(self) -> int:
@@ -244,7 +294,15 @@ class SignatureCache[K: Hashable, V: HasRetainedBytes](MutableMapping[K, V]):
         with self._lock:
             self._slots.clear()
 
+    def _snapshot(self) -> dict[K, V]:
+        with self._lock:
+            return {key: slot.value for key, slot in self._slots.items()}
+
+    def _retained(self) -> int:
+        """:attr:`retained_bytes`, for a caller that holds the lock."""
+        return sum(slot.value.retained for slot in self._slots.values())
+
     def _over_cap(self) -> bool:
         if self._max_entries and len(self._slots) > self._max_entries:
             return True
-        return bool(self._max_bytes) and self.retained_bytes > self._max_bytes
+        return bool(self._max_bytes) and self._retained() > self._max_bytes

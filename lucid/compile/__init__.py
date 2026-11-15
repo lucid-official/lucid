@@ -58,17 +58,21 @@ trace to inspect and is not checked.
 Memory.  An ``MPSGraphExecutable`` keeps the buffers MPSGraph planned for its
 intermediates until it is released, so every signature a long-lived wrapper has
 compiled pins memory in proportion to its tensors.  The executables are therefore
-bounded, least recently used out, in two places: the process-wide session cache
+bounded, oldest out, in two places: the process-wide session cache
 (``LUCID_COMPILE_MAX_CACHE`` entries, ``LUCID_COMPILE_MAX_CACHE_BYTES`` of estimated
-pinned memory) and each wrapper's own cache (:class:`CompiledModule`,
-:func:`make_step`, :func:`fused_step`, :func:`compiled_decode_step`:
-``LUCID_COMPILE_MAX_SIGNATURES`` entries, default 256, and
-``LUCID_COMPILE_MAX_SIGNATURE_BYTES``, default an eighth of the machine's memory;
-``0`` turns a cap off, and the values are read when the wrapper is made).  A dropped
-signature is compiled again on its next call, so a loop that cycles over more shapes
-than a cap allows recompiles on every call.  Not bounded: a ``dynamic=True`` module
-that shares one symbolic-batch executable (MPSGraph specialises it per runtime shape
-inside), and a segmented step's per-segment caches (``make_step(segments > 1)``).
+pinned memory) and each wrapper's own cache.  A :class:`CompiledModule`,
+:func:`make_step` step and :func:`compiled_decode_step` step keep the least recently
+used ``LUCID_COMPILE_MAX_SIGNATURES`` signatures (default 256) within
+``LUCID_COMPILE_MAX_SIGNATURE_BYTES`` (default an eighth of the machine's memory);
+``0`` turns a cap off, and the values are read when the wrapper is made.
+:func:`fused_step` obeys the byte cap but keeps at most 8 plans, whatever
+``LUCID_COMPILE_MAX_SIGNATURES`` says.  A dropped signature is compiled again on its
+next call, so a loop that cycles over more shapes than a cap allows recompiles on
+every call.  Bounded by count alone: the update plans of :func:`compile_optimizer`,
+16 per optimizer, first in first out, with no byte cap.  Not bounded: a
+``dynamic=True`` module that shares one symbolic-batch executable (MPSGraph
+specialises it per runtime shape inside), and a segmented step's per-segment caches
+(``make_step(segments > 1)``).
 """
 
 import sys

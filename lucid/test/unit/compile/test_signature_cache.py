@@ -19,6 +19,7 @@ that a module outlives the session cache's eviction is in
 
 import copy
 import pickle
+import sys
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -32,7 +33,12 @@ from lucid._C import engine as _C_engine
 from lucid.compile._core import signature_cache as sc
 from lucid.compile._core.signature_cache import SignatureCache, signature_limits
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor
+from lucid.test.unit.compile._helpers import (
+    COMPILE_DEVICE,
+    UNUSABLE_BYTE_COUNTS,
+    count_id,
+    metal_tensor,
+)
 
 _MB = 1024 * 1024
 _METAL = pytest.mark.skipif(not metal_available(), reason="metal unavailable")
@@ -118,6 +124,17 @@ def test_only_lookup_counts_as_a_use() -> None:
     assert sorted(cache) == ["b", "c"]
 
 
+def test_pop_answers_the_stored_entry_once_and_the_default_after() -> None:
+    cache, put = _cache()
+    a = put("a")
+    assert cache.pop("a", None) is a
+    assert cache.pop("a", None) is None
+    assert cache.pop("a", "gone") == "gone"
+    with pytest.raises(KeyError):
+        cache.pop("a")
+    assert len(cache) == 0
+
+
 def test_a_missing_key_is_a_miss_not_a_use() -> None:
     cache, put = _cache(max_entries=2)
     put("a")
@@ -152,6 +169,16 @@ def test_the_mapping_surface_a_dict_user_expects() -> None:
     assert b.name == "b"
 
 
+def test_items_and_values_are_snapshots_that_survive_the_cache_changing() -> None:
+    cache, put = _cache(max_entries=2)
+    a, b = put("a"), put("b")
+    items, values = cache.items(), cache.values()
+    put("c")  # evicts a, after the views were taken
+    assert dict(items) == {"a": a, "b": b}
+    assert list(values) == [a, b]
+    assert [name for name, _ in cache.items()] == ["b", "c"]
+
+
 def test_a_cache_copies_and_pickles_like_the_dict_it_replaced() -> None:
     """A module that was never called is copied and pickled (``deepcopy(model)``, a save)."""
     cache, put = _cache(max_entries=3, a=5)
@@ -172,17 +199,51 @@ def test_iteration_survives_a_store_made_during_it() -> None:
 
 
 def test_concurrent_use_neither_corrupts_nor_overshoots() -> None:
-    cache, put = _cache(max_entries=8, **{str(i): 1 for i in range(64)})
+    """Stores that evict, lookups, pops and every way to read the whole cache, interleaved.
 
-    def worker(offset: int) -> None:
-        for i in range(400):
+    A ``dict`` answers each of these atomically, so the cache has to: a ``pop`` that reads
+    and then deletes, or an ``items()`` that reads each key after listing them, raises
+    ``KeyError`` once a store evicts the key in between.  The interpreter's switch interval
+    is cut to a microsecond so that the interleaving happens.
+    """
+    cache, put = _cache(max_entries=8, max_bytes=6, **{str(i): 1 for i in range(64)})
+    rounds = 600
+
+    def key(i: int, offset: int) -> str:
+        return str((i * 7 + offset) % 64)
+
+    def storer(offset: int) -> None:
+        for i in range(rounds):
             put(str((i + offset) % 64))
-            cache.lookup(str((i * 7 + offset) % 64))
 
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        for done in [pool.submit(worker, k * 5) for k in range(4)]:
-            done.result()  # re-raises what a worker raised
-    assert len(cache) <= 8
+    def looker(offset: int) -> None:
+        for i in range(rounds):
+            cache.lookup(key(i, offset))
+
+    def popper(offset: int) -> None:
+        for i in range(rounds):
+            cache.pop(key(i, offset), None)
+            cache.get(key(i, offset + 1))
+
+    def lister(_: int) -> None:
+        for _round in range(rounds):
+            list(cache.items())
+            list(cache.values())
+            list(cache.keys())
+            list(cache)
+            cache.retained_bytes
+
+    workers = [fn for fn in (storer, looker, popper, lister) for _ in range(2)]
+    interval = sys.getswitchinterval()
+    sys.setswitchinterval(1e-6)
+    try:
+        with ThreadPoolExecutor(max_workers=len(workers)) as pool:
+            for done in [pool.submit(fn, 5 * k) for k, fn in enumerate(workers)]:
+                done.result()  # re-raises what a worker raised
+    finally:
+        sys.setswitchinterval(interval)
+    assert 1 <= len(cache) <= 6
+    assert cache.retained_bytes == len(cache)  # every entry weighs 1
 
 
 # ── the environment ────────────────────────────────────────────────────────
@@ -233,10 +294,7 @@ def test_the_byte_cap_takes_a_number_with_an_optional_suffix(
     assert capsys.readouterr().err == ""
 
 
-_UNUSABLE = ["", "-5", "1x", "abc", "1.5g", " 12", "12 ", "99999999999999999999", "99999999999g"]
-
-
-@pytest.mark.parametrize("text", _UNUSABLE)
+@pytest.mark.parametrize("text", UNUSABLE_BYTE_COUNTS, ids=count_id)
 def test_an_unusable_byte_cap_falls_back_and_says_so_once(
     quiet_environment: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], text: str
 ) -> None:
@@ -250,7 +308,7 @@ def test_an_unusable_byte_cap_falls_back_and_says_so_once(
     assert capsys.readouterr().err == ""  # once
 
 
-@pytest.mark.parametrize("text", [*_UNUSABLE, "64k", "1g"])
+@pytest.mark.parametrize("text", [*UNUSABLE_BYTE_COUNTS, "64k", "1g"], ids=count_id)
 def test_an_unusable_entry_cap_falls_back_and_says_so_once(
     quiet_environment: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], text: str
 ) -> None:

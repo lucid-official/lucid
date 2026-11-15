@@ -49,6 +49,32 @@ def to_metal(model: nn.Module) -> nn.Module:
     return model.to(COMPILE_DEVICE)
 
 
+#: Values of a byte-count environment variable that are no whole number of bytes (an optional
+#: ``k`` / ``m`` / ``g`` suffix aside): a sign, a blank, trailing text, a fraction, more than 64
+#: bits, and more digits than ``int()`` converts (4300).  The engine's reader of
+#: ``LUCID_COMPILE_MAX_CACHE_BYTES`` and the Python one of ``LUCID_COMPILE_MAX_SIGNATURE_BYTES``
+#: are held to the same list.
+UNUSABLE_BYTE_COUNTS = (
+    "",
+    "-5",
+    "1x",
+    "abc",
+    "1.5g",
+    " 12",
+    "12 ",
+    "99999999999999999999",
+    "99999999999g",
+    "9" * 21,
+    "9" * 5000,
+    "9" * 5000 + "k",
+)
+
+
+def count_id(text: str) -> str:
+    """A readable test id for one of :data:`UNUSABLE_BYTE_COUNTS` (the long ones are not)."""
+    return text if 0 < len(text) <= 24 else f"{len(text)}-chars"
+
+
 def metal_tensor(*args: object, **kwargs: object) -> Tensor:
     """Construct a tensor on the metal device.  Wraps ``lucid.randn`` etc."""
     t = lucid.randn(*args, **kwargs)
