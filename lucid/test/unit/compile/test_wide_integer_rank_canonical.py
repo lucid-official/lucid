@@ -348,3 +348,13 @@ def test_the_carried_op_bound_is_exceeded_by_the_unfixed_graph(name: str, where:
 # (``_holds``) only.  An answer that is rank 5 by itself (``embedding`` of a rank-4 index, table
 # ``(1000, 32)``, index ``(512, 4, 4, 8)``) runs ~1.9x *slower* merged (10-11 ms against 5-6; the
 # cause is not isolated; LCD-1002).
+#
+# LCD-1014 closed that: the merge of such an answer only added a reshape round trip to an answer
+# that is rank 5 before any lane is added, so ``wants_take_merge`` (``_AxisSplitLayout.h``) merges
+# only when the table's carried shape is wide or the answer is rank <= 4 uncarried, and the rank
+# pass flattens the index of an ``embedding`` first (``FlatIndexRule``), so the emitter sees a rank-1
+# index there.  The merge is kept: re-measured with the answer rank <= 4, ``searchsorted`` of one
+# sequence is 1.2x (int32) to 1.4x (int64) faster merged on every run (10.3 / 9.8 ms against
+# 12.5 / 11.9, and 13.7 / 13.1 against 18.8 / 17.7), ``embedding`` of a rank-3 index within noise
+# (0.9x to 1.1x).  What is left of the old regression is reached only through a consumer the pass
+# has no rule for (``test_rank_canonical_index.py``, ``..._the_pass_leaves_at_rank_5_is_whole``).

@@ -193,6 +193,20 @@ inline bool wants_lane_merge(const std::vector<std::int64_t>& operand,
            wants_axis_bands(with_lanes(result, lanes));
 }
 
+// The same for an axis gather (``lane_take``).  The table is gathered whole, so only a table whose
+// own carried shape is wide needs the merge; an answer that is wide alone does so only through the
+// lane axis, and merging it pays for the reshapes only when the answer, uncarried, is rank <= 4.
+// A wide answer that is rank 5+ by itself reads back as rank 5+ anyway and the merge made it
+// 1.4x to 1.9x slower (embedding of an int32 table, index (512, 4, 4, 8): 11.2 ms against 8.2).
+inline bool wants_take_merge(const std::vector<std::int64_t>& table,
+                             const std::vector<std::int64_t>& result,
+                             std::int64_t lanes) {
+    if (!concrete(table) || !concrete(result))
+        return false;
+    return wants_axis_bands(with_lanes(table, lanes)) ||
+           (result.size() <= 4 && wants_axis_bands(with_lanes(result, lanes)));
+}
+
 inline std::optional<std::size_t> resolve_axis(std::int64_t axis, std::size_t rank) {
     if (axis < 0)
         axis += static_cast<std::int64_t>(rank);
@@ -237,7 +251,7 @@ lane_gather_along_axis(const std::vector<std::int64_t>& data,
     std::vector<std::int64_t> result(data.begin(), data.begin() + static_cast<std::ptrdiff_t>(*at));
     result.insert(result.end(), index.begin(), index.end());
     result.insert(result.end(), data.begin() + static_cast<std::ptrdiff_t>(*at) + 1, data.end());
-    if (!d::wants_lane_merge(data, result, lanes))
+    if (!d::wants_take_merge(data, result, lanes))
         return std::nullopt;
     std::int64_t count = 1;
     for (std::int64_t k : index)
