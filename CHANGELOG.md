@@ -309,6 +309,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - no NaN from the exponent tail at an inf base (LCD-1017)
 
+- CPU argmax/argmin on bool name the cast (LCD-1013)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

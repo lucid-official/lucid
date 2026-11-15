@@ -510,7 +510,7 @@ Storage CpuBackend::arg_reduce_index(
     } else if (dt == Dtype::I64) {
         run(reinterpret_cast<const std::int64_t*>(ca.ptr.get()));
     } else {
-        ErrorBuilder("cpu_backend::arg_reduce_index").not_implemented("dtype not supported");
+        ErrorBuilder("cpu_backend::arg_reduce_index").not_implemented(detail::kArgReduceRefusal);
     }
     return Storage{CpuStorage{ptr, nbytes, Dtype::I64}};
 }

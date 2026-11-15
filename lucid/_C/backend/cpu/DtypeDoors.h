@@ -162,6 +162,12 @@ inline bool is_int_like(Dtype dt) {
     return dt == Dtype::I64 || is_narrow_int(dt);
 }
 
+//: What ``arg_reduce_index`` says to a dtype it cannot order: bool and complex are all that
+//: reach it, every other dtype widens at the door.  Worded as the GPU stream's refusal is
+//: (``GpuBackend::arg_reduce_index``), so both devices name the same cast.
+inline constexpr const char* kArgReduceRefusal =
+    "argmax / argmin do not accept bool or complex — cast to an integer or real dtype";
+
 // Apply an elementwise function at the caller's integer width.
 //
 // These ops — relu6, clip, masked_fill — are comparisons and selections,

@@ -126,6 +126,29 @@ def test_every_topk_entry_refuses_bool_in_the_same_words(
     assert str(caught.value) == "topk does not accept bool — cast to an integer dtype"
 
 
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda t: lucid.argmax(t),
+        lambda t: lucid.argmin(t),
+        lambda t: lucid.argmax(t, dim=0),
+        lambda t: t.argmin(dim=0, keepdim=True),
+    ],
+    ids=["argmax", "argmin", "argmax-dim", "argmin-method"],
+)
+@pytest.mark.parametrize("values", [_VECTOR, [1 + 1j, 2j]], ids=["bool", "complex"])
+def test_arg_reductions_refuse_in_the_same_words_on_both_devices(
+    device: str, call: Callable[[lucid.Tensor], object], values: list[object]
+) -> None:
+    # The CPU stream used to say ``dtype not supported`` where Metal named the
+    # dtypes and the cast (LCD-1013); one message, whichever device.
+    with pytest.raises(NotImplementedError) as caught:
+        call(lucid.tensor(values, device=device))
+    assert str(caught.value).endswith(
+        "argmax / argmin do not accept bool or complex — cast to an integer or real dtype"
+    )
+
+
 @pytest.mark.parity
 @pytest.mark.parametrize("name", _TABLE)
 def test_table_row_is_what_the_reference_does_on_cpu(ref: ModuleType, name: str) -> None:

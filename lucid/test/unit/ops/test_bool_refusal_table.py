@@ -188,6 +188,8 @@ _TABLE: dict[str, _Row] = {
     "mean-dtype": _accepted(lambda fw, t, m: fw.mean(t, dtype=fw.float32)),
     "mean-dim-dtype": _accepted(lambda fw, t, m: fw.mean(m, dim=1, dtype=fw.float32)),
     "softmax-dtype": _accepted(lambda fw, t, m: fw.softmax(t, 0, dtype=fw.float32)),
+    "softmax-dtype-positional": _accepted(lambda fw, t, m: fw.softmax(t, 0, fw.float32)),
+    "softmax-dtype-method": _accepted(lambda fw, t, m: t.softmax(0, dtype=fw.float32)),
     "log_softmax-dtype": _accepted(lambda fw, t, m: fw.log_softmax(t, 0, dtype=fw.float32)),
     "softmax-functional-dtype": _accepted(
         lambda fw, t, m: fw.nn.functional.softmax(t, 0, dtype=fw.float32)
