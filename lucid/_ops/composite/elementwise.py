@@ -19,6 +19,7 @@ import lucid
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _float_input
+from lucid._ops._bool_refusal import refuse_bool
 from lucid._ops.composite import _bessel
 from lucid._ops.composite._expm1 import _erfc_double, _erfc_single, _expm1, _logaddexp2, _sgn
 from lucid._ops.composite._gamma import _LogGamma, _polygamma
@@ -1309,6 +1310,7 @@ def frexp(input: Tensor) -> tuple[Tensor, Tensor]:
     differentiable, ``dm / dinput = 2**-e`` (a subnormal one flushes on
     Metal); the exponent is not.
     """
+    refuse_bool("frexp", input)
     orig_dtype = input.dtype
     work_dtype = orig_dtype if orig_dtype in (lucid.float32, lucid.float64) else lucid.float32
     work = input if orig_dtype == work_dtype else input.to(dtype=work_dtype)

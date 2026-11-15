@@ -11,6 +11,7 @@ import warnings
 import lucid as _l
 from lucid._tensor_args import GUARD_FRAMES
 from lucid._dispatch import _unwrap, _wrap
+from lucid._ops._bool_refusal import refuse_bool
 from lucid._ops._reduce import _log_softmax_adapter, _softmax_adapter, _softmin_adapter
 from lucid._tensor.tensor import Tensor
 from lucid._types import DTypeLike
@@ -70,6 +71,8 @@ def softmax(
     >>> p.sum(dim=1)
     tensor([1.])
     """
+    if dtype is None:
+        refuse_bool("softmax", input)
     return _wrap(
         _softmax_adapter(
             _unwrap(input), _get_softmax_dim("softmax", input.ndim, dim, _stacklevel), dtype
@@ -116,6 +119,8 @@ def log_softmax(
     >>> log_softmax(logits, dim=1)
     tensor([[-2.408, -1.408, -0.4076]])
     """
+    if dtype is None:
+        refuse_bool("log_softmax", input)
     return _wrap(
         _log_softmax_adapter(
             _unwrap(input), _get_softmax_dim("log_softmax", input.ndim, dim, _stacklevel), dtype

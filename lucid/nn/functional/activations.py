@@ -12,6 +12,7 @@ import lucid as _l
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _float_operand, _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry, _autocast_suspended
+from lucid._ops._bool_refusal import BOOL_CODE, bool_refusal
 from lucid._ops._dims import _dim_size, _wrap_dim
 from lucid._types import GeluApproximate
 from lucid.nn.functional._distance import (
@@ -85,13 +86,16 @@ def relu(input: Tensor, inplace: bool = False) -> Tensor:
     >>> relu(lucid.tensor([-2.0, -1.0, 0.0, 1.0, 2.0]))
     tensor([0., 0., 0., 1., 2.])
     """
+    impl = _unwrap(input)
+    if impl.dtype.value == BOOL_CODE:
+        raise bool_refusal("relu")
     if not inplace:
-        return _wrap(_C_engine.relu(_unwrap(input)))
+        return _wrap(_C_engine.relu(impl))
     if input.requires_grad and _C_engine.grad_enabled():
         return _in_place(input, "relu_", relu)
     # No graph to extend: the engine's fused kernel allocates nothing (0.44 ms
     # against 1.51 ms through the graph-preserving path on 64x3x128x128).
-    _C_engine.relu_(_unwrap(input))
+    _C_engine.relu_(impl)
     return input
 
 
@@ -246,7 +250,10 @@ def selu(input: Tensor, inplace: bool = False) -> Tensor:
     >>> selu(x)
     tensor([-1.111, 0., 1.051])
     """
-    return _in_place(input, "selu_", selu) if inplace else _wrap(_C_engine.selu(_unwrap(input)))
+    impl = _unwrap(input)
+    if impl.dtype.value == BOOL_CODE:
+        raise bool_refusal("selu")
+    return _in_place(input, "selu_", selu) if inplace else _wrap(_C_engine.selu(impl))
 
 
 def gelu(input: Tensor, *, approximate: GeluApproximate = "none") -> Tensor:

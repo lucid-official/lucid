@@ -436,8 +436,10 @@ def test_searchsorted_1m_by_1m_completes_in_bounded_memory() -> None:
     assert int(out[-1].item()) == 1_000_000
 
 
+# No ``bool``: a sequence and its values that are both bool are refused, as the
+# reference refuses them (LCD-1013, pinned in ``test_bool_refusal_table``).
 @pytest.mark.parametrize(
-    "dtype_name", ["float16", "bfloat16", "float32", "int8", "int16", "int32", "int64", "bool"]
+    "dtype_name", ["float16", "bfloat16", "float32", "int8", "int16", "int32", "int64"]
 )
 @pytest.mark.parametrize("right", [False, True])
 @pytest.mark.parametrize("out_int32", [False, True])
@@ -446,13 +448,10 @@ def test_searchsorted_and_bucketize_metal_zero_host_sync_and_compiled_parity(
 ) -> None:
     dt = getattr(lucid, dtype_name)
     ref_dt = getattr(ref, dtype_name)
-    if dtype_name == "bool":
-        seq_vals: list[object] = [False, False, True, True]
-        q_vals: list[object] = [[False, True], [True, False]]
-    elif dtype_name == "int64":
+    if dtype_name == "int64":
         base = 1 << 40
-        seq_vals = [base + 1, base + 3, base + 3, base + 7]
-        q_vals = [[base, base + 3], [base + 5, base + 9]]
+        seq_vals: list[object] = [base + 1, base + 3, base + 3, base + 7]
+        q_vals: list[object] = [[base, base + 3], [base + 5, base + 9]]
     elif dtype_name.startswith("int"):
         seq_vals = [-5, -1, -1, 3, 10]
         q_vals = [[-6, -1], [0, 12]]
@@ -472,10 +471,8 @@ def test_searchsorted_and_bucketize_metal_zero_host_sync_and_compiled_parity(
     got_bk = lucid.bucketize(q, seq, out_int32=out_int32, right=right)
     assert _C_engine.host_sync_count() == before
 
-    rseq_cmp = rseq.to(ref.uint8) if dtype_name == "bool" else rseq
-    rq_cmp = rq.to(ref.uint8) if dtype_name == "bool" else rq
-    want_ss = ref.searchsorted(rseq_cmp, rq_cmp, out_int32=out_int32, side=side)
-    want_bk = ref.bucketize(rq_cmp, rseq_cmp, out_int32=out_int32, right=right)
+    want_ss = ref.searchsorted(rseq, rq, out_int32=out_int32, side=side)
+    want_bk = ref.bucketize(rq, rseq, out_int32=out_int32, right=right)
     _same(got_ss, want_ss)
     _same(got_bk, want_bk)
 

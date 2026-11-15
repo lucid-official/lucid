@@ -827,7 +827,7 @@ def __abs__(self: Tensor) -> Tensor:
     >>> abs(a)
     tensor([1., 2., 3.])
     """
-    return _wrap(_C_engine.abs(self._impl))
+    return self.abs()
 
 
 def __invert__(self: Tensor) -> Tensor:

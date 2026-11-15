@@ -6,6 +6,7 @@ import lucid
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
+from lucid._ops._bool_refusal import refuse_bool
 from lucid._ops._dims import _wrap_dim
 from lucid._ops._reduce import (
     _MinMax,
@@ -149,6 +150,9 @@ def nanmean(
     >>> lucid.nanmean(x)
     tensor(2.)
     """
+    # Refused with a ``dtype`` too: unlike ``mean``, ``nanmean`` has no
+    # spelling that takes a bool.
+    refuse_bool("nanmean", input)
     axes = _reduction_axes(input._impl, dim, "nanmean")
     return _wrap(
         _run_with_dtype(
@@ -887,6 +891,7 @@ def gradient(
     edge_order: int = 1,
 ) -> tuple[Tensor, ...]:
     """Estimate the numerical gradient of ``input`` along ``dim`` using second-order central differences."""
+    refuse_bool("gradient", input)
     if input.ndim == 0:
         raise _C_engine.InvalidArgument("gradient: input cannot be a 0-D tensor")
     if edge_order not in (1, 2):

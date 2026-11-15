@@ -27,6 +27,7 @@ from lucid._dispatch import (
     _unwrap_or_scalar,
 )
 from lucid._dtype import _ENGINE_TO_DTYPE
+from lucid._ops._bool_refusal import bool_refusal
 from lucid._ops._dims import (
     _dim_size,
     _kept_sizes,
@@ -1067,7 +1068,11 @@ def _clip_dtype(
     """The dtype ``clip(x, min, max)`` computes in: ``x``'s, promoted with its bounds.
 
     One rule for ``clamp`` and ``clamp_``: the in-place form refuses a dtype
-    ``x`` cannot hold where this one returns it.
+    ``x`` cannot hold where this one returns it.  A bool tensor clamped to a
+    bool *number* is the one bool clamp the reference's CPU refuses (a bool
+    kernel for a number bound does not exist; bool bounds that are tensors,
+    and number bounds that promote the result to an integer or float, are
+    answered), so it is refused here for both.
     """
     if min is None and max is None:
         raise ValueError("clamp: at least one of min or max must be given")
@@ -1076,7 +1081,10 @@ def _clip_dtype(
         for b in (min, max)
         if b is not None
     ]
-    return _promotion.result_type(x_impl, *bounds)
+    dtype = _promotion.result_type(x_impl, *bounds)
+    if dtype == _C_engine.Bool and any(isinstance(b, _promotion.NUMBER) for b in bounds):
+        raise bool_refusal("clamp", "bound on a bool tensor")
+    return dtype
 
 
 def _clip_adapter(
@@ -1434,44 +1442,6 @@ def _cartesian_prod_adapter(*tensors: Tensor) -> _Impl:
     if len(tensors) == 1 and isinstance(tensors[0], (list, tuple)):
         tensors = tuple(tensors[0])
     return _C_engine.cartesian_prod([_unwrap(t) for t in tensors])
-
-
-def _searchsorted_adapter(
-    sorted_sequence: Tensor,
-    input: Tensor,
-    *,
-    out_int32: bool = False,
-    right: bool = False,
-    side: str | None = None,
-    sorter: Tensor | None = None,
-) -> _Impl:
-    """searchsorted(sorted_seq, values, *, out_int32=False, right=False, side=None, sorter=None)."""
-    if side is not None:
-        if side not in ("left", "right"):
-            raise RuntimeError(f"searchsorted(): side can only be 'left' or 'right', got {side!r}")
-        if right and side == "left":
-            raise RuntimeError(
-                "searchsorted(): side and right can't be set to opposites, got side of left while right was True"
-            )
-        right = side == "right"
-    seq_impl = _unwrap(sorted_sequence)
-    if sorter is not None:
-        s_impl = _unwrap(sorter)
-        if s_impl.dtype != _C_engine.I64 or list(s_impl.shape) != list(seq_impl.shape):
-            raise RuntimeError(
-                "searchsorted: sorter must be int64 dtype and match sorted_sequence shape"
-            )
-        seq_impl = _C_engine.gather(seq_impl, s_impl, len(seq_impl.shape) - 1)
-    out = _C_engine.searchsorted(seq_impl, _unwrap(input), bool(right))
-    return _C_engine.astype(out, _C_engine.I32) if out_int32 else out
-
-
-def _bucketize_adapter(
-    input: Tensor, boundaries: Tensor, *, out_int32: bool = False, right: bool = False
-) -> _Impl:
-    """bucketize(values, boundaries, *, out_int32=False, right=False)."""
-    out = _C_engine.bucketize(_unwrap(input), _unwrap(boundaries), bool(right))
-    return _C_engine.astype(out, _C_engine.I32) if out_int32 else out
 
 
 def _isclose_adapter(

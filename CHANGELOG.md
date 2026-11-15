@@ -399,6 +399,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - route a Metal quasi-norm trace to the p_norm node (LCD-1015)
 
+- refuse bool where the reference CPU refuses it (LCD-1013)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

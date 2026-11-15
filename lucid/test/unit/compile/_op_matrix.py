@@ -58,6 +58,16 @@ class Outcome:
     reached: set[str] = field(default_factory=set)
 
 
+def _mag(t: lucid.Tensor) -> lucid.Tensor:
+    """``|t|`` for building a safe denominator or exponent in a recipe.
+
+    A bool is read as 0 / 1 -- ``abs`` refuses a mask, as the reference does
+    (LCD-1013) -- so a recipe that needs a magnitude of its input for every
+    dtype takes it here and the bool case still runs.
+    """
+    return t.long() if t.dtype == lucid.bool_ else t.abs()
+
+
 def make_input(kind: str, dtype: str, shape: tuple[int, ...], seed: int) -> lucid.Tensor:
     lucid.manual_seed(seed)
     if dtype == "bool":
@@ -264,11 +274,11 @@ def _cases() -> list[Case]:
         "add": lambda t: t + t.flip([0]),
         "sub": lambda t: t - t.flip([0]),
         "mul": lambda t: t * t.flip([0]),
-        "div": lambda t: t / (t.flip([0]).abs() + 1),
-        "floordiv": lambda t: t // (t.flip([0]).abs() + 1),
+        "div": lambda t: t / (_mag(t.flip([0])) + 1),
+        "floordiv": lambda t: t // (_mag(t.flip([0])) + 1),
         "remainder": lambda t: t % 4,
         "fmod": lambda t: lucid.fmod(t, 4),
-        "pow": lambda t: lucid.pow(t.abs() + 1, t.flip([0]).abs().clamp(max=2)),
+        "pow": lambda t: lucid.pow(_mag(t) + 1, _mag(t.flip([0])).clamp(max=2)),
         "maximum": lambda t: lucid.maximum(t, t.flip([0])),
         "minimum": lambda t: lucid.minimum(t, t.flip([0])),
         "eq": lambda t: t == t.flip([0]),
@@ -284,7 +294,7 @@ def _cases() -> list[Case]:
         "masked_fill": lambda t: lucid.masked_fill(t, t > 1, 0),
         "atan2": lambda t: lucid.atan2(t, t.flip([0]) + 0.5),
         "hypot": lambda t: lucid.hypot(t, t.flip([0])),
-        "xlogy": lambda t: lucid.xlogy(t, t.flip([0]).abs() + 1),
+        "xlogy": lambda t: lucid.xlogy(t, _mag(t.flip([0])) + 1),
         "logaddexp": lambda t: lucid.logaddexp(t, t.flip([0])),
         "nextafter": lambda t: lucid.nextafter(t, t.flip([0])),
         "isclose": lambda t: lucid.isclose(t, t.flip([0])),
@@ -380,7 +390,7 @@ def _cases() -> list[Case]:
             lucid.zeros_like(t), 1, _idx(5, 4, 3, 2, 1, 0).reshape(1, 6).expand(4, 6), t
         ),
         "unfold_dim": lambda t: t.unfold(1, 3, 2) * 1,
-        "one_hot": lambda t: F.one_hot(t.abs().clamp(max=4).to(lucid.int64), 5),
+        "one_hot": lambda t: F.one_hot(_mag(t).clamp(max=4).to(lucid.int64), 5),
         "meshgrid": lambda t: lucid.meshgrid(t[0], t[1], indexing="ij"),
         # Unequal lengths, or the xy axis swap would be invisible.
         "meshgrid_xy": lambda t: lucid.meshgrid(t[0][:3], t[1], indexing="xy"),
@@ -720,6 +730,18 @@ EAGER_REJECTS: dict[tuple[str, str], Refusal] = {
     # A norm has no integer form; the reference refuses every order (LCD-384).
     **_each("norm", _NON_FLOAT, _both(_C_engine.DtypeMismatch, "a norm takes floats")),
     **_each("vector_norm", _NON_FLOAT, _both(_C_engine.DtypeMismatch, "a norm takes floats")),
+    # A mask is neither a magnitude nor a quantity to average, and the
+    # reference refuses it for each of these (LCD-1013); ``mask.float()`` is
+    # the spelling.  ``lucid._ops._bool_refusal.BOOL_REFUSED`` is the table.
+    **_each("abs", ("bool",), _both(_NOT_IMPL, "the absolute value of a bool (LCD-1013)")),
+    **_each("round", ("bool",), _both(_NOT_IMPL, "rounding a bool (LCD-1013)")),
+    **_each("floor", ("bool",), _both(_NOT_IMPL, "flooring a bool (LCD-1013)")),
+    **_each("ceil", ("bool",), _both(_NOT_IMPL, "the ceiling of a bool (LCD-1013)")),
+    **_each("trunc", ("bool",), _both(_NOT_IMPL, "truncating a bool (LCD-1013)")),
+    **_each("relu", ("bool",), _both(_C_engine.DtypeMismatch, "rectifying a bool (LCD-1013)")),
+    **_each("mean", ("bool",), _both(_C_engine.DtypeMismatch, "the mean of a bool (LCD-1013)")),
+    **_each("var", ("bool",), _both(_C_engine.DtypeMismatch, "the variance of a bool (LCD-1013)")),
+    **_each("std", ("bool",), _both(_C_engine.DtypeMismatch, "the deviation of a bool (LCD-1013)")),
 }
 
 

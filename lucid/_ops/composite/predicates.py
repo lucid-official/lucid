@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING
 
 import lucid
+from lucid._ops._bool_refusal import refuse_bool
 from lucid._ops.composite._shared import _is_tensor
 from lucid._types import TensorLike
 
@@ -345,6 +346,7 @@ def isin(
         elements = lucid.tensor(elements)
     if not _is_tensor(test_elements):
         test_elements = lucid.tensor(test_elements)
+    refuse_bool("isin", elements, test_elements)
     e_flat = elements.reshape(-1)
     t_flat = test_elements.reshape(-1)
     n, m = e_flat.shape[0], t_flat.shape[0]

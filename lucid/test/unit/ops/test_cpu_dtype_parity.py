@@ -177,7 +177,14 @@ def test_unary_accepts_every_shared_dtype_on_the_cpu(
     which is what the CPU used to fail at — with the promotion rule
     checked separately in :func:`test_real_valued_ops_promote_integers`.
     """
-    out = fn(_tensor(np.ones((2, 3)), dtype_name, np_dtype))
+    x = _tensor(np.ones((2, 3)), dtype_name, np_dtype)
+    if name == "abs" and dtype_name == "bool":
+        # The one refusal in the sweep: ``abs`` of a mask is refused as the
+        # reference refuses it (LCD-1013, ``test_bool_refusal_table``).
+        with pytest.raises(NotImplementedError):
+            fn(x)
+        return
+    out = fn(x)
     if name in _REAL_VALUED and dtype_name.startswith(("int", "bool")):
         assert str(out.dtype).endswith("float32"), f"{name} did not promote"
     else:

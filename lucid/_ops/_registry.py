@@ -10,14 +10,17 @@ declarative table of ``OpEntry`` records, not a mix of declarations and
 plumbing.
 """
 
+import inspect
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from lucid import _dispatch
 from lucid._C import engine as _C_engine
 from lucid._ops import _adapters as A  # accessor for every signature-normaliser
+from lucid._ops._bool_refusal import BOOL_CODE, bool_refusal
 from lucid._ops._reduce import _logical_not_adapter, _make_logical_adapter
 from lucid._ops._division import _make_div_adapter, _make_round_adapter
+from lucid._ops._search import _bucketize_adapter, _searchsorted_adapter
 from lucid._ops._reduce import (
     _all_adapter,
     _any_adapter,
@@ -152,6 +155,70 @@ def _float_valued(engine_fn: _Unary, *, engine_promotes: bool = True) -> _Unary:
     return _op
 
 
+#: The tensor type the guard below tests for: a non-tensor operand falls
+#: through to the engine op, which refuses it in its own words.
+_IMPL = _C_engine.TensorImpl
+
+
+def _bool_refused(name: str, engine_fn: _Unary) -> _Unary:
+    """``engine_fn``, a unary op the reference refuses a bool operand for.
+
+    The engine op computes a bool tensor's answer (``abs`` of a mask is the
+    mask); the reference raises, and so does the entry now
+    (:mod:`lucid._ops._bool_refusal`).  The entry's free function and its
+    Tensor method both call this, so ``abs(mask)`` and ``mask.abs()`` refuse
+    alike.  ``name`` is the entry's own name, which the in-place twin
+    (``abs_``) keeps in its message.
+    """
+
+    def _op(input: _C_engine.TensorImpl, /) -> _C_engine.TensorImpl:
+        if isinstance(input, _IMPL) and input.dtype.value == BOOL_CODE:
+            raise bool_refusal(name)
+        return engine_fn(input)
+
+    A._keep_engine_signature(_op, engine_fn)
+    _op.__qualname__ = _op.__name__
+    return _op
+
+
+def _bool_refused_adapter(
+    name: str, adapter: Callable[..., _C_engine.TensorImpl], *, unless_dtype: bool = False
+) -> Callable[..., _C_engine.TensorImpl]:
+    """``adapter``, an op the reference refuses a bool operand for.
+
+    The same refusal as :func:`_bool_refused`, for the ops that take extra
+    arguments (``mean``, ``var``, ``softmax``, ...) and so have an adapter of
+    their own.  ``unless_dtype`` is for the ones that answer a bool when the
+    caller names the dtype to compute in -- ``mean(mask, dtype=float32)`` and
+    ``softmax(mask, dim, dtype=float32)`` are the spellings the reference
+    offers -- found through the adapter's own signature, since ``dtype`` is
+    positional for ``softmax``.  Only a bool operand pays for that lookup.
+
+    The wrapper carries the adapter's signature, which is what the free
+    function, the Tensor method and the stub are made from.
+    """
+    signature = inspect.signature(adapter)
+
+    def _op(
+        x_impl: _C_engine.TensorImpl, /, *args: object, **kwargs: object
+    ) -> _C_engine.TensorImpl:
+        if isinstance(x_impl, _IMPL) and x_impl.dtype.value == BOOL_CODE:
+            dtype = (
+                signature.bind_partial(x_impl, *args, **kwargs).arguments.get("dtype")
+                if unless_dtype
+                else None
+            )
+            if dtype is None:
+                raise bool_refusal(name)
+        return adapter(x_impl, *args, **kwargs)
+
+    _op.__doc__ = adapter.__doc__
+    _op.__name__ = adapter.__name__
+    _op.__qualname__ = adapter.__name__
+    _op.__dict__["__signature__"] = signature
+    return _op
+
+
 def _real(input: _C_engine.TensorImpl, /) -> _C_engine.TensorImpl:
     """real(input): a complex tensor's real part as a view, a real tensor itself.
 
@@ -173,7 +240,7 @@ _R = _C_engine  # shorthand
 _REGISTRY: list[OpEntry] = [
     # ── unary ──────────────────────────────────────────────────────────────
     OpEntry("neg",       _R.neg,       1, method_name="neg",       free_fn_name="neg"),
-    OpEntry("abs",       _R.abs,       1, method_name="abs",       free_fn_name="abs"),
+    OpEntry("abs",       _bool_refused("abs", _R.abs), 1, method_name="abs", free_fn_name="abs"),
     OpEntry("sign",      _R.sign,      1, method_name="sign",      free_fn_name="sign"),
     OpEntry("exp",       _float_valued(_R.exp),       1, method_name="exp",       free_fn_name="exp"),
     OpEntry("log",       _float_valued(_R.log),       1, method_name="log",       free_fn_name="log"),
@@ -182,8 +249,8 @@ _REGISTRY: list[OpEntry] = [
     # rsqrt: not in engine — implemented in Python as reciprocal(sqrt(x))
     OpEntry("square",    _R.square,    1, method_name="square",    free_fn_name="square"),
     OpEntry("reciprocal",_float_valued(_R.reciprocal),1, method_name="reciprocal",free_fn_name="reciprocal"),
-    OpEntry("floor",     _R.floor,     1, method_name="floor",     free_fn_name="floor"),
-    OpEntry("ceil",      _R.ceil,      1, method_name="ceil",      free_fn_name="ceil"),
+    OpEntry("floor",     _bool_refused("floor", _R.floor), 1, method_name="floor", free_fn_name="floor"),
+    OpEntry("ceil",      _bool_refused("ceil", _R.ceil),   1, method_name="ceil",  free_fn_name="ceil"),
     OpEntry("round",     _make_round_adapter(), 1, method_name="round", free_fn_name="round",
             extra_kwargs=["decimals"]),
     OpEntry("sin",       _float_valued(_R.sin),       1, method_name="sin",       free_fn_name="sin"),
@@ -195,7 +262,7 @@ _REGISTRY: list[OpEntry] = [
     OpEntry("sinh",      _float_valued(_R.sinh),      1, method_name="sinh",      free_fn_name="sinh"),
     OpEntry("cosh",      _float_valued(_R.cosh),      1, method_name="cosh",      free_fn_name="cosh"),
     OpEntry("tanh",      _float_valued(_R.tanh),      1, method_name="tanh",      free_fn_name="tanh"),
-    OpEntry("relu",      _R.relu,      1, method_name="relu",      free_fn_name="relu"),
+    OpEntry("relu",      _bool_refused("relu", _R.relu), 1, method_name="relu", free_fn_name="relu"),
     OpEntry("sigmoid",   _float_valued(_R.sigmoid),   1, method_name="sigmoid",   free_fn_name="sigmoid"),
     OpEntry("silu",      _R.silu,      1, method_name="silu",      free_fn_name="silu"),
     # ``_R.gelu_exact``, not ``_R.gelu``.  The engine's ``gelu`` is the tanh
@@ -205,7 +272,7 @@ _REGISTRY: list[OpEntry] = [
     # spelled out, as ``F.gelu(x, approximate="tanh")``.
     OpEntry("gelu", _R.gelu_exact, 1, method_name="gelu", free_fn_name="gelu"),
     OpEntry("mish",      _R.mish,      1, method_name="mish",      free_fn_name="mish"),
-    OpEntry("selu",      _R.selu,      1, method_name="selu",      free_fn_name="selu"),
+    OpEntry("selu",      _bool_refused("selu", _R.selu), 1, method_name="selu", free_fn_name="selu"),
     OpEntry("softplus",  _R.softplus,  1, method_name="softplus",  free_fn_name="softplus"),
     OpEntry("relu6",     _R.relu6,     1, method_name="relu6",     free_fn_name="relu6"),
     OpEntry("hard_sigmoid", _R.hard_sigmoid, 1, method_name="hard_sigmoid", free_fn_name="hard_sigmoid"),
@@ -215,7 +282,7 @@ _REGISTRY: list[OpEntry] = [
 
     # ── in-place unary ─────────────────────────────────────────────────────
     OpEntry("neg_",        _R.neg_,        1, inplace=True, method_name="neg_"),
-    OpEntry("abs_",        _R.abs_,        1, inplace=True, method_name="abs_"),
+    OpEntry("abs_",        _bool_refused("abs_", _R.abs_), 1, inplace=True, method_name="abs_"),
     OpEntry("sign_",       _R.sign_,       1, inplace=True, method_name="sign_"),
     OpEntry("reciprocal_", _R.reciprocal_, 1, inplace=True, method_name="reciprocal_"),
     OpEntry("square_",     _R.square_,     1, inplace=True, method_name="square_"),
@@ -234,9 +301,9 @@ _REGISTRY: list[OpEntry] = [
     OpEntry("cosh_",       _R.cosh_,       1, inplace=True, method_name="cosh_"),
     OpEntry("tanh_",       _R.tanh_,       1, inplace=True, method_name="tanh_"),
     OpEntry("sigmoid_",    _R.sigmoid_,    1, inplace=True, method_name="sigmoid_"),
-    OpEntry("relu_",       _R.relu_,       1, inplace=True, method_name="relu_"),
-    OpEntry("floor_",      _R.floor_,      1, inplace=True, method_name="floor_"),
-    OpEntry("ceil_",       _R.ceil_,       1, inplace=True, method_name="ceil_"),
+    OpEntry("relu_",       _bool_refused("relu_", _R.relu_), 1, inplace=True, method_name="relu_"),
+    OpEntry("floor_",      _bool_refused("floor_", _R.floor_), 1, inplace=True, method_name="floor_"),
+    OpEntry("ceil_",       _bool_refused("ceil_", _R.ceil_), 1, inplace=True, method_name="ceil_"),
     OpEntry("round_",      _make_round_adapter(inplace=True), 1, inplace=True, method_name="round_",
             extra_kwargs=["decimals"]),
 
@@ -282,7 +349,8 @@ _REGISTRY: list[OpEntry] = [
     # ── reduction (with API-compat adapters) ───────────────────────────────
     OpEntry("sum",    _sum_adapter,    1, method_name="sum",    free_fn_name="sum",
             extra_kwargs=["dim", "keepdim", "dtype"]),
-    OpEntry("mean",   _mean_adapter,   1, method_name="mean",   free_fn_name="mean",
+    OpEntry("mean",   _bool_refused_adapter("mean", _mean_adapter, unless_dtype=True), 1,
+            method_name="mean",   free_fn_name="mean",
             extra_kwargs=["dim", "keepdim", "dtype"]),
     OpEntry("prod",   _prod_adapter,   1, method_name="prod",   free_fn_name="prod",
             extra_kwargs=["dim", "keepdim", "dtype"]),
@@ -290,7 +358,8 @@ _REGISTRY: list[OpEntry] = [
             extra_kwargs=["dim", "keepdim"]),
     OpEntry("min",    _min_adapter,    1, method_name="min",    free_fn_name="min",
             extra_kwargs=["dim", "keepdim"]),
-    OpEntry("var",    _var_adapter,      1, method_name="var",    free_fn_name="var",
+    OpEntry("var",    _bool_refused_adapter("var", _var_adapter), 1,
+            method_name="var",    free_fn_name="var",
             extra_kwargs=["dim", "keepdim", "correction", "unbiased"]),
     OpEntry("argmax", _argmax_adapter, 1, method_name="argmax", free_fn_name="argmax",
             extra_kwargs=["dim", "keepdim"]),
@@ -412,14 +481,15 @@ _REGISTRY: list[OpEntry] = [
             extra_kwargs=["indexing"]),
 
     # ── softmax / log_softmax (have dim and dtype kwargs) ──────────────────
-    OpEntry("softmax",     _softmax_adapter,     1, method_name="softmax",     free_fn_name="softmax",
-            extra_kwargs=["dim", "dtype"]),
-    OpEntry("log_softmax", _log_softmax_adapter, 1, method_name="log_softmax", free_fn_name="log_softmax",
-            extra_kwargs=["dim", "dtype"]),
+    OpEntry("softmax",     _bool_refused_adapter("softmax", _softmax_adapter, unless_dtype=True), 1,
+            method_name="softmax",     free_fn_name="softmax", extra_kwargs=["dim", "dtype"]),
+    OpEntry("log_softmax", _bool_refused_adapter("log_softmax", _log_softmax_adapter, unless_dtype=True), 1,
+            method_name="log_softmax", free_fn_name="log_softmax", extra_kwargs=["dim", "dtype"]),
 
     # ── rsqrt / std (engine-native) ────────────────────────────────────────
     OpEntry("rsqrt", _float_valued(_R.rsqrt), 1, method_name="rsqrt", free_fn_name="rsqrt"),
-    OpEntry("std",   _std_adapter,   1, method_name="std",   free_fn_name="std",
+    OpEntry("std",   _bool_refused_adapter("std", _std_adapter), 1,
+            method_name="std",   free_fn_name="std",
             extra_kwargs=["dim", "keepdim", "correction", "unbiased"]),
 
     # ── boolean reductions ─────────────────────────────────────────────────
@@ -468,8 +538,8 @@ _REGISTRY: list[OpEntry] = [
     OpEntry("log10", _float_valued(_R.log10), 1, method_name="log10", free_fn_name="log10"),
     OpEntry("log1p", _float_valued(_R.log1p, engine_promotes=False), 1, method_name="log1p", free_fn_name="log1p"),
     OpEntry("exp2",  _float_valued(_R.exp2, engine_promotes=False),  1, method_name="exp2",  free_fn_name="exp2"),
-    OpEntry("trunc", _R.trunc, 1, method_name="trunc", free_fn_name="trunc"),
-    OpEntry("frac",  _R.frac,  1, method_name="frac",  free_fn_name="frac"),
+    OpEntry("trunc", _bool_refused("trunc", _R.trunc), 1, method_name="trunc", free_fn_name="trunc"),
+    OpEntry("frac",  _bool_refused("frac", _R.frac),   1, method_name="frac",  free_fn_name="frac"),
 
     # ── elementwise math compositions (binary) ──────────────────────────────
     OpEntry("atan2",     A._make_arith_adapter(_R.atan2),     2, method_name="atan2",     free_fn_name="atan2"),
@@ -522,10 +592,10 @@ _REGISTRY: list[OpEntry] = [
             method_name="histc", free_fn_name="histc"),
     OpEntry("cartesian_prod", A._cartesian_prod_adapter, 0,
             method_name=None, free_fn_name="cartesian_prod"),
-    OpEntry("searchsorted",  A._searchsorted_adapter, 2,
+    OpEntry("searchsorted",  _searchsorted_adapter, 2,
             method_name=None, free_fn_name="searchsorted",
             extra_kwargs=["out_int32", "right", "side", "sorter"]),
-    OpEntry("bucketize",     A._bucketize_adapter, 2,
+    OpEntry("bucketize",     _bucketize_adapter, 2,
             method_name=None, free_fn_name="bucketize",
             extra_kwargs=["out_int32", "right"]),
 

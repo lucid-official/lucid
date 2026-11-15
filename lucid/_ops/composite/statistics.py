@@ -9,6 +9,7 @@ from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry
+from lucid._ops._bool_refusal import refuse_bool
 from lucid._types import DeviceLike, DTypeLike
 from lucid._ops.composite._euclidean import _euclidean_cdist
 from lucid._ops.composite.indexing import _scatter_add
@@ -185,6 +186,7 @@ def quantile(
     --------
     nanquantile : NaN-aware sibling.
     """
+    refuse_bool("quantile", input)
     if dim is not None:
         dim = _wrap_dim(dim, input.ndim, "quantile")
     if input.numel() == 0:
@@ -275,6 +277,7 @@ def nanquantile(
     --------
     quantile : NaN-unaware version (a single ``NaN`` poisons the slice).
     """
+    refuse_bool("nanquantile", input)
     if dim is not None:
         dim = _wrap_dim(dim, input.ndim, "nanquantile")
     if input.numel() == 0:
@@ -384,6 +387,7 @@ def cov(
     A complex ``input`` runs on Metal only: the CPU stream has no complex
     matrix product.
     """
+    refuse_bool("cov", input)
     if input.ndim > 2:
         raise _C_engine.InvalidArgument(
             f"cov(): expected input to have two or fewer dimensions "
@@ -447,6 +451,7 @@ def corrcoef(input: Tensor) -> Tensor:
     --------
     cov : raw covariance matrix without the std-normalisation.
     """
+    refuse_bool("corrcoef", input)
     c = cov(input, correction=1)  # (N, N)
     var = lucid.diagonal(c)  # (N,)
     # A Hermitian matrix's diagonal is real; its imaginary part is rounding.
@@ -838,6 +843,7 @@ def poisson(input: Tensor, generator: _C_engine.Generator | None = None) -> Tens
     """
     from lucid._ops.composite._count_samplers import poisson_counts
 
+    refuse_bool("poisson", input)
     if not input._impl.is_phantom:
         # Only decides whether to raise; nothing read here reaches the draws.
         from lucid.compile import _host_check
@@ -1107,6 +1113,9 @@ def histogram(
     >>> edges
     tensor([1., 1.75, 2.5, 3.25, 4.])
     """
+    refuse_bool("histogram", input)
+    refuse_bool("histogram", bins, role="bins")
+    refuse_bool("histogram", weight, role="weight")
     dtype = input.dtype if input.is_floating_point() else lucid.get_default_dtype()
     values = input.reshape(-1).to(dtype)
     device = input.device
@@ -1320,6 +1329,7 @@ def _moments(
     """
     from lucid._dispatch import _unwrap, _wrap
 
+    refuse_bool(name, x)
     dim, correction, keepdim = _variance_operands(name, args, kwargs)
     xi = _unwrap(x)
     axes = _reduction_axes(xi, dim, name)
