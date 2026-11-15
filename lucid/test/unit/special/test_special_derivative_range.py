@@ -121,7 +121,9 @@ _J0_FAR = [
 ]  # fmt: skip
 #: Per order: float32 then float64.  The third derivative of a quotient loses a
 #: digit or two near 1 (its terms are 35 times its value), so it is looser.
-_J0_RTOL = {lucid.float32: (4e-7, 1e-6, 1e-6, 1e-5), lucid.float64: (1e-14, 1e-13, 1e-13, 1e-12)}
+#: float32 order 2 measured 0.92e-6 at x = -1.2 (just past the series) on an M1 Pro; the bound
+#: leaves room for the chip's float32 sin/cos to differ (LCD-1015 saw that on an M4 Max).
+_J0_RTOL = {lucid.float32: (4e-7, 1e-6, 2e-6, 1e-5), lucid.float64: (1e-14, 1e-13, 1e-13, 1e-12)}
 
 
 @pytest.mark.parametrize(("device", "dtype"), _FLOATS)
