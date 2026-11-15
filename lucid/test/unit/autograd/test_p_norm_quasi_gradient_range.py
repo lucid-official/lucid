@@ -15,6 +15,7 @@ at which the norm is finite and the cotangent keeps the gradient finite.
 """
 
 import math
+import struct
 
 import pytest
 
@@ -230,11 +231,46 @@ def test_a_float64_slice_has_the_closed_form_where_float32_overflows() -> None:
     assert max(abs(v - want) for v in g.reshape(n).tolist()) <= 1e-12 * want
 
 
+#: Both signs of the tail ``(1 - p) - float32(1 - p)`` of the exponent split: its power of an
+#: infinite base is ``inf`` for a positive tail and 0 for a negative one, and ``inf * 0`` is NaN.
+NON_FINITE_ORDERS = [0.1, 0.15, 0.2, 0.3, 0.7]
+
+
+def _exponent_tail(p: float) -> float:
+    exponent = 1.0 - p
+    return exponent - struct.unpack("f", struct.pack("f", exponent))[0]
+
+
+def test_the_non_finite_orders_have_exponent_tails_of_both_signs() -> None:
+    tails = [_exponent_tail(p) for p in NON_FINITE_ORDERS]
+    assert any(t > 0.0 for t in tails) and any(t < 0.0 for t in tails)
+
+
+@pytest.mark.parametrize("p", NON_FINITE_ORDERS)
 @pytest.mark.parametrize("device_name", ["cpu", "metal"])
-def test_an_overflowing_norm_gives_an_infinite_gradient_not_a_nan(device_name: str) -> None:
-    """The norm itself is ``inf`` in float32 (1e40); its gradient is not recoverable from it."""
-    x = lucid.full((1, 10_000), 1.0, device=device_name, requires_grad=True)
-    norm = lucid.linalg.vector_norm(x, ord=0.1, dim=-1)
+def test_an_overflowing_norm_gives_an_infinite_gradient_not_a_nan(
+    device_name: str, p: float
+) -> None:
+    """The norm itself is ``inf`` in float32; its gradient is not recoverable from it, and the
+    split of the exponent must not turn the ``inf`` into the NaN of ``inf * 0``."""
+    x = lucid.full((1, 1_000), 1e38, device=device_name, requires_grad=True)
+    norm = lucid.linalg.vector_norm(x, ord=p, dim=-1)
     assert norm.item() == math.inf
     (g,) = grad(norm.sum(), [x])
-    assert set(g.reshape(10_000).tolist()) == {math.inf}
+    assert set(g.reshape(1_000).tolist()) == {math.inf}
+
+
+@pytest.mark.parametrize("p", NON_FINITE_ORDERS)
+@pytest.mark.parametrize("device_name", ["cpu", "metal"])
+def test_an_infinite_entry_leaves_the_finite_entries_infinite_not_a_nan(
+    device_name: str, p: float
+) -> None:
+    """The norm is ``inf``; the other entries' slope times an infinite scale is ``inf``, as it was
+    before the exponent was split (the infinite entry itself is ``0 * inf``)."""
+    x = lucid.full((1_000,), 1.0, device=device_name)
+    x[0] = math.inf
+    x.requires_grad_(True)
+    norm = lucid.linalg.vector_norm(x, ord=p)
+    assert norm.item() == math.inf
+    (g,) = grad(norm, [x])
+    assert set(g.tolist()[1:]) == {math.inf}
