@@ -321,6 +321,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - j0 and erfcx derivatives exact over the range (LCD-1030)
 
+- float64 bessel_j0 curvature at the origin (LCD-1030)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

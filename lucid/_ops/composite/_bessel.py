@@ -408,10 +408,15 @@ def _j1_small(x: Tensor) -> Tensor:
 
 
 def _j0(x: Tensor) -> Tensor:
-    """``J0(x)``; even in ``x``."""
+    """``J0(x)``; even in ``x``.
+
+    ``_j0_small`` is a function of ``x²``, so it takes ``x`` itself: through
+    ``|x|`` the second derivative at 0 was 0 (``|x|`` has none for the chain
+    rule to carry), where it is ``-1/2``.
+    """
     ax = lucid.abs(x)
     large = _hankel(_above(ax, 5.0), _PIO4, _J0_HANKEL, second_kind=False)
-    return lucid.where(ax <= 5.0, _j0_small(_below(ax, 5.0)), large)
+    return lucid.where(ax <= 5.0, _j0_small(lucid.clip(x, -5.0, 5.0)), large)
 
 
 def _j1(x: Tensor) -> Tensor:

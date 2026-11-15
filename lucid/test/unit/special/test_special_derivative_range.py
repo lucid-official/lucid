@@ -189,6 +189,25 @@ def test_sinc_keeps_its_curvature_at_zero(device: str) -> None:
         _check("sinc", x, 2, g2, math.pi**2 * _j0_derivative(u, 2), 1e-5, lucid.float32)
 
 
+# ── bessel_j0, float64: the same defect through |x| ─────────────────────────
+
+
+@pytest.mark.parametrize("device", devices_supporting(lucid.float64))
+def test_bessel_j0_float64_keeps_its_curvature_at_the_origin(device: str) -> None:
+    """``J0`` is a function of ``x²``; read through ``|x|`` its curvature at 0 was 0."""
+    xs = [0.0, -0.0, 1e-30, 1e-9, -2.0, 4.9999, 5.0, 5.0001]
+    _, d1, d2 = _derivatives(S.bessel_j0, xs, device, lucid.float64, 2)
+    assert d1[:2] == [0.0, 0.0]
+    for g in d2[:4]:
+        assert math.isclose(g, -0.5, rel_tol=1e-12), g
+    # J0'' = -J0 + J1 / x, either side of the rational form's own edge at 5
+    for x, g in zip(xs[4:], d2[4:], strict=True):
+        want = -S.bessel_j0(lucid.tensor(x, dtype=lucid.float64)).item() + (
+            S.bessel_j1(lucid.tensor(x, dtype=lucid.float64)).item() / x
+        )
+        assert math.isclose(g, want, rel_tol=1e-9), (x, g, want)
+
+
 # ── erfcx ───────────────────────────────────────────────────────────────────
 
 
