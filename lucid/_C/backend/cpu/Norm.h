@@ -522,6 +522,9 @@ struct ThreeHalvesPower {
 struct SqrtPower {
     double operator()(double x) const { return std::sqrt(x); }
 };
+struct QuarterPower {
+    double operator()(double x) const { return std::sqrt(std::sqrt(x)); }
+};
 
 // ``f`` called with the cheapest functor for ``power``.
 template <class F>
@@ -569,6 +572,22 @@ double lp_power_sum(const T* x, std::size_t len, std::size_t stride, Entry entry
     return (s0 + s1) + (s2 + s3);
 }
 
+// ``v[0] + ... + v[m - 1]`` in four partial sums, double.
+template <typename U>
+double lp_sum4(const U* v, std::size_t m) {
+    double s0 = 0.0, s1 = 0.0, s2 = 0.0, s3 = 0.0;
+    std::size_t j = 0;
+    for (; j + 4 <= m; j += 4) {
+        s0 += v[j];
+        s1 += v[j + 1];
+        s2 += v[j + 2];
+        s3 += v[j + 3];
+    }
+    for (; j < m; ++j)
+        s0 += v[j];
+    return (s0 + s1) + (s2 + s3);
+}
+
 // ``sum (|x_a| / top)^p`` by vForce, for an order with no cheap functor.  The ratios and
 // their powers are in the entries' own precision (a ratio is in [0, 1], so a float power cannot
 // overflow, and one that underflows is negligible next to the 1 the largest entry
@@ -602,17 +621,28 @@ double lp_ratio_power_sum(const T* x, std::size_t len, std::size_t stride, doubl
             vpow_f32(ratio, expo, powered, m);
         else
             vpow_f64(ratio, expo, powered, m);
-        double s0 = 0.0, s1 = 0.0, s2 = 0.0, s3 = 0.0;
-        std::size_t j = 0;
-        for (; j + 4 <= m; j += 4) {
-            s0 += powered[j];
-            s1 += powered[j + 1];
-            s2 += powered[j + 2];
-            s3 += powered[j + 3];
-        }
-        for (; j < m; ++j)
-            s0 += powered[j];
-        acc += (s0 + s1) + (s2 + s3);
+        acc += lp_sum4(powered, m);
+    }
+    return acc;
+}
+
+// ``sum |x_a|^p`` with every power taken in double by vForce on the widened magnitudes: the
+// sum of the orders below 1 that have no cheap functor (see :class:`PNorm`).
+template <typename T>
+double lp_double_power_sum(const T* x, std::size_t len, std::size_t stride, double p) {
+    constexpr std::size_t kBlock = 512;
+    double base[kBlock];
+    double expo[kBlock];
+    double powered[kBlock];
+    std::fill(expo, expo + std::min(kBlock, len), p);
+    double acc = 0.0;
+    for (std::size_t off = 0; off < len; off += kBlock) {
+        const std::size_t m = std::min(kBlock, len - off);
+        const T* block = x + off * stride;
+        for (std::size_t j = 0; j < m; ++j)
+            base[j] = std::abs(static_cast<double>(block[j * stride]));
+        vpow_f64(base, expo, powered, m);
+        acc += lp_sum4(powered, m);
     }
     return acc;
 }
@@ -621,29 +651,45 @@ double lp_ratio_power_sum(const T* x, std::size_t len, std::size_t stride, doubl
 // (NaN, infinity and all-zero slices included), summed over fixed blocks of ``kBlock`` entries
 // that are added in order: a block may run on any core, the total does not change.
 //
-// ``plain``: a float entry raised to p <= 6, or a double entry raised to p <= 1, stays inside
-// double, so the sum is the plain one (a half-integer order only: the others go through vForce on
-// ratios).  Otherwise it is relative to the slice's largest magnitude ``top``.  Below p = 1 the ratios' powers are in
-// [0, 1] too and the sum in [1, n]; the root ``s^(1/p)`` amplifies the sum's relative error by
-// 1/p, which the double accumulator absorbs.
+// Three ways to sum:
+//   * plain: the powers of the raw magnitudes, in double, for the orders with a cheap functor
+//     (a half-integer: multiplications, a square root; and 1/4: two square roots).  A float
+//     entry raised to p <= 6 stays inside double, and so does any entry raised to p <= 1
+//     (``|x|^p`` is between ``min(|x|, 1)`` and ``max(|x|, 1)``), so nothing needs scaling.
+//   * exact: the same plain sum for the other orders below 1 of a double entry, and below 1/2
+//     of a float one, with the powers by vForce in double.  Dividing by the largest magnitude
+//     would be wrong there: for p < 1 ``r^p > r``, so an entry whose ratio underflows float
+//     (below 1.4e-45) still adds ``r^p`` to a sum whose largest term is 1 (p = 0.1, a
+//     ratio of 1e-49: 1.3e-5), and a float power's rounding would be multiplied by 1/p in the root.
+//   * scaled (the rest): relative to the slice's largest magnitude ``top``, so every ratio's
+//     power is in [0, 1].  For a float entry and 1/2 <= p < 1 an underflowed ratio's power is
+//     below 4e-23 per entry, negligible against the 1 the largest contributes.
+// The root ``s^(1/p)`` multiplies the sum's relative error by 1/p, which the double
+// accumulator absorbs.
 template <typename T>
 class PNorm {
 public:
     static constexpr std::size_t kBlock = std::size_t{1} << 14;
+    // Below this order a float entry's underflowed ratio is not negligible: ``(1.4e-45)^p``
+    // times 2^31 entries is above float's own rounding.
+    static constexpr double kFloatRatioMinOrder = 0.5;
 
-    // For p <= 1, ``|x|^p`` lies between ``min(|x|, 1)`` and ``max(|x|, 1)``: no power leaves double
-    // unless the norm itself does, so a double entry takes the plain sum there too, as
-    // ``lp_slice_norm``'s does.
     explicit PNorm(double p)
         : p_(p),
           power_(p),
-          plain_(power_.halves >= 0 && p <= 6.0 && (sizeof(T) < sizeof(double) || p <= 1.0)) {}
-
-    bool plain() const { return plain_; }
+          quarter_(p == 0.25),
+          exact_(p < 1.0 && power_.halves < 0 && !quarter_ &&
+                 (sizeof(T) == sizeof(double) || p < kFloatRatioMinOrder)),
+          plain_(exact_ || quarter_ ||
+                 (power_.halves >= 0 && p <= 6.0 && (sizeof(T) < sizeof(double) || p <= 1.0))) {}
 
     // ``sum`` of one block's powers (relative to ``top`` unless the sum is plain).
     double block_sum(const T* x, std::size_t len, std::size_t stride, double top) const {
         const auto magnitude = [](T v) { return std::abs(static_cast<double>(v)); };
+        if (quarter_)
+            return lp_power_sum(x, len, stride, magnitude, QuarterPower{});
+        if (exact_)
+            return lp_double_power_sum(x, len, stride, p_);
         if (plain_)
             return with_fixed_power(
                 power_, [&](auto pw) { return lp_power_sum(x, len, stride, magnitude, pw); });
@@ -767,39 +813,70 @@ private:
                std::size_t m,
                const double* inv,
                double* acc) const {
-        if (!plain_ && power_.halves < 0) {
-            T ratio[kTile], expo[kTile], powered[kTile];
-            std::fill(expo, expo + m, static_cast<T>(p_));
-            for (std::size_t a = 0; a < len; ++a) {
-                const T* row = x + a * inner + c0;
-                for (std::size_t n = 0; n < m; ++n)
-                    ratio[n] = static_cast<T>(std::abs(static_cast<double>(row[n])) * inv[n]);
-                if constexpr (sizeof(T) == sizeof(float))
-                    vpow_f32(ratio, expo, powered, m);
-                else
-                    vpow_f64(ratio, expo, powered, m);
-                for (std::size_t n = 0; n < m; ++n)
-                    acc[n] += powered[n];
-            }
-            return;
-        }
+        if (quarter_)
+            return sweep_power(QuarterPower{}, x, len, inner, c0, m, inv, acc);
+        if (exact_)
+            return sweep_vpow<double>(x, len, inner, c0, m, nullptr, acc);
+        if (!plain_ && power_.halves < 0)
+            return sweep_vpow<T>(x, len, inner, c0, m, inv, acc);
         with_fixed_power(power_, [&](auto pw) {
-            for (std::size_t a = 0; a < len; ++a) {
-                const T* row = x + a * inner + c0;
-                if (plain_) {
-                    for (std::size_t n = 0; n < m; ++n)
-                        acc[n] += pw(std::abs(static_cast<double>(row[n])));
-                } else {
-                    for (std::size_t n = 0; n < m; ++n)
-                        acc[n] += pw(std::abs(static_cast<double>(row[n])) * inv[n]);
-                }
-            }
+            sweep_power(pw, x, len, inner, c0, m, inv, acc);
             return 0.0;
         });
     }
 
+    // ``sweep`` for a power with its own functor.
+    template <class Power>
+    void sweep_power(Power pw,
+                     const T* x,
+                     std::size_t len,
+                     std::size_t inner,
+                     std::size_t c0,
+                     std::size_t m,
+                     const double* inv,
+                     double* acc) const {
+        for (std::size_t a = 0; a < len; ++a) {
+            const T* row = x + a * inner + c0;
+            if (plain_) {
+                for (std::size_t n = 0; n < m; ++n)
+                    acc[n] += pw(std::abs(static_cast<double>(row[n])));
+            } else {
+                for (std::size_t n = 0; n < m; ++n)
+                    acc[n] += pw(std::abs(static_cast<double>(row[n])) * inv[n]);
+            }
+        }
+    }
+
+    // ``sweep`` by vForce in ``U``'s precision: on ratios (``inv``) in the entries' own, on the raw
+    // magnitudes (``inv`` null) in double.
+    template <typename U>
+    void sweep_vpow(const T* x,
+                    std::size_t len,
+                    std::size_t inner,
+                    std::size_t c0,
+                    std::size_t m,
+                    const double* inv,
+                    double* acc) const {
+        U base[kTile], expo[kTile], powered[kTile];
+        std::fill(expo, expo + m, static_cast<U>(p_));
+        for (std::size_t a = 0; a < len; ++a) {
+            const T* row = x + a * inner + c0;
+            for (std::size_t n = 0; n < m; ++n)
+                base[n] = static_cast<U>(std::abs(static_cast<double>(row[n])) *
+                                         (inv != nullptr ? inv[n] : 1.0));
+            if constexpr (sizeof(U) == sizeof(float))
+                vpow_f32(base, expo, powered, m);
+            else
+                vpow_f64(base, expo, powered, m);
+            for (std::size_t n = 0; n < m; ++n)
+                acc[n] += powered[n];
+        }
+    }
+
     double p_;
     LpPower power_;
+    bool quarter_;
+    bool exact_;
     bool plain_;
 };
 
