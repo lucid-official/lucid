@@ -12,7 +12,7 @@
     "Regenerate with:  lucid-audit --audit-only --update-coverage",
     "Do that only when the new state is the intended one."
   ],
-  "cells": 11816,
+  "cells": 11815,
   "answered": {
     "broadcast::F.gumbel_softmax": "pass",
     "broadcast::F.straight_through": "pass",
@@ -1335,7 +1335,6 @@
     "device::Tensor.cumsum": "pass",
     "device::Tensor.cumsum_": "pass",
     "device::Tensor.data": "pass",
-    "device::Tensor.data_ptr": "pass",
     "device::Tensor.detach": "pass",
     "device::Tensor.diag_embed": "pass",
     "device::Tensor.diagonal": "pass",
