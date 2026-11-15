@@ -1,0 +1,742 @@
+{
+  "comment": [
+    "Where Lucid's answer to a bool operand departs from the reference's, as of 2026-11-15 (LCD-1020).",
+    "Measured by lucid/test/unit/ops/test_bool_refusal_sweep.py against dtype_contract.json.",
+    "This file only shrinks: a deviation that is not listed fails the sweep, and so does a listed one",
+    "that no longer deviates -- delete the entry in the commit that fixes it.",
+    "kind: over-accept (the reference refuses, Lucid answers), class (both refuse, NotImplementedError",
+    "vs a plain RuntimeError), non-runtime (Lucid's refusal is not a RuntimeError), over-refuse",
+    "(the reference answers, Lucid refuses).",
+    "owner: LCD-1020-E1 engine schema row | LCD-1020-A1 Python composite (BOOL_REFUSED row) |",
+    "out-of-batch (not in this batch) | probe-artifact (the probe varies a non-operand) |",
+    "call-dependent (the reference's class varies with the call form).",
+    "devices: omitted when both devices deviate; otherwise the one that does."
+  ],
+  "deviations": {
+    "F.adaptive_avg_pool1d": {
+      "kind": "over-accept",
+      "owner": "call-dependent",
+      "reason": "the reference raises RuntimeError for output size 1 and NotImplementedError otherwise; the audit's call asks for a larger one"
+    },
+    "F.adaptive_avg_pool2d": {
+      "kind": "over-accept",
+      "owner": "call-dependent",
+      "reason": "the reference raises RuntimeError for output size 1 and NotImplementedError otherwise; the audit's call asks for a larger one"
+    },
+    "F.adaptive_avg_pool3d": {
+      "kind": "over-accept",
+      "owner": "call-dependent",
+      "reason": "the reference raises RuntimeError for output size 1 and NotImplementedError otherwise; the audit's call asks for a larger one"
+    },
+    "F.adaptive_max_pool1d": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
+    },
+    "F.adaptive_max_pool2d": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
+    },
+    "F.adaptive_max_pool3d": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
+    },
+    "F.affine_grid": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "CPU raises NotImplementedError('dtype must be F32/F64'); the reference raises ValueError (Metal already matches)",
+      "devices": [
+        "cpu"
+      ]
+    },
+    "F.avg_pool1d": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
+    },
+    "F.avg_pool2d": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
+    },
+    "F.avg_pool3d": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
+    },
+    "F.batch_norm": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "normalisation computes a bool input; the engine schema row must refuse it"
+    },
+    "F.bilinear": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
+      "devices": [
+        "metal"
+      ]
+    },
+    "F.binary_cross_entropy": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.binary_cross_entropy_with_logits": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.celu": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
+    },
+    "F.celu_": {
+      "kind": "class",
+      "owner": "LCD-1020-A1",
+      "reason": "in-place twin raises a cast error from the promoted result, not the op's refusal; refused once the out-of-place composite is"
+    },
+    "F.conv1d": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
+      "devices": [
+        "metal"
+      ]
+    },
+    "F.conv2d": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
+      "devices": [
+        "metal"
+      ]
+    },
+    "F.conv3d": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
+      "devices": [
+        "metal"
+      ]
+    },
+    "F.conv_transpose1d": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
+      "devices": [
+        "metal"
+      ]
+    },
+    "F.conv_transpose2d": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
+      "devices": [
+        "metal"
+      ]
+    },
+    "F.conv_transpose3d": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
+      "devices": [
+        "metal"
+      ]
+    },
+    "F.cross_entropy": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.ctc_loss": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.elu": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
+    },
+    "F.elu_": {
+      "kind": "class",
+      "owner": "LCD-1020-E1",
+      "reason": "in-place twin raises a cast error from the promoted result, not the op's refusal; refused once the out-of-place op is"
+    },
+    "F.embedding_bag": {
+      "kind": "over-accept",
+      "owner": "out-of-batch",
+      "reason": "computes a bool input; the reference raises a RuntimeError"
+    },
+    "F.gaussian_nll_loss": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.gelu": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
+    },
+    "F.glu": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "refuses through an inner op (a DtypeMismatch from mul); the reference raises NotImplementedError"
+    },
+    "F.grid_sample": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "sampling kernel computes a bool input; the engine schema row must refuse it"
+    },
+    "F.group_norm": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "normalisation computes a bool input; the engine schema row must refuse it"
+    },
+    "F.gumbel_softmax": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "refuses through the sampler (NotImplementedError); the reference raises RuntimeError"
+    },
+    "F.hardshrink": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
+    },
+    "F.hardsigmoid": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
+    },
+    "F.hardswish": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
+    },
+    "F.hardtanh": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
+    },
+    "F.hardtanh_": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
+    },
+    "F.huber_loss": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.instance_norm": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "refuses through mean (DtypeMismatch); the reference raises NotImplementedError"
+    },
+    "F.interpolate": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite resamples a bool input; a BOOL_REFUSED row is missing"
+    },
+    "F.kl_div": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.l1_loss": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.layer_norm": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "normalisation computes a bool input; the engine schema row must refuse it"
+    },
+    "F.leaky_relu": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
+    },
+    "F.leaky_relu_": {
+      "kind": "class",
+      "owner": "LCD-1020-E1",
+      "reason": "in-place twin raises a cast error from the promoted result, not the op's refusal; refused once the out-of-place op is"
+    },
+    "F.linear": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
+      "devices": [
+        "metal"
+      ]
+    },
+    "F.local_response_norm": {
+      "kind": "over-accept",
+      "owner": "out-of-batch",
+      "reason": "computes a bool input; the reference raises NotImplementedError"
+    },
+    "F.logsigmoid": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "refuses through an inner op (negation raises LucidError); the reference raises NotImplementedError"
+    },
+    "F.margin_ranking_loss": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.max_pool1d": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
+    },
+    "F.max_pool2d": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
+    },
+    "F.max_pool3d": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
+    },
+    "F.max_unpool1d": {
+      "kind": "over-accept",
+      "owner": "out-of-batch",
+      "reason": "computes a bool input; the reference raises NotImplementedError"
+    },
+    "F.max_unpool2d": {
+      "kind": "over-accept",
+      "owner": "out-of-batch",
+      "reason": "computes a bool input; the reference raises NotImplementedError"
+    },
+    "F.max_unpool3d": {
+      "kind": "over-accept",
+      "owner": "out-of-batch",
+      "reason": "computes a bool input; the reference raises NotImplementedError"
+    },
+    "F.mish": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
+    },
+    "F.mse_loss": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.multi_margin_loss": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.multilabel_soft_margin_loss": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.nll_loss": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.poisson_nll_loss": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.prelu": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
+    },
+    "F.relu6": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
+    },
+    "F.rms_norm": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "refuses with a plain TypeError; the reference raises a RuntimeError or NotImplementedError"
+    },
+    "F.rrelu": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
+    },
+    "F.rrelu_": {
+      "kind": "class",
+      "owner": "LCD-1020-A1",
+      "reason": "in-place twin raises a cast error from the promoted result, not the op's refusal; refused once the out-of-place composite is"
+    },
+    "F.scaled_dot_product_attention": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "CPU raises NotImplementedError('F32/F64 only'); the reference raises a RuntimeError (Metal already matches)",
+      "devices": [
+        "cpu"
+      ]
+    },
+    "F.silu": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-E1",
+      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
+    },
+    "F.smooth_l1_loss": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.soft_margin_loss": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.softplus": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "refuses through an inner op (a DtypeMismatch from mul); the reference raises NotImplementedError"
+    },
+    "F.softshrink": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
+    },
+    "F.tanhshrink": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "refuses with a plain TypeError; the reference raises a RuntimeError or NotImplementedError"
+    },
+    "F.threshold": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
+    },
+    "F.threshold_": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
+    },
+    "F.triplet_margin_loss": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.triplet_margin_with_distance_loss": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
+    },
+    "F.upsample": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite resamples a bool input; a BOOL_REFUSED row is missing"
+    },
+    "F.upsample_bilinear": {
+      "kind": "non-runtime",
+      "owner": "LCD-1020-A1",
+      "reason": "refuses with a plain TypeError (mode 'bilinear' needs a float); the reference raises NotImplementedError; refused once interpolate's BOOL_REFUSED row is in"
+    },
+    "F.upsample_nearest": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite resamples a bool input; a BOOL_REFUSED row is missing"
+    },
+    "Tensor.allclose": {
+      "kind": "over-refuse",
+      "owner": "out-of-batch",
+      "reason": "refuses with LucidError (bool subtraction) where the reference answers"
+    },
+    "Tensor.argmax": {
+      "kind": "class",
+      "owner": "call-dependent",
+      "reason": "the reference (2.13.0) raises a plain RuntimeError here; Lucid raises NotImplementedError"
+    },
+    "Tensor.argmin": {
+      "kind": "class",
+      "owner": "call-dependent",
+      "reason": "the reference (2.13.0) raises a plain RuntimeError here; Lucid raises NotImplementedError"
+    },
+    "Tensor.cauchy_": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "NotImplementedError from the sampler; the reference raises a RuntimeError"
+    },
+    "Tensor.clamp": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "clamp with two tensor bounds on a bool tensor computes; the reference raises NotImplementedError"
+    },
+    "Tensor.clip": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "clamp with two tensor bounds on a bool tensor computes; the reference raises NotImplementedError"
+    },
+    "Tensor.exponential_": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "NotImplementedError from the sampler; the reference raises a RuntimeError"
+    },
+    "Tensor.logdet": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "Tensor.multinomial": {
+      "kind": "over-accept",
+      "owner": "out-of-batch",
+      "reason": "draws from a bool distribution; the reference raises a RuntimeError"
+    },
+    "Tensor.nextafter": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "refuses with LucidError (not NotImplementedError) for a non-F32/F64 dtype"
+    },
+    "Tensor.nextafter_": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "refuses with LucidError (not NotImplementedError) for a non-F32/F64 dtype"
+    },
+    "Tensor.pow": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "pow(bool, bool) computes; the reference refuses a tensor exponent (b ** True answers)"
+    },
+    "Tensor.pow_": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "pow(bool, bool) computes; the reference refuses a tensor exponent (b ** True answers)"
+    },
+    "Tensor.topk": {
+      "kind": "class",
+      "owner": "call-dependent",
+      "reason": "the reference (2.13.0) raises a plain RuntimeError here; Lucid raises NotImplementedError"
+    },
+    "lucid.allclose": {
+      "kind": "over-refuse",
+      "owner": "out-of-batch",
+      "reason": "refuses with LucidError (bool subtraction) where the reference answers"
+    },
+    "lucid.argmax": {
+      "kind": "class",
+      "owner": "call-dependent",
+      "reason": "the reference (2.13.0) raises a plain RuntimeError here; Lucid raises NotImplementedError"
+    },
+    "lucid.argmin": {
+      "kind": "class",
+      "owner": "call-dependent",
+      "reason": "the reference (2.13.0) raises a plain RuntimeError here; Lucid raises NotImplementedError"
+    },
+    "lucid.complex": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "NotImplementedError('expected real floating'); the reference raises a RuntimeError"
+    },
+    "lucid.eye": {
+      "kind": "over-accept",
+      "owner": "probe-artifact",
+      "reason": "the probe rebuilds a size or range argument (eye's n, randint's low) as a bool tensor; it is not an operand"
+    },
+    "lucid.linalg.cholesky": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.cholesky_ex": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.cond": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.cross": {
+      "kind": "over-accept",
+      "owner": "out-of-batch",
+      "reason": "computes a bool cross product; the reference raises NotImplementedError"
+    },
+    "lucid.linalg.det": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.eig": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.eigvals": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.inv": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.inv_ex": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.ldl_factor": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.ldl_factor_ex": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.ldl_solve": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.lstsq": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.lu_solve": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.matrix_exp": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.matrix_rank": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.pinv": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.qr": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.slogdet": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.solve": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.solve_ex": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.svd": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.svdvals": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.tensorinv": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.tensorsolve": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.linalg.vander": {
+      "kind": "non-runtime",
+      "owner": "out-of-batch",
+      "reason": "refuses with a plain TypeError; the reference raises a RuntimeError"
+    },
+    "lucid.linalg.vecdot": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
+    },
+    "lucid.logdet": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
+    },
+    "lucid.multinomial": {
+      "kind": "over-accept",
+      "owner": "out-of-batch",
+      "reason": "draws from a bool distribution; the reference raises a RuntimeError"
+    },
+    "lucid.nextafter": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "refuses with LucidError (not NotImplementedError) for a non-F32/F64 dtype"
+    },
+    "lucid.nn.init.orthogonal": {
+      "kind": "over-accept",
+      "owner": "probe-artifact",
+      "reason": "an initialiser fills its argument in place; a bool destination is not a computation on a bool operand"
+    },
+    "lucid.nn.init.sparse": {
+      "kind": "over-accept",
+      "owner": "probe-artifact",
+      "reason": "an initialiser fills its argument in place; a bool destination is not a computation on a bool operand"
+    },
+    "lucid.pow": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "pow(bool, bool) computes; the reference refuses a tensor exponent (b ** True answers)"
+    },
+    "lucid.randint": {
+      "kind": "over-accept",
+      "owner": "probe-artifact",
+      "reason": "the probe rebuilds a size or range argument (eye's n, randint's low) as a bool tensor; it is not an operand"
+    },
+    "lucid.special.gammainc": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
+    },
+    "lucid.special.gammaincc": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
+    },
+    "lucid.special.multigammaln": {
+      "kind": "over-accept",
+      "owner": "LCD-1020-A1",
+      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
+    },
+    "lucid.topk": {
+      "kind": "class",
+      "owner": "call-dependent",
+      "reason": "the reference (2.13.0) raises a plain RuntimeError here; Lucid raises NotImplementedError"
+    },
+    "lucid.view_as_complex": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "NotImplementedError('expected real floating'); the reference raises a RuntimeError"
+    }
+  }
+}
