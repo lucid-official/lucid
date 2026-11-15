@@ -313,6 +313,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - exit waits for running first-run workers (LCD-1019)
 
+- range-safe recorded p-norm gradient below p = 2 (LCD-1018)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

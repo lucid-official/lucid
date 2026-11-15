@@ -356,6 +356,17 @@ TensorImplPtr quasi_scale(const TensorImplPtr& n,
     return mul_op(mul_op(d, pow_by_parts(div_op(n, pivot), 1.0 - p, log_bound)), tail);
 }
 
+// ``sign(A) (|A| / m)^(p-1)`` for the slice's largest magnitude ``m`` (``magnitude`` is ``|A|``).
+// A zero entry has the slope 0 (its power is infinite there): the base 1 gives ``sign(0) * 1``.
+TensorImplPtr quasi_slope(const TensorImplPtr& A,
+                          const TensorImplPtr& magnitude,
+                          const TensorImplPtr& m,
+                          double p) {
+    auto ratio = div_op(magnitude, m);
+    auto base = masked_fill_op(ratio, equal_op(ratio, zeros_like_op(ratio)), 1.0);
+    return mul_op(sign_op(A), pow_scalar_op(base, p - 1.0));
+}
+
 // ``dA`` of an order below 1: ``sign(A) (|A| / N)^(p-1) * dN``, formed relative to the slice's
 // largest magnitude ``m`` instead of to the norm.
 //
@@ -382,14 +393,109 @@ TensorImplPtr quasi_grad(const TensorImplPtr& A,
                          bool keepdims) {
     auto magnitude = abs_op(A);
     auto m = slice_top(magnitude, full, axis);
-    auto ratio = div_op(magnitude, m);
-    // A zero entry has the slope 0 (its power is infinite there): the base 1 gives ``sign(0) * 1``.
-    auto base = masked_fill_op(ratio, equal_op(ratio, zeros_like_op(ratio)), 1.0);
-    auto slope = mul_op(sign_op(A), pow_scalar_op(base, p - 1.0));
     auto scale = quasi_scale(keepdim_view(n_safe, full, axis, keepdims),
                              keepdim_view(d_live, full, axis, keepdims), m, p,
                              log_ratio_bound(full, axis, p));
-    return mul_op(slope, scale);
+    return mul_op(quasi_slope(A, magnitude, m, p), scale);
+}
+
+// ``sign(u) |u|^(p-1)`` of the ratio ``u = A / N`` for an order of at least 1, written
+// ``u |u|^(p-2)`` where that is as good: one op fewer.  From p = 3 up, and from p > 2 when nothing
+// is recorded, the slope of ``|u|^(p-2)`` is finite at 0 (or only the value is wanted).  In (2, 3)
+// a recorded graph keeps ``|u|^(p-1)``, whose slope ``(p-1) |u|^(p-2)`` is finite there, where
+// ``|u|^(p-2)``'s infinite slope would meet the zero factor ``u``.  Below 2 even ``|u|^(p-1)`` has
+// an infinite slope at a zero entry, and that ``inf * 0`` (through ``sign``'s zero slope) is a NaN
+// that the cotangent sum of ``N`` carries to every entry of the slice, so a recorded graph of
+// ``p = 1`` takes the power of 1 at a zero entry instead (its slope is ``sign(0) = 0`` either way,
+// the value is the same, and only that entry's own second derivative differs: 0, where the true
+// Hessian is infinite).  A recorded graph of an order in (0, 1) or (1, 2) is
+// :func:`recorded_grad`'s.
+TensorImplPtr ratio_slope(const TensorImplPtr& u, double p, bool recorded) {
+    if (p == 2.0)
+        return u;
+    if (p == 3.0)
+        return mul_op(u, abs_op(u));
+    if (p > 3.0 || (p > 2.0 && !recorded))
+        return mul_op(u, pow_scalar_op(abs_op(u), p - 2.0));
+    auto magnitude = abs_op(u);
+    if (recorded && p < 2.0)
+        magnitude = masked_fill_op(magnitude, equal_op(magnitude, zeros_like_op(magnitude)), 1.0);
+    return mul_op(sign_op(u), pow_scalar_op(magnitude, p - 1.0));
+}
+
+// ``dA`` of an order in (0, 1) or (1, 2) as a recorded graph: ``sign(A) (|A| / N)^(p-1) * dN``
+// written so that no backward of it forms an intermediate outside float32 when its answer is in.
+//
+// Below p = 2 the power ``|x|^(p-1)`` has the slope ``(p-1) |x|^(p-2)``, huge for an entry far
+// below the norm, and the second derivative walks it.  Through the ratio ``u = |A| / N`` the
+// cotangent ``w`` met ``|u|^(p-2)`` before the division by ``N`` that brings the product back
+// (``w`` ~ 1e20, ``u`` = 1e-30, p = 1.1: 1e47 on the way to the answer 1e27).  Nothing that
+// divides by ``N`` can come earlier in a chain that starts at ``u``.  A single unit per slice
+// (the largest entry, ``N``; the smallest) only moves the failure: the smallest entry's partial
+// product overflows in the first, the largest entry's underflows in the second (Metal flushes
+// it: a slice from 1 to 1e-35 with a cotangent of 1e-3).  The unit that cannot fail is the
+// entry's own.
+//
+// The slope is therefore written as the power law that agrees with it at the point:
+//
+//     sign(A) (|A| / N)^(p-1) = G * (|A| / |A_c|)^(p-1)    [* (N / N_c)^(1-p) for p > 1]
+//
+// where ``G`` is the eager slope and ``A_c``, ``N_c`` are the values of ``A`` and ``N``, constants
+// of the call.  The identity holds for every ``A``, so the function, and with it every derivative
+// order, is the gradient's.  The base ``|A| / |A_c|`` is 1: ``(p-1) 1^(p-2)`` is the power's
+// slope whatever the entry's size, the cotangent meets the norm's factor and ``G`` first and
+// ``1 / |A_c|`` last, and the largest partial product of an entry is its answer times ``|A_c|``
+// (``w G`` for p > 1: at most ``w``).  For p < 1 that is an entry above 1 whose answer is within a
+// factor of its size of float32's range, the one place a quasi-norm still overflows with an
+// answer that fits.  A higher derivative differentiates the same factors and stays in each
+// entry's own unit, so it is as scale-free as the ratio form was.  The value is ``G * 1 * scale``:
+// the eager gradient, to the bit.
+//
+// What multiplies the slope is the norm's factor, the reduced ``scale``: :func:`quasi_scale` for
+// p < 1 (the whole of LCD-1009's / LCD-1017's range handling, with the cotangent folded in where
+// it keeps the partial products in range), ``(N / N_c)^(1-p) dN`` for p > 1, whose first factor
+// is 1 and whose slope ``(1-p) / N_c`` is the norm's.  ``N_c`` is ``N`` where that is finite and 1
+// where it is not: an infinite norm is divided by 1, which gives the factor 0, as the ratio form
+// gave the gradient 0.
+//
+// ``G`` comes from the code the eager path runs (:func:`ratio_slope`, :func:`quasi_slope`).  A
+// zero entry has ``G = 0`` and takes the base 1 (the power is infinite there): its slope is
+// ``sign(0) = 0``, and its own second derivative is 0 where the true Hessian diagonal is infinite.
+TensorImplPtr recorded_grad(const TensorImplPtr& A,
+                            const TensorImplPtr& n_safe,
+                            const TensorImplPtr& d_live,
+                            double p,
+                            const Shape& full,
+                            const std::vector<int>& axis,
+                            bool keepdims) {
+    auto n = keepdim_view(n_safe, full, axis, keepdims);
+    auto d = keepdim_view(d_live, full, axis, keepdims);
+    auto magnitude = abs_op(A);
+    TensorImplPtr slope, scale, zero, unit;
+    {
+        NoGradGuard ng;
+        zero = equal_op(magnitude, zeros_like_op(magnitude));
+        unit = masked_fill_op(magnitude, zero, 1.0);
+    }
+    if (p < 1.0) {
+        auto top = slice_top(magnitude, full, axis);
+        {
+            NoGradGuard ng;
+            slope = quasi_slope(A, magnitude, top, p);
+        }
+        scale = quasi_scale(n, d, top, p, log_ratio_bound(full, axis, p));
+    } else {
+        TensorImplPtr n_c;
+        {
+            NoGradGuard ng;
+            slope = ratio_slope(div_op(A, n), p, false);
+            n_c = mul_op(n, ones_like_op(n));
+            n_c = where_op(isfinite_op(n_c), n_c, ones_like_op(n_c));
+        }
+        scale = mul_op(pow_scalar_op(div_op(n, n_c), 1.0 - p), d);
+    }
+    auto base = masked_fill_op(div_op(magnitude, unit), zero, 1.0);
+    return mul_op(mul_op(slope, pow_scalar_op(base, p - 1.0)), scale);
 }
 
 }  // namespace
@@ -406,36 +512,17 @@ TensorImplPtr PNormBackward::grad_from(const TensorImplPtr& A,
     auto n_safe = masked_fill_op(N, zero, 1.0);
     auto d_live = masked_fill_op(dN, zero, 0.0);
     const Shape& full = input_shapes_[0];
+    const bool recorded = GradMode::is_enabled();
+    // A recorded graph below p = 2 is walked by the second derivative, whose cotangent must
+    // not meet ``|u|^(p-2)`` before the division by ``N`` (:func:`recorded_grad`).  Eager mode
+    // has no second walk: the ratio form (p > 1) and :func:`quasi_grad` (p < 1) are cheaper.
+    if (recorded && p_ < 2.0 && p_ != 1.0)
+        return recorded_grad(A, n_safe, d_live, p_, full, axis_, keepdims_);
     if (p_ < 1.0)
         return quasi_grad(A, n_safe, d_live, p_, full, axis_, keepdims_);
     // ``u = A / N``, in [-1, 1]: the slope never forms a power of the norm.
     auto u = div_op(A, keepdim_view(n_safe, full, axis_, keepdims_));
-    // ``sign(u) |u|^(p-1)``, written ``u |u|^(p-2)`` where that is as good: one op
-    // fewer.  From p = 3 up, and from p > 2 when nothing is recorded, the slope of
-    // ``|u|^(p-2)`` is finite at 0 (or only the value is wanted).  In (2, 3) a
-    // recorded graph keeps ``|u|^(p-1)``, whose slope ``(p-1) |u|^(p-2)`` is finite
-    // there, where ``|u|^(p-2)``'s infinite slope would meet the zero factor ``u``.
-    // Below 2 even ``|u|^(p-1)`` has an infinite slope at a zero entry, and that
-    // ``inf * 0`` (through ``sign``'s zero slope) is a NaN that the cotangent sum of
-    // ``N`` carries to every entry of the slice, so a recorded graph takes the power
-    // of 1 at a zero entry instead: its slope is ``sign(0) = 0`` either way, the
-    // value is the same, and only that entry's own second derivative differs (0,
-    // where the true Hessian is infinite).  Orders below 1 are :func:`quasi_grad`'s.
-    const bool recorded = GradMode::is_enabled();
-    TensorImplPtr slope;
-    if (p_ == 2.0) {
-        slope = u;
-    } else if (p_ == 3.0) {
-        slope = mul_op(u, abs_op(u));
-    } else if (p_ > 3.0 || (p_ > 2.0 && !recorded)) {
-        slope = mul_op(u, pow_scalar_op(abs_op(u), p_ - 2.0));
-    } else {
-        auto magnitude = abs_op(u);
-        if (recorded && p_ < 2.0)
-            magnitude =
-                masked_fill_op(magnitude, equal_op(magnitude, zeros_like_op(magnitude)), 1.0);
-        slope = mul_op(sign_op(u), pow_scalar_op(magnitude, p_ - 1.0));
-    }
+    auto slope = ratio_slope(u, p_, recorded);
     return mul_op(slope, keepdim_view(d_live, full, axis_, keepdims_));
 }
 
