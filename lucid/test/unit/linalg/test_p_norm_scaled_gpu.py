@@ -25,8 +25,12 @@ from lucid.test._fixtures.tolerance_guard import noise_when_below
 TINY = [1e-20, 1e-30, 1e-37]
 HUGE = [1e25, 1e30, 1e36]
 ORDERS = [1.5, 2.0, 3.5]
-#: Below 1: 1/2 (the root is a square), 1/4 (4x amplification), 3/4 (a non-dyadic ``1/p``).
-QUASI_ORDERS = [0.25, 0.5, 0.75]
+#: Below 1: 1/2 (the root is a square), 1/4 (4x amplification), 3/4 and 9/10 (a non-dyadic
+#: ``1/p``), 1/5.
+QUASI_ORDERS = [0.2, 0.25, 0.5, 0.75, 0.9]
+#: 1/10 and 1/20: the norm of 1e4 unit entries at 1/10 is 1e40, past float32, so only short slices
+#: take them.
+TINY_ORDERS = [0.05, 0.1]
 
 
 def _t(a: np.ndarray, device: str, **kw: object) -> lucid.Tensor:
@@ -150,6 +154,78 @@ def test_nan_and_inf_survive_the_chunk_combine(device_gpu_only: str, width: int,
     arr[2, width - 1] = np.nan
     got = LA.vector_norm(_t(arr, device_gpu_only), p, dim=1).numpy()
     assert math.isnan(got[0]) and got[1] == math.inf and math.isnan(got[2])
+
+
+@pytest.mark.parametrize("p", TINY_ORDERS)
+@pytest.mark.parametrize(("shape", "dim"), [((7,), None), ((5, 9), 1), ((5, 9), 0), ((6, 3), 0)])
+def test_tiny_orders_match_float64_on_short_slices(
+    device_gpu_only: str, shape: tuple[int, ...], dim: object, p: float
+) -> None:
+    rng = np.random.default_rng(2)
+    arr = rng.standard_normal(shape).astype(np.float32)
+    got = LA.vector_norm(_t(arr, device_gpu_only), p, dim=dim).numpy()
+    want = _truth(arr, p, dim)
+    assert got.shape == want.shape
+    # The root multiplies the sum's rounding by 1/p: 10x at 1/10, 20x at 1/20 (8.4 ulp measured).
+    assert _ulps(got, want) < (12 if p < 0.1 else 6)
+
+
+#: A slice whose smallest entries are 40 or more decades below its largest: the ratio underflows
+#: float32 (Metal flushes below 1.18e-38) but ``r^p > r`` is not negligible below 1.
+WIDE_SLICES = [
+    np.array([1e20] + [1e-20] * 1000, dtype=np.float32),
+    np.array([1e10] + [1e-30] * 10, dtype=np.float32),
+    np.array([3e38] + [1e-10] * 10, dtype=np.float32),
+    np.array([1e20] + [1e-20] * 1_000_000, dtype=np.float32),
+]
+
+
+@pytest.mark.parametrize("p", [0.05, 0.1, 0.2, 0.25, 0.5, 0.75, 0.9])
+@pytest.mark.parametrize("index", range(len(WIDE_SLICES)))
+def test_small_entries_beside_a_huge_one_keep_their_powers(
+    device_gpu_only: str, index: int, p: float
+) -> None:
+    """The largest-first reductions of the p > 1 kernels read an underflowed ratio as nothing,
+    which for ``p = 0.1`` and a ratio of 1e-40 lost 61% of the norm; the term is ``|x|^p / m^p``."""
+    arr = WIDE_SLICES[index]
+    got = LA.vector_norm(_t(arr, device_gpu_only), p).item()
+    want = float(_truth(arr, p))
+    if want > 3.4e38:
+        assert got == math.inf
+    else:
+        assert got == pytest.approx(want, rel=2e-6, abs=0)
+
+
+@pytest.mark.parametrize("width", [1000, 100000, 600000])
+@pytest.mark.parametrize("p", [0.1, 0.25])
+def test_a_chunk_that_is_wholly_tiny_still_adds_its_power(
+    device_gpu_only: str, width: int, p: float
+) -> None:
+    """The fold rescales a chunk by ``m_a^p / m^p``; ``m_a / m`` is 1e-40 here and flushes."""
+    arr = np.full(width, 1e-20, dtype=np.float32)
+    arr[0] = 1e20
+    got = LA.vector_norm(_t(arr, device_gpu_only), p).item()
+    want = float(_truth(arr, p))
+    if want > 3.4e38:
+        assert got == math.inf
+    else:
+        assert got == pytest.approx(want, rel=2e-6, abs=0)
+
+
+@pytest.mark.parametrize(
+    ("p", "count", "value", "want"),
+    [(0.1, 10000, 1e-3, 1e37), (0.05, 100, 1e-5, 1e35), (0.1, 10000, 1e-2, 1e38)],
+)
+def test_a_root_past_float32_whose_product_is_in_range_is_not_inf(
+    device_gpu_only: str, p: float, count: int, value: float, want: float
+) -> None:
+    """``(count * value^p)^(1/p) = value * count^(1/p)``: ``count^(1/p)`` alone is 1e40."""
+    arr = np.full(count, value, dtype=np.float32)
+    got = LA.vector_norm(_t(arr, device_gpu_only), p).item()
+    assert got == pytest.approx(want, rel=2e-6, abs=0)
+    assert LA.vector_norm(_t(arr * np.float32(10.0), device_gpu_only), p).item() == (
+        pytest.approx(want * 10.0, rel=2e-6, abs=0) if want < 3.4e37 else math.inf
+    )
 
 
 @pytest.mark.parametrize("p", QUASI_ORDERS)

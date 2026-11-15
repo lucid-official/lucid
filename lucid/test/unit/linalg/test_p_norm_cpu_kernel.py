@@ -31,8 +31,12 @@ from lucid._ops import _reduce
 from lucid.compile import _tracing
 from lucid.linalg import _norm_scale
 
-#: The quasi-norms: 1/2 is a square root (the plain double sum), 1/4 and 3/4 are vForce on ratios.
-QUASI_ORDERS = [0.25, 0.5, 0.75]
+#: The quasi-norms.  1/2 and 1/4 are square roots (the plain double sum), 1/5 is vForce in double
+#: on the raw magnitudes (below 1/2 an underflowed ratio's power is not negligible), 3/4 and 9/10
+#: are vForce on ratios.
+QUASI_ORDERS = [0.2, 0.25, 0.5, 0.75, 0.9]
+#: 1/10: the norm of 1e4 unit entries is 1e40, past float32, so only short slices take it.
+TINY_ORDERS = [0.1]
 #: Orders taking each kernel path: 3/2, 2, 3, 4 (multiplications), 6 (the float limit of the
 #: plain double sum), 2.7 (vForce blocks), 7.5 (rescaled, a half-integer order past the limit),
 #: and the quasi-norms.
@@ -98,7 +102,7 @@ LAYOUTS = [
 
 @pytest.mark.parametrize("keepdim", [False, True])
 @pytest.mark.parametrize(("shape", "axes"), LAYOUTS)
-@pytest.mark.parametrize("p", ORDERS)
+@pytest.mark.parametrize("p", ORDERS + TINY_ORDERS)
 @pytest.mark.parametrize(("dtype", "tol"), [(lucid.float32, 3e-6), (lucid.float64, 1e-12)])
 def test_the_kernel_matches_the_float64_norm_over_every_layout(
     device_cpu_only: str,
@@ -214,6 +218,54 @@ def test_a_quasi_norm_slice_at_the_edge_of_the_range_keeps_its_norm(
     assert got == pytest.approx(_norm(x.tolist(), p), rel=1e-5, abs=0)
 
 
+#: A slice whose smallest entries are 40 or more decades below its largest.
+WIDE_SLICES = [
+    [1e20] + [1e-20] * 1000,
+    [1e10] + [1e-30] * 10,
+    [3e38] + [1e-10] * 10,
+]
+
+
+@pytest.mark.parametrize("p", [0.05, 0.1, 0.2, 0.25, 0.5, 0.75, 0.9])
+@pytest.mark.parametrize(
+    "values", WIDE_SLICES, ids=["1e20_1e-20x1000", "1e10_1e-30x10", "3e38_1e-10x10"]
+)
+def test_small_entries_beside_a_huge_one_keep_their_powers(
+    device_cpu_only: str, values: list[float], p: float
+) -> None:
+    """Below 1 ``r^p > r``: an entry whose ratio to the largest underflows float32 still adds
+    ``r^p`` (1e-5 for a ratio of 1e-49 at p = 0.1) to a sum whose largest term is 1."""
+    x = lucid.tensor(values)
+    got = lucid.linalg.vector_norm(x, p).item()
+    want = _norm(x.tolist(), p)
+    if want > 3.4e38:
+        assert got == math.inf
+    else:
+        assert got == pytest.approx(want, rel=1e-5, abs=0)
+
+
+@pytest.mark.parametrize("p", [0.25, 0.5])
+def test_a_million_tiny_entries_beside_a_huge_one_keep_their_powers(
+    device_cpu_only: str, p: float
+) -> None:
+    """Their ratios (1e-40) are subnormal float32 and their powers sum to 1e-4 of the largest's."""
+    x = lucid.tensor([1e20] + [1e-20] * 1_000_000)
+    got = lucid.linalg.vector_norm(x, p).item()
+    assert got == pytest.approx(_norm(x.tolist(), p), rel=1e-6, abs=0)
+
+
+@pytest.mark.parametrize(
+    ("p", "count", "value", "want"),
+    [(0.1, 10000, 1e-3, 1e37), (0.05, 100, 1e-5, 1e35), (0.1, 10000, 1e-2, 1e38)],
+)
+def test_a_root_past_float32_whose_product_is_in_range_is_not_inf(
+    device_cpu_only: str, p: float, count: int, value: float, want: float
+) -> None:
+    """``(count * value^p)^(1/p) = value * count^(1/p)``: ``count^(1/p)`` alone is 1e40."""
+    got = lucid.linalg.vector_norm(lucid.full((count,), value), p).item()
+    assert got == pytest.approx(want, rel=1e-5, abs=0)
+
+
 def test_a_quasi_norm_that_overflows_float32_is_inf_and_not_nan(device_cpu_only: str) -> None:
     """``(sum |x|^(1/4))^4`` of four entries near 3e37 is ~4e39: past float32, a true overflow."""
     x = lucid.tensor([3e37, 3e37, 3e37, 3e37])
@@ -235,7 +287,7 @@ def test_a_float64_slice_at_the_edge_of_the_range_keeps_its_norm(
 
 
 @pytest.mark.parametrize("dtype", [lucid.float32, lucid.float64])
-@pytest.mark.parametrize("p", [1.5, 3.0, 2.7, 7.5] + QUASI_ORDERS)
+@pytest.mark.parametrize("p", [1.5, 3.0, 2.7, 7.5] + QUASI_ORDERS + TINY_ORDERS)
 def test_a_nan_an_infinity_and_a_zero_slice_answer_as_themselves(
     device_cpu_only: str, dtype: lucid.dtype, p: float
 ) -> None:
@@ -248,7 +300,7 @@ def test_a_nan_an_infinity_and_a_zero_slice_answer_as_themselves(
 
 
 @pytest.mark.parametrize("dtype", [lucid.float32, lucid.float64])
-@pytest.mark.parametrize("p", [1.5, 3.0, 2.7, 7.5] + QUASI_ORDERS)
+@pytest.mark.parametrize("p", [1.5, 3.0, 2.7, 7.5] + QUASI_ORDERS + TINY_ORDERS)
 def test_the_columns_of_a_matrix_answer_as_themselves(
     device_cpu_only: str, dtype: lucid.dtype, p: float
 ) -> None:
@@ -311,6 +363,7 @@ def _impl(dtype: lucid.dtype = lucid.float32, device: str = "cpu", n: int = 6) -
         (1.5, lucid.float32, True),
         (0.5, lucid.float32, True),  # a quasi-norm: its second derivative left the range too
         (0.25, lucid.float64, True),
+        (0.1, lucid.float32, True),
         (0.75, lucid.float32, True),
         (2.0, lucid.float32, False),  # the plain graph's root has no window problem
         (1.0, lucid.float32, False),  # a sum of magnitudes, no power
@@ -411,7 +464,7 @@ def test_the_kernel_agrees_with_the_plain_graph_at_moderate_magnitudes(
 
 
 @pytest.mark.parametrize("dtype", [lucid.float32, lucid.float64])
-@pytest.mark.parametrize("p", [1.5, 2.7, 3.0, 7.5] + QUASI_ORDERS)
+@pytest.mark.parametrize("p", [1.5, 2.7, 3.0, 7.5] + QUASI_ORDERS + TINY_ORDERS)
 @pytest.mark.parametrize(
     ("shape", "axes"),
     [

@@ -21,6 +21,7 @@ The closed forms are plain Python float64 from the float32 values read back from
 
 import itertools
 import math
+import random
 
 import pytest
 
@@ -33,7 +34,7 @@ DIRECTION = [0.3, -1.0, 0.5, 2.0, -0.7]
 SECOND = [-0.4, 0.9, 1.3, -0.2, 0.6]
 ORDERS = [1.5, 2.0, 2.5, 3.0, 4.0, 6.0]
 #: The quasi-norms, whose power's slope ``|u|^(p-1)`` is infinite at a zero entry.
-QUASI_ORDERS = [0.25, 0.5, 0.75]
+QUASI_ORDERS = [0.1, 0.2, 0.25, 0.5, 0.75, 0.9]
 #: Decades across (nearly) the float32 range, plus the edges of both bands the plain graph lost.
 MAGNITUDES = sorted({10.0**e for e in range(-30, 31, 5)} | {1e-10, 1e-9, 1e-8, 1e-7, 1e6, 1e8, 1e9})
 
@@ -314,3 +315,20 @@ def test_a_quasi_norm_slice_spanning_thirty_decades_keeps_every_gradient_entry(
     for i, (got, ref) in enumerate(zip(g.tolist(), want, strict=True)):
         assert got - got == 0.0, f"entry {i} is {got}, want {ref}"
         assert abs(got - ref) <= 3e-5 * abs(ref), f"entry {i}: {got} vs {ref}"
+
+
+@pytest.mark.parametrize(("p", "count"), [(0.05, 64), (0.1, 64), (0.1, 4096), (0.2, 4096)])
+def test_a_slope_whose_ratio_to_the_norm_underflows_is_not_read_as_a_zero_entry(
+    device: str, p: float, count: int
+) -> None:
+    """``N`` is ``n^(1/p)`` times the largest entry, so for ``p = 0.1`` and 4096 entries the ratio
+    ``|x| / N`` of an ordinary entry is ~1e-37 (Metal flushes below 1.2e-38 to 0, which the
+    zero-entry mask read as a zero entry: a gradient of 0 for a slope of 1e33) while the slope
+    ``(|x| / N)^(p-1)`` is a good float.  It is formed relative to the largest magnitude."""
+    rng = random.Random(count)
+    x = _leaf([rng.gauss(0.0, 1.0) for _ in range(count)], device)
+    (g,) = grad(lucid.linalg.vector_norm(x, ord=p), [x])
+    want = _norm_and_slope(x.tolist(), p)[2]
+    for i, (got, ref) in enumerate(zip(g.tolist(), want, strict=True)):
+        assert got - got == 0.0 and got != 0.0, f"entry {i} is {got}, want {ref}"
+        assert abs(got - ref) <= 1e-4 * abs(ref), f"entry {i}: {got} vs {ref}"
