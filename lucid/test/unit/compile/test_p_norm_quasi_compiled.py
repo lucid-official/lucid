@@ -310,8 +310,9 @@ def test_a_root_past_float32_whose_product_is_in_range_is_not_inf(
 def test_the_gradient_at_a_root_past_float32_is_the_closed_form(
     p: float, count: int, value: float
 ) -> None:
-    """The slope ``(x / N)^(p-1) = (1e-40)^(-0.9)`` is 1e36, an ordinary float; eager forms
-    ``N / d = 1e40`` on the way and answers ``inf`` there (see the strict xfail below)."""
+    """The slope ``(x / N)^(p-1) = (1e-40)^(-0.9)`` is 1e36, an ordinary float: the compiled VJP
+    takes ``s^((1-p)/p)`` rather than forming ``N / d = 1e40``.  The eager side is covered by
+    LCD-1017 (``test_the_eager_gradient_at_a_root_past_float32_is_finite`` below)."""
     arr = np.full((1, count), value, dtype=np.float32)
     got, _ = _compiled_grad(arr, p)
     want = _truth_grad(arr, p)
@@ -319,10 +320,6 @@ def test_the_gradient_at_a_root_past_float32_is_the_closed_form(
     assert _ulps(got, want) < GRAD_ULP[p]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-1015 FOUND: eager quasi_grad forms N / m past float32 (1e40) where the slope is 1e36",
-)
 def test_the_eager_gradient_at_a_root_past_float32_is_finite() -> None:
     arr = np.full((1, 10000), 1e-3, dtype=np.float32)
     assert np.all(np.isfinite(_eager_grad(arr, 0.1)))
