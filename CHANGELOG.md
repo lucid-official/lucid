@@ -307,6 +307,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - finite quasi p-norm gradient where N/m overflows (LCD-1017)
 
+- no NaN from the exponent tail at an inf base (LCD-1017)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

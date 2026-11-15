@@ -294,7 +294,10 @@ TensorImplPtr pow_by_parts(const TensorImplPtr& x, double e, double log_base) {
     TensorImplPtr tail;
     {
         NoGradGuard ng;
-        tail = pow_scalar_op(x, e - head);
+        // An infinite base has the power ``inf`` for a positive tail and 0 for a negative one,
+        // and the head's ``inf`` times that 0 is NaN: the correction is 1 where there is
+        // nothing to correct.  A NaN base keeps its NaN through the head.
+        tail = where_op(isfinite_op(x), pow_scalar_op(x, e - head), ones_like_op(x));
     }
     return mul_op(pow_scalar_op(x, head), tail);
 }
