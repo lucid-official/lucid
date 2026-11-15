@@ -2,8 +2,10 @@
   "comment": [
     "Where Lucid's answer to a bool operand departs from the reference's, as of 2026-11-15 (LCD-1020).",
     "Measured by lucid/test/unit/ops/test_bool_refusal_sweep.py against dtype_contract.json.",
-    "This file only shrinks: a deviation that is not listed fails the sweep, and so does a listed one",
-    "that no longer deviates -- delete the entry in the commit that fixes it.",
+    "A deviation that is not listed fails the sweep, and so does a listed one that no longer deviates:",
+    "delete the entry in the commit that fixes it, so the file shrinks as fixes land.  Add an entry",
+    "only for a pre-existing deviation a newer measurement (a regenerated contract, a wider census)",
+    "turns up -- never to excuse a refusal a change of yours removed.",
     "kind: over-accept (the reference refuses, Lucid answers), class (both refuse, NotImplementedError",
     "vs a plain RuntimeError), non-runtime (Lucid's refusal is not a RuntimeError), over-refuse",
     "(the reference answers, Lucid refuses).",
@@ -132,30 +134,10 @@
       "owner": "out-of-batch",
       "reason": "refuses through an inner op (a DtypeMismatch from mul); the reference raises NotImplementedError"
     },
-    "F.grid_sample": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "the engine's grid_sample schema refuses a bool image; F.grid_sample casts it with _as_real before the engine sees it, so a Python-entry refusal is what is left"
-    },
     "F.gumbel_softmax": {
       "kind": "class",
       "owner": "out-of-batch",
       "reason": "refuses through the sampler (NotImplementedError); the reference raises RuntimeError"
-    },
-    "F.hardshrink": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
-    },
-    "F.hardtanh": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
-    },
-    "F.hardtanh_": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
     },
     "F.huber_loss": {
       "kind": "non-runtime",
@@ -166,11 +148,6 @@
       "kind": "class",
       "owner": "out-of-batch",
       "reason": "refuses through mean (DtypeMismatch); the reference raises NotImplementedError"
-    },
-    "F.interpolate": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite resamples a bool input; a BOOL_REFUSED row is missing"
     },
     "F.kl_div": {
       "kind": "non-runtime",
@@ -245,11 +222,6 @@
       "owner": "out-of-batch",
       "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
     },
-    "F.prelu": {
-      "kind": "class",
-      "owner": "LCD-1020-A1",
-      "reason": "raises DtypeMismatch from the engine relu it builds on (the reference raises NotImplementedError); a BOOL_REFUSED row (kernel) at the Python composite fixes it"
-    },
     "F.rms_norm": {
       "kind": "non-runtime",
       "owner": "out-of-batch",
@@ -278,25 +250,10 @@
       "owner": "out-of-batch",
       "reason": "refuses through an inner op (a DtypeMismatch from mul); the reference raises NotImplementedError"
     },
-    "F.softshrink": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
-    },
     "F.tanhshrink": {
       "kind": "non-runtime",
       "owner": "out-of-batch",
       "reason": "refuses with a plain TypeError; the reference raises a RuntimeError or NotImplementedError"
-    },
-    "F.threshold": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
-    },
-    "F.threshold_": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
     },
     "F.triplet_margin_loss": {
       "kind": "non-runtime",
@@ -307,21 +264,6 @@
       "kind": "non-runtime",
       "owner": "out-of-batch",
       "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.upsample": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite resamples a bool input; a BOOL_REFUSED row is missing"
-    },
-    "F.upsample_bilinear": {
-      "kind": "non-runtime",
-      "owner": "LCD-1020-A1",
-      "reason": "refuses with a plain TypeError (mode 'bilinear' needs a float); the reference raises NotImplementedError; refused once interpolate's BOOL_REFUSED row is in"
-    },
-    "F.upsample_nearest": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite resamples a bool input; a BOOL_REFUSED row is missing"
     },
     "Tensor.allclose": {
       "kind": "over-refuse",
@@ -342,16 +284,6 @@
       "kind": "class",
       "owner": "out-of-batch",
       "reason": "NotImplementedError from the sampler; the reference raises a RuntimeError"
-    },
-    "Tensor.clamp": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "clamp with two tensor bounds on a bool tensor computes; the reference raises NotImplementedError"
-    },
-    "Tensor.clip": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "clamp with two tensor bounds on a bool tensor computes; the reference raises NotImplementedError"
     },
     "Tensor.exponential_": {
       "kind": "class",
@@ -377,16 +309,6 @@
       "kind": "class",
       "owner": "out-of-batch",
       "reason": "refuses with LucidError (not NotImplementedError) for a non-F32/F64 dtype"
-    },
-    "Tensor.pow": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "pow(bool, bool) computes; the reference refuses a tensor exponent (b ** True answers)"
-    },
-    "Tensor.pow_": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "pow(bool, bool) computes; the reference refuses a tensor exponent (b ** True answers)"
     },
     "Tensor.topk": {
       "kind": "class",
@@ -548,11 +470,6 @@
       "owner": "out-of-batch",
       "reason": "refuses with a plain TypeError; the reference raises a RuntimeError"
     },
-    "lucid.linalg.vecdot": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
-    },
     "lucid.logdet": {
       "kind": "class",
       "owner": "out-of-batch",
@@ -578,30 +495,15 @@
       "owner": "probe-artifact",
       "reason": "an initialiser fills its argument in place; a bool destination is not a computation on a bool operand"
     },
-    "lucid.pow": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "pow(bool, bool) computes; the reference refuses a tensor exponent (b ** True answers)"
-    },
     "lucid.randint": {
       "kind": "over-accept",
       "owner": "probe-artifact",
       "reason": "the probe rebuilds a size or range argument (eye's n, randint's low) as a bool tensor; it is not an operand"
     },
-    "lucid.special.gammainc": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
-    },
-    "lucid.special.gammaincc": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
-    },
     "lucid.special.multigammaln": {
       "kind": "over-accept",
       "owner": "LCD-1020-A1",
-      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
+      "reason": "Python composite never reads the dtype; the BOOL_REFUSED row and the entry check are pending: lucid/special/__init__.py was claimed by LCD-1030 when LCD-1020-A1 ran"
     },
     "lucid.topk": {
       "kind": "class",

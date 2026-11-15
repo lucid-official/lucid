@@ -2,8 +2,9 @@
 
 Both refuse a bool sequence searched by bool values, as the reference's CPU
 does (a kernel it has no bool instantiation of -- LCD-1013,
-:mod:`lucid._ops._bool_refusal`); a sequence and values that differ in dtype
-are the engine's to reconcile, and it reconciles them as it always did.
+:mod:`lucid._ops._bool_refusal`).  A sequence and values that differ in dtype
+are not refused here: the reference promotes a bool beside another dtype and
+answers, where Lucid's engine raises ``DtypeMismatch`` (LCD-1021).
 """
 
 from typing import TYPE_CHECKING

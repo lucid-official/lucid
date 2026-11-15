@@ -27,7 +27,7 @@ from lucid._dispatch import (
     _unwrap_or_scalar,
 )
 from lucid._dtype import _ENGINE_TO_DTYPE
-from lucid._ops._bool_refusal import bool_refusal
+from lucid._ops._bool_refusal import bool_refusal, refuse_bool_power
 from lucid._ops._dims import (
     _dim_size,
     _kept_sizes,
@@ -128,6 +128,25 @@ def _scale_by_alpha(a: _Impl, b: _Impl, alpha: Scalar, name: str = "alpha") -> _
     return _C_engine.mul(b, _C_engine.astype(scale, b.dtype) if scale.dtype != b.dtype else scale)
 
 
+def _power_operands(
+    base: object, exponent: object, *, inplace: bool = False
+) -> tuple[_Impl, _Impl]:
+    """``base`` and ``exponent`` at the dtype ``base ** exponent`` computes in.
+
+    The one operand path behind ``pow``, ``pow_`` and the three power
+    operators (``**``, its reflected and in-place forms): promotion through
+    :func:`~lucid._dispatch._binary_operands`, an exponent the in-place form
+    cannot hold refused, and a bool power refused where the reference refuses
+    it (:func:`~lucid._ops._bool_refusal.refuse_bool_power`).
+    """
+    base_impl = _promotion.try_unwrap(base)
+    if inplace and base_impl is not None:
+        _promotion.check_pow_scalar(base_impl.dtype, exponent)
+    a, b = _binary_operands(base, exponent, inplace=inplace)
+    refuse_bool_power("pow_" if inplace else "pow", exponent, a)
+    return a, b
+
+
 def _make_arith_adapter(
     engine_fn: Callable[[_Impl, _Impl], _Impl], *, inplace: bool = False
 ) -> Callable[..., _Impl]:
@@ -162,7 +181,7 @@ def _make_arith_adapter(
     subtracts = engine_fn in (_C_engine.sub, _C_engine.sub_)
     adds_or_subtracts = subtracts or engine_fn in (_C_engine.add, _C_engine.add_)
     powers = engine_fn is _C_engine.pow
-    powers_inplace = engine_fn is _C_engine.pow_
+    raises_to_power = powers or engine_fn is _C_engine.pow_
     opmath = engine_fn in _OPMATH_OPS
 
     # Positional-only: the wrappers bind the advertised names to position
@@ -174,9 +193,11 @@ def _make_arith_adapter(
             scalar = _scalar_power(input, other)
             if scalar is not None:
                 return scalar
-        elif powers_inplace and isinstance(input, _C_engine.TensorImpl):
-            _promotion.check_pow_scalar(input.dtype, other)
-        a, b = _binary_operands(input, other, opmath=opmath, inplace=inplace)
+        a, b = (
+            _power_operands(input, other, inplace=inplace)
+            if raises_to_power
+            else _binary_operands(input, other, opmath=opmath, inplace=inplace)
+        )
         if adds_or_subtracts:
             alpha = _promotion.as_number(alpha)
             if alpha != 1 or isinstance(alpha, (bool, float)):
@@ -1068,11 +1089,12 @@ def _clip_dtype(
     """The dtype ``clip(x, min, max)`` computes in: ``x``'s, promoted with its bounds.
 
     One rule for ``clamp`` and ``clamp_``: the in-place form refuses a dtype
-    ``x`` cannot hold where this one returns it.  A bool tensor clamped to a
-    bool *number* is the one bool clamp the reference's CPU refuses (a bool
-    kernel for a number bound does not exist; bool bounds that are tensors,
-    and number bounds that promote the result to an integer or float, are
-    answered), so it is refused here for both.
+    ``x`` cannot hold where this one returns it.  A bool result is the one
+    the reference's CPU refuses for a number bound (no bool kernel exists for
+    it) and for a pair of tensor bounds; a single tensor bound is answered
+    by ``minimum`` / ``maximum``, and a number that promotes the result to an
+    integer or float leaves nothing bool to refuse.  It is refused here for
+    ``clamp`` and ``clamp_`` alike.
     """
     if min is None and max is None:
         raise ValueError("clamp: at least one of min or max must be given")
@@ -1082,7 +1104,7 @@ def _clip_dtype(
         if b is not None
     ]
     dtype = _promotion.result_type(x_impl, *bounds)
-    if dtype == _C_engine.Bool and any(isinstance(b, _promotion.NUMBER) for b in bounds):
+    if dtype == _C_engine.Bool and (len(bounds) == 2 or isinstance(bounds[0], _promotion.NUMBER)):
         raise bool_refusal("clamp", "bound on a bool tensor")
     return dtype
 

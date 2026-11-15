@@ -1,4 +1,4 @@
-"""The ops that refuse a bool tensor, in one table (LCD-1013).
+"""The ops that refuse a bool tensor, and who refuses them (LCD-1013, LCD-1020).
 
 The reference's CPU backend turns a bool operand away from a long list of
 ops -- a kernel with no bool instantiation raises ``NotImplementedError``, a
@@ -9,16 +9,30 @@ value, not a count or a magnitude, so the program that meant one of those
 casts at the call site (``mask.float().mean()``) and the one that did not
 learns of it where it happened.
 
-This module is the one owner of that rule.  :data:`BOOL_REFUSED` names every
-op that refuses bool and the class the reference raises for it; the op's
-entry points (registry entry, adapter, composite, ``nn.functional``) each
-call :func:`refuse_bool` / :func:`bool_refusal` with the op's name, so the
-error class and the message never diverge between a free function, its
-``Tensor`` method and the in-place twin.  The test table
-``lucid/test/unit/ops/test_bool_refusal_table.py`` pins every row against the
-reference and reads this table to prove no refusing op is missing from it.
+The rule has one owner per layer, and an op has exactly one of them:
+
+* An op with an engine schema (``abs``, ``relu``, ``softmax``, ``mean``, the
+  pools and norms, ...) is refused by the engine: its ``OpSchema`` declares
+  the refusal and ``SchemaGuard`` raises it for every caller -- the free
+  function, the ``Tensor`` method, the in-place twin, ``nn.functional`` and a
+  direct engine call alike.  :func:`engine_bool_refused` reads those
+  declarations back out of the engine.
+* An op with no schema of its own -- a composite built from other ops, or an
+  adapter whose answer depends on the form of the call (``pow`` takes a bool
+  base to a number, ``clamp`` a single tensor bound) -- is refused by its
+  Python entry, through :data:`BOOL_REFUSED`.  Each entry calls
+  :func:`refuse_bool` / :func:`bool_refusal` with the op's name, so the error
+  class and the message never diverge between a free function, its ``Tensor``
+  method and the in-place twin.
+
+Neither list is a census of the ops that refuse.  The bool-refusal sweep
+(``lucid/test/unit/ops/test_bool_refusal_sweep.py``) derives its candidates
+from the audit's op census and compares Lucid's answer with the reference's
+recorded one, and ``lucid/test/unit/ops/test_bool_refusal_table.py`` pins
+every row of both lists against the reference.
 """
 
+import functools
 from collections.abc import Mapping
 from types import MappingProxyType
 
@@ -34,18 +48,20 @@ _KERNEL = _C_engine.NotImplementedError
 #: and what ``mean(dtype=...)`` already raises for the dtype it refuses.
 _GUARD = _C_engine.DtypeMismatch
 
-#: ``Dtype.Bool``'s integer code.  The entries of the hot unary ops (``abs``,
-#: ``relu``) test ``impl.dtype.value == BOOL_CODE``, which is 150 ns cheaper
-#: than comparing the enum, on calls that cost about a microsecond.
+#: ``Dtype.Bool``'s integer code: ``impl.dtype.value == BOOL_CODE`` is 150 ns
+#: cheaper than comparing the enum.
 BOOL_CODE: int = _C_engine.Bool.value
 
+# The cast hints.  The engine words the same three in ``OpSchema.h``
+# (``bool_cast_hint``); a test holds the two spellings equal.
 _FLOATING = "a floating dtype, e.g. x.float()"
 _INTEGER = "an integer dtype, e.g. x.long()"
 _NUMBER = "an integer or floating dtype, e.g. x.long() or x.float()"
 
-#: op -> (error class the reference raises for a bool operand, what to cast to).
-#: In-place twins (``abs_``) take the row of their out-of-place op, and an alias
-#: (``fix``, ``absolute``, ``clip``) the row of the op it forwards to.
+#: op -> (error class the reference raises for a bool operand, what to cast to)
+#: for the ops this layer refuses -- the ones with no engine schema to do it.
+#: In-place twins (``pow_``) take the row of their out-of-place op, and an
+#: alias (``clip``, ``upsample``) the row of the op it forwards to.
 BOOL_REFUSED: Mapping[str, tuple[type[RuntimeError], str]] = MappingProxyType(
     {
         # Order statistics and counting over a sorted sequence.
@@ -54,11 +70,7 @@ BOOL_REFUSED: Mapping[str, tuple[type[RuntimeError], str]] = MappingProxyType(
         "searchsorted": (_KERNEL, _INTEGER),
         "bucketize": (_KERNEL, _INTEGER),
         "isin": (_GUARD, _INTEGER),
-        "clamp": (_KERNEL, _INTEGER),
-        # Moments.
-        "mean": (_GUARD, _FLOATING),
-        "std": (_GUARD, _FLOATING),
-        "var": (_GUARD, _FLOATING),
+        # Moments.  ``mean``, ``var`` and ``std`` are the engine's.
         "std_mean": (_GUARD, _FLOATING),
         "var_mean": (_GUARD, _FLOATING),
         "nanmean": (_GUARD, _FLOATING),
@@ -67,22 +79,60 @@ BOOL_REFUSED: Mapping[str, tuple[type[RuntimeError], str]] = MappingProxyType(
         "histogram": (_KERNEL, _FLOATING),
         "gradient": (_GUARD, _NUMBER),
         "poisson": (_KERNEL, _FLOATING),
-        # Elementwise.
-        "abs": (_KERNEL, _NUMBER),
-        "ceil": (_KERNEL, _NUMBER),
-        "floor": (_KERNEL, _NUMBER),
-        "round": (_KERNEL, _NUMBER),
-        "trunc": (_KERNEL, _NUMBER),
-        "frac": (_KERNEL, _FLOATING),
+        # Elementwise.  ``pow`` refuses a bool base only beside a tensor exponent
+        # (``mask ** True`` is a number), ``clamp`` a bool result of two bounds.
+        "clamp": (_KERNEL, _INTEGER),
+        "pow": (_KERNEL, _NUMBER),
         "frexp": (_GUARD, _FLOATING),
         "polar": (_GUARD, _FLOATING),
-        # Activations.
-        "relu": (_GUARD, _NUMBER),
-        "selu": (_KERNEL, _FLOATING),
-        "softmax": (_KERNEL, _FLOATING),
-        "log_softmax": (_KERNEL, _FLOATING),
+        # Special functions and linear algebra.
+        "gammainc": (_KERNEL, _FLOATING),
+        "gammaincc": (_KERNEL, _FLOATING),
+        "vecdot": (_GUARD, _FLOATING),
+        # Activations composed from other ops.
+        "celu": (_KERNEL, _FLOATING),
+        "hardshrink": (_KERNEL, _FLOATING),
+        "softshrink": (_KERNEL, _FLOATING),
+        "hardtanh": (_GUARD, _NUMBER),
+        "threshold": (_KERNEL, _NUMBER),
+        "rrelu": (_KERNEL, _FLOATING),
+        "prelu": (_KERNEL, _FLOATING),
+        # Resampling.
+        "interpolate": (_KERNEL, _FLOATING),
+        "grid_sample": (_KERNEL, _FLOATING),
     }
 )
+
+_KIND_CLASS: Mapping[str, type[RuntimeError]] = MappingProxyType(
+    {"kernel": _KERNEL, "guard": _GUARD}
+)
+
+
+@functools.cache
+def engine_bool_refused() -> Mapping[str, tuple[type[RuntimeError], str]]:
+    """The ops whose engine schema refuses a bool tensor, in :data:`BOOL_REFUSED`'s shape.
+
+    The engine owns these refusals: ``OpSchema.refusing_bool`` declares one
+    and ``SchemaGuard`` raises it for every caller, so no Python entry
+    repeats it.  This reads the declarations back out of the registry, for the
+    tests that hold the two layers to one rule.  An op the engine refuses
+    without registering a schema (``var``, ``frac``) is not in the registry
+    and so not in this mapping.
+
+    Returns
+    -------
+    Mapping[str, tuple[type[RuntimeError], str]]
+        ``op -> (error class, cast hint)``: the engine's
+        ``NotImplementedError`` for a ``"kernel"`` refusal, ``DtypeMismatch``
+        for a ``"guard"`` one.
+    """
+    refusals: dict[str, tuple[type[RuntimeError], str]] = {}
+    for schema in _C_engine.op_registry_all():
+        declared = schema.bool_refusal
+        if declared is not None:
+            kind, hint = declared
+            refusals[schema.name] = (_KIND_CLASS[kind], hint)
+    return MappingProxyType(refusals)
 
 
 def bool_refusal(op: str, role: str = "") -> RuntimeError:
@@ -154,8 +204,11 @@ def refuse_all_bool(op: str, *operands: object) -> None:
     """Raise ``op``'s refusal when *every* one of ``operands`` is a bool tensor.
 
     For the ops whose operands meet at a common dtype (``searchsorted``,
-    ``bucketize``): the reference has no kernel for a bool pair, and answers
-    a bool beside any other dtype by promoting.
+    ``bucketize``, ``gammainc``): the reference has no kernel for a bool pair,
+    and answers a bool beside another dtype by promoting.  Lucid's engine does
+    not promote for ``searchsorted`` and ``bucketize`` -- a bool beside an
+    integer is a ``DtypeMismatch`` there (LCD-1021) -- so only the pair is
+    refused here, and the mixed pair is left to whatever the op does with it.
 
     Parameters
     ----------
@@ -173,4 +226,44 @@ def refuse_all_bool(op: str, *operands: object) -> None:
         raise bool_refusal(op)
 
 
-__all__ = ["BOOL_CODE", "BOOL_REFUSED", "bool_refusal", "is_bool", "refuse_all_bool", "refuse_bool"]
+def refuse_bool_power(op: str, exponent: object, base: _C_engine.TensorImpl) -> None:
+    """Raise ``op``'s refusal for a power that computes in bool beside a tensor exponent.
+
+    The reference has no kernel for a bool raised to a bool *tensor* (nor for
+    a bool number raised to one), yet raises a bool tensor to a Python number:
+    ``mask ** True`` is the mask, ``mask ** 2`` an integer tensor.  Which of
+    the two a call is depends on the exponent's form, which the engine never
+    sees -- it gets two bool tensors either way -- so the entries of ``pow``
+    call this after promoting the operands, with the exponent as the caller
+    wrote it and the base as promoted beside it.  A number exponent costs one
+    type test, and no dtype is read.
+
+    Parameters
+    ----------
+    op : str
+        ``"pow"`` or ``"pow_"``; the in-place twin keeps its name in the message.
+    exponent : object
+        The exponent as written: a tensor, or a number (which never refuses).
+    base : TensorImpl
+        The base operand after promotion.  It is bool exactly when the pair
+        met at bool, that is when a bool exponent met a bool base.
+
+    Raises
+    ------
+    RuntimeError
+        The class :func:`bool_refusal` builds for ``op``.
+    """
+    if is_bool(exponent) and base.dtype.value == BOOL_CODE:
+        raise bool_refusal(op)
+
+
+__all__ = [
+    "BOOL_CODE",
+    "BOOL_REFUSED",
+    "bool_refusal",
+    "engine_bool_refused",
+    "is_bool",
+    "refuse_all_bool",
+    "refuse_bool",
+    "refuse_bool_power",
+]

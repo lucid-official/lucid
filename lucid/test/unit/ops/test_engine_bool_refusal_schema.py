@@ -4,10 +4,10 @@
 ``SchemaGuard`` constructor, the first thing every engine entry builds, turns a
 bool input away with the class the schema names: ``kernel`` raises
 ``NotImplementedError`` (the reference has no kernel for bool), ``guard`` raises
-``DtypeMismatch`` (a check on the input dtype).  The Python wrappers
-(``BOOL_REFUSED``) refuse earlier with the same classes, so a call through
-``lucid.abs`` never reaches the engine's check; this file calls the engine
-directly, as the entries that bypass the wrappers do.
+``DtypeMismatch`` (a check on the input dtype).  The engine is the one owner of
+these refusals -- ``lucid.abs``, ``Tensor.abs``, ``abs()`` and ``nn.functional`` reach
+the same check -- so this file calls it directly, and
+``test_bool_refusal_table.py`` pins every Python spelling.
 
 Three things are held:
 
@@ -78,9 +78,13 @@ _DECLARED: Final[dict[str, tuple[str, str]]] = {
     "grid_sample": (_KERNEL, _FLOATING),
 }
 
-#: Declared ops that no ``LUCID_REGISTER_OP`` publishes: ``var`` builds its own forward and is
-#: reached through ``std`` and ``var`` only, so the registry does not list it.
-_UNREGISTERED: Final[dict[str, tuple[str, str]]] = {"var": (_GUARD, _FLOATING)}
+#: Ops that refuse bool and that no ``LUCID_REGISTER_OP`` publishes, so the registry does not list
+#: them: ``var`` builds its own forward and is reached through ``std`` and ``var`` only, ``frac``
+#: is composed and raises through ``throw_bool_refusal``.
+_UNREGISTERED: Final[dict[str, tuple[str, str]]] = {
+    "var": (_GUARD, _FLOATING),
+    "frac": (_KERNEL, _FLOATING),
+}
 
 #: An operand builder: ``make(dtype)(*shape)`` is an engine impl on the device under test.
 _Make = Callable[..., object]
@@ -111,6 +115,7 @@ _CALLS: Final[dict[str, _Call]] = {
     "log_softmax": lambda x, real: _E.log_softmax(x(2, 3), -1),
     "mean": lambda x, real: _E.mean(x(2, 3), [1], False),
     "var": lambda x, real: _E.var(x(2, 3), [1], False),
+    "frac": lambda x, real: _E.frac(x(3)),
     "max_pool1d": lambda x, real: _E.nn.max_pool1d(x(1, 1, 4), 2),
     "max_pool2d": lambda x, real: _E.nn.max_pool2d(x(1, 1, 4, 4), 2, 2),
     "max_pool3d": lambda x, real: _E.nn.max_pool3d(x(1, 1, 4, 4, 4), 2, 2, 2),

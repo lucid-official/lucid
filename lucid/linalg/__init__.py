@@ -11,6 +11,7 @@ from lucid._dispatch import _unwrap, _wrap
 from lucid._dtype import _ENGINE_TO_DTYPE, to_engine_dtype
 from lucid._ops._adapters import _outer_adapter
 from lucid._ops._autocast import _autocast_entry
+from lucid._ops._bool_refusal import refuse_bool
 from lucid._ops._dims import _wrap_dim
 from lucid._ops._reduce import _reduction_axes, _require_normable, _truth_mask
 from lucid._promotion import try_unwrap as _try_unwrap
@@ -2118,11 +2119,10 @@ def vecdot(x: Tensor, y: Tensor, *, dim: int = -1) -> Tensor:
     >>> vecdot(lucid.tensor([1 + 2j, 3 - 1j]), lucid.tensor([2 - 1j, 1 + 1j]))
     tensor((2.-1.j), dtype=lucid.complex64)
     """
+    refuse_bool("vecdot", x, y)
     with _autocast_entry("vecdot", _unwrap(x), _unwrap(y)) as (xi, yi):
-        if xi.dtype in (_C_engine.C64, _C_engine.C128):
-            xi = _C_engine.conj(xi)
-        prod = _C_engine.mul(xi, yi)
-        return _wrap(_C_engine.sum(prod, [dim], False))
+        xi = _C_engine.conj(xi) if xi.dtype in (_C_engine.C64, _C_engine.C128) else xi
+        return _wrap(_C_engine.sum(_C_engine.mul(xi, yi), [dim], False))
 
 
 def dot(x: Tensor, y: Tensor) -> Tensor:

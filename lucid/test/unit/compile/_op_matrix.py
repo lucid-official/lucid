@@ -732,7 +732,8 @@ EAGER_REJECTS: dict[tuple[str, str], Refusal] = {
     **_each("vector_norm", _NON_FLOAT, _both(_C_engine.DtypeMismatch, "a norm takes floats")),
     # A mask is neither a magnitude nor a quantity to average, and the
     # reference refuses it for each of these (LCD-1013); ``mask.float()`` is
-    # the spelling.  ``lucid._ops._bool_refusal.BOOL_REFUSED`` is the table.
+    # the spelling.  The engine's schema refuses these (``OpSchema.bool_refusal``,
+    # LCD-1020); ``lucid._ops._bool_refusal`` says which layer owns the others.
     **_each("abs", ("bool",), _both(_NOT_IMPL, "the absolute value of a bool (LCD-1013)")),
     **_each("round", ("bool",), _both(_NOT_IMPL, "rounding a bool (LCD-1013)")),
     **_each("floor", ("bool",), _both(_NOT_IMPL, "flooring a bool (LCD-1013)")),

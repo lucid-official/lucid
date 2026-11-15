@@ -16,6 +16,7 @@ from lucid._dispatch import (
     _unwrap_or_scalar,
     _wrap,
 )
+from lucid._ops._adapters import _power_operands
 from lucid._tensor._indexing import _adopt_inplace, _getitem, _setitem
 from lucid._tensor._unary_plus import __pos__
 
@@ -617,7 +618,7 @@ def __pow__(self: Tensor, other: TensorOrScalar) -> Tensor:
     scalar = _scalar_power(self._impl, other)
     if scalar is not None:
         return _wrap(scalar)
-    a, b = _binary_operands(self, other)
+    a, b = _power_operands(self, other)
     return _wrap(_C_engine.pow(a, b))
 
 
@@ -651,7 +652,7 @@ def __rpow__(self: Tensor, other: TensorOrScalar) -> Tensor:
     >>> 2 ** a
     tensor([2., 4., 8.])
     """
-    a, b = _binary_operands(other, self)
+    a, b = _power_operands(other, self)
     return _wrap(_C_engine.pow(a, b))
 
 
@@ -687,8 +688,7 @@ def __ipow__(self: Tensor, other: TensorOrScalar) -> Tensor:
     >>> a
     tensor([1., 4., 9.])
     """
-    _promotion.check_pow_scalar(self._impl.dtype, other)
-    a, b = _binary_operands(self, other, inplace=True)
+    a, b = _power_operands(self, other, inplace=True)
     return _adopt_inplace(self, _C_engine.pow_(a, b), "**=")
 
 
@@ -827,7 +827,7 @@ def __abs__(self: Tensor) -> Tensor:
     >>> abs(a)
     tensor([1., 2., 3.])
     """
-    return self.abs()
+    return _wrap(_C_engine.abs(self._impl))
 
 
 def __invert__(self: Tensor) -> Tensor:

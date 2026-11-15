@@ -9,6 +9,7 @@ import lucid as _lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry
+from lucid._ops._bool_refusal import refuse_bool
 from lucid._ops._reduce import _require_floating
 from lucid.nn.functional._inplace import _keep_in_graph
 from lucid.nn.functional._grid_sampling import (
@@ -215,6 +216,8 @@ def grid_sample(
     (1, 3, 32, 32)
     """
     _check_options(input, mode, padding_mode)
+    # Before ``_as_real`` promotes a mask to float32 behind the caller's back.
+    refuse_bool("grid_sample", input, grid)
     ac = align_corners if align_corners is not None else False
     # The row applies once, here, for every path: the reflection that runs
     # before the kernel computed its coordinates at the grid's half

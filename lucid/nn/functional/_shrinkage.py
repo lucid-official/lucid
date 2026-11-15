@@ -6,6 +6,7 @@ Re-exported by :mod:`lucid.nn.functional.activations`.
 import lucid as _l
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _float_operand, _unwrap, _wrap
+from lucid._ops._bool_refusal import refuse_bool
 from lucid._tensor.tensor import Tensor
 from lucid.nn.functional._inplace import _dead_zone_zero, _keep_in_graph
 
@@ -51,6 +52,7 @@ def hardshrink(input: Tensor, lambd: float = 0.5) -> Tensor:
     >>> hardshrink(x, lambd=0.5)
     tensor([-1., 0., 0., 0., 1.])
     """
+    refuse_bool("hardshrink", input)
     outside = _unwrap((input > lambd) | (input < -lambd))
     return _keep_in_graph(
         _wrap(_C_engine.where(outside, _unwrap(input), _dead_zone_zero(input))), input
@@ -147,6 +149,7 @@ def softshrink(input: Tensor, lambd: float = 0.5) -> Tensor:
         raise _C_engine.InvalidArgument(
             f"softshrink: lambd must be no less than 0.0, but got {lambd}"
         )
+    refuse_bool("softshrink", input)
     xi = _unwrap(input)
     lam = _C_engine.full(xi.shape, lambd, xi.dtype, xi.device)
     neg_lam = _C_engine.full(xi.shape, -lambd, xi.dtype, xi.device)

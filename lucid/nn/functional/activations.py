@@ -12,7 +12,7 @@ import lucid as _l
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _float_operand, _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry, _autocast_suspended
-from lucid._ops._bool_refusal import BOOL_CODE, bool_refusal
+from lucid._ops._bool_refusal import BOOL_CODE, bool_refusal, refuse_bool
 from lucid._ops._dims import _dim_size, _wrap_dim
 from lucid._types import GeluApproximate
 from lucid.nn.functional._distance import (
@@ -86,16 +86,13 @@ def relu(input: Tensor, inplace: bool = False) -> Tensor:
     >>> relu(lucid.tensor([-2.0, -1.0, 0.0, 1.0, 2.0]))
     tensor([0., 0., 0., 1., 2.])
     """
-    impl = _unwrap(input)
-    if impl.dtype.value == BOOL_CODE:
-        raise bool_refusal("relu")
     if not inplace:
-        return _wrap(_C_engine.relu(impl))
+        return _wrap(_C_engine.relu(_unwrap(input)))
     if input.requires_grad and _C_engine.grad_enabled():
         return _in_place(input, "relu_", relu)
     # No graph to extend: the engine's fused kernel allocates nothing (0.44 ms
     # against 1.51 ms through the graph-preserving path on 64x3x128x128).
-    _C_engine.relu_(impl)
+    _C_engine.relu_(_unwrap(input))
     return input
 
 
@@ -250,10 +247,7 @@ def selu(input: Tensor, inplace: bool = False) -> Tensor:
     >>> selu(x)
     tensor([-1.111, 0., 1.051])
     """
-    impl = _unwrap(input)
-    if impl.dtype.value == BOOL_CODE:
-        raise bool_refusal("selu")
-    return _in_place(input, "selu_", selu) if inplace else _wrap(_C_engine.selu(impl))
+    return _in_place(input, "selu_", selu) if inplace else _wrap(_C_engine.selu(_unwrap(input)))
 
 
 def gelu(input: Tensor, *, approximate: GeluApproximate = "none") -> Tensor:
@@ -787,6 +781,11 @@ def prelu(input: Tensor, weight: Tensor) -> Tensor:
     tensor([-0.5, -0.25, 0., 1.])
     """
     with _autocast_entry("prelu", _unwrap(input), _unwrap(weight)) as (xi, wi):
+        # The reference's class for a bool prelu is the kernel's; the engine's
+        # relu below would raise the guard's.
+        dtype = xi.dtype
+        if dtype.value == BOOL_CODE:
+            raise bool_refusal("prelu")
         # A per-channel ``(C,)`` slope belongs to dim 1 of an ``(N, C, *)`` input.
         # Left as a bare vector it would broadcast against the *last* dim instead,
         # which fails on a feature map (or mixes up channels when that dim is C).
@@ -794,7 +793,7 @@ def prelu(input: Tensor, weight: Tensor) -> Tensor:
             wi = _C_engine.reshape(wi, [wi.shape[0]] + [1] * (len(xi.shape) - 2))
         pos = _C_engine.relu(xi)
         neg_part = _C_engine.mul(
-            wi, _C_engine.minimum(_C_engine.zeros(xi.shape, xi.dtype, xi.device), xi)
+            wi, _C_engine.minimum(_C_engine.zeros(xi.shape, dtype, xi.device), xi)
         )
         return _wrap(_C_engine.add(pos, neg_part))
 
@@ -842,6 +841,7 @@ def celu(input: Tensor, alpha: float = 1.0, inplace: bool = False) -> Tensor:
     """
     if alpha == 0.0:
         raise _C_engine.InvalidArgument("ZeroDivisionError: alpha cannot be 0 for CELU")
+    refuse_bool("celu", input)
     if inplace:
         return _in_place(input, "celu_", lambda t: celu(t, alpha))
     xi = _unwrap(input)
@@ -904,6 +904,7 @@ def hardtanh(
     """
     if min_val > max_val:
         raise ValueError("min_val cannot be greater than max_val")
+    refuse_bool("hardtanh", input)
     if inplace:
         return _in_place(input, "hardtanh_", lambda t: hardtanh(t, min_val, max_val))
     inside = _unwrap((input > min_val) & (input < max_val))
@@ -1056,6 +1057,7 @@ def _threshold(x: Tensor, threshold: float, value: float) -> Tensor:
     # a 0 at the first threshold and the loss went finite with nothing to
     # show for it.  The reference is the first.  (The public function's
     # ``threshold`` argument shadows its own name, hence this helper.)
+    refuse_bool("threshold", x)
     replaced = x <= threshold
     replacement = _l.full_like(x, float(value))
     return _keep_in_graph(_l.where(replaced, replacement, x), x)
@@ -1125,6 +1127,7 @@ def rrelu(
             f"rrelu: lower bound must be less than or equal to the upper bound, "
             f"got lower={lower}, upper={upper}"
         )
+    refuse_bool("rrelu", input)
     if inplace:
         return _in_place(input, "rrelu_", lambda t: rrelu(t, lower, upper, training))
     if not training:
