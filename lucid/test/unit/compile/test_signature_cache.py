@@ -242,7 +242,10 @@ def test_concurrent_use_neither_corrupts_nor_overshoots() -> None:
                 done.result()  # re-raises what a worker raised
     finally:
         sys.setswitchinterval(interval)
-    assert 1 <= len(cache) <= 6
+    # No lower bound: the poppers can empty the cache after the last store (the
+    # Mac Studio attest of 2026-11-15 ended at 0).  The contract is the cap and
+    # the byte account, which stay exact however the threads interleave.
+    assert len(cache) <= 6
     assert cache.retained_bytes == len(cache)  # every entry weighs 1
 
 
