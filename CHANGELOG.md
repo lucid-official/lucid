@@ -299,6 +299,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - scale the p < 1 norm gradient by the max entry (LCD-1009)
 
+- refuse bool in topk at both ends (LCD-1011)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

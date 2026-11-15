@@ -418,6 +418,13 @@ def _topk_adapter(
     """
     del sorted
     d = _wrap_dim(int(dim), len(a_impl.shape), "topk")
+    # The reference refuses bool at both ends, on every device.  The engine's
+    # topk does so for the largest, but the smallest is built below from
+    # argsort and gather, which take bool, so this is the one place both
+    # ends pass through: without it ``largest=False`` answered what
+    # ``largest=True`` refused.
+    if a_impl.dtype == _C_engine.Bool:
+        raise _C_engine.NotImplementedError("topk does not accept bool — cast to an integer dtype")
     # A 0-d tensor's one element is both its largest and its smallest, and
     # ``narrow`` below has no real axis to cut.
     if largest or not a_impl.shape:

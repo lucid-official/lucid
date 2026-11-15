@@ -2385,6 +2385,14 @@ def topk(input: Tensor, k: _int, dim: _int = ..., largest: _bool = ..., sorted: 
     tuple of (Tensor, Tensor)
         ``(values, indices)``.
     
+    Raises
+    ------
+    NotImplementedError
+        For a ``bool`` input, at either end and on every device: which
+        booleans are the largest is not a question :func:`topk` answers,
+        so cast to an integer dtype first.  :func:`sort` and
+        :func:`argsort` do take ``bool``.
+    
     Notes
     -----
     ``largest=False`` takes the head of the stable ascending order, so equal
