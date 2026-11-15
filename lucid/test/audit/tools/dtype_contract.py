@@ -20,6 +20,11 @@ Run::
 
     python -m lucid.test.audit.tools.dtype_contract
 
+For every symbol whose accepted list lacks ``bool`` the table also records
+the class of the error the reference raised (``bool_refusals``).  The
+bool-refusal sweep (``lucid/test/unit/ops/test_bool_refusal_sweep.py``) holds
+Lucid to it: refuse where the reference refuses, with the same class.
+
 The result is checked in as ``dtype_contract.json`` so the audit can read
 it without the reference installed.  Symbols the reference has no
 counterpart for — Lucid-only ops, and anything whose invocation cannot be
@@ -55,6 +60,10 @@ ALIASES: dict[str, str] = {
     "arcsinh": "asinh",
     "arccosh": "acosh",
 }
+
+#: What ``bool_refusals`` records for a symbol the reference neither answered
+#: nor raised for at bool: the probe returned ``None``.
+_NO_RESULT = "NoResult"
 
 #: Where each Lucid namespace lives in the reference.  ``None`` means the
 #: symbol is a tensor method.
@@ -99,15 +108,23 @@ def _as_reference(ref: Any, array: np.ndarray, follow: bool, name: str) -> Any:
     return ref.from_numpy(array)
 
 
-def measure(ref: Any, verbose: bool = False) -> tuple[dict[str, list[str]], list[str]]:
+def measure(
+    ref: Any, verbose: bool = False
+) -> tuple[dict[str, list[str]], list[str], dict[str, str]]:
     """Probe every surveyed symbol at every dtype.
 
-    Returns the accepted-dtype table and the list of symbols with no
-    reference counterpart.
+    Returns the accepted-dtype table, the list of symbols with no
+    reference counterpart, and -- for each measured symbol whose accepted
+    list lacks ``bool`` -- the class name of the error the reference raised
+    for the bool probe.  The class is part of the contract: a kernel with
+    no bool instantiation raises ``NotImplementedError`` and a guard on the
+    input dtype raises ``RuntimeError``, and a framework that refuses with
+    the other one answers a different question for whoever catches it.
     """
     ctx = Context(metal=False)
     accepted: dict[str, list[str]] = {}
     unmapped: list[str] = []
+    refused_bool: dict[str, str] = {}
 
     for symbol in _surface.enumerate_surface():
         fn = _surface.resolve(symbol)
@@ -139,6 +156,7 @@ def measure(ref: Any, verbose: bool = False) -> tuple[dict[str, list[str]], list
             continue
 
         works: list[str] = []
+        refusal = _NO_RESULT
         for name in _probe.DTYPES:
             try:
                 args = _probe.dtype_args(
@@ -160,12 +178,16 @@ def measure(ref: Any, verbose: bool = False) -> tuple[dict[str, list[str]], list
             except Exception as exc:  # noqa: BLE001 - a refusal is the measurement
                 if _probe.refuses_a_value(exc):
                     works.append(name)
+                elif name == "bool":
+                    refusal = type(exc).__name__
         if works:
             accepted[symbol.qualname] = works
+            if "bool" not in works:
+                refused_bool[symbol.qualname] = refusal
         if verbose:
             print(f"{symbol.qualname:52s} {works}")
 
-    return accepted, sorted(unmapped)
+    return accepted, sorted(unmapped), dict(sorted(refused_bool.items()))
 
 
 def _reference_kwargs(ref: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -187,7 +209,7 @@ def main() -> None:
     args = parser.parse_args()
 
     ref = require_ref()
-    accepted, unmapped = measure(ref, verbose=args.verbose)
+    accepted, unmapped, refused_bool = measure(ref, verbose=args.verbose)
 
     path = args.output or pathlib.Path(__file__).parent.parent / "dtype_contract.json"
     previous = {}
@@ -212,6 +234,7 @@ def main() -> None:
         "measured_against": f"reference framework {getattr(ref, '__version__', '?')}",
         "measured_on": previous.get("measured_on", ""),
         "symbols": dict(sorted(accepted.items())),
+        "bool_refusals": refused_bool,
         "unmapped": unmapped,
     }
     path.write_text(json.dumps(payload, indent=2) + "\n")

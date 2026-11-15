@@ -14,7 +14,7 @@
     "    python -m lucid.test.audit.tools.dtype_contract"
   ],
   "measured_against": "reference framework 2.13.0",
-  "measured_on": "2026-08-04",
+  "measured_on": "2026-11-15",
   "symbols": {
     "F.adaptive_avg_pool1d": [
       "float16",
@@ -36,12 +36,27 @@
       "float32",
       "float64"
     ],
+    "F.adaptive_max_pool1d_with_indices": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "F.adaptive_max_pool2d": [
       "float16",
       "float32",
       "float64"
     ],
+    "F.adaptive_max_pool2d_with_indices": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "F.adaptive_max_pool3d": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "F.adaptive_max_pool3d_with_indices": [
       "float16",
       "float32",
       "float64"
@@ -92,7 +107,22 @@
       "float32",
       "float64"
     ],
+    "F.binary_cross_entropy": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "F.binary_cross_entropy_with_logits": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "F.celu": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "F.celu_": [
       "float16",
       "float32",
       "float64"
@@ -285,11 +315,6 @@
       "float32",
       "float64"
     ],
-    "F.hinge_embedding_loss": [
-      "float16",
-      "float32",
-      "float64"
-    ],
     "F.huber_loss": [
       "float16",
       "float32",
@@ -397,6 +422,15 @@
       "float32",
       "float64"
     ],
+    "F.max_pool1d_with_indices": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "F.max_pool2d": [
       "int8",
       "int16",
@@ -406,7 +440,25 @@
       "float32",
       "float64"
     ],
+    "F.max_pool2d_with_indices": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "F.max_pool3d": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "F.max_pool3d_with_indices": [
       "int8",
       "int16",
       "int32",
@@ -542,6 +594,11 @@
       "int16",
       "int32",
       "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "F.rms_norm": [
       "float16",
       "float32",
       "float64"
@@ -686,6 +743,21 @@
       "float32",
       "float64"
     ],
+    "F.upsample": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "F.upsample_bilinear": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "F.upsample_nearest": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.abs": [
       "int8",
       "int16",
@@ -704,12 +776,50 @@
       "float32",
       "float64"
     ],
+    "Tensor.absolute": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.absolute_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.acos": [
       "bool",
       "int8",
       "int16",
       "int32",
       "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.acos_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.acosh": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.acosh_": [
       "float16",
       "float32",
       "float64"
@@ -734,6 +844,43 @@
       "float32",
       "float64"
     ],
+    "Tensor.addbmm": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.addcdiv": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.addcdiv_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.addcmul": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.addcmul_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.addmm": [
       "int8",
       "int16",
@@ -743,7 +890,86 @@
       "float32",
       "float64"
     ],
+    "Tensor.addmv": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.addr": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.adjoint": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.all": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.allclose": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.amax": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.amin": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.aminmax": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.angle": [
       "bool",
       "int8",
       "int16",
@@ -778,6 +1004,21 @@
       "float32",
       "float64"
     ],
+    "Tensor.arccosh": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.arccosh_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.arcsin": [
       "bool",
       "int8",
@@ -793,6 +1034,21 @@
       "float32",
       "float64"
     ],
+    "Tensor.arcsinh": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.arcsinh_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.arctan": [
       "bool",
       "int8",
@@ -803,7 +1059,37 @@
       "float32",
       "float64"
     ],
+    "Tensor.arctan2": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.arctan2_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.arctan_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.arctanh": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.arctanh_": [
       "float16",
       "float32",
       "float64"
@@ -836,12 +1122,52 @@
       "float32",
       "float64"
     ],
+    "Tensor.argwhere": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.as_strided": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.asin": [
       "bool",
       "int8",
       "int16",
       "int32",
       "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.asin_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.asinh": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.asinh_": [
       "float16",
       "float32",
       "float64"
@@ -866,8 +1192,82 @@
       "float32",
       "float64"
     ],
+    "Tensor.atan2_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.atan_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.atanh": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.atanh_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.baddbmm": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.baddbmm_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.bernoulli": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.bernoulli_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.bfloat16": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.bitwise_and": [
       "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64"
+    ],
+    "Tensor.bitwise_and_": [
       "int8",
       "int16",
       "int32",
@@ -880,7 +1280,20 @@
       "int32",
       "int64"
     ],
+    "Tensor.bitwise_left_shift_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64"
+    ],
     "Tensor.bitwise_not": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64"
+    ],
+    "Tensor.bitwise_not_": [
       "bool",
       "int8",
       "int16",
@@ -894,6 +1307,12 @@
       "int32",
       "int64"
     ],
+    "Tensor.bitwise_or_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64"
+    ],
     "Tensor.bitwise_right_shift": [
       "bool",
       "int8",
@@ -901,8 +1320,20 @@
       "int32",
       "int64"
     ],
+    "Tensor.bitwise_right_shift_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64"
+    ],
     "Tensor.bitwise_xor": [
       "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64"
+    ],
+    "Tensor.bitwise_xor_": [
       "int8",
       "int16",
       "int32",
@@ -937,6 +1368,21 @@
       "float32",
       "float64"
     ],
+    "Tensor.cauchy_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.cdouble": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.ceil": [
       "int8",
       "int16",
@@ -947,6 +1393,26 @@
       "float64"
     ],
     "Tensor.ceil_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.cfloat": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.char": [
+      "bool",
       "int8",
       "int16",
       "int32",
@@ -966,6 +1432,25 @@
       "float64"
     ],
     "Tensor.clamp": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.clamp_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.clamp_max": [
       "bool",
       "int8",
       "int16",
@@ -976,16 +1461,45 @@
       "float64"
     ],
     "Tensor.clamp_max_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.clamp_min": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
       "float16",
       "float32",
       "float64"
     ],
     "Tensor.clamp_min_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
       "float16",
       "float32",
       "float64"
     ],
     "Tensor.clip": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.clip_": [
       "bool",
       "int8",
       "int16",
@@ -996,6 +1510,36 @@
       "float64"
     ],
     "Tensor.clone": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.conj": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.conj_physical": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.conj_physical_": [
       "bool",
       "int8",
       "int16",
@@ -1017,6 +1561,30 @@
     ],
     "Tensor.copy_": [
       "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.copysign": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.copysign_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.corrcoef": [
       "int8",
       "int16",
       "int32",
@@ -1055,6 +1623,25 @@
       "float32",
       "float64"
     ],
+    "Tensor.count_nonzero": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.cov": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.cpu": [
       "bool",
       "int8",
@@ -1075,6 +1662,21 @@
       "float32",
       "float64"
     ],
+    "Tensor.deg2rad": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.deg2rad_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.detach": [
       "bool",
       "int8",
@@ -1086,6 +1688,36 @@
       "float64"
     ],
     "Tensor.detach_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.diag": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.diag_embed": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.diagflat": [
       "bool",
       "int8",
       "int16",
@@ -1115,12 +1747,32 @@
       "float32",
       "float64"
     ],
+    "Tensor.digamma": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.digamma_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.dim": [
       "bool",
       "int8",
       "int16",
       "int32",
       "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.dist": [
       "float16",
       "float32",
       "float64"
@@ -1140,6 +1792,21 @@
       "float32",
       "float64"
     ],
+    "Tensor.divide": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.divide_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.dot": [
       "int8",
       "int16",
@@ -1150,6 +1817,16 @@
       "float64"
     ],
     "Tensor.double": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.dsplit": [
       "bool",
       "int8",
       "int16",
@@ -1179,6 +1856,26 @@
       "float32",
       "float64"
     ],
+    "Tensor.eq_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.equal": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.erf": [
       "bool",
       "int8",
@@ -1189,12 +1886,37 @@
       "float32",
       "float64"
     ],
+    "Tensor.erf_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.erfc": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.erfc_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.erfinv": [
       "bool",
       "int8",
       "int16",
       "int32",
       "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.erfinv_": [
       "float16",
       "float32",
       "float64"
@@ -1215,6 +1937,11 @@
       "int16",
       "int32",
       "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.exp2_": [
       "float16",
       "float32",
       "float64"
@@ -1244,6 +1971,26 @@
       "float32",
       "float64"
     ],
+    "Tensor.expm1": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.expm1_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.exponential_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.fill_": [
       "bool",
       "int8",
@@ -1254,7 +2001,7 @@
       "float32",
       "float64"
     ],
-    "Tensor.flatten": [
+    "Tensor.fill_diagonal_": [
       "bool",
       "int8",
       "int16",
@@ -1264,7 +2011,25 @@
       "float32",
       "float64"
     ],
-    "Tensor.flip": [
+    "Tensor.fix": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.fix_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.flatten": [
       "bool",
       "int8",
       "int16",
@@ -1304,6 +2069,19 @@
       "float32",
       "float64"
     ],
+    "Tensor.float_power": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.float_power_": [
+      "float64"
+    ],
     "Tensor.floor": [
       "int8",
       "int16",
@@ -1331,7 +2109,45 @@
       "float32",
       "float64"
     ],
+    "Tensor.floor_divide_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.fmax": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.fmin": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.fmod": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.fmod_": [
       "int8",
       "int16",
       "int32",
@@ -1345,7 +2161,69 @@
       "float32",
       "float64"
     ],
+    "Tensor.frac_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.frexp": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.gather": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.gcd": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64"
+    ],
+    "Tensor.gcd_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64"
+    ],
     "Tensor.ge": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.ge_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.geometric_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.ger": [
       "bool",
       "int8",
       "int16",
@@ -1365,7 +2243,57 @@
       "float32",
       "float64"
     ],
+    "Tensor.greater": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.greater_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.greater_equal": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.greater_equal_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.gt": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.gt_": [
       "bool",
       "int8",
       "int16",
@@ -1385,12 +2313,126 @@
       "float32",
       "float64"
     ],
+    "Tensor.heaviside": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.heaviside_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.histc": [
       "float16",
       "float32",
       "float64"
     ],
+    "Tensor.histogram": [
+      "float32",
+      "float64"
+    ],
+    "Tensor.hsplit": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.hypot": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.hypot_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.i0": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.i0_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.index_add": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.index_add_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.index_copy": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.index_copy_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.index_put": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.index_put_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
       "float16",
       "float32",
       "float64"
@@ -1434,6 +2476,16 @@
       "float32",
       "float64"
     ],
+    "Tensor.is_conj": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.is_contiguous": [
       "bool",
       "int8",
@@ -1454,6 +2506,26 @@
       "float32",
       "float64"
     ],
+    "Tensor.is_inference": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.is_neg": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.is_pinned": [
       "bool",
       "int8",
@@ -1464,7 +2536,37 @@
       "float32",
       "float64"
     ],
+    "Tensor.is_same_size": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.is_set_to": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.is_shared": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.is_signed": [
       "bool",
       "int8",
       "int16",
@@ -1514,6 +2616,46 @@
       "float32",
       "float64"
     ],
+    "Tensor.isneginf": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.isposinf": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.isreal": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.item": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.kron": [
       "bool",
       "int8",
@@ -1533,6 +2675,34 @@
       "float32",
       "float64"
     ],
+    "Tensor.lcm": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64"
+    ],
+    "Tensor.lcm_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64"
+    ],
+    "Tensor.ldexp": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.ldexp_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.le": [
       "bool",
       "int8",
@@ -1543,7 +2713,77 @@
       "float32",
       "float64"
     ],
+    "Tensor.le_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.lerp": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.lerp_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.less": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.less_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.less_equal": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.less_equal_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.lgamma": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.lgamma_": [
       "float16",
       "float32",
       "float64"
@@ -1568,12 +2808,22 @@
       "float32",
       "float64"
     ],
+    "Tensor.log10_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.log1p": [
       "bool",
       "int8",
       "int16",
       "int32",
       "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.log1p_": [
       "float16",
       "float32",
       "float64"
@@ -1598,6 +2848,11 @@
       "float32",
       "float64"
     ],
+    "Tensor.log_normal_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.log_softmax": [
       "float16",
       "float32",
@@ -1608,7 +2863,31 @@
       "float32",
       "float64"
     ],
+    "Tensor.logaddexp2": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.logcumsumexp": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.logdet": [
+      "float32",
+      "float64"
+    ],
     "Tensor.logical_and": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.logical_and_": [
       "bool",
       "int8",
       "int16",
@@ -1628,7 +2907,27 @@
       "float32",
       "float64"
     ],
+    "Tensor.logical_not_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.logical_or": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.logical_or_": [
       "bool",
       "int8",
       "int16",
@@ -1644,6 +2943,31 @@
       "int16",
       "int32",
       "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.logical_xor_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.logit": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.logit_": [
       "float16",
       "float32",
       "float64"
@@ -1668,7 +2992,47 @@
       "float32",
       "float64"
     ],
+    "Tensor.lt_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.masked_fill": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.masked_fill_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.masked_scatter": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.masked_scatter_": [
       "bool",
       "int8",
       "int16",
@@ -1715,6 +3079,15 @@
       "float32",
       "float64"
     ],
+    "Tensor.median": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.min": [
       "bool",
       "int8",
@@ -1744,7 +3117,37 @@
       "float32",
       "float64"
     ],
+    "Tensor.mode": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.moveaxis": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.movedim": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.msort": [
       "bool",
       "int8",
       "int16",
@@ -1774,7 +3177,66 @@
       "float32",
       "float64"
     ],
+    "Tensor.multinomial": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.multiply": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.multiply_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.nan_to_num": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.nan_to_num_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.nanmean": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.nanmedian": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.nansum": [
       "bool",
       "int8",
       "int16",
@@ -1794,7 +3256,27 @@
       "float32",
       "float64"
     ],
+    "Tensor.ndimension": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.ne": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.ne_": [
       "bool",
       "int8",
       "int16",
@@ -1822,7 +3304,25 @@
       "float32",
       "float64"
     ],
-    "Tensor.new_full": [
+    "Tensor.negative": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.negative_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.nelement": [
       "bool",
       "int8",
       "int16",
@@ -1832,7 +3332,7 @@
       "float32",
       "float64"
     ],
-    "Tensor.new_tensor": [
+    "Tensor.new_full": [
       "bool",
       "int8",
       "int16",
@@ -1847,6 +3347,11 @@
       "float32",
       "float64"
     ],
+    "Tensor.nextafter_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.nonzero": [
       "bool",
       "int8",
@@ -1857,7 +3362,42 @@
       "float32",
       "float64"
     ],
+    "Tensor.normal_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.not_equal": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.not_equal_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.numel": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.numpy": [
       "bool",
       "int8",
       "int16",
@@ -1887,6 +3427,25 @@
       "float32",
       "float64"
     ],
+    "Tensor.polygamma": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.positive": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.pow": [
       "int8",
       "int16",
@@ -1906,6 +3465,51 @@
       "float64"
     ],
     "Tensor.prod": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.put": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.put_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.rad2deg": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.rad2deg_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.random_": [
       "bool",
       "int8",
       "int16",
@@ -1967,6 +3571,25 @@
       "float32",
       "float64"
     ],
+    "Tensor.remainder_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.renorm": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.renorm_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.repeat": [
       "bool",
       "int8",
@@ -2012,7 +3635,37 @@
       "float32",
       "float64"
     ],
+    "Tensor.resolve_conj": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.resolve_neg": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.roll": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.rot90": [
       "bool",
       "int8",
       "int16",
@@ -2050,7 +3703,22 @@
       "float32",
       "float64"
     ],
+    "Tensor.rsqrt_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.scatter": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.scatter_": [
       "bool",
       "int8",
       "int16",
@@ -2070,7 +3738,57 @@
       "float32",
       "float64"
     ],
+    "Tensor.scatter_add_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.select": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.sgn": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.sgn_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.share_memory_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.short": [
       "bool",
       "int8",
       "int16",
@@ -2115,6 +3833,16 @@
       "float32",
       "float64"
     ],
+    "Tensor.signbit": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.sin": [
       "bool",
       "int8",
@@ -2126,6 +3854,21 @@
       "float64"
     ],
     "Tensor.sin_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.sinc": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.sinc_": [
       "float16",
       "float32",
       "float64"
@@ -2155,6 +3898,16 @@
       "float32",
       "float64"
     ],
+    "Tensor.slice_scatter": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.softmax": [
       "float16",
       "float32",
@@ -2171,6 +3924,16 @@
       "float64"
     ],
     "Tensor.split": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.split_with_sizes": [
       "bool",
       "int8",
       "int16",
@@ -2224,6 +3987,16 @@
       "float32",
       "float64"
     ],
+    "Tensor.squeeze_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.std": [
       "float16",
       "float32",
@@ -2267,6 +4040,24 @@
       "float32",
       "float64"
     ],
+    "Tensor.subtract": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.subtract_": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.sum": [
       "bool",
       "int8",
@@ -2287,6 +4078,36 @@
       "float32",
       "float64"
     ],
+    "Tensor.swapaxes_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.swapdims": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.swapdims_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.t": [
       "bool",
       "int8",
@@ -2297,7 +4118,27 @@
       "float32",
       "float64"
     ],
+    "Tensor.t_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.take": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.take_along_dim": [
       "bool",
       "int8",
       "int16",
@@ -2337,7 +4178,27 @@
       "float32",
       "float64"
     ],
+    "Tensor.tensor_split": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.tile": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.to": [
       "bool",
       "int8",
       "int16",
@@ -2375,7 +4236,27 @@
       "float32",
       "float64"
     ],
+    "Tensor.transpose_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.tril": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.tril_": [
       "bool",
       "int8",
       "int16",
@@ -2395,7 +4276,41 @@
       "float32",
       "float64"
     ],
+    "Tensor.triu_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.true_divide": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.true_divide_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.trunc": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.trunc_": [
       "int8",
       "int16",
       "int32",
@@ -2444,6 +4359,51 @@
       "float32",
       "float64"
     ],
+    "Tensor.uniform_": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.unique": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.unique_consecutive": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.unsafe_chunk": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.unsafe_split": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.unsqueeze": [
       "bool",
       "int8",
@@ -2454,7 +4414,26 @@
       "float32",
       "float64"
     ],
+    "Tensor.unsqueeze_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.var": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.vdot": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
       "float16",
       "float32",
       "float64"
@@ -2479,12 +4458,37 @@
       "float32",
       "float64"
     ],
+    "Tensor.vsplit": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "Tensor.where": [
       "bool",
       "int8",
       "int16",
       "int32",
       "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.xlogy": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "Tensor.xlogy_": [
       "float16",
       "float32",
       "float64"
@@ -2628,6 +4632,46 @@
       "float32",
       "float64"
     ],
+    "lucid.allclose": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.amax": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.amin": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.aminmax": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.angle": [
       "bool",
       "int8",
@@ -2746,6 +4790,46 @@
       "float32",
       "float64"
     ],
+    "lucid.argwhere": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.as_strided": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.as_tensor": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.asarray": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.asin": [
       "bool",
       "int8",
@@ -2835,6 +4919,11 @@
       "float32",
       "float64"
     ],
+    "lucid.bernoulli": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.bitwise_and": [
       "bool",
       "int8",
@@ -2896,6 +4985,16 @@
       "float32",
       "float64"
     ],
+    "lucid.broadcast_tensors": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.broadcast_to": [
       "bool",
       "int8",
@@ -2922,6 +5021,10 @@
       "int32",
       "int64",
       "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.cdist": [
       "float32",
       "float64"
     ],
@@ -2954,6 +5057,26 @@
       "float32",
       "float64"
     ],
+    "lucid.clamp_max": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.clamp_min": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.clip": [
       "bool",
       "int8",
@@ -2965,6 +5088,16 @@
       "float64"
     ],
     "lucid.clone": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.combinations": [
       "bool",
       "int8",
       "int16",
@@ -2999,6 +5132,35 @@
       "float32",
       "float64"
     ],
+    "lucid.constant_pad_nd": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.copysign": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.corrcoef": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.cos": [
       "bool",
       "int8",
@@ -3019,7 +5181,75 @@
       "float32",
       "float64"
     ],
+    "lucid.count_nonzero": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.cov": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.cumulative_trapezoid": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.deg2rad": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.detach": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.diag": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.diag_embed": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.diagflat": [
       "bool",
       "int8",
       "int16",
@@ -3045,6 +5275,21 @@
       "int16",
       "int32",
       "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.digamma": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.dist": [
       "float16",
       "float32",
       "float64"
@@ -3110,6 +5355,16 @@
       "float64"
     ],
     "lucid.erf": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.erfc": [
       "bool",
       "int8",
       "int16",
@@ -3266,6 +5521,33 @@
       "float32",
       "float64"
     ],
+    "lucid.fft.ihfft": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float32",
+      "float64"
+    ],
+    "lucid.fft.ihfft2": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float32",
+      "float64"
+    ],
+    "lucid.fft.ihfftn": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float32",
+      "float64"
+    ],
     "lucid.fft.irfft": [
       "bool",
       "int8",
@@ -3317,6 +5599,15 @@
       "int16",
       "int32",
       "int64",
+      "float32",
+      "float64"
+    ],
+    "lucid.fix": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
       "float32",
       "float64"
     ],
@@ -3379,6 +5670,15 @@
       "float32",
       "float64"
     ],
+    "lucid.floor_divide": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.fmax": [
       "bool",
       "int8",
@@ -3413,6 +5713,21 @@
       "float32",
       "float64"
     ],
+    "lucid.frexp": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.from_dlpack": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.full_like": [
       "bool",
       "int8",
@@ -3422,6 +5737,23 @@
       "float16",
       "float32",
       "float64"
+    ],
+    "lucid.gather": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.gcd": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64"
     ],
     "lucid.ge": [
       "bool",
@@ -3435,6 +5767,15 @@
     ],
     "lucid.ger": [
       "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.gradient": [
       "int8",
       "int16",
       "int32",
@@ -3488,7 +5829,71 @@
       "float32",
       "float64"
     ],
+    "lucid.histogram": [
+      "float32",
+      "float64"
+    ],
+    "lucid.hsplit": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.hypot": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.i0": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.index_add": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.index_copy": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.index_put": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.index_put_": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
       "float16",
       "float32",
       "float64"
@@ -3691,6 +6096,23 @@
       "float32",
       "float64"
     ],
+    "lucid.lcm": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64"
+    ],
+    "lucid.ldexp": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.le": [
       "bool",
       "int8",
@@ -3726,6 +6148,16 @@
       "float32",
       "float64"
     ],
+    "lucid.lgamma": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.linalg.cholesky": [
       "float32",
       "float64"
@@ -3735,6 +6167,15 @@
       "float64"
     ],
     "lucid.linalg.cond": [
+      "float32",
+      "float64"
+    ],
+    "lucid.linalg.cross": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
       "float32",
       "float64"
     ],
@@ -3768,6 +6209,10 @@
       "float32",
       "float64"
     ],
+    "lucid.linalg.householder_product": [
+      "float32",
+      "float64"
+    ],
     "lucid.linalg.inv": [
       "float32",
       "float64"
@@ -3780,6 +6225,14 @@
       "float32",
       "float64"
     ],
+    "lucid.linalg.ldl_factor_ex": [
+      "float32",
+      "float64"
+    ],
+    "lucid.linalg.ldl_solve": [
+      "float32",
+      "float64"
+    ],
     "lucid.linalg.lstsq": [
       "float32",
       "float64"
@@ -3789,6 +6242,14 @@
       "float64"
     ],
     "lucid.linalg.lu_factor": [
+      "float32",
+      "float64"
+    ],
+    "lucid.linalg.lu_factor_ex": [
+      "float32",
+      "float64"
+    ],
+    "lucid.linalg.lu_solve": [
       "float32",
       "float64"
     ],
@@ -3852,6 +6313,22 @@
       "float32",
       "float64"
     ],
+    "lucid.linalg.tensorinv": [
+      "float32",
+      "float64"
+    ],
+    "lucid.linalg.tensorsolve": [
+      "float32",
+      "float64"
+    ],
+    "lucid.linalg.vander": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float32",
+      "float64"
+    ],
     "lucid.linalg.vecdot": [
       "float16",
       "float32",
@@ -3902,8 +6379,27 @@
       "float32",
       "float64"
     ],
+    "lucid.log_softmax": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.logaddexp": [
       "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.logaddexp2": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.logcumsumexp": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.logdet": [
       "float32",
       "float64"
     ],
@@ -3977,6 +6473,16 @@
       "float32",
       "float64"
     ],
+    "lucid.masked_scatter": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.masked_select": [
       "bool",
       "int8",
@@ -4021,6 +6527,15 @@
       "float32",
       "float64"
     ],
+    "lucid.median": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.meshgrid": [
       "bool",
       "int8",
@@ -4060,6 +6575,16 @@
       "float32",
       "float64"
     ],
+    "lucid.mode": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.moveaxis": [
       "bool",
       "int8",
@@ -4080,12 +6605,27 @@
       "float32",
       "float64"
     ],
+    "lucid.msort": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.mul": [
       "bool",
       "int8",
       "int16",
       "int32",
       "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.multinomial": [
       "float16",
       "float32",
       "float64"
@@ -4281,6 +6821,11 @@
       "float32",
       "float64"
     ],
+    "lucid.normal": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.not_equal": [
       "bool",
       "int8",
@@ -4321,6 +6866,11 @@
       "float32",
       "float64"
     ],
+    "lucid.poisson": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.polar": [
       "float32",
       "float64"
@@ -4353,6 +6903,26 @@
       "float32",
       "float64"
     ],
+    "lucid.put": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.rad2deg": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.rand_like": [
       "float16",
       "float32",
@@ -4363,6 +6933,16 @@
       "int16",
       "int32",
       "int64"
+    ],
+    "lucid.randint_like": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
     ],
     "lucid.randn_like": [
       "float16",
@@ -4423,7 +7003,22 @@
       "float32",
       "float64"
     ],
+    "lucid.renorm": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.repeat_interleave": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.reshape": [
       "bool",
       "int8",
       "int16",
@@ -4530,6 +7125,31 @@
       "float32",
       "float64"
     ],
+    "lucid.select": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.selu": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.sgn": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.sigmoid": [
       "bool",
       "int8",
@@ -4586,6 +7206,21 @@
       "int16",
       "int32",
       "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.slice_scatter": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.softmax": [
       "float16",
       "float32",
       "float64"
@@ -4697,6 +7332,16 @@
       "int16",
       "int32",
       "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.special.gammainc": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.special.gammaincc": [
       "float16",
       "float32",
       "float64"
@@ -4952,6 +7597,26 @@
       "float32",
       "float64"
     ],
+    "lucid.split": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.split_with_sizes": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.sqrt": [
       "bool",
       "int8",
@@ -4983,6 +7648,11 @@
       "float64"
     ],
     "lucid.std": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.std_mean": [
       "float16",
       "float32",
       "float64"
@@ -5085,6 +7755,16 @@
       "float32",
       "float64"
     ],
+    "lucid.tensor": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.tensor_split": [
       "bool",
       "int8",
@@ -5124,6 +7804,15 @@
       "float64"
     ],
     "lucid.trace": [
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.trapezoid": [
       "int8",
       "int16",
       "int32",
@@ -5201,6 +7890,36 @@
       "float32",
       "float64"
     ],
+    "lucid.unique_consecutive": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.unsafe_chunk": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.unsafe_split": [
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
+    ],
     "lucid.unsqueeze": [
       "bool",
       "int8",
@@ -5212,6 +7931,11 @@
       "float64"
     ],
     "lucid.var": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "lucid.var_mean": [
       "float16",
       "float32",
       "float64"
@@ -5271,19 +7995,413 @@
       "float64"
     ]
   },
+  "bool_refusals": {
+    "F.adaptive_avg_pool1d": "NotImplementedError",
+    "F.adaptive_avg_pool2d": "NotImplementedError",
+    "F.adaptive_avg_pool3d": "NotImplementedError",
+    "F.adaptive_max_pool1d": "NotImplementedError",
+    "F.adaptive_max_pool1d_with_indices": "NotImplementedError",
+    "F.adaptive_max_pool2d": "NotImplementedError",
+    "F.adaptive_max_pool2d_with_indices": "NotImplementedError",
+    "F.adaptive_max_pool3d": "NotImplementedError",
+    "F.adaptive_max_pool3d_with_indices": "NotImplementedError",
+    "F.affine_grid": "ValueError",
+    "F.avg_pool1d": "NotImplementedError",
+    "F.avg_pool2d": "NotImplementedError",
+    "F.avg_pool3d": "NotImplementedError",
+    "F.batch_norm": "NotImplementedError",
+    "F.bilinear": "NotImplementedError",
+    "F.binary_cross_entropy": "NotImplementedError",
+    "F.binary_cross_entropy_with_logits": "NotImplementedError",
+    "F.celu": "NotImplementedError",
+    "F.celu_": "NotImplementedError",
+    "F.conv1d": "NotImplementedError",
+    "F.conv2d": "NotImplementedError",
+    "F.conv3d": "NotImplementedError",
+    "F.conv_transpose1d": "NotImplementedError",
+    "F.conv_transpose2d": "NotImplementedError",
+    "F.conv_transpose3d": "NotImplementedError",
+    "F.cosine_similarity": "RuntimeError",
+    "F.cross_entropy": "NotImplementedError",
+    "F.ctc_loss": "NotImplementedError",
+    "F.elu": "NotImplementedError",
+    "F.elu_": "NotImplementedError",
+    "F.embedding_bag": "RuntimeError",
+    "F.fractional_max_pool3d": "NotImplementedError",
+    "F.gaussian_nll_loss": "RuntimeError",
+    "F.gelu": "NotImplementedError",
+    "F.glu": "NotImplementedError",
+    "F.grid_sample": "NotImplementedError",
+    "F.group_norm": "NotImplementedError",
+    "F.gumbel_softmax": "RuntimeError",
+    "F.hardshrink": "NotImplementedError",
+    "F.hardsigmoid": "NotImplementedError",
+    "F.hardswish": "NotImplementedError",
+    "F.hardtanh": "RuntimeError",
+    "F.hardtanh_": "RuntimeError",
+    "F.huber_loss": "NotImplementedError",
+    "F.instance_norm": "NotImplementedError",
+    "F.interpolate": "NotImplementedError",
+    "F.kl_div": "RuntimeError",
+    "F.l1_loss": "RuntimeError",
+    "F.layer_norm": "NotImplementedError",
+    "F.leaky_relu": "NotImplementedError",
+    "F.leaky_relu_": "NotImplementedError",
+    "F.linear": "NotImplementedError",
+    "F.local_response_norm": "NotImplementedError",
+    "F.log_softmax": "NotImplementedError",
+    "F.logsigmoid": "NotImplementedError",
+    "F.margin_ranking_loss": "RuntimeError",
+    "F.max_pool1d": "NotImplementedError",
+    "F.max_pool1d_with_indices": "NotImplementedError",
+    "F.max_pool2d": "NotImplementedError",
+    "F.max_pool2d_with_indices": "NotImplementedError",
+    "F.max_pool3d": "NotImplementedError",
+    "F.max_pool3d_with_indices": "NotImplementedError",
+    "F.max_unpool1d": "NotImplementedError",
+    "F.max_unpool2d": "NotImplementedError",
+    "F.max_unpool3d": "NotImplementedError",
+    "F.mish": "NotImplementedError",
+    "F.mse_loss": "NotImplementedError",
+    "F.multi_margin_loss": "NotImplementedError",
+    "F.multilabel_soft_margin_loss": "NotImplementedError",
+    "F.nll_loss": "NotImplementedError",
+    "F.normalize": "RuntimeError",
+    "F.one_hot": "RuntimeError",
+    "F.pairwise_distance": "RuntimeError",
+    "F.pdist": "RuntimeError",
+    "F.poisson_nll_loss": "RuntimeError",
+    "F.prelu": "NotImplementedError",
+    "F.relu": "RuntimeError",
+    "F.relu6": "RuntimeError",
+    "F.relu_": "RuntimeError",
+    "F.rms_norm": "NotImplementedError",
+    "F.rrelu": "NotImplementedError",
+    "F.rrelu_": "NotImplementedError",
+    "F.scaled_dot_product_attention": "RuntimeError",
+    "F.selu": "NotImplementedError",
+    "F.selu_": "NotImplementedError",
+    "F.silu": "NotImplementedError",
+    "F.smooth_l1_loss": "NotImplementedError",
+    "F.soft_margin_loss": "RuntimeError",
+    "F.softmax": "NotImplementedError",
+    "F.softmin": "RuntimeError",
+    "F.softplus": "NotImplementedError",
+    "F.softshrink": "NotImplementedError",
+    "F.softsign": "NotImplementedError",
+    "F.tanhshrink": "RuntimeError",
+    "F.threshold": "NotImplementedError",
+    "F.threshold_": "NotImplementedError",
+    "F.triplet_margin_loss": "RuntimeError",
+    "F.triplet_margin_with_distance_loss": "RuntimeError",
+    "F.upsample": "NotImplementedError",
+    "F.upsample_bilinear": "NotImplementedError",
+    "F.upsample_nearest": "NotImplementedError",
+    "Tensor.abs": "NotImplementedError",
+    "Tensor.abs_": "NotImplementedError",
+    "Tensor.absolute": "NotImplementedError",
+    "Tensor.absolute_": "NotImplementedError",
+    "Tensor.acos_": "RuntimeError",
+    "Tensor.acosh_": "RuntimeError",
+    "Tensor.addbmm": "NotImplementedError",
+    "Tensor.addcdiv": "RuntimeError",
+    "Tensor.addcdiv_": "RuntimeError",
+    "Tensor.addcmul": "NotImplementedError",
+    "Tensor.addcmul_": "NotImplementedError",
+    "Tensor.addmm": "NotImplementedError",
+    "Tensor.addmv": "NotImplementedError",
+    "Tensor.arccos_": "RuntimeError",
+    "Tensor.arccosh_": "RuntimeError",
+    "Tensor.arcsin_": "RuntimeError",
+    "Tensor.arcsinh_": "RuntimeError",
+    "Tensor.arctan2_": "RuntimeError",
+    "Tensor.arctan_": "RuntimeError",
+    "Tensor.arctanh_": "RuntimeError",
+    "Tensor.argmax": "RuntimeError",
+    "Tensor.argmin": "RuntimeError",
+    "Tensor.asin_": "RuntimeError",
+    "Tensor.asinh_": "RuntimeError",
+    "Tensor.atan2_": "RuntimeError",
+    "Tensor.atan_": "RuntimeError",
+    "Tensor.atanh_": "RuntimeError",
+    "Tensor.baddbmm": "NotImplementedError",
+    "Tensor.baddbmm_": "NotImplementedError",
+    "Tensor.bernoulli": "NotImplementedError",
+    "Tensor.bitwise_and_": "RuntimeError",
+    "Tensor.bitwise_left_shift_": "RuntimeError",
+    "Tensor.bitwise_or_": "RuntimeError",
+    "Tensor.bitwise_right_shift_": "RuntimeError",
+    "Tensor.bitwise_xor_": "RuntimeError",
+    "Tensor.bmm": "NotImplementedError",
+    "Tensor.cauchy_": "RuntimeError",
+    "Tensor.ceil": "NotImplementedError",
+    "Tensor.ceil_": "NotImplementedError",
+    "Tensor.clamp": "NotImplementedError",
+    "Tensor.clip": "NotImplementedError",
+    "Tensor.copysign_": "RuntimeError",
+    "Tensor.corrcoef": "RuntimeError",
+    "Tensor.cos_": "RuntimeError",
+    "Tensor.cosh_": "RuntimeError",
+    "Tensor.cov": "RuntimeError",
+    "Tensor.deg2rad_": "RuntimeError",
+    "Tensor.digamma_": "RuntimeError",
+    "Tensor.dist": "RuntimeError",
+    "Tensor.div_": "RuntimeError",
+    "Tensor.divide_": "RuntimeError",
+    "Tensor.dot": "NotImplementedError",
+    "Tensor.erf_": "RuntimeError",
+    "Tensor.erfc_": "RuntimeError",
+    "Tensor.erfinv_": "RuntimeError",
+    "Tensor.exp2_": "RuntimeError",
+    "Tensor.exp_": "RuntimeError",
+    "Tensor.expm1_": "RuntimeError",
+    "Tensor.exponential_": "RuntimeError",
+    "Tensor.fix": "NotImplementedError",
+    "Tensor.fix_": "NotImplementedError",
+    "Tensor.float_power_": "RuntimeError",
+    "Tensor.floor": "NotImplementedError",
+    "Tensor.floor_": "NotImplementedError",
+    "Tensor.floor_divide": "NotImplementedError",
+    "Tensor.floor_divide_": "NotImplementedError",
+    "Tensor.fmod": "NotImplementedError",
+    "Tensor.fmod_": "NotImplementedError",
+    "Tensor.frac": "NotImplementedError",
+    "Tensor.frac_": "NotImplementedError",
+    "Tensor.frexp": "RuntimeError",
+    "Tensor.gcd_": "RuntimeError",
+    "Tensor.geometric_": "NotImplementedError",
+    "Tensor.histc": "NotImplementedError",
+    "Tensor.histogram": "NotImplementedError",
+    "Tensor.hypot": "NotImplementedError",
+    "Tensor.hypot_": "NotImplementedError",
+    "Tensor.i0_": "RuntimeError",
+    "Tensor.inner": "NotImplementedError",
+    "Tensor.kthvalue": "NotImplementedError",
+    "Tensor.lcm_": "RuntimeError",
+    "Tensor.ldexp_": "RuntimeError",
+    "Tensor.lerp": "NotImplementedError",
+    "Tensor.lerp_": "NotImplementedError",
+    "Tensor.lgamma_": "RuntimeError",
+    "Tensor.log10_": "RuntimeError",
+    "Tensor.log1p_": "RuntimeError",
+    "Tensor.log2_": "RuntimeError",
+    "Tensor.log_": "RuntimeError",
+    "Tensor.log_normal_": "NotImplementedError",
+    "Tensor.log_softmax": "NotImplementedError",
+    "Tensor.logaddexp": "NotImplementedError",
+    "Tensor.logaddexp2": "NotImplementedError",
+    "Tensor.logcumsumexp": "NotImplementedError",
+    "Tensor.logdet": "RuntimeError",
+    "Tensor.logit_": "RuntimeError",
+    "Tensor.matmul": "NotImplementedError",
+    "Tensor.mean": "RuntimeError",
+    "Tensor.median": "NotImplementedError",
+    "Tensor.mm": "NotImplementedError",
+    "Tensor.multinomial": "RuntimeError",
+    "Tensor.nanmean": "RuntimeError",
+    "Tensor.nanmedian": "NotImplementedError",
+    "Tensor.neg": "RuntimeError",
+    "Tensor.neg_": "RuntimeError",
+    "Tensor.negative": "RuntimeError",
+    "Tensor.negative_": "RuntimeError",
+    "Tensor.nextafter": "NotImplementedError",
+    "Tensor.nextafter_": "NotImplementedError",
+    "Tensor.normal_": "NotImplementedError",
+    "Tensor.positive": "RuntimeError",
+    "Tensor.pow": "NotImplementedError",
+    "Tensor.pow_": "NotImplementedError",
+    "Tensor.rad2deg_": "RuntimeError",
+    "Tensor.reciprocal_": "RuntimeError",
+    "Tensor.relu": "RuntimeError",
+    "Tensor.relu_": "RuntimeError",
+    "Tensor.remainder": "NotImplementedError",
+    "Tensor.remainder_": "NotImplementedError",
+    "Tensor.renorm": "RuntimeError",
+    "Tensor.renorm_": "RuntimeError",
+    "Tensor.requires_grad_": "RuntimeError",
+    "Tensor.round": "NotImplementedError",
+    "Tensor.round_": "NotImplementedError",
+    "Tensor.rsqrt_": "RuntimeError",
+    "Tensor.sigmoid_": "RuntimeError",
+    "Tensor.sin_": "RuntimeError",
+    "Tensor.sinc_": "RuntimeError",
+    "Tensor.sinh_": "RuntimeError",
+    "Tensor.softmax": "NotImplementedError",
+    "Tensor.sqrt_": "RuntimeError",
+    "Tensor.square_": "RuntimeError",
+    "Tensor.std": "RuntimeError",
+    "Tensor.sub": "RuntimeError",
+    "Tensor.sub_": "RuntimeError",
+    "Tensor.subtract": "RuntimeError",
+    "Tensor.subtract_": "RuntimeError",
+    "Tensor.tan_": "RuntimeError",
+    "Tensor.tanh_": "RuntimeError",
+    "Tensor.topk": "RuntimeError",
+    "Tensor.trace": "NotImplementedError",
+    "Tensor.true_divide_": "RuntimeError",
+    "Tensor.trunc": "NotImplementedError",
+    "Tensor.trunc_": "NotImplementedError",
+    "Tensor.uniform_": "NotImplementedError",
+    "Tensor.var": "RuntimeError",
+    "Tensor.vdot": "NotImplementedError",
+    "Tensor.xlogy_": "RuntimeError",
+    "lucid.abs": "NotImplementedError",
+    "lucid.absolute": "NotImplementedError",
+    "lucid.addbmm": "NotImplementedError",
+    "lucid.addcdiv": "RuntimeError",
+    "lucid.addcmul": "NotImplementedError",
+    "lucid.addmm": "NotImplementedError",
+    "lucid.addmv": "NotImplementedError",
+    "lucid.argmax": "RuntimeError",
+    "lucid.argmin": "RuntimeError",
+    "lucid.baddbmm": "NotImplementedError",
+    "lucid.bernoulli": "NotImplementedError",
+    "lucid.bmm": "NotImplementedError",
+    "lucid.bucketize": "NotImplementedError",
+    "lucid.cdist": "RuntimeError",
+    "lucid.ceil": "NotImplementedError",
+    "lucid.complex": "RuntimeError",
+    "lucid.corrcoef": "RuntimeError",
+    "lucid.cov": "RuntimeError",
+    "lucid.cumulative_trapezoid": "RuntimeError",
+    "lucid.dist": "RuntimeError",
+    "lucid.eye": "RuntimeError",
+    "lucid.fix": "NotImplementedError",
+    "lucid.floor": "NotImplementedError",
+    "lucid.floor_divide": "NotImplementedError",
+    "lucid.fmod": "NotImplementedError",
+    "lucid.frac": "NotImplementedError",
+    "lucid.frexp": "RuntimeError",
+    "lucid.gradient": "RuntimeError",
+    "lucid.histc": "NotImplementedError",
+    "lucid.histogram": "NotImplementedError",
+    "lucid.hypot": "NotImplementedError",
+    "lucid.isin": "RuntimeError",
+    "lucid.kthvalue": "NotImplementedError",
+    "lucid.lerp": "NotImplementedError",
+    "lucid.linalg.cholesky": "RuntimeError",
+    "lucid.linalg.cholesky_ex": "RuntimeError",
+    "lucid.linalg.cond": "RuntimeError",
+    "lucid.linalg.cross": "NotImplementedError",
+    "lucid.linalg.det": "RuntimeError",
+    "lucid.linalg.eig": "RuntimeError",
+    "lucid.linalg.eigh": "NotImplementedError",
+    "lucid.linalg.eigvals": "RuntimeError",
+    "lucid.linalg.eigvalsh": "NotImplementedError",
+    "lucid.linalg.householder_product": "NotImplementedError",
+    "lucid.linalg.inv": "RuntimeError",
+    "lucid.linalg.inv_ex": "RuntimeError",
+    "lucid.linalg.ldl_factor": "RuntimeError",
+    "lucid.linalg.ldl_factor_ex": "RuntimeError",
+    "lucid.linalg.ldl_solve": "RuntimeError",
+    "lucid.linalg.lstsq": "RuntimeError",
+    "lucid.linalg.lu": "NotImplementedError",
+    "lucid.linalg.lu_factor": "NotImplementedError",
+    "lucid.linalg.lu_factor_ex": "NotImplementedError",
+    "lucid.linalg.lu_solve": "RuntimeError",
+    "lucid.linalg.matrix_exp": "RuntimeError",
+    "lucid.linalg.matrix_norm": "RuntimeError",
+    "lucid.linalg.matrix_power": "NotImplementedError",
+    "lucid.linalg.matrix_rank": "RuntimeError",
+    "lucid.linalg.norm": "RuntimeError",
+    "lucid.linalg.pinv": "RuntimeError",
+    "lucid.linalg.qr": "RuntimeError",
+    "lucid.linalg.slogdet": "RuntimeError",
+    "lucid.linalg.solve": "RuntimeError",
+    "lucid.linalg.solve_ex": "RuntimeError",
+    "lucid.linalg.solve_triangular": "NotImplementedError",
+    "lucid.linalg.svd": "RuntimeError",
+    "lucid.linalg.svdvals": "RuntimeError",
+    "lucid.linalg.tensorinv": "RuntimeError",
+    "lucid.linalg.tensorsolve": "RuntimeError",
+    "lucid.linalg.vander": "RuntimeError",
+    "lucid.linalg.vecdot": "RuntimeError",
+    "lucid.linalg.vector_norm": "RuntimeError",
+    "lucid.log_softmax": "NotImplementedError",
+    "lucid.logaddexp": "NotImplementedError",
+    "lucid.logaddexp2": "NotImplementedError",
+    "lucid.logcumsumexp": "NotImplementedError",
+    "lucid.logdet": "RuntimeError",
+    "lucid.matmul": "NotImplementedError",
+    "lucid.mean": "RuntimeError",
+    "lucid.median": "NotImplementedError",
+    "lucid.mm": "NotImplementedError",
+    "lucid.multinomial": "RuntimeError",
+    "lucid.nanmean": "RuntimeError",
+    "lucid.nanmedian": "NotImplementedError",
+    "lucid.neg": "RuntimeError",
+    "lucid.negative": "RuntimeError",
+    "lucid.nextafter": "NotImplementedError",
+    "lucid.nn.init.kaiming_normal": "NotImplementedError",
+    "lucid.nn.init.kaiming_uniform": "NotImplementedError",
+    "lucid.nn.init.normal": "NotImplementedError",
+    "lucid.nn.init.orthogonal": "NotImplementedError",
+    "lucid.nn.init.sparse": "NotImplementedError",
+    "lucid.nn.init.trunc_normal_": "NotImplementedError",
+    "lucid.nn.init.uniform": "NotImplementedError",
+    "lucid.nn.init.xavier_normal": "NotImplementedError",
+    "lucid.nn.init.xavier_uniform": "NotImplementedError",
+    "lucid.normal": "NotImplementedError",
+    "lucid.poisson": "NotImplementedError",
+    "lucid.polar": "RuntimeError",
+    "lucid.positive": "RuntimeError",
+    "lucid.pow": "NotImplementedError",
+    "lucid.rand_like": "NotImplementedError",
+    "lucid.randint": "RuntimeError",
+    "lucid.randn_like": "NotImplementedError",
+    "lucid.randperm": "RuntimeError",
+    "lucid.relu": "RuntimeError",
+    "lucid.remainder": "NotImplementedError",
+    "lucid.renorm": "RuntimeError",
+    "lucid.round": "NotImplementedError",
+    "lucid.rsub": "RuntimeError",
+    "lucid.searchsorted": "NotImplementedError",
+    "lucid.selu": "NotImplementedError",
+    "lucid.softmax": "NotImplementedError",
+    "lucid.special.gammainc": "NotImplementedError",
+    "lucid.special.gammaincc": "NotImplementedError",
+    "lucid.special.multigammaln": "RuntimeError",
+    "lucid.std": "RuntimeError",
+    "lucid.std_mean": "RuntimeError",
+    "lucid.sub": "RuntimeError",
+    "lucid.subtract": "RuntimeError",
+    "lucid.tensordot": "NotImplementedError",
+    "lucid.topk": "RuntimeError",
+    "lucid.trace": "NotImplementedError",
+    "lucid.trapezoid": "RuntimeError",
+    "lucid.trunc": "NotImplementedError",
+    "lucid.var": "RuntimeError",
+    "lucid.var_mean": "RuntimeError",
+    "lucid.vdot": "NotImplementedError",
+    "lucid.view_as_complex": "RuntimeError"
+  },
   "unmapped": [
+    "F.BOOL_CODE",
+    "F.DimLike",
+    "F.GUARD_FRAMES",
     "F.GeluApproximate",
     "F.Reduction",
     "F.ReductionKL",
     "F.accuracy",
     "F.apply_rotary_emb",
+    "F.bool_refusal",
     "F.check_embedding_indices",
     "F.correct_count",
     "F.fused_linear_gelu",
     "F.fused_linear_relu",
+    "F.nearest_codebook",
+    "F.noisy_linear",
     "F.repeat_kv",
+    "F.scaled_noise",
     "F.sinusoidal_embedding",
     "F.sinusoidal_embedding_2d",
+    "F.straight_through",
+    "F.straight_through",
+    "F.symexp",
+    "F.symlog",
+    "F.two_hot",
+    "F.unsupported_if",
+    "F.vector_quantize",
     "lucid.DTypeLike",
     "lucid.DeviceLike",
     "lucid.HasShape",
@@ -5298,6 +8416,9 @@
     "lucid.amp.GradScaler",
     "lucid.amp.autocast",
     "lucid.amp.autocast.to_engine_dtype",
+    "lucid.amp.custom_bwd",
+    "lucid.amp.custom_fwd",
+    "lucid.amp.is_autocast_available",
     "lucid.autograd.Function",
     "lucid.autograd.FunctionCtx",
     "lucid.autograd.RemovableHandle",
@@ -5305,16 +8426,21 @@
     "lucid.autograd.checkpoint",
     "lucid.autograd.detect_anomaly",
     "lucid.autograd.function.FunctionMeta",
+    "lucid.autograd.function.once_differentiable",
+    "lucid.autograd.function.untraced",
     "lucid.autograd.grad",
     "lucid.autograd.gradcheck",
     "lucid.autograd.gradgradcheck",
     "lucid.autograd.graph.allow_mutation_on_saved_tensors",
     "lucid.autograd.graph.save_on_cpu",
+    "lucid.autograd.graph.saved_tensors_hooks",
     "lucid.autograd.hessian",
+    "lucid.autograd.hvp",
     "lucid.autograd.is_anomaly_enabled",
     "lucid.autograd.jacobian",
     "lucid.autograd.jvp",
     "lucid.autograd.set_detect_anomaly",
+    "lucid.autograd.vhp",
     "lucid.autograd.vjp",
     "lucid.backends.accelerate",
     "lucid.backends.metal",
@@ -5326,6 +8452,7 @@
     "lucid.compile._tracing",
     "lucid.compile.compile",
     "lucid.compile.compile_optimizer",
+    "lucid.compile.compiled_decode_step",
     "lucid.compile.compiled_step",
     "lucid.compile.diagnose",
     "lucid.compile.fused_step",
@@ -5333,6 +8460,32 @@
     "lucid.compile.make_step",
     "lucid.compile.save_compiled",
     "lucid.contiguous",
+    "lucid.coreml.Activations",
+    "lucid.coreml.Classifier",
+    "lucid.coreml.ColorSpace",
+    "lucid.coreml.CompressionAware",
+    "lucid.coreml.ComputeUnits",
+    "lucid.coreml.CoreMLModel",
+    "lucid.coreml.DeploymentTarget",
+    "lucid.coreml.Draws",
+    "lucid.coreml.ImageInput",
+    "lucid.coreml.Latency",
+    "lucid.coreml.Metadata",
+    "lucid.coreml.Palettize",
+    "lucid.coreml.PlacementSummary",
+    "lucid.coreml.Precision",
+    "lucid.coreml.ShapeNotFlexible",
+    "lucid.coreml.Sparsify",
+    "lucid.coreml.State",
+    "lucid.coreml.StatefulModel",
+    "lucid.coreml.UnsupportedOp",
+    "lucid.coreml.UnsupportedRank",
+    "lucid.coreml.WeightPrecision",
+    "lucid.coreml.empty_cache",
+    "lucid.coreml.export",
+    "lucid.coreml.export_functions",
+    "lucid.coreml.load",
+    "lucid.coreml.precision_cost",
     "lucid.diffeq.ADAPTIVE_HEUN",
     "lucid.diffeq.BOSH3",
     "lucid.diffeq.ButcherTableau",
@@ -5346,6 +8499,7 @@
     "lucid.diffeq.HEUN3",
     "lucid.diffeq.IMPLICIT_EULER",
     "lucid.diffeq.IMPLICIT_MIDPOINT",
+    "lucid.diffeq.ImplicitSolveError",
     "lucid.diffeq.MIDPOINT",
     "lucid.diffeq.RADAU_IIA3",
     "lucid.diffeq.RADAU_IIA5",
@@ -5369,6 +8523,7 @@
     "lucid.distributions.Cauchy",
     "lucid.distributions.Chi2",
     "lucid.distributions.ComposeTransform",
+    "lucid.distributions.ConstraintRegistry",
     "lucid.distributions.ContinuousBernoulli",
     "lucid.distributions.CorrCholeskyTransform",
     "lucid.distributions.CumulativeDistributionTransform",
@@ -5379,6 +8534,7 @@
     "lucid.distributions.ExponentialFamily",
     "lucid.distributions.FisherSnedecor",
     "lucid.distributions.Gamma",
+    "lucid.distributions.GeneralizedPareto",
     "lucid.distributions.Geometric",
     "lucid.distributions.Gumbel",
     "lucid.distributions.HalfCauchy",
@@ -5390,6 +8546,8 @@
     "lucid.distributions.LKJCholesky",
     "lucid.distributions.Laplace",
     "lucid.distributions.LogNormal",
+    "lucid.distributions.LogisticNormal",
+    "lucid.distributions.LowRankMultivariateNormal",
     "lucid.distributions.LowerCholeskyTransform",
     "lucid.distributions.MixtureSameFamily",
     "lucid.distributions.Multinomial",
@@ -5397,14 +8555,17 @@
     "lucid.distributions.NegativeBinomial",
     "lucid.distributions.Normal",
     "lucid.distributions.OneHotCategorical",
+    "lucid.distributions.OneHotCategoricalStraightThrough",
     "lucid.distributions.Pareto",
     "lucid.distributions.Poisson",
+    "lucid.distributions.PositiveDefiniteTransform",
     "lucid.distributions.PowerTransform",
     "lucid.distributions.RelaxedBernoulli",
     "lucid.distributions.RelaxedOneHotCategorical",
     "lucid.distributions.ReshapeTransform",
     "lucid.distributions.SigmoidTransform",
     "lucid.distributions.SoftmaxTransform",
+    "lucid.distributions.SoftplusTransform",
     "lucid.distributions.StackTransform",
     "lucid.distributions.StickBreakingTransform",
     "lucid.distributions.StudentT",
@@ -5412,6 +8573,7 @@
     "lucid.distributions.Transform",
     "lucid.distributions.TransformedDistribution",
     "lucid.distributions.Uniform",
+    "lucid.distributions.VonMises",
     "lucid.distributions.Weibull",
     "lucid.distributions.Wishart",
     "lucid.distributions.bernoulli.Constraint",
@@ -5420,22 +8582,50 @@
     "lucid.distributions.bernoulli.open_unit_interval",
     "lucid.distributions.bernoulli.real",
     "lucid.distributions.bernoulli.unit_interval",
+    "lucid.distributions.biject_to",
     "lucid.distributions.categorical.integer_interval",
+    "lucid.distributions.categorical.one_hot",
+    "lucid.distributions.categorical.real_vector",
     "lucid.distributions.categorical.simplex",
+    "lucid.distributions.constraints.MixtureSameFamilyConstraint",
+    "lucid.distributions.constraints.cat",
+    "lucid.distributions.constraints.corr_cholesky",
+    "lucid.distributions.constraints.dependent",
+    "lucid.distributions.constraints.dependent_property",
     "lucid.distributions.constraints.greater_than",
     "lucid.distributions.constraints.greater_than_eq",
+    "lucid.distributions.constraints.half_open_interval",
+    "lucid.distributions.constraints.independent",
     "lucid.distributions.constraints.interval",
+    "lucid.distributions.constraints.is_dependent",
     "lucid.distributions.constraints.less_than",
+    "lucid.distributions.constraints.lower_cholesky",
+    "lucid.distributions.constraints.lower_triangular",
+    "lucid.distributions.constraints.multinomial",
     "lucid.distributions.constraints.nonnegative",
     "lucid.distributions.constraints.positive",
     "lucid.distributions.constraints.positive_definite",
+    "lucid.distributions.constraints.positive_integer",
+    "lucid.distributions.constraints.positive_semidefinite",
+    "lucid.distributions.constraints.square",
+    "lucid.distributions.constraints.stack",
+    "lucid.distributions.constraints.symmetric",
     "lucid.distributions.kl_divergence",
     "lucid.distributions.register_kl",
+    "lucid.distributions.relaxed.ExpRelaxedCategorical",
+    "lucid.distributions.relaxed.LogitRelaxedBernoulli",
+    "lucid.distributions.set_default_validate_args",
+    "lucid.distributions.transform_to",
     "lucid.einops.einsum",
+    "lucid.einops.pack",
+    "lucid.einops.parse_shape",
     "lucid.einops.rearrange",
     "lucid.einops.reduce",
     "lucid.einops.repeat",
+    "lucid.einops.unpack",
+    "lucid.eval",
     "lucid.expand",
+    "lucid.func.functional_call",
     "lucid.func.grad",
     "lucid.func.grad_and_value",
     "lucid.func.hessian",
@@ -5443,10 +8633,14 @@
     "lucid.func.jacrev",
     "lucid.func.jvp",
     "lucid.func.linearize",
+    "lucid.func.stack_module_state",
     "lucid.func.vjp",
     "lucid.func.vmap",
+    "lucid.histogram2d",
+    "lucid.linalg.cholesky_inverse",
     "lucid.linalg.dot",
     "lucid.linalg.inner",
+    "lucid.linalg.lu_unpack",
     "lucid.linalg.outer",
     "lucid.load_safetensors",
     "lucid.load_sharded",
@@ -5514,13 +8708,19 @@
     "lucid.nn.quantized.Tanh",
     "lucid.nn.quantized.activation.activation_qparams",
     "lucid.nn.quantized.conv.quantize_weight",
+    "lucid.nn.quantized.dynamic.GRU",
+    "lucid.nn.quantized.dynamic.GRUCell",
     "lucid.nn.quantized.dynamic.LSTM",
+    "lucid.nn.quantized.dynamic.LSTMCell",
     "lucid.nn.quantized.dynamic.Linear",
+    "lucid.nn.quantized.dynamic.RNNCell",
     "lucid.nn.quantized.mlx_linear.quantize",
     "lucid.nn.quantized.mlx_linear.quantized_matmul",
     "lucid.nn.utils.PackedSequence",
+    "lucid.nn.utils.clip_grad.write_grad_",
     "lucid.nn.utils.clip_grad_norm",
     "lucid.nn.utils.clip_grad_value_",
+    "lucid.nn.utils.clip_grads_with_norm_",
     "lucid.nn.utils.copy_parameters_and_buffers",
     "lucid.nn.utils.fuse_conv_bn_eval",
     "lucid.nn.utils.fuse_conv_bn_weights",
@@ -5532,20 +8732,42 @@
     "lucid.nn.utils.pad_packed_sequence",
     "lucid.nn.utils.pad_sequence",
     "lucid.nn.utils.parameters_to_vector",
+    "lucid.nn.utils.parametrizations.orthogonal",
+    "lucid.nn.utils.parametrizations.spectral_norm",
+    "lucid.nn.utils.parametrizations.weight_norm",
+    "lucid.nn.utils.parametrize.ParametrizationList",
+    "lucid.nn.utils.parametrize.cached",
     "lucid.nn.utils.parametrize.is_parametrized",
     "lucid.nn.utils.parametrize.register_parametrization",
     "lucid.nn.utils.parametrize.remove_parametrizations",
+    "lucid.nn.utils.parametrize.type_before_parametrizations",
+    "lucid.nn.utils.prune.BasePruningMethod",
+    "lucid.nn.utils.prune.CustomFromMask",
+    "lucid.nn.utils.prune.Identity",
+    "lucid.nn.utils.prune.L1Unstructured",
+    "lucid.nn.utils.prune.LnStructured",
+    "lucid.nn.utils.prune.PruningContainer",
+    "lucid.nn.utils.prune.RandomStructured",
+    "lucid.nn.utils.prune.RandomUnstructured",
+    "lucid.nn.utils.prune.custom_from_mask",
+    "lucid.nn.utils.prune.global_unstructured",
     "lucid.nn.utils.prune.identity",
     "lucid.nn.utils.prune.is_pruned",
     "lucid.nn.utils.prune.l1_unstructured",
+    "lucid.nn.utils.prune.ln_structured",
+    "lucid.nn.utils.prune.random_structured",
     "lucid.nn.utils.prune.random_unstructured",
     "lucid.nn.utils.prune.remove",
     "lucid.nn.utils.remove_spectral_norm",
     "lucid.nn.utils.remove_weight_norm",
     "lucid.nn.utils.skip_init",
     "lucid.nn.utils.spectral_norm",
+    "lucid.nn.utils.spectral_norm.SpectralNorm",
+    "lucid.nn.utils.unpack_sequence",
+    "lucid.nn.utils.unpad_sequence",
     "lucid.nn.utils.vector_to_parameters",
     "lucid.nn.utils.weight_norm",
+    "lucid.nn.utils.weight_norm.WeightNorm",
     "lucid.optim.ASGD",
     "lucid.optim.Adadelta",
     "lucid.optim.Adagrad",
@@ -5576,7 +8798,305 @@
     "lucid.optim.SequentialLR",
     "lucid.optim.SparseAdam",
     "lucid.optim.StepLR",
-    "lucid.pad",
+    "lucid.optim.lbfgs.ReadOnlyMap",
+    "lucid.optim.lr_scheduler.EPOCH_DEPRECATION_WARNING",
+    "lucid.optim.lr_scheduler.LRScheduler",
+    "lucid.optim.optimizer.EngineStateView",
+    "lucid.optim.optimizer.LoadedCheckpoint",
+    "lucid.optim.optimizer.check_decoupled_flag",
+    "lucid.optim.optimizer.engine_args",
+    "lucid.optim.optimizer.group_entries",
+    "lucid.optim.optimizer.held_checkpoint",
+    "lucid.optim.optimizer.held_from_checkpoint",
+    "lucid.optim.optimizer.moved_legacy_state",
+    "lucid.optim.optimizer.negated_grads",
+    "lucid.optim.optimizer.rule_args",
+    "lucid.optim.others.flat_params",
+    "lucid.optim.others.initial_state",
+    "lucid.optim.swa_utils.AveragedModel",
+    "lucid.optim.swa_utils.SWALR",
+    "lucid.optim.swa_utils.get_ema_avg_fn",
+    "lucid.optim.swa_utils.get_ema_multi_avg_fn",
+    "lucid.optim.swa_utils.get_swa_avg_fn",
+    "lucid.optim.swa_utils.get_swa_multi_avg_fn",
+    "lucid.optim.swa_utils.update_bn",
+    "lucid.peft.AdaLoraConfig",
+    "lucid.peft.AdaLoraModel",
+    "lucid.peft.AdamssConfig",
+    "lucid.peft.AdamssModel",
+    "lucid.peft.AdaptionPromptConfig",
+    "lucid.peft.AdaptionPromptModel",
+    "lucid.peft.ArrowConfig",
+    "lucid.peft.AutoPeftModel",
+    "lucid.peft.AutoPeftModelForCausalLM",
+    "lucid.peft.AutoPeftModelForFeatureExtraction",
+    "lucid.peft.AutoPeftModelForQuestionAnswering",
+    "lucid.peft.AutoPeftModelForSeq2SeqLM",
+    "lucid.peft.AutoPeftModelForSequenceClassification",
+    "lucid.peft.AutoPeftModelForTokenClassification",
+    "lucid.peft.BOFTConfig",
+    "lucid.peft.BOFTModel",
+    "lucid.peft.BdLoraConfig",
+    "lucid.peft.BeftConfig",
+    "lucid.peft.BeftModel",
+    "lucid.peft.BoneConfig",
+    "lucid.peft.BoneModel",
+    "lucid.peft.C3AConfig",
+    "lucid.peft.C3AModel",
+    "lucid.peft.CPTConfig",
+    "lucid.peft.CPTEmbedding",
+    "lucid.peft.CPTModel",
+    "lucid.peft.CartridgeConfig",
+    "lucid.peft.CartridgeEncoder",
+    "lucid.peft.DeftConfig",
+    "lucid.peft.DeftModel",
+    "lucid.peft.DeloraConfig",
+    "lucid.peft.DeloraModel",
+    "lucid.peft.EvaConfig",
+    "lucid.peft.FourierFTConfig",
+    "lucid.peft.FourierFTModel",
+    "lucid.peft.FrodConfig",
+    "lucid.peft.FrodModel",
+    "lucid.peft.GloraConfig",
+    "lucid.peft.GloraModel",
+    "lucid.peft.GraloraConfig",
+    "lucid.peft.GraloraModel",
+    "lucid.peft.HRAConfig",
+    "lucid.peft.HRAModel",
+    "lucid.peft.HiraConfig",
+    "lucid.peft.HiraModel",
+    "lucid.peft.IA3Config",
+    "lucid.peft.IA3Model",
+    "lucid.peft.KasaConfig",
+    "lucid.peft.LNTuningConfig",
+    "lucid.peft.LNTuningModel",
+    "lucid.peft.LilyConfig",
+    "lucid.peft.LilyModel",
+    "lucid.peft.LoHaConfig",
+    "lucid.peft.LoHaModel",
+    "lucid.peft.LoKrConfig",
+    "lucid.peft.LoKrModel",
+    "lucid.peft.LoftQConfig",
+    "lucid.peft.LoraConfig",
+    "lucid.peft.LoraGAConfig",
+    "lucid.peft.LoraModel",
+    "lucid.peft.LoraRuntimeConfig",
+    "lucid.peft.MODEL_TYPE_TO_PEFT_MODEL_MAPPING",
+    "lucid.peft.MissConfig",
+    "lucid.peft.MissModel",
+    "lucid.peft.ModulesToSaveWrapper",
+    "lucid.peft.MontecloraConfig",
+    "lucid.peft.MultitaskPromptEmbedding",
+    "lucid.peft.MultitaskPromptTuningConfig",
+    "lucid.peft.MultitaskPromptTuningInit",
+    "lucid.peft.NoMatchingPeftModuleError",
+    "lucid.peft.OFTConfig",
+    "lucid.peft.OFTModel",
+    "lucid.peft.OSFConfig",
+    "lucid.peft.OSFModel",
+    "lucid.peft.PEFT_TYPE_TO_CONFIG_MAPPING",
+    "lucid.peft.PEFT_TYPE_TO_MIXED_MODEL_MAPPING",
+    "lucid.peft.PEFT_TYPE_TO_TUNER_MAPPING",
+    "lucid.peft.PeanutConfig",
+    "lucid.peft.PeanutModel",
+    "lucid.peft.PeftConfig",
+    "lucid.peft.PeftError",
+    "lucid.peft.PeftMixedModel",
+    "lucid.peft.PeftModel",
+    "lucid.peft.PeftModelForCausalLM",
+    "lucid.peft.PeftModelForFeatureExtraction",
+    "lucid.peft.PeftModelForQuestionAnswering",
+    "lucid.peft.PeftModelForSeq2SeqLM",
+    "lucid.peft.PeftModelForSequenceClassification",
+    "lucid.peft.PeftModelForTokenClassification",
+    "lucid.peft.PeftType",
+    "lucid.peft.PeftWarning",
+    "lucid.peft.PolyConfig",
+    "lucid.peft.PolyModel",
+    "lucid.peft.PrefixEncoder",
+    "lucid.peft.PrefixTuningConfig",
+    "lucid.peft.PromptEmbedding",
+    "lucid.peft.PromptEncoder",
+    "lucid.peft.PromptEncoderConfig",
+    "lucid.peft.PromptEncoderReparameterizationType",
+    "lucid.peft.PromptLearningConfig",
+    "lucid.peft.PromptTuningConfig",
+    "lucid.peft.PromptTuningInit",
+    "lucid.peft.PsoftConfig",
+    "lucid.peft.PsoftModel",
+    "lucid.peft.PveraConfig",
+    "lucid.peft.PveraModel",
+    "lucid.peft.RandLoraConfig",
+    "lucid.peft.RandLoraModel",
+    "lucid.peft.RoadConfig",
+    "lucid.peft.RoadModel",
+    "lucid.peft.ShadowConfig",
+    "lucid.peft.ShadowModel",
+    "lucid.peft.ShiraConfig",
+    "lucid.peft.ShiraModel",
+    "lucid.peft.SupertuningConfig",
+    "lucid.peft.SupertuningModel",
+    "lucid.peft.TRANSFORMERS_MODELS_TO_PREFIX_TUNING_POSTPROCESS_MAPPING",
+    "lucid.peft.TaskType",
+    "lucid.peft.TinyLoraConfig",
+    "lucid.peft.TinyLoraModel",
+    "lucid.peft.TrainableTokensConfig",
+    "lucid.peft.TrainableTokensModel",
+    "lucid.peft.TunerLayerStatus",
+    "lucid.peft.TunerModelStatus",
+    "lucid.peft.UniLoraConfig",
+    "lucid.peft.UniLoraModel",
+    "lucid.peft.VBLoRAConfig",
+    "lucid.peft.VBLoRAModel",
+    "lucid.peft.VeloraConfig",
+    "lucid.peft.VeraConfig",
+    "lucid.peft.VeraModel",
+    "lucid.peft.WaveFTConfig",
+    "lucid.peft.WaveFTModel",
+    "lucid.peft.XLoraClassifier",
+    "lucid.peft.XLoraConfig",
+    "lucid.peft.XLoraModel",
+    "lucid.peft.auto.ConvertMode",
+    "lucid.peft.auto.NO_HUB",
+    "lucid.peft.auto.refuse_kwargs",
+    "lucid.peft.auto.refuse_value",
+    "lucid.peft.bloom_model_postprocess_past_key_value",
+    "lucid.peft.cast_mixed_precision_params",
+    "lucid.peft.compose_cartridge_adapters",
+    "lucid.peft.convert_to_lora",
+    "lucid.peft.create_arrow_model",
+    "lucid.peft.find_kappa_target_modules",
+    "lucid.peft.get_base_model_state_dict",
+    "lucid.peft.get_eva_state_dict",
+    "lucid.peft.get_layer_status",
+    "lucid.peft.get_model_status",
+    "lucid.peft.get_peft_config",
+    "lucid.peft.get_peft_model",
+    "lucid.peft.get_peft_model_state_dict",
+    "lucid.peft.initialize_kv_prefix_from_past_key_values",
+    "lucid.peft.initialize_kv_prefix_from_text",
+    "lucid.peft.initialize_lora_eva_weights",
+    "lucid.peft.inject_adapter_in_model",
+    "lucid.peft.load_peft_weights",
+    "lucid.peft.prepare_model_for_kbit_training",
+    "lucid.peft.preprocess_loraga",
+    "lucid.peft.prompt_embeddings_from_past_key_values",
+    "lucid.peft.replace_lora_weights_loftq",
+    "lucid.peft.save_as_lora",
+    "lucid.peft.set_base_model_state_dict",
+    "lucid.peft.set_peft_model_state_dict",
+    "lucid.peft.shift_tokens_right",
+    "lucid.peft.tuners.MixedModel",
+    "lucid.peft.tuners.adalora.AdaLoraLayer",
+    "lucid.peft.tuners.adalora.RankAllocator",
+    "lucid.peft.tuners.adalora.SVDConv2d",
+    "lucid.peft.tuners.adalora.SVDLinear",
+    "lucid.peft.tuners.adamss.AdamssLayer",
+    "lucid.peft.tuners.adamss.Linear",
+    "lucid.peft.tuners.adamss.SubspaceAllocator",
+    "lucid.peft.tuners.adaption_prompt.AdaptedAttention",
+    "lucid.peft.tuners.beft.BeftLayer",
+    "lucid.peft.tuners.beft.Linear",
+    "lucid.peft.tuners.boft.BOFTLayer",
+    "lucid.peft.tuners.boft.Conv2d",
+    "lucid.peft.tuners.boft.Linear",
+    "lucid.peft.tuners.bone.BoneLayer",
+    "lucid.peft.tuners.bone.Linear",
+    "lucid.peft.tuners.c3a.C3ALayer",
+    "lucid.peft.tuners.c3a.Linear",
+    "lucid.peft.tuners.cartridge.CartridgeModel",
+    "lucid.peft.tuners.deft.DeftLayer",
+    "lucid.peft.tuners.deft.Linear",
+    "lucid.peft.tuners.delora.DeloraLayer",
+    "lucid.peft.tuners.delora.Linear",
+    "lucid.peft.tuners.fourierft.FourierFTLayer",
+    "lucid.peft.tuners.fourierft.Linear",
+    "lucid.peft.tuners.frod.FrodLayer",
+    "lucid.peft.tuners.frod.Linear",
+    "lucid.peft.tuners.glora.GloraLayer",
+    "lucid.peft.tuners.glora.Linear",
+    "lucid.peft.tuners.gralora.GraloraLayer",
+    "lucid.peft.tuners.gralora.Linear",
+    "lucid.peft.tuners.hira.Conv1d",
+    "lucid.peft.tuners.hira.Conv2d",
+    "lucid.peft.tuners.hira.Conv3d",
+    "lucid.peft.tuners.hira.Embedding",
+    "lucid.peft.tuners.hira.HiraLayer",
+    "lucid.peft.tuners.hira.Linear",
+    "lucid.peft.tuners.hra.Conv2d",
+    "lucid.peft.tuners.hra.HRALayer",
+    "lucid.peft.tuners.hra.Linear",
+    "lucid.peft.tuners.ia3.Conv2d",
+    "lucid.peft.tuners.ia3.Conv3d",
+    "lucid.peft.tuners.ia3.IA3Layer",
+    "lucid.peft.tuners.ia3.Linear",
+    "lucid.peft.tuners.lily.LilyLayer",
+    "lucid.peft.tuners.lily.Linear",
+    "lucid.peft.tuners.ln_tuning.LNTuningLayer",
+    "lucid.peft.tuners.loha.Conv1d",
+    "lucid.peft.tuners.loha.Conv2d",
+    "lucid.peft.tuners.loha.Linear",
+    "lucid.peft.tuners.loha.LoHaLayer",
+    "lucid.peft.tuners.lokr.Conv1d",
+    "lucid.peft.tuners.lokr.Conv2d",
+    "lucid.peft.tuners.lokr.Linear",
+    "lucid.peft.tuners.lokr.LoKrLayer",
+    "lucid.peft.tuners.lokr.factorization",
+    "lucid.peft.tuners.lora.Conv1d",
+    "lucid.peft.tuners.lora.Conv2d",
+    "lucid.peft.tuners.lora.Conv3d",
+    "lucid.peft.tuners.lora.ConvTranspose1d",
+    "lucid.peft.tuners.lora.ConvTranspose2d",
+    "lucid.peft.tuners.lora.ConvTranspose3d",
+    "lucid.peft.tuners.lora.Embedding",
+    "lucid.peft.tuners.lora.Linear",
+    "lucid.peft.tuners.lora.LoraLayer",
+    "lucid.peft.tuners.lora.MultiheadAttention",
+    "lucid.peft.tuners.lora.ParamWrapper",
+    "lucid.peft.tuners.lora.QuantizedLinear",
+    "lucid.peft.tuners.miss.Linear",
+    "lucid.peft.tuners.miss.MissLayer",
+    "lucid.peft.tuners.multitask_prompt_tuning.MultitaskPromptTuningModel",
+    "lucid.peft.tuners.oft.Conv2d",
+    "lucid.peft.tuners.oft.Linear",
+    "lucid.peft.tuners.oft.OFTLayer",
+    "lucid.peft.tuners.osf.Linear",
+    "lucid.peft.tuners.osf.OSFLayer",
+    "lucid.peft.tuners.p_tuning.PromptEncoderModel",
+    "lucid.peft.tuners.peanut.Linear",
+    "lucid.peft.tuners.peanut.PeanutLayer",
+    "lucid.peft.tuners.poly.Linear",
+    "lucid.peft.tuners.poly.PolyLayer",
+    "lucid.peft.tuners.prefix_tuning.PrefixTuningModel",
+    "lucid.peft.tuners.prompt_tuning.PromptTuningModel",
+    "lucid.peft.tuners.psoft.Linear",
+    "lucid.peft.tuners.psoft.OrthLayer",
+    "lucid.peft.tuners.psoft.PsoftLayer",
+    "lucid.peft.tuners.pvera.Linear",
+    "lucid.peft.tuners.pvera.PveraLayer",
+    "lucid.peft.tuners.randlora.Linear",
+    "lucid.peft.tuners.randlora.RandLoraLayer",
+    "lucid.peft.tuners.road.Linear",
+    "lucid.peft.tuners.road.RoadLayer",
+    "lucid.peft.tuners.shira.Linear",
+    "lucid.peft.tuners.shira.ShiraLayer",
+    "lucid.peft.tuners.shira.random_mask",
+    "lucid.peft.tuners.supertuning.Linear",
+    "lucid.peft.tuners.supertuning.SupertuningLayer",
+    "lucid.peft.tuners.tinylora.Embedding",
+    "lucid.peft.tuners.tinylora.Linear",
+    "lucid.peft.tuners.tinylora.TinyLoraLayer",
+    "lucid.peft.tuners.trainable_tokens.Embedding",
+    "lucid.peft.tuners.trainable_tokens.Linear",
+    "lucid.peft.tuners.trainable_tokens.TrainableTokensLayer",
+    "lucid.peft.tuners.unilora.Linear",
+    "lucid.peft.tuners.unilora.UniLoraLayer",
+    "lucid.peft.tuners.vblora.Linear",
+    "lucid.peft.tuners.vblora.VBLoRALayer",
+    "lucid.peft.tuners.vera.Linear",
+    "lucid.peft.tuners.vera.VeraLayer",
+    "lucid.peft.tuners.waveft.Linear",
+    "lucid.peft.tuners.waveft.WaveFTLayer",
     "lucid.profiler.MemoryStats",
     "lucid.profiler.OpEvent",
     "lucid.profiler.ProfileSummary",
@@ -5625,6 +9145,7 @@
     "lucid.repeat",
     "lucid.save_safetensors",
     "lucid.save_sharded",
+    "lucid.serialization.safe_open",
     "lucid.signal.windows.bartlett",
     "lucid.signal.windows.blackman",
     "lucid.signal.windows.cosine",
@@ -5667,6 +9188,17 @@
     "lucid.utils.data.default_convert",
     "lucid.utils.data.get_worker_info",
     "lucid.utils.data.random_split",
+    "lucid.utils.rollout.Environment",
+    "lucid.utils.rollout.Episode",
+    "lucid.utils.rollout.LatentPolicy",
+    "lucid.utils.rollout.Policy",
+    "lucid.utils.rollout.PrioritizedBatch",
+    "lucid.utils.rollout.PrioritizedSequenceReplay",
+    "lucid.utils.rollout.RandomPolicy",
+    "lucid.utils.rollout.SequenceReplay",
+    "lucid.utils.rollout.StepResult",
+    "lucid.utils.rollout.SumTree",
+    "lucid.utils.rollout.rollout",
     "lucid.utils.tokenizer.BPETokenizer",
     "lucid.utils.tokenizer.BPETokenizerFast",
     "lucid.utils.tokenizer.ByteLevelBPETokenizer",
@@ -5763,6 +9295,7 @@
     "lucid.utils.transforms.RandomToneCurve",
     "lucid.utils.transforms.ReplayCompose",
     "lucid.utils.transforms.Resize",
+    "lucid.utils.transforms.ResizeShortestEdge",
     "lucid.utils.transforms.RingingOvershoot",
     "lucid.utils.transforms.Rotate",
     "lucid.utils.transforms.SafeRotate",
@@ -5782,6 +9315,7 @@
     "lucid.utils.transforms.TrivialAugmentWide",
     "lucid.utils.transforms.UnsharpMask",
     "lucid.utils.transforms.VerticalFlip",
+    "lucid.utils.transforms.VideoClassification",
     "lucid.utils.transforms.XYMasking",
     "lucid.utils.transforms.ZoomBlur",
     "lucid.utils.transforms.functional.adjust_brightness",
@@ -5833,6 +9367,7 @@
     "nn.AdaptiveAvgPool1d",
     "nn.AdaptiveAvgPool2d",
     "nn.AdaptiveAvgPool3d",
+    "nn.AdaptiveLogSoftmaxWithLoss",
     "nn.AdaptiveMaxPool1d",
     "nn.AdaptiveMaxPool2d",
     "nn.AdaptiveMaxPool3d",
@@ -5846,6 +9381,7 @@
     "nn.BatchNorm2d",
     "nn.BatchNorm3d",
     "nn.Bilinear",
+    "nn.Buffer",
     "nn.CELU",
     "nn.CTCLoss",
     "nn.ChannelShuffle",
@@ -5864,6 +9400,7 @@
     "nn.CosineEmbeddingLoss",
     "nn.CosineSimilarity",
     "nn.CrossEntropyLoss",
+    "nn.CrossMapLRN2d",
     "nn.Dropout",
     "nn.Dropout1d",
     "nn.Dropout2d",
@@ -5939,6 +9476,7 @@
     "nn.MultiheadAttention",
     "nn.MultilabelMarginLoss",
     "nn.NLLLoss",
+    "nn.NoisyLinear",
     "nn.PReLU",
     "nn.PaddingMode",
     "nn.PairwiseDistance",
@@ -5950,7 +9488,9 @@
     "nn.PoissonNLLLoss",
     "nn.RMSNorm",
     "nn.RNN",
+    "nn.RNNBase",
     "nn.RNNCell",
+    "nn.RNNCellBase",
     "nn.RReLU",
     "nn.ReLU",
     "nn.ReLU6",
@@ -5989,9 +9529,13 @@
     "nn.TripletMarginWithDistanceLoss",
     "nn.Unflatten",
     "nn.Unfold",
+    "nn.UninitializedParameter",
+    "nn.UninitializedParameterWarning",
     "nn.Upsample",
     "nn.UpsamplingBilinear2d",
     "nn.UpsamplingNearest2d",
+    "nn.VectorQuantizer",
+    "nn.VectorQuantizerOutput",
     "nn.ZeroPad1d",
     "nn.ZeroPad2d",
     "nn.ZeroPad3d",
@@ -6000,6 +9544,7 @@
     "nn.register_module_full_backward_hook",
     "nn.register_module_full_backward_pre_hook",
     "nn.register_module_load_state_dict_post_hook",
-    "nn.register_module_load_state_dict_pre_hook"
+    "nn.register_module_load_state_dict_pre_hook",
+    "nn.zero_grads_"
   ]
 }
