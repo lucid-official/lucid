@@ -64,6 +64,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid._ops._bool_refusal"
+    },
+    {
+      "kind": "module",
       "module": "lucid._ops._dims"
     },
     {
@@ -77,6 +81,10 @@
     {
       "kind": "module",
       "module": "lucid._ops._registry"
+    },
+    {
+      "kind": "module",
+      "module": "lucid._ops._search"
     },
     {
       "kind": "module",
@@ -1000,6 +1008,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid._ops.composite._inverse_hyperbolic"
+    },
+    {
+      "kind": "module",
       "module": "lucid._ops.composite._pow2"
     },
     {
@@ -1079,6 +1091,10 @@
     {
       "kind": "module",
       "module": "lucid._ops.composite._gamma"
+    },
+    {
+      "kind": "module",
+      "module": "lucid._ops.composite._inverse_hyperbolic"
     },
     {
       "kind": "module",
