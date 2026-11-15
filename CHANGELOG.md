@@ -297,6 +297,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - keep small-p p-norm terms and root in range (LCD-1009)
 
+- scale the p < 1 norm gradient by the max entry (LCD-1009)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

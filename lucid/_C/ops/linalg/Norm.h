@@ -159,7 +159,10 @@ private:
 // zero where $N = 0$ (the subgradient the reference picks) and, for $p < 1$,
 // zero at a zero entry (its power's slope is infinite there).  The ratio
 // $|A|/N$ is in $[0, 1]$, so the slope is as range-safe as the forward: a
-// slice at 1e-20 gets the same gradient as one at 1.
+// slice at 1e-20 gets the same gradient as one at 1.  For $p < 1$, $N$ can be
+// $n^{1/p}$ times the largest entry, which would underflow the ratio of an
+// ordinary entry, so the slope is formed relative to the slice's largest
+// magnitude $m$: $(|A|/m)^{p-1} (N/m)^{1-p}$, both factors at least 1.
 class LUCID_API PNormBackward : public FuncOp<PNormBackward, 1> {
 public:
     static const OpSchema schema_v1;

@@ -50,6 +50,8 @@
 #include "../../ops/gfunc/Gfunc.h"
 #include "../../ops/ufunc/Arith.h"
 #include "../../ops/ufunc/Astype.h"
+#include "../../ops/ufunc/Predicate.h"
+#include "../../ops/ufunc/Reductions.h"
 #include "../../ops/ufunc/ScalarParam.h"
 #include "../../ops/utils/Layout.h"
 #include "../../ops/utils/Select.h"
@@ -255,6 +257,60 @@ TensorImplPtr norm_op(const TensorImplPtr& a_in, double ord, std::vector<int> ax
 const OpSchema PNormBackward::schema_v1{"p_norm", 1,   AmpPolicy::KeepInput, true, "", 1, 1, {},
                                         true,     true};
 
+namespace {
+
+// ``dA`` of an order below 1: ``sign(A) (|A| / N)^(p-1) * dN``, formed relative to the slice's
+// largest magnitude ``m`` instead of to the norm.
+//
+// ``N`` can exceed ``m`` by ``n^(1/p)`` (1e33 for 4096 entries at p = 0.1), so the ratio
+// ``u = |A| / N`` of an ordinary entry is below float32's smallest normal (Metal flushes it to 0,
+// which the zero-entry mask then reads as a zero entry: a silent 0 for a slope of 1e33) while
+// the slope ``u^(p-1)`` is a perfectly good float.  ``(|A| / N)^(p-1) = (|A| / m)^(p-1) *
+// (N / m)^(1-p)`` and both factors are at least 1: ``|A| / m`` is in (0, 1] and ``N / m`` in
+// [1, n^(1/p)], so neither underflows, and their product is the slope (it overflows only where
+// the slope does).  ``m`` is a constant of the call: the slope is homogeneous of degree 0 in the
+// scale, so any positive constant gives the same function and the same derivatives.  It is
+// taken without the graph; a zero or non-finite ``m`` (an all-zero slice, an infinity, a NaN)
+// is 1, as the norm's own zero is settled by the caller.
+//
+// ``n_safe`` and ``d_live`` are the norm and its gradient on the reduced shape with the zero
+// slices settled; the cotangent is multiplied into the (reduced) ``(N / m)^(1-p)`` first, since
+// the slope factor ``(|A| / m)^(p-1)`` is at least 1 and the product of the reduced factors is
+// then no larger than the answer.
+TensorImplPtr quasi_grad(const TensorImplPtr& A,
+                         const TensorImplPtr& n_safe,
+                         const TensorImplPtr& d_live,
+                         double p,
+                         const Shape& full,
+                         const std::vector<int>& axis,
+                         bool keepdims) {
+    auto magnitude = abs_op(A);
+    TensorImplPtr m;
+    {
+        NoGradGuard ng;
+        TensorImplPtr top = magnitude;
+        if (!full.empty()) {
+            std::vector<int> axes = axis;
+            if (axes.empty())
+                for (int d = 0; d < static_cast<int>(full.size()); ++d)
+                    axes.push_back(d);
+            top = max_op(magnitude, axes, true);
+        }
+        auto finite = where_op(isfinite_op(top), top, ones_like_op(top));
+        m = masked_fill_op(finite, equal_op(finite, zeros_like_op(finite)), 1.0);
+    }
+    auto ratio = div_op(magnitude, m);
+    // A zero entry has the slope 0 (its power is infinite there): the base 1 gives ``sign(0) * 1``.
+    auto base = masked_fill_op(ratio, equal_op(ratio, zeros_like_op(ratio)), 1.0);
+    auto slope = mul_op(sign_op(A), pow_scalar_op(base, p - 1.0));
+    auto norm_ratio = div_op(keepdim_view(n_safe, full, axis, keepdims), m);
+    auto scale =
+        mul_op(pow_scalar_op(norm_ratio, 1.0 - p), keepdim_view(d_live, full, axis, keepdims));
+    return mul_op(slope, scale);
+}
+
+}  // namespace
+
 TensorImplPtr PNormBackward::grad_from(const TensorImplPtr& A,
                                        const TensorImplPtr& N,
                                        const TensorImplPtr& dN) const {
@@ -267,6 +323,8 @@ TensorImplPtr PNormBackward::grad_from(const TensorImplPtr& A,
     auto n_safe = masked_fill_op(N, zero, 1.0);
     auto d_live = masked_fill_op(dN, zero, 0.0);
     const Shape& full = input_shapes_[0];
+    if (p_ < 1.0)
+        return quasi_grad(A, n_safe, d_live, p_, full, axis_, keepdims_);
     // ``u = A / N``, in [-1, 1]: the slope never forms a power of the norm.
     auto u = div_op(A, keepdim_view(n_safe, full, axis_, keepdims_));
     // ``sign(u) |u|^(p-1)``, written ``u |u|^(p-2)`` where that is as good: one op
@@ -279,10 +337,7 @@ TensorImplPtr PNormBackward::grad_from(const TensorImplPtr& A,
     // ``N`` carries to every entry of the slice, so a recorded graph takes the power
     // of 1 at a zero entry instead: its slope is ``sign(0) = 0`` either way, the
     // value is the same, and only that entry's own second derivative differs (0,
-    // where the true Hessian is infinite).  Below 1 the *value* of ``|u|^(p-1)`` is
-    // infinite at a zero entry (``0^(p-1) = inf``), so ``sign(0) * inf`` is a NaN in
-    // that entry even with nothing recorded, where the reference's gradient is 0:
-    // the base is masked in eager mode too.
+    // where the true Hessian is infinite).  Orders below 1 are :func:`quasi_grad`'s.
     const bool recorded = GradMode::is_enabled();
     TensorImplPtr slope;
     if (p_ == 2.0) {
@@ -293,7 +348,7 @@ TensorImplPtr PNormBackward::grad_from(const TensorImplPtr& A,
         slope = mul_op(u, pow_scalar_op(abs_op(u), p_ - 2.0));
     } else {
         auto magnitude = abs_op(u);
-        if ((recorded && p_ < 2.0) || p_ < 1.0)
+        if (recorded && p_ < 2.0)
             magnitude =
                 masked_fill_op(magnitude, equal_op(magnitude, zeros_like_op(magnitude)), 1.0);
         slope = mul_op(sign_op(u), pow_scalar_op(magnitude, p_ - 1.0));
