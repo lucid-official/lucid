@@ -206,6 +206,26 @@
       "float32",
       "float64"
     ],
+    "F.dropout": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "F.dropout1d": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "F.dropout2d": [
+      "float16",
+      "float32",
+      "float64"
+    ],
+    "F.dropout3d": [
+      "float16",
+      "float32",
+      "float64"
+    ],
     "F.elu": [
       "float16",
       "float32",
@@ -8024,6 +8044,10 @@
     "F.cosine_similarity": "RuntimeError",
     "F.cross_entropy": "NotImplementedError",
     "F.ctc_loss": "NotImplementedError",
+    "F.dropout": "RuntimeError",
+    "F.dropout1d": "RuntimeError",
+    "F.dropout2d": "RuntimeError",
+    "F.dropout3d": "RuntimeError",
     "F.elu": "NotImplementedError",
     "F.elu_": "NotImplementedError",
     "F.embedding_bag": "RuntimeError",

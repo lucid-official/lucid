@@ -97,6 +97,26 @@
       "owner": "out-of-batch",
       "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
     },
+    "F.dropout": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the Bernoulli-mask dtype check raises NotImplementedError for a bool input where the reference's dtype guard raises RuntimeError; measured once preserved_globals stopped leaking determinism into the survey (LCD-1020)"
+    },
+    "F.dropout1d": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the Bernoulli-mask dtype check raises NotImplementedError for a bool input where the reference's dtype guard raises RuntimeError; measured once preserved_globals stopped leaking determinism into the survey (LCD-1020)"
+    },
+    "F.dropout2d": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the Bernoulli-mask dtype check raises NotImplementedError for a bool input where the reference's dtype guard raises RuntimeError; measured once preserved_globals stopped leaking determinism into the survey (LCD-1020)"
+    },
+    "F.dropout3d": {
+      "kind": "class",
+      "owner": "out-of-batch",
+      "reason": "the Bernoulli-mask dtype check raises NotImplementedError for a bool input where the reference's dtype guard raises RuntimeError; measured once preserved_globals stopped leaking determinism into the survey (LCD-1020)"
+    },
     "F.embedding_bag": {
       "kind": "over-accept",
       "owner": "out-of-batch",
