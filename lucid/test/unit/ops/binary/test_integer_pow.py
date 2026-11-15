@@ -156,9 +156,14 @@ def test_bool_pow_promotion_and_values(ref: ModuleType, device: str) -> None:
 
     b2_vals = [True, True, False, False, True, False, True, False] * 2
     b2 = lucid.tensor(b2_vals, dtype=lucid.bool, device=device)
-    got_bb = b**b2
-    assert got_bb.dtype == lucid.bool
-    assert got_bb.tolist() == [bool(x**y) for x, y in zip(vals, b2_vals, strict=True)]
+    # A bool raised to a bool *tensor* has no kernel in the reference's CPU (LCD-1020); the cast
+    # does.  Lucid refuses on both devices.
+    with pytest.raises(NotImplementedError):
+        ref.tensor(vals, dtype=ref.bool) ** ref.tensor(b2_vals, dtype=ref.bool)
+    with pytest.raises(NotImplementedError, match="pow does not accept bool"):
+        b**b2
+    got_bb = b.long() ** b2.long()
+    assert got_bb.tolist() == [int(x) ** int(y) for x, y in zip(vals, b2_vals, strict=True)]
 
 
 _NEGATIVE_BASES = [-3, -2, -1, 0, 1, 2, 3, 5]
