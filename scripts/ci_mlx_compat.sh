@@ -64,6 +64,27 @@ fi
 # from $WORK, where this link is the only import root besides the venv.
 ln -sfn "$ROOT/tools" "$WORK/tools"
 
+# pytest and pytest-benchmark exactly as the `test` extra pins them, read from
+# pyproject.toml so the pin lives in one place.
+TEST_TOOLS=()
+while IFS= read -r req; do TEST_TOOLS+=("$req"); done < <(
+    "$PYTHON_BIN" - "$ROOT/pyproject.toml" <<'PY'
+import re
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as fh:
+    extra = tomllib.load(fh)["project"]["optional-dependencies"]["test"]
+for req in extra:
+    if re.match(r"pytest(-benchmark)?\b(?!-)", req):
+        print(req)
+PY
+)
+if [ "${#TEST_TOOLS[@]}" -ne 2 ]; then
+    echo "ci_mlx_compat: expected pytest and pytest-benchmark in the test extra, got: ${TEST_TOOLS[*]}" >&2
+    exit 2
+fi
+
 make_venv() { # <venv dir> <requirement>...
     local venv=$1
     shift
@@ -103,7 +124,11 @@ for case in "${CASES[@]}"; do
     echo "==> mlx: $case${spec:+ ($spec)}"
     rm -rf "${WORK:?}/$case"
     venv="$WORK/$case/venv"
-    make_venv "$venv" "$WHEEL" pytest pytest-benchmark ${spec:+"$spec"}
+    # The test tools at the project's own pins (the `test` extra), never bare
+    # `pytest`: an unpinned install took pytest 9.2 on 2026-11-14, which
+    # pyproject holds back (pytest-benchmark reads Node._nodeid, 0517725afc),
+    # and every case failed to import its conftest.
+    make_venv "$venv" "$WHEEL" "${TEST_TOOLS[@]}" ${spec:+"$spec"}
     site=$("$venv/bin/python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
     # Into, not onto: the wheel already carries some lucid/test data files.
     mkdir -p "$site/lucid/test"

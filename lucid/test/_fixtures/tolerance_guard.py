@@ -43,11 +43,19 @@ import warnings
 from collections.abc import Callable, Iterator
 from contextvars import ContextVar
 from pathlib import Path
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 import _pytest
 import numpy as np
-from _pytest.python_api import ApproxScalar
+import pytest
+
+if TYPE_CHECKING:
+    from _pytest.python_api import ApproxScalar
+
+# The class `pytest.approx` builds for a scalar, reached through the public API
+# rather than its module: pytest 9.2 moved it out of `_pytest.python_api`, and a
+# venv that took 9.2 failed to import every conftest (2026-11-14 nightly).
+_APPROX_SCALAR: type = type(pytest.approx(0.0))
 
 _R = TypeVar("_R")
 
@@ -236,10 +244,10 @@ def _checked_closeness(
 
 def install() -> None:
     """Wrap the three comparison entry points; idempotent."""
-    if not getattr(ApproxScalar.__eq__, _MARK, False):
-        checked = _checked_approx_eq(ApproxScalar.__eq__)
+    if not getattr(_APPROX_SCALAR.__eq__, _MARK, False):
+        checked = _checked_approx_eq(_APPROX_SCALAR.__eq__)
         setattr(checked, _MARK, True)
-        setattr(ApproxScalar, "__eq__", checked)
+        setattr(_APPROX_SCALAR, "__eq__", checked)
     if not getattr(np.allclose, _MARK, False):
         setattr(np, "allclose", _checked_closeness(np.allclose, "np.allclose", "b", 1e-5, 1e-8))
     if not getattr(np.testing.assert_allclose, _MARK, False):
