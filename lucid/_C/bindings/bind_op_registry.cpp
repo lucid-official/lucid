@@ -9,6 +9,10 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include <optional>
+#include <string>
+#include <utility>
+
 #include "../core/AmpPolicy.h"
 #include "../core/OpRegistry.h"
 #include "../core/OpSchema.h"
@@ -44,6 +48,18 @@ void register_op_registry(py::module_& m) {
         // `internal` is true for ops that are implementation details and should
         // not appear in generated .pyi stubs or Python-facing documentation.
         .def_readonly("internal", &OpSchema::internal)
+        // ``None`` for an op that accepts a bool; otherwise ``(kind, hint)``:
+        // ``kind`` is ``"kernel"`` (the engine raises ``NotImplementedError``) or
+        // ``"guard"`` (``DtypeMismatch``), ``hint`` the cast the message offers.
+        .def_property_readonly(
+            "bool_refusal",
+            [](const OpSchema& s) -> std::optional<std::pair<std::string, std::string>> {
+                if (s.bool_refusal == BoolRefusal::None)
+                    return std::nullopt;
+                return std::pair{
+                    std::string(s.bool_refusal == BoolRefusal::Kernel ? "kernel" : "guard"),
+                    std::string(bool_cast_hint(s.bool_cast))};
+            })
         .def("__repr__", [](const OpSchema& s) {
             return "OpSchema(name='" + std::string(s.name) +
                    "', version=" + std::to_string(s.version) +

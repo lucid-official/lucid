@@ -44,6 +44,42 @@
 
 namespace lucid {
 
+// How an op turns a bool input away, and with which of the reference's two
+// error classes.
+//
+// The reference's CPU backend refuses a bool operand on many ops, two ways: a
+// kernel with no bool instantiation raises ``NotImplementedError``, and a guard
+// on the input dtype raises a plain ``RuntimeError``.  A program that catches
+// one does not catch the other, so the class is part of the answer.
+//
+// ``Kernel`` -> :class:`NotImplementedError` (``engine.NotImplementedError``,
+//               a ``RuntimeError`` and the builtin ``NotImplementedError``).
+// ``Guard``  -> :class:`DtypeMismatch` (``engine.DtypeMismatch``, a
+//               ``RuntimeError`` and a ``TypeError``).
+enum class BoolRefusal : std::uint8_t { None = 0, Kernel, Guard };
+
+// What the refusal tells the caller to cast the mask to.  Mirrors the
+// reference's dtype list for the op: an op that answers integers as well as
+// floats says "an integer or floating dtype", one that answers only floats
+// says "a floating dtype".
+enum class BoolCast : std::uint8_t { Number = 0, Floating, Integer };
+
+// The cast a refusal's message offers.  The wording is the Python table's
+// (``lucid/_ops/_bool_refusal.py``), so the engine and the composites that
+// still refuse in Python say the same thing; the ``OpSchema.bool_refusal``
+// binding reads it from here too.
+constexpr std::string_view bool_cast_hint(BoolCast cast) noexcept {
+    switch (cast) {
+    case BoolCast::Floating:
+        return "a floating dtype, e.g. x.float()";
+    case BoolCast::Integer:
+        return "an integer dtype, e.g. x.long()";
+    case BoolCast::Number:
+        break;
+    }
+    return "an integer or floating dtype, e.g. x.long() or x.float()";
+}
+
 // Per-op metadata record stored by pointer in the :class:`OpRegistry`.
 //
 // Schemas are intended to be ``constexpr`` statics defined alongside each
@@ -96,6 +132,14 @@ namespace lucid {
 //     ``true`` for ops that are not part of the public Python API
 //     (implementation-detail kernels, fused / internal helpers).  The
 //     Python binding layer hides these from ``dir(lucid)`` etc.
+// bool_refusal : BoolRefusal
+//     ``None`` unless the reference CPU refuses a bool input for this op.
+//     :class:`SchemaGuard` reads it first, so every entry that builds a guard
+//     (CPU, Metal, the in-place twin, a direct engine call, a trace) refuses
+//     the same way at the cost of one enum comparison.
+// bool_cast : BoolCast
+//     What the refusal's message tells the caller to cast to.  Read only when
+//     ``bool_refusal`` is set.
 struct LUCID_API OpSchema {
     std::string_view name;
     int version;
@@ -138,6 +182,12 @@ struct LUCID_API OpSchema {
     // reference runs it.  Without the flag one policy had to serve both, and
     // switching ``pow`` to ``Promote`` for the first broke the second.
     bool integral_closed = false;
+
+    // Refuses a bool input, as the reference CPU does.  Declared with
+    // :func:`refusing_bool` so the op's schema line names the class and the
+    // cast hint in one place; read by :class:`SchemaGuard`.
+    BoolRefusal bool_refusal = BoolRefusal::None;
+    BoolCast bool_cast = BoolCast::Number;
 
     // Minimal constructor for deterministic ops with default arity.
     //
@@ -221,6 +271,27 @@ struct LUCID_API OpSchema {
           stable_input_indices(std::move(stable_ins)),
           internal(is_internal),
           real_valued(real) {}
+
+    // Returns a copy of this schema that refuses a bool input.
+    //
+    // Chains onto a schema's constructor so the declaration stays one line:
+    //
+    //     const OpSchema AbsBackward::schema_v1 =
+    //         OpSchema{"abs", 1, AmpPolicy::Promote, true}
+    //             .refusing_bool(BoolRefusal::Kernel, BoolCast::Number);
+    //
+    // Parameters
+    // ----------
+    // refusal : BoolRefusal
+    //     The reference's error class for a bool operand.
+    // cast : BoolCast
+    //     What the message tells the caller to cast to.
+    constexpr OpSchema refusing_bool(BoolRefusal refusal, BoolCast cast) const {
+        OpSchema out = *this;
+        out.bool_refusal = refusal;
+        out.bool_cast = cast;
+        return out;
+    }
 };
 
 // Computes a 64-bit FNV-1a fingerprint of an op's behavioural schema.

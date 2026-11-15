@@ -173,7 +173,13 @@ void validate_grid_sample_inputs(const TensorImplPtr& input,
 }
 }  // namespace
 
-const OpSchema GridSampleBackward::schema_v1{"grid_sample", 1, AmpPolicy::Promote, true, "", true};
+// A bool image has no sampling kernel in the reference (``NotImplementedError``).
+// A bool *grid* beside a float image is a dtype ``RuntimeError`` there; this
+// schema's guard runs on both operands and answers that one with the image's
+// class.
+const OpSchema GridSampleBackward::schema_v1 =
+    OpSchema{"grid_sample", 1, AmpPolicy::Promote, true, "", true}.refusing_bool(
+        BoolRefusal::Kernel, BoolCast::Floating);
 
 TensorImplPtr GridSampleBackward::forward(const TensorImplPtr& input0,
                                           const TensorImplPtr& grid0,

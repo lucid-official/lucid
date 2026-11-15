@@ -269,7 +269,13 @@ LUCID_REGISTER_OP(SumBackward)
 // mean — KeepInput (see sum); divides broadcast gradient by the count of
 // reduced elements.  The reference's autocast lists mean nowhere, so it
 // runs in the input dtype there too.
-const OpSchema MeanBackward::schema_v1{"mean", 1, AmpPolicy::KeepInput, true, "", true};
+//
+// A mean is not a count: the reference's dtype guard turns a bool away
+// (``RuntimeError``), and only a float answers.  ``sum`` / ``prod`` / ``max`` /
+// ``min`` accept a bool, as the reference does, and are not flagged.
+const OpSchema MeanBackward::schema_v1 =
+    OpSchema{"mean", 1, AmpPolicy::KeepInput, true, "", true}.refusing_bool(BoolRefusal::Guard,
+                                                                            BoolCast::Floating);
 
 namespace {
 // Count the number of elements collapsed by the given axes.

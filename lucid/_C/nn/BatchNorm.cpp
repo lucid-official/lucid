@@ -180,12 +180,20 @@ int reduced_count(const std::string& op, const Shape& x_shape, const std::vector
 
 }  // namespace
 
+// The reference has no bool kernel for batch_norm at any rank (``NotImplementedError``),
+// and answers floats only.
 template <>
-const OpSchema BatchNorm1dBackward::schema_v1{"batch_norm1d", 1, AmpPolicy::ForceFP32, true};
+const OpSchema BatchNorm1dBackward::schema_v1 =
+    OpSchema{"batch_norm1d", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                          BoolCast::Floating);
 template <>
-const OpSchema BatchNorm2dBackward::schema_v1{"batch_norm", 1, AmpPolicy::ForceFP32, true};
+const OpSchema BatchNorm2dBackward::schema_v1 =
+    OpSchema{"batch_norm", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                        BoolCast::Floating);
 template <>
-const OpSchema BatchNorm3dBackward::schema_v1{"batch_norm3d", 1, AmpPolicy::ForceFP32, true};
+const OpSchema BatchNorm3dBackward::schema_v1 =
+    OpSchema{"batch_norm3d", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                          BoolCast::Floating);
 
 template <int N>
 TensorImplPtr BatchNormNdBackward<N>::forward(const TensorImplPtr& x,

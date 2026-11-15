@@ -13,36 +13,6 @@
     "devices: omitted when both devices deviate; otherwise the one that does."
   ],
   "deviations": {
-    "F.adaptive_avg_pool1d": {
-      "kind": "over-accept",
-      "owner": "call-dependent",
-      "reason": "the reference raises RuntimeError for output size 1 and NotImplementedError otherwise; the audit's call asks for a larger one"
-    },
-    "F.adaptive_avg_pool2d": {
-      "kind": "over-accept",
-      "owner": "call-dependent",
-      "reason": "the reference raises RuntimeError for output size 1 and NotImplementedError otherwise; the audit's call asks for a larger one"
-    },
-    "F.adaptive_avg_pool3d": {
-      "kind": "over-accept",
-      "owner": "call-dependent",
-      "reason": "the reference raises RuntimeError for output size 1 and NotImplementedError otherwise; the audit's call asks for a larger one"
-    },
-    "F.adaptive_max_pool1d": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
-    },
-    "F.adaptive_max_pool2d": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
-    },
-    "F.adaptive_max_pool3d": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
-    },
     "F.affine_grid": {
       "kind": "class",
       "owner": "out-of-batch",
@@ -50,26 +20,6 @@
       "devices": [
         "cpu"
       ]
-    },
-    "F.avg_pool1d": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
-    },
-    "F.avg_pool2d": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
-    },
-    "F.avg_pool3d": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
-    },
-    "F.batch_norm": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "normalisation computes a bool input; the engine schema row must refuse it"
     },
     "F.bilinear": {
       "kind": "class",
@@ -88,16 +38,6 @@
       "kind": "non-runtime",
       "owner": "out-of-batch",
       "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.celu": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
-    },
-    "F.celu_": {
-      "kind": "class",
-      "owner": "LCD-1020-A1",
-      "reason": "in-place twin raises a cast error from the promoted result, not the op's refusal; refused once the out-of-place composite is"
     },
     "F.conv1d": {
       "kind": "class",
@@ -157,16 +97,6 @@
       "owner": "out-of-batch",
       "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
     },
-    "F.elu": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
-    },
-    "F.elu_": {
-      "kind": "class",
-      "owner": "LCD-1020-E1",
-      "reason": "in-place twin raises a cast error from the promoted result, not the op's refusal; refused once the out-of-place op is"
-    },
     "F.embedding_bag": {
       "kind": "over-accept",
       "owner": "out-of-batch",
@@ -177,11 +107,6 @@
       "owner": "out-of-batch",
       "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
     },
-    "F.gelu": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
-    },
     "F.glu": {
       "kind": "class",
       "owner": "out-of-batch",
@@ -189,13 +114,8 @@
     },
     "F.grid_sample": {
       "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "sampling kernel computes a bool input; the engine schema row must refuse it"
-    },
-    "F.group_norm": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "normalisation computes a bool input; the engine schema row must refuse it"
+      "owner": "LCD-1020-A1",
+      "reason": "the engine's grid_sample schema refuses a bool image; F.grid_sample casts it with _as_real before the engine sees it, so a Python-entry refusal is what is left"
     },
     "F.gumbel_softmax": {
       "kind": "class",
@@ -206,16 +126,6 @@
       "kind": "over-accept",
       "owner": "LCD-1020-A1",
       "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
-    },
-    "F.hardsigmoid": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
-    },
-    "F.hardswish": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
     },
     "F.hardtanh": {
       "kind": "over-accept",
@@ -252,21 +162,6 @@
       "owner": "out-of-batch",
       "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
     },
-    "F.layer_norm": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "normalisation computes a bool input; the engine schema row must refuse it"
-    },
-    "F.leaky_relu": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
-    },
-    "F.leaky_relu_": {
-      "kind": "class",
-      "owner": "LCD-1020-E1",
-      "reason": "in-place twin raises a cast error from the promoted result, not the op's refusal; refused once the out-of-place op is"
-    },
     "F.linear": {
       "kind": "class",
       "owner": "out-of-batch",
@@ -290,21 +185,6 @@
       "owner": "out-of-batch",
       "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
     },
-    "F.max_pool1d": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
-    },
-    "F.max_pool2d": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
-    },
-    "F.max_pool3d": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "pool kernel computes a bool window; the engine schema row must refuse it"
-    },
     "F.max_unpool1d": {
       "kind": "over-accept",
       "owner": "out-of-batch",
@@ -319,11 +199,6 @@
       "kind": "over-accept",
       "owner": "out-of-batch",
       "reason": "computes a bool input; the reference raises NotImplementedError"
-    },
-    "F.mish": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
     },
     "F.mse_loss": {
       "kind": "non-runtime",
@@ -351,29 +226,14 @@
       "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
     },
     "F.prelu": {
-      "kind": "over-accept",
+      "kind": "class",
       "owner": "LCD-1020-A1",
-      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
-    },
-    "F.relu6": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
+      "reason": "raises DtypeMismatch from the engine relu it builds on (the reference raises NotImplementedError); a BOOL_REFUSED row (kernel) at the Python composite fixes it"
     },
     "F.rms_norm": {
       "kind": "non-runtime",
       "owner": "out-of-batch",
       "reason": "refuses with a plain TypeError; the reference raises a RuntimeError or NotImplementedError"
-    },
-    "F.rrelu": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-A1",
-      "reason": "Python composite never reads the dtype; a BOOL_REFUSED row is missing"
-    },
-    "F.rrelu_": {
-      "kind": "class",
-      "owner": "LCD-1020-A1",
-      "reason": "in-place twin raises a cast error from the promoted result, not the op's refusal; refused once the out-of-place composite is"
     },
     "F.scaled_dot_product_attention": {
       "kind": "class",
@@ -382,11 +242,6 @@
       "devices": [
         "cpu"
       ]
-    },
-    "F.silu": {
-      "kind": "over-accept",
-      "owner": "LCD-1020-E1",
-      "reason": "engine activation computes a bool input; the engine schema row must refuse it"
     },
     "F.smooth_l1_loss": {
       "kind": "non-runtime",

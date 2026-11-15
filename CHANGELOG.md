@@ -411,6 +411,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse bool where the reference CPU refuses it (LCD-1013)
 
+- schema-declared bool refusal in SchemaGuard (LCD-1020)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

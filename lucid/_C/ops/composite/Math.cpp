@@ -130,8 +130,15 @@ TensorImplPtr exp2_op(const TensorImplPtr& a_in) {
 
 // Fractional part — the ``trunc`` term contributes zero gradient, so the
 // gradient w.r.t. ``a`` is just the upstream gradient.
+//
+// ``frac`` has no schema of its own, so it asks the guard's helper for the
+// refusal itself: the reference has no bool kernel for it (``NotImplementedError``).
+// Without this a bool reached ``trunc`` and was refused there under the wrong name.
 TensorImplPtr frac_op(const TensorImplPtr& a_in) {
-    const AmpScope amp{"frac", unary_input(a_in, "frac")->device()};
+    const TensorImplPtr& input = unary_input(a_in, "frac");
+    if (input->dtype() == Dtype::Bool) [[unlikely]]
+        throw_bool_refusal("frac", BoolRefusal::Kernel, BoolCast::Floating);
+    const AmpScope amp{"frac", input->device()};
     const TensorImplPtr a = amp.cast(a_in);
     return sub_op(a, trunc_op(a));
 }

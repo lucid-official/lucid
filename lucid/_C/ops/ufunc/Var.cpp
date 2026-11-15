@@ -120,7 +120,12 @@ public:
 // autocast scope.  ``real_valued`` is separate and says the answer is
 // a real number whatever went in — the variance of integers is not an
 // integer, and computing it as one returned 0.
-const OpSchema VarBackward::schema_v1{"var", 1, AmpPolicy::KeepInput, true, "", true};
+//
+// The reference guards the dtype of ``var`` / ``std`` (``RuntimeError``), and
+// ``std`` is built on this op, so its refusal names ``var``.
+const OpSchema VarBackward::schema_v1 =
+    OpSchema{"var", 1, AmpPolicy::KeepInput, true, "", true}.refusing_bool(BoolRefusal::Guard,
+                                                                           BoolCast::Floating);
 
 }  // namespace
 

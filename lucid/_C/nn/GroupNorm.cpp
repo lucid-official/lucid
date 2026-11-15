@@ -35,7 +35,13 @@
 
 namespace lucid {
 
-const OpSchema GroupNormBackward::schema_v1{"group_norm", 1, AmpPolicy::ForceFP32, true};
+// No bool kernel in the reference (``NotImplementedError``), floats only.  The
+// reference's class turns into a dtype ``RuntimeError`` when a float weight
+// accompanies the bool input; the call without an affine (the audit's) is the
+// ``NotImplementedError`` this declares.
+const OpSchema GroupNormBackward::schema_v1 =
+    OpSchema{"group_norm", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                        BoolCast::Floating);
 
 TensorImplPtr GroupNormBackward::forward(const TensorImplPtr& x,
                                          const TensorImplPtr& gamma,

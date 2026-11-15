@@ -52,18 +52,35 @@
 
 namespace lucid {
 
+// The reference has no bool kernel for any pooling (``NotImplementedError``).
+// What it answers instead is what the message offers: max_pool in two and three
+// dimensions answers every integer width, so it says "a number"; the other four
+// answer floats (``avg_pool`` also int64 only), so they say "a floating dtype".
+// The adaptive pools are max_pool / avg_pool calls and refuse through them.
 template <>
-const OpSchema MaxPool1dBackward::schema_v1{"max_pool1d", 1, AmpPolicy::KeepInput, true};
+const OpSchema MaxPool1dBackward::schema_v1 =
+    OpSchema{"max_pool1d", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                        BoolCast::Floating);
 template <>
-const OpSchema MaxPool2dBackward::schema_v1{"max_pool2d", 1, AmpPolicy::KeepInput, true};
+const OpSchema MaxPool2dBackward::schema_v1 =
+    OpSchema{"max_pool2d", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                        BoolCast::Number);
 template <>
-const OpSchema MaxPool3dBackward::schema_v1{"max_pool3d", 1, AmpPolicy::KeepInput, true};
+const OpSchema MaxPool3dBackward::schema_v1 =
+    OpSchema{"max_pool3d", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                        BoolCast::Number);
 template <>
-const OpSchema AvgPool1dBackward::schema_v1{"avg_pool1d", 1, AmpPolicy::KeepInput, true};
+const OpSchema AvgPool1dBackward::schema_v1 =
+    OpSchema{"avg_pool1d", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                        BoolCast::Floating);
 template <>
-const OpSchema AvgPool2dBackward::schema_v1{"avg_pool2d", 1, AmpPolicy::KeepInput, true};
+const OpSchema AvgPool2dBackward::schema_v1 =
+    OpSchema{"avg_pool2d", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                        BoolCast::Floating);
 template <>
-const OpSchema AvgPool3dBackward::schema_v1{"avg_pool3d", 1, AmpPolicy::KeepInput, true};
+const OpSchema AvgPool3dBackward::schema_v1 =
+    OpSchema{"avg_pool3d", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                        BoolCast::Floating);
 
 namespace {
 

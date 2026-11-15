@@ -1,12 +1,24 @@
 // lucid/_C/core/SchemaGuard.h
 //
-// Op-dispatch entry gate that combines determinism enforcement with
-// AMP dtype resolution.
+// Op-dispatch entry gate that combines bool refusal, determinism enforcement
+// and AMP dtype resolution.
 //
 // Every Lucid op (forward and backward) begins its dispatch sequence by
 // constructing a :class:`SchemaGuard` from its :class:`OpSchema` and the
-// dtype/device of its primary input.  The guard's constructor does two
+// dtype/device of its primary input.  The guard's constructor does three
 // things in one pass:
+//
+//   0. Bool refusal — first statement.  When the schema's ``bool_refusal``
+//      is not ``None`` and ``input_dtype`` is ``Bool``, the constructor
+//      throws before anything else is read: ``BoolRefusal::Kernel`` raises
+//      :class:`NotImplementedError` (the reference's "no kernel for bool"),
+//      ``BoolRefusal::Guard`` raises :class:`DtypeMismatch` (its dtype
+//      guard).  Both messages read ``<op> does not accept bool — cast to
+//      <hint>`` with the hint from ``bool_cast``.  An op that refuses bool
+//      declares it on its schema, so the CPU and Metal entries, the in-place
+//      twin, a direct engine call and a trace share one check at the cost of
+//      one enum comparison.  An op built from other ops (a composite with no
+//      schema of its own) calls :func:`throw_bool_refusal` itself.
 //
 //   1. Determinism gate — if the global :func:`Determinism::is_enabled`
 //      flag is set and the schema's ``deterministic`` field is false, a
@@ -51,6 +63,7 @@
 #pragma once
 
 #include <optional>
+#include <string_view>
 
 #include "../api.h"
 #include "AmpPolicy.h"
@@ -88,6 +101,30 @@ namespace lucid {
 // When determinism is not globally enabled, this function is a no-op
 // and adds only a single relaxed atomic load to the call site.
 LUCID_API void check_schema_determinism(const OpSchema& schema);
+
+// Throws the refusal of an op that does not accept a bool input.
+//
+// The one place the message and the class are built: :class:`SchemaGuard`'s
+// constructor calls it for a schema that declares ``bool_refusal``, and a
+// composite that has no schema (``frac``) calls it by name.
+//
+// Parameters
+// ----------
+// op : std::string_view
+//     The op's name, as the caller used it.
+// refusal : BoolRefusal
+//     ``Kernel`` throws :class:`NotImplementedError`, ``Guard`` throws
+//     :class:`DtypeMismatch` (expected ``a non-bool dtype``, got ``bool``).
+//     ``None`` is treated as ``Kernel``: the function never returns.
+// cast : BoolCast
+//     Picks the cast hint the message ends with.
+//
+// Raises
+// ------
+// NotImplementedError / DtypeMismatch
+//     Always.  The message is ``<op> does not accept bool — cast to <hint>``.
+[[noreturn]] LUCID_API void
+throw_bool_refusal(std::string_view op, BoolRefusal refusal, BoolCast cast);
 
 // Combined determinism + AMP dtype-resolution guard.
 //

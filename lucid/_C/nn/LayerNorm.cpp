@@ -37,7 +37,12 @@
 
 namespace lucid {
 
-const OpSchema LayerNormBackward::schema_v1{"layer_norm", 1, AmpPolicy::ForceFP32, true};
+// No bool kernel in the reference (``NotImplementedError``), floats only; with a
+// float weight beside the bool input the reference's mixed-dtype guard fires
+// first (``RuntimeError``), a call shape this does not tell apart.
+const OpSchema LayerNormBackward::schema_v1 =
+    OpSchema{"layer_norm", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                        BoolCast::Floating);
 
 namespace {
 
