@@ -73,9 +73,11 @@ def _hvp_at_live_entries(x: list[float], w: list[float], p: float) -> list[float
     n, ratio, slope = _norm_and_slope(x, p)
     dot = sum(s * v for s, v in zip(slope, w, strict=True))
     return [
-        None
-        if r == 0.0 and p < 2.0
-        else (p - 1.0) / n * ((r ** (p - 2.0) if r > 0.0 else 0.0) * v - s * dot)
+        (
+            None
+            if r == 0.0 and p < 2.0
+            else (p - 1.0) / n * ((r ** (p - 2.0) if r > 0.0 else 0.0) * v - s * dot)
+        )
         for r, v, s in zip(ratio, w, slope, strict=True)
     ]
 

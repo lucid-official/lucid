@@ -150,9 +150,7 @@ def test_a_leading_axis_reduction_keeps_every_column(device: str) -> None:
     got, values = g.tolist(), x.tolist()
     for j in range(3):
         _assert_ulps(
-            [row[j] for row in got],
-            _closed_gradient([row[j] for row in values], 0.1),
-            UNEQUAL_ULPS,
+            [row[j] for row in got], _closed_gradient([row[j] for row in values], 0.1), UNEQUAL_ULPS
         )
 
 

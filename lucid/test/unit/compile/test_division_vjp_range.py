@@ -126,12 +126,7 @@ def _closed_form(a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _step(
-    kind: str,
-    case: Case,
-    magnitude: float,
-    *,
-    compiled: bool,
-    dtype: lucid.dtype = lucid.float32,
+    kind: str, case: Case, magnitude: float, *, compiled: bool, dtype: lucid.dtype = lucid.float32
 ) -> tuple[np.ndarray, np.ndarray | None]:
     """The gradients of ``sum(model(x))`` with respect to ``b`` and (if tracked) ``x``."""
     a, b = _values(case, magnitude)
@@ -178,10 +173,7 @@ def test_the_ops_have_vjp_emitters() -> None:
         )
 
 
-@pytest.mark.parametrize(
-    ("kind", "expected"),
-    [("div", "div"), ("reciprocal", "reciprocal")],
-)
+@pytest.mark.parametrize(("kind", "expected"), [("div", "div"), ("reciprocal", "reciprocal")])
 def test_a_trace_records_the_op_under_test(kind: str, expected: str) -> None:
     case = CASES[0]
     a, b = _values(case, 1.0)
@@ -203,9 +195,7 @@ def test_a_compiled_step_matches_the_closed_form(kind: str, case: Case, magnitud
 
 
 @pytest.mark.parametrize("kind", MODELS)
-def test_a_zero_numerator_has_a_zero_divisor_gradient_where_b_squared_underflows(
-    kind: str,
-) -> None:
+def test_a_zero_numerator_has_a_zero_divisor_gradient_where_b_squared_underflows(kind: str) -> None:
     """``0 * g / 0`` was NaN once ``b * b`` flushed; ``(g * (0 / b)) / b`` is exactly 0."""
     case = next(c for c in CASES if c.zero_numerator)
     for magnitude in (1e-30, 1e-20, 1.0, 1e20, 1e30):

@@ -219,11 +219,7 @@ def test_a_quasi_norm_slice_at_the_edge_of_the_range_keeps_its_norm(
 
 
 #: A slice whose smallest entries are 40 or more decades below its largest.
-WIDE_SLICES = [
-    [1e20] + [1e-20] * 1000,
-    [1e10] + [1e-30] * 10,
-    [3e38] + [1e-10] * 10,
-]
+WIDE_SLICES = [[1e20] + [1e-20] * 1000, [1e10] + [1e-30] * 10, [3e38] + [1e-10] * 10]
 
 
 @pytest.mark.parametrize("p", [0.05, 0.1, 0.2, 0.25, 0.5, 0.75, 0.9])
@@ -492,11 +488,7 @@ def test_the_kernel_agrees_with_the_plain_graph_at_moderate_magnitudes(
     ],
 )
 def test_the_kernel_returns_the_same_bits_every_time(
-    device_cpu_only: str,
-    dtype: lucid.dtype,
-    p: float,
-    shape: tuple[int, ...],
-    axes: list[int],
+    device_cpu_only: str, dtype: lucid.dtype, p: float, shape: tuple[int, ...], axes: list[int]
 ) -> None:
     """Blocks are added in order and a slice or a tile is one chunk's, so the core a chunk
     lands on does not change the total."""

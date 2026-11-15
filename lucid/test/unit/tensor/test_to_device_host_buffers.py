@@ -73,9 +73,9 @@ def test_a_strided_cpu_to_metal_move_packs_through_one_temporary_block() -> None
     kept: list[lucid.Tensor] = []
     above = _peak(_CPU, lambda: kept.append(x.t().to("metal")))
     # A view has to be packed somewhere; the copy that densified it first made a second block.
-    assert above <= nbytes + _MB, (
-        f"{above / _MB:.1f} MB above the source for a {nbytes / _MB:.0f} MB tensor"
-    )
+    assert (
+        above <= nbytes + _MB
+    ), f"{above / _MB:.1f} MB above the source for a {nbytes / _MB:.0f} MB tensor"
     assert kept[0].tolist() == x.t().tolist()
 
 
@@ -124,9 +124,9 @@ def test_a_metal_to_cpu_move_makes_no_device_side_copy() -> None:
     nbytes = g.numel() * 4
     kept: list[lucid.Tensor] = []
     above = _peak(_GPU, lambda: kept.append(g.to("cpu")))
-    assert above <= _MB, (
-        f"{above / _MB:.1f} MB of Metal memory made for a {nbytes / _MB:.0f} MB move"
-    )
+    assert (
+        above <= _MB
+    ), f"{above / _MB:.1f} MB of Metal memory made for a {nbytes / _MB:.0f} MB move"
     assert kept[0].tolist() == g.tolist()
 
 

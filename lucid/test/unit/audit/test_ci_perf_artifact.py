@@ -63,9 +63,9 @@ def test_the_artifact_is_named_and_kept_so_the_recorder_can_use_it() -> None:
     days = re.search(r"^          retention-days: (\d+)$", step, re.MULTILINE)
     assert days and int(days[1]) <= 14
     nightly = (ROOT / ".github/workflows/ci.yml").read_text().split("\n  nightly-perf:\n", 1)[1]
-    assert re.search(r"^          name: perf-history-", nightly, re.MULTILINE), (
-        "the nightly's artifacts must share the `perf-` prefix, or one listing cannot find both"
-    )
+    assert re.search(
+        r"^          name: perf-history-", nightly, re.MULTILINE
+    ), "the nightly's artifacts must share the `perf-` prefix, or one listing cannot find both"
 
 
 def _perf_block() -> str:
