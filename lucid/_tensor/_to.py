@@ -285,7 +285,13 @@ def _transfer_impl(
     casts_first = target_dtype != src_impl.dtype
     cast_after = _casts_after_the_move(src_impl, target_device, target_dtype)
     casts_first = casts_first and not cast_after
-    impl = src_impl if relabel or casts_first else _C_engine.contiguous(src_impl)
+    # A move across devices reads the source through its own geometry and
+    # writes a fresh buffer, so a dense copy first only added a full-size
+    # buffer (a freed >4 MB block lingers in the allocator for tens of
+    # seconds).  ``contiguous`` is kept for the same-device ``copy=True``,
+    # where it is the copy.
+    moves = target_device != src_impl.device
+    impl = src_impl if relabel or casts_first or moves else _C_engine.contiguous(src_impl)
     if casts_first:
         impl = _C_engine.astype(impl, target_dtype)
 
