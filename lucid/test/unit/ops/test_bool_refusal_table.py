@@ -184,6 +184,9 @@ _TABLE: dict[str, _Row] = {
     "clip": _kernel("clamp", lambda fw, t, m: fw.clip(t, False, True)),
     "clamp_min": _kernel("clamp", lambda fw, t, m: fw.clamp_min(t, True)),
     "clamp_max": _kernel("clamp", lambda fw, t, m: fw.clamp_max(t, True)),
+    "clamp-inplace": _kernel("clamp", lambda fw, t, m: t.clone().clamp_(False, True)),
+    "clip-inplace": _kernel("clamp", lambda fw, t, m: t.clone().clip_(False, True)),
+    "clamp_min-inplace": _kernel("clamp", lambda fw, t, m: t.clone().clamp_min_(True)),
     # ── what the reference answers, and so does Lucid ────────────────────────
     "mean-dtype": _accepted(lambda fw, t, m: fw.mean(t, dtype=fw.float32)),
     "mean-dim-dtype": _accepted(lambda fw, t, m: fw.mean(m, dim=1, dtype=fw.float32)),
