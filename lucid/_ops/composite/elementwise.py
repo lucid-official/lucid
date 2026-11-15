@@ -446,7 +446,7 @@ def arccosh(input: Tensor) -> Tensor:
     branch.  The derivative is :math:`1 / \sqrt{x^{2} - 1}`, singular
     at :math:`x = 1`.  Both ``arccosh`` and :func:`acosh` are one composite.
     Value and derivative hold to a few ulp over the whole dtype range
-    (``acosh(3e19)`` is 45.54), at every order of ``create_graph``.
+    (``acosh(3e19)`` is 45.54), through the third derivative (``create_graph``).
 
     Examples
     --------
@@ -526,7 +526,7 @@ def arcsinh(input: Tensor) -> Tensor:
     Derivative is :math:`1 / \sqrt{x^{2} + 1}`.  Both ``arcsinh`` and
     :func:`asinh` are one composite.  Value and derivative hold to a few ulp
     over the whole dtype range (``asinh(1e-8)`` is ``1e-8``, ``asinh(1e20)``
-    is 46.74), at every order of ``create_graph``.
+    is 46.74), through the third derivative (``create_graph``).
 
     Examples
     --------
@@ -607,7 +607,7 @@ def arctanh(input: Tensor) -> Tensor:
     :math:`|x| > 1` produces NaN.  Derivative is :math:`1 / (1 - x^{2})`.
     Both ``arctanh`` and :func:`atanh` are one composite.  Value and
     derivative hold to a few ulp over the whole dtype range
-    (``atanh(1e-8)`` is ``1e-8``), at every order of ``create_graph``.
+    (``atanh(1e-8)`` is ``1e-8``), through the third derivative (``create_graph``).
 
     Examples
     --------

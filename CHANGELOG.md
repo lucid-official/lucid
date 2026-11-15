@@ -325,6 +325,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - range-safe asinh/acosh/atanh and their slopes (LCD-1028)
 
+- acosh slope stays finite below -1, as the reference's (LCD-1028)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

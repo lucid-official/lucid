@@ -312,7 +312,10 @@ def test_the_slopes_at_the_poles_and_at_infinity(device: str) -> None:
     assert slope(lucid.atanh, [INF, -INF]) == [0.0, 0.0]
     for fn in (lucid.asinh, lucid.acosh, lucid.atanh):
         assert all(g != g for g in slope(fn, [NAN]))
-    assert all(g != g for g in slope(lucid.acosh, [0.5, -3.0]))
+    # inside (-1, 1) the slope is NaN; below -1 it is the reference's finite 1 / sqrt(x^2 - 1)
+    # although the value is NaN there, so a ``where`` masking it differentiates cleanly
+    assert all(g != g for g in slope(lucid.acosh, [0.5, -0.5]))
+    assert slope(lucid.acosh, [-3.0]) == pytest.approx([1.0 / math.sqrt(8.0)], rel=5e-7)
 
 
 # ── every entry point is the same function ───────────────────────────────────────────────────────
@@ -455,3 +458,27 @@ def test_the_derivatives_agree_with_the_reference_where_it_is_right(
             if abs(b) < floor:
                 continue
             assert abs(a - b) <= 1e-5 * abs(b), f"{name} d{order}({xi}): {a} vs {b}"
+
+
+#: Points outside each function's real domain, and both infinities, with a ``where`` keeping
+#: the function only where it is defined.  The masked branch is still differentiated, so its
+#: slope must stay finite wherever the reference's does (LCD-1028 review: ``acosh`` at ``x <= -1``).
+MASKED = [
+    ("asinh", lambda x: x == x, [-1e5, -1e19, 1e19, -INF, INF]),
+    ("acosh", lambda x: x >= 1.0, [-1.5, -3.0, -1e30, -INF, INF]),
+    ("atanh", lambda x: lucid.abs(x) < 1.0, [-1.5, 3.0, 1e30, -INF, INF]),
+]
+
+
+@pytest.mark.parametrize("name,keep,xs", MASKED, ids=[m[0] for m in MASKED])
+def test_a_masked_out_entry_leaves_no_nan_in_the_gradient(
+    name: str, keep: Callable[[lucid.Tensor], lucid.Tensor], xs: list[float], device: str
+) -> None:
+    x = lucid.tensor(xs, device=device, requires_grad=True)
+    y = lucid.where(keep(x), getattr(lucid, name)(x), lucid.zeros_like(x))
+    (d1,) = grad(y.sum(), [x], create_graph=True)
+    (d2,) = grad(d1.sum(), [x])
+    for order, d in (("d1", d1), ("d2", d2)):
+        values = d.tolist()
+        assert not any(math.isnan(v) for v in values), (name, order, values)
+

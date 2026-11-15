@@ -106,8 +106,16 @@ def _asinh_slope(x: Tensor) -> Tensor:
 
 
 def _acosh_slope(x: Tensor) -> Tensor:
-    """``1 / sqrt(x^2 - 1)``, as the product of two roots so that ``x^2`` is never formed."""
-    return 1.0 / (lucid.sqrt(x - 1.0) * lucid.sqrt(x + 1.0))
+    """``1 / sqrt(x^2 - 1)``: ``1 / |x|`` past the split, where ``x^2`` would overflow.
+
+    ``(x - 1)(x + 1)`` rather than two roots: the product is positive again for ``x <= -1``,
+    where ``acosh`` itself is NaN but a ``where`` that masks it still differentiates this
+    slope, and two roots would hand that ``where`` a NaN gradient (the reference's slope is
+    finite there).  ``x - 1`` is exact next to 1, so the slope keeps its digits at the pole.
+    """
+    split = _split(x)
+    near = lucid.clamp(x, min=-split, max=split)
+    return lucid.rsqrt((near - 1.0) * (near + 1.0)) / _beyond(lucid.abs(x), split)
 
 
 def _atanh_slope(x: Tensor) -> Tensor:
