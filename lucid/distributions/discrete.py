@@ -13,10 +13,10 @@ import lucid
 from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import (
     _as_tensor,
-    _broadcast_pair,
+    _broadcast_params,
     _clamp_probs,
     _lazy_param,
-    _require_probs_or_logits,
+    _pick_probs_or_logits,
 )
 from lucid.distributions.bernoulli import _logits_to_probs, _probs_to_logits
 from lucid.distributions.constraints import (
@@ -250,8 +250,8 @@ class _CountTrialDistribution(Distribution):
         logits: Tensor | float | None,
         validate_args: bool | None,
     ) -> None:
-        param, self._is_logits = _require_probs_or_logits(cls_name, probs, logits)
-        self.total_count, param = _broadcast_pair(_as_tensor(total_count), param)
+        raw, self._is_logits = _pick_probs_or_logits(cls_name, probs, logits)
+        self.total_count, param = _broadcast_params(total_count, raw)
         if self._is_logits:
             self.logits = param
         else:

@@ -183,6 +183,13 @@ class Distribution:
     tensor of shape ``sample_shape + batch_shape``, having reduced over
     ``event_shape``.
 
+    **Parameter dtype**
+
+    A parameter given as a Python number takes the floating dtype and the
+    device of the tensor parameters given beside it, and the default dtype
+    when it has none, so ``Normal(0.1, scale)`` with a float64 ``scale``
+    holds ``0.1`` in float64.  A tensor parameter is never cast.
+
     **Reparameterisation**
 
     When ``has_rsample = True`` the sampler can be written as a

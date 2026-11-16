@@ -1,6 +1,7 @@
 """Tiny helpers shared across the distribution implementations."""
 
 from collections.abc import Callable
+from numbers import Real
 from typing import Protocol, Self, overload, override
 
 import lucid
@@ -21,6 +22,56 @@ def _as_tensor(x: Tensor | float | int) -> Tensor:
         if t.ndim == 1 and t.shape == (1,):
             t = t.squeeze()
     return t
+
+
+def _promote_params(*values: Tensor | float | int) -> tuple[Tensor, ...]:
+    """Tensors for the parameters of one distribution, numbers following the tensors.
+
+    A parameter given as a Python number takes the floating dtype and the
+    device of the first tensor parameter among ``values`` — what the reference
+    framework does when it broadcasts a distribution's parameters together —
+    and the default dtype when there is none.  Converted on its own, a number
+    was a default-dtype tensor before anything said what it would meet:
+    ``0.1`` was rounded to float32 ahead of the float64 arithmetic, and a
+    float32 count beside a float64 probability of the same shape was never
+    promoted, so ``lgamma(n + 1)`` ran in float32.
+
+    A tensor is returned as it is, so an integer tensor keeps its dtype and
+    does not turn a number beside it into an integer: the reference would give
+    ``Binomial(int_count, probs=0.3)`` a probability of ``0``.
+
+    Parameters
+    ----------
+    *values : Tensor | float | int
+        One distribution's parameters, in any mixture of tensors and numbers.
+
+    Returns
+    -------
+    tuple of Tensor
+        One tensor per value, in order.  Numbers are 0-dim.
+
+    Raises
+    ------
+    TypeError
+        If a value is neither a tensor nor a real number.
+    """
+    for v in values:
+        if not isinstance(v, (lucid.Tensor, Real)):
+            raise TypeError(
+                f"a distribution parameter must be a Tensor or a number, got {type(v).__name__}"
+            )
+    tensors = [v for v in values if isinstance(v, lucid.Tensor)]
+    if not tensors:
+        return tuple(_as_tensor(v) for v in values)
+    like = next((t for t in tensors if t.is_floating_point()), tensors[0])
+    dtype = like.dtype if like.is_floating_point() else lucid.get_default_dtype()
+    with untraced():
+        return tuple(
+            v
+            if isinstance(v, lucid.Tensor)
+            else lucid.full((), float(v), dtype=dtype, device=like.device)
+            for v in values
+        )
 
 
 def _broadcast_shapes(a: tuple[int, ...], b: tuple[int, ...]) -> tuple[int, ...]:
@@ -73,6 +124,32 @@ def _broadcast_pair(a: Tensor, b: Tensor) -> tuple[Tensor, Tensor]:
         return a, b
     z = a * 0 + b * 0
     return a + z, b + z
+
+
+def _broadcast_params(*values: Tensor | float | int) -> tuple[Tensor, ...]:
+    """One distribution's parameters as tensors of a common shape.
+
+    The reference framework's ``broadcast_all``: :func:`_promote_params` turns
+    numbers into tensors that follow the tensors beside them, and
+    :func:`_broadcast_pair` brings every pair to one shape.  A constructor
+    that scored its parameters together calls this rather than converting
+    each on its own, which is how a number lost the dtype of its neighbour.
+
+    Parameters
+    ----------
+    *values : Tensor | float | int
+        The parameters, in any mixture of tensors and numbers.
+
+    Returns
+    -------
+    tuple of Tensor
+        One tensor per value, in order, all of the broadcast shape.
+    """
+    tensors = list(_promote_params(*values))
+    for i in range(len(tensors)):
+        for j in range(i + 1, len(tensors)):
+            tensors[i], tensors[j] = _broadcast_pair(tensors[i], tensors[j])
+    return tuple(tensors)
 
 
 def _align_device(t: Tensor, ref: Tensor) -> Tensor:
@@ -246,15 +323,28 @@ class _lazy_param[T](property):
         return self._name in vars(instance)
 
 
+def _pick_probs_or_logits(
+    cls_name: str, probs: Tensor | float | int | None, logits: Tensor | float | int | None
+) -> tuple[Tensor | float | int, bool]:
+    """Return ``(param, is_logits)`` — the one of ``probs`` / ``logits`` given, as given.
+
+    The parameter is left unconverted, so a caller that scores it beside other
+    parameters (a count, a temperature) can let a number follow their dtype
+    through :func:`_promote_params`.
+    """
+    if probs is not None and logits is None:
+        return probs, False
+    if logits is not None and probs is None:
+        return logits, True
+    raise ValueError(f"{cls_name}: pass exactly one of `probs` or `logits`.")
+
+
 def _require_probs_or_logits(
     cls_name: str, probs: Tensor | float | int | None, logits: Tensor | float | int | None
 ) -> tuple[Tensor, bool]:
     """Return ``(param, is_logits)`` when exactly one of ``probs`` or ``logits`` is passed."""
-    if probs is not None and logits is None:
-        return _as_tensor(probs), False
-    if logits is not None and probs is None:
-        return _as_tensor(logits), True
-    raise ValueError(f"{cls_name}: pass exactly one of `probs` or `logits`.")
+    param, is_logits = _pick_probs_or_logits(cls_name, probs, logits)
+    return _as_tensor(param), is_logits
 
 
 def _set_probs_or_logits(

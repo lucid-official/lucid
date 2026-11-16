@@ -8,7 +8,7 @@ from typing import Self, override
 
 import lucid
 from lucid._tensor.tensor import Tensor
-from lucid.distributions._util import _as_tensor, _broadcast_pair
+from lucid.distributions._util import _broadcast_params
 from lucid.distributions.constraints import Constraint, interval, positive, real, simplex
 from lucid.distributions.distribution import Distribution
 from lucid.distributions.independent import Independent
@@ -124,12 +124,7 @@ class GeneralizedPareto(Distribution):
         validate_args: bool | None = None,
     ) -> None:
         """Initialise a :class:`GeneralizedPareto` distribution."""
-        self.loc = _as_tensor(loc)
-        self.scale = _as_tensor(scale)
-        self.concentration = _as_tensor(concentration)
-        self.loc, self.scale = _broadcast_pair(self.loc, self.scale)
-        self.loc, self.concentration = _broadcast_pair(self.loc, self.concentration)
-        self.scale, self.concentration = _broadcast_pair(self.scale, self.concentration)
+        self.loc, self.scale, self.concentration = _broadcast_params(loc, scale, concentration)
         super().__init__(
             batch_shape=tuple(self.loc.shape), event_shape=(), validate_args=validate_args
         )
@@ -373,7 +368,7 @@ class VonMises(Distribution):
         self, loc: Tensor | float, concentration: Tensor | float, validate_args: bool | None = None
     ) -> None:
         """Initialise a :class:`VonMises` distribution."""
-        self.loc, self.concentration = _broadcast_pair(_as_tensor(loc), _as_tensor(concentration))
+        self.loc, self.concentration = _broadcast_params(loc, concentration)
         super().__init__(
             batch_shape=tuple(self.loc.shape), event_shape=(), validate_args=validate_args
         )

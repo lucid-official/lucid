@@ -10,7 +10,7 @@ from lucid.distributions.constraints import Constraint, interval, real
 from lucid.distributions.distribution import Distribution
 
 
-from lucid.distributions._util import _as_tensor, _broadcast_pair
+from lucid.distributions._util import _broadcast_params
 
 
 class Uniform(Distribution):
@@ -119,9 +119,7 @@ class Uniform(Distribution):
         >>> d.mean
         tensor(0.5)
         """
-        self.low = _as_tensor(low)
-        self.high = _as_tensor(high)
-        self.low, self.high = _broadcast_pair(self.low, self.high)
+        self.low, self.high = _broadcast_params(low, high)
         super().__init__(
             batch_shape=tuple(self.low.shape), event_shape=(), validate_args=validate_args
         )

@@ -37,7 +37,7 @@ from lucid.distributions.distribution import ExponentialFamily
 _MAX_GAMMA_RETRIES: int = 8
 
 
-from lucid.distributions._util import _as_tensor, _broadcast_pair
+from lucid.distributions._util import _as_tensor, _broadcast_params, _promote_params
 from lucid.special import gammainc, xlog1py
 
 
@@ -464,9 +464,7 @@ class Gamma(ExponentialFamily):
         >>> d.mean  # α/β = 2.0
         tensor(2.)
         """
-        self.concentration = _as_tensor(concentration)
-        self.rate = _as_tensor(rate)
-        self.concentration, self.rate = _broadcast_pair(self.concentration, self.rate)
+        self.concentration, self.rate = _broadcast_params(concentration, rate)
         super().__init__(
             batch_shape=tuple(self.concentration.shape), event_shape=(), validate_args=validate_args
         )
@@ -764,10 +762,9 @@ class Chi2(Gamma):
         self.df = _as_tensor(df)
         super().__init__(
             concentration=self.df * 0.5,
-            # ``_as_tensor(0.5)`` produces a 0-D scalar; using
-            # ``lucid.tensor(0.5)`` would yield a (1,) tensor and force
-            # an unwanted broadcast that propagates into the batch shape.
-            rate=_as_tensor(0.5),
+            # A 0-D constant in ``df``'s dtype and device: ``lucid.tensor(0.5)``
+            # would be (1,)-shaped and force a broadcast into the batch shape.
+            rate=_promote_params(0.5, self.df)[0],
             validate_args=validate_args,
         )
 
@@ -895,11 +892,7 @@ class Beta(ExponentialFamily):
         >>> d.mean  # α/(α+β) = 2/7 ≈ 0.286
         tensor(0.2857)
         """
-        self.concentration1 = _as_tensor(concentration1)
-        self.concentration0 = _as_tensor(concentration0)
-        self.concentration1, self.concentration0 = _broadcast_pair(
-            self.concentration1, self.concentration0
-        )
+        self.concentration1, self.concentration0 = _broadcast_params(concentration1, concentration0)
         super().__init__(
             batch_shape=tuple(self.concentration1.shape),
             event_shape=(),

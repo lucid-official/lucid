@@ -12,7 +12,7 @@ from lucid.distributions.distribution import Distribution, ExponentialFamily
 _LOG_SQRT_2PI = 0.5 * math.log(2.0 * math.pi)
 
 
-from lucid.distributions._util import _as_tensor, _broadcast_pair, _image_cdf, _image_icdf
+from lucid.distributions._util import _broadcast_params, _image_cdf, _image_icdf
 
 
 class Normal(ExponentialFamily):
@@ -117,9 +117,7 @@ class Normal(ExponentialFamily):
         validate_args : bool or None, optional
             Validate parameter constraints on construction.
         """
-        self.loc = _as_tensor(loc)
-        self.scale = _as_tensor(scale)
-        self.loc, self.scale = _broadcast_pair(self.loc, self.scale)
+        self.loc, self.scale = _broadcast_params(loc, scale)
         super().__init__(
             batch_shape=tuple(self.loc.shape), event_shape=(), validate_args=validate_args
         )

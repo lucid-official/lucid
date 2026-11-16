@@ -10,7 +10,7 @@ from lucid.distributions.constraints import Constraint, nonnegative, positive, r
 from lucid.distributions.distribution import Distribution, ExponentialFamily
 
 
-from lucid.distributions._util import _as_tensor, _broadcast_pair
+from lucid.distributions._util import _as_tensor, _broadcast_params
 
 
 class Exponential(ExponentialFamily):
@@ -461,9 +461,7 @@ class Laplace(Distribution):
         >>> d.mean
         tensor(0.)
         """
-        self.loc = _as_tensor(loc)
-        self.scale = _as_tensor(scale)
-        self.loc, self.scale = _broadcast_pair(self.loc, self.scale)
+        self.loc, self.scale = _broadcast_params(loc, scale)
         super().__init__(
             batch_shape=tuple(self.loc.shape), event_shape=(), validate_args=validate_args
         )
@@ -760,9 +758,7 @@ class Cauchy(Distribution):
         >>> d = Cauchy(loc=0.0, scale=1.0)
         >>> x = d.rsample((1000,))
         """
-        self.loc = _as_tensor(loc)
-        self.scale = _as_tensor(scale)
-        self.loc, self.scale = _broadcast_pair(self.loc, self.scale)
+        self.loc, self.scale = _broadcast_params(loc, scale)
         super().__init__(
             batch_shape=tuple(self.loc.shape), event_shape=(), validate_args=validate_args
         )

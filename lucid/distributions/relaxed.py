@@ -22,10 +22,11 @@ import lucid
 from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import (
     _align_device,
-    _as_tensor,
     _broadcast_shapes,
     _clamp_probs,
     _lazy_param,
+    _pick_probs_or_logits,
+    _promote_params,
     _require_probs_or_logits,
 )
 from lucid.distributions.bernoulli import _logits_to_probs, _probs_to_logits
@@ -100,12 +101,11 @@ class LogitRelaxedBernoulli(Distribution):
         validate_args: bool | None = None,
     ) -> None:
         """Construct the distribution; raises ``ValueError`` unless exactly one of ``probs``/``logits`` is given."""
-        param, self._is_logits = _require_probs_or_logits("RelaxedBernoulli", probs, logits)
-        self.temperature = _as_tensor(temperature)
-        # A temperature or a probability given as a number is a 0-dim host
-        # tensor, and either may be the one that is not: whichever is the
-        # host scalar follows the other to its device, so the two can meet
-        # on Metal — the rule ``_broadcast_pair`` applies.
+        raw, self._is_logits = _pick_probs_or_logits("RelaxedBernoulli", probs, logits)
+        # A number follows the other parameter in dtype and device; a 0-dim host
+        # *tensor* may still sit beside a Metal one, and follows it likewise —
+        # the rule ``_broadcast_pair`` applies.
+        self.temperature, param = _promote_params(temperature, raw)
         if param.ndim == 0 and param.device.type == "cpu":
             param = _align_device(param, self.temperature)
         self.temperature = _align_device(self.temperature, param)
@@ -423,7 +423,7 @@ class ExpRelaxedCategorical(Distribution):
         from lucid.distributions.categorical import _normalize_logits, _normalize_probs
 
         raw, self._is_logits = _require_probs_or_logits("RelaxedOneHotCategorical", probs, logits)
-        self.temperature = _as_tensor(temperature)
+        self.temperature = _promote_params(temperature, raw)[0]
         if self._is_logits:
             self.logits = _normalize_logits(raw)
             shape = tuple(self.logits.shape)

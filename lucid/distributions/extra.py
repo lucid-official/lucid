@@ -13,8 +13,7 @@ from typing import Self, override
 import lucid
 from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
-from lucid.distributions._util import _align_device, _as_tensor
-from lucid.distributions._util import _broadcast_pair
+from lucid.distributions._util import _broadcast_params, _promote_params
 from lucid.distributions._util import _clamp_probs, _lazy_param, _set_probs_or_logits
 from lucid.distributions.bernoulli import _logits_to_probs, _probs_to_logits
 from lucid.distributions.constraints import (
@@ -127,7 +126,7 @@ class Gumbel(Distribution):
         validate_args : bool | None, optional
             If ``True``, validate parameter constraints at construction time.
         """
-        self.loc, self.scale = _broadcast_pair(_as_tensor(loc), _as_tensor(scale))
+        self.loc, self.scale = _broadcast_params(loc, scale)
         super().__init__(
             batch_shape=tuple(self.loc.shape), event_shape=(), validate_args=validate_args
         )
@@ -324,9 +323,7 @@ class InverseGamma(Distribution):
         validate_args : bool | None, optional
             If ``True``, validate parameter constraints at construction time.
         """
-        self.concentration = _as_tensor(concentration)
-        self.rate = _as_tensor(rate)
-        self.concentration, self.rate = _broadcast_pair(self.concentration, self.rate)
+        self.concentration, self.rate = _broadcast_params(concentration, rate)
         # Lazily import Gamma to avoid a circular dependency at import time.
         from lucid.distributions.gamma import Gamma as _Gamma
 
@@ -528,11 +525,7 @@ class Kumaraswamy(Distribution):
         validate_args : bool | None, optional
             If ``True``, validate parameter constraints at construction time.
         """
-        self.concentration1 = _as_tensor(concentration1)  # a
-        self.concentration0 = _as_tensor(concentration0)  # b
-        self.concentration1, self.concentration0 = _broadcast_pair(
-            self.concentration1, self.concentration0
-        )
+        self.concentration1, self.concentration0 = _broadcast_params(concentration1, concentration0)
         super().__init__(
             batch_shape=tuple(self.concentration1.shape),
             event_shape=(),
@@ -810,9 +803,10 @@ class Multinomial(Distribution):
             self.logits = self._cat.logits
         else:
             self.probs = self._cat.probs
-        # An ``int`` count becomes a 0-dim host tensor; it joins the
-        # probabilities on their device, or ``n · p`` cannot run on Metal.
-        self._total_count: Tensor = _align_device(_as_tensor(total_count), self._cat._probs)
+        # An ``int`` count becomes a 0-dim tensor in the probabilities' dtype and
+        # on their device, or ``n · p`` cannot run on Metal and ``lgamma(n + 1)``
+        # runs in the default dtype beside float64 probabilities.
+        self._total_count: Tensor = _promote_params(total_count, self._cat._probs)[0]
         super().__init__(
             batch_shape=tuple(self._cat._batch_shape),
             event_shape=(self._cat._num_events,),

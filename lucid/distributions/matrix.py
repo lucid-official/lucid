@@ -17,7 +17,13 @@ import lucid.linalg as _la
 import lucid.special as _sp
 from lucid._engine_scope import untraced
 from lucid._tensor.tensor import Tensor
-from lucid.distributions._util import _align_device, _as_tensor, _broadcast_shapes, _lazy_param
+from lucid.distributions._util import (
+    _align_device,
+    _as_tensor,
+    _broadcast_shapes,
+    _lazy_param,
+    _promote_params,
+)
 from lucid.distributions.constraints import (
     Constraint,
     corr_cholesky,
@@ -184,7 +190,7 @@ class Wishart(Distribution):
             self, "Wishart", covariance_matrix, precision_matrix, scale_tril
         )
         self._dim = dim
-        df = _as_tensor(df)
+        df = _promote_params(df, given)[0]
 
         # ``support`` promises positive-definite draws, and the Bartlett
         # diagonal is χ²(df − i) for i = 0, …, d − 1.  At df ≤ d − 1 the

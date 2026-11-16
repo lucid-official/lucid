@@ -13,8 +13,7 @@ from typing import Self, override
 import lucid
 from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
-from lucid.distributions._util import _as_tensor
-from lucid.distributions._util import _broadcast_pair
+from lucid.distributions._util import _as_tensor, _broadcast_params
 from lucid.distributions._util import _image_cdf, _image_icdf
 from lucid.distributions.constraints import Constraint, greater_than_eq, nonnegative, positive
 from lucid.distributions.distribution import Distribution
@@ -108,9 +107,7 @@ class Pareto(Distribution):
         """
         from lucid.distributions.exponential import Exponential
 
-        self.scale = _as_tensor(scale)
-        self.alpha = _as_tensor(alpha)
-        self.scale, self.alpha = _broadcast_pair(self.scale, self.alpha)
+        self.scale, self.alpha = _broadcast_params(scale, alpha)
         # X = scale * exp(E) with E ~ Exponential(alpha): what cdf/icdf read.
         self._base = Exponential(self.alpha, validate_args=False)
         super().__init__(
@@ -379,9 +376,7 @@ class Weibull(Distribution):
         """
         from lucid.distributions.exponential import Exponential
 
-        self.scale = _as_tensor(scale)
-        self.concentration = _as_tensor(concentration)
-        self.scale, self.concentration = _broadcast_pair(self.scale, self.concentration)
+        self.scale, self.concentration = _broadcast_params(scale, concentration)
         # X = scale * E^(1/k) with E ~ Exponential(1): what cdf/icdf read.
         self._base = Exponential(lucid.ones_like(self.scale), validate_args=False)
         super().__init__(
@@ -1103,9 +1098,7 @@ class FisherSnedecor(Distribution):
         validate_args : bool | None, optional
             If ``True``, validate parameter constraints at construction time.
         """
-        self.df1 = _as_tensor(df1)
-        self.df2 = _as_tensor(df2)
-        self.df1, self.df2 = _broadcast_pair(self.df1, self.df2)
+        self.df1, self.df2 = _broadcast_params(df1, df2)
         super().__init__(
             batch_shape=tuple(self.df1.shape), event_shape=(), validate_args=validate_args
         )
