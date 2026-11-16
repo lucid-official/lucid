@@ -122,7 +122,11 @@ EOF
 fi
 
 echo "==> Running targeted engine suites under $MODE ($SANITIZE)"
+# --capture=sys: a sanitizer writes its report to fd 2 and then exits, so pytest's
+# default fd capture would hold the report in a temporary file that the dying process
+# never prints -- the job then ends with a bare exit 1 mid-line.  Capturing only
+# sys.stderr leaves fd 2 on the job log.
 # shellcheck disable=SC2086 — the target is a list of paths
-env "${EXTRA_OPTS[@]}" "$RUN_PYTHON" -m pytest $PYTEST_TARGET --tb=short -q
+env "${EXTRA_OPTS[@]}" "$RUN_PYTHON" -m pytest $PYTEST_TARGET --tb=short -q --capture=sys
 
 echo "==> $MODE ($SANITIZE): green"
