@@ -2733,30 +2733,19 @@ std::shared_ptr<TensorImpl> clone_grad_impl(std::shared_ptr<TensorImpl> g) {
         out->copy_from(*g);
         return out;
     }
-    const bool prev_mode = GradMode::is_enabled();
-    GradMode::set_enabled(true);
-    try {
-        auto out = add_op(g, zero_grad_like(*g));
-        GradMode::set_enabled(prev_mode);
-        return out;
-    } catch (...) {
-        GradMode::set_enabled(prev_mode);
-        throw;
-    }
+    // The guard restores the raw flag the thread had.  A restore through
+    // ``is_enabled()`` would write ``false`` into the raw flag whenever
+    // inference mode is on, and leave grad mode off after it ends.
+    const GradModeGuard grad_on(true);
+    return add_op(g, zero_grad_like(*g));
 }
 
 void merge_grad_impl(std::shared_ptr<TensorImpl>& cur, const std::shared_ptr<TensorImpl>& g) {
     const bool g_tracks = tracks_autograd(g);
-    const bool prev_mode = GradMode::is_enabled();
-    if (tracks_autograd(cur) || g_tracks)
-        GradMode::set_enabled(true);
     std::shared_ptr<TensorImpl> sum;
-    try {
+    {
+        const GradModeGuard grad_mode(GradMode::raw_enabled() || tracks_autograd(cur) || g_tracks);
         sum = add_op(cur, g);
-        GradMode::set_enabled(prev_mode);
-    } catch (...) {
-        GradMode::set_enabled(prev_mode);
-        throw;
     }
     const bool leaf_grad = cur->is_leaf() && cur->requires_grad();
     if (!g_tracks && !leaf_grad && (!cur->is_aliased() || !tracks_autograd(cur))) {

@@ -357,6 +357,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - detach dropout_stateful's tracer through the guard (LCD-1042)
 
+- restore the raw grad flag after a tracked grad add (LCD-1042)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
