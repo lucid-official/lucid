@@ -9,6 +9,7 @@ All operations are Lucid-native (engine ops only) — no numpy / PIL.
 """
 
 import math
+from collections.abc import Callable
 from typing import Literal
 
 import lucid
@@ -21,6 +22,19 @@ _RESIZE_ALIGN_MODES = frozenset({"bilinear", "bicubic", "linear", "trilinear"})
 #: The modes ``antialias`` applies to; the others ignore it, as in the reference.
 _ANTIALIASED_MODES = frozenset({"bilinear", "bicubic"})
 _COPYING_MODES = frozenset({"nearest", "nearest-exact"})
+
+
+def _sampled(x: Tensor, sample: Callable[[Tensor], Tensor]) -> Tensor:
+    """``sample(x)``, with a bool ``x`` sampled as float32 and brought back to bool.
+
+    ``interpolate`` and ``grid_sample`` refuse a bool (the reference's CPU has
+    no kernel for one), and a bool mask is a mask a nearest-type sample copies
+    exactly: ``0.0`` and ``1.0`` come back as themselves, so ``> 0.5`` is the
+    mask the samples came from.
+    """
+    if x.dtype != lucid.bool_:
+        return sample(x)
+    return sample(x.to(lucid.float32)) > 0.5
 
 
 def _cat(tensors: list[Tensor], dim: int) -> Tensor:
@@ -111,12 +125,15 @@ def resize(
     # reference does it: rounded, clamped to the dtype's range, cast.
     # Nearest only copies samples, so it keeps the integers as they are.
     integer = not x.is_floating_point() and mode not in _COPYING_MODES
-    out = F.interpolate(
+    out = _sampled(
         x.to(lucid.float32) if integer else x,
-        size=(new_h, new_w),
-        mode=mode,
-        align_corners=False if mode in _RESIZE_ALIGN_MODES else None,
-        antialias=antialias and mode in _ANTIALIASED_MODES,
+        lambda t: F.interpolate(
+            t,
+            size=(new_h, new_w),
+            mode=mode,
+            align_corners=False if mode in _RESIZE_ALIGN_MODES else None,
+            antialias=antialias and mode in _ANTIALIASED_MODES,
+        ),
     )
     if integer:
         info = iinfo(x.dtype)
@@ -737,7 +754,9 @@ def warp_affine(
     grid = F.affine_grid(theta, [b, c, out_hw[0], out_hw[1]], align_corners=True)
     gmode = "nearest" if mode == "nearest" else "bilinear"
     pad = "zeros" if fill == 0.0 else "border"
-    y = F.grid_sample(x, grid, mode=gmode, padding_mode=pad, align_corners=True)
+    y = _sampled(
+        x, lambda t: F.grid_sample(t, grid, mode=gmode, padding_mode=pad, align_corners=True)
+    )
     return y[0] if unbatched else y
 
 
@@ -992,7 +1011,10 @@ def remap(img: Tensor, dx: Tensor, dy: Tensor, *, mode: str = "bilinear") -> Ten
     if b > 1:
         grid = _cat([grid] * b, 0)
     gmode = "nearest" if mode == "nearest" else "bilinear"
-    y = F.grid_sample(x, grid, mode=gmode, padding_mode="reflection", align_corners=True)
+    y = _sampled(
+        x,
+        lambda t: F.grid_sample(t, grid, mode=gmode, padding_mode="reflection", align_corners=True),
+    )
     return y[0] if unbatched else y
 
 
