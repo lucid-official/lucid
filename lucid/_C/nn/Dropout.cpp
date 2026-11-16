@@ -201,11 +201,15 @@ std::pair<TensorImplPtr, TensorImplPtr> dropout_stateful_op(const TensorImplPtr&
     // the trace.  Without this the captured graph would contain a
     // ``"dropout"`` node nested under our ``"dropout_stateful"`` node
     // — the MPSGraph emitter would see both, double-emit the mask,
-    // and the compile path would fail consistency checks.
-    auto* saved_tracer = ::lucid::compile::current_tracer();
-    ::lucid::compile::set_current_tracer(nullptr);
-    TensorImplPtr y = dropout_op(x, p, training, gen);
-    ::lucid::compile::set_current_tracer(saved_tracer);
+    // and the compile path would fail consistency checks.  The detach is a
+    // guard: the nested draw throws on a bool or integer input and under
+    // determinism without a generator, and a tracer left unset would record
+    // nothing for the rest of the trace.
+    TensorImplPtr y;
+    {
+        const ::lucid::compile::TracerDetach nested_dropout_not_an_op;
+        y = dropout_op(x, p, training, gen);
+    }
 
     // ``state_out`` in eager mode is a verbatim clone of ``state_in`` —
     // Lucid's :class:`Generator` already advances per call, so the

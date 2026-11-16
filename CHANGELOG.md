@@ -355,6 +355,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - StudentT entropy slope, inf and NaN lanes (LCD-1037)
 
+- detach dropout_stateful's tracer through the guard (LCD-1042)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
