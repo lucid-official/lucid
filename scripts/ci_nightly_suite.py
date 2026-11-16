@@ -68,15 +68,6 @@ class Designed:
 
 #: Test file (repository-relative) → the skips it is designed to make.
 DESIGNED: dict[str, tuple[Designed, ...]] = {
-    "lucid/test/parity/models/vision/test_resnet.py": (
-        Designed(
-            r"^the reference answers with \|logits\| up to \S+, far past the ",
-            3,
-            "three deep variants amplify the randomised norm buffers past where "
-            "an elementwise comparison describes the model "
-            "(lucid/test/parity/models/_utils.py)",
-        ),
-    ),
     "lucid/test/parity/nn/test_interpolate_sample_positions_parity.py": (
         Designed(r"^Metal has no float64$", None, "every float64 case runs on the CPU only"),
     ),
