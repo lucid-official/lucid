@@ -32,6 +32,21 @@
 // where eager rounds twice, so committing it too is the faithful answer, and the
 // pair is rare enough that the three extra ops are not a cost anyone sees.
 //
+// What the guard does not reach (each pinned by a strict xfail in
+// test_cancelling_sums_compiled.py):
+//
+// * float16 / bfloat16: the commit is emitted, but Lucid's half pipeline keeps a
+//   fused chain's intermediates at float32 and rounds once, so ``(x + 1) - 1``
+//   still comes back ``x``; the cause is the width of the op-math, not a rewrite.
+// * complex64: ``is_floating_point`` excludes it, so an add / sub of complex
+//   values is neither recorded nor committed.
+// * a view between the sum and the subtraction: a moves-only op (``reshape``,
+//   ``detach``, a full slice) binds a new tensor, so the operands no longer
+//   match by identity, and MPSGraph sees through the view when it simplifies.
+// * a term recomputed rather than reused (``(x * k) - ((x * k) - x)``, or
+//   ``((a + b) + c) - (a + b)`` with two add nodes): two nodes are two tensors
+//   here, and MPSGraph merges them before it simplifies.
+//
 // Objective-C++ only.
 
 #pragma once
@@ -98,7 +113,8 @@ inline bool is_floating(const OpNode& node) {
 // ``add``: a difference read together with the term it removed (``(x - y) + y``),
 // or a constant offset read together with a constant.  ``sub``: a sum read
 // together with one of its terms (``(x + y) - y``), a constant offset read
-// together with a constant, or ``x - (x - y)``.
+// together with a constant, ``x - (x - y)``, or a constant minus a constant
+// offset (``C - (C - x)``).
 inline RoundingCommit commit_before(const BuilderContext& ctx, const OpNode& node, Additive kind) {
     using namespace cancelling_sums_detail;
     RoundingCommit out;
@@ -109,7 +125,8 @@ inline RoundingCommit commit_before(const BuilderContext& ctx, const OpNode& nod
     const bool const_offset_meets_const_lhs = has_const_term(ctx, p) && is_const_splat(ctx, q);
     if (kind == Additive::Sub) {
         out.lhs = sum_cancels_with(ctx, p, q) || const_offset_meets_const_lhs;
-        out.rhs = is_traced_value(ctx, p, ctx.resolve_saved(q, kDiffLhsSlot));
+        out.rhs = is_traced_value(ctx, p, ctx.resolve_saved(q, kDiffLhsSlot)) ||
+                  (is_const_splat(ctx, p) && has_const_term(ctx, q));
         return out;
     }
     out.lhs = difference_returns_with(ctx, p, q) || const_offset_meets_const_lhs;

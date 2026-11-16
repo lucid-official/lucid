@@ -57,6 +57,8 @@ _PATTERNS: dict[str, tuple[_Fn, int]] = {
     "(a-b)+b": (lambda a, b: (a - b) + b, 2),
     "b+(a-b)": (lambda a, b: b + (a - b), 2),
     "(a+1)-1": (lambda a: (a + 1.0) - 1.0, 1),
+    "C-(C-a)": (lambda a: 1.0 - (1.0 - a), 1),
+    "C-(C-a)-large": (lambda a: 1e6 - (1e6 - a), 1),
     "(a+C)-C": (lambda a: (a + 3.5) - 3.5, 1),
     "(a-C)+C": (lambda a: (a - 1e6) + 1e6, 1),
     "(a+C)+(-C)": (lambda a: (a + 1e6) + (-1e6), 1),
@@ -106,6 +108,7 @@ def test_a_compiled_sum_keeps_its_rounding_for_the_term_taken_off(
 
 def test_the_gradient_through_a_cancelling_pair_is_eagers(device_gpu_only: str) -> None:
     """``d/da (a + b) - a`` is 0 either way; the committed sum must not change a gradient."""
+
     class _Pair(nn.Module):
         def __init__(self) -> None:
             super().__init__()
@@ -131,16 +134,94 @@ def test_the_gradient_through_a_cancelling_pair_is_eagers(device_gpu_only: str) 
     assert model.a.grad.tolist() == eager.a.grad.tolist()
 
 
+def _eager_and_compiled(fn: _Fn, args: list[lucid.Tensor]) -> tuple[lucid.Tensor, lucid.Tensor]:
+    with lucid.no_grad():
+        want = fn(*args)
+    return want, _compiled(fn, args)
+
+
+def _is_eager(fn: _Fn, args: list[lucid.Tensor]) -> bool:
+    want, got = _eager_and_compiled(fn, args)
+    return _differing(got.to(lucid.float32), want.to(lucid.float32)) == 0
+
+
+# What the guard does not reach.  Each is a strict xfail: it passes the day the
+# mechanism is closed, and the XPASS says so.
+
+
 @pytest.mark.xfail(
     strict=True,
-    reason="LCD-1033: operands are matched by graph-tensor identity, so a term that is recomputed "
-    "(two `a * 4097` nodes) rather than reused is not seen to cancel before MPSGraph merges them",
+    reason="LCD-1033 follow-up: operands are matched by graph-tensor identity, so a term that is "
+    "recomputed (two `a * 4097` nodes) rather than reused is not seen to cancel before MPSGraph "
+    "merges them",
 )
 def test_a_term_recomputed_rather_than_reused_is_not_yet_seen(device_gpu_only: str) -> None:
     def fn(a: lucid.Tensor) -> lucid.Tensor:
         return (a * 4097.0) - ((a * 4097.0) - a)
 
-    args = _operands(device_gpu_only, 1)
-    with lucid.no_grad():
-        want = fn(*args)
-    assert _differing(_compiled(fn, args), want) == 0
+    assert _is_eager(fn, _operands(device_gpu_only, 1))
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="LCD-1033 follow-up: a sum computed twice (two add nodes) is two tensors to the guard "
+    "and one after MPSGraph's CSE, so `((a + b) + c) - (a + b)` is cancelled",
+)
+def test_a_sum_recomputed_rather_than_reused_is_not_yet_seen(device_gpu_only: str) -> None:
+    def fn(a: lucid.Tensor, b: lucid.Tensor, c: lucid.Tensor) -> lucid.Tensor:
+        return ((a + b) + c) - (a + b)
+
+    assert _is_eager(fn, _operands(device_gpu_only, 3))
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="LCD-1033 follow-up: a moves-only op (reshape, detach, a full slice) between the sum "
+    "and the subtraction binds a new tensor, so the operands stop matching by identity while "
+    "MPSGraph still sees through the view",
+)
+@pytest.mark.parametrize(
+    "view",
+    [
+        pytest.param(lambda t: t.reshape(64, 64).reshape(-1), id="reshape-round-trip"),
+        pytest.param(lambda t: t[:], id="full-slice"),
+        pytest.param(lambda t: t.detach(), id="detach"),
+    ],
+)
+def test_a_sum_seen_through_a_view_is_not_yet_guarded(
+    view: Callable[[lucid.Tensor], lucid.Tensor], device_gpu_only: str
+) -> None:
+    def fn(a: lucid.Tensor, b: lucid.Tensor) -> lucid.Tensor:
+        return view(a + b) - a
+
+    assert _is_eager(fn, _operands(device_gpu_only, 2))
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="LCD-1033 follow-up: the commit is emitted for float16 / bfloat16 but Lucid's half "
+    "pipeline keeps a fused elementwise chain's intermediates at float32 and rounds once, so "
+    "`(a + 1) - 1` compiled is `a` where eager rounds the sum to half",
+)
+@pytest.mark.parametrize("dtype", [lucid.float16, lucid.bfloat16], ids=["float16", "bfloat16"])
+def test_a_half_precision_sum_is_not_yet_rounded_before_the_subtraction(
+    dtype: lucid.dtype, device_gpu_only: str
+) -> None:
+    def fn(a: lucid.Tensor) -> lucid.Tensor:
+        return (a + 1.0) - 1.0
+
+    (a,) = _operands(device_gpu_only, 1)
+    assert _is_eager(fn, [(a * 1e-3).to(dtype)])
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="LCD-1033 follow-up: is_floating_point excludes complex64, so an add / sub of complex "
+    "values is neither recorded nor committed and `(z + w) - z` is cancelled",
+)
+def test_a_complex_sum_is_not_yet_guarded(device_gpu_only: str) -> None:
+    def fn(z: lucid.Tensor, w: lucid.Tensor) -> lucid.Tensor:
+        return ((z + w) - z).real
+
+    a, b, c = _operands(device_gpu_only, 3)
+    assert _is_eager(fn, [lucid.complex(a, b), lucid.complex(b, c)])
