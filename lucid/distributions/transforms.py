@@ -174,6 +174,22 @@ class SigmoidTransform(Transform):
         return -softplus(-x) - softplus(x)
 
 
+def _log_one_minus_tanh_sq(x: Tensor) -> Tensor:
+    r""":math:`\log(1 - \tanh^2 x) = 2(\log 2 - x - \operatorname{softplus}(-2x))`.
+
+    The owner of this identity for every transform that composes a ``tanh``
+    (:class:`TanhTransform`, :class:`CorrCholeskyTransform`).  The pieces stay
+    finite where the textbook ``log(1 - tanh(x)**2)`` is ``log(0)`` (``tanh``
+    rounds to 1 from ``|x|`` ~ 9 in float32), and where the spelled-out
+    ``log1p(exp(-2x))`` overflows (``x`` below -44 in float32, a ``-inf`` for
+    a log-determinant of about ``-2|x|``): ``softplus`` is the identity past its
+    threshold.
+    """
+    from lucid.nn.functional.activations import softplus
+
+    return 2.0 * (math.log(2.0) - x - softplus(-2.0 * x))
+
+
 class TanhTransform(Transform):
     r"""Element-wise hyperbolic tangent bijection :math:`y = \tanh(x)`.
 
@@ -222,8 +238,13 @@ class TanhTransform(Transform):
 
     @override
     def _inverse(self, y: Tensor) -> Tensor:
-        r"""Inverse: :math:`x = \tfrac{1}{2}\log\!\bigl((1+y)/(1-y)\bigr)`."""
-        return 0.5 * ((1.0 + y) / (1.0 - y)).log()
+        r"""Inverse :math:`x = \operatorname{arctanh}(y)`, by :func:`lucid.atanh`.
+
+        The textbook :math:`\tfrac{1}{2}\log\bigl((1+y)/(1-y)\bigr)` rounds
+        :math:`1 + y` to 1 below ``|y|`` ~ 2e-5 in float32 (the inverse of
+        ``tanh(1e-8)`` was 0) and loses digits next to :math:`\pm 1`.
+        """
+        return lucid.atanh(y)
 
     @override
     def log_abs_det_jacobian(self, x: Tensor, y: Tensor) -> Tensor:
@@ -247,9 +268,7 @@ class TanhTransform(Transform):
         Tensor
             Same shape as ``x``.
         """
-        # log(1 − tanh²(x)) = 2·(log 2 − x − softplus(−2x)) — the stable
-        # form used by the reference framework.
-        return 2.0 * (math.log(2.0) - x - (-2.0 * x).exp().log1p())
+        return _log_one_minus_tanh_sq(x)
 
 
 class AffineTransform(Transform):
@@ -1186,9 +1205,7 @@ class CorrCholeskyTransform(Transform):
             free.append(lucid.cat(elems, dim=-1))  # (..., row)
 
         z = lucid.cat(free, dim=-1)  # (..., d*(d-1)/2)
-        # inverse tanh: arctanh(z) = 0.5 * log((1+z)/(1-z))
-        denom = lucid.where((1.0 - z) < 1e-8, lucid.full_like(z, 1e-8), 1.0 - z)
-        return 0.5 * ((1.0 + z) / denom).log()
+        return lucid.atanh(z)  # ``z`` is clamped inside (-1, 1) above: finite
 
     @override
     def log_abs_det_jacobian(self, x: Tensor, y: Tensor) -> Tensor:
@@ -1232,9 +1249,7 @@ class CorrCholeskyTransform(Transform):
         if d < 2:
             return lucid.zeros(tuple(x.shape[:-1]), dtype=x.dtype, device=x.device)
 
-        z = x.tanh()
-        one_minus_z2 = lucid.clip(1.0 - z * z, min=1e-12)
-        tanh_logdet = one_minus_z2.log().sum(dim=-1)
+        tanh_logdet = _log_one_minus_tanh_sq(x).sum(dim=-1)
 
         # ``1 - cumsum(y², -1)`` at the entries with ``col <= row - 2``.
         # Masked-out lanes are set to 1.0 *before* the log: a zero there
