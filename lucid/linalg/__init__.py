@@ -1841,8 +1841,9 @@ def vander(x: Tensor, *, N: int | None = None, increasing: bool = True) -> Tenso
 
     Raises
     ------
-    TypeError
-        If ``x`` is a bool tensor.
+    RuntimeError
+        If ``x`` is a bool tensor (a dtype-mismatch refusal, also a
+        :class:`TypeError`, as the reference's); cast it first.
 
     Notes
     -----
@@ -1862,8 +1863,7 @@ def vander(x: Tensor, *, N: int | None = None, increasing: bool = True) -> Tenso
     >>> vander(lucid.tensor([1.0, 2.0, 3.0]))
     tensor([[1., 1., 1.], [1., 2., 4.], [1., 3., 9.]])
     """
-    if x.dtype == lucid.bool:
-        raise TypeError("linalg.vander: expected a numeric input, got lucid.bool")
+    refuse_bool("vander", x)
     vec = x.unsqueeze(-1) if x.ndim == 0 else x
     shape = tuple(vec.shape)
     cols = shape[-1] if N is None else int(N)

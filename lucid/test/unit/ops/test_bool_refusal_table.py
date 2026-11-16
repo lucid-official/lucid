@@ -45,6 +45,7 @@ import pytest
 import lucid
 from lucid._C import engine as _C_engine
 from lucid._ops._bool_refusal import _FLOATING, _INTEGER, _NUMBER, BOOL_REFUSED, engine_bool_refused
+from lucid.nn.functional._loss_checks import _FLOATING_RESULT, _KINDS, _OPERAND_DTYPES
 
 # ``upsample*`` are the reference's deprecated spellings of ``interpolate``: they warn by design.
 pytestmark = pytest.mark.filterwarnings("ignore:.*nn.functional.upsample.*:UserWarning")
@@ -83,6 +84,136 @@ def _refused(op: str, call: _Call) -> _Row:
 
 def _accepted(call: _Call) -> _Row:
     return _Row(None, "accepted", call)
+
+
+# The losses refuse a bool operand at their door (LCD-1024).  Each entry is the class the reference
+# raises for a bool *input*, the ``nn.functional`` call and the ``nn`` module's, on the bool vector
+# ``t`` and matrix ``m`` (a class label is ``t[:2].long()``).  The reference words a bool *target*
+# beside a floating input as a dtype mismatch, a plain ``RuntimeError``, whatever the input's
+# class: the ``-target`` rows further down pin those, where Lucid's class is the loss's own.
+_LossCalls = tuple[Kind, _Call, _Call]
+
+_LOSSES: dict[str, _LossCalls] = {
+    "mse_loss": (
+        "kernel",
+        lambda fw, t, m: fw.nn.functional.mse_loss(t, t),
+        lambda fw, t, m: fw.nn.MSELoss()(t, t),
+    ),
+    "l1_loss": (
+        "guard",
+        lambda fw, t, m: fw.nn.functional.l1_loss(t, t),
+        lambda fw, t, m: fw.nn.L1Loss()(t, t),
+    ),
+    "smooth_l1_loss": (
+        "kernel",
+        lambda fw, t, m: fw.nn.functional.smooth_l1_loss(t, t),
+        lambda fw, t, m: fw.nn.SmoothL1Loss()(t, t),
+    ),
+    "huber_loss": (
+        "kernel",
+        lambda fw, t, m: fw.nn.functional.huber_loss(t, t),
+        lambda fw, t, m: fw.nn.HuberLoss()(t, t),
+    ),
+    "binary_cross_entropy": (
+        "kernel",
+        lambda fw, t, m: fw.nn.functional.binary_cross_entropy(t, t),
+        lambda fw, t, m: fw.nn.BCELoss()(t, t),
+    ),
+    "binary_cross_entropy_with_logits": (
+        "kernel",
+        lambda fw, t, m: fw.nn.functional.binary_cross_entropy_with_logits(t, t),
+        lambda fw, t, m: fw.nn.BCEWithLogitsLoss()(t, t),
+    ),
+    "cross_entropy": (
+        "kernel",
+        lambda fw, t, m: fw.nn.functional.cross_entropy(m, t[:2].long()),
+        lambda fw, t, m: fw.nn.CrossEntropyLoss()(m, t[:2].long()),
+    ),
+    "nll_loss": (
+        "kernel",
+        lambda fw, t, m: fw.nn.functional.nll_loss(m, t[:2].long()),
+        lambda fw, t, m: fw.nn.NLLLoss()(m, t[:2].long()),
+    ),
+    "kl_div": (
+        "guard",
+        lambda fw, t, m: fw.nn.functional.kl_div(t, t),
+        lambda fw, t, m: fw.nn.KLDivLoss()(t, t),
+    ),
+    "poisson_nll_loss": (
+        "guard",
+        lambda fw, t, m: fw.nn.functional.poisson_nll_loss(t, t),
+        lambda fw, t, m: fw.nn.PoissonNLLLoss()(t, t),
+    ),
+    "gaussian_nll_loss": (
+        "guard",
+        lambda fw, t, m: fw.nn.functional.gaussian_nll_loss(t, t, t),
+        lambda fw, t, m: fw.nn.GaussianNLLLoss()(t, t, t),
+    ),
+    "soft_margin_loss": (
+        "guard",
+        lambda fw, t, m: fw.nn.functional.soft_margin_loss(t, t),
+        lambda fw, t, m: fw.nn.SoftMarginLoss()(t, t),
+    ),
+    "hinge_embedding_loss": (
+        "guard",
+        lambda fw, t, m: fw.nn.functional.hinge_embedding_loss(t, t),
+        lambda fw, t, m: fw.nn.HingeEmbeddingLoss()(t, t),
+    ),
+    "margin_ranking_loss": (
+        "guard",
+        lambda fw, t, m: fw.nn.functional.margin_ranking_loss(t, t, t),
+        lambda fw, t, m: fw.nn.MarginRankingLoss()(t, t, t),
+    ),
+    "multi_margin_loss": (
+        "kernel",
+        lambda fw, t, m: fw.nn.functional.multi_margin_loss(m, t[:2].long()),
+        lambda fw, t, m: fw.nn.MultiMarginLoss()(m, t[:2].long()),
+    ),
+    "multilabel_margin_loss": (
+        "kernel",
+        lambda fw, t, m: fw.nn.functional.multilabel_margin_loss(m, m.long()),
+        lambda fw, t, m: fw.nn.MultiLabelMarginLoss()(m, m.long()),
+    ),
+    "multilabel_soft_margin_loss": (
+        "kernel",
+        lambda fw, t, m: fw.nn.functional.multilabel_soft_margin_loss(m, m),
+        lambda fw, t, m: fw.nn.MultiLabelSoftMarginLoss()(m, m),
+    ),
+    "triplet_margin_loss": (
+        "guard",
+        lambda fw, t, m: fw.nn.functional.triplet_margin_loss(m, m, m),
+        lambda fw, t, m: fw.nn.TripletMarginLoss()(m, m, m),
+    ),
+    "triplet_margin_with_distance_loss": (
+        "guard",
+        lambda fw, t, m: fw.nn.functional.triplet_margin_with_distance_loss(m, m, m),
+        lambda fw, t, m: fw.nn.TripletMarginWithDistanceLoss()(m, m, m),
+    ),
+    # The CTC log-probabilities are (time, batch, classes); the lengths are integer tensors.
+    "ctc_loss": (
+        "kernel",
+        lambda fw, t, m: fw.nn.functional.ctc_loss(
+            m.reshape(3, 1, 2),
+            t[:1].reshape(1, 1).long(),
+            fw.tensor([3]).long(),
+            fw.tensor([1]).long(),
+        ),
+        lambda fw, t, m: fw.nn.CTCLoss()(
+            m.reshape(3, 1, 2),
+            t[:1].reshape(1, 1).long(),
+            fw.tensor([3]).long(),
+            fw.tensor([1]).long(),
+        ),
+    ),
+}
+
+
+def _loss_rows() -> dict[str, _Row]:
+    rows: dict[str, _Row] = {}
+    for loss, (kind, functional, module) in _LOSSES.items():
+        rows[loss] = _Row(loss, kind, functional)
+        rows[f"{loss}-module"] = _Row(loss, kind, module)
+    return rows
 
 
 _TABLE: dict[str, _Row] = {
@@ -303,6 +434,59 @@ _TABLE: dict[str, _Row] = {
             m.float().reshape(1, 1, 2, 3), m.reshape(1, 1, 3, 2), align_corners=False
         ),
     ),
+    # ── losses, and the other ops that refused a bool with a plain TypeError (LCD-1024) ─
+    **_loss_rows(),
+    # A bool target: the reference's dtype-mismatch RuntimeError, whichever the loss's own class;
+    # a class label that is bool is told to be an integer, not a float.
+    "cross_entropy-target": _refused(
+        "cross_entropy", lambda fw, t, m: fw.nn.functional.cross_entropy(m.float(), t[:2])
+    ),
+    "cross_entropy-probabilities": _refused(
+        "cross_entropy", lambda fw, t, m: fw.nn.functional.cross_entropy(m.float(), m)
+    ),
+    "nll_loss-target": _refused(
+        "nll_loss", lambda fw, t, m: fw.nn.functional.nll_loss(m.float(), t[:2])
+    ),
+    "kl_div-target": _refused("kl_div", lambda fw, t, m: fw.nn.functional.kl_div(t.float(), t)),
+    "l1_loss-target": _refused("l1_loss", lambda fw, t, m: fw.nn.functional.l1_loss(t.float(), t)),
+    "gaussian_nll_loss-var": _refused(
+        "gaussian_nll_loss",
+        lambda fw, t, m: fw.nn.functional.gaussian_nll_loss(t.float(), t.float(), t),
+    ),
+    "rms_norm": _kernel("rms_norm", lambda fw, t, m: fw.nn.functional.rms_norm(t, (4,))),
+    # An explicit ``eps`` skipped the ``finfo`` that refused the default one: the bool computed.
+    "rms_norm-eps": _kernel(
+        "rms_norm", lambda fw, t, m: fw.nn.functional.rms_norm(t, (4,), eps=1e-5)
+    ),
+    "rms_norm-weight": _refused(
+        "rms_norm", lambda fw, t, m: fw.nn.functional.rms_norm(t, (4,), t.float())
+    ),
+    "rms_norm-module": _refused("rms_norm", lambda fw, t, m: fw.nn.RMSNorm(4)(t)),
+    "tanhshrink": _guard("tanhshrink", lambda fw, t, m: fw.nn.functional.tanhshrink(t)),
+    "tanhshrink-module": _guard("tanhshrink", lambda fw, t, m: fw.nn.Tanhshrink()(t)),
+    "vander": _guard("vander", lambda fw, t, m: fw.linalg.vander(t)),
+    "vander-columns": _guard("vander", lambda fw, t, m: fw.linalg.vander(t, N=2)),
+    # The channel mask is drawn only when something is dropped: a bool refuses there, as dropout's.
+    "feature_alpha_dropout": _guard(
+        "feature_alpha_dropout",
+        lambda fw, t, m: fw.nn.functional.feature_alpha_dropout(
+            t.reshape(1, 2, 2), p=0.5, training=True
+        ),
+    ),
+    "feature_alpha_dropout-inplace": _guard(
+        "feature_alpha_dropout",
+        lambda fw, t, m: fw.nn.functional.feature_alpha_dropout(
+            t.clone().reshape(1, 2, 2), p=0.5, training=True, inplace=True
+        ),
+    ),
+    # Below rank 2 the reference refuses for its own reason (a feature needs a channel axis).
+    "feature_alpha_dropout-rank1": _refused(
+        "feature_alpha_dropout",
+        lambda fw, t, m: fw.nn.functional.feature_alpha_dropout(t, p=0.5, training=True),
+    ),
+    "feature_alpha_dropout-module": _guard(
+        "feature_alpha_dropout", lambda fw, t, m: fw.nn.FeatureAlphaDropout()(t.reshape(1, 2, 2))
+    ),
     # ── refused by the engine's schema: no Python entry repeats these ────────
     "silu-functional": _kernel("silu", lambda fw, t, m: fw.nn.functional.silu(t)),
     "silu-method": _kernel("silu", lambda fw, t, m: t.silu(), parity=False),
@@ -450,6 +634,43 @@ _TABLE: dict[str, _Row] = {
     "dropout2d-eval": _accepted(
         lambda fw, t, m: fw.nn.functional.dropout2d(t.reshape(1, 1, 2, 2), training=False)
     ),
+    "feature_alpha_dropout-eval": _accepted(
+        lambda fw, t, m: fw.nn.functional.feature_alpha_dropout(t.reshape(1, 2, 2), training=False)
+    ),
+    "feature_alpha_dropout-default": _accepted(
+        lambda fw, t, m: fw.nn.functional.feature_alpha_dropout(t.reshape(1, 2, 2))
+    ),
+    "feature_alpha_dropout-p0": _accepted(
+        lambda fw, t, m: fw.nn.functional.feature_alpha_dropout(
+            t.reshape(1, 2, 2), p=0.0, training=True
+        )
+    ),
+    "feature_alpha_dropout-module-eval": _accepted(
+        lambda fw, t, m: fw.nn.FeatureAlphaDropout().eval()(t.reshape(1, 2, 2))
+    ),
+    # Two bools compare as truth values, with ``isclose``'s tolerances.
+    "allclose": _accepted(lambda fw, t, m: fw.allclose(t, t)),
+    "allclose-different": _accepted(lambda fw, t, m: fw.allclose(t, ~t)),
+    "allclose-method": _accepted(lambda fw, t, m: t.allclose(t)),
+    "allclose-equal-nan": _accepted(lambda fw, t, m: fw.allclose(t, t, equal_nan=True)),
+    "allclose-atol": _accepted(lambda fw, t, m: fw.allclose(t, ~t, atol=1.0)),
+    "allclose-rtol": _accepted(lambda fw, t, m: fw.allclose(t, ~t, rtol=1.0, atol=0.0)),
+    "allclose-broadcast": _accepted(lambda fw, t, m: fw.allclose(m, t[:3])),
+    # A bool target beside a floating input is a number to these, as to the reference.
+    "mse_loss-target": _accepted(lambda fw, t, m: fw.nn.functional.mse_loss(t.float(), t)),
+    "smooth_l1_loss-target": _accepted(
+        lambda fw, t, m: fw.nn.functional.smooth_l1_loss(t.float(), t)
+    ),
+    "huber_loss-target": _accepted(lambda fw, t, m: fw.nn.functional.huber_loss(t.float(), t)),
+    "soft_margin_loss-target": _accepted(
+        lambda fw, t, m: fw.nn.functional.soft_margin_loss(t.float(), t)
+    ),
+    "hinge_embedding_loss-target": _accepted(
+        lambda fw, t, m: fw.nn.functional.hinge_embedding_loss(t.float(), t)
+    ),
+    "cosine_embedding_loss": _accepted(
+        lambda fw, t, m: fw.nn.functional.cosine_embedding_loss(m, m.flip(0), t[:2])
+    ),
     "mean-dtype": _accepted(lambda fw, t, m: fw.mean(t, dtype=fw.float32)),
     "mean-dim-dtype": _accepted(lambda fw, t, m: fw.mean(m, dim=1, dtype=fw.float32)),
     "softmax-dtype": _accepted(lambda fw, t, m: fw.softmax(t, 0, dtype=fw.float32)),
@@ -572,6 +793,19 @@ def test_every_op_of_the_table_is_pinned() -> None:
     ), f"missing a row: {sorted(owned - pinned)}; not in either list: {sorted(pinned - owned)}"
 
 
+def test_every_loss_that_can_refuse_a_bool_has_a_row() -> None:
+    # A loss whose input or target kind leaves bool out, or whose result must be floating, reaches
+    # ``bool_refusal`` for its name: a loss of that kind with no row would be a ``KeyError`` there.
+    # ``cosine_embedding_loss`` takes bool for every operand, and so has none.
+    can_refuse = {
+        loss
+        for loss, (input_kind, target_kind) in _OPERAND_DTYPES.items()
+        if "bool" not in _KINDS[input_kind] or (target_kind and "bool" not in _KINDS[target_kind])
+    } | _FLOATING_RESULT
+    assert can_refuse == set(_LOSSES)
+    assert set(_LOSSES) <= set(BOOL_REFUSED)
+
+
 def test_an_op_has_one_owner() -> None:
     # The engine refuses what its schema declares and Python what has no schema.  The one op in
     # both is ``grid_sample``: its Python entry sees the bool before ``_as_real`` casts it.
@@ -644,6 +878,9 @@ _IN_PLACE: dict[str, Callable[[lucid.Tensor], object]] = {
     "celu_": lambda t: lucid.nn.functional.celu_(t),
     "rrelu_": lambda t: lucid.nn.functional.rrelu_(t),
     "dropout-inplace": lambda t: lucid.nn.functional.dropout(t, inplace=True),
+    "feature_alpha_dropout-inplace": lambda t: lucid.nn.functional.feature_alpha_dropout(
+        t.reshape(1, 2, 2), training=True, inplace=True
+    ),
 }
 
 

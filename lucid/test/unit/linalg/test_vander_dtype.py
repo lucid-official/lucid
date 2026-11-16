@@ -75,8 +75,10 @@ def test_an_integer_input_has_exact_int64_powers(device: str, dtype: str) -> Non
 
 
 def test_a_bool_input_is_refused() -> None:
-    with pytest.raises(TypeError, match="vander"):
+    # The reference's class: a ``RuntimeError`` that is not a ``NotImplementedError`` (LCD-1024).
+    with pytest.raises(RuntimeError, match="vander does not accept bool") as caught:
         lucid.linalg.vander(lucid.tensor([True, False]))
+    assert not isinstance(caught.value, NotImplementedError)
 
 
 def test_a_negative_n_is_refused() -> None:

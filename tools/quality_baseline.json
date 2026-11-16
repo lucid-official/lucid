@@ -1050,7 +1050,7 @@
     "lucid/models/_utils/_detection.py": 1218,
     "lucid/models/generative/diamond/_model.py": 627,
     "lucid/models/generative/rectified_flow/_model.py": 128,
-    "lucid/nn/functional/loss.py": 769,
+    "lucid/nn/functional/loss.py": 766,
     "lucid/nn/modules/activation.py": 707,
     "lucid/nn/modules/loss.py": 990,
     "lucid/nn/modules/normalization.py": 532,

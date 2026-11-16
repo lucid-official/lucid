@@ -23,35 +23,10 @@
         "cpu"
       ]
     },
-    "F.binary_cross_entropy": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.binary_cross_entropy_with_logits": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.cross_entropy": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.ctc_loss": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
     "F.embedding_bag": {
       "kind": "over-accept",
       "owner": "out-of-batch",
       "reason": "computes a bool input; the reference raises a RuntimeError"
-    },
-    "F.gaussian_nll_loss": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
     },
     "F.glu": {
       "kind": "class",
@@ -63,25 +38,10 @@
       "owner": "out-of-batch",
       "reason": "refuses through the sampler (NotImplementedError); the reference raises RuntimeError"
     },
-    "F.huber_loss": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
     "F.instance_norm": {
       "kind": "class",
       "owner": "out-of-batch",
       "reason": "refuses through mean (DtypeMismatch); the reference raises NotImplementedError"
-    },
-    "F.kl_div": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.l1_loss": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
     },
     "F.local_response_norm": {
       "kind": "over-accept",
@@ -92,11 +52,6 @@
       "kind": "class",
       "owner": "out-of-batch",
       "reason": "refuses through an inner op (negation raises LucidError); the reference raises NotImplementedError"
-    },
-    "F.margin_ranking_loss": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
     },
     "F.max_unpool1d": {
       "kind": "over-accept",
@@ -113,36 +68,6 @@
       "owner": "out-of-batch",
       "reason": "computes a bool input; the reference raises NotImplementedError"
     },
-    "F.mse_loss": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.multi_margin_loss": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.multilabel_soft_margin_loss": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.nll_loss": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.poisson_nll_loss": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.rms_norm": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "refuses with a plain TypeError; the reference raises a RuntimeError or NotImplementedError"
-    },
     "F.scaled_dot_product_attention": {
       "kind": "class",
       "owner": "out-of-batch",
@@ -151,40 +76,10 @@
         "cpu"
       ]
     },
-    "F.smooth_l1_loss": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.soft_margin_loss": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
     "F.softplus": {
       "kind": "class",
       "owner": "out-of-batch",
       "reason": "refuses through an inner op (a DtypeMismatch from mul); the reference raises NotImplementedError"
-    },
-    "F.tanhshrink": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "refuses with a plain TypeError; the reference raises a RuntimeError or NotImplementedError"
-    },
-    "F.triplet_margin_loss": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.triplet_margin_with_distance_loss": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "Tensor.allclose": {
-      "kind": "over-refuse",
-      "owner": "out-of-batch",
-      "reason": "refuses with LucidError (bool subtraction) where the reference answers"
     },
     "Tensor.argmax": {
       "kind": "class",
@@ -230,11 +125,6 @@
       "kind": "class",
       "owner": "call-dependent",
       "reason": "the reference (2.13.0) raises a plain RuntimeError here; Lucid raises NotImplementedError"
-    },
-    "lucid.allclose": {
-      "kind": "over-refuse",
-      "owner": "out-of-batch",
-      "reason": "refuses with LucidError (bool subtraction) where the reference answers"
     },
     "lucid.argmax": {
       "kind": "class",
@@ -380,11 +270,6 @@
       "kind": "class",
       "owner": "out-of-batch",
       "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
-    },
-    "lucid.linalg.vander": {
-      "kind": "non-runtime",
-      "owner": "out-of-batch",
-      "reason": "refuses with a plain TypeError; the reference raises a RuntimeError"
     },
     "lucid.logdet": {
       "kind": "class",

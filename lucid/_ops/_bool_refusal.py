@@ -96,14 +96,41 @@ BOOL_REFUSED: Mapping[str, tuple[type[RuntimeError], str]] = MappingProxyType(
         "gammaincc": (_KERNEL, _FLOATING),
         "multigammaln": (_GUARD, _NUMBER),
         "vecdot": (_GUARD, _FLOATING),
-        # Activations composed from other ops.
+        "vander": (_GUARD, _NUMBER),
+        # Activations, dropout and normalisation composed from other ops.
         "celu": (_KERNEL, _FLOATING),
         "hardshrink": (_KERNEL, _FLOATING),
         "softshrink": (_KERNEL, _FLOATING),
+        "tanhshrink": (_GUARD, _NUMBER),
         "hardtanh": (_GUARD, _NUMBER),
         "threshold": (_KERNEL, _NUMBER),
         "rrelu": (_KERNEL, _FLOATING),
         "prelu": (_KERNEL, _FLOATING),
+        "feature_alpha_dropout": (_GUARD, _FLOATING),
+        "rms_norm": (_KERNEL, _FLOATING),
+        # Losses (:mod:`lucid.nn.functional._loss_checks` raises these).  The class is the
+        # reference's for a bool *input*; it words a bool beside a floating operand as a
+        # dtype mismatch for some of them, which this table does not tell apart.
+        "binary_cross_entropy": (_KERNEL, _FLOATING),
+        "binary_cross_entropy_with_logits": (_KERNEL, _FLOATING),
+        "cross_entropy": (_KERNEL, _FLOATING),
+        "ctc_loss": (_KERNEL, _FLOATING),
+        "gaussian_nll_loss": (_GUARD, _FLOATING),
+        "hinge_embedding_loss": (_GUARD, _FLOATING),
+        "huber_loss": (_KERNEL, _FLOATING),
+        "kl_div": (_GUARD, _FLOATING),
+        "l1_loss": (_GUARD, _FLOATING),
+        "margin_ranking_loss": (_GUARD, _FLOATING),
+        "mse_loss": (_KERNEL, _FLOATING),
+        "multi_margin_loss": (_KERNEL, _FLOATING),
+        "multilabel_margin_loss": (_KERNEL, _FLOATING),
+        "multilabel_soft_margin_loss": (_KERNEL, _FLOATING),
+        "nll_loss": (_KERNEL, _FLOATING),
+        "poisson_nll_loss": (_GUARD, _FLOATING),
+        "smooth_l1_loss": (_KERNEL, _FLOATING),
+        "soft_margin_loss": (_GUARD, _FLOATING),
+        "triplet_margin_loss": (_GUARD, _FLOATING),
+        "triplet_margin_with_distance_loss": (_GUARD, _FLOATING),
         # Resampling.
         "interpolate": (_KERNEL, _FLOATING),
         "grid_sample": (_KERNEL, _FLOATING),
@@ -142,7 +169,7 @@ def engine_bool_refused() -> Mapping[str, tuple[type[RuntimeError], str]]:
     return MappingProxyType(refusals)
 
 
-def bool_refusal(op: str, role: str = "") -> RuntimeError:
+def bool_refusal(op: str, role: str = "", *, index: bool = False) -> RuntimeError:
     """The error ``op`` raises for a bool operand, for a call site to ``raise``.
 
     Parameters
@@ -153,6 +180,9 @@ def bool_refusal(op: str, role: str = "") -> RuntimeError:
     role : str, optional
         Names the operand when it is not the first one (``"bins"``,
         ``"weight"``).
+    index : bool, optional
+        The operand is an index -- a class label -- so the cast to name is an
+        integer one, whatever dtype the op computes in.
 
     Returns
     -------
@@ -162,6 +192,8 @@ def bool_refusal(op: str, role: str = "") -> RuntimeError:
         that names the op and the cast to make.
     """
     error, cast = BOOL_REFUSED[op.removesuffix("_")]
+    if index:
+        cast = _INTEGER
     what = f"a bool {role}" if role else "bool"
     return error(f"{op} does not accept {what} — cast to {cast}")
 

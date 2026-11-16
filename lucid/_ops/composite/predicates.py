@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING
 
 import lucid
-from lucid._ops._bool_refusal import refuse_bool
+from lucid._ops._bool_refusal import is_bool, refuse_bool
 from lucid._ops.composite._shared import _is_tensor
 from lucid._types import TensorLike
 
@@ -634,17 +634,27 @@ def allclose(
         Reduces to a single Python ``bool`` — synchronises any pending
         GPU work to evaluate the final reduction.
 
+    Raises
+    ------
+    RuntimeError
+        If a bool tensor meets a tensor of another dtype -- a dtype-mismatch
+        refusal, as the reference's.  Two bool tensors compare as truth values.
+
+    Notes
+    -----
+    The answer is :func:`isclose`'s, reduced with ``all``: equal infinities
+    are close, and opposite ones are not.  A pair of different floating or
+    integer dtypes meets at the dtype they promote to.
+
     See Also
     --------
     isclose : element-wise variant that returns a Tensor of bools.
     """
-    diff = lucid.abs(input - other)
-    tol = atol + rtol * lucid.abs(other)
-    close = diff <= tol
-    if equal_nan:
-        both_nan = lucid.isnan(input) & lucid.isnan(other)
-        close = close | both_nan
-    return bool(close.all().item())
+    if input.dtype != other.dtype and not (is_bool(input) or is_bool(other)):
+        # ``isclose`` compares one dtype; a bool beside another is left to refuse.
+        common = lucid.promote_types(input.dtype, other.dtype)
+        input, other = input.to(common), other.to(common)
+    return bool(lucid.isclose(input, other, rtol=rtol, atol=atol, equal_nan=equal_nan).all().item())
 
 
 __all__ = [

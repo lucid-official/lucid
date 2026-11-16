@@ -3,7 +3,6 @@
 Re-exported by :mod:`lucid.nn.functional.activations`.
 """
 
-import lucid as _l
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _float_operand, _unwrap, _wrap
 from lucid._ops._bool_refusal import refuse_bool
@@ -96,8 +95,7 @@ def tanhshrink(input: Tensor) -> Tensor:
     >>> tanhshrink(x)
     tensor([-1.036, -0.03788, 0., 0.03788, 1.036])
     """
-    if input.dtype == _l.bool_:
-        raise TypeError("tanhshrink: bool input is not supported")
+    refuse_bool("tanhshrink", input)
     xi = _float_operand(_unwrap(input))
     return _wrap(_C_engine.sub(xi, _C_engine.tanh(xi)))
 

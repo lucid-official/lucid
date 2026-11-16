@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry, _autocast_suspended
+from lucid._ops._bool_refusal import refuse_bool
 from lucid._ops._dims import _to_axes
 from lucid._ops._reduce import _require_normable
 from lucid._types import DimLike, DTypeLike
@@ -394,6 +395,7 @@ def rms_norm(
     """
     from lucid._factories.creation import ones
 
+    refuse_bool("rms_norm", input)
     if eps is None:
         from lucid._dtype import finfo
 

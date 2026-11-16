@@ -44,6 +44,7 @@ from lucid.nn.functional._loss_checks import (
     _check_target,
     _check_triplet_margin as _check_triplet_margin,
     _check_unit_interval,
+    _l2_pairwise_distance,
     _legacy_reduction,
     _loss_dtype,
     _num_classes,
@@ -1259,20 +1260,16 @@ def triplet_margin_with_distance_loss(
     >>> triplet_margin_with_distance_loss(a, p, n, distance_function=manhattan)
     tensor(0.)
     """
-    from lucid.nn.functional.activations import pairwise_distance
-
     op = "triplet_margin_with_distance_loss"
     _check_reduction(reduction, op)
     _check_same_rank(op, broadcast=False, anchor=anchor, positive=positive, negative=negative)
     df: object = distance_function
-    if df is None:
+    if df is None or df is _l2_pairwise_distance:
         # A distance function of the caller's own decides which dtypes it
-        # takes; the default one is the reference's, with its rule.
+        # takes; the default one -- ``None``, or the module's stored copy of
+        # it -- is the reference's, with its rule.
         _check_dtypes(op, anchor=anchor, positive=positive, negative=negative)
-
-        def df(a: Tensor, b: Tensor) -> Tensor:
-            """Derivative helper used inside the loss-function gradient computation."""
-            return pairwise_distance(a, b, p=2.0)
+        df = _l2_pairwise_distance
 
     d_ap: Tensor = df(anchor, positive)
     d_an: Tensor = df(anchor, negative)

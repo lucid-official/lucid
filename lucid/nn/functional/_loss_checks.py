@@ -23,6 +23,10 @@ depended on the device and on the code path:
 
 An operand of a dtype the loss does not take is now refused with a
 ``TypeError`` that names the loss and the dtype (:func:`_check_dtypes`).
+A bool is the exception: it is refused as every other op refuses one
+(:func:`lucid._ops._bool_refusal.bool_refusal`), with the error class the
+reference raises -- a ``RuntimeError`` that is a ``NotImplementedError`` for
+some losses, a dtype-mismatch one for the rest -- and a cast to make.
 The accepted operands are cast to one dtype (:func:`_loss_dtype`), so no
 kernel sees a mixed pair.
 """
@@ -37,6 +41,7 @@ from lucid._tensor_args import GUARD_FRAMES
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap
+from lucid._ops._bool_refusal import bool_refusal
 from lucid._tensor._indexing import broadcast_shapes
 from lucid._types import Reduction, ReductionKL
 from lucid.nn.functional._index_checks import _host_read
@@ -443,9 +448,17 @@ def _kind_of(t: Tensor) -> str:
 
 def _check_kind(t: Tensor, kind: str, what: str, op: str) -> None:
     """Refuse ``t``, the ``what`` operand of loss ``op``, unless its dtype
-    is of ``kind`` (see ``_KINDS``)."""
-    if _kind_of(t) not in _KINDS[kind]:
-        raise TypeError(f"{op}: expected {_DESCRIBE[kind]} {what}, got {t.dtype}")
+    is of ``kind`` (see ``_KINDS``).
+
+    A bool is refused as every op refuses one (``bool_refusal``: the
+    reference's class, and a cast to name); any other dtype with a
+    ``TypeError`` that names it."""
+    found = _kind_of(t)
+    if found in _KINDS[kind]:
+        return
+    if found == "bool":
+        raise bool_refusal(op, "" if what == "input" else what, index=kind == "index")
+    raise TypeError(f"{op}: expected {_DESCRIBE[kind]} {what}, got {t.dtype}")
 
 
 def _check_gaussian_var(var: Tensor, x: Tensor, op: str) -> None:
@@ -476,7 +489,10 @@ def _check_dtypes(op: str, target: Tensor | None = None, **inputs: Tensor) -> No
     if op in _FLOATING_RESULT and not any(
         t.is_floating_point() for t in (*inputs.values(), target)
     ):
-        dtypes = ", ".join(str(t.dtype) for t in (*inputs.values(), target))
+        operands = (*inputs.values(), target)
+        if all(_kind_of(t) == "bool" for t in operands):
+            raise bool_refusal(op)
+        dtypes = ", ".join(str(t.dtype) for t in operands)
         raise TypeError(f"{op}: expected a floating point input or target, got {dtypes}")
 
 
@@ -542,6 +558,8 @@ def _check_cross_entropy_target(
     _check_dtypes(op, None if soft else target, input=x)
     if not soft:
         _check_class_target(x, target, op)
+    elif _kind_of(target) == "bool":
+        raise bool_refusal(op, "target")
     elif not target.is_floating_point():
         raise TypeError(
             f"{op}: a target of the input's shape holds class probabilities "
