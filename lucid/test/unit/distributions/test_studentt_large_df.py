@@ -8,7 +8,9 @@ float64 was 1.2e-7 off at ``df = 1e8`` for the same reason.  ``entropy`` had the
 difference of two ``digamma`` (float32, ``df = 1e8``: 9.21 for 1.4189).  Hand-writing ``log1p`` alone
 does not repair it, and there is a second cancellation behind the first: the slope of
 ``(df+1)/2 log1p(z^2/df)`` in ``df`` is the difference of two ``z^2/(2 df)``, so even with a stable
-value the gradient in ``df`` was noise from about ``df = 1e6`` (``_student_math``).
+value the gradient in ``df`` was noise from about ``df = 1e6`` (``_student_math``).  The entropy's
+slope in ``df`` has its own: ``(a + 1/2) F(a)`` is 1/2 plus a small part, so its slope is a sum of
+two ``1/(2a)`` that cancel.
 
 The oracle is the closed form in 400-digit arithmetic, written out below (mpmath, scratch only),
 at inputs that float32 holds exactly; the gradients in ``x``, ``loc`` and ``scale`` are the closed
@@ -109,30 +111,46 @@ _LOG_PROB = _table("""
 1.2676506002282294e+30 100.0 0.0 1.0 -5000.918938533205 -1.5554426531438542e-53 -100.0 9999.0
 """)
 
-# (df, scale, entropy)
+# (df, scale, entropy, d entropy / d df); d entropy / d scale = 1 / scale
 _ENTROPY = _table("""
-0.0009765625 1.0 1028.4665386259887
-0.0009765625 2.0 1029.1596858065489
-0.5 1.0 3.6667274161038543
-0.5 2.0 4.3598745966638
-1.0 1.0 2.5310242469692907
-1.0 2.0 3.224171427529236
-3.0 1.0 1.773477571863291
-3.0 2.0 2.466624752423236
-30.0 1.0 1.4525433297872075
-30.0 2.0 2.1456905103471526
-1000.0 1.0 1.4199387830378813
-1000.0 2.0 2.1130859635978267
-1000000.0 1.0 1.4189395332049228
-1000000.0 2.0 2.1120867137648682
-100000000.0 1.0 1.4189385432046728
-100000000.0 2.0 2.112085723764618
-10000000000.0 1.0 1.4189385333046727
-10000000000.0 2.0 2.112085713864618
-1125899906842624.0 1.0 1.4189385332046736
-1125899906842624.0 2.0 2.112085713764619
-1.2676506002282294e+30 1.0 1.4189385332046727
-1.2676506002282294e+30 2.0 2.112085713764618
+0.0009765625 1.0 1028.4665386259887 -1049087.1784896126
+0.0009765625 2.0 1029.1596858065489 -1049087.1784896126
+0.5 1.0 3.6667274161038543 -4.495793565063314
+0.5 2.0 4.3598745966638 -4.495793565063314
+1.0 1.0 2.5310242469692907 -1.1449340668482264
+1.0 2.0 3.224171427529236 -1.1449340668482264
+3.0 1.0 1.773477571863291 -0.12320146702978621
+3.0 2.0 2.466624752423236 -0.12320146702978621
+7.0 1.0 1.5663782617176052 -0.02164102929766765
+7.0 2.0 2.2595254422775506 -0.02164102929766765
+8.0 1.0 1.5474982728250088 -0.01647016857073614
+8.0 2.0 2.2406454533849542 -0.01647016857073614
+17.0 1.0 1.4785919128942644 -0.0035557043061433327
+17.0 2.0 2.17173909345421 -0.0035557043061433327
+18.0 1.0 1.4752360890704899 -0.003167171790651088
+18.0 2.0 2.1683832696304353 -0.003167171790651088
+30.0 1.0 1.4525433297872075 -0.0011289938824940592
+30.0 2.0 2.1456905103471526 -0.0011289938824940592
+1000.0 1.0 1.4199387830378813 -1.0004994995015015e-06
+1000.0 2.0 2.1130859635978267 -1.0004994995015015e-06
+10000.0 1.0 1.419038535704506 -1.0000499949995002e-08
+10000.0 2.0 2.1121857162644515 -1.0000499949995002e-08
+1000000.0 1.0 1.4189395332049228 -1.0000004999995e-12
+1000000.0 2.0 2.1120867137648682 -1.0000004999995e-12
+10000000.0 1.0 1.4189386332046752 -1.000000049999995e-14
+10000000.0 2.0 2.1120858137646206 -1.000000049999995e-14
+100000000.0 1.0 1.4189385432046728 -1.000000005e-16
+100000000.0 2.0 2.112085723764618 -1.000000005e-16
+1000000000.0 1.0 1.4189385342046728 -1.0000000005e-18
+1000000000.0 2.0 2.112085714764618 -1.0000000005e-18
+10000000000.0 1.0 1.4189385333046727 -1.00000000005e-20
+10000000000.0 2.0 2.112085713864618 -1.00000000005e-20
+1099511627776.0 1.0 1.4189385332055822 -8.271806125534038e-25
+1099511627776.0 2.0 2.1120857137655276 -8.271806125534038e-25
+1125899906842624.0 1.0 1.4189385332046736 -7.888609052210122e-31
+1125899906842624.0 2.0 2.112085713764619 -7.888609052210122e-31
+1.2676506002282294e+30 1.0 1.4189385332046727 -6.223015277861142e-61
+1.2676506002282294e+30 2.0 2.112085713764618 -6.223015277861142e-61
 """)
 
 # (a, lgamma(a + 1/2) - lgamma(a) - log(a)/2, digamma(a + 1/2) - digamma(a))
@@ -278,11 +296,31 @@ def test_infinite_df_is_the_normal(device: str, dtype: lucid.dtype) -> None:
 
 @pytest.mark.parametrize(("device", "dtype"), _FLOATS)
 @pytest.mark.parametrize("df", [0.0, -1.0, math.nan])
-def test_df_outside_its_domain_is_nan(df: float, device: str, dtype: lucid.dtype) -> None:
-    """``df <= 0`` and NaN stay NaN (without validation, which would raise first)."""
+def test_df_outside_its_domain_is_nan_with_nan_gradients(
+    df: float, device: str, dtype: lucid.dtype
+) -> None:
+    """``df <= 0`` and NaN are NaN in the value and in every gradient (without validation, which
+    would raise first).  Masking only the output left the gradients 0; the old code had NaN."""
     for x in (0.0, 1.0):
-        got = D.StudentT(_t(df, device, dtype), validate_args=False).log_prob(_t(x, device, dtype))
-        assert math.isnan(got.item()), (df, x)
+        lp, _, dx, dloc, dscale = _gradients(df, x, 0.0, 1.0, device, dtype)
+        assert all(math.isnan(v) for v in (lp, dx, dloc, dscale)), (df, x, lp, dx, dloc, dscale)
+    entropy = D.StudentT(_t(df, device, dtype), validate_args=False).entropy()
+    assert math.isnan(entropy.item()), df
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+def test_a_bad_lane_does_not_poison_the_others(device: str, dtype: lucid.dtype) -> None:
+    """Elementwise: lanes with ``df`` of -1 and 0 are NaN, the lane with ``df = 3`` is as alone."""
+    df = lucid.tensor([-1.0, 3.0, 0.0], dtype=dtype, device=device)
+    x = lucid.tensor([0.5, 0.5, 0.5], dtype=dtype, device=device, requires_grad=True)
+    out = D.StudentT(df, validate_args=False).log_prob(x)
+    out.sum().backward()
+    assert x.grad is not None
+    alone_lp, _, alone_dx, _, _ = _gradients(3.0, 0.5, 0.0, 1.0, device, dtype)
+    got = [v.item() for v in out]
+    grad = [v.item() for v in x.grad]
+    assert math.isnan(got[0]) and math.isnan(got[2]) and math.isnan(grad[0]) and math.isnan(grad[2])
+    assert got[1] == alone_lp and grad[1] == alone_dx
 
 
 @pytest.mark.parametrize(("device", "dtype"), _FLOATS)
@@ -298,14 +336,41 @@ def test_a_batch_mixes_every_regime_in_one_call(device: str, dtype: lucid.dtype)
 
 
 @pytest.mark.parametrize(("device", "dtype"), _FLOATS)
-@pytest.mark.parametrize(("df", "scale", "want"), _ENTROPY)
-def test_entropy_matches_the_closed_form(
-    df: float, scale: float, want: float, device: str, dtype: lucid.dtype
+@pytest.mark.parametrize(("df", "scale", "want", "want_ddf"), _ENTROPY)
+def test_entropy_and_its_gradients_match_the_closed_form(
+    df: float, scale: float, want: float, want_ddf: float, device: str, dtype: lucid.dtype
 ) -> None:
-    """The entropy over the same ``df`` range: it was 9.21 for 1.4189 at ``df = 1e8`` in float32."""
-    dist = D.StudentT(_t(df, device, dtype), _t(0.0, device, dtype), _t(scale, device, dtype))
-    got = dist.entropy().item()
-    assert _within(got, want, dtype, 8), (df, scale, got, want)
+    """The entropy over the same ``df`` range: it was 9.21 for 1.4189 at ``df = 1e8`` in float32.
+
+    Its slope in ``df`` is ``-1/df^2`` for a large ``df``, the remainder of ``1/(2a) - 1/(2a)``
+    in the digamma form: float32 was 1e-3 off at ``df = 1e3`` and 4 times off from ``1e7``,
+    float64 6e-5 off at ``1e12``.
+    """
+    df_t, scale_t = _t(df, device, dtype, True), _t(scale, device, dtype, True)
+    out = D.StudentT(df_t, _t(0.0, device, dtype), scale_t).entropy()
+    out.backward()
+    assert df_t.grad is not None and scale_t.grad is not None
+    assert _within(out.item(), want, dtype, 8), (df, scale, out.item(), want)
+    assert _within(df_t.grad.item(), want_ddf, dtype, 24), (df, df_t.grad.item(), want_ddf)
+    assert _within(scale_t.grad.item(), 1.0 / scale, dtype, 4), (scale, scale_t.grad.item())
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+def test_infinite_df_entropy_is_the_normal(device: str, dtype: lucid.dtype) -> None:
+    """``df = +inf``: ``log(scale) + log(2 pi e)/2``, a zero gradient in ``df``, 1/scale in ``scale``.
+
+    A deliberate departure from the reference, which answers NaN: its ``(df+1)/2 *
+    (digamma(inf) - digamma(inf))`` is ``inf * 0``, an artefact of the formula; the limit is the
+    Normal's entropy, as for ``log_prob``.
+    """
+    for scale in (1.0, 2.0):
+        df_t, scale_t = _t(math.inf, device, dtype, True), _t(scale, device, dtype, True)
+        out = D.StudentT(df_t, _t(0.0, device, dtype), scale_t).entropy()
+        out.backward()
+        want = math.log(scale) + 0.5 * math.log(2.0 * math.pi * math.e)
+        assert _within(out.item(), want, dtype, 4), (scale, out.item(), want)
+        assert df_t.grad is not None and df_t.grad.item() == 0.0
+        assert scale_t.grad is not None and _within(scale_t.grad.item(), 1.0 / scale, dtype, 4)
 
 
 @pytest.mark.parametrize(("device", "dtype"), _FLOATS)
@@ -367,3 +432,15 @@ def test_parity_log_prob_gradient_and_entropy(ref: Any, df: float) -> None:
     np.testing.assert_allclose(
         mine.entropy().detach().numpy(), theirs.entropy().detach().numpy(), rtol=1e-10, atol=1e-10
     )
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("df", [0.5, 3.0, 30.0])
+def test_parity_entropy_gradient_in_df(ref: Any, df: float) -> None:
+    mine_df = lucid.tensor(df, dtype=lucid.float64, requires_grad=True)
+    D.StudentT(mine_df).entropy().backward()
+    ref_df = ref.tensor(df, dtype=ref.float64, requires_grad=True)
+    ref.distributions.StudentT(ref_df).entropy().backward()
+    assert mine_df.grad is not None and ref_df.grad is not None
+    # The reference's own trigamma is good to ~1e-9 here (the closed-form table above is exact).
+    np.testing.assert_allclose(mine_df.grad.numpy(), ref_df.grad.numpy(), rtol=1e-7, atol=1e-12)
