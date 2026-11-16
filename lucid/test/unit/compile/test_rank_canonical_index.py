@@ -31,8 +31,12 @@ Three guards, as for the other rules:
   ``-1``) bit for bit at index ranks 1-6, on float and wide-integer tables, for the forward of every
   op above and the gradients of a compiled step; an index outside the table of an executable that was
   built from valid ones answers as the native graph does;
-* a coarse timing bound against the twin of each case (the same elements, the layout the rule reads
-  them as), and the same measurement with the pass off, which must exceed the bound.
+* the IR of each timed case against its twin (the same elements, the layout the rule reads them as):
+  the same ops at the same shapes, none reading or writing rank 5+, and the same comparison with
+  the pass off, which must fail.  The clock row for the same pairs is in the perf tier
+  (``lucid/test/perf/compile/test_index_rank_twin.py``): a ~1 ms wall-clock ratio does not hold on
+  the hosted runner, which read the int32 embedding at 2.04x for a graph that was its twin's
+  (LCD-1039).
 """
 
 import os
@@ -48,14 +52,8 @@ import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 from lucid.compile import make_step
-from lucid.test.unit.compile._helpers import (
-    COMPILE_DEVICE,
-    assert_ratio_within,
-    compare_ms,
-    compiled_call,
-    to_metal,
-    with_env,
-)
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, to_metal
+from lucid.test.unit.compile._index_twins import CASES, Side, ramp as _ramp, rotation as _rotation
 from lucid.test.unit.compile.test_rank_canonical_movement import (
     ENV,
     _canon,
@@ -63,6 +61,7 @@ from lucid.test.unit.compile.test_rank_canonical_movement import (
     _named,
     _only,
     _shape,
+    _trace,
     needs_metal,
 )
 
@@ -452,14 +451,6 @@ def test_a_position_outside_the_axis_answers_as_the_native_graph_does(name: str)
     _same(on[1], off[1], "positions outside, rewritten vs native")
 
 
-def _rotation(shape: Shape, dim: int, extent: int) -> lucid.Tensor:
-    """Positions along ``dim`` that are distinct in every slice, so an overwrite has one answer."""
-    dim %= len(shape)
-    stride = _numel(shape[dim + 1 :])
-    flat = lucid.arange(_numel(shape))
-    return ((flat // stride + 1) % extent).reshape(*shape).to(COMPILE_DEVICE)
-
-
 _REDUCTIONS: dict[str, Callable[[int], Callable[..., lucid.Tensor]]] = {
     "set": lambda d: lambda t, i, s: t.scatter(d, i, s) + 0,
     "add": lambda d: lambda t, i, s: t.scatter(d, i, s, reduce="add") + 0,
@@ -636,140 +627,69 @@ def test_a_symbolic_batch_survives_the_index_rewrites() -> None:
             _same(compiled(data, index, rows), fn(data, index, rows), f"batch {batch}")
 
 
-# ── time ──────────────────────────────────────────────────────────────────────────────
+# ── the twin: the same ops at the same shapes ─────────────────────────────────────────
+#
+# A twin holds the same elements as its case in the layout the rules read it as
+# (``_index_twins.CASES``), so a graph the pass has rewritten computes what the twin computes:
+# the same ops at the same shapes and attributes, only the views differ.  That is asserted on the
+# IR, which is deterministic.  The clock row that used to sit here (rank-5 not slower than the
+# twin, 1.5x + 0.5 ms) flaked on the hosted runner at 2.04x for a graph that was the twin's, so it
+# runs in the recorded perf tier (``lucid/test/perf/compile/test_index_rank_twin.py``, LCD-1039).
+# What the IR cannot see -- an emitter that is slow for a layout both sides share, the ~0.2 ms
+# MPSGraph copies a rank-4 feed read through the pass's flat view -- is that tier's to report.
 
-_BOUND = 1.5
-#: What a sub-millisecond case adds on top of the ratio: a rank-4 index feed read through the pass's
-#: flat view is copied by MPSGraph (~0.2 ms, 0.7 against 0.5 ms for the int32 embedding), which a
-#: bound of 1.5x of a 0.5 ms twin does not cover; the unfixed graphs are 13x to 70x their twin.
-_SLACK_MS = 0.5
-#: The unfixed graph is expected to miss the bound, and ``compare_ms`` only stops early on a hit,
-#: so every attempt of an "exceeds the bound" guard runs: one is enough for a miss of 4x or more.
-_UNFIXED_ATTEMPTS = 1
-
-
-def _ramp(shape: Shape, modulo: int, dtype: lucid.dtype) -> lucid.Tensor:
-    """``0 .. modulo - 1`` repeating, made on the device (a timed operand has up to 1M elements)."""
-    return (lucid.arange(_numel(shape)) % modulo).reshape(*shape).to(dtype).to(COMPILE_DEVICE)
+IrOps = list[_C_engine.compile.OpNode]
 
 
-@dataclass(frozen=True)
-class _Timed:
-    #: the rank-5+ case and its twin: the same elements read the way the rule reads them
-    wide: Callable[[str | None], Callable[[], float]]
-    twin: Callable[[str | None], Callable[[], float]]
+def _ir(side: Side, gate: str | None) -> tuple[IrOps, dict[int, Shape]]:
+    """The pass's output for ``side`` and the shape of every tensor id in it (feeds included)."""
+    graph, feeds = _trace(side.fn, *side.args)
+    with mock.patch.dict(os.environ, {} if gate is None else {ENV: gate}):
+        ops = list(_C_engine.compile.canonicalize_rank(graph, feeds, False).ops)
+    shapes = {fid: tuple(feed.shape) for fid, feed in feeds.items()}
+    shapes |= {out.id: tuple(out.shape) for node in ops for out in node.outputs}
+    return ops, shapes
 
 
-def _embedding_case(table: Shape, wide: Shape, twin: Shape, dtype: lucid.dtype) -> _Timed:
-    w = _ramp(table, 1000, dtype)
-
-    def build(shape: Shape) -> Callable[[str | None], Callable[[], float]]:
-        index = _ramp(shape, table[0], lucid.int64)
-        return lambda gate: with_env(compiled_call(_embed_sum, w, index), ENV, gate)
-
-    return _Timed(build(wide), build(twin))
+def _computes(ops: IrOps) -> list[tuple[str, Shape, dict[str, object]]]:
+    """What the graph computes, views aside: each op but a reshape, its answer's shape and attrs."""
+    return [(n.name, tuple(n.outputs[0].shape), dict(n.attrs)) for n in ops if n.name != "reshape"]
 
 
-def _embed_sum(w: lucid.Tensor, i: lucid.Tensor) -> lucid.Tensor:
-    return F.embedding(i, w).reshape(-1).sum()
+def _read_or_write_rank_5(ops: IrOps, shapes: dict[int, Shape]) -> list[str]:
+    """The ops, a reshape (a free view) aside, that read or write a tensor of rank >= 5."""
+    return [
+        n.name
+        for n in ops
+        if n.name != "reshape"
+        and any(len(shapes[i]) > 4 for i in (*n.inputs, *(out.id for out in n.outputs)))
+    ]
 
 
-_E_TABLE: Shape = (1000, 32)
-_CASES: dict[str, Callable[[], _Timed]] = {
-    # float32, a rank-5 index (the answer is rank 6, lead 4096): 40 ms against 0.8 unfixed
-    "embedding_rank_5_index": lambda: _embedding_case(
-        _E_TABLE, (2048, 2, 2, 2, 2), (32768,), lucid.float32
-    ),
-    # int32, a rank-4 index (the answer is rank 5 by itself): the LCD-997 lane merge made it
-    # 2.1x slower than the native graph, which is itself 4-5x the flat form
-    "embedding_int32_rank_4_index": lambda: _embedding_case(
-        _E_TABLE, (512, 4, 4, 8), (16384,), lucid.int32
-    ),
-}
+@pytest.mark.parametrize("name", sorted(CASES))
+def test_a_rank_5_index_op_computes_what_its_twin_computes(name: str) -> None:
+    """The case and the twin share every op, shape and attribute, and nothing computes at rank 5+.
 
-# rank 5 and the layout the rule merges it to: ``(2048, 4, 4, 4, 8)`` around each axis
-_G5: Shape = (2048, 4, 4, 4, 8)
-_G_TWINS: dict[str, tuple[int, int, Shape]] = {
-    # name: (dim of the rank-5 op, dim of the twin, twin shape)
-    "last": (-1, -1, (131072, 8)),
-    "mid": (2, 1, (8192, 4, 32)),
-    "first": (0, 0, (2048, 512)),
-}
+    Equal answers also say the twin holds the case's elements: a twin of a quarter of the index
+    (the int32 embedding's, until LCD-1039) names a smaller embedding and fails here.
+    """
+    case = CASES[name]("cpu")
+    wide, wide_shapes = _ir(case.wide, None)
+    twin, twin_shapes = _ir(case.twin, None)
+    assert case.op in [n.name for n in wide]
+    assert _read_or_write_rank_5(wide, wide_shapes) == []
+    assert _read_or_write_rank_5(twin, twin_shapes) == []
+    assert _computes(wide) == _computes(twin)
 
 
-def _gather_case(where: str) -> _Timed:
-    dim5, dim_twin, twin = _G_TWINS[where]
-
-    def build(shape: Shape, dim: int) -> Callable[[str | None], Callable[[], float]]:
-        data, index = _ramp(shape, 1000, lucid.float32), _ramp(shape, shape[dim], lucid.int64)
-        fn: Callable[..., lucid.Tensor] = lambda t, i: lucid.gather(t, dim, i).reshape(-1).sum()
-        return lambda gate: with_env(compiled_call(fn, data, index), ENV, gate)
-
-    return _Timed(build(_G5, dim5), build(twin, dim_twin))
-
-
-def _scatter_case(where: str) -> _Timed:
-    dim5, dim_twin, twin = _G_TWINS[where]
-
-    def build(shape: Shape, dim: int) -> Callable[[str | None], Callable[[], float]]:
-        base, src = _ramp(shape, 1000, lucid.float32), _ramp(shape, 7, lucid.float32)
-        index = _rotation(shape, dim, shape[dim])
-        fn: Callable[..., lucid.Tensor] = lambda t, i, s: (
-            t.scatter(dim, i, s, reduce="add").reshape(-1).sum()
-        )
-        return lambda gate: with_env(compiled_call(fn, base, index, src), ENV, gate)
-
-    return _Timed(build(_G5, dim5), build(twin, dim_twin))
-
-
-def _search_case() -> _Timed:
-    sequence = _ramp((256,), 256, lucid.float32)
-
-    def build(shape: Shape) -> Callable[[str | None], Callable[[], float]]:
-        values = _ramp(shape, 251, lucid.float32)
-        fn: Callable[..., lucid.Tensor] = lambda s, v: lucid.searchsorted(s, v).reshape(-1).sum()
-        return lambda gate: with_env(compiled_call(fn, sequence, values), ENV, gate)
-
-    # lead 128: the unfixed binary search is ~100 ms, the flat one under 1
-    return _Timed(build((128, 2, 2, 2, 16)), build((16384,)))
-
-
-for _where in sorted(_G_TWINS):
-    _CASES[f"gather_{_where}"] = lambda w=_where: _gather_case(w)
-    _CASES[f"scatter_add_{_where}"] = lambda w=_where: _scatter_case(w)
-_CASES["searchsorted_one_sequence"] = _search_case
-
-
-@needs_metal
-@pytest.mark.parametrize("name", sorted(_CASES))
-def test_a_rank_5_index_op_is_not_slower_than_its_twin(name: str) -> None:
-    """Held to 1.5x the twin; unfixed they ran 5x to 600x it."""
-    case = _CASES[name]()
-
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {"rank-5": case.wide(None), "twin": case.twin(None)}
-
-    assert_ratio_within(build, "rank-5", "twin", bound=_BOUND, slack_ms=_SLACK_MS, what=name)
-
-
-@needs_metal
-@pytest.mark.parametrize("name", sorted(_CASES))
-def test_the_index_op_bound_is_exceeded_by_the_unfixed_graph(name: str) -> None:
-    """The guard above can fail: with the pass off the same op is over its bound."""
-    case = _CASES[name]()
-
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {"gate off": case.wide("-1"), "twin": case.twin(None)}
-
-    unfixed = compare_ms(
-        build, "gate off", "twin", bound=_BOUND, slack_ms=_SLACK_MS, attempts=_UNFIXED_ATTEMPTS
-    )
-    assert not unfixed.within, (
-        f"{name}: the unfixed graph meets the guard's bound, so the guard cannot fail: "
-        f"{unfixed.report}"
-    )
+@pytest.mark.parametrize("name", sorted(CASES))
+def test_the_twin_comparison_fails_for_the_unrewritten_graph(name: str) -> None:
+    """The guard above can fail: with the pass off the op reads rank 5+ and is not the twin's."""
+    case = CASES[name]("cpu")
+    wide, wide_shapes = _ir(case.wide, "-1")
+    twin, _ = _ir(case.twin, None)
+    assert case.op in _read_or_write_rank_5(wide, wide_shapes)
+    assert _computes(wide) != _computes(twin)
 
 
 # ── no timing row for the wide-integer lane merge of an answer that is rank 5 by itself ──
