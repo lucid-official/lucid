@@ -9,7 +9,7 @@ value, not a count or a magnitude, so the program that meant one of those
 casts at the call site (``mask.float().mean()``) and the one that did not
 learns of it where it happened.
 
-The rule has one owner per layer, and an op has exactly one of them:
+The rule has one owner per layer, and an op has one of them (one exception, below):
 
 * An op with an engine schema (``abs``, ``relu``, ``softmax``, ``mean``, the
   pools and norms, ...) is refused by the engine: its ``OpSchema`` declares
@@ -24,6 +24,12 @@ The rule has one owner per layer, and an op has exactly one of them:
   :func:`refuse_bool` / :func:`bool_refusal` with the op's name, so the error
   class and the message never diverge between a free function, its ``Tensor``
   method and the in-place twin.
+
+One op is in both lists: ``grid_sample``.  Its engine schema refuses a bool,
+but ``F.grid_sample`` promotes an integral image or grid to float32 (``_as_real``)
+before the engine sees it, so the Python entry has to refuse first.  The other
+bypass is the caller's: a pipeline that resamples a bool mask casts it itself
+(``lucid.utils.transforms.functional._sampled``).
 
 Neither list is a census of the ops that refuse.  The bool-refusal sweep
 (``lucid/test/unit/ops/test_bool_refusal_sweep.py``) derives its candidates

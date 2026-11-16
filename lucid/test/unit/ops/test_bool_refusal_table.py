@@ -581,3 +581,36 @@ def test_a_refused_in_place_twin_leaves_the_tensor_as_it_was(device: str, name: 
         _IN_PLACE[name](t)
     assert t.tolist() == _VECTOR
     assert t._impl.version == version
+
+
+# ── a bool beside an integer: not a refusal, an answer Lucid does not give yet ──────────────
+
+#: ``(call, what the reference answers)``: the reference promotes the bool and searches at int64.
+_PROMOTED_SEARCH: dict[str, tuple[Callable[[ModuleType, object, object], object], list[int]]] = {
+    "searchsorted-bool-sequence": (lambda fw, b, i: fw.searchsorted(b, i[:2]), [0, 1]),
+    "searchsorted-bool-values": (lambda fw, b, i: fw.searchsorted(i, b), [0, 1]),
+    "bucketize-bool-values": (lambda fw, b, i: fw.bucketize(b, i), [0, 1]),
+    "bucketize-bool-boundaries": (lambda fw, b, i: fw.bucketize(i, b), [0, 1, 2]),
+}
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("name", list(_PROMOTED_SEARCH))
+def test_the_reference_answers_a_bool_beside_an_integer(ref: ModuleType, name: str) -> None:
+    call, want = _PROMOTED_SEARCH[name]
+    got = call(ref, ref.tensor([False, True]), ref.tensor([0, 1, 2]))
+    assert got.tolist() == want  # type: ignore[attr-defined]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="LCD-1021: searchsorted / bucketize raise DtypeMismatch for a bool beside an integer, "
+    "where the reference promotes and answers at int64",
+)
+@pytest.mark.parametrize("name", list(_PROMOTED_SEARCH))
+def test_a_bool_beside_an_integer_is_promoted_not_refused(device: str, name: str) -> None:
+    call, want = _PROMOTED_SEARCH[name]
+    got = call(
+        lucid, lucid.tensor([False, True], device=device), lucid.tensor([0, 1, 2], device=device)
+    )
+    assert got.tolist() == want  # type: ignore[attr-defined]
