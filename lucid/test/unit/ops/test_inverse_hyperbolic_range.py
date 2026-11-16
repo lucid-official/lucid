@@ -481,4 +481,3 @@ def test_a_masked_out_entry_leaves_no_nan_in_the_gradient(
     for order, d in (("d1", d1), ("d2", d2)):
         values = d.tolist()
         assert not any(math.isnan(v) for v in values), (name, order, values)
-
