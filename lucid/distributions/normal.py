@@ -494,7 +494,7 @@ class LogNormal(Distribution):
             Shape ``batch_shape``.
         """
         s2 = self.scale * self.scale
-        return (s2.exp() - 1.0) * (2.0 * self.loc + s2).exp()
+        return s2.expm1() * (2.0 * self.loc + s2).exp()
 
     @override
     def rsample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:

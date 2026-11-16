@@ -664,7 +664,7 @@ class Geometric(Distribution):
         # Avoid u=0 which would give -inf.  Lucid's rand draws from
         # [0, 1) so u=0 is admissible — clamp upward by epsilon.
         u_safe = u.clip(1e-7, 1.0 - 1e-7)
-        return (u_safe.log() / (1.0 - self.probs).log()).floor().detach()
+        return (u_safe.log() / (-self.probs).log1p()).floor().detach()
 
     @override
     def log_prob(self, value: Tensor) -> Tensor:
