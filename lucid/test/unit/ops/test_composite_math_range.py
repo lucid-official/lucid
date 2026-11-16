@@ -140,6 +140,18 @@ def test_xlog1py_second_derivative_through_a_vanishing_argument(device: str) -> 
     _close(d2.tolist(), [-2.0] * 3, [2.0] * 3, TOL)
 
 
+def test_log1p_subnormal_input(device: str) -> None:
+    """The CPU returns the input's bits; Metal flushes the subnormal difference to a signed 0."""
+    xs = [1e-40, -1e-40]
+    got = lucid.log1p(lucid.tensor(xs, device=device)).tolist()
+    for g, v in zip(got, xs, strict=True):
+        if device == "cpu":
+            assert g == lucid.tensor([v]).tolist()[0]
+        else:
+            assert g in (0.0, lucid.tensor([v]).tolist()[0])
+            assert math.copysign(1.0, g) == math.copysign(1.0, v)
+
+
 def test_log1p_values_are_unchanged(device: str) -> None:
     """Every value is ``log1p`` of the float32 operand, and the zeros keep their sign."""
     xs = [1e-30, -1e-30, 1e-12, 3e-8, 6e-8, 1e-5, 0.5, -0.5, 10.0, 1e30, 3e38]
@@ -275,12 +287,18 @@ def test_logaddexp_a_tie_keeps_a_half_and_a_quarter(device: str) -> None:
 
 
 def test_logaddexp_slopes_of_the_infinite_lanes_are_the_weights(device: str) -> None:
-    """``(x, +inf)``: the infinity has weight 1, the finite partner 0 (it was NaN / 0.047)."""
-    a = _leaf([-3.0, INF, -INF, 0.0, INF], device)
-    b = _leaf([INF, -3.0, 2.0, -INF, -INF], device)
+    """``(x, +inf)``: the infinity has weight 1, the finite partner 0 (it was NaN / 0.047).
+
+    A pair of equal infinities is a policy, not the reference's value (NaN): the slopes are
+    ``(1, 0)``, finite and summing to 1, as the answer ``hi`` has slope 1 in ``hi``.
+    """
+    a = _leaf([-3.0, INF, -INF, 0.0, INF, INF, -INF], device)
+    b = _leaf([INF, -3.0, 2.0, -INF, -INF, INF, -INF], device)
     da, db = grad(lucid.logaddexp(a, b).sum(), [a, b])
-    assert da.tolist() == [0.0, 1.0, 0.0, 1.0, 1.0]
-    assert db.tolist() == [1.0, 0.0, 1.0, 0.0, 0.0]
+    assert da.tolist() == [0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0]
+    assert db.tolist() == [1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0]
+    value = lucid.logaddexp(a, b).tolist()
+    assert value == [INF, INF, 2.0, 0.0, INF, INF, -INF]
     nan = _leaf([NAN, 1.0], device)
     other = _leaf([1.0, NAN], device)
     for g in grad(lucid.logaddexp(nan, other).sum(), [nan, other]):
@@ -404,6 +422,60 @@ def test_atan2_a_tie_of_the_operands_keeps_both_derivatives(
     _close(h_x.tolist(), [s[1] + s[2] for s in second], sc2, 1e-4)
 
 
+@pytest.mark.parametrize("zero", [0.0, -0.0])
+def test_atan2_a_zero_x_keeps_its_slope_and_the_mixed_second_derivative(
+    device: str, zero: float
+) -> None:
+    """``x = ±0``, ``y != 0`` is ±π/2 with ``d/dx = -1/y`` and ``d2/dx dy = 1/y^2``.
+
+    The lane was a constant ``±π/2``, so ``x`` had slope 0 (``atan2([1, 2], [0, 0])`` gave
+    ``d/dx = [0, 0]`` against ``[-1, -0.5]``) and the mixed derivative 0.
+    """
+    ys = [1.0, 2.0, -1.0, 1e-10, 1e30, -4.0, 1e-3]
+    y, x = _leaf(ys, device), _leaf([zero] * len(ys), device)
+    dy, dx = grad(lucid.atan2(y, x).sum(), [y, x], create_graph=True)
+    assert dy.tolist() == [0.0] * len(ys)
+    _close_each(dx.tolist(), [-1.0 / v for v in ys], TOL)
+    assert dx.tolist()[:3] == [-1.0, -0.5, 1.0]
+    h_yy, h_yx = grad(dy.sum(), [y, x], retain_graph=True)
+    h_xy, h_xx = grad(dx.sum(), [y, x])
+    mixed = [1.0 / (v * v) for v in ys]
+    for got in (h_yx.tolist(), h_xy.tolist()):
+        _close_each(got, mixed, 1e-4, floor=1e-30)
+    assert h_xy.tolist()[:3] == [1.0, 0.25, 1.0]
+    assert [abs(v) for v in h_yy.tolist() + h_xx.tolist()] == [0.0] * (2 * len(ys))
+    for g, v in zip(lucid.atan2(y, x).tolist(), ys, strict=True):
+        assert _same_value(g, math.copysign(0.5 * math.pi, v), 1e-6), (v, g)
+
+
+@pytest.mark.parametrize("zero", [0.0, -0.0])
+def test_atan2_the_axes_over_magnitudes(device: str, zero: float) -> None:
+    """``(y, ±0)`` and ``(±0, x)`` over 1e-30..1e30 against the closed forms, both orders."""
+    values = [s * 10.0**e for e in range(-30, 31, 6) for s in (1.0, -1.0)]
+    n = len(values)
+    for y0, x0 in (([zero] * n, values), (values, [zero] * n)):
+        y, x = _leaf(y0, device), _leaf(x0, device)
+        out = lucid.atan2(y, x)
+        for g, a, b in zip(out.tolist(), y0, x0, strict=True):
+            assert _same_value(g, math.atan2(a, b), 1e-6), (a, b, g)
+        dy, dx = grad(out.sum(), [y, x], create_graph=True)
+        _close_each(dy.tolist(), [_atan2_first(a, b)[0] for a, b in zip(y0, x0, strict=True)], TOL)
+        _close_each(dx.tolist(), [_atan2_first(a, b)[1] for a, b in zip(y0, x0, strict=True)], TOL)
+        h_yy, h_yx = grad(dy.sum(), [y, x], retain_graph=True)
+        h_xy, h_xx = grad(dx.sum(), [y, x])
+        want = [_atan2_second(a, b) for a, b in zip(y0, x0, strict=True)]
+        scale = [1.0 / math.hypot(a, b) ** 2 for a, b in zip(y0, x0, strict=True)]
+        fits = [i for i, c in enumerate(scale) if 1e-30 < c < 1e30]  # the answer is a float32
+        for i, entry in enumerate((h_yy, h_yx, h_xy, h_xx)):
+            column = [w[(0, 1, 1, 2)[i]] for w in want]
+            _close(
+                [entry.tolist()[k] for k in fits],
+                [column[k] for k in fits],
+                [scale[k] for k in fits],
+                1e-4,
+            )
+
+
 ATAN2_POOL = [-INF, -3.0, -0.0, 0.0, 3.0, INF, NAN]
 
 
@@ -448,6 +520,17 @@ def _hypot_second(a: float, b: float) -> tuple[float, float, float]:
     return br * br / h, -ar * br / h, ar * ar / h  # aa, ab, bb
 
 
+def _hypot_hessian(
+    a0: list[float], b0: list[float], device: str
+) -> tuple[list[float], list[float], list[float]]:
+    """``(d2/da2, d2/dab, d2/db2)`` of ``hypot`` at every (a, b) of the two lists."""
+    a, b = _leaf(a0, device), _leaf(b0, device)
+    da, db = grad(lucid.hypot(a, b).sum(), [a, b], create_graph=True)
+    h_aa, h_ab = grad(da.sum(), [a, b], retain_graph=True)
+    (h_bb,) = grad(db.sum(), [b])
+    return h_aa.tolist(), h_ab.tolist(), h_bb.tolist()
+
+
 @pytest.mark.parametrize("sign_b", [1.0, -1.0])
 @pytest.mark.parametrize("sign_a", [1.0, -1.0])
 def test_hypot_second_derivative_at_a_tie_is_not_zero(
@@ -459,16 +542,57 @@ def test_hypot_second_derivative_at_a_tie_is_not_zero(
     ``1 / (2 sqrt(2) m) * [[1, -s], [-s, 1]]`` with ``s = sign(a) sign(b)``.
     """
     magnitudes = [1e-30, 1e-10, 1.0, 1e10, 1e30]
-    a = _leaf([sign_a * m for m in magnitudes], device)
-    b = _leaf([sign_b * m for m in magnitudes], device)
-    da, db = grad(lucid.hypot(a, b).sum(), [a, b], create_graph=True)
-    h_aa, h_ab = grad(da.sum(), [a, b], retain_graph=True)
-    (h_bb,) = grad(db.sum(), [b])
+    h_aa, h_ab, h_bb = _hypot_hessian(
+        [sign_a * m for m in magnitudes], [sign_b * m for m in magnitudes], device
+    )
     curvature = [1.0 / (2.0 * math.sqrt(2.0) * m) for m in magnitudes]
     sign = sign_a * sign_b
-    _close(h_aa.tolist(), curvature, curvature, TOL)
-    _close(h_ab.tolist(), [-sign * c for c in curvature], curvature, TOL)
-    _close(h_bb.tolist(), curvature, curvature, TOL)
+    _close(h_aa, curvature, curvature, TOL)
+    _close(h_ab, [-sign * c for c in curvature], curvature, TOL)
+    _close(h_bb, curvature, curvature, TOL)
+
+
+@pytest.mark.parametrize("sign_other", [1.0, -1.0])
+@pytest.mark.parametrize("sign_zero", [1.0, -1.0])
+def test_hypot_second_derivative_along_the_axes(
+    device: str, sign_zero: float, sign_other: float
+) -> None:
+    """``hypot(0, m)``: ``|.|`` of the smaller lane has slope 0 at 0, the Hessian is ``1/m`` there."""
+    magnitudes = [1e-30, 1e-10, 1.0, 1e10, 1e30]
+    zeros = [0.0 * sign_zero] * len(magnitudes)
+    others = [sign_other * m for m in magnitudes]
+    scale = [1.0 / m for m in magnitudes]
+    for zero_first in (True, False):
+        a0, b0 = (zeros, others) if zero_first else (others, zeros)
+        h_aa, h_ab, h_bb = _hypot_hessian(a0, b0, device)
+        want = [_hypot_second(x, y) for x, y in zip(a0, b0, strict=True)]
+        _close(h_aa, [w[0] for w in want], scale, TOL)
+        _close(h_ab, [w[1] for w in want], scale, TOL)
+        _close(h_bb, [w[2] for w in want], scale, TOL)
+        # the curvature across the axis is 1/m, along it 0
+        _close(h_aa if zero_first else h_bb, scale, scale, TOL)
+
+
+def test_hypot_an_infinite_lane_has_the_sign_slope_and_no_nan(device: str) -> None:
+    """The infinity's slope is its sign, the finite partner's 0, whatever the partner is.
+
+    The arithmetic path read the infinity, and its ``0 * inf`` leaked through the ``where`` that
+    answers ``|inf|``: every gradient of the pair was NaN.  The reference's is NaN for the
+    infinity itself and 0 for the partner.
+    """
+    a0 = [INF, 0.0, 1.0, -INF, -3.0, INF, NAN, INF]
+    b0 = [0.0, INF, INF, 2.0, -INF, INF, INF, NAN]
+    a, b = _leaf(a0, device), _leaf(b0, device)
+    out = lucid.hypot(a, b)
+    assert out.tolist() == [INF] * 8
+    da, db = grad(out.sum(), [a, b], create_graph=True)
+    for lane, (x, y) in enumerate(zip(a0, b0, strict=True)):
+        if math.isinf(y):  # an infinite second operand answers, also beside another infinity
+            assert (da.tolist()[lane], db.tolist()[lane]) == (0.0, math.copysign(1.0, y)), lane
+        else:
+            assert (da.tolist()[lane], db.tolist()[lane]) == (math.copysign(1.0, x), 0.0), lane
+    h_a, h_b = grad((da + db).sum(), [a, b])
+    assert all(_finite(v) for v in h_a.tolist() + h_b.tolist())
 
 
 def test_hypot_first_derivative_over_the_grid(device: str) -> None:
@@ -553,3 +677,36 @@ def test_the_recorded_first_derivative_equals_the_eager_one(device: str, name: s
     recorded = grad(out_fn().sum(), leaves, create_graph=True)
     for want, got in zip(eager, recorded, strict=True):
         _close(got.tolist(), want.tolist(), [max(abs(w), 1e-30) for w in want.tolist()], 1e-6)
+
+
+@pytest.mark.parametrize("name", ["logaddexp", "atan2", "hypot"])
+def test_broadcast_operands_reduce_their_gradients(device: str, name: str) -> None:
+    """The ``where`` on the operands broadcasts: value, gradient shapes and sums equal the expanded."""
+    fn = getattr(lucid, name)
+    col, row = [[0.5], [-1.5], [2.0]], [0.0, 1.0, -2.0, 3.0]
+    a, b = _leaf(col, device), _leaf(row, device)
+    out = fn(a, b)
+    da, db = grad(out.sum(), [a, b], create_graph=True)
+    assert out.shape == (3, 4) and da.shape == (3, 1) and db.shape == (4,)
+    big_a = _leaf([[v[0]] * 4 for v in col], device)
+    big_b = _leaf([row] * 3, device)
+    want = fn(big_a, big_b)
+    assert out.tolist() == want.tolist()
+    ga, gb = grad(want.sum(), [big_a, big_b])
+    for got, expect in zip(da.tolist(), ga.tolist(), strict=True):
+        assert abs(got[0] - sum(expect)) <= 1e-5
+    for j, got in enumerate(db.tolist()):
+        assert abs(got - sum(gb.tolist()[i][j] for i in range(3))) <= 1e-5
+    h_a, h_b = grad((da.sum() + db.sum()), [a, b])
+    assert h_a.shape == (3, 1) and h_b.shape == (4,)
+    assert all(_finite(v[0]) for v in h_a.tolist()) and all(_finite(v) for v in h_b.tolist())
+
+
+@pytest.mark.parametrize("name", ["logaddexp", "atan2", "hypot"])
+def test_a_zero_dim_operand_beside_a_vector(device: str, name: str) -> None:
+    fn = getattr(lucid, name)
+    a = lucid.tensor(0.5, device=device, requires_grad=True)
+    b = _leaf([0.0, 1.0, -2.0], device)
+    out = fn(a, b)
+    (da,) = grad(out.sum(), [a])
+    assert out.shape == (3,) and da.shape == ()
