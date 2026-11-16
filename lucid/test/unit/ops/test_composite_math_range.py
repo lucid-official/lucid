@@ -89,11 +89,7 @@ def _pairs(exps_a: list[int], exps_b: list[int]) -> tuple[list[float], list[floa
 
 
 def _log1p_orders(x: list[float]) -> tuple[list[float], list[float], list[float]]:
-    return (
-        [1 / (1 + v) for v in x],
-        [-1 / (1 + v) ** 2 for v in x],
-        [2 / (1 + v) ** 3 for v in x],
-    )
+    return ([1 / (1 + v) for v in x], [-1 / (1 + v) ** 2 for v in x], [2 / (1 + v) ** 3 for v in x])
 
 
 def _three_derivatives(
