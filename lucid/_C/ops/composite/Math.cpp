@@ -86,11 +86,14 @@ cast_operands(const AmpScope& amp, const TensorImplPtr& a, const TensorImplPtr& 
 // 1: right for the first derivative and 0 for every later one, so
 // ``d²log1p(0)`` was -0 where it is -1 (and ``d³`` 0 where it is 2).
 // There ``log(u)`` is exactly +0 and the correction is ``x``, so the sum is
-// ``x`` to the bit — except for ``x = -0``, where ``(+0) + (-0)`` is +0.  The
-// sum is therefore written ``correction - (0 - log(u))``: ``0 - (+0)`` is +0,
+// ``x`` — except for ``x = -0``, where ``(+0) + (-0)`` is +0.  The sum is
+// therefore written ``correction - (0 - log(u))``: ``0 - (+0)`` is +0,
 // ``(-0) - (+0)`` is -0, and ``0 - v`` is ``-v`` for every other ``v``, so the
 // value is the one ``log(u) + correction`` would round to, with ``log1p(-0)``
-// still -0 and the slope still +1 / (1 + x).
+// still -0 and the slope still +1 / (1 + x).  One value differs from the old
+// ``where`` that copied ``x``: a subnormal ``x`` on Metal.  The GPU flushes the
+// subtraction's subnormal result, so it comes back as a signed 0, where the
+// copy kept its bits (the CPU is unchanged).
 TensorImplPtr log1p_lanes(const TensorImplPtr& a) {
     auto ones = full_like_op(a, 1.0);
     auto zero = full_like_op(a, 0.0);
@@ -206,8 +209,13 @@ TensorImplPtr atan2_op(const TensorImplPtr& y_in, const TensorImplPtr& x_in) {
     const auto x_is_inf = isinf_op(x);
     const auto y_is_inf = isinf_op(y);
 
-    const auto safe_x =
-        where_op(logical_or_op(x_is_zero, x_is_inf), where_op(x_neg, neg_op(ones_x), ones_x), x);
+    // x = ±0 beside a finite non-zero y keeps its tracked zero: the lane is
+    // ±π/2, and ``-y / (x² + y²)`` is its slope in x (a substituted constant
+    // gave it 0, and the mixed second derivative 0 where it is ``1 / y²``).
+    // The ratio below is ``x / y`` there, so the divisor is the non-zero ``y``.
+    const auto x_replaced =
+        logical_or_op(x_is_inf, logical_and_op(x_is_zero, logical_or_op(y_is_zero, y_is_inf)));
+    const auto safe_x = where_op(x_replaced, where_op(x_neg, neg_op(ones_x), ones_x), x);
     const auto safe_y = where_op(y_is_inf, where_op(y_neg, neg_op(ones_y), ones_y), y);
 
     // ``arctan(safe_y / safe_x)`` taken on the ratio that is at most 1 in
@@ -220,8 +228,10 @@ TensorImplPtr atan2_op(const TensorImplPtr& y_in, const TensorImplPtr& x_in) {
     // — a ``where`` on the operands, not on two quotients: the quotient of the
     // unselected pair would still overflow and its zero cotangent times that
     // infinity is NaN.  Both forms are exact in a neighbourhood of the switch,
-    // so a tie (``|y| = |x|``, ``q = ±1``) keeps its derivative.  ``safe_x`` is
-    // never 0, and where the operands swap ``|safe_y| > |safe_x| > 0``.
+    // so a tie (``|y| = |x|``, ``q = ±1``) keeps its derivative.  The divisor
+    // is never 0: ``safe_x`` is 0 only beside a non-zero ``safe_y``, and there
+    // the operands swap.  A zero ``x`` also leaves its sign bit in ``x_neg``,
+    // which the quadrant arithmetic below turns into the right ±π/2.
     const auto swapped = greater_op(abs_op(safe_y), abs_op(safe_x));
     const auto ratio = div_op(where_op(swapped, safe_x, safe_y), where_op(swapped, safe_y, safe_x));
     const auto arc = arctan_op(ratio);
@@ -263,9 +273,7 @@ TensorImplPtr atan2_op(const TensorImplPtr& y_in, const TensorImplPtr& x_in) {
     const auto inf_inf_branch = where_op(y_neg, neg_op(inf_inf_mag), inf_inf_mag);
 
     auto out = where_op(logical_and_op(x_is_inf, logical_not_op(y_is_inf)), y0_branch, normal);
-    out = where_op(logical_or_op(logical_and_op(x_is_zero, logical_not_op(y_is_zero)),
-                                 logical_and_op(y_is_inf, logical_not_op(x_is_inf))),
-                   signed_half_pi, out);
+    out = where_op(logical_and_op(y_is_inf, logical_not_op(x_is_inf)), signed_half_pi, out);
     out = where_op(logical_and_op(x_is_inf, y_is_inf), inf_inf_branch, out);
     out = where_op(logical_and_op(x_is_zero, y_is_zero), y0_branch, out);
     return where_op(logical_or_op(isnan_op(x), isnan_op(y)), base, out);
@@ -318,19 +326,35 @@ void require_floating(const char* op, const TensorImplPtr& a, const TensorImplPt
 // exactly; ``maximum`` and ``minimum`` split the tied cotangent between the
 // two operands, and the ratio ``n / m`` then has slope 0 where it is not, so
 // the second derivative at ``a = b`` was 0 for every scale
-// (``hypot(1, 1)``: 0 against 0.354).
+// (``hypot(1, 1)``: 0 against 0.354).  The smaller lane enters through the
+// raw operand: its sign vanishes in the square, and ``abs`` has slope 0 at 0,
+// which made the second derivative along an axis (``hypot(0, 1)``) 0 where it
+// is 1.
+//
+// An infinite lane never reaches that arithmetic: both operands read 0 there,
+// and the override answers with ``|inf|``.  Left in, ``0 · inf`` met a zero
+// cotangent in the ``where`` that picks the override and every gradient of the
+// pair was NaN.  The infinity's slope is its sign and the finite partner's is
+// 0 (the reference's partner slope; its own is NaN); when both are infinite the
+// second operand wins.
 TensorImplPtr hypot_lanes(const TensorImplPtr& a, const TensorImplPtr& b) {
-    auto abs_a = abs_op(a);
-    auto abs_b = abs_op(b);
+    auto a_inf = isinf_op(a);
+    auto b_inf = isinf_op(b);
+    auto any_inf = logical_or_op(a_inf, b_inf);
+    auto zero = zeros_like_op(a);
+    auto lane_a = where_op(any_inf, zero, a);
+    auto lane_b = where_op(any_inf, zero, b);
+    auto abs_a = abs_op(lane_a);
+    auto abs_b = abs_op(lane_b);
     auto b_larger = greater_op(abs_b, abs_a);
     auto big = where_op(b_larger, abs_b, abs_a);
-    auto small = where_op(b_larger, abs_a, abs_b);
+    auto small = where_op(b_larger, lane_a, lane_b);
     auto one = ones_like_op(big);
-    auto safe = where_op(equal_op(big, zeros_like_op(big)), one, big);
+    auto safe = where_op(equal_op(big, zero), one, big);
     auto ratio = div_op(small, safe);
     auto out = mul_op(big, sqrt_op(add_op(one, square_op(ratio))));
-    out = where_op(isinf_op(a), abs_a, out);
-    return where_op(isinf_op(b), abs_b, out);
+    out = where_op(a_inf, abs_op(a), out);
+    return where_op(b_inf, abs_op(b), out);
 }
 
 TensorImplPtr hypot_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in) {

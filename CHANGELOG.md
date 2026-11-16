@@ -329,6 +329,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - range-safe log1p, logaddexp, atan2, hypot graphs (LCD-1029)
 
+- hypot axes and infinities, atan2 zero-x slope (LCD-1029)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
