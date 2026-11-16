@@ -337,6 +337,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - expm1 and log1p where the sum rounds to 1 (LCD-1035)
 
+- corr-cholesky log-det is a function of x (LCD-1035)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

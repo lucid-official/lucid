@@ -175,19 +175,19 @@ class SigmoidTransform(Transform):
 
 
 def _log_one_minus_tanh_sq(x: Tensor) -> Tensor:
-    r""":math:`\log(1 - \tanh^2 x) = 2(\log 2 - x - \operatorname{softplus}(-2x))`.
+    r""":math:`\log(1 - \tanh^2 x) = 2(\log 2 - |x| - \log(1 + e^{-2|x|}))`.
 
     The owner of this identity for every transform that composes a ``tanh``
-    (:class:`TanhTransform`, :class:`CorrCholeskyTransform`).  The pieces stay
-    finite where the textbook ``log(1 - tanh(x)**2)`` is ``log(0)`` (``tanh``
-    rounds to 1 from ``|x|`` ~ 9 in float32), and where the spelled-out
-    ``log1p(exp(-2x))`` overflows (``x`` below -44 in float32, a ``-inf`` for
-    a log-determinant of about ``-2|x|``): ``softplus`` is the identity past its
-    threshold.
+    (:class:`TanhTransform`, :class:`CorrCholeskyTransform`).  Even in ``x``,
+    and written in ``|x|`` so the exponential is at most 1: it stays finite and
+    exact where the textbook ``log(1 - tanh(x)**2)`` is ``log(0)`` (``tanh``
+    rounds to 1 from ``|x|`` ~ 9 in float32), and where ``log1p(exp(-2x))``
+    overflows for a negative ``x`` (below -44 in float32, a ``-inf`` for a
+    log-determinant of about ``-2|x|``).  No ``softplus`` threshold either: its
+    identity branch past ``-2x > 20`` is off by ``e^{-2|x|}`` in float64.
     """
-    from lucid.nn.functional.activations import softplus
-
-    return 2.0 * (math.log(2.0) - x - softplus(-2.0 * x))
+    a = x.abs()
+    return 2.0 * (math.log(2.0) - a - (-2.0 * a).exp().log1p())
 
 
 class TanhTransform(Transform):
@@ -250,10 +250,10 @@ class TanhTransform(Transform):
     def log_abs_det_jacobian(self, x: Tensor, y: Tensor) -> Tensor:
         r"""Numerically-stable :math:`\log(1 - \tanh^2(x))`.
 
-        Computed as :math:`2\bigl(\log 2 - x - \operatorname{softplus}(-2x)\bigr)`
-        — the stable form used by the reference framework that avoids
-        the catastrophic ``log(1 - 1)`` cancellation when ``|x|`` is
-        large.
+        Computed as :math:`2\bigl(\log 2 - |x| - \log(1 + e^{-2|x|})\bigr)`
+        — the form that avoids the catastrophic ``log(1 - 1)``
+        cancellation when ``|x|`` is large and the overflow of
+        ``exp(-2x)`` for a very negative ``x``.
 
         Parameters
         ----------
@@ -1211,10 +1211,11 @@ class CorrCholeskyTransform(Transform):
     def log_abs_det_jacobian(self, x: Tensor, y: Tensor) -> Tensor:
         r"""Log-Jacobian of the unconstrained-to-Cholesky correlation map.
 
-        Combines the tanh contribution
-        :math:`\sum_{i>j} \log(1 - \tanh^2(x_{ij}))` with the
-        closed-form Lewandowski normalisation terms expressed directly
-        from the output diagonal entries of ``y``.
+        A function of ``x`` alone: the entry at ``(row i, column k)`` of the
+        free vector contributes
+        :math:`\bigl(1 + \tfrac{1}{2}(i - 1 - k)\bigr)\log(1 - \tanh^2 x_{ik})`,
+        the ``1`` from the ``tanh`` and the rest from the stick-breaking that
+        follows (see the note in the body).
 
         Parameters
         ----------
@@ -1222,7 +1223,7 @@ class CorrCholeskyTransform(Transform):
             Unconstrained parameters (strictly-lower-triangular real
             entries).
         y : Tensor
-            Output Cholesky correlation matrix.
+            Output Cholesky correlation matrix; only its size is read.
 
         Returns
         -------
@@ -1233,33 +1234,21 @@ class CorrCholeskyTransform(Transform):
         # log-Jacobian of ``x`` against the *free* (strictly lower) entries
         # of ``y``, which is the only determinant that is defined here.
         #
-        # Two factors compose.  ``tanh`` contributes ``Σ log(1 - tanh²(x))``
-        # over the free vector.  The stick-breaking that follows scales the
-        # entry at ``(i, j)`` by ``sqrt(∏_{k<j} (1 - r_{ik}²))``, and that
-        # product is exactly ``1 - Σ_{k≤j-1} y_{ik}²`` — so the whole
-        # contribution is half the log of ``1 - cumsum(y², -1)`` read at the
-        # positions two or more columns below the diagonal.
-        #
-        # What stood here was a guess: the comment above it sketched three
-        # different formulas and settled on weighting ``log L_{rr}`` by
-        # ``d - row``.  It is off by a sample-dependent amount — ``-0.5973``
-        # against ``-0.3885`` at ``d = 3`` — which is a wrong density rather
-        # than a wrong constant, so nothing downstream normalises it away.
+        # ``tanh`` contributes ``log(1 - tanh²(x_ik))`` per entry.  The
+        # stick-breaking scales the entry at ``(i, c)`` by
+        # ``sqrt(1 - Σ_{k<c} y_{ik}²)`` and, since ``1 - Σ_{k≤c} y_{ik}² =
+        # ∏_{k≤c} (1 - tanh²(x_ik))``, the contribution is half the log of that
+        # product at the columns ``c ≤ i - 2``.  Collecting by ``x_ik``: it is
+        # counted once for every ``c`` in ``[k, i - 2]``, ``i - 1 - k`` times.
+        # Read off ``x`` it has no cumulative sum of squares to cancel (the
+        # ``1 - Σ y²`` of a saturated entry rounds to 0, and was clipped at 1e-12).
         d = self._resolve_dim_from_matrix(int(y.shape[-1]))
         if d < 2:
             return lucid.zeros(tuple(x.shape[:-1]), dtype=x.dtype, device=x.device)
 
-        tanh_logdet = _log_one_minus_tanh_sq(x).sum(dim=-1)
-
-        # ``1 - cumsum(y², -1)`` at the entries with ``col <= row - 2``.
-        # Masked-out lanes are set to 1.0 *before* the log: a zero there
-        # would make ``log(0) * 0`` a NaN and poison the whole sum.
-        remaining = 1.0 - (y * y).cumsum(dim=-1)
-        mask = lucid.tril(lucid.ones(d, d, dtype=x.dtype, device=x.device), diagonal=-2)
-        safe = lucid.clip(remaining, min=1e-12) * mask + (1.0 - mask)
-        stick_logdet = 0.5 * (safe.log() * mask).sum(dim=-1).sum(dim=-1)
-
-        return tanh_logdet + stick_logdet
+        weights = [1.0 + 0.5 * (row - 1 - col) for row in range(1, d) for col in range(row)]
+        weight = lucid.tensor(weights, dtype=x.dtype, device=x.device)
+        return (_log_one_minus_tanh_sq(x) * weight).sum(dim=-1)
 
 
 class CumulativeDistributionTransform(Transform):

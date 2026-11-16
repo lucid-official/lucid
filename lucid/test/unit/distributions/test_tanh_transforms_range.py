@@ -8,18 +8,24 @@ inverse of ``tanh(1e-8)`` was 0, and next to ``+-1`` the quotient lost its digit
 The log-determinant ``log(1 - tanh(x)^2)`` is ``2 (log 2 - |x| - log1p(exp(-2|x|)))``:
 ``TanhTransform`` wrote ``log1p(exp(-2x))`` out, which overflows float32 below ``x = -44`` (a ``-inf``
 for an answer of about ``-2|x|``), and ``CorrCholeskyTransform`` took ``log(1 - tanh(x)^2)`` itself,
-clipped at 1e-12, so a large ``|x|`` read as a constant ``-27.6``.
+clipped at 1e-12, so a large ``|x|`` read as a constant ``-27.6``.  A ``softplus(-2x)`` spelling is no
+better in float64: its default threshold makes it the identity from ``-2x = 20``, off by ``e^{-2|x|}``
+(4e-9 at ``x = -10.01``).  ``CorrCholeskyTransform``'s stick-breaking half read ``1 - cumsum(y^2)``
+off the output, the same cancellation (a saturated entry rounds it to 0, and it was clipped at 1e-12):
+the whole log-determinant is a function of ``x``, entry ``(row i, column k)`` weighing
+``1 + (i - 1 - k) / 2`` of ``log(1 - tanh(x_ik)^2)``.
 
 The oracles are plain float64 closed forms (``math``) at the values read back from the tensors.
 """
 
 import math
+import random
 
 import pytest
 
 import lucid
 import lucid.distributions.transforms as T
-from lucid.test._fixtures.devices import device_dtype_params
+from lucid.test._fixtures.devices import device_dtype_params, devices_supporting
 
 _FLOATS = device_dtype_params([lucid.float32, lucid.float64])
 _EPS = {lucid.float32: 1.2e-7, lucid.float64: 2.3e-16}
@@ -70,7 +76,7 @@ def test_tanh_round_trips_from_1e_minus_8_to_5(device: str, dtype: lucid.dtype) 
 def test_tanh_log_det_is_finite_and_exact_over_the_range(device: str, dtype: lucid.dtype) -> None:
     """Float32 from -100 to 100 (``exp(-2x)`` overflowed below -44), float64 to 400 (below -355)."""
     top = 100.0 if dtype == lucid.float32 else 400.0
-    mags = [0.0, 1e-8, 1e-3, 0.5, 2.0, 9.0, 20.0, 44.0, 45.0, 60.0, top]
+    mags = [0.0, 1e-8, 1e-3, 0.5, 2.0, 9.0, 10.01, 10.5, 12.0, 14.0, 20.0, 44.0, 45.0, 60.0, top]
     xs = [s * m for m in mags for s in (1.0, -1.0)]
     x = lucid.tensor(xs, dtype=dtype, device=device, requires_grad=True)
     transform = T.TanhTransform()
@@ -85,7 +91,7 @@ def test_tanh_log_det_is_finite_and_exact_over_the_range(device: str, dtype: luc
     (grad,) = lucid.autograd.grad(ld.sum(), x)
     for xv, gv in zip(x.tolist(), grad.tolist(), strict=True):
         assert math.isclose(
-            gv, -2.0 * math.tanh(xv), abs_tol=2e-6 if dtype == lucid.float32 else 1e-12
+            gv, -2.0 * math.tanh(xv), abs_tol=2e-6 if dtype == lucid.float32 else 2e-15
         ), (xv, gv)
 
 
@@ -115,23 +121,76 @@ def test_corr_cholesky_inverse_of_a_tiny_two_by_two(device: str, dtype: lucid.dt
     assert math.isclose(got, 1e-8, rel_tol=1e-6), got
 
 
-@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
-def test_corr_cholesky_log_det_reads_a_large_x_off_the_formula(
-    device: str, dtype: lucid.dtype
-) -> None:
-    """``log(1 - tanh(x)^2)`` for ``x = 20`` is ``-38.6``; the clipped textbook form said ``-27.6``.
+def _corr_cholesky_weights(d: int) -> list[float]:
+    """Entry ``(row i, column k)`` of the free vector: ``1`` from the ``tanh``, ``(i - 1 - k) / 2`` from the sticks."""
+    return [1.0 + 0.5 * (row - 1 - col) for row in range(1, d) for col in range(row)]
 
-    Dim 3, free entries ``[x0, x1, x2]`` fill ``L[1, 0]``, ``L[2, 0]`` and ``L[2, 1]``: the stick-breaking
-    term is half the log-determinant of the ``tanh`` at ``x1`` (the only entry two columns below
-    the diagonal), so the whole is ``ld(x0) + 1.5 ld(x1) + ld(x2)``.
-    """
-    free = [20.0, 0.5, -0.3] if dtype == lucid.float64 else [9.0, 0.5, -0.3]
-    transform = T.CorrCholeskyTransform(3)
-    x = lucid.tensor(free, dtype=dtype, device=device)
-    got = transform.log_abs_det_jacobian(x, transform(x)).item()
-    want = (
-        _log_one_minus_tanh_sq(free[0])
-        + 1.5 * _log_one_minus_tanh_sq(free[1])
-        + _log_one_minus_tanh_sq(free[2])
+
+def _corr_cholesky_exact(free: list[float], d: int) -> float:
+    return sum(
+        w * _log_one_minus_tanh_sq(v) for w, v in zip(_corr_cholesky_weights(d), free, strict=True)
     )
-    assert math.isclose(got, want, rel_tol=2e-6 if dtype == lucid.float32 else 1e-12), (got, want)
+
+
+# a saturated entry in each dimension (float32 saturates ``tanh`` from |x| ~ 9, float64 from ~ 18):
+# the ``1 - sum(y^2)`` of the output rounds to 0 there, which the old read clipped at 1e-12
+_SATURATED = {
+    3: ([20.0, 0.5, -0.3], [9.0, 0.5, -0.3]),
+    4: ([0.3, -0.2, 0.5, 20.0, -0.4, 0.2], [0.3, -0.2, 0.5, 12.0, -0.4, 0.2]),
+    5: (
+        [0.1, -0.2, 3.0, 0.4, 25.0, -0.6, 0.7, -0.8, -30.0, 0.2],
+        [0.1, -0.2, 3.0, 0.4, 12.0, -0.6, 0.7, -0.8, -15.0, 0.2],
+    ),
+}
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+@pytest.mark.parametrize("dim", sorted(_SATURATED))
+def test_corr_cholesky_log_det_with_a_saturated_entry(
+    device: str, dtype: lucid.dtype, dim: int
+) -> None:
+    """The whole log-determinant, tanh and sticks, against the exact weighted sum, and its slope.
+
+    Dim 3: ``ld(x0) + 1.5 ld(x1) + ld(x2)``.  Dim 4 with a saturated ``x3`` (row 3, column 0, weight 2)
+    was off by whole nats through the stick half: float64 ``-66.83`` for ``-77.89``, float32 with
+    12 for 20 ``-50.83`` for ``-45.89``.
+    """
+    free = _SATURATED[dim][0 if dtype == lucid.float64 else 1]
+    transform = T.CorrCholeskyTransform(dim)
+    x = lucid.tensor(free, dtype=dtype, device=device, requires_grad=True)
+    ld = transform.log_abs_det_jacobian(x, transform(x))
+    want = _corr_cholesky_exact(x.tolist(), dim)
+    assert math.isclose(ld.item(), want, rel_tol=2e-6 if dtype == lucid.float32 else 1e-12), (
+        ld.item(),
+        want,
+    )
+    # the slope is read off ``x`` too (it was zero through the clip): ``-2 w tanh(x)`` per entry
+    (grad,) = lucid.autograd.grad(ld, x)
+    for gv, xv, w in zip(grad.tolist(), x.tolist(), _corr_cholesky_weights(dim), strict=True):
+        assert math.isclose(
+            gv, -2.0 * w * math.tanh(xv), abs_tol=4e-6 if dtype == lucid.float32 else 4e-15
+        ), (xv, gv)
+
+
+@pytest.mark.parametrize("device", devices_supporting(lucid.float64))
+@pytest.mark.parametrize("dim", [3, 4, 5, 6])
+def test_corr_cholesky_log_det_matches_the_stick_breaking_read_off_y(device: str, dim: int) -> None:
+    """The weights are an identity, not a fit: at moderate ``x`` the sticks read off the output agree.
+
+    ``0.5 * sum log(1 - cumsum(y^2))`` at the columns two or more below the diagonal, plus the ``tanh``
+    terms: the form the log-determinant had, which cancels only for a saturated entry.
+    """
+    rng = random.Random(dim)
+    free = [rng.uniform(-3.0, 3.0) for _ in range(dim * (dim - 1) // 2)]
+    transform = T.CorrCholeskyTransform(dim)
+    x = lucid.tensor(free, dtype=lucid.float64, device=device)
+    y = transform(x)
+    rows = y.tolist()
+    sticks = sum(
+        0.5 * math.log(1.0 - sum(rows[i][k] ** 2 for k in range(c + 1)))
+        for i in range(dim)
+        for c in range(i - 1)
+    )
+    want = sum(_log_one_minus_tanh_sq(v) for v in free) + sticks
+    got = transform.log_abs_det_jacobian(x, y).item()
+    assert math.isclose(got, want, rel_tol=1e-11), (got, want)
