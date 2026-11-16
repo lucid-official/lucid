@@ -164,6 +164,24 @@ def test_sinc_is_spherical_bessel_j0_at_pi_x(device: str, dtype: lucid.dtype) ->
 
 
 @pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+def test_sinc_matches_the_closed_form(device: str, dtype: lucid.dtype) -> None:
+    """``sin(pi x) / (pi x)`` in float64, 1e-8 to 40 and across the seam at ``pi x = 1`` (``x = 0.3183``).
+
+    The test above pins that ``sinc`` and ``spherical_bessel_j0`` are one body; this one is what the
+    body is: both would pass it together if the series were wrong.
+    """
+    mags = [1e-8 * (40.0 / 1e-8) ** (i / 79) for i in range(80)]
+    mags += [0.31, 0.3183, 0.31830988, 0.31831, 0.3184, 0.32, 1.0, 2.0, 3.0]
+    xs = [s * m for m in mags for s in (1.0, -1.0)]
+    x = lucid.tensor(xs, dtype=dtype, device=device)
+    rel, atol = (2e-6, 2e-7) if dtype == lucid.float32 else (2e-13, 2e-15)
+    for xv, g in zip(x.tolist(), lucid.sinc(x).tolist(), strict=True):
+        u = math.pi * xv
+        want = math.sin(u) / u
+        assert abs(g - want) <= rel * abs(want) + atol, (xv, g, want)
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
 def test_sinc_special_values(device: str, dtype: lucid.dtype) -> None:
     x = lucid.tensor([0.0, -0.0, 1e-30, 1.0, -2.0, 3.0, INF, -INF, NAN], dtype=dtype, device=device)
     got = lucid.sinc(x).tolist()
