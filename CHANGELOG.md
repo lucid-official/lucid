@@ -343,6 +343,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - resample a bool mask as float32 (LCD-1020)
 
+- round a sum before a cancelling subtraction (LCD-1033)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

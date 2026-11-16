@@ -30,6 +30,7 @@
 #include "../../../core/Half.h"
 #include "../../MpsDtype.h"
 #include "../OpEmitter.h"
+#include "../_CancellingSums.h"
 #include "../_NanPropagation.h"
 #include "../_SignedZero.h"
 
@@ -116,19 +117,29 @@ public:
         const bool b_pos_zero = node.inputs.size() == 2 && is_pos_zero_splat(ctx, node.inputs[1]);
         const bool a_neg_zero = node.inputs.size() == 2 && is_neg_zero_splat(ctx, node.inputs[0]);
         const bool b_neg_zero = node.inputs.size() == 2 && is_neg_zero_splat(ctx, node.inputs[1]);
-        return emit_binary(ctx, node,
-                           [a_pos_zero, b_pos_zero, a_neg_zero,
-                            b_neg_zero](MPSGraph* g, MPSGraphTensor* a, MPSGraphTensor* b) {
-                               if (b_pos_zero)
-                                   return add_pos_zero(g, a, b);
-                               if (a_pos_zero)
-                                   return add_pos_zero(g, b, a);
-                               if (b_neg_zero)
-                                   return sub_pos_zero(g, a, zero_splat_like(g, b));
-                               if (a_neg_zero)
-                                   return sub_pos_zero(g, b, zero_splat_like(g, a));
-                               return [g additionWithPrimaryTensor:a secondaryTensor:b name:@"add"];
-                           });
+        const RoundingCommit commit = commit_before(ctx, node, Additive::Add);
+        const bool ok = emit_binary(ctx, node,
+                                    [a_pos_zero, b_pos_zero, a_neg_zero, b_neg_zero,
+                                     commit](MPSGraph* g, MPSGraphTensor* a, MPSGraphTensor* b) {
+                                        if (commit.lhs)
+                                            a = commit_rounding(g, a);
+                                        if (commit.rhs)
+                                            b = commit_rounding(g, b);
+                                        if (b_pos_zero)
+                                            return add_pos_zero(g, a, b);
+                                        if (a_pos_zero)
+                                            return add_pos_zero(g, b, a);
+                                        if (b_neg_zero)
+                                            return sub_pos_zero(g, a, zero_splat_like(g, b));
+                                        if (a_neg_zero)
+                                            return sub_pos_zero(g, b, zero_splat_like(g, a));
+                                        return [g additionWithPrimaryTensor:a
+                                                            secondaryTensor:b
+                                                                       name:@"add"];
+                                    });
+        if (ok)
+            record_additive(ctx, node, Additive::Add);
+        return ok;
     }
 };
 
@@ -139,21 +150,27 @@ public:
         const bool a_neg_zero = node.inputs.size() == 2 && is_neg_zero_splat(ctx, node.inputs[0]);
         const bool b_pos_zero = node.inputs.size() == 2 && is_pos_zero_splat(ctx, node.inputs[1]);
         const bool b_neg_zero = node.inputs.size() == 2 && is_neg_zero_splat(ctx, node.inputs[1]);
-        return emit_binary(ctx, node,
-                           [a_neg_zero, b_pos_zero, b_neg_zero](MPSGraph* g, MPSGraphTensor* a,
-                                                                MPSGraphTensor* b) {
-                               if (b_neg_zero)
-                                   return add_pos_zero(g, a, zero_splat_like(g, b));
-                               if (b_pos_zero)
-                                   return sub_pos_zero(g, a, b);
-                               if (a_neg_zero)
-                                   return [g
-                                       negativeWithTensor:sub_pos_zero(g, b, zero_splat_like(g, a))
-                                                     name:@"sub_from_neg_zero"];
-                               return [g subtractionWithPrimaryTensor:a
-                                                      secondaryTensor:b
-                                                                 name:@"sub"];
-                           });
+        const RoundingCommit commit = commit_before(ctx, node, Additive::Sub);
+        const bool ok = emit_binary(
+            ctx, node,
+            [a_neg_zero, b_pos_zero, b_neg_zero, commit](MPSGraph* g, MPSGraphTensor* a,
+                                                         MPSGraphTensor* b) {
+                if (commit.lhs)
+                    a = commit_rounding(g, a);
+                if (commit.rhs)
+                    b = commit_rounding(g, b);
+                if (b_neg_zero)
+                    return add_pos_zero(g, a, zero_splat_like(g, b));
+                if (b_pos_zero)
+                    return sub_pos_zero(g, a, b);
+                if (a_neg_zero)
+                    return [g negativeWithTensor:sub_pos_zero(g, b, zero_splat_like(g, a))
+                                            name:@"sub_from_neg_zero"];
+                return [g subtractionWithPrimaryTensor:a secondaryTensor:b name:@"sub"];
+            });
+        if (ok)
+            record_additive(ctx, node, Additive::Sub);
+        return ok;
     }
 };
 
