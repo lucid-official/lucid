@@ -141,8 +141,7 @@ def _power_operands(
     the mask), and the engine sees two bool tensors either way, so the check is
     here; a number exponent costs one type test and no dtype read.
     """
-    base_impl = _promotion.try_unwrap(base)
-    if inplace and base_impl is not None:
+    if inplace and (base_impl := _promotion.try_unwrap(base)) is not None:
         _promotion.check_pow_scalar(base_impl.dtype, exponent)
     a, b = _binary_operands(base, exponent, inplace=inplace)
     if (

@@ -460,6 +460,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - the bool pow check costs one dtype read (LCD-1020)
 
+- pow unwraps the base only for the in-place check (LCD-1020)
+
 ### Tooling
 
 - record that 1055fa3b9 moves no binary interface
