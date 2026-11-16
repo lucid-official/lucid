@@ -13,6 +13,7 @@ with eager bit for bit over 4096 float32 pairs spread across eight decades; befo
 the fix 1400 .. 4096 of them differed, by up to the whole error term.
 """
 
+import platform
 import warnings
 from collections.abc import Callable
 
@@ -146,11 +147,14 @@ def _is_eager(fn: _Fn, args: list[lucid.Tensor]) -> bool:
 
 
 # What the guard does not reach.  Each is a strict xfail: it passes the day the
-# mechanism is closed, and the XPASS says so.
+# mechanism is closed, and the XPASS says so.  The identity-based cases depend on
+# MPSGraph's simplifier, which folds them from macOS 27 on (the hosted runner's
+# macOS 26 does not, so they pass there): strict only where the fold happens.
+_SIMPLIFIER_FOLDS = int((platform.mac_ver()[0] or "0").split(".")[0]) >= 27
 
 
 @pytest.mark.xfail(
-    strict=True,
+    strict=_SIMPLIFIER_FOLDS,
     reason="LCD-1033 follow-up: operands are matched by graph-tensor identity, so a term that is "
     "recomputed (two `a * 4097` nodes) rather than reused is not seen to cancel before MPSGraph "
     "merges them",
@@ -163,7 +167,7 @@ def test_a_term_recomputed_rather_than_reused_is_not_yet_seen(device_gpu_only: s
 
 
 @pytest.mark.xfail(
-    strict=True,
+    strict=_SIMPLIFIER_FOLDS,
     reason="LCD-1033 follow-up: a sum computed twice (two add nodes) is two tensors to the guard "
     "and one after MPSGraph's CSE, so `((a + b) + c) - (a + b)` is cancelled",
 )
@@ -175,7 +179,7 @@ def test_a_sum_recomputed_rather_than_reused_is_not_yet_seen(device_gpu_only: st
 
 
 @pytest.mark.xfail(
-    strict=True,
+    strict=_SIMPLIFIER_FOLDS,
     reason="LCD-1033 follow-up: a moves-only op (reshape, detach, a full slice) between the sum "
     "and the subtraction binds a new tensor, so the operands stop matching by identity while "
     "MPSGraph still sees through the view",
@@ -198,7 +202,7 @@ def test_a_sum_seen_through_a_view_is_not_yet_guarded(
 
 
 @pytest.mark.xfail(
-    strict=True,
+    strict=_SIMPLIFIER_FOLDS,
     reason="LCD-1033 follow-up: the commit is emitted for float16 / bfloat16 but Lucid's half "
     "pipeline keeps a fused elementwise chain's intermediates at float32 and rounds once, so "
     "`(a + 1) - 1` compiled is `a` where eager rounds the sum to half",
@@ -215,7 +219,7 @@ def test_a_half_precision_sum_is_not_yet_rounded_before_the_subtraction(
 
 
 @pytest.mark.xfail(
-    strict=True,
+    strict=_SIMPLIFIER_FOLDS,
     reason="LCD-1033 follow-up: is_floating_point excludes complex64, so an add / sub of complex "
     "values is neither recorded nor committed and `(z + w) - z` is cancelled",
 )
