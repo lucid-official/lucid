@@ -12,10 +12,17 @@ from typing import Self, override
 import lucid
 import lucid.autograd
 from lucid._tensor.tensor import Tensor
+from lucid.distributions._student_math import (
+    _digamma_half_gap,
+    _gamma_half_excess,
+    _student_exponent,
+)
 from lucid.distributions._util import _as_tensor
 from lucid.distributions._util import _broadcast_pair
 from lucid.distributions.constraints import Constraint, positive, real
 from lucid.distributions.distribution import Distribution
+
+_HALF_LOG_2PI = 0.5 * math.log(2.0 * math.pi)
 
 
 class StudentT(Distribution):
@@ -299,6 +306,13 @@ class StudentT(Distribution):
 
         where :math:`z = (x - \mu) / \sigma`.
 
+        The :math:`\log\Gamma` difference and the :math:`\log(1 + z^2/\nu)`
+        term are evaluated without cancelling, so the density, and its
+        gradients in ``df``, ``loc``, ``scale`` and ``value``, hold to a few
+        ulp for any :math:`\nu` from ``1e-3`` to ``1e30`` and beyond.  As
+        :math:`\nu \to \infty` it tends to the Normal log-density, which
+        is also the answer at ``df = inf``.
+
         Parameters
         ----------
         value : Tensor
@@ -316,13 +330,17 @@ class StudentT(Distribution):
         tensor(-1.145)
         """
         z = (value - self.loc) / self.scale
-        return (
-            lucid.lgamma((self.df + 1.0) * 0.5)
-            - lucid.lgamma(self.df * 0.5)
-            - 0.5 * (math.pi * self.df).log()
+        # lgamma((df+1)/2) - lgamma(df/2) - log(pi df)/2 is one quantity,
+        # E(df/2) - log(2 pi)/2 (E = the gamma ratio's excess over sqrt(df/2));
+        # taken apart each lgamma of a large df is the whole answer plus its
+        # rounding.  _student_math owns both cancelling groups.
+        out = (
+            _gamma_half_excess(self.df * 0.5)
+            - _HALF_LOG_2PI
             - self.scale.log()
-            - 0.5 * (self.df + 1.0) * (1.0 + z * z / self.df).log()
+            - _student_exponent(self.df, z)
         )
+        return lucid.where(self.df > 0.0, out, float("nan"))
 
     @override
     def entropy(self) -> Tensor:
@@ -353,17 +371,15 @@ class StudentT(Distribution):
         >>> StudentT(df=1.0, loc=0.0, scale=1.0).entropy()  # Cauchy: log(4π) ≈ 2.531
         tensor(2.531)
         """
-        # H = log(scale·sqrt(df)·B(0.5, df/2)) + (df+1)/2 · (digamma((df+1)/2) − digamma(df/2)).
-        # ``log Γ(½)`` is a Python constant: as a host tensor it could not meet
-        # a Metal ``df``.
-        beta_term = (
-            math.lgamma(0.5) + lucid.lgamma(self.df * 0.5) - lucid.lgamma((self.df + 1.0) * 0.5)
-        )
-        return (
+        # H = log(scale sqrt(df) B(1/2, df/2)) + (df+1)/2 (digamma((df+1)/2) - digamma(df/2)),
+        # with a = df/2:  log(scale) + log(2 pi)/2 - E(a) + (a + 1/2) F(a), the
+        # gamma ratio's excess E and the digamma gap F of _student_math; their
+        # textbook forms subtract two large numbers and are garbage for large df.
+        a = self.df * 0.5
+        out = (
             self.scale.log()
-            + 0.5 * self.df.log()
-            + beta_term
-            + (self.df + 1.0)
-            * 0.5
-            * (lucid.digamma((self.df + 1.0) * 0.5) - lucid.digamma(self.df * 0.5))
+            + _HALF_LOG_2PI
+            - _gamma_half_excess(a)
+            + (a + 0.5) * _digamma_half_gap(a)
         )
+        return lucid.where(self.df > 0.0, out, float("nan"))

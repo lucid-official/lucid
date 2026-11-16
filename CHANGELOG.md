@@ -351,6 +351,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - number params follow the tensor dtype (LCD-1040)
 
+- StudentT range-safe in df (LCD-1037)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
