@@ -197,7 +197,8 @@ def refuse_bool(op: str, *operands: object, role: str = "") -> None:
         The class :func:`bool_refusal` builds for ``op``.
     """
     for operand in operands:
-        if is_bool(operand):
+        impl = _promotion.try_unwrap(operand)
+        if impl is not None and impl.dtype.value == BOOL_CODE:
             raise bool_refusal(op, role)
 
 
@@ -227,37 +228,6 @@ def refuse_all_bool(op: str, *operands: object) -> None:
         raise bool_refusal(op)
 
 
-def refuse_bool_power(op: str, exponent: object, base: _C_engine.TensorImpl) -> None:
-    """Raise ``op``'s refusal for a power that computes in bool beside a tensor exponent.
-
-    The reference has no kernel for a bool raised to a bool *tensor* (nor for
-    a bool number raised to one), yet raises a bool tensor to a Python number:
-    ``mask ** True`` is the mask, ``mask ** 2`` an integer tensor.  Which of
-    the two a call is depends on the exponent's form, which the engine never
-    sees -- it gets two bool tensors either way -- so the entries of ``pow``
-    call this after promoting the operands, with the exponent as the caller
-    wrote it and the base as promoted beside it.  A number exponent costs one
-    type test, and no dtype is read.
-
-    Parameters
-    ----------
-    op : str
-        ``"pow"`` or ``"pow_"``; the in-place twin keeps its name in the message.
-    exponent : object
-        The exponent as written: a tensor, or a number (which never refuses).
-    base : TensorImpl
-        The base operand after promotion.  It is bool exactly when the pair
-        met at bool, that is when a bool exponent met a bool base.
-
-    Raises
-    ------
-    RuntimeError
-        The class :func:`bool_refusal` builds for ``op``.
-    """
-    if is_bool(exponent) and base.dtype.value == BOOL_CODE:
-        raise bool_refusal(op)
-
-
 __all__ = [
     "BOOL_CODE",
     "BOOL_REFUSED",
@@ -266,5 +236,4 @@ __all__ = [
     "is_bool",
     "refuse_all_bool",
     "refuse_bool",
-    "refuse_bool_power",
 ]

@@ -458,6 +458,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - upload into an MLX-owned buffer, pack in place (LCD-1012)
 
+- the bool pow check costs one dtype read (LCD-1020)
+
 ### Tooling
 
 - record that 1055fa3b9 moves no binary interface

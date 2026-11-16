@@ -27,7 +27,7 @@ from lucid._dispatch import (
     _unwrap_or_scalar,
 )
 from lucid._dtype import _ENGINE_TO_DTYPE
-from lucid._ops._bool_refusal import bool_refusal, refuse_bool_power
+from lucid._ops._bool_refusal import BOOL_CODE, bool_refusal, is_bool
 from lucid._ops._dims import (
     _dim_size,
     _kept_sizes,
@@ -136,14 +136,21 @@ def _power_operands(
     The one operand path behind ``pow``, ``pow_`` and the three power
     operators (``**``, its reflected and in-place forms): promotion through
     :func:`~lucid._dispatch._binary_operands`, an exponent the in-place form
-    cannot hold refused, and a bool power refused where the reference refuses
-    it (:func:`~lucid._ops._bool_refusal.refuse_bool_power`).
+    cannot hold refused, and a bool raised to a bool *tensor* refused as the
+    reference refuses it.  A bool raised to a number answers (``mask ** True`` is
+    the mask), and the engine sees two bool tensors either way, so the check is
+    here; a number exponent costs one type test and no dtype read.
     """
     base_impl = _promotion.try_unwrap(base)
     if inplace and base_impl is not None:
         _promotion.check_pow_scalar(base_impl.dtype, exponent)
     a, b = _binary_operands(base, exponent, inplace=inplace)
-    refuse_bool_power("pow_" if inplace else "pow", exponent, a)
+    if (
+        not isinstance(exponent, _promotion.NUMBER)
+        and a.dtype.value == BOOL_CODE
+        and is_bool(exponent)
+    ):
+        raise bool_refusal("pow_" if inplace else "pow")
     return a, b
 
 
