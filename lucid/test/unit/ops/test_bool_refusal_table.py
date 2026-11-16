@@ -374,7 +374,82 @@ _TABLE: dict[str, _Row] = {
             m.reshape(1, 1, 2, 3), t[:1].float(), t[:1].float(), training=False
         ),
     ),
+    # The GEMM and convolution kernels have no bool instantiation in the reference (LCD-1025);
+    # Metal used to answer with MLX's own error for these.
+    "linear": _kernel("linear", lambda fw, t, m: fw.nn.functional.linear(m, m)),
+    # A float input beside a bool weight: the reference reports the mismatch first.
+    "linear-weight": _refused("linear", lambda fw, t, m: fw.nn.functional.linear(m.float(), m)),
+    "bilinear": _kernel(
+        "bilinear_layer",
+        lambda fw, t, m: fw.nn.functional.bilinear(
+            t.reshape(2, 2), t.reshape(2, 2), t.reshape(1, 2, 2)
+        ),
+    ),
+    "conv1d": _kernel(
+        "conv1d",
+        lambda fw, t, m: fw.nn.functional.conv1d(t.reshape(1, 1, 4), t[:2].reshape(1, 1, 2)),
+    ),
+    "conv2d": _kernel(
+        "conv2d",
+        lambda fw, t, m: fw.nn.functional.conv2d(m.reshape(1, 1, 2, 3), t.reshape(1, 1, 2, 2)),
+    ),
+    "conv3d": _kernel(
+        "conv3d",
+        lambda fw, t, m: fw.nn.functional.conv3d(
+            t.reshape(1, 1, 1, 2, 2), t[:1].reshape(1, 1, 1, 1, 1)
+        ),
+    ),
+    "conv_transpose1d": _kernel(
+        "conv_transpose1d",
+        lambda fw, t, m: fw.nn.functional.conv_transpose1d(
+            t.reshape(1, 1, 4), t[:2].reshape(1, 1, 2)
+        ),
+    ),
+    "conv_transpose2d": _kernel(
+        "conv_transpose2d",
+        lambda fw, t, m: fw.nn.functional.conv_transpose2d(
+            m.reshape(1, 1, 2, 3), t.reshape(1, 1, 2, 2)
+        ),
+    ),
+    "conv_transpose3d": _kernel(
+        "conv_transpose3d",
+        lambda fw, t, m: fw.nn.functional.conv_transpose3d(
+            t.reshape(1, 1, 1, 2, 2), t[:1].reshape(1, 1, 1, 1, 1)
+        ),
+    ),
+    # Dropout draws a mask in the input's dtype; the reference refuses a bool at its dtype guard
+    # (LCD-1025).  Nothing is drawn in eval or at ``p == 0``, and those still answer.
+    "dropout": _guard("dropout", lambda fw, t, m: fw.nn.functional.dropout(t)),
+    "dropout-module": _guard("dropout", lambda fw, t, m: fw.nn.Dropout()(t)),
+    "dropout-inplace": _guard(
+        "dropout", lambda fw, t, m: fw.nn.functional.dropout(t.clone(), inplace=True)
+    ),
+    "dropout1d": _guard(
+        "dropoutnd", lambda fw, t, m: fw.nn.functional.dropout1d(t.reshape(1, 2, 2))
+    ),
+    "dropout1d-module": _guard("dropoutnd", lambda fw, t, m: fw.nn.Dropout1d()(t.reshape(1, 2, 2))),
+    "dropout2d": _guard(
+        "dropoutnd", lambda fw, t, m: fw.nn.functional.dropout2d(t.reshape(1, 1, 2, 2))
+    ),
+    "dropout2d-module": _guard(
+        "dropoutnd", lambda fw, t, m: fw.nn.Dropout2d()(t.reshape(1, 1, 2, 2))
+    ),
+    "dropout3d": _guard(
+        "dropoutnd", lambda fw, t, m: fw.nn.functional.dropout3d(t.reshape(1, 1, 1, 2, 2))
+    ),
+    "dropout3d-module": _guard(
+        "dropoutnd", lambda fw, t, m: fw.nn.Dropout3d()(t.reshape(1, 1, 1, 2, 2))
+    ),
+    "alpha_dropout": _guard(
+        "alpha_dropout", lambda fw, t, m: fw.nn.functional.alpha_dropout(t, training=True)
+    ),
+    "alpha_dropout-module": _guard("alpha_dropout", lambda fw, t, m: fw.nn.AlphaDropout()(t)),
     # ── what the reference answers, and so does Lucid ────────────────────────
+    "dropout-eval": _accepted(lambda fw, t, m: fw.nn.functional.dropout(t, training=False)),
+    "dropout-p0": _accepted(lambda fw, t, m: fw.nn.functional.dropout(t, p=0.0)),
+    "dropout2d-eval": _accepted(
+        lambda fw, t, m: fw.nn.functional.dropout2d(t.reshape(1, 1, 2, 2), training=False)
+    ),
     "mean-dtype": _accepted(lambda fw, t, m: fw.mean(t, dtype=fw.float32)),
     "mean-dim-dtype": _accepted(lambda fw, t, m: fw.mean(m, dim=1, dtype=fw.float32)),
     "softmax-dtype": _accepted(lambda fw, t, m: fw.softmax(t, 0, dtype=fw.float32)),
@@ -568,6 +643,7 @@ _IN_PLACE: dict[str, Callable[[lucid.Tensor], object]] = {
     "threshold_": lambda t: lucid.nn.functional.threshold_(t, 0.1, 20.0),
     "celu_": lambda t: lucid.nn.functional.celu_(t),
     "rrelu_": lambda t: lucid.nn.functional.rrelu_(t),
+    "dropout-inplace": lambda t: lucid.nn.functional.dropout(t, inplace=True),
 }
 
 

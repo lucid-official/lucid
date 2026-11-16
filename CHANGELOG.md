@@ -347,6 +347,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - guard C - (C - x); pin the unguarded cases (LCD-1033)
 
+- refuse a bool in linear, conv and dropout (LCD-1025)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

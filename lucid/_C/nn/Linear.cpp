@@ -37,7 +37,14 @@
 
 namespace lucid {
 
-const OpSchema LinearBackward::schema_v1{"linear", 1, AmpPolicy::Promote, true};
+// The reference has no bool kernel for the GEMM (``NotImplementedError``).  It
+// answers integers where this op does not (the CPU kernel and MLX's matmul are
+// floating-only), so the cast the message offers is the one Lucid answers: a
+// float.  MLX's own "only inexact types" error never reaches the caller on
+// Metal, because the guard stops the call first.
+const OpSchema LinearBackward::schema_v1 =
+    OpSchema{"linear", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                  BoolCast::Floating);
 
 namespace {
 

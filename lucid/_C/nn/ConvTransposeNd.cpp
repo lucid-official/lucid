@@ -36,12 +36,22 @@
 
 namespace lucid {
 
+// The reference has no bool transposed-convolution kernel in any dimension
+// (``NotImplementedError``).  It answers int64 only, and this op answers no
+// integer (the CPU kernel and MLX's conv are floating-only), so the message
+// offers a float.
 template <>
-const OpSchema ConvTranspose1dBackward::schema_v1{"conv_transpose1d", 1, AmpPolicy::Promote, true};
+const OpSchema ConvTranspose1dBackward::schema_v1 =
+    OpSchema{"conv_transpose1d", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                            BoolCast::Floating);
 template <>
-const OpSchema ConvTranspose2dBackward::schema_v1{"conv_transpose2d", 1, AmpPolicy::Promote, true};
+const OpSchema ConvTranspose2dBackward::schema_v1 =
+    OpSchema{"conv_transpose2d", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                            BoolCast::Floating);
 template <>
-const OpSchema ConvTranspose3dBackward::schema_v1{"conv_transpose3d", 1, AmpPolicy::Promote, true};
+const OpSchema ConvTranspose3dBackward::schema_v1 =
+    OpSchema{"conv_transpose3d", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                            BoolCast::Floating);
 
 namespace {
 

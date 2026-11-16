@@ -23,14 +23,6 @@
         "cpu"
       ]
     },
-    "F.bilinear": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
-      "devices": [
-        "metal"
-      ]
-    },
     "F.binary_cross_entropy": {
       "kind": "non-runtime",
       "owner": "out-of-batch",
@@ -41,54 +33,6 @@
       "owner": "out-of-batch",
       "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
     },
-    "F.conv1d": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
-      "devices": [
-        "metal"
-      ]
-    },
-    "F.conv2d": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
-      "devices": [
-        "metal"
-      ]
-    },
-    "F.conv3d": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
-      "devices": [
-        "metal"
-      ]
-    },
-    "F.conv_transpose1d": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
-      "devices": [
-        "metal"
-      ]
-    },
-    "F.conv_transpose2d": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
-      "devices": [
-        "metal"
-      ]
-    },
-    "F.conv_transpose3d": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
-      "devices": [
-        "metal"
-      ]
-    },
     "F.cross_entropy": {
       "kind": "non-runtime",
       "owner": "out-of-batch",
@@ -98,26 +42,6 @@
       "kind": "non-runtime",
       "owner": "out-of-batch",
       "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.dropout": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "the Bernoulli-mask dtype check raises NotImplementedError for a bool input where the reference's dtype guard raises RuntimeError; measured once preserved_globals stopped leaking determinism into the survey (LCD-1020)"
-    },
-    "F.dropout1d": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "the Bernoulli-mask dtype check raises NotImplementedError for a bool input where the reference's dtype guard raises RuntimeError; measured once preserved_globals stopped leaking determinism into the survey (LCD-1020)"
-    },
-    "F.dropout2d": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "the Bernoulli-mask dtype check raises NotImplementedError for a bool input where the reference's dtype guard raises RuntimeError; measured once preserved_globals stopped leaking determinism into the survey (LCD-1020)"
-    },
-    "F.dropout3d": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "the Bernoulli-mask dtype check raises NotImplementedError for a bool input where the reference's dtype guard raises RuntimeError; measured once preserved_globals stopped leaking determinism into the survey (LCD-1020)"
     },
     "F.embedding_bag": {
       "kind": "over-accept",
@@ -158,14 +82,6 @@
       "kind": "non-runtime",
       "owner": "out-of-batch",
       "reason": "the loss checks the dtype with a plain TypeError; the reference refuses with a RuntimeError or NotImplementedError"
-    },
-    "F.linear": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "Metal leaks the backend's InvalidArgument; the CPU already raises the reference's NotImplementedError",
-      "devices": [
-        "metal"
-      ]
     },
     "F.local_response_norm": {
       "kind": "over-accept",

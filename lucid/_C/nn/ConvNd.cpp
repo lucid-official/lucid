@@ -49,12 +49,23 @@
 
 namespace lucid {
 
+// The reference has no bool convolution kernel in any dimension
+// (``NotImplementedError``).  It answers integers where this op does not (the
+// CPU kernel and MLX's conv are floating-only), so the message offers a float.
+// The guard stops a bool before MLX can raise its own "floating point types"
+// error on Metal.
 template <>
-const OpSchema Conv1dBackward::schema_v1{"conv1d", 1, AmpPolicy::Promote, true};
+const OpSchema Conv1dBackward::schema_v1 =
+    OpSchema{"conv1d", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                  BoolCast::Floating);
 template <>
-const OpSchema Conv2dBackward::schema_v1{"conv2d", 1, AmpPolicy::Promote, true};
+const OpSchema Conv2dBackward::schema_v1 =
+    OpSchema{"conv2d", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                  BoolCast::Floating);
 template <>
-const OpSchema Conv3dBackward::schema_v1{"conv3d", 1, AmpPolicy::Promote, true};
+const OpSchema Conv3dBackward::schema_v1 =
+    OpSchema{"conv3d", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                  BoolCast::Floating);
 
 namespace {
 

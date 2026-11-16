@@ -27,6 +27,7 @@ import pytest
 
 import lucid
 from lucid._C import engine as _C_engine
+from lucid._dispatch import _wrap
 
 _NUMBER: Final = "an integer or floating dtype, e.g. x.long() or x.float()"
 _FLOATING: Final = "a floating dtype, e.g. x.float()"
@@ -76,6 +77,22 @@ _DECLARED: Final[dict[str, tuple[str, str]]] = {
     "batch_norm3d": (_KERNEL, _FLOATING),
     "batch_norm_eval": (_KERNEL, _FLOATING),
     "grid_sample": (_KERNEL, _FLOATING),
+    # The GEMM and convolution kernels (LCD-1025): no bool kernel in the reference.  It answers
+    # integers where Lucid does not, so the cast offered is the one Lucid answers: a float.
+    # Metal used to leak MLX's own error for these.
+    "linear": (_KERNEL, _FLOATING),
+    "bilinear_layer": (_KERNEL, _FLOATING),
+    "conv1d": (_KERNEL, _FLOATING),
+    "conv2d": (_KERNEL, _FLOATING),
+    "conv3d": (_KERNEL, _FLOATING),
+    "conv_transpose1d": (_KERNEL, _FLOATING),
+    "conv_transpose2d": (_KERNEL, _FLOATING),
+    "conv_transpose3d": (_KERNEL, _FLOATING),
+    # Dropout draws a ``1 / (1 - p)`` mask in the input's dtype; the reference refuses a bool at its
+    # dtype guard (LCD-1025), where the mask sampler's own error was a ``NotImplementedError``.
+    "dropout": (_GUARD, _FLOATING),
+    "dropoutnd": (_GUARD, _FLOATING),
+    "alpha_dropout": (_GUARD, _FLOATING),
 }
 
 #: Ops that refuse bool and that no ``LUCID_REGISTER_OP`` publishes, so the registry does not list
@@ -93,6 +110,34 @@ _Make = Callable[..., object]
 _Call = Callable[[_Make, _Make], object]
 
 _E: Final = _C_engine
+
+#: The GEMM and convolution ops (LCD-1025) with their operands' shapes, input first and bias last
+#: (``bilinear_layer`` has a second input before the weight).
+_LAYER_OPS: Final[dict[str, tuple[Callable[..., object], tuple[tuple[int, ...], ...]]]] = {
+    "linear": (_E.nn.linear, ((2, 3), (4, 3), (4,))),
+    "bilinear_layer": (_E.nn.bilinear_layer, ((2, 3), (2, 4), (5, 3, 4), (5,))),
+    "conv1d": (_E.nn.conv1d, ((1, 1, 4), (1, 1, 2), (1,))),
+    "conv2d": (_E.nn.conv2d, ((1, 1, 4, 4), (1, 1, 2, 2), (1,))),
+    "conv3d": (_E.nn.conv3d, ((1, 1, 3, 3, 3), (1, 1, 2, 2, 2), (1,))),
+    "conv_transpose1d": (_E.nn.conv_transpose1d, ((1, 1, 4), (1, 1, 2), (1,))),
+    "conv_transpose2d": (_E.nn.conv_transpose2d, ((1, 1, 4, 4), (1, 1, 2, 2), (1,))),
+    "conv_transpose3d": (_E.nn.conv_transpose3d, ((1, 1, 3, 3, 3), (1, 1, 2, 2, 2), (1,))),
+}
+
+
+def _layer_call(name: str) -> _Call:
+    """``name`` called with every operand built in the dtype under test."""
+    fn, shapes = _LAYER_OPS[name]
+    return lambda x, real: fn(*(x(*shape) for shape in shapes))
+
+
+def _layer_call_with_one(name: str, position: int) -> _Call:
+    """``name`` called with the operand at ``position`` in the dtype under test, the rest float32."""
+    fn, shapes = _LAYER_OPS[name]
+    return lambda x, real: fn(
+        *((x if at == position else real)(*shape) for at, shape in enumerate(shapes))
+    )
+
 
 _CALLS: Final[dict[str, _Call]] = {
     "abs": lambda x, real: _E.abs(x(3)),
@@ -131,6 +176,24 @@ _CALLS: Final[dict[str, _Call]] = {
         x(2, 3, 4, 4), real(3), real(3), real(3), real(3), 1e-5
     ),
     "grid_sample": lambda x, real: _E.nn.grid_sample(x(1, 1, 4, 4), real(1, 2, 2, 2), 0, 0, False),
+    # The layer ops: every operand is built in the dtype under test (``_LAYER_OPS``).
+    **{name: _layer_call(name) for name in _LAYER_OPS},
+    # A seeded generator: the draw needs one under ``set_deterministic(True)``, which a sweep in the
+    # same process can leave on.  A bool is refused before the draw (and before that check).
+    "dropout": lambda x, real: _E.nn.dropout(x(2, 3), 0.5, True, _E.Generator(0)),
+    "dropoutnd": lambda x, real: _E.nn.dropoutnd(x(2, 3, 4), 0.5, True, _E.Generator(0)),
+    "alpha_dropout": lambda x, real: _E.nn.alpha_dropout(x(2, 3), 0.5, True, _E.Generator(0)),
+}
+
+#: The dropout ops with nothing to drop (``training=False``, or ``p == 0``): the input comes back as
+#: it is, so a bool is answered, as the reference answers it.
+_PASS_THROUGH: Final[dict[str, Callable[[object], object]]] = {
+    "dropout-eval": lambda a: _E.nn.dropout(a, 0.5, False),
+    "dropout-p0": lambda a: _E.nn.dropout(a, 0.0, True),
+    "dropoutnd-eval": lambda a: _E.nn.dropoutnd(a, 0.5, False),
+    "dropoutnd-p0": lambda a: _E.nn.dropoutnd(a, 0.0, True),
+    "alpha_dropout-eval": lambda a: _E.nn.alpha_dropout(a, 0.5, False),
+    "alpha_dropout-p0": lambda a: _E.nn.alpha_dropout(a, 0.0, True),
 }
 
 _ALL: Final = {**_DECLARED, **_UNREGISTERED}
@@ -251,6 +314,62 @@ def test_a_transposed_bool_is_refused(device: str) -> None:
         _E.abs(mask._impl)
     with pytest.raises(_C_engine.DtypeMismatch):
         _E.relu(mask._impl)
+
+
+def _layer_positions() -> list[tuple[str, int]]:
+    return [
+        (name, at) for name, (_, shapes) in sorted(_LAYER_OPS.items()) for at in range(len(shapes))
+    ]
+
+
+@pytest.mark.parametrize(("name", "position"), _layer_positions())
+def test_a_bool_operand_in_any_position_of_a_layer_op_is_refused(
+    name: str, position: int, device: str
+) -> None:
+    # Every operand of a layer op goes through the schema's guard (``promote_for_schema``), so a
+    # bool weight or bias is refused as a bool input is, before the operands' dtypes are compared.
+    # The reference reports a dtype mismatch for a bool beside a float (a plain ``RuntimeError``);
+    # the same departure ``grid_sample`` has for a bool grid.  The cast the message offers repairs it.
+    call = _layer_call_with_one(name, position)
+    with pytest.raises(RuntimeError) as caught:
+        call(_builder(lucid.bool_, device), _builder(lucid.float32, device))
+    assert type(caught.value) is _C_engine.NotImplementedError, (name, type(caught.value).__mro__)
+    assert f"{name} does not accept bool" in str(caught.value)
+
+
+def _bool(device: str, *shape: int) -> object:
+    return lucid.ones(*shape, dtype=lucid.bool_, device=device)._impl
+
+
+def test_the_layer_refusal_does_not_depend_on_the_layout(device: str) -> None:
+    # The guard reads the dtype and nothing else: an empty batch, a 1-d input and a transposed
+    # (non-contiguous) one are refused like any other.  The reference answers the empty batch with an
+    # empty result; the refusal here is the one that was there before, now with the declared class.
+    weight, bias = _bool(device, 4, 3), _bool(device, 4)
+    transposed = lucid.ones(3, 2, dtype=lucid.bool_, device=device).T
+    assert not transposed.is_contiguous()
+    for x in (_bool(device, 0, 3), _bool(device, 3), transposed._impl):
+        with pytest.raises(_C_engine.NotImplementedError, match="linear does not accept bool"):
+            _E.nn.linear(x, weight, bias)
+
+
+def test_the_dropout_refusal_does_not_depend_on_the_layout(device: str) -> None:
+    # The same for the draw: an empty tensor and a transposed one are refused, with the guard class.
+    transposed = lucid.ones(4, 2, dtype=lucid.bool_, device=device).T
+    assert not transposed.is_contiguous()
+    for x in (_bool(device, 0, 4), transposed._impl):
+        with pytest.raises(_C_engine.DtypeMismatch, match="dropout does not accept bool"):
+            _E.nn.dropout(x, 0.5, True, _E.Generator(0))
+
+
+@pytest.mark.parametrize("name", sorted(_PASS_THROUGH))
+def test_a_dropout_with_nothing_to_drop_answers_a_bool(name: str, device: str) -> None:
+    # The refusal is the draw's: ``training=False`` and ``p == 0`` return the input untouched
+    # (the reference does too), and a guard built at the entry would refuse them as well.
+    mask = lucid.tensor([[True, False, True], [False, True, True]], device=device)
+    out = _wrap(_PASS_THROUGH[name](mask._impl))
+    assert out.dtype == lucid.bool_
+    assert out.tolist() == mask.tolist()
 
 
 # ── what still answers ───────────────────────────────────────────────────────

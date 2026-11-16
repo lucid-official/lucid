@@ -87,7 +87,13 @@ TensorImplPtr rotate_op(const TensorImplPtr& input, double angle_deg, double cy,
     return out;
 }
 
-const OpSchema BilinearLayerBackward::schema_v1{"bilinear_layer", 1, AmpPolicy::Promote, true};
+// The reference has no bool ``bmm`` (``NotImplementedError``).  It answers
+// integers where this op does not (the CPU kernel and MLX's matmul are
+// floating-only), so the message offers a float.  ``promote_for_schema`` builds
+// a ``SchemaGuard`` per operand, so the refusal needs no line of its own here.
+const OpSchema BilinearLayerBackward::schema_v1 =
+    OpSchema{"bilinear_layer", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
+                                                                          BoolCast::Floating);
 
 namespace {
 
