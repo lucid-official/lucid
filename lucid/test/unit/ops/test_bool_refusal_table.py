@@ -90,7 +90,7 @@ def _accepted(call: _Call) -> _Row:
 # raises for a bool *input*, the ``nn.functional`` call and the ``nn`` module's, on the bool vector
 # ``t`` and matrix ``m`` (a class label is ``t[:2].long()``).  The reference words a bool *target*
 # beside a floating input as a dtype mismatch, a plain ``RuntimeError``, whatever the input's
-# class: the ``-target`` rows further down pin those, where Lucid's class is the loss's own.
+# class: the ``-target`` rows further down pin those, and Lucid raises that class for them too.
 _LossCalls = tuple[Kind, _Call, _Call]
 
 _LOSSES: dict[str, _LossCalls] = {
@@ -436,22 +436,74 @@ _TABLE: dict[str, _Row] = {
     ),
     # ── losses, and the other ops that refused a bool with a plain TypeError (LCD-1024) ─
     **_loss_rows(),
-    # A bool target: the reference's dtype-mismatch RuntimeError, whichever the loss's own class;
-    # a class label that is bool is told to be an integer, not a float.
-    "cross_entropy-target": _refused(
+    # A bool target, label or var beside a floating input: the reference's plain dtype-mismatch
+    # RuntimeError in every loss, whichever class the loss gives a bool *input* (``guard`` fails a
+    # NotImplementedError).  A bool class label is told to be an integer, not a float (below).
+    "binary_cross_entropy-target": _guard(
+        "binary_cross_entropy", lambda fw, t, m: fw.nn.functional.binary_cross_entropy(t.float(), t)
+    ),
+    "binary_cross_entropy_with_logits-target": _guard(
+        "binary_cross_entropy_with_logits",
+        lambda fw, t, m: fw.nn.functional.binary_cross_entropy_with_logits(t.float(), t),
+    ),
+    "cross_entropy-target": _guard(
         "cross_entropy", lambda fw, t, m: fw.nn.functional.cross_entropy(m.float(), t[:2])
     ),
-    "cross_entropy-probabilities": _refused(
+    "cross_entropy-probabilities": _guard(
         "cross_entropy", lambda fw, t, m: fw.nn.functional.cross_entropy(m.float(), m)
     ),
-    "nll_loss-target": _refused(
+    "nll_loss-target": _guard(
         "nll_loss", lambda fw, t, m: fw.nn.functional.nll_loss(m.float(), t[:2])
     ),
-    "kl_div-target": _refused("kl_div", lambda fw, t, m: fw.nn.functional.kl_div(t.float(), t)),
-    "l1_loss-target": _refused("l1_loss", lambda fw, t, m: fw.nn.functional.l1_loss(t.float(), t)),
-    "gaussian_nll_loss-var": _refused(
+    "multi_margin_loss-target": _guard(
+        "multi_margin_loss", lambda fw, t, m: fw.nn.functional.multi_margin_loss(m.float(), t[:2])
+    ),
+    "multilabel_margin_loss-target": _guard(
+        "multilabel_margin_loss",
+        lambda fw, t, m: fw.nn.functional.multilabel_margin_loss(m.float(), m),
+    ),
+    "multilabel_soft_margin_loss-target": _guard(
+        "multilabel_soft_margin_loss",
+        lambda fw, t, m: fw.nn.functional.multilabel_soft_margin_loss(m.float(), m),
+    ),
+    "kl_div-target": _guard("kl_div", lambda fw, t, m: fw.nn.functional.kl_div(t.float(), t)),
+    "l1_loss-target": _guard("l1_loss", lambda fw, t, m: fw.nn.functional.l1_loss(t.float(), t)),
+    "margin_ranking_loss-target": _guard(
+        "margin_ranking_loss",
+        lambda fw, t, m: fw.nn.functional.margin_ranking_loss(t.float(), t.float(), t),
+    ),
+    "triplet_margin_loss-negative": _guard(
+        "triplet_margin_loss",
+        lambda fw, t, m: fw.nn.functional.triplet_margin_loss(m.float(), m.float(), m),
+    ),
+    "gaussian_nll_loss-var": _guard(
         "gaussian_nll_loss",
         lambda fw, t, m: fw.nn.functional.gaussian_nll_loss(t.float(), t.float(), t),
+    ),
+    # A bool *input* beside a floating target takes the class its loss gives one in the reference,
+    # which varies: these two are the kernel's NotImplementedError there.  ``binary_cross_entropy``
+    # and ``huber_loss`` are the kernel's class for an all-bool call but a dtype mismatch here, and
+    # the table has one class per loss, so Lucid raises the kernel's for them (both RuntimeError).
+    "binary_cross_entropy_with_logits-input": _kernel(
+        "binary_cross_entropy_with_logits",
+        lambda fw, t, m: fw.nn.functional.binary_cross_entropy_with_logits(t, t.float()),
+    ),
+    "multilabel_soft_margin_loss-input": _kernel(
+        "multilabel_soft_margin_loss",
+        lambda fw, t, m: fw.nn.functional.multilabel_soft_margin_loss(m, m.float()),
+    ),
+    # A bool beside an integer meets no floating operand: the kernel's class, as for two bools.
+    "mse_loss-integer": _kernel(
+        "mse_loss", lambda fw, t, m: fw.nn.functional.mse_loss(t, t.long())
+    ),
+    "mse_loss-integer-target": _kernel(
+        "mse_loss", lambda fw, t, m: fw.nn.functional.mse_loss(t.long(), t)
+    ),
+    "smooth_l1_loss-integer": _kernel(
+        "smooth_l1_loss", lambda fw, t, m: fw.nn.functional.smooth_l1_loss(t, t.long())
+    ),
+    "smooth_l1_loss-integer-target": _kernel(
+        "smooth_l1_loss", lambda fw, t, m: fw.nn.functional.smooth_l1_loss(t.long(), t)
     ),
     "rms_norm": _kernel("rms_norm", lambda fw, t, m: fw.nn.functional.rms_norm(t, (4,))),
     # An explicit ``eps`` skipped the ``finfo`` that refused the default one: the bool computed.
@@ -804,6 +856,26 @@ def test_every_loss_that_can_refuse_a_bool_has_a_row() -> None:
     } | _FLOATING_RESULT
     assert can_refuse == set(_LOSSES)
     assert set(_LOSSES) <= set(BOOL_REFUSED)
+
+
+@pytest.mark.parametrize(
+    ("name", "cast"),
+    [
+        ("cross_entropy-target", _INTEGER),
+        ("nll_loss-target", _INTEGER),
+        ("multi_margin_loss-target", _INTEGER),
+        ("cross_entropy-probabilities", _FLOATING),
+        ("kl_div-target", _FLOATING),
+    ],
+)
+def test_a_bool_target_is_told_the_cast_it_wants(device: str, name: str, cast: str) -> None:
+    # A class label is an integer, class probabilities and the other targets are floating.
+    t = lucid.tensor(_VECTOR, device=device)
+    m = lucid.tensor(_MATRIX, device=device)
+    with pytest.raises(RuntimeError) as caught:
+        _TABLE[name].call(lucid, t, m)
+    assert "a bool target" in str(caught.value)
+    assert f"cast to {cast}" in str(caught.value)
 
 
 def test_an_op_has_one_owner() -> None:

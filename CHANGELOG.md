@@ -361,6 +361,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - bool parity in losses, norms, vander and allclose (LCD-1024)
 
+- a bool loss target is a dtype mismatch (LCD-1024)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

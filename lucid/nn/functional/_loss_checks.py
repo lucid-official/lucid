@@ -389,6 +389,11 @@ _KINDS: dict[str, frozenset[str]] = {
     "index": frozenset({"integer"}),
 }
 
+#: The operands a loss compares its input against, by the names ``_check_kind`` is given.
+#: The reference refuses a bool one beside a floating input as a plain dtype mismatch, in
+#: every loss; a bool *input* is refused by the loss's kernel, whose class varies.
+_TARGETS: frozenset[str] = frozenset({"target", "var"})
+
 _DESCRIBE: dict[str, str] = {
     "floating": "a floating point",
     "real": "a floating point or integer (not bool)",
@@ -452,12 +457,15 @@ def _check_kind(t: Tensor, kind: str, what: str, op: str) -> None:
 
     A bool is refused as every op refuses one (``bool_refusal``: the
     reference's class, and a cast to name); any other dtype with a
-    ``TypeError`` that names it."""
+    ``TypeError`` that names it.  A bool *target* or ``var`` beside a floating
+    input is a dtype mismatch whatever the loss's own class (``_TARGETS``)."""
     found = _kind_of(t)
     if found in _KINDS[kind]:
         return
     if found == "bool":
-        raise bool_refusal(op, "" if what == "input" else what, index=kind == "index")
+        raise bool_refusal(
+            op, "" if what == "input" else what, index=kind == "index", mismatch=what in _TARGETS
+        )
     raise TypeError(f"{op}: expected {_DESCRIBE[kind]} {what}, got {t.dtype}")
 
 
@@ -490,7 +498,7 @@ def _check_dtypes(op: str, target: Tensor | None = None, **inputs: Tensor) -> No
         t.is_floating_point() for t in (*inputs.values(), target)
     ):
         operands = (*inputs.values(), target)
-        if all(_kind_of(t) == "bool" for t in operands):
+        if any(_kind_of(t) == "bool" for t in operands):
             raise bool_refusal(op)
         dtypes = ", ".join(str(t.dtype) for t in operands)
         raise TypeError(f"{op}: expected a floating point input or target, got {dtypes}")
@@ -559,7 +567,7 @@ def _check_cross_entropy_target(
     if not soft:
         _check_class_target(x, target, op)
     elif _kind_of(target) == "bool":
-        raise bool_refusal(op, "target")
+        raise bool_refusal(op, "target", mismatch=True)
     elif not target.is_floating_point():
         raise TypeError(
             f"{op}: a target of the input's shape holds class probabilities "

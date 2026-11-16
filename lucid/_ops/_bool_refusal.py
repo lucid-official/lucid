@@ -169,7 +169,9 @@ def engine_bool_refused() -> Mapping[str, tuple[type[RuntimeError], str]]:
     return MappingProxyType(refusals)
 
 
-def bool_refusal(op: str, role: str = "", *, index: bool = False) -> RuntimeError:
+def bool_refusal(
+    op: str, role: str = "", *, index: bool = False, mismatch: bool = False
+) -> RuntimeError:
     """The error ``op`` raises for a bool operand, for a call site to ``raise``.
 
     Parameters
@@ -183,6 +185,10 @@ def bool_refusal(op: str, role: str = "", *, index: bool = False) -> RuntimeErro
     index : bool, optional
         The operand is an index -- a class label -- so the cast to name is an
         integer one, whatever dtype the op computes in.
+    mismatch : bool, optional
+        The operand sits beside a floating one the op computes in (a loss's
+        target): the reference refuses that as a dtype mismatch, whatever
+        kernel class the op's row names, so the guard class is raised.
 
     Returns
     -------
@@ -192,6 +198,8 @@ def bool_refusal(op: str, role: str = "", *, index: bool = False) -> RuntimeErro
         that names the op and the cast to make.
     """
     error, cast = BOOL_REFUSED[op.removesuffix("_")]
+    if mismatch:
+        error = _GUARD
     if index:
         cast = _INTEGER
     what = f"a bool {role}" if role else "bool"
