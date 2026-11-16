@@ -553,12 +553,6 @@ def aminmax(input: Tensor, *, dim: int | None = None, keepdim: bool = False) -> 
     return _MinMax((lucid.min(input, axes, keepdim), lucid.max(input, axes, keepdim)))
 
 
-def _logaddexp_pair(a: Tensor, b: Tensor) -> Tensor:
-    m_raw = lucid.maximum(a, b)
-    m = lucid.where(lucid.isinf(m_raw), lucid.zeros_like(m_raw), m_raw)
-    return m + lucid.log(lucid.exp(a - m) + lucid.exp(b - m))
-
-
 def logcumsumexp(input: Tensor, dim: int) -> Tensor:
     r"""Return the logarithm of the cumulative sum of exponentials of ``input`` along ``dim``.
 
@@ -591,7 +585,7 @@ def logcumsumexp(input: Tensor, dim: int) -> Tensor:
     step = 1
     while step < n:
         head = acc.narrow(d, 0, step)
-        pair = _logaddexp_pair(acc.narrow(d, 0, n - step), acc.narrow(d, step, n - step))
+        pair = lucid.logaddexp(acc.narrow(d, 0, n - step), acc.narrow(d, step, n - step))
         acc = lucid.cat([head, pair], dim=d)
         step <<= 1
     return acc.to(input.dtype) if work_dt != input.dtype else acc

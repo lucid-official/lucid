@@ -1,7 +1,6 @@
-"""``sin(u) / u`` across its removable singularity, for
-``lucid.special.spherical_bessel_j0`` (LCD-1030).  ``lucid.sinc`` is the same
-function at ``u = pi x`` and still carries its own copy of this series in
-``elementwise.py``."""
+"""``sin(u) / u`` across its removable singularity: the one body behind
+``lucid.sinc`` (``u = pi x``) and ``lucid.special.spherical_bessel_j0``
+(``u = x``)."""
 
 import math
 from typing import TYPE_CHECKING

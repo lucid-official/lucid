@@ -27,6 +27,7 @@ from lucid._ops.composite._inverse_hyperbolic import _acosh, _asinh, _atanh
 from lucid._ops.composite._opmath import _nan_quiet_pick, _promote_pair, _real
 from lucid._ops.composite._pow2 import _copysign, _frexp, _ldexp_dtype, _ldexp_to, _signbit
 from lucid._ops.composite._shared import _is_tensor
+from lucid._ops.composite._sinc import _sin_over
 from lucid._types import Scalar, TensorOrScalar
 
 if TYPE_CHECKING:
@@ -701,13 +702,6 @@ def expm1(input: Tensor) -> Tensor:
     return _expm1(input)
 
 
-# ``sin(u) / u = sum (-1)^k u^(2k) / (2k + 1)!``, highest power first.  Twelve
-# terms hold ``|u| < 1`` to float64's last digit (the next is 1e-28).
-_SINC_SERIES: tuple[float, ...] = tuple(
-    (-1.0) ** k / math.factorial(2 * k + 1) for k in range(12, -1, -1)
-)
-
-
 def sinc(input: Tensor) -> Tensor:
     r"""Normalised sinc function with the standard removable singularity at 0.
 
@@ -751,17 +745,7 @@ def sinc(input: Tensor) -> Tensor:
     >>> lucid.sinc(x)
     tensor([1., 0.6366, -0.2122])
     """
-    px = input * math.pi
-    small = lucid.abs(px) < 1.0
-    # Each branch runs on its own interval: ``sin(u) / u`` at the u = 1 that
-    # stands in for the small arguments, the series on u clamped into [-1, 1].
-    safe_px = lucid.where(small, lucid.full_like(input, 1.0), px)
-    val = lucid.sin(safe_px) / safe_px
-    u2 = lucid.where(small, px, lucid.zeros_like(px)) ** 2
-    series = lucid.full_like(input, _SINC_SERIES[0])
-    for c in _SINC_SERIES[1:]:
-        series = series * u2 + c
-    return lucid.where(small, series, val)
+    return _sin_over(input * math.pi)
 
 
 def heaviside(input: Tensor, values: Tensor | Scalar) -> Tensor:
