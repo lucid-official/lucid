@@ -13,8 +13,9 @@ import lucid
 import lucid.autograd
 from lucid._tensor.tensor import Tensor
 from lucid.distributions._student_math import (
-    _digamma_half_gap,
+    _df_or_nan,
     _gamma_half_excess,
+    _student_entropy_tail,
     _student_exponent,
 )
 from lucid.distributions._util import _as_tensor
@@ -23,6 +24,7 @@ from lucid.distributions.constraints import Constraint, positive, real
 from lucid.distributions.distribution import Distribution
 
 _HALF_LOG_2PI = 0.5 * math.log(2.0 * math.pi)
+_HALF_LOG_2PI_E = _HALF_LOG_2PI + 0.5
 
 
 class StudentT(Distribution):
@@ -333,14 +335,15 @@ class StudentT(Distribution):
         # lgamma((df+1)/2) - lgamma(df/2) - log(pi df)/2 is one quantity,
         # E(df/2) - log(2 pi)/2 (E = the gamma ratio's excess over sqrt(df/2));
         # taken apart each lgamma of a large df is the whole answer plus its
-        # rounding.  _student_math owns both cancelling groups.
-        out = (
-            _gamma_half_excess(self.df * 0.5)
+        # rounding.  _student_math owns both cancelling groups.  A df outside
+        # (0, inf] is NaN in the value and in every gradient.
+        df = _df_or_nan(self.df)
+        return (
+            _gamma_half_excess(df * 0.5)
             - _HALF_LOG_2PI
             - self.scale.log()
-            - _student_exponent(self.df, z)
+            - _student_exponent(df, z)
         )
-        return lucid.where(self.df > 0.0, out, float("nan"))
 
     @override
     def entropy(self) -> Tensor:
@@ -372,14 +375,8 @@ class StudentT(Distribution):
         tensor(2.531)
         """
         # H = log(scale sqrt(df) B(1/2, df/2)) + (df+1)/2 (digamma((df+1)/2) - digamma(df/2)),
-        # with a = df/2:  log(scale) + log(2 pi)/2 - E(a) + (a + 1/2) F(a), the
-        # gamma ratio's excess E and the digamma gap F of _student_math; their
-        # textbook forms subtract two large numbers and are garbage for large df.
-        a = self.df * 0.5
-        out = (
-            self.scale.log()
-            + _HALF_LOG_2PI
-            - _gamma_half_excess(a)
-            + (a + 0.5) * _digamma_half_gap(a)
-        )
-        return lucid.where(self.df > 0.0, out, float("nan"))
+        # with a = df/2:  log(scale) + log(2 pi e)/2 + K(a), K = (a + 1/2) F(a) - E(a) - 1/2
+        # of _student_math (K -> 1/(2a), 0 at df = inf: the Normal entropy).  The textbook
+        # forms subtract two large numbers and are garbage for large df, in value and slope.
+        df = _df_or_nan(self.df)
+        return _student_entropy_tail(df * 0.5) + _HALF_LOG_2PI_E + self.scale.log()
