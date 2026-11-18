@@ -4335,7 +4335,7 @@ def cartesian_prod(*tensors: Tensor) -> Tensor:
             [2, 4]])
     """
     ...
-def searchsorted(sorted_sequence: Tensor, input: Tensor, *, out_int32: _bool = ..., right: _bool = ..., side: str | None = ..., sorter: Tensor | None = ...) -> Tensor:
+def searchsorted(sorted_sequence: Tensor, input: Tensor | Scalar, *, out_int32: _bool = ..., right: _bool = ..., side: str | None = ..., sorter: Tensor | None = ...) -> Tensor:
     r"""    Find insertion points to maintain order in a sorted sequence.
     
     For each ``v = input[i]`` returns the smallest ``j`` such that
@@ -4346,8 +4346,12 @@ def searchsorted(sorted_sequence: Tensor, input: Tensor, *, out_int32: _bool = .
     ----------
     sorted_sequence : Tensor
         1-D sorted sequence of boundaries.
-    input : Tensor
-        Query values (arbitrary shape).
+    input : Tensor | Scalar
+        Query values (arbitrary shape).  A Python number is searched as a
+        0-d value on the sequence's device.  The two operands are promoted
+        to their common dtype, as the reference does: a bool beside an
+        integer, or an integer beside a float, is searched at the wider
+        dtype.
     right : bool, default False
         Use ``<=`` rather than ``<`` for the comparison.
     
@@ -4370,7 +4374,7 @@ def searchsorted(sorted_sequence: Tensor, input: Tensor, *, out_int32: _bool = .
     Tensor([0, 1, 2, 3])
     """
     ...
-def bucketize(input: Tensor, boundaries: Tensor, *, out_int32: _bool = ..., right: _bool = ...) -> Tensor:
+def bucketize(input: Tensor | Scalar, boundaries: Tensor, *, out_int32: _bool = ..., right: _bool = ...) -> Tensor:
     r"""    Return the bucket index of each element of ``input`` in ``boundaries``.
     
     For each ``v = values[i]`` returns the smallest ``j`` such that
@@ -4379,8 +4383,10 @@ def bucketize(input: Tensor, boundaries: Tensor, *, out_int32: _bool = ..., righ
     
     Parameters
     ----------
-    input : Tensor
-        Query values (arbitrary shape).
+    input : Tensor | Scalar
+        Query values (arbitrary shape).  A Python number is bucketed as a
+        0-d value on the boundaries' device.  ``input`` and ``boundaries``
+        are promoted to their common dtype, as the reference does.
     boundaries : Tensor
         1-D, sorted, monotonically non-decreasing bucket edges.
     right : bool, default False

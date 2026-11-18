@@ -253,10 +253,10 @@ def refuse_all_bool(op: str, *operands: object) -> None:
 
     For the ops whose operands meet at a common dtype (``searchsorted``,
     ``bucketize``, ``gammainc``): the reference has no kernel for a bool pair,
-    and answers a bool beside another dtype by promoting.  Lucid's engine does
-    not promote for ``searchsorted`` and ``bucketize`` -- a bool beside an
-    integer is a ``DtypeMismatch`` there (LCD-1021) -- so only the pair is
-    refused here, and the mixed pair is left to whatever the op does with it.
+    and answers a bool beside another dtype by promoting.  So only the pair is
+    refused here; a bool beside another dtype is promoted by the op itself
+    (``searchsorted`` and ``bucketize`` cast both operands to their common
+    dtype, :mod:`lucid._ops._search`).
 
     Parameters
     ----------
