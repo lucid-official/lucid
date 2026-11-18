@@ -360,6 +360,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.distributions._util"
+    },
+    {
+      "kind": "module",
       "module": "lucid.distributions.gamma"
     },
     {
@@ -22526,6 +22530,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.distributions._stirling_math"
+    },
+    {
+      "kind": "module",
       "module": "lucid.distributions.bernoulli"
     },
     {
@@ -22636,15 +22644,15 @@
     },
     {
       "kind": "module",
+      "module": "lucid.distributions._stirling_math"
+    },
+    {
+      "kind": "module",
       "module": "lucid.distributions.bernoulli"
     },
     {
       "kind": "module",
       "module": "lucid.distributions.extra"
-    },
-    {
-      "kind": "module",
-      "module": "lucid.distributions.gamma"
     }
   ],
   "lucid.stack": [
