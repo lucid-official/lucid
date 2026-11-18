@@ -45,7 +45,12 @@ import pytest
 import lucid
 from lucid._C import engine as _C_engine
 from lucid._ops._bool_refusal import _FLOATING, _INTEGER, _NUMBER, BOOL_REFUSED, engine_bool_refused
-from lucid.nn.functional._loss_checks import _FLOATING_RESULT, _KINDS, _OPERAND_DTYPES
+from lucid.nn.functional._loss_checks import (
+    _BOOL_BY_CALL,
+    _FLOATING_RESULT,
+    _KINDS,
+    _OPERAND_DTYPES,
+)
 
 # ``upsample*`` are the reference's deprecated spellings of ``interpolate``: they warn by design.
 pytestmark = pytest.mark.filterwarnings("ignore:.*nn.functional.upsample.*:UserWarning")
@@ -482,8 +487,8 @@ _TABLE: dict[str, _Row] = {
     ),
     # A bool *input* beside a floating target takes the class its loss gives one in the reference,
     # which varies: these two are the kernel's NotImplementedError there.  ``binary_cross_entropy``
-    # and ``huber_loss`` are the kernel's class for an all-bool call but a dtype mismatch here, and
-    # the table has one class per loss, so Lucid raises the kernel's for them (both RuntimeError).
+    # and ``huber_loss`` are the kernel's class for an all-bool call but a dtype mismatch beside a
+    # target of another dtype (LCD-1046), as the next rows pin.
     "binary_cross_entropy_with_logits-input": _kernel(
         "binary_cross_entropy_with_logits",
         lambda fw, t, m: fw.nn.functional.binary_cross_entropy_with_logits(t, t.float()),
@@ -491,6 +496,83 @@ _TABLE: dict[str, _Row] = {
     "multilabel_soft_margin_loss-input": _kernel(
         "multilabel_soft_margin_loss",
         lambda fw, t, m: fw.nn.functional.multilabel_soft_margin_loss(m, m.float()),
+    ),
+    "binary_cross_entropy-input": _guard(
+        "binary_cross_entropy",
+        lambda fw, t, m: fw.nn.functional.binary_cross_entropy(t, t.float()),
+    ),
+    "binary_cross_entropy-input-integer": _guard(
+        "binary_cross_entropy",
+        lambda fw, t, m: fw.nn.functional.binary_cross_entropy(t, t.long()),
+    ),
+    "huber_loss-input": _guard(
+        "huber_loss", lambda fw, t, m: fw.nn.functional.huber_loss(t, t.float())
+    ),
+    "huber_loss-input-integer": _guard(
+        "huber_loss", lambda fw, t, m: fw.nn.functional.huber_loss(t, t.long())
+    ),
+    # A class weight beside floating logits is read at the logits' dtype by the reference's
+    # class-index kernels, so a bool one is a plain dtype ``RuntimeError`` (LCD-1046).  Class
+    # probabilities multiply it in instead and take it (the accepted rows below).
+    "cross_entropy-weight": _guard(
+        "cross_entropy",
+        lambda fw, t, m: fw.nn.functional.cross_entropy(m.float(), t[:2].long(), weight=t[:3]),
+    ),
+    "cross_entropy-weight-module": _guard(
+        "cross_entropy",
+        lambda fw, t, m: fw.nn.CrossEntropyLoss(weight=t[:3])(m.float(), t[:2].long()),
+    ),
+    "nll_loss-weight": _guard(
+        "nll_loss",
+        lambda fw, t, m: fw.nn.functional.nll_loss(m.float(), t[:2].long(), weight=t[:3]),
+    ),
+    "nll_loss-weight-module": _guard(
+        "nll_loss", lambda fw, t, m: fw.nn.NLLLoss(weight=t[:3])(m.float(), t[:2].long())
+    ),
+    "multi_margin_loss-weight": _guard(
+        "multi_margin_loss",
+        lambda fw, t, m: fw.nn.functional.multi_margin_loss(m.float(), t[:2].long(), weight=t[:3]),
+    ),
+    "multi_margin_loss-weight-module": _guard(
+        "multi_margin_loss",
+        lambda fw, t, m: fw.nn.MultiMarginLoss(weight=t[:3])(m.float(), t[:2].long()),
+    ),
+    # ``pos_weight - 1`` is a subtraction, and the reference's takes no bool.
+    "binary_cross_entropy_with_logits-pos_weight": _guard(
+        "binary_cross_entropy_with_logits",
+        lambda fw, t, m: fw.nn.functional.binary_cross_entropy_with_logits(
+            m.float(), m.float(), pos_weight=t[:3]
+        ),
+    ),
+    # The CTC length tensors must be integral: a bool one is a dtype ``RuntimeError`` (LCD-1046).
+    "ctc_loss-input_lengths": _guard(
+        "ctc_loss",
+        lambda fw, t, m: fw.nn.functional.ctc_loss(
+            m.float().reshape(3, 1, 2), t[:1].reshape(1, 1).long(), t[:1], fw.tensor([1]).long()
+        ),
+    ),
+    "ctc_loss-target_lengths": _guard(
+        "ctc_loss",
+        lambda fw, t, m: fw.nn.functional.ctc_loss(
+            m.float().reshape(3, 1, 2), t[:1].reshape(1, 1).long(), fw.tensor([3]).long(), t[:1]
+        ),
+    ),
+    "ctc_loss-lengths-module": _guard(
+        "ctc_loss",
+        lambda fw, t, m: fw.nn.CTCLoss()(
+            m.float().reshape(3, 1, 2), t[:1].reshape(1, 1).long(), t[:1], fw.tensor([1]).long()
+        ),
+    ),
+    # ``poisson_nll_loss`` takes a bool beside another dtype -- ``exp`` of one is a float -- and
+    # refuses it only where the reference subtracts one: a bool input that is not a log, and a
+    # bool target under ``full`` (a bool input beside a bool target is the row above).
+    "poisson_nll_loss-rate": _guard(
+        "poisson_nll_loss",
+        lambda fw, t, m: fw.nn.functional.poisson_nll_loss(t, t.float(), log_input=False),
+    ),
+    "poisson_nll_loss-full": _guard(
+        "poisson_nll_loss",
+        lambda fw, t, m: fw.nn.functional.poisson_nll_loss(t.float(), t, full=True),
     ),
     # A bool beside an integer meets no floating operand: the kernel's class, as for two bools.
     "mse_loss-integer": _kernel(
@@ -723,6 +805,44 @@ _TABLE: dict[str, _Row] = {
     "cosine_embedding_loss": _accepted(
         lambda fw, t, m: fw.nn.functional.cosine_embedding_loss(m, m.flip(0), t[:2])
     ),
+    # A bool beside another dtype is a number to ``poisson_nll_loss`` (LCD-1046), and a float16
+    # target does not narrow what a non-floating input makes of it: float32, as the reference.
+    "poisson_nll_loss-bool-input": _accepted(
+        lambda fw, t, m: fw.nn.functional.poisson_nll_loss(t, t.float())
+    ),
+    "poisson_nll_loss-bool-input-integer": _accepted(
+        lambda fw, t, m: fw.nn.functional.poisson_nll_loss(t, t.long())
+    ),
+    "poisson_nll_loss-bool-input-half": _accepted(
+        lambda fw, t, m: fw.nn.functional.poisson_nll_loss(t, t.half())
+    ),
+    "poisson_nll_loss-bool-target": _accepted(
+        lambda fw, t, m: fw.nn.functional.poisson_nll_loss(t.float(), t)
+    ),
+    "poisson_nll_loss-bool-target-integer": _accepted(
+        lambda fw, t, m: fw.nn.functional.poisson_nll_loss(t.long(), t)
+    ),
+    # A bool weight is a mask of the elements that count, to the losses that scale one by weight,
+    # and to a class-probability target (the class-index kernels' dtype rule does not apply).
+    "binary_cross_entropy-weight": _accepted(
+        lambda fw, t, m: fw.nn.functional.binary_cross_entropy(m.float() * 0.5, m.float(), weight=m)
+    ),
+    "binary_cross_entropy_with_logits-weight": _accepted(
+        lambda fw, t, m: fw.nn.functional.binary_cross_entropy_with_logits(
+            m.float(), m.float(), weight=m
+        )
+    ),
+    "multilabel_soft_margin_loss-weight": _accepted(
+        lambda fw, t, m: fw.nn.functional.multilabel_soft_margin_loss(
+            m.float(), m.float(), weight=t[:3]
+        )
+    ),
+    "mse_loss-weight": _accepted(
+        lambda fw, t, m: fw.nn.functional.mse_loss(m.float(), m.float() * 0.5, weight=m)
+    ),
+    "cross_entropy-probabilities-weight": _accepted(
+        lambda fw, t, m: fw.nn.functional.cross_entropy(m.float(), m.float() * 0.5, weight=t[:3])
+    ),
     "mean-dtype": _accepted(lambda fw, t, m: fw.mean(t, dtype=fw.float32)),
     "mean-dim-dtype": _accepted(lambda fw, t, m: fw.mean(m, dim=1, dtype=fw.float32)),
     "softmax-dtype": _accepted(lambda fw, t, m: fw.softmax(t, 0, dtype=fw.float32)),
@@ -848,33 +968,48 @@ def test_every_op_of_the_table_is_pinned() -> None:
 def test_every_loss_that_can_refuse_a_bool_has_a_row() -> None:
     # A loss whose input or target kind leaves bool out, or whose result must be floating, reaches
     # ``bool_refusal`` for its name: a loss of that kind with no row would be a ``KeyError`` there.
-    # ``cosine_embedding_loss`` takes bool for every operand, and so has none.
-    can_refuse = {
-        loss
-        for loss, (input_kind, target_kind) in _OPERAND_DTYPES.items()
-        if "bool" not in _KINDS[input_kind] or (target_kind and "bool" not in _KINDS[target_kind])
-    } | _FLOATING_RESULT
+    # ``cosine_embedding_loss`` takes bool for every operand, and so has none.  A loss whose answer
+    # turns on the call (``_BOOL_BY_CALL``) says ``numeric`` in the table and refuses in its own check.
+    can_refuse = (
+        {
+            loss
+            for loss, (input_kind, target_kind) in _OPERAND_DTYPES.items()
+            if "bool" not in _KINDS[input_kind]
+            or (target_kind and "bool" not in _KINDS[target_kind])
+        }
+        | _FLOATING_RESULT
+        | _BOOL_BY_CALL
+    )
     assert can_refuse == set(_LOSSES)
     assert set(_LOSSES) <= set(BOOL_REFUSED)
 
 
 @pytest.mark.parametrize(
-    ("name", "cast"),
+    ("name", "role", "cast"),
     [
-        ("cross_entropy-target", _INTEGER),
-        ("nll_loss-target", _INTEGER),
-        ("multi_margin_loss-target", _INTEGER),
-        ("cross_entropy-probabilities", _FLOATING),
-        ("kl_div-target", _FLOATING),
+        ("cross_entropy-target", "target", _INTEGER),
+        ("nll_loss-target", "target", _INTEGER),
+        ("multi_margin_loss-target", "target", _INTEGER),
+        ("cross_entropy-probabilities", "target", _FLOATING),
+        ("kl_div-target", "target", _FLOATING),
+        ("cross_entropy-weight", "weight", _FLOATING),
+        ("nll_loss-weight", "weight", _FLOATING),
+        ("multi_margin_loss-weight", "weight", _FLOATING),
+        ("binary_cross_entropy_with_logits-pos_weight", "pos_weight", _FLOATING),
+        ("ctc_loss-input_lengths", "input_lengths", _INTEGER),
+        ("ctc_loss-target_lengths", "target_lengths", _INTEGER),
     ],
 )
-def test_a_bool_target_is_told_the_cast_it_wants(device: str, name: str, cast: str) -> None:
-    # A class label is an integer, class probabilities and the other targets are floating.
+def test_a_bool_operand_is_told_the_cast_it_wants(
+    device: str, name: str, role: str, cast: str
+) -> None:
+    # A class label or a length is an integer, class probabilities, the other targets and a weight
+    # are floating.
     t = lucid.tensor(_VECTOR, device=device)
     m = lucid.tensor(_MATRIX, device=device)
     with pytest.raises(RuntimeError) as caught:
         _TABLE[name].call(lucid, t, m)
-    assert "a bool target" in str(caught.value)
+    assert f"a bool {role}" in str(caught.value)
     assert f"cast to {cast}" in str(caught.value)
 
 
