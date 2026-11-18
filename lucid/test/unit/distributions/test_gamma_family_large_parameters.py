@@ -519,6 +519,23 @@ def test_inverse_gamma_entropy(row: tuple[float, ...], device: str, dtype: lucid
 
 
 @pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+@pytest.mark.parametrize("row", _IGAMMA_LP)
+def test_inverse_gamma_owner_log_prob(
+    row: tuple[float, ...], device: str, dtype: lucid.dtype
+) -> None:
+    """The owner's own form (``rate / x`` in ``bd0``), whether or not the law calls it yet."""
+    _check_rows(M._inverse_gamma_log_prob, row, 3, device, dtype, 16, 32, (1e-3, 1e-3, 1.0))
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+@pytest.mark.parametrize("row", _IGAMMA_H)
+def test_inverse_gamma_owner_entropy(
+    row: tuple[float, ...], device: str, dtype: lucid.dtype
+) -> None:
+    _check_rows(M._inverse_gamma_entropy, row, 2, device, dtype, 32, 32, (1e-3, 1e-3))
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
 @pytest.mark.parametrize(("rate", "k", "want", "slope"), _POIS_LP)
 def test_poisson_log_prob(
     rate: float, k: float, want: float, slope: float, device: str, dtype: lucid.dtype
@@ -669,6 +686,33 @@ def test_kumaraswamy_moments(
         law.variance.item(),
         var,
     )
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+def test_exponential_family_log_normalizers(device: str, dtype: lucid.dtype) -> None:
+    """``Beta`` and ``Dirichlet`` give the owner's ``log B`` as their log-normalizer (it is what
+    the Bregman form of their entropy and KL differences reads)."""
+    a, b = _t(1e3, device, dtype), _t(7.0, device, dtype)
+    beta = D.Beta(a, b)
+    assert _within(
+        beta._log_normalizer(*beta._natural_params).item(), -41.79599038729854, dtype, 32, 1.0
+    )
+    alpha = _t([5.0, 6.0, 1e3], device, dtype)
+    dirichlet = D.Dirichlet(alpha)
+    want = M._log_multi_beta(alpha).item()
+    assert dirichlet._log_normalizer(*dirichlet._natural_params).item() == want
+    assert _within(want, -68.07457099771744, dtype, 64, 1.0)
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+def test_integer_operands_take_the_default_float(device: str, dtype: lucid.dtype) -> None:
+    """``log_comb`` of integer tensors is the default float's (the owner promotes before it computes)."""
+    n = lucid.tensor([20, 9, 1000], device=device)
+    k = lucid.tensor([7, 4, 3], device=device)
+    got = M._log_comb(n, k)
+    want = M._log_comb(n.to(got.dtype), k.to(got.dtype))
+    assert got.dtype == lucid.get_default_dtype()
+    assert [v.item() for v in got] == [v.item() for v in want]
 
 
 # ── the reported rows ───────────────────────────────────────────────────────
