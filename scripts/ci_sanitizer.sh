@@ -122,11 +122,35 @@ EOF
 fi
 
 echo "==> Running targeted engine suites under $MODE ($SANITIZE)"
-# --capture=sys: a sanitizer writes its report to fd 2 and then exits, so pytest's
-# default fd capture would hold the report in a temporary file that the dying process
-# never prints -- the job then ends with a bare exit 1 mid-line.  Capturing only
-# sys.stderr leaves fd 2 on the job log.
+# A sanitizer writes its report to fd 2 and exits.  pytest's fd capture holds fd 2 in
+# a temporary file during each test, which the dying process never prints, so the job
+# ended with a bare exit 1 mid-line.  The pytest run therefore sends each report to a
+# per-process file (log_path) and prints those files when the run fails.  Only this run:
+# the seeded probe above reads its report from stderr.
+SAN_LOG_DIR="$(pwd)/build/sanitizer-logs"
+rm -rf "$SAN_LOG_DIR"
+mkdir -p "$SAN_LOG_DIR"
+RUN_OPTS=()
+for opt in "${EXTRA_OPTS[@]}"; do
+    name="${opt%%=*}"
+    RUN_OPTS+=("$opt:log_path=$SAN_LOG_DIR/${name%%_OPTIONS}")
+done
+set +e
 # shellcheck disable=SC2086 — the target is a list of paths
-env "${EXTRA_OPTS[@]}" "$RUN_PYTHON" -m pytest $PYTEST_TARGET --tb=short -q --capture=sys
+env "${RUN_OPTS[@]}" "$RUN_PYTHON" -m pytest $PYTEST_TARGET --tb=short -q
+PYTEST_RC=$?
+set -e
+shopt -s nullglob
+SAN_LOGS=("$SAN_LOG_DIR"/*)
+shopt -u nullglob
+if [ "$PYTEST_RC" -ne 0 ] || [ "${#SAN_LOGS[@]}" -gt 0 ]; then
+    for log in "${SAN_LOGS[@]}"; do
+        echo "==> sanitizer report: $log"
+        cat "$log"
+    done
+    [ "$PYTEST_RC" -ne 0 ] && exit "$PYTEST_RC"
+    echo "ERROR: the run passed but a sanitizer wrote a report" >&2
+    exit 1
+fi
 
 echo "==> $MODE ($SANITIZE): green"
