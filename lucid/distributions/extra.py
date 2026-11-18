@@ -14,7 +14,12 @@ import lucid
 from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import _broadcast_params, _promote_params
-from lucid.distributions._util import _clamp_probs, _lazy_param, _set_probs_or_logits
+from lucid.distributions._util import (
+    _broadcast_to,
+    _clamp_probs,
+    _lazy_param,
+    _set_probs_or_logits,
+)
 from lucid.distributions.bernoulli import _logits_to_probs, _probs_to_logits
 from lucid.distributions.constraints import (
     Constraint,
@@ -1285,9 +1290,8 @@ class ContinuousBernoulli(Distribution):
         u = lucid.clamp(u, min=1e-6, max=1.0 - 1e-6)
         # Broadcast distribution parameters to the full sample shape so that
         # lucid.where (which requires same-shape operands) always succeeds.
-        zeros_b: Tensor = lucid.zeros(*shape, dtype=self._param.dtype, device=self._param.device)
-        p: Tensor = self._probs + zeros_b
-        l: Tensor = self._logits + zeros_b
+        p: Tensor = _broadcast_to(self._probs, shape)
+        l: Tensor = _broadcast_to(self._logits, shape)
         d: Tensor = 2.0 * p - 1.0  # ∈ (−1, 1) \ {0}
         abs_d: Tensor = d.abs()
         eps: float = 1e-4

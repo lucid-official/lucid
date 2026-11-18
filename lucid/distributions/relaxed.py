@@ -23,6 +23,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import (
     _align_device,
     _broadcast_shapes,
+    _broadcast_to,
     _clamp_probs,
     _lazy_param,
     _pick_probs_or_logits,
@@ -153,8 +154,7 @@ class LogitRelaxedBernoulli(Distribution):
             both ``logits`` and ``temperature``.
         """
         shape = self._extended_shape(sample_shape)
-        logits: Tensor = self.logits
-        l: Tensor = logits + lucid.zeros(shape, dtype=logits.dtype, device=logits.device)
+        l: Tensor = _broadcast_to(self.logits, shape)
         u1: Tensor = lucid.rand(*shape, dtype=l.dtype, device=l.device).clip(1e-7, 1.0 - 1e-7)
         u2: Tensor = lucid.rand(*shape, dtype=l.dtype, device=l.device).clip(1e-7, 1.0 - 1e-7)
         # Gumbel(0,1) = −log(−log U).
@@ -473,8 +473,7 @@ class ExpRelaxedCategorical(Distribution):
             flowing through both ``logits`` and ``temperature``.
         """
         out_shape = self._extended_shape(sample_shape)
-        logits: Tensor = self.logits
-        l = logits + lucid.zeros(out_shape, dtype=logits.dtype, device=logits.device)
+        l = _broadcast_to(self.logits, out_shape)
         u = lucid.rand(*out_shape, dtype=l.dtype, device=l.device).clip(1e-7, 1.0 - 1e-7)
         g = -(-(u.log())).log()
         scores = (l + g) / self.temperature.unsqueeze(-1)

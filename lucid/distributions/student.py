@@ -18,8 +18,7 @@ from lucid.distributions._student_math import (
     _student_entropy_tail,
     _student_exponent,
 )
-from lucid.distributions._util import _as_tensor
-from lucid.distributions._util import _broadcast_pair
+from lucid.distributions._util import _broadcast_params
 from lucid.distributions.constraints import Constraint, positive, real
 from lucid.distributions.distribution import Distribution
 
@@ -157,12 +156,7 @@ class StudentT(Distribution):
         >>> d.mean
         tensor(2.)
         """
-        self.df = _as_tensor(df)
-        self.loc = _as_tensor(loc)
-        self.scale = _as_tensor(scale)
-        self.df, self.loc = _broadcast_pair(self.df, self.loc)
-        self.df, self.scale = _broadcast_pair(self.df, self.scale)
-        self.loc, self.scale = _broadcast_pair(self.loc, self.scale)
+        self.df, self.loc, self.scale = _broadcast_params(df, loc, scale)
         super().__init__(
             batch_shape=tuple(self.df.shape), event_shape=(), validate_args=validate_args
         )
@@ -205,7 +199,7 @@ class StudentT(Distribution):
         >>> StudentT(df=5.0, loc=3.0).mean
         tensor(3.)
         """
-        return lucid.where(self.df > 1.0, self.loc + 0 * self.df, float("nan"))
+        return lucid.where(self.df > 1.0, self.loc, float("nan"))
 
     @override
     @property

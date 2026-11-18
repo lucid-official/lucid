@@ -5,18 +5,40 @@ from numbers import Real
 from typing import Protocol, Self, overload, override
 
 import lucid
+from lucid._C import engine as _C_engine
 from lucid._dtype import finfo
 from lucid._engine_scope import untraced
 from lucid._tensor._indexing import broadcast_shapes
 from lucid._tensor.tensor import Tensor
 
 
+def _require_parameter(value: object) -> None:
+    """Raise ``TypeError`` unless ``value`` can be a distribution parameter.
+
+    The one place the rule lives: a parameter is a tensor or a real number.
+    Left to ``float``, a string would parse and a one-element array would
+    convert, so a single-parameter law took what a multi-parameter one refused.
+    """
+    if not isinstance(value, (lucid.Tensor, Real)):
+        raise TypeError(
+            f"a distribution parameter must be a Tensor or a number, got {type(value).__name__}"
+        )
+
+
 def _as_tensor(x: Tensor | float | int) -> Tensor:
     """Promote a Python scalar to a 0-dim Lucid tensor — matches the
     reference framework's convention so distributions parameterised by
-    scalars get ``batch_shape == ()`` rather than ``(1,)``."""
+    scalars get ``batch_shape == ()`` rather than ``(1,)``.
+
+    Raises
+    ------
+    TypeError
+        If ``x`` is neither a tensor nor a real number (the rule
+        :func:`_promote_params` applies to the same parameters).
+    """
     if isinstance(x, lucid.Tensor):
         return x
+    _require_parameter(x)
     with untraced():
         t = lucid.tensor(float(x))
         if t.ndim == 1 and t.shape == (1,):
@@ -37,8 +59,9 @@ def _promote_params(*values: Tensor | float | int) -> tuple[Tensor, ...]:
     promoted, so ``lgamma(n + 1)`` ran in float32.
 
     A tensor is returned as it is, so an integer tensor keeps its dtype and
-    does not turn a number beside it into an integer: the reference would give
-    ``Binomial(int_count, probs=0.3)`` a probability of ``0``.
+    does not turn a number beside it into an integer: the reference would
+    truncate the ``0.3`` of ``Binomial(int_count, probs=0.3)`` to ``0`` and then
+    raise ``TypeError`` from ``finfo`` the first time it scored a value.
 
     Parameters
     ----------
@@ -56,10 +79,7 @@ def _promote_params(*values: Tensor | float | int) -> tuple[Tensor, ...]:
         If a value is neither a tensor nor a real number.
     """
     for v in values:
-        if not isinstance(v, (lucid.Tensor, Real)):
-            raise TypeError(
-                f"a distribution parameter must be a Tensor or a number, got {type(v).__name__}"
-            )
+        _require_parameter(v)
     tensors = [v for v in values if isinstance(v, lucid.Tensor)]
     if not tensors:
         return tuple(_as_tensor(v) for v in values)
@@ -81,14 +101,26 @@ def _broadcast_shapes(a: tuple[int, ...], b: tuple[int, ...]) -> tuple[int, ...]
     return broadcast_shapes(a, b)
 
 
-def _broadcast_pair(a: Tensor, b: Tensor) -> tuple[Tensor, Tensor]:
-    """Broadcast ``a`` and ``b`` to a common shape via arithmetic ``+ 0``.
+def _broadcast_to(t: Tensor, shape: tuple[int, ...]) -> Tensor:
+    """``t`` as a view of ``shape`` — ``t`` itself when it already has that shape.
 
-    Cheaper than constructing two ``broadcast_to`` views — the
-    ``a*0 + b*0`` trick produces a single materialised zero tensor of
-    the joint shape, then both inputs are added to it.  Returns
-    ``(a, b)`` unchanged when shapes already match (no zero
-    materialisation).
+    The one way a distribution brings a parameter to a larger shape.  A view
+    does no arithmetic, so every value survives bit for bit (an infinity or a
+    NaN in one lane cannot reach another), and it joins the autograd graph only
+    if ``t`` is in it: a detached parameter stays detached, a leaf that is
+    broadcast keeps its gradient, and a parameter that needs no broadcast stays
+    the very tensor it was.
+    """
+    return t if tuple(t.shape) == shape else t.broadcast_to(shape)
+
+
+def _broadcast_pair(a: Tensor, b: Tensor) -> tuple[Tensor, Tensor]:
+    """Broadcast ``a`` and ``b`` to a common shape, as views.
+
+    Arithmetic is no way to broadcast: ``a * 0 + b * 0`` made a finite parameter
+    NaN beside an infinite one (``inf * 0``), tied every broadcast parameter to
+    the autograd graph, and left a distribution that could not be deep-copied.
+    Each of the pair is :func:`_broadcast_to` the joint shape instead.
 
     Parameters
     ----------
@@ -100,13 +132,15 @@ def _broadcast_pair(a: Tensor, b: Tensor) -> tuple[Tensor, Tensor]:
     -------
     tuple of Tensor
         ``(a_broadcast, b_broadcast)`` with identical shapes.
+
+    Raises
+    ------
+    lucid._C.engine.DeviceMismatch
+        If they live on different devices and neither is a 0-dim host tensor.
     """
-    # Distribution parameters routinely mix a user tensor with a host-derived
-    # scalar constant (``Chi2`` passes ``rate=_as_tensor(0.5)``, ``StudentT``
-    # its ``loc``/``scale`` defaults).  Those constants are created without a
-    # device, so combining them with a Metal parameter raised DeviceMismatch.
-    # This is the single point where the two meet, so reconcile here rather
-    # than threading a device through all ~67 ``_as_tensor`` call sites.
+    # A 0-dim host tensor is a scalar in every other sense, so beside a Metal
+    # parameter it follows it — the allowance the reference framework makes.
+    # This is the single point where the parameters of one distribution meet.
     if a.device != b.device:
         if a.ndim == 0 and a.device.type == "cpu":
             if not a.requires_grad:
@@ -122,10 +156,13 @@ def _broadcast_pair(a: Tensor, b: Tensor) -> tuple[Tensor, Tensor]:
                 b = lucid.full(tuple(a.shape), val, dtype=a.dtype, device=a.device)
             else:
                 b = b.to(a.device.type)
-    if tuple(a.shape) == tuple(b.shape) and a.device == b.device:
-        return a, b
-    z = a * 0 + b * 0
-    return a + z, b + z
+    # A view would not notice the mismatch until the first op that meets them.
+    if a.device != b.device:
+        raise _C_engine.DeviceMismatch(
+            f"distribution parameters must share a device, got {a.device} and {b.device}"
+        )
+    shape = _broadcast_shapes(tuple(a.shape), tuple(b.shape))
+    return _broadcast_to(a, shape), _broadcast_to(b, shape)
 
 
 def _broadcast_params(*values: Tensor | float | int) -> tuple[Tensor, ...]:

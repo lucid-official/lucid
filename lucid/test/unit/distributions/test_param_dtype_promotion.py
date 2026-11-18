@@ -28,7 +28,7 @@ import pytest
 
 import lucid
 import lucid.distributions as D
-from lucid.distributions._util import _promote_params
+from lucid.distributions._util import _as_tensor, _promote_params
 
 _Build = Callable[[Any, dict[str, Any]], Any]
 
@@ -46,16 +46,12 @@ class _Case:
     value: Any
     tensors: dict[str, Any] = field(default_factory=dict)
     build: _Build | None = None
-    xfail: str | None = None
     # The reference cannot be built, or cannot score, in this form.
     no_reference: str | None = None
 
 
 _PROBS = [0.2, 0.3, 0.5]
 _COV = [[2.0, 0.5], [0.5, 1.0]]
-# StudentT converts its parameters in a file another change holds.  ``strict``
-# turns this into a failure the day it is fixed, so the marker cannot linger.
-_STUDENT = "LCD-1040: StudentT converts its parameters in student.py (held by LCD-1037)"
 _TEMPERATURE = "the reference takes a tensor temperature only"
 _GENERALIZED_PARETO = "the reference mixes float32 and float64 in GeneralizedPareto.log_prob"
 
@@ -89,7 +85,7 @@ _CASES: dict[str, _Case] = {
     "Laplace": _Case({"loc": 0.1, "scale": 1.3}, 0.7),
     "Cauchy": _Case({"loc": 0.1, "scale": 1.3}, 0.7),
     "Gumbel": _Case({"loc": 0.1, "scale": 1.3}, 0.7),
-    "StudentT": _Case({"df": 3.1, "loc": 0.1, "scale": 1.3}, 0.7, xfail=_STUDENT),
+    "StudentT": _Case({"df": 3.1, "loc": 0.1, "scale": 1.3}, 0.7),
     "Pareto": _Case({"scale": 1.1, "alpha": 2.3}, 1.7),
     "GeneralizedPareto": _Case(
         {"loc": 0.1, "scale": 1.3, "concentration": 0.3}, 1.7, no_reference=_GENERALIZED_PARETO
@@ -177,15 +173,9 @@ _MIXED = [(n, a) for n, c in _ALL.items() for a in _anchors(c)]
 _ALONE = [n for n, c in _ALL.items() if not c.tensors]
 
 
-def _mixed(rows: list[tuple[str, str | None]] = _MIXED, *, float64: bool = False) -> list[Any]:
-    """Parameters for a sweep; ``float64`` carries the xfail of a law that still
-    rounds its numbers — the float32 and structure rows of it are fine."""
-
-    def marks(name: str) -> list[pytest.MarkDecorator]:
-        reason = _ALL[name].xfail
-        return [pytest.mark.xfail(strict=True, reason=reason)] if reason and float64 else []
-
-    return [pytest.param(n, a, marks=marks(n), id=f"{n}-{a or 'tensors'}") for n, a in rows]
+def _mixed(rows: list[tuple[str, str | None]] = _MIXED) -> list[Any]:
+    """Parameters for a sweep, one row per (law, anchor) build."""
+    return [pytest.param(n, a, id=f"{n}-{a or 'tensors'}") for n, a in rows]
 
 
 def _tensor(v: Any, dtype: Any, device: str = "cpu") -> lucid.Tensor:
@@ -276,14 +266,14 @@ def test_every_distribution_is_swept() -> None:
     assert swept == every
 
 
-@pytest.mark.parametrize("name,anchor", _mixed(float64=True))
+@pytest.mark.parametrize("name,anchor", _mixed())
 def test_numbers_take_the_float64_of_the_tensors_beside_them(name: str, anchor: str | None) -> None:
     dist = _make(D, name, anchor, _f64)
     for key, t in _float_tensors(dist).items():
         assert t.dtype == lucid.float64, f"{name}.{key} is {t.dtype}"
 
 
-@pytest.mark.parametrize("name,anchor", _mixed(float64=True))
+@pytest.mark.parametrize("name,anchor", _mixed())
 def test_a_number_keeps_its_float64_value(name: str, anchor: str | None) -> None:
     """``0.1`` is held as ``0.1``, not as the float32 nearest to it."""
     dist = _make(D, name, anchor, _f64)
@@ -294,7 +284,7 @@ def test_a_number_keeps_its_float64_value(name: str, anchor: str | None) -> None
         assert float(held[param].item()) == float(number), f"{name}.{param}"
 
 
-@pytest.mark.parametrize("name,anchor", _mixed(float64=True))
+@pytest.mark.parametrize("name,anchor", _mixed())
 def test_float64_results_match_the_all_tensor_build(name: str, anchor: str | None) -> None:
     """Numbers and float64 tensors in one signature score as all float64 tensors."""
     mixed = _make(D, name, anchor, _f64)
@@ -395,7 +385,11 @@ def test_chi2_rate_follows_the_degrees_of_freedom() -> None:
 
 
 def test_an_integer_count_tensor_keeps_a_numeric_probability() -> None:
-    """The reference truncates ``0.3`` to ``0`` beside an integer tensor; Lucid must not."""
+    """Lucid keeps ``0.3`` beside an integer count tensor.
+
+    The reference truncates it to ``0`` and then raises ``TypeError`` (from
+    ``finfo``) the first time it scores a value, so there is no answer to match.
+    """
     dist = D.Binomial(lucid.tensor(5, dtype=lucid.int64), probs=0.3)
     assert abs(float(dist.probs.item()) - 0.3) < 1e-6
 
@@ -446,6 +440,61 @@ class TestPromoteParams:
             _promote_params(bad, _f64(1.0))
 
 
+class TestOneParameterRule:
+    """A parameter is a tensor or a number, whichever helper converts it."""
+
+    _BAD = ["0.5", None, [0.5], np.array([0.5]), b"0.5"]
+    _GOOD = [0.5, 1, True, np.float32(0.5), np.int64(1)]
+
+    @pytest.mark.parametrize("bad", _BAD, ids=repr)
+    def test_as_tensor_refuses_what_promote_params_refuses(self, bad: Any) -> None:
+        with pytest.raises(TypeError, match="Tensor or a number"):
+            _promote_params(bad)
+        with pytest.raises(TypeError, match="Tensor or a number"):
+            _as_tensor(bad)
+
+    @pytest.mark.parametrize("good", _GOOD, ids=repr)
+    def test_both_take_a_real_number(self, good: Any) -> None:
+        assert _as_tensor(good).item() == _promote_params(good)[0].item() == float(good)
+
+    def test_as_tensor_returns_a_tensor_as_it_is(self) -> None:
+        t = _f64([1.0, 2.0])
+        assert _as_tensor(t) is t
+
+    @pytest.mark.parametrize(
+        "build",
+        [
+            lambda bad: D.Exponential(bad),
+            lambda bad: D.Poisson(bad),
+            lambda bad: D.HalfNormal(bad),
+            lambda bad: D.HalfCauchy(bad),
+            lambda bad: D.LKJCholesky(2, bad),
+            lambda bad: D.Chi2(bad),
+            lambda bad: D.StudentT(bad),
+            lambda bad: D.Bernoulli(probs=bad),
+            lambda bad: D.Geometric(probs=bad),
+        ],
+        ids=[
+            "Exponential",
+            "Poisson",
+            "HalfNormal",
+            "HalfCauchy",
+            "LKJCholesky",
+            "Chi2",
+            "StudentT",
+            "Bernoulli",
+            "Geometric",
+        ],
+    )
+    @pytest.mark.parametrize("bad", ["0.5", np.array([0.5])], ids=["str", "ndarray"])
+    def test_a_law_refuses_a_non_number_it_used_to_convert(
+        self, build: Callable[[Any], Any], bad: Any
+    ) -> None:
+        """Each of these parsed the string and converted the one-element array."""
+        with pytest.raises(TypeError, match="Tensor or a number"):
+            build(bad)
+
+
 def test_numbers_follow_the_tensor_to_its_device(device: str) -> None:
     """A number beside a Metal tensor is created there, in the tensor's dtype."""
     dist = D.Normal(0.1, _tensor(1.3, lucid.float32, device))
@@ -454,6 +503,65 @@ def test_numbers_follow_the_tensor_to_its_device(device: str) -> None:
     binom = D.Binomial(5, probs=_tensor(0.3, lucid.float32, device))
     assert binom.total_count.device.type == device
     assert binom.log_prob(_tensor(2.0, lucid.float32, device)).device.type == device
+
+
+def _on(device: str) -> Callable[[Any], lucid.Tensor]:
+    """A converter to a float32 tensor on ``device``."""
+    return lambda v: _tensor(v, lucid.float32, device)
+
+
+@pytest.mark.parametrize("name,anchor", _mixed())
+def test_a_law_holds_its_numbers_on_the_device_of_its_tensors(
+    name: str, anchor: str | None, device: str
+) -> None:
+    """The class sweep on both devices: numbers land where the tensor beside them is.
+
+    A number is a 0-dim host tensor until something says where it will be
+    used.  ``Wishart``'s ``df``, ``Chi2``'s ``rate``, ``Gamma``'s other
+    parameter and the relaxed laws' ``temperature`` each met a Metal tensor as
+    a host constant and raised ``DeviceMismatch``; every law's held parameters
+    and its scores must be on the device of the tensor it was built around.
+    """
+    dist = _make(D, name, anchor, _on(device))
+    for key, t in _float_tensors(dist).items():
+        assert t.device.type == device, f"{name}.{key} is on {t.device}"
+        assert t.dtype == lucid.float32, f"{name}.{key} is {t.dtype}"
+    scored = dist.log_prob(_on(device)(_ALL[name].value))
+    assert scored.device.type == device, f"{name}.log_prob is on {scored.device}"
+
+
+@pytest.mark.parametrize("name", _ALONE)
+def test_a_constant_a_law_derives_is_held_on_the_tensors_device(name: str, device: str) -> None:
+    """``Chi2(df_on_metal)`` derives its ``rate`` as a number; it must follow ``df``."""
+    dist = _make(D, name, None, _on(device), as_tensors=True)
+    floats = _float_tensors(dist)
+    assert floats, f"{name} holds no floating tensor"
+    for key, t in floats.items():
+        assert t.device.type == device, f"{name}.{key} is on {t.device}"
+    scored = dist.log_prob(_on(device)(_ALL[name].value))
+    assert scored.device.type == device, f"{name}.log_prob is on {scored.device}"
+
+
+def test_wishart_degrees_of_freedom_number_follows_the_matrix_to_its_device(device: str) -> None:
+    """``Wishart(3.1, covariance_matrix=<Metal>)`` raised ``DeviceMismatch`` (LCD-1040).
+
+    ``df`` was a host tensor beside a Metal matrix, so the batch broadcast, the
+    Bartlett draw and every score that read it failed.  It is now created on the
+    matrix's device in the matrix's dtype.
+    """
+    dist = D.Wishart(3.1, covariance_matrix=_on(device)(_COV))
+    assert dist.df.device.type == device
+    assert dist.df.dtype == lucid.float32
+    lucid.manual_seed(0)
+    draw = dist.sample((2,))
+    for what, out in (
+        ("sample", draw),
+        ("log_prob", dist.log_prob(draw)),
+        ("mean", dist.mean),
+        ("variance", dist.variance),
+        ("entropy", dist.entropy()),
+    ):
+        assert out.device.type == device, f"Wishart.{what} is on {out.device}"
 
 
 _REFERENCE_ROWS = [
@@ -472,7 +580,7 @@ def _held_dtypes(dist: Any) -> dict[str, str]:
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize("name,anchor", _mixed(_REFERENCE_ROWS, float64=True))
+@pytest.mark.parametrize("name,anchor", _mixed(_REFERENCE_ROWS))
 def test_held_dtypes_match_the_reference(name: str, anchor: str | None, ref: ModuleType) -> None:
     """The reference holds the same parameters in float64 for the same build."""
 

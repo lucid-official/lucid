@@ -14,6 +14,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import (
     _as_tensor,
     _broadcast_params,
+    _broadcast_to,
     _clamp_probs,
     _lazy_param,
     _pick_probs_or_logits,
@@ -172,10 +173,7 @@ class Poisson(ExponentialFamily):
         """
         # ``lucid.poisson`` draws from the Lucid Philox PRNG, so
         # ``manual_seed`` controls the stream end-to-end.
-        rate_b: Tensor = self.rate + lucid.zeros(
-            self._extended_shape(sample_shape), dtype=self.rate.dtype, device=self.rate.device
-        )
-        return lucid.poisson(rate_b)
+        return lucid.poisson(_broadcast_to(self.rate, self._extended_shape(sample_shape)))
 
     @override
     def log_prob(self, value: Tensor) -> Tensor:
@@ -458,10 +456,8 @@ class Binomial(_CountTrialDistribution):
         from lucid._ops.composite._count_samplers import binomial_counts
 
         out_shape: tuple[int, ...] = self._extended_shape(sample_shape)
-        device = self._probs.device
-        dtype = self._probs.dtype
-        n: Tensor = self.total_count + lucid.zeros(out_shape, dtype=dtype, device=device)
-        p: Tensor = self._probs + lucid.zeros(out_shape, dtype=dtype, device=device)
+        n: Tensor = _broadcast_to(self.total_count.to(self._probs.dtype), out_shape)
+        p: Tensor = _broadcast_to(self._probs, out_shape)
         return binomial_counts(n, p)
 
     @override
@@ -764,12 +760,8 @@ class NegativeBinomial(_CountTrialDistribution):
         from lucid.distributions.gamma import _sample_standard_gamma
 
         out_shape: tuple[int, ...] = self._extended_shape(sample_shape)
-        p: Tensor = self._probs + lucid.zeros(
-            out_shape, dtype=self._probs.dtype, device=self._probs.device
-        )
-        r: Tensor = self.total_count + lucid.zeros(
-            out_shape, dtype=self._probs.dtype, device=self._probs.device
-        )
+        p: Tensor = _broadcast_to(self._probs, out_shape)
+        r: Tensor = _broadcast_to(self.total_count.to(self._probs.dtype), out_shape)
         # Gamma(r, rate=(1−p)/p) — sample standard Gamma(r) then divide
         # by the rate.
         rate: Tensor = (1.0 - p) / p

@@ -21,7 +21,12 @@ from lucid.distributions.constraints import open_unit_interval  # noqa: F401
 from lucid.distributions.distribution import Distribution, ExponentialFamily
 
 
-from lucid.distributions._util import _clamp_probs, _lazy_param, _set_probs_or_logits
+from lucid.distributions._util import (
+    _broadcast_to,
+    _clamp_probs,
+    _lazy_param,
+    _set_probs_or_logits,
+)
 from lucid.special import xlog1py
 
 
@@ -343,7 +348,7 @@ class Bernoulli(ExponentialFamily):
         """
         shape = self._extended_shape(sample_shape)
         u = lucid.rand(*shape, dtype=self._probs.dtype, device=self._probs.device)
-        p = self._probs + lucid.zeros(shape, dtype=self._probs.dtype, device=self._probs.device)
+        p = _broadcast_to(self._probs, shape)
         out = (u < p).to(self._probs.dtype)
         return out.detach()
 

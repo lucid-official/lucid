@@ -285,17 +285,14 @@ class Uniform(Distribution):
         >>> Uniform(low=0.0, high=2.0).log_prob(lucid.tensor(1.0))
         tensor(-0.6931)
         """
-        # log(1 / (high - low)) inside support, -inf outside.
-        log_density = -(self.high - self.low).log()
-        # Match value's shape for the comparison so 0-dim params + N-dim value work.
-        low_b = self.low + value * 0
-        high_b = self.high + value * 0
-        in_support = (value >= low_b) & (value < high_b)
-        return lucid.where(
-            in_support,
-            log_density + value * 0,
-            lucid.full(tuple(value.shape), -math.inf, device=value.device, dtype=value.dtype),
-        )
+        # log(1 / (high - low)) inside support, -inf outside.  The comparison and
+        # ``where`` broadcast the parameters against ``value`` on their own, in the
+        # dtype the parameters and the value promote to, as every other law's score.
+        # ``0 -`` rather than a negation: the unit interval's density is +0, not -0.
+        in_support = (value >= self.low) & (value < self.high)
+        log_density = 0.0 - (self.high - self.low).log()
+        dtype = lucid.promote_types(log_density.dtype, value.dtype)
+        return lucid.where(in_support, log_density.to(dtype), -math.inf)
 
     @override
     def cdf(self, value: Tensor) -> Tensor:
