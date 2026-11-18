@@ -536,7 +536,8 @@ _POISSON_CELLS = [
 
 def _poisson_refused(x: str, t: str, log_input: bool, full: bool) -> bool:
     """The reference subtracts a bool operand in these cells and refuses it: the product of a
-    bool input and a bool target, a bool input that is not a log, and a bool target's Stirling term."""
+    bool input and a bool target, a bool input that is not a log, and a bool target's Stirling term.
+    """
     return (x == "bool" and (t == "bool" or not log_input)) or (t == "bool" and full)
 
 

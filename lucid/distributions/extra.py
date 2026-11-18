@@ -14,12 +14,7 @@ import lucid
 from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import _broadcast_params, _promote_params
-from lucid.distributions._util import (
-    _broadcast_to,
-    _clamp_probs,
-    _lazy_param,
-    _set_probs_or_logits,
-)
+from lucid.distributions._util import _broadcast_to, _clamp_probs, _lazy_param, _set_probs_or_logits
 from lucid.distributions.bernoulli import _logits_to_probs, _probs_to_logits
 from lucid.distributions.constraints import (
     Constraint,

@@ -102,13 +102,7 @@ def _lanes(value: float, bad: float | None = None) -> list[float]:
 
 
 def _build(
-    name: str,
-    anchor: str,
-    vector: lucid.Tensor,
-    *,
-    form: str,
-    dtype: lucid.dtype,
-    device: str,
+    name: str, anchor: str, vector: lucid.Tensor, *, form: str, dtype: lucid.dtype, device: str
 ) -> Any:
     """Law ``name`` with ``anchor`` the vector and the rest numbers or 0-dim tensors."""
     kw: dict[str, Any] = {}

@@ -498,12 +498,10 @@ _TABLE: dict[str, _Row] = {
         lambda fw, t, m: fw.nn.functional.multilabel_soft_margin_loss(m, m.float()),
     ),
     "binary_cross_entropy-input": _guard(
-        "binary_cross_entropy",
-        lambda fw, t, m: fw.nn.functional.binary_cross_entropy(t, t.float()),
+        "binary_cross_entropy", lambda fw, t, m: fw.nn.functional.binary_cross_entropy(t, t.float())
     ),
     "binary_cross_entropy-input-integer": _guard(
-        "binary_cross_entropy",
-        lambda fw, t, m: fw.nn.functional.binary_cross_entropy(t, t.long()),
+        "binary_cross_entropy", lambda fw, t, m: fw.nn.functional.binary_cross_entropy(t, t.long())
     ),
     "huber_loss-input": _guard(
         "huber_loss", lambda fw, t, m: fw.nn.functional.huber_loss(t, t.float())
