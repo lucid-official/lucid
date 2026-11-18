@@ -67,9 +67,11 @@ def _promote_params(*values: Tensor | float | int) -> tuple[Tensor, ...]:
     dtype = like.dtype if like.is_floating_point() else lucid.get_default_dtype()
     with untraced():
         return tuple(
-            v
-            if isinstance(v, lucid.Tensor)
-            else lucid.full((), float(v), dtype=dtype, device=like.device)
+            (
+                v
+                if isinstance(v, lucid.Tensor)
+                else lucid.full((), float(v), dtype=dtype, device=like.device)
+            )
             for v in values
         )
 
