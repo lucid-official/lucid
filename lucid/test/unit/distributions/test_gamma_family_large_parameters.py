@@ -630,7 +630,8 @@ def test_multinomial_log_prob(
 @pytest.mark.parametrize("row", _GAMMA_KL)
 def test_gamma_kl(row: tuple[float, ...], device: str, dtype: lucid.dtype) -> None:
     """``KL(Gamma || Gamma)`` between neighbours is ``O((a_p - a_q)^2 / a)`` out of terms of size
-    ``a log a``: float32 ``(1e6, 1) -> (1e6 + 64, 1 + 2^-13)`` was off by a factor, and ``p = q`` is 0."""
+    ``a log a``: float32 ``(1e6, 1) -> (1e6 + 64, 1 + 2^-13)`` was off by a factor, and ``p = q`` is 0.
+    """
     p = D.Gamma(_t(row[0], device, dtype), _t(row[1], device, dtype))
     q = D.Gamma(_t(row[2], device, dtype), _t(row[3], device, dtype))
     got = kl_divergence(p, q).item()
