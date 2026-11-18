@@ -38,12 +38,14 @@ from lucid.nn.functional._loss_checks import (
     _check_gaussian_var,
     _check_label_smoothing as _check_label_smoothing,
     _check_multi_margin as _check_multi_margin,
+    _check_poisson_bools,
     _check_reduction as _check_reduction,
     _check_same_rank,
     _check_same_weight,
     _check_target,
     _check_triplet_margin as _check_triplet_margin,
     _check_unit_interval,
+    _ctc_lengths,
     _l2_pairwise_distance,
     _legacy_reduction,
     _loss_dtype,
@@ -524,7 +526,6 @@ def _class_nll(
             smooth = smooth * keep
         nll = (1.0 - label_smoothing) * nll + label_smoothing * smooth
 
-    # The mean divides by the total weight of the samples kept.
     return _reduce(nll, reduction, weight=sample_weight)
 
 
@@ -587,9 +588,9 @@ def cross_entropy(
         target back would stall every step, it makes the loss NaN
         instead.
     weight : Tensor or None, optional
-        Per-class weight vector of shape :math:`(C,)` — useful for
-        class-imbalanced training.  Any other shape raises
-        ``ValueError``.
+        Per-class weight vector of shape :math:`(C,)`; any other shape raises
+        ``ValueError``.  For class indices it is of ``input``'s dtype, else
+        ``RuntimeError``; class probabilities take any dtype.
     ignore_index : int, optional
         Class index whose samples are skipped entirely (default ``-100``).
         Common for masked / padded targets in sequence models.
@@ -661,7 +662,6 @@ def cross_entropy(
         # Class dim is 1 for both (N, C) and (N, C, *) inputs.
         out = _soft_target_nll(_log_softmax(x, dim=1), target, weight, reduction, label_smoothing)
     else:
-        # The targets are checked before the first kernel runs.
         targets = _class_targets(target, num_classes, op, ignore_index=ignore_index)
         out = _class_nll(_log_softmax(x, dim=1), targets, weight, reduction, label_smoothing)
     return out.reshape([]) if unbatched and reduction == "none" else out
@@ -714,8 +714,8 @@ def nll_loss(
         ``ignore_index`` raises ``IndexError`` for a CPU tensor and makes
         the loss NaN on Metal.
     weight : Tensor or None, optional
-        Per-class weight vector :math:`(C,)`.  Any other shape raises
-        ``ValueError``.
+        Per-class weight vector :math:`(C,)` of ``input``'s dtype, else
+        ``RuntimeError``.  Any other shape raises ``ValueError``.
     ignore_index : int, optional
         Class index whose samples are excluded (default ``-100``).
     reduction, size_average, reduce : str, optional
@@ -755,7 +755,6 @@ def nll_loss(
     num_classes: int = _num_classes(x, op)
     _check_class_weight(weight, num_classes, x, target, op)
     _check_class_target(x, target, op)
-    # An unbatched (C,) input is one sample.
     unbatched: bool = x.ndim == 1
     if unbatched:
         x = x.unsqueeze(0)
@@ -945,7 +944,7 @@ def binary_cross_entropy_with_logits(
         useful for highly-imbalanced binary tasks, where setting
         ``pos_weight = n_neg / n_pos`` recovers the prevalence-
         balanced gradient.  It broadcasts to ``input``'s shape, as
-        ``weight`` does.
+        ``weight`` does, and is no bool (``RuntimeError``).
 
     Returns
     -------
@@ -1533,13 +1532,14 @@ def poisson_nll_loss(
     Parameters
     ----------
     input : Tensor
-        Predicted Poisson rate.  By default (``log_input=True``)
-        treated as :math:`\log \lambda` for numerical stability;
-        set ``log_input=False`` to pass the rate :math:`\lambda`
-        directly.
+        Predicted Poisson rate: :math:`\log \lambda` by default
+        (``log_input=True``), the rate :math:`\lambda` itself with
+        ``log_input=False``.  A bool or integer input is computed in the
+        default floating dtype, which a float16 target does not narrow.
     target : Tensor
         Observed counts that broadcast with ``input``; a shape that does not
-        raises ``ValueError``.
+        raises ``ValueError``.  A bool target is ``RuntimeError`` beside a bool
+        input and under ``full``; a bool input is, with ``log_input=False``.
     log_input : bool, optional
         Whether ``input`` is :math:`\log \lambda` (default) or
         :math:`\lambda`.  The log-form avoids exponentiating an
@@ -1586,14 +1586,13 @@ def poisson_nll_loss(
     tensor(-0.2976)
     """
     reduction = _legacy_reduction(size_average, reduce, reduction, "poisson_nll_loss")
-    x, target = _operands("poisson_nll_loss", input, target)
+    _check_poisson_bools(input, target, log_input, full)
+    x, target = _operands("poisson_nll_loss", input, target, floating_input=True)
     _check_target(x, target, "poisson_nll_loss")
     xi, ti = _unwrap(x), _unwrap(target)
     if log_input:
-        # Formula — exp(x) - target * x
         loss = _C_engine.sub(_C_engine.exp(xi), _C_engine.mul(ti, xi))
     else:
-        # Formula — x - target * log(x + eps)
         log_xeps = _C_engine.log(
             _C_engine.add(xi, _C_engine.full(xi.shape, eps, xi.dtype, xi.device))
         )
@@ -1750,17 +1749,21 @@ def ctc_loss(
         ``IndexError``.  This is stricter than the reference, which reads
         past the class axis.  The padding past a row's target length is
         not read and may hold anything.
-    input_lengths : Tensor
-        Effective input lengths :math:`(N,)`, ``int32``.  Enables
-        padding-aware batching.  Each must lie in :math:`[0, T]`, else
-        ``IndexError``.  A length of 0 is allowed: the loss is ``inf`` for
-        a non-empty target (see ``zero_infinity``), ``0`` for an empty one.
-    target_lengths : Tensor
-        Effective target lengths :math:`(N,)`, ``int32``.  Each must lie in
-        :math:`[0, S]` for padded targets, and they must add up to the
-        number of concatenated targets.  A length outside its range
-        raises ``IndexError``; a count that does not match raises
-        ``ValueError``.
+    input_lengths : Tensor or Sequence of int
+        Effective input lengths :math:`(N,)`.  Enables padding-aware
+        batching.  Each must lie in :math:`[0, T]`, else ``IndexError``.  A
+        length of 0 is allowed: the loss is ``inf`` for a non-empty target
+        (see ``zero_infinity``), ``0`` for an empty one.  A tensor holds
+        integers of any width (``int8`` to ``int64``), and a bool or
+        floating one raises ``RuntimeError``, as in the reference.  A
+        sequence holds Python ints, and anything else in it raises
+        ``TypeError``.
+    target_lengths : Tensor or Sequence of int
+        Effective target lengths :math:`(N,)`, typed as ``input_lengths`` is
+        and refused as it is.  Each must lie in :math:`[0, S]` for padded
+        targets, and they must add up to the number of concatenated targets.
+        A length outside its range raises ``IndexError``; a count that does
+        not match raises ``ValueError``.
     blank : int, optional
         Index of the blank symbol (default ``0``), in :math:`[0, C)`,
         else ``IndexError``.
@@ -1817,11 +1820,8 @@ def ctc_loss(
     _check_reduction(reduction, op)
     _check_dtypes(op, log_probs=log_probs)
 
-    def _as_lengths(v: Tensor | Sequence[int]) -> Tensor:
-        return v if isinstance(v, _lucid.Tensor) else _lucid.tensor(list(v), dtype=_lucid.int64)
-
-    input_lengths = _as_lengths(input_lengths)
-    target_lengths = _as_lengths(target_lengths)
+    input_lengths = _ctc_lengths(input_lengths, "input_lengths", op)
+    target_lengths = _ctc_lengths(target_lengths, "target_lengths", op)
 
     # An unbatched (T, C) input is one sequence, with a (S,) target and
     # 0-d (or one-element) lengths; it raised "must be 3-D".
@@ -1964,9 +1964,9 @@ def multi_margin_loss(
         Required minimum score gap between the true class and
         every competitor (default ``1.0``).
     weight : Tensor or None, optional
-        Per-class weight vector of shape :math:`(C,)`.  Each sample
-        contribution is scaled by the weight of its *true* class.  Any
-        other shape raises ``ValueError``.
+        Per-class weight vector of shape :math:`(C,)`, of ``input``'s dtype
+        (else ``RuntimeError``).  Each sample contribution is scaled by the
+        weight of its *true* class.  Any other shape raises ``ValueError``.
     reduction, size_average, reduce : str, optional
         ``"mean"`` (default), ``"sum"``, or ``"none"``.
 

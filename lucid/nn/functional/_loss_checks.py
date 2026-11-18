@@ -29,12 +29,22 @@ reference raises -- a ``RuntimeError`` that is a ``NotImplementedError`` for
 some losses, a dtype-mismatch one for the rest -- and a cast to make.
 The accepted operands are cast to one dtype (:func:`_loss_dtype`), so no
 kernel sees a mixed pair.
+
+The table holds an input and a target at the usual dtypes.  What it cannot
+hold has a check of its own, each measured against the reference:
+
+- a class ``weight`` is of the input's dtype for class indices, and of any
+  for class probabilities (:func:`_check_weight_dtype`);
+- the length tensors of ``ctc_loss`` are integral (:func:`_ctc_lengths`);
+- a bool beside another dtype is refused where the loss subtracts it
+  (:func:`_check_poisson_bools`), and as a dtype mismatch rather than the
+  kernel's error beside a target of another dtype (``_MISMATCH_BESIDE_TARGET``).
 """
 
 import math
 import warnings
-from collections.abc import Callable
-from typing import Literal, TYPE_CHECKING, override, overload
+from collections.abc import Callable, Sequence
+from typing import Literal, SupportsIndex, TYPE_CHECKING, override, overload
 
 import lucid as _lucid
 from lucid._tensor_args import GUARD_FRAMES
@@ -324,7 +334,13 @@ def _num_classes(x: Tensor, op: str, *, max_ndim: int | None = None) -> int:
 
 
 def _check_class_weight(
-    weight: Tensor | None, num_classes: int, x: Tensor, target: Tensor, op: str
+    weight: Tensor | None,
+    num_classes: int,
+    x: Tensor,
+    target: Tensor,
+    op: str,
+    *,
+    indexed: bool = True,
 ) -> None:
     """A per-class ``weight`` has exactly one entry per class, and ``x``,
     ``target`` and ``weight`` all share one device
@@ -333,6 +349,10 @@ def _check_class_weight(
     device check lives too (``cross_entropy``'s falls here rather than
     its own dtype check, which skips ``target`` for a class-probability
     one).
+
+    With class indices (``indexed``) the weight is also of ``x``'s dtype
+    (:func:`_check_weight_dtype`).  A target of class probabilities
+    multiplies the weight in instead, so any dtype that does is taken.
 
     The weight's shape is checked by value only — no entry is read, so
     this costs nothing on Metal.  A longer weight was silently cut to
@@ -345,6 +365,27 @@ def _check_class_weight(
             f"classes or no classes but got weight tensor of shape: "
             f"{list(_shape(weight))}"
         )
+    if indexed and weight is not None:
+        _check_weight_dtype(weight, x, op)
+
+
+def _check_weight_dtype(weight: Tensor, x: Tensor, op: str) -> None:
+    """Refuse a class ``weight`` that is not of ``x``'s dtype, as the
+    reference's class-index kernels do: they read both through one scalar
+    type, so a bool, integer, float16 or float64 weight beside a float32
+    input is a dtype mismatch, not a promotion.  The bool and the mismatch
+    are one ``RuntimeError`` class for the reference's
+    ``expected scalar type Float but found …``.
+
+    An input that is not floating point is left for :func:`_check_dtypes`,
+    which names it."""
+    if not x.is_floating_point() or _unwrap(weight).dtype == _unwrap(x).dtype:
+        return
+    if _kind_of(weight) == "bool":
+        raise bool_refusal(op, "weight", mismatch=True)
+    raise _C_engine.DtypeMismatch(
+        f"{op}: expected weight of the input's dtype {x.dtype}, got {weight.dtype}"
+    )
 
 
 def _check_class_target(x: Tensor, target: Tensor, op: str) -> None:
@@ -404,7 +445,12 @@ _DESCRIBE: dict[str, str] = {
 #: Each loss's ``(input kind, target kind)``, the reference's rule,
 #: measured against it (``test_loss_operand_dtypes``).  An empty target
 #: kind means the loss has no target here, or checks it elsewhere
-#: (``ctc_loss``'s labels are checked with its lengths).
+#: (``ctc_loss``'s labels take any dtype, and its lengths are checked by
+#: :func:`_ctc_lengths`).  The table is the rule for an operand beside the
+#: loss's others at their usual dtype; what changes with the pair or the call
+#: is on top of it (``_FLOATING_RESULT``, ``_BOOL_BY_CALL``,
+#: ``_MISMATCH_BESIDE_TARGET``), and the operands that are not input or
+#: target — a class ``weight``, a length tensor — have their own checks.
 #:
 #: A loss with a floating point input has no integer form in the
 #: reference: it has no integer kernel, or its result is a probability or
@@ -427,7 +473,7 @@ _OPERAND_DTYPES: dict[str, tuple[str, str]] = {
     "smooth_l1_loss": ("numeric", "numeric"),
     "l1_loss": ("real", "real"),
     "gaussian_nll_loss": ("real", "real"),
-    "poisson_nll_loss": ("real", "numeric"),
+    "poisson_nll_loss": ("numeric", "numeric"),
     "margin_ranking_loss": ("real", "real"),
     "cosine_embedding_loss": ("numeric", "numeric"),
     "triplet_margin_loss": ("real", ""),
@@ -440,6 +486,22 @@ _OPERAND_DTYPES: dict[str, tuple[str, str]] = {
 #: kernel for them.
 _FLOATING_RESULT: frozenset[str] = frozenset({"mse_loss", "smooth_l1_loss", "l1_loss"})
 
+#: The losses whose answer for a bool operand turns on the call, not on the operand's
+#: place alone, so the table above says ``numeric`` and the loss checks the rest itself
+#: (:func:`_check_poisson_bools`).
+_BOOL_BY_CALL: frozenset[str] = frozenset({"poisson_nll_loss"})
+
+#: The extra operands of :func:`_operands` that a loss takes through arithmetic the reference
+#: refuses a bool in (``pos_weight - 1``): a number, not a mask.  A ``weight`` that only
+#: multiplies takes a bool, as it does there.
+_NUMBER_EXTRAS: frozenset[str] = frozenset({"pos_weight"})
+
+#: The losses whose bool *input* is refused as a dtype mismatch when the target is not
+#: bool: the reference compares the two dtypes first (``huber_loss``'s output type, the
+#: ``Found dtype … but expected …`` of the BCE kernel), and only a bool pair reaches the
+#: kernel whose ``NotImplementedError`` the table's row names.
+_MISMATCH_BESIDE_TARGET: frozenset[str] = frozenset({"huber_loss", "binary_cross_entropy"})
+
 
 def _kind_of(t: Tensor) -> str:
     """``"floating"``, ``"integer"``, ``"bool"`` or ``"complex"``."""
@@ -451,22 +513,51 @@ def _kind_of(t: Tensor) -> str:
     return "integer" if _promotion.is_integer(d) else "complex"
 
 
-def _check_kind(t: Tensor, kind: str, what: str, op: str) -> None:
+def _check_kind(t: Tensor, kind: str, what: str, op: str, *, mismatch: bool = False) -> None:
     """Refuse ``t``, the ``what`` operand of loss ``op``, unless its dtype
     is of ``kind`` (see ``_KINDS``).
 
     A bool is refused as every op refuses one (``bool_refusal``: the
     reference's class, and a cast to name); any other dtype with a
     ``TypeError`` that names it.  A bool *target* or ``var`` beside a floating
-    input is a dtype mismatch whatever the loss's own class (``_TARGETS``)."""
+    input is a dtype mismatch whatever the loss's own class (``_TARGETS``), and
+    so is a bool operand the call says is (``mismatch``: a bool input beside a
+    target of another dtype, for the losses in ``_MISMATCH_BESIDE_TARGET``)."""
     found = _kind_of(t)
     if found in _KINDS[kind]:
         return
     if found == "bool":
         raise bool_refusal(
-            op, "" if what == "input" else what, index=kind == "index", mismatch=what in _TARGETS
+            op,
+            "" if what == "input" else what,
+            index=kind == "index",
+            mismatch=mismatch or what in _TARGETS,
         )
     raise TypeError(f"{op}: expected {_DESCRIBE[kind]} {what}, got {t.dtype}")
+
+
+def _ctc_lengths(lengths: Tensor | Sequence[int], name: str, op: str) -> Tensor:
+    """The ``name`` argument of ``ctc_loss`` (``input_lengths`` or
+    ``target_lengths``) as an integer tensor.
+
+    A tensor is integral, as the reference's CTC kernel reads it: any integer
+    width is taken, and a bool or floating one is refused with the dtype
+    ``RuntimeError`` the reference raises (``… must be integral``), where it was
+    cast to integers and computed.  A sequence holds Python integers — a bool,
+    float or string entry is the ``TypeError`` the reference's argument parser
+    raises for an ``int[]``."""
+    if isinstance(lengths, _lucid.Tensor):
+        found = _kind_of(lengths)
+        if found == "bool":
+            raise bool_refusal(op, name, index=True, mismatch=True)
+        if found != "integer":
+            raise _C_engine.DtypeMismatch(f"{op}: {name} must be integral, got {lengths.dtype}")
+        return lengths
+    entries = list(lengths)
+    for entry in entries:
+        if isinstance(entry, bool) or not isinstance(entry, SupportsIndex):
+            raise TypeError(f"{op}: {name} must hold integers, got {type(entry).__name__}")
+    return _lucid.tensor(entries, dtype=_lucid.int64)
 
 
 def _check_gaussian_var(var: Tensor, x: Tensor, op: str) -> None:
@@ -489,8 +580,9 @@ def _check_dtypes(op: str, target: Tensor | None = None, **inputs: Tensor) -> No
     them; ``target`` is its target, when it has one."""
     _check_device(op, target=target, **inputs)
     input_kind, target_kind = _OPERAND_DTYPES[op]
+    mismatch = op in _MISMATCH_BESIDE_TARGET and target is not None and _kind_of(target) != "bool"
     for what, t in inputs.items():
-        _check_kind(t, input_kind, what, op)
+        _check_kind(t, input_kind, what, op, mismatch=mismatch)
     if target is None or not target_kind:
         return
     _check_kind(target, target_kind, "target", op)
@@ -520,20 +612,55 @@ def _cast(t: Tensor, d: _C_engine.Dtype) -> Tensor:
     return t if _unwrap(t).dtype == d else t.to(dtype=d)
 
 
+def _check_poisson_bools(
+    x: Tensor, target: Tensor, log_input: bool, full: bool, op: str = "poisson_nll_loss"
+) -> None:
+    """Refuse the bool operands the reference's ``poisson_nll_loss`` refuses.
+
+    The reference takes a bool beside another dtype (``exp`` of a bool is a
+    float), and refuses it where it would subtract one: the loss is
+    ``exp(x) - target * x``, or ``x - target * log(x + eps)`` when ``log_input``
+    is false, plus Stirling's term in ``target`` when ``full`` — and a
+    subtraction takes no bool operand.  That is a bool ``x`` that meets a bool
+    ``target`` (a bool product), a bool ``x`` with ``log_input`` false, and a
+    bool ``target`` with ``full``.  Each one is the guard class of ``op``'s row,
+    a dtype ``RuntimeError``, as the reference raises.  Only dtypes are read."""
+    bool_x, bool_target = _kind_of(x) == "bool", _kind_of(target) == "bool"
+    if bool_x and (bool_target or not log_input):
+        raise bool_refusal(op)
+    if bool_target and full:
+        raise bool_refusal(op, "target", mismatch=True)
+
+
 def _operands(
-    op: str, x: Tensor, target: Tensor, *, promote: bool = True, **extra: Tensor | None
+    op: str,
+    x: Tensor,
+    target: Tensor,
+    *,
+    promote: bool = True,
+    floating_input: bool = False,
+    **extra: Tensor | None,
 ) -> tuple[Tensor, Tensor]:
     """``x`` and ``target`` checked for loss ``op`` (:func:`_check_device`,
     :func:`_check_dtypes`) and cast to the dtype the loss computes in.
 
     That dtype is the one the two promote to.  With ``promote=False`` it is
     ``x``'s alone: a target that is only compared, never multiplied, does
-    not widen the loss.  ``extra`` is a loss's other tensor operands —
-    ``weight``, ``pos_weight`` — checked against ``x``'s device too, but
-    not cast: a weight is only ever multiplied through the ordinary
-    operator overloads, which promote and broadcast on their own."""
+    not widen the loss.  With ``floating_input`` an ``x`` that is not floating
+    point is first widened to the default floating dtype, as a loss whose first
+    term is ``exp`` or ``log`` of the input does: an integer or bool ``x`` meets
+    a float16 target as a float32, not as a float16.  ``extra`` is a loss's other
+    tensor operands — ``weight``, ``pos_weight`` — checked against ``x``'s device
+    too, but not cast: a weight is only ever multiplied through the ordinary
+    operator overloads, which promote and broadcast on their own.  The ones in
+    ``_NUMBER_EXTRAS`` are refused if bool."""
     _check_device(op, input=x, target=target, **extra)
     _check_dtypes(op, target, input=x)
+    for what, t in extra.items():
+        if t is not None and what in _NUMBER_EXTRAS:
+            _check_kind(t, "real", what, op, mismatch=True)
+    if floating_input and not x.is_floating_point():
+        x = _cast(x, _promotion.default_float(_unwrap(x).device))
     d = _loss_dtype(x, target) if promote else _loss_dtype(x)
     return _cast(x, d), _cast(target, d)
 
@@ -558,11 +685,11 @@ def _check_cross_entropy_target(
     :func:`~lucid.nn.functional.loss.cross_entropy`, returning
     ``(num_classes, soft)``."""
     num_classes: int = _num_classes(x, op)
-    _check_class_weight(weight, num_classes, x, target, op)
     # A target of the input's own shape holds class probabilities, as in
     # the reference; the docstring said so, and the gather path refused it
     # with a rank mismatch.
     soft: bool = _shape(target) == _shape(x)
+    _check_class_weight(weight, num_classes, x, target, op, indexed=not soft)
     _check_dtypes(op, None if soft else target, input=x)
     if not soft:
         _check_class_target(x, target, op)
