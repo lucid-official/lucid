@@ -9,6 +9,7 @@ import warnings
 
 import lucid
 from lucid._tensor.tensor import Tensor
+from lucid.distributions._stirling_math import _gamma_kl, _log_beta, _log_multi_beta
 from lucid.distributions.bernoulli import Bernoulli
 from lucid.distributions.categorical import Categorical
 from lucid.distributions.continuous_extra import HalfNormal
@@ -336,13 +337,7 @@ def _kl_gamma_gamma(p: Gamma, q: Gamma) -> Tensor:
             + (\alpha_p - \alpha_q)\,\psi(\alpha_p)
             + (\beta_q - \beta_p)\,\frac{\alpha_p}{\beta_p}
     """
-    a_p, b_p = p.concentration, p.rate
-    a_q, b_q = q.concentration, q.rate
-    t1 = a_q * (b_p / b_q).log()
-    t2 = lucid.lgamma(a_q) - lucid.lgamma(a_p)
-    t3 = (a_p - a_q) * lucid.digamma(a_p)
-    t4 = (b_q - b_p) * (a_p / b_p)
-    return t1 + t2 + t3 + t4
+    return _gamma_kl(p.concentration, p.rate, q.concentration, q.rate)
 
 
 @register_kl(Beta, Beta)
@@ -353,13 +348,8 @@ def _kl_beta_beta(p: Beta, q: Beta) -> Tensor:
     :math:`(\alpha_1, \alpha_0)` and :math:`(\beta_1, \beta_0)`.
     """
     sum_p = p.concentration1 + p.concentration0
-    sum_q = q.concentration1 + q.concentration0
-    t1 = lucid.lgamma(sum_p) - lucid.lgamma(sum_q)
-    t2 = (
-        lucid.lgamma(q.concentration1)
-        - lucid.lgamma(p.concentration1)
-        + lucid.lgamma(q.concentration0)
-        - lucid.lgamma(p.concentration0)
+    t12 = _log_beta(q.concentration1, q.concentration0) - _log_beta(
+        p.concentration1, p.concentration0
     )
     t3 = (p.concentration1 - q.concentration1) * (
         lucid.digamma(p.concentration1) - lucid.digamma(sum_p)
@@ -367,7 +357,7 @@ def _kl_beta_beta(p: Beta, q: Beta) -> Tensor:
     t4 = (p.concentration0 - q.concentration0) * (
         lucid.digamma(p.concentration0) - lucid.digamma(sum_p)
     )
-    return t1 + t2 + t3 + t4
+    return t12 + t3 + t4
 
 
 @register_kl(Poisson, Poisson)
@@ -403,13 +393,7 @@ def _kl_dirichlet_dirichlet(p: Dirichlet, q: Dirichlet) -> Tensor:
     a = p.concentration
     b = q.concentration
     sum_a = a.sum(dim=-1, keepdim=True)
-    sum_b = b.sum(dim=-1, keepdim=True)
-    t1 = (
-        lucid.lgamma(sum_a).squeeze(-1)
-        - lucid.lgamma(a).sum(dim=-1)
-        - lucid.lgamma(sum_b).squeeze(-1)
-        + lucid.lgamma(b).sum(dim=-1)
-    )
+    t1 = _log_multi_beta(b) - _log_multi_beta(a)
     t2 = ((a - b) * (lucid.digamma(a) - lucid.digamma(sum_a))).sum(dim=-1)
     return t1 + t2
 

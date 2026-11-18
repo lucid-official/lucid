@@ -11,6 +11,12 @@ from typing import Self, override
 
 import lucid
 from lucid._tensor.tensor import Tensor
+from lucid.distributions._stirling_math import (
+    _binomial_pmf_centred,
+    _log_comb,
+    _negative_binomial_pmf_centred,
+    _poisson_log_prob,
+)
 from lucid.distributions._util import (
     _as_tensor,
     _broadcast_params,
@@ -197,7 +203,7 @@ class Poisson(ExponentialFamily):
         Tensor
             Log-probability values of the same shape as ``value``.
         """
-        return lucid.xlogy(value, self.rate) - self.rate - lucid.lgamma(value + 1.0)
+        return _poisson_log_prob(self.rate, value)
 
     @override
     def entropy(self) -> Tensor:
@@ -483,13 +489,12 @@ class Binomial(_CountTrialDistribution):
         Tensor
             Log-probability values of the same shape as ``value``.
         """
-        # log p(k) = lgamma(n+1) − lgamma(k+1) − lgamma(n−k+1)
-        #           + k·log(p) + (n−k)·log(1−p).
+        # log p(k) = log C(n, k) + k·log(p) + (n−k)·log(1−p).
         n: Tensor = self.total_count
         # A caller may score counts held as integers; everything below is
         # float arithmetic, so the counts join the parameters.
         k: Tensor = value.to(self._logits.dtype)
-        log_comb: Tensor = lucid.lgamma(n + 1.0) - lucid.lgamma(k + 1.0) - lucid.lgamma(n - k + 1.0)
+        coefficient: Tensor = _log_comb(n, k)
         # Stable form via logits: k·l − n·softplus(l).
         l: Tensor = self._logits
 
@@ -521,7 +526,12 @@ class Binomial(_CountTrialDistribution):
         sp_neg, sp_pos = (-l).softplus(), l.softplus()
         lower = lucid.where((k == 0.0) & lucid.isinf(sp_neg), 0.0, sp_neg)
         upper = lucid.where((n - k == 0.0) & lucid.isinf(sp_pos), 0.0, sp_pos)
-        return log_comb - k * lower - (n - k) * upper
+        plain: Tensor = coefficient - k * lower - (n - k) * upper
+        # For a large n the coefficient and ``k log p + (n - k) log(1 - p)`` are numbers of size
+        # n that cancel to ``log P``: the saddle-point form never forms them (``Binomial(1e7, 0.5)``
+        # at 5e6 was 0 in float32 for -8.2848).  The plain form keeps the ends and small counts.
+        centred, inside = _binomial_pmf_centred(n, k, l)
+        return lucid.where(inside, centred, plain)
 
     @override
     def entropy(self) -> Tensor:
@@ -820,13 +830,18 @@ class NegativeBinomial(_CountTrialDistribution):
         empty: Tensor = (k + r) == 0
         k_plus_r: Tensor = lucid.where(empty, 1.0, k + r)
         r_safe: Tensor = lucid.where(empty, 1.0, r)
-        return (
+        plain: Tensor = (
             lucid.lgamma(k_plus_r)
             - lucid.lgamma(r_safe)
             - lucid.lgamma(k + 1.0)
             - r * neg_log_q
             - k * neg_log_p
         )
+        # ``k + r >= 10`` with ``k, r > 0`` takes the saddle-point form (see :class:`Binomial`): the
+        # three ``lgamma`` and ``r log q + k log p`` are numbers of size ``k + r`` that cancel to
+        # ``log P``.  The plain form keeps ``k = 0``, ``r = 0`` and small counts bit for bit.
+        centred, inside = _negative_binomial_pmf_centred(r, k, l)
+        return lucid.where(inside, centred, plain)
 
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:

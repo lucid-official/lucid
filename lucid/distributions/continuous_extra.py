@@ -13,6 +13,7 @@ from typing import Self, override
 import lucid
 from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
+from lucid.distributions._stirling_math import _f_log_prob
 from lucid.distributions._util import _as_tensor, _broadcast_params
 from lucid.distributions._util import _image_cdf, _image_icdf
 from lucid.distributions.constraints import Constraint, greater_than_eq, nonnegative, positive
@@ -1249,13 +1250,4 @@ class FisherSnedecor(Distribution):
         Tensor
             Log-density values of the same shape as ``value``.
         """
-        half1: Tensor = self.df1 * 0.5
-        half2: Tensor = self.df2 * 0.5
-        ratio: Tensor = self.df1 / self.df2
-        log_beta: Tensor = lucid.lgamma(half1) + lucid.lgamma(half2) - lucid.lgamma(half1 + half2)
-        return (
-            half1 * ratio.log()
-            + lucid.xlogy(half1 - 1.0, value)
-            - (half1 + half2) * lucid.log1p(ratio * value)
-            - log_beta
-        )
+        return _f_log_prob(self.df1, self.df2, value)

@@ -367,6 +367,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - check the loss operands the dtype table does not hold
 
+- stable log-beta, log-comb and gamma-family densities
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

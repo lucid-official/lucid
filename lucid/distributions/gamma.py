@@ -24,6 +24,16 @@ from lucid._C import engine as _C_engine
 from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
+from lucid.distributions._stirling_math import (
+    _beta_entropy,
+    _beta_log_prob,
+    _dirichlet_entropy,
+    _dirichlet_log_prob,
+    _gamma_entropy,
+    _gamma_log_prob,
+    _log_beta,
+    _log_multi_beta,
+)
 from lucid.distributions.constraints import (
     Constraint,
     independent,
@@ -38,7 +48,7 @@ _MAX_GAMMA_RETRIES: int = 8
 
 
 from lucid.distributions._util import _as_tensor, _broadcast_params, _promote_params
-from lucid.special import gammainc, xlog1py
+from lucid.special import gammainc
 
 
 def _sample_standard_log_gamma(concentration: Tensor, sample_shape: tuple[int, ...]) -> Tensor:
@@ -595,12 +605,7 @@ class Gamma(ExponentialFamily):
         >>> Gamma(concentration=1.0, rate=1.0).log_prob(lucid.tensor(1.0))
         tensor(-1.)
         """
-        return (
-            self.concentration * self.rate.log()
-            + lucid.xlogy(self.concentration - 1.0, value)
-            - self.rate * value
-            - lucid.lgamma(self.concentration)
-        )
+        return _gamma_log_prob(self.concentration, self.rate, value)
 
     @override
     def cdf(self, value: Tensor) -> Tensor:
@@ -652,12 +657,7 @@ class Gamma(ExponentialFamily):
         >>> Gamma(concentration=1.0, rate=1.0).entropy()  # Exp(1): H = 1
         tensor(1.)
         """
-        return (
-            self.concentration
-            - self.rate.log()
-            + lucid.lgamma(self.concentration)
-            + (1.0 - self.concentration) * lucid.digamma(self.concentration)
-        )
+        return _gamma_entropy(self.concentration) - self.rate.log()
 
     @override
     @property
@@ -1059,10 +1059,7 @@ class Beta(ExponentialFamily):
         Tensor
             Element-wise log-densities, shape ``batch_shape``.
         """
-        a = self.concentration1
-        b = self.concentration0
-        log_b = lucid.lgamma(a) + lucid.lgamma(b) - lucid.lgamma(a + b)
-        return lucid.xlogy(a - 1.0, value) + xlog1py(b - 1.0, -value) - log_b
+        return _beta_log_prob(self.concentration1, self.concentration0, value)
 
     @override
     def entropy(self) -> Tensor:
@@ -1083,16 +1080,7 @@ class Beta(ExponentialFamily):
         Tensor
             Entropy in nats, shape ``batch_shape``.
         """
-        a = self.concentration1
-        b = self.concentration0
-        ab = a + b
-        log_b = lucid.lgamma(a) + lucid.lgamma(b) - lucid.lgamma(ab)
-        return (
-            log_b
-            - (a - 1.0) * lucid.digamma(a)
-            - (b - 1.0) * lucid.digamma(b)
-            + (ab - 2.0) * lucid.digamma(ab)
-        )
+        return _beta_entropy(self.concentration1, self.concentration0)
 
     @override
     @property
@@ -1102,7 +1090,7 @@ class Beta(ExponentialFamily):
     @override
     def _log_normalizer(self, *natural_params: Tensor) -> Tensor:
         x, y = natural_params
-        return lucid.lgamma(x) + lucid.lgamma(y) - lucid.lgamma(x + y)
+        return _log_beta(x, y)
 
     @override
     @property
@@ -1373,9 +1361,7 @@ class Dirichlet(ExponentialFamily):
         Tensor
             Log-densities, shape ``batch_shape``.
         """
-        a = self.concentration
-        log_b = lucid.lgamma(a).sum(dim=-1) - lucid.lgamma(a.sum(dim=-1))
-        return lucid.xlogy(a - 1.0, value).sum(dim=-1) - log_b
+        return _dirichlet_log_prob(self.concentration, value)
 
     @override
     def entropy(self) -> Tensor:
@@ -1395,14 +1381,10 @@ class Dirichlet(ExponentialFamily):
         Tensor
             Entropy in nats, shape ``batch_shape``.
         """
-        a = self.concentration
-        s = a.sum(dim=-1)
-        k = a.shape[-1]
-        log_b = lucid.lgamma(a).sum(dim=-1) - lucid.lgamma(s)
-        # Each term of the formula once: ψ(α₀) appears only in
-        # ``(α₀ − K) ψ(α₀)``.  Writing the last sum as
-        # ``Σ (αᵢ − 1)(ψ(αᵢ) − ψ(α₀))`` counted it a second time.
-        return log_b + (s - k) * lucid.digamma(s) - ((a - 1.0) * lucid.digamma(a)).sum(dim=-1)
+        # ``log B + (α₀ − K) ψ(α₀) − Σ (αᵢ − 1) ψ(αᵢ)``, each term once: ψ(α₀) appears only
+        # in ``(α₀ − K) ψ(α₀)``.  Writing the last sum as ``Σ (αᵢ − 1)(ψ(αᵢ) − ψ(α₀))``
+        # counted it a second time.
+        return _dirichlet_entropy(self.concentration)
 
     @override
     @property
@@ -1412,7 +1394,7 @@ class Dirichlet(ExponentialFamily):
     @override
     def _log_normalizer(self, *natural_params: Tensor) -> Tensor:
         (x,) = natural_params
-        return lucid.lgamma(x).sum(dim=-1) - lucid.lgamma(x.sum(dim=-1))
+        return _log_multi_beta(x)
 
     @override
     @property

@@ -4,6 +4,7 @@ import math
 
 import lucid
 from lucid._tensor.tensor import Tensor
+from lucid.distributions._stirling_math import _log_beta
 from lucid.distributions._util import _sum_rightmost
 from lucid.distributions.bernoulli import Bernoulli, Geometric
 from lucid.distributions.categorical import OneHotCategorical
@@ -437,11 +438,7 @@ def _kl_uniform_beta(p: Uniform, q: Beta) -> Tensor:
     c = p.high - p.low
     t2 = (q.concentration1 - 1.0) * (_x_log_x(p.high) - _x_log_x(p.low) - c) / c
     t3 = (q.concentration0 - 1.0) * (_x_log_x(1.0 - p.high) - _x_log_x(1.0 - p.low) + c) / c
-    t4 = (
-        lucid.lgamma(q.concentration1)
-        + lucid.lgamma(q.concentration0)
-        - lucid.lgamma(q.concentration1 + q.concentration0)
-    )
+    t4 = _log_beta(q.concentration1, q.concentration0)
     return lucid.where((p.high > 1.0) | (p.low < 0.0), float("inf"), t3 + t4 - c.log() - t2)
 
 
