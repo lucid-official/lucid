@@ -373,6 +373,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - search two operands of different dtypes at their common dtype
 
+- build isin's Python operands on the other operand's device
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

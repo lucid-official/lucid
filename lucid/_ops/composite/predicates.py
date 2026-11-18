@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import lucid
 from lucid._ops._bool_refusal import is_bool, refuse_bool
-from lucid._ops.composite._shared import _is_tensor
+from lucid._ops.composite._shared import _operands_together
 from lucid._types import TensorLike
 
 if TYPE_CHECKING:
@@ -302,9 +302,13 @@ def isin(
     ----------
     elements : Tensor | TensorLike
         Values to test.  Reshaped to 1-D internally; the output is
-        reshaped back to ``elements.shape``.
+        reshaped back to ``elements.shape``.  A Python number or list is
+        built on the device of the other operand, so ``isin(x, 2)`` works
+        for a Metal ``x``.
     test_elements : Tensor | TensorLike
-        The set of values to test against. Flattened internally.
+        The set of values to test against. Flattened internally.  A Python
+        number is a weak scalar beside a tensor, as in the reference:
+        ``isin(int8_tensor, 300)`` compares at ``int8``.
     assume_unique : bool, optional
         If ``True``, assumes both ``elements`` and ``test_elements``
         contain unique items. Accepted for reference-framework parity;
@@ -340,12 +344,11 @@ def isin(
     >>> t = lucid.tensor([2, 4])
     >>> lucid.isin(e, t)
     tensor([False, True, False, True], dtype=lucid.bool)
+    >>> lucid.isin(e, 3)
+    tensor([False, False, True, False], dtype=lucid.bool)
     """
     del assume_unique
-    if not _is_tensor(elements):
-        elements = lucid.tensor(elements)
-    if not _is_tensor(test_elements):
-        test_elements = lucid.tensor(test_elements)
+    elements, test_elements = _operands_together(elements, test_elements)
     refuse_bool("isin", elements, test_elements)
     e_flat = elements.reshape(-1)
     t_flat = test_elements.reshape(-1)
