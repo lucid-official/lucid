@@ -1101,7 +1101,7 @@ def test_a_refused_in_place_twin_leaves_the_tensor_as_it_was(device: str, name: 
     assert t._impl.version == version
 
 
-# ── a bool beside an integer: not a refusal, an answer Lucid does not give yet ──────────────
+# ── a bool beside an integer: not a refusal, the two are promoted and searched ──────────────
 
 #: ``(call, what the reference answers)``: the reference promotes the bool and searches at int64.
 _PROMOTED_SEARCH: dict[str, tuple[Callable[[ModuleType, object, object], object], list[int]]] = {
@@ -1120,11 +1120,6 @@ def test_the_reference_answers_a_bool_beside_an_integer(ref: ModuleType, name: s
     assert got.tolist() == want  # type: ignore[attr-defined]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="LCD-1021: searchsorted / bucketize raise DtypeMismatch for a bool beside an integer, "
-    "where the reference promotes and answers at int64",
-)
 @pytest.mark.parametrize("name", list(_PROMOTED_SEARCH))
 def test_a_bool_beside_an_integer_is_promoted_not_refused(device: str, name: str) -> None:
     call, want = _PROMOTED_SEARCH[name]
