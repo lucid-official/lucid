@@ -13,6 +13,12 @@ from typing import Self, override
 import lucid
 from lucid._dtype import finfo
 from lucid._tensor.tensor import Tensor
+from lucid.distributions._stirling_math import (
+    _inverse_gamma_entropy,
+    _inverse_gamma_log_prob,
+    _log_beta,
+    _log_multinomial_coeff,
+)
 from lucid.distributions._util import _broadcast_params, _promote_params
 from lucid.distributions._util import _broadcast_to, _clamp_probs, _lazy_param, _set_probs_or_logits
 from lucid.distributions.bernoulli import _logits_to_probs, _probs_to_logits
@@ -391,14 +397,12 @@ class InverseGamma(Distribution):
             Log-density :math:`\alpha\log\beta - \log\Gamma(\alpha)
             - (\alpha+1)\log x - \beta/x`.
         """
-        c, r = self.concentration, self.rate
-        return c * r.log() - lucid.lgamma(c) - (c + 1.0) * value.log() - r / value
+        return _inverse_gamma_log_prob(self.concentration, self.rate, value)
 
     @override
     def entropy(self) -> Tensor:
         """``α + log β + log Γ(α) − (1 + α) · ψ(α)``."""
-        c, r = self.concentration, self.rate
-        return c + r.log() + lucid.lgamma(c) - (c + 1.0) * lucid.digamma(c)
+        return _inverse_gamma_entropy(self.concentration, self.rate)
 
     @override
     def cdf(self, value: Tensor) -> Tensor:
@@ -535,15 +539,9 @@ class Kumaraswamy(Distribution):
     @property
     @override
     def mean(self) -> Tensor:
-        """``E[X] = b · B(1 + 1/a, b)`` expressed via ``lgamma``."""
+        """``E[X] = b · B(1 + 1/a, b)``, through the log-beta."""
         a, b = self.concentration1, self.concentration0
-        log_mean = (
-            b.log()
-            + lucid.lgamma(1.0 + 1.0 / a)
-            + lucid.lgamma(b)
-            - lucid.lgamma(1.0 + 1.0 / a + b)
-        )
-        return log_mean.exp()
+        return (b.log() + _log_beta(1.0 + 1.0 / a, b)).exp()
 
     @override
     def expand(self, batch_shape: Sequence[int], _instance: Self | None = None) -> Self:
@@ -576,13 +574,7 @@ class Kumaraswamy(Distribution):
     def variance(self) -> Tensor:
         """``Var[X] = E[X²] − E[X]²``  where ``E[X²] = b · B(1 + 2/a, b)``."""
         a, b = self.concentration1, self.concentration0
-        log_sq_mean = (
-            b.log()
-            + lucid.lgamma(1.0 + 2.0 / a)
-            + lucid.lgamma(b)
-            - lucid.lgamma(1.0 + 2.0 / a + b)
-        )
-        return log_sq_mean.exp() - self.mean**2
+        return (b.log() + _log_beta(1.0 + 2.0 / a, b)).exp() - self.mean**2
 
     @override
     def rsample(self, sample_shape: tuple[int, ...] = ()) -> Tensor:
@@ -938,9 +930,7 @@ class Multinomial(Distribution):
         :math:`p_i = 0` (a zero in ``probs`` or a logit of ``-inf``), rather
         than ``0 · (-inf) = NaN``.
         """
-        log_coeff: Tensor = lucid.lgamma(value.sum(dim=-1) + 1.0) - lucid.lgamma(value + 1.0).sum(
-            dim=-1
-        )
+        log_coeff: Tensor = _log_multinomial_coeff(value)
         if self._is_logits:
             log_p: Tensor = self.logits
             # ``log_softmax`` differentiates without dividing by p, so the

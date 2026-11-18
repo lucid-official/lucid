@@ -369,6 +369,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - stable log-beta, log-comb and gamma-family densities
 
+- route InverseGamma, Kumaraswamy, Multinomial via log-beta (LCD-1041)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
