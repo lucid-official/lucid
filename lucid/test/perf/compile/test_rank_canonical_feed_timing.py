@@ -3,7 +3,7 @@
 from collections.abc import Callable
 import pytest
 from lucid._C import engine as _C_engine
-from lucid.test.perf.compile._timing import assert_ratio_within
+from lucid.test.perf.compile._timing import checked_twin_shape, assert_ratio_within
 from lucid.test.unit.compile._helpers import compiled_call, read_first
 from lucid.test.unit.compile.test_rank_canonical_feed import (
     _TWINS,
@@ -25,6 +25,7 @@ pytestmark = [
 def test_a_rank_5_feed_is_not_slower_than_its_rank_4_twin(name: str) -> None:
     """Held to 1.5x the twin; the views of a rank-5 feed ran 1.9x to 2.6x it, the pass off 4.7x+."""
     fn, wide, twin = _TWINS[name]
+    twin = checked_twin_shape(wide, twin)
     xs5 = (_on(_filled(wide, 0.1)), _on(_filled(wide, 0.9)))
     xs4 = (_on(_filled(twin, 0.1)), _on(_filled(twin, 0.9)))
 

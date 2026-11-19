@@ -3,7 +3,7 @@
 from collections.abc import Callable
 import pytest
 from lucid._C import engine as _C_engine
-from lucid.test.perf.compile._timing import assert_ratio_within, compare_ms
+from lucid.test.perf.compile._timing import checked_twin_shape, assert_ratio_within, compare_ms
 from lucid.test.unit.compile.test_rank_canonical_movement import needs_metal
 from lucid.test.unit.compile.test_wide_integer_rank_canonical import (
     _BOUND,
@@ -24,7 +24,7 @@ pytestmark = [
 @pytest.mark.parametrize(("name", "where"), _ROWS)
 def test_a_rank_4_carried_op_is_not_slower_than_its_rank_3_twin(name: str, where: str) -> None:
     """Held to 1.5x the twin; unfixed the rank-5 carried operand ran 4x to 8x it."""
-    twin_shape = _TWINS[where][1]
+    twin_shape = checked_twin_shape(_W4, _TWINS[where][1])
 
     def build() -> dict[str, Callable[[], float]]:
         _C_engine.compile.session_cache_clear()
@@ -40,7 +40,7 @@ def test_a_rank_4_carried_op_is_not_slower_than_its_rank_3_twin(name: str, where
 @pytest.mark.parametrize(("name", "where"), _ROWS)
 def test_the_carried_op_bound_is_exceeded_by_the_unfixed_graph(name: str, where: str) -> None:
     """The guard above can fail: with the gate off the rank-4 op is over its bound."""
-    twin_shape = _TWINS[where][1]
+    twin_shape = checked_twin_shape(_W4, _TWINS[where][1])
 
     def build() -> dict[str, Callable[[], float]]:
         _C_engine.compile.session_cache_clear()

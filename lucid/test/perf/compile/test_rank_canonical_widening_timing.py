@@ -4,7 +4,7 @@ from collections.abc import Callable
 import pytest
 import lucid
 from lucid._C import engine as _C_engine
-from lucid.test.perf.compile._timing import assert_ratio_within, compare_ms
+from lucid.test.perf.compile._timing import checked_twin_shape, assert_ratio_within, compare_ms
 from lucid.test.unit.compile._helpers import compiled_call, with_env
 from lucid.test.unit.compile.test_rank_canonical_movement import ENV, Shape, _metal, needs_metal
 from lucid.test.unit.compile.test_rank_canonical_widening import (
@@ -33,7 +33,8 @@ pytestmark = [
 @pytest.mark.parametrize("where", sorted(_REPEAT_TWINS))
 def test_a_rank_4_repeat_is_not_slower_than_its_rank_3_twin(where: str) -> None:
     """Held to 1.5x the twin; unfixed the rank-5 intermediate ran 19x to 21x it."""
-    dim, twin_shape = _REPEAT_TWINS[where]
+    dim, narrow = _REPEAT_TWINS[where]
+    twin_shape = checked_twin_shape(_W4, narrow)
     fn = _repeat_forward(dim)
 
     def build() -> dict[str, Callable[[], float]]:
@@ -51,7 +52,8 @@ def test_a_rank_4_repeat_is_not_slower_than_its_rank_3_twin(where: str) -> None:
 @pytest.mark.parametrize("where", sorted(_REPEAT_TWINS))
 def test_the_repeat_bound_is_exceeded_by_the_unfixed_graph(where: str) -> None:
     """The guard above can fail: with the gate off the rank-4 repeat is over its bound."""
-    dim, twin_shape = _REPEAT_TWINS[where]
+    dim, narrow = _REPEAT_TWINS[where]
+    twin_shape = checked_twin_shape(_W4, narrow)
 
     def build() -> dict[str, Callable[[], float]]:
         _C_engine.compile.session_cache_clear()
@@ -72,7 +74,8 @@ def test_the_repeat_bound_is_exceeded_by_the_unfixed_graph(where: str) -> None:
 @needs_metal
 @pytest.mark.parametrize("where", sorted(_REPEAT_TWINS))
 def test_a_rank_4_repeat_backward_is_not_slower_than_its_rank_3_twin(where: str) -> None:
-    dim, twin_shape = _REPEAT_TWINS[where]
+    dim, narrow = _REPEAT_TWINS[where]
+    twin_shape = checked_twin_shape(_W4, narrow)
 
     def build() -> dict[str, Callable[[], float]]:
         _C_engine.compile.session_cache_clear()
@@ -87,7 +90,8 @@ def test_a_rank_4_repeat_backward_is_not_slower_than_its_rank_3_twin(where: str)
 @needs_metal
 @pytest.mark.parametrize("where", sorted(_REPEAT_TWINS))
 def test_the_repeat_backward_bound_is_exceeded_by_the_unfixed_graph(where: str) -> None:
-    dim, twin_shape = _REPEAT_TWINS[where]
+    dim, narrow = _REPEAT_TWINS[where]
+    twin_shape = checked_twin_shape(_W4, narrow)
 
     def build() -> dict[str, Callable[[], float]]:
         _C_engine.compile.session_cache_clear()
@@ -113,7 +117,7 @@ def test_a_tile_backward_is_not_slower_than_its_rank_2_twin() -> None:
         _C_engine.compile.session_cache_clear()
         return {
             "tile": _step(_tile_wide, _TILE_WIDE, None),
-            "twin": _step(_tile_twin, _TILE_TWIN, None),
+            "twin": _step(_tile_twin, checked_twin_shape(_TILE_WIDE, _TILE_TWIN), None),
         }
 
     assert_ratio_within(build, "tile", "twin", bound=_STEP_BOUND, slack_ms=0.5, what="tile")
@@ -125,7 +129,7 @@ def test_the_tile_backward_bound_is_exceeded_by_the_unfixed_graph() -> None:
         _C_engine.compile.session_cache_clear()
         return {
             "gate off": _step(_tile_wide, _TILE_WIDE, "-1"),
-            "twin": _step(_tile_twin, _TILE_TWIN, None),
+            "twin": _step(_tile_twin, checked_twin_shape(_TILE_WIDE, _TILE_TWIN), None),
         }
 
     unfixed = compare_ms(

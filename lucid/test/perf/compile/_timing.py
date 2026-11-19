@@ -1,10 +1,18 @@
 """Interleaved, synchronized timings for the recorded performance tier."""
 
+import math
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 Calls = Mapping[str, Callable[[], object]]
+
+
+def checked_twin_shape(wide: tuple[int, ...], twin: tuple[int, ...]) -> tuple[int, ...]:
+    """Check equal work when the timed calls allocate their operands independently."""
+    assert math.prod(wide) == math.prod(twin), (wide, twin)
+    return twin
+
 
 #: The smallest ratio bound a guard may state (``1.0`` itself is allowed: it says "no ratio,
 #: only ``slack_ms``").  The bounds that held on the runner run after run are 1.5x and up; the

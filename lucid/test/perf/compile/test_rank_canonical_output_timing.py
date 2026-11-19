@@ -4,7 +4,7 @@ from collections.abc import Callable
 import pytest
 import lucid
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.perf.compile._timing import assert_ratio_within
+from lucid.test.perf.compile._timing import checked_twin_shape, assert_ratio_within
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, compiled_call, read_first
 from lucid.test.unit.compile.test_rank_canonical_output import (
     _filled,
@@ -27,7 +27,7 @@ def test_a_rank_5_output_is_not_slower_than_its_rank_4_twin() -> None:
     (a rank-5 feed) is in both.
     """
     r5 = (6144, 16, 2, 16, 2)
-    r4 = (6144, 16, 2, 32)
+    r4 = checked_twin_shape(r5, (6144, 16, 2, 32))
     x5, x4 = _filled(r5).to(COMPILE_DEVICE), _filled(r4).to(COMPILE_DEVICE)
 
     def pair(

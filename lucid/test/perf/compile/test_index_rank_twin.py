@@ -26,6 +26,7 @@ from lucid.test.unit.compile._layout_twins import LAYOUT_CASES, layout_twin
 
 from lucid._C import engine as _C_engine
 from lucid.test._default_device import metal_available
+from lucid.test.perf.compile._timing import checked_twin_shape
 from lucid.test.perf.compile._timing import assert_ratio_within, compare_ms
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, compiled_call, with_env
 from lucid.test.unit.compile._index_twins import CASES
@@ -128,3 +129,10 @@ def test_space_to_depth_time_against_always_on() -> None:
 
     with lucid.no_grad():
         assert_ratio_within(build, "default", "always", bound=1.5, slack_ms=0.3)
+
+
+def test_a_quarter_size_timing_operand_is_rejected() -> None:
+    wide = (2, 4, 8)
+    assert checked_twin_shape(wide, (8, 8)) == (8, 8)
+    with pytest.raises(AssertionError):
+        checked_twin_shape(wide, (2, 8))

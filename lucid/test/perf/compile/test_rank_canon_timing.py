@@ -1,7 +1,7 @@
 """Recorded timing comparisons for rank canon."""
 
 import pytest
-from lucid.test.perf.compile._timing import assert_ratio_within
+from lucid.test.perf.compile._timing import checked_twin_shape, assert_ratio_within
 from lucid.test.unit.compile.test_rank_canon import (
     _forward_call,
     needs_metal,
@@ -23,11 +23,10 @@ def test_a_rank_5_multiply_is_not_slower_than_its_rank_4_twin() -> None:
     the ratio the hosted runner reported (LCD-935 runner probe, rank5-probe.yml).  With
     matched reductions the fixed graph measures 1.3-1.4x on the M1 Pro and the virtual
     M1 alike; the unfixed graph is about 15-30x."""
+    wide = (6144, 16, 2, 16, 2)
+    twin = checked_twin_shape(wide, (6144, 16, 2, 32))
     assert_ratio_within(
-        lambda: {
-            "rank-5": _forward_call((6144, 16, 2, 16, 2), (-2, -1)),
-            "rank-4": _forward_call((6144, 16, 2, 32), (-1,)),
-        },
+        lambda: {"rank-5": _forward_call(wide, (-2, -1)), "rank-4": _forward_call(twin, (-1,))},
         "rank-5",
         "rank-4",
         bound=2.0,
