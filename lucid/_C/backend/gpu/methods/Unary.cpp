@@ -64,6 +64,10 @@ Storage GpuBackend::tanh(const Storage& a, const Shape& shape, Dtype dt) {
     return mlx_unary(a, shape, dt, [](auto& x) { return ::mlx::core::tanh(x); });
 }
 
+Storage GpuBackend::log1p(const Storage& a, const Shape& shape, Dtype dt) {
+    return mlx_unary(a, shape, dt, [](auto& x) { return ::mlx::core::log1p(x); });
+}
+
 Storage GpuBackend::log2(const Storage& a, const Shape& shape, Dtype dt) {
     return mlx_unary(a, shape, dt, [](auto& x) { return ::mlx::core::log2(x); });
 }

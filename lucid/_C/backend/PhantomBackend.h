@@ -85,6 +85,7 @@ public:
     Storage sigmoid(const Storage&, const Shape&, Dtype dt) override { return phantom(dt); }
     Storage relu(const Storage&, const Shape&, Dtype dt) override { return phantom(dt); }
     Storage log2(const Storage&, const Shape&, Dtype dt) override { return phantom(dt); }
+    Storage log1p(const Storage&, const Shape&, Dtype dt) override { return phantom(dt); }
     Storage erf(const Storage&, const Shape&, Dtype dt) override { return phantom(dt); }
     Storage erfinv(const Storage&, const Shape&, Dtype dt) override { return phantom(dt); }
     Storage reciprocal(const Storage&, const Shape&, Dtype dt) override { return phantom(dt); }

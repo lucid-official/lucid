@@ -102,6 +102,18 @@ public:
     grad_formula_impl(const TensorImplPtr& g, const TensorImplPtr& x, const TensorImplPtr&);
 };
 
+// Native real log1p. The graph form of its VJP keeps all higher orders.
+class LUCID_API Log1pBackward : public UnaryOp<Log1pBackward> {
+public:
+    static const OpSchema schema_v1;
+    static Storage dispatch(backend::IBackend& be, const Storage& a, const Shape& shape, Dtype dt) {
+        return be.log1p(a, shape, dt);
+    }
+    Storage grad_formula(const Storage& g);
+    TensorImplPtr
+    grad_formula_impl(const TensorImplPtr& g, const TensorImplPtr& x, const TensorImplPtr&);
+};
+
 // Autograd node for the element-wise base-2 logarithm $y = \log_2(x)$.
 //
 // Saves the input ``x``; the backward divides by $x \ln 2$.  The constant

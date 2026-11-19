@@ -95,6 +95,11 @@ cast_operands(const AmpScope& amp, const TensorImplPtr& a, const TensorImplPtr& 
 // subtraction's subnormal result, so it comes back as a signed 0, where the
 // copy kept its bits (the CPU is unchanged).
 TensorImplPtr log1p_lanes(const TensorImplPtr& a) {
+    const Dtype dtype = a->dtype();
+    if (is_floating_point(dtype) && !is_half_float(dtype) && compile::current_tracer() == nullptr &&
+        !a->is_phantom())
+        return Log1pBackward::forward(a);
+
     auto ones = full_like_op(a, 1.0);
     auto zero = full_like_op(a, 0.0);
     auto u = add_op(a, ones);

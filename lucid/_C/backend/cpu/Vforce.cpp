@@ -294,6 +294,9 @@ void vpow_f64(const double* base, const double* expo, double* out, std::size_t n
         split_edges<SPEC>(in, out, n, [](double* o, const double* i, int* c) { F64(o, i, c); });   \
     }
 
+// Both vForce precisions return +0 for log1p(-0).
+constexpr EdgeSpec kSignedZero{{Edge::Identity, 0.0f}, {Edge::Identity, 0.0}};
+LUCID_VFORCE_EDGED(vlog1p, vvlog1pf, vvlog1p, kSignedZero)
 LUCID_VFORCE_EDGED(vsin, vvsinf, vvsin, kSinEdge)
 LUCID_VFORCE_EDGED(vcos, vvcosf, vvcos, kCosEdge)
 LUCID_VFORCE_EDGED(vtan, vvtanf, vvtan, kOddEdge)

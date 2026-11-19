@@ -489,6 +489,7 @@ public:
     // :func:`sinh`, :func:`cosh`) that are not part of the core unary
     // set above.  Same call shape and dispatch contract as that group.
     virtual Storage log2(const Storage& a, const Shape& shape, Dtype dt) = 0;
+    virtual Storage log1p(const Storage& a, const Shape& shape, Dtype dt) = 0;
     virtual Storage erf(const Storage& a, const Shape& shape, Dtype dt) = 0;
     virtual Storage erfinv(const Storage& a, const Shape& shape, Dtype dt) = 0;
     virtual Storage reciprocal(const Storage& a, const Shape& shape, Dtype dt) = 0;

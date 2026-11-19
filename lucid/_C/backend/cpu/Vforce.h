@@ -553,6 +553,10 @@ LUCID_INTERNAL void vlog2_f32(const float* in, float* out, std::size_t n);
 // Accelerate.framework ``vvlog2``.
 LUCID_INTERNAL void vlog2_f64(const double* in, double* out, std::size_t n);
 
+// Natural logarithm of one plus the operand, preserving signed zero.
+LUCID_INTERNAL void vlog1p_f32(const float* in, float* out, std::size_t n);
+LUCID_INTERNAL void vlog1p_f64(const double* in, double* out, std::size_t n);
+
 // Single-precision Gauss error function.
 //
 // Computes $\text{out}_i = \mathrm{erf}(\text{in}_i)$ via ``vverff``, where

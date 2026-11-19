@@ -456,6 +456,7 @@ public:
     Storage relu(const Storage& a, const Shape& shape, Dtype dt) override;
 
     Storage log2(const Storage& a, const Shape& shape, Dtype dt) override;
+    Storage log1p(const Storage& a, const Shape& shape, Dtype dt) override;
 
     Storage erf(const Storage& a, const Shape& shape, Dtype dt) override;
 

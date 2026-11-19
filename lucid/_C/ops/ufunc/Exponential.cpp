@@ -61,6 +61,22 @@ TensorImplPtr log_op(const TensorImplPtr& a) {
 }
 LUCID_REGISTER_OP(LogBackward)
 
+const OpSchema Log1pBackward::schema_v1{"log1p", 1, AmpPolicy::KeepInput, true};
+
+Storage Log1pBackward::grad_formula(const Storage& g) {
+    const auto n = shape_numel(out_shape_);
+    auto denominator = add_scalar_storage(saved_inputs_[0], 1.0, n, dtype_, device_);
+    return divide_storages(g, denominator, n, dtype_, device_);
+}
+
+TensorImplPtr Log1pBackward::grad_formula_impl(const TensorImplPtr& g,
+                                               const TensorImplPtr& x,
+                                               const TensorImplPtr&) {
+    return div_op(g, add_op(x, ones_like_op(x)));
+}
+
+LUCID_REGISTER_OP(Log1pBackward)
+
 // log2 — ForceFP32; gradient includes the chain-rule factor 1/ln(2).
 const OpSchema Log2Backward::schema_v1{"log2", 1, AmpPolicy::ForceFP32, true};
 

@@ -496,6 +496,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - pow unwraps the base only for the in-place check (LCD-1020)
 
+- dispatch real log1p through native vector kernels (LCD-1034)
+
 ### Tooling
 
 - record that 1055fa3b9 moves no binary interface

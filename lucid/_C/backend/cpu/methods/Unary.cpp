@@ -170,6 +170,22 @@ Storage CpuBackend::tanh(const Storage& a, const Shape& shape, Dtype dt) {
                     });
 }
 
+Storage CpuBackend::log1p(const Storage& a, const Shape& shape, Dtype dt) {
+    const auto n = shape_numel(shape);
+    const auto bytes = n * dtype_size(dt);
+    auto data = allocate_aligned_bytes(bytes, Device::CPU);
+    const auto& src = std::get<CpuStorage>(a).ptr;
+    if (dt == Dtype::F32)
+        cpu::vlog1p_f32(reinterpret_cast<const float*>(src.get()),
+                        reinterpret_cast<float*>(data.get()), n);
+    else if (dt == Dtype::F64)
+        cpu::vlog1p_f64(reinterpret_cast<const double*>(src.get()),
+                        reinterpret_cast<double*>(data.get()), n);
+    else
+        ErrorBuilder("cpu_backend::log1p").not_implemented("requires float32 or float64");
+    return Storage{CpuStorage{std::move(data), bytes, dt}};
+}
+
 Storage CpuBackend::log2(const Storage& a, const Shape& shape, Dtype dt) {
     return unary_op(a, shape, dt, cpu::vlog2_f32, cpu::vlog2_f64,
                     [](const std::int32_t* ip, std::int32_t* op, std::size_t n) {
