@@ -15,6 +15,7 @@ is differentiated), over 1e-30 .. 1e30 (1e-300 .. 1e300 in float64) and across t
 normal is not asked for: Metal flushes it.
 """
 
+import cmath
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -362,17 +363,16 @@ def test_half_precision_answers_in_float32_and_rounds(dtype: lucid.dtype, device
 
 
 @pytest.mark.skipif(not metal_available(), reason="complex64 inverse hyperbolics are Metal's")
-def test_a_complex_input_keeps_the_textbook_forms() -> None:
-    """The stable forms are real-valued; a complex input is answered as it always was (its branch
-    is the textbook formula's, not ``cmath``'s: ``acosh(-0.5 + 0.3j)`` is on the other sheet)."""
+def test_a_complex_input_takes_the_principal_sheet() -> None:
+    """Check each component on the original examples, including acosh in quadrant II."""
     t = lucid.tensor([1 + 2j, -0.5 + 0.3j, 0.7 - 1.1j], dtype=lucid.complex64, device="metal")
-    textbook = {
-        "asinh": lucid.log(t + lucid.sqrt(t * t + 1.0)),
-        "acosh": lucid.log(t + lucid.sqrt(t * t - 1.0)),
-        "atanh": lucid.log((1.0 + t) / (1.0 - t)) * 0.5,
-    }
-    for name, want in textbook.items():
-        assert getattr(lucid, name)(t).tolist() == want.tolist(), name
+    for name in ("asinh", "acosh", "atanh"):
+        oracle = getattr(cmath, name)
+        for z, got in zip(t.tolist(), getattr(lucid, name)(t).tolist(), strict=True):
+            want = oracle(z)
+            for value, expected in ((got.real, want.real), (got.imag, want.imag)):
+                assert math.copysign(1.0, value) == math.copysign(1.0, expected)
+                assert math.isclose(value, expected, rel_tol=4e-7), (name, z, value, expected)
 
 
 @pytest.mark.skipif(not metal_available(), reason="lucid.compile is Metal's")

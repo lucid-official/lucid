@@ -32,6 +32,7 @@ from typing import final, override
 
 import lucid
 from lucid._dispatch import _float_input
+from lucid._ops.composite import _complex_inverse_hyperbolic as _complex
 from lucid._ops.composite._opmath import _in_float32
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
@@ -72,7 +73,9 @@ def _atanh_magnitude(a: Tensor) -> Tensor:
 
 
 def _acosh_value(x: Tensor) -> Tensor:
-    """``acosh`` of a real float tensor; NaN below 1, to a few ulp above."""
+    """Principal acosh. Real inputs below one yield NaN."""
+    if x.is_complex():
+        return _complex.acosh_value(x)
     split = _split(x)
     t = lucid.clamp(x, max=split) - 1.0
     # the two roots rather than one root of the product: below 1 the first is NaN,
@@ -136,18 +139,26 @@ def _atanh_slope(x: Tensor) -> Tensor:
 
 
 def _asinh_value(x: Tensor) -> Tensor:
+    if x.is_complex():
+        return _complex.asinh_value(x)
     return _odd_value(_asinh_magnitude, x)
 
 
 def _atanh_value(x: Tensor) -> Tensor:
+    if x.is_complex():
+        return _complex.atanh_value(x)
     return _odd_value(_atanh_magnitude, x)
 
 
 def _asinh_traced(x: Tensor) -> Tensor:
+    if x.is_complex():
+        return _complex.asinh_value(x)
     return _odd_traced(_asinh_magnitude, x)
 
 
 def _atanh_traced(x: Tensor) -> Tensor:
+    if x.is_complex():
+        return _complex.atanh_value(x)
     return _odd_traced(_atanh_magnitude, x)
 
 
@@ -167,6 +178,8 @@ class _Asinh(Function):
     @staticmethod
     def backward(ctx: FunctionCtx, grad: Tensor) -> Tensor:
         (x,) = ctx.saved_tensors
+        if x.is_complex():
+            return grad * _complex.asinh_slope(x).conj()
         return grad * _asinh_slope(x)
 
 
@@ -186,6 +199,8 @@ class _Acosh(Function):
     @staticmethod
     def backward(ctx: FunctionCtx, grad: Tensor) -> Tensor:
         (x,) = ctx.saved_tensors
+        if x.is_complex():
+            return grad * _complex.acosh_slope(x).conj()
         return grad * _acosh_slope(x)
 
 
@@ -205,6 +220,8 @@ class _Atanh(Function):
     @staticmethod
     def backward(ctx: FunctionCtx, grad: Tensor) -> Tensor:
         (x,) = ctx.saved_tensors
+        if x.is_complex():
+            return grad * _complex.atanh_slope(x).conj()
         return grad * _atanh_slope(x)
 
 
@@ -227,24 +244,24 @@ def _apply_atanh(x: Tensor) -> Tensor:
 
 
 def _asinh(input: Tensor) -> Tensor:
-    """``lucid.asinh``: a 16-bit input is evaluated in float32, a complex one by the textbook form."""
+    """``lucid.asinh``: a 16-bit input is evaluated in float32, a Metal complex input uses the principal value."""
     x = _float_input(input)
-    if x.is_complex():
+    if x.is_complex() and x.device.type != "metal":
         return lucid.log(x + lucid.sqrt(x * x + 1.0))
     return _in_float32(_apply_asinh, x)
 
 
 def _acosh(input: Tensor) -> Tensor:
-    """``lucid.acosh``: a 16-bit input is evaluated in float32, a complex one by the textbook form."""
+    """``lucid.acosh``: a 16-bit input is evaluated in float32, a Metal complex input uses the principal value."""
     x = _float_input(input)
-    if x.is_complex():
+    if x.is_complex() and x.device.type != "metal":
         return lucid.log(x + lucid.sqrt(x * x - 1.0))
     return _in_float32(_apply_acosh, x)
 
 
 def _atanh(input: Tensor) -> Tensor:
-    """``lucid.atanh``: a 16-bit input is evaluated in float32, a complex one by the textbook form."""
+    """``lucid.atanh``: a 16-bit input is evaluated in float32, a Metal complex input uses the principal value."""
     x = _float_input(input)
-    if x.is_complex():
+    if x.is_complex() and x.device.type != "metal":
         return lucid.log((1.0 + x) / (1.0 - x)) * 0.5
     return _in_float32(_apply_atanh, x)
