@@ -31,14 +31,11 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
-from lucid.compile import _tracing, make_step
+from lucid.compile import make_step
+from lucid.test.unit.compile._rank_twins import _filled, _trace, rank_ir, computes, wide_ops
+from lucid.test.unit.compile._layout_twins import _window_partition, LAYOUT_CASES, layout_twin
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import (
-    COMPILE_DEVICE,
-    assert_ratio_within,
-    compiled_call,
-    to_metal,
-)
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, to_metal
 
 ENV = "LUCID_COMPILE_RANK_CANON_MIN_LEAD"
 
@@ -58,21 +55,6 @@ def _default_gate() -> Iterator[None]:
     with mock.patch.dict(os.environ):
         os.environ.pop(ENV, None)
         yield
-
-
-def _filled(shape: Shape, phase: float = 0.0) -> lucid.Tensor:
-    n = 1
-    for s in shape:
-        n *= s
-    return (lucid.sin(lucid.arange(n, dtype=lucid.float32) * 0.37 + phase) + 1.5).reshape(*shape)
-
-
-def _trace(
-    fn: Callable[..., lucid.Tensor], *args: lucid.Tensor
-) -> tuple[_C_engine.compile.TraceGraph, dict[int, object]]:
-    with lucid.no_grad(), _tracing() as tracer:
-        fn(*args)
-    return tracer.graph, tracer.external_feeds
 
 
 def _canon(
@@ -117,13 +99,6 @@ def _permuted(shape: Shape, perm: tuple[int, ...]) -> Callable[[lucid.Tensor], l
 
 def _flat(shape: Shape) -> lucid.Tensor:
     return _filled((_numel(shape),))
-
-
-def _window_partition(x: lucid.Tensor) -> lucid.Tensor:
-    b, h, w, c = x.shape
-    ws = 7
-    t = x.reshape(b, h // ws, ws, w // ws, ws, c)
-    return t.permute(0, 1, 3, 2, 4, 5)
 
 
 def _window_reverse(windows: lucid.Tensor) -> lucid.Tensor:
@@ -676,91 +651,12 @@ def test_a_matmul_step_matches_eager_and_the_unrewritten_graph(
     _check_step(lambda: _Product(pair, dtype), arg, dtype)
 
 
-# ── time ──────────────────────────────────────────────────────────────────────────────
-
-Case = tuple[Callable[..., lucid.Tensor], tuple[lucid.Tensor, ...]]
-
-
-def _metal(shape: Shape, phase: float = 0.0) -> lucid.Tensor:
-    return _filled(shape, phase).to(COMPILE_DEVICE)
-
-
-# Each case reads its rank-5+ result through a reshape, as a model does (Swin merges the
-# window axes, attention merges heads): a reduction reads the recorded rank-5+ result by
-# itself, which is the reduction rule's to fix (LCD-920e).
-def _window_cases() -> tuple[Case, Case]:
-    x = _metal((256, 56, 56, 4))
-    return (
-        (lambda t: _window_partition(t).reshape(256 * 64, 49, 4).sum(dim=1), (x,)),
-        (
-            lambda t: (
-                t.reshape(2048, 7, 8, 28).permute(0, 2, 1, 3).reshape(256 * 64, 49, 4).sum(dim=1)
-            ),
-            (x,),
-        ),
-    )
-
-
-def _narrow_cases() -> tuple[Case, Case]:
-    # Swap the last two axes of a rank-5 tensor whose last axis is 2 wide: 250 ms unfixed.
-    x = _metal((65536 * 4 * 2 * 8 * 2,))
-    return (
-        (
-            lambda t: (
-                t.reshape(65536, 4, 2, 8, 2)
-                .permute(0, 1, 2, 4, 3)
-                .reshape(65536 * 8 * 2, 8)
-                .sum(dim=1)
-            ),
-            (x,),
-        ),
-        (
-            lambda t: (
-                t.reshape(65536 * 8, 8, 2).permute(0, 2, 1).reshape(65536 * 8 * 2, 8).sum(dim=1)
-            ),
-            (x,),
-        ),
-    )
-
-
-def _softmax_cases() -> tuple[Case, Case]:
-    def fn(t: lucid.Tensor) -> lucid.Tensor:
-        return F.softmax(t, dim=-1).reshape(1024 * 8 * 4 * 16, 16).sum(dim=-1)
-
-    return (fn, (_metal((1024, 8, 4, 16, 16)),)), (fn, (_metal((1024 * 8 * 4, 16, 16)),))
-
-
-def _matmul_cases() -> tuple[Case, Case]:
-    def fn(a: lucid.Tensor, b: lucid.Tensor) -> lucid.Tensor:
-        return (a @ b).reshape(1024 * 8 * 16, 16).sum(dim=-1)
-
-    return (
-        (fn, (_metal((1024, 4, 2, 16, 32)), _metal((1024, 4, 2, 32, 16), 1.0))),
-        (fn, (_metal((1024 * 8, 16, 32)), _metal((1024 * 8, 32, 16), 1.0))),
-    )
-
-
-#: Each row: the rank-5+ graph and the same elements and the same work at rank <= 4.
-_TWINS: dict[str, Callable[[], tuple[Case, Case]]] = {
-    "window_partition": _window_cases,
-    "narrow_last_axis_permute": _narrow_cases,
-    "softmax_lead_1024": _softmax_cases,
-    "matmul_lead_1024": _matmul_cases,
-}
-
-
-@needs_metal
-@pytest.mark.usefixtures("inference")
-@pytest.mark.parametrize("name", sorted(_TWINS))
-def test_a_rank_5_case_is_not_slower_than_its_rank_4_twin(name: str) -> None:
-    """Held to 1.5x the twin; the unfixed graphs ran 2x to 20x it."""
-    wide_case, twin_case = _TWINS[name]()
-
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {
-            "rank-5+": compiled_call(wide_case[0], *wide_case[1]),
-            "twin": compiled_call(twin_case[0], *twin_case[1]),
-        }
-
-    assert_ratio_within(build, "rank-5+", "twin", bound=1.5, slack_ms=0.3, what=name)
+@pytest.mark.parametrize("name", sorted(LAYOUT_CASES))
+def test_rewritten_layout_computes_its_twin(name: str) -> None:
+    pair = layout_twin(name, "cpu")
+    wide, shapes = rank_ir(pair.wide, None)
+    twin, _ = rank_ir(pair.twin, None)
+    native, _ = rank_ir(pair.wide, "-1")
+    assert not wide_ops(wide, shapes)
+    assert computes(wide) == computes(twin)
+    assert computes(native) != computes(twin)

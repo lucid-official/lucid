@@ -42,15 +42,18 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
-from lucid.compile import _tracing, make_step
+from lucid.compile import make_step
+from lucid.test.unit.compile._rank_twins import _trace, computes, rank_ir, _filled
+from lucid.test.unit.compile._movement_twins import (
+    MOVEMENT_CASES,
+    movement_twin,
+    space_to_depth_side,
+    _space_to_depth,
+)
 from lucid.test._fixtures.devices import metal_available
 from lucid.test.unit.compile._helpers import (
     COMPILE_DEVICE,
-    assert_ratio_within,
-    compare_ms,
-    compiled_call,
     to_metal,
-    with_env,
 )
 
 ENV = "LUCID_COMPILE_RANK_CANON_MIN_LEAD"
@@ -72,21 +75,6 @@ def _default_gate() -> Iterator[None]:
     with mock.patch.dict(os.environ):
         os.environ.pop(ENV, None)
         yield
-
-
-def _filled(shape: Shape, phase: float = 0.0) -> lucid.Tensor:
-    n = 1
-    for s in shape:
-        n *= s
-    return (lucid.sin(lucid.arange(n, dtype=lucid.float32) * 0.37 + phase) + 1.5).reshape(*shape)
-
-
-def _trace(
-    fn: Callable[..., lucid.Tensor], *args: lucid.Tensor
-) -> tuple[_C_engine.compile.TraceGraph, dict[int, object]]:
-    with lucid.no_grad(), _tracing() as tracer:
-        fn(*args)
-    return tracer.graph, tracer.external_feeds
 
 
 def _canon(
@@ -302,12 +290,6 @@ def test_a_consumer_that_reads_wide_keeps_its_producer_unrewritten() -> None:
 
 
 # ── permute: the gate reads the larger of the input's and the output's lead ───────────
-
-
-def _space_to_depth(x: lucid.Tensor, patch: int = 2) -> lucid.Tensor:
-    b, c, h, w = x.shape
-    v = x.reshape(b, c, h // patch, patch, w // patch, patch).permute(0, 3, 5, 1, 2, 4)
-    return v.reshape(b, patch * patch * c, h // patch, w // patch)
 
 
 def test_a_space_to_depth_splits_when_only_its_input_view_has_a_large_lead() -> None:
@@ -545,127 +527,20 @@ def _metal(shape: Shape, phase: float = 0.0) -> lucid.Tensor:
     return _filled(shape, phase).to(COMPILE_DEVICE)
 
 
-#: The rank-5 case and the rank-4 twin of the same elements and work (the axis the op
-#: names moves down by one with the merged leading axes).  1M elements: what the unfixed graph
-#: pays is the slice loop over the lead (2048 slices), not the elements, so the inner dims are
-#: small.  The first version of these guards, 16.8M elements, held the file at a 4.9 GB footprint
-#: (each unfixed graph kept 0.1-0.7 GB after its test); at this size every unfixed graph is still
-#: 30x to 100x its twin.
-_S5: Shape = (2048, 4, 8, 4, 4)
-_S4: Shape = (8192, 8, 4, 4)
+@pytest.mark.parametrize("name", sorted(MOVEMENT_CASES))
+def test_movement_computes_its_twin(name: str) -> None:
+    case = movement_twin(name, "cpu")
+    wide, _ = rank_ir(case.wide, None)
+    twin, _ = rank_ir(case.twin, None)
+    native, _ = rank_ir(case.wide, "-1")
+    assert computes(wide) == computes(twin)
+    assert computes(native) != computes(twin)
 
 
-def _tot(y: lucid.Tensor) -> lucid.Tensor:
-    return y.reshape(-1).sum()
-
-
-_TWINS: dict[str, tuple[Op, Op]] = {
-    "masked_fill": (
-        lambda t: _tot((t * 1.0).masked_fill(t > 1.5, 0.0)),
-        lambda t: _tot((t * 1.0).masked_fill(t > 1.5, 0.0)),
-    ),
-    "flip": (lambda t: _tot(lucid.flip(t * 1.0, (2,))), lambda t: _tot(lucid.flip(t * 1.0, (1,)))),
-    "tril": (lambda t: _tot(lucid.tril(t * 1.0)), lambda t: _tot(lucid.tril(t * 1.0))),
-    "cat": (
-        lambda t: _tot(lucid.cat([t * 1.0, t * 2.0], dim=2)),
-        lambda t: _tot(lucid.cat([t * 1.0, t * 2.0], dim=1)),
-    ),
-    "pad": (
-        lambda t: _tot(F.pad(t * 1.0, (1, 1, 1, 1))),
-        lambda t: _tot(F.pad(t * 1.0, (1, 1, 1, 1))),
-    ),
-    "tile": (
-        lambda t: _tot(lucid.tile(t * 1.0, (1, 1, 2, 1, 1))),
-        lambda t: _tot(lucid.tile(t * 1.0, (1, 2, 1, 1))),
-    ),
-    "repeat": (
-        lambda t: _tot(lucid.repeat(t * 1.0, 2, dim=-1)),
-        lambda t: _tot(lucid.repeat(t * 1.0, 2, dim=-1)),
-    ),
-    "cumsum": (
-        lambda t: _tot(lucid.cumsum(t * 1.0, dim=2)),
-        lambda t: _tot(lucid.cumsum(t * 1.0, dim=1)),
-    ),
-    "expand": (
-        lambda t: _tot(t + t[:1, :, :1].expand(*_S5)),
-        lambda t: _tot(t + t[:1, :1].expand(*_S4)),
-    ),
-    "slice": (lambda t: _tot((t * 1.0)[:, :, 2:5]), lambda t: _tot((t * 1.0)[:, 2:5])),
-    "stack": (
-        lambda t: _tot(lucid.stack([t * 1.0, t * 2.0], dim=2)),
-        lambda t: _tot(lucid.stack([t * 1.0, t * 2.0], dim=1)),
-    ),
-}
-
-
-#: The ratio each op is held to.  ``expand`` stays at 1.1x-1.5x its twin on an M1 Pro (the
-#: broadcast is materialised at rank 4 too, LCD-928's remaining row; 1.5x at 16.8M elements, 1.1x
-#: at this size), which leaves 1.5x a hair of slack; unfixed it ran 33x.
-_BOUND = {"expand": 3.0}
-_DEFAULT_BOUND = 1.5
-
-
-@needs_metal
-@pytest.mark.usefixtures("inference")
-@pytest.mark.parametrize("name", sorted(_TWINS))
-def test_a_rank_5_movement_op_is_not_slower_than_its_rank_4_twin(name: str) -> None:
-    """Held to 1.5x the twin (``expand``: 3x); the unfixed graphs ran 30x to 100x it."""
-    wide_fn, twin_fn = _TWINS[name]
-
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {
-            "rank-5": compiled_call(wide_fn, _metal(_S5)),
-            "twin": compiled_call(twin_fn, _metal(_S4)),
-        }
-
-    bound = _BOUND.get(name, _DEFAULT_BOUND)
-    assert_ratio_within(build, "rank-5", "twin", bound=bound, slack_ms=0.3, what=name)
-
-
-@needs_metal
-@pytest.mark.usefixtures("inference")
-@pytest.mark.parametrize("name", sorted(_TWINS))
-def test_the_movement_bound_is_exceeded_by_the_unfixed_graph(name: str) -> None:
-    """The guard above can fail: with the pass off the rank-5 graph is over its bound.
-
-    A bound the unfixed graph also meets guards nothing.  ``repeat``'s did -- its rank-4 twin is
-    itself on MPSGraph's slow path, so the unfixed graph read 1.4x under a 1.5x bound -- and
-    nothing said so until the ratio of the unfixed graph was measured by hand (LCD-935).  This
-    measures it with the pass off (``-1``) against the same twin and the same bound, so a twin
-    that changes, or an op whose unfixed cost moves under the bound, fails here by name.
-    """
-    wide_fn, twin_fn = _TWINS[name]
-
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {
-            "pass off": with_env(compiled_call(wide_fn, _metal(_S5)), ENV, "-1"),
-            "twin": compiled_call(twin_fn, _metal(_S4)),
-        }
-
-    bound = _BOUND.get(name, _DEFAULT_BOUND)
-    # One attempt: the unfixed graph is expected to miss the bound, so a second would always run.
-    unfixed = compare_ms(build, "pass off", "twin", bound=bound, slack_ms=0.3, attempts=1)
-    assert not unfixed.within, (
-        f"{name}: the unfixed graph meets the guard's bound, so the guard cannot fail: "
-        f"{unfixed.report}"
-    )
-
-
-@needs_metal
-@pytest.mark.usefixtures("inference")
-def test_a_space_to_depth_of_a_feed_is_not_slower_than_its_rank_4_twin() -> None:
-    """The permute gate reads the input view's lead too (25.8 ms against 2.35 unfixed)."""
-
-    def fn(t: lucid.Tensor) -> lucid.Tensor:
-        return _space_to_depth(t).sum()
-
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {
-            "gate default": with_env(compiled_call(fn, _metal((96, 64, 32, 64))), ENV, None),
-            "always-on": with_env(compiled_call(fn, _metal((96, 64, 32, 64))), ENV, "0"),
-        }
-
-    assert_ratio_within(build, "gate default", "always-on", bound=1.5, slack_ms=0.3)
+def test_space_to_depth_uses_the_always_on_layout() -> None:
+    side = space_to_depth_side("cpu")
+    default, _ = rank_ir(side, None)
+    always, _ = rank_ir(side, "0")
+    native, _ = rank_ir(side, "-1")
+    assert computes(default) == computes(always)
+    assert computes(native) != computes(always)

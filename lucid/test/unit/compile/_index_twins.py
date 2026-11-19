@@ -15,13 +15,12 @@ Every case is built on a device the caller names: the IR needs none, the clock n
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import lucid
 import lucid.nn.functional as F
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE
 
-Shape = tuple[int, ...]
+from lucid.test.unit.compile._rank_twins import RankTwin, Shape, Side
 
 
 def ramp(
@@ -39,35 +38,19 @@ def rotation(shape: Shape, dim: int, extent: int, device: str = COMPILE_DEVICE) 
     return ((flat // stride + 1) % extent).reshape(*shape).to(device)
 
 
-@dataclass(frozen=True)
-class Side:
-    """One compiled call: ``fn`` on ``args``."""
-
-    fn: Callable[..., lucid.Tensor]
-    args: tuple[lucid.Tensor, ...]
-
-
-@dataclass(frozen=True)
-class IndexCase:
-    #: the recorded op the rank pass rewrites (the node both sides must hold)
-    op: str
-    wide: Side
-    twin: Side
-
-
 def _embed_sum(w: lucid.Tensor, i: lucid.Tensor) -> lucid.Tensor:
     return F.embedding(i, w).reshape(-1).sum()
 
 
 def _embedding_case(
     table: Shape, wide: Shape, twin: Shape, dtype: lucid.dtype, dev: str
-) -> IndexCase:
+) -> RankTwin:
     w = ramp(table, 1000, dtype, dev)
 
     def side(shape: Shape) -> Side:
         return Side(_embed_sum, (w, ramp(shape, table[0], lucid.int64, dev)))
 
-    return IndexCase("embedding", side(wide), side(twin))
+    return RankTwin("embedding", side(wide), side(twin))
 
 
 _E_TABLE: Shape = (1000, 32)
@@ -82,7 +65,7 @@ _G_TWINS: dict[str, tuple[int, int, Shape]] = {
 }
 
 
-def _gather_case(where: str, dev: str) -> IndexCase:
+def _gather_case(where: str, dev: str) -> RankTwin:
     dim5, dim_twin, twin = _G_TWINS[where]
 
     def side(shape: Shape, dim: int) -> Side:
@@ -91,10 +74,10 @@ def _gather_case(where: str, dev: str) -> IndexCase:
         )
         return Side(lambda t, i: lucid.gather(t, dim, i).reshape(-1).sum(), (data, index))
 
-    return IndexCase("gather", side(_G5, dim5), side(twin, dim_twin))
+    return RankTwin("gather", side(_G5, dim5), side(twin, dim_twin))
 
 
-def _scatter_case(where: str, dev: str) -> IndexCase:
+def _scatter_case(where: str, dev: str) -> RankTwin:
     dim5, dim_twin, twin = _G_TWINS[where]
 
     def side(shape: Shape, dim: int) -> Side:
@@ -105,10 +88,10 @@ def _scatter_case(where: str, dev: str) -> IndexCase:
         )
         return Side(fn, (base, index, src))
 
-    return IndexCase("scatter_add", side(_G5, dim5), side(twin, dim_twin))
+    return RankTwin("scatter_add", side(_G5, dim5), side(twin, dim_twin))
 
 
-def _search_case(dev: str) -> IndexCase:
+def _search_case(dev: str) -> RankTwin:
     sequence = ramp((256,), 256, lucid.float32, dev)
 
     def side(shape: Shape) -> Side:
@@ -116,10 +99,10 @@ def _search_case(dev: str) -> IndexCase:
         return Side(lambda s, v: lucid.searchsorted(s, v).reshape(-1).sum(), (sequence, values))
 
     # lead 128: the unfixed binary search is ~100 ms, the flat one under 1
-    return IndexCase("searchsorted", side((128, 2, 2, 2, 16)), side((16384,)))
+    return RankTwin("searchsorted", side((128, 2, 2, 2, 16)), side((16384,)))
 
 
-CASES: dict[str, Callable[[str], IndexCase]] = {
+CASES: dict[str, Callable[[str], RankTwin]] = {
     # float32, a rank-5 index (the answer is rank 6, lead 4096): 40 ms against 0.8 unfixed
     "embedding_rank_5_index": lambda dev: _embedding_case(
         _E_TABLE, (2048, 2, 2, 2, 2), (32768,), lucid.float32, dev

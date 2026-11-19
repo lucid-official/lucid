@@ -39,10 +39,9 @@ import pytest
 
 import lucid
 from lucid._C import engine as _C_engine
-from lucid.compile import _tracing
 from lucid.compile._core.fallback import is_first_run_failure
 from lucid.test.unit.compile._first_run_probes import _GROUPS, GROUP_ENV, STALL_BUDGET_ENV
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_ratio_within
+from lucid.test.unit.compile._runtime_cases import _cached_executable
 
 _C = _C_engine.compile
 _ROOT = Path(lucid.__file__).resolve().parent.parent
@@ -183,19 +182,6 @@ def test_the_real_hang_is_given_up_on_and_answered_eagerly(device_gpu_only: str)
 # ── what needs no thread left behind: run in this process ─────────────────────────────────
 
 
-def _cached_executable(scale: float) -> tuple[_C.CompiledExecutable, list[object]]:
-    """An executable of ``x * scale + 1`` through the session cache, and its feeds."""
-    x = lucid.ones(4, device=COMPILE_DEVICE)
-    step = lucid.ones_like(x)
-    with lucid.no_grad(), _tracing() as tracer:
-        y = x * scale + step
-    lucid.eval(x, step, y)
-    exe = _C.compile_or_cached(tracer.graph, tracer.external_feeds, False, [], [])
-    assert exe is not None
-    by_id = {int(tid): impl for tid, impl in tracer.external_feeds.items()}
-    return exe, [by_id[int(tid)] for tid in exe.input_ids]
-
-
 @pytest.fixture
 def _clean_session_cache() -> Iterator[None]:
     _C.session_cache_clear()
@@ -267,37 +253,3 @@ def test_the_budget_follows_the_environment(
     for bad in (-1.0, float("nan")):
         with pytest.raises(ValueError, match="seconds"):
             _C.set_first_run_budget_s(bad)
-
-
-def test_the_guard_adds_no_measurable_steady_state_cost(
-    _clean_session_cache: None, device_gpu_only: str
-) -> None:
-    """A warm run looks the ledger up and runs on the caller's thread; off, it does neither.
-
-    Absolute, not a ratio (LCD-935): the cost is a microsecond-scale lookup on a ~0.3 ms run, so
-    a ratio bound would measure the runner.  The run may cost 0.1 ms more, a third of itself: a
-    per-call wait or lock of that size fails.  That a warm run never asks for a worker (a
-    hand-off is ~0.02 ms, below any wall-clock bound) is held by the probe
-    ``a_warm_executable_does_not_need_a_worker``.
-    """
-    del device_gpu_only
-    exe, feeds = _cached_executable(1.5)
-    _C.run_executable(exe, feeds)
-    assert exe.first_run_state == "warm"
-
-    def guarded() -> None:
-        _C.set_first_run_budget_s(120.0)
-        _C.run_executable(exe, feeds)
-
-    def unguarded() -> None:
-        _C.set_first_run_budget_s(0.0)
-        _C.run_executable(exe, feeds)
-
-    assert_ratio_within(
-        {"guarded": guarded, "unguarded": unguarded},
-        "guarded",
-        "unguarded",
-        bound=1.0,
-        slack_ms=0.1,
-        what="a warm run with the watchdog on against off",
-    )

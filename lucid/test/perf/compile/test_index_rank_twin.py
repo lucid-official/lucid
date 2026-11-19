@@ -21,6 +21,9 @@ from collections.abc import Callable
 
 import pytest
 
+import lucid
+from lucid.test.unit.compile._layout_twins import LAYOUT_CASES, layout_twin
+
 from lucid._C import engine as _C_engine
 from lucid.test._default_device import metal_available
 from lucid.test.unit.compile._helpers import (
@@ -30,7 +33,13 @@ from lucid.test.unit.compile._helpers import (
     compiled_call,
     with_env,
 )
-from lucid.test.unit.compile._index_twins import CASES, Side
+from lucid.test.unit.compile._index_twins import CASES
+from lucid.test.unit.compile._rank_twins import Side
+from lucid.test.unit.compile._movement_twins import (
+    MOVEMENT_CASES,
+    movement_twin,
+    space_to_depth_side,
+)
 
 pytestmark = [
     pytest.mark.perf,
@@ -82,3 +91,45 @@ def test_the_index_op_bound_is_exceeded_by_the_unfixed_graph(name: str) -> None:
         f"{name}: the unfixed graph meets the guard's bound, so the guard cannot fail: "
         f"{unfixed.report}"
     )
+
+
+@pytest.mark.parametrize("name", sorted(LAYOUT_CASES))
+def test_a_rank_5_case_is_not_slower_than_its_rank_4_twin(name: str) -> None:
+    """Held to 1.5x the twin; the unfixed graphs ran 2x to 20x it."""
+    case = layout_twin(name, COMPILE_DEVICE)
+
+    def build() -> dict[str, Callable[[], float]]:
+        _C_engine.compile.session_cache_clear()
+        return {"rank-5+": _timed(case.wide, None), "twin": _timed(case.twin, None)}
+
+    with lucid.no_grad():
+        assert_ratio_within(build, "rank-5+", "twin", bound=1.5, slack_ms=0.3, what=name)
+
+
+@pytest.mark.parametrize("name", sorted(MOVEMENT_CASES))
+@pytest.mark.parametrize("gate", [None, "-1"], ids=["default", "native"])
+def test_movement_time_against_twin(name: str, gate: str | None) -> None:
+    case = movement_twin(name, COMPILE_DEVICE)
+
+    def build() -> dict[str, Callable[[], float]]:
+        _C_engine.compile.session_cache_clear()
+        return {"case": _timed(case.wide, gate), "twin": _timed(case.twin, None)}
+
+    bound = 3.0 if name == "expand" else 1.5
+    with lucid.no_grad():
+        if gate is None:
+            assert_ratio_within(build, "case", "twin", bound=bound, slack_ms=0.3, what=name)
+        else:
+            timing = compare_ms(build, "case", "twin", bound=bound, slack_ms=0.3, attempts=1)
+            assert not timing.within, timing.report
+
+
+def test_space_to_depth_time_against_always_on() -> None:
+    side = space_to_depth_side(COMPILE_DEVICE)
+
+    def build() -> dict[str, Callable[[], float]]:
+        _C_engine.compile.session_cache_clear()
+        return {"default": _timed(side, None), "always": _timed(side, "0")}
+
+    with lucid.no_grad():
+        assert_ratio_within(build, "default", "always", bound=1.5, slack_ms=0.3)

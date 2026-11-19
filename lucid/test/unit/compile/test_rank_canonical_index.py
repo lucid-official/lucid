@@ -53,7 +53,8 @@ import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
 from lucid.compile import make_step
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, to_metal
-from lucid.test.unit.compile._index_twins import CASES, Side, ramp as _ramp, rotation as _rotation
+from lucid.test.unit.compile._index_twins import CASES, ramp as _ramp, rotation as _rotation
+from lucid.test.unit.compile._rank_twins import rank_ir, computes, wide_ops
 from lucid.test.unit.compile.test_rank_canonical_movement import (
     ENV,
     _canon,
@@ -61,7 +62,6 @@ from lucid.test.unit.compile.test_rank_canonical_movement import (
     _named,
     _only,
     _shape,
-    _trace,
     needs_metal,
 )
 
@@ -638,33 +638,6 @@ def test_a_symbolic_batch_survives_the_index_rewrites() -> None:
 # What the IR cannot see -- an emitter that is slow for a layout both sides share, the ~0.2 ms
 # MPSGraph copies a rank-4 feed read through the pass's flat view -- is that tier's to report.
 
-IrOps = list[_C_engine.compile.OpNode]
-
-
-def _ir(side: Side, gate: str | None) -> tuple[IrOps, dict[int, Shape]]:
-    """The pass's output for ``side`` and the shape of every tensor id in it (feeds included)."""
-    graph, feeds = _trace(side.fn, *side.args)
-    with mock.patch.dict(os.environ, {} if gate is None else {ENV: gate}):
-        ops = list(_C_engine.compile.canonicalize_rank(graph, feeds, False).ops)
-    shapes = {fid: tuple(feed.shape) for fid, feed in feeds.items()}
-    shapes |= {out.id: tuple(out.shape) for node in ops for out in node.outputs}
-    return ops, shapes
-
-
-def _computes(ops: IrOps) -> list[tuple[str, Shape, dict[str, object]]]:
-    """What the graph computes, views aside: each op but a reshape, its answer's shape and attrs."""
-    return [(n.name, tuple(n.outputs[0].shape), dict(n.attrs)) for n in ops if n.name != "reshape"]
-
-
-def _read_or_write_rank_5(ops: IrOps, shapes: dict[int, Shape]) -> list[str]:
-    """The ops, a reshape (a free view) aside, that read or write a tensor of rank >= 5."""
-    return [
-        n.name
-        for n in ops
-        if n.name != "reshape"
-        and any(len(shapes[i]) > 4 for i in (*n.inputs, *(out.id for out in n.outputs)))
-    ]
-
 
 @pytest.mark.parametrize("name", sorted(CASES))
 def test_a_rank_5_index_op_computes_what_its_twin_computes(name: str) -> None:
@@ -674,22 +647,22 @@ def test_a_rank_5_index_op_computes_what_its_twin_computes(name: str) -> None:
     (the int32 embedding's, until LCD-1039) names a smaller embedding and fails here.
     """
     case = CASES[name]("cpu")
-    wide, wide_shapes = _ir(case.wide, None)
-    twin, twin_shapes = _ir(case.twin, None)
+    wide, wide_shapes = rank_ir(case.wide, None)
+    twin, twin_shapes = rank_ir(case.twin, None)
     assert case.op in [n.name for n in wide]
-    assert _read_or_write_rank_5(wide, wide_shapes) == []
-    assert _read_or_write_rank_5(twin, twin_shapes) == []
-    assert _computes(wide) == _computes(twin)
+    assert wide_ops(wide, wide_shapes) == []
+    assert wide_ops(twin, twin_shapes) == []
+    assert computes(wide) == computes(twin)
 
 
 @pytest.mark.parametrize("name", sorted(CASES))
 def test_the_twin_comparison_fails_for_the_unrewritten_graph(name: str) -> None:
     """The guard above can fail: with the pass off the op reads rank 5+ and is not the twin's."""
     case = CASES[name]("cpu")
-    wide, wide_shapes = _ir(case.wide, "-1")
-    twin, _ = _ir(case.twin, None)
-    assert case.op in _read_or_write_rank_5(wide, wide_shapes)
-    assert _computes(wide) != _computes(twin)
+    wide, wide_shapes = rank_ir(case.wide, "-1")
+    twin, _ = rank_ir(case.twin, None)
+    assert case.op in wide_ops(wide, wide_shapes)
+    assert computes(wide) != computes(twin)
 
 
 # ── no timing row for the wide-integer lane merge of an answer that is rank 5 by itself ──

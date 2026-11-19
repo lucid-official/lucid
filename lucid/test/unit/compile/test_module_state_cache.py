@@ -26,12 +26,12 @@ import pytest
 
 import lucid
 import lucid.nn as nn
-import lucid.nn._tree_version as tree_version
 from lucid.compile._core import signature as sig
 from lucid.compile._core.module_state import StateContract
 from lucid.nn._tree_version import _TrackedDict
 from lucid.nn.utils import parametrize
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_ratio_within, metal_tensor
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, metal_tensor
+from lucid.test.unit.compile._runtime_cases import _deep_model
 
 # Compiled forwards under grad mode run eagerly (LCD-582); these test them.
 pytestmark = pytest.mark.usefixtures("inference")
@@ -173,10 +173,6 @@ def test_a_module_pickled_with_plain_registries_comes_back_tracked() -> None:
     assert _answer(restored) != before and _answer(restored)[1]
 
 
-def _deep_model(n: int = 200) -> nn.Module:
-    return nn.Sequential(*[nn.Linear(4, 4) for _ in range(n)])
-
-
 def test_replays_do_not_walk_the_tree(monkeypatch: pytest.MonkeyPatch) -> None:
     walks: list[int] = []
     walk = sig._iter_modules
@@ -198,38 +194,17 @@ def test_replays_do_not_walk_the_tree(monkeypatch: pytest.MonkeyPatch) -> None:
     model[7].flag = 3  # type: ignore[attr-defined]
     compiled(x)
     assert walks, "a change to the tree did not reach the key"
+    assert sig.model_has_active_hooks(model) is False
+    walks.clear()
+    sig.signature_of(
+        model, (x,), {}, dynamic=False, param_fingerprint=sig._param_fingerprint(model)
+    )
+    assert walks == [], "keying a warm model walked its modules"
     assert compiled.cache_info()["entries"] == 2
     walks.clear()
     for _ in range(5):
         compiled(x)
     assert walks == []
-
-
-def test_keying_a_call_no_longer_costs_a_walk(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Time, loosely: the cached key against one that walks every call."""
-    model = _deep_model()
-    x = lucid.randn(2, 4)
-    fp = sig._param_fingerprint(model)
-
-    def keying() -> None:
-        for _ in range(20):
-            sig.signature_of(model, (x,), {}, dynamic=False, param_fingerprint=fp)
-            sig.model_has_active_hooks(model)
-
-    versions = iter(range(10**9, 2 * 10**9))
-
-    def keying_each_call_a_new_version() -> None:
-        # The version is patched inside the call, so the other side keeps its cache.
-        with monkeypatch.context() as patch:
-            patch.setattr(tree_version, "_tree_version", lambda: next(versions))
-            keying()
-
-    assert_ratio_within(
-        {"cached": keying, "walking": keying_each_call_a_new_version},
-        "cached",
-        "walking",
-        bound=0.1,
-    )
 
 
 # ── what the walk keys a module's attributes by (LCD-704) ────────────────
