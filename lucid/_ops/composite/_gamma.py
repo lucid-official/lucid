@@ -449,7 +449,7 @@ def _igam_fac(a: Tensor, x: Tensor, k: _IgamConstants) -> Tensor:
     # flushes the subnormal — P(174.49, 105.92) came out 0 for 6.7e-10.
     direct = lucid.exp(a - x + a * lucid.log(x / fac))
     numfac = (x - a - _LANCZOS13_G + 0.5) / fac
-    scaled = lucid.exp(a * (lucid.log1p(numfac) - numfac) + x * (0.5 - _LANCZOS13_G) / fac)
+    scaled = lucid.exp((-0.5 * a) * _deviance(numfac) + x * (0.5 - _LANCZOS13_G) / fac)
     near_value = res * lucid.where(moderate, direct, scaled)
     return lucid.where(far, far_value, near_value)
 
@@ -590,6 +590,14 @@ _IGAM_SERIES_MIN_REL = 0.05
 _ETA_SQ_COEFFS: tuple[float, ...] = tuple((-1.0) ** k * (2.0 / k) for k in range(2, 20))
 
 
+def _deviance(s: Tensor) -> Tensor:
+    """Twice the difference between s and log1p(s), including when they round alike."""
+    near = s.abs() < _IGAM_ETA_SERIES
+    small = lucid.where(near, s, lucid.zeros_like(s))
+    series = small * small * _horner_float(_ETA_SQ_COEFFS, small)
+    return lucid.where(near, series, 2.0 * (s - lucid.log1p(s)))
+
+
 def _igam_asymptotic(a: Tensor, x: Tensor, *, lower: bool) -> Tensor:
     """P or Q by Temme's uniform expansion (DLMF 8.12.3/4) — for x near a."""
     from lucid._ops.composite._gamma_temme import _TEMME_D
@@ -597,12 +605,7 @@ def _igam_asymptotic(a: Tensor, x: Tensor, *, lower: bool) -> Tensor:
     sgn = -1.0 if lower else 1.0
     sigma = (x - a) / a
     zero = lucid.zeros_like(a)
-    near_sig = lucid.abs(sigma) < _IGAM_ETA_SERIES
-    eta_sq_series = (
-        sigma * sigma * _horner_float(_ETA_SQ_COEFFS, lucid.where(near_sig, sigma, zero))
-    )
-    eta_sq_log = -2.0 * (lucid.log1p(sigma) - sigma)
-    eta_sq = lucid.where(near_sig, eta_sq_series, eta_sq_log)
+    eta_sq = _deviance(sigma)
     eta_abs = lucid.sqrt(eta_sq)
     eta = lucid.where(x > a, eta_abs, lucid.where(x < a, -eta_abs, zero))
     res = 0.5 * lucid.erfc(sgn * eta * lucid.sqrt(a / 2.0))

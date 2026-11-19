@@ -375,6 +375,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - build isin's Python operands on the other operand's device
 
+- preserve small incomplete gamma deviances (LCD-1034)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
