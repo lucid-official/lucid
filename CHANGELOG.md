@@ -473,6 +473,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - schema-declared bool refusal in SchemaGuard (LCD-1020)
 
+- inspect physical operations during Metal lowering (LCD-1043)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

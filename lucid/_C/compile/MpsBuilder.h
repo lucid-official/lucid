@@ -27,7 +27,9 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -38,6 +40,12 @@
 #include "TraceIR.h"
 
 namespace lucid::compile {
+
+// Metal operation class, label, incoming operation indices and physical output types.
+// Missing shape denotes unknown rank. An empty shape denotes a scalar.
+using EmittedTensor = std::pair<unsigned, std::optional<std::vector<std::int64_t>>>;
+using EmittedOperation =
+    std::tuple<std::string, std::string, std::vector<std::uint32_t>, std::vector<EmittedTensor>>;
 
 class BuilderContext;  // forward decl — defined in OpEmitters/OpEmitter.h
 
@@ -389,7 +397,8 @@ class LUCID_API MpsBuilder {
 public:
     MpsBuilder(const TraceGraph& graph,
                const std::unordered_map<TensorId, TensorImplPtr>& external_feeds,
-               std::string* error_msg = nullptr);
+               std::string* error_msg = nullptr,
+               std::vector<EmittedOperation>* emitted = nullptr);
     ~MpsBuilder();
 
     MpsBuilder(const MpsBuilder&) = delete;
@@ -443,6 +452,7 @@ private:
     const TraceGraph& graph_;
     const std::unordered_map<TensorId, TensorImplPtr>& external_feeds_;
     std::string* error_msg_;
+    std::vector<EmittedOperation>* emitted_;
 };
 
 }  // namespace lucid::compile

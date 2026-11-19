@@ -647,11 +647,33 @@ NSArray<MPSGraphOperation*>* ops_inputs_first(const CloneWalkGraph& walk) {
     return order;
 }
 
+std::vector<EmittedOperation> describe_operations(const CloneWalkGraph& walk) {
+    std::vector<EmittedOperation> result;
+    result.reserve(walk.ops.size());
+    for (std::size_t i = 0; i < walk.ops.size(); ++i) {
+        MPSGraphOperation* op = walk.ops[i];
+        std::vector<EmittedTensor> outputs;
+        for (MPSGraphTensor* tensor in op.outputTensors) {
+            std::optional<std::vector<std::int64_t>> shape;
+            if (tensor.shape != nil) {
+                shape.emplace();
+                for (NSNumber* d in tensor.shape)
+                    shape->push_back(d.longLongValue);
+            }
+            outputs.emplace_back(static_cast<unsigned>(tensor.dataType), std::move(shape));
+        }
+        result.emplace_back(NSStringFromClass(op.class).UTF8String, op.name.UTF8String,
+                            walk.inputs[i], std::move(outputs));
+    }
+    return result;
+}
+
 MPSGraphExecutable* compile_graph(MPSGraph* graph,
                                   NSDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feeds,
                                   NSArray<MPSGraphTensor*>* targets,
                                   NSArray<MPSGraphOperation*>* target_ops,
-                                  bool half_precision) {
+                                  bool half_precision,
+                                  std::vector<EmittedOperation>* emitted = nullptr) {
     if (!feeds_are_symbolic(feeds)) {
         NSMutableArray<MPSGraphTensor*>* canonical =
             [NSMutableArray arrayWithCapacity:targets.count];
@@ -660,6 +682,8 @@ MPSGraphExecutable* compile_graph(MPSGraph* graph,
         targets = canonical;
     }
     const CloneWalkGraph walk = reachable_ops(targets, target_ops);
+    if (emitted != nullptr)
+        *emitted = describe_operations(walk);
     if (clone_walk_over_budget(walk))
         target_ops = ops_inputs_first(walk);
     id<MTLDevice> device = (__bridge id<MTLDevice>)lucid::gpu::mps::shared_mtl_device();
@@ -794,8 +818,9 @@ namespace lucid::compile {
 // ────────────────────────────────────────────────────────────────────
 MpsBuilder::MpsBuilder(const TraceGraph& graph,
                        const std::unordered_map<TensorId, TensorImplPtr>& external_feeds,
-                       std::string* error_msg)
-    : graph_(graph), external_feeds_(external_feeds), error_msg_(error_msg) {}
+                       std::string* error_msg,
+                       std::vector<EmittedOperation>* emitted)
+    : graph_(graph), external_feeds_(external_feeds), error_msg_(error_msg), emitted_(emitted) {}
 
 MpsBuilder::~MpsBuilder() = default;
 
@@ -1157,8 +1182,8 @@ CompiledExecutable* MpsBuilder::compile_trace(bool dynamic_batch,
         for (MPSGraphTensor* t : target_tensors)
             [target_arr addObject:t];
 
-        MPSGraphExecutable* compiled =
-            compile_graph(graph_obj, feed_dict, target_arr, nil, carries_half_precision(graph));
+        MPSGraphExecutable* compiled = compile_graph(graph_obj, feed_dict, target_arr, nil,
+                                                     carries_half_precision(graph), emitted_);
         if (compiled == nil)
             return fail("compile_trace: MPSGraph compilation returned nil");
 
@@ -1525,8 +1550,8 @@ MpsBuilder::compile_trace_with_backward(TensorId loss_id,
         NSDictionary<MPSGraphTensor*, MPSGraphShapedType*>* feed_dict =
             make_feed_dict(feed_tensors, input_dtypes, declared_shapes);
 
-        MPSGraphExecutable* compiled =
-            compile_graph(graph_obj, feed_dict, target_arr, nil, carries_half_precision(graph));
+        MPSGraphExecutable* compiled = compile_graph(graph_obj, feed_dict, target_arr, nil,
+                                                     carries_half_precision(graph), emitted_);
         if (compiled == nil)
             return fail("compile_trace_with_backward: MPSGraph compilation returned nil");
 

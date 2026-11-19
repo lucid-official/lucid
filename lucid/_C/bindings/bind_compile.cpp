@@ -342,6 +342,27 @@ void bind_run_executable(py::module_& m) {
 // read the rewritten IR without a GPU.
 void bind_rank_canon(py::module_& m) {
     m.def(
+        "_inspect_emitted_operations",
+        [](const lucid::compile::TraceGraph& graph,
+           const std::unordered_map<lucid::compile::TensorId, lucid::TensorImplPtr>& feeds,
+           std::optional<lucid::compile::TensorId> loss_id,
+           const std::vector<lucid::compile::TensorId>& param_ids) {
+            const lucid::compile::RankCanon canon(graph, feeds, false);
+            std::vector<lucid::compile::EmittedOperation> operations;
+            std::string error;
+            lucid::compile::MpsBuilder builder(canon.graph(), feeds, &error, &operations);
+            auto exe = lucid::compile::share_executable(
+                loss_id ? builder.compile_trace_with_backward(*loss_id, param_ids)
+                        : builder.compile_trace());
+            if (!exe)
+                throw std::runtime_error(error);
+            return operations;
+        },
+        py::arg("graph"), py::arg("external_feeds"), py::arg("loss_id") = std::nullopt,
+        py::arg("param_ids") = std::vector<lucid::compile::TensorId>{},
+        "Inspect reachable Metal operations while lowering a trace, optionally with its "
+        "gradients.");
+    m.def(
         "canonicalize_rank",
         [](const lucid::compile::TraceGraph& graph, const py::dict& external_feeds_py,
            bool dynamic_batch) {
