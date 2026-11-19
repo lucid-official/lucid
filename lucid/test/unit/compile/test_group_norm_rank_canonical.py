@@ -5,29 +5,32 @@ group statistics.  MPSGraph runs an op on a rank-5+ tensor as a slice loop over 
 above the last four, so ``N = 256`` took ~9.8 ms against ~2.7 ms for the same elements at
 rank 2.  A concrete shape now works in ``(N*G, C/G * prod(spatial))`` and applies the
 per-channel affine on ``(N, C, prod(spatial))``; a symbolic batch keeps the grouped form.
-The graph cannot be inspected from Python, so the guard is
+The guards cover
 
 * a value table: forward output, loss and every gradient of a compiled step equal eager's
   for ranks 2..5, group counts from 1 (LayerNorm-like) to C (InstanceNorm-like), affine on
   and off, and float32 / float16 / bfloat16;
 * NaN and inf rows: a poisoned group stays poisoned in the same cells as eager;
 * a dynamic-batch row, where the grouped form must still hold;
-* a coarse timing bound against the rank-2 twin the layout is meant to reach.
+* the physical operand shapes of the emitted work against an equal-element twin. The clock
+  comparisons run under ``lucid/test/perf/compile/``.
 """
 
 import pytest
+
+from lucid.test.unit.compile._rank_twins import (
+    RankTwin,
+    Side,
+    OperationShape,
+    emitted,
+    operation_shapes,
+)
 
 import lucid
 import lucid.nn as nn
 from lucid.compile import make_step
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import (
-    COMPILE_DEVICE,
-    assert_cache_hit,
-    assert_ratio_within,
-    step_call,
-    to_metal,
-)
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_cache_hit, to_metal
 
 pytestmark = [
     pytest.mark.skipif(not metal_available(), reason="compile needs Metal"),
@@ -217,17 +220,16 @@ class _Twin(nn.Module):
         return ((y - mu) * (v + 1e-5).rsqrt()).reshape(*x.shape)
 
 
-def test_a_group_norm_is_not_slower_than_its_rank_2_twin() -> None:
-    """Coarse on purpose: the grouped rank-5 form ran ~6x the twin at N = 256, the fix ~1.3x."""
+@pytest.mark.parametrize("backward", [False, True])
+def test_group_statistics_are_computed_on_the_twin_rows(backward: bool) -> None:
     shape = (256, 64, 16, 16)
     x = _input(shape, lucid.float32)
-    assert_ratio_within(
-        lambda: {
-            "group_norm": step_call(_module(shape, 8, True, lucid.float32), _loss, x),
-            "rank-2 twin": step_call(to_metal(_Twin(shape, 8)), _loss, x),
-        },
-        "group_norm",
-        "rank-2 twin",
-        bound=2.0,
-        slack_ms=1.0,
-    )
+    wide = Side(lambda t: lucid.nn.functional.group_norm(t, 8).reshape(-1).sum(), (x,))
+    rows = x.reshape(2048, -1)
+    twin = Side(lambda t: lucid.nn.functional.layer_norm(t, (2048,)).reshape(-1).sum(), (rows,))
+    pair = RankTwin("group_norm", wide, twin)
+
+    def statistics(side: Side) -> list[OperationShape]:
+        return sorted(operation_shapes(emitted(side, backward=backward), "ReductionMean"), key=repr)
+
+    assert statistics(pair.wide) == statistics(pair.twin)

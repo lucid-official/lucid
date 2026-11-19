@@ -23,10 +23,8 @@ Three guards, as for the earlier rules:
 * a value table on Metal: the forward and the ``make_step`` gradients of the rewritten graph equal
   eager's (and the unrewritten graph's, exactly, for ops that only move values) at float32,
   float16 and bfloat16, over rank 5 and rank 6 and with NaN and inf in the data;
-* a coarse timing bound against the rank-4 twin of each case (the same elements), the same
-  measurement with the pass off, which must exceed the bound (a bound the unfixed graph meets
-  guards nothing), and the permute gate that now reads the larger of the input's and the output's
-  lead.
+* the physical operand shapes of the emitted work against an equal-element twin. The clock
+  comparisons run under ``lucid/test/perf/compile/``.
 
 The rank-4 ``repeat`` and ``tile`` backward that the pass cannot see are in
 ``test_rank_canonical_widening.py``.
@@ -51,10 +49,7 @@ from lucid.test.unit.compile._movement_twins import (
     _space_to_depth,
 )
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import (
-    COMPILE_DEVICE,
-    to_metal,
-)
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, to_metal
 
 ENV = "LUCID_COMPILE_RANK_CANON_MIN_LEAD"
 

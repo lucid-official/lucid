@@ -11,8 +11,8 @@ it runs at the lowest rank its operands' broadcast pattern allows.  Three guards
 * a value table: loss and gradient of a compiled step equal eager's across broadcast
   patterns, ranks 5..6, a tensor read at two layouts (its gradient accumulates at rank 5+),
   a region between rewritten ops, and a symbolic batch;
-* a coarse timing bound: the rank-5 ``x * w`` may not run several times slower than the same
-  elements as a rank-4 twin (the unfixed graph was ~14x).
+* the physical operand shapes of the emitted work against an equal-element twin. The clock
+  comparisons run under ``lucid/test/perf/compile/``.
 """
 
 import os
@@ -21,6 +21,8 @@ from unittest import mock
 
 import pytest
 
+from lucid.test.unit.compile._rank_twins import RankTwin, Side, computes, rank_ir
+
 import lucid
 import lucid.nn as nn
 from lucid._C import engine as _C_engine
@@ -28,12 +30,7 @@ from lucid.autograd import Function
 from lucid.compile import _tracing, make_step
 from lucid.compile._core.trace_context import recording
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import (
-    COMPILE_DEVICE,
-    assert_cache_hit,
-    assert_ratio_within,
-    to_metal,
-)
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_cache_hit, to_metal
 
 ENV = "LUCID_COMPILE_RANK_CANON_MIN_LEAD"
 
@@ -386,27 +383,6 @@ def _forward_call(shape: tuple[int, ...], dims: tuple[int, ...]) -> Callable[[],
     return lambda: float(cm(x)[0].sum().item())
 
 
-@needs_metal
-@pytest.mark.usefixtures("inference")
-def test_a_rank_5_multiply_is_not_slower_than_its_rank_4_twin() -> None:
-    """Both sides reduce the same 32 elements per output into the same (6144, 16, 2)
-    result, so only the rank differs.  The old twin reduced a size-32 axis against the
-    rank-5 graph's size-2 axis; that reduction difference, not the rank, was 2.4-2.7x of
-    the ratio the hosted runner reported (LCD-935 runner probe, rank5-probe.yml).  With
-    matched reductions the fixed graph measures 1.3-1.4x on the M1 Pro and the virtual
-    M1 alike; the unfixed graph is about 15-30x."""
-    assert_ratio_within(
-        lambda: {
-            "rank-5": _forward_call((6144, 16, 2, 16, 2), (-2, -1)),
-            "rank-4": _forward_call((6144, 16, 2, 32), (-1,)),
-        },
-        "rank-5",
-        "rank-4",
-        bound=2.0,
-        slack_ms=1.0,
-    )
-
-
 # ── every op the rule owns, wrapped on shapes far below the gate ───────────────────────
 
 _UNARY: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
@@ -473,3 +449,18 @@ def test_a_wrapped_binary_op_matches_eager(name: str, pair: tuple[tuple[int, ...
     with mock.patch.dict(os.environ, {ENV: "0"}):
         got = lucid.compile(fn)(a, b)
     _same(got, fn(a, b), name)
+
+
+@needs_metal
+def test_multiply_feeds_the_reduction_from_its_flat_layout() -> None:
+    logical = (6144, 16, 2, 16, 2)
+    fn = lambda a, w: (a * w).sum(dim=(-2, -1))
+    x, w = (_filled(logical, phase).to(COMPILE_DEVICE) for phase in (0.0, 0.5))
+    case = Side(fn, (x, w))
+    twin = Side(
+        lambda a, b: (a * b).reshape(*logical).sum(dim=(-2, -1)), (x.reshape(-1), w.reshape(-1))
+    )
+    pair = RankTwin("mul", case, twin)
+    reference = computes(rank_ir(pair.twin, None)[0])
+    assert computes(rank_ir(pair.wide, None)[0]) == reference
+    assert computes(rank_ir(pair.wide, "-1")[0]) != reference

@@ -12,16 +12,15 @@ rank 3 (M1 Pro), a float32 one 7.2 against 6.6.  The helper reads the operand an
 policy is the rank pass's lead gate: a small lead, a symbolic dim and
 ``LUCID_COMPILE_RANK_CANON_MIN_LEAD=-1`` keep the native spelling.
 
-The graph cannot be inspected from Python, so the guards are
+The guards cover
 
 * a value table on Metal: with the gate at ``0`` (merge whenever the carried tensor is rank 5+)
   every case equals eager's and the native spelling's (gate ``-1``) bit for bit, over values that
   float32 would round, the axes that change where the merge falls (first, middle, last, bands of
   size 1), an index shorter and longer than the axis, and rank 5;
 * a symbolic batch, which keeps the native spelling;
-* a coarse timing bound against the rank-3 twin of each case (the same elements), and the same
-  measurement with the gate off, which must exceed the bound (a bound the unfixed graph meets
-  guards nothing).
+* the physical operand shapes of the emitted work against an equal-element twin. The clock
+  comparisons run under ``lucid/test/perf/compile/``.
 """
 
 import os
@@ -35,13 +34,8 @@ import pytest
 import lucid
 import lucid.nn.functional as F
 from lucid._C import engine as _C_engine
-from lucid.test.unit.compile._helpers import (
-    COMPILE_DEVICE,
-    assert_ratio_within,
-    compare_ms,
-    compiled_call,
-    with_env,
-)
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, compiled_call, with_env
+from lucid.test.unit.compile._rank_twins import RankTwin, Side, emitted, operation_shapes
 from lucid.test.unit.compile.test_rank_canonical_movement import ENV, needs_metal
 
 pytestmark = pytest.mark.filterwarnings(
@@ -231,7 +225,7 @@ def test_a_symbolic_batch_keeps_the_native_spelling(dtype: str) -> None:
 #: unfixed graph is 4x to 8x its twin and the file stays well under 1 GB.
 _W4: Shape = (2048, 8, 8, 8)
 _TWINS: dict[str, tuple[int, Shape]] = {
-    "last": (-1, (16384, 8, 8)),
+    "last": (-1, (131072, 8)),
     "mid": (1, (2048, 8, 64)),
     "first": (0, (2048, 512)),
 }
@@ -291,47 +285,9 @@ def _operands(name: str, shape: Shape, dim: int) -> tuple[lucid.Tensor, ...]:
 
 
 def _timed(name: str, where: str, gate: str | None, shape: Shape) -> Callable[[], float]:
-    dim = _TWINS[where][0]
-    call = compiled_call(_CASES[name].make(dim), *_operands(name, shape, dim))
+    side = _carried_side(name, where, shape)
+    call = compiled_call(side.fn, *side.args)
     return with_env(call, ENV, gate)
-
-
-@needs_metal
-@pytest.mark.parametrize(("name", "where"), _ROWS)
-def test_a_rank_4_carried_op_is_not_slower_than_its_rank_3_twin(name: str, where: str) -> None:
-    """Held to 1.5x the twin; unfixed the rank-5 carried operand ran 4x to 8x it."""
-    twin_shape = _TWINS[where][1]
-
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {
-            "rank-4": _timed(name, where, None, _W4),
-            "twin": _timed(name, where, None, twin_shape),
-        }
-
-    assert_ratio_within(build, "rank-4", "twin", bound=_BOUND, slack_ms=0.3, what=f"{name} {where}")
-
-
-@needs_metal
-@pytest.mark.parametrize(("name", "where"), _ROWS)
-def test_the_carried_op_bound_is_exceeded_by_the_unfixed_graph(name: str, where: str) -> None:
-    """The guard above can fail: with the gate off the rank-4 op is over its bound."""
-    twin_shape = _TWINS[where][1]
-
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {
-            "gate off": _timed(name, where, "-1", _W4),
-            "twin": _timed(name, where, None, twin_shape),
-        }
-
-    unfixed = compare_ms(
-        build, "gate off", "twin", bound=_BOUND, slack_ms=0.3, attempts=_UNFIXED_ATTEMPTS
-    )
-    assert not unfixed.within, (
-        f"{name} {where}: the unfixed graph meets the guard's bound, so the guard cannot fail: "
-        f"{unfixed.report}"
-    )
 
 
 # ── no timing row for ``lane_take`` (``graph_gather``): measured, and the clock cannot see it ──
@@ -358,3 +314,20 @@ def test_the_carried_op_bound_is_exceeded_by_the_unfixed_graph(name: str, where:
 # 12.5 / 11.9, and 13.7 / 13.1 against 18.8 / 17.7), ``embedding`` of a rank-3 index within noise
 # (0.9x to 1.1x).  What is left of the old regression is reached only through a consumer the pass
 # has no rule for (``test_rank_canonical_index.py``, ``..._the_pass_leaves_at_rank_5_is_whole``).
+
+
+def _carried_side(name: str, where: str, shape: Shape) -> Side:
+    dim = _TWINS[where][0]
+    return Side(_CASES[name].make(dim), _operands(name, shape, dim))
+
+
+@needs_metal
+@pytest.mark.parametrize(("name", "where"), _ROWS)
+def test_carried_gather_has_the_same_physical_operands_as_its_twin(name: str, where: str) -> None:
+    twin = RankTwin(
+        name, _carried_side(name, where, _W4), _carried_side(name, where, _TWINS[where][1])
+    )
+    wide = operation_shapes(emitted(twin.wide), "GatherAlongAxis")
+    reference = operation_shapes(emitted(twin.twin), "GatherAlongAxis")
+    assert wide == reference
+    assert operation_shapes(emitted(twin.wide, "-1"), "GatherAlongAxis") != reference

@@ -5,31 +5,33 @@ dispatch per slice (~5 us each): ``x * w`` on a ``(6144, 16, 2, 16, 2)`` input t
 against 3 ms for ``(96, 64, 16, 2, 32)``.  A compiled ``reshape(6144, 16, 2, 16, 2).sum(2)``
 was ~27x slower than eager.  The reduction emitters now fuse adjacent kept axes, adjacent
 reduced axes and size-1 axes before emitting, so the graph holds no rank-5+ tensor from a
-reduction.  The graph cannot be inspected from Python, so the guard is
+reduction.  The guards cover
 
 * a value table: loss and parameter gradient of a compiled step equal eager's for every
   reduction kind across ranks 2..6 and axis patterns (adjacent, split, alternating, with
   a size-1 axis, full), with NaN rows for the extremum kinds (LCD-873 / LCD-878);
 * a dynamic-batch row, where the fused leading block must stay symbolic;
-* a coarse timing bound: the rank-5 reduction may not run more than a few times slower
-  than the same elements reduced as a rank-3 view, both compiled (the bug was 30x).
+* the physical operand shapes of the emitted work against an equal-element twin. The clock
+  comparisons run under ``lucid/test/perf/compile/``.
 """
 
 from collections.abc import Callable
 
 import pytest
 
+from lucid.test.unit.compile._rank_twins import (
+    RankTwin,
+    Side,
+    OperationShape,
+    emitted,
+    operation_shapes,
+)
+
 import lucid
 import lucid.nn as nn
 from lucid.compile import make_step
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import (
-    COMPILE_DEVICE,
-    assert_cache_hit,
-    assert_ratio_within,
-    step_call,
-    to_metal,
-)
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_cache_hit, step_call, to_metal
 
 pytestmark = [
     pytest.mark.skipif(not metal_available(), reason="compile needs Metal"),
@@ -246,16 +248,15 @@ def _step_of(
     return step_call(to_metal(_Scaled(shape)), fn, _input(shape))
 
 
-def test_a_rank_5_reduction_is_not_slower_than_its_rank_3_twin() -> None:
-    """Coarse on purpose: the unfixed graph was ~30x the twin's time, the fixed one ~1.3x."""
-    shape = (96, 64, 32, 32)  # the view is made inside the loss; an input is rank 4 either way
-    assert_ratio_within(
-        lambda: {
-            "rank-5": _step_of(shape, lambda y: y.reshape(6144, 16, 2, 16, 2).sum(dim=2).sum()),
-            "rank-3": _step_of(shape, lambda y: y.reshape(6144 * 16, 2, 32).sum(dim=1).sum()),
-        },
-        "rank-5",
-        "rank-3",
-        bound=8.0,
-        slack_ms=5.0,
-    )
+def test_reduction_uses_the_same_axes_and_rows_as_its_explicit_twin() -> None:
+    x = _input((96, 64, 32, 32))
+    wide = Side(lambda t: t.reshape(6144, 16, 2, 16, 2).sum(dim=2).reshape(-1).sum(), (x,))
+    twin = Side(lambda t: t.reshape(98304, 2, 32).sum(dim=1).reshape(-1).sum(), (x,))
+    pair = RankTwin("sum", wide, twin)
+
+    def reductions(side: Side, gate: str | None) -> list[OperationShape]:
+        return sorted(operation_shapes(emitted(side, gate), "ReductionSum"), key=repr)
+
+    assert reductions(pair.wide, None) == reductions(pair.twin, None)
+    # The reduction emitter folds adjacent axes independently of the rank pass.
+    assert reductions(pair.wide, "-1") == reductions(pair.twin, None)

@@ -18,7 +18,8 @@ Guards:
   paths keep their checks on the logical shape);
 * an AOT export / import round trip returns the same bits;
 * a symbolic batch is left as it was;
-* a coarse timing bound against the rank-4 twin.
+* the physical operand shapes of the emitted work against an equal-element twin. The clock
+  comparisons run under ``lucid/test/perf/compile/``.
 """
 
 import os
@@ -27,19 +28,15 @@ from unittest import mock
 
 import pytest
 
+from lucid.test.unit.compile._rank_twins import Side, RankTwin, emitted
+
 import lucid
 import lucid.compile as lc
 import lucid.nn as nn
 import lucid.optim as optim
 from lucid.compile import compile_optimizer, fused_step, make_step
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import (
-    COMPILE_DEVICE,
-    assert_ratio_within,
-    compiled_call,
-    read_first,
-    to_metal,
-)
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, to_metal
 
 ENV = "LUCID_COMPILE_RANK_CANON_MIN_LEAD"
 
@@ -318,43 +315,13 @@ def test_a_dynamic_batch_rank_5_output_is_unchanged(gate: str | None) -> None:
 # ── time ──────────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.usefixtures("inference")
-def test_a_rank_5_output_is_not_slower_than_its_rank_4_twin() -> None:
-    """Unfixed: 26 ms against 2 ms.  Each rank-5 output is held to 1.5x its own rank-4 twin.
-
-    The twin differs from the case in the output alone, so a cost the *input* side pays
-    (a rank-5 feed) is in both.
-    """
-    r5 = (6144, 16, 2, 16, 2)
-    r4 = (6144, 16, 2, 32)
-    x5, x4 = _filled(r5).to(COMPILE_DEVICE), _filled(r4).to(COMPILE_DEVICE)
-
-    def pair(
-        case: tuple[Callable[[lucid.Tensor], lucid.Tensor], lucid.Tensor],
-        twin: tuple[Callable[[lucid.Tensor], lucid.Tensor], lucid.Tensor],
-    ) -> Callable[[], dict[str, Callable[[], float]]]:
-        return lambda: {
-            "case": compiled_call(case[0], case[1], read=read_first),
-            "twin": compiled_call(twin[0], twin[1], read=read_first),
-        }
-
-    # The unfixed output is ~10x its twin, so a noisy attempt cannot hide the defect.
-    assert_ratio_within(
-        pair((lambda a: a + 1.0, x5), (lambda a: (a + 1.0).reshape(*r4), x5)),
-        "case",
-        "twin",
-        bound=1.5,
-        what="rank-5 output",
-    )
-    # A graph output that is a reshape of a computed value costs a rank-4 reshape too
-    # (+25% here, whatever the rank), so the twin is a rank-4 reshape.
-    assert_ratio_within(
-        pair(
-            (lambda a: (a + 1.0).reshape(*r5), x4),
-            (lambda a: (a + 1.0).reshape(98304, 2, 16, 2), x4),
-        ),
-        "case",
-        "twin",
-        bound=1.5,
-        what="reshape to rank 5",
-    )
+@pytest.mark.parametrize("reshape", [False, True])
+def test_physical_output_matches_an_explicit_rank_four_output(reshape: bool) -> None:
+    logical = (6144, 16, 2, 16, 2)
+    physical = (98304, 2, 16, 2)
+    x = _filled((6144, 16, 2, 32) if reshape else logical).to(COMPILE_DEVICE)
+    case = Side(lambda a: (a + 1.0).reshape(*logical) if reshape else a + 1.0, (x,))
+    twin = RankTwin("output", case, Side(lambda a: (a + 1.0).reshape(*physical), (x,)))
+    wide, reference = emitted(twin.wide), emitted(twin.twin)
+    assert wide[0][3] == reference[0][3]
+    assert wide[0][3][0][1] == list(physical)

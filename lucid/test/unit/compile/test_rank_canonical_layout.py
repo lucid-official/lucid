@@ -18,7 +18,8 @@ Three guards, as for the elementwise rule:
 * a value table on Metal: forward and ``make_step`` gradients of the rewritten graph equal
   eager's, and equal the *unrewritten* compiled graph's to the last bit, at float32, float16 and
   bfloat16;
-* a coarse timing bound against the rank-4 twin of each case.
+* the physical operand shapes of the emitted work against an equal-element twin. The clock
+  comparisons run under ``lucid/test/perf/compile/``.
 """
 
 import os

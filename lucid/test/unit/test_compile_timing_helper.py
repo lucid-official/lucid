@@ -9,8 +9,8 @@ from collections.abc import Callable
 
 import pytest
 
-from lucid.test.unit.compile import _helpers
-from lucid.test.unit.compile._helpers import (
+from lucid.test.perf.compile import _timing
+from lucid.test.perf.compile._timing import (
     MIN_RATIO_BOUND,
     MIN_SLACK_MS,
     Calls,
@@ -32,7 +32,7 @@ class _Clock:
 @pytest.fixture
 def clock(monkeypatch: pytest.MonkeyPatch) -> _Clock:
     scripted = _Clock()
-    monkeypatch.setattr(_helpers, "time", scripted)
+    monkeypatch.setattr(_timing, "time", scripted)
     return scripted
 
 

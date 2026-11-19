@@ -10,16 +10,14 @@ intermediate at rank <= 4 themselves (``OpEmitters/_AxisSplitLayout.h``): the ax
 the op names merge.  The policy is the pass's lead gate, so a small lead, a symbolic dim and
 ``LUCID_COMPILE_RANK_CANON_MIN_LEAD=-1`` keep the native spelling.
 
-The graph cannot be inspected from Python, so the guards are
+The guards cover
 
 * a value table on Metal: the forward and the ``make_step`` gradients of the merged spelling
   (gate ``0``) equal eager's and the native spelling's (gate ``-1``), at float32, float16 and
   bfloat16, over the axes and repeat counts that change where the merge falls;
 * a symbolic batch, which keeps the native spelling;
-* a coarse timing bound against the rank-3 twin of each case (the same elements, whose
-  intermediate is rank 4 natively), the same measurement with the gate off, which must exceed the
-  bound (a bound the unfixed graph meets guards nothing), and the GQA-sized repeat, whose lead is
-  under the gate and must keep its native speed.
+* the physical operand shapes of the emitted work against an equal-element twin. The clock
+  comparisons run under ``lucid/test/perf/compile/``.
 """
 
 import os
@@ -31,14 +29,8 @@ import pytest
 import lucid
 import lucid.nn as nn
 from lucid._C import engine as _C_engine
-from lucid.test.unit.compile._helpers import (
-    COMPILE_DEVICE,
-    assert_ratio_within,
-    compare_ms,
-    compiled_call,
-    step_call,
-    with_env,
-)
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, step_call, with_env
+from lucid.test.unit.compile._rank_twins import _trace, RankTwin, Side, emitted, operation_shapes
 from lucid.test.unit.compile.test_rank_canonical_movement import (
     _DTYPES,
     ENV,
@@ -129,7 +121,7 @@ def test_a_symbolic_batch_keeps_the_native_spelling() -> None:
 #: this size the whole file stays under 1 GB with the unfixed graph still 19x to 23x its twin.
 _W4: Shape = (2048, 8, 8, 8)
 _REPEAT_TWINS: dict[str, tuple[int, Shape]] = {
-    "last": (-1, (16384, 8, 8)),
+    "last": (-1, (131072, 8)),
     "mid": (1, (2048, 8, 64)),
     "first": (0, (2048, 512)),
 }
@@ -175,83 +167,6 @@ _STEP_BOUND = 2.0
 _UNFIXED_ATTEMPTS = 1
 
 
-@needs_metal
-@pytest.mark.usefixtures("inference")
-@pytest.mark.parametrize("where", sorted(_REPEAT_TWINS))
-def test_a_rank_4_repeat_is_not_slower_than_its_rank_3_twin(where: str) -> None:
-    """Held to 1.5x the twin; unfixed the rank-5 intermediate ran 19x to 21x it."""
-    dim, twin_shape = _REPEAT_TWINS[where]
-    fn = _repeat_forward(dim)
-
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {
-            "rank-4": compiled_call(fn, _metal(_W4)),
-            "twin": compiled_call(fn, _metal(twin_shape)),
-        }
-
-    assert_ratio_within(build, "rank-4", "twin", bound=_BOUND, slack_ms=0.3, what=where)
-
-
-@needs_metal
-@pytest.mark.usefixtures("inference")
-@pytest.mark.parametrize("where", sorted(_REPEAT_TWINS))
-def test_the_repeat_bound_is_exceeded_by_the_unfixed_graph(where: str) -> None:
-    """The guard above can fail: with the gate off the rank-4 repeat is over its bound."""
-    dim, twin_shape = _REPEAT_TWINS[where]
-
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {
-            "gate off": with_env(compiled_call(_repeat_forward(dim), _metal(_W4)), ENV, "-1"),
-            "twin": compiled_call(_repeat_forward(dim), _metal(twin_shape)),
-        }
-
-    unfixed = compare_ms(
-        build, "gate off", "twin", bound=_BOUND, slack_ms=0.3, attempts=_UNFIXED_ATTEMPTS
-    )
-    assert not unfixed.within, (
-        f"{where}: the unfixed graph meets the guard's bound, so the guard cannot fail: "
-        f"{unfixed.report}"
-    )
-
-
-@needs_metal
-@pytest.mark.parametrize("where", sorted(_REPEAT_TWINS))
-def test_a_rank_4_repeat_backward_is_not_slower_than_its_rank_3_twin(where: str) -> None:
-    dim, twin_shape = _REPEAT_TWINS[where]
-
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {
-            "rank-4": _step(_repeat_step(dim), _W4, None),
-            "twin": _step(_repeat_step(dim), twin_shape, None),
-        }
-
-    assert_ratio_within(build, "rank-4", "twin", bound=_STEP_BOUND, slack_ms=0.5, what=where)
-
-
-@needs_metal
-@pytest.mark.parametrize("where", sorted(_REPEAT_TWINS))
-def test_the_repeat_backward_bound_is_exceeded_by_the_unfixed_graph(where: str) -> None:
-    dim, twin_shape = _REPEAT_TWINS[where]
-
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {
-            "gate off": _step(_repeat_step(dim), _W4, "-1"),
-            "twin": _step(_repeat_step(dim), twin_shape, None),
-        }
-
-    unfixed = compare_ms(
-        build, "gate off", "twin", bound=_STEP_BOUND, slack_ms=0.5, attempts=_UNFIXED_ATTEMPTS
-    )
-    assert not unfixed.within, (
-        f"{where}: the unfixed backward meets the guard's bound, so the guard cannot fail: "
-        f"{unfixed.report}"
-    )
-
-
 def _tile_wide(t: lucid.Tensor) -> lucid.Tensor:
     return lucid.tile(t, (1, 2, 1))
 
@@ -261,52 +176,55 @@ def _tile_twin(t: lucid.Tensor) -> lucid.Tensor:
 
 
 @needs_metal
-def test_a_tile_backward_is_not_slower_than_its_rank_2_twin() -> None:
-    """Held to 2x the twin; unfixed the rank-6 interleave ran 22x it."""
-
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {
-            "tile": _step(_tile_wide, _TILE_WIDE, None),
-            "twin": _step(_tile_twin, _TILE_TWIN, None),
-        }
-
-    assert_ratio_within(build, "tile", "twin", bound=_STEP_BOUND, slack_ms=0.5, what="tile")
-
-
-@needs_metal
-def test_the_tile_backward_bound_is_exceeded_by_the_unfixed_graph() -> None:
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {
-            "gate off": _step(_tile_wide, _TILE_WIDE, "-1"),
-            "twin": _step(_tile_twin, _TILE_TWIN, None),
-        }
-
-    unfixed = compare_ms(
-        build, "gate off", "twin", bound=_STEP_BOUND, slack_ms=0.5, attempts=_UNFIXED_ATTEMPTS
-    )
-    assert not unfixed.within, (
-        f"the unfixed tile backward meets the guard's bound, so the guard cannot fail: "
-        f"{unfixed.report}"
-    )
-
-
-@needs_metal
-@pytest.mark.usefixtures("inference")
-def test_a_gqa_sized_repeat_keeps_its_native_speed() -> None:
-    """``(8, 8, 512, 64)`` repeated along the heads has a lead of 8, under the gate: the graph is
-    the native one (1.3 ms), so the gate-on call is held to the gate-off one."""
-    gqa: Shape = (8, 8, 512, 64)
+@pytest.mark.parametrize("where", sorted(_REPEAT_TWINS))
+@pytest.mark.parametrize("backward", [False, True])
+def test_repeat_uses_its_twins_split_axis(where: str, backward: bool) -> None:
+    dim, shape = _REPEAT_TWINS[where]
 
     def fn(t: lucid.Tensor) -> lucid.Tensor:
-        return lucid.repeat(t * 1.0, 4, dim=1).reshape(-1).sum()
+        return lucid.repeat(t, 2, dim=dim).reshape(-1).sum()
 
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {
-            "gate default": with_env(compiled_call(fn, _metal(gqa)), ENV, None),
-            "gate off": with_env(compiled_call(fn, _metal(gqa)), ENV, "-1"),
-        }
+    pair = RankTwin("repeat", Side(fn, (_metal(_W4),)), Side(fn, (_metal(shape),)))
+    op, label = (
+        ("ReductionSum", "mps_reduction_sum") if backward else ("Broadcast", "mps_broadcast_to")
+    )
+    twin = operation_shapes(emitted(pair.twin, backward=backward), op, label=label)
+    assert operation_shapes(emitted(pair.wide, backward=backward), op, label=label) == twin
+    assert operation_shapes(emitted(pair.wide, "-1", backward), op, label=label) != twin
 
-    assert_ratio_within(build, "gate default", "gate off", bound=_BOUND, slack_ms=0.3)
+
+@needs_metal
+def test_tile_gradient_folds_only_the_repeated_axis() -> None:
+    x = _metal(_TILE_WIDE)
+    wide = Side(lambda t: _tile_wide(t).reshape(-1).sum(), (x,))
+    # The incoming gradient has two copies of each eight-by-eight row.
+    gradient = _metal((2048, 2, 8, 8))
+    assert gradient.numel() == 2 * x.numel()
+    twin = Side(lambda g: g.sum(dim=1, keepdim=True), (gradient,))
+    expected = operation_shapes(emitted(twin), "ReductionSum", label="sum")
+    assert (
+        operation_shapes(emitted(wide, backward=True), "ReductionSum", label="mps_reduction_sum")
+        == expected
+    )
+    assert (
+        operation_shapes(emitted(wide, "-1", True), "ReductionSum", label="mps_reduction_sum")
+        != expected
+    )
+
+
+@needs_metal
+def test_repeat_below_threshold_preserves_the_native_graph() -> None:
+    side = Side(_repeat_forward(1), (_metal((8, 8, 512, 64)),))
+    default = operation_shapes(emitted(side), "Broadcast")
+    assert default == operation_shapes(emitted(side, "-1"), "Broadcast")
+    assert default != operation_shapes(emitted(side, "0"), "Broadcast")
+
+
+@needs_metal
+def test_inspection_reports_an_invalid_gradient_request() -> None:
+    x = _metal((2, 3))
+    graph, feeds = _trace(lambda t: t.sum(), x)
+    loss = graph.ops[-1].outputs[0].id
+    with pytest.raises(RuntimeError, match="param_ids must be non-empty"):
+        _C_engine.compile._inspect_emitted_operations(graph, feeds, loss, [])
+    assert _C_engine.compile._inspect_emitted_operations(graph, feeds)

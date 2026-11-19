@@ -75,3 +75,44 @@ def _filled(shape: Shape, phase: float = 0.0) -> lucid.Tensor:
     for s in shape:
         n *= s
     return (lucid.sin(lucid.arange(n, dtype=lucid.float32) * 0.37 + phase) + 1.5).reshape(*shape)
+
+
+EmittedType = tuple[int, list[int] | None]
+EmittedNode = tuple[str, str, list[int], list[EmittedType]]
+OperationShape = tuple[str, tuple[tuple[EmittedType, ...], ...], tuple[EmittedType, ...]]
+
+
+def emitted(side: Side, gate: str | None = None, backward: bool = False) -> list[EmittedNode]:
+    """Inspect the actual emitter graph for a forward or a single trainable operand."""
+    with mock.patch.dict(os.environ):
+        if gate is None:
+            os.environ.pop(ENV, None)
+        else:
+            os.environ[ENV] = gate
+        graph, feeds = _trace(side.fn, *side.args)
+        if backward:
+            (parameter,) = feeds
+            return _C_engine.compile._inspect_emitted_operations(
+                graph, feeds, graph.ops[-1].outputs[0].id, [parameter]
+            )
+        return _C_engine.compile._inspect_emitted_operations(graph, feeds)
+
+
+def operation_shapes(
+    nodes: list[EmittedNode], op: str, *, label: str | None = None
+) -> list[OperationShape]:
+    """Physical input and output types of every occurrence, in target-to-feed order."""
+    selected = [
+        (cls, tuple(tuple(nodes[i][3]) for i in inputs), tuple(outputs))
+        for cls, name, inputs, outputs in nodes
+        if cls == "MPSGraph" + op + "Op" and (label is None or name == label)
+    ]
+    assert selected, (op, label)
+    return selected
+
+
+def shape_twin(
+    name: str, fn: Callable[..., lucid.Tensor], wide: Shape, narrow: Shape, inputs: int = 1
+) -> RankTwin:
+    args = tuple(lucid.ones(*wide, device="metal") for _ in range(inputs))
+    return RankTwin(name, Side(fn, args), Side(fn, tuple(t.reshape(*narrow) for t in args)))

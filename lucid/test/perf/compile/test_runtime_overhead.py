@@ -6,7 +6,7 @@ import lucid
 import lucid.nn._tree_version as tree_version
 from lucid._C import engine as _C_engine
 from lucid.compile._core import signature as sig
-from lucid.test.unit.compile._helpers import assert_ratio_within
+from lucid.test.perf.compile._timing import assert_ratio_within
 from lucid.test.unit.compile._runtime_cases import _cached_executable, _deep_model
 
 pytestmark = pytest.mark.perf

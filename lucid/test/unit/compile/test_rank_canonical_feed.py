@@ -17,7 +17,8 @@ What is held here:
 * a symbolic batch keeps its feeds as they are;
 * an AOT round trip binds the restored executable's feed at the shape it was declared at;
 * the cache key is unchanged: the same executable serves a second call and a second tensor;
-* a rank-5 feed is no slower than its rank-4 twin.
+* the physical operand shapes of the emitted work against an equal-element twin. The clock
+  comparisons run under ``lucid/test/perf/compile/``.
 """
 
 import os
@@ -26,19 +27,15 @@ from unittest import mock
 
 import pytest
 
+from lucid.test.unit.compile._rank_twins import emitted, operation_shapes, shape_twin
+
 import lucid
 import lucid.compile as lc
 import lucid.nn as nn
 from lucid._C import engine as _C_engine
 from lucid.compile import make_step
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import (
-    COMPILE_DEVICE,
-    assert_ratio_within,
-    compiled_call,
-    read_first,
-    to_metal,
-)
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, to_metal
 
 ENV = "LUCID_COMPILE_RANK_CANON_MIN_LEAD"
 
@@ -283,19 +280,10 @@ _TWINS: dict[str, tuple[Callable[..., lucid.Tensor], Shape, Shape]] = {
 
 
 @needs_metal
-@pytest.mark.usefixtures("inference")
 @pytest.mark.parametrize("name", sorted(_TWINS))
-def test_a_rank_5_feed_is_not_slower_than_its_rank_4_twin(name: str) -> None:
-    """Held to 1.5x the twin; the views of a rank-5 feed ran 1.9x to 2.6x it, the pass off 4.7x+."""
-    fn, wide, twin = _TWINS[name]
-    xs5 = (_on(_filled(wide, 0.1)), _on(_filled(wide, 0.9)))
-    xs4 = (_on(_filled(twin, 0.1)), _on(_filled(twin, 0.9)))
-
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        return {
-            "rank-5": compiled_call(fn, *xs5, read=read_first),
-            "rank-4 twin": compiled_call(fn, *xs4, read=read_first),
-        }
-
-    assert_ratio_within(build, "rank-5", "rank-4 twin", bound=1.5, slack_ms=0.1, what=name)
+def test_feed_placeholders_match_an_explicit_flat_feed(name: str) -> None:
+    fn, shape, _ = _TWINS[name]
+    pair = shape_twin(name, fn, shape, (-1,), 2)
+    expected = operation_shapes(emitted(pair.twin), "Placeholder")
+    assert operation_shapes(emitted(pair.wide), "Placeholder") == expected
+    assert operation_shapes(emitted(pair.wide, "-1"), "Placeholder") != expected

@@ -16,10 +16,11 @@ and declined paths — ties, NaN, signed zeros, wide int64, descending, every ax
 to the same answer, their gradients, and the speed.
 """
 
-import warnings
 from collections.abc import Callable
 
 import pytest
+import math
+from lucid.test.unit.compile._rank_twins import emitted, shape_twin, operation_shapes, Side
 
 import lucid
 import lucid.nn as nn
@@ -27,7 +28,7 @@ from lucid._C import engine as _C_engine
 from lucid.compile import make_step
 from lucid.compile._core.fallback import CompileFallbackWarning
 from lucid.test._fixtures.devices import metal_available
-from lucid.test.unit.compile._helpers import COMPILE_DEVICE, assert_ratio_within
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE
 from lucid.test.unit.compile.test_sort_order_compiled import FLOATS, INF, INTS, ROWS, _same, _wide
 
 pytestmark = [
@@ -229,19 +230,28 @@ _OPS: dict[str, Callable[[lucid.Tensor], lucid.Tensor]] = {
 }
 
 
-@pytest.mark.parametrize("name", list(_OPS))
+@pytest.mark.parametrize("name", sorted(_OPS))
 @pytest.mark.parametrize("shape", [(256, 8, 16, 16), (64, 4, 8, 16, 16)])
-def test_a_compiled_sort_is_not_slower_than_eager(name: str, shape: tuple[int, ...]) -> None:
-    fn = _OPS[name]
-    x = _fill(shape).to(COMPILE_DEVICE)
+def test_ordering_work_matches_an_explicit_row_layout(name: str, shape: tuple[int, ...]) -> None:
+    rows = (shape[0], shape[1], math.prod(shape[2:])) if name == "sort_dim1" else (-1, shape[-1])
+    pair = shape_twin(name, _OPS[name], shape, rows)
+    wide, reference = emitted(pair.wide), emitted(pair.twin)
+    if name == "topk_select":
+        # Four independent selections, each reducing all rows along the last dimension.
+        def selections(side: Side) -> list[tuple[int, int, int]]:
+            nodes = emitted(side)
+            rows_and_width = []
+            for cls, _, inputs, _ in nodes:
+                if cls == "MPSGraphReductionArgMaxOp":
+                    dtype, sizes = nodes[inputs[0]][3][0]
+                    assert sizes
+                    rows_and_width.append((dtype, math.prod(sizes[:-1]), sizes[-1]))
+            assert len(rows_and_width) == 4
+            return rows_and_width
 
-    def build() -> dict[str, Callable[[], float]]:
-        _C_engine.compile.session_cache_clear()
-        compiled = lucid.compile(fn)
-        return {"compiled": lambda: float(compiled(x).item()), "eager": lambda: float(fn(x).item())}
-
-    # The guard is for the per-row argSort cost (~100x, LCD-926).  The ranked path runs
-    # 1.7-2.6x eager at rank 5 under load (topk smallest), so 3x flaked.
-    with lucid.no_grad(), warnings.catch_warnings():
-        warnings.simplefilter("ignore", CompileFallbackWarning)
-        assert_ratio_within(build, "compiled", "eager", bound=5.0, what=f"{name} {shape}")
+        assert selections(pair.wide) == selections(pair.twin)
+    else:
+        label = "mps_greater_equal" if name == "topk_sort" else "mps_less_equal"
+        assert operation_shapes(wide, "Arithmetic", label=label) == operation_shapes(
+            reference, "Arithmetic", label=label
+        )

@@ -26,13 +26,8 @@ from lucid.test.unit.compile._layout_twins import LAYOUT_CASES, layout_twin
 
 from lucid._C import engine as _C_engine
 from lucid.test._default_device import metal_available
-from lucid.test.unit.compile._helpers import (
-    COMPILE_DEVICE,
-    assert_ratio_within,
-    compare_ms,
-    compiled_call,
-    with_env,
-)
+from lucid.test.perf.compile._timing import assert_ratio_within, compare_ms
+from lucid.test.unit.compile._helpers import COMPILE_DEVICE, compiled_call, with_env
 from lucid.test.unit.compile._index_twins import CASES
 from lucid.test.unit.compile._rank_twins import Side
 from lucid.test.unit.compile._movement_twins import (
