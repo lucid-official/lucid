@@ -387,6 +387,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - keep an empty LSTM batch from offsetting its null gate buffer (LCD-1047)
 
+- return before conjugating an empty complex64 buffer (LCD-1047)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

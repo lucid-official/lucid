@@ -280,3 +280,10 @@ def test_an_lstm_over_an_empty_batch_answers_empty(device_cpu_only: str, batch_f
     assert x.grad is not None and tuple(x.grad.shape) == tuple(x.shape)
     weight = lstm.weight_hh_l0.grad
     assert weight is not None and all(v == 0.0 for v in weight.reshape(-1).tolist())
+
+
+@pytest.mark.parametrize("dtype", [lucid.complex64])
+def test_a_conjugate_of_nothing_is_empty(device_cpu_only: str, dtype: lucid.dtype) -> None:
+    # ``vzconj_c64`` negated the imag halves through ``out + 1`` on a null buffer.
+    got = lucid.conj_physical(lucid.zeros(0, 3, dtype=dtype))
+    assert tuple(got.shape) == (0, 3) and got.dtype == dtype

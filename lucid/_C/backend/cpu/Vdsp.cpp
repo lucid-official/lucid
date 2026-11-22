@@ -351,6 +351,9 @@ void vzconj_c64(const float* a, float* out, std::size_t n) {
     // Copy the full interleaved buffer, then negate only the imag halves
     // via a stride-2 view starting at offset 1.  ``vDSP_vneg`` handles the
     // stride natively.
+    // An empty input leaves both buffers null; the imag view must not offset them.
+    if (n == 0)
+        return;
     std::memcpy(out, a, n * 2 * sizeof(float));
     vDSP_vneg(out + 1, 2, out + 1, 2, L(n));
 }
