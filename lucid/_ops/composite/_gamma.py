@@ -129,6 +129,11 @@ class _Lanczos:
 
     def __init__(self, g: float, coeffs: tuple[float, ...]) -> None:
         n = len(coeffs) - 1
+        if n < 2 or n % 2:
+            raise ValueError(
+                f"a Lanczos set adds its partial fractions in pairs: need an even count >= 2 of "
+                f"terms after P_0, got {n}"
+            )
         t0 = g + 0.5
         s0 = coeffs[0] + math.fsum(coeffs[k] / k for k in range(1, n + 1))
         diff = [-coeffs[k] / (k * s0) for k in range(1, n + 1)]
@@ -137,9 +142,8 @@ class _Lanczos:
         # (numerator slope, numerator intercept) of the fraction for the terms k = i + 1, i + 2
         self.pairs: tuple[tuple[float, float], ...] = tuple(
             (diff[i] + diff[i + 1], diff[i] * (i + 2) + diff[i + 1] * (i + 1))
-            for i in range(0, n - 1, 2)
+            for i in range(0, n, 2)
         )
-        self.tail: float | None = diff[-1] if n % 2 else None
 
     def difference(self, z: Tensor, one: Tensor) -> Tensor:
         """:math:`\\ln\\Gamma(1 + z)` for ``z >= -1/2``, exactly 0 at ``z = 0``.
@@ -154,8 +158,6 @@ class _Lanczos:
             upper = shifted + one
             fractions.append((z * slope + intercept) / (shifted * upper))
             shifted = upper
-        if self.tail is not None:
-            fractions.append(self.tail / (shifted + one))
         total = fractions[0]
         for fraction in fractions[1:]:
             total = total + fraction

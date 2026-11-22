@@ -18,13 +18,18 @@ better.
 The engine-event counts are the structural guard on cost: they do not depend on the machine.
 """
 
+import math
 from collections.abc import Callable
 
 import pytest
 
 import lucid
 from lucid._ops.composite._gamma import (
+    _LANCZOS_F64,
+    _LANCZOS_F64_G,
+    _LANCZOS_F64_P,
     _digamma_positive,
+    _Lanczos,
     _lgamma,
     _lgamma_positive,
     _polygamma_positive,
@@ -387,3 +392,33 @@ def test_the_trace_forms_differentiate_to_the_slopes(
         (g,) = lucid.autograd.grad(value(x).sum(), [x])
         for got, want in zip(g.tolist(), slope.tolist(), strict=True):
             assert _units(got, want, dtype, relative=False) <= 32.0, (got, want)
+
+
+# ── the Lanczos sets ────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("count", [0, 1, 3, 7])
+def test_a_lanczos_set_needs_an_even_number_of_terms(count: int) -> None:
+    """The partial fractions are added in pairs: an odd count would drop its last term unseen."""
+    with pytest.raises(ValueError, match="in pairs"):
+        _Lanczos(5.0, (1.0, *[1.0 / (k + 1) for k in range(count)]))
+
+
+def test_the_difference_form_is_the_lanczos_form_minus_its_value_at_one() -> None:
+    """``F(z) - F(0)`` written out term by term in double precision, against the pairs' sum.
+
+    Independent of the pairing: the plain partial fractions ``sum_k P_k / (z + k)`` of the same set.
+    """
+    p, t0 = _LANCZOS_F64_P, _LANCZOS_F64_G + 0.5
+
+    def forward(z: float) -> float:
+        s = p[0] + math.fsum(p[k] / (z + k) for k in range(1, len(p)))
+        return (-z) + (z + 0.5) * math.log(z + t0) + math.log(s)
+
+    zs = [-0.4, -0.1, 0.05, 0.3, 1.0, 2.5, 9.0]
+    got = _LANCZOS_F64.difference(
+        lucid.tensor(zs, dtype=lucid.float64), lucid.ones((), dtype=lucid.float64)
+    ).tolist()
+    for z, g in zip(zs, got, strict=True):
+        want = forward(z) - forward(0.0)
+        assert abs(g - want) <= 1e-13 * max(1.0, abs(want)), (z, g, want)
