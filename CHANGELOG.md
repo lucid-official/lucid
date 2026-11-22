@@ -514,6 +514,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - dispatch real log1p through native vector kernels (LCD-1034)
 
+- cut the gamma-family densities' cost (LCD-1050)
+
 ### Tooling
 
 - record that 1055fa3b9 moves no binary interface

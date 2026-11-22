@@ -51,11 +51,13 @@ Entry points (one per quantity, each also used by every law that needs it):
 """
 
 import math
+from typing import final, override
 
 import lucid
 from lucid._ops.composite._gamma import _horner_float
 from lucid._ops.composite._opmath import _in_float32
 from lucid._tensor.tensor import Tensor
+from lucid.autograd.function import Function, FunctionCtx
 from lucid.distributions._util import _align_device
 from lucid.special import xlog1py as _xlog1py
 
@@ -124,8 +126,7 @@ def _is_double(x: Tensor) -> bool:
     return x.dtype == lucid.float64
 
 
-def _stirling_series(z: Tensor) -> Tensor:
-    """``S(z)`` from its asymptotic series, for ``z`` at or above the dtype's series start."""
+def _stirling_series_value(z: Tensor) -> Tensor:
     r = 1.0 / z
     return r * _horner_float(_S_COEFFS[: _TERMS_64 if _is_double(z) else _TERMS_32], r * r)
 
@@ -134,6 +135,36 @@ def _digamma_series(z: Tensor) -> Tensor:
     """``D(z)`` from its asymptotic series, for ``z`` at or above the dtype's series start."""
     r = 1.0 / z
     return r * r * _horner_float(_D_COEFFS[: _TERMS_64 if _is_double(z) else _TERMS_32], r * r)
+
+
+@final
+class _StirlingSeries(Function):
+    """``S(z)`` from its series with the slope ``-D(z)``: the derivative of the *same* truncation.
+
+    ``S_T' = -D_T`` term by term (``(2k-1) c_k = B_2k / 2k``), so the slope is one Horner pass of
+    ``D``'s series; differentiating the value's graph instead tapes every step of its own.
+    """
+
+    _trace_form = staticmethod(_stirling_series_value)
+
+    @override
+    @staticmethod
+    def forward(ctx: FunctionCtx, z: Tensor) -> Tensor:
+        ctx.save_for_backward(z)
+        return _stirling_series_value(z.detach())
+
+    @override
+    @staticmethod
+    def backward(ctx: FunctionCtx, grad: Tensor) -> Tensor:
+        (z,) = ctx.saved_tensors
+        return -(grad * _digamma_series(z))
+
+
+def _stirling_series(z: Tensor) -> Tensor:
+    """``S(z)`` from its asymptotic series, for ``z`` at or above the dtype's series start."""
+    out = _StirlingSeries.apply(z)
+    assert isinstance(out, Tensor)
+    return out
 
 
 def _stirling_plain(z: Tensor) -> Tensor:
@@ -210,11 +241,6 @@ def _digamma_remainder(z: Tensor) -> Tensor:
     return _in_float32(_digamma_remainder_impl, z)
 
 
-def _gamma_tail_series(z: Tensor) -> Tensor:
-    """``G(z)`` from the two series, for ``z`` at or above the dtype's series start."""
-    return -0.5 / z + _stirling_series(z) + (z - 1.0) * _digamma_series(z)
-
-
 def _gamma_tail_recurred(z: Tensor) -> Tensor:
     r"""``G(z)`` for ``z >= _SHIFT_FROM`` through the exact recurrences, with no ``lgamma`` / ``digamma``.
 
@@ -240,50 +266,75 @@ def _gamma_tail_recurred(z: Tensor) -> Tensor:
         w = z + float(j)
         step = lucid.log1p((k - float(j)) / w) - (j + 1.0) / w
         gap = gap + lucid.where(k > float(j), step, lucid.zeros_like(z))
+    # ``G(b) - k (1/(2b) + D(b))`` with ``G(b) = -1/(2b) + S(b) + (b - 1) D(b)`` and ``b - 1 - k = z - 1``.
     return (
-        _gamma_tail_series(b) + 0.5 * lucid.log1p(k / z) - k * (0.5 / b + _digamma_series(b)) + gap
+        -0.5 * (1.0 + k) / b
+        + _stirling_series(b)
+        + (z - 1.0) * _digamma_series(b)
+        + 0.5 * lucid.log1p(k / z)
+        + gap
     )
 
 
-def _gamma_tail_impl(z: Tensor) -> Tensor:
-    stable = z >= _SHIFT_FROM
-    # Each branch runs on its own domain: a lane of the other is held inside it.
-    recurred = _gamma_tail_recurred(lucid.where(stable, z, lucid.full_like(z, _SERIES_FROM)))
-    small = lucid.where(stable, lucid.ones_like(z), z)
-    plain = -0.5 / small + _stirling_plain(small) + (small - 1.0) * _digamma_plain(small)
-    return lucid.where(stable, recurred, plain)
+def _gamma_tail_small(lg: Tensor, psi: Tensor, z: Tensor) -> Tensor:
+    """``G(z)`` from the ``lgamma`` and ``digamma`` of ``z`` the caller holds: O(1/z) terms for ``z < 1``."""
+    return -0.5 / z + _stirling_small(lg, z) + (z - 1.0) * (lucid.log(z) - 0.5 / z - psi)
 
 
-def _gamma_tail(z: Tensor) -> Tensor:
-    r"""``G(z) = -1/(2z) + S(z) + (z - 1) D(z)``, so that ``z + lgamma(z) + (1 - z) digamma(z)
-    = log(2 pi e z) / 2 + G(z)``.
+def _bd0_value(x: Tensor, m: Tensor) -> Tensor:
+    """``bd0`` for positive finite ``x`` and ``m``: both lanes are finite there, so no lane needs holding."""
+    terms = _BD0_TERMS_64 if _is_double(x) else _BD0_TERMS_32
+    gap = x - m
+    v = gap / (x + m)
+    v2 = v * v
+    # Series lane: (x - m) v + 2 x sum_{j>=1} v^(2j+1)/(2j+1), every term of one sign; for |v| < 1 the
+    # polynomial is finite.  Direct lane: finite wherever x, m > 0 (a lane of the other costs no NaN).
+    series = gap * v + 2.0 * x * v * v2 * _horner_float(_BD0_COEFFS[:terms], v2)
+    direct = x * lucid.log(x / m) + m - x
+    return lucid.where(v.abs() < _BD0_V, series, direct)
 
-    :math:`G \to -1/(3z)`.  The Gamma entropy ``alpha + lgamma(alpha) + (1 - alpha)
-    digamma(alpha)`` is a sum of ``alpha log alpha``-sized terms that cancel to
-    ``1/2 log(2 pi e alpha)``; written through ``G`` none of them is formed and the slope in
-    ``alpha`` is a sum of ``1/alpha^2`` terms, not ``1 - alpha psi_1(alpha)``.  From ``z = 1`` it
-    is read through :func:`_gamma_tail_recurred` (the series, reached by the exact recurrence);
-    below 1 through ``S`` and ``D`` of ``lgamma`` / ``digamma``, where their terms are O(1/z).
+
+@final
+class _Bd0(Function):
+    """``bd0`` with its exact slopes ``log(x/m)`` and ``1 - x/m``, each read as ``t = (x - m)/m``.
+
+    ``1 - x/m = -t`` keeps every digit near ``x = m`` (``x - m`` is exact there), and so does
+    ``log(x/m) = log1p(t)`` on the lanes of the series; farther out ``t`` rounds to -1 as ``x/m``
+    underflows and the plain ``log(x/m)`` is the accurate one.  A handful of ops where the graph of
+    the two lanes tapes some sixty.
     """
-    return _in_float32(_gamma_tail_impl, z)
+
+    _trace_form = staticmethod(_bd0_value)
+
+    @override
+    @staticmethod
+    def forward(ctx: FunctionCtx, x: Tensor, m: Tensor) -> Tensor:
+        ctx.save_for_backward(x, m)
+        return _bd0_value(x.detach(), m.detach())
+
+    @override
+    @staticmethod
+    def backward(ctx: FunctionCtx, grad: Tensor) -> tuple[Tensor | None, Tensor | None]:
+        x, m = ctx.saved_tensors
+        gap = x - m
+        t = gap / m
+        need_x, need_m = ctx.needs_input_grad
+        slope = None
+        if need_x:
+            # Each lane reads the form of its own domain: the other is held where it stays finite.
+            near = (gap / (x + m)).abs() < _BD0_V
+            slope = lucid.where(
+                near,
+                lucid.log1p(lucid.where(near, t, 0.0)),
+                lucid.log(lucid.where(near, 1.0, x / m)),
+            )
+        return (None if slope is None else grad * slope, -(grad * t) if need_m else None)
 
 
 def _bd0_impl(x: Tensor, m: Tensor) -> Tensor:
-    terms = _BD0_TERMS_64 if _is_double(x) else _BD0_TERMS_32
-    v = (x - m) / (x + m)
-    near = v.abs() < _BD0_V
-    one = lucid.ones_like(x)
-    # Series lane: (x - m) v + 2 x sum_{j>=1} v^(2j+1)/(2j+1), every term of one sign.  The
-    # far lane is held at x = m = 1 there (v = 0), and the series lane at x = 1, m = 2 below.
-    xs = lucid.where(near, x, one)
-    ms = lucid.where(near, m, one)
-    vs = (xs - ms) / (xs + ms)
-    v2 = vs * vs
-    series = (xs - ms) * vs + 2.0 * xs * vs * v2 * _horner_float(_BD0_COEFFS[:terms], v2)
-    xd = lucid.where(near, one, x)
-    md = lucid.where(near, 2.0 * one, m)
-    direct = xd * lucid.log(xd / md) + md - xd
-    return lucid.where(near, series, direct)
+    out = _Bd0.apply(x, m)
+    assert isinstance(out, Tensor)
+    return out
 
 
 def _bd0(x: Tensor, m: Tensor) -> Tensor:
@@ -314,88 +365,127 @@ def _common(*tensors: Tensor) -> tuple[Tensor, ...]:
     return tuple(t if t.dtype == dtype else t.to(dtype) for t in views)
 
 
+def _components(alpha: Tensor) -> Tensor:
+    """The ``K`` components of a vector along its last axis, moved to the front: shape ``(K, *batch)``.
+
+    Every quantity of the frame is elementwise in the components, so each runs once over the whole
+    ``(K, *batch)`` tensor: the op count does not grow with ``K`` (on a device that pays per op, a
+    second and a third category cost nothing but data).  The components lead because a ``stack`` or a
+    reduction along a tiny *last* axis costs as much as an ``lgamma``.
+    """
+    return alpha.movedim(-1, 0)
+
+
+def _pair(a: Tensor, b: Tensor) -> Tensor:
+    """``(a, b)`` as ``(2, *batch)`` components."""
+    return lucid.stack([a, b], dim=0)
+
+
 def _log_shares(a: Tensor, s: Tensor) -> Tensor:
-    """``log(a_i / s)`` along the last axis; the largest share is read as ``log1p(-rest / s)``.
+    """``log(a_i / s)`` for components ``(K, *batch)``; the largest (the first of equals) is ``log1p(-rest / s)``.
 
     ``a_i / s`` rounds to a relative ``eps``, which is an absolute ``eps`` in its logarithm; times
     ``a_i`` it is ``eps * s`` for the one share near 1.  ``rest``, the sum of the others, is
     exact where ``s - a_i`` is not.
     """
-    k = a.shape[-1]
-    dominant = lucid.arange(k, device=a.device) == a.argmax(dim=-1, keepdim=True)
-    rest = lucid.where(dominant, lucid.zeros_like(a), a).sum(dim=-1, keepdim=True)
+    k = a.shape[0]
+    # The first of the largest: weights ``K - i`` make the earliest index the unique maximum of the hits.
+    weight = (float(k) - lucid.arange(k, dtype=a.dtype, device=a.device)).reshape(
+        k, *([1] * (a.ndim - 1))
+    )
+    hit = lucid.where(a.detach() == a.detach().amax(dim=0), weight, 0.0)
+    dominant = hit == hit.amax(dim=0)
+    rest = lucid.where(dominant, 0.0, a).sum(dim=0)
     return lucid.where(dominant, lucid.log1p(-rest / s), lucid.log(a / s))
 
 
-class _Stirling:
-    """The Stirling frame of one concentration vector (last axis ``K``): shares, remainder, lanes.
+def _stirling_small(lg: Tensor, z: Tensor) -> Tensor:
+    """``S(z)`` from the ``lgamma`` of ``z`` the caller already holds: both terms are O(10) for ``z < 10``."""
+    return lg - ((z - 0.5) * lucid.log(z) - z + _HALF_LOG_2PI)
 
-    ``large`` is the per-lane mask of the centred forms (a valid vector with ``s >= _CENTRED_FROM``);
-    ``a`` is the vector held inside that domain, so the centred pieces are finite on every
-    lane.  ``plain`` holds the complementary domain for the ``lgamma`` / ``digamma`` forms.
+
+class _Stirling:
+    """The Stirling frame of one concentration vector given as components ``(K, *batch)``.
+
+    ``large`` is the lane mask of the centred forms (a valid vector with ``sum >= centred_from``);
+    ``a`` are the components held inside that domain (a dead lane holds ``_CENTRED_FROM / K`` each,
+    so the sum is the series' start), so the centred pieces are finite on every lane.  The plain
+    forms read the raw ``comps`` and ``total``.  Pieces that only some callers need are built on
+    first use: a quantity nobody asks for is not formed (each costs a pass over the batch).
     """
 
-    def __init__(self, alpha: Tensor, centred_from: float = _CENTRED_FROM) -> None:
-        total = alpha.sum(dim=-1, keepdim=True)
-        valid = (alpha.amin(dim=-1, keepdim=True) > 0.0) & lucid.isfinite(total)
-        self.k: int = alpha.shape[-1]
-        self.large: Tensor = valid & (total >= centred_from)
-        self.a: Tensor = lucid.where(self.large, alpha, lucid.full_like(alpha, 2.0))
-        self.plain: Tensor = lucid.where(self.large, lucid.ones_like(alpha), alpha)
-        self.s: Tensor = self.a.sum(dim=-1, keepdim=True)
+    def __init__(self, comps: Tensor, centred_from: float = _CENTRED_FROM) -> None:
+        self.comps: Tensor = comps
+        self.k: int = comps.shape[0]
+        self.total: Tensor = comps.sum(dim=0)
+        valid = (comps.amin(dim=0) > 0.0) & lucid.isfinite(self.total)
+        self.large: Tensor = valid & (self.total >= centred_from)
+        self.a: Tensor = lucid.where(self.large, comps, _CENTRED_FROM / self.k)
+        self.s: Tensor = self.a.sum(dim=0)
         self.shares: Tensor = _log_shares(self.a, self.s)
+        self._lgamma: tuple[Tensor, Tensor] | None = None
         self._tail: Tensor | None = None
+
+    def _small_lgamma(self) -> tuple[Tensor, Tensor]:
+        """``(big, lgamma)``: ``lgamma`` of the ``K`` components and of the total, in one pass.
+
+        A component of a centred lane that is ``>= _SERIES_FROM`` reads its remainder from the series
+        and holds 1 here; every other component is its own raw value: a small one of a centred lane
+        (whose remainder is ``lgamma - closed part``) and every one of a plain lane (whose log-beta
+        is the plain ``lgamma`` sum) share the one pass.  The total of a plain lane is the last row
+        (a centred lane holds 1: its remainder is the series).
+        """
+        if self._lgamma is None:
+            big = self.large & (self.comps >= _SERIES_FROM)
+            held = lucid.cat(
+                [
+                    lucid.where(big, 1.0, self.comps),
+                    lucid.where(self.large, 1.0, self.total).unsqueeze(0),
+                ],
+                dim=0,
+            )
+            self._lgamma = (big, lucid.lgamma(held))
+        return self._lgamma
 
     @property
     def tail(self) -> Tensor:
-        """``R = log B(a) - sum a_i log(a_i / s)`` on the centred domain (shape without the last axis)."""
+        """``R = log B(a) - sum a_i log(a_i / s)`` on the centred domain (batch shape)."""
         if self._tail is None:
-            s = self.s.squeeze(-1)
+            big, lg = self._small_lgamma()
+            # The small lane's closed part is read at a held operand: 1 on a lane it does not own.
+            held = lucid.where(self.large & ~big, self.comps, 1.0)
+            remainders = lucid.where(
+                big,
+                _stirling_series(lucid.where(big, self.comps, _SERIES_FROM)),
+                _stirling_small(lg[: self.k], held),
+            )
             self._tail = (
-                -0.5 * self.shares.sum(dim=-1)
-                + 0.5 * (self.k - 1) * (_LOG_2PI - lucid.log(s))
-                + _stirling_remainder(self.a).sum(dim=-1)
-                - _stirling_remainder(s)
+                -0.5 * self.shares.sum(dim=0)
+                + 0.5 * (self.k - 1) * (_LOG_2PI - lucid.log(self.s))
+                + remainders.sum(dim=0)
+                - _stirling_series(self.s)
             )
         return self._tail
 
-    def _log_beta(self) -> Tensor:
+    def log_beta(self) -> Tensor:
         """``sum lgamma(a_i) - lgamma(s)``: centred on the large lanes, plain elsewhere."""
-        centred = (self.a * self.shares).sum(dim=-1) + self.tail
-        plain = lucid.lgamma(self.plain).sum(dim=-1) - lucid.lgamma(self.plain.sum(dim=-1))
-        return lucid.where(self.large.squeeze(-1), centred, plain)
+        _, lg = self._small_lgamma()
+        centred = (self.a * self.shares).sum(dim=0) + self.tail
+        plain = lg[: self.k].sum(dim=0) - lg[self.k]
+        return lucid.where(self.large, centred, plain)
 
     def deviance(self, x: Tensor) -> Tensor:
         """``sum_i bd0(a_i, s x_i)``: ``-`` this is ``sum a_i log(x_i / p_i)`` when ``sum x = 1``."""
-        return _bd0(self.a, self.s * x).sum(dim=-1)
+        return _bd0_impl(self.a, self.s * x).sum(dim=0)
 
     def near(self, x: Tensor) -> Tensor:
         """Per lane: every ``x_i`` within ``_NEAR_V`` of its mean count ``a_i / s`` (see ``_NEAR_V``)."""
         m = self.s * x
-        return ((self.a - m).abs() <= _NEAR_V * (self.a + m)).all(dim=-1)
-
-    def entropy(self) -> Tensor:
-        """The Dirichlet entropy ``log B + (s - K) psi(s) - sum (a_i - 1) psi(a_i)``."""
-        s = self.s.squeeze(-1)
-        k1 = self.k - 1.0
-        centred = (
-            0.5 * self.shares.sum(dim=-1)
-            + 0.5 * k1 * (_LOG_2PI + 1.0 - lucid.log(s))
-            + _gamma_tail(self.a).sum(dim=-1)
-            - _gamma_tail(s)
-            + k1 * (0.5 / s + _digamma_remainder(s))
-        )
-        ps = self.plain.sum(dim=-1)
-        plain = (
-            self._log_beta()
-            + (ps - self.k) * lucid.digamma(ps)
-            - ((self.plain - 1.0) * lucid.digamma(self.plain)).sum(dim=-1)
-        )
-        return lucid.where(self.large.squeeze(-1), centred, plain)
+        return ((self.a - m).abs() - _NEAR_V * (self.a + m)).amax(dim=0) <= 0.0
 
 
 def _log_multi_beta_impl(alpha: Tensor) -> Tensor:
-    return _Stirling(alpha)._log_beta()
+    return _Stirling(_components(alpha)).log_beta()
 
 
 def _log_multi_beta(alpha: Tensor) -> Tensor:
@@ -409,10 +499,14 @@ def _log_multi_beta(alpha: Tensor) -> Tensor:
     return _in_float32(_log_multi_beta_impl, alpha)
 
 
+def _log_beta_impl(a: Tensor, b: Tensor) -> Tensor:
+    return _Stirling(_pair(a, b)).log_beta()
+
+
 def _log_beta(a: Tensor, b: Tensor) -> Tensor:
     """``lgamma(a) + lgamma(b) - lgamma(a + b)``: :func:`_log_multi_beta` of the pair."""
     a, b = _common(a, b)
-    return _log_multi_beta(lucid.stack([a, b], dim=-1))
+    return _in_float32(_log_beta_impl, a, b)
 
 
 def _log_comb(n: Tensor, k: Tensor) -> Tensor:
@@ -441,24 +535,58 @@ def _log_comb(n: Tensor, k: Tensor) -> Tensor:
     return lucid.where(big, lucid.where(ends, centred - centred.detach(), centred), plain)
 
 
+def _entropy_of(frame: _Stirling) -> Tensor:
+    """The Dirichlet entropy ``log B + (s - K) psi(s) - sum (a_i - 1) psi(a_i)`` of a frame's vector.
+
+    A component of a centred lane that is ``>= _SHIFT_FROM`` reads ``G`` through the recurrence; every
+    other one (a smaller component of a centred lane, every component of a plain lane) shares one
+    ``lgamma`` and one ``digamma`` pass between ``G``'s small form and the plain entropy.  ``G(s)`` and
+    ``D(s)`` of a centred lane are always ``>= _ENTROPY_FROM``: the recurrence alone, and ``G(s)``
+    rides the components' recurrence as one more row.
+    """
+    k, k1, comps = frame.k, frame.k - 1.0, frame.comps
+    rec = frame.large & (comps >= _SHIFT_FROM)
+    ps = lucid.where(frame.large, 1.0, frame.total)
+    held = lucid.cat([lucid.where(rec, 1.0, comps), ps.unsqueeze(0)], dim=0)
+    lg, psi = lucid.lgamma(held), lucid.digamma(held)
+    z = lucid.where(frame.large & ~rec, comps, 1.0)
+    recurred = _gamma_tail_recurred(
+        lucid.cat([lucid.where(rec, comps, _SERIES_FROM), frame.s.unsqueeze(0)], dim=0)
+    )
+    tails = lucid.where(rec, recurred[:k], _gamma_tail_small(lg[:k], psi[:k], z))
+    centred = (
+        0.5 * frame.shares.sum(dim=0)
+        + 0.5 * k1 * (_LOG_2PI + 1.0 - lucid.log(frame.s))
+        + tails.sum(dim=0)
+        - recurred[k]
+        + k1 * (0.5 / frame.s + _digamma_recurred(frame.s))
+    )
+    plain = lg[:k].sum(dim=0) - lg[k] + (ps - k) * psi[k] - ((comps - 1.0) * psi[:k]).sum(dim=0)
+    return lucid.where(frame.large, centred, plain)
+
+
 def _dirichlet_entropy_impl(alpha: Tensor) -> Tensor:
-    return _Stirling(alpha, _ENTROPY_FROM).entropy()
+    return _entropy_of(_Stirling(_components(alpha), _ENTROPY_FROM))
 
 
 def _dirichlet_entropy(alpha: Tensor) -> Tensor:
     r"""Entropy of ``Dirichlet(alpha)`` along the last axis, without the digamma cancellation.
 
     :math:`\log B(\alpha) + (s - K)\psi(s) - \sum_i (\alpha_i - 1)\psi(\alpha_i)` is a sum of
-    :math:`\alpha\log\alpha`-sized terms; from ``s >= 10`` it is read from the centred
+    :math:`\alpha\log\alpha`-sized terms; from ``s >= 4`` it is read from the centred
     form instead (see the module docstring) and the plain one is kept below.
     """
     return _in_float32(_dirichlet_entropy_impl, alpha)
 
 
+def _beta_entropy_impl(a: Tensor, b: Tensor) -> Tensor:
+    return _entropy_of(_Stirling(_pair(a, b), _ENTROPY_FROM))
+
+
 def _beta_entropy(a: Tensor, b: Tensor) -> Tensor:
     """Entropy of ``Beta(a, b)``: :func:`_dirichlet_entropy` of the pair."""
     a, b = _common(a, b)
-    return _dirichlet_entropy(lucid.stack([a, b], dim=-1))
+    return _in_float32(_beta_entropy_impl, a, b)
 
 
 def _gamma_entropy_recurred(alpha: Tensor) -> Tensor:
@@ -488,18 +616,15 @@ def _gamma_entropy(alpha: Tensor) -> Tensor:
 
 
 def _beta_log_prob_impl(a: Tensor, b: Tensor, x: Tensor) -> Tensor:
-    frame = _Stirling(lucid.stack([a, b], dim=-1))
+    frame = _Stirling(_pair(a, b))
     y = 1.0 - x
+    xy = _pair(x, y)
     # The centred form takes the interior of the support; a boundary point is a different
     # (xlogy) formula, which sees the stable log B.
-    inside = frame.large.squeeze(-1) & (x > 0.0) & (y > 0.0)
-    inside = inside & frame.near(lucid.stack([x, y], dim=-1))
-    half = lucid.full_like(x, 0.5)
-    xc, yc = lucid.where(inside, x, half), lucid.where(inside, y, half)
-    centred = (
-        -frame.deviance(lucid.stack([xc, yc], dim=-1)) - lucid.log(xc) - lucid.log(yc) - frame.tail
-    )
-    plain = lucid.xlogy(a - 1.0, x) + _xlog1py(b - 1.0, -x) - frame._log_beta()
+    inside = frame.large & (x > 0.0) & (y > 0.0) & frame.near(xy)
+    xyc = lucid.where(inside, xy, 0.5)
+    centred = -frame.deviance(xyc) - lucid.log(xyc).sum(dim=0) - frame.tail
+    plain = lucid.xlogy(a - 1.0, x) + _xlog1py(b - 1.0, -x) - frame.log_beta()
     return lucid.where(inside, centred, plain)
 
 
@@ -516,23 +641,19 @@ def _beta_log_prob(a: Tensor, b: Tensor, x: Tensor) -> Tensor:
 
 
 def _dirichlet_log_prob_impl(alpha: Tensor, x: Tensor) -> Tensor:
-    frame = _Stirling(alpha)
-    inside = (
-        frame.large.squeeze(-1)
-        & (x.amin(dim=-1) > 0.0)
-        & lucid.isfinite(x.amax(dim=-1))
-        & frame.near(x)
-    )
-    xc = lucid.where(inside.unsqueeze(-1), x, lucid.full_like(x, 1.0 / frame.k))
+    frame = _Stirling(_components(alpha))
+    xs = _components(x)
+    inside = frame.large & (xs.amin(dim=0) > 0.0) & lucid.isfinite(xs.sum(dim=0)) & frame.near(xs)
+    xc = lucid.where(inside, xs, 1.0 / frame.k)
     # sum a_i log(x_i / p_i) = -sum bd0(a_i, s x_i) + s (sum x_i - 1); the last term is 0 on the
     # simplex, and keeps the slope off it the plain formula's.
     centred = (
         -frame.deviance(xc)
-        + frame.s.squeeze(-1) * (xc.sum(dim=-1) - 1.0)
-        - lucid.log(xc).sum(dim=-1)
+        + frame.s * (xc.sum(dim=0) - 1.0)
+        - lucid.log(xc).sum(dim=0)
         - frame.tail
     )
-    plain = lucid.xlogy(alpha - 1.0, x).sum(dim=-1) - frame._log_beta()
+    plain = lucid.xlogy(frame.comps - 1.0, xs).sum(dim=0) - frame.log_beta()
     return lucid.where(inside, centred, plain)
 
 
@@ -544,26 +665,27 @@ def _dirichlet_log_prob(alpha: Tensor, x: Tensor) -> Tensor:
 
 def _f_log_prob_impl(d1: Tensor, d2: Tensor, x: Tensor) -> Tensor:
     half1, half2 = d1 * 0.5, d2 * 0.5
-    frame = _Stirling(lucid.stack([half1, half2], dim=-1))
-    lane = frame.large.squeeze(-1) & (x > 0.0) & lucid.isfinite(x)
+    frame = _Stirling(_pair(half1, half2))
+    lane = frame.large & (x > 0.0) & lucid.isfinite(x)
     # The centred pieces are formed from sanitised operands: an infinite ``x`` or ``d`` would meet
     # the zero cotangent of the ``where`` below as ``inf * 0``.
-    xs = lucid.where(lane, x, lucid.ones_like(x))
-    c1, c2 = 2.0 * frame.a[..., 0], 2.0 * frame.a[..., 1]
+    xs = lucid.where(lane, x, 1.0)
+    c1, c2 = 2.0 * frame.a[0], 2.0 * frame.a[1]
     w = c1 * xs + c2
     u, y = c1 * xs / w, c2 / w
-    inside = lane & (u > 0.0) & (y > 0.0) & frame.near(lucid.stack([u, y], dim=-1))
-    half = lucid.full_like(x, 0.5)
-    xc, uc, yc = (lucid.where(inside, t, half) for t in (xs, u, y))
+    uy = _pair(u, y)
+    inside = lane & (u > 0.0) & (y > 0.0) & frame.near(uy)
+    xc = lucid.where(inside, xs, 0.5)
+    uyc = lucid.where(inside, uy, 0.5)
     # log p(x) = log Beta(u; a, b) + log(d1 d2 / w^2), and -log u - log y + log(d1 d2 / w^2) is
     # -log x: the large logs cancel before they are formed.
-    centred = -frame.deviance(lucid.stack([uc, yc], dim=-1)) - lucid.log(xc) - frame.tail
+    centred = -frame.deviance(uyc) - lucid.log(xc) - frame.tail
     ratio = d1 / d2
     plain = (
         half1 * lucid.log(ratio)
         + lucid.xlogy(half1 - 1.0, x)
         - (half1 + half2) * lucid.log1p(ratio * x)
-        - frame._log_beta()
+        - frame.log_beta()
     )
     return lucid.where(inside, centred, plain)
 
@@ -694,10 +816,7 @@ def _gamma_family_log_prob(
     xc = lucid.where(inside, x, lucid.ones_like(x))
     m = rc / xc if inverse else rc * xc
     centred = (
-        -_bd0_impl(ac, m)
-        - lucid.log(xc)
-        + 0.5 * (lucid.log(ac) - _LOG_2PI)
-        - _stirling_remainder_impl(ac)
+        -_bd0_impl(ac, m) - lucid.log(xc) + 0.5 * (lucid.log(ac) - _LOG_2PI) - _stirling_series(ac)
     )
     return lucid.where(inside, centred, plain)
 
@@ -736,7 +855,7 @@ def _poisson_log_prob_impl(rate: Tensor, k: Tensor) -> Tensor:
     base = lucid.full_like(k, _CENTRED_FROM)
     kc = lucid.where(inside, k, base)
     rc = lucid.where(inside, rate, base)
-    centred = -_bd0_impl(kc, rc) - 0.5 * (_LOG_2PI + lucid.log(kc)) - _stirling_remainder_impl(kc)
+    centred = -_bd0_impl(kc, rc) - 0.5 * (_LOG_2PI + lucid.log(kc)) - _stirling_series(kc)
     return lucid.where(inside, centred, plain)
 
 
