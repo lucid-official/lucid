@@ -20,6 +20,7 @@
 
 #include "../../core/Allocator.h"
 #include "../../core/Dtype.h"
+#include "../../core/PointerOffset.h"
 #include "../../core/Storage.h"
 #include "../IBackend.h"
 #include "Blas.h"
@@ -117,7 +118,8 @@ void activate_step(const Dims& d, const S* raw, const S* c_prev, S* gates, S* c_
             c_next[n(b, H) + k] = gb[H + k] * c_prev[n(b, H) + k] + gb[k] * gb[2 * H + k];
         }
     }
-    rebuild_h_raw(d, gates + 3 * H, c_next, h_raw);
+    // A zero batch leaves ``gates`` null; the output-gate slice must not offset it.
+    rebuild_h_raw(d, offset_or_null(gates, 3 * H), c_next, h_raw);
 }
 
 // Returns {output, hn, cn, gates, cells}; see the file header for layouts.
@@ -192,7 +194,7 @@ void recurrent_input(const Dims& d,
         return;
     }
     S* h_raw = d.P > 0 ? scratch : h_prev;
-    rebuild_h_raw(d, G + n(t - 1, B, fH) + 3 * H, C + n(t, B, H), h_raw);
+    rebuild_h_raw(d, offset_or_null(G, n(t - 1, B, fH) + 3 * H), C + n(t, B, H), h_raw);
     if (d.P > 0)
         gemm(false, true, B, d.P, H, h_raw, H, Whr, H, S(0), h_prev, d.P);
 }
@@ -251,7 +253,7 @@ void hidden_grad(const Dims& d,
         std::copy_n(dh_step, n(B, H), dh_raw);
         return;
     }
-    rebuild_h_raw(d, G + n(t, B, fH) + 3 * H, C + n(t + 1, B, H), h_raw);
+    rebuild_h_raw(d, offset_or_null(G, n(t, B, fH) + 3 * H), C + n(t + 1, B, H), h_raw);
     gemm(true, false, d.P, H, B, dh_step, d.P, h_raw, H, S(1), dWhr, H);
     gemm(false, false, B, H, d.P, dh_step, d.P, Whr, H, S(0), dh_raw, H);
 }

@@ -263,3 +263,20 @@ def test_a_contraction_over_a_zero_length_axis_is_zero(
     flat = lucid.matmul(lucid.zeros(rows, 0), lucid.zeros(0, cols))
     assert tuple(flat.shape) == (rows, cols)
     assert _same_values(flat, 0.0)
+
+
+@pytest.mark.parametrize("batch_first", [False, True])
+def test_an_lstm_over_an_empty_batch_answers_empty(device_cpu_only: str, batch_first: bool) -> None:
+    # The CPU kernel's gate buffer is null for a zero batch; the output-gate slice of every
+    # step (forward and backward) once offset it, which UBSan reports in the nightly job.
+    _poison()
+    lstm = lucid.nn.LSTM(3, 4, num_layers=2, batch_first=batch_first)
+    x = lucid.zeros(0, 5, 3) if batch_first else lucid.zeros(5, 0, 3)
+    x.requires_grad_(True)
+    out, (h, c) = lstm(x)
+    assert tuple(out.shape) == ((0, 5, 4) if batch_first else (5, 0, 4))
+    assert tuple(h.shape) == (2, 0, 4) and tuple(c.shape) == (2, 0, 4)
+    out.sum().backward()
+    assert x.grad is not None and tuple(x.grad.shape) == tuple(x.shape)
+    weight = lstm.weight_hh_l0.grad
+    assert weight is not None and all(v == 0.0 for v in weight.reshape(-1).tolist())
