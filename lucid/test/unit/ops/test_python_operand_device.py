@@ -473,10 +473,7 @@ _BUILDERS = frozenset(
 #: ``(file under lucid/_ops, function)`` that build a tensor with no operand to follow: the
 #: empty result of ``block_diag()`` has no tensor among its arguments, and
 #: ``_operand_beside`` is the one place that says so (``like`` is ``None``).
-_NO_PARTNER = {
-    ("composite/blas.py", "block_diag"),
-    ("composite/_shared.py", "_operand_beside"),
-}
+_NO_PARTNER = {("composite/blas.py", "block_diag"), ("composite/_shared.py", "_operand_beside")}
 
 
 def _deviceless_builders(source: str) -> list[tuple[str, int]]:
