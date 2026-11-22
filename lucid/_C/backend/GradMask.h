@@ -27,6 +27,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "../core/PointerOffset.h"
 #include "../core/Storage.h"
 
 namespace lucid {
@@ -119,13 +120,6 @@ constexpr bool any_set(const Ptr*... p) noexcept {
 template <typename... Ptr>
 constexpr bool none_set(const Ptr*... p) noexcept {
     return ((p == nullptr) && ...);
-}
-
-// ``base + off``, or ``nullptr`` when ``base`` is (arithmetic on a null
-// pointer is undefined, so an optional operand is offset through this).
-template <typename T>
-constexpr T* offset_or_null(T* base, std::size_t off) noexcept {
-    return base ? base + off : nullptr;
 }
 
 // ``p[i]``, or zero when ``p`` is null.

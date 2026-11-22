@@ -383,6 +383,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - read the entropies' G and D by recurrence (LCD-1053)
 
+- never offset an empty tensor's null buffer (LCD-1047)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

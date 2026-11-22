@@ -15,6 +15,7 @@
 #include "../core/ErrorBuilder.h"
 #include "../core/GradMode.h"
 #include "../core/PhantomMode.h"
+#include "../core/PointerOffset.h"
 #include "AccumulateGrad.h"
 #include "CustomFunction.h"
 #include "Helpers.h"
@@ -684,7 +685,7 @@ Storage assignable_grad(const TensorImpl& self, const TensorImpl& g) {
     if (storage_is_cpu(g.raw_storage()) && g.is_contiguous() && !g.is_dense()) {
         const auto& cpu = std::get<CpuStorage>(g.raw_storage());
         const std::size_t off = g.storage_offset();
-        std::shared_ptr<std::byte[]> view_ptr(cpu.ptr, cpu.ptr.get() + off);
+        std::shared_ptr<std::byte[]> view_ptr(cpu.ptr, offset_or_null(cpu.ptr.get(), off));
         return TensorImpl::detach_gpu_grad_slot(Storage{CpuStorage{
             std::move(view_ptr), g.nbytes(), g.dtype(), cpu.version, cpu.offset_in_allocation + off,
             cpu.allocation_nbytes != 0 ? cpu.allocation_nbytes : cpu.nbytes}});

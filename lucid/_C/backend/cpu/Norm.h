@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "../../api.h"
+#include "../../core/PointerOffset.h"
 #include "../../core/Shape.h"
 #include "Parallel.h"
 #include "Vforce.h"
@@ -436,7 +437,8 @@ void lp_normalize_forward_typed(
     for (int o = 0; o < outer; ++o)
         for (int n = 0; n < inner; ++n) {
             const std::size_t base = static_cast<std::size_t>(o) * axis_len * inner + n;
-            const T nm = static_cast<T>(lp_slice_norm(x + base, axis_len, inner, ord, power));
+            const T nm =
+                static_cast<T>(lp_slice_norm(offset_or_null(x, base), axis_len, inner, ord, power));
             // ``max(nm, eps)``, written so a NaN norm survives it: ``nm > eps`` is
             // false for NaN, and the ternary would otherwise divide the row by eps
             // (``std::fmax`` returns the non-NaN operand, the same swallowing).
@@ -890,6 +892,12 @@ void p_norm_typed(
     const T* x, T* out, std::size_t outer, std::size_t len, std::size_t inner, double p) {
     if (outer == 0 || inner == 0)
         return;
+    // A norm of nothing is 0.  The slices are ``outer * inner`` of them, each reading ``len``
+    // entries from an input that is null when ``len`` is 0, so there is no pointer to offset.
+    if (len == 0) {
+        std::fill_n(out, outer * inner, T{0});
+        return;
+    }
     const PNorm<T> norm(p);
     if (inner >= 8) {
         // Tiles as narrow as 16 columns when that is what it takes to give every core a few.
@@ -991,11 +999,16 @@ void p_norm_over_axes(
         return;
     }
     const std::vector<T> moved = p_norm_gather_reduced_last(x, shape, reduced);
-    std::size_t len = 1;
-    for (std::size_t d = 0; d < rank; ++d)
+    std::size_t len = 1, slices = 1;
+    for (std::size_t d = 0; d < rank; ++d) {
         if (reduced[d])
             len *= static_cast<std::size_t>(shape[d]);
-    p_norm_typed(moved.data(), out, shape_numel(shape) / std::max<std::size_t>(len, 1), len, 1, p);
+        else
+            slices *= static_cast<std::size_t>(shape[d]);
+    }
+    // ``slices`` is the kept axes' extent, not ``numel / len``: with a reduced axis of length 0
+    // that quotient is 0 although the result has elements (each of them 0).
+    p_norm_typed(moved.data(), out, slices, len, 1, p);
 }
 
 }  // namespace lucid::backend::cpu

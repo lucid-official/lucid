@@ -42,6 +42,7 @@
 #include "MemoryStats.h"
 #include "OffThread.h"
 #include "PhantomMode.h"
+#include "PointerOffset.h"
 #include "StridedCopy.h"
 
 namespace lucid {
@@ -253,8 +254,11 @@ make_numpy_view(const CpuStorage& s, const Shape& shape, const Stride& stride, s
 
     // The first element sits ``offset`` bytes into the buffer; handing NumPy
     // the buffer's first byte read a view at an offset from the wrong place.
+    // An empty tensor's buffer is null whatever offset a slice or ``as_strided``
+    // gave its view: NumPy is handed that null (it allocates the empty array
+    // itself) rather than ``null + offset``.
     return py::array(lucid_dtype_to_np(s.dtype), py_shape, py_stride,
-                     static_cast<const void*>(s.ptr.get() + offset), owner);
+                     static_cast<const void*>(offset_or_null(s.ptr.get(), offset)), owner);
 }
 
 }  // namespace
@@ -2242,7 +2246,7 @@ TensorImpl::to_string(int precision, std::size_t threshold, std::size_t edgeitem
     const std::byte* data = nullptr;
     const auto read_cpu = [&](const CpuStorage& s) {
         const std::size_t elem = dtype_size(meta_.dtype);
-        const std::byte* first = s.ptr.get() + offset_;
+        const std::byte* first = offset_or_null(s.ptr.get(), offset_);
         // format_element dereferences typed pointers: a row-major buffer that
         // starts off the element's alignment gets the aligned copy instead.
         if (nbytes() > 0 && is_contiguous() &&
@@ -2663,8 +2667,9 @@ std::shared_ptr<TensorImpl> TensorImpl::make_block_view(const std::shared_ptr<Te
     const std::size_t alloc_nbytes =
         cpu.allocation_nbytes != 0 ? cpu.allocation_nbytes : cpu.nbytes;
     const std::size_t alloc_offset = cpu.offset_in_allocation + view->offset_;
-    cpu = CpuStorage(std::shared_ptr<std::byte[]>(cpu.ptr, cpu.ptr.get() + view->offset_), nbytes,
-                     cpu.dtype, cpu.version, alloc_offset, alloc_nbytes);
+    cpu = CpuStorage(
+        std::shared_ptr<std::byte[]>(cpu.ptr, offset_or_null(cpu.ptr.get(), view->offset_)), nbytes,
+        cpu.dtype, cpu.version, alloc_offset, alloc_nbytes);
     view->offset_ = 0;
     return view;
 }
@@ -2680,9 +2685,11 @@ TensorImpl::make_allocation_view(const std::shared_ptr<TensorImpl>& base,
         ph->nbytes = base->allocation_nbytes();
     } else if (auto* cpu = std::get_if<CpuStorage>(&view->storage_)) {
         const std::size_t alloc_nbytes = base->allocation_nbytes();
-        *cpu = CpuStorage(
-            std::shared_ptr<std::byte[]>(cpu->ptr, cpu->ptr.get() - cpu->offset_in_allocation),
-            alloc_nbytes, cpu->dtype, cpu->version, 0, alloc_nbytes);
+        // An empty allocation has no start to step back to: its buffer is null.
+        const auto start =
+            offset_or_null(cpu->ptr.get(), -static_cast<std::ptrdiff_t>(cpu->offset_in_allocation));
+        *cpu = CpuStorage(std::shared_ptr<std::byte[]>(cpu->ptr, start), alloc_nbytes, cpu->dtype,
+                          cpu->version, 0, alloc_nbytes);
     }
     return view;
 }
