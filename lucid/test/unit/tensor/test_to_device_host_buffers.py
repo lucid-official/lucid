@@ -18,6 +18,11 @@ same loop, so an allocator that stops retaining freed blocks fails it instead of
 The peak tests count what the engine itself allocates and do not depend on the allocator;
 the snapshot tests, whose temporaries the engine does not track, read a child's peak
 resident size.
+
+The footprint and snapshot tests read process memory, which AddressSanitizer's quarantine and
+redzones inflate (212 MB against a 140 MB bound for the pickle case, LCD-1056), so they carry
+``requires_unsanitized_memory``; the peak tests read the engine's counters and keep running
+under a sanitizer.
 """
 
 import gc
@@ -245,6 +250,7 @@ def _grew(mode: str) -> dict[str, float]:
 
 
 @pytest.mark.slow
+@pytest.mark.requires_unsanitized_memory
 def test_a_loop_of_cpu_to_metal_moves_leaves_what_the_cpu_loop_leaves() -> None:
     """Eight new shapes: the move was at four times the control, then at two, now at one."""
     control = _grew("control")
@@ -327,6 +333,7 @@ def _rise(case: str) -> dict[str, float]:
 
 
 @pytest.mark.slow
+@pytest.mark.requires_unsanitized_memory
 @pytest.mark.parametrize("case", list(_SNAPSHOT_CASES))
 def test_a_read_or_write_through_a_view_takes_no_full_size_snapshot(case: str) -> None:
     """The peak above the setup is the result it hands back and a little, not a second copy of it.

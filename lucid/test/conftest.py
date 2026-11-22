@@ -27,6 +27,9 @@ What you get for free in any test:
   value raises ``VacuousToleranceError`` (``_fixtures/tolerance_guard.py``).
 * Autouse wall-clock deadline for tests that reach a native graph compile
   (``_fixtures/deadline.py``); ``@pytest.mark.deadline(seconds)`` overrides.
+* ``@pytest.mark.requires_unsanitized_memory`` -- skipped when the process loaded the ASan (or
+  TSan) runtime, whose quarantine and redzones inflate the footprint; a test whose assertion reads
+  process memory carries it (``_fixtures/sanitizer.py``).
 """
 
 import pytest
@@ -55,6 +58,7 @@ from lucid.test._fixtures.dtypes import float_dtype, float_dtype_extended, int_d
 from lucid.test._fixtures.ref_framework import ref  # noqa: F401
 from lucid.test._fixtures.tensors import tensor_factory  # noqa: F401
 from lucid.test._fixtures.perf import bench  # noqa: F401
+from lucid.test._fixtures import sanitizer as _sanitizer
 from lucid.test._fixtures.tolerance_guard import install as _install_tolerance_guard
 
 # ``lucid-audit --models`` runs the zoo's tests on the device it was asked for
@@ -66,6 +70,11 @@ apply_default_device()
 _install_tolerance_guard()
 
 _GOVERNOR = _memory.Governor()
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Skip ``requires_unsanitized_memory`` tests when the process runs under ASan."""
+    _sanitizer.skip_where_memory_is_inflated(items)
 
 
 def pytest_runtest_setup(item: pytest.Item) -> None:
