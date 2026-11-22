@@ -761,9 +761,9 @@ def _saddle_pmf_impl(n: Tensor, k: Tensor, p_k: Tensor, p_rest: Tensor) -> Tenso
     pk, pr = lucid.where(inside, p_k, half), lucid.where(inside, p_rest, half)
     rest = nc - kc
     # Loader (2000): C(n, k) p^k q^(n-k) = exp(S(n) - S(k) - S(n-k) - bd0(k, n p) - bd0(n-k, n q))
-    # / sqrt(2 pi k (n-k) / n), with S the Stirling remainder.
+    # / sqrt(2 pi k (n-k) / n), with S the Stirling remainder (``nc >= 10`` on every lane: the series).
     return (
-        _stirling_remainder_impl(nc)
+        _stirling_series(nc)
         - _stirling_remainder_impl(kc)
         - _stirling_remainder_impl(rest)
         - _bd0_impl(kc, nc * pk)
