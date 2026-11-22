@@ -20,7 +20,8 @@
 # git worktree (a path under .claude/worktrees/) must never run one.  There, and whenever
 # LUCID_SANITIZE_BUILD_DIR is set, the instrumented engine is built the way `tools/agent_ws.py build`
 # builds a worktree: `setup.py build_ext --inplace` with the main checkout's interpreter, no pip or
-# uv install.  The release engine in lucid/_C is put back on exit.
+# uv install.  The release engine in lucid/_C is put back on exit — in the main checkout too,
+# unless CI is set (a runner is discarded after the job).
 #   LUCID_SANITIZE_BUILD_DIR=<dir>     build directory (default build/sanitize-<mode>, its own CMake
 #                                      cache, so the release build in build/agent is left alone)
 #   LUCID_SANITIZE_BUILD_PYTHON=<py>   interpreter that builds (default: <main checkout>/.venv/bin/python3)
@@ -149,6 +150,12 @@ PY
 }
 
 echo "==> Building engine with LUCID_SANITIZE=$SANITIZE"
+if [ "$WORKTREE_MODE" = "0" ] && [ -z "${CI:-}" ]; then
+    # A developer's main checkout keeps its release engine too: the editable install below
+    # overwrites lucid/_C in place, and every later `import lucid` there would load the
+    # instrumented engine and abort ("Interceptors are not working").  A CI runner is thrown away.
+    protect_release_engine "$PYTHON_BIN"
+fi
 if [ "$WORKTREE_MODE" = "1" ]; then
     build_engine_in_place
 elif "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
