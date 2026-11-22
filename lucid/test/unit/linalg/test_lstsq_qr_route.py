@@ -10,6 +10,13 @@ each driver returns, the derivative in both operands — and the rank of a
 rank-deficient matrix, which the SVD route decides.
 """
 
+import json
+import math
+import os
+import struct
+import subprocess
+import sys
+import textwrap
 from types import ModuleType
 
 import numpy as np
@@ -143,12 +150,114 @@ def test_a_rank_deficient_matrix_is_ranked_and_solved_like_the_reference(
     a_np = _deficient(kind)
     b_np = np.random.default_rng(6).standard_normal((a_np.shape[0], 2))
     got = LA.lstsq(lucid.tensor(a_np), lucid.tensor(b_np), driver=driver)
-    want = ref.linalg.lstsq(ref.tensor(a_np), ref.tensor(b_np), driver=driver or "gelsy")
+    # The oracle is the reference's SVD driver whatever ``driver`` Lucid is given: the
+    # reference's ``gelsy`` hands LAPACK a pivot array it never initialised (a nonzero entry
+    # pins that column), so on a dirty heap it ranks a duplicated column 2, not 3 (LCD-1055).
+    # An SVD rank agrees with the QR-pivot rank on every matrix built here.
+    want = ref.linalg.lstsq(ref.tensor(a_np), ref.tensor(b_np), driver="gelsd")
     assert int(got.rank.item()) == int(want.rank.item())
     # The graded matrix keeps singular values near 1e-13: its solution is the
     # ill-conditioned one, agreeing to the conditioning, not to the digit.
     tol = 1e-2 if kind == "graded" else 1e-6
     np.testing.assert_allclose(got.solution.numpy(), want.solution.numpy(), rtol=tol, atol=1e-8)
+
+
+# ── the answer does not depend on what the heap held (LCD-1055) ──────────────
+
+#: ``(A, B, driver)`` as nested lists, so a child process can be sent the same case.
+_Case = tuple[list[list[float]], list[list[float]], str | None]
+
+_FILL_BE = struct.unpack("<d", b"\xbe" * 8)[0]  # what AddressSanitizer writes into a new block
+
+#: Answers a child process computes from the cases the parent sends on stdin.
+_HEAP_CHILD = textwrap.dedent("""
+    import json
+    import sys
+
+    import lucid
+    import lucid.linalg as LA
+
+    out = {}
+    for key, (a, b, driver) in json.load(sys.stdin).items():
+        got = LA.lstsq(
+            lucid.tensor(a, dtype=lucid.float64),
+            lucid.tensor(b, dtype=lucid.float64),
+            driver=driver,
+        )
+        out[key] = [got.rank.reshape(-1).tolist(), got.solution.tolist()]
+    json.dump(out, sys.stdout)
+""")
+
+
+def _heap_cases() -> dict[str, _Case]:
+    cases: dict[str, _Case] = {}
+    for kind in ["duplicate-column", "low-rank-tall", "low-rank-wide", "zero", "graded"]:
+        a_np = _deficient(kind)
+        b_np = np.random.default_rng(6).standard_normal((a_np.shape[0], 2))
+        for driver in _DRIVERS:
+            cases[f"{kind}/{driver}"] = (a_np.tolist(), b_np.tolist(), driver)
+    return cases
+
+
+def _poison_pool(value: float) -> None:
+    """Leave ``value`` in every small block the allocator will hand out next."""
+    for numel in range(1, 513):
+        lucid.full((numel,), value, dtype=lucid.float64)
+        lucid.full((numel,), value, dtype=lucid.float32)
+
+
+def _answer(case: _Case) -> tuple[list[int], np.ndarray]:
+    a, b, driver = case
+    got = LA.lstsq(
+        lucid.tensor(a, dtype=lucid.float64), lucid.tensor(b, dtype=lucid.float64), driver=driver
+    )
+    return got.rank.reshape(-1).tolist(), got.solution.numpy()
+
+
+def _svd_rank(key: str, case: _Case) -> list[int]:
+    """``matrix_rank``'s, which cuts at the same default as ``lstsq``; ``gels`` reports none."""
+    return [] if key.endswith("/gels") else [int(np.linalg.matrix_rank(np.array(case[0])))]
+
+
+@pytest.mark.parametrize("fill", [7.0, math.nan, _FILL_BE], ids=["7.0", "nan", "0xbe"])
+def test_a_rank_deficient_answer_does_not_depend_on_what_the_pool_held(
+    device_cpu_only: str, fill: float
+) -> None:
+    """A buffer the route reads before it writes would return ``fill`` in place of its answer."""
+    cases = _heap_cases()
+    clean = {key: _answer(case) for key, case in cases.items()}
+    for key, case in cases.items():
+        _poison_pool(fill)
+        rank, solution = _answer(case)
+        assert rank == _svd_rank(key, case) == clean[key][0], key
+        np.testing.assert_allclose(solution, clean[key][1], rtol=1e-10, atol=1e-12, err_msg=key)
+
+
+def test_a_rank_deficient_answer_does_not_depend_on_what_the_heap_held(
+    device_cpu_only: str,
+) -> None:
+    """The same answers in a process whose ``malloc`` scribbles over every block it touches.
+
+    ``MallocScribble`` is the release build's stand-in for AddressSanitizer's fill: the only other
+    way to put a pattern into the buffers a library allocates for itself.
+    """
+    cases = _heap_cases()
+    result = subprocess.run(
+        [sys.executable, "-c", _HEAP_CHILD],
+        input=json.dumps(cases),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env={**os.environ, "MallocScribble": "1", "MallocPreScribble": "1"},
+    )
+    assert result.returncode == 0, result.stderr
+    scribbled = json.loads(result.stdout)
+    for key, case in cases.items():
+        rank, solution = _answer(case)
+        assert scribbled[key][0] == rank == _svd_rank(key, case), key
+        np.testing.assert_allclose(
+            np.array(scribbled[key][1]), solution, rtol=1e-10, atol=1e-12, err_msg=key
+        )
 
 
 @pytest.mark.parametrize("kind", ["duplicate-column", "low-rank-tall", "zero"])
