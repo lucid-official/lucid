@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from typing import Self, override
 
 import lucid
+from lucid._ops.composite._gamma import _lgamma_positive
 from lucid._tensor.tensor import Tensor
 from lucid.distributions._stirling_math import (
     _binomial_pmf_centred,
@@ -830,12 +831,16 @@ class NegativeBinomial(_CountTrialDistribution):
         empty: Tensor = (k + r) == 0
         k_plus_r: Tensor = lucid.where(empty, 1.0, k + r)
         r_safe: Tensor = lucid.where(empty, 1.0, r)
-        plain: Tensor = (
-            lucid.lgamma(k_plus_r)
-            - lucid.lgamma(r_safe)
-            - lucid.lgamma(k + 1.0)
+        # A count below 0 is outside the support (a log-mass of -inf), and ``k + r`` there can be
+        # below 0 too, which the positive-domain ``lgamma`` is not asked about.
+        plain: Tensor = lucid.where(
+            k < 0.0,
+            -float("inf"),
+            _lgamma_positive(k_plus_r)
+            - _lgamma_positive(r_safe)
+            - _lgamma_positive(k + 1.0)
             - r * neg_log_q
-            - k * neg_log_p
+            - k * neg_log_p,
         )
         # ``k + r >= 10`` with ``k, r > 0`` takes the saddle-point form (see :class:`Binomial`): the
         # three ``lgamma`` and ``r log q + k log p`` are numbers of size ``k + r`` that cancel to

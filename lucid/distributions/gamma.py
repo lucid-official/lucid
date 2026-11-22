@@ -22,6 +22,7 @@ from typing import Self, override
 import lucid
 from lucid._C import engine as _C_engine
 from lucid._dtype import finfo
+from lucid._ops.composite._gamma import _digamma_positive, _lgamma_positive
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 from lucid.distributions._stirling_math import (
@@ -207,7 +208,9 @@ def _gamma_grad_regimes(alpha: Tensor, x: Tensor, log_x: Tensor) -> tuple[Tensor
         denom = denom + 1.0
         series1 = series1 + numer / denom
         series2 = series2 + numer / (denom * denom)
-    small_over_x = -x.clamp(max=20.0).exp() * ((log_x - lucid.digamma(alpha)) * series1 - series2)
+    small_over_x = -x.clamp(max=20.0).exp() * (
+        (log_x - _digamma_positive(alpha)) * series1 - series2
+    )
 
     # 2. Rice saddle-point expansion (alpha > 8.0).
     near_mode = (x >= 0.9 * alpha) & (x <= 1.1 * alpha)
@@ -667,7 +670,7 @@ class Gamma(ExponentialFamily):
     @override
     def _log_normalizer(self, *natural_params: Tensor) -> Tensor:
         x, y = natural_params
-        return lucid.lgamma(x + 1.0) + (x + 1.0) * (-1.0 / y).log()
+        return _lgamma_positive(x + 1.0) + (x + 1.0) * (-1.0 / y).log()
 
 
 class Chi2(Gamma):
@@ -1097,7 +1100,7 @@ class Beta(ExponentialFamily):
     def _mean_carrier_measure(self) -> Tensor:
         a = self.concentration1
         b = self.concentration0
-        return 2.0 * lucid.digamma(a + b) - lucid.digamma(a) - lucid.digamma(b)
+        return 2.0 * _digamma_positive(a + b) - _digamma_positive(a) - _digamma_positive(b)
 
 
 class Dirichlet(ExponentialFamily):
@@ -1401,4 +1404,4 @@ class Dirichlet(ExponentialFamily):
     def _mean_carrier_measure(self) -> Tensor:
         a = self.concentration
         k = float(a.shape[-1])
-        return k * lucid.digamma(a.sum(dim=-1)) - lucid.digamma(a).sum(dim=-1)
+        return k * _digamma_positive(a.sum(dim=-1)) - _digamma_positive(a).sum(dim=-1)

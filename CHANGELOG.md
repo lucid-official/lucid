@@ -520,6 +520,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - one Lanczos sum, exact lgamma zeros, cheaper digamma
 
+- gamma family reads the positive-domain lgamma
+
 ### Tooling
 
 - record that 1055fa3b9 moves no binary interface

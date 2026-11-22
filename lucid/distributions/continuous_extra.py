@@ -12,6 +12,7 @@ from typing import Self, override
 
 import lucid
 from lucid._dtype import finfo
+from lucid._ops.composite._gamma import _lgamma_positive
 from lucid._tensor.tensor import Tensor
 from lucid.distributions._stirling_math import _f_log_prob
 from lucid.distributions._util import _as_tensor, _broadcast_params
@@ -416,7 +417,7 @@ class Weibull(Distribution):
             Mean values of shape ``batch_shape``.
         """
         # μ = λ · Γ(1 + 1/k).
-        return self.scale * lucid.lgamma(1.0 + 1.0 / self.concentration).exp()
+        return self.scale * _lgamma_positive(1.0 + 1.0 / self.concentration).exp()
 
     @override
     @property
@@ -451,8 +452,8 @@ class Weibull(Distribution):
         """
         # Var = λ² · [Γ(1 + 2/k) − Γ(1 + 1/k)²].
         k_inv: Tensor = 1.0 / self.concentration
-        g1: Tensor = lucid.lgamma(1.0 + k_inv).exp()
-        g2: Tensor = lucid.lgamma(1.0 + 2.0 * k_inv).exp()
+        g1: Tensor = _lgamma_positive(1.0 + k_inv).exp()
+        g2: Tensor = _lgamma_positive(1.0 + 2.0 * k_inv).exp()
         return self.scale * self.scale * (g2 - g1 * g1)
 
     @override

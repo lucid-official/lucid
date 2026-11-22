@@ -7,7 +7,9 @@ Two of the pieces that made them cheap are checked here against what they replac
   series lane, the direct lane, and the far lane where ``x / m`` underflows and ``log1p`` of
   ``(x - m) / m`` would be ``-inf``);
 * the frame runs every per-category op once over ``(K, *batch)``: the number of engine ops of a
-  density or an entropy must not grow with the number of categories ``K``.
+  density or an entropy must not grow with the number of categories ``K``;
+* the counts' plain lanes read the positive-domain ``lgamma`` (LCD-1058): a count outside the
+  support is still ``-inf``.
 """
 
 import math
@@ -117,3 +119,29 @@ def test_op_count_does_not_grow_with_the_number_of_categories() -> None:
         counts["log_prob"].add(_event_count(lambda: D.Dirichlet(alpha).log_prob(x)))
         counts["entropy"].add(_event_count(lambda: D.Dirichlet(alpha).entropy()))
     assert all(len(c) == 1 for c in counts.values()), counts
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+def test_a_count_outside_the_support_still_scores_minus_infinity(
+    device: str, dtype: lucid.dtype
+) -> None:
+    """LCD-1058: the counts' plain lanes read the positive-domain ``lgamma``, which has no left half.
+
+    A count below 0, a count above ``total_count`` and a multinomial with a negative count were
+    ``-inf`` through the pole of ``lgamma`` at the non-positive integers.  The lanes clamp (or mask)
+    before the call, so they are ``-inf`` still, and not the NaN of ``log`` of a negative number.
+    """
+    inf = float("inf")
+
+    def t(values: float | list[float]) -> lucid.Tensor:
+        return lucid.tensor(values, dtype=dtype, device=device)
+
+    poisson = D.Poisson(t(3.0), validate_args=False).log_prob(t([-1.0, -2.0, -7.0]))
+    assert poisson.tolist() == [-inf, -inf, -inf]
+    for total, counts in ((5.0, [-1.0, -3.0, 6.0, 9.0]), (50.0, [-1.0, 51.0, 60.0])):
+        law = D.Binomial(t(total), probs=t(0.3), validate_args=False)
+        assert law.log_prob(t(counts)).tolist() == [-inf] * len(counts)
+    nb = D.NegativeBinomial(t(2.5), probs=t(0.3), validate_args=False)
+    assert nb.log_prob(t([-1.0, -2.0, -6.0])).tolist() == [-inf, -inf, -inf]
+    multinomial = D.Multinomial(5, probs=t([0.2, 0.3, 0.5]), validate_args=False)
+    assert multinomial.log_prob(t([[-1.0, 2.0, 3.0]])).tolist() == [-inf]

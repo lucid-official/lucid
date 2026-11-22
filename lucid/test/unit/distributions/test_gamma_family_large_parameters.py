@@ -901,12 +901,18 @@ def test_the_reported_float64_rows(device: str, dtype: lucid.dtype) -> None:
 
 @pytest.mark.parametrize(("device", "dtype"), _FLOATS)
 def test_small_parameters_keep_the_plain_form(device: str, dtype: lucid.dtype) -> None:
-    """Below ``sum = 10`` nothing changed: the integer cases are the plain form's, value for value."""
+    """Below ``sum = 10`` nothing changed: the integer cases are the plain form's, value for value.
+
+    The plain form's ``lgamma(1) = lgamma(2) = 0`` exactly (LCD-1049; they were 4.77e-7 in float32
+    and -8.9e-16 in float64), so the uniform ``Beta(1, 1)`` and the exponential ``Gamma(1, 1)`` at 0
+    have a log-density of exactly 0, which is the reference's value.  These two used to be pinned
+    to the plain expression, ``-(lgamma(1) + lgamma(1) - lgamma(2))`` and ``-lgamma(1)``: bit for
+    bit the old ``lgamma``'s rounding, which is the defect.
+    """
     one = _t(1.0, device, dtype)
-    plain = (lucid.lgamma(one) + lucid.lgamma(one) - lucid.lgamma(_t(2.0, device, dtype))).item()
-    assert D.Beta(one, one).log_prob(_t(0.3, device, dtype)).item() == -plain  # bit for bit
+    assert D.Beta(one, one).log_prob(_t(0.3, device, dtype)).item() == 0.0
     assert D.Gamma(one, one).entropy().item() == pytest.approx(1.0, abs=4 * _EPS[dtype])
-    assert D.Gamma(one, one).log_prob(_t(0.0, device, dtype)).item() == -lucid.lgamma(one).item()
+    assert D.Gamma(one, one).log_prob(_t(0.0, device, dtype)).item() == 0.0
     assert D.NegativeBinomial(_t(5.0, device, dtype), logits=_t(-1.0, device, dtype)).log_prob(
         _t(0.0, device, dtype)
     ).item() == pytest.approx(
@@ -1076,9 +1082,10 @@ def _lgamma_differences(path: pathlib.Path) -> set[tuple[str, str]]:
     """``(file, qualified function)`` of every ``lgamma(...) - / + lgamma(...)`` in the file."""
 
     def calls_lgamma(node: ast.AST) -> bool:
+        # the positive-domain entry is the same function: renaming the call must not hide the defect
         return any(
             isinstance(n, ast.Call)
-            and getattr(n.func, "attr", getattr(n.func, "id", "")) == "lgamma"
+            and getattr(n.func, "attr", getattr(n.func, "id", "")) in ("lgamma", "_lgamma_positive")
             for n in ast.walk(node)
         )
 

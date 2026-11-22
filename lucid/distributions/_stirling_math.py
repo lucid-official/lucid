@@ -69,7 +69,7 @@ import math
 from typing import final, override
 
 import lucid
-from lucid._ops.composite._gamma import _horner_float
+from lucid._ops.composite._gamma import _digamma_positive, _horner_float, _lgamma_positive
 from lucid._ops.composite._opmath import _in_float32
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
@@ -184,12 +184,12 @@ def _stirling_series(z: Tensor) -> Tensor:
 
 def _stirling_plain(z: Tensor) -> Tensor:
     """``S(z)`` as ``lgamma`` minus the closed part: both are O(10) for ``z < _SERIES_FROM``."""
-    return lucid.lgamma(z) - ((z - 0.5) * lucid.log(z) - z + _HALF_LOG_2PI)
+    return _lgamma_positive(z) - ((z - 0.5) * lucid.log(z) - z + _HALF_LOG_2PI)
 
 
 def _digamma_plain(z: Tensor) -> Tensor:
     """``D(z)`` as the closed part minus ``digamma``: both are O(1) for ``z < _SERIES_FROM``."""
-    return lucid.log(z) - 0.5 / z - lucid.digamma(z)
+    return lucid.log(z) - 0.5 / z - _digamma_positive(z)
 
 
 def _stirling_remainder_impl(z: Tensor) -> Tensor:
@@ -459,7 +459,7 @@ class _Stirling:
                 ],
                 dim=0,
             )
-            self._lgamma = (big, lucid.lgamma(held))
+            self._lgamma = (big, _lgamma_positive(held))
         return self._lgamma
 
     @property
@@ -540,11 +540,11 @@ def _log_comb(n: Tensor, k: Tensor) -> Tensor:
     nc, kc, mc = (lucid.where(big, t, zero) for t in (n, k, m))
     centred = -lucid.log1p(nc) - _log_beta(kc + 1.0, mc + 1.0)
     one = lucid.ones_like(n)
-    plain = (
-        lucid.lgamma(lucid.where(big, one, n) + 1.0)
-        - lucid.lgamma(lucid.where(big, one, k) + 1.0)
-        - lucid.lgamma(lucid.where(big, one, m) + 1.0)
-    )
+    # One pass over the three counts.  A count + 1 below 0 is outside the support: the clamp keeps
+    # its ``lgamma`` at the pole (+inf, so a log-mass of -inf) as the plain ``lgamma`` had it.
+    held = lucid.stack([lucid.where(big, one, t) + 1.0 for t in (n, k, m)], dim=0)
+    lg = _lgamma_positive(lucid.clamp(held, min=0.0))
+    plain = lg[0] - lg[1] - lg[2]
     # The ends are exactly 0 in value (as ``lgamma(n + 1) - lgamma(1) - lgamma(n + 1)`` is) and keep the
     # slope of the function: ``centred - centred.detach()`` is 0.0 with the gradient of ``centred``.
     return lucid.where(big, lucid.where(ends, centred - centred.detach(), centred), plain)
@@ -563,7 +563,7 @@ def _entropy_of(frame: _Stirling) -> Tensor:
     rec = frame.large & (comps >= _SHIFT_FROM)
     ps = lucid.where(frame.large, 1.0, frame.total)
     held = lucid.cat([lucid.where(rec, 1.0, comps), ps.unsqueeze(0)], dim=0)
-    lg, psi = lucid.lgamma(held), lucid.digamma(held)
+    lg, psi = _lgamma_positive(held), _digamma_positive(held)
     z = lucid.where(frame.large & ~rec, comps, 1.0)
     recurred = _gamma_tail_recurred(
         lucid.cat([lucid.where(rec, comps, _SERIES_FROM), frame.s.unsqueeze(0)], dim=0)
@@ -613,7 +613,7 @@ def _gamma_entropy_impl(alpha: Tensor) -> Tensor:
     centred_lane = (alpha >= _SHIFT_FROM) & lucid.isfinite(alpha)
     big = lucid.where(centred_lane, alpha, lucid.full_like(alpha, _SERIES_FROM))
     small = lucid.where(centred_lane, lucid.ones_like(alpha), alpha)
-    plain = small + lucid.lgamma(small) + (1.0 - small) * lucid.digamma(small)
+    plain = small + _lgamma_positive(small) + (1.0 - small) * _digamma_positive(small)
     return lucid.where(centred_lane, _gamma_entropy_recurred(big), plain)
 
 
@@ -735,9 +735,10 @@ def _log_multinomial_coeff(counts: Tensor) -> Tensor:
         steps = lucid.arange(1, k, dtype=counts.dtype, device=counts.device)
         centred = centred - lucid.log(nc.unsqueeze(-1) + steps).sum(dim=-1)
     plain_counts = lucid.where(big.unsqueeze(-1), lucid.zeros_like(counts), counts)
-    plain = lucid.lgamma(plain_counts.sum(dim=-1) + 1.0) - lucid.lgamma(plain_counts + 1.0).sum(
-        dim=-1
-    )
+    # A count + 1 below 0 stays at the pole (clamp), as in :func:`_log_comb`.
+    whole = _lgamma_positive(lucid.clamp(plain_counts.sum(dim=-1) + 1.0, min=0.0))
+    parts = _lgamma_positive(lucid.clamp(plain_counts + 1.0, min=0.0)).sum(dim=-1)
+    plain = whole - parts
     return lucid.where(big, centred, plain)
 
 
@@ -837,7 +838,9 @@ def _gamma_family_log_prob(
 
 
 def _gamma_log_prob_impl(alpha: Tensor, rate: Tensor, x: Tensor) -> Tensor:
-    plain = alpha * lucid.log(rate) + lucid.xlogy(alpha - 1.0, x) - rate * x - lucid.lgamma(alpha)
+    plain = (
+        alpha * lucid.log(rate) + lucid.xlogy(alpha - 1.0, x) - rate * x - _lgamma_positive(alpha)
+    )
     return _gamma_family_log_prob(alpha, rate, x, plain, inverse=False)
 
 
@@ -854,7 +857,9 @@ def _gamma_log_prob(alpha: Tensor, rate: Tensor, x: Tensor) -> Tensor:
 
 
 def _inverse_gamma_log_prob_impl(alpha: Tensor, rate: Tensor, x: Tensor) -> Tensor:
-    plain = alpha * lucid.log(rate) - lucid.lgamma(alpha) - (alpha + 1.0) * lucid.log(x) - rate / x
+    plain = (
+        alpha * lucid.log(rate) - _lgamma_positive(alpha) - (alpha + 1.0) * lucid.log(x) - rate / x
+    )
     return _gamma_family_log_prob(alpha, rate, x, plain, inverse=True)
 
 
@@ -865,7 +870,7 @@ def _inverse_gamma_log_prob(alpha: Tensor, rate: Tensor, x: Tensor) -> Tensor:
 
 
 def _poisson_log_prob_impl(rate: Tensor, k: Tensor) -> Tensor:
-    plain = lucid.xlogy(k, rate) - rate - lucid.lgamma(k + 1.0)
+    plain = lucid.xlogy(k, rate) - rate - _lgamma_positive(lucid.clamp(k + 1.0, min=0.0))
     inside = (k >= _CENTRED_FROM) & lucid.isfinite(k) & (rate > 0.0) & lucid.isfinite(rate)
     base = lucid.full_like(k, _CENTRED_FROM)
     kc = lucid.where(inside, k, base)
@@ -886,8 +891,8 @@ def _inverse_gamma_entropy_impl(alpha: Tensor, rate: Tensor) -> Tensor:
     big = lucid.where(centred_lane, alpha, lucid.full_like(alpha, _SERIES_FROM))
     small = lucid.where(centred_lane, lucid.ones_like(alpha), alpha)
     log_rate = lucid.log(rate)
-    centred = log_rate + _gamma_entropy_recurred(big) - 2.0 * lucid.digamma(big)
-    plain = small + log_rate + lucid.lgamma(small) - (small + 1.0) * lucid.digamma(small)
+    centred = log_rate + _gamma_entropy_recurred(big) - 2.0 * _digamma_positive(big)
+    plain = small + log_rate + _lgamma_positive(small) - (small + 1.0) * _digamma_positive(small)
     return lucid.where(centred_lane, centred, plain)
 
 
@@ -927,9 +932,9 @@ def _gamma_kl_impl(a_p: Tensor, b_p: Tensor, a_q: Tensor, b_q: Tensor) -> Tensor
     )
     plain = (
         a_q * lucid.log(b_p / b_q)
-        + lucid.lgamma(a_q)
-        - lucid.lgamma(a_p)
-        + (a_p - a_q) * lucid.digamma(a_p)
+        + _lgamma_positive(a_q)
+        - _lgamma_positive(a_p)
+        + (a_p - a_q) * _digamma_positive(a_p)
         + (b_q - b_p) * (a_p / b_p)
     )
     return lucid.where(valid, exact, plain)

@@ -4,6 +4,7 @@ import math
 
 import lucid
 from lucid._tensor.tensor import Tensor
+from lucid._ops.composite._gamma import _digamma_positive, _lgamma_positive
 from lucid.distributions._stirling_math import _log_beta
 from lucid.distributions._util import _sum_rightmost
 from lucid.distributions.bernoulli import Bernoulli, Geometric
@@ -254,8 +255,8 @@ def _kl_beta_exponential(p: Beta, q: Exponential) -> Tensor:
 @register_kl(Beta, Gamma)
 def _kl_beta_gamma(p: Beta, q: Gamma) -> Tensor:
     sum_p = p.concentration1 + p.concentration0
-    t2 = lucid.lgamma(q.concentration) - q.concentration * q.rate.log()
-    t3 = (q.concentration - 1.0) * (lucid.digamma(p.concentration1) - lucid.digamma(sum_p))
+    t2 = _lgamma_positive(q.concentration) - q.concentration * q.rate.log()
+    t3 = (q.concentration - 1.0) * (_digamma_positive(p.concentration1) - _digamma_positive(sum_p))
     return -p.entropy() + t2 - t3 + q.rate * p.concentration1 / sum_p
 
 
@@ -301,7 +302,7 @@ def _kl_exponential_gamma(p: Exponential, q: Gamma) -> Tensor:
     return (
         -q.concentration * ratio.log()
         + ratio
-        + lucid.lgamma(q.concentration)
+        + _lgamma_positive(q.concentration)
         + q.concentration * _EULER_GAMMA
         - (1.0 + _EULER_GAMMA)
     )
@@ -332,8 +333,8 @@ def _kl_gamma_exponential(p: Gamma, q: Exponential) -> Tensor:
 def _kl_gamma_gumbel(p: Gamma, q: Gumbel) -> Tensor:
     bs, lsr = p.rate * q.scale, q.loc / q.scale
     t1 = (
-        (p.concentration - 1.0) * lucid.digamma(p.concentration)
-        - lucid.lgamma(p.concentration)
+        (p.concentration - 1.0) * _digamma_positive(p.concentration)
+        - _lgamma_positive(p.concentration)
         - p.concentration
     )
     return (
@@ -351,14 +352,14 @@ def _kl_gamma_normal(p: Gamma, q: Normal) -> Tensor:
     t1 = (
         0.5 * (beta_sqr * var_n * 2.0 * math.pi).log()
         - p.concentration
-        - lucid.lgamma(p.concentration)
+        - _lgamma_positive(p.concentration)
     )
     t2 = (
         0.5 * (p.concentration**2 + p.concentration) / beta_sqr
         - q.loc * p.concentration / p.rate
         + 0.5 * (q.loc**2)
     )
-    return t1 + (p.concentration - 1.0) * lucid.digamma(p.concentration) + t2 / var_n
+    return t1 + (p.concentration - 1.0) * _digamma_positive(p.concentration) + t2 / var_n
 
 
 @register_kl(Gumbel, Normal)
@@ -414,7 +415,7 @@ def _kl_pareto_exponential(p: Pareto, q: Exponential) -> Tensor:
 @register_kl(Pareto, Gamma)
 def _kl_pareto_gamma(p: Pareto, q: Gamma) -> Tensor:
     c = p.scale.log() + 1.0 / p.alpha
-    t2 = lucid.lgamma(q.concentration) - q.concentration * q.rate.log()
+    t2 = _lgamma_positive(q.concentration) - q.concentration * q.rate.log()
     res = (
         (p.alpha.log() - c)
         + t2
@@ -457,7 +458,7 @@ def _kl_uniform_exponential(p: Uniform, q: Exponential) -> Tensor:
 @register_kl(Uniform, Gamma)
 def _kl_uniform_gamma(p: Uniform, q: Gamma) -> Tensor:
     c = p.high - p.low
-    t2 = lucid.lgamma(q.concentration) - q.concentration * q.rate.log()
+    t2 = _lgamma_positive(q.concentration) - q.concentration * q.rate.log()
     t3 = (1.0 - q.concentration) * (_x_log_x(p.high) - _x_log_x(p.low) - c) / c
     res = -c.log() + t2 + t3 + q.rate * (p.high + p.low) / 2.0
     return lucid.where(p.low < 0.0, float("inf"), res)

@@ -12,6 +12,7 @@ from typing import Self, override
 
 import lucid
 from lucid._dtype import finfo
+from lucid._ops.composite._gamma import _digamma_positive, _lgamma_positive
 from lucid._tensor.tensor import Tensor
 from lucid.distributions._stirling_math import (
     _inverse_gamma_entropy,
@@ -627,7 +628,7 @@ class Kumaraswamy(Distribution):
         """
         a, b = self.concentration1, self.concentration0
         # ψ(b+1) = ψ(concentration0 + 1)
-        harmonic: Tensor = _EULER_GAMMA + lucid.digamma(b + 1.0)
+        harmonic: Tensor = _EULER_GAMMA + _digamma_positive(b + 1.0)
         return (1.0 - 1.0 / a) * harmonic + (1.0 - 1.0 / b) - a.log() - b.log()
 
     @override
@@ -916,7 +917,7 @@ class Multinomial(Distribution):
         counts = lucid.arange(1, n + 1, 1, dtype=p.dtype, device=p.device)
         counts = counts.reshape([n] + [1] * p.ndim)
         marginal = Binomial(self.total_count, probs=p, validate_args=False)
-        weights = marginal.log_prob(counts).exp() * lucid.lgamma(counts + 1.0)
+        weights = marginal.log_prob(counts).exp() * _lgamma_positive(counts + 1.0)
         return term1 + weights.sum(dim=0).sum(dim=-1)
 
     @override

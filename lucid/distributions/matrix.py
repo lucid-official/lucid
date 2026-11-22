@@ -16,6 +16,7 @@ import lucid
 import lucid.linalg as _la
 import lucid.special as _sp
 from lucid._engine_scope import untraced
+from lucid._ops.composite._gamma import _digamma_positive, _lgamma_positive
 from lucid._tensor.tensor import Tensor
 from lucid.distributions._util import (
     _align_device,
@@ -401,7 +402,7 @@ class Wishart(Distribution):
         half_nu = nu / 2.0
         log_det_factor = self.scale_tril.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
         offsets = lucid.arange(p, dtype=nu.dtype, device=nu.device) / 2.0
-        mvdigamma = lucid.digamma(half_nu.unsqueeze(-1) - offsets).sum(dim=-1)
+        mvdigamma = _digamma_positive(half_nu.unsqueeze(-1) - offsets).sum(dim=-1)
         return (
             (p + 1) * (p * math.log(2.0) / 2.0 + log_det_factor)
             + _sp.multigammaln(half_nu, p)
@@ -646,7 +647,7 @@ class LKJCholesky(Distribution):
         # numerator — mvlgamma(alpha - 0.5, dm1)
         # denominator — lgamma(alpha) * dm1
         numerator = _sp.multigammaln(alpha - 0.5, dm1)
-        denominator = lucid.lgamma(alpha) * dm1
+        denominator = _lgamma_positive(alpha) * dm1
 
         # pi-constant adjustment
         pi_constant = 0.5 * dm1 * math.log(math.pi)

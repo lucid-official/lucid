@@ -9,6 +9,7 @@ import warnings
 
 import lucid
 from lucid._tensor.tensor import Tensor
+from lucid._ops.composite._gamma import _digamma_positive, _lgamma_positive
 from lucid.distributions._stirling_math import _gamma_kl, _log_beta, _log_multi_beta
 from lucid.distributions.bernoulli import Bernoulli
 from lucid.distributions.categorical import Categorical
@@ -352,10 +353,10 @@ def _kl_beta_beta(p: Beta, q: Beta) -> Tensor:
         p.concentration1, p.concentration0
     )
     t3 = (p.concentration1 - q.concentration1) * (
-        lucid.digamma(p.concentration1) - lucid.digamma(sum_p)
+        _digamma_positive(p.concentration1) - _digamma_positive(sum_p)
     )
     t4 = (p.concentration0 - q.concentration0) * (
-        lucid.digamma(p.concentration0) - lucid.digamma(sum_p)
+        _digamma_positive(p.concentration0) - _digamma_positive(sum_p)
     )
     return t12 + t3 + t4
 
@@ -394,7 +395,7 @@ def _kl_dirichlet_dirichlet(p: Dirichlet, q: Dirichlet) -> Tensor:
     b = q.concentration
     sum_a = a.sum(dim=-1, keepdim=True)
     t1 = _log_multi_beta(b) - _log_multi_beta(a)
-    t2 = ((a - b) * (lucid.digamma(a) - lucid.digamma(sum_a))).sum(dim=-1)
+    t2 = ((a - b) * (_digamma_positive(a) - _digamma_positive(sum_a))).sum(dim=-1)
     return t1 + t2
 
 
@@ -466,7 +467,7 @@ def _kl_gumbel_gumbel(p: Gumbel, q: Gumbel) -> Tensor:
     ct1: Tensor = p.scale / q.scale
     ct23: Tensor = (q.loc - p.loc) / q.scale
     t12: Tensor = -ct1.log() - ct23 + ct1 * _EULER_GAMMA
-    return t12 + (ct23 + lucid.lgamma(1.0 + ct1)).exp() - (1.0 + _EULER_GAMMA)
+    return t12 + (ct23 + _lgamma_positive(1.0 + ct1)).exp() - (1.0 + _EULER_GAMMA)
 
 
 @register_kl(Cauchy, Cauchy)

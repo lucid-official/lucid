@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING
 import lucid
 from lucid._C import engine as _C_engine
 from lucid._types import DTypeLike
+from lucid._ops.composite._gamma import _lgamma_positive
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -141,7 +142,7 @@ def _poisson_log_pmf(k: Tensor, lam: Tensor, log_lam: Tensor) -> Tensor:
     ``d = (k - lam) / lam`` and ``h(d) = (1 + d) ln(1 + d) - d``: both are of
     order ``lam ln lam``, and their difference is of order ``1``.
     """
-    plain = -lam + k * log_lam - lucid.lgamma(k + 1.0)
+    plain = -lam + k * log_lam - _lgamma_positive(k + 1.0)
     big = k.clip(10.0, float("inf"))
     d = (big - lam) / lam
     h = (1.0 + d) * d.log1p() - d
@@ -233,7 +234,7 @@ def _stirling_tail(k: Tensor) -> Tensor:
     x = k + 1.0
     inv2 = 1.0 / (x * x)
     series = (1.0 / 12.0 - (1.0 / 360.0 - (1.0 / 1260.0) * inv2) * inv2) / x
-    small = lucid.lgamma(x) - ((k + 0.5) * x.log() - x + _HALF_LOG_2PI)
+    small = _lgamma_positive(x) - ((k + 0.5) * x.log() - x + _HALF_LOG_2PI)
     return lucid.where(k <= 9.0, small, series)
 
 
