@@ -379,6 +379,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - compute principal complex inverse hyperbolics on Metal (LCD-1036)
 
+- name the ops the emitter tests select, guard a nil op name (LCD-1043)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

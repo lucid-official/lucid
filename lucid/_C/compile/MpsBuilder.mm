@@ -662,8 +662,10 @@ std::vector<EmittedOperation> describe_operations(const CloneWalkGraph& walk) {
             }
             outputs.emplace_back(static_cast<unsigned>(tensor.dataType), std::move(shape));
         }
-        result.emplace_back(NSStringFromClass(op.class).UTF8String, op.name.UTF8String,
-                            walk.inputs[i], std::move(outputs));
+        // ``op.name`` may be nil; ``std::string(nullptr)`` would be undefined.
+        const char* label = op.name != nil ? op.name.UTF8String : "";
+        result.emplace_back(NSStringFromClass(op.class).UTF8String, label, walk.inputs[i],
+                            std::move(outputs));
     }
     return result;
 }

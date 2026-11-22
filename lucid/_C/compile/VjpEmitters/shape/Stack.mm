@@ -291,7 +291,7 @@ public:
                     [g reshapeTensor:cur withShape:shape_to_ns(fold.split) name:nil];
                 MPSGraphTensor* summed = [g reductionSumWithTensor:split
                                                               axis:(NSInteger)fold.sum_axis
-                                                              name:nil];
+                                                              name:@"tile_vjp_sum"];
                 cur = [g reshapeTensor:summed withShape:shape_to_ns(fold.folded) name:nil];
             }
             bctx.accumulate_grad(
@@ -315,7 +315,7 @@ public:
         MPSGraphTensor* g_reshape =
             [g reshapeTensor:grad withShape:shape_to_ns(interleaved) name:nil];
         MPSGraphTensor* g_summed =
-            [g reductionSumWithTensor:g_reshape axes:rep_axes name:nil];
+            [g reductionSumWithTensor:g_reshape axes:rep_axes name:@"tile_vjp_sum"];
         MPSGraphTensor* dx =
             [g reshapeTensor:g_summed withShape:shape_to_ns(x_shape) name:@"tile_vjp"];
         bctx.accumulate_grad(x_id, from_tensor(dx));

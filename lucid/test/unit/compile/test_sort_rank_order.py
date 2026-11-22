@@ -251,7 +251,7 @@ def test_ordering_work_matches_an_explicit_row_layout(name: str, shape: tuple[in
 
         assert selections(pair.wide) == selections(pair.twin)
     else:
-        label = "mps_greater_equal" if name == "topk_sort" else "mps_less_equal"
+        label = "rank_loose"
         assert operation_shapes(wide, "Arithmetic", label=label) == operation_shapes(
             reference, "Arithmetic", label=label
         )

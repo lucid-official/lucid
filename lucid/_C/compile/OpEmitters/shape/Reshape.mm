@@ -256,7 +256,9 @@ public:
 
         // 2) broadcast the inserted size-1 axis to ``reps``.
         MPSGraphTensor* tiled =
-            [graph broadcastTensor:shaped toShape:shape_to_ns(layout.spread) name:nil];
+            [graph broadcastTensor:shaped
+                           toShape:shape_to_ns(layout.spread)
+                              name:@"repeat_spread"];
 
         // 3) collapse the two axes back: (..., D*reps, ...).
         std::vector<std::int64_t> final_shape = in_shape;

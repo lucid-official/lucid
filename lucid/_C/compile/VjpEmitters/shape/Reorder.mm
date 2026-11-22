@@ -249,7 +249,9 @@ public:
                 MPSGraphTensor* folded =
                     [g reshapeTensor:go withShape:shape_to_ns(layout.spread) name:nil];
                 MPSGraphTensor* summed =
-                    [g reductionSumWithTensor:folded axis:(NSInteger)layout.spread_axis name:nil];
+                    [g reductionSumWithTensor:folded
+                                       axis:(NSInteger)layout.spread_axis
+                                       name:@"repeat_vjp_sum"];
                 return [g reshapeTensor:summed withShape:x.shape name:@"repeat_vjp"];
             });
     }

@@ -251,9 +251,13 @@ inline MPSGraphTensor* graph_rank_order(
     MPSGraphTensor* strictly =
         descending ? [g greaterThanWithPrimaryTensor:other secondaryTensor:mine name:nil]
                    : [g lessThanWithPrimaryTensor:other secondaryTensor:mine name:nil];
-    MPSGraphTensor* loosely =
-        descending ? [g greaterThanOrEqualToWithPrimaryTensor:other secondaryTensor:mine name:nil]
-                   : [g lessThanOrEqualToWithPrimaryTensor:other secondaryTensor:mine name:nil];
+    // Named so tests can select it whatever the SDK calls an unnamed compare.
+    MPSGraphTensor* loosely = descending ? [g greaterThanOrEqualToWithPrimaryTensor:other
+                                                                    secondaryTensor:mine
+                                                                               name:@"rank_loose"]
+                                         : [g lessThanOrEqualToWithPrimaryTensor:other
+                                                                 secondaryTensor:mine
+                                                                            name:@"rank_loose"];
     MPSGraphTensor* before = [g selectWithPredicateTensor:earlier
                                       truePredicateTensor:loosely
                                      falsePredicateTensor:strictly

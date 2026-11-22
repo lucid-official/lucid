@@ -186,7 +186,7 @@ def test_repeat_uses_its_twins_split_axis(where: str, backward: bool) -> None:
 
     pair = RankTwin("repeat", Side(fn, (_metal(_W4),)), Side(fn, (_metal(shape),)))
     op, label = (
-        ("ReductionSum", "mps_reduction_sum") if backward else ("Broadcast", "mps_broadcast_to")
+        ("ReductionSum", "repeat_vjp_sum") if backward else ("Broadcast", "repeat_spread")
     )
     twin = operation_shapes(emitted(pair.twin, backward=backward), op, label=label)
     assert operation_shapes(emitted(pair.wide, backward=backward), op, label=label) == twin
@@ -203,11 +203,11 @@ def test_tile_gradient_folds_only_the_repeated_axis() -> None:
     twin = Side(lambda g: g.sum(dim=1, keepdim=True), (gradient,))
     expected = operation_shapes(emitted(twin), "ReductionSum", label="sum")
     assert (
-        operation_shapes(emitted(wide, backward=True), "ReductionSum", label="mps_reduction_sum")
+        operation_shapes(emitted(wide, backward=True), "ReductionSum", label="tile_vjp_sum")
         == expected
     )
     assert (
-        operation_shapes(emitted(wide, "-1", True), "ReductionSum", label="mps_reduction_sum")
+        operation_shapes(emitted(wide, "-1", True), "ReductionSum", label="tile_vjp_sum")
         != expected
     )
 
