@@ -190,9 +190,14 @@ _HEAP_CHILD = textwrap.dedent("""
 
 
 def _heap_cases() -> dict[str, _Case]:
+    """Rank-deficient kinds plus a full-rank tall and wide matrix (the QR route's), per driver."""
+    matrices = {
+        kind: _deficient(kind)
+        for kind in ["duplicate-column", "low-rank-tall", "low-rank-wide", "zero", "graded"]
+    }
+    matrices |= {"full-tall": _system((6, 3))[0], "full-wide": _system((3, 6))[0]}
     cases: dict[str, _Case] = {}
-    for kind in ["duplicate-column", "low-rank-tall", "low-rank-wide", "zero", "graded"]:
-        a_np = _deficient(kind)
+    for kind, a_np in matrices.items():
         b_np = np.random.default_rng(6).standard_normal((a_np.shape[0], 2))
         for driver in _DRIVERS:
             cases[f"{kind}/{driver}"] = (a_np.tolist(), b_np.tolist(), driver)
