@@ -1060,6 +1060,10 @@
     },
     {
       "kind": "module",
+      "module": "lucid.distributions._stirling_math"
+    },
+    {
+      "kind": "module",
       "module": "lucid.distributions.gamma"
     },
     {
@@ -1147,6 +1151,10 @@
     {
       "kind": "module",
       "module": "lucid.diffeq._event"
+    },
+    {
+      "kind": "module",
+      "module": "lucid.distributions._stirling_math"
     },
     {
       "kind": "module",
