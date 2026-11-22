@@ -179,12 +179,32 @@ def test_a_zero_dim_input_is_its_magnitude(device_cpu_only: str, p: float) -> No
         ((0, 4, 16), [0], (4, 16)),
         ((3, 0, 16), [1], (3, 16)),
         ((3, 4, 0), [1], (3, 0)),
+        # LCD-1047: an empty axis with a narrow inner extent, so every slice starts at a
+        # non-zero offset of an input that is a null pointer (UBSan halted the nightly on it)
+        ((2, 0, 3), [1], (2, 3)),
+        ((1, 0, 9), [1], (1, 9)),
+        ((4, 0, 2, 3), [1], (4, 2, 3)),
+        # reduced axes that are not one run: gathered first, and the slices are the kept axes'
+        # extent -- numel / length is 0 once a reduced axis is empty, and nothing was written
+        ((2, 0, 3, 4), [1, 3], (2, 3)),
+        ((2, 0, 3, 4), [0, 1, 3], (3,)),
+        ((2, 3, 0, 4), [0, 2], (3, 4)),
+        ((2, 3, 0, 4), [1, 3, 0], (0,)),
     ],
 )
+@pytest.mark.parametrize("p", [0.5, 1.5, 3.0, 7.5])
 def test_an_empty_reduction_is_zero(
-    device_cpu_only: str, shape: tuple[int, ...], axes: list[int], out_shape: tuple[int, ...]
+    device_cpu_only: str,
+    shape: tuple[int, ...],
+    axes: list[int],
+    out_shape: tuple[int, ...],
+    p: float,
 ) -> None:
-    got = _kernel(lucid.zeros(*shape), 3.0, axes, False)
+    # Fill the allocator's small blocks with 7.0: a result the kernel owes and never writes
+    # then reads as 7.0 instead of the 0.0 a fresh page would give.
+    for numel in range(1, 65):
+        lucid.full((numel,), 7.0)
+    got = _kernel(lucid.zeros(*shape), p, axes, False)
     assert tuple(got.shape) == out_shape
     assert all(v == 0.0 for v in got.reshape(-1).tolist())
 
