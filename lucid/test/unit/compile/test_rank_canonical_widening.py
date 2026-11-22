@@ -185,9 +185,7 @@ def test_repeat_uses_its_twins_split_axis(where: str, backward: bool) -> None:
         return lucid.repeat(t, 2, dim=dim).reshape(-1).sum()
 
     pair = RankTwin("repeat", Side(fn, (_metal(_W4),)), Side(fn, (_metal(shape),)))
-    op, label = (
-        ("ReductionSum", "repeat_vjp_sum") if backward else ("Broadcast", "repeat_spread")
-    )
+    op, label = ("ReductionSum", "repeat_vjp_sum") if backward else ("Broadcast", "repeat_spread")
     twin = operation_shapes(emitted(pair.twin, backward=backward), op, label=label)
     assert operation_shapes(emitted(pair.wide, backward=backward), op, label=label) == twin
     assert operation_shapes(emitted(pair.wide, "-1", backward), op, label=label) != twin
