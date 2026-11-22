@@ -99,7 +99,6 @@ _COMPOSITES = {
     "l1_loss": "lucid.nn.functional.l1_loss",
     "local_response_norm": "lucid.nn.functional.local_response_norm",
     "log10": "lucid.log10",
-    "log1p": "lucid.log1p",
     "logsumexp": "lucid.logsumexp",
     "lstm_cell": "lucid.nn.LSTMCell",
     "lstsq": "lucid.linalg.lstsq",
