@@ -42,6 +42,9 @@ TRACE_FORM: frozenset[str] = frozenset(
         "_LogGamma",
         "_Ndtri",
         "_Polygamma",
+        # Exact slopes of the gamma-family densities' primitives (LCD-1050)
+        "_Bd0",
+        "_StirlingSeries",
     }
 )
 

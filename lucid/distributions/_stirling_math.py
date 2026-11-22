@@ -42,6 +42,21 @@ _ENTROPY_FROM``.  The plain ``lgamma`` / ``digamma`` entropy and its slope ``1 +
 subtract numbers of size 1 for an answer of ``1/(2z)``, which on ``1 <= z < 10`` is 22 (value) and
 55 (slope) float32 epsilons off, and on one Metal GPU 36 at ``z = 9`` (LCD-1053).
 
+Cost (LCD-1050).  Both branches run on every lane (a data-dependent branch would sync a device and
+break tracing), so what is evaluated twice is the price of a lane the other branch owns.  Four rules
+keep it near the plain form's:
+
+* the ``K`` components of a vector lead, ``(K, *batch)``, and every per-category op runs once over
+  them (:func:`_components`): the op count does not depend on ``K``;
+* one ``lgamma`` pass over the components and the total (``_Stirling._small_lgamma``) serves the
+  small-lane remainder of a centred lane and the plain log-beta of a plain lane; the entropy shares a
+  ``lgamma`` and a ``digamma`` pass the same way;
+* the series is read alone where the argument is known to be at its start (a total of a centred
+  lane, ``Gamma`` / ``Poisson`` at ``alpha, k >= 10``), and ``lgamma`` is never formed to be
+  discarded;
+* ``bd0`` and the Stirling series are ``Function`` s with their exact slope (``log1p((x - m)/m)``,
+  ``-D(z)``) instead of a taped graph of both lanes.
+
 Entry points (one per quantity, each also used by every law that needs it):
 :func:`_log_beta`, :func:`_log_multi_beta`, :func:`_log_comb`, :func:`_log_multinomial_coeff`;
 :func:`_beta_log_prob`, :func:`_dirichlet_log_prob`, :func:`_f_log_prob`, :func:`_gamma_log_prob`,
@@ -221,7 +236,7 @@ def _digamma_recurred(z: Tensor) -> Tensor:
     gap = lucid.zeros_like(z)
     for j in range(steps):
         u = 1.0 / (z + float(j))
-        gap = gap + lucid.where(k > float(j), u - lucid.log1p(u), lucid.zeros_like(z))
+        gap = gap + lucid.where(k > float(j), u - lucid.log1p(u), 0.0)
     return _digamma_series(b) - 0.5 * k / (b * z) + gap
 
 
@@ -263,9 +278,9 @@ def _gamma_tail_recurred(z: Tensor) -> Tensor:
     gap = lucid.zeros_like(z)
     for j in range(steps):
         # A dead step is the constant 0: it adds nothing to the value or to the gradient.
-        w = z + float(j)
-        step = lucid.log1p((k - float(j)) / w) - (j + 1.0) / w
-        gap = gap + lucid.where(k > float(j), step, lucid.zeros_like(z))
+        r = 1.0 / (z + float(j))
+        step = lucid.log1p((k - float(j)) * r) - (j + 1.0) * r
+        gap = gap + lucid.where(k > float(j), step, 0.0)
     # ``G(b) - k (1/(2b) + D(b))`` with ``G(b) = -1/(2b) + S(b) + (b - 1) D(b)`` and ``b - 1 - k = z - 1``.
     return (
         -0.5 * (1.0 + k) / b
