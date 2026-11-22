@@ -1,8 +1,20 @@
 """The gamma family: :math:`\\ln\\Gamma` and the polygammas :math:`\\psi^{(n)}`.
 
-``lucid.lgamma`` is :func:`_lgamma`: the Lanczos approximation (Numerical
-Recipes, g = 7, n = 9; relative error below 1.5e-15 for x > 0 in float64)
-on the right half, Euler's reflection on the left.
+``lucid.lgamma`` is :func:`_lgamma`: a Lanczos approximation (error 2e-10 in
+float32, 1e-15 in float64; :class:`_Lanczos`) on the right half, Euler's
+reflection on the left.  The approximation is evaluated as a *difference* from
+its own value at ``x = 1`` (:meth:`_Lanczos.difference`), which makes ``lgamma``
+exactly 0 at its two zeros ``x = 1, 2`` and accurate near them, and runs once
+per element whichever half the element is on.
+
+Two entries share each evaluation.  The public ones (``lucid.lgamma``,
+``lucid.digamma``, ``lucid.special.polygamma``) cover the whole real line.
+:func:`_lgamma_positive`, :func:`_digamma_positive` and
+:func:`_polygamma_positive` are for a caller that guarantees ``x > 0`` (a
+concentration, a count plus one, a degrees-of-freedom): they skip the
+reflection, the pole tests and the infinity guard: a third of ``lgamma``'s
+engine events and over half of ``digamma``'s.  Their answer on a non-positive
+``x`` is not specified.
 
 ``lucid.digamma`` is ``n = 0`` and ``lucid.special.polygamma`` is every
 ``n``; both call :func:`_polygamma`.  They used to be two separate series
@@ -43,28 +55,152 @@ from lucid._ops.composite._opmath import _in_float32, _real
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
 
-_LANCZOS_G = 7.0
-_LANCZOS_P: list[float] = [
-    0.99999999999980993,
-    676.5203681218851,
-    -1259.1392167224028,
-    771.32342877765313,
-    -176.61502916214059,
-    12.507343278686905,
-    -0.13857109526572012,
-    9.9843695780195716e-6,
-    1.5056327351493116e-7,
-]
+# A Lanczos approximation is  lgamma(z + 1) = F(z) = (c - z) + (z + 1/2) log t + log s(z),
+# t = z + g + 1/2,  s(z) = P_0 + sum_{k=1..n} P_k / (z + k),  to the approximation's own error.
+# Two are used: Numerical Recipes (2nd ed.) g = 5, n = 6, error 2e-10, for float32 (its epsilon is
+# 1.2e-7, and six terms are two passes fewer than the eight of the older g = 7, n = 9 set), and
+# Godfrey's g = 607/128, n = 14 (Numerical Recipes, 3rd ed.), error ~1e-15, for float64.
+_LANCZOS_F32_G = 5.0
+_LANCZOS_F32_P: tuple[float, ...] = (
+    1.000000000190015,
+    76.18009172947146,
+    -86.50532032941677,
+    24.01409824083091,
+    -1.231739572450155,
+    0.1208650973866179e-2,
+    -0.5395239384953e-5,
+)
+_LANCZOS_F64_G = 607.0 / 128.0
+_LANCZOS_F64_P: tuple[float, ...] = (
+    0.99999999999999709182,
+    57.156235665862923517,
+    -59.597960355475491248,
+    14.136097974741747174,
+    -0.49191381609762019978,
+    0.33994649984811888699e-4,
+    0.46523628927048575665e-4,
+    -0.98374475304879564677e-4,
+    0.15808870322491248884e-3,
+    -0.21026444172410488319e-3,
+    0.21743961811521264320e-3,
+    -0.16431810653676389022e-3,
+    0.84418223983852743293e-4,
+    -0.26190838401581408670e-4,
+    0.36899182659531622704e-5,
+)
 
 
-def _lgamma(x: Tensor) -> Tensor:
+@final
+class _Lanczos:
+    """The constants of one Lanczos approximation's *difference form*.
+
+    Summed as written, F is three terms of size ~7 (float32: ulp 4.8e-7) that cancel to 0 at
+    ``z = 0`` and ``z = 1`` (``x = 1, 2``): ``lgamma(2)`` was 4.77e-7 in float32 and ``lgamma(1)``
+    -8.9e-16 in float64 (the approximation's own error at the point), and near a zero the error
+    stays that size against a true value of 0.577 |x - 1|.
+
+    The same F, grouped as a *difference* from its value at ``z = 0``,
+
+        lgamma(1 + z) = F(z) - F(0)
+                      = z (log t0 - 1) + (z + 1/2) log1p(z / t0) + log1p(z u(z)),
+        u(z)          = -sum_k [P_k / (k s0)] / (z + k),         (s0 = s(0), t0 = g + 1/2)
+
+    has no term that does not vanish with ``z``: it is exactly 0 at ``z = 0`` and carries the
+    digits of a small ``z``.  ``s(z) / s0 - 1 = z u(z)`` is the same sum with each term cancelled
+    by its value at 0 (``P_k/(z+k) - P_k/k = -z P_k / (k (z+k))``).  F(0) is replaced by the true
+    value 0, which moves the approximation by its own error at 1 and nowhere else.
+
+    ``log1p(z u)`` loses ``1/(1 + z u) = s0/s(z)`` of the absolute error of ``z u`` (up to 42 for
+    g = 5, 263 for the older g = 7), and the terms of ``u`` alternate in sign and are an order
+    larger than their sum.  Adjacent terms are therefore added as one fraction,
+
+        c_a / (z + a) + c_b / (z + b) = ((c_a + c_b) z + (c_a b + c_b a)) / ((z + a)(z + b)),
+
+    whose parts no longer cancel against each other.  Held to a 50-digit oracle (a thousand points
+    per band), the worst error over 1e-3 .. 1e6 is 3.9 (float32) / 5.6 (float64) epsilons where
+    the direct form's was 18 / 15, and the direct form's mid-band noise is kept: at 10-20 float64
+    is 2.6 against 2.9 (the g = 7 set without the pairing: 8).  Near ``x = 1, 2`` the error is at
+    most 5 / 8 epsilons *of the tiny value* (float32 / float64) where it was 10^7.  The large
+    bands carry the rounding of three terms of size ``z log z`` where the direct form carried two:
+    up to 0.6 epsilon more there (at most 2.1 in all).
+
+    The constants are formed in double precision.
+    """
+
+    def __init__(self, g: float, coeffs: tuple[float, ...]) -> None:
+        n = len(coeffs) - 1
+        t0 = g + 0.5
+        s0 = coeffs[0] + math.fsum(coeffs[k] / k for k in range(1, n + 1))
+        diff = [-coeffs[k] / (k * s0) for k in range(1, n + 1)]
+        self.c1 = math.log(t0) - 1.0
+        self.inv_t0 = 1.0 / t0
+        # (numerator slope, numerator intercept) of the fraction for the terms k = i + 1, i + 2
+        self.pairs: tuple[tuple[float, float], ...] = tuple(
+            (diff[i] + diff[i + 1], diff[i] * (i + 2) + diff[i + 1] * (i + 1))
+            for i in range(0, n - 1, 2)
+        )
+        self.tail: float | None = diff[-1] if n % 2 else None
+
+    def difference(self, z: Tensor, one: Tensor) -> Tensor:
+        """:math:`\\ln\\Gamma(1 + z)` for ``z >= -1/2``, exactly 0 at ``z = 0``.
+
+        ``one`` is a 0-d one of ``z``'s dtype and device: the shifts ``z + k`` are built by adding
+        it to the last, one op each, not a constant tensor each.
+        """
+        shifted = z
+        fractions: list[Tensor] = []
+        for slope, intercept in self.pairs:
+            shifted = shifted + one
+            upper = shifted + one
+            fractions.append((z * slope + intercept) / (shifted * upper))
+            shifted = upper
+        if self.tail is not None:
+            fractions.append(self.tail / (shifted + one))
+        total = fractions[0]
+        for fraction in fractions[1:]:
+            total = total + fraction
+        return z * self.c1 + (z + 0.5) * lucid.log1p(z * self.inv_t0) + lucid.log1p(z * total)
+
+
+_LANCZOS_F32 = _Lanczos(_LANCZOS_F32_G, _LANCZOS_F32_P)
+_LANCZOS_F64 = _Lanczos(_LANCZOS_F64_G, _LANCZOS_F64_P)
+
+
+def _lgamma_core(a: Tensor, one: Tensor) -> Tensor:
+    """:math:`\\ln\\Gamma(a)` for ``a >= 1/2``, exactly 0 at ``a = 1`` and ``a = 2``.
+
+    Below 3/2 the difference form is read at ``z = a - 1``.  From 3/2 on it is read one step
+    down, ``lgamma(a) = lgamma(a - 1) + log(a - 1)``, so that the second zero ``a = 2`` is a zero
+    of the difference form as well; ``log(a - 1)`` is taken of the exact ``a - 1`` there
+    (subtracting 1 from ``a`` in [1, 2^24] is exact) and of 1 elsewhere, so it is 0.
+    """
+    am1 = a - one
+    hi = am1 >= 0.5
+    z = lucid.where(hi, am1 - one, am1)
+    lanczos = _LANCZOS_F64 if a.dtype == lucid.float64 else _LANCZOS_F32
+    return lanczos.difference(z, one) + lucid.log(lucid.where(hi, am1, one))
+
+
+def _lgamma(x: Tensor, positive: bool = False) -> Tensor:
     """:math:`\\ln|\\Gamma(x)|` on the whole real line; float32 for 16 bits.
+
+    ``positive`` is the caller's promise that ``x > 0`` (:func:`_lgamma_positive`).
 
     An integer ``x`` is the default float first (:func:`_real`): the integer
     went into the Lanczos series as itself and failed to hold its first
     ``inf``.
     """
-    return _in_float32(_lgamma_wide, _real(x))
+    return _in_float32(_lgamma_positive_wide if positive else _lgamma_wide, _real(x))
+
+
+def _lgamma_positive_wide(x: Tensor) -> Tensor:
+    """:func:`_lgamma` for ``x > 0`` in ``x``'s own dtype, float32 or float64."""
+    # Below 1/2 the difference form is read one step up,
+    # lgamma(x) = lgamma(x + 1) - log(x): the two terms are > 0.57 apart from 0 and do not
+    # cancel, and log(x) is the whole answer for a tiny x.  ``log`` meets 1 off that side.
+    one = lucid.ones((), dtype=x.dtype, device=x.device)
+    low = x < 0.5
+    return _lgamma_core(lucid.where(low, x + one, x), one) - lucid.log(lucid.where(low, x, one))
 
 
 def _lgamma_wide(x: Tensor) -> Tensor:
@@ -80,17 +216,17 @@ def _lgamma_wide(x: Tensor) -> Tensor:
     #
     #     lgamma(x) = log(π) − log|sin(πx)| − lgamma(1 − x)
     #
-    # Both branches are evaluated, because ``where`` selects rather than
-    # short-circuits, so each is given an argument clamped into its own
-    # half.  Without that the losing branch divides by zero at ``z + k``
-    # and the NaN reaches the *gradient* through the mask, which is the
-    # usual way a where-guarded formula goes wrong.
-    half = lucid.full_like(x, 0.5)
-    reflect = x < half
-
-    big = x == math.inf
-    right = _lgamma_lanczos(lucid.clamp(lucid.where(big, half, x), min=0.5))
-    mirror = _lgamma_lanczos(lucid.clamp(1.0 - x, min=0.5))
+    # The series is needed at x or at 1 − x, never both, so it runs once at
+    # whichever the element is on; ``where`` selects the argument, not the
+    # result, and each side is given one inside its own half.  Without that
+    # the losing branch divides by zero at ``z + k`` and the NaN reaches the
+    # *gradient* through the mask, which is the usual way a where-guarded
+    # formula goes wrong.
+    one = lucid.ones((), dtype=x.dtype, device=x.device)
+    reflect = x < 0.5
+    arg = lucid.where(reflect, one - x, x)
+    # ±inf has no finite half to read: 1 − (−inf) and +inf are both inf.
+    core = _lgamma_core(lucid.where(lucid.isinf(arg), one, arg), one)
     # ``sin(πx)`` is zero at every integer, where Γ has its poles and the
     # answer is +inf.  Only the reflected side may see it: elsewhere it is
     # replaced by 1, so ``log`` never meets a zero it was not asked about.
@@ -99,23 +235,35 @@ def _lgamma_wide(x: Tensor) -> Tensor:
     # |x|, and in float32 the gradient at -1000.5 came out 6.90836 against
     # digamma's 6.90875.  Only the reflected side takes it, so that +inf on
     # the other never forms inf - round(inf) = NaN under the mask.
-    x_left = lucid.where(reflect, x, half)
+    x_left = lucid.where(reflect, x, 0.5)
     sin_term = lucid.abs(lucid.sin(math.pi * (x_left - lucid.round(x_left))))
-    sin_safe = lucid.where(reflect, sin_term, lucid.ones_like(x))
-    left = math.log(math.pi) - lucid.log(sin_safe) - mirror
-    out = lucid.where(reflect, left, right)
+    sin_safe = lucid.where(reflect, sin_term, one)
+    out = lucid.where(reflect, math.log(math.pi) - lucid.log(sin_safe) - core, core)
 
     # The poles are named rather than computed.  ``sin(π · -1.0)`` came out
     # 1.2e-16 before the reduction above, and lgamma(-1) answered 37.78
     # instead of +inf; the reduced form is exact at integers, but -inf
     # reduces to NaN, and a pole should not hinge on rounding either way.
-    at_pole = (x <= lucid.zeros_like(x)) & (x == lucid.round(x))
-    out = lucid.where(at_pole, lucid.full_like(x, float("inf")), out)
+    at_pole = (x <= 0.0) & (x == lucid.round(x))
+    out = lucid.where(at_pole, math.inf, out)
     # The Lanczos form at +inf is inf - inf.  +inf is handed to x * x
     # instead, which has the same limit and, like digamma, an infinite
     # derivative there (x log x would form inf / inf in its backward).
-    x_big = lucid.where(big, x, lucid.ones_like(x))
+    big = x == math.inf
+    x_big = lucid.where(big, x, one)
     return lucid.where(big, x_big * x_big, out)
+
+
+def _lgamma_positive(x: Tensor) -> Tensor:
+    """:math:`\\ln\\Gamma(x)` for a caller that guarantees ``x > 0`` (:class:`_LogGamma`).
+
+    One evaluation of the difference form, with no reflection, pole test or infinity guard.
+    ``0`` gives ``+inf`` as :func:`_lgamma` does; ``nan`` stays ``nan``; a negative ``x`` or
+    ``+inf`` is outside the promise and answers ``nan``.
+    """
+    out = _LogGamma.apply(x, True)
+    assert isinstance(out, Tensor)
+    return out
 
 
 @final
@@ -129,21 +277,25 @@ class _LogGamma(Function):
     ``digamma`` also carries the other poles (NaN at the negative integers),
     ``+inf`` at ``+inf``, and is itself differentiable, so higher orders
     follow.
+
+    ``positive`` selects the entry of a caller that guarantees ``x > 0``: the value and the slope
+    both skip the left half.
     """
 
     _trace_form = staticmethod(_lgamma)
 
     @override
     @staticmethod
-    def forward(ctx: FunctionCtx, x: Tensor) -> Tensor:
+    def forward(ctx: FunctionCtx, x: Tensor, positive: bool) -> Tensor:
         ctx.save_for_backward(x)
-        return _lgamma(x.detach())
+        ctx.positive = positive
+        return _lgamma(x.detach(), positive)
 
     @override
     @staticmethod
-    def backward(ctx: FunctionCtx, grad: Tensor) -> Tensor:
+    def backward(ctx: FunctionCtx, grad: Tensor) -> tuple[Tensor, None]:
         (x,) = ctx.saved_tensors
-        return grad * _polygamma(0, x)
+        return grad * _polygamma(0, x, bool(ctx.positive)), None
 
 
 def _integer_order(value: int, name: str) -> int:
@@ -162,17 +314,6 @@ def _integer_order(value: int, name: str) -> int:
         raise TypeError(f"`{name}` must be an integer, not {type(value).__name__}") from None
 
 
-def _lgamma_lanczos(x: Tensor) -> Tensor:
-    """The Lanczos series proper — correct for ``x >= 0.5``."""
-    z = x - 1.0
-    t = z + (_LANCZOS_G + 0.5)
-    series = lucid.full_like(x, _LANCZOS_P[0])
-    for k in range(1, len(_LANCZOS_P)):
-        series = series + _LANCZOS_P[k] / (z + float(k))
-    c = 0.5 * math.log(2.0 * math.pi) - (_LANCZOS_G + 0.5)
-    return (c - z) + (z + 0.5) * lucid.log(t) + lucid.log(series)
-
-
 # B_2, B_4, ..., B_12.  Every odd Bernoulli number past B_1 is zero, which
 # is why the asymptotic series skips odd powers.
 _BERNOULLI_2K: tuple[float, ...] = (
@@ -189,6 +330,14 @@ _BERNOULLI_2K: tuple[float, ...] = (
 # series a truncation error near 1e-14 relative, below float64's own noise
 # for the values involved.
 _SHIFT = 8
+
+# ``digamma``'s Bernoulli terms and shift for float32.  Float64 keeps the plan above.  Float32's
+# epsilon is 1e-7, so at x + 4 >= 4 four terms leave a truncation of 7e-9 (worst at x -> 0, where
+# psi is large), and the shorter shift also sums fewer rounded reciprocals: against a 50-digit
+# oracle the worst error over (0, 1e30] is 3.4 epsilons, from 5.3 at the shift of 8, for half the
+# passes.
+_SHIFT_F32 = 4
+_TERMS_F32 = 4
 
 
 @functools.cache
@@ -209,28 +358,43 @@ def _cot_derivative_poly(n: int) -> tuple[int, ...]:
     return tuple(coeffs)
 
 
+def _psi_series(x: Tensor, one: Tensor) -> Tensor:
+    """:math:`\\psi(x)` for ``x > 0``: recurrence shift, then the series."""
+    # psi(x) = psi(x + K) - sum_{k<K} 1/(x + k), and
+    # psi(z) ~ log z - 1/(2z) - sum_k B_2k / (2k z^2k).  ``one`` is a 0-d one of x's dtype and
+    # device: x + k is built by adding it to the last, one op per term.
+    shift, terms = (
+        (_SHIFT, len(_BERNOULLI_2K)) if x.dtype == lucid.float64 else (_SHIFT_F32, _TERMS_F32)
+    )
+    xk = x
+    total = lucid.reciprocal(xk)
+    for _ in range(shift - 1):
+        xk = xk + one
+        total = total + lucid.reciprocal(xk)
+    xr = xk + one
+    r = lucid.reciprocal(xr)
+    r2 = r * r
+    # Horner, opened with the top term so that no full-size constant is filled first.
+    poly = r2 * (_BERNOULLI_2K[terms - 1] / (2.0 * terms)) + (
+        _BERNOULLI_2K[terms - 2] / (2.0 * (terms - 1))
+    )
+    for k in range(terms - 2, 0, -1):
+        poly = poly * r2 + (_BERNOULLI_2K[k - 1] / (2.0 * k))
+    return lucid.log(xr) - 0.5 * r - r2 * poly - total
+
+
 def _positive(n: int, x: Tensor) -> Tensor:
     """:math:`\\psi^{(n)}(x)` for ``x > 0``: recurrence shift, then the series."""
+    one = lucid.ones((), dtype=x.dtype, device=x.device)
+    if n == 0:
+        return _psi_series(x, one)
+
     # Every power is taken of a reciprocal, never divided by: at x = +inf
     # the backward of 1 / z^m is (-m z^(m-1)) / z^(2m) = inf / inf, while
     # that of (1/z)^m is m (1/z)^(m-1) * (-1/z^2) = 0 * 0.  It also keeps a
     # float32 x = 1e-6 from passing through x^(n+1) = 1e-24 on the way to
     # 1/x^(n+1).
-    xr = x + float(_SHIFT)
-    r = 1.0 / xr
-    r2 = r * r
-    if n == 0:
-        # psi(x) = psi(x + K) - sum_{k<K} 1/(x + k), and
-        # psi(z) ~ log z - 1/(2z) - sum_k B_2k / (2k z^2k).
-        shift = 1.0 / x
-        for k in range(1, _SHIFT):
-            shift = shift + 1.0 / (x + float(k))
-        b_cnt = len(_BERNOULLI_2K)
-        poly = lucid.full_like(x, _BERNOULLI_2K[-1] / (2.0 * b_cnt))
-        for k in range(b_cnt - 1, 0, -1):
-            poly = poly * r2 + (_BERNOULLI_2K[k - 1] / (2.0 * k))
-        return lucid.log(xr) - 0.5 * r - r2 * poly - shift
-
+    #
     # psi^(n)(x) = psi^(n)(x + K) + (-1)^(n+1) n! sum_{k<K} 1/(x + k)^(n+1), and
     # psi^(n)(z) ~ (-1)^(n+1) [ (n-1)!/z^n + n!/(2 z^(n+1))
     #                          + sum_k B_2k (2k+n-1)!/(2k)! / z^(2k+n) ].
@@ -238,18 +402,23 @@ def _positive(n: int, x: Tensor) -> Tensor:
     # term, B_2k (2k+n-1)!/(2k)! alone passes float32's range from about
     # n = 31 although the terms are tiny.  The one quantity that genuinely
     # grows like a factorial is evaluated once, in log space.
+    xk = x
+    powers = lucid.reciprocal(xk) ** (n + 1)
+    for _ in range(1, _SHIFT):
+        xk = xk + one
+        powers = powers + lucid.reciprocal(xk) ** (n + 1)
+    xr = xk + one
+    r = lucid.reciprocal(xr)
+    r2 = r * r
     sign = 1.0 if n % 2 == 1 else -1.0
-    n_fact = float(math.factorial(n))
-    shift = (sign * n_fact) * (1.0 / x) ** (n + 1)
-    for k in range(1, _SHIFT):
-        shift = shift + (sign * n_fact) * (1.0 / (x + float(k))) ** (n + 1)
+    shift = (sign * float(math.factorial(n))) * powers
     lead = lucid.exp(math.lgamma(n) - n * lucid.log(xr))
     coeffs = [
         b * float(math.prod(range(n, 2 * k + n))) / float(math.factorial(2 * k))
         for k, b in enumerate(_BERNOULLI_2K, start=1)
     ]
-    poly = lucid.full_like(x, coeffs[-1])
-    for c in reversed(coeffs[:-1]):
+    poly = r2 * coeffs[-1] + coeffs[-2]
+    for c in reversed(coeffs[:-2]):
         poly = poly * r2 + c
     bracket = 1.0 + (n / 2.0) * r + r2 * poly
     return sign * lead * bracket + shift
@@ -262,14 +431,15 @@ def _horner(coeffs: tuple[int, ...], c: Tensor) -> Tensor:
     return acc
 
 
-def _polygamma_value(n: int, x: Tensor) -> Tensor:
+def _polygamma_value(n: int, x: Tensor, positive: bool = False) -> Tensor:
     """:math:`\\psi^{(n)}(x)` on the whole real line, ``n >= 0``, as plain ops.
 
     A 16-bit ``x`` is evaluated in float32: the recurrence's shift and the
     series cancel, and ``digamma(1.5)`` in float16 was 0.0391 for 0.0365.
-    An integer ``x`` is the default float first (:func:`_real`).
+    An integer ``x`` is the default float first (:func:`_real`).  ``positive`` is the caller's
+    promise that ``x > 0`` (:func:`_polygamma_positive`): the series alone.
     """
-    return _in_float32(lambda v: _polygamma_wide(n, v), _real(x))
+    return _in_float32(lambda v: _positive(n, v) if positive else _polygamma_wide(n, v), _real(x))
 
 
 @final
@@ -280,35 +450,51 @@ class _Polygamma(Function):
     so carry a gradient of 0 — ``digamma`` at ``-3`` had a slope of 0 next to
     a trigamma of ``+inf``.  The derivative is the next order of the same
     function, so a pole's slope is that order's pole value, and every order
-    above is differentiable in turn.
+    above is differentiable in turn.  ``positive`` selects the entry of a caller that guarantees
+    ``x > 0``; the slope is then the next order of that entry.
     """
 
     _trace_form = staticmethod(_polygamma_value)
 
     @override
     @staticmethod
-    def forward(ctx: FunctionCtx, n: int, x: Tensor) -> Tensor:
+    def forward(ctx: FunctionCtx, n: int, x: Tensor, positive: bool) -> Tensor:
         ctx.save_for_backward(x)
         ctx.order = n
-        return _polygamma_value(n, x.detach())
+        ctx.positive = positive
+        return _polygamma_value(n, x.detach(), positive)
 
     @override
     @staticmethod
-    def backward(ctx: FunctionCtx, grad: Tensor) -> tuple[None, Tensor]:
+    def backward(ctx: FunctionCtx, grad: Tensor) -> tuple[None, Tensor, None]:
         (x,) = ctx.saved_tensors
-        return None, grad * _polygamma(ctx.order + 1, x)
+        return None, grad * _polygamma(ctx.order + 1, x, bool(ctx.positive)), None
 
 
-def _polygamma(n: int, x: Tensor) -> Tensor:
+def _polygamma(n: int, x: Tensor, positive: bool = False) -> Tensor:
     """:math:`\\psi^{(n)}(x)` on the whole real line, ``n >= 0`` (:class:`_Polygamma`)."""
-    out = _Polygamma.apply(n, x)
+    out = _Polygamma.apply(n, x, positive)
     assert isinstance(out, Tensor)
     return out
 
 
+def _polygamma_positive(n: int, x: Tensor) -> Tensor:
+    """:math:`\\psi^{(n)}(x)` for a caller that guarantees ``x > 0``: the series, no left half.
+
+    ``0`` gives the pole (``-inf`` for ``n = 0``) and ``nan`` stays ``nan``; a negative ``x`` is
+    outside the promise.
+    """
+    return _polygamma(n, x, True)
+
+
+def _digamma_positive(x: Tensor) -> Tensor:
+    """:math:`\\psi(x)` for a caller that guarantees ``x > 0`` (:func:`_polygamma_positive`)."""
+    return _polygamma(0, x, True)
+
+
 def _polygamma_wide(n: int, x: Tensor) -> Tensor:
     """:func:`_polygamma` in ``x``'s own dtype, float32 or float64."""
-    one = lucid.ones_like(x)
+    one = lucid.ones((), dtype=x.dtype, device=x.device)
     # The poles are the non-positive integers, -inf among them.
     pole = (x <= 0.0) & (x == lucid.floor(x))
     reflect = (x < 0.0) & ~pole
@@ -324,7 +510,7 @@ def _polygamma_wide(n: int, x: Tensor) -> Tensor:
     # whose argument is exact near |r| = 1/2: cos(pi/2) itself rounds to
     # 6e-17, and at the half-integers, where P_n(0) = 0 for even n, that
     # residue was the whole error — 4e-9 relative in polygamma(2, -1000.5).
-    frac = lucid.where(reflect, x - lucid.round(x), lucid.full_like(x, 0.25))
+    frac = lucid.where(reflect, x - lucid.round(x), 0.25)
     cot = lucid.sin(math.pi * (0.5 - lucid.abs(frac))) / lucid.sin(math.pi * frac)
     cot_term = math.pi ** (n + 1) * _horner(_cot_derivative_poly(n), cot)
     left = (series if n % 2 == 0 else -series) - cot_term
@@ -334,13 +520,13 @@ def _polygamma_wide(n: int, x: Tensor) -> Tensor:
         # psi(x) ~ -1/x at the origin, so psi(+0) = -inf and psi(-0) = +inf;
         # the other poles have no sign and are NaN.
         at_zero = x == 0.0
-        out = lucid.where(pole, lucid.full_like(x, math.nan), out)
+        out = lucid.where(pole, math.nan, out)
         return lucid.where(at_zero, -1.0 / lucid.where(at_zero, x, one), out)
     # (-1)^(n+1) n! / (x + m)^(n+1): with n odd the power is even and the pole
     # is +inf from both sides; with n even the reference takes the sign
     # (-1)^(n+1) as well, and so does this.
     pole_value = math.inf if n % 2 == 1 else -math.inf
-    return lucid.where(pole, lucid.full_like(x, pole_value), out)
+    return lucid.where(pole, pole_value, out)
 
 
 # ── Regularized incomplete gamma ──────────────────────────────────────────────

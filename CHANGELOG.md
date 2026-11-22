@@ -518,6 +518,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - saddle pmf reads S(n) from the series (LCD-1050)
 
+- one Lanczos sum, exact lgamma zeros, cheaper digamma
+
 ### Tooling
 
 - record that 1055fa3b9 moves no binary interface

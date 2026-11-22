@@ -1310,13 +1310,14 @@ def frexp(input: Tensor) -> tuple[Tensor, Tensor]:
 def lgamma(input: Tensor) -> Tensor:
     r"""Natural log of the gamma function :math:`\ln \Gamma(x)`.
 
-    Implemented as a pure composite over engine primitives — uses the
-    Lanczos approximation (Numerical Recipes, :math:`g = 7`, 9 series
-    coefficients).  Relative error stays below ``1.5e-15`` for real
-    ``x > 0`` in float64; ``x < 1/2`` goes through Euler's reflection.
-    The gradient is :func:`digamma`, including at the poles: ``-inf`` at
-    ``+0`` (``+inf`` at ``-0``) and NaN at the negative integers, as the
-    reference has it.
+    Implemented as a pure composite over engine primitives — a Lanczos
+    approximation (error ``2e-10`` in float32, ``1e-15`` in float64) read as a
+    difference from its own value at ``x = 1``, so that the two zeros
+    :math:`\Gamma(1) = \Gamma(2) = 1` give exactly ``0`` and the value near
+    them is accurate to a few ulp *of the small value*; ``x < 1/2`` goes
+    through Euler's reflection.  The gradient is :func:`digamma`, including at
+    the poles: ``-inf`` at ``+0`` (``+inf`` at ``-0``) and NaN at the negative
+    integers, as the reference has it.
 
     Parameters
     ----------
@@ -1332,7 +1333,7 @@ def lgamma(input: Tensor) -> Tensor:
     --------
     digamma : derivative :math:`\psi(x) = \frac{d}{dx} \ln \Gamma(x)`.
     """
-    out = _LogGamma.apply(input)
+    out = _LogGamma.apply(input, False)
     assert isinstance(out, Tensor)
     return out
 
@@ -1342,8 +1343,8 @@ def digamma(input: Tensor) -> Tensor:
 
     Implemented as a composite of engine primitives so autograd flows
     through naturally, and its gradient is the trigamma function.  For
-    ``x >= 0`` the argument is shifted by 8 via
-    :math:`\psi(x) = \psi(x + 8) - \sum_{k=0}^{7} 1/(x + k)` and the
+    ``x >= 0`` the argument is shifted by 8 (4 in float32) via
+    :math:`\psi(x) = \psi(x + K) - \sum_{k=0}^{K-1} 1/(x + k)` and the
     asymptotic Bernoulli series is evaluated there; for ``x < 0`` the
     reflection formula :math:`\psi(x) = \psi(1 - x) - \pi \cot(\pi x)`
     maps the argument onto the right half.
