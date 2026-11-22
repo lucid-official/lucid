@@ -35,6 +35,13 @@ is small there).  The threshold is where the two errors cross, measured on ``log
 on a per-lane mask; each branch is evaluated on a domain held inside its own, so a lane the other
 branch owns cannot put a NaN into a gradient.
 
+The entropies have a second threshold, lower than ``_CENTRED_FROM``: ``G(z)`` and ``D(z)`` are read
+through the exact recurrences (:func:`_gamma_tail_recurred`, :func:`_digamma_recurred`) from
+``z = _SHIFT_FROM``, and a Dirichlet / Beta entropy takes the centred form from ``sum(alpha) >=
+_ENTROPY_FROM``.  The plain ``lgamma`` / ``digamma`` entropy and its slope ``1 + (1 - z) psi_1(z)``
+subtract numbers of size 1 for an answer of ``1/(2z)``, which on ``1 <= z < 10`` is 22 (value) and
+55 (slope) float32 epsilons off, and on one Metal GPU 36 at ``z = 9`` (LCD-1053).
+
 Entry points (one per quantity, each also used by every law that needs it):
 :func:`_log_beta`, :func:`_log_multi_beta`, :func:`_log_comb`, :func:`_log_multinomial_coeff`;
 :func:`_beta_log_prob`, :func:`_dirichlet_log_prob`, :func:`_f_log_prob`, :func:`_gamma_log_prob`,
@@ -83,6 +90,22 @@ _SERIES_FROM = 10.0
 _CENTRED_FROM = 10.0
 _TERMS_32, _TERMS_64 = 4, 10
 
+# The entropy's pieces ``G(z)`` (the Gamma entropy's tail) and ``D(z)`` are read from the series at
+# ``z + k`` for ``z >= _SHIFT_FROM``, ``k`` the whole steps up to ``_RECUR_TO_*`` (see
+# :func:`_gamma_tail_recurred`): float32's four terms are good to 6e-9 relative from 6, float64
+# keeps its ten from 10.  Below ``_SHIFT_FROM`` (and for a non-finite or non-positive argument, with
+# its inf / NaN as before) the plain ``lgamma`` / ``digamma`` form is kept.  On ``1 <= z < 10``
+# the plain Gamma entropy is off by up to 22 / 27 epsilons in value and 55 / 35 in slope against a
+# 60-digit oracle (float32 / float64): its slope ``1 + (1 - z) psi_1(z)`` subtracts two numbers
+# near 1 for an answer of ``1/(2z)``, and one Metal GPU's ``psi_1`` is 2.4 ulp off at 9, which is 36
+# epsilons there.
+_SHIFT_FROM = 1.0
+_RECUR_TO_32, _RECUR_TO_64 = 6.0, 10.0
+# The Dirichlet / Beta entropy reads the centred form (and so ``G``, ``D``) from ``sum(alpha) >=
+# _ENTROPY_FROM``: from 4 its worst error is 9 epsilons in value and 26 in slope near a root, the
+# plain form's 55 and 114 for ``sum(alpha)`` in [7, 10]; below 4 they cross.
+_ENTROPY_FROM = 4.0
+
 # ``bd0``: the series in ``v = (x - m) / (x + m)`` below this ``|v|`` (the plain form loses
 # ``1/|v|`` of its digits, the series needs ``|v|^(2 terms)`` below the epsilon).
 _BD0_V = 0.3
@@ -101,14 +124,33 @@ def _is_double(x: Tensor) -> bool:
     return x.dtype == lucid.float64
 
 
+def _stirling_series(z: Tensor) -> Tensor:
+    """``S(z)`` from its asymptotic series, for ``z`` at or above the dtype's series start."""
+    r = 1.0 / z
+    return r * _horner_float(_S_COEFFS[: _TERMS_64 if _is_double(z) else _TERMS_32], r * r)
+
+
+def _digamma_series(z: Tensor) -> Tensor:
+    """``D(z)`` from its asymptotic series, for ``z`` at or above the dtype's series start."""
+    r = 1.0 / z
+    return r * r * _horner_float(_D_COEFFS[: _TERMS_64 if _is_double(z) else _TERMS_32], r * r)
+
+
+def _stirling_plain(z: Tensor) -> Tensor:
+    """``S(z)`` as ``lgamma`` minus the closed part: both are O(10) for ``z < _SERIES_FROM``."""
+    return lucid.lgamma(z) - ((z - 0.5) * lucid.log(z) - z + _HALF_LOG_2PI)
+
+
+def _digamma_plain(z: Tensor) -> Tensor:
+    """``D(z)`` as the closed part minus ``digamma``: both are O(1) for ``z < _SERIES_FROM``."""
+    return lucid.log(z) - 0.5 / z - lucid.digamma(z)
+
+
 def _stirling_remainder_impl(z: Tensor) -> Tensor:
-    terms = _TERMS_64 if _is_double(z) else _TERMS_32
     far = z >= _SERIES_FROM
     # Each branch runs on its own domain: a lane of the other is held at the switch.
-    r = 1.0 / lucid.where(far, z, lucid.full_like(z, _SERIES_FROM))
-    series = r * _horner_float(_S_COEFFS[:terms], r * r)
-    near = lucid.where(far, lucid.full_like(z, _SERIES_FROM), z)
-    plain = lucid.lgamma(near) - ((near - 0.5) * lucid.log(near) - near + _HALF_LOG_2PI)
+    series = _stirling_series(lucid.where(far, z, lucid.full_like(z, _SERIES_FROM)))
+    plain = _stirling_plain(lucid.where(far, lucid.full_like(z, _SERIES_FROM), z))
     return lucid.where(far, series, plain)
 
 
@@ -122,14 +164,42 @@ def _stirling_remainder(z: Tensor) -> Tensor:
     return _in_float32(_stirling_remainder_impl, z)
 
 
+def _climb(z: Tensor) -> tuple[Tensor, Tensor, int]:
+    """``(k, b, steps)``: ``z`` raised by ``k`` whole steps to ``b``, where the series is good.
+
+    ``steps`` is the most a lane in ``[_SHIFT_FROM, ...)`` can need; a lane already at the series'
+    start has ``k = 0`` and ``b = z``.  ``k`` is a constant of the graph (no gradient).
+    """
+    start = _RECUR_TO_64 if _is_double(z) else _RECUR_TO_32
+    steps = math.ceil(start - _SHIFT_FROM)
+    k = lucid.clamp(lucid.ceil(start - z), min=0.0, max=float(steps)).detach()
+    return k, z + k, steps
+
+
+def _digamma_recurred(z: Tensor) -> Tensor:
+    r"""``D(z)`` for ``z >= _SHIFT_FROM`` through the exact recurrence, with no ``digamma``.
+
+    With ``b = z + k`` (``k`` whole steps, ``b`` in the series' range) ``D(z) = D(b) - k / (2 b z) +
+    sum_{j<k} [1/(z + j) - log(1 + 1/(z + j))]``: the plain ``log z - 1/(2z) - digamma(z)`` is a
+    difference of numbers near 2 for a result near ``1/(12 z^2)``, and its slope ``1/z + 1/(2 z^2) -
+    psi_1(z)`` one of numbers near 0.1 for ``1/(6 z^3)``.  A step's ``u - log(1 + u)``, ``u =
+    1/(z + j) <= 1``, keeps most of its digits and so does its slope ``-u^2 / (1 + u)``; the
+    ``k``-multiplied terms vanish with ``k``, so a ``z`` at the series' start reads it unchanged.
+    """
+    k, b, steps = _climb(z)
+    gap = lucid.zeros_like(z)
+    for j in range(steps):
+        u = 1.0 / (z + float(j))
+        gap = gap + lucid.where(k > float(j), u - lucid.log1p(u), lucid.zeros_like(z))
+    return _digamma_series(b) - 0.5 * k / (b * z) + gap
+
+
 def _digamma_remainder_impl(z: Tensor) -> Tensor:
-    terms = _TERMS_64 if _is_double(z) else _TERMS_32
-    far = z >= _SERIES_FROM
-    r = 1.0 / lucid.where(far, z, lucid.full_like(z, _SERIES_FROM))
-    series = r * r * _horner_float(_D_COEFFS[:terms], r * r)
-    near = lucid.where(far, lucid.full_like(z, _SERIES_FROM), z)
-    plain = lucid.log(near) - 0.5 / near - lucid.digamma(near)
-    return lucid.where(far, series, plain)
+    stable = z >= _SHIFT_FROM
+    # Each branch runs on its own domain: a lane of the other is held inside it.
+    recurred = _digamma_recurred(lucid.where(stable, z, lucid.full_like(z, _SERIES_FROM)))
+    plain = _digamma_plain(lucid.where(stable, lucid.ones_like(z), z))
+    return lucid.where(stable, recurred, plain)
 
 
 def _digamma_remainder(z: Tensor) -> Tensor:
@@ -140,8 +210,48 @@ def _digamma_remainder(z: Tensor) -> Tensor:
     return _in_float32(_digamma_remainder_impl, z)
 
 
+def _gamma_tail_series(z: Tensor) -> Tensor:
+    """``G(z)`` from the two series, for ``z`` at or above the dtype's series start."""
+    return -0.5 / z + _stirling_series(z) + (z - 1.0) * _digamma_series(z)
+
+
+def _gamma_tail_recurred(z: Tensor) -> Tensor:
+    r"""``G(z)`` for ``z >= _SHIFT_FROM`` through the exact recurrences, with no ``lgamma`` / ``digamma``.
+
+    With ``b = z + k`` (``k`` whole steps, ``b`` in the series' range), ``lgamma(z) = lgamma(b) -
+    sum_j log(z + j)`` and ``digamma(z) = digamma(b) - sum_j 1/(z + j)`` turn the Gamma entropy's
+    ``H(z) = z + lgamma(z) + (1 - z) digamma(z)`` into
+
+    .. math::
+        G(z) = G(b) + \tfrac12\log\bigl(1 + \tfrac{k}{z}\bigr) - k\bigl(\tfrac{1}{2b} + D(b)\bigr)
+               + \sum_{j<k}\Bigl[\log\bigl(1 + \tfrac{k-j}{z+j}\bigr) - \tfrac{j+1}{z+j}\Bigr],
+
+    where ``G(b)`` and ``D(b)`` are read from the series and no logarithm of a large number is
+    formed.  The slope ``H'(z) = 1 - (z - 1) psi_1(z)`` of the closed form subtracts two numbers
+    near 1 for an answer of ``1/(2z)`` (0.06 at ``z = 9``), and the gradient through ``lgamma`` and
+    ``digamma`` adds ``1 + psi - psi`` besides.  Here no ``digamma`` is called and each term of the
+    slope is a fraction of ``1/z``.  A ``z`` at the series' start has ``k = 0``: every step is dead
+    and ``G(z)`` is read from the series unchanged.
+    """
+    k, b, steps = _climb(z)
+    gap = lucid.zeros_like(z)
+    for j in range(steps):
+        # A dead step is the constant 0: it adds nothing to the value or to the gradient.
+        w = z + float(j)
+        step = lucid.log1p((k - float(j)) / w) - (j + 1.0) / w
+        gap = gap + lucid.where(k > float(j), step, lucid.zeros_like(z))
+    return (
+        _gamma_tail_series(b) + 0.5 * lucid.log1p(k / z) - k * (0.5 / b + _digamma_series(b)) + gap
+    )
+
+
 def _gamma_tail_impl(z: Tensor) -> Tensor:
-    return -0.5 / z + _stirling_remainder_impl(z) + (z - 1.0) * _digamma_remainder_impl(z)
+    stable = z >= _SHIFT_FROM
+    # Each branch runs on its own domain: a lane of the other is held inside it.
+    recurred = _gamma_tail_recurred(lucid.where(stable, z, lucid.full_like(z, _SERIES_FROM)))
+    small = lucid.where(stable, lucid.ones_like(z), z)
+    plain = -0.5 / small + _stirling_plain(small) + (small - 1.0) * _digamma_plain(small)
+    return lucid.where(stable, recurred, plain)
 
 
 def _gamma_tail(z: Tensor) -> Tensor:
@@ -151,7 +261,9 @@ def _gamma_tail(z: Tensor) -> Tensor:
     :math:`G \to -1/(3z)`.  The Gamma entropy ``alpha + lgamma(alpha) + (1 - alpha)
     digamma(alpha)`` is a sum of ``alpha log alpha``-sized terms that cancel to
     ``1/2 log(2 pi e alpha)``; written through ``G`` none of them is formed and the slope in
-    ``alpha`` is a sum of ``1/alpha^2`` terms, not ``1 - alpha psi_1(alpha)``.
+    ``alpha`` is a sum of ``1/alpha^2`` terms, not ``1 - alpha psi_1(alpha)``.  From ``z = 1`` it
+    is read through :func:`_gamma_tail_recurred` (the series, reached by the exact recurrence);
+    below 1 through ``S`` and ``D`` of ``lgamma`` / ``digamma``, where their terms are O(1/z).
     """
     return _in_float32(_gamma_tail_impl, z)
 
@@ -223,11 +335,11 @@ class _Stirling:
     lane.  ``plain`` holds the complementary domain for the ``lgamma`` / ``digamma`` forms.
     """
 
-    def __init__(self, alpha: Tensor) -> None:
+    def __init__(self, alpha: Tensor, centred_from: float = _CENTRED_FROM) -> None:
         total = alpha.sum(dim=-1, keepdim=True)
         valid = (alpha.amin(dim=-1, keepdim=True) > 0.0) & lucid.isfinite(total)
         self.k: int = alpha.shape[-1]
-        self.large: Tensor = valid & (total >= _CENTRED_FROM)
+        self.large: Tensor = valid & (total >= centred_from)
         self.a: Tensor = lucid.where(self.large, alpha, lucid.full_like(alpha, 2.0))
         self.plain: Tensor = lucid.where(self.large, lucid.ones_like(alpha), alpha)
         self.s: Tensor = self.a.sum(dim=-1, keepdim=True)
@@ -330,7 +442,7 @@ def _log_comb(n: Tensor, k: Tensor) -> Tensor:
 
 
 def _dirichlet_entropy_impl(alpha: Tensor) -> Tensor:
-    return _Stirling(alpha).entropy()
+    return _Stirling(alpha, _ENTROPY_FROM).entropy()
 
 
 def _dirichlet_entropy(alpha: Tensor) -> Tensor:
@@ -349,22 +461,28 @@ def _beta_entropy(a: Tensor, b: Tensor) -> Tensor:
     return _dirichlet_entropy(lucid.stack([a, b], dim=-1))
 
 
+def _gamma_entropy_recurred(alpha: Tensor) -> Tensor:
+    """``alpha + lgamma(alpha) + (1 - alpha) digamma(alpha)`` for ``alpha >= _SHIFT_FROM``."""
+    return 0.5 * (_LOG_2PI + 1.0 + lucid.log(alpha)) + _gamma_tail_recurred(alpha)
+
+
 def _gamma_entropy_impl(alpha: Tensor) -> Tensor:
-    centred_lane = (alpha >= _CENTRED_FROM) & lucid.isfinite(alpha)
-    big = lucid.where(centred_lane, alpha, lucid.full_like(alpha, _CENTRED_FROM))
+    centred_lane = (alpha >= _SHIFT_FROM) & lucid.isfinite(alpha)
+    big = lucid.where(centred_lane, alpha, lucid.full_like(alpha, _SERIES_FROM))
     small = lucid.where(centred_lane, lucid.ones_like(alpha), alpha)
-    centred = 0.5 * (_LOG_2PI + 1.0 + lucid.log(big)) + _gamma_tail_impl(big)
     plain = small + lucid.lgamma(small) + (1.0 - small) * lucid.digamma(small)
-    return lucid.where(centred_lane, centred, plain)
+    return lucid.where(centred_lane, _gamma_entropy_recurred(big), plain)
 
 
 def _gamma_entropy(alpha: Tensor) -> Tensor:
     r"""``alpha + lgamma(alpha) + (1 - alpha) digamma(alpha)``: the entropy of ``Gamma(alpha, 1)``.
 
-    For ``alpha >= 10`` it is :math:`\tfrac12\log(2\pi e\,\alpha) + G(\alpha)` with the tail
-    ``G`` of :func:`_gamma_tail`; below, the plain form.  (``Gamma(1e6, 1)``: float32 gave 7.0
-    for 8.3267.)  Its slope in ``alpha`` is ``1/(2 alpha) + G'`` and not
-    ``1 - (alpha - 1) psi_1(alpha)``, a difference of two numbers near 1.
+    For ``alpha >= 1`` it is :math:`\tfrac12\log(2\pi e\,\alpha) + G(\alpha)` with the tail
+    ``G`` of :func:`_gamma_tail_recurred`; below, the plain form.  (``Gamma(1e6, 1)``: float32
+    gave 7.0 for 8.3267.)  Its slope in ``alpha`` is ``1/(2 alpha) + G'`` and not
+    ``1 - (alpha - 1) psi_1(alpha)``, a difference of two numbers near 1 (and, through ``lgamma`` and
+    ``digamma``, ``1 + psi - psi`` besides): that cost up to 55 float32 epsilons from ``alpha = 5`` to
+    10, and 36 at 9 on a Metal GPU whose ``psi_1`` is 2.4 ulp off.
     """
     return _in_float32(_gamma_entropy_impl, alpha)
 
@@ -630,11 +748,11 @@ def _poisson_log_prob(rate: Tensor, k: Tensor) -> Tensor:
 
 
 def _inverse_gamma_entropy_impl(alpha: Tensor, rate: Tensor) -> Tensor:
-    centred_lane = (alpha >= _CENTRED_FROM) & lucid.isfinite(alpha)
-    big = lucid.where(centred_lane, alpha, lucid.full_like(alpha, _CENTRED_FROM))
+    centred_lane = (alpha >= _SHIFT_FROM) & lucid.isfinite(alpha)
+    big = lucid.where(centred_lane, alpha, lucid.full_like(alpha, _SERIES_FROM))
     small = lucid.where(centred_lane, lucid.ones_like(alpha), alpha)
     log_rate = lucid.log(rate)
-    centred = log_rate + _gamma_entropy_impl(big) - 2.0 * lucid.digamma(big)
+    centred = log_rate + _gamma_entropy_recurred(big) - 2.0 * lucid.digamma(big)
     plain = small + log_rate + lucid.lgamma(small) - (small + 1.0) * lucid.digamma(small)
     return lucid.where(centred_lane, centred, plain)
 

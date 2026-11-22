@@ -323,6 +323,78 @@ _DIR_H = _table("""
 3 1099511627776.0 1099511627776.0 2199023255552.0 -28.007172468508674
 2 1.2676506002282294e+30 1.2676506002282294e+30 -34.27814126563251
 """)
+# LCD-1053: the band between the plain lgamma / digamma form and the series (1 <= a < 10), where the
+# plain entropy answered to 22 (value) and 55 (slope) float32 epsilons, 27 and 35 in float64, and on
+# one Metal GPU 36 at a = 9 (its psi_1 is 2.4 ulp off, and the slope is 16 times that).
+# a, H(a) = a + lgamma(a) + (1 - a) psi(a), H'(a) = 1 + (1 - a) psi_1(a)
+_GAMMA_H_BAND = _table("""
+0.9921875 0.9921369154241927 1.012999346735727
+1.0 1.0 1.0
+1.0078125 1.0077626797196784 0.9872941550935026
+1.5 1.3609727753754666 0.5325988997276604
+2.5 1.7299479095050543 0.2644633658496477
+3.5 1.9430820007339662 0.17410560974941283
+4.5 2.092688328584091 0.12946213936346368
+5.5 2.207894799000836 0.10295925854667554
+5.953125 2.2525067691257545 0.09420677869375628
+6.0 2.2569034006230435 0.09338522131442337
+6.046875 2.261261854744845 0.09257781609287391
+6.5 2.3015497426575102 0.08543505337522969
+7.0 2.342545201419298 0.07872893224397472
+7.5 2.3804405891591687 0.0729966714714253
+8.5 2.4485861254553467 0.06371410810805483
+9.25 2.4942274886781317 0.058164452407173384
+9.5 2.5085614713721975 0.05652304801265823
+9.75 2.5224965084107223 0.05497162080447127
+9.984375 2.5352174956830464 0.053592469059581274
+""")
+# a, rate, H, d/da, d/drate (InverseGamma entropy)
+_IGAMMA_H_BAND = _table("""
+1.5 1.0 1.2879928274183134 -1.3370055013616984 1.0
+3.0 2.0 0.695157020726022 -0.5797362673929057 0.5
+4.5 1.0 -0.6850535241349668 -0.3679880667145571 1.0
+6.0 0.5 -1.8484791168005026 -0.2692606901598073 2.0
+7.5 1.0 -1.5130743793330048 -0.2122351219219823 1.0
+9.0 1.0 -1.8018118768108498 -0.17512014694031425 1.0
+9.5 2.0 -1.1937671008737563 -0.16547152892553985 0.5
+""")
+# a, b, H, d/da, d/db (Beta entropy, a + b in [4, 10), the plain form's range)
+_BETA_H_BAND = _table("""
+3.0 4.5 -0.38693123445815353 -0.005480701864581974 -0.08615042880466542
+2.5 6.0 -0.541825632906669 0.07591113882266684 -0.09516700571255748
+3.5 3.5 -0.32916553504983276 -0.05816850045389942 -0.05816850045389942
+1.5 8.0 -0.9296555570235362 0.3650785632459031 -0.09947943933997723
+5.0 3.0 -0.43015082634799956 -0.08646973478427275 0.008953954467735678
+4.0 5.5 -0.4749980848416572 -0.018989203693103234 -0.06456107793508173
+7.0 2.5 -0.6338062368507944 -0.08879140423778255 0.09694302936789044
+0.5 6.0 -1.7469477425204114 3.2156815111471517 -0.15833436781076457
+6.0 1.0 -0.9584261358947217 -0.1388888888888889 0.7677258897966878
+3.15625 4.1875 -0.36321458547037533 -0.023164874498026622 -0.0797955324639795
+2.0 2.0 -0.12509280256138833 -0.07728815537399579 -0.07728815537399579
+""")
+# alpha_1..3, H, d/dalpha_1..3 (Dirichlet entropy: a sum below 10, or a component below 10 beside a large sum)
+_DIR_H_BAND = _table("""
+1.5 2.5 3.0 -1.1496146763727004 0.14677961156501054 -0.1213559223130021 -0.1756874218591027
+2.0 3.0 4.0 -1.3125533958143927 0.06013802131596212 -0.08479604553226432 -0.14639677904715742
+3.0 3.0 3.0 -1.218018503922557 -0.08479604553226432 -0.08479604553226432 -0.08479604553226432
+0.5 3.0 4.5 -2.416077202426274 3.133086173742497 -0.12418306022629574 -0.2048527871663792
+1.0 4.0 4.5 -1.787942431661352 0.7214823750491437 -0.12998649216220226 -0.1490554855873926
+2.5 2.5 5.0 -1.4260803809835694 0.0006277156214479254 0.0006277156214479254 -0.14912747317666109
+5.0 5.0 12.0 -2.14522546173273 -0.0017300874063593942 -0.0017300874063593942 -0.0723588660473504
+0.5 3.0 9.0 -3.2073293054474115 3.258610733987334 0.0013415000185416463 -0.1488864838372569
+""")
+# z, D(z) = log z - 1/(2z) - psi(z), D'(z) = 1/z + 1/(2 z^2) - psi_1(z)
+_DIGAMMA_REMAINDER_BAND = _table("""
+1.0 0.07721566490153287 -0.14493406684822643
+1.5 0.03564180079625453 -0.04591331165579042
+2.0 0.02036284546147817 -0.019934066848226437
+3.0 0.009161286902975886 -0.0060451779593375474
+4.5 0.00409535930563406 -0.001811522792096795
+6.0 0.0023084674629211947 -0.0007674001815597698
+7.5 0.0014788696295113019 -0.00039367447448157756
+9.0 0.0010275438250538307 -0.00022806407674747452
+9.984375 0.0008351090183989945 -0.0001671167887918262
+""")
 # K, counts_1..K, log multinomial coefficient
 _MULTINOMIAL = _table("""
 3 1000000.0 2000000.0 3000000.0 6068409.934856347
@@ -498,6 +570,91 @@ def test_gamma_entropy(
     assert at.grad is not None
     assert _within(out.item(), want, dtype, 32, 1.0), (a, out.item(), want)
     assert _within(at.grad.item(), slope, dtype, 32, 1e-13), (a, at.grad.item(), slope)
+
+
+# ── LCD-1053: the entropies between the plain form and the series ───────────
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+@pytest.mark.parametrize(("a", "want", "slope"), _GAMMA_H_BAND)
+def test_gamma_entropy_band(
+    a: float, want: float, slope: float, device: str, dtype: lucid.dtype
+) -> None:
+    """``Gamma`` entropy on ``0.99 <= a < 10`` to 8 epsilons in value and 12 in slope.
+
+    The plain form's slope ``1 + (1 - a) psi_1(a)`` subtracts two numbers near 1 for ``1/(2a)``: it
+    was 55 epsilons off in float32 (9.4), 35 in float64 (9.4), and 36 on an M4 Max at 9 (the card's
+    row).  The tables above carry the 32-epsilon bound of ``test_gamma_entropy``; this is the tight
+    one, which the recurrence meets from ``a = 1`` up."""
+    at = _t(a, device, dtype, True)
+    out = _gamma_h(at)
+    out.backward()
+    assert at.grad is not None
+    assert _within(out.item(), want, dtype, 8, 1.0), (a, out.item(), want)
+    assert _within(at.grad.item(), slope, dtype, 12, 1e-13), (a, at.grad.item(), slope)
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+@pytest.mark.parametrize(("a", "want", "slope"), _GAMMA_H_BAND)
+def test_chi_squared_entropy_band(
+    a: float, want: float, slope: float, device: str, dtype: lucid.dtype
+) -> None:
+    """``Chi2(2 a)`` is ``Gamma(a, 1/2)``: the same band, ``log 2`` higher, with half the slope in ``df``."""
+    df = _t(2.0 * a, device, dtype, True)
+    out = D.Chi2(df, validate_args=False).entropy()
+    out.backward()
+    assert df.grad is not None
+    assert _within(out.item(), want + math.log(2.0), dtype, 8, 1.0), (a, out.item())
+    assert _within(df.grad.item(), 0.5 * slope, dtype, 12, 1e-13), (a, df.grad.item())
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+@pytest.mark.parametrize("row", _IGAMMA_H_BAND)
+def test_inverse_gamma_entropy_band(
+    row: tuple[float, ...], device: str, dtype: lucid.dtype
+) -> None:
+    """``InverseGamma`` entropy through the same kernel plus ``-2 psi(a)``: it was 25 epsilons in value.
+    The slope keeps the 32 of ``psi_1``'s own accuracy (``-2 psi_1`` is a term of the answer)."""
+    _check_rows(_igamma_h, row, 2, device, dtype, 12, 32, (1e-3, 1e-3))
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+@pytest.mark.parametrize("row", _BETA_H_BAND)
+def test_beta_entropy_band(row: tuple[float, ...], device: str, dtype: lucid.dtype) -> None:
+    """``Beta`` entropy for ``a + b`` in [4, 10): the centred form (it read the plain one, 31 epsilons
+    in value and a slope that is a difference of terms of size 1), slopes to 64 epsilons of
+    ``max(|slope|, 0.02)`` (a slope can pass through 0, where a relative bound has no meaning)."""
+    _check_rows(_beta_h, row, 2, device, dtype, 16, 64, (0.02, 0.02))
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+@pytest.mark.parametrize("row", _DIR_H_BAND)
+def test_dirichlet_entropy_band(row: tuple[float, ...], device: str, dtype: lucid.dtype) -> None:
+    """``Dirichlet`` entropy and its slopes where a component (or the whole sum) is below 10."""
+    alpha, want, slopes = list(row[:3]), row[3], row[4:]
+    at = _t(alpha, device, dtype, True)
+    out = D.Dirichlet(at, validate_args=False).entropy()
+    out.backward()
+    assert at.grad is not None
+    assert _within(out.item(), want, dtype, 16, 1.0), (alpha, out.item(), want)
+    for i, (got, ref) in enumerate(zip(at.grad.tolist(), slopes, strict=True)):
+        assert _within(got, ref, dtype, 64, 0.02), (alpha, i, got, ref)
+
+
+@pytest.mark.parametrize(("device", "dtype"), _FLOATS)
+@pytest.mark.parametrize(("z", "d", "slope"), _DIGAMMA_REMAINDER_BAND)
+def test_digamma_remainder_below_the_series(
+    z: float, d: float, slope: float, device: str, dtype: lucid.dtype
+) -> None:
+    """``D(z)`` and ``D'(z)`` on ``1 <= z < 10`` to 128 epsilons *of their own size* (1e-3 down to
+    1e-4): ``log z - 1/(2z) - digamma(z)`` subtracts numbers near 2, and its slope numbers near 0.1,
+    which cost a thousand epsilons of ``D`` and a hundred of ``D'``."""
+    zt = _t(z, device, dtype, True)
+    out = M._digamma_remainder(zt)
+    out.backward()
+    assert zt.grad is not None
+    assert _within(out.item(), d, dtype, 128), (z, out.item(), d)
+    assert _within(zt.grad.item(), slope, dtype, 128), (z, zt.grad.item(), slope)
 
 
 @pytest.mark.parametrize(("device", "dtype"), _FLOATS)

@@ -381,6 +381,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - name the ops the emitter tests select, guard a nil op name (LCD-1043)
 
+- read the entropies' G and D by recurrence (LCD-1053)
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
