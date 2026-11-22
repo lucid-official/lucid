@@ -16,7 +16,6 @@ one it refuses.
 """
 
 import gc
-import os
 import subprocess
 import sys
 import textwrap
@@ -29,13 +28,10 @@ import pytest
 import lucid
 import lucid.nn as nn
 from lucid.test._fixtures.memory import live_bytes
+from lucid.test._fixtures.sanitizer import is_sanitized
 
 Scenario = Callable[[ModuleType, str], object]
-_SANITIZED = bool(
-    os.environ.get("ASAN_OPTIONS")
-    or os.environ.get("UBSAN_OPTIONS")
-    or os.environ.get("LUCID_SANITIZE")
-)
+_SANITIZED = is_sanitized()
 
 
 def _values(t: object) -> object:

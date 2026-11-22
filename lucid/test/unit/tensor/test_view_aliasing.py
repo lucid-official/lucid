@@ -9,7 +9,6 @@ cannot be done safely the write is refused rather than left to diverge.
 """
 
 import gc
-import os
 import time
 from collections.abc import Callable
 
@@ -18,12 +17,9 @@ import pytest
 import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
+from lucid.test._fixtures.sanitizer import is_sanitized
 
-_SANITIZED = bool(
-    os.environ.get("ASAN_OPTIONS")
-    or os.environ.get("UBSAN_OPTIONS")
-    or os.environ.get("LUCID_SANITIZE")
-)
+_SANITIZED = is_sanitized()
 
 
 def _view(base: lucid.Tensor, *shape: int) -> lucid.Tensor:
