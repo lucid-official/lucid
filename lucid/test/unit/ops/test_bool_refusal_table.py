@@ -55,7 +55,7 @@ from lucid._ops._bool_refusal import (
     refusal,
 )
 from lucid.test._helpers.dtype_refusal import engine_refusal
-from lucid.test.unit.ops.test_integer_refusal_table import PINNED_OPS
+from lucid.test._helpers.dtype_refusal_pins import PINNED_OPS
 from lucid.nn.functional._loss_checks import (
     _BOOL_BY_CALL,
     _FLOATING_RESULT,
@@ -975,9 +975,10 @@ def test_every_op_of_the_table_is_pinned() -> None:
     owned = set(BOOL_REFUSED) | set(engine_bool_refused()) | _ENGINE_UNREGISTERED
     pinned = {row.op for row in _TABLE.values() if row.op is not None}
     elsewhere = set(BOOL_REFUSED) & PINNED_OPS
-    assert (
-        pinned | elsewhere == owned
-    ), f"missing a row: {sorted(owned - pinned - elsewhere)}; not in either list: {sorted(pinned - owned)}"
+    missing = sorted(owned - pinned - elsewhere)
+    assert pinned | elsewhere == owned, (
+        f"missing a row: {missing}; not in either list: {sorted(pinned - owned)}"
+    )
 
 
 def test_every_loss_that_can_refuse_a_bool_has_a_row() -> None:
@@ -1029,11 +1030,10 @@ def test_a_bool_operand_is_told_the_cast_it_wants(
 
 
 def test_an_op_has_one_owner() -> None:
-    # The engine refuses what its schema declares and Python what has no schema.  The one op in
-    # both is ``grid_sample``: its Python entry sees the bool before ``_as_real`` casts it.
-    assert set(BOOL_REFUSED) & set(engine_bool_refused()) == {"grid_sample"}
+    # The engine refuses what its schema declares and Python what has no schema; an entry that
+    # reaches an engine op on some paths only (``grid_sample``) asks the schema, not a row.
+    assert not set(BOOL_REFUSED) & set(engine_bool_refused())
     assert not set(BOOL_REFUSED) & _ENGINE_UNREGISTERED
-    assert BOOL_REFUSED["grid_sample"] == engine_bool_refused()["grid_sample"]
 
 
 def test_the_two_layers_name_the_same_casts() -> None:

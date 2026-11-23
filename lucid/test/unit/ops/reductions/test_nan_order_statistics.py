@@ -410,21 +410,19 @@ def test_quantile_keepdim_and_method_match_reference(
 
 
 @pytest.mark.parametrize("dim", _DIMS, ids=lambda d: f"dim{d}")
-def test_integer_quantiles_need_no_nan_handling(
+def test_an_integer_quantile_is_refused_and_its_float_cast_answers(
     ref: ModuleType, device: str, dim: int | None
 ) -> None:
     data = _DATA["no_nan"]
     x = lucid.tensor(data, dtype=lucid.int64, device=device)
-    as_float = ref.tensor(data, dtype=ref.float32)
-    # The reference refuses an integer quantile; Lucid answers what the same
-    # numbers give in floating point, with or without NaN skipping.
-    want = ref.quantile(as_float, 0.4, dim)
+    want = ref.quantile(ref.tensor(data, dtype=ref.float32), 0.4, dim)
     for fn in (lucid.quantile, lucid.nanquantile):
-        np.testing.assert_allclose(_np(fn(x, 0.4, dim)), _np(want), rtol=1e-6)
-    lower = lucid.quantile(x, 0.4, dim, interpolation="lower")
-    want_lower = ref.quantile(as_float, 0.4, dim, interpolation="lower")
-    assert lower.dtype == lucid.int64
-    np.testing.assert_array_equal(_np(lower), _np(want_lower))
+        # The reference's dtype ``RuntimeError``, with the cast to make; a result of
+        # ``interpolation="lower"`` is no longer an integer tensor for it to hold a NaN fill.
+        with pytest.raises(RuntimeError, match="does not accept int64") as caught:
+            fn(x, 0.4, dim)
+        assert not isinstance(caught.value, NotImplementedError)
+        np.testing.assert_allclose(_np(fn(x.float(), 0.4, dim)), _np(want), rtol=1e-6)
 
 
 # ── no host reads ─────────────────────────────────────────────────────────────
