@@ -3,7 +3,10 @@
 Re-exported by :mod:`lucid.linalg`, whose ``inv`` it solves with.
 """
 
+import math as _math
+
 import lucid
+from lucid._ops._bool_refusal import refuse
 from lucid._tensor.tensor import Tensor
 from lucid.linalg import inv
 
@@ -57,8 +60,7 @@ def matrix_exp(input: Tensor) -> Tensor:
     >>> matrix_exp(A)
     tensor([[0.5403, 0.8415], [-0.8415, 0.5403]])
     """
-    import math as _math
-
+    refuse("matrix_exp", input)
     A = input
     sh: tuple[int, ...] = tuple(A.shape)
     if len(sh) < 2 or sh[-1] != sh[-2]:

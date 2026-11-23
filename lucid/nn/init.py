@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, ParamSpec, TypeVar
 import lucid as _lucid
 from lucid import _promotion
 from lucid._C import engine as _C_engine
+from lucid._ops._bool_refusal import refuse
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
@@ -900,6 +901,7 @@ def orthogonal_(
     """
     if tensor.ndim < 2:
         raise ValueError("orthogonal_() requires at least a 2D tensor")
+    refuse("orthogonal_", tensor)
     if tensor.numel() == 0:
         return tensor
     rows: int = int(tensor.shape[0])
@@ -981,6 +983,7 @@ def sparse_(
         raise ValueError("sparse_() requires a 2D tensor")
     if not 0.0 <= sparsity <= 1.0:
         raise ValueError(f"sparsity must be in [0, 1], got {sparsity!r}")
+    refuse("sparse_", tensor)
     if tensor.numel() == 0:
         return tensor
 

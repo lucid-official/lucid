@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _float_input, _unwrap, _wrap
-from lucid._ops._bool_refusal import refuse_bool
+from lucid._ops._bool_refusal import refuse
 from lucid._ops.composite._opmath import _promote_pair
 from lucid._types import TensorOrScalar
 
@@ -121,7 +121,8 @@ def polar(abs: TensorOrScalar, angle: TensorOrScalar) -> Tensor:
     >>> lucid.polar(r, th)
     tensor([(1.+0.j), (1.+1.732j)], dtype=lucid.complex64)
     """
-    refuse_bool("polar", abs, angle)
+    refuse("polar", abs)
+    refuse("polar", angle)
     abs, angle = _promote_pair(abs, angle)
     return lucid.complex(abs * lucid.cos(angle), abs * lucid.sin(angle))
 

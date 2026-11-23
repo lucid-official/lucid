@@ -13,6 +13,7 @@ from lucid._ctx import check_random_allowed as _check_random
 
 from lucid._C import engine as _C_engine
 from lucid._dispatch import normalize_factory_kwargs, _wrap
+from lucid._ops._bool_refusal import refuse
 from lucid._factories._build import _leaf
 from lucid._factories._overloads import (
     Overloads,
@@ -1379,6 +1380,7 @@ def _exponential_like(input: Tensor, lambd: float, generator: _C_engine.Generato
         raise _C_engine.InvalidArgument(
             f"exponential_ expects lambda > 0.0, but found lambda={lambd}"
         )
+    refuse("exponential_", input)
     shape, dt, dev = _require_real_float(input, "exponential_")
     work_dt = _C_engine.F64 if dt == _C_engine.F64 else _C_engine.F32
     u = _wrap(_C_engine.uniform(shape, 0.0, 1.0, work_dt, dev, generator))
@@ -1393,6 +1395,7 @@ def _cauchy_like(
     """Samples of Cauchy(median, sigma) shaped like `input`."""
     if not sigma > 0.0:
         raise _C_engine.InvalidArgument(f"cauchy_ expects sigma > 0.0, but found sigma={sigma}")
+    refuse("cauchy_", input)
     shape, dt, dev = _require_real_float(input, "cauchy_")
     work_dt = _C_engine.F64 if dt == _C_engine.F64 else _C_engine.F32
     u = _wrap(_C_engine.uniform(shape, 0.0, 1.0, work_dt, dev, generator))

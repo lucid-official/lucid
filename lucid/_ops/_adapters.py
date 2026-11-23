@@ -27,7 +27,7 @@ from lucid._dispatch import (
     _unwrap_or_scalar,
 )
 from lucid._dtype import _ENGINE_TO_DTYPE
-from lucid._ops._bool_refusal import BOOL_CODE, bool_refusal, is_bool
+from lucid._ops._bool_refusal import BOOL_CODE, bool_refusal, is_bool, refuse_unless_bool
 from lucid._ops._dims import (
     _dim_size,
     _kept_sizes,
@@ -391,9 +391,8 @@ def _masked_select_adapter(a_impl: _Impl, mask: _Impl) -> _Impl:
     goes through boolean indexing instead, which scatters the gradient
     back to the selected positions.
     """
+    refuse_unless_bool("masked_select", mask, "mask")
     a_impl, mask = _broadcast_with_mask("masked_select", a_impl, mask)
-    if mask.dtype != _C_engine.Bool:
-        mask = _C_engine.astype(mask, _C_engine.Bool)
     if a_impl.requires_grad and _C_engine.grad_enabled():
         from lucid._dispatch import _wrap
 

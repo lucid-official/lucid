@@ -9,6 +9,7 @@ silently.
 """
 
 from lucid._C import engine as _C_engine
+from lucid._ops._bool_refusal import refuse
 from lucid._tensor.tensor import Tensor
 
 
@@ -18,4 +19,14 @@ def _require_same_dtype(op: str, a: Tensor, b: Tensor, names: tuple[str, str] = 
         raise _C_engine.DtypeMismatch(
             f"{op}: expected {names[0]} and {names[1]} to have the same dtype, "
             f"but found {a.dtype} and {b.dtype}"
+        )
+
+
+def _check_ldl_factor(factor: Tensor) -> None:
+    """Refuse a packed LDL factor ``ldl_solve`` cannot read: an integral one, or not square."""
+    refuse("ldl_solve", factor)
+    if factor.ndim < 2 or factor.shape[-1] != factor.shape[-2]:
+        raise ValueError(
+            f"ldl_solve: LD must be a square matrix or a batch of them, got "
+            f"shape {tuple(factor.shape)}"
         )

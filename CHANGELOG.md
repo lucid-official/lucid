@@ -391,6 +391,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - derive aliases from their target; guard every alias pair
 
+- refuse integers in composites, linalg and samplers as the reference does
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

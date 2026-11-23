@@ -6,7 +6,7 @@ import lucid
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
-from lucid._ops._bool_refusal import refuse_bool
+from lucid._ops._bool_refusal import refuse, refuse_bool
 from lucid._ops._dims import _wrap_dim
 from lucid._ops._reduce import (
     _MinMax,
@@ -152,7 +152,7 @@ def nanmean(
     """
     # Refused with a ``dtype`` too: unlike ``mean``, ``nanmean`` has no
     # spelling that takes a bool.
-    refuse_bool("nanmean", input)
+    refuse("nanmean", input)
     axes = _reduction_axes(input._impl, dim, "nanmean")
     return _wrap(
         _run_with_dtype(

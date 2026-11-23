@@ -50,7 +50,7 @@ from collections.abc import Callable
 from typing import final, override
 
 import lucid
-from lucid._ops._bool_refusal import refuse_all_bool
+from lucid._ops._bool_refusal import refuse_common
 from lucid._ops.composite._opmath import _in_float32, _real
 from lucid._tensor.tensor import Tensor
 from lucid.autograd.function import Function, FunctionCtx
@@ -972,7 +972,7 @@ def gammainc(input: Tensor, other: Tensor) -> Tensor:
     >>> gammainc(lucid.tensor([1.0, 2.0, 3.0]), lucid.tensor([1.0, 2.0, 3.0]))
     tensor([0.6321, 0.594, 0.5768])
     """
-    refuse_all_bool("gammainc", input, other)
+    refuse_common("gammainc", input, other)
     return _regularized_gamma(input, other, lower=True)
 
 
@@ -1025,7 +1025,7 @@ def gammaincc(input: Tensor, other: Tensor) -> Tensor:
     >>> gammaincc(lucid.tensor([1.0, 2.0]), lucid.tensor([1.0, 10.0]))
     tensor([0.3679, 0.0004994])
     """
-    refuse_all_bool("gammaincc", input, other)
+    refuse_common("gammaincc", input, other)
     return _regularized_gamma(input, other, lower=False)
 
 
