@@ -171,15 +171,7 @@ def test_a_reduction_that_has_no_identity_refuses_nothing_to_reduce(
 
 @pytest.mark.parametrize(("shape", "axis"), EMPTY_AXIS)
 @pytest.mark.parametrize(
-    "name",
-    [
-        "sum",
-        "prod",
-        "logsumexp",
-        "vector_norm[1.5]",
-        "vector_norm[3.0]",
-        "vector_norm[0.5]",
-    ],
+    "name", ["sum", "prod", "logsumexp", "vector_norm[1.5]", "vector_norm[3.0]", "vector_norm[0.5]"]
 )
 def test_a_reduction_over_nothing_has_an_empty_gradient(
     device_cpu_only: str, name: str, shape: tuple[int, ...], axis: int
@@ -232,11 +224,7 @@ def test_an_op_over_a_zero_length_axis_has_an_empty_gradient(
 )
 @pytest.mark.parametrize("p", [0.5, 1.5, 3.0, 7.5])
 def test_a_norm_over_axes_that_are_not_a_run_and_include_an_empty_one(
-    device_cpu_only: str,
-    shape: tuple[int, ...],
-    axes: list[int],
-    kept: tuple[int, ...],
-    p: float,
+    device_cpu_only: str, shape: tuple[int, ...], axes: list[int], kept: tuple[int, ...], p: float
 ) -> None:
     """The kept axes' extent is the number of slices, not ``numel / reduced length``: the quotient
     is 0 once a reduced axis is empty, and the slices were then never written."""
@@ -247,10 +235,7 @@ def test_a_norm_over_axes_that_are_not_a_run_and_include_an_empty_one(
     assert _same_values(got, 0.0)
 
 
-@pytest.mark.parametrize(
-    ("batch", "rows", "cols"),
-    [(2, 3, 3), (3, 16, 16), (1, 1, 9), (2, 5, 2)],
-)
+@pytest.mark.parametrize(("batch", "rows", "cols"), [(2, 3, 3), (3, 16, 16), (1, 1, 9), (2, 5, 2)])
 def test_a_contraction_over_a_zero_length_axis_is_zero(
     device_cpu_only: str, batch: int, rows: int, cols: int
 ) -> None:
