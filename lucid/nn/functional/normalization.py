@@ -5,11 +5,10 @@ nn.functional normalization operations.
 import math
 from typing import TYPE_CHECKING
 
-from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry, _autocast_suspended
-from lucid._ops._bool_refusal import refuse, refuse_bool
+from lucid._ops._bool_refusal import refuse, refuse_declared
 from lucid._ops._dims import _to_axes
 from lucid._ops._reduce import _require_normable
 from lucid._types import DimLike, DTypeLike
@@ -396,14 +395,14 @@ def rms_norm(
     """
     from lucid._factories.creation import ones
 
-    refuse_bool("rms_norm", input)
+    # A bool is the entry's to refuse, an integer the engine schema's: asked here, before any
+    # work (the engine op is reached last, after the shape checks and the default weight).
+    refuse("rms_norm", input)
+    refuse_declared("rms_norm", input)
     if eps is None:
         from lucid._dtype import finfo
 
-        # An integer input has no machine epsilon; the engine call below turns it away
-        # (its schema declares the refusal) before reading one.
-        integral = _promotion.is_integral(_unwrap(input).dtype)
-        eps = 0.0 if integral else float(finfo(input.dtype).eps)
+        eps = float(finfo(input.dtype).eps)
     norm_shape = tuple(int(d) for d in normalized_shape)
     if not norm_shape:
         raise _C_engine.InvalidArgument("rms_norm: normalized_shape must not be empty")

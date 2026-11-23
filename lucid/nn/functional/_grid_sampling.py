@@ -505,7 +505,10 @@ def check_options(x: Tensor, mode: str, padding_mode: str) -> None:
 
 
 def _as_real(t: Tensor) -> Tensor:
-    """Promote an integral tensor to float32, as the engine kernel does.
+    """Cast a complex tensor to float32, which drops its imaginary part.
+
+    A bool or integer operand never gets here: the entries refuse one first, as the reference
+    does (``refuse_declared`` / ``refuse`` in :mod:`lucid.nn.functional.sampling`).
 
     Parameters
     ----------
@@ -515,9 +518,9 @@ def _as_real(t: Tensor) -> Tensor:
     Returns
     -------
     Tensor
-        ``t`` if it is already floating point, otherwise a float32 copy.
+        A float32 copy of ``t`` if it is complex, ``t`` itself otherwise.
     """
-    return t if t.is_floating_point() else t.to(_lucid.float32)
+    return t.to(_lucid.float32) if t.is_complex() else t
 
 
 def opmath(x: Tensor, grid: Tensor) -> tuple[Tensor, Tensor]:

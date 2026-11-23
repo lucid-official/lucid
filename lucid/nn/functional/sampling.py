@@ -216,8 +216,9 @@ def grid_sample(
     (1, 3, 32, 32)
     """
     _check_options(input, mode, padding_mode)
-    # Before ``_as_real`` promotes a mask or an index image to float32 behind the caller's back.
-    refuse("grid_sample", input)
+    # The image is the engine schema's to refuse (the entry reaches the engine on some paths only);
+    # the grid is the entry's own, a dtype guard where the image is a kernel's.
+    refuse_declared("grid_sample", input)
     refuse("grid_sample", grid, "grid")
     ac = align_corners if align_corners is not None else False
     # The row applies once, here, for every path: the reflection that runs

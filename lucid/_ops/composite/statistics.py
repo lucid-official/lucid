@@ -9,7 +9,7 @@ from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry
-from lucid._ops._bool_refusal import refuse, refuse_bool
+from lucid._ops._bool_refusal import refuse, refuse_bool, refuse_complex
 from lucid._types import DeviceLike, DTypeLike
 from lucid._ops.composite._euclidean import _euclidean_cdist
 from lucid._ops.composite.indexing import _scatter_add
@@ -217,10 +217,7 @@ def quantile(
             n = input.shape[dim]
             results = _quantile_sorted(sorted_x, q_list, dim, keepdim, interpolation, n)
             nans = lucid.isnan(input).sum(dim=dim, keepdim=keepdim)
-        # An integer input holds no NaN, and an ``interpolation="lower"`` result
-        # of one is an integer tensor that could not hold the NaN fill anyway.
-        if lucid.is_floating_point(input):
-            results = [lucid.where(nans == 0, r, lucid.full_like(r, math.nan)) for r in results]
+        results = [lucid.where(nans == 0, r, lucid.full_like(r, math.nan)) for r in results]
 
         return _pack_quantile_results(results, scalar_q, input.ndim, dim, keepdim)
 
@@ -282,9 +279,6 @@ def nanquantile(
         dim = _wrap_dim(dim, input.ndim, "nanquantile")
     if input.numel() == 0:
         raise _C_engine.InvalidArgument("quantile() input tensor must be non-empty")
-    if not lucid.is_floating_point(input):
-        # No NaN to skip: the plain quantile is the answer.
-        return quantile(input, q, dim, keepdim, interpolation=interpolation)
     q_list, scalar_q = _parse_q(q)
     with _autocast_entry("nanquantile", _unwrap(input)) as (xi,):
         input = _wrap(xi)
@@ -814,13 +808,15 @@ def poisson(input: Tensor, generator: _C_engine.Generator | None = None) -> Tens
     -------
     Tensor
         Integral counts with the shape, device and floating dtype of
-        ``input`` (the default dtype for an integer ``input``), as the
-        reference answers.  Zero rates always return zero.
+        ``input``.  Zero rates always return zero.
 
     Raises
     ------
     ValueError
         If any element of ``input`` is negative or not finite.
+    NotImplementedError
+        If ``input`` is a bool or an integer tensor, as in the reference
+        framework: cast the rates (``rates.float()``).
 
     Notes
     -----
@@ -937,7 +933,7 @@ def _histogramdd_weighted(
             f"histogramdd: weight shape {tuple(weight.shape)} must match "
             f"sample count ({n_samples},)"
         )
-    dtype = input.dtype if input.is_floating_point() else lucid.get_default_dtype()
+    dtype = input.dtype
     device = input.device
     flat_idx = lucid.zeros(n_samples, dtype=lucid.int64, device=device)
     inside = lucid.ones(n_samples, dtype=lucid.bool, device=device)
@@ -1002,6 +998,8 @@ def histogramdd(
     from lucid._C import engine as _C_engine
     from lucid._dispatch import _unwrap, _wrap
 
+    refuse("histogramdd", input)
+    refuse_complex("histogramdd", input)
     if input.ndim != 2:
         raise ValueError(f"histogramdd: expected (N, D) input, got shape {tuple(input.shape)}")
     D: int = int(input.shape[1])
@@ -1090,8 +1088,7 @@ def histogram(
     Returns
     -------
     tuple of Tensor
-        ``(hist, bin_edges)``, both in ``input``'s floating dtype (the
-        default float dtype for an integer ``input``) and on its device.
+        ``(hist, bin_edges)``, both in ``input``'s floating dtype and on its device.
         ``hist`` holds counts, weight sums or densities; ``bin_edges`` has
         length ``bins + 1``.  Every bin is half-open but the last, which
         holds its right edge.  When the range comes from an ``input``
@@ -1104,6 +1101,10 @@ def histogram(
         ``bins`` is not positive or its edges are fewer than two, the
         given ``range`` is not finite or its ``lo`` exceeds its ``hi``, or
         ``weight`` has another number of elements than ``input``.
+    NotImplementedError
+        ``input`` is a bool, integer or complex tensor, as in the reference
+        framework (``input.float()`` is the spelling).  A bool or integer
+        ``bins`` or ``weight`` is a dtype ``RuntimeError``.
 
     Examples
     --------
@@ -1115,10 +1116,11 @@ def histogram(
     tensor([1., 1.75, 2.5, 3.25, 4.])
     """
     refuse("histogram", input)
+    refuse_complex("histogram", input)
     refuse("histogram", bins, "bins")
     refuse("histogram", weight, "weight")
-    dtype = input.dtype if input.is_floating_point() else lucid.get_default_dtype()
-    values = input.reshape(-1).to(dtype)
+    dtype = input.dtype
+    values = input.reshape(-1)
     device = input.device
     edges, bucket, finite = _histogram_bins(values, bins, range)
     n_bins = int(edges.numel()) - 1

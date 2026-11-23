@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _unwrap_or_scalar
-from lucid._ops._bool_refusal import refuse_all_bool
+from lucid._ops._bool_refusal import refuse_common
 from lucid._types import Scalar
 
 if TYPE_CHECKING:
@@ -57,7 +57,7 @@ def _search_operands(
     """
     sequence_impl = _unwrap(sequence)
     values_impl = _unwrap_or_scalar(values, sequence_impl)
-    refuse_all_bool(op, sequence_impl, values_impl)
+    refuse_common(op, sequence_impl, values_impl)
     dtype = _promotion.result_type(sequence_impl, values_impl)
     return (
         sequence_impl if sequence_impl.dtype == dtype else _C_engine.astype(sequence_impl, dtype),

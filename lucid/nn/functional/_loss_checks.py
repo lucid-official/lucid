@@ -497,6 +497,7 @@ _BOOL_BY_CALL: frozenset[str] = frozenset({"poisson_nll_loss"})
 #: multiplies takes a bool, as it does there.
 _NUMBER_EXTRAS: frozenset[str] = frozenset({"pos_weight"})
 
+
 def _target_differs(x: Tensor, target: Tensor) -> bool:
     """The BCE kernel's own check: ``Found dtype … but expected …``."""
     return _unwrap(x).dtype != _unwrap(target).dtype

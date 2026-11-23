@@ -35,13 +35,14 @@ for each of bool, the signed integers and the signed integers narrower than int6
 class the reference raises and the cast to name -- or nothing, where the reference
 answers.
 
-Two exceptions to "one owner": ``grid_sample`` is in both lists.  Its engine
-schema refuses bool and integers, but ``F.grid_sample`` promotes an integral image
-or grid to float32 (``_as_real``) before the engine sees it, so the Python entry has
-to refuse first.  And an op's *role* may be Python's where its primary operand is the
-engine's (the ``attn_mask`` of attention, whose queries and keys the engine
-checks).  The other bypass is the caller's: a pipeline that resamples a mask casts it
-itself (``lucid.utils.transforms.functional._sampled``).
+The owner is one per ``(op, dtype)``: the engine's for the dtypes its schema declares and
+Python's for the rest (``rms_norm`` and ``embedding_bag`` are the engine's for integers and
+the entry's for bool).  An entry that reaches the engine op only on some of its paths asks the
+engine's declaration back with :func:`refuse_declared` instead of declaring it again
+(``grid_sample``, ``embedding_bag``, ``rms_norm``).  An op's *role* may be Python's where its
+primary operand is the engine's (the ``attn_mask`` of attention, whose queries and keys the
+engine checks).  The bypass is the caller's: a pipeline that resamples a mask casts it itself
+(``lucid.utils.transforms.functional._sampled``).
 
 Neither list is a census of the ops that refuse.  The refusal sweeps
 (``lucid/test/unit/ops/test_bool_refusal_sweep.py`` and its integer twin) derive
@@ -95,8 +96,7 @@ LAST_INTEGRAL_CODE: int = _INTEGRAL[-1].value
 #: How a dtype is spelled in a message, by its code: the engine's ``dtype_name``
 #: (``int32``), not the enum's (``I32``), so the two layers word one refusal alike.
 _NAMES: tuple[str, ...] = tuple(
-    name
-    for _, name in sorted((d.value, dtype._name) for d, dtype in _ENGINE_TO_DTYPE.items())
+    name for _, name in sorted((d.value, dtype._name) for d, dtype in _ENGINE_TO_DTYPE.items())
 )
 _ARTICLES: tuple[str, ...] = tuple(
     f"{'an' if name.startswith('int') else 'a'} {name}" for name in _NAMES
@@ -157,10 +157,13 @@ class Row:
     on_ints: Rule | None = None
     #: The rule for the signed integers narrower than int64 only.
     on_narrow: Rule | None = None
-    #: The rule for a float or complex operand.  Only an operand that must be a bool and
-    #: nothing else (a mask) sets it, and only :func:`refuse_unless_bool` reads it: every
-    #: other check returns at once for a float.
-    on_other: Rule | None = None
+    #: The rule for a float operand.  Only an operand that must be a bool and nothing else
+    #: (a mask) sets it, and only :func:`refuse_unless_bool` reads it: every other check
+    #: returns at once for a float.
+    on_float: Rule | None = None
+    #: The rule for a complex operand, read by :func:`refuse_complex` and
+    #: :func:`refuse_unless_bool`.
+    on_complex: Rule | None = None
 
     def __post_init__(self) -> None:
         """Refuse a row that sets both integer slots."""
@@ -192,10 +195,19 @@ def _row(
     bool: Rule | None = None,
     ints: Rule | None = None,
     narrow: Rule | None = None,
-    other: Rule | None = None,
+    floats: Rule | None = None,
+    complexes: Rule | None = None,
 ) -> Row:
     """A :class:`Row`, spelled the way the table below reads."""
-    return Row(op, role, on_bool=bool, on_ints=ints, on_narrow=narrow, on_other=other)
+    return Row(
+        op,
+        role,
+        on_bool=bool,
+        on_ints=ints,
+        on_narrow=narrow,
+        on_float=floats,
+        on_complex=complexes,
+    )
 
 
 #: The spatial ranks the pooling ops come in (``max_unpool1d`` .. ``3d``).
@@ -220,7 +232,8 @@ _DECLARED: tuple[Row, ...] = (
     _row("corrcoef", bool=GUARD_NUMBER),
     # The reference wants the input's dtype of ``bins`` and ``weight``: any other is a
     # dtype mismatch, not the kernel's refusal of the input.
-    _row("histogram", bool=KERNEL_FLOATING, ints=KERNEL_FLOATING),
+    _row("histogram", bool=KERNEL_FLOATING, ints=KERNEL_FLOATING, complexes=KERNEL_FLOATING),
+    _row("histogramdd", bool=KERNEL_FLOATING, ints=KERNEL_FLOATING, complexes=KERNEL_FLOATING),
     _row("histogram", "bins", bool=GUARD_FLOATING, ints=GUARD_FLOATING),
     _row("histogram", "weight", bool=GUARD_FLOATING, ints=GUARD_FLOATING),
     _row("gradient", bool=GUARD_NUMBER),
@@ -277,8 +290,8 @@ _DECLARED: tuple[Row, ...] = (
     _row("exponential", bool=GUARD_FLOATING, ints=GUARD_FLOATING),
     # Indices and masks: the reference wants int64 class indices and a bool mask.
     _row("one_hot", bool=INVALID_INT64, narrow=INVALID_INT64),
-    _row("masked_select", "mask", ints=GUARD_BOOL, other=GUARD_BOOL),
-    _row("scaled_dot_product_attention", "attn_mask", ints=GUARD_FLOATING),
+    _row("masked_select", "mask", ints=GUARD_BOOL, floats=GUARD_BOOL, complexes=GUARD_BOOL),
+    _row("scaled_dot_product_attention", "attn_mask", ints=GUARD_BOOL),
     # The engine op declares an embedding table's integers (``refuse_declared``); its bool
     # is the Python entry's.
     _row("embedding_bag", bool=GUARD_FLOATING),
@@ -309,7 +322,7 @@ _DECLARED: tuple[Row, ...] = (
     _row("triplet_margin_with_distance_loss", bool=GUARD_FLOATING),
     # Resampling.  ``affine_grid`` checks ``theta`` in Python (a ``ValueError``).
     _row("interpolate", bool=KERNEL_FLOATING, ints=KERNEL_FLOATING),
-    _row("grid_sample", bool=KERNEL_FLOATING, ints=KERNEL_FLOATING),
+    # The image is the engine's (``refuse_declared``); the grid is a dtype guard of the entry's.
     _row("grid_sample", "grid", bool=GUARD_FLOATING, ints=GUARD_FLOATING),
     _row("affine_grid", bool=INVALID_FLOATING, ints=INVALID_FLOATING),
 )
@@ -329,20 +342,26 @@ def _table(rows: tuple[Row, ...]) -> Mapping[tuple[str, str], Row]:
 ROWS: Mapping[tuple[str, str], Row] = _table(_DECLARED)
 
 #: The same rows compiled for the call: ``(op, role)`` -> the rule for each integral dtype,
-#: indexed by the dtype's engine code, and the rule for every other dtype after them.
+#: indexed by the dtype's engine code, then the rule for a float and for a complex.
 _BY_CODE: Mapping[tuple[str, str], tuple[Rule | None, ...]] = MappingProxyType(
-    {key: (*row.by_code(), row.on_other) for key, row in ROWS.items()}
+    {key: (*row.by_code(), row.on_float, row.on_complex) for key, row in ROWS.items()}
+)
+
+#: Which slot of a compiled row a dtype code reads: its own for bool and the integers, then
+#: the float slot, then the complex one.
+_COMPLEX_CODES = frozenset({_C_engine.C64.value, _C_engine.C128.value})
+_SLOT: tuple[int, ...] = tuple(
+    code
+    if code <= LAST_INTEGRAL_CODE
+    else LAST_INTEGRAL_CODE + (2 if code in _COMPLEX_CODES else 1)
+    for code in range(max(d.value for d in _ENGINE_TO_DTYPE) + 1)
 )
 
 #: op -> ``(error class the reference raises for a bool operand, what to cast to)`` for
 #: the ops this layer refuses a bool in -- the ones with no engine schema to do it.  The
 #: bool view of :data:`ROWS`, primary operands only.
 BOOL_REFUSED: Mapping[str, Rule] = MappingProxyType(
-    {
-        row.op: row.on_bool
-        for row in ROWS.values()
-        if row.role == "" and row.on_bool is not None
-    }
+    {row.op: row.on_bool for row in ROWS.values() if row.role == "" and row.on_bool is not None}
 )
 
 _KIND_CLASS: Mapping[str, type[RuntimeError]] = MappingProxyType(
@@ -408,7 +427,7 @@ def _rule(op: str, role: str, code: int) -> Rule | None:
     rules = _BY_CODE.get((base, role)) or _BY_CODE.get((base, ""))
     if rules is None:
         raise KeyError(f"{op} has no refusal row; add one to lucid._ops._bool_refusal")
-    return rules[min(code, LAST_INTEGRAL_CODE + 1)]
+    return rules[_SLOT[code]]
 
 
 def _error(
@@ -424,6 +443,19 @@ def _error(
     if role:
         what = f"{_ARTICLES[code]} {_ROLE_PHRASE.get(role, role)}"
     return error(f"{op} does not accept {what} — cast to {cast}")
+
+
+def _dtype_code(operand: object) -> int:
+    """``operand``'s engine dtype code, or ``-1`` for anything that is not a tensor."""
+    impl = _promotion.try_unwrap(operand)
+    return -1 if impl is None else impl.dtype.value
+
+
+def _check(op: str, code: int, role: str = "") -> None:
+    """Raise ``op``'s refusal of the dtype ``code`` if its ``role`` row has one."""
+    rule = _rule(op, role, code)
+    if rule is not None:
+        raise _error(op, code, role, rule, index=False, mismatch=False)
 
 
 def refusal(
@@ -534,11 +566,8 @@ def refuse(op: str, operand: object, role: str = "") -> None:
     if impl is None:
         return
     code = impl.dtype.value
-    if code > LAST_INTEGRAL_CODE:
-        return
-    rule = _rule(op, role, code)
-    if rule is not None:
-        raise _error(op, code, role, rule, index=False, mismatch=False)
+    if code <= LAST_INTEGRAL_CODE:
+        _check(op, code, role)
 
 
 def refuse_mixed(op: str, first: object, second: object) -> None:
@@ -571,9 +600,7 @@ def refuse_mixed(op: str, first: object, second: object) -> None:
     role = "" if codes[0] == codes[1] else "mixed"
     for code in codes:
         if code <= LAST_INTEGRAL_CODE:
-            rule = _rule(op, role, code)
-            if rule is not None:
-                raise _error(op, code, role, rule, index=False, mismatch=False)
+            _check(op, code, role)
 
 
 def refuse_declared(op: str, operand: object) -> None:
@@ -609,12 +636,37 @@ def refuse_declared(op: str, operand: object) -> None:
         raise _error(op, code, "", rule, index=False, mismatch=False)
 
 
+def refuse_complex(op: str, operand: object, role: str = "") -> None:
+    """Raise ``op``'s refusal when ``operand`` is a complex tensor its row turns away.
+
+    For an op whose kernel is real-valued and which would otherwise cast the operand to
+    float32 and drop its imaginary part (``histogram``).
+
+    Parameters
+    ----------
+    op : str
+        The refusing op's name, the ``op`` of a row of :data:`ROWS`.
+    operand : object
+        The operand to look at.  A real tensor and a non-tensor pass.
+    role : str, optional
+        The operand's role, and the row that holds it.
+
+    Raises
+    ------
+    RuntimeError
+        The class :func:`refusal` builds for ``op``.
+    """
+    code = _dtype_code(operand)
+    if code in _COMPLEX_CODES:
+        _check(op, code, role)
+
+
 def refuse_unless_bool(op: str, operand: object, role: str = "") -> None:
     """Raise ``op``'s refusal when ``operand`` is a tensor of any dtype but bool.
 
     For an operand that is a truth value and nothing else (a mask): the reference refuses
     an integer and a float one alike, and answers a bool.  The row's ``on_ints`` rule is
-    the integer's, its ``on_other`` the float's.
+    the integer's, its ``on_float`` and ``on_complex`` theirs.
 
     Parameters
     ----------
@@ -630,22 +682,18 @@ def refuse_unless_bool(op: str, operand: object, role: str = "") -> None:
     RuntimeError
         The class :func:`refusal` builds for ``op``.
     """
-    impl = _promotion.try_unwrap(operand)
-    if impl is None:
-        return
-    code = impl.dtype.value
-    if code == BOOL_CODE:
-        return
-    rule = _rule(op, role, code)
-    if rule is not None:
-        raise _error(op, code, role, rule, index=False, mismatch=False)
+    code = _dtype_code(operand)
+    if code not in (-1, BOOL_CODE):
+        _check(op, code, role)
 
 
 def refuse_bool(op: str, *operands: object, role: str = "") -> None:
     """Raise ``op``'s refusal when any of ``operands`` is a bool tensor.
 
     For the entries whose op answers an integer (``cov``, ``isin``, ``clamp``): only a
-    bool is looked at, so an integer operand costs nothing here.
+    bool is looked at, so an integer operand costs nothing here.  It stays beside
+    :func:`refuse` for that reason -- the fast path for the ops the reference answers for
+    integers, which would otherwise look their row up for every integer they are given.
 
     Parameters
     ----------
@@ -699,32 +747,7 @@ def refuse_common(op: str, *operands: object) -> None:
             return
         common = max(common, code)
     if common >= 0:
-        rule = _rule(op, "", common)
-        if rule is not None:
-            raise _error(op, common, "", rule, index=False, mismatch=False)
-
-
-def refuse_all_bool(op: str, *operands: object) -> None:
-    """Raise ``op``'s refusal when *every* one of ``operands`` is a bool tensor.
-
-    For ``searchsorted`` and ``bucketize``, which answer a bool beside another dtype by
-    promoting (:mod:`lucid._ops._search`).  A bool pair is the one the reference has no
-    kernel for.
-
-    Parameters
-    ----------
-    op : str
-        The refusing op's name, the ``op`` of a row of :data:`ROWS`.
-    *operands : object
-        The operands that meet at one dtype.
-
-    Raises
-    ------
-    RuntimeError
-        The class :func:`bool_refusal` builds for ``op``.
-    """
-    if all(is_bool(operand) for operand in operands):
-        raise bool_refusal(op)
+        _check(op, common)
 
 
 __all__ = [
@@ -740,9 +763,9 @@ __all__ = [
     "is_bool",
     "refusal",
     "refuse",
-    "refuse_all_bool",
     "refuse_bool",
     "refuse_common",
+    "refuse_complex",
     "refuse_declared",
     "refuse_mixed",
     "refuse_unless_bool",
