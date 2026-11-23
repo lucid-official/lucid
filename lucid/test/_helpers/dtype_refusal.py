@@ -72,15 +72,12 @@ def engine_refusal(op: str, dtype: lucid.dtype) -> Refusal | None:
     ``op`` is the engine's name for the operation (``hard_sigmoid`` for ``F.hardsigmoid``,
     ``var`` for ``std``), the one its error message words.
     """
-    for schema in _C_engine.op_registry_all():
-        if schema.name == op:
-            rule = schema.refusal_for(dtype._engine)
-            break
+    schema = _C_engine.op_lookup(op)
+    if schema is not None:
+        rule = schema.refusal_for(dtype._engine)
     else:
         declared = UNREGISTERED.get(op)
-        if declared is None or dtype._engine not in declared[2]:
-            return None
-        rule = (declared[0], declared[1])
+        rule = None if declared is None or dtype._engine not in declared[2] else declared[:2]
     if rule is None:
         return None
     return Refusal(op, rule[0], dtype._name, rule[1])
