@@ -31,6 +31,7 @@ import pytest
 import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _wrap
+from lucid.test._helpers.dtype_refusal import UNREGISTERED
 
 _D: Final = _C_engine.Dtype
 
@@ -143,13 +144,9 @@ _DECLARED: Final[dict[str, _Rule]] = {
     "nextafter": (_KERNEL, _FLOATING, _BOOL | _INTS | _COMPLEX),
 }
 
-#: Ops that refuse and that no ``LUCID_REGISTER_OP`` publishes, so the registry does not list
-#: them: ``var`` builds its own forward and is reached through ``std`` and ``var`` only, ``frac``
-#: is composed and asks ``check_schema_dtype`` of a schema of its own that is never registered.
-_UNREGISTERED: Final[dict[str, _Rule]] = {
-    "var": (_GUARD, _FLOATING, _BOOL | _INTS),
-    "frac": (_KERNEL, _FLOATING, _BOOL | _INTS),
-}
+#: Ops that refuse and that no ``LUCID_REGISTER_OP`` publishes, so the registry does not list them
+#: (``var``, ``frac``); declared once in the helper every other refusal-aware test reads.
+_UNREGISTERED: Final[dict[str, _Rule]] = UNREGISTERED
 
 
 class _Builder:
