@@ -19,6 +19,7 @@ import lucid
 import lucid.nn.functional as F
 from lucid.amp import autocast
 from lucid.test._fixtures.devices import device_dtype_params, metal_available
+from lucid.test._helpers.dtype_refusal import engine_refusal
 
 
 def _amp_dtype(device: str) -> lucid.dtype:
@@ -189,8 +190,13 @@ def test_integer_and_bool_dtypes_under_autocast(
 
     with autocast(device_type=device, dtype=amp_dt):
         y_exp = lucid.exp(x)
-        # ``mean`` refuses a bool, as the reference does (LCD-1013): cast the mask.
-        y_mean = (x.float() if dtype == lucid.bool else x).mean()
+        # ``mean`` refuses a bool and an integer, as the reference does (LCD-1013, LCD-1026), and
+        # autocast does not lift the refusal: cast the mask or the integers.
+        refusal = engine_refusal("mean", dtype)
+        assert refusal is not None
+        with refusal.raises():
+            x.mean()
+        y_mean = x.float().mean()
         if dtype != lucid.bool:
             y_add = x + x
             y_mul = x * x
