@@ -19,10 +19,11 @@ loss's input kind and target kind. Every loss checks it before it
 computes. These tests sweep that table:
 
 - every loss in ``nn.functional`` has a row;
-- for each dtype the call is refused with a ``TypeError`` naming the loss
-  and the dtype, on the CPU and on Metal alike, or it computes the value
-  of the same loss on float32 operands -- a bool is refused with the
-  reference's ``RuntimeError`` and a cast to make (LCD-1024);
+- for each dtype the call is refused, on the CPU and on Metal alike, or it computes the value
+  of the same loss on float32 operands -- a bool or an integer is refused with the
+  reference's ``RuntimeError`` (its class is the table's, ``_bool_refusal.ROWS``), a message
+  that names the loss and the dtype, and a cast to make (LCD-1024, LCD-1026); any other dtype
+  is a ``TypeError`` naming both;
 - under ``-m parity``, each verdict is the reference's, and so is each
   accepted value and its dtype.
 
@@ -52,6 +53,7 @@ DTYPES = ("int8", "int32", "int64", "bool", "float16", "float32")
 SWEEPS = ("input", "mixed", "target")
 
 _INTEGERS = frozenset({"int8", "int32", "int64"})
+_INTEGRAL = _INTEGERS | {"bool"}
 _FLOATS = frozenset({"float16", "float32"})
 _ACCEPTS: dict[str, frozenset[str]] = {
     "floating": _FLOATS,
@@ -217,20 +219,20 @@ def test_every_loss_has_a_dtype_rule() -> None:
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize(("name", "sweep", "dtype"), CELLS)
 def test_the_door_decides(name: str, sweep: str, dtype: str, device: str) -> None:
-    """Refused with a ``TypeError`` naming the loss and the dtype (a bool, with
-    the reference's ``RuntimeError``), or computed as on float32 operands —
-    the same verdict on each device."""
+    """Refused with the reference's ``RuntimeError`` for a bool or an integer (a ``TypeError``
+    for any other dtype), or computed as on float32 operands — the same verdict on each device."""
     make = _lucid_make(device)
     dtypes = _dtypes(name, sweep, dtype)
     if (name, dtype) in _NOT_IMPLEMENTED and sweep == "input":
         with pytest.raises(NotImplementedError):
             _run(name, make, dtypes)
         return
-    if not _expected(name, sweep, dtype) and dtype == "bool":
-        # A bool is refused as every op refuses one (LCD-1024): the reference's class, and a cast.
+    if not _expected(name, sweep, dtype) and dtype in _INTEGRAL:
+        # A bool or an integer is refused as every op refuses one (LCD-1024, LCD-1026): the
+        # reference's class, the dtype as the engine spells it, and a cast.
         with pytest.raises(RuntimeError, match=f"{name} does not accept") as caught:
             _run(name, make, dtypes)
-        assert "cast to" in str(caught.value)
+        assert f" {dtype} " in str(caught.value) and "cast to" in str(caught.value)
         return
     if not _expected(name, sweep, dtype):
         with pytest.raises(TypeError, match=name) as caught:

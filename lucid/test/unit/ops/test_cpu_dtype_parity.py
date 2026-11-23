@@ -35,7 +35,7 @@ import pytest
 import lucid
 import lucid.linalg
 import lucid.nn.functional as F
-from lucid.test._helpers.dtype_refusal import engine_refusal
+from lucid.test._helpers.dtype_refusal import Refusal, engine_refusal
 
 _DEVICES = ["cpu", "metal"]
 
@@ -823,15 +823,16 @@ _POOLING = {
     "adaptive_max_pool2d": (lambda t: F.adaptive_max_pool2d(t, 2), (1, 2, 8, 8)),
 }
 
-#: The engine op whose schema decides which integer widths each pool answers (an adaptive pool
-#: runs the kernel of its fixed-window twin).
-_POOLING_SCHEMA = {
+#: The engine op whose schema decides which integer widths each pool answers.  An adaptive pool
+#: has none: the reference has no integer kernel for it at any width, so its Python entry
+#: refuses them all (``_bool_refusal.ROWS``), whatever the kernel of its fixed-window twin does.
+_POOLING_SCHEMA: dict[str, str | None] = {
     "max_pool1d": "max_pool1d",
     "max_pool2d": "max_pool2d",
     "avg_pool1d": "avg_pool1d",
     "avg_pool2d": "avg_pool2d",
-    "adaptive_avg_pool2d": "avg_pool2d",
-    "adaptive_max_pool2d": "max_pool2d",
+    "adaptive_avg_pool2d": None,
+    "adaptive_max_pool2d": None,
 }
 
 
@@ -865,13 +866,18 @@ def test_pooling_integers_answer_or_are_refused_on_both_devices(name: str, dtype
     the reference on every half-way window.
 
     The reference has the integer kernel for ``max_pool2d`` at every width but for
-    ``avg_pool`` at int64 only, and for ``max_pool1d`` at none; where it has none, the schema of
-    the engine op refuses the width (LCD-1026) on both devices alike, whatever the pool's
-    spelling (the adaptive pools run their fixed-window twin's kernel).
+    ``avg_pool`` at int64 only, and for ``max_pool1d`` and the adaptive pools at none; where it
+    has none, the schema of the engine op refuses the width (LCD-1026) on both devices alike, and
+    the adaptive pools' Python entry refuses every one.
     """
     call, shape = _POOLING[name]
     dtype = getattr(lucid, dtype_name)
-    refused = engine_refusal(_POOLING_SCHEMA[name], dtype)
+    schema = _POOLING_SCHEMA[name]
+    refused = (
+        engine_refusal(schema, dtype)
+        if schema is not None
+        else Refusal(name, "kernel", dtype._name, "a floating dtype, e.g. x.float()")
+    )
     values = (np.random.default_rng(1).integers(-9, 10, shape)).astype(dtype_name)
     outs = []
     for device in _DEVICES:
@@ -1133,7 +1139,9 @@ def test_local_response_norm_promotes_rather_than_degenerating() -> None:
 
     ``alpha`` is 1e-4.  In an integer dtype it truncates to zero, every
     scale collapses to ``k`` and the whole op silently becomes the
-    identity — which is why this checks a value and not just a dtype.
+    identity — which is why this checks a value and not just a dtype.  Only int64 is promoted:
+    the reference has a kernel for it and none for the narrower integers (refused, in
+    ``test_integer_refusal_table``).
     """
     values = np.arange(1, 5, dtype=np.int64).reshape(1, 4, 1, 1)
     for device in _DEVICES:
@@ -1421,32 +1429,47 @@ def test_tensordot_takes_half_on_both_devices() -> None:
     assert np.allclose(outs[0], a.astype(np.float64) @ b.astype(np.float64), rtol=1e-2)
 
 
-@pytest.mark.parametrize("dtype_name", ["int32", "float32"])
-def test_grid_sample_promotes_both_of_its_operands(dtype_name: str) -> None:
+def test_grid_sample_answers_a_floating_pair_alike_on_both_devices() -> None:
     """Resampling interpolates *between* samples, so the answer is real.
 
     The forward is assembled by hand and read ``input->dtype()`` directly
     rather than the schema that already said so, so an integer image ran
-    on Metal and raised on the CPU.  Both operands promote: the grid
-    carries fractional coordinates and is no more integral than the image.
+    on Metal and raised on the CPU.
     """
-    image = np.arange(16).reshape(1, 1, 4, 4).astype(dtype_name)
-    grid = np.zeros((1, 2, 2, 2)).astype(dtype_name)
+    image = np.arange(16).reshape(1, 1, 4, 4).astype("float32")
+    grid = np.zeros((1, 2, 2, 2)).astype("float32")
     outs = []
     for device in _DEVICES:
         got = F.grid_sample(
-            lucid.tensor(
-                np.ascontiguousarray(image), dtype=getattr(lucid, dtype_name), device=device
-            ),
-            lucid.tensor(
-                np.ascontiguousarray(grid), dtype=getattr(lucid, dtype_name), device=device
-            ),
+            lucid.tensor(np.ascontiguousarray(image), dtype=lucid.float32, device=device),
+            lucid.tensor(np.ascontiguousarray(grid), dtype=lucid.float32, device=device),
         )
         assert lucid.is_floating_point(got), device
         outs.append(np.asarray(got.numpy(), dtype=np.float64))
     assert np.allclose(outs[0], outs[1])
     # the centre of a 4x4 ramp
     assert np.allclose(outs[0].ravel()[:2], [7.5, 7.5])
+
+
+@pytest.mark.parametrize("dtype_name", ["int8", "int16", "int32", "int64"])
+def test_grid_sample_refuses_an_integer_operand_on_both_devices(dtype_name: str) -> None:
+    """An integer image is a kernel the reference lacks, and an integer grid is a dtype mismatch.
+
+    The entry promoted both to float32 before the engine's schema could see them, so an integer
+    image resampled where the reference refuses it; it refuses them first now, the image with the
+    kernel's class and the grid with a dtype guard (``test_integer_refusal_table``).
+    """
+    dtype = getattr(lucid, dtype_name)
+    for device in _DEVICES:
+        image = lucid.zeros((1, 1, 4, 4), dtype=dtype, device=device)
+        grid = lucid.zeros((1, 2, 2, 2), dtype=dtype, device=device)
+        float_image = lucid.zeros((1, 1, 4, 4), device=device)
+        float_grid = lucid.zeros((1, 2, 2, 2), device=device)
+        with pytest.raises(NotImplementedError, match=f"does not accept {dtype_name}"):
+            F.grid_sample(image, float_grid)
+        with pytest.raises(RuntimeError, match=f"does not accept an {dtype_name} grid") as caught:
+            F.grid_sample(float_image, grid)
+        assert not isinstance(caught.value, NotImplementedError)
 
 
 @pytest.mark.parametrize("buffer_dtype", ["int32", "float32", "float64"])
@@ -1517,24 +1540,19 @@ def test_batch_norm_keeps_float32_statistics_under_a_half_input() -> None:
     assert np.isfinite(means[0]).all()
 
 
-@pytest.mark.parametrize("dtype_name", ["int32", "float32"])
-def test_embedding_bag_promotes_an_integer_table(dtype_name: str) -> None:
+def test_embedding_bag_pools_a_floating_table_alike_on_both_devices() -> None:
     """Embeddings are real numbers; pooling them sums or averages.
 
-    The CPU kernel is written for floats only, so Metal took an integer
-    table and the CPU refused one.  The indices and offsets beside it stay
-    integral — they are positions, not values.
+    The indices and offsets beside the table stay integral — they are positions, not values.
     """
-    weight = np.arange(15).reshape(5, 3).astype(dtype_name)
+    weight = np.arange(15).reshape(5, 3).astype("float32")
     index = np.array([0, 2, 4, 1, 3], dtype=np.int64)
     offsets = np.array([0, 3], dtype=np.int64)
     outs = []
     for device in _DEVICES:
         got = F.embedding_bag(
             lucid.tensor(index, dtype=lucid.int64, device=device),
-            lucid.tensor(
-                np.ascontiguousarray(weight), dtype=getattr(lucid, dtype_name), device=device
-            ),
+            lucid.tensor(np.ascontiguousarray(weight), dtype=lucid.float32, device=device),
             lucid.tensor(offsets, dtype=lucid.int64, device=device),
             mode="sum",
         )
@@ -1542,6 +1560,27 @@ def test_embedding_bag_promotes_an_integer_table(dtype_name: str) -> None:
         outs.append(np.asarray(got.numpy(), dtype=np.float64))
     assert np.allclose(outs[0], outs[1])
     assert np.allclose(outs[0].ravel()[:3], [18.0, 21.0, 24.0])
+
+
+@pytest.mark.parametrize("dtype_name", ["int8", "int16", "int32", "int64"])
+def test_embedding_bag_refuses_an_integer_table_on_both_devices(dtype_name: str) -> None:
+    """The CPU kernel is written for floats only, and so is the reference's.
+
+    Metal took an integer table and the CPU refused one, and the entry then promoted it so that
+    both answered; the table is refused on both now, with the engine's own words, whichever of
+    the paths below the entry the call would have taken (the weighted one never reaches the
+    engine op).
+    """
+    for device in _DEVICES:
+        index = lucid.tensor([0, 2, 4, 1, 3], dtype=lucid.int64, device=device)
+        offsets = lucid.tensor([0, 3], dtype=lucid.int64, device=device)
+        table = lucid.zeros((5, 3), dtype=getattr(lucid, dtype_name), device=device)
+        with pytest.raises(RuntimeError, match=f"does not accept {dtype_name}") as caught:
+            F.embedding_bag(index, table, offsets, mode="sum")
+        assert not isinstance(caught.value, NotImplementedError)
+        weights = lucid.ones(5, device=device)
+        with pytest.raises(RuntimeError, match=f"does not accept {dtype_name}"):
+            F.embedding_bag(index, table, offsets, mode="sum", per_sample_weights=weights)
 
 
 def test_fold_keeps_its_dtype_on_both_devices() -> None:

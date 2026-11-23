@@ -24,6 +24,22 @@ def _make_batch(b: int = 4, c: int = 3, h: int = 8, w: int = 8) -> list[tuple]:
     return [(lucid.rand(c, h, w), lucid.tensor(i % 10, dtype=lucid.int64)) for i in range(b)]
 
 
+# ── labels of any integer width ─────────────────────────────────────
+
+
+@pytest.mark.parametrize("dtype", [lucid.int8, lucid.int16, lucid.int32, lucid.int64])
+@pytest.mark.parametrize("collator", [D.MixupCollator, D.CutMixCollator])
+def test_a_label_of_any_integer_width_becomes_a_one_hot_target(
+    collator: type, dtype: lucid.dtype
+) -> None:
+    # ``one_hot`` takes int64 only, as the reference does; the encoder casts the labels first, so a
+    # dataset that hands out int32 labels still works.
+    batch = [(lucid.rand(3, 8, 8), lucid.tensor(i % 10, dtype=dtype)) for i in range(4)]
+    _, y = collator(alpha=0.2, num_classes=10, p=0.0)(batch)
+    assert tuple(y.shape) == (4, 10)
+    assert y.argmax(dim=1).tolist() == [0, 1, 2, 3]
+
+
 # ── MixupCollator ───────────────────────────────────────────────────
 
 

@@ -534,7 +534,6 @@ _MIXED = {
 }
 
 
-@pytest.mark.parametrize("other", ["float32", "int64"])
 @pytest.mark.parametrize("half_operand", ["input", "grid"])
 @pytest.mark.parametrize("path", sorted(_MIXED))
 @pytest.mark.parametrize(
@@ -542,15 +541,15 @@ _MIXED = {
     [pytest.param(*s, marks=[_METAL] if s[0] == "metal" else []) for s in _SETTINGS],
 )
 def test_grid_sample_runs_a_half_operand_beside_another_in_float32(
-    device: str, autocast_dt: str, path: str, half_operand: str, other: str
+    device: str, autocast_dt: str, path: str, half_operand: str
 ) -> None:
     """Every path, as the row says: the composites refused a float32 pair,
-    the reflection mirrored a half grid before the kernel widened it, and an
-    integer operand is promoted to float32 before the row, as the kernel's
-    schema promotes it."""
+    and the reflection mirrored a half grid before the kernel widened it.  An
+    integer operand is not promoted beside it: it is refused, as the reference
+    refuses it (``test_an_integer_operand_beside_a_half_one_is_refused``)."""
     shape, grid_shape, mode, padding = _MIXED[path]
     half = getattr(lucid, autocast_dt)
-    x_dt, grid_dt = (half, getattr(lucid, other))
+    x_dt, grid_dt = (half, lucid.float32)
     if half_operand == "grid":
         x_dt, grid_dt = grid_dt, x_dt
     x = _Make(lucid, device, x_dt)(*shape)
@@ -562,6 +561,31 @@ def test_grid_sample_runs_a_half_operand_beside_another_in_float32(
     assert out.dtype == lucid.float32
     want = F.grid_sample(x.float(), grid.float(), **kwargs)
     np.testing.assert_allclose(out.numpy(), want.numpy(), rtol=_EXACT, atol=_EXACT)
+
+
+@pytest.mark.parametrize("half_operand", ["input", "grid"])
+@pytest.mark.parametrize("path", sorted(_MIXED))
+@pytest.mark.parametrize(
+    ("device", "autocast_dt"),
+    [pytest.param(*s, marks=[_METAL] if s[0] == "metal" else []) for s in _SETTINGS],
+)
+def test_an_integer_operand_beside_a_half_one_is_refused(
+    device: str, autocast_dt: str, path: str, half_operand: str
+) -> None:
+    """The entry judges the operand before autocast casts anything: an integer image is a kernel
+    the reference lacks, an integer grid a dtype mismatch, under autocast as outside it."""
+    shape, grid_shape, mode, padding = _MIXED[path]
+    half = getattr(lucid, autocast_dt)
+    x_dt, grid_dt = (half, lucid.int64)
+    if half_operand == "grid":
+        x_dt, grid_dt = grid_dt, x_dt
+    x = _Make(lucid, device, x_dt)(*shape)
+    grid = _Make(lucid, device, grid_dt)(*grid_shape, seed=1, scale=1.5)
+    kwargs = {"mode": mode, "padding_mode": padding, "align_corners": False}
+    with autocast(device_type=device, dtype=half):
+        with pytest.raises(RuntimeError, match="grid_sample does not accept") as caught:
+            lucid.nn.functional.grid_sample(x, grid, **kwargs)
+    assert isinstance(caught.value, NotImplementedError) == (half_operand == "grid")
 
 
 def test_outside_autocast_grid_sample_still_refuses_a_mixed_pair() -> None:

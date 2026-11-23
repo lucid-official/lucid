@@ -48,11 +48,18 @@ class TestCoordinateMapping:
         out = F.interpolate(_ramp(5), scale_factor=0.6, mode="area")
         assert out.reshape(-1).tolist() == pytest.approx([0.5, 2.0, 3.5])
 
-    def test_nearest_keeps_an_integer_dtype(self) -> None:
-        x = lucid.arange(6, dtype=lucid.int64).reshape(1, 1, 2, 3)
+    def test_nearest_keeps_a_floating_dtype(self) -> None:
+        x = lucid.arange(6, dtype=lucid.float64).reshape(1, 1, 2, 3)
         out = F.interpolate(x, scale_factor=1.5, mode="nearest")
-        assert out.dtype == lucid.int64
+        assert out.dtype == lucid.float64
         assert out.shape == (1, 1, 3, 4)
+
+    def test_nearest_refuses_an_integer_input(self) -> None:
+        # The reference has no integer kernel for ``nearest`` either; a label mask is cast by its
+        # caller (``utils.transforms.functional._sampled``).
+        x = lucid.arange(6, dtype=lucid.int64).reshape(1, 1, 2, 3)
+        with pytest.raises(NotImplementedError, match="interpolate does not accept int64"):
+            F.interpolate(x, scale_factor=1.5, mode="nearest")
 
     @pytest.mark.parametrize(
         ("shape", "scale", "expected"),
@@ -214,10 +221,13 @@ class TestRefusals:
         with pytest.raises(error, match=match):
             F.interpolate(lucid.zeros(*shape), **kw)
 
-    def test_interpolating_an_integer_input_is_a_type_error(self) -> None:
+    @pytest.mark.parametrize("mode", ["bilinear", "bicubic", "area", "nearest-exact"])
+    def test_an_integer_input_is_refused_as_the_kernels_gap(self, mode: str) -> None:
+        # Not a ``TypeError`` about the mode: the reference has no integer kernel for any mode, and
+        # says so with ``NotImplementedError``.
         x = lucid.arange(16, dtype=lucid.int64).reshape(1, 1, 4, 4)
-        with pytest.raises(TypeError, match="floating-point"):
-            F.interpolate(x, size=2, mode="bilinear")
+        with pytest.raises(NotImplementedError, match="interpolate does not accept int64"):
+            F.interpolate(x, size=2, mode=mode)
 
 
 @pytest.mark.parametrize(

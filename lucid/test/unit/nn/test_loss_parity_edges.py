@@ -764,8 +764,11 @@ class TestCrossEntropyWithClassProbabilities:
 
     def test_an_integer_target_of_the_input_shape_is_refused(self, device: str) -> None:
         x = lucid.tensor(self.X, device=device)
-        with pytest.raises(TypeError, match="floating point"):
+        # The reference's dtype ``RuntimeError``: probabilities are floating, and a class index
+        # of the input's shape is not one (``TypeError`` too, as every dtype refusal is).
+        with pytest.raises(RuntimeError, match="does not accept an int64 target") as caught:
             F.cross_entropy(x, lucid.tensor([[0, 1, 0], [1, 0, 0]], device=device))
+        assert not isinstance(caught.value, NotImplementedError)
 
     def test_ignore_index_is_refused(self, device: str) -> None:
         x = lucid.tensor(self.X, device=device)

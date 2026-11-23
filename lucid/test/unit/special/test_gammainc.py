@@ -226,8 +226,11 @@ def test_broadcasts_and_promotes() -> None:
     out = gammainc(a, x)
     assert out.shape == (2, 3)
     assert out.dtype == lucid.float64
-    # An integer argument is promoted to a float, as the other special
-    # functions promote it.
-    ints = gammainc(lucid.tensor([1, 2]), lucid.tensor([1, 1]))
+    # An integer argument beside a float one is promoted to a float, as the other special
+    # functions promote it; a pair of integers has no kernel in the reference, and is refused
+    # (``test_integer_refusal_table``).
+    ints = gammainc(lucid.tensor([1, 2]), lucid.tensor([1.0, 1.0]))
     assert ints.dtype == lucid.float32
     assert np.allclose(ints.numpy(), [1.0 - math.exp(-1.0), 1.0 - 2.0 * math.exp(-1.0)])
+    with pytest.raises(NotImplementedError, match="gammainc does not accept int64"):
+        gammainc(lucid.tensor([1, 2]), lucid.tensor([1, 1]))

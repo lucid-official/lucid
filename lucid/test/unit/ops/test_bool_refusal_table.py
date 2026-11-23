@@ -44,7 +44,18 @@ import pytest
 
 import lucid
 from lucid._C import engine as _C_engine
-from lucid._ops._bool_refusal import _FLOATING, _INTEGER, _NUMBER, BOOL_REFUSED, engine_bool_refused
+from lucid._ops._bool_refusal import (
+    _BOOL_MASK,
+    _FLOATING,
+    _INT64,
+    _INTEGER,
+    _NUMBER,
+    BOOL_REFUSED,
+    engine_bool_refused,
+    refusal,
+)
+from lucid.test._helpers.dtype_refusal import engine_refusal
+from lucid.test.unit.ops.test_integer_refusal_table import PINNED_OPS
 from lucid.nn.functional._loss_checks import (
     _BOOL_BY_CALL,
     _FLOATING_RESULT,
@@ -959,11 +970,14 @@ _ENGINE_UNREGISTERED = frozenset({"var", "frac"})
 
 
 def test_every_op_of_the_table_is_pinned() -> None:
+    # The ops that came with the integer refusals are pinned for bool and integers alike in
+    # ``test_integer_refusal_table.py``, which replays every row of the Python table.
     owned = set(BOOL_REFUSED) | set(engine_bool_refused()) | _ENGINE_UNREGISTERED
     pinned = {row.op for row in _TABLE.values() if row.op is not None}
+    elsewhere = set(BOOL_REFUSED) & PINNED_OPS
     assert (
-        pinned == owned
-    ), f"missing a row: {sorted(owned - pinned)}; not in either list: {sorted(pinned - owned)}"
+        pinned | elsewhere == owned
+    ), f"missing a row: {sorted(owned - pinned - elsewhere)}; not in either list: {sorted(pinned - owned)}"
 
 
 def test_every_loss_that_can_refuse_a_bool_has_a_row() -> None:
@@ -1023,19 +1037,36 @@ def test_an_op_has_one_owner() -> None:
 
 
 def test_the_two_layers_name_the_same_casts() -> None:
-    # ``OpSchema.h`` (``bool_cast_hint``) and ``_bool_refusal.py`` each spell the casts out; a
-    # message that sent the caller to a different dtype by layer would be a defect.
+    # ``OpSchema.h`` (``cast_hint_text``) and ``_bool_refusal.py`` each spell the casts out; a
+    # message that sent the caller to a different dtype by layer would be a defect.  The entries
+    # that want one dtype (an int64 class index, a bool mask) have a cast of their own.
     casts = {_FLOATING, _INTEGER, _NUMBER}
     engine_hints = {hint for _, hint in engine_bool_refused().values()}
     assert engine_hints <= casts
-    assert {hint for _, hint in BOOL_REFUSED.values()} <= casts
+    assert {hint for _, hint in BOOL_REFUSED.values()} <= casts | {_INT64, _BOOL_MASK}
     assert engine_hints == {_FLOATING, _NUMBER}
 
 
-def test_the_two_layers_raise_the_same_two_classes() -> None:
-    expected = {_C_engine.NotImplementedError, _C_engine.DtypeMismatch}
-    assert {cls for cls, _ in engine_bool_refused().values()} == expected
-    assert {cls for cls, _ in BOOL_REFUSED.values()} == expected
+@pytest.mark.parametrize(
+    ("code", "name"), [(0, "bool"), (1, "int8"), (2, "int16"), (3, "int32"), (4, "int64")]
+)
+def test_the_two_layers_spell_the_dtype_alike(code: int, name: str) -> None:
+    # The engine says ``int32`` where the enum says ``I32``: a refusal reads the same from either
+    # layer, the op aside.  ``leaky_relu`` is the engine's and ``celu`` Python's, both kernel
+    # refusals of every dtype here with the floating cast.
+    dtype = lucid.bool_ if name == "bool" else getattr(lucid, name)
+    engine = engine_refusal("leaky_relu", dtype)
+    assert engine is not None
+    assert str(refusal("celu", code)) == engine.message.replace("leaky_relu", "celu")
+    assert f"does not accept {name} " in str(refusal("celu", code))
+
+
+def test_the_two_layers_raise_the_same_classes() -> None:
+    engine = {_C_engine.NotImplementedError, _C_engine.DtypeMismatch}
+    assert {cls for cls, _ in engine_bool_refused().values()} == engine
+    # Python adds the engine's argument class: ``one_hot`` and ``affine_grid`` are a Python
+    # entry's own check, not a kernel's or a dtype guard's.
+    assert {cls for cls, _ in BOOL_REFUSED.values()} == engine | {_C_engine.InvalidArgument}
 
 
 @pytest.mark.parametrize(

@@ -122,9 +122,16 @@ def test_poisson_factory_matches_the_reference_dtype(
     assert _name(mine.dtype) == _name(theirs.dtype)
 
 
-def test_poisson_factory_of_an_integer_rate_uses_the_default_float(device: str) -> None:
-    out = lucid.poisson(lucid.tensor([2, 3], dtype=lucid.int64, device=device))
+def test_poisson_factory_of_a_float_rate_uses_its_dtype(device: str) -> None:
+    out = lucid.poisson(lucid.tensor([2.0, 3.0], device=device))
     assert out.dtype == lucid.get_default_dtype()
+
+
+def test_poisson_factory_refuses_an_integer_rate(device: str) -> None:
+    # The reference has no kernel for an integer rate either (``NotImplementedError``): the caller
+    # casts it, and the distribution (``D.Poisson``) already does.
+    with pytest.raises(NotImplementedError, match="poisson does not accept int64"):
+        lucid.poisson(lucid.tensor([2, 3], dtype=lucid.int64, device=device))
 
 
 def test_count_samples_are_integral_and_in_range(device: str) -> None:
