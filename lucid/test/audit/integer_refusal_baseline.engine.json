@@ -14,11 +14,5 @@
     "op: the engine's name for the primitive; the sweep checks the schema has not declared the row."
   ],
   "owner": "engine",
-  "deviations": {
-    "F.affine_grid": {
-      "op": "affine_grid",
-      "reason": "the CPU kernel raises NotImplementedError('dtype must be F32/F64'); the reference raises ValueError, as Metal's InvalidArgument already does",
-      "cpu": {"int8": "class", "int16": "class", "int32": "class", "int64": "class"}
-    }
-  }
+  "deviations": {}
 }
