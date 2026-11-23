@@ -553,6 +553,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - bool guard tests the impl type, not isinstance (LCD-1013)
 - split bool refusal by owner, add composites (LCD-1020)
 - drop the duplicate concat binding
+- key the dtype refusals by (op, role) and cover integers
 
 ---
 
