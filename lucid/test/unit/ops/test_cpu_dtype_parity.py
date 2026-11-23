@@ -35,6 +35,7 @@ import pytest
 import lucid
 import lucid.linalg
 import lucid.nn.functional as F
+from lucid.test._helpers.dtype_refusal import engine_refusal
 
 _DEVICES = ["cpu", "metal"]
 
@@ -822,6 +823,17 @@ _POOLING = {
     "adaptive_max_pool2d": (lambda t: F.adaptive_max_pool2d(t, 2), (1, 2, 8, 8)),
 }
 
+#: The engine op whose schema decides which integer widths each pool answers (an adaptive pool
+#: runs the kernel of its fixed-window twin).
+_POOLING_SCHEMA = {
+    "max_pool1d": "max_pool1d",
+    "max_pool2d": "max_pool2d",
+    "avg_pool1d": "avg_pool1d",
+    "avg_pool2d": "avg_pool2d",
+    "adaptive_avg_pool2d": "avg_pool2d",
+    "adaptive_max_pool2d": "max_pool2d",
+}
+
 
 @pytest.mark.parametrize("name", sorted(_POOLING))
 def test_pooling_takes_half_on_both_devices(name: str) -> None:
@@ -843,91 +855,120 @@ def test_pooling_takes_half_on_both_devices(name: str) -> None:
 
 @pytest.mark.parametrize("name", sorted(_POOLING))
 @pytest.mark.parametrize("dtype_name", ["int8", "int16", "int32", "int64"])
-def test_pooling_takes_integers_on_both_devices(name: str, dtype_name: str) -> None:
-    """Pooling an integer image answers in that integer type.
+def test_pooling_integers_answer_or_are_refused_on_both_devices(name: str, dtype_name: str) -> None:
+    """An integer image is pooled in its own type where the reference has a kernel, else refused.
 
     ``max`` selects one of its inputs and ``avg`` casts a fractional mean,
     so both are defined without a float kernel.  The mean truncates toward
     zero, which is what the framework's own float-to-integer cast does —
     rounding to nearest instead put the CPU one apart from Metal and from
     the reference on every half-way window.
+
+    The reference has the integer kernel for ``max_pool2d`` at every width but for
+    ``avg_pool`` at int64 only, and for ``max_pool1d`` at none; where it has none, the schema of
+    the engine op refuses the width (LCD-1026) on both devices alike, whatever the pool's
+    spelling (the adaptive pools run their fixed-window twin's kernel).
     """
     call, shape = _POOLING[name]
+    dtype = getattr(lucid, dtype_name)
+    refused = engine_refusal(_POOLING_SCHEMA[name], dtype)
     values = (np.random.default_rng(1).integers(-9, 10, shape)).astype(dtype_name)
     outs = []
     for device in _DEVICES:
-        got = call(
-            lucid.tensor(
-                np.ascontiguousarray(values), dtype=getattr(lucid, dtype_name), device=device
-            )
-        )
+        image = lucid.tensor(np.ascontiguousarray(values), dtype=dtype, device=device)
+        if refused is not None:
+            with refused.raises():
+                call(image)
+            continue
+        got = call(image)
         got = got[0] if isinstance(got, tuple) else got
         assert str(got.dtype).endswith(dtype_name), f"{name} on {device}"
         outs.append(np.asarray(got.numpy()))
-    assert np.array_equal(outs[0], outs[1]), f"{name} disagrees across devices"
+    if refused is None:
+        assert np.array_equal(outs[0], outs[1]), f"{name} disagrees across devices"
 
 
 def test_integer_avg_pool_truncates_toward_zero() -> None:
-    """The half-way case, pinned in both signs.
+    """The half-way case, pinned in both signs, at the one integer width ``avg_pool`` has.
 
     4.5 becomes 4 and -4.5 becomes -4.  Round-to-nearest would answer 5
     and -5 (or -4, depending on the tie rule), and the disagreement is
-    invisible on any window whose mean is already an integer.
+    invisible on any window whose mean is already an integer.  Only int64 reaches the
+    kernel: the narrower widths are refused, as the reference refuses them.
     """
-    positive = np.array([[[[3, 1], [5, 9]]]], dtype=np.int32)  # mean 4.5
+    positive = np.array([[[[3, 1], [5, 9]]]], dtype=np.int64)  # mean 4.5
     negative = -positive  # mean -4.5
     for device in _DEVICES:
         for values, expected in ((positive, 4), (negative, -4)):
             got = F.avg_pool2d(
-                lucid.tensor(np.ascontiguousarray(values), dtype=lucid.int32, device=device), 2
+                lucid.tensor(np.ascontiguousarray(values), dtype=lucid.int64, device=device), 2
             )
             assert int(np.asarray(got.numpy()).ravel()[0]) == expected, device
 
 
-_PROMOTING_LAYER_OPS = {
-    "softmax": F.softmax,
-    "log_softmax": F.log_softmax,
-    "softmin": F.softmin,
-    "silu": F.silu,
-    "elu": F.elu,
-    "leaky_relu": F.leaky_relu,
-    "hardsigmoid": F.hardsigmoid,
-    "hardswish": F.hardswish,
+#: Layer ops that build their own forward, each with the engine op whose schema words its refusal
+#: (``softmin`` runs ``softmax``, ``std`` runs ``var``, the hard activations are
+#: ``hard_sigmoid`` / ``hard_swish`` in the engine).
+_LAYER_OPS = {
+    "softmax": (F.softmax, "softmax"),
+    "log_softmax": (F.log_softmax, "log_softmax"),
+    "softmin": (F.softmin, "softmax"),
+    "silu": (F.silu, "silu"),
+    "elu": (F.elu, "elu"),
+    "leaky_relu": (F.leaky_relu, "leaky_relu"),
+    "hardsigmoid": (F.hardsigmoid, "hard_sigmoid"),
+    "hardswish": (F.hardswish, "hard_swish"),
     # ``normalize`` is not here: an integer norm is refused, as the
     # reference refuses it (LCD-384).
-    "var": lucid.var,
-    "std": lucid.std,
+    "var": (lucid.var, "var"),
+    "std": (lucid.std, "var"),
 }
 
 
-@pytest.mark.parametrize("name", sorted(_PROMOTING_LAYER_OPS))
-def test_real_valued_layer_ops_promote_integers(name: str) -> None:
-    """An integer input gets a float answer, on both devices.
+@pytest.mark.parametrize("dtype_name", ["int8", "int16", "int32", "int64"])
+@pytest.mark.parametrize("name", sorted(_LAYER_OPS))
+def test_layer_ops_refuse_integers_on_both_devices(name: str, dtype_name: str) -> None:
+    """An integer input is refused with the engine's class, on both devices.
 
     Each of these builds its own forward rather than going through a
-    kernel template, and so none of them consulted the schema that
-    already said the result was float.  Metal computed in the integer
-    type — ``softmax([1, 2, 3])`` came back ``[0, 0, 0]`` — while the CPU
-    raised NotImplementedError for the same call.
+    kernel template, and used to promote an integer to float32 behind the
+    caller's back — Metal computed in the integer type once, and
+    ``softmax([1, 2, 3])`` came back ``[0, 0, 0]``.  The reference has no
+    integer kernel for any of them (LCD-1026), so the schema of the engine op
+    turns the dtype away at the door, the same way on both devices; the call
+    site casts (``x.float()``).
     """
-    values = np.array([[1, 2, 3]], dtype=np.int32)
+    fn, engine_op = _LAYER_OPS[name]
+    refusal = engine_refusal(engine_op, getattr(lucid, dtype_name))
+    assert refusal is not None, f"{engine_op} answers {dtype_name} now"
+    values = np.array([[1, 2, 3]], dtype=dtype_name)
+    for device in _DEVICES:
+        x = lucid.tensor(values, dtype=getattr(lucid, dtype_name), device=device)
+        with refusal.raises():
+            fn(x)
+
+
+@pytest.mark.parametrize("name", sorted(_LAYER_OPS))
+def test_layer_ops_answer_floating_on_both_devices(name: str) -> None:
+    """The float input is answered, in floating point, and the two devices agree."""
+    values = np.array([[1, 2, 3]], dtype=np.float32)
     outs = []
     for device in _DEVICES:
-        got = _PROMOTING_LAYER_OPS[name](lucid.tensor(values, dtype=lucid.int32, device=device))
-        assert lucid.is_floating_point(got), f"{name} on {device} stayed integral"
+        got = _LAYER_OPS[name][0](lucid.tensor(values, dtype=lucid.float32, device=device))
+        assert lucid.is_floating_point(got), f"{name} on {device} is not floating"
         outs.append(np.asarray(got.numpy(), dtype=np.float64))
     assert np.allclose(outs[0], outs[1], atol=1e-5), f"{name} disagrees across devices"
 
 
-def test_softmax_of_integers_is_a_distribution() -> None:
+def test_softmax_is_a_distribution() -> None:
     """The values, not only the dtype.
 
-    Promoting could have been done by relabelling the output, which would
-    keep the dtype assertion above green while returning the same wrong
-    numbers.  These are the softmax of [1, 2, 3] and they sum to one.
+    A forward built by hand could relabel its output and keep the dtype
+    assertion above green while returning the wrong numbers.  These are the
+    softmax of [1, 2, 3] and they sum to one.
     """
     for device in _DEVICES:
-        got = F.softmax(lucid.tensor([[1, 2, 3]], dtype=lucid.int32, device=device))
+        got = F.softmax(lucid.tensor([[1.0, 2.0, 3.0]], device=device))
         row = np.asarray(got.numpy(), dtype=np.float64).ravel()
         assert abs(row.sum() - 1.0) < 1e-6, device
         assert np.allclose(row, [0.09003057, 0.24472847, 0.66524096], atol=1e-6), device
@@ -956,15 +997,17 @@ def test_random_generators_draw_half(name: str) -> None:
 def test_metal_storage_dtype_matches_its_bytes() -> None:
     """MLX promotes; the wrapper must convert rather than relabel.
 
-    ``mean`` of an int32 array comes back float32.  Recording the
+    ``mean`` of an integer array comes back float32.  Recording the
     caller's dtype next to the array's own byte count made the storage
-    claim int32 while holding float32 bits, and ``avg_pool2d`` answered
+    claim an integer while holding float32 bits, and ``avg_pool2d`` answered
     1083179008 — 0x40900000, the float 4.5 read as an integer — for a
-    window whose mean is 4.5.  Nothing raised.
+    window whose mean is 4.5.  Nothing raised.  The kernel is int64's alone
+    now (the narrower widths are refused, LCD-1026), so int64 is the width that
+    meets the promotion.
     """
-    values = np.array([[[[3, 1], [5, 9]]]], dtype=np.int32)
+    values = np.array([[[[3, 1], [5, 9]]]], dtype=np.int64)
     got = F.avg_pool2d(
-        lucid.tensor(np.ascontiguousarray(values), dtype=lucid.int32, device="metal"), 2
+        lucid.tensor(np.ascontiguousarray(values), dtype=lucid.int64, device="metal"), 2
     )
     assert abs(int(np.asarray(got.numpy()).ravel()[0])) < 100, "bytes were reinterpreted"
 
@@ -998,8 +1041,8 @@ def test_ordering_of_bools_is_refused_on_both_devices(name: str) -> None:
 
 
 @pytest.mark.parametrize("dtype_name", ["int8", "int16", "int32", "int64"])
-def test_scatter_add_and_movement_keep_integers(dtype_name: str) -> None:
-    """scatter_add, unfold and fold, at every integer width.
+def test_scatter_add_keeps_integers(dtype_name: str) -> None:
+    """scatter_add, at every integer width.
 
     int64 needed its own kernel rather than a widening: `as_i64` passes
     an int64 storage through untouched, so a widen-and-recurse guard that
@@ -1015,14 +1058,44 @@ def test_scatter_add_and_movement_keep_integers(dtype_name: str) -> None:
         )
         idx = lucid.tensor(index, dtype=lucid.int64, device=device)
         scattered = lucid.scatter_add(x, 0, idx, x)
-        unfolded = F.unfold(x.reshape(1, 1, 2, 2), 2)
         assert str(scattered.dtype).endswith(dtype_name), device
-        assert str(unfolded.dtype).endswith(dtype_name), device
-        outs[device] = [
-            np.asarray(scattered.numpy()).tolist(),
-            np.asarray(unfolded.numpy()).tolist(),
-        ]
+        outs[device] = np.asarray(scattered.numpy()).tolist()
     assert outs["cpu"] == outs["metal"]
+
+
+#: The window movers with the operand each takes: an image for ``unfold``, its columns for ``fold``.
+_WINDOW_MOVERS = {
+    "unfold": (lambda t: F.unfold(t, 2), np.arange(4).reshape(1, 1, 2, 2)),
+    "fold": (lambda t: F.fold(t, (2, 2), 2), np.arange(4).reshape(1, 4, 1)),
+}
+
+
+@pytest.mark.parametrize("dtype_name", ["int8", "int16", "int32", "int64", "float32"])
+@pytest.mark.parametrize("op", sorted(_WINDOW_MOVERS))
+def test_window_movers_keep_floats_and_refuse_integers(op: str, dtype_name: str) -> None:
+    """``unfold`` and ``fold`` have a float kernel and no integer one, on either device.
+
+    They used to widen an integer onto int64 and move it; the reference has no integer kernel
+    for either (LCD-1026), so the schema turns every integer width away on both devices alike, and
+    a float keeps its dtype, with the two devices in agreement.
+    """
+    dtype = getattr(lucid, dtype_name)
+    refusal = engine_refusal(op, dtype)
+    call, operand = _WINDOW_MOVERS[op]
+    outs = []
+    for device in _DEVICES:
+        x = lucid.tensor(
+            np.ascontiguousarray(operand.astype(dtype_name)), dtype=dtype, device=device
+        )
+        if refusal is not None:
+            with refusal.raises():
+                call(x)
+            continue
+        got = call(x)
+        assert str(got.dtype).endswith(dtype_name), device
+        outs.append(np.asarray(got.numpy()).tolist())
+    if refusal is None:
+        assert outs[0] == outs[1]
 
 
 def test_int64_scatter_survives_metal_without_precision_loss() -> None:
@@ -1384,24 +1457,33 @@ def test_batch_norm_updates_its_statistics_in_a_float(buffer_dtype: str) -> None
     step of it at that width and ``reciprocal`` refused on the CPU while
     Metal answered.  It runs at the dtype the forward computed in now and
     casts back on the write, so the caller's storage keeps its own dtype.
+    The input is floating throughout: an integer *input* is refused (LCD-1026), so the
+    integer buffers meet a float32 forward.
     """
     if buffer_dtype == "float64":
         devices = ["cpu"]  # Metal has no float64
     else:
         devices = _DEVICES
+    forward_dtype = "float32" if buffer_dtype == "int32" else buffer_dtype
     values = np.random.default_rng(0).random((2, 3, 2, 2)) * 10
     outs = []
     for device in devices:
-        dt = getattr(lucid, buffer_dtype)
 
-        def make(array, d=dt, dev=device):
+        def make(array, dtype_name=buffer_dtype, dev=device):
             return lucid.tensor(
-                np.ascontiguousarray(np.asarray(array).astype(buffer_dtype)), dtype=d, device=dev
+                np.ascontiguousarray(np.asarray(array).astype(dtype_name)),
+                dtype=getattr(lucid, dtype_name),
+                device=dev,
             )
 
         running_mean, running_var = make(np.zeros(3)), make(np.ones(3))
         got = F.batch_norm(
-            make(values), running_mean, running_var, make(np.ones(3)), make(np.zeros(3)), True
+            make(values, forward_dtype),
+            running_mean,
+            running_var,
+            make(np.ones(3), forward_dtype),
+            make(np.zeros(3), forward_dtype),
+            True,
         )
         assert lucid.is_floating_point(got), (buffer_dtype, device)
         assert str(running_mean.dtype).endswith(buffer_dtype), "buffer changed dtype"
@@ -1462,25 +1544,24 @@ def test_embedding_bag_promotes_an_integer_table(dtype_name: str) -> None:
     assert np.allclose(outs[0].ravel()[:3], [18.0, 21.0, 24.0])
 
 
-@pytest.mark.parametrize("dtype_name", ["int32", "int64", "float32"])
-def test_fold_keeps_its_dtype_on_both_devices(dtype_name: str) -> None:
+def test_fold_keeps_its_dtype_on_both_devices() -> None:
     """Metal's fold accumulates with a scatter, which has no int64 kernel.
 
     Same route the scatter ops themselves take: there is no exact way
     around it on-device, and refusing a dtype the CPU folds is the
-    device-dependent behaviour the backend pair exists to avoid.
+    device-dependent behaviour the backend pair exists to avoid.  The integer widths, which
+    fold folded on both devices once, are refused on both now (LCD-1026):
+    ``test_window_movers_keep_floats_and_refuse_integers`` holds that.
     """
-    values = np.arange(1, 5).reshape(1, 4, 1).astype(dtype_name)
+    values = np.arange(1, 5).reshape(1, 4, 1).astype(np.float32)
     outs = []
     for device in _DEVICES:
         got = F.fold(
-            lucid.tensor(
-                np.ascontiguousarray(values), dtype=getattr(lucid, dtype_name), device=device
-            ),
+            lucid.tensor(np.ascontiguousarray(values), dtype=lucid.float32, device=device),
             (2, 2),
             2,
         )
-        assert str(got.dtype).endswith(dtype_name), device
+        assert str(got.dtype).endswith("float32"), device
         outs.append(np.asarray(got.numpy()).tolist())
     assert outs[0] == outs[1]
 
