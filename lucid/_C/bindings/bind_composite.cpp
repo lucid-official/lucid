@@ -110,10 +110,6 @@ void register_composite(py::module_& m) {
         py::arg("a"), py::arg("shape"));
     m.def("_bitcast", &bitcast_op, py::arg("a"), py::arg("dtype"));
     m.def("fma", &fma_op, py::arg("a"), py::arg("b"), py::arg("c"));
-    m.def(
-        "concat",
-        [](const std::vector<TensorImplPtr>& xs, int dim) { return concatenate_op(xs, dim); },
-        py::arg("tensors"), py::arg("dim"));
 
     // Top-level ``cross`` and ``norm`` are aliases for the linalg sub-module
     // entries.  They live in Python (lucid.linalg.{cross, norm}); the Python
