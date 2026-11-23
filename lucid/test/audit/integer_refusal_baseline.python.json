@@ -1,0 +1,313 @@
+{
+  "comment": [
+    "Where Lucid's answer to an integer operand departs from the reference's, as of 2026-11-24 (LCD-1026-Q1).",
+    "Measured by lucid/test/unit/ops/test_integer_refusal_sweep.py against dtype_contract.json.",
+    "A (symbol, width) deviation that is not listed fails the sweep, and so does a listed one that no longer",
+    "deviates or deviates another way: delete the cell (and the symbol, once it has none) in the commit",
+    "that fixes it, so the file shrinks as fixes land.  Add a cell only for a pre-existing deviation a newer",
+    "measurement (a regenerated contract, a wider census) turns up -- never to excuse a refusal a change",
+    "of yours removed.  A symbol lives in exactly one of the three owner files.",
+    "kind: over-accept (the reference refuses, Lucid answers), class (both refuse, NotImplementedError vs a",
+    "plain RuntimeError), non-runtime (Lucid's refusal is not a RuntimeError), over-refuse (the reference",
+    "answers, Lucid refuses).  Cells are listed per device (cpu / metal) and per integer width.",
+    "A composite, an adapter or a loss: the fix is the Python entry check."
+  ],
+  "owner": "python",
+  "deviations": {
+    "F.adaptive_avg_pool1d": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int64": "over-accept"},
+      "metal": {"int64": "over-accept"}
+    },
+    "F.adaptive_avg_pool2d": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int64": "over-accept"},
+      "metal": {"int64": "over-accept"}
+    },
+    "F.adaptive_avg_pool3d": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int64": "over-accept"},
+      "metal": {"int64": "over-accept"}
+    },
+    "F.adaptive_max_pool2d": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "F.adaptive_max_pool2d_with_indices": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "F.adaptive_max_pool3d": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "F.adaptive_max_pool3d_with_indices": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "F.binary_cross_entropy": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises NotImplementedError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.binary_cross_entropy_with_logits": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises NotImplementedError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.cross_entropy": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises NotImplementedError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.ctc_loss": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises NotImplementedError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.embedding_bag": {
+      "reason": "answers an integer operand; the reference raises RuntimeError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "F.gaussian_nll_loss": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises RuntimeError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.glu": {
+      "reason": "raises DtypeMismatch; the reference raises NotImplementedError",
+      "cpu": {"int8": "class", "int16": "class", "int32": "class", "int64": "class"},
+      "metal": {"int8": "class", "int16": "class", "int32": "class", "int64": "class"}
+    },
+    "F.grid_sample": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "F.gumbel_softmax": {
+      "reason": "raises NotImplementedError; the reference raises RuntimeError",
+      "cpu": {"int8": "class", "int16": "class", "int32": "class", "int64": "class"},
+      "metal": {"int8": "class", "int16": "class", "int32": "class", "int64": "class"}
+    },
+    "F.hardshrink": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "F.huber_loss": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises NotImplementedError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.instance_norm": {
+      "reason": "raises DtypeMismatch; the reference raises NotImplementedError",
+      "cpu": {"int8": "class", "int16": "class", "int32": "class", "int64": "class"},
+      "metal": {"int8": "class", "int16": "class", "int32": "class", "int64": "class"}
+    },
+    "F.interpolate": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "F.kl_div": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises RuntimeError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.l1_loss": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises RuntimeError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.local_response_norm": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept"}
+    },
+    "F.max_unpool1d": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "F.max_unpool2d": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "F.max_unpool3d": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "F.mse_loss": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises NotImplementedError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.multi_margin_loss": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises NotImplementedError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.multilabel_soft_margin_loss": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises NotImplementedError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.nll_loss": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises NotImplementedError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.one_hot": {
+      "reason": "answers an integer operand; the reference raises RuntimeError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept"}
+    },
+    "F.prelu": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "F.rms_norm": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises NotImplementedError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.smooth_l1_loss": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises NotImplementedError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.soft_margin_loss": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises RuntimeError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.softshrink": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "F.upsample": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "F.upsample_bilinear": {
+      "reason": "Lucid's own check raises TypeError, not a RuntimeError; the reference raises NotImplementedError",
+      "cpu": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"},
+      "metal": {"int8": "non-runtime", "int16": "non-runtime", "int32": "non-runtime", "int64": "non-runtime"}
+    },
+    "F.upsample_nearest": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "Tensor.cauchy_": {
+      "reason": "raises NotImplementedError; the reference raises RuntimeError",
+      "cpu": {"int8": "class", "int16": "class", "int32": "class", "int64": "class"},
+      "metal": {"int8": "class", "int16": "class", "int32": "class", "int64": "class"}
+    },
+    "Tensor.exponential_": {
+      "reason": "raises NotImplementedError; the reference raises RuntimeError",
+      "cpu": {"int8": "class", "int16": "class", "int32": "class", "int64": "class"},
+      "metal": {"int8": "class", "int16": "class", "int32": "class", "int64": "class"}
+    },
+    "Tensor.frexp": {
+      "reason": "answers an integer operand; the reference raises RuntimeError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "Tensor.histogram": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "Tensor.masked_select": {
+      "reason": "the audit's companion mask is a float that follows the width under test, so the cell asks about an integer mask: the reference raises RuntimeError for a non-bool mask and Lucid answers one (lucid.masked_select(x, x) answers too)",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "Tensor.multinomial": {
+      "reason": "answers an integer operand; the reference raises RuntimeError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "Tensor.nanmean": {
+      "reason": "answers an integer operand; the reference raises RuntimeError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "lucid.frexp": {
+      "reason": "answers an integer operand; the reference raises RuntimeError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "lucid.histogram": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "lucid.linalg.ldl_solve": {
+      "reason": "raises NotImplementedError; the reference raises RuntimeError",
+      "cpu": {"int8": "class", "int16": "class", "int32": "class", "int64": "class"},
+      "metal": {"int8": "class", "int16": "class", "int32": "class", "int64": "class"}
+    },
+    "lucid.linalg.matrix_exp": {
+      "reason": "answers an integer operand; the reference raises RuntimeError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "lucid.linalg.vecdot": {
+      "reason": "answers an integer operand; the reference raises RuntimeError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "lucid.multinomial": {
+      "reason": "answers an integer operand; the reference raises RuntimeError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "lucid.nanmean": {
+      "reason": "answers an integer operand; the reference raises RuntimeError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "lucid.nn.init.orthogonal": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "lucid.nn.init.sparse": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "lucid.poisson": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "lucid.polar": {
+      "reason": "answers an integer operand; the reference raises RuntimeError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "lucid.special.gammainc": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    },
+    "lucid.special.gammaincc": {
+      "reason": "answers an integer operand; the reference raises NotImplementedError",
+      "cpu": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"},
+      "metal": {"int8": "over-accept", "int16": "over-accept", "int32": "over-accept", "int64": "over-accept"}
+    }
+  }
+}

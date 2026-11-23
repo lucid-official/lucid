@@ -1,0 +1,69 @@
+{
+  "comment": [
+    "Where Lucid's answer to an integer operand departs from the reference's, as of 2026-11-24 (LCD-1026-Q1).",
+    "Measured by lucid/test/unit/ops/test_integer_refusal_sweep.py against dtype_contract.json.",
+    "A (symbol, width) deviation that is not listed fails the sweep, and so does a listed one that no longer",
+    "deviates or deviates another way: delete the cell (and the symbol, once it has none) in the commit",
+    "that fixes it, so the file shrinks as fixes land.  Add a cell only for a pre-existing deviation a newer",
+    "measurement (a regenerated contract, a wider census) turns up -- never to excuse a refusal a change",
+    "of yours removed.  A symbol lives in exactly one of the three owner files.",
+    "kind: over-accept (the reference refuses, Lucid answers), class (both refuse, NotImplementedError vs a",
+    "plain RuntimeError), non-runtime (Lucid's refusal is not a RuntimeError), over-refuse (the reference",
+    "answers, Lucid refuses).  Cells are listed per device (cpu / metal) and per integer width.",
+    "Not a refusal to add.  The access side: Lucid refuses what the reference answers, a feature",
+    "to build rather than a check to delete.  And the probe's own artifacts."
+  ],
+  "owner": "deferred",
+  "deviations": {
+    "F.bilinear": {
+      "reason": "no integer kernel: CPU raises NotImplementedError (F32/F64 only), Metal the backend's InvalidArgument; the reference answers (an integer matmul)",
+      "cpu": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse", "int64": "over-refuse"},
+      "metal": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse", "int64": "over-refuse"}
+    },
+    "F.conv1d": {
+      "reason": "no integer kernel: CPU raises NotImplementedError (F32/F64 only), Metal the backend's InvalidArgument; the reference answers",
+      "cpu": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse", "int64": "over-refuse"},
+      "metal": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse", "int64": "over-refuse"}
+    },
+    "F.conv2d": {
+      "reason": "no integer kernel: CPU raises NotImplementedError (F32/F64 only), Metal the backend's InvalidArgument; the reference answers",
+      "cpu": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse", "int64": "over-refuse"},
+      "metal": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse", "int64": "over-refuse"}
+    },
+    "F.conv3d": {
+      "reason": "no integer kernel: CPU raises NotImplementedError (F32/F64 only), Metal the backend's InvalidArgument; the reference answers",
+      "cpu": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse", "int64": "over-refuse"},
+      "metal": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse", "int64": "over-refuse"}
+    },
+    "F.conv_transpose1d": {
+      "reason": "no integer kernel: CPU raises NotImplementedError (F32/F64 only), Metal the backend's InvalidArgument; the reference answers int64 (the narrower widths it refuses, as Lucid does)",
+      "cpu": {"int64": "over-refuse"},
+      "metal": {"int64": "over-refuse"}
+    },
+    "F.conv_transpose2d": {
+      "reason": "no integer kernel: CPU raises NotImplementedError (F32/F64 only), Metal the backend's InvalidArgument; the reference answers int64 (the narrower widths it refuses, as Lucid does)",
+      "cpu": {"int64": "over-refuse"},
+      "metal": {"int64": "over-refuse"}
+    },
+    "F.conv_transpose3d": {
+      "reason": "no integer kernel: CPU raises NotImplementedError (F32/F64 only), Metal the backend's InvalidArgument; the reference answers int64 (the narrower widths it refuses, as Lucid does)",
+      "cpu": {"int64": "over-refuse"},
+      "metal": {"int64": "over-refuse"}
+    },
+    "F.linear": {
+      "reason": "no integer kernel: CPU raises NotImplementedError (F32/F64 only), Metal the backend's InvalidArgument; the reference answers (an integer matmul)",
+      "cpu": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse", "int64": "over-refuse"},
+      "metal": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse", "int64": "over-refuse"}
+    },
+    "F.max_pool1d_with_indices": {
+      "reason": "Lucid refuses every integer max_pool1d form; the reference refuses max_pool1d at integer widths yet answers max_pool1d_with_indices",
+      "cpu": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse", "int64": "over-refuse"},
+      "metal": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse", "int64": "over-refuse"}
+    },
+    "lucid.randperm": {
+      "reason": "the probe hands n as an integer tensor: the reference accepts it, Lucid refuses int8/16/32 with a misleading InvalidArgument (\"n=7 is too large for lucid.int64\") while int64 works -- a probe-shaped case, found rather than designed",
+      "cpu": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse"},
+      "metal": {"int8": "over-refuse", "int16": "over-refuse", "int32": "over-refuse"}
+    }
+  }
+}

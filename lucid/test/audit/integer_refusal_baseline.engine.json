@@ -1,0 +1,24 @@
+{
+  "comment": [
+    "Where Lucid's answer to an integer operand departs from the reference's, as of 2026-11-24 (LCD-1026-Q1).",
+    "Measured by lucid/test/unit/ops/test_integer_refusal_sweep.py against dtype_contract.json.",
+    "A (symbol, width) deviation that is not listed fails the sweep, and so does a listed one that no longer",
+    "deviates or deviates another way: delete the cell (and the symbol, once it has none) in the commit",
+    "that fixes it, so the file shrinks as fixes land.  Add a cell only for a pre-existing deviation a newer",
+    "measurement (a regenerated contract, a wider census) turns up -- never to excuse a refusal a change",
+    "of yours removed.  A symbol lives in exactly one of the three owner files.",
+    "kind: over-accept (the reference refuses, Lucid answers), class (both refuse, NotImplementedError vs a",
+    "plain RuntimeError), non-runtime (Lucid's refusal is not a RuntimeError), over-refuse (the reference",
+    "answers, Lucid refuses).  Cells are listed per device (cpu / metal) and per integer width.",
+    "A primitive with a schema: the fix is a schema row (OpSchema.refusal_for).",
+    "op: the engine's name for the primitive; the sweep checks the schema has not declared the row."
+  ],
+  "owner": "engine",
+  "deviations": {
+    "F.affine_grid": {
+      "op": "affine_grid",
+      "reason": "the CPU kernel raises NotImplementedError('dtype must be F32/F64'); the reference raises ValueError, as Metal's InvalidArgument already does",
+      "cpu": {"int8": "class", "int16": "class", "int32": "class", "int64": "class"}
+    }
+  }
+}
