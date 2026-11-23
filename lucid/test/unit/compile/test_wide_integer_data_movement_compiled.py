@@ -144,9 +144,6 @@ OPS: dict[str, Callable[[lucid.Tensor, _Idx], object]] = {
     "flip": lambda t, i: lucid.flip(t, [0]) + 0,
     "where": lambda t, i: lucid.where(i.mask, t, lucid.flip(t, [0])) + 0,
     "embedding": lambda t, i: F.embedding(i.perm, t.reshape(8, 1)) + 0,
-    "interpolate_nearest": lambda t, i: (
-        F.interpolate(t.reshape(1, 1, 8), size=13, mode="nearest") + 0
-    ),
 }
 
 
@@ -155,6 +152,25 @@ OPS: dict[str, Callable[[lucid.Tensor, _Idx], object]] = {
 def test_wide_integers_come_back_whole(dtype: str, op: str) -> None:
     i = _idx()
     _same(lambda t: OPS[op](t, i), _x(dtype))
+
+
+@pytest.mark.parametrize("dtype", list(DTYPES))
+def test_integer_interpolate_is_refused_compiled_as_eager(dtype: str) -> None:
+    """``interpolate`` of an integer is no data movement: the reference has no kernel for it, and
+    the trace runs the eager entry, so the call is refused while it is traced, with eager's
+    class and message."""
+
+    def fn(t: lucid.Tensor) -> lucid.Tensor:
+        return F.interpolate(t.reshape(1, 1, 8), size=13, mode="nearest") + 0
+
+    x = _x(dtype)
+    with pytest.raises(NotImplementedError, match=f"interpolate does not accept {dtype}") as eager:
+        fn(x)
+    _C_engine.compile.session_cache_clear()
+    with pytest.raises(NotImplementedError, match=f"interpolate does not accept {dtype}") as traced:
+        lucid.compile(fn)(x)
+    assert type(traced.value) is type(eager.value)
+    assert str(traced.value) == str(eager.value)
 
 
 @pytest.mark.parametrize("dtype", list(DTYPES))
