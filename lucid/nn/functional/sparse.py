@@ -8,6 +8,7 @@ import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_suspended
+from lucid._ops._bool_refusal import refuse
 from lucid._unsupported import unsupported_if
 from lucid.nn.functional._index_checks import _check_indices, _check_table, _padding_index
 from lucid.nn.functional.activations import straight_through
@@ -349,8 +350,9 @@ def one_hot(input: Tensor, num_classes: int = -1) -> Tensor:
     Parameters
     ----------
     input : Tensor
-        Integer tensor of arbitrary shape ``(*)`` whose entries are class
-        indices in ``[0, num_classes)``.
+        ``int64`` tensor of arbitrary shape ``(*)`` whose entries are class
+        indices in ``[0, num_classes)``.  Any other dtype is refused, as the
+        reference framework does -- cast with ``input.long()``.
     num_classes : int, optional
         Total number of classes :math:`C`.  If ``-1`` (the default), it
         is inferred as ``input.max() + 1``; supplying an explicit value
@@ -397,9 +399,10 @@ def one_hot(input: Tensor, num_classes: int = -1) -> Tensor:
     tensor([[0, 1],
             [1, 0]], dtype=lucid.int64)
     """
-    if input.dtype not in (lucid.int8, lucid.int16, lucid.int32, lucid.int64):
+    refuse("one_hot", input)
+    if input.dtype != lucid.int64:
         raise _C_engine.InvalidArgument(
-            f"one_hot: input must be an integer tensor, got {input.dtype}; "
+            f"one_hot: input must be an int64 tensor, got {input.dtype}; "
             "cast with .to(lucid.int64) first"
         )
     if num_classes != -1 and num_classes <= 0:

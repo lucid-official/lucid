@@ -393,6 +393,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse integers in composites, linalg and samplers as the reference does
 
+- refuse integers in nn.functional entries as the reference does
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

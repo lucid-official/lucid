@@ -11,6 +11,7 @@ import warnings
 import lucid as _l
 from lucid._tensor_args import GUARD_FRAMES
 from lucid._dispatch import _unwrap, _wrap
+from lucid._ops._bool_refusal import refuse
 from lucid._ops._reduce import _log_softmax_adapter, _softmax_adapter, _softmin_adapter
 from lucid._tensor.tensor import Tensor
 from lucid._types import DTypeLike
@@ -288,6 +289,7 @@ def gumbel_softmax(
             stacklevel=2,
             skip_file_prefixes=GUARD_FRAMES,
         )
+    refuse("gumbel_softmax", logits)
     # Sample Gumbel noise: −log(−log U) with U ∈ (0, 1).  Clamp away
     # from the boundaries to avoid log(0).
     u: Tensor = _l.rand_like(logits).clip(1e-7, 1.0 - 1e-7)

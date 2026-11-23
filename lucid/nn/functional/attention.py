@@ -5,6 +5,7 @@ nn.functional attention operations.
 from typing import TYPE_CHECKING
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
+from lucid._ops._bool_refusal import refuse
 from lucid.nn.functional.dropout import _check_probability
 
 if TYPE_CHECKING:
@@ -165,7 +166,12 @@ def _broadcast_leading(shapes: list[tuple[int, ...]]) -> tuple[int, ...]:
 
 
 def _attention_operands(
-    query: Tensor, key: Tensor, value: Tensor, enable_gqa: bool, dropout_p: float
+    query: Tensor,
+    key: Tensor,
+    value: Tensor,
+    enable_gqa: bool,
+    dropout_p: float,
+    attn_mask: Tensor | None,
 ) -> tuple[Tensor, Tensor, Tensor]:
     """Q, K and V with one leading shape, as the reference's math reads them.
 
@@ -177,8 +183,11 @@ def _attention_operands(
 
     The call is checked here, before anything is read from the shapes: an
     operand below 2-D has no sequence axis, and a ``dropout_p`` outside
-    ``[0, 1]`` is refused even when the fused path would not draw a mask.
+    ``[0, 1]`` is refused even when the fused path would not draw a mask.  ``attn_mask`` is a
+    truth value or an additive bias, so an integer one is refused here as well (the engine
+    checks the queries, keys and values).
     """
+    refuse("scaled_dot_product_attention", attn_mask, "attn_mask")
     _check_probability(dropout_p)
     if min(query.ndim, key.ndim, value.ndim) < 2:
         raise _C_engine.InvalidArgument(
@@ -307,7 +316,7 @@ def scaled_dot_product_attention(
     """
     import lucid as _lucid
 
-    query, key, value = _attention_operands(query, key, value, enable_gqa, dropout_p)
+    query, key, value = _attention_operands(query, key, value, enable_gqa, dropout_p, attn_mask)
     if query.is_metal and query.ndim != 4 and key.ndim == value.ndim == query.ndim:
         # Metal's fused attention takes (B, H, L, D) and nothing else, and
         # raised "expected to be rank 4" on the (B, L, D) that MobileNet-v4's

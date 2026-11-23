@@ -20,6 +20,7 @@ from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry, _autocast_suspended
+from lucid._ops._bool_refusal import refuse
 from lucid._tensor.tensor import Tensor
 from lucid.nn.functional._spatial_args import (
     _PoolGeometry,
@@ -423,6 +424,9 @@ def _adaptive_pool(
             )
         spatial = tuple(int(s) for s in xb.shape[-n:])
         sizes = _adaptive_size(output_size, spatial, op)
+        # The reference's average pool is a kernel for every window and a dtype guard
+        # when the output is one element; its max pool is a kernel throughout.
+        refuse(op, x, "global" if reduce == "mean" and all(s == 1 for s in sizes) else "")
         if 0 in sizes:
             # No windows: an empty result, still on ``x``'s graph.
             empty = xb.narrow(xb.ndim - n + sizes.index(0), 0, 0)
@@ -649,6 +653,7 @@ def _scatter_unpool(
     x: Tensor, checked: tuple[Tensor, int], output_spatial: tuple[int, ...], n_spatial: int
 ) -> Tensor:
     """Shared body of ``max_unpool{1,2,3}d``."""
+    refuse(f"max_unpool{n_spatial}d", x)
     with _pool_autocast(f"max_unpool{n_spatial}d", x) as x:
         idx, spatial_numel = checked
         leading = [int(s) for s in x.shape[:-n_spatial]]

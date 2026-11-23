@@ -9,7 +9,7 @@ import lucid as _lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry
-from lucid._ops._bool_refusal import refuse_bool
+from lucid._ops._bool_refusal import refuse, refuse_declared
 from lucid._ops._reduce import _require_floating
 from lucid.nn.functional._inplace import _keep_in_graph
 from lucid.nn.functional._grid_sampling import (
@@ -94,8 +94,8 @@ def interpolate(
         axes, both or neither of ``size`` and ``scale_factor``,
         ``align_corners`` or ``antialias`` with a mode that has no use
         for it, or a non-positive size.
-    TypeError
-        For an integer input with any mode but the two nearest ones.
+    NotImplementedError
+        For a bool or integer input in any mode; cast a label mask to float32 and back.
 
     Notes
     -----
@@ -216,15 +216,15 @@ def grid_sample(
     (1, 3, 32, 32)
     """
     _check_options(input, mode, padding_mode)
-    # Before ``_as_real`` promotes a mask to float32 behind the caller's back.
-    refuse_bool("grid_sample", input, grid)
+    # Before ``_as_real`` promotes a mask or an index image to float32 behind the caller's back.
+    refuse("grid_sample", input)
+    refuse("grid_sample", grid, "grid")
     ac = align_corners if align_corners is not None else False
     # The row applies once, here, for every path: the reflection that runs
     # before the kernel computed its coordinates at the grid's half
-    # precision, and the composite applied no row at all.  An integer
-    # operand is promoted first, as the kernel's schema does before its row:
-    # the row skips integers, and a float32 one beside a half one would
-    # otherwise meet the body with autocast already off.
+    # precision, and the composite applied no row at all.  The operands are made
+    # real first, so a float32 one beside a half one does not meet the body with
+    # autocast already off.
     operands = [_unwrap(_as_real(t)) for t in (input, grid)]
     with _autocast_entry("grid_sample", *operands) as (xi, gi):
         return _grid_sample(_wrap(xi), _wrap(gi), mode, padding_mode, ac)
@@ -317,6 +317,7 @@ def affine_grid(
     >>> g.shape
     (1, 4, 4, 2)
     """
+    refuse("affine_grid", theta)
     ac = align_corners if align_corners is not None else False
     sz = [int(s) for s in size]
     if len(sz) not in (4, 5):
@@ -583,6 +584,11 @@ def embedding_bag(
     # Same index contract as ``embedding``, checked before the gather:
     # the indices, ``padding_idx``, and the bag boundaries in ``offsets``.
     op = "embedding_bag"
+    # The table holds embeddings, which are real numbers.  The engine op refuses an
+    # integer one (its schema), but the weighted and the gradient-scaled paths below do
+    # not reach it, and ``max_norm`` rewrites the table before it does: judge it here.
+    refuse(op, weight)
+    refuse_declared(op, weight)
     padding_idx = _padding_index(padding_idx, weight, op)
     pad_idx = -1 if padding_idx is None else padding_idx
     _check_table(input, weight, op)
@@ -609,20 +615,6 @@ def embedding_bag(
 
     x_impl = _unwrap(input)
     w_impl = _unwrap(weight)
-    # The table holds embeddings, which are real numbers — pooling them
-    # sums or averages, and the CPU kernel is written for floats only.
-    # Metal took an integer table and the CPU refused one, so the same
-    # call worked on one device and not the other.  Promote, as the
-    # engine's real-valued ops do; the indices and offsets beside it stay
-    # integral, because they are positions rather than values.
-    if w_impl.dtype in (
-        _C_engine.Dtype.Bool,
-        _C_engine.Dtype.I8,
-        _C_engine.Dtype.I16,
-        _C_engine.Dtype.I32,
-        _C_engine.Dtype.I64,
-    ):
-        w_impl = _C_engine.astype(w_impl, _C_engine.Dtype.F32)
     x_ndim = len(x_impl.shape)
 
     if x_ndim == 2:

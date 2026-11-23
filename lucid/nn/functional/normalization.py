@@ -5,10 +5,11 @@ nn.functional normalization operations.
 import math
 from typing import TYPE_CHECKING
 
+from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry, _autocast_suspended
-from lucid._ops._bool_refusal import refuse_bool
+from lucid._ops._bool_refusal import refuse, refuse_bool
 from lucid._ops._dims import _to_axes
 from lucid._ops._reduce import _require_normable
 from lucid._types import DimLike, DTypeLike
@@ -399,7 +400,10 @@ def rms_norm(
     if eps is None:
         from lucid._dtype import finfo
 
-        eps = float(finfo(input.dtype).eps)
+        # An integer input has no machine epsilon; the engine call below turns it away
+        # (its schema declares the refusal) before reading one.
+        integral = _promotion.is_integral(_unwrap(input).dtype)
+        eps = 0.0 if integral else float(finfo(input.dtype).eps)
     norm_shape = tuple(int(d) for d in normalized_shape)
     if not norm_shape:
         raise _C_engine.InvalidArgument("rms_norm: normalized_shape must not be empty")
@@ -588,6 +592,7 @@ def instance_norm(
     >>> y.shape
     (4, 3, 64, 64)
     """
+    refuse("instance_norm", input)
     _check_instance_norm_input(input, use_input_stats, running_mean, running_var, weight, bias)
     amp_was_active = _C_engine.amp_is_active(_unwrap(input).device)
     with _autocast_entry("instance_norm", _unwrap(input)) as (xi,):
@@ -689,6 +694,7 @@ def local_response_norm(
         raise RuntimeError(
             f"local_response_norm: kernel size should be greater than zero, but got size={size}"
         )
+    refuse("local_response_norm", input)
     # The row applies once, here: its parts (a FP32 ``sum`` and a KEEP
     # ``div``) would otherwise meet in two dtypes under Metal autocast.
     with _autocast_entry("local_response_norm", _lrn_operand(xi)) as (xi,):
@@ -703,14 +709,10 @@ def _lrn_operand(xi: _C_engine.TensorImpl) -> _C_engine.TensorImpl:
     # dtype does not approximate the answer, it erases it: ``alpha`` is
     # 1e-4, which truncates to zero, so every scale collapses to ``k`` and
     # the op becomes the identity.  Promote once, here, because this is a
-    # composite and there is no schema for the engine to read.
-    if xi.dtype in (
-        _C_engine.Dtype.Bool,
-        _C_engine.Dtype.I8,
-        _C_engine.Dtype.I16,
-        _C_engine.Dtype.I32,
-        _C_engine.Dtype.I64,
-    ):
+    # composite and there is no schema for the engine to read.  Only int64 gets this
+    # far: the reference's pooled sum has a kernel for it and for no narrower integer,
+    # nor for a bool (``refuse`` above), and answers float32.
+    if xi.dtype == _C_engine.Dtype.I64:
         xi = _C_engine.astype(xi, _C_engine.Dtype.F32)
     # The reference averages a rank-3 input's window with ``avg_pool2d`` and
     # a deeper one's with ``avg_pool3d``, whose CPU row is FP32, so under a

@@ -37,7 +37,7 @@ from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_suspended
-from lucid._ops._bool_refusal import refuse_bool
+from lucid._ops._bool_refusal import refuse
 from lucid.nn.functional._grid_sampling import cubic_coefficients
 from lucid.nn.functional.pooling import (
     adaptive_avg_pool1d,
@@ -442,7 +442,7 @@ def _check_mode(x: Tensor, mode: str, align_corners: bool | None, antialias: boo
             f"interpolate: antialias is only defined for {sorted(_ANTIALIASED)} "
             f"on 4-D input, not {mode!r}"
         )
-    refuse_bool("interpolate", x)
+    refuse("interpolate", x)
     if mode not in ("nearest", "nearest-exact") and not x.is_floating_point():
         raise TypeError(f"interpolate: mode {mode!r} needs a floating-point input, got {x.dtype}")
 

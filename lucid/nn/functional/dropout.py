@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
-from lucid._ops._bool_refusal import refuse_bool
+from lucid._ops._bool_refusal import refuse
 from lucid._types import DeviceLike
 from lucid.nn.functional._inplace import _in_place
 
@@ -538,7 +538,7 @@ def feature_alpha_dropout(
         return dropped
     if not training or p == 0.0:
         return input
-    refuse_bool("feature_alpha_dropout", input)
+    refuse("feature_alpha_dropout", input)
 
     xi = _unwrap(input)
     if len(xi.shape) < 2:
