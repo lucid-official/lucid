@@ -564,6 +564,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - split bool refusal by owner, add composites (LCD-1020)
 - drop the duplicate concat binding
 - key the dtype refusals by (op, role) and cover integers
+- an integer (or bool) tensor is now refused, with the reference's error class, by every op the reference refuses it for, instead of being promoted to float32 (LCD-1026). Message: `<op> does not accept int32 — cast to a floating dtype, e.g. x.float()`. This covers:
+  - reductions: `mean`, `var`, `std`, `nanmean`, `std_mean`, `var_mean`, `quantile`, `nanquantile`;
+  - the softmax family and activations: silu, gelu, elu, selu, celu, leaky_relu, mish, softplus, hardswish, hardsigmoid, rrelu, prelu, glu, hardshrink, softshrink, gumbel_softmax;
+  - norms: layer, group, batch, instance, rms; `local_response_norm` still answers int64;
+  - pools: `max_pool1d`, adaptive pools, `avg_pool*` at int8–32, `max_unpool*`;
+  - `unfold` / `fold`, `interpolate` / `upsample*`, `grid_sample`, `affine_grid` (`ValueError`), and the integer table of `embedding_bag`;
+  - dropout while training with p > 0;
+  - `multinomial`, `poisson`, `bernoulli`, `histogram` / `histogramdd`, `frexp`, `polar`, `special.gammainc` / `gammaincc` (an integer pair), `nn.init.orthogonal_` / `sparse_`, `Tensor.cauchy_` / `exponential_`;
+  - linalg: `det`, `inv`, `solve`, `cholesky`, `qr`, `svd`, `eig`, `pinv`, `vecdot`, `matrix_exp`, `ldl_solve`, and the rest.
+  Related changes:
+  - `one_hot` takes int64 only.
+  - `masked_select` takes a bool mask only.
+  - The `attn_mask` of `scaled_dot_product_attention` may not be an integer.
+  - An integer loss operand was a `TypeError`. It is now `NotImplementedError` for kernel losses and `DtypeMismatch` for the rest. `except TypeError` no longer catches the `NotImplementedError` cases.
+  - `utils.transforms` resamplers keep an integer label mask in its own dtype. Labels below 2**24 are exact.
+  - Mixup and CutMix accept int8–32 labels.
+  - The engine's duplicate `concat` binding is gone. ABI 59.
 
 ---
 
