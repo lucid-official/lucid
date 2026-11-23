@@ -389,6 +389,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - return before conjugating an empty complex64 buffer (LCD-1047)
 
+- derive aliases from their target; guard every alias pair
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

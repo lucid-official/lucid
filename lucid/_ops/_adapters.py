@@ -601,11 +601,6 @@ def _view_adapter(a_impl: _Impl, size: int | Sequence[int]) -> _Impl:
     return _C_engine.view(a_impl, _int_list(size, "view", "size"))
 
 
-def _concat_adapter(tensors: Sequence[Tensor], dim: int = 0) -> _Impl:
-    """concat(tensors, dim=0) — first arg is a list of tensors."""
-    return _C_engine.concat(_promote_impls([_unwrap(t) for t in tensors]), int(dim))
-
-
 def _reshape_adapter(x_impl: _Impl, shape: int | Sequence[int]) -> _Impl:
     """reshape(input, shape) — ``x.reshape(2, 3)`` is ``x.reshape((2, 3))``."""
     return _C_engine.reshape(x_impl, _int_list(shape, "reshape", "shape"))

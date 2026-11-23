@@ -288,6 +288,9 @@ _OPS_NAMES: frozenset[str] = frozenset([
     "add", "sub", "mul", "div", "pow",
     "atan2", "fmod", "remainder", "floor_divide", "hypot", "logaddexp", "nextafter",
     "maximum", "minimum",
+    # ── aliases the registry derives from their target (lucid._ops._aliases) ──
+    "multiply", "subtract", "divide", "true_divide", "arctan2",
+    "absolute", "negative", "fix", "row_stack",
     # ── linear algebra ────────────────────────────────────────────────────
     "matmul", "mm", "bmm", "tensordot", "kron",
     # ── complex viewing (engine ops) ──────────────────────────────────────

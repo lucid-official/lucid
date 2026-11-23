@@ -36,7 +36,7 @@ from lucid._ops._registry import _REGISTRY, OpEntry, _bind_leading
 
 if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
-    from lucid._types import DTypeLike, TensorOrScalar
+    from lucid._types import DTypeLike, Scalar, TensorOrScalar
 
 _Impl = _C_engine.TensorImpl
 
@@ -967,7 +967,7 @@ def _divide_(self: Tensor, other: TensorOrScalar, *, rounding_mode: str | None =
     )
 
 
-def _subtract_(self: Tensor, other: TensorOrScalar, *, alpha: float = 1.0) -> Tensor:
+def _subtract_(self: Tensor, other: TensorOrScalar, *, alpha: Scalar = 1) -> Tensor:
     """Write ``lucid.subtract(self, other, alpha=alpha)`` into ``self`` in place."""
     import lucid
 

@@ -1162,7 +1162,7 @@ def gen_tensor_pyi() -> tuple[str, int]:
             "    def float_power_(self, exponent: TensorOrScalar) -> Self: ...",
             "    def heaviside_(self, values: TensorOrScalar) -> Self: ...",
             "    def divide_(self, other: TensorOrScalar, *, rounding_mode: str | None = None) -> Self: ...",
-            "    def subtract_(self, other: TensorOrScalar, *, alpha: _float = 1.0) -> Self: ...",
+            "    def subtract_(self, other: TensorOrScalar, *, alpha: Scalar = 1) -> Self: ...",
             "    def logit_(self, eps: _float | None = None) -> Self: ...",
             "    def nan_to_num_(self, nan: _float | None = None, posinf: _float | None = None, neginf: _float | None = None) -> Self: ...",
             "    def renorm_(self, p: _float, dim: _int, maxnorm: _float) -> Self: ...",
@@ -2143,7 +2143,7 @@ def _annotation_for_param(name: str, ann: object, entry: object, kind: object) -
 
     # List-style ops: the first slot is the tensor list.
     if n == -1 and name == "tensors":
-        return "list[Tensor]"
+        return "Sequence[Tensor]"
 
     if name in _PARAM_TYPE_MAP:
         return _PARAM_TYPE_MAP[name]

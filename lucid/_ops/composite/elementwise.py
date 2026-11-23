@@ -2,13 +2,18 @@
 
 Three subgroups:
 
-1. **Aliases** for engine ops the reference framework exposes under multiple names
-   (``absolute`` ↔ ``abs``, ``subtract`` ↔ ``sub``, etc.).
-2. **Inverse-hyperbolic** functions composed from ``log`` and ``sqrt``.
+1. **Unary / binary helpers** — ``positive`` and ``rsub``.
+2. **Inverse-hyperbolic** functions composed from ``log`` and ``sqrt``, with
+   their short names.
 3. **Specials** — ``expm1``, ``sinc``, ``heaviside``, ``xlogy``, ``logit``,
    ``signbit``, ``float_power``, ``fmax`` / ``fmin`` — each implemented as
    a small expression over engine primitives, so autograd works without
    any extra wiring.
+
+An alias of a registry op (``multiply`` ↔ ``mul``, ``absolute`` ↔ ``abs``…) is
+not written here: the registry derives it from
+:data:`lucid._ops._aliases.ALIASES`, so it takes exactly the calls its target
+takes.
 """
 
 import math
@@ -34,83 +39,7 @@ if TYPE_CHECKING:
     from lucid._tensor.tensor import Tensor
 
 
-# ── Aliases ────────────────────────────────────────────────────────────────
-
-
-def absolute(input: Tensor) -> Tensor:
-    r"""Element-wise absolute value.
-
-    Verbose alias of :func:`lucid.abs`, exposed for parity with reference
-    frameworks that publish both ``abs`` and ``absolute`` spellings of the
-    same operation.
-
-    Parameters
-    ----------
-    input : Tensor
-        Input tensor. Any numeric dtype.
-
-    Returns
-    -------
-    Tensor
-        Tensor of the same shape and dtype as ``input`` containing
-        :math:`|x_i|` element-wise.
-
-    Notes
-    -----
-    Mathematical definition:
-
-    .. math::
-
-        \text{out}_i = |x_i|
-
-    The gradient is :math:`\operatorname{sign}(x_i)`; the sub-gradient at
-    :math:`x_i = 0` is conventionally taken to be ``0``.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> x = lucid.tensor([-1.5, 0.0, 2.0])
-    >>> lucid.absolute(x)
-    tensor([1.5, 0., 2.])
-    """
-    return lucid.abs(input)
-
-
-def negative(input: Tensor) -> Tensor:
-    r"""Element-wise negation.
-
-    Verbose alias of :func:`lucid.neg`. Equivalent to the unary ``-`` operator
-    on a tensor.
-
-    Parameters
-    ----------
-    input : Tensor
-        Input tensor. Any numeric dtype.
-
-    Returns
-    -------
-    Tensor
-        Tensor of the same shape and dtype as ``input`` whose entries are
-        :math:`-x_i`.
-
-    Notes
-    -----
-    Mathematical definition:
-
-    .. math::
-
-        \text{out}_i = -x_i
-
-    The gradient with respect to ``input`` is :math:`-1` everywhere.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> x = lucid.tensor([1.0, -2.0, 3.5])
-    >>> lucid.negative(x)
-    tensor([-1., 2., -3.5])
-    """
-    return lucid.neg(input)
+# ── Unary / binary helpers ─────────────────────────────────────────────────
 
 
 def positive(input: Tensor) -> Tensor:
@@ -145,175 +74,6 @@ def positive(input: Tensor) -> Tensor:
     if input.dtype == lucid.bool_:
         raise RuntimeError("the + operator is not supported on a boolean tensor")
     return input
-
-
-def subtract(input: Tensor, other: Tensor | Scalar, *, alpha: float = 1.0) -> Tensor:
-    r"""Element-wise subtraction with an optional scalar multiplier.
-
-    Computes :math:`a - \alpha \cdot b` element-wise, broadcasting ``input``
-    and ``other`` to a common shape and following the standard dtype-promotion
-    rules.
-
-    Parameters
-    ----------
-    input : Tensor
-        Minuend.
-    other : Tensor | Scalar
-        Subtrahend. Python scalars are broadcast against ``input``.
-    alpha : float, optional
-        Scalar multiplier applied to ``other`` before subtraction.
-        Defaults to ``1.0`` (plain subtraction).
-
-    Returns
-    -------
-    Tensor
-        Element-wise difference of the broadcast shape of ``input`` and ``other``.
-
-    Notes
-    -----
-    Mathematical definition:
-
-    .. math::
-
-        \text{out}_i = a_i - \alpha \cdot b_i
-
-    Dtype follows standard promotion: e.g. ``int64 - float32 → float32``.
-    Gradients flow as :math:`\partial / \partial a = 1` and
-    :math:`\partial / \partial b = -\alpha`.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> a = lucid.tensor([4.0, 5.0])
-    >>> b = lucid.tensor([1.0, 2.0])
-    >>> lucid.subtract(a, b, alpha=2.0)
-    tensor([2., 1.])
-    """
-    alpha = _promotion.as_number(alpha)
-    return (
-        input - other if alpha == 1.0 and not isinstance(alpha, bool) else input - (other * alpha)
-    )
-
-
-def multiply(input: Tensor, other: Tensor | Scalar) -> Tensor:
-    r"""Element-wise product.
-
-    Verbose alias of the ``*`` operator. Broadcasts ``input`` and ``other`` and
-    applies the standard dtype-promotion rules.
-
-    Parameters
-    ----------
-    input : Tensor
-        First operand.
-    other : Tensor | Scalar
-        Second operand.
-
-    Returns
-    -------
-    Tensor
-        Element-wise product of the broadcast shape of ``input`` and ``other``.
-
-    Notes
-    -----
-    Mathematical definition:
-
-    .. math::
-
-        \text{out}_i = a_i \cdot b_i
-
-    Gradients: :math:`\partial / \partial a = b`,
-    :math:`\partial / \partial b = a`.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> a = lucid.tensor([1.0, 2.0, 3.0])
-    >>> lucid.multiply(a, 2.0)
-    tensor([2., 4., 6.])
-    """
-    return input * other
-
-
-def divide(input: Tensor, other: Tensor | Scalar, *, rounding_mode: str | None = None) -> Tensor:
-    r"""Element-wise division — :func:`lucid.div` under its longer name.
-
-    ``rounding_mode=None`` is the ``/`` operator: integer operands are
-    promoted to a floating dtype.  ``"trunc"`` rounds the quotient toward
-    zero and ``"floor"`` toward negative infinity, keeping an integer dtype.
-
-    Parameters
-    ----------
-    input : Tensor
-        Numerator.
-    other : Tensor | Scalar
-        Denominator.
-    rounding_mode : {None, "trunc", "floor"}, optional
-        How the quotient is rounded.  Default ``None``: not at all.
-
-    Returns
-    -------
-    Tensor
-        Element-wise quotient of the broadcast shape of ``input`` and ``other``.
-
-    Notes
-    -----
-    .. math::
-
-        \text{out}_i = \frac{a_i}{b_i}
-
-    Division by zero gives :math:`\pm\infty` (NaN for ``0/0``).  The gradients
-    are :math:`1/b` and :math:`-a / b^{2}`, and zero for a rounded quotient.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> lucid.divide(lucid.tensor([6.0, 9.0]), 3.0)
-    tensor([2., 3.])
-    >>> lucid.divide(lucid.tensor([7, -7]), 2, rounding_mode="trunc")
-    tensor([3, -3], dtype=lucid.int64)
-    """
-    return lucid.div(input, other, rounding_mode=rounding_mode)
-
-
-def true_divide(input: Tensor, other: Tensor | Scalar) -> Tensor:
-    r"""Element-wise true (floating-point) division.
-
-    Equivalent to :func:`divide`; named ``true_divide`` for parity with
-    NumPy / reference-framework spellings that distinguish it from
-    integer-flavored ``floor_divide``.
-
-    Parameters
-    ----------
-    input : Tensor
-        Numerator.
-    other : Tensor | Scalar
-        Denominator.
-
-    Returns
-    -------
-    Tensor
-        Element-wise quotient in a floating-point dtype.
-
-    Notes
-    -----
-    Mathematical definition:
-
-    .. math::
-
-        \text{out}_i = \frac{a_i}{b_i}
-
-    Even for integer inputs, the output dtype is a floating type — this is
-    the defining property that separates ``true_divide`` from
-    ``floor_divide``.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> a = lucid.tensor([7, 8], dtype=lucid.int32)
-    >>> lucid.true_divide(a, 2)
-    tensor([3.5, 4.])
-    """
-    return input / other
 
 
 def rsub(input: Tensor, other: Tensor | Scalar, *, alpha: float = 1.0) -> Tensor:
@@ -359,58 +119,6 @@ def rsub(input: Tensor, other: Tensor | Scalar, *, alpha: float = 1.0) -> Tensor
     return (
         other - input if alpha == 1.0 and not isinstance(alpha, bool) else other - (input * alpha)
     )
-
-
-def arctan2(input: Tensor, other: Tensor | Scalar) -> Tensor:
-    r"""Quadrant-correct two-argument arctangent.
-
-    Verbose alias of :func:`lucid.atan2`.  Returns the polar angle
-    :math:`\theta` of the point :math:`(x, y)` in the Cartesian plane,
-    resolving the correct quadrant from the signs of both arguments.
-
-    Parameters
-    ----------
-    input : Tensor
-        Ordinate (imaginary / y-coordinate). Must broadcast with ``other``.
-    other : Tensor | Scalar
-        Abscissa (real / x-coordinate). Must broadcast with ``input``.
-
-    Returns
-    -------
-    Tensor
-        Element-wise angle in radians on :math:`[-\pi, \pi]`, with the
-        broadcast shape of ``input`` and ``other``.
-
-    Notes
-    -----
-    Mathematical definition:
-
-    .. math::
-
-        \arctan2(y, x) =
-        \begin{cases}
-            \arctan(y/x),          & x > 0, \\
-            \arctan(y/x) + \pi,    & x < 0,\ y \geq 0, \\
-            \arctan(y/x) - \pi,    & x < 0,\ y < 0, \\
-            +\pi/2,                & x = 0,\ y > 0, \\
-            -\pi/2,                & x = 0,\ y < 0, \\
-            0,                     & x = 0,\ y = 0.
-        \end{cases}
-
-    The naive :math:`\arctan(y / x)` collapses both half-planes into
-    :math:`(-\pi/2, \pi/2)`; ``arctan2`` instead inspects the sign of
-    each argument to recover the full :math:`[-\pi, \pi]` range, which
-    is essential for converting Cartesian to polar coordinates.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> y = lucid.tensor([1.0,  1.0, -1.0, -1.0])
-    >>> x = lucid.tensor([1.0, -1.0, -1.0,  1.0])
-    >>> lucid.arctan2(y, x)
-    tensor([0.7854, 2.356, -2.356, -0.7854])
-    """
-    return lucid.atan2(input, other)
 
 
 # ── Inverse hyperbolic (composed) ──────────────────────────────────────────
@@ -1429,21 +1137,9 @@ def sgn(input: Tensor) -> Tensor:
     return _sgn(input)
 
 
-def fix(input: Tensor) -> Tensor:
-    """Round floating-point elements towards zero in a new tensor (alias of :func:`lucid.trunc`)."""
-    return lucid.trunc(input)
-
-
 __all__ = [
-    "absolute",
-    "negative",
     "positive",
-    "subtract",
-    "multiply",
-    "divide",
-    "true_divide",
     "rsub",
-    "arctan2",
     "arccosh",
     "acosh",
     "arcsinh",
@@ -1470,7 +1166,6 @@ __all__ = [
     "rad2deg",
     "logaddexp2",
     "sgn",
-    "fix",
 ]
 
 

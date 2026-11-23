@@ -2702,7 +2702,7 @@ def masked_fill(input: Tensor, mask: Tensor, value: _float) -> Tensor:
     Tensor([0., 2., 0.])
     """
     ...
-def cat(tensors: list[Tensor], dim: DimLike = ...) -> Tensor:
+def cat(tensors: Sequence[Tensor], dim: DimLike = ...) -> Tensor:
     r"""    Concatenate tensors along an existing dimension.
     
     All tensors must share the same shape *except* along ``dim``.  The
@@ -2741,7 +2741,7 @@ def cat(tensors: list[Tensor], dim: DimLike = ...) -> Tensor:
             [3, 4]])
     """
     ...
-def stack(tensors: list[Tensor], dim: DimLike = ...) -> Tensor:
+def stack(tensors: Sequence[Tensor], dim: DimLike = ...) -> Tensor:
     r"""    Stack tensors along a new dimension.
     
     All inputs must share the same shape.  The output has rank
@@ -2775,7 +2775,7 @@ def stack(tensors: list[Tensor], dim: DimLike = ...) -> Tensor:
     (2, 2)
     """
     ...
-def hstack(tensors: list[Tensor]) -> Tensor:
+def hstack(tensors: Sequence[Tensor]) -> Tensor:
     r"""    Stack tensors horizontally (column-wise).
     
     For 1-D inputs this concatenates along axis 0; for higher rank inputs
@@ -2809,7 +2809,7 @@ def hstack(tensors: list[Tensor]) -> Tensor:
             [3, 4, 6]])
     """
     ...
-def vstack(tensors: list[Tensor]) -> Tensor:
+def vstack(tensors: Sequence[Tensor]) -> Tensor:
     r"""    Stack tensors vertically (row-wise).
     
     1-D inputs are treated as rows of length ``size``; higher-rank
@@ -5100,36 +5100,6 @@ def view(input: Tensor, size: _int | Sequence[_int]) -> Tensor:
     (3, 4)
     """
     ...
-def concat(tensors: list[Tensor], dim: _int = ...) -> Tensor:
-    r"""    Alias for :func:`cat`.
-    
-    Concatenates a list of tensors along an existing dimension.  Provided
-    for naming parity with array libraries that prefer the longer name.
-    
-    Parameters
-    ----------
-    tensors : list of Tensor
-        Tensors to concatenate.
-    dim : int
-        Concatenation dimension.
-    
-    Returns
-    -------
-    Tensor
-        The concatenated tensor.
-    
-    Notes
-    -----
-    Behaviour is identical to :func:`cat` — see that function for the
-    precise contract and edge cases.
-    
-    Examples
-    --------
-    >>> import lucid
-    >>> lucid.concat([lucid.tensor([1, 2]), lucid.tensor([3, 4])], dim=0)
-    Tensor([1, 2, 3, 4])
-    """
-    ...
 def real(input: Tensor) -> Tensor:
     r"""    Real part of a complex tensor.
     
@@ -5242,6 +5212,377 @@ def conj(input: Tensor) -> Tensor:
     >>> x = lucid.tensor([1.0, 2.0, 3.0])
     >>> lucid.conj(x)
     Tensor([...])
+    """
+    ...
+def multiply(input: Tensor, other: Tensor | Scalar) -> Tensor:
+    r"""    Element-wise product.
+    
+    Verbose alias of the ``*`` operator. Broadcasts ``input`` and ``other`` and
+    applies the standard dtype-promotion rules.
+    
+    Parameters
+    ----------
+    input : Tensor
+        First operand.
+    other : Tensor | Scalar
+        Second operand.
+    
+    Returns
+    -------
+    Tensor
+        Element-wise product of the broadcast shape of ``input`` and ``other``.
+    
+    Notes
+    -----
+    Mathematical definition:
+    
+    .. math::
+    
+        \text{out}_i = a_i \cdot b_i
+    
+    Gradients: :math:`\partial / \partial a = b`,
+    :math:`\partial / \partial b = a`.
+    
+    Examples
+    --------
+    >>> import lucid
+    >>> a = lucid.tensor([1.0, 2.0, 3.0])
+    >>> lucid.multiply(a, 2.0)
+    tensor([2., 4., 6.])
+    """
+    ...
+def subtract(input: Tensor, other: Tensor | Scalar, *, alpha: Scalar = ...) -> Tensor:
+    r"""    Element-wise subtraction with an optional scalar multiplier.
+    
+    Computes :math:`a - \alpha \cdot b` element-wise, broadcasting ``input``
+    and ``other`` to a common shape and following the standard dtype-promotion
+    rules.
+    
+    Parameters
+    ----------
+    input : Tensor
+        Minuend.
+    other : Tensor | Scalar
+        Subtrahend. Python scalars are broadcast against ``input``.
+    alpha : Scalar, optional
+        Scalar multiplier applied to ``other`` before subtraction.
+        Defaults to ``1`` (plain subtraction).
+    
+    Returns
+    -------
+    Tensor
+        Element-wise difference of the broadcast shape of ``input`` and ``other``.
+    
+    Notes
+    -----
+    Mathematical definition:
+    
+    .. math::
+    
+        \text{out}_i = a_i - \alpha \cdot b_i
+    
+    Dtype follows standard promotion: e.g. ``int64 - float32 → float32``.
+    Gradients flow as :math:`\partial / \partial a = 1` and
+    :math:`\partial / \partial b = -\alpha`.
+    
+    Examples
+    --------
+    >>> import lucid
+    >>> a = lucid.tensor([4.0, 5.0])
+    >>> b = lucid.tensor([1.0, 2.0])
+    >>> lucid.subtract(a, b, alpha=2.0)
+    tensor([2., 1.])
+    """
+    ...
+def divide(input: Tensor, other: Tensor | Scalar, *, rounding_mode: str | None = ...) -> Tensor:
+    r"""    Element-wise division — :func:`lucid.div` under its longer name.
+    
+    ``rounding_mode=None`` is the ``/`` operator: integer operands are
+    promoted to a floating dtype.  ``"trunc"`` rounds the quotient toward
+    zero and ``"floor"`` toward negative infinity, keeping an integer dtype.
+    
+    Parameters
+    ----------
+    input : Tensor
+        Numerator.
+    other : Tensor | Scalar
+        Denominator.
+    rounding_mode : {None, "trunc", "floor"}, optional
+        How the quotient is rounded.  Default ``None``: not at all.
+    
+    Returns
+    -------
+    Tensor
+        Element-wise quotient of the broadcast shape of ``input`` and ``other``.
+    
+    Notes
+    -----
+    .. math::
+    
+        \text{out}_i = \frac{a_i}{b_i}
+    
+    Division by zero gives :math:`\pm\infty` (NaN for ``0/0``).  The gradients
+    are :math:`1/b` and :math:`-a / b^{2}`, and zero for a rounded quotient.
+    
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.divide(lucid.tensor([6.0, 9.0]), 3.0)
+    tensor([2., 3.])
+    >>> lucid.divide(lucid.tensor([7, -7]), 2, rounding_mode="trunc")
+    tensor([3, -3], dtype=lucid.int64)
+    """
+    ...
+def true_divide(input: Tensor, other: Tensor | Scalar) -> Tensor:
+    r"""    Element-wise true (floating-point) division.
+    
+    Equivalent to :func:`divide`; named ``true_divide`` for parity with
+    NumPy / reference-framework spellings that distinguish it from
+    integer-flavored ``floor_divide``.
+    
+    Parameters
+    ----------
+    input : Tensor
+        Numerator.
+    other : Tensor | Scalar
+        Denominator.
+    
+    Returns
+    -------
+    Tensor
+        Element-wise quotient in a floating-point dtype.
+    
+    Notes
+    -----
+    Mathematical definition:
+    
+    .. math::
+    
+        \text{out}_i = \frac{a_i}{b_i}
+    
+    Even for integer inputs, the output dtype is a floating type — this is
+    the defining property that separates ``true_divide`` from
+    ``floor_divide``.
+    
+    Examples
+    --------
+    >>> import lucid
+    >>> a = lucid.tensor([7, 8], dtype=lucid.int32)
+    >>> lucid.true_divide(a, 2)
+    tensor([3.5, 4.])
+    """
+    ...
+def arctan2(input: Tensor, other: Tensor | Scalar) -> Tensor:
+    r"""    Quadrant-correct two-argument arctangent.
+    
+    Verbose alias of :func:`lucid.atan2`.  Returns the polar angle
+    :math:`\theta` of the point :math:`(x, y)` in the Cartesian plane,
+    resolving the correct quadrant from the signs of both arguments.
+    
+    Parameters
+    ----------
+    input : Tensor
+        Ordinate (imaginary / y-coordinate). Must broadcast with ``other``.
+    other : Tensor | Scalar
+        Abscissa (real / x-coordinate). Must broadcast with ``input``.
+    
+    Returns
+    -------
+    Tensor
+        Element-wise angle in radians on :math:`[-\pi, \pi]`, with the
+        broadcast shape of ``input`` and ``other``.
+    
+    Notes
+    -----
+    Mathematical definition:
+    
+    .. math::
+    
+        \arctan2(y, x) =
+        \begin{cases}
+            \arctan(y/x),          & x > 0, \\
+            \arctan(y/x) + \pi,    & x < 0,\ y \geq 0, \\
+            \arctan(y/x) - \pi,    & x < 0,\ y < 0, \\
+            +\pi/2,                & x = 0,\ y > 0, \\
+            -\pi/2,                & x = 0,\ y < 0, \\
+            0,                     & x = 0,\ y = 0.
+        \end{cases}
+    
+    The naive :math:`\arctan(y / x)` collapses both half-planes into
+    :math:`(-\pi/2, \pi/2)`; ``arctan2`` instead inspects the sign of
+    each argument to recover the full :math:`[-\pi, \pi]` range, which
+    is essential for converting Cartesian to polar coordinates.
+    
+    Examples
+    --------
+    >>> import lucid
+    >>> y = lucid.tensor([1.0,  1.0, -1.0, -1.0])
+    >>> x = lucid.tensor([1.0, -1.0, -1.0,  1.0])
+    >>> lucid.arctan2(y, x)
+    tensor([0.7854, 2.356, -2.356, -0.7854])
+    """
+    ...
+def absolute(input: Tensor) -> Tensor:
+    r"""    Element-wise absolute value.
+    
+    Verbose alias of :func:`lucid.abs`, exposed for parity with reference
+    frameworks that publish both ``abs`` and ``absolute`` spellings of the
+    same operation.
+    
+    Parameters
+    ----------
+    input : Tensor
+        Input tensor. Any numeric dtype.
+    
+    Returns
+    -------
+    Tensor
+        Tensor of the same shape and dtype as ``input`` containing
+        :math:`|x_i|` element-wise.
+    
+    Notes
+    -----
+    Mathematical definition:
+    
+    .. math::
+    
+        \text{out}_i = |x_i|
+    
+    The gradient is :math:`\operatorname{sign}(x_i)`; the sub-gradient at
+    :math:`x_i = 0` is conventionally taken to be ``0``.
+    
+    Examples
+    --------
+    >>> import lucid
+    >>> x = lucid.tensor([-1.5, 0.0, 2.0])
+    >>> lucid.absolute(x)
+    tensor([1.5, 0., 2.])
+    """
+    ...
+def negative(input: Tensor) -> Tensor:
+    r"""    Element-wise negation.
+    
+    Verbose alias of :func:`lucid.neg`. Equivalent to the unary ``-`` operator
+    on a tensor.
+    
+    Parameters
+    ----------
+    input : Tensor
+        Input tensor. Any numeric dtype.
+    
+    Returns
+    -------
+    Tensor
+        Tensor of the same shape and dtype as ``input`` whose entries are
+        :math:`-x_i`.
+    
+    Notes
+    -----
+    Mathematical definition:
+    
+    .. math::
+    
+        \text{out}_i = -x_i
+    
+    The gradient with respect to ``input`` is :math:`-1` everywhere.
+    
+    Examples
+    --------
+    >>> import lucid
+    >>> x = lucid.tensor([1.0, -2.0, 3.5])
+    >>> lucid.negative(x)
+    tensor([-1., 2., -3.5])
+    """
+    ...
+def fix(input: Tensor) -> Tensor:
+    r"""    Round elements towards zero.
+    
+    Alias of :func:`lucid.trunc`: each element loses its fractional part, so
+    positive values round down and negative values round up.
+    
+    Parameters
+    ----------
+    input : Tensor
+        Input tensor.
+    
+    Returns
+    -------
+    Tensor
+        The truncated tensor, with the shape and dtype of ``input``.
+    
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.fix(lucid.tensor([1.5, -1.5]))
+    tensor([1., -1.])
+    """
+    ...
+def row_stack(tensors: Sequence[Tensor]) -> Tensor:
+    r"""    Stack tensors as rows — alias of :func:`lucid.vstack`.
+    
+    Verbose name provided for API parity. Each 1-D input is treated as a
+    row and concatenated along axis 0.
+    
+    Parameters
+    ----------
+    tensors : Sequence[Tensor]
+        Tensors to stack. 1-D tensors are promoted to ``(1, N)`` row
+        vectors; higher-rank tensors must have matching column count.
+    
+    Returns
+    -------
+    Tensor
+        Tensor formed by concatenating the (possibly promoted) inputs
+        along axis 0.
+    
+    Notes
+    -----
+    For all-1-D inputs of length ``N``, the result has shape ``(k, N)``:
+    
+    .. math::
+    
+        \text{out}_{ij} = v^{(i)}_j.
+    
+    The 1-D-to-2-D promotion is the inverse of :func:`column_stack`'s
+    promotion.
+    
+    Examples
+    --------
+    >>> import lucid
+    >>> a = lucid.tensor([1., 2., 3.])
+    >>> b = lucid.tensor([4., 5., 6.])
+    >>> lucid.row_stack([a, b])
+    tensor([[1., 2., 3.], [4., 5., 6.]])
+    """
+    ...
+def concat(tensors: Sequence[Tensor], dim: DimLike = ...) -> Tensor:
+    r"""    Alias for :func:`cat`.
+    
+    Concatenates a list of tensors along an existing dimension.  Provided
+    for naming parity with array libraries that prefer the longer name.
+    
+    Parameters
+    ----------
+    tensors : list of Tensor
+        Tensors to concatenate.
+    dim : int
+        Concatenation dimension.
+    
+    Returns
+    -------
+    Tensor
+        The concatenated tensor.
+    
+    Notes
+    -----
+    Behaviour is identical to :func:`cat` — see that function for the
+    precise contract and edge cases.
+    
+    Examples
+    --------
+    >>> import lucid
+    >>> lucid.concat([lucid.tensor([1, 2]), lucid.tensor([3, 4])], dim=0)
+    tensor([1, 2, 3, 4], dtype=lucid.int64)
     """
     ...
 
@@ -5941,7 +6282,6 @@ nan: _float
 newaxis: None
 
 # ── Composite ops (elementwise / shape / blas / reductions / predicates / dtype) ─
-def absolute(input: Tensor) -> Tensor: ...
 def acosh(input: Tensor) -> Tensor: ...
 def addbmm(input: Tensor, batch1: Tensor, batch2: Tensor, *, beta: _float = ..., alpha: _float = ...) -> Tensor: ...
 def addcdiv(input: Tensor, tensor1: Tensor, tensor2: Tensor, *, value: _float = ...) -> Tensor: ...
@@ -5957,7 +6297,6 @@ def aminmax(input: Tensor, *, dim: _int | None = ..., keepdim: _bool = ...) -> _
 def angle(input: Tensor) -> Tensor: ...
 def arccosh(input: Tensor) -> Tensor: ...
 def arcsinh(input: Tensor) -> Tensor: ...
-def arctan2(input: Tensor, other: Tensor | Scalar) -> Tensor: ...
 def arctanh(input: Tensor) -> Tensor: ...
 def argwhere(input: Tensor) -> Tensor: ...
 def asinh(input: Tensor) -> Tensor: ...
@@ -5991,7 +6330,6 @@ def diagflat(input: Tensor, offset: _int = ...) -> Tensor: ...
 def diagonal_scatter(input: Tensor, src: Tensor, offset: _int = ..., dim1: _int = ..., dim2: _int = ...) -> Tensor: ...
 def digamma(input: Tensor) -> Tensor: ...
 def dist(input: Tensor, other: Tensor, p: _float = ...) -> Tensor: ...
-def divide(input: Tensor, other: Tensor | Scalar, *, rounding_mode: str | None = ...) -> Tensor: ...
 def dsplit(input: Tensor, indices_or_sections: _int | Sequence[_int]) -> list[Tensor]: ...
 def dstack(tensors: Sequence[Tensor]) -> Tensor: ...
 def equal(input: Tensor, other: Tensor) -> _bool:
@@ -6036,7 +6374,6 @@ def equal(input: Tensor, other: Tensor) -> _bool:
     ...
 def erfc(input: Tensor) -> Tensor: ...
 def expm1(input: Tensor) -> Tensor: ...
-def fix(input: Tensor) -> Tensor: ...
 def float_power(input: Tensor | Scalar | _complex, exponent: Tensor | Scalar | _complex) -> Tensor: ...
 def fmax(input: TensorOrScalar, other: TensorOrScalar) -> Tensor: ...
 def fmin(input: TensorOrScalar, other: TensorOrScalar) -> Tensor: ...
@@ -6081,13 +6418,11 @@ def mode(input: Tensor, dim: _int = ..., keepdim: _bool = ...) -> tuple[Tensor, 
 def moveaxis(input: Tensor, source: _int | Sequence[_int], destination: _int | Sequence[_int]) -> Tensor: ...
 def msort(input: Tensor) -> Tensor: ...
 def multinomial(input: Tensor, num_samples: _int, replacement: _bool = ..., *, generator: _C_engine.Generator | None = ...) -> Tensor: ...
-def multiply(input: Tensor, other: Tensor | Scalar) -> Tensor: ...
 def mv(input: Tensor, vec: Tensor) -> Tensor: ...
 def nanmean(input: Tensor, dim: _int | Sequence[_int] | None = ..., keepdim: _bool = ..., *, dtype: DTypeLike | None = ...) -> Tensor: ...
 def nanmedian(input: Tensor, dim: _int | None = ..., keepdim: _bool = ...) -> Tensor | tuple[Tensor, Tensor]: ...
 def nanquantile(input: Tensor, q: _float | Sequence[_float] | Tensor, dim: _int | None = ..., keepdim: _bool = ..., *, interpolation: str = ...) -> Tensor: ...
 def nansum(input: Tensor, dim: _int | Sequence[_int] | None = ..., keepdim: _bool = ..., *, dtype: DTypeLike | None = ...) -> Tensor: ...
-def negative(input: Tensor) -> Tensor: ...
 def numel(input: Tensor) -> _int: ...
 def poisson(input: Tensor, generator: _C_engine.Generator | None = ...) -> Tensor: ...
 def polar(abs: TensorOrScalar, angle: TensorOrScalar) -> Tensor: ...
@@ -6101,7 +6436,6 @@ def resolve_conj(input: Tensor) -> Tensor: ...
 def resolve_neg(input: Tensor) -> Tensor: ...
 def result_type(tensor: Tensor | Scalar, other: Tensor | Scalar) -> dtype: ...
 def rot90(input: Tensor, k: _int = ..., dims: Sequence[_int] = ...) -> Tensor: ...
-def row_stack(tensors: Sequence[Tensor]) -> Tensor: ...
 def rsub(input: Tensor, other: Tensor | Scalar, *, alpha: _float = ...) -> Tensor: ...
 def scatter_reduce(input: Tensor, dim: _int, index: Tensor, src: Tensor, reduce: str = ..., *, include_self: _bool = ...) -> Tensor: ...
 def select(input: Tensor, dim: _int, index: _int) -> Tensor: ...
@@ -6113,7 +6447,6 @@ def slice_scatter(input: Tensor, src: Tensor, dim: _int = ..., start: _int | Non
 def split_with_sizes(input: Tensor, split_sizes: Sequence[_int], dim: _int = ...) -> tuple[Tensor, ...]: ...
 def std_mean(input: Tensor, dim: _int | Sequence[_int] | None = None, unbiased: _bool | None = None, keepdim: _bool = False, *, correction: _int | _float | None = None) -> tuple[Tensor, Tensor]: ...
 def stft(input: Tensor, n_fft: _int, hop_length: _int | None = ..., win_length: _int | None = ..., window: Tensor | None = ..., center: _bool = ..., pad_mode: str = ..., normalized: _bool = ..., onesided: _bool | None = ..., return_complex: _bool | None = ..., align_to_window: _bool | None = ...) -> Tensor: ...
-def subtract(input: Tensor, other: Tensor | Scalar, *, alpha: _float = ...) -> Tensor: ...
 def swapaxes(input: Tensor, axis0: _int, axis1: _int) -> Tensor: ...
 def swapdims(input: Tensor, dim0: _int, dim1: _int) -> Tensor: ...
 def t(input: Tensor) -> Tensor: ...
@@ -6122,7 +6455,6 @@ def tensor_split(input: Tensor, indices_or_sections: _int | Sequence[_int], dim:
 def trapezoid(y: Tensor, x: Tensor | None = ..., *, dx: _float | None = ..., dim: _int = ...) -> Tensor: ...
 def tril_indices(row: _int, col: _int | None = ..., offset: _int = ..., *, dtype: DTypeLike = ..., device: DeviceLike = ...) -> Tensor: ...
 def triu_indices(row: _int, col: _int | None = ..., offset: _int = ..., *, dtype: DTypeLike = ..., device: DeviceLike = ...) -> Tensor: ...
-def true_divide(input: Tensor, other: Tensor | Scalar) -> Tensor: ...
 def unravel_index(indices: Tensor, shape: _int | Sequence[_int]) -> tuple[Tensor, ...]: ...
 def unsafe_chunk(input: Tensor, chunks: _int, dim: _int = ...) -> tuple[Tensor, ...]: ...
 def unsafe_split(input: Tensor, split_size: _int | Sequence[_int], dim: _int = ...) -> tuple[Tensor, ...]: ...

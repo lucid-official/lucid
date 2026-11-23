@@ -320,46 +320,6 @@ def column_stack(tensors: Sequence[Tensor]) -> Tensor:
     return lucid.cat(fixed, 1)
 
 
-def row_stack(tensors: Sequence[Tensor]) -> Tensor:
-    r"""Stack tensors as rows — alias of :func:`lucid.vstack`.
-
-    Verbose name provided for API parity. Each 1-D input is treated as a
-    row and concatenated along axis 0.
-
-    Parameters
-    ----------
-    tensors : Sequence[Tensor]
-        Tensors to stack. 1-D tensors are promoted to ``(1, N)`` row
-        vectors; higher-rank tensors must have matching column count.
-
-    Returns
-    -------
-    Tensor
-        Tensor formed by concatenating the (possibly promoted) inputs
-        along axis 0.
-
-    Notes
-    -----
-    For all-1-D inputs of length ``N``, the result has shape ``(k, N)``:
-
-    .. math::
-
-        \text{out}_{ij} = v^{(i)}_j.
-
-    The 1-D-to-2-D promotion is the inverse of :func:`column_stack`'s
-    promotion.
-
-    Examples
-    --------
-    >>> import lucid
-    >>> a = lucid.tensor([1., 2., 3.])
-    >>> b = lucid.tensor([4., 5., 6.])
-    >>> lucid.row_stack([a, b])
-    tensor([[1., 2., 3.], [4., 5., 6.]])
-    """
-    return lucid.vstack(list(tensors))
-
-
 def dstack(tensors: Sequence[Tensor]) -> Tensor:
     r"""Stack tensors along the third (depth) axis.
 
@@ -1411,7 +1371,6 @@ __all__ = [
     "adjoint",
     "t",
     "column_stack",
-    "row_stack",
     "dstack",
     "atleast_1d",
     "atleast_2d",

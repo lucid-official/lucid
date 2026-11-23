@@ -10,12 +10,13 @@ declarative table of ``OpEntry`` records, not a mix of declarations and
 plumbing.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
 from lucid import _dispatch
 from lucid._C import engine as _C_engine
 from lucid._ops import _adapters as A  # accessor for every signature-normaliser
+from lucid._ops._aliases import ALIASES, OpAlias, narrowed
 from lucid._ops._reduce import _logical_not_adapter, _make_logical_adapter
 from lucid._ops._division import _make_div_adapter, _make_round_adapter
 from lucid._ops._search import _bucketize_adapter, _searchsorted_adapter
@@ -580,8 +581,6 @@ _REGISTRY: list[OpEntry] = [
     # Shape aliases.
     OpEntry("view",   A._view_adapter,   1,
             method_name="view", free_fn_name="view"),
-    OpEntry("concat", A._concat_adapter, -1,
-            method_name=None, free_fn_name="concat"),
 
     # No `cross` / `norm` / `einsum` top-level forwarders.  Lucid's API tree
     # gives each op exactly one canonical path: linalg ops live only under
@@ -605,3 +604,32 @@ _REGISTRY: list[OpEntry] = [
     OpEntry("conj",    _R.conj,    1, method_name="conj", free_fn_name="conj"),
 ]
 # fmt: on
+
+
+def _derived_entry(alias: OpAlias, target: OpEntry) -> OpEntry:
+    """``target`` under the name ``alias`` gives it.
+
+    The same adapter, so the same signature, the same refusal of a bad operand
+    and the same engine path.  The Tensor method is left to ``_free_fn_methods``,
+    which takes it from the free function.  An alias's ``fixed`` keywords are
+    bound in the adapter and gone from its signature.
+    """
+    return replace(
+        target,
+        name=alias.name,
+        engine_fn=(
+            narrowed(target.engine_fn, alias.name, alias.fixed) if alias.fixed else target.engine_fn
+        ),
+        free_fn_name=alias.name,
+        method_name=None,
+        extra_kwargs=[k for k in target.extra_kwargs if k not in alias.fixed],
+    )
+
+
+def _derived_entries(registry: list[OpEntry]) -> list[OpEntry]:
+    """The entries of the derived aliases in :data:`lucid._ops._aliases.ALIASES`."""
+    by_free_fn = {e.free_fn_name: e for e in registry if e.free_fn_name}
+    return [_derived_entry(a, by_free_fn[a.target]) for a in ALIASES if a.derived]
+
+
+_REGISTRY.extend(_derived_entries(_REGISTRY))

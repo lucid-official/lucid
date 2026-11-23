@@ -1281,7 +1281,7 @@
     "lucid/_factories/creation.py": 4,
     "lucid/_factories/random.py": 3,
     "lucid/_ops/composite/blas.py": 2,
-    "lucid/_ops/composite/elementwise.py": 3,
+    "lucid/_ops/composite/elementwise.py": 2,
     "lucid/_ops/composite/predicates.py": 2,
     "lucid/_ops/composite/shape.py": 4,
     "lucid/_ops/composite/statistics.py": 1,
