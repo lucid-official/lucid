@@ -813,7 +813,7 @@ class TestDiscreteControl:
 
     @staticmethod
     def _actions(b: int = 2, t: int = 3, action_dim: int = 4) -> lucid.Tensor:
-        index = lucid.zeros((b, t)).to(lucid.int32)
+        index = lucid.zeros((b, t)).to(lucid.int64)
         return lucid.nn.functional.one_hot(index, num_classes=action_dim).to(lucid.float32)
 
     def test_the_action_is_a_one_hot(self) -> None:

@@ -541,7 +541,7 @@ class TestActorObjective:
         observations, actions, rewards = _batch(t=3)
         if space == "discrete":
             actions = lucid.nn.functional.one_hot(
-                lucid.zeros((2, 3)).to(lucid.int32), num_classes=2
+                lucid.zeros((2, 3)).to(lucid.int64), num_classes=2
             ).to(lucid.float32)
         output = model(observations, actions, rewards)
         model.backward(output)
