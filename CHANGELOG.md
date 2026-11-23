@@ -397,6 +397,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse integer operands of the losses with the reference's class
 
+- resample integer label masks as float32, cast mix labels to int64
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

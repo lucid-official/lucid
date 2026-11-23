@@ -24,17 +24,27 @@ _ANTIALIASED_MODES = frozenset({"bilinear", "bicubic"})
 _COPYING_MODES = frozenset({"nearest", "nearest-exact"})
 
 
-def _sampled(x: Tensor, sample: Callable[[Tensor], Tensor]) -> Tensor:
-    """``sample(x)``, with a bool ``x`` sampled as float32 and brought back to bool.
+_INTEGER_DTYPES = (lucid.int8, lucid.int16, lucid.int32, lucid.int64)
 
-    ``interpolate`` and ``grid_sample`` refuse a bool (the reference's CPU has
-    no kernel for one), and a bool mask is a mask a nearest-type sample copies
-    exactly: ``0.0`` and ``1.0`` come back as themselves, so ``> 0.5`` is the
-    mask the samples came from.
+
+def _sampled(x: Tensor, sample: Callable[[Tensor], Tensor]) -> Tensor:
+    """``sample(x)``, with a bool or integer ``x`` sampled as float32 and brought back.
+
+    ``interpolate`` and ``grid_sample`` refuse a bool and an integer (the reference's
+    CPU has no kernel for either).  A mask is a mask a nearest-type sample copies
+    exactly: ``0.0`` and ``1.0`` come back as themselves, so ``> 0.5`` is the bool mask
+    the samples came from, and an integer label mask comes back as the labels,
+    rounded and returned to the dtype it had.
+
+    float32 holds every integer up to ``2**24`` exactly, so a label mask is resampled
+    without loss while its values stay below 16 777 216; a larger label (an int64
+    instance id) is rounded to the nearest float32 on the way and is not what it was.
     """
-    if x.dtype != lucid.bool_:
-        return sample(x)
-    return sample(x.to(lucid.float32)) > 0.5
+    if x.dtype == lucid.bool_:
+        return sample(x.to(lucid.float32)) > 0.5
+    if x.dtype in _INTEGER_DTYPES:
+        return sample(x.to(lucid.float32)).round().to(x.dtype)
+    return sample(x)
 
 
 def _cat(tensors: list[Tensor], dim: int) -> Tensor:

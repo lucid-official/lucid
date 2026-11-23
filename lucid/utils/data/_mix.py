@@ -55,7 +55,7 @@ def _validate_init(alpha: float, num_classes: int, p: float) -> None:
 
 def _to_soft_targets(labels: Tensor, num_classes: int) -> Tensor:
     """Encode integer labels ``(B,)`` as float ``(B, num_classes)`` one-hot."""
-    return nnF.one_hot(labels, num_classes=num_classes).to(lucid.float32)
+    return nnF.one_hot(labels.to(lucid.int64), num_classes=num_classes).to(lucid.float32)
 
 
 # ── Mixup ────────────────────────────────────────────────────────────
