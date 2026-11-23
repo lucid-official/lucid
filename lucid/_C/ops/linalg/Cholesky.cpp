@@ -55,7 +55,8 @@ TensorImplPtr cholesky_op(const TensorImplPtr& a_in, bool upper) {
     Validator::input(a_in, "cholesky.a").non_null().square_2d();
     const AmpScope amp{"cholesky", a_in->device()};
     const TensorImplPtr a = amp.cast(a_in);
-    Validator::input(a, "cholesky.a").float_only();
+    Validator::input(a, "cholesky.a").non_null();
+    linalg_detail::require_solver_dtype(a->dtype(), "cholesky");
     OpScopeFull scope{"cholesky", a->device(), a->dtype(), a->shape()};
     scope.set_attr("upper", upper);
 

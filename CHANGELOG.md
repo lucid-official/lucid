@@ -487,6 +487,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - inspect physical operations during Metal lowering (LCD-1043)
 
+- OpSchema declares integer refusals, one guard enforces
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

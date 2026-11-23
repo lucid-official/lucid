@@ -92,8 +92,8 @@ TensorImplPtr rotate_op(const TensorImplPtr& input, double angle_deg, double cy,
 // floating-only), so the message offers a float.  ``promote_for_schema`` builds
 // a ``SchemaGuard`` per operand, so the refusal needs no line of its own here.
 const OpSchema BilinearLayerBackward::schema_v1 =
-    OpSchema{"bilinear_layer", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                          BoolCast::Floating);
+    OpSchema{"bilinear_layer", 1, AmpPolicy::Promote, true}.refusing_bool(DtypeRefusal::Kernel,
+                                                                          CastHint::Floating);
 
 namespace {
 

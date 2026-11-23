@@ -44,8 +44,8 @@ namespace lucid {
 // number"; the rest have no bool kernel (``NotImplementedError``) and no
 // integer one either, so they cast to a floating dtype.
 const OpSchema ReluBackward::schema_v1 =
-    OpSchema{"relu", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Guard,
-                                                                  BoolCast::Number);
+    OpSchema{"relu", 1, AmpPolicy::KeepInput, true}.refusing_bool(DtypeRefusal::Guard,
+                                                                  CastHint::Number);
 
 // dL/dx = 0 where x <= 0, else dL/dy.  The reference tests ``x <= 0``, so
 // a NaN input passes its gradient; testing ``x > 0`` dropped it.
@@ -218,8 +218,8 @@ LUCID_REGISTER_OP(SigmoidBackward)
 
 // silu — AmpPolicy::Promote; gradient derived analytically from y = x*σ(x).
 const OpSchema SiluBackward::schema_v1 =
-    OpSchema{"silu", 1, AmpPolicy::Promote, true, "", true}.refusing_bool(BoolRefusal::Kernel,
-                                                                          BoolCast::Floating);
+    OpSchema{"silu", 1, AmpPolicy::Promote, true, "", true}.refusing(kBoolAndSignedIntegers,
+                                                                     DtypeRefusal::Kernel);
 
 // dL/dx = σ(x) * (1 + x*(1 - σ(x))) * dL/dy.  Delegates to the backend so
 // GPU can dispatch to a single fused kernel (MLX expression or MPSGraph)
@@ -247,9 +247,8 @@ LUCID_REGISTER_OP(SiluBackward)
 
 // gelu — ForceFP32 because the tanh approximation used inside the backend is
 // not numerically safe in half precision.
-const OpSchema GeluBackward::schema_v1 =
-    OpSchema{"gelu", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                  BoolCast::Floating);
+const OpSchema GeluBackward::schema_v1 = OpSchema{"gelu", 1, AmpPolicy::ForceFP32, true}.refusing(
+    kBoolAndSignedIntegers, DtypeRefusal::Kernel);
 
 // Delegate to the backend; the exact formula involves the Gaussian CDF
 // 0.5*(1 + erf(x/sqrt(2))) and its derivative.
@@ -287,8 +286,8 @@ LUCID_REGISTER_OP(GeluBackward)
 // gelu_exact — Gaussian-CDF formulation (exact erf-based).  ForceFP32
 // matches the tanh-approx variant for consistent AMP behaviour.
 const OpSchema GeluExactBackward::schema_v1 =
-    OpSchema{"gelu_exact", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                        BoolCast::Floating);
+    OpSchema{"gelu_exact", 1, AmpPolicy::ForceFP32, true}.refusing(kBoolAndSignedIntegers,
+                                                                   DtypeRefusal::Kernel);
 
 Storage GeluExactBackward::grad_formula(const Storage& g) {
     return backend::Dispatcher::for_device(device_).gelu_exact_backward(saved_inputs_[0], g,
@@ -318,8 +317,8 @@ LUCID_REGISTER_OP(GeluExactBackward)
 
 // leaky_relu — KeepInput (valid for integer slopes).
 const OpSchema LeakyReluBackward::schema_v1 =
-    OpSchema{"leaky_relu", 1, AmpPolicy::KeepInput, true, "", true}.refusing_bool(
-        BoolRefusal::Kernel, BoolCast::Floating);
+    OpSchema{"leaky_relu", 1, AmpPolicy::KeepInput, true, "", true}.refusing(kBoolAndSignedIntegers,
+                                                                             DtypeRefusal::Kernel);
 
 // dL/dx = (x > 0 ? 1 : slope_) * dL/dy  (leaky mask).
 Storage LeakyReluBackward::grad_formula(const Storage& g) {
@@ -357,7 +356,9 @@ TensorImplPtr leaky_relu_op(const TensorImplPtr& a, double slope) {
 LUCID_REGISTER_OP(LeakyReluBackward)
 
 // softplus — ForceFP32 because log(1 + e^x) overflows in float16.
-const OpSchema SoftplusBackward::schema_v1{"softplus", 1, AmpPolicy::ForceFP32, true};
+const OpSchema SoftplusBackward::schema_v1 =
+    OpSchema{"softplus", 1, AmpPolicy::ForceFP32, true}.refusing(kSignedIntegers,
+                                                                 DtypeRefusal::Kernel);
 
 // dL/dx = sigmoid(x) * dL/dy  (derivative of log(1 + e^x) is sigmoid(x)).
 Storage SoftplusBackward::grad_formula(const Storage& g) {
@@ -372,9 +373,8 @@ TensorImplPtr softplus_op(const TensorImplPtr& a) {
 LUCID_REGISTER_OP(SoftplusBackward)
 
 // elu — ForceFP32; backward depends on alpha_ captured in the node.
-const OpSchema EluBackward::schema_v1 =
-    OpSchema{"elu", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                 BoolCast::Floating);
+const OpSchema EluBackward::schema_v1 = OpSchema{"elu", 1, AmpPolicy::ForceFP32, true}.refusing(
+    kBoolAndSignedIntegers, DtypeRefusal::Kernel);
 
 // Delegate to the backend because the piecewise formula (1 if x>=0 else
 // alpha*e^x) requires a conditional that the generic storage primitives do
@@ -412,9 +412,8 @@ TensorImplPtr elu_op(const TensorImplPtr& a, double alpha) {
 LUCID_REGISTER_OP(EluBackward)
 
 // selu — ForceFP32; fixed α/λ constants embedded in the backend.
-const OpSchema SeluBackward::schema_v1 =
-    OpSchema{"selu", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                  BoolCast::Floating);
+const OpSchema SeluBackward::schema_v1 = OpSchema{"selu", 1, AmpPolicy::ForceFP32, true}.refusing(
+    kBoolAndSignedIntegers, DtypeRefusal::Kernel);
 
 // Delegate; the backend applies the standard SELU backward with its fixed
 // self-normalising constants.
@@ -429,9 +428,8 @@ TensorImplPtr selu_op(const TensorImplPtr& a) {
 LUCID_REGISTER_OP(SeluBackward)
 
 // mish — ForceFP32; composed function requires tanh and softplus in backward.
-const OpSchema MishBackward::schema_v1 =
-    OpSchema{"mish", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                  BoolCast::Floating);
+const OpSchema MishBackward::schema_v1 = OpSchema{"mish", 1, AmpPolicy::ForceFP32, true}.refusing(
+    kBoolAndSignedIntegers, DtypeRefusal::Kernel);
 
 // Delegate; the backend computes d/dx[x*tanh(log(1+e^x))] which involves the
 // product rule applied to tanh(softplus(x)).
@@ -447,8 +445,8 @@ LUCID_REGISTER_OP(MishBackward)
 
 // hard_sigmoid — KeepInput; piecewise linear, valid for float inputs.
 const OpSchema HardSigmoidBackward::schema_v1 =
-    OpSchema{"hard_sigmoid", 1, AmpPolicy::KeepInput, true, "", true}.refusing_bool(
-        BoolRefusal::Kernel, BoolCast::Floating);
+    OpSchema{"hard_sigmoid", 1, AmpPolicy::KeepInput, true, "", true}.refusing(
+        kBoolAndSignedIntegers, DtypeRefusal::Kernel);
 
 // Delegate; the backend returns 1/6 inside the active region, 0 outside.
 Storage HardSigmoidBackward::grad_formula(const Storage& g) {
@@ -463,8 +461,8 @@ LUCID_REGISTER_OP(HardSigmoidBackward)
 
 // hard_swish — KeepInput; piecewise linear backward.
 const OpSchema HardSwishBackward::schema_v1 =
-    OpSchema{"hard_swish", 1, AmpPolicy::KeepInput, true, "", true}.refusing_bool(
-        BoolRefusal::Kernel, BoolCast::Floating);
+    OpSchema{"hard_swish", 1, AmpPolicy::KeepInput, true, "", true}.refusing(kBoolAndSignedIntegers,
+                                                                             DtypeRefusal::Kernel);
 
 // Delegate; the backend handles the three-region piecewise formula.
 Storage HardSwishBackward::grad_formula(const Storage& g) {
@@ -479,8 +477,8 @@ LUCID_REGISTER_OP(HardSwishBackward)
 
 // relu6 — KeepInput; gradient is non-zero only in the open interval (0, 6).
 const OpSchema Relu6Backward::schema_v1 =
-    OpSchema{"relu6", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Guard,
-                                                                   BoolCast::Number);
+    OpSchema{"relu6", 1, AmpPolicy::KeepInput, true}.refusing_bool(DtypeRefusal::Guard,
+                                                                   CastHint::Number);
 
 // dL/dx = (0 < x < 6) * dL/dy  using an in-range boolean mask.
 Storage Relu6Backward::grad_formula(const Storage& g) {

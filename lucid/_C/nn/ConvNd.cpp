@@ -56,16 +56,16 @@ namespace lucid {
 // error on Metal.
 template <>
 const OpSchema Conv1dBackward::schema_v1 =
-    OpSchema{"conv1d", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                  BoolCast::Floating);
+    OpSchema{"conv1d", 1, AmpPolicy::Promote, true}.refusing_bool(DtypeRefusal::Kernel,
+                                                                  CastHint::Floating);
 template <>
 const OpSchema Conv2dBackward::schema_v1 =
-    OpSchema{"conv2d", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                  BoolCast::Floating);
+    OpSchema{"conv2d", 1, AmpPolicy::Promote, true}.refusing_bool(DtypeRefusal::Kernel,
+                                                                  CastHint::Floating);
 template <>
 const OpSchema Conv3dBackward::schema_v1 =
-    OpSchema{"conv3d", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                  BoolCast::Floating);
+    OpSchema{"conv3d", 1, AmpPolicy::Promote, true}.refusing_bool(DtypeRefusal::Kernel,
+                                                                  CastHint::Floating);
 
 namespace {
 
@@ -432,7 +432,9 @@ LUCID_REGISTER_OP(Conv1dBackward)
 LUCID_REGISTER_OP(Conv2dBackward)
 LUCID_REGISTER_OP(Conv3dBackward)
 
-const OpSchema UnfoldBackward::schema_v1{"unfold", 1, AmpPolicy::KeepInput, true};
+const OpSchema UnfoldBackward::schema_v1 =
+    OpSchema{"unfold", 1, AmpPolicy::KeepInput, true}.refusing(kSignedIntegers,
+                                                               DtypeRefusal::Kernel);
 
 TensorImplPtr UnfoldBackward::forward(const TensorImplPtr& x,
                                       const std::vector<int>& kernel,
@@ -440,6 +442,7 @@ TensorImplPtr UnfoldBackward::forward(const TensorImplPtr& x,
                                       const std::vector<int>& pad,
                                       const std::vector<int>& dilation) {
     Validator::input(x, "unfold.x").non_null();
+    check_schema_dtype(UnfoldBackward::schema_v1, x->dtype());
 
     const int N = static_cast<int>(kernel.size());
     if (N < 1 || N > 3)
@@ -552,6 +555,7 @@ TensorImplPtr fold_op(const TensorImplPtr& x,
                       const std::vector<int>& padding,
                       const std::vector<int>& dilation) {
     Validator::input(x, "fold.x").non_null();
+    check_schema_dtype(FoldBackward::schema_v1, x->dtype());
     require_rank(x->shape(), 3, "fold: x", "(N, C*kH*kW, L)");
     for (const auto* v : {&output_size, &kernel_size, &stride, &padding, &dilation})
         if (v->size() != 2)
@@ -649,7 +653,8 @@ std::vector<TensorImplPtr> FoldBackward::apply_for_graph(const TensorImplPtr& gr
     return {unfold_op(grad_out, kernel_, stride_, pad_, dilation_)};
 }
 
-const OpSchema FoldBackward::schema_v1{"fold", 1, AmpPolicy::KeepInput, true};
+const OpSchema FoldBackward::schema_v1 =
+    OpSchema{"fold", 1, AmpPolicy::KeepInput, true}.refusing(kSignedIntegers, DtypeRefusal::Kernel);
 
 LUCID_REGISTER_OP(FoldBackward)
 

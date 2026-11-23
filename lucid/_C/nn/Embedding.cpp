@@ -31,6 +31,7 @@
 #include "../core/OpRegistry.h"
 #include "../core/PhantomMode.h"
 #include "../core/Profiler.h"
+#include "../core/SchemaGuard.h"
 #include "../core/Scope.h"
 #include "../core/TensorImpl.h"
 #include "../core/Validate.h"
@@ -282,6 +283,7 @@ TensorImplPtr embedding_bag_op(const TensorImplPtr& weight,
                                int padding_idx,
                                bool include_last_offset) {
     Validator::input(weight, "embedding_bag.weight").non_null();
+    check_schema_dtype(EmbeddingBagBackward::schema_v1, weight->dtype());
     Validator::input(indices, "embedding_bag.indices").non_null();
     Validator::input(offsets, "embedding_bag.offsets").non_null();
     Validator::pair(weight, indices, "embedding_bag: weight/indices").same_device();
@@ -342,7 +344,9 @@ TensorImplPtr embedding_bag_op(const TensorImplPtr& weight,
     return out;
 }
 
-const OpSchema EmbeddingBagBackward::schema_v1{"embedding_bag", 1, AmpPolicy::Promote, true};
+const OpSchema EmbeddingBagBackward::schema_v1 =
+    OpSchema{"embedding_bag", 1, AmpPolicy::Promote, true}.refusing(kSignedIntegers,
+                                                                    DtypeRefusal::Guard);
 
 std::vector<Storage> EmbeddingBagBackward::apply(Storage grad_out) {
     auto& be = backend::Dispatcher::for_device(device_);

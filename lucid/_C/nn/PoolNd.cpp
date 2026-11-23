@@ -59,28 +59,28 @@ namespace lucid {
 // The adaptive pools are max_pool / avg_pool calls and refuse through them.
 template <>
 const OpSchema MaxPool1dBackward::schema_v1 =
-    OpSchema{"max_pool1d", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                        BoolCast::Floating);
+    OpSchema{"max_pool1d", 1, AmpPolicy::KeepInput, true}.refusing(kBoolAndSignedIntegers,
+                                                                   DtypeRefusal::Kernel);
 template <>
 const OpSchema MaxPool2dBackward::schema_v1 =
-    OpSchema{"max_pool2d", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                        BoolCast::Number);
+    OpSchema{"max_pool2d", 1, AmpPolicy::KeepInput, true}.refusing_bool(DtypeRefusal::Kernel,
+                                                                        CastHint::Number);
 template <>
 const OpSchema MaxPool3dBackward::schema_v1 =
-    OpSchema{"max_pool3d", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                        BoolCast::Number);
+    OpSchema{"max_pool3d", 1, AmpPolicy::KeepInput, true}.refusing_bool(DtypeRefusal::Kernel,
+                                                                        CastHint::Number);
 template <>
 const OpSchema AvgPool1dBackward::schema_v1 =
-    OpSchema{"avg_pool1d", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                        BoolCast::Floating);
+    OpSchema{"avg_pool1d", 1, AmpPolicy::KeepInput, true}.refusing(
+        dtype_bit(Dtype::Bool) | kNarrowSigned, DtypeRefusal::Kernel);
 template <>
 const OpSchema AvgPool2dBackward::schema_v1 =
-    OpSchema{"avg_pool2d", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                        BoolCast::Floating);
+    OpSchema{"avg_pool2d", 1, AmpPolicy::KeepInput, true}.refusing(
+        dtype_bit(Dtype::Bool) | kNarrowSigned, DtypeRefusal::Kernel);
 template <>
 const OpSchema AvgPool3dBackward::schema_v1 =
-    OpSchema{"avg_pool3d", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                        BoolCast::Floating);
+    OpSchema{"avg_pool3d", 1, AmpPolicy::KeepInput, true}.refusing(
+        dtype_bit(Dtype::Bool) | kNarrowSigned, DtypeRefusal::Kernel);
 
 namespace {
 

@@ -24,6 +24,7 @@
 #include "../core/GradMode.h"
 #include "../core/OpRegistry.h"
 #include "../core/Profiler.h"
+#include "../core/SchemaGuard.h"
 #include "../core/Scope.h"
 #include "../core/TensorImpl.h"
 #include "../core/Validate.h"
@@ -45,8 +46,9 @@
 
 namespace lucid {
 
-const OpSchema ScaledDotProductAttentionBackward::schema_v1{"scaled_dot_product_attention", 1,
-                                                            AmpPolicy::ForceFP32, true};
+const OpSchema ScaledDotProductAttentionBackward::schema_v1 =
+    OpSchema{"scaled_dot_product_attention", 1, AmpPolicy::ForceFP32, true}.refusing(
+        kSignedIntegers, DtypeRefusal::Guard);
 
 namespace {
 
@@ -184,6 +186,18 @@ ForwardCore run_forward(const TensorImplPtr& q,
 
 }  // namespace
 
+namespace {
+
+// The guard-less entry sees no operand by itself: each of Q, K and V is held
+// to the schema, so a float Q beside an integer K is refused as the integer.
+void check_operand_dtypes(const TensorImplPtr& q, const TensorImplPtr& k, const TensorImplPtr& v) {
+    for (const TensorImpl* t : {q.get(), k.get(), v.get()})
+        if (t)
+            check_schema_dtype(ScaledDotProductAttentionBackward::schema_v1, t->dtype());
+}
+
+}  // namespace
+
 TensorImplPtr ScaledDotProductAttentionBackward::forward(const TensorImplPtr& q_in,
                                                          const TensorImplPtr& k_in,
                                                          const TensorImplPtr& v_in,
@@ -193,6 +207,7 @@ TensorImplPtr ScaledDotProductAttentionBackward::forward(const TensorImplPtr& q_
     // The row (LOWER on both devices) casts Q, K, V and an additive mask
     // together; a Bool mask is not a float and stays.  Before it, a float32
     // Q from RoPE met a float16 V under Metal autocast and was refused.
+    check_operand_dtypes(q_in, k_in, v_in);
     const AmpScope amp{schema_v1.name, q_in ? q_in->device() : Device::CPU};
     const auto operands = amp.cast_widest({q_in, k_in, v_in, mask_in});
     const TensorImplPtr &q = operands[0], &k = operands[1], &v = operands[2];
@@ -351,6 +366,7 @@ scaled_dot_product_attention_with_weights_op(const TensorImplPtr& q_in,
                                              double scale,
                                              bool is_causal) {
     // The row, as in ScaledDotProductAttentionBackward::forward.
+    check_operand_dtypes(q_in, k_in, v_in);
     const AmpScope amp{ScaledDotProductAttentionBackward::schema_v1.name,
                        q_in ? q_in->device() : Device::CPU};
     const auto operands = amp.cast_widest({q_in, k_in, v_in, mask_in});

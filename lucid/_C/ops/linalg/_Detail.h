@@ -41,6 +41,7 @@
 #include "../../core/Error.h"
 #include "../../core/ErrorBuilder.h"
 #include "../../core/Helpers.h"
+#include "../../core/SchemaGuard.h"
 #include "../../core/Shape.h"
 #include "../../core/Storage.h"
 #include "../../core/TensorImpl.h"
@@ -201,6 +202,18 @@ inline void require_float(Dtype dt, const char* op) {
     if (dt != Dtype::F32 && dt != Dtype::F64)
         ErrorBuilder(op).not_implemented("only F32/F64 supported (got" +
                                          std::string(dtype_name(dt)) + ")");
+}
+
+// The dtype gate of the solvers that have no schema (cholesky, eig, ldl_factor,
+// pinv, qr, svd).  An integer input is the reference's dtype guard
+// (``RuntimeError``), so it is refused as a ``DtypeMismatch`` that names the cast;
+// what else the kernels do not take (bool, half, complex) keeps
+// :func:`require_float`'s not-implemented error.  One helper, so no solver
+// carries the branch itself.
+inline void require_solver_dtype(Dtype dt, const char* op) {
+    if (is_integral(dt))
+        throw_dtype_refusal(op, dt, DtypeRefusal::Guard, CastHint::Floating);
+    require_float(dt, op);
 }
 
 // Whether the trailing matrix of ``sh`` has no entries.

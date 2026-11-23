@@ -42,7 +42,7 @@ namespace lucid {
 TensorImplPtr pinv_op(const TensorImplPtr& a) {
     using namespace linalg_detail;
     Validator::input(a, "pinv.a").non_null();
-    require_float(a->dtype(), "pinv");
+    linalg_detail::require_solver_dtype(a->dtype(), "pinv");
     if (a->shape().size() < 2)
         ErrorBuilder("pinv").invalid_argument("input must be at least 2-D");
     OpScopeFull scope{"pinv", a->device(), a->dtype(), a->shape()};

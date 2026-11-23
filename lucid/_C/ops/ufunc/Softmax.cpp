@@ -36,8 +36,8 @@ namespace lucid {
 // The reference has no bool (and no integer) kernel for softmax or log_softmax,
 // so both refuse a bool with ``NotImplementedError``.
 const OpSchema SoftmaxBackward::schema_v1 =
-    OpSchema{"softmax", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                     BoolCast::Floating);
+    OpSchema{"softmax", 1, AmpPolicy::ForceFP32, true}.refusing(kBoolAndSignedIntegers,
+                                                                DtypeRefusal::Kernel);
 
 // Normalise the axis, dispatch the forward softmax, and wire the backward node.
 // The output tensor is saved on the node (saved_output_) so apply() can use p
@@ -110,8 +110,8 @@ LUCID_REGISTER_OP(SoftmaxBackward)
 
 // log_softmax — ForceFP32 for the same numerical stability reason as softmax.
 const OpSchema LogSoftmaxBackward::schema_v1 =
-    OpSchema{"log_softmax", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                         BoolCast::Floating);
+    OpSchema{"log_softmax", 1, AmpPolicy::ForceFP32, true}.refusing(kBoolAndSignedIntegers,
+                                                                    DtypeRefusal::Kernel);
 
 // Forward: compute log_softmax via the numerically-stable backend,
 // save the log_softmax output for use in the backward pass.

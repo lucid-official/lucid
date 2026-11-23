@@ -54,7 +54,7 @@ LUCID_REGISTER_OP(NegBackward)
 // A real |x| has no bool kernel in the reference (``NotImplementedError``); the
 // complex magnitude below it is another op and never sees a bool.
 const OpSchema AbsBackward::schema_v1 = OpSchema{"abs", 1, AmpPolicy::Promote, true}.refusing_bool(
-    BoolRefusal::Kernel, BoolCast::Number);
+    DtypeRefusal::Kernel, CastHint::Number);
 
 // dL/dx = sign(x) * dL/dy.
 Storage AbsBackward::grad_formula(const Storage& g) {

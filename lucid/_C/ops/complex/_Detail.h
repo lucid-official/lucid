@@ -33,6 +33,7 @@
 #include "../../core/ErrorBuilder.h"
 #include "../../core/Helpers.h"
 #include "../../core/OpSchema.h"
+#include "../../core/SchemaGuard.h"
 #include "../../core/Storage.h"
 #include "../../core/TensorImpl.h"
 
@@ -83,9 +84,10 @@ inline void require_complex(Dtype dt, const char* op) {
 //
 // Used by ``complex_combine`` to gate the ``re`` / ``im`` arguments to
 // ``complex_op``: any real float is accepted.  The half formats widen
-// to ``F32`` at the op layer, since there is no half complex.  Any
-// integer, boolean, or complex dtype triggers a ``NotImplemented`` error
-// from the named op via ``ErrorBuilder``.
+// to ``F32`` at the op layer, since there is no half complex.  An integer
+// dtype is the reference's dtype guard (``RuntimeError``) and raises
+// ``DtypeMismatch``; a boolean or complex dtype triggers a ``NotImplemented``
+// error from the named op via ``ErrorBuilder``.
 //
 // Parameters
 // ----------
@@ -96,9 +98,13 @@ inline void require_complex(Dtype dt, const char* op) {
 //
 // Raises
 // ------
+// DtypeMismatch
+//     If ``dt`` is an integer dtype.
 // NotImplemented
-//     If ``dt`` is not a real floating-point dtype.
+//     If ``dt`` is any other dtype that is not a real floating-point one.
 inline void require_real_float(Dtype dt, const char* op) {
+    if (is_integral(dt))
+        throw_dtype_refusal(op, dt, DtypeRefusal::Guard, CastHint::Floating);
     if (!is_floating_point(dt))
         ErrorBuilder(op).not_implemented("expected real floating dtype, got " +
                                          std::string(dtype_name(dt)));

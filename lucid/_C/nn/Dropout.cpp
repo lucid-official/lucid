@@ -46,18 +46,6 @@ namespace lucid {
 
 namespace {
 
-// A drawn mask is ``1 / (1 - p)`` and ``0`` in the input's dtype, and a bool holds
-// neither, so the draw refuses one -- with the class the schema declares, before
-// anything is drawn.  The reference refuses it with its dtype guard (a
-// ``RuntimeError``), not with the "no kernel" error the mask sampler would raise.
-// Not a ``SchemaGuard``: the pass-through (``training=false``, ``p == 0``) returns
-// the input untouched, so a bool survives it as it does in the reference, and a
-// guard built at the entry would refuse that call too.
-void refuse_bool_draw(const OpSchema& schema, Dtype dt) {
-    if (dt == Dtype::Bool) [[unlikely]]
-        throw_bool_refusal(schema.name, schema.bool_refusal, schema.bool_cast);
-}
-
 // A node built on the pass-through path (``training=false`` or ``p == 0``)
 // holds no mask, and its gradient is the incoming one unchanged.
 bool mask_absent(const Storage& mask) {
@@ -84,10 +72,18 @@ TensorImplPtr masked_grad_for_graph(const TensorImplPtr& grad_out,
 
 }  // namespace
 
+// The refusal is the draw's, not the entry's.  A mask is ``1 / (1 - p)`` and ``0``
+// in the input's dtype, which a bool or an integer cannot hold, so the three
+// dropouts call ``check_schema_dtype`` where they draw (``training && p > 0``),
+// before anything is drawn.  The pass-through (``training=false``, ``p == 0``)
+// returns the input untouched, so such an input survives it as it does in the
+// reference, and a ``SchemaGuard`` built at the entry would refuse that call too.
+// The reference refuses at its dtype guard (a ``RuntimeError``), not with the
+// "no kernel" error the mask sampler would raise.
 const OpSchema DropoutBackward::schema_v1 =
     OpSchema{"dropout", 1, AmpPolicy::KeepInput, false,
              "uses Generator-driven Bernoulli mask; reproducible only with explicit seed"}
-        .refusing_bool(BoolRefusal::Guard, BoolCast::Floating);
+        .refusing(kBoolAndSignedIntegers, DtypeRefusal::Guard);
 
 TensorImplPtr
 DropoutBackward::forward(const TensorImplPtr& a, double p, bool training, Generator* gen) {
@@ -96,7 +92,7 @@ DropoutBackward::forward(const TensorImplPtr& a, double p, bool training, Genera
         ErrorBuilder("dropout").invalid_argument("p must be in [0, 1)");
 
     if (training && p > 0.0) {
-        refuse_bool_draw(schema_v1, a->dtype());
+        check_schema_dtype(schema_v1, a->dtype());
         // Under deterministic mode an explicit generator is required.
         if (gen == nullptr)
             check_schema_determinism(schema_v1);
@@ -295,7 +291,7 @@ TensorImplPtr traced_mask_multiply(std::string_view name,
 const OpSchema DropoutNdBackward::schema_v1 =
     OpSchema{"dropoutnd", 1, AmpPolicy::KeepInput, false,
              "Bernoulli channel mask; reproducible only with explicit seed"}
-        .refusing_bool(BoolRefusal::Guard, BoolCast::Floating);
+        .refusing(kBoolAndSignedIntegers, DtypeRefusal::Guard);
 
 TensorImplPtr
 DropoutNdBackward::forward(const TensorImplPtr& a, double p, bool training, Generator* gen) {
@@ -304,7 +300,7 @@ DropoutNdBackward::forward(const TensorImplPtr& a, double p, bool training, Gene
         ErrorBuilder("dropoutnd").invalid_argument("p must be in [0, 1)");
 
     if (training && p > 0.0) {
-        refuse_bool_draw(schema_v1, a->dtype());
+        check_schema_dtype(schema_v1, a->dtype());
         if (gen == nullptr)
             check_schema_determinism(schema_v1);
     }
@@ -384,7 +380,7 @@ constexpr double kAlphaPrime = -kSeluLambda * kSeluAlpha;
 const OpSchema AlphaDropoutBackward::schema_v1 =
     OpSchema{"alpha_dropout", 1, AmpPolicy::KeepInput, false,
              "Bernoulli mask + SELU rescaling; reproducible only with explicit seed"}
-        .refusing_bool(BoolRefusal::Guard, BoolCast::Floating);
+        .refusing(kBoolAndSignedIntegers, DtypeRefusal::Guard);
 
 TensorImplPtr
 AlphaDropoutBackward::forward(const TensorImplPtr& a, double p, bool training, Generator* gen) {
@@ -393,7 +389,7 @@ AlphaDropoutBackward::forward(const TensorImplPtr& a, double p, bool training, G
         ErrorBuilder("alpha_dropout").invalid_argument("p must be in [0, 1)");
 
     if (training && p > 0.0) {
-        refuse_bool_draw(schema_v1, a->dtype());
+        check_schema_dtype(schema_v1, a->dtype());
         if (gen == nullptr)
             check_schema_determinism(schema_v1);
     }

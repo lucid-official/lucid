@@ -55,8 +55,8 @@ namespace lucid {
 // The eval path of batch_norm: the reference refuses a bool there as it does in
 // training (``NotImplementedError``).
 const OpSchema BatchNormEvalBackward::schema_v1 =
-    OpSchema{"batch_norm_eval", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                             BoolCast::Floating);
+    OpSchema{"batch_norm_eval", 1, AmpPolicy::ForceFP32, true}.refusing(kBoolAndSignedIntegers,
+                                                                        DtypeRefusal::Kernel);
 
 TensorImplPtr BatchNormEvalBackward::forward(const TensorImplPtr& x,
                                              const TensorImplPtr& mean,

@@ -31,7 +31,9 @@
 
 namespace lucid {
 
-const OpSchema RMSNormBackward::schema_v1{"rms_norm", 1, AmpPolicy::ForceFP32, true};
+const OpSchema RMSNormBackward::schema_v1 =
+    OpSchema{"rms_norm", 1, AmpPolicy::ForceFP32, true}.refusing(kSignedIntegers,
+                                                                 DtypeRefusal::Kernel);
 
 TensorImplPtr
 RMSNormBackward::forward(const TensorImplPtr& x, const TensorImplPtr& gamma, double eps) {

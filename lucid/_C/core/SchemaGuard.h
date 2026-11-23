@@ -1,6 +1,6 @@
 // lucid/_C/core/SchemaGuard.h
 //
-// Op-dispatch entry gate that combines bool refusal, determinism enforcement
+// Op-dispatch entry gate that combines dtype refusal, determinism enforcement
 // and AMP dtype resolution.
 //
 // Every Lucid op (forward and backward) begins its dispatch sequence by
@@ -8,17 +8,19 @@
 // dtype/device of its primary input.  The guard's constructor does three
 // things in one pass:
 //
-//   0. Bool refusal — first statement.  When the schema's ``bool_refusal``
-//      is not ``None`` and ``input_dtype`` is ``Bool``, the constructor
-//      throws before anything else is read: ``BoolRefusal::Kernel`` raises
-//      :class:`NotImplementedError` (the reference's "no kernel for bool"),
-//      ``BoolRefusal::Guard`` raises :class:`DtypeMismatch` (its dtype
-//      guard).  Both messages read ``<op> does not accept bool — cast to
-//      <hint>`` with the hint from ``bool_cast``.  An op that refuses bool
-//      declares it on its schema, so the CPU and Metal entries, the in-place
-//      twin, a direct engine call and a trace share one check at the cost of
-//      one enum comparison.  An op built from other ops (a composite with no
-//      schema of its own) calls :func:`throw_bool_refusal` itself.
+//   0. Dtype refusal — first statement.  When ``input_dtype`` is in the
+//      schema's ``refused`` mask, the constructor throws before anything else
+//      is read: ``DtypeRefusal::Kernel`` raises :class:`NotImplementedError`
+//      (the reference's "no kernel for this dtype"), ``DtypeRefusal::Guard``
+//      raises :class:`DtypeMismatch` (its dtype guard).  Both messages read
+//      ``<op> does not accept <dtype> — cast to <hint>`` with the hint from
+//      ``cast``.  An op that refuses a dtype declares it on its schema, so the
+//      CPU and Metal entries, the in-place twin, a direct engine call and a
+//      trace share one check at the cost of one shift and one test.  The guard
+//      sees one operand: an op with another operand the refusal covers calls
+//      :func:`check_schema_dtype` for it, and an op built from other ops (a
+//      composite with no schema of its own) calls :func:`throw_dtype_refusal`
+//      itself.
 //
 //   1. Determinism gate — if the global :func:`Determinism::is_enabled`
 //      flag is set and the schema's ``deterministic`` field is false, a
@@ -102,29 +104,55 @@ namespace lucid {
 // and adds only a single relaxed atomic load to the call site.
 LUCID_API void check_schema_determinism(const OpSchema& schema);
 
-// Throws the refusal of an op that does not accept a bool input.
+// Throws the refusal of an op that does not accept a dtype.
 //
 // The one place the message and the class are built: :class:`SchemaGuard`'s
-// constructor calls it for a schema that declares ``bool_refusal``, and a
-// composite that has no schema (``frac``) calls it by name.
+// constructor and :func:`check_schema_dtype` call it for a schema whose
+// ``refused`` mask holds the dtype, and a composite that has no schema
+// (``frac``, the linalg solvers) calls it by name.
 //
 // Parameters
 // ----------
 // op : std::string_view
 //     The op's name, as the caller used it.
-// refusal : BoolRefusal
+// dt : Dtype
+//     The refused dtype; its :func:`dtype_name` is in the message.
+// kind : DtypeRefusal
 //     ``Kernel`` throws :class:`NotImplementedError`, ``Guard`` throws
-//     :class:`DtypeMismatch` (expected ``a non-bool dtype``, got ``bool``).
-//     ``None`` is treated as ``Kernel``: the function never returns.
-// cast : BoolCast
+//     :class:`DtypeMismatch` (expected ``a non-bool dtype`` for a bool and
+//     ``a floating dtype`` otherwise, got the dtype's name).  ``None`` is
+//     treated as ``Kernel``: the function never returns.
+// hint : CastHint
 //     Picks the cast hint the message ends with.
 //
 // Raises
 // ------
 // NotImplementedError / DtypeMismatch
-//     Always.  The message is ``<op> does not accept bool — cast to <hint>``.
+//     Always.  The message is ``<op> does not accept <dtype> — cast to <hint>``.
 [[noreturn]] LUCID_API void
-throw_bool_refusal(std::string_view op, BoolRefusal refusal, BoolCast cast);
+throw_dtype_refusal(std::string_view op, Dtype dt, DtypeRefusal kind, CastHint hint);
+
+// Refuses ``dtype`` if the schema's ``refused`` mask holds it.
+//
+// What :class:`SchemaGuard`'s constructor does with its one input, for the
+// operands it does not see and for a path it should not run on: the second
+// operand of ``solve`` / ``nextafter``, the weight of ``embedding_bag``, a
+// dropout that only draws a mask when ``training && p > 0``.  A pass-through
+// call must keep a dtype the reference lets through, which a guard built at
+// the entry would refuse.
+//
+// Parameters
+// ----------
+// schema : const OpSchema&
+//     The op's schema.
+// dtype : Dtype
+//     The operand's dtype.
+//
+// Raises
+// ------
+// NotImplementedError / DtypeMismatch
+//     Per ``schema.refusal``, when ``dtype`` is refused.
+LUCID_API void check_schema_dtype(const OpSchema& schema, Dtype dtype);
 
 // Combined determinism + AMP dtype-resolution guard.
 //

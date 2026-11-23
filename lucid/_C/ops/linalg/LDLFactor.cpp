@@ -13,7 +13,9 @@ namespace lucid {
 
 std::vector<TensorImplPtr> ldl_factor_op(const TensorImplPtr& a) {
     using namespace linalg_detail;
-    Validator::input(a, "ldl_factor.a").float_only().square_2d();
+    Validator::input(a, "ldl_factor.a").non_null();
+    linalg_detail::require_solver_dtype(a->dtype(), "ldl_factor");
+    Validator::input(a, "ldl_factor.a").square_2d();
 
     const auto& sh = a->shape();
     const int n = static_cast<int>(sh[sh.size() - 1]);

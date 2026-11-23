@@ -41,8 +41,8 @@ namespace lucid {
 // float weight beside the bool input the reference's mixed-dtype guard fires
 // first (``RuntimeError``), a call shape this does not tell apart.
 const OpSchema LayerNormBackward::schema_v1 =
-    OpSchema{"layer_norm", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                        BoolCast::Floating);
+    OpSchema{"layer_norm", 1, AmpPolicy::ForceFP32, true}.refusing(kBoolAndSignedIntegers,
+                                                                   DtypeRefusal::Kernel);
 
 namespace {
 

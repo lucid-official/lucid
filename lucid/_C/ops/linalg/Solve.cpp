@@ -33,6 +33,7 @@
 #include "../../core/GradMode.h"
 #include "../../core/Helpers.h"
 #include "../../core/OpRegistry.h"
+#include "../../core/SchemaGuard.h"
 #include "../../core/Scope.h"
 #include "../../core/TensorImpl.h"
 #include "../../core/Validate.h"
@@ -49,7 +50,8 @@ namespace lucid {
 // parameter 2 on FuncOp means two gradient outputs (one per operand), but the
 // schema input count of 1 refers to the number of saved inputs in the registry
 // sense.  AmpPolicy::KeepInput prevents lossy dtype promotion before the solve.
-const OpSchema SolveBackward::schema_v1{"solve", 1, AmpPolicy::KeepInput};
+const OpSchema SolveBackward::schema_v1 =
+    OpSchema{"solve", 1, AmpPolicy::KeepInput}.refusing(kSignedIntegers, DtypeRefusal::Guard);
 
 namespace {
 
@@ -104,6 +106,7 @@ TensorImplPtr solve_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in) {
     Validator::input(b_in, "solve.b").non_null();
     Validator::pair(a_in, b_in, "solve").same_device();
     SchemaGuard sg{SolveBackward::schema_v1, a_in->dtype(), a_in->device()};
+    check_schema_dtype(SolveBackward::schema_v1, b_in->dtype());
     const Dtype eff_dt = sg.effective_dtype();
     const TensorImplPtr a = astype_op(a_in, eff_dt);
     const TensorImplPtr b = astype_op(b_in, eff_dt);

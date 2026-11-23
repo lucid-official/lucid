@@ -178,8 +178,8 @@ void validate_grid_sample_inputs(const TensorImplPtr& input,
 // schema's guard runs on both operands and answers that one with the image's
 // class.
 const OpSchema GridSampleBackward::schema_v1 =
-    OpSchema{"grid_sample", 1, AmpPolicy::Promote, true, "", true}.refusing_bool(
-        BoolRefusal::Kernel, BoolCast::Floating);
+    OpSchema{"grid_sample", 1, AmpPolicy::Promote, true, "", true}.refusing(kBoolAndSignedIntegers,
+                                                                            DtypeRefusal::Kernel);
 
 TensorImplPtr GridSampleBackward::forward(const TensorImplPtr& input0,
                                           const TensorImplPtr& grid0,

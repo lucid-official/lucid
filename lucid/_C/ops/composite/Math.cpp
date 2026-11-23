@@ -3,7 +3,9 @@
 // Composition-based elementwise math ops.  Each entry function builds its
 // forward graph from existing differentiable ``*_op`` calls; the chain rule
 // is provided automatically by the primitives' backward nodes (LogBackward,
-// ExpBackward, MulBackward, etc.) so no new schemas are registered here.
+// ExpBackward, MulBackward, etc.) so no new schemas are registered here.  A
+// composite that must turn a dtype away keeps an unregistered schema for the
+// purpose (``frac``), so it refuses through the same helper as the primitives.
 //
 // Each opens with an :class:`AmpScope` under its own name, so autocast
 // applies the composite's row once to its inputs and the primitives inside
@@ -19,6 +21,8 @@
 #include "../../core/Dtype.h"
 #include "../../core/ErrorBuilder.h"
 #include "../../core/GradMode.h"
+#include "../../core/OpSchema.h"
+#include "../../core/SchemaGuard.h"
 #include "../../core/TensorImpl.h"
 #include "../bfunc/Add.h"
 #include "../bfunc/Compare.h"
@@ -48,6 +52,13 @@ const TensorImplPtr& unary_input(const TensorImplPtr& a, const char* op) {
         ErrorBuilder(op).fail("null input");
     return a;
 }
+
+// What ``frac`` refuses.  The reference has no kernel for a bool or an integer
+// (``NotImplementedError``), and a composite has no registered schema to say so:
+// this one is never registered, only asked.  Without it a bool reached ``trunc``
+// and was refused there under the wrong name.
+const OpSchema kFracDtypes = OpSchema{"frac", 1, AmpPolicy::KeepInput, true}.refusing(
+    kBoolAndSignedIntegers, DtypeRefusal::Kernel);
 
 // The two operands of a binary composite, cast together by its scope.
 std::pair<TensorImplPtr, TensorImplPtr>
@@ -147,14 +158,9 @@ TensorImplPtr exp2_op(const TensorImplPtr& a_in) {
 
 // Fractional part — the ``trunc`` term contributes zero gradient, so the
 // gradient w.r.t. ``a`` is just the upstream gradient.
-//
-// ``frac`` has no schema of its own, so it asks the guard's helper for the
-// refusal itself: the reference has no bool kernel for it (``NotImplementedError``).
-// Without this a bool reached ``trunc`` and was refused there under the wrong name.
 TensorImplPtr frac_op(const TensorImplPtr& a_in) {
     const TensorImplPtr& input = unary_input(a_in, "frac");
-    if (input->dtype() == Dtype::Bool) [[unlikely]]
-        throw_bool_refusal("frac", BoolRefusal::Kernel, BoolCast::Floating);
+    check_schema_dtype(kFracDtypes, input->dtype());
     const AmpScope amp{"frac", input->device()};
     const TensorImplPtr a = amp.cast(a_in);
     return sub_op(a, trunc_op(a));

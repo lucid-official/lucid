@@ -11,6 +11,7 @@
 #include "../../core/GradMode.h"
 #include "../../core/Helpers.h"
 #include "../../core/OpRegistry.h"
+#include "../../core/SchemaGuard.h"
 #include "../../core/Scope.h"
 #include "../../core/TensorImpl.h"
 #include "../../core/Validate.h"
@@ -25,7 +26,8 @@
 #include "_Detail.h"
 namespace lucid {
 
-const OpSchema LUSolveBackward::schema_v1{"lu_solve", 1, AmpPolicy::KeepInput};
+const OpSchema LUSolveBackward::schema_v1 =
+    OpSchema{"lu_solve", 1, AmpPolicy::KeepInput}.refusing(kSignedIntegers, DtypeRefusal::Guard);
 
 namespace {
 
@@ -107,7 +109,9 @@ LUCID_REGISTER_OP(LUSolveBackward)
 TensorImplPtr
 lu_solve_op(const TensorImplPtr& LU, const TensorImplPtr& pivots, const TensorImplPtr& b) {
     using namespace linalg_detail;
-    Validator::input(LU, "lu_solve.LU").float_only().non_null();
+    Validator::input(LU, "lu_solve.LU").non_null();
+    check_schema_dtype(LUSolveBackward::schema_v1, LU->dtype());
+    Validator::input(LU, "lu_solve.LU").float_only();
     // LAPACK's ``ipiv`` is ``const int*``, so the buffer is read 32 bits at
     // a time whatever dtype it arrived as.  Only checking for null let
     // three separate failures through: an int8 or bool pivot vector was
@@ -116,7 +120,9 @@ lu_solve_op(const TensorImplPtr& LU, const TensorImplPtr& pivots, const TensorIm
     // returned a different — silently wrong — answer.  Only I32 is the
     // width this reads, so only I32 may be passed.
     Validator::input(pivots, "lu_solve.pivots").non_null().dtype_eq(Dtype::I32);
-    Validator::input(b, "lu_solve.b").float_only().non_null();
+    Validator::input(b, "lu_solve.b").non_null();
+    check_schema_dtype(LUSolveBackward::schema_v1, b->dtype());
+    Validator::input(b, "lu_solve.b").float_only();
     Validator::pair(LU, b, "lu_solve").same_dtype().same_device();
     Validator::pair(LU, pivots, "lu_solve").same_device();
 

@@ -27,6 +27,7 @@
 #include "../../core/Half.h"
 #include "../../core/OpRegistry.h"
 #include "../../core/Profiler.h"
+#include "../../core/SchemaGuard.h"
 #include "../../core/Scope.h"
 #include "../../core/TensorImpl.h"
 #include "../../kernel/BinaryKernel.h"  // detail::broadcast_shapes
@@ -131,6 +132,9 @@ TensorImplPtr nextafter_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in)
         throw DtypeMismatch(std::string(dtype_name(a_in->dtype())),
                             std::string(dtype_name(b_in->dtype())), "nextafter");
 
+    // The dtypes are equal by now, so one check covers both operands.
+    check_schema_dtype(NextafterBackward::schema_v1, a_in->dtype());
+
     auto [a, b] = detail::align_binary_devices(a_in, b_in, "nextafter");
     if (a->dtype() != Dtype::F32 && a->dtype() != Dtype::F64)
         ErrorBuilder("nextafter").fail("dtype must be F32 or F64");
@@ -193,7 +197,14 @@ TensorImplPtr nextafter_op(const TensorImplPtr& a_in, const TensorImplPtr& b_in)
     return result;
 }
 
-const OpSchema NextafterBackward::schema_v1{"nextafter", 1, AmpPolicy::KeepInput, true};
+// The reference's ``nextafter`` has a kernel for floats only: a bool or an integer
+// raises ``NotImplementedError`` (measured, LCD-1026), and a complex has no
+// kernel either.  Half floats are answered there and refused here ("dtype must
+// be F32 or F64"): that is the access side, not a refusal this schema declares.
+const OpSchema NextafterBackward::schema_v1 =
+    OpSchema{"nextafter", 1, AmpPolicy::KeepInput, true}.refusing(
+        kBoolAndSignedIntegers | dtype_bit(Dtype::C64) | dtype_bit(Dtype::C128),
+        DtypeRefusal::Kernel);
 
 std::vector<Storage> NextafterBackward::apply(Storage grad_out) {
     Storage zeros = backend::Dispatcher::for_device(device_).zeros(out_shape_, dtype_);

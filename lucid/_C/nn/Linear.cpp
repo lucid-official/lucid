@@ -43,8 +43,8 @@ namespace lucid {
 // float.  MLX's own "only inexact types" error never reaches the caller on
 // Metal, because the guard stops the call first.
 const OpSchema LinearBackward::schema_v1 =
-    OpSchema{"linear", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                  BoolCast::Floating);
+    OpSchema{"linear", 1, AmpPolicy::Promote, true}.refusing_bool(DtypeRefusal::Kernel,
+                                                                  CastHint::Floating);
 
 namespace {
 

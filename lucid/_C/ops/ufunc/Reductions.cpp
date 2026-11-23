@@ -274,8 +274,8 @@ LUCID_REGISTER_OP(SumBackward)
 // (``RuntimeError``), and only a float answers.  ``sum`` / ``prod`` / ``max`` /
 // ``min`` accept a bool, as the reference does, and are not flagged.
 const OpSchema MeanBackward::schema_v1 =
-    OpSchema{"mean", 1, AmpPolicy::KeepInput, true, "", true}.refusing_bool(BoolRefusal::Guard,
-                                                                            BoolCast::Floating);
+    OpSchema{"mean", 1, AmpPolicy::KeepInput, true, "", true}.refusing(kBoolAndSignedIntegers,
+                                                                       DtypeRefusal::Guard);
 
 namespace {
 // Count the number of elements collapsed by the given axes.

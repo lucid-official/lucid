@@ -33,6 +33,7 @@
 #include "../../core/Helpers.h"
 #include "../../core/OpRegistry.h"
 #include "../../core/PhantomMode.h"
+#include "../../core/SchemaGuard.h"
 #include "../../core/Scope.h"
 #include "../../core/TensorImpl.h"
 #include "../../core/Validate.h"
@@ -56,7 +57,8 @@
 
 namespace lucid {
 
-const OpSchema DetBackward::schema_v1{"det", 1, AmpPolicy::KeepInput};
+const OpSchema DetBackward::schema_v1 =
+    OpSchema{"det", 1, AmpPolicy::KeepInput}.refusing(kSignedIntegers, DtypeRefusal::Guard);
 const OpSchema CofactorBackward::schema_v1{"det_cofactor", 1, AmpPolicy::KeepInput};
 
 namespace {
@@ -225,6 +227,8 @@ LUCID_REGISTER_OP(CofactorBackward)
 // needs A to call inv_op; without it saved_inputs_[0] would be empty.
 TensorImplPtr det_op(const TensorImplPtr& a) {
     using namespace linalg_detail;
+    Validator::input(a, "det.a").non_null();
+    check_schema_dtype(DetBackward::schema_v1, a->dtype());
     Validator::input(a, "det.a").float_only().square_2d();
     OpScopeFull scope{"det", a->device(), a->dtype(), a->shape()};
 

@@ -42,16 +42,16 @@ namespace lucid {
 // offers a float.
 template <>
 const OpSchema ConvTranspose1dBackward::schema_v1 =
-    OpSchema{"conv_transpose1d", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                            BoolCast::Floating);
+    OpSchema{"conv_transpose1d", 1, AmpPolicy::Promote, true}.refusing(
+        dtype_bit(Dtype::Bool) | kNarrowSigned, DtypeRefusal::Kernel);
 template <>
 const OpSchema ConvTranspose2dBackward::schema_v1 =
-    OpSchema{"conv_transpose2d", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                            BoolCast::Floating);
+    OpSchema{"conv_transpose2d", 1, AmpPolicy::Promote, true}.refusing(
+        dtype_bit(Dtype::Bool) | kNarrowSigned, DtypeRefusal::Kernel);
 template <>
 const OpSchema ConvTranspose3dBackward::schema_v1 =
-    OpSchema{"conv_transpose3d", 1, AmpPolicy::Promote, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                            BoolCast::Floating);
+    OpSchema{"conv_transpose3d", 1, AmpPolicy::Promote, true}.refusing(
+        dtype_bit(Dtype::Bool) | kNarrowSigned, DtypeRefusal::Kernel);
 
 namespace {
 

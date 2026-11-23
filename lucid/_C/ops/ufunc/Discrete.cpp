@@ -17,8 +17,8 @@ namespace lucid {
 // The four step functions below share one refusal: the reference has no bool
 // kernel for them (``NotImplementedError``) and answers every integer width.
 const OpSchema RoundBackward::schema_v1 =
-    OpSchema{"round", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                   BoolCast::Number);
+    OpSchema{"round", 1, AmpPolicy::KeepInput, true}.refusing_bool(DtypeRefusal::Kernel,
+                                                                   CastHint::Number);
 
 // Zero gradient: round is piecewise constant.
 // A step function is flat wherever it is differentiable, so the gradient is
@@ -39,8 +39,8 @@ LUCID_REGISTER_OP(RoundBackward)
 
 // floor — KeepInput.
 const OpSchema FloorBackward::schema_v1 =
-    OpSchema{"floor", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                   BoolCast::Number);
+    OpSchema{"floor", 1, AmpPolicy::KeepInput, true}.refusing_bool(DtypeRefusal::Kernel,
+                                                                   CastHint::Number);
 
 // Zero gradient: floor is piecewise constant.
 // A step function is flat wherever it is differentiable, so the gradient is
@@ -61,8 +61,8 @@ LUCID_REGISTER_OP(FloorBackward)
 
 // ceil — KeepInput.
 const OpSchema CeilBackward::schema_v1 =
-    OpSchema{"ceil", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                  BoolCast::Number);
+    OpSchema{"ceil", 1, AmpPolicy::KeepInput, true}.refusing_bool(DtypeRefusal::Kernel,
+                                                                  CastHint::Number);
 
 // Zero gradient: ceil is piecewise constant.
 // A step function is flat wherever it is differentiable, so the gradient is
@@ -83,8 +83,8 @@ LUCID_REGISTER_OP(CeilBackward)
 
 // trunc — KeepInput.
 const OpSchema TruncBackward::schema_v1 =
-    OpSchema{"trunc", 1, AmpPolicy::KeepInput, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                   BoolCast::Number);
+    OpSchema{"trunc", 1, AmpPolicy::KeepInput, true}.refusing_bool(DtypeRefusal::Kernel,
+                                                                   CastHint::Number);
 
 Storage TruncBackward::dispatch(backend::IBackend& be, const Storage& a, const Shape& s, Dtype dt) {
     if (!is_floating_point(dt))

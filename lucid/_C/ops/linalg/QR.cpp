@@ -47,7 +47,7 @@ std::vector<TensorImplPtr> qr_op(const TensorImplPtr& a_in) {
         ErrorBuilder("qr").invalid_argument("input must be at least 2-D");
     const AmpScope amp{"qr", a_in->device()};
     const TensorImplPtr a = amp.cast(a_in);
-    require_float(a->dtype(), "qr");
+    linalg_detail::require_solver_dtype(a->dtype(), "qr");
     OpScopeFull scope{"qr", a->device(), a->dtype(), a->shape()};
 
     const auto& sh = a->shape();

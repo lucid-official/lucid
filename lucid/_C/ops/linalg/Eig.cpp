@@ -44,7 +44,7 @@ std::vector<TensorImplPtr> eig_op(const TensorImplPtr& a_in) {
     require_square_matrix(a_in->shape(), "eig.a");
     const AmpScope amp{"eig", a_in->device()};
     const TensorImplPtr a = amp.cast(a_in);
-    require_float(a->dtype(), "eig");
+    linalg_detail::require_solver_dtype(a->dtype(), "eig");
     OpScopeFull scope{"eig", a->device(), a->dtype(), a->shape()};
 
     const auto& sh = a->shape();

@@ -66,25 +66,34 @@ constexpr Dtype untouched_dtype(const OpSchema& schema, Dtype input_dtype) noexc
 
 }  // namespace
 
-void throw_bool_refusal(std::string_view op, BoolRefusal refusal, BoolCast cast) {
+void throw_dtype_refusal(std::string_view op, Dtype dt, DtypeRefusal kind, CastHint hint) {
+    const std::string got{dtype_name(dt)};
     std::string msg{op};
-    msg += " does not accept bool — cast to ";
-    msg += bool_cast_hint(cast);
-    if (refusal == BoolRefusal::Guard) {
+    msg += " does not accept ";
+    msg += got;
+    msg += " — cast to ";
+    msg += cast_hint_text(hint);
+    if (kind == DtypeRefusal::Guard) {
         std::string context{op};
         context += ": ";
         context += msg;
-        throw DtypeMismatch("a non-bool dtype", "bool", std::move(context));
+        throw DtypeMismatch(dt == Dtype::Bool ? "a non-bool dtype" : "a floating dtype", got,
+                            std::move(context));
     }
     ErrorBuilder(op).not_implemented(msg);
 }
 
+void check_schema_dtype(const OpSchema& schema, Dtype dtype) {
+    if (schema.refuses(dtype)) [[unlikely]]
+        throw_dtype_refusal(schema.name, dtype, schema.refusal, schema.cast);
+}
+
 SchemaGuard::SchemaGuard(const OpSchema& schema, Dtype input_dtype, Device device) {
-    // First, and one comparison: a schema that refuses bool says so by data, so
-    // the CPU and Metal entries, the in-place twin, a direct engine call and a
-    // trace all stop here with the same class and the same message.
-    if (schema.bool_refusal != BoolRefusal::None && input_dtype == Dtype::Bool) [[unlikely]]
-        throw_bool_refusal(schema.name, schema.bool_refusal, schema.bool_cast);
+    // First, and one shift and one test: a schema that refuses a dtype says so by
+    // data, so the CPU and Metal entries, the in-place twin, a direct engine call
+    // and a trace all stop here with the same class and the same message.
+    if (schema.refuses(input_dtype)) [[unlikely]]
+        throw_dtype_refusal(schema.name, input_dtype, schema.refusal, schema.cast);
 
     check_schema_determinism(schema);
 

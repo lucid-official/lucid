@@ -49,7 +49,7 @@ std::vector<TensorImplPtr> svd_op(const TensorImplPtr& a_in, bool compute_uv) {
         ErrorBuilder("svd").invalid_argument("input must be at least 2-D");
     const AmpScope amp{"svd", a_in->device()};
     const TensorImplPtr a = amp.cast(a_in);
-    require_float(a->dtype(), "svd");
+    linalg_detail::require_solver_dtype(a->dtype(), "svd");
     OpScopeFull scope{"svd", a->device(), a->dtype(), a->shape()};
     scope.set_attr("compute_uv", compute_uv);
 

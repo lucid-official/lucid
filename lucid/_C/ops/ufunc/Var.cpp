@@ -124,8 +124,8 @@ public:
 // The reference guards the dtype of ``var`` / ``std`` (``RuntimeError``), and
 // ``std`` is built on this op, so its refusal names ``var``.
 const OpSchema VarBackward::schema_v1 =
-    OpSchema{"var", 1, AmpPolicy::KeepInput, true, "", true}.refusing_bool(BoolRefusal::Guard,
-                                                                           BoolCast::Floating);
+    OpSchema{"var", 1, AmpPolicy::KeepInput, true, "", true}.refusing(kBoolAndSignedIntegers,
+                                                                      DtypeRefusal::Guard);
 
 }  // namespace
 

@@ -27,6 +27,7 @@
 #include "../../core/GradMode.h"
 #include "../../core/Helpers.h"
 #include "../../core/OpRegistry.h"
+#include "../../core/SchemaGuard.h"
 #include "../../core/Scope.h"
 #include "../../core/TensorImpl.h"
 #include "../../core/Validate.h"
@@ -41,7 +42,8 @@ namespace lucid {
 // schema_v1 associates this backward node with the op name "inv" for
 // serialisation and the OpRegistry, and sets AmpPolicy::KeepInput so that
 // mixed-precision training does not silently downcast the saved inverse.
-const OpSchema InvBackward::schema_v1{"inv", 1, AmpPolicy::KeepInput};
+const OpSchema InvBackward::schema_v1 =
+    OpSchema{"inv", 1, AmpPolicy::KeepInput}.refusing(kSignedIntegers, DtypeRefusal::Guard);
 
 // Backward pass for inv_op.
 //

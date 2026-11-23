@@ -184,16 +184,16 @@ int reduced_count(const std::string& op, const Shape& x_shape, const std::vector
 // and answers floats only.
 template <>
 const OpSchema BatchNorm1dBackward::schema_v1 =
-    OpSchema{"batch_norm1d", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                          BoolCast::Floating);
+    OpSchema{"batch_norm1d", 1, AmpPolicy::ForceFP32, true}.refusing(kBoolAndSignedIntegers,
+                                                                     DtypeRefusal::Kernel);
 template <>
 const OpSchema BatchNorm2dBackward::schema_v1 =
-    OpSchema{"batch_norm", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                        BoolCast::Floating);
+    OpSchema{"batch_norm", 1, AmpPolicy::ForceFP32, true}.refusing(kBoolAndSignedIntegers,
+                                                                   DtypeRefusal::Kernel);
 template <>
 const OpSchema BatchNorm3dBackward::schema_v1 =
-    OpSchema{"batch_norm3d", 1, AmpPolicy::ForceFP32, true}.refusing_bool(BoolRefusal::Kernel,
-                                                                          BoolCast::Floating);
+    OpSchema{"batch_norm3d", 1, AmpPolicy::ForceFP32, true}.refusing(kBoolAndSignedIntegers,
+                                                                     DtypeRefusal::Kernel);
 
 template <int N>
 TensorImplPtr BatchNormNdBackward<N>::forward(const TensorImplPtr& x,

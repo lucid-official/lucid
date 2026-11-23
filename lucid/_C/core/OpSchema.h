@@ -12,6 +12,7 @@
 // initialisation time (see :file:`OpRegistry.h`'s ``LUCID_REGISTER_OP``
 // macro) and consulted by :class:`SchemaGuard` at every op dispatch to:
 //
+//   0. Refuse an input dtype the reference refuses (``refused``).
 //   1. Reject calls that violate the current determinism setting.
 //   2. Compute the effective compute dtype — under AMP from the op's row in
 //      the per-device policy table (``AmpPolicyTable.def``, looked up by
@@ -36,49 +37,79 @@
 
 #include <cstdint>
 #include <initializer_list>
+#include <stdexcept>
 #include <string_view>
 #include <vector>
 
 #include "../api.h"
 #include "AmpPolicy.h"
+#include "Dtype.h"
 
 namespace lucid {
 
-// How an op turns a bool input away, and with which of the reference's two
-// error classes.
+// How an op turns a dtype away, and with which of the reference's two error
+// classes.
 //
-// The reference's CPU backend refuses a bool operand on many ops, two ways: a
-// kernel with no bool instantiation raises ``NotImplementedError``, and a guard
-// on the input dtype raises a plain ``RuntimeError``.  A program that catches
-// one does not catch the other, so the class is part of the answer.
+// The reference's CPU backend refuses a bool or integer operand on many ops,
+// two ways: a kernel with no instantiation for the dtype raises
+// ``NotImplementedError``, and a guard on the input dtype raises a plain
+// ``RuntimeError``.  A program that catches one does not catch the other, so
+// the class is part of the answer.  It is one class per op: the reference's
+// class does not change with the integer width, only whether the width is
+// refused does (``avg_pool2d`` answers int64 and refuses the narrower ones).
 //
 // ``Kernel`` -> :class:`NotImplementedError` (``engine.NotImplementedError``,
 //               a ``RuntimeError`` and the builtin ``NotImplementedError``).
 // ``Guard``  -> :class:`DtypeMismatch` (``engine.DtypeMismatch``, a
 //               ``RuntimeError`` and a ``TypeError``).
-enum class BoolRefusal : std::uint8_t { None = 0, Kernel, Guard };
+enum class DtypeRefusal : std::uint8_t { None = 0, Kernel, Guard };
 
-// What the refusal tells the caller to cast the mask to.  Mirrors the
-// reference's dtype list for the op: an op that answers integers as well as
-// floats says "an integer or floating dtype", one that answers only floats
-// says "a floating dtype".
-enum class BoolCast : std::uint8_t { Number = 0, Floating, Integer };
+// What the refusal tells the caller to cast to.  Mirrors the reference's dtype
+// list for the op: an op that answers integers as well as floats says "an
+// integer or floating dtype", one that answers only floats says "a floating
+// dtype".
+enum class CastHint : std::uint8_t { Number = 0, Floating, Integer };
 
 // The cast a refusal's message offers.  The wording is the Python table's
 // (``lucid/_ops/_bool_refusal.py``), so the engine and the composites that
-// still refuse in Python say the same thing; the ``OpSchema.bool_refusal``
-// binding reads it from here too.
-constexpr std::string_view bool_cast_hint(BoolCast cast) noexcept {
-    switch (cast) {
-    case BoolCast::Floating:
+// still refuse in Python say the same thing; the ``OpSchema`` bindings read
+// it from here too.
+constexpr std::string_view cast_hint_text(CastHint hint) noexcept {
+    switch (hint) {
+    case CastHint::Floating:
         return "a floating dtype, e.g. x.float()";
-    case BoolCast::Integer:
+    case CastHint::Integer:
         return "an integer dtype, e.g. x.long()";
-    case BoolCast::Number:
+    case CastHint::Number:
         break;
     }
     return "an integer or floating dtype, e.g. x.long() or x.float()";
 }
+
+// A set of dtypes, one bit per :class:`Dtype` code (``1 << code``).
+//
+// The codes are the checkpoint-stable enum values, 0..10 today, so a 16-bit
+// word holds every dtype with room for five more.
+using DtypeMask = std::uint16_t;
+
+static_assert(static_cast<unsigned>(Dtype::C128) < 16 && static_cast<unsigned>(Dtype::BF16) < 16,
+              "DtypeMask is 16 bits wide: widen it before adding a dtype past code 15");
+
+constexpr DtypeMask dtype_bit(Dtype dt) noexcept {
+    return static_cast<DtypeMask>(DtypeMask{1} << static_cast<unsigned>(dt));
+}
+
+// The signed integer widths Lucid has (there is no unsigned type).
+constexpr DtypeMask kSignedIntegers =
+    dtype_bit(Dtype::I8) | dtype_bit(Dtype::I16) | dtype_bit(Dtype::I32) | dtype_bit(Dtype::I64);
+
+// The widths narrower than 64 bits: the reference's ``avg_pool`` and
+// ``conv_transpose`` have a kernel for int64 and none for these.
+constexpr DtypeMask kNarrowSigned =
+    dtype_bit(Dtype::I8) | dtype_bit(Dtype::I16) | dtype_bit(Dtype::I32);
+
+// A bool counts as an integer for every op the reference turns away both of.
+constexpr DtypeMask kBoolAndSignedIntegers = dtype_bit(Dtype::Bool) | kSignedIntegers;
 
 // Per-op metadata record stored by pointer in the :class:`OpRegistry`.
 //
@@ -132,14 +163,19 @@ constexpr std::string_view bool_cast_hint(BoolCast cast) noexcept {
 //     ``true`` for ops that are not part of the public Python API
 //     (implementation-detail kernels, fused / internal helpers).  The
 //     Python binding layer hides these from ``dir(lucid)`` etc.
-// bool_refusal : BoolRefusal
-//     ``None`` unless the reference CPU refuses a bool input for this op.
+// refusal : DtypeRefusal
+//     ``None`` unless the reference CPU refuses some dtype for this op; then
+//     the error class it raises.  One class per op.
+// refused : DtypeMask
+//     The dtypes the op refuses, one bit per :class:`Dtype` code.
 //     :class:`SchemaGuard` reads it first, so every entry that builds a guard
 //     (CPU, Metal, the in-place twin, a direct engine call, a trace) refuses
-//     the same way at the cost of one enum comparison.
-// bool_cast : BoolCast
+//     the same way at the cost of one shift and one test.  An op whose other
+//     operands are not seen by the guard calls :func:`check_schema_dtype` for
+//     them.
+// cast : CastHint
 //     What the refusal's message tells the caller to cast to.  Read only when
-//     ``bool_refusal`` is set.
+//     ``refused`` is non-empty.
 struct LUCID_API OpSchema {
     std::string_view name;
     int version;
@@ -183,11 +219,12 @@ struct LUCID_API OpSchema {
     // switching ``pow`` to ``Promote`` for the first broke the second.
     bool integral_closed = false;
 
-    // Refuses a bool input, as the reference CPU does.  Declared with
-    // :func:`refusing_bool` so the op's schema line names the class and the
-    // cast hint in one place; read by :class:`SchemaGuard`.
-    BoolRefusal bool_refusal = BoolRefusal::None;
-    BoolCast bool_cast = BoolCast::Number;
+    // The dtypes this op turns away, as the reference CPU does.  Declared with
+    // :func:`refusing` so the op's schema line names the dtypes, the class and
+    // the cast hint in one place; read by :class:`SchemaGuard`.
+    DtypeRefusal refusal = DtypeRefusal::None;
+    CastHint cast = CastHint::Number;
+    DtypeMask refused = 0;
 
     // Minimal constructor for deterministic ops with default arity.
     //
@@ -272,25 +309,51 @@ struct LUCID_API OpSchema {
           internal(is_internal),
           real_valued(real) {}
 
-    // Returns a copy of this schema that refuses a bool input.
+    // Returns a copy of this schema that also refuses ``mask``.
     //
     // Chains onto a schema's constructor so the declaration stays one line:
     //
-    //     const OpSchema AbsBackward::schema_v1 =
-    //         OpSchema{"abs", 1, AmpPolicy::Promote, true}
-    //             .refusing_bool(BoolRefusal::Kernel, BoolCast::Number);
+    //     const OpSchema SoftmaxBackward::schema_v1 =
+    //         OpSchema{"softmax", 1, AmpPolicy::ForceFP32, true}.refusing(
+    //             kBoolAndSignedIntegers, DtypeRefusal::Kernel);
+    //
+    // An op has one refusal class and one cast hint, so a second call may add
+    // dtypes but may not change either.  The functions are ``constexpr``: a
+    // schema that does is rejected by the compiler where the declaration is a
+    // constant expression, and by the first load of the library where it is
+    // not (an exception out of a static initialiser ends the process, so the
+    // mistake cannot ship unseen).
     //
     // Parameters
     // ----------
-    // refusal : BoolRefusal
-    //     The reference's error class for a bool operand.
-    // cast : BoolCast
+    // mask : DtypeMask
+    //     The dtypes to refuse, e.g. ``kSignedIntegers``.  Non-empty.
+    // kind : DtypeRefusal
+    //     The reference's error class for those dtypes.  Not ``None``.
+    // hint : CastHint, default=Floating
     //     What the message tells the caller to cast to.
-    constexpr OpSchema refusing_bool(BoolRefusal refusal, BoolCast cast) const {
+    constexpr OpSchema
+    refusing(DtypeMask mask, DtypeRefusal kind, CastHint hint = CastHint::Floating) const {
+        if (mask == 0 || kind == DtypeRefusal::None)
+            throw std::logic_error("OpSchema::refusing needs a dtype and a refusal class");
+        if (refusal != DtypeRefusal::None && (refusal != kind || cast != hint))
+            throw std::logic_error("OpSchema::refusing: an op has one refusal class and one hint");
         OpSchema out = *this;
-        out.bool_refusal = refusal;
-        out.bool_cast = cast;
+        out.refusal = kind;
+        out.cast = hint;
+        out.refused = static_cast<DtypeMask>(refused | mask);
         return out;
+    }
+
+    // Shorthand for ``refusing(dtype_bit(Dtype::Bool), kind, hint)``: the ops
+    // that turn away a bool and nothing else (``round``, ``relu``).
+    constexpr OpSchema refusing_bool(DtypeRefusal kind, CastHint hint) const {
+        return refusing(dtype_bit(Dtype::Bool), kind, hint);
+    }
+
+    // Whether this op turns ``dt`` away.
+    constexpr bool refuses(Dtype dt) const noexcept {
+        return ((refused >> static_cast<unsigned>(dt)) & 1u) != 0;
     }
 };
 

@@ -12,14 +12,29 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "../core/AmpPolicy.h"
+#include "../core/Dtype.h"
 #include "../core/OpRegistry.h"
 #include "../core/OpSchema.h"
 
 namespace py = pybind11;
 
 namespace lucid::bindings {
+
+namespace {
+
+using RefusalView = std::optional<std::pair<std::string, std::string>>;
+
+RefusalView refusal_view(const OpSchema& s, Dtype dt) {
+    if (!s.refuses(dt))
+        return std::nullopt;
+    return std::pair{std::string(s.refusal == DtypeRefusal::Kernel ? "kernel" : "guard"),
+                     std::string(cast_hint_text(s.cast))};
+}
+
+}  // namespace
 
 // Registers the OpSchema read-only descriptor and the two registry query
 // functions: op_lookup and op_registry_all.
@@ -51,15 +66,24 @@ void register_op_registry(py::module_& m) {
         // ``None`` for an op that accepts a bool; otherwise ``(kind, hint)``:
         // ``kind`` is ``"kernel"`` (the engine raises ``NotImplementedError``) or
         // ``"guard"`` (``DtypeMismatch``), ``hint`` the cast the message offers.
-        .def_property_readonly(
-            "bool_refusal",
-            [](const OpSchema& s) -> std::optional<std::pair<std::string, std::string>> {
-                if (s.bool_refusal == BoolRefusal::None)
-                    return std::nullopt;
-                return std::pair{
-                    std::string(s.bool_refusal == BoolRefusal::Kernel ? "kernel" : "guard"),
-                    std::string(bool_cast_hint(s.bool_cast))};
-            })
+        // The bool column of ``refusal_for``, kept for the callers that only
+        // ask about a bool.
+        .def_property_readonly("bool_refusal",
+                               [](const OpSchema& s) { return refusal_view(s, Dtype::Bool); })
+        // Every dtype the op refuses, in dtype-code order.
+        .def_property_readonly("refused_dtypes",
+                               [](const OpSchema& s) {
+                                   std::vector<Dtype> out;
+                                   for (unsigned code = 0; code < 16; ++code)
+                                       if ((s.refused >> code) & 1u)
+                                           out.push_back(static_cast<Dtype>(code));
+                                   return out;
+                               })
+        // ``None`` when the op answers ``dtype``; otherwise the same
+        // ``(kind, hint)`` as ``bool_refusal``.
+        .def(
+            "refusal_for", [](const OpSchema& s, Dtype dtype) { return refusal_view(s, dtype); },
+            py::arg("dtype"))
         .def("__repr__", [](const OpSchema& s) {
             return "OpSchema(name='" + std::string(s.name) +
                    "', version=" + std::to_string(s.version) +
