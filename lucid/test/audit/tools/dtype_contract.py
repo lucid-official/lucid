@@ -21,9 +21,11 @@ Run::
     python -m lucid.test.audit.tools.dtype_contract
 
 For every symbol whose accepted list lacks ``bool`` the table also records
-the class of the error the reference raised (``bool_refusals``).  The
-bool-refusal sweep (``lucid/test/unit/ops/test_bool_refusal_sweep.py``) holds
-Lucid to it: refuse where the reference refuses, with the same class.
+the class of the error the reference raised (``bool_refusals``), and the same
+for the integer widths (``int_refusals``; ``int_widths`` names the refused
+ones when only some are).  The sweeps
+(``lucid/test/unit/ops/test_{bool,integer}_refusal_sweep.py``) hold Lucid to
+them: refuse where the reference refuses, with the same class.
 
 The result is checked in as ``dtype_contract.json`` so the audit can read
 it without the reference installed.  Symbols the reference has no
@@ -33,9 +35,11 @@ so a missing verdict is visibly a gap and not a claim.
 """
 
 import argparse
+import datetime
 import json
 import pathlib
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Final
 
 import numpy as np
 
@@ -61,9 +65,14 @@ ALIASES: dict[str, str] = {
     "arccosh": "acosh",
 }
 
-#: What ``bool_refusals`` records for a symbol the reference neither answered
-#: nor raised for at bool: the probe returned ``None``.
+#: What a refusal column records for a symbol the reference neither answered
+#: nor raised for at that dtype: the probe returned ``None``.
 _NO_RESULT = "NoResult"
+
+#: The integer widths the framework has, in the order the probe tries them.  No unsigned
+#: width: ``uint8`` is not a Lucid dtype, so a column for it could only ever be a claim about
+#: something Lucid cannot be asked.
+INTEGERS: Final[tuple[str, ...]] = tuple(name for name in _probe.DTYPES if name.startswith("int"))
 
 #: Where each Lucid namespace lives in the reference.  ``None`` means the
 #: symbol is a tensor method.
@@ -108,23 +117,117 @@ def _as_reference(ref: Any, array: np.ndarray, follow: bool, name: str) -> Any:
     return ref.from_numpy(array)
 
 
-def measure(
-    ref: Any, verbose: bool = False
-) -> tuple[dict[str, list[str]], list[str], dict[str, str]]:
-    """Probe every surveyed symbol at every dtype.
+@dataclass(frozen=True)
+class Measurement:
+    """What the reference did with every surveyed symbol, and the columns read off it.
 
-    Returns the accepted-dtype table, the list of symbols with no
-    reference counterpart, and -- for each measured symbol whose accepted
-    list lacks ``bool`` -- the class name of the error the reference raised
-    for the bool probe.  The class is part of the contract: a kernel with
-    no bool instantiation raises ``NotImplementedError`` and a guard on the
-    input dtype raises ``RuntimeError``, and a framework that refuses with
-    the other one answers a different question for whoever catches it.
+    ``refused`` holds, for every dtype a symbol was probed at and not accepted, the class of
+    the error the reference raised.  The class is part of the contract: a kernel with no
+    instantiation for the dtype raises ``NotImplementedError`` and a guard on the input
+    dtype raises ``RuntimeError``, and a framework that refuses with the other one answers a
+    different question for whoever catches it.
     """
+
+    accepted: dict[str, list[str]]
+    unmapped: list[str]
+    refused: dict[str, dict[str, str]]
+
+    def bool_refusals(self) -> dict[str, str]:
+        """``symbol -> class`` for every measured symbol whose accepted list lacks ``bool``."""
+        return {
+            name: self.refused.get(name, {}).get("bool", _NO_RESULT)
+            for name, works in sorted(self.accepted.items())
+            if "bool" not in works
+        }
+
+    def int_widths(self) -> dict[str, list[str]]:
+        """``symbol -> the integer widths refused``, for the symbols that refuse only some.
+
+        A symbol that refuses every width is the common case and is not listed: ``avg_pool2d``
+        takes ``int64`` alone, and that is the exception worth writing down.
+        """
+        refused = self._refused_widths()
+        return {name: widths for name, widths in refused.items() if len(widths) < len(INTEGERS)}
+
+    def int_refusals(self) -> dict[str, str]:
+        """``symbol -> class`` for every measured symbol the reference refuses an integer.
+
+        One class per symbol, because that is what was measured: no symbol's class depends on
+        the width.  One that did would make the column say something false, so it stops the
+        regeneration instead (``ValueError``) and the column grows a width key when it does.
+        """
+        out: dict[str, str] = {}
+        for name, widths in self._refused_widths().items():
+            classes = {self.refused.get(name, {}).get(width, _NO_RESULT) for width in widths}
+            if len(classes) > 1:
+                raise ValueError(
+                    f"{name}: the reference refuses its integer widths with different classes "
+                    f"({sorted(classes)}); int_refusals holds one class per symbol"
+                )
+            out[name] = classes.pop()
+        return out
+
+    def _refused_widths(self) -> dict[str, list[str]]:
+        found = {
+            name: [width for width in INTEGERS if width not in works]
+            for name, works in sorted(self.accepted.items())
+        }
+        return {name: widths for name, widths in found.items() if widths}
+
+
+def _working_call(symbol: _surface.Symbol, fn: Any, ctx: Context) -> Any:
+    """The first invocation of ``symbol`` that runs on Lucid and answers, or ``None``.
+
+    The audit's own choice, so the question put to the reference is the one the audit asks.
+    """
+    with _probe.preserved_globals():
+        for domain in ctx.domains:
+            for candidate in _specs.invocations(symbol.short, domain, symbol.qualname, fn):
+                try:
+                    out = fn(*candidate.args, **candidate.kwargs)
+                except Exception:  # noqa: BLE001 - surveying, not asserting
+                    continue
+                if _probe.to_numpy(out) is not None:
+                    return candidate
+    return None
+
+
+def _ask_reference(ref: Any, call: Any, target: Any) -> tuple[list[str], dict[str, str]]:
+    """Replay ``call`` on the reference at every dtype: those it answers, and why it did not."""
+    works: list[str] = []
+    classes: dict[str, str] = {}
+    for name in _probe.DTYPES:
+        try:
+            args = _probe.dtype_args(call, name, lambda a, f, n=name: _as_reference(ref, a, f, n))
+            fn_ref = target
+            if isinstance(target, str):
+                # A method.  The primary argument becomes the receiver
+                # and drops out of the argument list.
+                if call.primary >= len(args):
+                    break
+                fn_ref = getattr(args[call.primary], target, None)
+                if fn_ref is None:
+                    break
+                args = args[: call.primary] + args[call.primary + 1 :]
+            out = fn_ref(*args, **_reference_kwargs(ref, call.kwargs))
+            if out is not None:
+                works.append(name)
+            else:
+                classes[name] = _NO_RESULT
+        except Exception as exc:  # noqa: BLE001 - a refusal is the measurement
+            if _probe.refuses_a_value(exc):
+                works.append(name)
+            else:
+                classes[name] = type(exc).__name__
+    return works, {name: cls for name, cls in classes.items() if name not in works}
+
+
+def measure(ref: Any, verbose: bool = False) -> Measurement:
+    """Probe every surveyed symbol at every dtype."""
     ctx = Context(metal=False)
     accepted: dict[str, list[str]] = {}
     unmapped: list[str] = []
-    refused_bool: dict[str, str] = {}
+    refused: dict[str, dict[str, str]] = {}
 
     for symbol in _surface.enumerate_surface():
         fn = _surface.resolve(symbol)
@@ -135,19 +238,7 @@ def measure(
             unmapped.append(symbol.qualname)
             continue
 
-        call = None
-        with _probe.preserved_globals():
-            for domain in ctx.domains:
-                for candidate in _specs.invocations(symbol.short, domain, symbol.qualname, fn):
-                    try:
-                        out = fn(*candidate.args, **candidate.kwargs)
-                    except Exception:  # noqa: BLE001 - surveying, not asserting
-                        continue
-                    if _probe.to_numpy(out) is not None:
-                        call = candidate
-                        break
-                if call is not None:
-                    break
+        call = _working_call(symbol, fn, ctx)
         if call is None:
             continue
         try:
@@ -155,39 +246,14 @@ def measure(
         except TypeError:
             continue
 
-        works: list[str] = []
-        refusal = _NO_RESULT
-        for name in _probe.DTYPES:
-            try:
-                args = _probe.dtype_args(
-                    call, name, lambda a, f, n=name: _as_reference(ref, a, f, n)
-                )
-                fn_ref = target
-                if isinstance(target, str):
-                    # A method.  The primary argument becomes the receiver
-                    # and drops out of the argument list.
-                    if call.primary >= len(args):
-                        break
-                    fn_ref = getattr(args[call.primary], target, None)
-                    if fn_ref is None:
-                        break
-                    args = args[: call.primary] + args[call.primary + 1 :]
-                out = fn_ref(*args, **_reference_kwargs(ref, call.kwargs))
-                if out is not None:
-                    works.append(name)
-            except Exception as exc:  # noqa: BLE001 - a refusal is the measurement
-                if _probe.refuses_a_value(exc):
-                    works.append(name)
-                elif name == "bool":
-                    refusal = type(exc).__name__
+        works, why = _ask_reference(ref, call, target)
         if works:
             accepted[symbol.qualname] = works
-            if "bool" not in works:
-                refused_bool[symbol.qualname] = refusal
+            refused[symbol.qualname] = why
         if verbose:
             print(f"{symbol.qualname:52s} {works}")
 
-    return accepted, sorted(unmapped), dict(sorted(refused_bool.items()))
+    return Measurement(accepted, sorted(unmapped), refused)
 
 
 def _reference_kwargs(ref: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -209,7 +275,7 @@ def main() -> None:
     args = parser.parse_args()
 
     ref = require_ref()
-    accepted, unmapped, refused_bool = measure(ref, verbose=args.verbose)
+    measured = measure(ref, verbose=args.verbose)
 
     path = args.output or pathlib.Path(__file__).parent.parent / "dtype_contract.json"
     previous = {}
@@ -228,17 +294,30 @@ def main() -> None:
             "sides build their arguments through _probe.dtype_args so the",
             "two are answering the same question.",
             "",
+            "bool_refusals / int_refusals: the class of the error the reference",
+            "raised for a bool / an integer operand, for every symbol whose accepted",
+            "list lacks it.  int_widths: the refused integer widths, for the symbols",
+            "that refuse only some (avg_pool2d takes int64).  No uint8 -- Lucid has none.",
+            "",
             "Regenerate with:",
             "    python -m lucid.test.audit.tools.dtype_contract",
         ],
         "measured_against": f"reference framework {getattr(ref, '__version__', '?')}",
         "measured_on": previous.get("measured_on", ""),
-        "symbols": dict(sorted(accepted.items())),
-        "bool_refusals": refused_bool,
-        "unmapped": unmapped,
+        "symbols": dict(sorted(measured.accepted.items())),
+        "bool_refusals": measured.bool_refusals(),
+        "int_refusals": measured.int_refusals(),
+        "int_widths": measured.int_widths(),
+        "unmapped": measured.unmapped,
     }
+    # The date moves with the measurement, not with the run: an unchanged contract stays
+    # byte-identical, so regenerating to check it leaves no diff.
+    if {k: v for k, v in payload.items() if k != "measured_on"} != {
+        k: v for k, v in previous.items() if k != "measured_on"
+    }:
+        payload["measured_on"] = datetime.date.today().isoformat()
     path.write_text(json.dumps(payload, indent=2) + "\n")
-    print(f"{len(accepted)} symbols measured, {len(unmapped)} unmapped -> {path}")
+    print(f"{len(measured.accepted)} symbols measured, {len(measured.unmapped)} unmapped -> {path}")
 
 
 if __name__ == "__main__":
