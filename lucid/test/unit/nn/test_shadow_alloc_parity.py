@@ -34,6 +34,7 @@ from lucid.test._fixtures.devices import (
     devices_supporting,
     metal_available,
 )
+from lucid.test._helpers.dtype_refusal import engine_refusal
 
 
 def _assert_same_answer(phantom: Tensor, eager: Tensor) -> None:
@@ -295,6 +296,11 @@ def test_unary_free_fn_and_method_parity(
     _assert_same_answer(method_out, eager_out)
 
 
+#: The engine op whose schema words the refusal of a reduction that is not its own (``std`` runs
+#: the engine's ``var``).
+_ENGINE_OP = {"std": "var"}
+
+
 @pytest.mark.parametrize(
     "op_name",
     [
@@ -320,6 +326,19 @@ def test_reduction_free_fn_and_method_parity(
 ) -> None:
     fn = getattr(lucid, op_name)
     eager_x = lucid.ones((2, 3, 4), dtype=dt, device=device)
+    refusal = engine_refusal(_ENGINE_OP.get(op_name, op_name), dt)
+    if refusal is not None:
+        # An integer mean, variance or deviation is refused (LCD-1026); the phantom is refused
+        # the same way, class and message, through the free function and the method.
+        with refusal.raises():
+            fn(eager_x, dim=dim, keepdim=keepdim)
+        with shadow_alloc():
+            ph_x = lucid.ones((2, 3, 4), dtype=dt, device=device)
+            with refusal.raises():
+                fn(ph_x, dim=dim, keepdim=keepdim)
+            with refusal.raises():
+                getattr(ph_x, op_name)(dim=dim, keepdim=keepdim)
+        return
     eager_out = fn(eager_x, dim=dim, keepdim=keepdim)
 
     with shadow_alloc():
