@@ -35,6 +35,7 @@ import lucid
 import lucid.nn.functional as F
 
 from lucid._C import engine as _C_engine
+from lucid.test._helpers.dtype_refusal import engine_refusal
 from lucid.test.unit.compile._helpers import COMPILE_DEVICE, verbose_compile_notices
 
 DEV = COMPILE_DEVICE
@@ -689,6 +690,22 @@ def _each(name: str, dtypes: tuple[str, ...], r: Refusal) -> dict[tuple[str, str
     return {(name, d): r for d in dtypes}
 
 
+def _engine_refusals(name: str, op: str, dtypes: tuple[str, ...]) -> dict[tuple[str, str], Refusal]:
+    """The pairs of ``name`` the engine's schema of ``op`` refuses, read back from it.
+
+    The declaration is ``OpSchema`` (LCD-1020, LCD-1026), pinned op by op in
+    ``test_engine_bool_refusal_schema``; listing the pairs here again would be a second copy of
+    the policy that drifts the day the engine declares one more dtype.  ``op`` is the engine's
+    name for the case (``std`` is refused by ``var``).
+    """
+    rows: dict[tuple[str, str], Refusal] = {}
+    for dtype in dtypes:
+        refused = engine_refusal(op, DTYPES[dtype])
+        if refused is not None:
+            rows[(name, dtype)] = _both(refused.error, f"{op}: {refused.message}")
+    return rows
+
+
 _INT = ("i64", "i32")
 _NON_FLOAT = ("i64", "i32", "bool")
 
@@ -711,12 +728,6 @@ EAGER_REJECTS: dict[tuple[str, str], Refusal] = {
     # (CHA-158).
     ("sub", "bool"): _both(_C_engine.LucidError, "subtracting bools; use ^"),
     **_each("lerp", _INT, _both(_NOT_IMPL, "lerp takes floating tensors only")),
-    **_each(
-        "nextafter",
-        _NON_FLOAT,
-        # Every other clean refusal here is a subclass; this one is the base.
-        _both(_C_engine.LucidError, "nextafter takes float32 / float64 only"),
-    ),
     ("argmax", "bool"): _both(_NOT_IMPL, "no arg-reduction of bools"),
     ("argmin", "bool"): _both(_NOT_IMPL, "no arg-reduction of bools"),
     ("trace", "bool"): _both(_NOT_IMPL, "no trace of a bool matrix"),
@@ -730,19 +741,21 @@ EAGER_REJECTS: dict[tuple[str, str], Refusal] = {
     # A norm has no integer form; the reference refuses every order (LCD-384).
     **_each("norm", _NON_FLOAT, _both(_C_engine.DtypeMismatch, "a norm takes floats")),
     **_each("vector_norm", _NON_FLOAT, _both(_C_engine.DtypeMismatch, "a norm takes floats")),
-    # A mask is neither a magnitude nor a quantity to average, and the
-    # reference refuses it for each of these (LCD-1013); ``mask.float()`` is
-    # the spelling.  The engine's schema refuses these (``OpSchema.bool_refusal``,
-    # LCD-1020); ``lucid._ops._bool_refusal`` says which layer owns the others.
-    **_each("abs", ("bool",), _both(_NOT_IMPL, "the absolute value of a bool (LCD-1013)")),
-    **_each("round", ("bool",), _both(_NOT_IMPL, "rounding a bool (LCD-1013)")),
-    **_each("floor", ("bool",), _both(_NOT_IMPL, "flooring a bool (LCD-1013)")),
-    **_each("ceil", ("bool",), _both(_NOT_IMPL, "the ceiling of a bool (LCD-1013)")),
-    **_each("trunc", ("bool",), _both(_NOT_IMPL, "truncating a bool (LCD-1013)")),
-    **_each("relu", ("bool",), _both(_C_engine.DtypeMismatch, "rectifying a bool (LCD-1013)")),
-    **_each("mean", ("bool",), _both(_C_engine.DtypeMismatch, "the mean of a bool (LCD-1013)")),
-    **_each("var", ("bool",), _both(_C_engine.DtypeMismatch, "the variance of a bool (LCD-1013)")),
-    **_each("std", ("bool",), _both(_C_engine.DtypeMismatch, "the deviation of a bool (LCD-1013)")),
+    # What the engine's schema refuses (``OpSchema.refusal_for``, LCD-1020, LCD-1026).  A mask is
+    # neither a magnitude nor a quantity to average (LCD-1013) and the reference has no integer
+    # kernel for a mean, a variance or a ``nextafter`` (LCD-1026); ``mask.float()`` and
+    # ``x.float()`` are the spellings.  ``lucid._ops._bool_refusal`` says which layer owns the
+    # refusals that are not the engine's.
+    **_engine_refusals("abs", "abs", _NON_FLOAT),
+    **_engine_refusals("round", "round", _NON_FLOAT),
+    **_engine_refusals("floor", "floor", _NON_FLOAT),
+    **_engine_refusals("ceil", "ceil", _NON_FLOAT),
+    **_engine_refusals("trunc", "trunc", _NON_FLOAT),
+    **_engine_refusals("relu", "relu", _NON_FLOAT),
+    **_engine_refusals("mean", "mean", _NON_FLOAT),
+    **_engine_refusals("var", "var", _NON_FLOAT),
+    **_engine_refusals("std", "var", _NON_FLOAT),
+    **_engine_refusals("nextafter", "nextafter", _NON_FLOAT),
 }
 
 

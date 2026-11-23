@@ -20,12 +20,25 @@ import lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap
 from lucid.compile import _tracing
+from lucid.test._helpers.dtype_refusal import engine_refusal
 
-#: The three ways the nested draw refuses: the input is no float (bool and int64 are
-#: each refused by a different check), or determinism is on and no generator was given.
+
+def _dropout_refusal(dtype: lucid.dtype) -> type[RuntimeError]:
+    """The class ``dropout``'s schema raises for ``dtype``: a bool and every integer alike."""
+    refusal = engine_refusal("dropout", dtype)
+    assert refusal is not None, f"dropout accepts {dtype} now"
+    return refusal.error
+
+
+#: The ways the nested draw refuses: the input is no float (a bool or an integer, turned away by
+#: the schema of ``dropout``), or determinism is on and no generator was given.
 _REFUSALS = [
-    pytest.param(lucid.bool_, False, TypeError, id="bool-input"),
-    pytest.param(lucid.int64, False, NotImplementedError, id="int64-input"),
+    *(
+        pytest.param(
+            dtype, False, _dropout_refusal(dtype), id=f"{str(dtype).removeprefix('lucid.')}-input"
+        )
+        for dtype in (lucid.bool_, lucid.int8, lucid.int16, lucid.int32, lucid.int64)
+    ),
     pytest.param(lucid.float32, True, _C_engine.LucidError, id="deterministic-without-generator"),
 ]
 
@@ -68,7 +81,7 @@ def test_a_throw_does_not_install_a_tracer_that_was_not_there(device: str) -> No
     """Outside a trace the detach is a no-op both ways: nothing is installed afterwards."""
     x = lucid.ones((4,), dtype=lucid.bool_, device=device)
     assert _C_engine.compile.current_tracer() is None
-    with pytest.raises(TypeError):
+    with pytest.raises(_dropout_refusal(lucid.bool_)):
         _C_engine.nn.dropout_stateful(_unwrap(x), _unwrap(_state(device)), 0.5, True)
     assert _C_engine.compile.current_tracer() is None
 
