@@ -1384,6 +1384,18 @@ _QUALIFIED: dict[str, Callable[[str], Iterator[Call]]] = {
             )
         ]
     ),
+    # Its mask is a bool and nothing else (the reference refuses an integer or float one, and so
+    # does Lucid since LCD-1026): the method's ``(*args, **kwargs)`` signature derives three floats.
+    "Tensor.masked_select": lambda d: iter(
+        [
+            Call(
+                [_f((3, 4), d), lucid.tensor(_probe.rng(6).random((3, 4)) > 0.5)],
+                {},
+                0,
+                "x.masked_select(mask)",
+            )
+        ]
+    ),
     "Tensor.unfold": lambda d: iter(
         [Call([_f((2, 3, 8), d), 2, 3, 1], {}, 0, "x.unfold(dim, size, step)")]
     ),

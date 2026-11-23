@@ -3068,7 +3068,14 @@
       "float64"
     ],
     "Tensor.masked_select": [
-      "bool"
+      "bool",
+      "int8",
+      "int16",
+      "int32",
+      "int64",
+      "float16",
+      "float32",
+      "float64"
     ],
     "Tensor.matmul": [
       "int8",
@@ -8545,7 +8552,6 @@
     "Tensor.logcumsumexp": "NotImplementedError",
     "Tensor.logdet": "RuntimeError",
     "Tensor.logit_": "RuntimeError",
-    "Tensor.masked_select": "RuntimeError",
     "Tensor.mean": "RuntimeError",
     "Tensor.multinomial": "RuntimeError",
     "Tensor.nanmean": "RuntimeError",
@@ -8694,7 +8700,6 @@
     ]
   },
   "unmapped": [
-    "F.BOOL_CODE",
     "F.DimLike",
     "F.GUARD_FRAMES",
     "F.GeluApproximate",
@@ -8702,14 +8707,16 @@
     "F.ReductionKL",
     "F.accuracy",
     "F.apply_rotary_emb",
-    "F.bool_refusal",
     "F.check_embedding_indices",
     "F.correct_count",
     "F.fused_linear_gelu",
     "F.fused_linear_relu",
     "F.nearest_codebook",
     "F.noisy_linear",
+    "F.refuse",
     "F.refuse_bool",
+    "F.refuse_declared",
+    "F.refuse_mixed",
     "F.repeat_kv",
     "F.scaled_noise",
     "F.sinusoidal_embedding",
