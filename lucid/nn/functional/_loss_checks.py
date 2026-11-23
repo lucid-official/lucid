@@ -21,12 +21,12 @@ depended on the device and on the code path:
 - ``huber_loss`` returned a wrong number on the CPU for a float16 target
   beside a float32 input.
 
-An operand of a dtype the loss does not take is now refused with a
-``TypeError`` that names the loss and the dtype (:func:`_check_dtypes`).
-A bool is the exception: it is refused as every other op refuses one
-(:func:`lucid._ops._bool_refusal.bool_refusal`), with the error class the
+An operand of a dtype the loss does not take is now refused (:func:`_check_dtypes`).
+A bool or an integer is refused as every other op refuses one
+(:func:`lucid._ops._bool_refusal.refusal`), with the error class the
 reference raises -- a ``RuntimeError`` that is a ``NotImplementedError`` for
-some losses, a dtype-mismatch one for the rest -- and a cast to make.
+some losses, a dtype-mismatch one for the rest -- and a cast to make; any
+other dtype with a ``TypeError`` that names the loss and the dtype.
 The accepted operands are cast to one dtype (:func:`_loss_dtype`), so no
 kernel sees a mixed pair.
 
@@ -37,8 +37,9 @@ hold has a check of its own, each measured against the reference:
   for class probabilities (:func:`_check_weight_dtype`);
 - the length tensors of ``ctc_loss`` are integral (:func:`_ctc_lengths`);
 - a bool beside another dtype is refused where the loss subtracts it
-  (:func:`_check_poisson_bools`), and as a dtype mismatch rather than the
-  kernel's error beside a target of another dtype (``_MISMATCH_BESIDE_TARGET``).
+  (:func:`_check_poisson_bools`);
+- a bool or integer input is a dtype mismatch rather than the kernel's error beside a target
+  the reference will not promote it to (``_MISMATCH_BESIDE_TARGET``, per loss).
 """
 
 import math
@@ -51,7 +52,7 @@ from lucid._tensor_args import GUARD_FRAMES
 from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap
-from lucid._ops._bool_refusal import bool_refusal
+from lucid._ops._bool_refusal import bool_refusal, refusal
 from lucid._tensor._indexing import broadcast_shapes
 from lucid._types import Reduction, ReductionKL
 from lucid.nn.functional._index_checks import _host_read
@@ -496,11 +497,27 @@ _BOOL_BY_CALL: frozenset[str] = frozenset({"poisson_nll_loss"})
 #: multiplies takes a bool, as it does there.
 _NUMBER_EXTRAS: frozenset[str] = frozenset({"pos_weight"})
 
-#: The losses whose bool *input* is refused as a dtype mismatch when the target is not
-#: bool: the reference compares the two dtypes first (``huber_loss``'s output type, the
-#: ``Found dtype … but expected …`` of the BCE kernel), and only a bool pair reaches the
-#: kernel whose ``NotImplementedError`` the table's row names.
-_MISMATCH_BESIDE_TARGET: frozenset[str] = frozenset({"huber_loss", "binary_cross_entropy"})
+def _target_differs(x: Tensor, target: Tensor) -> bool:
+    """The BCE kernel's own check: ``Found dtype … but expected …``."""
+    return _unwrap(x).dtype != _unwrap(target).dtype
+
+
+def _target_widens(x: Tensor, target: Tensor) -> bool:
+    """``huber_loss``'s output type: a floating target beside a bool or integer input, or any
+    target but a bool beside a bool input, is a mismatch; an integer pair is the kernel's."""
+    return target.is_floating_point() or (_kind_of(x) == "bool" and _kind_of(target) != "bool")
+
+
+#: The losses whose bool or integer *input* is refused as a dtype mismatch when the target
+#: is of a dtype that does not meet it: the reference compares the two dtypes first
+#: (``huber_loss``'s output type, the ``Found dtype … but expected …`` of the BCE kernel), and
+#: only a pair that does reaches the kernel whose ``NotImplementedError`` the table's row names.
+#: Each entry says when the pair is a mismatch, measured against the reference for every
+#: pair of bool and integer widths.
+_MISMATCH_BESIDE_TARGET: dict[str, Callable[[Tensor, Tensor], bool]] = {
+    "huber_loss": _target_widens,
+    "binary_cross_entropy": _target_differs,
+}
 
 
 def _kind_of(t: Tensor) -> str:
@@ -513,25 +530,39 @@ def _kind_of(t: Tensor) -> str:
     return "integer" if _promotion.is_integer(d) else "complex"
 
 
-def _check_kind(t: Tensor, kind: str, what: str, op: str, *, mismatch: bool = False) -> None:
+def _check_kind(
+    t: Tensor,
+    kind: str,
+    what: str,
+    op: str,
+    *,
+    mismatch: bool = False,
+    beside: Tensor | None = None,
+) -> None:
     """Refuse ``t``, the ``what`` operand of loss ``op``, unless its dtype
     is of ``kind`` (see ``_KINDS``).
 
-    A bool is refused as every op refuses one (``bool_refusal``: the
-    reference's class, and a cast to name); any other dtype with a
-    ``TypeError`` that names it.  A bool *target* or ``var`` beside a floating
-    input is a dtype mismatch whatever the loss's own class (``_TARGETS``), and
-    so is a bool operand the call says is (``mismatch``: a bool input beside a
-    target of another dtype, for the losses in ``_MISMATCH_BESIDE_TARGET``)."""
+    A bool or an integer is refused as every op refuses one (:func:`refusal`: the
+    reference's class, and a cast to name); any other dtype with a ``TypeError`` that
+    names it.  A bool or integer *target* or ``var`` beside a floating input is a dtype
+    mismatch whatever the loss's own class (``_TARGETS``), and so is a bool or integer
+    operand the call says is (``mismatch``, or an input beside the ``beside`` target of
+    another dtype, for the losses in ``_MISMATCH_BESIDE_TARGET``)."""
     found = _kind_of(t)
     if found in _KINDS[kind]:
         return
-    if found == "bool":
-        raise bool_refusal(
+    if found in ("bool", "integer"):
+        check = _MISMATCH_BESIDE_TARGET.get(op)
+        raise refusal(
             op,
+            _unwrap(t).dtype.value,
             "" if what == "input" else what,
             index=kind == "index",
-            mismatch=mismatch or what in _TARGETS,
+            mismatch=(
+                mismatch
+                or what in _TARGETS
+                or (check is not None and beside is not None and check(t, beside))
+            ),
         )
     raise TypeError(f"{op}: expected {_DESCRIBE[kind]} {what}, got {t.dtype}")
 
@@ -580,20 +611,16 @@ def _check_dtypes(op: str, target: Tensor | None = None, **inputs: Tensor) -> No
     them; ``target`` is its target, when it has one."""
     _check_device(op, target=target, **inputs)
     input_kind, target_kind = _OPERAND_DTYPES[op]
-    mismatch = op in _MISMATCH_BESIDE_TARGET and target is not None and _kind_of(target) != "bool"
     for what, t in inputs.items():
-        _check_kind(t, input_kind, what, op, mismatch=mismatch)
+        _check_kind(t, input_kind, what, op, beside=target)
     if target is None or not target_kind:
         return
     _check_kind(target, target_kind, "target", op)
     if op in _FLOATING_RESULT and not any(
         t.is_floating_point() for t in (*inputs.values(), target)
     ):
-        operands = (*inputs.values(), target)
-        if any(_kind_of(t) == "bool" for t in operands):
-            raise bool_refusal(op)
-        dtypes = ", ".join(str(t.dtype) for t in operands)
-        raise TypeError(f"{op}: expected a floating point input or target, got {dtypes}")
+        # Two operands of bool or integer dtypes: the reference has no kernel for the pair.
+        raise refusal(op, _unwrap(next(iter(inputs.values()))).dtype.value)
 
 
 def _loss_dtype(*operands: Tensor) -> _C_engine.Dtype:
@@ -693,8 +720,8 @@ def _check_cross_entropy_target(
     _check_dtypes(op, None if soft else target, input=x)
     if not soft:
         _check_class_target(x, target, op)
-    elif _kind_of(target) == "bool":
-        raise bool_refusal(op, "target", mismatch=True)
+    elif _kind_of(target) in ("bool", "integer"):
+        raise refusal(op, _unwrap(target).dtype.value, "target", mismatch=True)
     elif not target.is_floating_point():
         raise TypeError(
             f"{op}: a target of the input's shape holds class probabilities "

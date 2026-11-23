@@ -395,6 +395,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse integers in nn.functional entries as the reference does
 
+- refuse integer operands of the losses with the reference's class
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call
