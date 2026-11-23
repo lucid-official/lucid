@@ -111,16 +111,6 @@
       "owner": "out-of-batch",
       "reason": "draws from a bool distribution; the reference raises a RuntimeError"
     },
-    "Tensor.nextafter": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "refuses with LucidError (not NotImplementedError) for a non-F32/F64 dtype"
-    },
-    "Tensor.nextafter_": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "refuses with LucidError (not NotImplementedError) for a non-F32/F64 dtype"
-    },
     "Tensor.topk": {
       "kind": "class",
       "owner": "call-dependent",
@@ -280,11 +270,6 @@
       "kind": "over-accept",
       "owner": "out-of-batch",
       "reason": "draws from a bool distribution; the reference raises a RuntimeError"
-    },
-    "lucid.nextafter": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "refuses with LucidError (not NotImplementedError) for a non-F32/F64 dtype"
     },
     "lucid.nn.init.orthogonal": {
       "kind": "over-accept",

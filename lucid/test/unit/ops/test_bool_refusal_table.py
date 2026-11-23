@@ -251,6 +251,9 @@ _TABLE: dict[str, _Row] = {
     "polar": _guard("polar", lambda fw, t, m: fw.polar(t, t)),
     "polar-first": _guard("polar", lambda fw, t, m: fw.polar(t, t.float())),
     "polar-second": _guard("polar", lambda fw, t, m: fw.polar(t.float(), t)),
+    "nextafter": _kernel("nextafter", lambda fw, t, m: fw.nextafter(t, t)),
+    "nextafter-method": _kernel("nextafter", lambda fw, t, m: t.nextafter(t)),
+    "nextafter-inplace": _kernel("nextafter", lambda fw, t, m: t.clone().nextafter_(t)),
     # ── activations ──────────────────────────────────────────────────────────
     "relu": _guard("relu", lambda fw, t, m: fw.relu(t)),
     "relu-method": _guard("relu", lambda fw, t, m: t.relu()),
@@ -1074,6 +1077,7 @@ _IN_PLACE: dict[str, Callable[[lucid.Tensor], object]] = {
     "round_": lambda t: t.round_(),
     "trunc_": lambda t: t.trunc_(),
     "frac_": lambda t: t.frac_(),
+    "nextafter_": lambda t: t.nextafter_(t),
     "clamp_": lambda t: t.clamp_(t, t),
     "pow_": lambda t: t.pow_(t),
     "ipow": lambda t: operator.ipow(t, t),
