@@ -711,6 +711,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `take_along_dim(x, indices, dim)` and `take` read int64 positions only, as the reference does; a bool, int8, int16 or int32 index raises `DtypeMismatch`. `gather` reads int32 or int64. A bool, int8 or int16 index raises `DtypeMismatch`, and so does a flat `take_along_dim(x, indices)` with one. `gather` answers an index with no element whatever its dtype, as the reference does (LCD-1075).
 - `ldexp(input, other)` refuses a bool `other` beside a real floating `input` with `NotImplementedError`, as the reference does. An integer, bool or complex `input` still answers (LCD-1075).
 - **Behaviour change:** a scale factor that is a tensor with a dimension, a tensor that requires grad, or a value that is not a number (a str, None or a list) raises `TypeError: <op>(): argument '<name>' must be Number, not <type>`, as the reference does. Before, such values were accepted or gave `expected Tensor or Number`. To migrate a learnable 0-d scale, multiply by it explicitly (`x + alpha * y`) (LCD-1088).
+- review fixes for the integral refusals (LCD-1105)
 
 ---
 

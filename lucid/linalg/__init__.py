@@ -16,7 +16,7 @@ from lucid._ops._reduce import _reduction_axes, _require_normable, _truth_mask
 from lucid._promotion import try_unwrap as _try_unwrap
 from lucid._tensor._indexing import broadcast_shapes as _broadcast_batch
 from lucid._tensor.tensor import Tensor
-from lucid.linalg._dtype_guard import _check_solve_operands, _checked_operand, _inverse_of_empty
+from lucid.linalg._dtype_guard import _check_solve_operands, _inv_operand
 from lucid.linalg._norm_scale import _scaled, _scaled_p_norm
 from lucid.linalg._operand_guard import _check_ldl_solve_operands, _require_triangular_system
 
@@ -89,12 +89,21 @@ def inv(A: Tensor) -> Tensor:
         Inverse matrix of shape ``(*, n, n)`` with the same dtype as
         ``A``.
 
+    Raises
+    ------
+    DtypeMismatch
+        If ``A`` is a bool or integer tensor, an empty one included.
+
     Notes
     -----
     Internally computes :math:`PA = LU` and then solves ``LU X = P`` for
     ``X`` via two triangular sweeps.  Cost is :math:`O(n^3)` per matrix.
     For ill-conditioned ``A`` consider :func:`pinv` (SVD-based) for a
     more robust pseudo-inverse.
+
+    A floating matrix with a zero dimension is returned unchanged rather than handed to the
+    factorisation: the 0x0 matrix is its own inverse, and LAPACK's behaviour at ``n = 0`` is not
+    uniform across the implementations this runs against.
 
     Examples
     --------
@@ -103,20 +112,10 @@ def inv(A: Tensor) -> Tensor:
     >>> A = lucid.tensor([[4.0, 7.0], [2.0, 6.0]])
     >>> inv(A)
     tensor([[0.6, -0.7], [-0.2, 0.4]])
-
-    Notes
-    -----
-    A matrix with a zero dimension is returned unchanged rather than
-    handed to the factorisation.  The 0x0 matrix is its own inverse — it
-    is the identity on the zero-dimensional space — so nothing is lost,
-    and LAPACK's behaviour at ``n = 0`` is not uniform across the
-    implementations this runs against: the same call is harmless on one
-    Accelerate build and a segmentation fault on another.  Guarding here
-    makes the answer depend on the mathematics rather than on which
-    machine is asking.
     """
+    A = _inv_operand(A)
     if len(A.shape) >= 2 and A.shape[-1] == 0:
-        return _inverse_of_empty(A)
+        return A
     return _la.inv(A)  # type: ignore[arg-type, return-value]
 
 
@@ -1574,8 +1573,9 @@ def matrix_rank(
         if atol is not None or rtol is not None:
             raise ValueError("matrix_rank: tol cannot be specified together with atol or rtol")
         atol, rtol = tol, 0.0
+    _refuse("matrix_rank", input)
     with _autocast_entry("matrix_rank", _unwrap(input)) as (a_impl,):
-        A_cast = _checked_operand("matrix_rank", a_impl)
+        A_cast = _wrap(a_impl)
         with lucid.no_grad():
             sv = eigvalsh(A_cast).abs() if hermitian else svdvals(A_cast)
             if sv.numel() == 0:

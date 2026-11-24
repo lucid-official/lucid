@@ -11,10 +11,11 @@ road (2-D, batched, empty, a mode or a driver that routes elsewhere) once per dt
   Lucid answers what the reference refuses, or refuses what it answers, fails.
 * ``kind`` is how the reference turns the refused cells away: a ``"guard"`` (a ``RuntimeError``
   that is not a ``NotImplementedError``) or a ``"kernel"`` (a ``NotImplementedError``, a kernel
-  with no instantiation for the dtype).  An integer is held to it; a bool is held to it for a
-  kernel only.  The engine's factorisations raise ``NotImplementedError('only F32/F64')`` for a
-  bool where the reference's guard is a plain ``RuntimeError``: that class gap is recorded in
-  ``lucid/test/audit/bool_refusal_baseline.json``, not pinned a second time here.
+  with no instantiation for the dtype).  Every refused cell is held to it exactly, with one
+  exception: the engine's factorisations raise ``NotImplementedError('only F32/F64')`` for a bool
+  where the reference's guard is a plain ``RuntimeError``.  That class gap is recorded per op in
+  ``lucid/test/audit/bool_refusal_baseline.json``, and a bool cell of an op the baseline lists is
+  held to ``RuntimeError`` only -- so the day the baseline loses the op, its cells become exact.
 * ``-m parity`` replays every route on the reference, so the table cannot drift from it, and checks
   that an answered cell has the reference's result dtype.
 
@@ -22,6 +23,7 @@ Every operand is a matrix of ones: a refusal is raised before the values are rea
 roads (``matrix_power``, ``multi_dot``, ``cross``, ``vander``, ``diagonal``) do not need them.
 """
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from types import ModuleType
@@ -30,6 +32,7 @@ from typing import Literal
 import pytest
 
 import lucid
+from lucid.test.unit.ops._dtype_sweep import AUDIT_DIR
 
 pytestmark = pytest.mark.filterwarnings("ignore")
 
@@ -158,6 +161,13 @@ ROUTES: tuple[Route, ...] = (
     _guard("lstsq-wide", lambda la, M: la.lstsq(M(3, 4), M(3, 2))),
     _guard("lstsq-gels", lambda la, M: la.lstsq(M(4, 3), M(4, 2), driver="gels")),
     _guard("lstsq-gelsd", lambda la, M: la.lstsq(M(4, 3), M(4, 2), driver="gelsd")),
+    # Given an ``rcond`` the reference's refusal is a kernel's: the class depends on the call.
+    _kernel("lstsq-rcond", lambda la, M: la.lstsq(M(4, 3), M(4, 2), rcond=0.1)),
+    _kernel("lstsq-rcond-vector", lambda la, M: la.lstsq(M(3, 3), M(3), rcond=0.1)),
+    _kernel("lstsq-rcond-batched", lambda la, M: la.lstsq(M(2, 4, 3), M(2, 4, 2), rcond=0.1)),
+    _kernel(
+        "lstsq-rcond-gelss", lambda la, M: la.lstsq(M(4, 3), M(4, 2), rcond=0.1, driver="gelss")
+    ),
     # ── what the reference has no kernel for ───────────────────────────────────────────────────
     _kernel("eigh", lambda la, M: la.eigh(M(3, 3))),
     _kernel("eigh-upper", lambda la, M: la.eigh(M(3, 3), UPLO="U")),
@@ -246,18 +256,28 @@ def _is_kernel(error: BaseException) -> bool:
     return isinstance(error, NotImplementedError)
 
 
-def _holds_class(route: Route, dtype: str, error: BaseException, *, strict: bool) -> bool:
+_RECORDED: dict[str, dict[str, str | list[str]]] = json.loads(
+    (AUDIT_DIR / "bool_refusal_baseline.json").read_text()
+)["deviations"]
+#: The ``linalg`` ops whose bool is refused as a kernel where the reference's is a guard.
+_BOOL_CLASS_GAPS = frozenset(
+    name.removeprefix("lucid.linalg.")
+    for name, entry in _RECORDED.items()
+    if name.startswith("lucid.linalg.") and entry["kind"] == "class"
+)
+
+
+def _holds_class(route: Route, dtype: str, error: BaseException, *, on_lucid: bool) -> bool:
     """Whether ``error`` is the class ``route`` turns ``dtype`` away with.
 
-    Lucid's bool refused by a guard is held to ``RuntimeError`` only (``strict`` is false): the
-    engine's factorisations word it as a kernel error, which ``bool_refusal_baseline.json``
-    records.  The reference is always held to the exact class.
+    Exactly, except Lucid's bool of an op the baseline records (``_BOOL_CLASS_GAPS``): a
+    ``RuntimeError`` is enough there.  The reference is always held to the exact class.
     """
     if not isinstance(error, RuntimeError):
         return False
     if route.kind == "kernel":
         return _is_kernel(error)
-    if not strict and dtype == "bool":
+    if on_lucid and dtype == "bool" and route.name.partition("-")[0] in _BOOL_CLASS_GAPS:
         return True
     return not _is_kernel(error)
 
@@ -278,7 +298,7 @@ def test_lucid_answers_and_refuses_where_the_reference_does(
         return
     with pytest.raises(RuntimeError) as caught:
         route.call(lucid.linalg, operand)
-    assert _holds_class(route, dtype, caught.value, strict=False), (
+    assert _holds_class(route, dtype, caught.value, on_lucid=True), (
         type(caught.value),
         str(caught.value),
     )
@@ -302,7 +322,7 @@ def test_the_reference_does_what_the_table_says(ref: ModuleType, route: Route, d
         return
     with pytest.raises(RuntimeError) as caught:
         route.call(ref.linalg, operand)
-    assert _holds_class(route, dtype, caught.value, strict=True), (
+    assert _holds_class(route, dtype, caught.value, on_lucid=False), (
         type(caught.value),
         str(caught.value),
     )

@@ -150,6 +150,8 @@ PINS: dict[str, Pin] = {
     # its own guard first, on every route.
     "pinv": pin("pinv", lambda fw, x, m: fw.linalg.pinv(m)),
     "pinv-hermitian": pin("pinv", lambda fw, x, m: fw.linalg.pinv(m[:, :2], hermitian=True)),
+    "lstsq": pin("lstsq", lambda fw, x, m: fw.linalg.lstsq(m, m)),
+    "lstsq-rcond": pin("lstsq", lambda fw, x, m: fw.linalg.lstsq(m, m, rcond=0.1), role="rcond"),
     "matrix_rank": pin("matrix_rank", lambda fw, x, m: fw.linalg.matrix_rank(m)),
     "matrix_rank-hermitian": pin(
         "matrix_rank", lambda fw, x, m: fw.linalg.matrix_rank(m[:, :2], hermitian=True)

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry, _autocast_suspended
-from lucid._ops._bool_refusal import refuse as _refuse, refuse_declared as _refuse_declared
+from lucid._ops._bool_refusal import refuse as _refuse, refuse_integral as _refuse_integral
 from lucid._ops._dims import _to_axes
 from lucid._ops._reduce import _require_normable
 from lucid._types import DimLike, DTypeLike
@@ -397,8 +397,7 @@ def rms_norm(
 
     # A bool is the entry's to refuse, an integer the engine schema's: asked here, before any
     # work (the engine op is reached last, after the shape checks and the default weight).
-    _refuse("rms_norm", input)
-    _refuse_declared("rms_norm", input)
+    _refuse_integral("rms_norm", input)
     if eps is None:
         from lucid._dtype import finfo
 

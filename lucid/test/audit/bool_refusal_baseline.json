@@ -103,16 +103,6 @@
       "owner": "out-of-batch",
       "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
     },
-    "lucid.linalg.inv": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
-    },
-    "lucid.linalg.inv_ex": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
-    },
     "lucid.linalg.ldl_factor": {
       "kind": "class",
       "owner": "out-of-batch",
@@ -144,11 +134,6 @@
       "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
     },
     "lucid.linalg.svdvals": {
-      "kind": "class",
-      "owner": "out-of-batch",
-      "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"
-    },
-    "lucid.linalg.tensorinv": {
       "kind": "class",
       "owner": "out-of-batch",
       "reason": "the factorisation raises NotImplementedError('only F32/F64'); the reference raises a plain RuntimeError for a bool"

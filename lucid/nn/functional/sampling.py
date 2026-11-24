@@ -9,7 +9,11 @@ import lucid as _lucid
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._ops._autocast import _autocast_entry
-from lucid._ops._bool_refusal import refuse as _refuse, refuse_declared as _refuse_declared
+from lucid._ops._bool_refusal import (
+    refuse as _refuse,
+    refuse_declared as _refuse_declared,
+    refuse_integral as _refuse_integral,
+)
 from lucid._ops._reduce import _require_floating
 from lucid.nn.functional._inplace import _keep_in_graph
 from lucid.nn.functional._grid_sampling import (
@@ -588,8 +592,7 @@ def embedding_bag(
     # The table holds embeddings, which are real numbers.  The engine op refuses an
     # integer one (its schema), but the weighted and the gradient-scaled paths below do
     # not reach it, and ``max_norm`` rewrites the table before it does: judge it here.
-    _refuse(op, weight)
-    _refuse_declared(op, weight)
+    _refuse_integral(op, weight)
     padding_idx = _padding_index(padding_idx, weight, op)
     pad_idx = -1 if padding_idx is None else padding_idx
     _check_table(input, weight, op)

@@ -32,6 +32,7 @@ from lucid._C import engine as _C_engine
 from lucid._dispatch import _unwrap, _wrap
 from lucid._dtype import finfo as _finfo
 from lucid._ops._autocast import _autocast_entry
+from lucid._ops._bool_refusal import refuse
 from lucid._tensor._indexing import broadcast_shapes as _broadcast_batch
 from lucid._tensor.tensor import Tensor
 from lucid.linalg import _Pinv, qr, solve_triangular, svdvals
@@ -407,6 +408,9 @@ def _lstsq_solution(
     b_shape = tuple(int(s) for s in B.shape)
     vec_rhs, b_batch = _check_lstsq_shapes(a_shape, b_shape)
     batch = _broadcast_batch(a_shape[:-2], b_batch)
+    # After the shapes, as the reference's: it is a kernel's refusal when ``rcond`` is given, a dtype
+    # guard when it is not.
+    refuse("lstsq", A, "" if rcond is None else "rcond")
     n = a_shape[-1]
     b_mat = B.unsqueeze(-1) if vec_rhs else B
     k = int(b_mat.shape[-1])

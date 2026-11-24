@@ -136,6 +136,7 @@ _BOOL_MASK = "a bool dtype, e.g. mask.bool()"
 _ROLE_PHRASE: Mapping[str, str] = MappingProxyType(
     {
         "mixed": "operand beside another dtype",
+        "rcond": "operand of a call with rcond",
         "global": "input of a global average",
         "indices": "index tensor",
     }
@@ -304,6 +305,10 @@ _DECLARED: tuple[Row, ...] = (
     # the reference has no integral kernel for; its own entry is a dtype guard on every route.
     _row("pinv", bool=GUARD_FLOATING, ints=GUARD_FLOATING),
     _row("matrix_rank", bool=GUARD_FLOATING, ints=GUARD_FLOATING),
+    # The reference's ``lstsq`` is a dtype guard, and a kernel with no instantiation once ``rcond``
+    # is given; either is judged after the shapes.
+    _row("lstsq", bool=GUARD_FLOATING, ints=GUARD_FLOATING),
+    _row("lstsq", "rcond", bool=KERNEL_FLOATING, ints=KERNEL_FLOATING),
     # ``solve`` and ``inv`` are engine ops whose schema declares the integers but not bool, and
     # whose entry reads the operand before the engine does (``solve`` judges ``A``'s dtype before
     # any shape, ``inv`` hands an empty matrix back without calling the engine): the bool is the

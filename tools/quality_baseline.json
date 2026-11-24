@@ -2008,7 +2008,7 @@
     "lucid/nn/functional/loss.py": 83,
     "lucid/nn/functional/normalization.py": 9,
     "lucid/nn/functional/positional.py": 7,
-    "lucid/nn/functional/sampling.py": 166,
+    "lucid/nn/functional/sampling.py": 165,
     "lucid/nn/functional/sparse.py": 5,
     "lucid/nn/modules/attention.py": 116,
     "lucid/nn/modules/transformer.py": 17,
