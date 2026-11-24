@@ -5,7 +5,7 @@ from typing import ClassVar
 
 from lucid.models._base import ModelConfig
 from lucid.models._meta import model_family_meta
-from lucid.models._utils._common import check_positive
+from lucid.models._utils._common import check_non_negative, check_positive
 
 
 @model_family_meta(
@@ -97,3 +97,8 @@ class DenseNetConfig(ModelConfig):
             num_init_features=self.num_init_features,
             bn_size=self.bn_size,
         )
+        # A negative count builds an empty block yet still subtracts
+        # ``n * growth_rate`` from the running width, so the next stage is
+        # sized for channels that never arrive (a ShapeMismatch in the first
+        # forward).  Zero is a block with no layers, which the model handles.
+        check_non_negative(owner, block_config=self.block_config)

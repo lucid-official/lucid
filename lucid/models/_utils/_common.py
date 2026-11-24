@@ -7,7 +7,7 @@ regardless of its output task (classification, detection, segmentation …).
 import random
 from collections.abc import Iterator, Mapping, Sequence, Sized
 from dataclasses import replace
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypeIs, cast
 
 import lucid
 import lucid.nn as nn
@@ -118,9 +118,19 @@ def check_stage_lengths(owner: str, *, count: int | None = None, **per_stage: Si
 type _Numbers = float | Sequence[_Numbers]
 
 
+def _is_nested(value: _Numbers) -> TypeIs[Sequence[_Numbers]]:
+    """Whether ``value`` is a sequence to walk into, not a number.
+
+    ``str`` and ``bytes`` are sequences of themselves, so walking one never
+    ends; they stay leaves and the bound comparison refuses them as a
+    ``TypeError``.
+    """
+    return isinstance(value, Sequence) and not isinstance(value, (str, bytes))
+
+
 def _leaves(path: str, value: _Numbers) -> Iterator[tuple[str, float]]:
     """Each number inside ``value`` with the index path that reaches it."""
-    if isinstance(value, Sequence):
+    if _is_nested(value):
         for i, item in enumerate(value):
             yield from _leaves(f"{path}[{i}]", item)
     else:

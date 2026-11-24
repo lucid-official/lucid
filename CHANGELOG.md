@@ -464,6 +464,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - CSPNet enums and negative block counts are refused
 
+- strings are leaves in bound checks; DenseNet refuses n < 0
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

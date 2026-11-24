@@ -197,6 +197,11 @@ _STRUCTURAL: list[tuple[type[ModelConfig], dict[str, Any], str]] = [
     (SKNetConfig, {"rd_divisor": 0}, r"rd_divisor must be positive, got 0"),
     (VGGConfig, {"arch": (2, 2, 0, 3, 3)}, r"arch\[2\] must be positive, got 0"),
     (DenseNetConfig, {"growth_rate": 0}, r"growth_rate must be positive, got 0"),
+    (
+        DenseNetConfig,
+        {"block_config": (-1, 1), "growth_rate": 4, "num_init_features": 8},
+        r"block_config\[0\] must be non-negative, got -1",
+    ),
     (CSPNetConfig, {"stem_out_chs": 0}, r"stem_out_chs must be positive, got 0"),
     (CSPNetConfig, {"stem_pool": "avg"}, r"stem_pool must be one of \('max', ''\), got 'avg'"),
     (
@@ -287,6 +292,8 @@ _STILL_ACCEPTED: list[tuple[type[ModelConfig], dict[str, Any]]] = [
     (ConvNeXtConfig, {"depths": (1, 0, 1, 1)}),
     (ViTConfig, {"depth": 0}),
     (CSPNetConfig, {"depths": (3, 0, 5, 2)}),
+    # A block with no layers: the model builds it and still runs.
+    (DenseNetConfig, {"block_config": (6, 0, 24, 16)}),
     (CrossViTConfig, {"depths": ((1, 4, 0), (0, 0, 1), (1, 4, 0))}),
     (MaskFormerConfig, {"num_encoder_layers": 0}),
     # Both stem layouts and both block flavours are the paper's.
@@ -310,7 +317,8 @@ def test_a_value_the_model_handles_is_still_accepted(
 
 
 _DEPTH_FIELD = re.compile(
-    r"^(depth|depths|layers|blocks_per_stage|num_vit|\w+_(depth|depths|layers|blocks|repeats|convs))$"
+    r"^(depth|depths|layers|blocks_per_stage|block_config|num_vit"
+    r"|\w+_(depth|depths|layers|blocks|repeats|convs))$"
 )
 
 
@@ -351,6 +359,7 @@ def test_the_depth_sweep_sees_the_vision_zoo() -> None:
         ("CSPNetConfig", "depths"),
         ("CrossViTConfig", "depths"),
         ("ResNetConfig", "layers"),
+        ("DenseNetConfig", "block_config"),
         ("DETRConfig", "num_decoder_layers"),
         ("IJEPAConfig", "predictor_depth"),
     } <= named
@@ -373,6 +382,33 @@ def test_every_vision_block_count_refuses_a_negative_entry(
     with pytest.raises(ValueError) as refused:
         config_class(**{field: bad})
     assert re.search(rf"\b{field}\b.*\b(positive|negative)\b", str(refused.value))
+
+
+_NOT_A_NUMBER: list[tuple[type[ModelConfig], dict[str, Any]]] = [
+    (ViTConfig, {"num_classes": "10"}),
+    (ViTConfig, {"depth": "12"}),
+    (ViTConfig, {"depth": b"12"}),
+    (SwinConfig, {"depths": (2, "2", 6, 2)}),
+    (CrossViTConfig, {"depths": ((1, 4, 0), (1, "4", 0), (1, 4, 0))}),
+]
+
+
+@pytest.mark.parametrize(
+    ("config_class", "overrides"),
+    _NOT_A_NUMBER,
+    ids=[
+        f"{c.__name__}-{'-'.join(o)}-{type(next(iter(o.values()))).__name__}"
+        for c, o in _NOT_A_NUMBER
+    ],
+)
+def test_a_string_in_a_numeric_field_is_refused_not_walked(
+    config_class: type[ModelConfig], overrides: dict[str, Any]
+) -> None:
+    """A ``str`` is a sequence of ``str``: walking it into the bound check
+    recursed without end (``RecursionError``).  It is a leaf, and comparing it
+    with a number raises the ordinary ``TypeError``."""
+    with pytest.raises((TypeError, ValueError)):
+        config_class(**overrides)
 
 
 #: (factory, bad override): the refusal must reach the public entry point,
