@@ -25,6 +25,10 @@ Three guards, over both devices and both widths:
 * every op, and its gradient, against the reference — the gradient convention is
   the conjugate one of ``autograd/ComplexGrad.h``;
 * the boundaries: empty operands, a broadcast condition, a transposed view.
+
+LCD-1082 adds the special values of ``pow`` at a zero base, the same on both
+devices: MLX's complex power answered 0 there whatever the exponent, where
+``std::pow`` (the CPU stream, and the reference) answers NaN or ``inf + NaN j``.
 """
 
 from collections.abc import Callable
@@ -340,25 +344,7 @@ def _assert_same_special_values(got: np.ndarray, want: np.ndarray, tol: dict[str
 
 
 @pytest.mark.parity
-@pytest.mark.parametrize(
-    ("device", "dtype"),
-    [
-        pytest.param(
-            *p.values,
-            marks=(
-                pytest.mark.xfail(
-                    strict=True,
-                    raises=AssertionError,
-                    reason="LCD-1082: MLX's complex power is 0 at a zero base",
-                )
-                if p.values[0] == "metal"
-                else ()
-            ),
-            id=p.id,
-        )
-        for p in _PLACEMENTS
-    ],
-)
+@pytest.mark.parametrize(("device", "dtype"), _PLACEMENTS)
 def test_pow_of_a_zero_base_to_a_non_positive_exponent(
     ref: ModuleType, device: str, dtype: lucid.dtype
 ) -> None:
@@ -369,6 +355,259 @@ def test_pow_of_a_zero_base_to_a_non_positive_exponent(
     got = lucid.pow(_tensor(lucid, base, name, device), _tensor(lucid, expo, name, device))
     want = ref.pow(_tensor(ref, base, name, device), _tensor(ref, expo, name, device))
     _assert_same_special_values(_numpy(got), _numpy(want), _TOL[name])
+
+
+# ── pow at a zero base (LCD-1082) ────────────────────────────────────────────
+#
+# ``std::pow(x, y)`` is ``exp(y * log(x))``; at a base of zero ``log`` is ``-inf + theta j``
+# with ``theta`` in ``{+0, -0, pi, -pi}`` by the signs of the base's parts, and the product with
+# ``c + d j`` follows C99 Annex G.  Every answer is one of three values:
+#
+#   Z = 0 + 0 j      I = inf + NaN j      N = NaN + NaN j      (every zero is +0)
+#
+# MLX's complex power answers Z for every exponent (NaN only for a NaN part), so Metal was wrong
+# for ``c <= 0`` and for an infinite or NaN part of ``d``.
+
+_INF, _NAN = float("inf"), float("nan")
+
+#: The classes of one exponent part the table tells apart, in the order of its rows and columns.
+_PART_CLASSES = [_NAN, -_INF, -2.5, -0.0, 0.0, 2.5, _INF]
+_PART_IDS = ["nan", "-inf", "neg", "-0", "+0", "pos", "+inf"]
+
+#: A base of zero by the signs of its parts (real, imaginary): True = negative.
+_ZERO_BASES = {
+    "+0+0j": (False, False),
+    "+0-0j": (False, True),
+    "-0+0j": (True, False),
+    "-0-0j": (True, True),
+}
+
+# Rows are ``Re y`` and columns ``Im y``, each in the order of ``_PART_CLASSES``.  Read off
+# ``exp(y * log(x))`` with libc++'s multiply and ``exp``, and equal to the reference's CPU kernel
+# on all 49 pairs for each signed zero.
+_TABLE_THETA_ZERO = (  # Re x is +0: theta is +0 or -0
+    "NNNNNNN",
+    "IIIIIII",
+    "INIIIIN",
+    "NNNNNNN",
+    "NNNNNNN",
+    "ZNZZZZN",
+    "ZZZZZZZ",
+)
+_TABLE_THETA_PI = (  # x = -0 + 0j: theta is +pi
+    "NNNNNNN",
+    "IIIIIIN",
+    "IIIIIIN",
+    "NNNNNNN",
+    "NNNNNNN",
+    "ZNZZZZZ",
+    "ZNZZZZZ",
+)
+_TABLE_THETA_NEG_PI = (  # x = -0 - 0j: theta is -pi
+    "NNNNNNN",
+    "INIIIII",
+    "INIIIII",
+    "NNNNNNN",
+    "NNNNNNN",
+    "ZZZZZZN",
+    "ZZZZZZN",
+)
+_ZERO_BASE_TABLES = {
+    (False, False): _TABLE_THETA_ZERO,
+    (False, True): _TABLE_THETA_ZERO,
+    (True, False): _TABLE_THETA_PI,
+    (True, True): _TABLE_THETA_NEG_PI,
+}
+
+
+@pytest.mark.parametrize(("device", "dtype"), _PLACEMENTS)
+@pytest.mark.parametrize("base_id", list(_ZERO_BASES))
+def test_pow_of_a_zero_base_follows_the_std_pow_table(
+    base_id: str, device: str, dtype: lucid.dtype
+) -> None:
+    """``0 ** y`` over every class of ``Re y`` and ``Im y``, for each signed zero, against the table."""
+    name = str(dtype).removeprefix("lucid.")
+    re_neg, im_neg = _ZERO_BASES[base_id]
+    base_value = complex(-0.0 if re_neg else 0.0, -0.0 if im_neg else 0.0)
+    expo = np.array(
+        [complex(c, d) for c in _PART_CLASSES for d in _PART_CLASSES], dtype=np.complex128
+    )
+    base = np.full(expo.shape, base_value, dtype=np.complex128)
+    got = _numpy(lucid.pow(_tensor(lucid, base, name, device), _tensor(lucid, expo, name, device)))
+
+    table = _ZERO_BASE_TABLES[(re_neg, im_neg)]
+    for i, (row, col) in enumerate((r, c) for r in range(7) for c in range(7)):
+        want = table[row][col]
+        where = (
+            f"{base_id} ** ({_PART_IDS[row]}, {_PART_IDS[col]}j) = {got[i]!r}, table says {want}"
+        )
+        re_part, im_part = got[i].real, got[i].imag
+        if want == "Z":
+            assert re_part == 0 and im_part == 0, where
+            assert not np.signbit(re_part) and not np.signbit(im_part), where
+        elif want == "I":
+            assert re_part == np.inf and np.isnan(im_part), where
+        else:
+            assert np.isnan(re_part) and np.isnan(im_part), where
+
+
+#: The exponent parts the reference is held to, beyond the table's classes: finite magnitudes
+#: whose products with ``log`` overflow or underflow, and ``0.5``.
+_GRID_RE = [0.0, -0.0, 1.0, 2.5, -1.0, -2.5, _INF, -_INF, _NAN, 1e-30, 1e30, -1e30, 0.5]
+_GRID_IM = [0.0, -0.0, 1.0, -1.0, _INF, -_INF, _NAN, 1e-30, 1e30, -1e30, 3.0]
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize(("device", "dtype"), _PLACEMENTS)
+@pytest.mark.parametrize("base_id", list(_ZERO_BASES))
+def test_pow_of_a_zero_base_matches_the_reference_over_a_grid(
+    ref: ModuleType, base_id: str, device: str, dtype: lucid.dtype
+) -> None:
+    """The 143 exponents of the grid, each signed zero, to the bit (NaN against NaN, the sign of a zero)."""
+    name = str(dtype).removeprefix("lucid.")
+    re_neg, im_neg = _ZERO_BASES[base_id]
+    base_value = complex(-0.0 if re_neg else 0.0, -0.0 if im_neg else 0.0)
+    expo = np.array([complex(c, d) for c in _GRID_RE for d in _GRID_IM], dtype=np.complex128)
+    base = np.full(expo.shape, base_value, dtype=np.complex128)
+    got = _numpy(lucid.pow(_tensor(lucid, base, name, device), _tensor(lucid, expo, name, device)))
+    want = _numpy(ref.pow(_tensor(ref, base, name, device), _tensor(ref, expo, name, device)))
+    _assert_same_special_values(got, want, _TOL[name])
+    for part in ("real", "imag"):
+        g, w = getattr(got, part), getattr(want, part)
+        np.testing.assert_array_equal(np.signbit(g) & (g == 0), np.signbit(w) & (w == 0))
+
+
+# The zero lanes are patched where they stand; every other lane is the plain power.  Each case is
+# a layout the kernel reads its operands through: interleaved, broadcast, strided, transposed, 0-d.
+_LAYOUT_BASE = np.array([0, 1 + 1j, 0, -0.5 + 0.3j, 0, 2 - 1j])
+_LAYOUT_EXPO = np.array([-1, -1, 0, 1.3 + 0.2j, 2.5, -0.8 + 0.9j])
+_ZERO_TO = {-1 + 0j: complex(_INF, _NAN), 0j: complex(_NAN, _NAN), 1 + 0j: 0j, 2.5 + 0j: 0j}
+
+
+def _closed_pow(base: np.ndarray, expo: np.ndarray) -> np.ndarray:
+    """``base ** expo`` from NumPy, with the zero-base lanes of ``std::pow`` (exponents of ``_ZERO_TO``)."""
+    base, expo = np.broadcast_arrays(base, expo)
+    with np.errstate(all="ignore"):
+        out = np.array(np.power(base, expo))
+    for idx in np.ndindex(out.shape):
+        if base[idx] == 0:
+            out[idx] = _ZERO_TO[complex(expo[idx])]
+    return out
+
+
+@pytest.mark.parametrize(("device", "dtype"), _PLACEMENTS)
+def test_pow_patches_only_the_zero_lanes_in_every_layout(device: str, dtype: lucid.dtype) -> None:
+    name = str(dtype).removeprefix("lucid.")
+
+    def run(base: np.ndarray, expo: np.ndarray, *, transposed: bool = False, step: int = 1) -> None:
+        """``base ** expo`` through the layout: the operands' values are ``base`` and ``expo``."""
+        b, e = _rounded(base, name), _rounded(expo, name)
+
+        def lay_out(arr: np.ndarray) -> lucid.Tensor:
+            if transposed:
+                # The transpose of the transpose: a view whose values are ``arr``'s, column-major.
+                return _tensor(lucid, np.ascontiguousarray(arr.T), name, device).mT
+            t = _tensor(lucid, arr, name, device)
+            return t[::step] if step != 1 else t
+
+        got = _numpy(lucid.pow(lay_out(b), lay_out(e)))
+        want = _closed_pow(b[::step], e[::step]) if step != 1 else _closed_pow(b, e)
+        _assert_same_special_values(got, want, _TOL[name])
+
+    # Zero and non-zero lanes in one tensor, and in a strided view whose elements are the zeros.
+    run(_LAYOUT_BASE, _LAYOUT_EXPO)
+    run(_LAYOUT_BASE, _LAYOUT_EXPO, step=2)
+    # A column of bases against a row of exponents: both operands broadcast.
+    run(np.array([[0], [1 + 1j], [0]]), np.array([[0, 1, -1, 2.5]], dtype=np.complex128))
+    # A column-major pair.
+    run(
+        np.array([[0, 1 + 1j, 0], [-0.5j, 0, 2]]),
+        np.array([[0, -1, 2.5], [1, 0, -1]], dtype=np.complex128),
+        transposed=True,
+    )
+    # A 0-d base and exponent, and a 0-d base against a vector.
+    run(np.array(0j), np.array(-1 + 0j))
+    run(np.array(0j), np.array([0, 1, -1, 2.5], dtype=np.complex128))
+
+
+_SCALAR_EXPONENTS = [-2.5, -2.0, -1.0, -0.5, 0.5, 1.0, 2.0, 2.5]
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize(("device", "dtype"), _PLACEMENTS)
+@pytest.mark.parametrize("expo", _SCALAR_EXPONENTS)
+def test_pow_of_a_zero_tensor_to_a_scalar_exponent(
+    ref: ModuleType, expo: float, device: str, dtype: lucid.dtype
+) -> None:
+    """Every spelling of a tensor power a real scalar, to the reference's tensor-scalar kernel."""
+    name = str(dtype).removeprefix("lucid.")
+    zeros = np.zeros(4, dtype=np.complex128)
+    z, r = _tensor(lucid, zeros, name, device), _tensor(ref, zeros, name, device)
+    for got, want in (
+        (lucid.pow(z, expo), ref.pow(r, expo)),
+        (z**expo, r**expo),
+        (z.pow(expo), r.pow(expo)),
+    ):
+        _assert_same_special_values(_numpy(got), _numpy(want), _TOL[name])
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize(("device", "dtype"), _PLACEMENTS)
+def test_pow_of_a_scalar_zero_to_a_tensor_exponent(
+    ref: ModuleType, device: str, dtype: lucid.dtype
+) -> None:
+    name = str(dtype).removeprefix("lucid.")
+    expo = np.array([0, 1, -1, 2.5, -2.5, 1j, -1 + 1j], dtype=np.complex128)
+    z, r = _tensor(lucid, expo, name, device), _tensor(ref, expo, name, device)
+    for got, want in (
+        (lucid.pow(0.0, z), ref.pow(0.0, r)),
+        (0**z, 0**r),
+        (0.0**z, 0.0**r),
+    ):
+        _assert_same_special_values(_numpy(got), _numpy(want), _TOL[name])
+
+
+_GRAD_EXPOS = np.array(
+    [
+        0j,
+        1 + 0j,
+        2.5 + 0j,
+        -1 + 0j,
+        -2.5 + 0j,
+        1j,
+        1 + 1j,
+        -1 + 1j,
+        0.5 - 2j,
+        complex(_INF, 0),
+        complex(-_INF, 0),
+        complex(_NAN, 0),
+        complex(2, _NAN),
+        complex(1, _INF),
+    ]
+)
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize(("device", "dtype"), [p for p in _PLACEMENTS if p.values[0] == "metal"])
+def test_pow_gradient_at_a_zero_base_is_nan_where_the_reference_is(
+    ref: ModuleType, device: str, dtype: lucid.dtype
+) -> None:
+    """Metal's gradient of ``0 ** y`` was a finite zero where the reference's is NaN, since the
+    forward value it differentiates was 0.  (The CPU stream's multiply recovers an infinity from
+    ``inf * NaN`` where the reference's is NaN, so its gradient at ``y = -1`` is ``-inf``.)"""
+    name = str(dtype).removeprefix("lucid.")
+
+    def grads(lib: ModuleType) -> list[np.ndarray]:
+        base = _tensor(lib, np.zeros(len(_GRAD_EXPOS), np.complex128), name, device)
+        expo = _tensor(lib, _GRAD_EXPOS, name, device)
+        base.requires_grad_(True)
+        expo.requires_grad_(True)
+        out = lib.pow(base, expo)
+        loss = lib.real(out).sum() + lib.imag(out).sum()
+        return [_numpy(g) for g in lib.autograd.grad(loss, [base, expo])]
+
+    for g, w in zip(grads(lucid), grads(ref), strict=True):
+        _assert_same_special_values(g, w, _TOL[name])
 
 
 # The branch cut and the sign of zero: ``log(-1 + 0j) = pi j`` and ``log(-1 - 0j) = -pi j``;
