@@ -189,16 +189,21 @@ def _cases() -> list[object]:
 #: Stubbed names the runtime does not spell out — the only cases left
 #: unchecked, and listed so the guard cannot go quiet: a name that stops
 #: being one of these fails, as does a new one.  ``var`` / ``std`` and the
-#: pairs read the reference's overloads by type; ``to`` its four shapes;
-#: ``no_grad`` / ``enable_grad`` are classes.
+#: pairs read the reference's overloads by type, as do ``max`` / ``min`` (a
+#: tensor second argument is ``other``, anything else ``dim``); ``to`` its
+#: four shapes; ``no_grad`` / ``enable_grad`` are classes.
 _CONTRACT_ONLY = frozenset(
     {
         "lucid.enable_grad",
+        "lucid.max",
+        "lucid.min",
         "lucid.no_grad",
         "lucid.std",
         "lucid.std_mean",
         "lucid.var",
         "lucid.var_mean",
+        "Tensor.max",
+        "Tensor.min",
         "Tensor.std",
         "Tensor.to",
         "Tensor.var",

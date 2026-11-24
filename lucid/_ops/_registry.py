@@ -32,9 +32,8 @@ from lucid._ops._reduce import (
     _cumsum_adapter,
     _log_softmax_adapter,
     _logsumexp_adapter,
-    _max_adapter,
+    _make_extremum_adapter,
     _mean_adapter,
-    _min_adapter,
     _prod_adapter,
     _softmax_adapter,
     _std_adapter,
@@ -172,6 +171,11 @@ A._keep_engine_signature(_real, _C_engine.real)
 
 _R = _C_engine  # shorthand
 
+# ``max(input, other)`` and ``min(input, other)`` are these two functions, so the
+# ``maximum`` / ``minimum`` entries below and the extremum adapters share them.
+_maximum = A._make_arith_adapter(_R.maximum)
+_minimum = A._make_arith_adapter(_R.minimum)
+
 # fmt: off
 _REGISTRY: list[OpEntry] = [
     # ── unary ──────────────────────────────────────────────────────────────
@@ -263,8 +267,8 @@ _REGISTRY: list[OpEntry] = [
     # rounds toward zero (``lucid._ops._division``).
     OpEntry("div",      _make_div_adapter(), 2, method_name="div",      free_fn_name="div"),
     OpEntry("pow",      A._make_arith_adapter(_R.pow),      2, method_name="pow",      free_fn_name="pow"),
-    OpEntry("maximum",  A._make_arith_adapter(_R.maximum),  2, method_name="maximum",  free_fn_name="maximum"),
-    OpEntry("minimum",  A._make_arith_adapter(_R.minimum),  2, method_name="minimum",  free_fn_name="minimum"),
+    OpEntry("maximum",  _maximum,  2, method_name="maximum",  free_fn_name="maximum"),
+    OpEntry("minimum",  _minimum,  2, method_name="minimum",  free_fn_name="minimum"),
     # Integer operands keep their dtype; a half tensor's scalar partner is
     # read in float32 (op-math), as for mul and div.
     OpEntry("floor_divide", A._make_arith_adapter(_R.floordiv), 2, method_name="floor_divide", free_fn_name="floor_divide"),
@@ -291,10 +295,14 @@ _REGISTRY: list[OpEntry] = [
             extra_kwargs=["dim", "keepdim", "dtype"]),
     OpEntry("prod",   _prod_adapter,   1, method_name="prod",   free_fn_name="prod",
             extra_kwargs=["dim", "keepdim", "dtype"]),
-    OpEntry("max",    _max_adapter,    1, method_name="max",    free_fn_name="max",
-            extra_kwargs=["dim", "keepdim"]),
-    OpEntry("min",    _min_adapter,    1, method_name="min",    free_fn_name="min",
-            extra_kwargs=["dim", "keepdim"]),
+    # max / min read their second argument by type: a tensor is ``other`` (the
+    # elementwise maximum / minimum), anything else ``dim``.
+    OpEntry("max",    _make_extremum_adapter("max", _R.max, _R.argmax, _maximum), 1,
+            method_name="max", free_fn_name="max",
+            extra_kwargs=["dim", "keepdim", "other"]),
+    OpEntry("min",    _make_extremum_adapter("min", _R.min, _R.argmin, _minimum), 1,
+            method_name="min", free_fn_name="min",
+            extra_kwargs=["dim", "keepdim", "other"]),
     OpEntry("var",    _var_adapter,      1, method_name="var",    free_fn_name="var",
             extra_kwargs=["dim", "keepdim", "correction", "unbiased"]),
     OpEntry("argmax", _argmax_adapter, 1, method_name="argmax", free_fn_name="argmax",

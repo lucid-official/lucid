@@ -70,22 +70,30 @@ def _documented(doc: str) -> list[str]:
     return [n for n in names if n != "None"]  # "None" says there are none
 
 
+def _parameters_of(node: ast.FunctionDef) -> set[str]:
+    a = node.args
+    params = {p.arg for p in a.posonlyargs + a.args + a.kwonlyargs}
+    return params | {p.arg for p in (a.vararg, a.kwarg) if p is not None}
+
+
 def _stub_cases() -> list[object]:
     cases = []
     for path in _STUBS:
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef)]
-        for cls in (n for n in tree.body if isinstance(n, ast.ClassDef)):
-            nodes += [n for n in cls.body if isinstance(n, ast.FunctionDef)]
-        for node in nodes:
-            doc = ast.get_docstring(node, clean=False)
-            if not doc or node.name.startswith("_"):
-                continue
-            a = node.args
-            params = {p.arg for p in a.posonlyargs + a.args + a.kwonlyargs}
-            params |= {p.arg for p in (a.vararg, a.kwarg) if p is not None}
-            label = f"{path.name}:{node.name}:{node.lineno}"
-            cases.append(pytest.param(doc, sorted(params), id=label))
+        scopes = [tree.body] + [n.body for n in tree.body if isinstance(n, ast.ClassDef)]
+        for body in scopes:
+            nodes = [n for n in body if isinstance(n, ast.FunctionDef)]
+            # An overloaded name is one function: its docstring sits on one overload
+            # and may document the parameter of any of them (``max``'s ``other``).
+            taken: dict[str, set[str]] = {}
+            for node in nodes:
+                taken.setdefault(node.name, set()).update(_parameters_of(node))
+            for node in nodes:
+                doc = ast.get_docstring(node, clean=False)
+                if not doc or node.name.startswith("_"):
+                    continue
+                label = f"{path.name}:{node.name}:{node.lineno}"
+                cases.append(pytest.param(doc, sorted(taken[node.name]), id=label))
     return cases
 
 

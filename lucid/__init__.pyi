@@ -5675,47 +5675,135 @@ def max(input: Tensor, dim: _int, keepdim: _bool = False) -> _ValuesIndices[Tens
 @overload
 def max(input: Tensor, dim: Sequence[_int], keepdim: _bool = False) -> Tensor: ...
 @overload
-def min(input: Tensor, dim: None = None, keepdim: _bool = False) -> Tensor: ...
-@overload
-def min(input: Tensor, dim: _int, keepdim: _bool = False) -> _ValuesIndices[Tensor]: ...
-@overload
-def min(input: Tensor, dim: Sequence[_int], keepdim: _bool = False) -> Tensor:
-    r"""    Return the smallest element of ``input``, or ``(values, indices)`` along ``dim``.
+def max(input: Tensor, other: Tensor) -> Tensor:
+    r"""    Return the largest element of ``input``, along ``dim``, or the larger of two tensors.
     
-    When ``dim`` is an ``int``, returns a ``(values, indices)`` pair with
-    ``.values`` and ``.indices`` attributes; when ``dim`` is ``None`` or a
-    sequence of axes, returns the reduced ``Tensor`` of values.
+    ``max`` is three functions under one name, told apart by the second
+    argument.  ``max(input)`` and ``max(input, dim, keepdim=False)`` reduce:
+    with an ``int`` ``dim`` the result is a ``(values, indices)`` pair with
+    ``.values`` and ``.indices`` attributes; with ``dim`` ``None`` or a
+    sequence of axes it is the reduced ``Tensor`` of values.
+    ``max(input, other)``, with a *tensor* second argument, is
+    :func:`lucid.maximum` of the two: the larger element of each pair,
+    broadcast and promoted to a common dtype.  A tensor is never read as
+    ``dim``, so ``dim`` as a tensor — ``max(input, dim=other)`` — is refused.
     
     Parameters
     ----------
     input : Tensor
         Input tensor.
     dim : int or list of int, optional
-        Axis or axes to reduce.  ``None`` reduces every element.
+        Axis or axes to reduce.  ``None`` reduces every element.  Not
+        combined with ``other``.
     keepdim : bool, default False
-        Keep each reduced axis with size 1.
+        Keep each reduced axis with size 1.  Not combined with ``other``.
+    other : Tensor
+        The tensor to compare with, element by element.  Given in the place
+        of ``dim`` or as ``other=``; with it the call takes neither ``dim``
+        nor ``keepdim``.
+    
+    Returns
+    -------
+    Tensor or _ValuesIndices[Tensor]
+        The largest values (and first-occurrence ``int64`` indices when ``dim``
+        is a single integer axis), or, with ``other``, the elementwise
+        maximum.
+    
+    Raises
+    ------
+    TypeError
+        If ``other`` is combined with ``dim`` or ``keepdim``, or a tensor is
+        given as ``dim`` or ``keepdim``.
+    
+    Notes
+    -----
+    NaN propagates: a slice holding NaN reduces to NaN, and the larger of
+    NaN and a number is NaN.  With an ``int`` ``dim`` a tie sends the whole
+    gradient to the returned index (the first extremum); with ``dim`` ``None``
+    or a sequence of axes it is shared equally among the tied positions, the
+    subgradient the reference framework's ``amax`` gives.  For two tensors a
+    tie gives each operand half.
+    
+    Examples
+    --------
+    >>> import lucid
+    >>> x = lucid.tensor([[1.0, 4.0], [3.0, 2.0]])
+    >>> lucid.max(x)
+    tensor(4.)
+    >>> lucid.max(x, dim=1).values
+    tensor([4., 3.])
+    >>> lucid.max(x, lucid.tensor([2.0, 3.0]))
+    tensor([[2., 4.],
+            [3., 3.]])
+    """
+    ...
+@overload
+def min(input: Tensor, dim: None = None, keepdim: _bool = False) -> Tensor: ...
+@overload
+def min(input: Tensor, dim: _int, keepdim: _bool = False) -> _ValuesIndices[Tensor]: ...
+@overload
+def min(input: Tensor, dim: Sequence[_int], keepdim: _bool = False) -> Tensor: ...
+@overload
+def min(input: Tensor, other: Tensor) -> Tensor:
+    r"""    Return the smallest element of ``input``, along ``dim``, or the smaller of two tensors.
+    
+    ``min`` is three functions under one name, told apart by the second
+    argument.  ``min(input)`` and ``min(input, dim, keepdim=False)`` reduce:
+    with an ``int`` ``dim`` the result is a ``(values, indices)`` pair with
+    ``.values`` and ``.indices`` attributes; with ``dim`` ``None`` or a
+    sequence of axes it is the reduced ``Tensor`` of values.
+    ``min(input, other)``, with a *tensor* second argument, is
+    :func:`lucid.minimum` of the two: the smaller element of each pair,
+    broadcast and promoted to a common dtype.  A tensor is never read as
+    ``dim``, so ``dim`` as a tensor — ``min(input, dim=other)`` — is refused.
+    
+    Parameters
+    ----------
+    input : Tensor
+        Input tensor.
+    dim : int or list of int, optional
+        Axis or axes to reduce.  ``None`` reduces every element.  Not
+        combined with ``other``.
+    keepdim : bool, default False
+        Keep each reduced axis with size 1.  Not combined with ``other``.
+    other : Tensor
+        The tensor to compare with, element by element.  Given in the place
+        of ``dim`` or as ``other=``; with it the call takes neither ``dim``
+        nor ``keepdim``.
     
     Returns
     -------
     Tensor or _ValuesIndices[Tensor]
         The smallest values (and first-occurrence ``int64`` indices when ``dim``
-        is a single integer axis).
+        is a single integer axis), or, with ``other``, the elementwise
+        minimum.
+    
+    Raises
+    ------
+    TypeError
+        If ``other`` is combined with ``dim`` or ``keepdim``, or a tensor is
+        given as ``dim`` or ``keepdim``.
     
     Notes
     -----
-    NaN propagates: a slice holding NaN reduces to NaN.  The gradient is
-    shared equally among the positions tied for the smallest value, so the
-    shares sum to one — the subgradient the reference framework's
-    ``amin`` gives.
+    NaN propagates: a slice holding NaN reduces to NaN, and the smaller of
+    NaN and a number is NaN.  With an ``int`` ``dim`` a tie sends the whole
+    gradient to the returned index (the first extremum); with ``dim`` ``None``
+    or a sequence of axes it is shared equally among the tied positions, the
+    subgradient the reference framework's ``amin`` gives.  For two tensors a
+    tie gives each operand half.
     
     Examples
     --------
     >>> import lucid
     >>> x = lucid.tensor([[1.0, 4.0], [3.0, 2.0]])
     >>> lucid.min(x)
-    Tensor(1.)
+    tensor(1.)
     >>> lucid.min(x, dim=1).values
-    Tensor([1., 2.])
+    tensor([1., 2.])
+    >>> lucid.min(x, lucid.tensor([2.0, 3.0]))
+    tensor([[1., 3.],
+            [2., 2.]])
     """
     ...
 def var(input: Tensor, dim: _int | Sequence[_int] | None = None, unbiased: _bool | None = None, keepdim: _bool = False, *, correction: _int | _float | None = None) -> Tensor:

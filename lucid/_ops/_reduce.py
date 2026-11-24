@@ -31,6 +31,7 @@ from lucid._deprecation import _PACKAGE_DIR
 from lucid._dtype import _ENGINE_TO_DTYPE, to_engine_dtype
 from lucid._ops._autocast import _autocast_suspended
 from lucid._ops._dims import _to_axes, _wrap_dims
+from lucid._tensor_args import require_tensor
 from lucid._types import DTypeLike, Scalar
 
 _Impl = _C_engine.TensorImpl
@@ -609,10 +610,10 @@ def _extreme_adapter(
     val_fn: Callable[[_Impl, list[int], bool, _C_engine.ExtremumNanGrad], _Impl],
     idx_fn: Callable[[_Impl, int, bool], _Impl],
     x_impl: _Impl,
-    dim: int | Sequence[int] | None,
-    keepdim: bool,
+    dim: object,
+    keepdim: object,
 ) -> _Impl | _ValuesIndices[_Impl]:
-    """Shared body of ``max`` and ``min``.
+    """Shared body of ``max`` and ``min``'s reductions.
 
     With an int ``dim`` a float result is gathered at the returned index, so
     a tie sends its whole gradient to that index (the first extremum), as the
@@ -638,18 +639,96 @@ def _extreme_adapter(
     return _ValuesIndices((_C_engine.squeeze(picked, axis), _C_engine.squeeze(kept, axis)))
 
 
-def _max_adapter(
-    x_impl: _Impl, dim: int | Sequence[int] | None = None, keepdim: bool = False
-) -> _Impl | _ValuesIndices[_Impl]:
-    """max(x, dim=None, keepdim=False)."""
-    return _extreme_adapter("max", _C_engine.max, _C_engine.argmax, x_impl, dim, keepdim)
+# ── max / min overloads ──────────────────────────────────────────────────────
+
+_EXTREMUM_KEYWORDS = frozenset({"dim", "keepdim", "other"})
 
 
-def _min_adapter(
-    x_impl: _Impl, dim: int | Sequence[int] | None = None, keepdim: bool = False
-) -> _Impl | _ValuesIndices[_Impl]:
-    """min(x, dim=None, keepdim=False)."""
-    return _extreme_adapter("min", _C_engine.min, _C_engine.argmin, x_impl, dim, keepdim)
+def _extremum_reduction(
+    name: str, args: tuple[object, ...], kwargs: dict[str, object]
+) -> tuple[object, object]:
+    """``(dim, keepdim)`` of a ``max`` / ``min`` reduction, whichever way it was spelled."""
+    count = len(args)
+    if kwargs:
+        if count and "dim" in kwargs:
+            raise TypeError(f"{name}() got multiple values for argument 'dim'")
+        if count > 1 and "keepdim" in kwargs:
+            raise TypeError(f"{name}() got multiple values for argument 'keepdim'")
+    dim = args[0] if count else kwargs.get("dim")
+    keepdim = args[1] if count > 1 else kwargs.get("keepdim", False)
+    if _promotion.try_unwrap(dim) is not None:
+        raise TypeError(f"{name}(): argument 'dim' must be int, not Tensor")
+    if _promotion.try_unwrap(keepdim) is not None:
+        raise TypeError(f"{name}(): argument 'keepdim' must be bool, not Tensor")
+    return dim, keepdim
+
+
+def _extremum_operands(
+    name: str, args: tuple[object, ...], kwargs: dict[str, object]
+) -> tuple[_Impl | None, object, object]:
+    """``(other, dim, keepdim)`` from any spelling of a ``max`` / ``min`` call.
+
+    The one reading of the arguments after ``input``.  The reference's
+    overloads are ``f(input)``, ``f(input, dim, keepdim=False)`` and
+    ``f(input, other)``, told apart by what the second argument is: a tensor,
+    in its place or as ``other=``, is the other operand of the elementwise
+    form, which takes nothing more; anything else is ``dim``.  A tensor named
+    ``dim=`` is refused rather than read as ``other``, and ``other=`` takes a
+    tensor only.  ``other`` is ``None`` for a reduction.
+    """
+    count = len(args)
+    if count > 2:
+        raise TypeError(
+            f"{name}() takes from 1 to 3 positional arguments but {count + 1} were given"
+        )
+    if kwargs and not kwargs.keys() <= _EXTREMUM_KEYWORDS:
+        unknown = sorted(kwargs.keys() - _EXTREMUM_KEYWORDS)
+        raise TypeError(f"{name}() got an unexpected keyword argument {unknown[0]!r}")
+    other = _promotion.try_unwrap(args[0]) if count else None
+    if other is None and kwargs and "other" in kwargs:
+        require_tensor(name, "other", kwargs["other"])
+        other = _promotion.try_unwrap(kwargs["other"])
+    if other is None:
+        return (None, *_extremum_reduction(name, args, kwargs))
+    if count + len(kwargs) > 1:
+        raise TypeError(
+            f"{name}(input, other) is the elementwise {name} and takes no dim, "
+            f"keepdim or further argument"
+        )
+    return other, None, False
+
+
+def _make_extremum_adapter(
+    name: str,
+    val_fn: Callable[[_Impl, list[int], bool, _C_engine.ExtremumNanGrad], _Impl],
+    idx_fn: Callable[[_Impl, int, bool], _Impl],
+    elementwise: Callable[[_Impl, _Impl], _Impl],
+) -> Callable[..., _Impl | _ValuesIndices[_Impl]]:
+    """The adapter of ``max`` / ``min``: a reduction, or ``elementwise`` of two tensors.
+
+    ``max(input, other)`` is ``maximum(input, other)`` and ``min(input, other)``
+    is ``minimum(input, other)``: ``elementwise`` is that op's own adapter, which
+    the registry hands over because this module sits below it, so the
+    promotion, broadcasting, NaN rule and gradient are that function's.  The
+    parameters after ``input`` stay open because the overloads bind the
+    second one by type — see :func:`_extremum_operands`.
+    """
+
+    def _adapter(input: _Impl, *args: object, **kwargs: object) -> _Impl | _ValuesIndices[_Impl]:
+        plain = not kwargs and len(args) < 2 and isinstance(input, _Impl)
+        if plain and (not args or _promotion.try_unwrap(args[0]) is None):
+            # ``max(x)`` / ``max(x, dim)``: the reductions nothing needs parsed for.
+            return _extreme_adapter(name, val_fn, idx_fn, input, args[0] if args else None, False)
+        if not isinstance(input, _Impl):  # a free function admits a number in slot 0
+            require_tensor(name, "input", input, 0)
+        other, dim, keepdim = _extremum_operands(name, args, kwargs)
+        if other is not None:
+            return elementwise(input, other)
+        return _extreme_adapter(name, val_fn, idx_fn, input, dim, keepdim)
+
+    _adapter.__name__ = name
+    _adapter.__doc__ = f"{name}(input), {name}(input, dim, keepdim=False) or {name}(input, other)."
+    return _adapter
 
 
 def _flat_arg_reduce(
