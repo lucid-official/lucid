@@ -427,7 +427,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `max(a, b)` and `min(a, b)`, and the methods `Tensor.max(other)` and `Tensor.min(other)`, with a tensor second argument (positional or `other=`), failed with "item() can only be called on a tensor with one element". They now return the elementwise maximum or minimum, exactly `maximum(a, b)` / `minimum(a, b)`: same promotion, broadcasting, NaN propagation and gradient (LCD-1073).
 
-- refuse a complex alpha, beta or value a tensor cannot hold
+- `index_add` casts a float `alpha` to an integer tensor's dtype, as the reference does; it raised `DtypeMismatch`. `lerp` with a zero-imaginary complex weight on a float tensor now answers; it raised `TypeError` (LCD-1076).
 
 ### Added
 
@@ -625,6 +625,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - an `other=` that is not a tensor;
   - a number as `input` (this was an AttributeError) (LCD-1073).
 - A lone tensor in the second position of `max` / `min`, including a 0-d integer tensor, is now the `other` operand. A 0-d integer tensor there used to be an axis through `__index__`. It is still an axis as `dim=`, or in the second place when `keepdim` follows: `max(x, dim=tensor(0))`, `max(x, tensor(0), True)` (LCD-1073).
+- A complex `alpha`, `beta`, `value` or `weight` on a tensor that cannot hold it now raises, instead of silently dropping its imaginary part (LCD-1076).
+  - `add`, `sub`, `rsub`, `subtract` and their method and in-place forms raise by type, `0j` included: `RuntimeError: For non-complex input tensors, argument alpha must not be a complex number.` for a floating result, and `...integral input tensors... must not be a floating point number.` for a bool or integer result.
+  - `addmm`, `addmv`, `addbmm`, `baddbmm`, `addr`, `addcmul`, `addcdiv`, `lerp` and `index_add` read a scalar with no imaginary part as its real part. A scalar with one raises `RuntimeError: value cannot be converted to type <T> without overflow`.
+- `addcmul` and `addcdiv` with a complex `value` that has no imaginary part keep a real tensor real; they used to promote the result to complex (LCD-1076).
+- `rsub` scales through the same `alpha` rule as `sub`: a float, complex or bool `alpha` on an integer tensor is refused as `sub` refuses it, where it used to be promoted or accepted. Its default `alpha` is `1`, not `1.0` (LCD-1076).
 - every engine forward checks that its result's storage holds its shape's bytes before handing it back; a short result is an error rather than a silent out-of-bounds read. Engine shape messages now spell a shape as `[2, 3]` (LCD-1072).
 
 ---
