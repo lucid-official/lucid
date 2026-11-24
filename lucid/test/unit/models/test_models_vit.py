@@ -194,14 +194,22 @@ class TestViTResolutionBoundary(unittest.TestCase):
                 message = self._refusal("vit_base_16", height, width)
                 self.assertIn(f"Got {height}x{width} pixels", message)
 
-    def test_the_built_grid_still_answers_at_any_remainder(self) -> None:
-        # The patch conv drops a remainder smaller than a patch, so 39 px is
-        # still the 4x4 grid the table was built for.
+    def test_a_remainder_smaller_than_a_patch_is_refused_not_cropped(self) -> None:
+        # LCD-1107: the patch conv drops a remainder smaller than a patch, so
+        # 36 and 39 px answered as the 4x4 grid's 32x32 crop with the border
+        # unread.  The reference ViT refuses every size but the configured one.
+        for side in (33, 36, 39):
+            with self.subTest(side=side):
+                message = self._refusal("vit_base_16_cls", side, side)
+                self.assertIn("built for 32x32", message)
+                self.assertIn(f"Got {side}x{side} pixels", message)
+                self.assertIn("not a multiple of the 8px patch", message)
+
+    def test_the_built_size_still_answers(self) -> None:
         lucid.manual_seed(0)
         model = models.create_model("vit_base_16_cls", **self._SMALL).eval()
-        for side in (32, 36, 39):
-            with self.subTest(side=side), lucid.no_grad():
-                self.assertEqual(model(lucid.randn(1, 3, side, side)).logits.shape, (1, 1000))
+        with lucid.no_grad():
+            self.assertEqual(model(lucid.randn(1, 3, 32, 32)).logits.shape, (1, 1000))
 
 
 class TestViTRegistry(unittest.TestCase):

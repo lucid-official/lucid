@@ -465,6 +465,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CSPNetConfig` refuses an unknown `stem_pool` (anything but `"max"` or `""`) and an unknown entry in `block_type` (anything but `"bottle"` or `"dark"`), naming the field and, for the tuple, the index (`block_type[1]`). Before, a typo in either silently built the other layout (`_DarkBlock`, no stem pool) (LCD-1113).
 - A negative block count is refused by field name on every vision, detection and segmentation config: `ViTConfig.depth`, the `depths` of Swin, ConvNeXt, CvT, PVT, MaxViT, EfficientFormer, InceptionNeXt, CrossViT (including its per-stage cross-attention depth, named `depths[1][2]`) and CSPNet, `EfficientFormerConfig.num_vit`, the encoder / decoder layer counts of DETR, MaskFormer and Mask2Former, `Mask2FormerConfig.swin_depths`, `EfficientDetConfig.fpn_repeats` / `head_repeats` and `MaskRCNNConfig.mask_num_convs`, and `DenseNetConfig.block_config`. Before, `range(-1)` was empty, so a negative depth built a model with no stack and raised nothing (DenseNet: a ShapeMismatch in the first forward). A depth of 0 is still accepted where the builder handles it. `DETRConfig.num_bbox_layers` and `Mask2FormerConfig.num_decoder_layers` must be at least 1: below that the box head is one layer and the masked decoder is the same empty stack as one layer (LCD-1113).
 
+- fixed-grid ViT, I-JEPA, CLIP refuse an off-grid image
+
 ### Added
 
 - expose Tracer.is_constant for a value kept past the call

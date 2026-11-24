@@ -30,6 +30,7 @@ from lucid._tensor.tensor import Tensor
 from lucid._types import DeviceLike
 from lucid.models._base import PretrainedModel
 from lucid.models._mixins import BackboneMixin, ClassificationHeadMixin, FeatureInfo
+from lucid.models._utils._classification import check_patch_grid
 from lucid.models._utils._common import host_random, update_averages
 from lucid.models._output import ImageClassificationOutput, ModelOutput
 from lucid.models._tasks import ImageClassificationModel
@@ -77,14 +78,28 @@ def _sincos_2d(dim: int, grid: int) -> Tensor:
 
 
 class _PatchEmbed(nn.Module):
-    """Non-overlapping patches, projected by one convolution."""
+    """Non-overlapping patches, projected by one convolution.
 
-    def __init__(self, in_channels: int, patch_size: int, dim: int) -> None:
+    The position table is built for one grid, so the embedding takes the one
+    ``image_size`` it was built for; ``encode`` and the probe reach it
+    without passing through :meth:`IJEPAModel.forward`'s own check.
+    """
+
+    def __init__(self, in_channels: int, patch_size: int, dim: int, image_size: int) -> None:
         super().__init__()
         self.proj = nn.Conv2d(in_channels, dim, patch_size, stride=patch_size)
+        self.patch_size = patch_size
+        self.image_size = image_size
 
     @override
     def forward(self, x: Tensor) -> Tensor:
+        check_patch_grid(
+            "I-JEPA",
+            int(x.shape[-2]),
+            int(x.shape[-1]),
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+        )
         x = self.proj(x)
         b, c, h, w = (int(s) for s in x.shape)
         return x.reshape(b, c, h * w).permute(0, 2, 1)
@@ -102,7 +117,9 @@ class _Encoder(nn.Module):
     def __init__(self, config: IJEPAConfig) -> None:
         super().__init__()
         hidden = int(config.dim * config.mlp_ratio)
-        self.patch_embed = _PatchEmbed(config.in_channels, config.patch_size, config.dim)
+        self.patch_embed = _PatchEmbed(
+            config.in_channels, config.patch_size, config.dim, config.image_size
+        )
         self.register_buffer("pos_embed", _sincos_2d(config.dim, config.grid_size))
         blocks = [
             _Block(config.dim, config.num_heads, hidden, config.layer_norm_eps)
@@ -487,6 +504,11 @@ class IJEPAModel(PretrainedModel, BackboneMixin):
         -------
         Tensor
             ``(B, dim)``.
+
+        Raises
+        ------
+        ValueError
+            If the images are not ``config.image_size`` pixels on each side.
 
         Notes
         -----

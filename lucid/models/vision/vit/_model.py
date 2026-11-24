@@ -21,6 +21,7 @@ import lucid
 import lucid.nn as nn
 import lucid.nn.functional as F
 from lucid._tensor.tensor import Tensor
+from lucid.models._utils._classification import check_patch_grid
 from lucid.models._utils._common import init_transformer_trunc_normal
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
@@ -68,39 +69,17 @@ class _PatchEmbed(nn.Module):
 
     @override
     def forward(self, x: Tensor) -> Tensor:
-        self._check_grid(int(x.shape[-2]), int(x.shape[-1]))
+        check_patch_grid(
+            "ViT",
+            int(x.shape[-2]),
+            int(x.shape[-1]),
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+        )
         # (B, C, H, W) → (B, dim, H/p, W/p) → (B, num_patches, dim)
         x = self.proj(x)
         B, C, H, W = x.shape
         return x.reshape(B, C, H * W).permute(0, 2, 1)
-
-    def _check_grid(self, height: int, width: int) -> None:
-        """Refuse an input whose patch grid the position table does not cover.
-
-        The learned position table holds one row per patch of the built grid.
-        Before this check another grid either failed as a broadcast error at
-        ``x + pos_embed`` that named neither size or, when it had the same
-        patch count (16x64 against a 32x32 build of 8px patches), answered
-        silently with the table laid over a different 2-D layout — every
-        patch added the position entry of another.  Both are refused.
-        """
-        p, size = self.patch_size, self.image_size
-        side = size // p
-        if (height // p, width // p) == (side, side):
-            return
-        rebuild = (
-            f", or build the model with image_size={height}, whose position "
-            "table then has to be learned or resized for that grid"
-            if height == width
-            else ""
-        )
-        raise ValueError(
-            f"ViT is built for {size}x{size} inputs: its position table holds "
-            f"one entry per patch of a {side}x{side} grid of {p}px patches.  "
-            f"Got {height}x{width} pixels, which is "
-            f"{height // p}x{width // p} patches.  "
-            f"Resize the input to {size}x{size}{rebuild}."
-        )
 
 
 # ---------------------------------------------------------------------------

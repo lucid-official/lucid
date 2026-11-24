@@ -33,6 +33,7 @@ from lucid._tensor.tensor import Tensor
 from lucid.models._base import PretrainedModel
 from lucid.models._tasks import ImageClassificationModel
 from lucid.models._output import ModelOutput
+from lucid.models._utils._classification import check_patch_grid
 from lucid.models.multimodal.clip._towers import _TransformerTower
 from lucid.models.multimodal.clip._config import CLIPConfig
 
@@ -67,6 +68,7 @@ class _VisionTransformer(nn.Module):
         super().__init__()
         width = config.vision_width
         self.patch_size = config.patch_size
+        self.image_size = config.image_size
         grid = config.image_size // config.patch_size
         self.num_patches = grid * grid
 
@@ -95,6 +97,13 @@ class _VisionTransformer(nn.Module):
         Tensor
             ``(B, embed_dim)`` — unnormalised.
         """
+        check_patch_grid(
+            "CLIP",
+            int(pixel_values.shape[-2]),
+            int(pixel_values.shape[-1]),
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+        )
         batch = int(pixel_values.shape[0])
         x = self.conv1(pixel_values)
         x = x.reshape(batch, int(x.shape[1]), -1).swapaxes(1, 2)
@@ -397,6 +406,13 @@ class CLIPModel(PretrainedModel):
         -------
         Tensor
             ``(B, embed_dim)`` with unit rows.
+
+        Raises
+        ------
+        ValueError
+            If the images are not ``config.image_size`` pixels on each side.
+            The position table is sized for that one grid; an off-grid size
+            would otherwise drop its border unread.
 
         Examples
         --------
