@@ -585,6 +585,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `utils.transforms` resamplers keep an integer label mask in its own dtype. Labels below 2**24 are exact.
   - Mixup and CutMix accept int8–32 labels.
   - The engine's duplicate `concat` binding is gone. ABI 59.
+- name ShapelessFused in AxisIndex, drop the alias
 
 ---
 

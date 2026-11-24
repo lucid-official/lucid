@@ -141,8 +141,6 @@ struct AxisIndex {
 
 namespace axis_index_detail {
 
-using Fused = gpu::ShapelessFused;
-
 inline void validate_index_dtype(const ::mlx::core::array& idx) {
     namespace mx = ::mlx::core;
     if (!mx::issubdtype(idx.dtype(), mx::integer) && idx.dtype() != mx::bool_) {
@@ -190,11 +188,11 @@ std::vector<::mlx::core::array> check(const std::vector<::mlx::core::array>& in)
 // One Metal kernel per call instead of one per elementwise step: an index
 // is often as large as the gather it feeds, and each separate step would
 // be another pass over it.
-inline const Fused& fused(NegativeIndex negative, bool narrow) {
-    static const Fused wrap(&check<true, false>);
-    static const Fused wrap32(&check<true, true>);
-    static const Fused strict(&check<false, false>);
-    static const Fused strict32(&check<false, true>);
+inline const gpu::ShapelessFused& fused(NegativeIndex negative, bool narrow) {
+    static const gpu::ShapelessFused wrap(&check<true, false>);
+    static const gpu::ShapelessFused wrap32(&check<true, true>);
+    static const gpu::ShapelessFused strict(&check<false, false>);
+    static const gpu::ShapelessFused strict32(&check<false, true>);
     if (negative == NegativeIndex::Wrap)
         return narrow ? wrap32 : wrap;
     return narrow ? strict32 : strict;
@@ -265,9 +263,9 @@ std::vector<::mlx::core::array> sink_check(const std::vector<::mlx::core::array>
     return {mx::where(c[1], c[0], ext)};
 }
 
-inline const Fused& fused_sink(bool narrow) {
-    static const Fused wide(&sink_check<false>);
-    static const Fused narrow32(&sink_check<true>);
+inline const gpu::ShapelessFused& fused_sink(bool narrow) {
+    static const gpu::ShapelessFused wide(&sink_check<false>);
+    static const gpu::ShapelessFused narrow32(&sink_check<true>);
     return narrow ? narrow32 : wide;
 }
 
