@@ -1,13 +1,14 @@
 // lucid/_C/ops/linalg/SolveTriangular.cpp
 //
 // Implements solve_triangular_op via IBackend::linalg_solve_triangular()
-// → BLAS strsm/dtrsm (the GPU backend delegates to the CPU backend), and its
-// backward node.  The right-hand side is read by ``solve_rhs_contract``; the
-// node is wired on the aligned operands and the broadcast / vector axis are
-// differentiable views around it.
+// → BLAS strsm/dtrsm/ctrsm/ztrsm (the GPU backend delegates to the CPU
+// backend), and its backward node.  The right-hand side is read by
+// ``solve_rhs_contract``; the node is wired on the aligned operands and the
+// broadcast / vector axis are differentiable views around it.
 
 #include "SolveTriangular.h"
 
+#include "../../autograd/ComplexGrad.h"
 #include "../../backend/Dispatcher.h"
 #include "../../core/ErrorBuilder.h"
 #include "../../core/GradMode.h"
@@ -50,7 +51,15 @@ TensorImplPtr solve_triangular_aligned(const TensorImplPtr& a,
     return out;
 }
 
-// dB = A⁻ᵀ G and dA = Π(-dB Xᵀ), with Π the triangle the forward read.
+// The solve takes a complex operand (BLAS ``ctrsm`` / ``ztrsm``).  Any other
+// dtype the substitution cannot take keeps ``float_only``'s refusal.
+Validator& float_or_complex(Validator& v, const TensorImplPtr& t) {
+    return (t && is_complex(t->dtype())) ? v.non_null() : v.float_only();
+}
+
+// dB = A⁻ᵀ G and dA = Π(-dB Xᵀ), with Π the triangle the forward read.  On a
+// complex dtype this is the real-dtype formula, and the callers conjugate
+// around it (``autograd/ComplexGrad.h``), which makes it A⁻ᴴ G and -dB Xᴴ.
 std::vector<TensorImplPtr> solve_triangular_adjoint(
     const TensorImplPtr& a, const TensorImplPtr& x, const TensorImplPtr& g, bool upper, bool unit) {
     auto dB = solve_triangular_aligned(mT_op(a), g, !upper, unit);
@@ -65,10 +74,12 @@ std::vector<Storage> SolveTriangularBackward::apply(Storage grad_out) {
     NoGradGuard ng;
     using ::lucid::helpers::fresh;
     auto A = fresh(Storage{saved_inputs_[0]}, input_shapes_[0], dtype_, device_);
-    auto G = fresh(std::move(grad_out), out_shape_, dtype_, device_);
+    auto G =
+        fresh(conj_if_complex(grad_out, out_shape_, dtype_, device_), out_shape_, dtype_, device_);
     auto X = fresh(Storage{saved_output_}, out_shape_, dtype_, device_);
     auto grads = solve_triangular_adjoint(A, X, G, upper_, unitriangular_);
-    return {grads[0]->storage(), grads[1]->storage()};
+    return {conj_if_complex(grads[0]->storage(), input_shapes_[0], dtype_, device_),
+            conj_if_complex(grads[1]->storage(), input_shapes_[1], dtype_, device_)};
 }
 
 std::vector<TensorImplPtr> SolveTriangularBackward::apply_for_graph(const TensorImplPtr& grad_out) {
@@ -79,7 +90,8 @@ std::vector<TensorImplPtr> SolveTriangularBackward::apply_for_graph(const Tensor
     // X recomputed rather than read from the saved output, so its own
     // dependence on A and B is part of the recorded graph.
     auto x = solve_triangular_aligned(a, b, upper_, unitriangular_);
-    return solve_triangular_adjoint(a, x, grad_out, upper_, unitriangular_);
+    auto grads = solve_triangular_adjoint(a, x, conj_if_complex(grad_out), upper_, unitriangular_);
+    return {conj_if_complex(grads[0]), conj_if_complex(grads[1])};
 }
 
 LUCID_REGISTER_OP(SolveTriangularBackward)
@@ -89,8 +101,10 @@ TensorImplPtr solve_triangular_op(const TensorImplPtr& a,
                                   bool upper,
                                   bool unitriangular) {
     using namespace linalg_detail;
-    Validator::input(a, "solve_triangular.a").float_only().square_2d();
-    Validator::input(b, "solve_triangular.b").float_only();
+    auto check_a = Validator::input(a, "solve_triangular.a");
+    float_or_complex(check_a, a).square_2d();
+    auto check_b = Validator::input(b, "solve_triangular.b");
+    float_or_complex(check_b, b);
     if (a->dtype() != b->dtype())
         ErrorBuilder("solve_triangular").fail("A and b must have the same dtype");
     if (a->device() != b->device())

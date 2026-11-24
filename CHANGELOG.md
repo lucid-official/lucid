@@ -533,6 +533,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - complex where, pow, log, matmul and masked_fill (LCD-1070)
 
+- complex solve_triangular on both devices (LCD-1070)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

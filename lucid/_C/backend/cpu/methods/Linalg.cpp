@@ -514,8 +514,6 @@ Storage CpuBackend::linalg_solve_triangular(const Storage& a,
                                             bool upper,
                                             bool unitriangular,
                                             Dtype dt) {
-    if (dt != Dtype::F32 && dt != Dtype::F64)
-        ErrorBuilder("cpu_backend::linalg_solve_triangular").not_implemented("only F32/F64");
     const auto& a_cpu = std::get<CpuStorage>(a);
     const auto& b_cpu = std::get<CpuStorage>(b);
     const int n = static_cast<int>(a_shape[a_shape.size() - 1]);
@@ -528,17 +526,25 @@ Storage CpuBackend::linalg_solve_triangular(const Storage& a,
     auto out_ptr = allocate_aligned_bytes(b_cpu.nbytes, Device::CPU);
     if (b_cpu.nbytes > 0)
         std::memcpy(out_ptr.get(), b_cpu.ptr.get(), b_cpu.nbytes);
-    if (dt == Dtype::F32) {
-        const auto* a_p = reinterpret_cast<const float*>(a_cpu.ptr.get());
-        auto* x_p = reinterpret_cast<float*>(out_ptr.get());
+    // One substitution per batch entry, in the dtype's own BLAS routine.
+    auto solve = [&](auto tag, auto trsm) {
+        using T = decltype(tag);
+        const auto* a_p = reinterpret_cast<const T*>(a_cpu.ptr.get());
+        auto* x_p = reinterpret_cast<T*>(out_ptr.get());
         for (std::int64_t bi = 0; bi < batch; ++bi)
-            cpu::strsm(upper, unitriangular, n, nrhs, a_p + bi * a_per, n, x_p + bi * b_per, nrhs);
-    } else {
-        const auto* a_p = reinterpret_cast<const double*>(a_cpu.ptr.get());
-        auto* x_p = reinterpret_cast<double*>(out_ptr.get());
-        for (std::int64_t bi = 0; bi < batch; ++bi)
-            cpu::dtrsm(upper, unitriangular, n, nrhs, a_p + bi * a_per, n, x_p + bi * b_per, nrhs);
-    }
+            trsm(upper, unitriangular, n, nrhs, a_p + bi * a_per, n, x_p + bi * b_per, nrhs);
+    };
+    if (dt == Dtype::F32)
+        solve(float{}, cpu::strsm);
+    else if (dt == Dtype::F64)
+        solve(double{}, cpu::dtrsm);
+    else if (dt == Dtype::C64)
+        solve(std::complex<float>{}, cpu::ctrsm);
+    else if (dt == Dtype::C128)
+        solve(std::complex<double>{}, cpu::ztrsm);
+    else
+        ErrorBuilder("cpu_backend::linalg_solve_triangular")
+            .not_implemented("only F32/F64/complex");
     return Storage{CpuStorage{out_ptr, b_cpu.nbytes, dt}};
 }
 

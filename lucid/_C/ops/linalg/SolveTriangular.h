@@ -4,7 +4,7 @@
 // right-hand-side $B$, compute $X$ such that $A X = B$.
 //
 // This is strictly cheaper than the general ``solve_op``: no factorisation
-// is performed — BLAS ``*trsm`` (``strsm`` / ``dtrsm``) does a single pass
+// is performed — BLAS ``*trsm`` (``strsm`` / ``dtrsm`` / ``ctrsm`` / ``ztrsm``) does a single pass
 // of forward- or back-substitution, $\mathcal{O}(n^2)$ per right-hand side
 // instead of $\mathcal{O}(n^3)$ for a Gaussian-elimination solve.  This is
 // exactly the inner kernel used to back-substitute through a Cholesky, QR,
@@ -36,6 +36,9 @@
 //   ``A.shape[:-1]`` is a matrix here, not a batch of vectors.  Any other
 //   ``B`` raises ``ShapeMismatch`` before the backend is called.
 // - Differentiable in ``A`` and ``B`` through [[SolveTriangularBackward]].
+//   For a complex dtype the gradients are $A^{-H} G$ and
+//   $-\,\partial L/\partial B\; X^{H}$ (conjugate transposes), as the
+//   reference's.
 
 #pragma once
 
@@ -83,7 +86,8 @@ public:
 // ----------
 // a : TensorImplPtr
 //     Triangular coefficient matrix of shape ``(..., N, N)`` with dtype
-//     ``F32`` or ``F64``.  Only the half indicated by ``upper`` is read.
+//     ``F32``, ``F64``, ``C64`` or ``C128``.  Only the half indicated by
+//     ``upper`` is read.
 // b : TensorImplPtr
 //     Right-hand side of shape ``(..., N, K)`` (or ``(..., N)`` for a single
 //     RHS), same dtype and device as ``a``.
