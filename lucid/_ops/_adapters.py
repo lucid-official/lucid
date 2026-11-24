@@ -28,6 +28,7 @@ from lucid._dispatch import (
 )
 from lucid._dtype import _ENGINE_TO_DTYPE
 from lucid._ops._bool_refusal import BOOL_CODE, bool_refusal, is_bool, refuse_unless_bool
+from lucid._ops._bool_refusal import refuse, refuse_unlike
 from lucid._ops._dims import (
     _dim_size,
     _kept_sizes,
@@ -236,7 +237,11 @@ _complex_parts = _make_arith_adapter(_C_engine.complex)
 
 
 def _complex_adapter(real: _Impl, imag: _Impl) -> _Impl:
-    """complex(real, imag) — the reference's names for the two parts."""
+    """complex(real, imag) — the reference's names for the two parts.
+
+    The reference does not promote the pair: two dtypes are refused, whatever they are.
+    """
+    refuse_unlike("complex", real, imag)
     return _complex_parts(real, imag)
 
 
@@ -297,11 +302,13 @@ def _as_dim(value: object) -> int:
 def _gather_adapter(input: _Impl, dim: int, index: Tensor, *, sparse_grad: bool = False) -> _Impl:
     """gather(input, dim, index, *, sparse_grad=False).
 
-    ``dim`` may be a 0-d integer tensor, as the reference reads one.
+    ``dim`` may be a 0-d integer tensor, as the reference reads one.  The index is int32 or
+    int64, as the reference reads it: an int8, an int16 or a bool one is refused.
     """
     if sparse_grad:
         raise _C_engine.NotImplementedError("gather(): sparse_grad=True is not supported")
     require_tensor("gather", "index", index, 2)
+    refuse("gather", index, "index")
     index_impl = _unwrap(index)
     d = dim if type(dim) is int else _as_dim(dim)
     return _C_engine.gather(_unwrap(input), index_impl, d)
@@ -315,8 +322,10 @@ def _take_adapter(a_impl: _Impl, index: Tensor) -> _Impl:
 
     The engine op takes a 1-D index only, so any other shape — a matrix of
     positions, a 0-d one — raised ``ShapeMismatch`` where the reference
-    answers in the index's shape.
+    answers in the index's shape.  The index is int64, as the reference reads it: a narrower
+    integer or a bool is refused.
     """
+    refuse("take", index, "index")
     idx = _unwrap(index)
     shape = list(idx.shape)
     if len(shape) == 1:

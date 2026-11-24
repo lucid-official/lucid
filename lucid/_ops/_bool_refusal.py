@@ -96,6 +96,9 @@ _INTEGRAL = sorted(
     (d for d in _ENGINE_TO_DTYPE if _promotion.is_integral(d)), key=lambda d: d.value
 )
 
+#: The codes of int8 and int16, the widths ``Row.on_short`` covers.
+_SHORT_CODES = frozenset({_C_engine.I8.value, _C_engine.I16.value})
+
 #: The largest integral dtype code.  Every dtype with a larger one is a float or complex,
 #: which no row refuses, so ``code > LAST_INTEGRAL_CODE`` is the whole answer for them.
 LAST_INTEGRAL_CODE: int = _INTEGRAL[-1].value
@@ -115,6 +118,7 @@ _FLOATING = "a floating dtype, e.g. x.float()"
 _INTEGER = "an integer dtype, e.g. x.long()"
 _NUMBER = "an integer or floating dtype, e.g. x.long() or x.float()"
 _INT64 = "int64, e.g. x.long()"
+_INT32_OR_64 = "int32 or int64, e.g. x.int() or x.long()"
 _BOOL_MASK = "a bool dtype, e.g. mask.bool()"
 
 #: What a role is called in a message where it is not an operand's own name.
@@ -148,6 +152,7 @@ GUARD_NUMBER = Rule(_GUARD, _NUMBER)
 GUARD_INTEGER = Rule(_GUARD, _INTEGER)
 GUARD_BOOL = Rule(_GUARD, _BOOL_MASK)
 GUARD_INT64 = Rule(_GUARD, _INT64)
+GUARD_INT32_OR_64 = Rule(_GUARD, _INT32_OR_64)
 INVALID_FLOATING = Rule(_INVALID, _FLOATING)
 INVALID_INT64 = Rule(_INVALID, _INT64)
 
@@ -156,9 +161,9 @@ INVALID_INT64 = Rule(_INVALID, _INT64)
 class Row:
     """One operand of one op: which of its dtypes are refused, and how.
 
-    A slot left ``None`` is a dtype the reference answers.  ``on_ints`` and
-    ``on_narrow`` are two spellings of one question -- the widths the rule covers --
-    so a row sets at most one of them.
+    A slot left ``None`` is a dtype the reference answers.  ``on_ints``, ``on_narrow`` and
+    ``on_short`` are three spellings of one question -- the widths the rule covers -- so a row
+    sets at most one of them.
     """
 
     op: str
@@ -169,6 +174,8 @@ class Row:
     on_ints: Rule | None = None
     #: The rule for the signed integers narrower than int64 only.
     on_narrow: Rule | None = None
+    #: The rule for int8 and int16 only (``gather`` reads int32 and int64).
+    on_short: Rule | None = None
     #: The rule for a float operand.  Only an operand that must be a bool and nothing else
     #: (a mask) sets it, and only :func:`refuse_unless_bool` reads it: every other check
     #: returns at once for a float.
@@ -179,8 +186,8 @@ class Row:
 
     def __post_init__(self) -> None:
         """Refuse a row that sets both integer slots."""
-        if self.on_ints is not None and self.on_narrow is not None:
-            raise ValueError(f"{self.op}: a row sets on_ints or on_narrow, not both")
+        if sum(slot is not None for slot in (self.on_ints, self.on_narrow, self.on_short)) > 1:
+            raise ValueError(f"{self.op}: a row sets one of on_ints, on_narrow and on_short")
 
     @property
     def key(self) -> tuple[str, str]:
@@ -195,6 +202,8 @@ class Row:
                 slots[dtype.value] = self.on_bool
             elif dtype.value == LAST_INTEGRAL_CODE:
                 slots[dtype.value] = self.on_ints
+            elif dtype.value in _SHORT_CODES:
+                slots[dtype.value] = self.on_ints or self.on_narrow or self.on_short
             else:
                 slots[dtype.value] = self.on_ints or self.on_narrow
         return tuple(slots)
@@ -302,8 +311,13 @@ _DECLARED: tuple[Row, ...] = (
     _row("exponential", bool=GUARD_FLOATING, ints=GUARD_FLOATING),
     # Indices and masks: the reference wants int64 class indices and a bool mask.
     _row("one_hot", bool=INVALID_INT64, narrow=INVALID_INT64),
-    # The reference reads the positions of ``take_along_dim`` as int64 and nothing narrower.
+    # The reference reads the positions of ``take_along_dim`` and ``take`` as int64 and nothing
+    # narrower, and ``gather``'s index as int32 or int64 (a flat ``take_along_dim`` is a ``gather``).
     _row("take_along_dim", "indices", bool=GUARD_INT64, narrow=GUARD_INT64),
+    _row("take", "index", bool=GUARD_INT64, narrow=GUARD_INT64),
+    Row("gather", "index", on_bool=GUARD_INT32_OR_64, on_short=GUARD_INT32_OR_64),
+    # ``ldexp`` of a real float refuses a bool exponent (an integer or complex base answers).
+    _row("ldexp", "exponent", bool=KERNEL_NUMBER),
     _row("masked_select", "mask", ints=GUARD_BOOL, floats=GUARD_BOOL, complexes=GUARD_BOOL),
     _row("scaled_dot_product_attention", "attn_mask", ints=GUARD_BOOL),
     # The engine op declares an embedding table's integers (``refuse_declared``); its bool
@@ -377,6 +391,8 @@ class Pair:
 #: The ops that refuse a pair of tensors of two dtypes.  An in-place twin takes its out-of-place
 #: op's pair.
 _PAIRED: tuple[Pair, ...] = (
+    Pair("heaviside", "input", "values"),
+    Pair("complex", "real", "imag"),
     Pair("polar", "abs", "angle"),
     Pair("cdist", "x1", "x2"),
     Pair("linalg.cross"),

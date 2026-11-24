@@ -230,6 +230,11 @@ PINS: dict[str, Pin] = {
     "take_along_dim-indices": pin(
         "take_along_dim", lambda fw, x, m: fw.take_along_dim(x.float(), x, 0), role="indices"
     ),
+    # ``take`` reads int64 too, ``gather`` int32 or int64 (so an int32 index answers there).
+    "take-index": pin("take", lambda fw, x, m: fw.take(x.float(), x), role="index"),
+    "gather-index": pin("gather", lambda fw, x, m: fw.gather(x.float(), 0, x), role="index"),
+    # ``ldexp`` of a real float has no kernel for a bool exponent; an integral exponent answers.
+    "ldexp-exponent": pin("ldexp", lambda fw, x, m: fw.ldexp(x.float(), x), role="exponent"),
     "masked_select-mask": pin(
         "masked_select", lambda fw, x, m: fw.masked_select(x.float(), x), role="mask"
     ),

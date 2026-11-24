@@ -560,6 +560,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - refuse operands of two dtypes through one owner (LCD-1075)
 
+- wire heaviside, complex, ldexp, take and gather (LCD-1075)
+
 ### Performance
 
 - pool the MAE sets without rank-6 views

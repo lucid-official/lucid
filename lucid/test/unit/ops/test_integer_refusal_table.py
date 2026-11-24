@@ -205,14 +205,17 @@ def test_a_rule_names_the_cast_of_its_class() -> None:
         _table._INTEGER,
         _table._NUMBER,
         _table._INT64,
+        _table._INT32_OR_64,
         _table._BOOL_MASK,
     }
 
 
 def test_a_row_sets_one_integer_slot() -> None:
     rule = Rule(_table._KERNEL, _table._FLOATING)
-    with pytest.raises(ValueError, match="not both"):
+    with pytest.raises(ValueError, match="one of on_ints, on_narrow and on_short"):
         _table.Row("x", on_ints=rule, on_narrow=rule)
+    with pytest.raises(ValueError, match="one of on_ints, on_narrow and on_short"):
+        _table.Row("x", on_narrow=rule, on_short=rule)
 
 
 def test_a_dtype_is_refused_by_its_width() -> None:
@@ -221,6 +224,10 @@ def test_a_dtype_is_refused_by_its_width() -> None:
     assert [rule is not None for rule in rules] == [True, True, True, True, False]
     # ``one_hot`` is the same by width, with its own cast.
     assert {rule.hint for rule in ROWS[("one_hot", "")].by_code() if rule} == {_table._INT64}
+    # ``gather`` reads int32 and int64, so only bool, int8 and int16 are refused.
+    rules = ROWS[("gather", "index")].by_code()
+    assert [rule is not None for rule in rules] == [True, True, True, False, False]
+    assert {rule.hint for rule in rules if rule} == {_table._INT32_OR_64}
 
 
 def test_a_role_with_no_row_reads_the_primary_one() -> None:

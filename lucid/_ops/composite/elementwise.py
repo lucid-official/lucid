@@ -25,7 +25,7 @@ from lucid import _promotion
 from lucid._C import engine as _C_engine
 from lucid._dispatch import _binary_operands, _float_input, _refuse_bool_subtraction, _wrap
 from lucid._ops._adapters import _scale_by_alpha
-from lucid._ops._bool_refusal import refuse
+from lucid._ops._bool_refusal import refuse, refuse_bool, refuse_unlike
 from lucid._ops.composite import _bessel
 from lucid._ops.composite._expm1 import _erfc_double, _erfc_single, _expm1, _logaddexp2, _sgn
 from lucid._ops.composite._gamma import _LogGamma, _polygamma
@@ -478,6 +478,12 @@ def heaviside(input: Tensor, values: Tensor | Scalar) -> Tensor:
     Tensor
         Element-wise Heaviside step.
 
+    Raises
+    ------
+    DtypeMismatch
+        If ``input`` and a tensor ``values`` have different dtypes, a 0-d ``values``
+        included.  The reference does not promote the pair.
+
     Notes
     -----
     Mathematical definition:
@@ -501,6 +507,7 @@ def heaviside(input: Tensor, values: Tensor | Scalar) -> Tensor:
     >>> lucid.heaviside(x, 0.5)
     tensor([0., 0.5, 1.])
     """
+    refuse_unlike("heaviside", input, values)
     if not _is_tensor(values):
         values = lucid.full_like(input, float(_promotion.as_number(cast(float, values))))
     return lucid.where(
@@ -976,6 +983,13 @@ def ldexp(input: Tensor, other: Tensor | Scalar) -> Tensor:
         number leaves a float or complex ``input`` as it is and takes an
         integral one to the default float.
 
+    Raises
+    ------
+    lucid._C.engine.NotImplementedError
+        If ``input`` is a real floating tensor and ``other`` a bool tensor: the
+        reference has no kernel for the pair.  An integral or complex ``input``
+        takes a bool exponent.
+
     See Also
     --------
     frexp : inverse decomposition into mantissa / exponent.
@@ -992,6 +1006,8 @@ def ldexp(input: Tensor, other: Tensor | Scalar) -> Tensor:
     >>> lucid.ldexp(z, lucid.tensor([1, 2])).tolist()
     [(2+4j), (12-4j)]
     """
+    if _is_tensor(input) and input.is_floating_point():
+        refuse_bool("ldexp", other, role="exponent")
     return _ldexp_to(input, other, _ldexp_dtype(input, other))
 
 

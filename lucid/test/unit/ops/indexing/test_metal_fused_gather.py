@@ -24,6 +24,15 @@ _INT_DTYPES = [lucid.int8, lucid.int16, lucid.int32, lucid.int64]
 _INDEX_DTYPES = [lucid.int8, lucid.int16, lucid.int32, lucid.int64]
 
 
+def _kernel_gather(src: lucid.Tensor, dim: int, idx: lucid.Tensor) -> lucid.Tensor:
+    """The engine's gather, which reads every index width.
+
+    ``lucid.gather`` refuses an int8 or int16 index, as the reference does (LCD-1075); the kernel
+    keeps reading them, and these tests are about the kernel.
+    """
+    return _wrap(_C_engine.gather(_unwrap(src), _unwrap(idx), dim))
+
+
 @pytest.mark.parametrize("src_dtype", _FLOAT_DTYPES)
 @pytest.mark.parametrize("idx_dtype", _INDEX_DTYPES)
 def test_gather_float_dtypes_in_and_out_of_range(
@@ -31,7 +40,7 @@ def test_gather_float_dtypes_in_and_out_of_range(
 ) -> None:
     src = lucid.arange(12, dtype=src_dtype, device="metal").reshape(3, 4)
     idx = lucid.tensor([[0, -1, 4, -5], [2, 3, -4, 99]], dtype=idx_dtype, device="metal")
-    out = lucid.gather(src, 1, idx).to(lucid.float32).tolist()
+    out = _kernel_gather(src, 1, idx).to(lucid.float32).tolist()
     assert out[0][0] == 0.0
     assert out[0][1] == 3.0
     assert math.isnan(out[0][2])
@@ -49,7 +58,7 @@ def test_gather_integer_dtypes_fill_zero_out_of_range(
 ) -> None:
     src = (lucid.arange(8, dtype=src_dtype, device="metal") + 10).reshape(2, 4)
     idx = lucid.tensor([[1, 4, -1], [-5, 0, 3]], dtype=idx_dtype, device="metal")
-    got = lucid.gather(src, 1, idx).tolist()
+    got = _kernel_gather(src, 1, idx).tolist()
     assert got == [[11, 0, 13], [0, 14, 17]]
 
 
