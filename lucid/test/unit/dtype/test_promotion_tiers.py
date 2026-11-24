@@ -12,6 +12,10 @@ operands as given.  ``kron`` and ``hstack`` / ``vstack`` once used the
 This pins the class, not one op: every op that meets a 0-d tensor with a
 dimensioned one, over the 11 x 11 dtype lattice, on both devices, against the
 reference.
+
+``inner`` (a product for a 0-d operand), ``lerp`` (a 0-d weight) and ``column_stack``
+(lifts a 0-d input to a column) once refused the pair (LCD-1068, LCD-1069); ``addr``,
+whose 0-d accumulator the reference expands first, ranked it below the vectors.
 """
 
 from collections.abc import Callable
@@ -46,6 +50,19 @@ _COMPLEX = {lucid.complex64, lucid.complex128}
 #: the one length every op here accepts beside a 0-d tensor.
 _Call = Callable[[Any, Any, Any], Any]
 
+
+def _inner(lib: Any, z: Any, d: Any) -> Any:
+    return lib.linalg.inner(z, d) if lib is lucid else lib.inner(z, d)
+
+
+def _lerp(lib: Any, z: Any, d: Any) -> Any:
+    return lib.lerp(d, d, z)
+
+
+def _column_stack(lib: Any, z: Any, d: Any) -> Any:
+    return lib.column_stack([z, d])
+
+
 #: Every op that takes a 0-d tensor beside a dimensioned one and promotes.
 _SWEEP: dict[str, _Call] = {
     "kron(0d, nd)": lambda lib, z, d: lib.kron(z, d),
@@ -64,6 +81,12 @@ _SWEEP: dict[str, _Call] = {
     "where(c, 0d, nd)": lambda lib, z, d: lib.where(d == d, z, d),
     "where(c, nd, 0d)": lambda lib, z, d: lib.where(d == d, d, z),
     "mul": lambda lib, z, d: z * d,
+    "inner(0d, nd)": lambda lib, z, d: _inner(lib, z, d),
+    "inner(nd, 0d)": lambda lib, z, d: _inner(lib, d, z),
+    "Tensor.inner": lambda lib, z, d: z.inner(d),
+    "lerp(0d weight)": lambda lib, z, d: _lerp(lib, z, d),
+    "column_stack(0d, nd)": lambda lib, z, d: _column_stack(lib, z, d),
+    "column_stack(nd, 0d)": lambda lib, z, d: _column_stack(lib, d, z),
 }
 
 
@@ -179,18 +202,14 @@ def test_linalg_cross_refuses_mixed_dtypes(
             lucid.linalg.cross(x, y)
 
 
-@pytest.mark.parity
-@pytest.mark.parametrize("op", list(_SWEEP))
-def test_zero_dim_beside_dimensioned_matches_the_reference(
-    op: str, device: str, ref: ModuleType
-) -> None:
-    """Where the reference answers, so does Lucid, at the same dtype and values.
+def _cells_off_the_reference(call: _Call, device: str, ref: ModuleType) -> tuple[int, list[str]]:
+    """How many 0-d / dimensioned dtype cells ``call`` was compared on, and the ones that differ.
 
-    A cell Lucid cannot run for want of a kernel (``NotImplementedError``) is
-    left out; the complex32 the reference answers for float16 beside complex is
-    the documented deviation (Lucid has no complex32 and answers complex64).
+    Where the reference answers, Lucid must, at the same dtype and values.  A cell
+    Lucid cannot run for want of a kernel (``NotImplementedError``) is left out;
+    the complex32 the reference answers for float16 beside complex is the documented
+    deviation (Lucid has no complex32 and answers complex64).
     """
-    call = _SWEEP[op]
     problems: list[str] = []
     compared = 0
     for zero in _DTYPES:
@@ -214,6 +233,40 @@ def test_zero_dim_beside_dimensioned_matches_the_reference(
                 problems.append(f"{label}: dtype {_name(got.dtype)}, reference {want_dtype}")
             elif got.tolist() != want.tolist():
                 problems.append(f"{label}: {got.tolist()}, reference {want.tolist()}")
+    return compared, problems
+
+
+@pytest.mark.parity
+@pytest.mark.parametrize("op", list(_SWEEP))
+def test_zero_dim_beside_dimensioned_matches_the_reference(
+    op: str, device: str, ref: ModuleType
+) -> None:
+    compared, problems = _cells_off_the_reference(_SWEEP[op], device, ref)
+    assert compared > 0
+    assert not problems, f"{len(problems)} cell(s):\n  " + "\n  ".join(problems[:20])
+
+
+def _addr(lib: Any, z: Any, d: Any) -> Any:
+    """``0 + d (x) d`` with the 0-d ``z`` as the accumulator.
+
+    The accumulator is zeroed (``z * 0`` keeps its dtype) so that only the product
+    is compared: the reference rounds a half-precision ``z + d * d`` once, Lucid
+    twice, a difference this test is not about.
+    """
+    return lib.addr(z * 0, d, d)
+
+
+@pytest.mark.parity
+def test_addr_forms_its_product_at_the_dtype_its_operands_promote_to(ref: ModuleType) -> None:
+    """The reference expands the 0-d accumulator and multiplies at the promoted dtype.
+
+    ``addr(int16_0d, int8[1], int8[1])`` is ``int16``, ``63 * 63`` is ``3969``: Lucid
+    ranked the accumulator below the vectors, multiplied them in ``int8`` and wrapped.
+
+    CPU only: an ``int8`` ``outer`` saturates on Metal where the CPU wraps, for operands
+    of one dtype, so no accumulator is involved.
+    """
+    compared, problems = _cells_off_the_reference(_addr, "cpu", ref)
     assert compared > 0
     assert not problems, f"{len(problems)} cell(s):\n  " + "\n  ".join(problems[:20])
 
@@ -240,60 +293,23 @@ def test_linalg_cross_refuses_wherever_the_reference_does(ref: ModuleType) -> No
     assert not problems, "\n".join(problems)
 
 
-def _inner(lib: Any, z: Any, d: Any) -> Any:
-    return lib.linalg.inner(z, d) if lib is lucid else lib.inner(z, d)
-
-
-def _lerp(lib: Any, z: Any, d: Any) -> Any:
-    return lib.lerp(d, d, z)
-
-
-def _column_stack(lib: Any, z: Any, d: Any) -> Any:
-    return lib.column_stack([z, d])
-
-
 @pytest.mark.parity
 @pytest.mark.parametrize(
     ("call", "zero", "dim"),
     [
-        pytest.param(
-            _inner,
-            lucid.int16,
-            lucid.int8,
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="LCD-1068: inner with a 0-d operand is a product in the reference "
-                "and ranks by tier; Lucid hands the engine's single-dtype kernel both and refuses",
-            ),
-            id="inner",
-        ),
-        pytest.param(
-            _lerp,
-            lucid.float32,
-            lucid.float16,
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="LCD-1068: lerp's 0-d weight ranks below the half-precision "
-                "operands in the reference; Lucid refuses the dtype pair",
-            ),
-            id="lerp",
-        ),
-        pytest.param(
-            _column_stack,
-            lucid.int16,
-            lucid.int8,
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="LCD-1069: column_stack does not lift a 0-d input to a column",
-            ),
-            id="column_stack",
-        ),
+        pytest.param(_inner, lucid.int16, lucid.int8, id="inner"),
+        pytest.param(_lerp, lucid.float32, lucid.float16, id="lerp"),
+        pytest.param(_column_stack, lucid.int16, lucid.int8, id="column_stack"),
     ],
 )
 def test_zero_dim_gaps_outside_the_ranking_fix(
     call: _Call, zero: lucid.dtype, dim: lucid.dtype, ref: ModuleType
 ) -> None:
-    """Deferred: the same 0-d-beside-dimensioned pairing, for ops the fix does not own."""
+    """The three ops LCD-1060 left open, each at the cell that exposed it.
+
+    They were strict xfails (LCD-1068, LCD-1069) until each followed its own
+    ranking; the whole lattice for them is in ``_SWEEP``.
+    """
     want = call(ref, *_operands(ref, zero, dim, "cpu"))
     got = call(lucid, *_operands(lucid, zero, dim, "cpu"))
     assert _name(got.dtype) == _name(want.dtype)
